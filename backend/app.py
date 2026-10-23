@@ -99,7 +99,6 @@ from engine.workflow import WorkflowEngine, effective_workflow, node_label
 from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService, latex_compile, lock_store
 from services import net_probe as network_probe
-from services.chart_contracts import BIBLIO_CHART_TYPES
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
 from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
@@ -4321,11 +4320,6 @@ def _execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     # paper-ready figure. Either box can be turned off on its own.
     emit_latex = as_bool(params.get('emit_latex', True))
     emit_latex_table = as_bool(params.get('emit_latex_table', True))
-    if chart_type in BIBLIO_CHART_TYPES and (emit_latex or emit_latex_table):
-        # These four have no LaTeX figure builder. Saying so once is honest; calling
-        # _latex_outputs would fail the node after the chart itself already rendered.
-        add_log(t('wf.latex_unsupported', chart=chart_type))
-        emit_latex = emit_latex_table = False
     if emit_latex or emit_latex_table:
         spec.update(
             _latex_outputs(

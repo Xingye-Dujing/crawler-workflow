@@ -1,0 +1,92 @@
+"""Registry of bibliographic export formats.
+
+CNKI RefWorks and CSSCI stay in :mod:`services.biblio_import` (the original
+Chinese path); this package owns the international formats. Adding a format is
+one module exporting a :class:`FormatSpec`, plus one tuple entry below.
+"""
+
+from services.biblio_formats import bibtex, dimensions, endnote, lens, pubmed, ris, scopus, wos
+from services.biblio_formats.base import CAPABILITIES, FormatSpec
+
+FORMAT_SPECS: tuple[FormatSpec, ...] = (
+    pubmed.SPEC,
+    wos.SPEC,
+    ris.SPEC,
+    bibtex.SPEC,
+    endnote.SPEC,
+    scopus.SPEC,
+    dimensions.SPEC,
+    lens.SPEC,
+)
+
+FORMAT_BY_ID = {spec.id: spec for spec in FORMAT_SPECS}
+
+
+def format_ids() -> tuple[str, ...]:
+    return tuple(spec.id for spec in FORMAT_SPECS)
+
+
+def detect_format(text: str) -> str | None:
+    for spec in FORMAT_SPECS:
+        try:
+            if spec.detect(str(text or '')):
+                return spec.id
+        except Exception:
+            continue
+    return None
+
+
+def parse_format(text: str, fmt: str) -> tuple[list[dict], int]:
+    spec = FORMAT_BY_ID.get(fmt)
+    if spec is None:
+        raise ValueError(f'unknown bibliographic format: {fmt}')
+    return spec.parse(str(text or ''))
+
+
+def detect_frame(frame) -> str | None:
+    for spec in FORMAT_SPECS:
+        if spec.detect_frame is None or spec.parse_frame is None:
+            continue
+        try:
+            if spec.detect_frame(frame):
+                return spec.id
+        except Exception:
+            continue
+    return None
+
+
+def parse_frame(frame, fmt: str) -> tuple[list[dict], int]:
+    spec = FORMAT_BY_ID.get(fmt)
+    if spec is None or spec.parse_frame is None:
+        raise ValueError(f'format {fmt} has no tabular reader')
+    return spec.parse_frame(frame)
+
+
+def capabilities(fmt: str) -> dict[str, bool]:
+    spec = FORMAT_BY_ID.get(fmt)
+    known = spec.capabilities if spec else frozenset()
+    return {name: name in known for name in CAPABILITIES}
+
+
+def accepted_extensions() -> tuple[str, ...]:
+    found: list[str] = []
+    for spec in FORMAT_SPECS:
+        for extension in spec.extensions:
+            if extension not in found:
+                found.append(extension)
+    return tuple(found)
+
+
+__all__ = [
+    'CAPABILITIES',
+    'FORMAT_BY_ID',
+    'FORMAT_SPECS',
+    'FormatSpec',
+    'accepted_extensions',
+    'capabilities',
+    'detect_format',
+    'detect_frame',
+    'format_ids',
+    'parse_format',
+    'parse_frame',
+]

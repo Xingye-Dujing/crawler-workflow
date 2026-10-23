@@ -8,7 +8,7 @@ import pytest
 
 from engine.workflow import WorkflowEngine
 from services import bibliometrics
-from services.biblio_schema import normalize_params, output_columns
+from services.biblio_schema import collect_errors, normalize_params, output_columns
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -59,8 +59,28 @@ def _refs():
     refs = '[1] 张三. 甲文[J]. 甲刊, 2020(1): 1-2.\n[2] 李四. 乙文[J]. 乙刊, 2021(2): 3-4.'
     return pd.DataFrame(
         [
-            {'题名': '施引一', '年份': 2021, '参考文献': refs, '关键词': '甲;乙', '摘要': '甲 乙'},
-            {'题名': '施引二', '年份': 2022, '参考文献': refs, '关键词': '乙;丙', '摘要': '乙 丙'},
+            {
+                '题名': '施引一',
+                '年份': 2021,
+                '参考文献': refs,
+                '来源期刊': '甲源',
+                '基金': '基金A;基金B',
+                '关键词': '甲;乙',
+                '摘要': '甲 乙',
+                '引用次数': 10,
+                '使用次数': 5,
+            },
+            {
+                '题名': '施引二',
+                '年份': 2022,
+                '参考文献': refs,
+                '来源期刊': '乙源',
+                '基金': '基金A;基金C',
+                '关键词': '乙;丙',
+                '摘要': '乙 丙',
+                '引用次数': 1,
+                '使用次数': 1,
+            },
         ]
     )
 
@@ -177,6 +197,101 @@ class TestCitations:
         params = _params(entity_type='bibliographic_coupling')
         params.pop('burst')
         assert normalize_params(params, 'test')['burst'] is False
+
+
+class TestPhaseTwoContracts:
+    def test_document_is_the_cite_space_name_for_bibliographic_coupling(self):
+        coupling = bibliometrics.build(_refs(), _params(entity_type='bibliographic_coupling', burst=False), 'test')
+        document = bibliometrics.build(_refs(), _params(entity_type='document', burst=False), 'test')
+        assert {row['节点'] for row in document['rows']} == {row['节点'] for row in coupling['rows']}
+
+    def test_journal_coupling_connects_source_journals_by_shared_references(self):
+        result = bibliometrics.build(_refs(), _params(entity_type='journal', burst=False), 'test')
+        assert {row['节点'] for row in result['rows']} == {'甲源', '乙源'}
+        assert len(result['edges']) == 1
+
+    def test_funder_cooccurrence_builds_grant_links(self):
+        result = bibliometrics.build(_refs(), _params(entity_type='funder', burst=False), 'test')
+        assert {row['节点'] for row in result['rows']} == {'基金A', '基金B', '基金C'}
+        assert any(edge['source'] == '基金A' and edge['target'] == '基金B' for edge in result['edges'])
+        assert any(edge['source'] == '基金A' and edge['target'] == '基金C' for edge in result['edges'])
+
+    def test_min_tc_uses_the_mapped_citation_count_column(self):
+        result = bibliometrics.build(
+            _refs(),
+            _params(min_tc=5, selection='threshold', threshold_c=1),
+            'test',
+        )
+        assert {row['节点'] for row in result['rows']} == {'甲', '乙'}
+
+    def test_edge_threshold_cc_removes_weak_pairs(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙;丙', '摘要': ''},
+                {'题名': 'b', '年份': 2021, '关键词': '甲;乙', '摘要': ''},
+            ]
+        )
+        kept = bibliometrics.build(frame, _params(selection='threshold', threshold_c=1), 'test')
+        pruned = bibliometrics.build(frame, _params(selection='threshold', threshold_c=1, threshold_cc=2), 'test')
+        assert len(pruned['edges']) < len(kept['edges'])
+        assert all(edge['count'] >= 2 for edge in pruned['edges'])
+
+    def test_largest_component_drops_small_islands(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'c', '年份': 2021, '关键词': '丙;丁', '摘要': ''},
+                {'题名': 'd', '年份': 2021, '关键词': '丙;丁', '摘要': ''},
+            ]
+        )
+        result = bibliometrics.build(
+            frame,
+            _params(selection='threshold', threshold_c=1, largest_component=True),
+            'test',
+        )
+        assert {row['节点'] for row in result['rows']} == {'丙', '丁'}
+        assert any('最大连通分量' in note or 'largest connected component' in note for note in result['notes'])
+
+    def test_citation_metrics_are_emitted_only_when_the_data_has_them(self):
+        with_metrics = bibliometrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')
+        assert all('总被引' in row and 'H指数' in row for row in with_metrics['rows'])
+        assert max(row['H指数'] for row in with_metrics['rows']) >= 1
+        without = bibliometrics.build(_keywords(), _params(), 'test')
+        assert all('总被引' not in row for row in without['rows'])
+        assert '总被引' not in output_columns(_params(), list(_keywords().columns))
+        assert '总被引' in output_columns(_params(), list(_refs().columns))
+
+    def test_output_shape_columns_are_a_contract(self):
+        assert output_columns(_params(output_shape='edges')) == ['source', 'target', 'weight', 'count']
+        assert output_columns(_params(output_shape='clusters', cluster=True)) == [
+            '聚类',
+            '聚类标签',
+            '节点数',
+            '节点',
+            '轮廓值',
+        ]
+        assert output_columns(_params(output_shape='bursts', burst=True)) == [
+            '节点',
+            '突现起始',
+            '突现结束',
+            '突现强度',
+        ]
+
+    def test_a_shape_that_its_switch_missing_is_refused_by_name(self):
+        assert any('clusters' in message for message in collect_errors(_params(output_shape='clusters'), 'test'))
+        assert any('bursts' in message for message in collect_errors(_params(output_shape='bursts'), 'test'))
+
+    def test_exports_write_graphml_gml_and_json(self, tmp_path):
+        result = bibliometrics.build(_keywords(), _params(cluster=True, burst=True), 'test')
+        files = bibliometrics.export_result(result, str(tmp_path), 'demo')
+        assert files['biblio_graphml'].endswith('_graph.graphml')
+        assert files['biblio_gml'].endswith('_graph.gml')
+        assert files['biblio_json'].endswith('_graph.json')
+        snapshot = json.loads((tmp_path / 'demo_graph.json').read_text(encoding='utf-8'))
+        assert snapshot['summary']['entity_type'] == 'keyword'
+        assert snapshot['nodes']
+        assert snapshot['edges']
 
 
 class TestContracts:

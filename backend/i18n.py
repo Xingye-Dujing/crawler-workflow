@@ -87,7 +87,6 @@ _ZH = {
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
     'wf.visualize_no_input': '没有上游数据，请连接数据源或文件上传节点',
     'wf.visualize_done': '[可视化] 已渲染 {chart} 图表（{engine}），共 {n} 行',
-    'wf.latex_unsupported': '[可视化] {chart} 没有 LaTeX 图源，已跳过 LaTeX 产物（图本身已生成）',
     'wf.browser_opened': '已打开浏览器用于 {platform} 登录（{url}），等待 {n} 秒完成登录…',
     'wf.cookies_generated': '已生成 {platform} 的 Cookie（{n} 项）',
     # ── LLM ───────────────────────────────────────────────────
@@ -144,9 +143,12 @@ _ZH = {
     'biblio.entity.country': '国家/地区',
     'biblio.entity.term': '主题词',
     'biblio.entity.category': '学科',
+    'biblio.entity.journal': '来源期刊（耦合）',
+    'biblio.entity.funder': '基金/资助机构',
     'biblio.entity.document_cocitation': '文献共被引',
     'biblio.entity.author_cocitation': '作者共被引',
     'biblio.entity.journal_cocitation': '期刊共被引',
+    'biblio.entity.document': '文献（耦合）',
     'biblio.entity.bibliographic_coupling': '文献耦合',
     'biblio.bad_option': '{nid}：{param} 的值「{value}」无效（可选：{allowed}）',
     'biblio.time_range': '{nid}：时间范围无效：{start} > {end}',
@@ -174,6 +176,11 @@ _ZH = {
     'biblio.label_fallback': '聚类标签方法 {asked} 没有可用文本，实际使用 {used}（已在运行摘要中如实标明）',
     'biblio.no_edges': '{start}–{end} 年没有共现边：请降低阈值、扩大时间范围或换一种实体类型',
     'biblio.no_edges_after_prune': '{pruning} 剪枝后没有边：请减少最大连边数或改用 none',
+    'biblio.no_edges_after_threshold': '阈值 (c, cc, ccv) 过滤后没有边：请降低 cc/ccv 或扩大时间范围',
+    'biblio.no_edges_after_component': '保留最大连通分量后没有边：请关闭该选项或降低筛选阈值',
+    'biblio.largest_component': '已保留最大连通分量：节点 {before} → {after}，其余分量已剪除',
+    'biblio.shape_needs_cluster': '{nid}：输出形态 clusters 需要开启聚类，请先开启或改回 nodes/edges',
+    'biblio.shape_needs_burst': '{nid}：输出形态 bursts 需要开启突现检测，请先开启或改回 nodes/edges',
     'biblio.isolates_dropped': '{n} 个孤立节点在成图后没有连边，已从节点表移除',
     'biblio.too_many_nodes': '节点数 {n} 超过上限 {cap}：请收紧 TopN 或缩短时间范围',
     'biblio.too_many_edges': '边数 {n} 超过上限 {cap}：请收紧 TopN/最大连边数',
@@ -188,6 +195,7 @@ _ZH = {
     'chart.biblio_no_nodes': '文献计量图没有可画的节点',
     'chart.biblio_no_links': '知识图谱没有连接：请检查“连接”列或降低筛选阈值',
     'chart.biblio_no_years': '文献计量图没有可用的年份：请检查首年/末年或年份序列',
+    'chart.biblio_no_clusters': '文献计量图没有聚类结果：请在上游节点开启聚类',
     'chart.biblio_no_bursts': '没有突现词可画：请在上游节点开启突现检测并调整 gamma/最短时长',
     'chart.biblio_bad_json': '「{col}」不是合法 JSON：请让上游文献计量节点重新生成结果',
     'chart.biblio_single_category': '节点',
@@ -200,6 +208,9 @@ _ZH = {
     'chart.biblio_activity': '年度活动',
     'api.biblioEmpty': '无法从 {format} 文件中解析出任何文献记录',
     'api.biblioDecode': '无法解码文件 {name}（已尝试 UTF-8 与 GB18030）',
+    'api.biblioNotRecognized': '无法把 {name} 识别为任何已支持的文献导出格式',
+    'api.biblioXmlUnsafe': 'XML 文件包含实体声明（DTD/ENTITY），出于安全考虑拒绝解析',
+    'api.biblioXmlBad': 'XML 文献文件无法解析：{err}',
     'engine.biblio_no_input': '{nid} 需要且只接受一个上游数据表（文献导入节点）',
     'engine.biblio_multi_input': '{nid} 有 {n} 个上游连接：文献计量只接受一个输入，请只保留一条连线',
     # ── analyzer labels (console prefix) ──────────────────────
@@ -1605,9 +1616,6 @@ _EN = {
     'wf.tokenize_done': '[Tokenize] {mode} segmented {col} -> {n} rows',
     'wf.visualize_no_input': 'no upstream data — connect a data source or an upload node',
     'wf.visualize_done': '[Visualize] Rendered {chart} chart ({engine}) from {n} rows',
-    'wf.latex_unsupported': (
-        '[Visualize] {chart} has no LaTeX figure source; LaTeX artifacts skipped (the chart itself was drawn)'
-    ),
     'wf.browser_opened': 'Browser opened for {platform} login ({url}); waiting {n}s for the user to log in',
     'wf.cookies_generated': 'Cookies generated for {platform} ({n} cookies)',
     # ── LLM ───────────────────────────────────────────────────
@@ -1666,9 +1674,12 @@ _EN = {
     'biblio.entity.country': 'Country/Region',
     'biblio.entity.term': 'Term',
     'biblio.entity.category': 'Category',
+    'biblio.entity.journal': 'Source journal (coupling)',
+    'biblio.entity.funder': 'Funder/Grant',
     'biblio.entity.document_cocitation': 'Document co-citation',
     'biblio.entity.author_cocitation': 'Author co-citation',
     'biblio.entity.journal_cocitation': 'Journal co-citation',
+    'biblio.entity.document': 'Document (coupling)',
     'biblio.entity.bibliographic_coupling': 'Bibliographic coupling',
     'biblio.bad_option': '{nid}: {param} = "{value}" is not valid (allowed: {allowed})',
     'biblio.time_range': '{nid}: invalid time range: {start} > {end}',
@@ -1712,6 +1723,19 @@ _EN = {
         'No co-occurrence edges in {start}–{end}: lower the threshold, widen the time range, or choose another entity'
     ),
     'biblio.no_edges_after_prune': '{pruning} pruning left no edges: lower max links per node or use none',
+    'biblio.no_edges_after_threshold': (
+        'The (c, cc, ccv) thresholds left no edges: lower cc/ccv or widen the time range'
+    ),
+    'biblio.no_edges_after_component': (
+        'Keeping the largest connected component left no edges: disable it or lower the threshold'
+    ),
+    'biblio.largest_component': (
+        'Kept the largest connected component: nodes {before} → {after}; smaller components were removed'
+    ),
+    'biblio.shape_needs_cluster': '{nid}: output_shape clusters needs clustering enabled; enable it or use nodes/edges',
+    'biblio.shape_needs_burst': (
+        '{nid}: output_shape bursts needs burst detection enabled; enable it or use nodes/edges'
+    ),
     'biblio.isolates_dropped': '{n} isolated nodes had no edge after graph construction and were removed',
     'biblio.too_many_nodes': '{n} nodes exceed the cap ({cap}): narrow TopN or the time range',
     'biblio.too_many_edges': '{n} edges exceed the cap ({cap}): narrow TopN or max links per node',
@@ -1728,6 +1752,7 @@ _EN = {
     'chart.biblio_no_nodes': 'The bibliometric chart has no nodes to draw',
     'chart.biblio_no_links': 'The knowledge graph has no links: check the 连接 column or lower the selection threshold',
     'chart.biblio_no_years': 'The bibliometric chart has no usable years: check 首年/末年 or 年份序列',
+    'chart.biblio_no_clusters': 'The bibliometric chart has no clusters: enable clustering in the upstream biblio node',
     'chart.biblio_no_bursts': 'No burst terms to draw: enable burst detection upstream and adjust gamma/min duration',
     'chart.biblio_bad_json': '"{col}" is not valid JSON: re-run the upstream biblio node',
     'chart.biblio_single_category': 'Nodes',
@@ -1740,6 +1765,9 @@ _EN = {
     'chart.biblio_activity': 'Yearly activity',
     'api.biblioEmpty': 'No bibliographic records could be parsed from the {format} file',
     'api.biblioDecode': 'Could not decode {name} (tried UTF-8 and GB18030)',
+    'api.biblioNotRecognized': 'Could not recognize {name} as any supported bibliographic export',
+    'api.biblioXmlUnsafe': 'The XML file declares DTD/ENTITY content; refusing to parse it for safety',
+    'api.biblioXmlBad': 'The XML bibliographic file could not be parsed: {err}',
     'engine.biblio_no_input': '{nid} needs exactly one upstream data table (an Upload node)',
     'engine.biblio_multi_input': (
         '{nid} has {n} upstream connections: bibliometrics accepts one input; keep a single wire'

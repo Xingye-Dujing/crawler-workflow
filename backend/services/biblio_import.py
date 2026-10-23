@@ -19,6 +19,7 @@ import hashlib
 import re
 
 from i18n import t
+from services.biblio_refs import references_json, structured_references
 
 BASE_COLUMNS = [
     '记录ID',
@@ -36,6 +37,21 @@ BASE_COLUMNS = [
     'DOI',
     '格式',
 ]
+
+#: Columns emitted only when the export really carried the field. Order is the
+#: contract the upload response and the biblio builder read; a format that
+#: cannot carry one simply never grows the column.
+OPTIONAL_COLUMNS = (
+    '国家',
+    '学科',
+    '引用次数',
+    '使用次数',
+    '使用次数2013',
+    '基金',
+    '文献类型',
+    '语言',
+    '引文',
+)
 
 _CNKI_TAG = re.compile(r'^([A-Z][A-Z0-9])(?:\s+(.*))?$')
 _CSSCI_TAG = re.compile(r'^【([^】]{1,20})】\s*(.*)$')
@@ -86,7 +102,9 @@ def detect_format(text: str) -> str | None:
         # plain-text cell. The parser then refuses it by name when it yields
         # zero records, instead of silently storing the whole file as content.
         return CNKI
-    return None
+    from services import biblio_formats
+
+    return biblio_formats.detect_format(text)
 
 
 # ─── Shared record helpers ──────────────────────────────────────
@@ -107,6 +125,16 @@ def _split_list(value: str, pattern=_LIST_SPLIT) -> list[str]:
 
 def _join_list(value: str, pattern=_LIST_SPLIT) -> str:
     return ';'.join(_split_list(value, pattern))
+
+
+def _join_authors(value: str) -> str:
+    """Authors are separated by semicolons, never by a comma inside a name."""
+    seen: list[str] = []
+    for part in re.split(r'[;；\n]+', str(value or '')):
+        item = part.strip()
+        if item and item not in seen:
+            seen.append(item)
+    return ';'.join(seen)
 
 
 def _first(fields: dict, *tags) -> str:
@@ -177,11 +205,19 @@ def _row(
     fmt: str,
     country: str = '',
     category: str = '',
+    tc='',
+    usage='',
+    usage2013='',
+    funding: str = '',
+    doctype: str = '',
+    language: str = '',
+    citations: list[dict] | None = None,
 ) -> dict:
+    structured = citations if citations is not None else structured_references(refs)
     return {
         '记录ID': _record_id(title, authors, year, journal),
         '题名': title.strip(),
-        '作者': _join_list(authors),
+        '作者': _join_authors(authors),
         '作者单位': _join_list(affiliations, _AFF_SPLIT),
         '来源期刊': journal.strip(),
         '年份': year,
@@ -195,6 +231,13 @@ def _row(
         '格式': fmt,
         '国家': _join_list(country),
         '学科': _join_list(category),
+        '引用次数': tc,
+        '使用次数': usage,
+        '使用次数2013': usage2013,
+        '基金': _join_list(funding),
+        '文献类型': str(doctype or '').strip(),
+        '语言': str(language or '').strip(),
+        '引文': references_json(structured),
     }
 
 
@@ -248,7 +291,7 @@ def parse_cnki(text: str) -> tuple[list[dict], int]:
     skipped = 0
     for fields in _cnki_blocks(text):
         title = _all(fields, 'T1')
-        authors = _all(fields, 'A1')
+        authors = ';'.join(str(value).strip() for value in fields.get('A1') or [] if str(value).strip())
         affiliations = _all(fields, 'AD')
         journal = _first(fields, 'JF', 'JO', 'T2')
         if not title:
@@ -272,6 +315,8 @@ def parse_cnki(text: str) -> tuple[list[dict], int]:
                 refs=refs,
                 doi=_first(fields, 'DO'),
                 fmt=CNKI,
+                doctype=_first(fields, 'RT'),
+                language=_first(fields, 'LA'),
             )
         )
     return rows, skipped
@@ -348,6 +393,10 @@ def parse_cssci(text: str) -> tuple[list[dict], int]:
                 fmt=CSSCI,
                 country=_cssci_value(fields, '国家', '国别'),
                 category=_cssci_value(fields, '学科', '学科分类'),
+                tc=_cssci_value(fields, '引用次数', '被引次数'),
+                funding=_cssci_value(fields, '基金', '基金项目'),
+                doctype=_cssci_value(fields, '文献类型', '文章类型'),
+                language=_cssci_value(fields, '语言'),
             )
         )
     return rows, skipped
@@ -356,12 +405,27 @@ def parse_cssci(text: str) -> tuple[list[dict], int]:
 # ─── Public entry ───────────────────────────────────────────────
 
 
-def parse_text(text: str, fmt: str | None = None) -> dict | None:
-    """Parse a decoded export; ``None`` means "not a bibliographic file"."""
-    fmt = fmt or detect_format(text)
-    if fmt is None:
-        return None
-    rows, skipped = parse_cnki(text) if fmt == CNKI else parse_cssci(text)
+def _observed_capabilities(rows: list[dict]) -> dict[str, bool]:
+    """What this particular file really carried, not what its format could carry."""
+    return {
+        'refs': any(str(row.get('参考文献') or '').strip() or str(row.get('引文') or '').strip() for row in rows),
+        'tc': any(str(row.get('引用次数') or '').strip() for row in rows),
+        'usage': any(
+            str(row.get('使用次数') or '').strip() or str(row.get('使用次数2013') or '').strip() for row in rows
+        ),
+        'categories': any(str(row.get('学科') or '').strip() for row in rows),
+        'grants': any(str(row.get('基金') or '').strip() for row in rows),
+        'abstract': any(str(row.get('摘要') or '').strip() for row in rows),
+        'keywords': any(str(row.get('关键词') or '').strip() for row in rows),
+        'country': any(str(row.get('国家') or '').strip() for row in rows),
+        'doi': any(str(row.get('DOI') or '').strip() for row in rows),
+        'doctype': any(str(row.get('文献类型') or '').strip() for row in rows),
+        'language': any(str(row.get('语言') or '').strip() for row in rows),
+        'funding': any(str(row.get('基金') or '').strip() for row in rows),
+    }
+
+
+def _finalize(rows: list[dict], fmt: str, skipped: int = 0) -> dict:
     if not rows:
         raise ValueError(t('api.biblioEmpty', format=fmt))
 
@@ -383,19 +447,48 @@ def parse_text(text: str, fmt: str | None = None) -> dict | None:
         warnings.append(t('biblio.import_skipped', n=skipped))
 
     columns = list(BASE_COLUMNS)
-    for optional in ('国家', '学科'):
-        if any(row.get(optional) for row in unique):
+    for optional in OPTIONAL_COLUMNS:
+        if any(str(row.get(optional) or '').strip() for row in unique):
             columns.append(optional)
     for row in unique:
-        for optional in ('国家', '学科'):
+        for optional in OPTIONAL_COLUMNS:
             if optional not in columns:
                 row.pop(optional, None)
+    observed = _observed_capabilities(unique)
     return {
         'format': fmt,
         'rows': [{column: row.get(column, '') for column in columns} for row in unique],
         'columns': columns,
         'warnings': warnings,
+        'capabilities': observed,
     }
+
+
+def parse_text(text: str, fmt: str | None = None) -> dict | None:
+    """Parse a decoded export; ``None`` means "not a bibliographic file"."""
+    fmt = fmt or detect_format(text)
+    if fmt is None:
+        return None
+    if fmt == CNKI:
+        rows, skipped = parse_cnki(text)
+    elif fmt == CSSCI:
+        rows, skipped = parse_cssci(text)
+    else:
+        from services import biblio_formats
+
+        rows, skipped = biblio_formats.parse_format(text, fmt)
+    return _finalize(rows, fmt, skipped)
+
+
+def parse_frame(frame, fmt: str | None = None) -> dict | None:
+    """Parse a spreadsheet/CSV frame when its columns name a known export."""
+    from services import biblio_formats
+
+    fmt = fmt or biblio_formats.detect_frame(frame)
+    if fmt is None:
+        return None
+    rows, skipped = biblio_formats.parse_frame(frame, fmt)
+    return _finalize(rows, fmt, skipped)
 
 
 def parse_bytes(raw: bytes, name: str = '', fmt: str | None = None) -> dict | None:

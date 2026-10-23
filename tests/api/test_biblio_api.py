@@ -118,6 +118,38 @@ class TestBibliographicUpload:
         preview = body['preview'][0]
         assert '[1]' in preview['参考文献']
 
+    @pytest.mark.parametrize(
+        ('name', 'fmt', 'rows'),
+        [
+            ('biblio_scopus_demo.csv', 'Scopus', 3),
+            ('biblio_dimensions_demo.csv', 'Dimensions', 2),
+            ('biblio_lens_demo.csv', 'Lens', 2),
+            ('biblio_pubmed_demo.xml', 'PubMed', 2),
+            ('biblio_ris_demo.ris', 'RIS', 2),
+            ('biblio_bibtex_demo.bib', 'BibTeX', 2),
+            ('biblio_endnote_demo.enw', 'EndNote', 2),
+        ],
+    )
+    def test_international_exports_upload_as_records(self, client, name, fmt, rows):
+        body = _upload(client, name)
+        assert body['biblio_format'] == fmt
+        assert body['is_txt'] is False
+        assert body['row_count'] == rows
+        assert body['biblio_capabilities'] is not None
+        assert body['biblio_capabilities']['abstract'] is True
+
+    def test_an_ordinary_csv_is_still_an_ordinary_table(self, client):
+        response = client.post(
+            '/api/data/upload',
+            data={'file': (io.BytesIO('name,age\n张三,20\n'.encode()), 'people.csv')},
+            content_type='multipart/form-data',
+        )
+        body = response.get_json()
+        assert response.status_code == 200, body
+        assert body['biblio_format'] is None
+        assert body['columns'] == ['name', 'age']
+        assert body['row_count'] == 1
+
 
 @pytest.mark.serial
 def test_upload_biblio_visualize_end_to_end(client, app_module):

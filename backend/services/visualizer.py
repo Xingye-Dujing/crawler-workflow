@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from i18n import t
+from services.chart_contracts import BIBLIO_CHART_TYPES
 
 matplotlib.use('Agg')  # headless backend, safe for a web server
 plt.rcParams['font.sans-serif'] = [
@@ -64,6 +65,9 @@ CHART_TYPES = (
     'cluster_timeline',
     'burst',
     'timezone',
+    'circular',
+    'landscape',
+    'biblio_heatmap',
     'wordcloud',
     'map',
 )
@@ -418,6 +422,9 @@ ECHARTS_ONLY_TYPES = (
     'cluster_timeline',
     'burst',
     'timezone',
+    'circular',
+    'landscape',
+    'biblio_heatmap',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other
@@ -552,9 +559,22 @@ class VisualizationService:
         grid = option.get('grid')
         if isinstance(grid, dict):
             grid['containLabel'] = True
-            grid['bottom'] = max(int(grid.get('bottom') or 0), 96)
-            grid['right'] = max(int(grid.get('right') or 0), 72)
-            grid['left'] = max(int(grid.get('left') or 0), 64)
+
+            def _floor_margin(key: str, minimum: int) -> None:
+                raw = grid.get(key)
+                # A percentage margin is a chart's own responsive room for a long
+                # axis label. Replacing it with the numeric floor can clip 突现词
+                # or cluster names, so only pixel margins are floored.
+                if isinstance(raw, str) and raw.strip().endswith('%'):
+                    return
+                try:
+                    grid[key] = max(int(float(raw or 0)), minimum)
+                except (TypeError, ValueError):
+                    grid[key] = minimum
+
+            _floor_margin('bottom', 96)
+            _floor_margin('right', 72)
+            _floor_margin('left', 64)
 
         title = option.get('title')
         if isinstance(title, dict):
@@ -643,7 +663,7 @@ class VisualizationService:
         }
 
         # ── Bibliometric views (fixed columns from the biblio node) ──
-        if chart_type in ('knowledge_graph', 'cluster_timeline', 'burst', 'timezone'):
+        if chart_type in BIBLIO_CHART_TYPES:
             from services import biblio_charts
 
             try:

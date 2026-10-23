@@ -25,16 +25,16 @@ import pandas as pd
 from analyzers.keyword import KeywordExtractor
 from i18n import t
 from services import biblio_cluster
+from services.biblio_refs import normalize_reference, parse_reference, references_from_json
 from services.biblio_schema import (
     CITATION_TYPES,
-    COUPLING_TYPE,
+    COUPLING_TYPES,
     LIMITS,
     normalize_params,
     read_columns,
 )
 
 _YEAR = re.compile(r'(?:19|20)\d{2}')
-_REF_TYPE = re.compile(r'\[(?:J|M|D|C|N|R|S|G|P|A|EB/OL|J/OL|DB/OL|M/OL|C/OL)\]')
 _LIST_SPLIT = re.compile(r'[;；,，、]+')
 _TERM_POS = frozenset({'n', 'nz', 'vn', 'v', 'eng'})
 _MAX_TERMS_PER_DOC = 30
@@ -49,9 +49,12 @@ ENTITY_LABEL_KEYS = {
     'country': 'biblio.entity.country',
     'term': 'biblio.entity.term',
     'category': 'biblio.entity.category',
+    'journal': 'biblio.entity.journal',
+    'funder': 'biblio.entity.funder',
     'document_cocitation': 'biblio.entity.document_cocitation',
     'author_cocitation': 'biblio.entity.author_cocitation',
     'journal_cocitation': 'biblio.entity.journal_cocitation',
+    'document': 'biblio.entity.document',
     'bibliographic_coupling': 'biblio.entity.bibliographic_coupling',
 }
 
@@ -77,6 +80,14 @@ def _year(value) -> int | None:
     return int(match.group(0)) if match else None
 
 
+def _numeric(value) -> float:
+    text = str(value if value is not None else '').replace(',', '').strip()
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
 def _json(value) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 
@@ -98,57 +109,26 @@ def _unique_labels(labels: dict[str, str]) -> dict[str, str]:
     return display
 
 
-def _parse_reference(raw: str) -> dict | None:
-    """One cited reference, from a Chinese or English bibliographic string.
-
-    The parser is intentionally conservative: a reference without a title and
-    without a journal is not a usable node. The caller measures the parse rate
-    and refuses a graph built mostly from unparsed fragments.
-    """
-    text = re.sub(r'^\s*\[\d+\]\s*', '', str(raw or '')).strip()
-    if not text:
-        return None
-    marker = _REF_TYPE.search(text)
-    authors: list[str] = []
-    title = ''
-    journal = ''
-    year = _year(text)
-    if marker:
-        head = text[: marker.start()].strip().rstrip('.．')
-        parts = re.split(r'[.．]', head, maxsplit=1)
-        authors = _split(parts[0]) if parts else []
-        title = (parts[1] if len(parts) > 1 else '').strip().rstrip('.．')
-        tail = text[marker.end() :].lstrip('.． ')
-        if marker.group(0).startswith('[J'):
-            found = re.match(r'([^,，.]+)', tail)
-            if found:
-                journal = found.group(1).strip()
-    else:
-        parts = re.split(r'[.．]', text, maxsplit=1)
-        authors = _split(parts[0]) if parts else []
-        title = (parts[1] if len(parts) > 1 else text).strip().rstrip('.．')
-    if not title and not journal:
-        return None
-    title = re.sub(r'\s+', ' ', title).strip()
-    return {
-        'raw': text,
-        'title': title,
-        'authors': authors,
-        'journal': journal,
-        'year': year,
-    }
-
-
 def _ref_key(text: str) -> str:
     return re.sub(r'[\s\.。；;,，:：\-—_（）()\[\]【】]', '', text or '').lower()
 
 
-def _reference_nodes(raw_refs: list[str], entity: str) -> tuple[dict, list[dict], int]:
-    """Ref key → metadata, and the parsed refs. Returns (nodes, parsed, total)."""
+def _reference_nodes(
+    raw_refs: list[str],
+    entity: str,
+    structured: list[dict] | None = None,
+) -> tuple[dict, list[dict], int]:
+    """Ref key → metadata, and the parsed refs. Returns (nodes, parsed, total).
+
+    ``structured`` is the importer's canonical ``引文`` list. When present it is
+    preferred, so a WoS/Scopus/PubMed reference keeps the author, journal and
+    DOI the exporter already separated instead of being re-guessed from text.
+    """
     nodes: dict[str, dict] = {}
     parsed: list[dict] = []
-    for raw in raw_refs:
-        item = _parse_reference(raw)
+    items = structured if structured else raw_refs
+    for value in items:
+        item = normalize_reference(value) if isinstance(value, dict) else parse_reference(value)
         if item is None:
             continue
         parsed.append(item)
@@ -169,7 +149,16 @@ def _reference_nodes(raw_refs: list[str], entity: str) -> tuple[dict, list[dict]
         if not key:
             continue
         nodes.setdefault(key, {'label': label[:160], 'year': item['year']})
-    return nodes, parsed, len(raw_refs)
+    total = len(raw_refs) if raw_refs else len(parsed)
+    return nodes, parsed, total
+
+
+def _document_references(record: dict, columns: dict) -> tuple[list[str], list[dict]]:
+    """The raw and structured references a document carries."""
+    raw_text = str(record.get(columns['reference']) or '')
+    raw_refs = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    structured = references_from_json(record.get('引文')) if '引文' in record else []
+    return raw_refs, structured
 
 
 def _doc_terms(row: dict, columns: dict, entity: str) -> list[str]:
@@ -200,10 +189,14 @@ def _require_columns(df: pd.DataFrame, params: dict) -> dict:
     entity = params['entity_type']
     columns = read_columns(params)
     required: list[str] = []
-    if entity in CITATION_TYPES or entity == COUPLING_TYPE:
-        required = [columns['reference'], columns['year']]
-        if entity == COUPLING_TYPE:
+    if entity in CITATION_TYPES or entity in COUPLING_TYPES:
+        required = [columns['year']]
+        if columns['reference'] not in df.columns and '引文' not in df.columns:
+            required.insert(0, columns['reference'])
+        if entity in ('document', 'bibliographic_coupling'):
             required.append(columns['title'])
+        if entity == 'journal':
+            required.append(columns['entity'])
     elif entity == 'term':
         if columns['title'] not in df.columns and columns['abstract'] not in df.columns:
             missing = f'{columns["title"]}/{columns["abstract"]}'
@@ -229,14 +222,13 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
     dropped_year = 0
     skipped = 0
 
-    if entity in CITATION_TYPES or entity == COUPLING_TYPE:
+    if entity in CITATION_TYPES or entity in COUPLING_TYPES:
         total_refs = 0
         parsed_refs = 0
         field_refs = 0
         for _, row in df.iterrows():
-            raw_text = str(row.get(columns['reference']) or '')
-            raw_refs = [line.strip() for line in raw_text.splitlines() if line.strip()]
-            nodes, parsed, total = _reference_nodes(raw_refs, entity)
+            raw_refs, structured = _document_references(row.to_dict(), columns)
+            nodes, parsed, total = _reference_nodes(raw_refs, entity, structured)
             total_refs += total
             parsed_refs += len(parsed)
             if entity == 'author_cocitation':
@@ -270,10 +262,25 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
             continue
 
         record = row.to_dict()
-        if entity in CITATION_TYPES or entity == COUPLING_TYPE:
-            raw_text = str(record.get(columns['reference']) or '')
-            raw_refs = [line.strip() for line in raw_text.splitlines() if line.strip()]
-            nodes, _, _ = _reference_nodes(raw_refs, entity)
+        filtered = False
+        for column, param in (
+            (params['tc_column'], 'min_tc'),
+            (params['usage_column'], 'min_usage'),
+        ):
+            if params.get(param) is None:
+                continue
+            if column not in df.columns:
+                raise BiblioError(t('biblio.column_missing', col=column, entity=entity))
+            if _numeric(record.get(column)) < params[param]:
+                filtered = True
+                break
+        if filtered:
+            skipped += 1
+            continue
+
+        if entity in CITATION_TYPES or entity in COUPLING_TYPES:
+            raw_refs, structured = _document_references(record, columns)
+            nodes, _, _ = _reference_nodes(raw_refs, entity, structured)
             entities = list(nodes)
         elif entity == 'term':
             entities = _term_entities(record, columns)
@@ -284,13 +291,19 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
             skipped += 1
             continue
 
-        if entity == COUPLING_TYPE:
-            title = str(record.get(columns['title']) or '').strip()
-            record_id = str(record.get('记录ID') or '').strip()
-            name = title or record_id or f'record-{len(docs) + 1}'
-            if name in seen_doc_names:
-                name = f'{name}（{record_id[:6] or len(docs) + 1}）'
-            seen_doc_names.add(name)
+        if entity in COUPLING_TYPES:
+            if entity == 'journal':
+                name = str(record.get(columns['entity']) or '').strip()
+            else:
+                title = str(record.get(columns['title']) or '').strip()
+                record_id = str(record.get('记录ID') or '').strip()
+                name = title or record_id or f'record-{len(docs) + 1}'
+                if name in seen_doc_names:
+                    name = f'{name}（{record_id[:6] or len(docs) + 1}）'
+                seen_doc_names.add(name)
+            if not name:
+                skipped += 1
+                continue
         else:
             name = ''
 
@@ -301,6 +314,8 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
                 'entities': list(dict.fromkeys(entities)),
                 'terms': _doc_terms(record, columns, entity),
                 'name': name,
+                'tc': _numeric(record.get(columns['tc'])) if columns['tc'] in df.columns else None,
+                'usage': _numeric(record.get(columns['usage'])) if columns['usage'] in df.columns else None,
             }
         )
 
@@ -328,7 +343,7 @@ def _node_metadata(docs: list[dict], params: dict, ref_nodes: dict) -> tuple[dic
     node_docs: dict[str, set[int]] = defaultdict(set)
     node_years: dict[str, int | None] = {}
     for doc in docs:
-        if entity == COUPLING_TYPE:
+        if entity in COUPLING_TYPES:
             name = doc['name']
             labels[name] = name
             year_counts[name][doc['year']] += 1
@@ -363,7 +378,8 @@ def _select(freq: Counter, params: dict) -> set[str]:
             if total >= position * position:
                 g = position
         return set(names[: max(1, g)])
-    return {name for name in names if freq[name] >= params['min_count']}
+    floor = params.get('threshold_c') or params['min_count']
+    return {name for name in names if freq[name] >= floor}
 
 
 def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, Counter, dict, dict]:
@@ -381,8 +397,8 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
     for name, counts in year_counts.items():
         total_freq[name] = sum(counts.values())
 
-    if entity == COUPLING_TYPE:
-        # Coupling is a relation between papers, not between two events inside
+    if entity in COUPLING_TYPES:
+        # Coupling is a relation between citing units, not between two events inside
         # one year: a 2021 paper and a 2022 paper that share references are
         # coupled. Counting pairs inside a slice missed exactly that case.
         strength: Counter = Counter()
@@ -419,12 +435,22 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
         total_freq = Counter(strength)
         return total_freq, merged_edges, edge_slices, {'slices': len(slices), 'node_docs': node_docs}
 
+    look_back = params.get('look_back_years') or 0
     for slice_id, members in sorted(slices.items()):
         slice_freq: Counter = Counter()
         for doc in members:
             for name in doc['entities']:
                 slice_freq[name] += 1
-        selected = _select(slice_freq, params)
+        if look_back:
+            look_slices = max(0, look_back // width)
+            selection_freq: Counter = Counter()
+            for prior in range(max(0, slice_id - look_slices), slice_id + 1):
+                for doc in slices.get(prior, []):
+                    for name in doc['entities']:
+                        selection_freq[name] += 1
+            selected = _select(selection_freq, params)
+        else:
+            selected = _select(slice_freq, params)
         for doc in members:
             chosen = sorted(name for name in doc['entities'] if name in selected)
             for left, right in combinations(chosen, 2):
@@ -455,6 +481,29 @@ def _normalized_edges(merged: Counter, total_freq: Counter, measure: str) -> dic
             continue
         edges[(left, right)] = {'weight': weight, 'count': count}
     return edges
+
+
+def _threshold_edges(edges: dict, total_freq: Counter, params: dict) -> dict:
+    """Apply the (c, cc, ccv) analogue of CiteSpace's threshold selection.
+
+    ``threshold_c`` picks nodes (handled by :func:`_select`), ``threshold_cc``
+    is the minimum raw co-occurrence/citation count, and ``threshold_ccv`` is
+    the minimum share of the union of the two endpoints' occurrences. Applying
+    both to the merged edge table keeps a high-count edge between two very
+    common nodes from being mistaken for a strong relation.
+    """
+    floor = params.get('threshold_cc') or 0
+    share = params.get('threshold_ccv') or 0.0
+    kept = {}
+    for key, info in edges.items():
+        if info['count'] < floor:
+            continue
+        if share:
+            union = total_freq.get(key[0], 0) + total_freq.get(key[1], 0) - info['count']
+            if union <= 0 or info['count'] / union < share:
+                continue
+        kept[key] = info
+    return kept
 
 
 def _max_links(edges: dict, params: dict) -> dict:
@@ -524,6 +573,40 @@ def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> di
 
 
 # ─── Metrics, bursts and layout ─────────────────────────────────
+
+
+def _node_citation_stats(nodes: list[str], node_docs: dict[str, set[int]], docs: list[dict]) -> dict[str, dict]:
+    """Per-node TC totals and h-index, counted over the documents carrying the node."""
+    stats: dict[str, dict] = {}
+    for name in nodes:
+        values = []
+        for index in node_docs.get(name, set()):
+            if 0 <= index < len(docs):
+                value = docs[index].get('tc')
+                if value is not None:
+                    values.append(max(0.0, float(value)))
+        values.sort(reverse=True)
+        h = 0
+        for rank, value in enumerate(values, start=1):
+            if value >= rank:
+                h = rank
+            else:
+                break
+        stats[name] = {'总被引': round(sum(values), 4), 'H指数': h}
+    return stats
+
+
+def _node_usage_stats(nodes: list[str], node_docs: dict[str, set[int]], docs: list[dict]) -> dict[str, float]:
+    stats: dict[str, float] = {}
+    for name in nodes:
+        total = 0.0
+        for index in node_docs.get(name, set()):
+            if 0 <= index < len(docs):
+                value = docs[index].get('usage')
+                if value is not None:
+                    total += max(0.0, float(value))
+        stats[name] = round(total, 4)
+    return stats
 
 
 def _normalized_degree(graph: nx.Graph) -> dict[str, float]:
@@ -768,6 +851,9 @@ def build(df: pd.DataFrame, params: dict, nid: str = '') -> dict:
     edges = _normalized_edges(merged_edges, total_freq, params['link_measure'])
     if not edges:
         raise BiblioError(t('biblio.no_edges', start=window['start'], end=window['end']))
+    edges = _threshold_edges(edges, total_freq, params)
+    if not edges:
+        raise BiblioError(t('biblio.no_edges_after_threshold'))
     edges = _max_links(edges, params)
     edges = _prune(edges, edge_slices, params, notes)
     if not edges:
@@ -790,7 +876,26 @@ def build(df: pd.DataFrame, params: dict, nid: str = '') -> dict:
     for (left, right), info in edges.items():
         graph.add_edge(left, right, weight=info['weight'], count=info['count'])
 
+    if params['largest_component']:
+        components = list(nx.connected_components(graph))
+        if len(components) > 1:
+            largest = sorted(components, key=lambda members: (-len(members), min(members)))[0]
+            keep = set(largest)
+            before = len(final_nodes)
+            edges = {key: info for key, info in edges.items() if key[0] in keep and key[1] in keep}
+            final_nodes = sorted({name for key in edges for name in key})
+            if not edges:
+                raise BiblioError(t('biblio.no_edges_after_component'))
+            graph = nx.Graph()
+            graph.add_nodes_from(final_nodes)
+            for (left, right), info in edges.items():
+                graph.add_edge(left, right, weight=info['weight'], count=info['count'])
+            notes.append(t('biblio.largest_component', before=before, after=len(final_nodes)))
+
     metrics = _metrics(graph, final_nodes, notes)
+    input_columns = set(df.columns)
+    citation_stats = _node_citation_stats(final_nodes, node_docs, docs) if params['tc_column'] in input_columns else {}
+    usage_stats = _node_usage_stats(final_nodes, node_docs, docs) if params['usage_column'] in input_columns else {}
     bursts: dict[str, dict] = {}
     burst_rows: list[dict] = []
     if params['burst']:
@@ -870,6 +975,10 @@ def build(df: pd.DataFrame, params: dict, nid: str = '') -> dict:
             'y': positions[name][1],
             '连接': links,
         }
+        if citation_stats:
+            row.update(citation_stats.get(name, {'总被引': 0.0, 'H指数': 0}))
+        if usage_stats:
+            row['使用次数合计'] = usage_stats.get(name, 0.0)
         if clusters is not None:
             cluster = clusters['members'].get(name, {})
             row['聚类'] = int(cluster.get('cluster', 0))
@@ -915,6 +1024,7 @@ def build(df: pd.DataFrame, params: dict, nid: str = '') -> dict:
         'link_measure': params['link_measure'],
         'clusters': clusters['summary'] if clusters else None,
         'bursts': len(bursts),
+        'output_shape': params['output_shape'],
         'notes': notes,
     }
     return {
@@ -937,6 +1047,21 @@ def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
     graph_path = target / f'{safe}_graph.graphml'
     nx.write_graphml(result['graph'], graph_path)
     files['biblio_graphml'] = str(graph_path)
+
+    gml_path = target / f'{safe}_graph.gml'
+    nx.write_gml(result['graph'], gml_path)
+    files['biblio_gml'] = str(gml_path)
+
+    json_path = target / f'{safe}_graph.json'
+    snapshot = {
+        'summary': result.get('summary') or {},
+        'nodes': result.get('rows') or [],
+        'edges': result.get('edges') or [],
+        'clusters': result.get('clusters') or [],
+        'bursts': result.get('bursts') or [],
+    }
+    json_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
+    files['biblio_json'] = str(json_path)
 
     nodes_path = target / f'{safe}_nodes.csv'
     pd.DataFrame(result['rows']).to_csv(nodes_path, index=False, encoding='utf-8-sig')

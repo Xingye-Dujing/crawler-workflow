@@ -18,6 +18,7 @@ complete even where a centroid is missing. A chart whose required field is absen
 (``ChartConfigError``), the rule the renderers already follow.
 """
 
+import json
 import math
 import re
 
@@ -322,6 +323,16 @@ class LatexChartService:
             return cls._topic_map(df, x, y, value_field, label_field)
         if chart_type == 'topic_terms':
             return cls._topic_terms(df, x, y, y2)
+        if chart_type in (
+            'knowledge_graph',
+            'cluster_timeline',
+            'burst',
+            'timezone',
+            'circular',
+            'landscape',
+            'biblio_heatmap',
+        ):
+            return cls._biblio_figure(df, chart_type)
         if chart_type == 'sankey':
             return cls._relation(df, x, y, value_field, agg, ribbons=True)
         if chart_type == 'network':
@@ -811,10 +822,547 @@ class LatexChartService:
             + '\n\\end{minipage}'
         )
 
+    # ── bibliometric figures ──────────────────────────────────────────
+
+    @staticmethod
+    def _biblio_text(value) -> str:
+        if value is None or (isinstance(value, float) and not math.isfinite(value)):
+            return ''
+        return str(value).strip()
+
+    @staticmethod
+    def _biblio_float(value, default=0.0) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        return number if math.isfinite(number) else default
+
+    @classmethod
+    def _biblio_parsed(cls, value, column: str):
+        if isinstance(value, (list, dict)):
+            return value
+        text = cls._biblio_text(value)
+        if not text:
+            return []
+        try:
+            return json.loads(text)
+        except (TypeError, ValueError) as exc:
+            raise ChartConfigError(t('chart.biblio_bad_json', col=column)) from exc
+
+    @classmethod
+    def _require_biblio(cls, df, *columns):
+        VisualizationService._require_columns(df, *columns)
+
+    @classmethod
+    def _biblio_node_rows(cls, df, columns):
+        cls._require_biblio(df, *columns)
+        rows = {}
+        for _, row in df.iterrows():
+            name = cls._biblio_text(row['节点'])
+            if name and name not in rows:
+                rows[name] = row
+        if not rows:
+            raise ChartConfigError(t('chart.biblio_no_nodes'))
+        return rows, list(rows)
+
+    @classmethod
+    def _biblio_links(cls, rows, names):
+        cls._require_biblio(pd.DataFrame([rows[name] for name in names[:1]]), '连接')
+        links = {}
+        for name in names:
+            for item in cls._biblio_parsed(rows[name].get('连接'), '连接'):
+                if not isinstance(item, dict):
+                    continue
+                target = cls._biblio_text(item.get('target'))
+                if target not in rows or target == name:
+                    continue
+                left, right = sorted((name, target))
+                value = cls._biblio_float(item.get('value'), 0.0)
+                if (left, right) not in links or value > links[(left, right)]['value']:
+                    links[(left, right)] = {'source': left, 'target': right, 'value': value}
+        if not links:
+            raise ChartConfigError(t('chart.biblio_no_links'))
+        return sorted(links.values(), key=lambda link: (-link['value'], link['source'], link['target']))
+
+    @staticmethod
+    def _biblio_color(index: int) -> str:
+        return _CYCLE_NAMES[index % len(_CYCLE_NAMES)]
+
+    @classmethod
+    def _biblio_cluster_colors(cls, rows, names):
+        colors = {}
+        for name in names:
+            cluster = cls._biblio_text(rows[name].get('聚类'))
+            label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+            key = f'#{cluster} {label}' if cluster else ''
+            if key and key not in colors:
+                colors[key] = cls._biblio_color(len(colors))
+        return colors
+
+    @staticmethod
+    def _biblio_formulas() -> str:
+        # A CiteSpace-style method note belongs inside the figure: the reader should not
+        # have to hunt through prose to learn which normalized link and centrality numbers
+        # were plotted. Every formula is the one this implementation actually computes.
+        return (
+            '\\medskip\\par{\\footnotesize\\textbf{计量公式：}'
+            r'余弦 $\cos(C_i,C_j)=w_{ij}/\sqrt{w_i w_j}$；Dice $2w_{ij}/(w_i+w_j)$；'
+            r'Jaccard $w_{ij}/(w_i+w_j-w_{ij})$。中介中心性 '
+            r'$g(v)=\sum_{s\ne v\ne t}\sigma_{st}(v)/\sigma_{st}$；PageRank '
+            r'$PR(p)=\frac{1-d}{N}+d\sum_{q\to p}PR(q)/L(q)$；'
+            r'$\Sigma=(g(v)+1)^B$。'
+            '}\n'
+        )
+
+    @classmethod
+    def _biblio_fixed_graph(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', 'x', 'y', '连接', '频次'))
+        links = cls._biblio_links(rows, names)
+        colors = cls._biblio_cluster_colors(rows, names)
+        max_freq = max((cls._biblio_float(rows[name]['频次'], 0.0) for name in names), default=1.0) or 1.0
+        xs = [cls._biblio_float(rows[name]['x'], 0.0) for name in names]
+        ys = [cls._biblio_float(rows[name]['y'], 0.0) for name in names]
+        min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+        span_x = max_x - min_x or 1.0
+        span_y = max_y - min_y or 1.0
+        positions = {
+            name: (
+                1.0 + 13.5 * (xs[i] - min_x) / span_x,
+                1.0 + 7.5 * (ys[i] - min_y) / span_y,
+            )
+            for i, name in enumerate(names)
+        }
+        center_x = sum(value[0] for value in positions.values()) / len(positions)
+        center_y = sum(value[1] for value in positions.values()) / len(positions)
+        ranked = sorted(names, key=lambda name: (-cls._biblio_float(rows[name]['频次'], 0.0), name))
+        labelled = set(ranked[:120])
+        max_weight = max((link['value'] for link in links), default=1.0) or 1.0
+        out = []
+        for link in links[:180]:
+            x1, y1 = positions[link['source']]
+            x2, y2 = positions[link['target']]
+            width = 0.25 + 2.5 * math.sqrt(max(0.0, link['value'] / max_weight))
+            out.append(f'\\draw[black!18,line width={width:.2f}pt] ({x1:.2f},{y1:.2f}) -- ({x2:.2f},{y2:.2f});')
+        for name in names:
+            x, y = positions[name]
+            frequency = cls._biblio_float(rows[name]['频次'], 0.0)
+            radius = 0.08 + 0.52 * math.sqrt(max(0.0, frequency / max_freq))
+            cluster = cls._biblio_text(rows[name].get('聚类'))
+            label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+            color = colors.get(f'#{cluster} {label}', 'cA')
+            burst = cls._biblio_float(rows[name].get('突现强度'), 0.0) if '突现强度' in rows[name] else 0.0
+            border = 'black' if burst > 0 else color
+            width = '1.1pt' if burst > 0 else '0.6pt'
+            out.append(
+                f'\\draw[fill={color}!55,draw={border},line width={width}] ({x:.2f},{y:.2f}) circle ({radius:.2f});'
+            )
+            if name in labelled:
+                dx, dy = x - center_x, y - center_y
+                if abs(dx) >= abs(dy):
+                    direction, anchor, xoff = (
+                        ('east', 'west', radius + 0.14) if dx >= 0 else ('west', 'east', radius + 0.14)
+                    )
+                else:
+                    direction, anchor = ('north', 'south') if dy >= 0 else ('south', 'north')
+                    xoff = 0.0
+                lx = x + (xoff if abs(dx) >= abs(dy) else 0)
+                ly = y + (0 if abs(dx) >= abs(dy) else (radius + 0.14 if dy >= 0 else -(radius + 0.14)))
+                font = '\\small' if frequency / max_freq >= 0.65 else '\\scriptsize'
+                out.append(
+                    f'\\draw[leadline] ({x:.2f},{y:.2f}) -- ({lx:.2f},{ly:.2f});'
+                    f'\\node[font={font},anchor={anchor},lblbox] at ({lx:.2f},{ly:.2f}) {{{_esc(name)}}};'
+                )
+        if len(names) > 120:
+            omitted = len(names) - 120
+            out.append(
+                '\\node[font=\\scriptsize,text=black!55,anchor=south west] at (0,0)'
+                f'{{已省略 {omitted} 个低频节点标签；完整节点见三线表。}};'
+            )
+        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+
+    @classmethod
+    def _biblio_circular(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '连接', '频次'))
+        links = cls._biblio_links(rows, names)
+        nodes = [{'source': link['source'], 'target': link['target'], 'value': link['value']} for link in links]
+        return cls._graph_tikz(nodes, links)
+
+    @classmethod
+    def _biblio_landscape(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '聚类', '聚类标签', '频次'))
+        clusters = {}
+        for name in names:
+            cluster = cls._biblio_text(rows[name].get('聚类'))
+            if not cluster:
+                continue
+            label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+            key = f'#{cluster} {label}'
+            group = clusters.setdefault(key, {'frequency': 0.0, 'nodes': 0, 'x': [], 'y': []})
+            group['frequency'] += cls._biblio_float(rows[name]['频次'], 0.0)
+            group['nodes'] += 1
+            if 'x' in rows[name] and 'y' in rows[name]:
+                group['x'].append(cls._biblio_float(rows[name].get('x'), 0.0))
+                group['y'].append(cls._biblio_float(rows[name].get('y'), 0.0))
+        if not clusters:
+            raise ChartConfigError(t('chart.biblio_no_clusters'))
+        ordered = sorted(clusters.items(), key=lambda item: (-item[1]['frequency'], item[0]))[:30]
+        max_frequency = max((group['frequency'] for _, group in ordered), default=1.0) or 1.0
+        radius = max(2.4, 0.48 * len(ordered))
+        out = []
+        for index, (name, group) in enumerate(ordered):
+            angle = 360.0 * index / len(ordered)
+            if group['x'] and group['y']:
+                x = sum(group['x']) / len(group['x']) / 100.0 * 12.0
+                y = sum(group['y']) / len(group['y']) / 100.0 * 8.0
+            else:
+                x = radius * math.cos(math.radians(angle)) + 7.0
+                y = radius * math.sin(math.radians(angle)) + 4.5
+            size = 0.35 + 1.05 * math.sqrt(max(0.0, group['frequency'] / max_frequency))
+            color = cls._biblio_color(index)
+            out.append(
+                f'\\draw[fill={color}!55,draw={color},line width=0.7pt,opacity=0.78]'
+                f' ({x:.2f},{y:.2f}) circle ({size:.2f});'
+                f'\\node[lblbox,anchor=center] at ({x:.2f},{y:.2f}) {{{_fold_label(name, 12)}\\\\{group["nodes"]}项}};'
+            )
+        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+
+    @classmethod
+    def _biblio_timeline(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '聚类', '聚类标签', '首年', '末年', '频次'))
+        groups = {}
+        for name in names:
+            cluster = cls._biblio_text(rows[name].get('聚类'))
+            label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+            key = f'#{cluster} {label}'
+            group = groups.setdefault(key, [])
+            first = int(cls._biblio_float(rows[name].get('首年'), 0))
+            last = int(cls._biblio_float(rows[name].get('末年'), first))
+            frequency = cls._biblio_float(rows[name].get('频次'), 0.0)
+            if first:
+                group.append((first, last, name, frequency))
+        if not groups:
+            raise ChartConfigError(t('chart.biblio_no_years'))
+        ordered = sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))[:18]
+        categories = [name for name, _ in ordered]
+        years = [year for _, entries in ordered for entry in entries for year in (entry[0], entry[1]) if year]
+        if not years:
+            raise ChartConfigError(t('chart.biblio_no_years'))
+        max_frequency = max((entry[3] for _, entries in ordered for entry in entries), default=1.0) or 1.0
+        body = []
+        for index, (name, entries) in enumerate(ordered):
+            color = cls._biblio_color(index)
+            firsts = [entry[0] for entry in entries]
+            lasts = [entry[1] for entry in entries]
+            category_key = _esc(name).replace(' ', '~')
+            body.append(
+                f'\\draw[black!18,line width=1pt] (axis cs:{min(firsts)},{category_key}) -- '
+                f'(axis cs:{max(lasts)},{category_key});'
+            )
+            coordinates = []
+            for first, _last, entry_name, frequency in entries:
+                size = 1.5 + 4.5 * math.sqrt(max(0.0, frequency / max_frequency))
+                coordinates.append((first, entry_name, size))
+            # A separate mark line per point keeps the paper palette readable without a custom
+            # colormap callback; the category axis is already the cluster identity.
+            for first, entry_name, size in coordinates[:12]:
+                body.append(
+                    f'\\draw[{color},fill={color}!60] (axis cs:{first},{category_key}) circle ({size:.1f}pt);'
+                    f'\\node[lblbox,anchor=west,font=\\scriptsize] at (axis cs:{first},{category_key})'
+                    f' {{{_esc(entry_name)}}};'
+                )
+        return (
+            '\\begin{tikzpicture}\\begin{axis}[cixi,symbolic y coords={'
+            + _sym(categories)
+            + '},ytick=data,y=0.95cm,xmin='
+            + str(min(years) - 1)
+            + ',xmax='
+            + str(max(years) + 1)
+            + ',xlabel={年份},ylabel={聚类},width=15cm,height='
+            + str(1.0 + len(ordered) * 0.95)
+            + 'cm]\n'
+            + '\n'.join(body)
+            + '\n\\end{axis}\\end{tikzpicture}'
+        )
+
+    @classmethod
+    def _biblio_burst(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '突现起始', '突现结束', '突现强度'))
+        items = []
+        for name in names:
+            strength = cls._biblio_float(rows[name].get('突现强度'), 0.0)
+            start = int(cls._biblio_float(rows[name].get('突现起始'), 0))
+            end = int(cls._biblio_float(rows[name].get('突现结束'), 0))
+            if strength > 0 and start and end >= start:
+                items.append((name, start, end, strength))
+        if not items:
+            raise ChartConfigError(t('chart.biblio_no_bursts'))
+        items.sort(key=lambda item: (-item[3], item[0]))
+        items = items[:70]
+        categories = [item[0] for item in items]
+        years = [item[1] for item in items] + [item[2] for item in items]
+        body = []
+        for index, (name, start, end, strength) in enumerate(items):
+            color = cls._biblio_color(index % 10)
+            body.append(
+                f'\\draw[{color},fill={color}!65,rounded corners=1pt] (axis cs:{start},'
+                f'{_esc(name).replace(" ", "~")}) rectangle (axis cs:{end + 1},'
+                f'{_esc(name).replace(" ", "~")});'
+                f'\\node[lblbox,anchor=west,font=\\scriptsize] at (axis cs:{start},'
+                f'{_esc(name).replace(" ", "~")}) {{{_esc(name)}}};'
+                f'\\node[font=\\scriptsize,anchor=east] at (axis cs:{end + 1},'
+                f'{_esc(name).replace(" ", "~")}) {{B={_num(strength)}}};'
+            )
+        height = f'{1 + len(items) * 1.15:.2f}cm'
+        return (
+            '\\begin{tikzpicture}\\begin{axis}[hide y axis line,hide x axis line,y=-1.15cm,'
+            'symbolic y coords={' + _sym(categories) + '},ytick=data,'
+            'yticklabel style={font=\\scriptsize},'
+            f'xmin={min(years) - 1},xmax={max(years) + 2},xlabel={{年份}},width=16cm,height='
+            + height
+            + ']\n'
+            + '\n'.join(body)
+            + '\n\\end{axis}\\end{tikzpicture}'
+        )
+
+    @classmethod
+    def _biblio_timezone(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '年份序列', '频次'))
+        ordered = sorted(names, key=lambda name: (-cls._biblio_float(rows[name]['频次'], 0.0), name))[:20]
+        series = {}
+        for name in ordered:
+            parsed = cls._biblio_parsed(rows[name].get('年份序列'), '年份序列')
+            if not isinstance(parsed, dict) or not parsed:
+                continue
+            series[name] = {int(year): int(cls._biblio_float(count, 0)) for year, count in parsed.items()}
+        if not series:
+            raise ChartConfigError(t('chart.biblio_no_years'))
+        years = sorted({year for item in series.values() for year in item})
+        max_count = max((count for item in series.values() for count in item.values()), default=1) or 1
+        body = []
+        for index, name in enumerate(ordered):
+            if name not in series:
+                continue
+            y = index * 1.15
+            color = cls._biblio_color(index)
+            for year, count in sorted(series[name].items()):
+                size = 1.5 + 5.5 * math.sqrt(max(0, count) / max_count)
+                body.append(f'\\draw[{color},fill={color}!65] (axis cs:{year},{y:.2f}) circle ({size:.1f}pt);')
+            body.append(
+                f'\\node[lblbox,anchor=east,font=\\scriptsize] at (axis cs:{years[0] - 0.5},{y:.2f}) {{{_esc(name)}}};'
+            )
+        return (
+            '\\begin{tikzpicture}\\begin{axis}[hide y axis line,hide x axis line,no marks,'
+            f'xmin={years[0] - 1.5},xmax={years[-1] + 1},ymin=-0.6,'
+            f'ymax={len(ordered) * 1.15:.2f},xlabel={{年份}},width=16cm,'
+            f'height={len(ordered) * 1.2:.2f}cm]\n' + '\n'.join(body) + '\n\\end{axis}\\end{tikzpicture}'
+        )
+
+    @classmethod
+    def _biblio_heatmap(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '聚类', '聚类标签', '年份序列', '频次'))
+        groups = {}
+        years = set()
+        for name in names:
+            cluster = cls._biblio_text(rows[name].get('聚类'))
+            if not cluster:
+                continue
+            label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+            key = f'#{cluster} {label}'
+            parsed = cls._biblio_parsed(rows[name].get('年份序列'), '年份序列')
+            if not isinstance(parsed, dict):
+                continue
+            group = groups.setdefault(key, {})
+            for year, count in parsed.items():
+                try:
+                    year_int = int(float(year))
+                except (TypeError, ValueError):
+                    continue
+                group[year_int] = group.get(year_int, 0) + int(cls._biblio_float(count, 0))
+                years.add(year_int)
+        if not groups or not years:
+            raise ChartConfigError(t('chart.biblio_no_clusters'))
+        ordered = sorted(groups, key=lambda label: (-sum(groups[label].values()), label))[:24]
+        year_list = sorted(years)
+        max_count = max((count for group in ordered for count in groups[group].values()), default=1) or 1
+        body = []
+        for row, group in enumerate(ordered):
+            y = len(ordered) - row
+            for column, year in enumerate(year_list):
+                count = groups[group].get(year, 0)
+                shade = int(10 + 80 * count / max_count) if count else 0
+                fill = f'cA!{shade}' if shade else 'black!3'
+                body.append(
+                    f'\\draw[fill={fill},draw=black!10] ({column:.2f},{y:.2f})rectangle ({column + 1:.2f},{y + 1:.2f});'
+                )
+                if count:
+                    color = 'white' if shade > 55 else 'black'
+                    body.append(
+                        f'\\node[font=\\scriptsize,text={color}] at ({column + 0.5:.2f},{y + 0.5:.2f}) {{{count}}};'
+                    )
+        for row, group in enumerate(ordered):
+            label = _fold_label(group, 11)
+            y = len(ordered) - row + 0.5
+            body.append(f'\\node[font=\\scriptsize,text=black,anchor=east] at (-0.15,{y:.2f}) {{{label}}};')
+        for column, year in enumerate(year_list):
+            body.append(f'\\node[font=\\scriptsize,rotate=45,anchor=north west] at ({column + 0.5:.2f},0) {{{year}}};')
+        pic = '\\begin{tikzpicture}[x=0.65cm,y=0.7cm]\n' + '\n'.join(body) + '\n\\end{tikzpicture}'
+        return pic
+
+    @classmethod
+    def _biblio_figure(cls, df, chart_type: str) -> str:
+        if chart_type in ('knowledge_graph', 'circular'):
+            pic = cls._biblio_fixed_graph(df) if chart_type == 'knowledge_graph' else cls._biblio_circular(df)
+        elif chart_type == 'landscape':
+            pic = cls._biblio_landscape(df)
+        elif chart_type == 'cluster_timeline':
+            pic = cls._biblio_timeline(df)
+        elif chart_type == 'burst':
+            pic = cls._biblio_burst(df)
+        elif chart_type == 'timezone':
+            pic = cls._biblio_timezone(df)
+        elif chart_type == 'biblio_heatmap':
+            pic = cls._biblio_heatmap(df)
+        else:
+            raise ChartConfigError(f'no bibliometric LaTeX figure for {chart_type}')
+        return '\\begin{minipage}{17.5cm}\n' + pic + '\n' + cls._biblio_formulas() + '\n\\end{minipage}'
+
+    @classmethod
+    def _biblio_table_data(cls, df, chart_type: str):
+        if chart_type in ('knowledge_graph', 'circular'):
+            required = ['节点', '频次', '度', '中介中心性', '特征向量中心性', 'PageRank', 'Sigma']
+            if '聚类标签' in df.columns:
+                required.append('聚类标签')
+            cls._require_biblio(df, *required)
+            head = [_esc(column) for column in required]
+            rows = []
+            for _, row in df.iterrows():
+                name = cls._biblio_text(row['节点'])
+                if not name:
+                    continue
+                values = [_esc(name)]
+                for column in required[1:]:
+                    if column == '聚类标签':
+                        values.append(_esc(cls._biblio_text(row.get(column))))
+                    else:
+                        values.append(_num(cls._biblio_float(row.get(column), 0.0)))
+                rows.append(values)
+            return head, rows
+        if chart_type == 'cluster_timeline':
+            rows, names = cls._biblio_node_rows(df, ('节点', '聚类', '聚类标签', '首年', '末年', '频次'))
+            groups = {}
+            for name in names:
+                cluster = cls._biblio_text(rows[name].get('聚类'))
+                label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+                key = f'#{cluster} {label}'
+                first = int(cls._biblio_float(rows[name].get('首年'), 0))
+                last = int(cls._biblio_float(rows[name].get('末年'), first))
+                frequency = cls._biblio_float(rows[name].get('频次'), 0.0)
+                group = groups.setdefault(key, {'nodes': 0, 'frequency': 0.0, 'years': []})
+                group['nodes'] += 1
+                group['frequency'] += frequency
+                if first:
+                    group['years'].extend([first, last])
+            head = [_esc('聚类'), _esc('节点数'), _esc('首年'), _esc('末年'), _esc('总频次')]
+            table = [
+                [
+                    _esc(key),
+                    _num(group['nodes']),
+                    _num(min(group['years']) if group['years'] else 0),
+                    _num(max(group['years']) if group['years'] else 0),
+                    _num(round(group['frequency'], 4)),
+                ]
+                for key, group in sorted(groups.items(), key=lambda item: (-item[1]['nodes'], item[0]))
+            ]
+            return head, table
+        if chart_type == 'burst':
+            rows, names = cls._biblio_node_rows(df, ('节点', '突现起始', '突现结束', '突现强度'))
+            items = []
+            for name in names:
+                strength = cls._biblio_float(rows[name].get('突现强度'), 0.0)
+                if strength <= 0:
+                    continue
+                items.append(
+                    (
+                        name,
+                        int(cls._biblio_float(rows[name].get('突现起始'), 0)),
+                        int(cls._biblio_float(rows[name].get('突现结束'), 0)),
+                        strength,
+                    )
+                )
+            items.sort(key=lambda item: (-item[3], item[0]))
+            head = [_esc('节点'), _esc('起始'), _esc('结束'), _esc('强度 B')]
+            return head, [[_esc(name), _num(start), _num(end), _num(strength)] for name, start, end, strength in items]
+        if chart_type in ('timezone', 'biblio_heatmap'):
+            rows, names = cls._biblio_node_rows(df, ('节点', '年份序列', '频次'))
+            if chart_type == 'biblio_heatmap':
+                cls._require_biblio(df, '聚类', '聚类标签')
+            table = []
+            years = set()
+            for name in names:
+                parsed = cls._biblio_parsed(rows[name].get('年份序列'), '年份序列')
+                if not isinstance(parsed, dict):
+                    continue
+                counts = {int(float(year)): int(cls._biblio_float(count, 0)) for year, count in parsed.items()}
+                years.update(counts)
+                table.append((name, counts, cls._biblio_float(rows[name].get('频次'), 0.0)))
+            if not years:
+                raise ChartConfigError(t('chart.biblio_no_years'))
+            year_list = sorted(years)
+            if chart_type == 'biblio_heatmap':
+                groups = {}
+                for name, counts, _frequency in table:
+                    cluster = cls._biblio_text(rows[name].get('聚类'))
+                    label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+                    key = f'#{cluster} {label}'
+                    group = groups.setdefault(key, {year: 0 for year in year_list})
+                    for year, count in counts.items():
+                        group[year] += count
+                ordered = sorted(groups.items(), key=lambda item: (-sum(item[1].values()), item[0]))[:40]
+                head = [_esc('聚类')] + [_esc(str(year)) for year in year_list]
+                return head, [[_esc(key)] + [_num(group[year]) for year in year_list] for key, group in ordered]
+            head = [_esc('节点'), _esc('年份区间'), _esc('总频次')]
+            rows_out = []
+            for name, counts, frequency in sorted(table, key=lambda item: (-item[2], item[0]))[:80]:
+                span = f'{min(counts)}--{max(counts)}' if counts else ''
+                rows_out.append([_esc(name), _esc(span), _num(frequency)])
+            return head, rows_out
+        if chart_type == 'landscape':
+            rows, names = cls._biblio_node_rows(df, ('节点', '聚类', '聚类标签', '频次'))
+            groups = {}
+            for name in names:
+                cluster = cls._biblio_text(rows[name].get('聚类'))
+                label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
+                key = f'#{cluster} {label}'
+                group = groups.setdefault(key, {'nodes': [], 'frequency': 0.0})
+                group['nodes'].append(name)
+                group['frequency'] += cls._biblio_float(rows[name].get('频次'), 0.0)
+            head = [_esc('聚类'), _esc('节点数'), _esc('总频次'), _esc('代表节点')]
+            table = []
+            for key, group in sorted(groups.items(), key=lambda item: (-item[1]['frequency'], item[0])):
+                representatives = '、'.join(
+                    sorted(group['nodes'], key=lambda x: (-cls._biblio_float(rows[x].get('频次'), 0), x))[:5]
+                )
+                table.append(
+                    [_esc(key), _num(len(group['nodes'])), _num(round(group['frequency'], 4)), _esc(representatives)]
+                )
+            return head, table
+        raise ChartConfigError(f'no bibliometric LaTeX table for {chart_type}')
+
     # ── booktabs three-line table ─────────────────────────────────────
 
     @classmethod
     def _table_data(cls, df, chart_type, *, x, y, value_field, agg, y2, label_field, stack_fields, tokenize):
+        if chart_type in (
+            'knowledge_graph',
+            'cluster_timeline',
+            'burst',
+            'timezone',
+            'circular',
+            'landscape',
+            'biblio_heatmap',
+        ):
+            return cls._biblio_table_data(df, chart_type)
         if chart_type == 'stack_pct':
             fields = [s.strip() for s in str(stack_fields or '').replace('，', ',').split(',') if s.strip()]
             if not x or not fields:

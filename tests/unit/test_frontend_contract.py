@@ -27,6 +27,7 @@ from services.biblio_schema import (
     ENTITY_TYPES,
     LABEL_METHODS,
     LINK_MEASURES,
+    OUTPUT_SHAPES,
     PRUNING_MODES,
     SELECTION_MODES,
 )
@@ -340,7 +341,14 @@ class TestBiblioPanelContract:
         assert self._js_array('BIBLIO_LINK_MEASURES') == list(LINK_MEASURES)
         assert self._js_array('BIBLIO_PRUNING_MODES') == list(PRUNING_MODES)
         assert self._js_array('BIBLIO_LABEL_METHODS') == list(LABEL_METHODS)
+        assert self._js_array('BIBLIO_OUTPUT_SHAPES') == list(OUTPUT_SHAPES)
         assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
+
+    def test_bibliometric_labels_are_decluttered_before_render(self):
+        src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert 'function _graphLabelLayout' in src, 'graph/scatter labels need the collision resolver'
+        assert "s.type === 'graph' || s.type === 'scatter'" in src
+        assert 's.labelLayout = _graphLabelLayout(s)' in src
 
 
 class TestPaletteContract:

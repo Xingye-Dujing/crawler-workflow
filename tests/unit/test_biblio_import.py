@@ -1,10 +1,12 @@
-"""CNKI RefWorks / CSSCI import: the two file shapes the Biblio node can read."""
+"""Bibliographic import: Chinese exports and the international format registry."""
 
+import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from services.biblio_import import CNKI, CSSCI, detect_format, parse_bytes, parse_text
+from services.biblio_import import CNKI, CSSCI, detect_format, parse_bytes, parse_frame, parse_text
 
 pytestmark = pytest.mark.unit
 
@@ -86,3 +88,87 @@ class TestDetection:
         parsed = parse_text('RT Journal Article\nT1 题名\nYR 2020\nER\n')
         assert parsed is not None
         assert parsed['rows'][0]['年份'] == 2020
+
+
+class TestInternationalFormats:
+    @pytest.mark.parametrize(
+        ('name', 'fmt', 'rows'),
+        [
+            ('biblio_wos_demo.txt', 'WoS', 3),
+            ('biblio_scopus_demo.csv', 'Scopus', 3),
+            ('biblio_dimensions_demo.csv', 'Dimensions', 2),
+            ('biblio_lens_demo.csv', 'Lens', 2),
+            ('biblio_pubmed_demo.xml', 'PubMed', 2),
+            ('biblio_ris_demo.ris', 'RIS', 2),
+            ('biblio_bibtex_demo.bib', 'BibTeX', 2),
+            ('biblio_endnote_demo.enw', 'EndNote', 2),
+        ],
+    )
+    def test_every_registered_format_normalizes_to_the_same_columns(self, name, fmt, rows):
+        parsed = parse_bytes(_sample(name), name)
+        assert parsed['format'] == fmt
+        assert len(parsed['rows']) == rows
+        assert parsed['columns'][:3] == ['记录ID', '题名', '作者']
+        first = parsed['rows'][0]
+        assert 'Digital governance' in first['题名']
+        assert first['年份'] == 2021
+        assert first['格式'] == fmt
+        assert first['作者']
+        assert first['引文']
+        assert json.loads(first['引文'])[0]['title']
+
+    def test_wos_keeps_author_commas_and_each_cited_reference_separate(self):
+        parsed = parse_bytes(_sample('biblio_wos_demo.txt'), 'wos.txt')
+        first = parsed['rows'][0]
+        assert first['作者'] == 'ZHANG, Y;LI, X'
+        assert first['参考文献'].splitlines() == [
+            'SMITH J, 2018, PUBLIC ADMIN REV, V78, P1',
+            'DOE J, 2019, GOVERNANCE, V32, P2',
+            'ROE P, 2020, POLICY STUD J, V48, P3',
+        ]
+        assert first['引用次数'] == 12
+        assert first['使用次数'] == 30
+        assert first['使用次数2013'] == 41
+        assert "People's Republic of China" in first['国家']
+        assert first['学科'] == 'Public Administration'
+        assert first['文献类型'] == 'Article'
+
+    def test_pubmed_xml_keeps_structured_references_and_affiliation_countries(self):
+        parsed = parse_bytes(_sample('biblio_pubmed_demo.xml'), 'pubmed.xml')
+        first = parsed['rows'][0]
+        assert first['作者'] == 'Yan Zhang;Xin Li'
+        assert first['DOI'] == '10.0000/demo.pubmed.2021.001'
+        assert first['关键词'] == 'digital governance;public participation'
+        assert 'China' in first['国家']
+        assert 'National Natural Science Foundation' in first['基金']
+        references = json.loads(first['引文'])
+        assert references[0]['journal'] == 'Public Administration Review'
+        assert references[0]['doi'] == '10.0000/demo.ref.2018.1'
+
+    def test_scopus_csv_is_also_read_from_a_frame(self):
+        frame = pd.read_csv(SAMPLES / 'biblio_scopus_demo.csv', dtype=str, keep_default_na=False)
+        parsed = parse_frame(frame)
+        assert parsed['format'] == 'Scopus'
+        assert len(parsed['rows']) == 3
+        assert parsed['rows'][0]['来源期刊'] == 'Public Management Review'
+        assert parsed['rows'][0]['引用次数'] == 12
+
+    def test_a_plain_csv_is_not_claimed_by_the_registry(self):
+        assert detect_format('name,age\n张三,20\n') is None
+        assert parse_text('name,age\n张三,20\n') is None
+
+    def test_a_plain_sentence_with_at_signs_stays_text(self):
+        assert detect_format('我的邮箱是 someone@example.com，不是一条 BibTeX 记录。') is None
+
+    def test_pubmed_refuses_an_xml_entity_declaration(self):
+        with pytest.raises(ValueError, match='ENTITY|实体'):
+            parse_text(
+                '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY y "z">]><PubmedArticleSet><x>&y;</x></PubmedArticleSet>',
+                'PubMed',
+            )
+
+    def test_an_unknown_registered_extension_is_refused_not_stored_as_text(self):
+        with pytest.raises(ValueError):
+            # A .ris file that is not RIS must not quietly become one text row;
+            # the upload route reports this refusal as a 400.
+            parse_text('not a ris file at all', 'RIS')

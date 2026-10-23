@@ -1,0 +1,93 @@
+FN Clarivate Analytics Web of Science
+VR 1.0
+PT J
+AU ZHANG, Y
+   LI, X
+AF Zhang, Yan
+   Li, Xin
+TI Digital governance and public participation: evidence from Chinese cities
+SO PUBLIC MANAGEMENT REVIEW
+LA English
+DT Article
+DE digital governance; public participation; policy capacity
+ID PUBLIC-SECTOR; GOVERNANCE; E-GOVERNMENT
+AB This synthetic record demonstrates the Web of Science tagged format. It is not a real publication.
+C1 [Zhang, Y] Tsinghua Univ, Sch Publ Policy, Beijing 100084, Peoples R China
+   [Li, X] Univ Calif Berkeley, Goldman Sch Publ Policy, Berkeley, CA 94720 USA
+RP Zhang, Y (corresponding author), Tsinghua Univ, Beijing, Peoples R China.
+EM zhang@example.invalid
+CR SMITH J, 2018, PUBLIC ADMIN REV, V78, P1
+   DOE J, 2019, GOVERNANCE, V32, P2
+   ROE P, 2020, POLICY STUD J, V48, P3
+TC 12
+Z9 14
+U1 30
+U2 41
+PY 2021
+VL 23
+IS 4
+BP 100
+EP 120
+DI 10.0000/demo.wos.2021.001
+SC Public Administration
+FU National Natural Science Foundation of China
+FX 72000001
+UT WOS:000000000000001
+ER
+PT J
+AU CHEN, H
+AF Chen, Hui
+TI Algorithmic accountability in public service delivery
+SO GOVERNMENT INFORMATION QUARTERLY
+LA English
+DT Article
+DE algorithmic accountability; public service; digital government
+ID ARTIFICIAL-INTELLIGENCE; ACCOUNTABILITY
+AB A second synthetic Web of Science record for the demonstration dataset.
+C1 [Chen, H] Fudan Univ, Sch Int Relat & Publ Affairs, Shanghai 200433, Peoples R China
+CR SMITH J, 2018, PUBLIC ADMIN REV, V78, P1
+   WANG L, 2021, GOV INFORM Q, V38, P4
+TC 7
+Z9 7
+U1 11
+U2 19
+PY 2022
+VL 39
+IS 2
+BP 101500
+EP 101500
+DI 10.0000/demo.wos.2022.002
+SC Information Science & Library Science
+FU National Social Science Fund of China
+FX 21BGL001
+UT WOS:000000000000002
+ER
+PT J
+AU WANG, L
+   SMITH, J
+AF Wang, Lei
+   Smith, John
+TI Data infrastructure and collaborative governance
+SO POLICY STUDIES JOURNAL
+LA English
+DT Review
+DE data infrastructure; collaborative governance; public value
+ID COLLABORATION; INFRASTRUCTURE
+AB A third synthetic Web of Science record with a review document type.
+C1 [Wang, L] Zhejiang Univ, Sch Publ Affairs, Hangzhou 310058, Peoples R China
+   [Smith, J] Univ Manchester, Alliance Manchester Business Sch, Manchester M15 6PB, England
+CR CHEN H, 2022, GOV INFORM Q, V39, P2
+   DOE J, 2019, GOVERNANCE, V32, P2
+TC 21
+Z9 25
+U1 44
+U2 66
+PY 2023
+VL 50
+IS 1
+BP 1
+EP 18
+DI 10.0000/demo.wos.2023.003
+SC Political Science
+UT WOS:000000000000003
+ER

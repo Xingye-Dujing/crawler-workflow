@@ -17,9 +17,12 @@ ENTITY_TYPES = (
     'country',
     'term',
     'category',
+    'journal',
+    'funder',
     'document_cocitation',
     'author_cocitation',
     'journal_cocitation',
+    'document',
     'bibliographic_coupling',
 )
 
@@ -29,7 +32,15 @@ CITATION_TYPES = (
     'journal_cocitation',
 )
 
+#: Document coupling and source-journal coupling read a paper's references and
+#: connect the citing units that share them. ``document`` and
+#: ``bibliographic_coupling`` are the same construction under the names used by
+#: CiteSpace and by this project; keeping both is a compatibility choice.
+COUPLING_TYPES = ('document', 'bibliographic_coupling', 'journal')
+
 COUPLING_TYPE = 'bibliographic_coupling'
+
+OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts')
 
 SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
@@ -45,9 +56,12 @@ ENTITY_COLUMNS = {
     'country': '国家',
     'term': '题名',
     'category': '学科',
+    'journal': '来源期刊',
+    'funder': '基金',
     'document_cocitation': '参考文献',
     'author_cocitation': '参考文献',
     'journal_cocitation': '参考文献',
+    'document': '题名',
     'bibliographic_coupling': '参考文献',
 }
 
@@ -60,9 +74,12 @@ ENTITY_REQUIRED = {
     'country': ('国家', '年份'),
     'term': ('题名', '年份'),
     'category': ('学科', '年份'),
+    'journal': ('参考文献', '来源期刊', '年份'),
+    'funder': ('基金', '年份'),
     'document_cocitation': ('参考文献', '年份'),
     'author_cocitation': ('参考文献', '年份'),
     'journal_cocitation': ('参考文献', '年份'),
+    'document': ('参考文献', '题名', '年份'),
     'bibliographic_coupling': ('参考文献', '题名', '年份'),
 }
 
@@ -76,14 +93,23 @@ DEFAULTS = {
     'title_column': '题名',
     'abstract_column': '摘要',
     'reference_column': '参考文献',
+    'tc_column': '引用次数',
+    'usage_column': '使用次数',
     'time_start': '',
     'time_end': '',
     'slice_years': 1,
+    'look_back_years': 0,
     'selection': 'top_n',
     'top_n': 50,
     'top_pct': 10,
     'g_index': 25,
     'min_count': 2,
+    'threshold_c': 0,
+    'threshold_cc': 1,
+    'threshold_ccv': 0.0,
+    'min_tc': '',
+    'min_usage': '',
+    'largest_component': False,
     'link_measure': 'cosine',
     'max_links_per_node': 10,
     'lrf': 2.5,
@@ -97,6 +123,7 @@ DEFAULTS = {
     'burst_min_duration': 2,
     'burst_weight': 2.0,
     'burst_top': 20,
+    'output_shape': 'nodes',
     'export_files': True,
 }
 
@@ -126,6 +153,16 @@ BASE_COLUMNS = (
 CLUSTER_COLUMNS = ('聚类', '聚类标签', '轮廓值')
 BURST_COLUMNS = ('突现强度', '突现起始', '突现结束')
 
+#: Data-dependent citation metrics. They are emitted only when the input table
+#: really has the mapped times-cited/usage columns, so CNKI RefWorks does not
+#: gain an all-zero H-index column it cannot justify.
+CITATION_METRIC_COLUMNS = ('总被引', 'H指数')
+USAGE_METRIC_COLUMNS = ('使用次数合计',)
+
+EDGE_COLUMNS = ('source', 'target', 'weight', 'count')
+CLUSTER_TABLE_COLUMNS = ('聚类', '聚类标签', '节点数', '节点', '轮廓值')
+BURST_TABLE_COLUMNS = ('节点', '突现起始', '突现结束', '突现强度')
+
 
 def read_columns(params: dict) -> dict[str, str]:
     """The actual table columns this node reads, after the user's mapping.
@@ -145,18 +182,33 @@ def read_columns(params: dict) -> dict[str, str]:
         or DEFAULTS['abstract_column'],
         'reference': str(params.get('reference_column') or DEFAULTS['reference_column']).strip()
         or DEFAULTS['reference_column'],
+        'tc': str(params.get('tc_column') or DEFAULTS['tc_column']).strip() or DEFAULTS['tc_column'],
+        'usage': str(params.get('usage_column') or DEFAULTS['usage_column']).strip() or DEFAULTS['usage_column'],
     }
 
 
-def output_columns(params: dict) -> list[str]:
-    """The exact columns a node emits, conditional on its own switches."""
+def output_columns(params: dict, input_columns: list[str] | None = None) -> list[str]:
+    """The exact columns a node emits, conditional on its own switches and input."""
+    shape = str(params.get('output_shape') or DEFAULTS['output_shape'])
+    if shape == 'edges':
+        return list(EDGE_COLUMNS)
+    if shape == 'clusters':
+        return list(CLUSTER_TABLE_COLUMNS)
+    if shape == 'bursts':
+        return list(BURST_TABLE_COLUMNS)
     cols = list(BASE_COLUMNS)
     if as_bool(params.get('cluster'), DEFAULTS['cluster']):
         cols += list(CLUSTER_COLUMNS)
     entity = str(params.get('entity_type') or DEFAULTS['entity_type'])
-    burst_default = False if entity == COUPLING_TYPE else DEFAULTS['burst']
+    burst_default = False if entity in COUPLING_TYPES else DEFAULTS['burst']
     if as_bool(params.get('burst'), burst_default):
         cols += list(BURST_COLUMNS)
+    available = set(input_columns or [])
+    columns = read_columns(params)
+    if columns['tc'] in available:
+        cols += list(CITATION_METRIC_COLUMNS)
+    if columns['usage'] in available:
+        cols += list(USAGE_METRIC_COLUMNS)
     return cols
 
 
@@ -172,6 +224,11 @@ def _whole(nid: str, param: str, value, low: int, high: int) -> int:
     if number < low or number > high:
         raise ValueError(_bad(nid, param, value, f'{low}..{high}'))
     return number
+
+
+def _optional_whole(nid: str, param: str, value) -> int | None:
+    text = str(value if value is not None else '').strip()
+    return None if not text else _whole(nid, param, text, 0, 1000000000)
 
 
 def _number(nid: str, param: str, value, low: float, high: float) -> float:
@@ -221,7 +278,19 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     if label_method not in LABEL_METHODS:
         errors.append(_bad(nid, 'label_method', label_method, ', '.join(LABEL_METHODS)))
 
+    shape = str(params.get('output_shape') or DEFAULTS['output_shape']).strip()
+    if shape not in OUTPUT_SHAPES:
+        errors.append(_bad(nid, 'output_shape', shape, ', '.join(OUTPUT_SHAPES)))
+
     check(lambda: _whole(nid, 'slice_years', params.get('slice_years', DEFAULTS['slice_years']), 1, 50))
+    check(lambda: _whole(nid, 'look_back_years', params.get('look_back_years', DEFAULTS['look_back_years']), 0, 50))
+    check(lambda: _whole(nid, 'threshold_c', params.get('threshold_c', DEFAULTS['threshold_c']), 0, 100000))
+    check(lambda: _whole(nid, 'threshold_cc', params.get('threshold_cc', DEFAULTS['threshold_cc']), 0, 100000))
+    check(lambda: _number(nid, 'threshold_ccv', params.get('threshold_ccv', DEFAULTS['threshold_ccv']), 0.0, 1.0))
+    for name in ('min_tc', 'min_usage'):
+        raw = params.get(name, DEFAULTS[name])
+        if raw not in (None, ''):
+            check(lambda raw=raw, name=name: _whole(nid, name, raw, 0, 1000000000))
     check(lambda: _whole(nid, 'top_n', params.get('top_n', DEFAULTS['top_n']), 1, 5000))
     check(lambda: _whole(nid, 'top_pct', params.get('top_pct', DEFAULTS['top_pct']), 1, 100))
     check(lambda: _whole(nid, 'g_index', params.get('g_index', DEFAULTS['g_index']), 1, 1000))
@@ -254,8 +323,13 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     if start is not None and end is not None and start > end:
         errors.append(t('biblio.time_range', nid=nid or '(biblio)', start=start, end=end))
 
-    if entity == COUPLING_TYPE and as_bool(params.get('burst'), False):
+    burst_default = False if entity in COUPLING_TYPES else DEFAULTS['burst']
+    if entity in COUPLING_TYPES and as_bool(params.get('burst'), False):
         errors.append(t('biblio.coupling_no_burst', nid=nid or '(biblio)'))
+    if shape == 'clusters' and not as_bool(params.get('cluster'), DEFAULTS['cluster']):
+        errors.append(t('biblio.shape_needs_cluster', nid=nid or '(biblio)'))
+    if shape == 'bursts' and not as_bool(params.get('burst'), burst_default):
+        errors.append(t('biblio.shape_needs_burst', nid=nid or '(biblio)'))
     return errors
 
 
@@ -295,14 +369,25 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         or DEFAULTS['abstract_column'],
         'reference_column': str(params.get('reference_column') or DEFAULTS['reference_column']).strip()
         or DEFAULTS['reference_column'],
+        'tc_column': str(params.get('tc_column') or DEFAULTS['tc_column']).strip() or DEFAULTS['tc_column'],
+        'usage_column': str(params.get('usage_column') or DEFAULTS['usage_column']).strip() or DEFAULTS['usage_column'],
         'time_start': start,
         'time_end': end,
         'slice_years': _whole(nid, 'slice_years', params.get('slice_years', 1), 1, 50),
+        'look_back_years': _whole(nid, 'look_back_years', params.get('look_back_years', 0), 0, 50),
         'selection': str(params.get('selection') or DEFAULTS['selection']).strip(),
         'top_n': _whole(nid, 'top_n', params.get('top_n', DEFAULTS['top_n']), 1, 5000),
         'top_pct': _whole(nid, 'top_pct', params.get('top_pct', DEFAULTS['top_pct']), 1, 100),
         'g_index': _whole(nid, 'g_index', params.get('g_index', DEFAULTS['g_index']), 1, 1000),
         'min_count': _whole(nid, 'min_count', params.get('min_count', DEFAULTS['min_count']), 1, 100000),
+        'threshold_c': _whole(nid, 'threshold_c', params.get('threshold_c', DEFAULTS['threshold_c']), 0, 100000),
+        'threshold_cc': _whole(nid, 'threshold_cc', params.get('threshold_cc', DEFAULTS['threshold_cc']), 0, 100000),
+        'threshold_ccv': _number(
+            nid, 'threshold_ccv', params.get('threshold_ccv', DEFAULTS['threshold_ccv']), 0.0, 1.0
+        ),
+        'min_tc': _optional_whole(nid, 'min_tc', params.get('min_tc', DEFAULTS['min_tc'])),
+        'min_usage': _optional_whole(nid, 'min_usage', params.get('min_usage', DEFAULTS['min_usage'])),
+        'largest_component': as_bool(params.get('largest_component'), DEFAULTS['largest_component']),
         'link_measure': str(params.get('link_measure') or DEFAULTS['link_measure']).strip(),
         'max_links_per_node': _whole(
             nid, 'max_links_per_node', params.get('max_links_per_node', DEFAULTS['max_links_per_node']), 1, 200
@@ -322,5 +407,6 @@ def normalize_params(params: dict, nid: str = '') -> dict:
             nid, 'burst_weight', params.get('burst_weight', DEFAULTS['burst_weight']), 1.0001, 100.0
         ),
         'burst_top': _whole(nid, 'burst_top', params.get('burst_top', DEFAULTS['burst_top']), 1, 500),
+        'output_shape': str(params.get('output_shape') or DEFAULTS['output_shape']).strip(),
         'export_files': as_bool(params.get('export_files'), DEFAULTS['export_files']),
     }

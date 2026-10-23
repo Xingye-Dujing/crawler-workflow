@@ -7,6 +7,8 @@ than silently dropped). Whether it *renders* is MiKTeX's job and is checked by c
 the suite depend on a TeX installation it is not allowed to need.
 """
 
+import json
+
 import pandas as pd
 import pytest
 
@@ -53,6 +55,42 @@ def _tt():
     return pd.DataFrame({'term': ['词一', '词二', '词三'], 'overall': [100, 80, 50], 'within': [30, 20, 15]})
 
 
+def _biblio():
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '乙', '丙'],
+            'x': [0.0, 10.0, 20.0],
+            'y': [0.0, 10.0, 20.0],
+            '连接': [
+                json.dumps([{'target': '乙', 'value': 1.0, 'count': 2}], ensure_ascii=False),
+                json.dumps(
+                    [{'target': '甲', 'value': 1.0, 'count': 2}, {'target': '丙', 'value': 0.5, 'count': 1}],
+                    ensure_ascii=False,
+                ),
+                json.dumps([{'target': '乙', 'value': 0.5, 'count': 1}], ensure_ascii=False),
+            ],
+            '频次': [3, 2, 1],
+            '度': [2, 2, 1],
+            '中介中心性': [0.2, 0.0, 0.0],
+            '特征向量中心性': [0.8, 0.5, 0.2],
+            'PageRank': [0.4, 0.3, 0.2],
+            'Sigma': [1.5, 1.0, 1.0],
+            '聚类': [0, 0, 1],
+            '聚类标签': ['甲组', '甲组', '乙组'],
+            '突现强度': [2.0, 0.0, 0.0],
+            '突现起始': [2020, '', ''],
+            '突现结束': [2021, '', ''],
+            '首年': [2020, 2020, 2021],
+            '末年': [2021, 2021, 2021],
+            '年份序列': [
+                json.dumps({'2020': 1, '2021': 2}, ensure_ascii=False),
+                json.dumps({'2020': 2}, ensure_ascii=False),
+                json.dumps({'2021': 1}, ensure_ascii=False),
+            ],
+        }
+    )
+
+
 # One usable spec + one frame per chart type, so the happy path is swept in one test.
 CASES = {
     'bar': (_cat(), dict(x='g', y='v')),
@@ -68,18 +106,27 @@ CASES = {
     'topic_terms': (_tt(), dict(x='term', y='overall', y2='within')),
     'sankey': (_flow(), dict(x='s', y='t', value_field='v')),
     'network': (_flow(), dict(x='s', y='t', value_field='v')),
+    'knowledge_graph': (_biblio(), dict()),
+    'cluster_timeline': (_biblio(), dict()),
+    'burst': (_biblio(), dict()),
+    'timezone': (_biblio(), dict()),
+    'circular': (_biblio(), dict()),
+    'landscape': (_biblio(), dict()),
+    'biblio_heatmap': (_biblio(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),
 }
 
 
+def test_cases_cover_every_bibliometric_chart():
+    assert set(BIBLIO_CHART_TYPES) <= set(CASES)
+
+
 class TestFigure:
-    # model_agreement and the four bibliometric views are on-screen figures this round: they have
-    # no paper twin yet (the Visualize executor prints a named skip instead of failing), so they
-    # are deliberately out of both LaTeX sweeps — the LaTeX service has no CASES entry for them.
+    # model_agreement remains an on-screen matrix; every bibliometric view now has a paper twin.
     @pytest.mark.parametrize(
         'chart_type',
-        [c for c in CHART_TYPES if c != 'model_agreement' and c not in BIBLIO_CHART_TYPES],
+        [c for c in CHART_TYPES if c != 'model_agreement'],
     )
     def test_every_type_emits_a_standalone_document(self, chart_type):
         df, kw = CASES[chart_type]
@@ -173,11 +220,10 @@ class TestPaperStyle:
 
 
 class TestTable:
-    # model_agreement and the four bibliometric views are on-screen figures this round: they have
-    # no paper twin yet, so they are deliberately out of both LaTeX sweeps.
+    # model_agreement remains an on-screen matrix; every bibliometric view now has a three-line table.
     @pytest.mark.parametrize(
         'chart_type',
-        [c for c in CHART_TYPES if c != 'model_agreement' and c not in BIBLIO_CHART_TYPES],
+        [c for c in CHART_TYPES if c != 'model_agreement'],
     )
     def test_every_type_makes_a_booktabs_three_line_table(self, chart_type):
         df, kw = CASES[chart_type]

@@ -3304,11 +3304,12 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Bibliometrics node settings ── */
-var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'bibliographic_coupling'];
+var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'journal', 'funder', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'document', 'bibliographic_coupling'];
 var BIBLIO_SELECTION_MODES = ['top_n', 'top_pct', 'g_index', 'threshold'];
 var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
 var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
 var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
+var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts'];
 
 function biblioOption(value, label) {
     /* Both shapes: `selectOptionTags` reads value/label, `renderParamSelect`
@@ -3332,13 +3333,20 @@ function biblioPruningOptions(values) {
 function biblioLabelOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.label.' + value)); });
 }
+function biblioOutputShapeOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.shape.' + value)); });
+}
+var BIBLIO_COUPLING_TYPES = ['document', 'bibliographic_coupling', 'journal'];
+function isBiblioCoupling(entity) {
+    return BIBLIO_COUPLING_TYPES.indexOf(entity) >= 0;
+}
 
 function updateBiblioEntity(nodeId, entity) {
     updateParam(nodeId, 'entity_type', entity);
     /* Coupling nodes are the citing papers themselves, so burst detection has
        no meaning there. Uncheck it as a derived default when that mode is
        chosen; an EXPLICIT true is still refused by the backend by name. */
-    if (entity === 'bibliographic_coupling') updateParam(nodeId, 'burst', false);
+    if (isBiblioCoupling(entity)) updateParam(nodeId, 'burst', false);
     openSettings(nodeId);
 }
 
@@ -3357,18 +3365,27 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'title_column', 'biblio.ui.titleColumn', 'text', '题名') +
         renderParamInput(nodeId, p, 'abstract_column', 'biblio.ui.abstractColumn', 'text', '摘要') +
         renderParamInput(nodeId, p, 'reference_column', 'biblio.ui.referenceColumn', 'text', '参考文献') +
+        renderParamInput(nodeId, p, 'tc_column', 'biblio.ui.tcColumn', 'text', '引用次数') +
+        renderParamInput(nodeId, p, 'usage_column', 'biblio.ui.usageColumn', 'text', '使用次数') +
         '<div class="settings-hint">' + I18n.t('biblio.ui.columnsHint') + '</div>';
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.network') + '</div>';
     html += renderParamInput(nodeId, p, 'time_start', 'biblio.ui.timeStart', 'number', '') +
         renderParamInput(nodeId, p, 'time_end', 'biblio.ui.timeEnd', 'number', '') +
         renderParamInput(nodeId, p, 'slice_years', 'biblio.ui.sliceYears', 'number', 1) +
+        renderParamInput(nodeId, p, 'look_back_years', 'biblio.ui.lookBackYears', 'number', 0) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.timeHint') + '</div>';
     html += renderParamSelect(nodeId, p, 'selection', 'biblio.ui.selection', 'top_n', biblioSelectionOptions(BIBLIO_SELECTION_MODES)) +
         renderParamInput(nodeId, p, 'top_n', 'biblio.ui.topN', 'number', 50) +
         renderParamInput(nodeId, p, 'top_pct', 'biblio.ui.topPct', 'number', 10) +
         renderParamInput(nodeId, p, 'g_index', 'biblio.ui.gIndex', 'number', 25) +
-        renderParamInput(nodeId, p, 'min_count', 'biblio.ui.minCount', 'number', 2);
+        renderParamInput(nodeId, p, 'min_count', 'biblio.ui.minCount', 'number', 2) +
+        renderParamInput(nodeId, p, 'threshold_c', 'biblio.ui.thresholdC', 'number', 0) +
+        renderParamInput(nodeId, p, 'threshold_cc', 'biblio.ui.thresholdCC', 'number', 1) +
+        renderParamInput(nodeId, p, 'threshold_ccv', 'biblio.ui.thresholdCCV', 'number', 0) +
+        renderParamInput(nodeId, p, 'min_tc', 'biblio.ui.minTc', 'number', '') +
+        renderParamInput(nodeId, p, 'min_usage', 'biblio.ui.minUsage', 'number', '') +
+        renderParamCheckbox(nodeId, p, 'largest_component', 'biblio.ui.largestComponent', false);
     html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(BIBLIO_LINK_MEASURES)) +
         renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
         renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +
@@ -3388,20 +3405,21 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'burst_weight', 'biblio.ui.burstWeight', 'number', 2.0) +
         renderParamInput(nodeId, p, 'burst_top', 'biblio.ui.burstTop', 'number', 20) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.burstHint') + '</div>';
-    if (entity === 'bibliographic_coupling') {
+    if (isBiblioCoupling(entity)) {
         html += '<div class="settings-group" style="font-size:11px;color:#e67e22;">' + I18n.t('biblio.ui.burstCoupling') + '</div>';
     }
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.output') + '</div>';
-    html += renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +
+    html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(BIBLIO_OUTPUT_SHAPES)) +
+        renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.exportHint') + '</div>' +
         '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     return html;
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'wordcloud', 'map'];
-var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'wordcloud', 'map'];
+var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -3427,7 +3445,7 @@ var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreemen
 // rare word look bigger than a common one.
 var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
 var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap'];
 // The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
 // on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
 // tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
@@ -3608,10 +3626,9 @@ function renderVisualizeSettings(nodeId, p) {
         html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.mapRegionNames') + '</div>';
     }
     // LaTeX export is orthogonal to the renderer: the node still draws its chart, and these add a
-    // compilable figure source / a booktabs three-line table as .txt next to it. The four
-    // bibliometric views have no LaTeX figure builder, so the boxes are not offered there —
-    // the executor says by name that it skipped them instead of failing on an invisible default.
-    if (BIBLIO_CHARTS.indexOf(ct) < 0) {
+    // compilable figure source / a booktabs three-line table as .txt next to it. Bibliometric views
+    // have paper twins too; only model_agreement remains an on-screen-only matrix.
+    if (ct !== 'model_agreement') {
         html += '<div class="settings-group"><label class="settings-checkbox-label">' +
             '<input type="checkbox" ' + (boolParam(p.emit_latex, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex\',this.checked)"> ' +
             I18n.t('settings.emitLatex') + '</label>' +
@@ -4140,8 +4157,55 @@ function patchOptionForTheme(option) {
     if (option.visualMap && option.visualMap.textStyle) option.visualMap.textStyle.color = p.ink;
 }
 
+/* ECharts' hideOverlap is not enough for a bibliometric graph: the labels are
+   placed before the solver settles, so dense Chinese terms still print on top of
+   one another. labelLayout runs after the node rect is known, so it can shift a
+   label into the first free slot and hide only what cannot fit. */
+function _graphLabelLayout(series) {
+    var placed = [];
+    function overlaps(a, b) {
+        return a.x < b.x + b.width + 6 && b.x < a.x + a.width + 6 &&
+               a.y < b.y + b.height + 6 && b.y < a.y + a.height + 6;
+    }
+    return function (params, api) {
+        if (params.dataIndex === 0) placed = [];
+        var item = api && api.getItemRect && api.getItemRect();
+        if (item) placed.push({x: item.x - 3, y: item.y - 3, width: item.width + 6, height: item.height + 6});
+        var rect = params.labelRect || (api && api.getLabelRect && api.getLabelRect());
+        var width = rect.width, height = rect.height;
+        var candidates = [[rect.x, rect.y]];
+        for (var shift = 6; shift <= 600; shift += 6) {
+            candidates.push([rect.x, rect.y - shift]);
+            candidates.push([rect.x, rect.y + shift]);
+            candidates.push([rect.x - shift, rect.y]);
+            candidates.push([rect.x + shift, rect.y]);
+            candidates.push([rect.x - shift, rect.y - shift]);
+            candidates.push([rect.x + shift, rect.y + shift]);
+            candidates.push([rect.x - shift, rect.y + shift]);
+            candidates.push([rect.x + shift, rect.y - shift]);
+        }
+        for (var i = 0; i < candidates.length; i++) {
+            var box = {x: candidates[i][0], y: candidates[i][1], width: width, height: height};
+            var clear = true;
+            for (var j = 0; j < placed.length; j++) {
+                if (overlaps(box, placed[j])) { clear = false; break; }
+            }
+            if (clear) {
+                placed.push(box);
+                return {x: box.x, y: box.y, width: width, height: height};
+            }
+        }
+        return {ignore: true};
+    };
+}
+
 function applyEchartsOption(instance, option) {
     patchOptionForTheme(option);
+    (option.series || []).forEach(function (s) {
+        if (s && (s.type === 'graph' || s.type === 'scatter') && Array.isArray(s.data) && s.data.length) {
+            s.labelLayout = _graphLabelLayout(s);
+        }
+    });
     var mapSeries = (option.series || []).find(function (s) { return s.type === 'map'; });
     if (mapSeries) {
         ensureMapRegistered(mapSeries.map || 'china').then(function () {
@@ -8001,11 +8065,22 @@ workflow.validateDetailed = function () {
             } else if (biblioParents.length > 1) {
                 add(id, I18n.t('validate.biblioOneInput').replace('{title}', label).replace('{n}', biblioParents.length));
             }
-            if (BIBLIO_ENTITY_TYPES.indexOf(params.entity_type || 'keyword') < 0) {
+            var entity = params.entity_type || 'keyword';
+            var shape = params.output_shape || 'nodes';
+            if (BIBLIO_ENTITY_TYPES.indexOf(entity) < 0) {
                 add(id, I18n.t('validate.biblioEntity').replace('{title}', label));
             }
-            if ((params.entity_type || '') === 'bibliographic_coupling' && boolParam(params.burst, true)) {
+            if (BIBLIO_OUTPUT_SHAPES.indexOf(shape) < 0) {
+                add(id, I18n.t('validate.biblioShape').replace('{title}', label));
+            }
+            if (isBiblioCoupling(entity) && boolParam(params.burst, true)) {
                 add(id, I18n.t('validate.biblioBurstCoupling').replace('{title}', label));
+            }
+            if (shape === 'clusters' && !boolParam(params.cluster, true)) {
+                add(id, I18n.t('validate.biblioShapeCluster').replace('{title}', label));
+            }
+            if (shape === 'bursts' && !boolParam(params.burst, !isBiblioCoupling(entity))) {
+                add(id, I18n.t('validate.biblioShapeBurst').replace('{title}', label));
             }
         }
 

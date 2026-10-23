@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from services.biblio_schema import (
     CITATION_TYPES,
-    COUPLING_TYPE,
+    COUPLING_TYPES,
 )
 from services.biblio_schema import (
     output_columns as biblio_output_columns,
@@ -377,7 +377,7 @@ def compute_columns(nodes: dict, connections: list) -> dict:
         elif ntype == 'analysis':
             out[nid] = _analysis_output(params, merged)
         elif ntype == 'biblio':
-            out[nid] = biblio_output_columns(params)
+            out[nid] = biblio_output_columns(params, merged or [])
         else:
             out[nid] = None  # source/comment/resume/visualize/output/compile: unknown or non-tabular
     return out
@@ -410,16 +410,20 @@ def referenced_columns(nodes: dict) -> dict:
         elif ntype == 'biblio':
             entity = str(params.get('entity_type') or 'keyword')
             columns = biblio_read_columns(params)
-            if entity in CITATION_TYPES or entity == COUPLING_TYPE:
+            if entity in CITATION_TYPES or entity in COUPLING_TYPES:
                 found += [columns['reference'], columns['year']]
-                if entity == COUPLING_TYPE:
+                if entity in ('document', 'bibliographic_coupling'):
                     found.append(columns['title'])
+                if entity == 'journal':
+                    found.append(columns['entity'])
             elif entity == 'term':
-                # Either title or abstract is enough; naming both would flag a
-                # table that runs, so the hard read here is only the year.
                 found.append(columns['year'])
             else:
                 found += [columns['entity'], columns['year']]
+            if str(params.get('min_tc') or '').strip():
+                found.append(columns['tc'])
+            if str(params.get('min_usage') or '').strip():
+                found.append(columns['usage'])
         elif ntype == 'analysis':
             for step in _steps_of(params):
                 spec = STEP_PARAMS.get(str(step.get('op') or ''), {})

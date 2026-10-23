@@ -66,12 +66,12 @@ python app.py
 - **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、分组聚合（多指标）、**事件研究套件**（阶段划分 / 分阶段 LDA /
   主题流向 / 情感演化 / 二次爆发预警 / 曲线外推（移动平均 · Holt · 季节 Holt-Winters/朴素）），主题步骤（主题模型 / 分阶段 / 距离图 / 显著词）默认
 `auto`（装了编码器用 embedding+KMeans，没装自动走 LDA，控制台都如实写明用了哪种；可选装 `requirements-optional.txt`，也可显式选 `embedding`/`lda`），输出列三种方法一致，通用导出（CSV/JSON/Excel/TXT/HTML/Markdown，Parquet 需可选引擎 pyarrow）、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
-- **文献计量 / 知识图谱**：Upload 自动识别 **CNKI RefWorks** 与 **CSSCI** 导出 txt；Bibliometrics 节点按时间切片构建关键词 / 作者 / 机构 /
-  国家 / 学科 / 主题词共现、文献·作者·期刊共被引与文献耦合，支持 TopN / Top% / g-index / 阈值选择、cosine/Dice/Jaccard/关联强度、
-  MST / Pathfinder 剪枝、度 / 中介 / 特征向量 / PageRank / Sigma、谱聚类与 LLR/LSI/MI/TF-IDF 标签、Kleinberg 突现，输出 GraphML/CSV。
+- **文献计量 / 知识图谱**：Upload 自动识别 **CNKI RefWorks、CSSCI、WoS、Scopus、PubMed、Dimensions、Lens、RIS、BibTeX、EndNote** 等文献导出，也保留普通文本行为；Bibliometrics 节点按时间切片构建关键词 / 作者 / 机构 /
+  国家 / 学科 / 主题词 / 来源期刊耦合 / 基金共现 / 文献耦合，以及文献·作者·期刊共被引，支持 TopN / Top% / g-index / 阈值三元组、TC/usage 过滤、look-back、cosine/Dice/Jaccard/关联强度、
+  MST / Pathfinder、最大连通分量、度 / 中介 / 特征向量 / PageRank / Sigma / H 指数、谱聚类与 LLR/LSI/MI/TF-IDF 标签、Kleinberg 突现，输出 GraphML/GML/JSON/CSV。
   它吃的是**普通表格**：列映射可把爬取数据的「话题 / 用户名 / 发布时间」接进来，不只服务文献。→ [`docs/analysis.md`](docs/analysis.md#文献计量)
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
-  占比堆叠 / 模型一致率 / 知识图谱 / 聚类时间线 / 突现词图 / 时区图、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台。→ [`docs/analysis.md`](docs/analysis.md)
+  占比堆叠 / 模型一致率 / 知识图谱 / 环形图谱 / 聚类时间线 / 景观图 / 突现词图 / 时区图 / 聚类年份热力图、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台；文献图谱标签会碰撞避让。→ [`docs/analysis.md`](docs/analysis.md)
 - **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、
   右侧大纲侧栏一键定位节点、自动排布上下顺序可指定、运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
 - **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、
@@ -127,8 +127,8 @@ crawler_workflow/
 → 菜单 Execute 运行。
 
 **只处理已有数据（不采集）**：直接拖一个 Visualize（或 Analysis / Bibliometrics）节点，把数据源切成 Upload File 上传
-CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整条工作流。`.txt` 若是 **CNKI RefWorks** 或 **CSSCI** 导出，
-会自动解析成文献记录表（`记录ID/题名/作者/作者单位/来源期刊/年份/关键词/摘要/参考文献…`），其它 `.txt` 仍按单列文本导入。
+CSV/TSV/JSON/TXT/Excel/XML/RIS/BibTeX/EndNote，配好字段后点 Preview Chart 即可，不必跑整条工作流。文献导出（CNKI RefWorks、CSSCI、WoS、Scopus、PubMed、Dimensions、Lens、RIS、BibTeX、EndNote）
+会自动解析成文献记录表（`记录ID/题名/作者/作者单位/来源期刊/年份/关键词/摘要/参考文献/引文/引用次数…`），其它普通文本与 CSV 仍按原有方式导入。
 Bibliometrics 节点的列映射可以把任意表（包括爬取数据的「话题 / 用户名 / 发布时间」）接成网络，不绑定文献导出。
 Excel 一次只导入**一张表**：
 含多个非空工作表的工作簿会**按名拒绝**并列出各表名，请先把要用的那张拆成单表再上传（过去会静默只读第一张、

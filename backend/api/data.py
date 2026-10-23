@@ -9,6 +9,7 @@ the 400 helpers from ``api.http``; ``json_safe_records``/``as_bool`` from ``util
 Paths and behaviour are unchanged; none of these handlers has a monkeypatch seam.
 """
 
+import io
 import json
 import logging
 
@@ -20,7 +21,7 @@ from stores import _load_dataset, _register_dataset, get_dataset_store
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
-from services.biblio_import import BiblioDecodeError, decode_text, parse_bytes
+from services.biblio_import import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
 from services.data_analysis import DataAnalysisService
 from services.dataset_store import SOURCE_PASTE, SOURCE_UPLOAD
 from utils.helpers import as_bool
@@ -40,8 +41,18 @@ def upload_dataset():
     filename = file.filename or 'upload'
     name_lower = filename.lower()
     biblio_format = None
+    biblio_capabilities = None
     warnings: list[str] = []
     is_txt = False
+
+    def use_biblio(parsed: dict) -> pd.DataFrame:
+        nonlocal biblio_format, biblio_capabilities, warnings
+        biblio_format = parsed['format']
+        biblio_capabilities = parsed.get('capabilities')
+        warnings = parsed['warnings']
+        logger.info(t('biblio.import_ok', format=biblio_format, n=len(parsed['rows'])))
+        return pd.DataFrame(parsed['rows'], columns=parsed['columns'])
+
     try:
         if name_lower.endswith('.json'):
             df = pd.DataFrame(json.load(file.stream))
@@ -67,10 +78,13 @@ def upload_dataset():
                 df = pd.DataFrame({'content': [text]})
                 is_txt = True
             else:
-                df = pd.DataFrame(parsed['rows'], columns=parsed['columns'])
-                biblio_format = parsed['format']
-                warnings = parsed['warnings']
-                logger.info(t('biblio.import_ok', format=biblio_format, n=len(df)))
+                df = use_biblio(parsed)
+        elif name_lower.endswith(('.xml', '.ris', '.bib', '.bibtex', '.enw', '.nbib')):
+            raw = file.stream.read()
+            parsed = parse_bytes(raw, filename)
+            if parsed is None:
+                return jsonify({'ok': False, 'error': t('api.biblioNotRecognized', name=filename)}), 400
+            df = use_biblio(parsed)
         elif name_lower.endswith(('.xlsx', '.xls', '.xlsm')):
             # Spreadsheets are the format a non-technical user's data actually
             # arrives in. Without this branch the file fell through to
@@ -88,12 +102,25 @@ def upload_dataset():
                     {'ok': False, 'error': t('api.excelMultiSheet', name=filename, sheets='、'.join(filled))}
                 ), 400
             df = book.parse(filled[0] if filled else (sheet_names[0] if sheet_names else 0))
+            parsed = parse_frame(df)
+            if parsed is not None:
+                df = use_biblio(parsed)
         elif name_lower.endswith(('.csv', '.tsv')):
             # ``sep=None`` would make pandas *sniff* the delimiter, which turns a
             # comma file with a stray tab inside a quoted cell into a different
             # table. Only .tsv asks for a tab; .csv keeps the comma contract the
             # exporter writes.
-            df = pd.read_csv(file.stream, sep='\t' if name_lower.endswith('.tsv') else ',')
+            raw = file.stream.read()
+            parsed = None
+            if name_lower.endswith('.csv'):
+                try:
+                    parsed = parse_text(decode_text(raw, filename))
+                except BiblioDecodeError:
+                    parsed = None
+            if parsed is not None:
+                df = use_biblio(parsed)
+            else:
+                df = pd.read_csv(io.BytesIO(raw), sep='\t' if name_lower.endswith('.tsv') else ',')
         else:
             # An extension nobody recognises is refused, not guessed at: reading
             # a Parquet or a PDF as CSV produces a table that is technically
@@ -124,6 +151,7 @@ def upload_dataset():
             # CSSCI export has many rows and must not be described as one text.
             'is_txt': is_txt,
             'biblio_format': biblio_format,
+            'biblio_capabilities': biblio_capabilities,
             'warnings': warnings,
             # False when identical rows were already stored: the UI can then
             # say "already saved" rather than pretending it wrote something new.

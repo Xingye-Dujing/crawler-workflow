@@ -245,18 +245,18 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
 
 CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流。它是普通表格节点：上游可以是 Upload（CSV/Excel/JSON/CNKI/CSSCI），也可以是爬虫节点；列映射把任意表接成网络，CNKI/CSSCI 只是默认列名。实现为净室重写（Kleinberg 突现、PFNET、谱聚类、LLR 等公开算法），不包含 CiteSpace 代码或其 JCR 基线数据。
 
-- **导入**：`.txt` 自动识别 **CNKI RefWorks**（`RT/A1/AD/T1/JF/YR/K1/AB/ER`）与 **CSSCI**（`【来源篇名】…【参考文献】`），编码尝试 UTF-8 → GB18030。规范化列为 `记录ID/题名/作者/作者单位/来源期刊/年份/卷/期/页码/关键词/摘要/参考文献/DOI/格式`；普通文本仍按单列导入。
-- **实体**：关键词 / 作者 / 机构 / 国家 / 学科 / 主题词共现；文献、作者、期刊共被引；文献耦合。共现类只需要实体列与年份列；引文类需要参考文献列。CNKI RefWorks 通常没有参考文献，引文模式会按名拒绝并提示改用 CSSCI。
-- **网络**：按年份切片（`slice_years`），每片按 TopN / Top% / g-index / 最小频次选择后合并；关联强度 cosine / Dice / Jaccard / association；每节点最大连边 + 连边保留因子 LRF；剪枝 none / 最大生成树 / 逐片 PFNET（Pathfinder）。实际剪枝前后边数写入控制台，不静默替换算法。
-- **指标**：度、中介中心性（距离 = 1/权重，节点多时按 500 源点采样并播报）、特征向量中心性（按连通分量计算）、PageRank、Sigma = `(中介中心性+1)^突现强度`。
-- **聚类**：归一化 Laplacian 谱聚类，聚类数留空时按特征值间隙自动选择；模块度 Q 与平均轮廓值写入运行摘要；标签支持 LLR / LSI / MI / TF-IDF，候选词来自簇内实体与关联文献的题名/摘要/关键词。
-- **突现**：两状态 Kleinberg Viterbi，按逐年文档数计算；每个节点保留最强突现区间，突现词表另写 CSV。文献耦合的节点是施引文献本身，禁止突现。
-- **输出**：一行一节点，固定列 `节点/类型/频次/首年/末年/年份序列/度/中介中心性/特征向量中心性/PageRank/Sigma/x/y/连接`；开启聚类追加 `聚类/聚类标签/轮廓值`，开启突现追加 `突现强度/突现起始/突现结束`。`连接` 与 `年份序列` 是规范 JSON 文本，图谱图直接读取；每个节点的 `连接` 存完整局部邻接，图构建时按端点对去重。
-- **图**：`knowledge_graph`（固定布局知识图谱）、`cluster_timeline`（聚类时间线）、`burst`（突现词图）、`timezone`（时区图），均仅 ECharts。缺列/无连边/未开聚类或突现时按名拒绝；这四张图暂无 LaTeX 图源，勾选 LaTeX 会被明确跳过并播报。
-- **产物**：默认写 `<节点>_graph.graphml`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。
+- **导入**：格式注册表识别 **CNKI RefWorks、CSSCI、WoS 纯文本、Scopus CSV、PubMed XML/NBIB、Dimensions CSV、Lens CSV、RIS、BibTeX、EndNote tagged**。规范化列为 `记录ID/题名/作者/作者单位/来源期刊/年份/卷/期/页码/关键词/摘要/参考文献/DOI/格式`，并按实际数据追加 `国家/学科/引用次数/使用次数/使用次数2013/基金/文献类型/语言/引文`。`引文` 是结构化 JSON；普通文本与不满足文献签名的 CSV/Excel 仍保持原导入行为。
+- **实体**：关键词 / 作者 / 机构 / 国家 / 学科 / 主题词 / 基金共现；文献、作者、期刊共被引；文献耦合；来源期刊耦合。共现类只需要实体列与年份列；引文/耦合类需要参考文献列。CNKI RefWorks 通常没有参考文献，引文模式会按名拒绝并提示改用 CSSCI/WoS/Scopus 等含引文的导出。
+- **网络**：按年份切片（`slice_years`），每片按 TopN / Top% / g-index / 阈值三元组选择后合并；支持 look-back years、最低 TC/usage 过滤、cosine / Dice / Jaccard / association、每节点最大连边 + LRF、cc/ccv 边过滤、最大连通分量；剪枝 none / 最大生成树 / 逐片 PFNET（Pathfinder）。实际剪枝前后边数写入控制台，不静默替换算法。
+- **指标**：度、中介中心性（距离 = 1/权重，节点多时按 500 源点采样并播报）、特征向量中心性（按连通分量计算）、PageRank、Sigma = `(中介中心性+1)^突现强度`；输入含 `引用次数` 时追加 `总被引/H指数`，含 `使用次数` 时追加 `使用次数合计`。
+- **聚类**：归一化 Laplacian 谱聚类，聚类数留空时按特征值间隙自动选择；模块度 Q、逐节点/逐簇轮廓值写入运行摘要；标签支持 LLR / LSI / MI / TF-IDF，候选词来自簇内实体与关联文献的题名/摘要/关键词。
+- **突现**：两状态 Kleinberg Viterbi，按逐年文档数计算；每个节点保留最强突现区间，突现词表另写 CSV。耦合类节点是施引单元本身，禁止突现。
+- **输出**：默认 `output_shape=nodes`，一行一节点，固定列 `节点/类型/频次/首年/末年/年份序列/度/中介中心性/特征向量中心性/PageRank/Sigma/x/y/连接`；开启聚类追加 `聚类/聚类标签/轮廓值`，开启突现追加 `突现强度/突现起始/突现结束`。`连接` 与 `年份序列` 是规范 JSON 文本，图谱图直接读取；每个节点的 `连接` 存完整局部邻接，图构建时按端点对去重。`output_shape` 还可输出 `edges`/`clusters`/`bursts` 普通表，供下游继续处理。
+- **图**：`knowledge_graph`（固定布局知识图谱）、`circular`（环形图谱）、`cluster_timeline`（聚类时间线）、`landscape`（景观图）、`burst`（突现词图）、`timezone`（时区图）、`biblio_heatmap`（聚类—年份热力图），均仅 ECharts。缺列/无连边/未开聚类或突现时按名拒绝。七类图均有 TikZ/pgfplots LaTeX 图源与 booktabs 三线表，并附余弦、Dice、Jaccard、中介中心性、PageRank、Sigma 公式。前端 `labelLayout` 会按实际渲染矩形避让中文标签，放不下的低频标签隐藏并保留 hover。
+- **产物**：默认写 `<节点>_graph.graphml`、`_graph.gml`、`_graph.json`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。
 - **边界**：CNKI 无被引次数与 CR，因此无共被引/耦合/引用突现；双图叠加需要外部 JCR 期刊—学科基线，本期不提供假数据。
 
-演示：`data/workflows/文献计量演示：CNKI 与 CSSCI 知识图谱.json`（CNKI 关键词/作者 + CSSCI 文献共被引，六个图），样例在 `samples/`。工作流按数据集 id 引用本机已注册的两份样例；换一台机器时先上传 `samples/biblio_cnki_demo.txt` 与 `samples/biblio_cssci_demo.txt`，再在两个 Upload 节点里重新选择即可。
+演示：`data/workflows/文献计量演示：CNKI 与 CSSCI 知识图谱.json`（CNKI 关键词/作者 + CSSCI 文献共被引/来源期刊耦合/作者共被引，共 11 张图），样例在 `samples/`。工作流按数据集 id 引用本机已注册的两份样例；换一台机器时先上传 `samples/biblio_cnki_demo.txt` 与 `samples/biblio_cssci_demo.txt`，再在两个 Upload 节点里重新选择即可。
 
 ## 可视化
 - **图表是论文样式，不是仪表盘样式**：一套印刷安全的配色（首个色是深板岩蓝，不再是荧光蓝）、衬线字体
