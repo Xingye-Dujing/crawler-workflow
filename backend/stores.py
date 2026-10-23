@@ -23,6 +23,7 @@ import pandas as pd
 from state import _dataset_cache
 
 from config import Config
+from services.biblio_store import BiblioStore
 from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping
 from services.lexicon_store import LexiconStore
@@ -107,6 +108,23 @@ def get_lexicon_store() -> LexiconStore:
             if _LEXICON_STORE is None:
                 _LEXICON_STORE = LexiconStore()
     return _LEXICON_STORE
+
+
+# ─── Bibliometrics projects and snapshots ───────────────────────
+
+#: Named subjects of study and the bibliometrics tables captured from a run.
+_BIBLIO_STORE = None
+_BIBLIO_LOCK = threading.Lock()
+
+
+def get_biblio_store() -> BiblioStore:
+    """The single store behind the bibliometrics workspace, opened on first use."""
+    global _BIBLIO_STORE
+    if _BIBLIO_STORE is None:
+        with _BIBLIO_LOCK:
+            if _BIBLIO_STORE is None:
+                _BIBLIO_STORE = BiblioStore()
+    return _BIBLIO_STORE
 
 
 #: The read-through cache of loaded frames (``_dataset_cache``, from ``state``) is bounded so a

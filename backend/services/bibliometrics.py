@@ -1336,6 +1336,66 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
     }
 
 
+def snapshot_capture(rows: list[dict]) -> dict:
+    """Split a stored bibliometrics table into the two things a comparison reads.
+
+    ``nodes`` keeps one row per entity WITHOUT its adjacency — ``连接``/``年份序列`` are
+    re-derived into ``edges`` here, and holding the same links in two places is how a snapshot
+    starts disagreeing with itself. An edge is stored once per unordered pair, at its strongest
+    weight, because a node table lists each undirected link from both ends.
+    """
+    nodes: list[dict] = []
+    edges: dict[tuple, dict] = {}
+
+    def remember(source: str, target: str, weight, count):
+        if not source or not target:
+            return
+        key = (source, target) if source <= target else (target, source)
+        value = _as_float(weight, 0.0)
+        best = edges.get(key)
+        if best is None or value > best['weight']:
+            edges[key] = {'source': key[0], 'target': key[1], 'weight': value, 'count': _as_int(count)}
+
+    for row in rows or ():
+        source = str(row.get('source') or '').strip()
+        target = str(row.get('target') or '').strip()
+        name = str(row.get('节点') or '').strip()
+        if source and target:
+            remember(source, target, row.get('weight'), row.get('count'))
+            continue
+        if not name:
+            continue
+        nodes.append({key: value for key, value in row.items() if key not in ('连接', '年份序列')})
+        for link in _as_list(row.get('连接')):
+            remember(name, str(link.get('target') or ''), link.get('value'), link.get('count'))
+
+    return {'nodes': nodes, 'edges': sorted(edges.values(), key=lambda e: (e['source'], e['target']))}
+
+
+def _as_float(value, default: float = 0.0) -> float:
+    try:
+        text = str(value).strip()
+        return default if text == '' else float(text)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_int(value) -> int:
+    return int(_as_float(value, 0.0))
+
+
+def _as_list(value) -> list[dict]:
+    """A JSON-text adjacency cell, already parsed by the caller or raw from the table."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
     """Write GraphML + CSV summaries; return {kind: path} for the run ledger."""
     target = Path(out_dir)

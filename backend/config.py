@@ -65,6 +65,11 @@ class Config:
     # pipeline reads at run time. Separate store because these are curated inputs a
     # person maintains, not per-execution state.
     LEXICON_DB = os.path.join(DATA_DIR, 'lexicon.db')
+    # Bibliometrics projects and snapshots: a named capture of what a biblio node produced,
+    # kept so two runs of the same corpus can be compared tomorrow. Separate store because a
+    # snapshot is curated — the user names it and decides what to keep — while a run record is
+    # whatever happened, and retention sweeps may drop the latter.
+    BIBLIO_DB = os.path.join(DATA_DIR, 'biblio.db')
     # Housekeeping: keep the newest N runs per workflow, and never keep
     # anything older than this many days. Runs that finished cleanly are the
     # first to go; interrupted ones are kept to the end because they are the
