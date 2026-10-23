@@ -1483,6 +1483,7 @@ const canvas = {
             selection: 'top_n', top_n: 50, top_pct: 10, g_index: 25, min_count: 2,
             threshold_c: 0, threshold_cc: 1, threshold_ccv: 0, min_tc: '', min_usage: '', largest_component: false,
             link_measure: 'cosine', citation_expansion: 0, max_links_per_node: 10, lrf: 2.5, pruning: 'none', pruning_scope: 'slices',
+            pathfinder_r: 'inf', pathfinder_lmax: 0, pathfinder_dmax: 1.0,
             cluster: true, cluster_count: '', label_method: 'llr', top_terms: 5,
             burst: true, burst_gamma: 1.0, burst_min_duration: 2, burst_weight: 2.0, burst_top: 20,
             aliases: '', exclude_values: '', cluster_labels: '', basemap_dataset_id: '',

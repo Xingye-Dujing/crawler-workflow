@@ -463,10 +463,18 @@ const out = {};
     w.x.biblioWorkspace._restoreFocus({ querySelector: (sel) => { hits.push(sel); return fake; } }, inside);
     w.x.biblioWorkspace._restoreFocus({ querySelector: () => null }, inside);
     w.x.biblioWorkspace._restoreFocus({ querySelector: () => fake }, '');
-    /* The pickers are rebuilt with the body, so the panel owes CustomSelect a look — measured
-       behind a patched global, because this harness does not load custom-select.js at all. */
-    let refreshes = 0;
-    w.sandbox.CustomSelect = { refreshAll: () => { refreshes += 1; }, ownsPopup: () => false };
+    /* The pickers are rebuilt with the body, so the panel has to hand that subtree to
+       CustomSelect itself — measured behind a patched global, because this harness does not
+       load custom-select.js and its observer at all. */
+    let scans = 0;
+    let scannedRoot = null;
+    w.sandbox.CustomSelect = {
+        scan: (root) => {
+            scans += 1;
+            scannedRoot = root === w.x.body() ? 'panel' : 'other';
+        },
+        ownsPopup: () => false,
+    };
     w.x.biblioWorkspace.render();
     out.fields = {
         marked: ['search', 'label'].every((k) => html.indexOf(`data-biblio-keep="${k}"`) >= 0),
@@ -474,7 +482,8 @@ const out = {};
         askedOutside: outside === '',
         askedUnmarked: unmarked === '',
         restore: hits,
-        refreshes,
+        scans,
+        scannedRoot,
     };
 }
 

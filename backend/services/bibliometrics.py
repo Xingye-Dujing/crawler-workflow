@@ -724,16 +724,25 @@ def _max_links(edges: dict, params: dict) -> dict:
     }
 
 
+def _edges_by_slice(edges: dict, edge_slices: dict) -> dict:
+    """``{slice_id: {edge_key: info}}`` — the same network seen one slice at a time."""
+    out: dict[int, dict] = defaultdict(dict)
+    for key, ids in edge_slices.items():
+        info = edges.get(key)
+        if info is None:
+            continue
+        for slice_id in ids:
+            out[slice_id][key] = info
+    return {slice_id: out[slice_id] for slice_id in sorted(out)}
+
+
 def _slice_mst_keys(edges: dict, edge_slices: dict) -> tuple[set[tuple[str, str]], int]:
     keep_keys: set[tuple[str, str]] = set()
     slices_seen = 0
-    for slice_id in sorted({sid for ids in edge_slices.values() for sid in ids}):
+    for slice_edges in _edges_by_slice(edges, edge_slices).values():
         graph = nx.Graph()
-        for key, ids in edge_slices.items():
-            if slice_id not in ids or key not in edges:
-                continue
-            left, right = key
-            graph.add_edge(left, right, weight=edges[key]['weight'])
+        for (left, right), info in slice_edges.items():
+            graph.add_edge(left, right, weight=info['weight'])
         if graph.number_of_edges() == 0:
             continue
         slices_seen += 1
@@ -753,6 +762,92 @@ def _global_mst_keys(edges: dict) -> set[tuple[str, str]]:
     }
 
 
+#: One DP level of the general Pathfinder reduction costs ``n³`` dense element operations, so
+#: the whole reduction is capped at roughly this many. A network above it refuses BY NAME with
+#: the numbers it measured — a run that appears to hang is worse than a named refusal, and the
+#: classic r=∞ / full-depth case never reaches the DP at all (it is a maximum spanning forest).
+_PFNET_WORK_BUDGET = 400_000_000
+
+
+def _pfnet_combine(r: str):
+    """How two consecutive link distances become one path distance (Mantel's r-norm)."""
+    if r == '1':
+        return lambda left, right: left + right
+    if r == '2':
+        return lambda left, right: np.sqrt(left * left + right * right)
+    return np.maximum
+
+
+def _pfnet_keys(edges: dict, params: dict) -> set[tuple[str, str]]:
+    """The Pathfinder reduction of one network (Mantel 1990; Chen & Lewens 2007).
+
+    Similarity is read as distance ``d = 1 - s``. A link survives iff its own distance is no
+    longer than the best *indirect* path between its endpoints, where a path's length is the
+    Mantel r-norm of its links (``inf`` = its longest single link, ``1`` = their sum, ``2`` =
+    their Euclidean norm) using at most ``pathfinder_lmax`` links (0 = as many as the network
+    allows). ``pathfinder_dmax`` then keeps only that fraction of the survivors, strongest
+    first — 1.0 keeps every link the reduction justified.
+
+    With r=∞ and unlimited depth the two definitions coincide, so that case is answered by the
+    maximum spanning forest instead of the DP; that is the same graph, not a weaker one.
+    """
+    names = sorted({node for key in edges for node in key})
+    size = len(names)
+    if size < 3:
+        return set(edges)
+    r = params['pathfinder_r']
+    levels = params['pathfinder_lmax'] or (size - 1)
+    levels = max(2, min(levels, size - 1))
+    if r == 'inf' and levels >= size - 1:
+        return _global_mst_keys(edges)
+    work = size**3 * (levels - 1)
+    if work > _PFNET_WORK_BUDGET:
+        raise ValueError(t('biblio.pfnet_refused', nodes=size, levels=levels, work=work, limit=_PFNET_WORK_BUDGET))
+
+    index = {name: position for position, name in enumerate(names)}
+    direct = np.full((size, size), np.inf)
+    np.fill_diagonal(direct, 0.0)
+    for (left, right), info in edges.items():
+        i, j = index[left], index[right]
+        distance = max(0.0, 1.0 - float(info['weight']))
+        if distance < direct[i, j]:
+            direct[i, j] = direct[j, i] = distance
+    # A path step is a real link: the zero diagonal would let a path "return" through its own
+    # start for free and dominate every link it touches.
+    step = direct.copy()
+    np.fill_diagonal(step, np.inf)
+    combine = _pfnet_combine(r)
+
+    best = np.full((size, size), np.inf)
+    for hop in range(2, levels + 1):
+        current = best.copy()
+        for middle in range(size):
+            reached = step[:, middle] if hop == 2 else best[:, middle]
+            current = np.minimum(current, combine(reached[:, None], step[middle, :][None, :]))
+        np.fill_diagonal(current, np.inf)
+        if np.array_equal(current, best):
+            break
+        best = current
+
+    tolerance = 1e-9
+    kept = []
+    for key in edges:
+        i, j = index[key[0]], index[key[1]]
+        if direct[i, j] <= best[i, j] + tolerance:
+            kept.append(key)
+    dmax = float(params['pathfinder_dmax'])
+    if dmax < 1.0 and len(kept) > 1:
+        ranked = sorted(kept, key=lambda key: (-float(edges[key]['weight']), key))
+        kept = ranked[: max(1, math.ceil(len(ranked) * dmax))]
+    return set(kept)
+
+
+def _pruning_scope_word(scope: str) -> str:
+    """The scope as the reader sees it: a raw ``slices`` inside a Chinese console line is a
+    token, not a word, and the line is the only place the user learns what was pruned."""
+    return t('biblio.pruning_scope.slices' if scope == 'slices' else 'biblio.pruning_scope.merged')
+
+
 def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> dict:
     mode = params['pruning']
     if mode == 'none':
@@ -762,20 +857,44 @@ def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> di
     if mode == 'mst':
         keep_keys = _slice_mst_keys(edges, edge_slices)[0] if scope == 'slices' else _global_mst_keys(edges)
         kept = {key: info for key, info in edges.items() if key in keep_keys}
-        notes.append(t('biblio.mst_done', before=len(edges), after=len(kept), scope=scope))
+        notes.append(
+            t(
+                'biblio.mst_done',
+                before=len(edges),
+                after=len(kept),
+                scope=_pruning_scope_word(scope),
+            )
+        )
         return kept
 
-    # Pathfinder: PFNET(r=∞, q=n−1) is a maximum spanning tree on one slice;
-    # CiteSpace applies it per slice and merges, which is why the result can
-    # keep more links than one global MST. The retained count is reported.
+    # Pathfinder: every link is compared against the best INDIRECT path between its endpoints,
+    # so which network is being reduced matters — per slice the union of the slice reductions
+    # keeps more links than one reduction of the merged network. The parameters actually used
+    # are printed, because r=∞ at full depth is a spanning forest and a reader may want to know
+    # which of the two ran.
     if scope == 'merged':
-        keep_keys = _global_mst_keys(edges)
-        slices_seen = 1
-        notes.append(t('biblio.pathfinder_merged_equals_mst'))
+        keep_keys = _pfnet_keys(edges, params)
+        units = 1
     else:
-        keep_keys, slices_seen = _slice_mst_keys(edges, edge_slices)
+        networks = _edges_by_slice(edges, edge_slices)
+        keep_keys = set()
+        for slice_edges in networks.values():
+            keep_keys |= _pfnet_keys(slice_edges, params)
+        units = len(networks)
     kept = {key: info for key, info in edges.items() if key in keep_keys}
-    notes.append(t('biblio.pathfinder_done', before=len(edges), after=len(kept), slices=slices_seen))
+    depth = params['pathfinder_lmax']
+    notes.append(
+        t(
+            'biblio.pfnet_done',
+            before=len(edges),
+            after=len(kept),
+            r='∞' if params['pathfinder_r'] == 'inf' else params['pathfinder_r'],
+            lmax=str(depth) if depth else t('biblio.pfnet_depth_all'),
+            dmax=params['pathfinder_dmax'],
+            scope=_pruning_scope_word(scope),
+            units=units,
+        )
+    )
     return kept
 
 

@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from engine.workflow import WorkflowEngine
+from i18n import t
 from services import bibliometrics
 from services.biblio_schema import collect_errors, normalize_params, output_columns
 
@@ -390,8 +391,10 @@ class TestPhaseTwoContracts:
         merged = bibliometrics.build(frame, _params(pruning='mst', pruning_scope='merged'), 'test')
         assert len(merged['edges']) == len(merged['rows']) - 1
         assert len(slices['edges']) >= len(merged['edges'])
-        assert any('MST 剪枝（slices）' in note or 'MST pruning (slices)' in note for note in slices['notes'])
-        assert any('MST 剪枝（merged）' in note or 'MST pruning (merged)' in note for note in merged['notes'])
+        # The scope is named with the interface's own word, not the stored token: a Chinese
+        # console line reading 「MST 剪枝（slices）」 is half a sentence in two languages.
+        assert any('MST' in note and t('biblio.pruning_scope.slices') in note for note in slices['notes'])
+        assert any('MST' in note and t('biblio.pruning_scope.merged') in note for note in merged['notes'])
 
     def test_citation_metrics_are_emitted_only_when_the_data_has_them(self):
         with_metrics = bibliometrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')
@@ -512,3 +515,117 @@ def test_every_output_shape_reads_back():
 
     for shape in OUTPUT_SHAPES:
         assert classify_shape(output_columns({'output_shape': shape})) == shape
+
+
+def _edges(*triples):
+    """``(a, b, weight)`` in canonical-pair form, as ``_prune`` hands them over."""
+    return {(a, b) if a < b else (b, a): {'weight': weight} for a, b, weight in triples}
+
+
+def _pf(r='inf', lmax=0, dmax=1.0):
+    return {'pathfinder_r': r, 'pathfinder_lmax': lmax, 'pathfinder_dmax': dmax}
+
+
+class TestPathfinderReduction:
+    """Mantel's PFNET reimplemented from the published definition, on hand-computed networks.
+
+    Similarity is read as distance ``d = 1 - s``; a link survives iff its own distance is no
+    longer than the best indirect path between its endpoints under the chosen r-norm."""
+
+    TRIANGLE = _edges(('A', 'B', 0.5), ('B', 'C', 0.5), ('A', 'C', 0.4))
+
+    def test_the_bottleneck_norm_drops_the_dominated_chord(self):
+        # A→B→C costs max(0.5, 0.5) = 0.5, better than the chord's own 0.6.
+        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('inf')) == {('A', 'B'), ('B', 'C')}
+
+    def test_the_sum_and_euclidean_norms_keep_it_because_two_links_really_do_cost_more(self):
+        # 0.5 + 0.5 = 1.0 and √(0.5²+0.5²) ≈ 0.707, both worse than 0.6.
+        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('1')) == set(self.TRIANGLE)
+        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('2')) == set(self.TRIANGLE)
+
+    def test_the_depth_limit_decides_whether_a_long_way_round_counts(self):
+        chain = _edges(('A', 'B', 0.8), ('B', 'C', 0.8), ('C', 'D', 0.8), ('A', 'D', 0.3))
+        # Two hops cannot get from A to D, so the direct link stands; at three hops it is dominated.
+        assert ('A', 'D') in bibliometrics._pfnet_keys(chain, _pf('inf', lmax=2))
+        assert ('A', 'D') not in bibliometrics._pfnet_keys(chain, _pf('inf', lmax=3))
+
+    def test_the_keep_fraction_leaves_the_strongest_survivors(self):
+        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('1', dmax=0.5)) == {('A', 'B'), ('B', 'C')}
+
+    def test_the_bottleneck_case_at_full_depth_is_the_same_graph_as_the_spanning_forest(self):
+        """The fast path is not a weaker substitute: PFNET(r=∞, unlimited depth) IS the maximum
+        spanning forest, so the two must agree link for link."""
+        edges = _edges(
+            ('A', 'B', 0.9),
+            ('B', 'C', 0.8),
+            ('C', 'D', 0.7),
+            ('A', 'D', 0.2),
+            ('A', 'C', 0.3),
+            ('B', 'D', 0.25),
+            ('D', 'E', 0.6),
+            ('A', 'E', 0.1),
+        )
+        assert bibliometrics._pfnet_keys(edges, _pf('inf')) == bibliometrics._global_mst_keys(edges)
+
+    def test_a_network_wider_than_the_budget_refuses_and_names_its_numbers(self, monkeypatch):
+        monkeypatch.setattr(bibliometrics, '_PFNET_WORK_BUDGET', 10)
+        with pytest.raises(ValueError) as exc:
+            bibliometrics._pfnet_keys(self.TRIANGLE, _pf('1'))
+        text = str(exc.value)
+        assert '3' in text and '10' in text, text
+
+    def test_two_and_three_nodes_have_no_indirect_path_to_compare(self):
+        assert bibliometrics._pfnet_keys(_edges(('A', 'B', 0.5)), _pf('1')) == {('A', 'B')}
+
+
+class TestPathfinderInTheRun:
+    def test_the_exponent_changes_the_pruned_network(self):
+        """A run that prunes identically whatever r says would be a switch that switches nothing."""
+        few = bibliometrics.build(_keywords(), _params(pruning='pathfinder', pruning_scope='merged'), 'test')
+        many = bibliometrics.build(
+            _keywords(), _params(pruning='pathfinder', pruning_scope='merged', pathfinder_r='1'), 'test'
+        )
+        assert len(many['edges']) >= len(few['edges'])
+        assert many['edges'] != few['edges'] or len(many['edges']) > len(few['edges'])
+
+    def test_the_console_names_the_parameters_that_ran(self):
+        result = bibliometrics.build(
+            _keywords(), _params(pruning='pathfinder', pathfinder_r='2', pathfinder_lmax=3, pathfinder_dmax=0.8), 'test'
+        )
+        line = next(note for note in result['notes'] if 'Pathfinder' in note)
+        assert 'r=2' in line and '3' in line and '0.8' in line
+
+    def test_pruning_a_slice_network_is_not_the_same_job_as_pruning_the_merged_one(self):
+        per_slice = bibliometrics.build(_keywords(), _params(pruning='pathfinder', pathfinder_r='1'), 'test')
+        merged = bibliometrics.build(
+            _keywords(), _params(pruning='pathfinder', pruning_scope='merged', pathfinder_r='1'), 'test'
+        )
+        assert per_slice['notes'] != merged['notes']
+
+
+class TestPathfinderParameters:
+    def test_the_defaults_are_the_classic_pfnet(self):
+        params = normalize_params(_params(), 'test')
+        assert (params['pathfinder_r'], params['pathfinder_lmax'], params['pathfinder_dmax']) == ('inf', 0, 1.0)
+
+    def test_normalizing_twice_changes_nothing(self):
+        once = normalize_params(_params(pathfinder_r='1', pathfinder_lmax=3, pathfinder_dmax='0.8'), 'test')
+        assert normalize_params(once, 'test') == once
+
+    def test_an_exponent_this_build_cannot_compute_is_refused_by_name(self):
+        errors = collect_errors(_params(pathfinder_r='3'), 'test')
+        assert any('pathfinder_r' in line and '3' in line for line in errors), errors
+
+    @pytest.mark.parametrize(
+        ('name', 'value'),
+        [('pathfinder_lmax', 51), ('pathfinder_lmax', -1), ('pathfinder_dmax', 0), ('pathfinder_dmax', 1.5)],
+    )
+    def test_a_number_outside_its_range_is_refused_by_name(self, name, value):
+        assert any(name in line for line in collect_errors(_params(**{name: value}), 'test'))
+
+    @pytest.mark.parametrize('name', ['pathfinder_lmax', 'pathfinder_dmax'])
+    def test_a_cleared_box_refuses_by_name_rather_than_assuming_the_default(self, name):
+        """Same rule as every other numeric box on this node: a value the user erased is not a
+        preference for the default, and 0 on the depth would mean "unlimited" while 0 on the
+        fraction would mean "keep nothing" — the two readings differ, so the box asks."""
+        assert any(name in line for line in collect_errors(_params(**{name: ''}), 'test'))

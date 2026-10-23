@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from node_runner import run_node
 
+from services.biblio_schema import DEFAULTS as BIBLIO_DEFAULTS
 from utils.helpers import platform_for
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')]
@@ -59,7 +60,30 @@ def _save(nid='out-1', filename='f'):
 
 #: Parameters that SELECT which panel is drawn. Poisoning one of these would test
 #: a different panel, so the hostile batch leaves them alone.
-_PANEL_SELECTORS = frozenset({'operation', 'platform', 'collect', 'mode', 'method', 'how', 'bins', 'chart_type'})
+_PANEL_SELECTORS = frozenset(
+    {
+        'operation',
+        'platform',
+        'collect',
+        'mode',
+        'method',
+        'how',
+        'bins',
+        'chart_type',
+        'engine',
+        # The bibliometrics node is almost entirely selects; poisoning one would only
+        # prove that a value the panel never writes is escaped.
+        'entity_type',
+        'selection',
+        'link_measure',
+        'pruning',
+        'pruning_scope',
+        'pathfinder_r',
+        'label_method',
+        'output_shape',
+        'basemap_dataset_id',
+    }
+)
 
 #: Every panel this file renders, as (scenario id, node type, params).
 _PANELS = [
@@ -118,6 +142,27 @@ _PANELS = [
     ('panel_sentiment_snownlp', 'process', {'operation': 'sentiment', 'mode': 'snownlp'}),
     ('panel_sentiment_bert', 'process', {'operation': 'sentiment', 'mode': 'bert'}),
     ('panel_sentiment_llm', 'process', {'operation': 'sentiment', 'mode': 'llm'}),
+    # The bibliometrics node carries forty-odd parameters and this panel is the only place
+    # a researcher can set any of them, so it is the highest-value reachability surface here.
+    (
+        'panel_biblio_keyword',
+        'biblio',
+        {
+            'entity_type': 'keyword',
+            'output_shape': 'nodes',
+            'year_column': '年份',
+            'pruning': 'pathfinder',
+            'pathfinder_r': '2',
+            'pathfinder_lmax': 3,
+            'pathfinder_dmax': 0.8,
+            'cluster_labels': '#0 = 甲组',
+        },
+    ),
+    (
+        'panel_biblio_dual_map',
+        'biblio',
+        {'entity_type': 'journal', 'output_shape': 'dual_map', 'basemap_dataset_id': 'ds-1'},
+    ),
 ]
 
 #: One quote is enough to leave an attribute; the rest proves the payload landed.
@@ -1536,3 +1581,43 @@ class TestModelAgreementChart:
         for label in ('settings.modelField', 'settings.agreementLabelField', 'settings.idField'):
             assert label in html, (label, html)
         assert 'settings.xField' not in html, 'a chart with no x/y must not render an x field box'
+
+
+#: A parameter whose field writes it through a dedicated handler instead of the generic
+#: ``updateParam('node','key',…)``. ``entity_type`` is the one: changing it also changes which
+#: columns the node expects, so it has its own writer.
+PANEL_WRITERS = {'entity_type': 'updateBiblioEntity'}
+
+
+def _panel_has_a_field_for(html: str, key: str) -> bool:
+    if f"'{key}'" in html:
+        return True
+    writer = PANEL_WRITERS.get(key)
+    return bool(writer) and writer in html
+
+
+class TestBiblioPanelReachability:
+    """Every parameter the bibliometrics server knows has to be settable from the panel.
+
+    The node has forty-odd parameters and the settings panel is the only way to reach any of
+    them, so a parameter added to ``biblio_schema.DEFAULTS`` without a field is a setting no
+    researcher can use — and a parameter the panel shows that the server does not read is a box
+    that lies. This walks the server's own list rather than a copy of the panel."""
+
+    def test_every_server_parameter_has_a_field(self, results):
+        html = results['settings']['panel_biblio_keyword']
+        missing = sorted(key for key in BIBLIO_DEFAULTS if not _panel_has_a_field_for(html, key))
+        assert missing == [], f'parameters the panel cannot set: {missing}'
+
+    def test_the_panel_writes_no_parameter_the_server_does_not_read(self, results):
+        html = results['settings']['panel_biblio_keyword']
+        written = set(re.findall(r"updateParam\('[^']+','([a-z_]+)'", html))
+        unknown = sorted(written - set(BIBLIO_DEFAULTS))
+        assert unknown == [], f'fields for parameters the server never reads: {unknown}'
+
+    def test_the_pathfinder_controls_carry_the_values_stored_on_the_node(self, results):
+        """A field that renders its own default instead of the stored value rewrites the user's
+        canvas the first time they touch anything else in the panel."""
+        html = results['settings']['panel_biblio_keyword']
+        assert 'value="2" selected' in html, 'the r select did not come up on the stored exponent'
+        assert 'value="3"' in html and 'value="0.8"' in html, 'the depth/fraction boxes are not the stored ones'

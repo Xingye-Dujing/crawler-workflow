@@ -169,9 +169,17 @@ _ZH = {
     'biblio.records_skipped': '{n} 条记录没有可分析的实体，已跳过',
     'biblio.wide_ref_skipped': '{n} 条参考文献被超过 {cap} 篇文献同时引用，已跳过其两两配对（过大团会淹没图）',
     'biblio.mst_done': 'MST 剪枝（{scope}）：{before} → {after} 条边',
-    'biblio.pathfinder_done': 'Pathfinder 剪枝：{before} → {after} 条边（{slices} 个切片）',
-    'biblio.pathfinder_merged_equals_mst': (
-        'Pathfinder 合并网络作用域下 PFNET(r=∞,q=n−1) 等价于最大生成树，已如实按合并网络处理'
+    'biblio.pruning_scope.slices': '逐切片',
+    'biblio.pruning_scope.merged': '合并网络',
+    'biblio.pfnet_depth_all': '不限',
+    'biblio.pfnet_done': (
+        'Pathfinder 剪枝（{scope}，r={r}，最长间接路径 {lmax} 跳，保留比例 {dmax}）：'
+        '{before} → {after} 条边（共 {units} 张网络）'
+    ),
+    'biblio.pfnet_refused': (
+        'Pathfinder 要把每条连边与两端之间最好的间接路径逐对比较：{nodes} 个节点 × {levels} 层约需 {work} 次运算，'
+        '超过上限 {limit}。请降低 TopN 或 pathfinder_lmax，或改用 MST 剪枝'
+        '（r=∞ 且不限跳数时二者本是同一张图，那种情况本实现会自动走生成森林快路，不会拒）'
     ),
     'biblio.betweenness_sampled': '节点数 {n} 超过 2000，中介中心性使用 {k} 个源点采样',
     'biblio.eigen_failed': '特征向量中心性未收敛，已改用归一化加权度（0–1）作为回退并播报',
@@ -1748,10 +1756,18 @@ _EN = {
         '(a giant clique would bury the graph)'
     ),
     'biblio.mst_done': 'MST pruning ({scope}): {before} → {after} edges',
-    'biblio.pathfinder_done': 'Pathfinder pruning: {before} → {after} edges ({slices} slices)',
-    'biblio.pathfinder_merged_equals_mst': (
-        'Pathfinder on the merged network is PFNET(r=∞,q=n−1), which equals a maximum spanning tree; '
-        'the actual method is reported'
+    'biblio.pruning_scope.slices': 'per slice',
+    'biblio.pruning_scope.merged': 'merged network',
+    'biblio.pfnet_depth_all': 'unlimited',
+    'biblio.pfnet_done': (
+        'Pathfinder pruning ({scope}, r={r}, longest indirect path {lmax} links, keep fraction {dmax}): '
+        '{before} → {after} edges ({units} networks)'
+    ),
+    'biblio.pfnet_refused': (
+        'Pathfinder compares every link against the best indirect path between its endpoints: {nodes} nodes × '
+        '{levels} levels is about {work} operations, above the {limit} budget. Lower top_n or pathfinder_lmax, '
+        'or prune with MST instead (at r=∞ with unlimited depth the two are the same graph, and this build '
+        'takes that fast path automatically)'
     ),
     'biblio.betweenness_sampled': 'More than {n} nodes; betweenness uses {k} sampled sources',
     'biblio.eigen_failed': (

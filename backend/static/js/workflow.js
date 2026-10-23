@@ -3323,6 +3323,7 @@ var BIBLIO_SELECTION_MODES = ['top_n', 'top_pct', 'g_index', 'threshold'];
 var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
 var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
 var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
+var BIBLIO_PATHFINDER_R = ['1', '2', 'inf'];
 var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
 var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts', 'dual_map'];
 
@@ -3347,6 +3348,9 @@ function biblioPruningOptions(values) {
 }
 function biblioPruningScopeOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.scope.' + value)); });
+}
+function biblioPathfinderOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.pfnetR.' + value)); });
 }
 function biblioLabelOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.label.' + value)); });
@@ -3438,7 +3442,11 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
         renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +
         renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(BIBLIO_PRUNING_MODES)) +
-        renderParamSelect(nodeId, p, 'pruning_scope', 'biblio.ui.pruningScope', 'slices', biblioPruningScopeOptions(BIBLIO_PRUNING_SCOPES));
+        renderParamSelect(nodeId, p, 'pruning_scope', 'biblio.ui.pruningScope', 'slices', biblioPruningScopeOptions(BIBLIO_PRUNING_SCOPES)) +
+        renderParamSelect(nodeId, p, 'pathfinder_r', 'biblio.ui.pathfinderR', 'inf', biblioPathfinderOptions(BIBLIO_PATHFINDER_R)) +
+        renderParamInput(nodeId, p, 'pathfinder_lmax', 'biblio.ui.pathfinderLmax', 'number', 0) +
+        renderParamInput(nodeId, p, 'pathfinder_dmax', 'biblio.ui.pathfinderDmax', 'number', 1) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.pathfinderHint') + '</div>';
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.cluster') + '</div>';
     html += renderParamCheckbox(nodeId, p, 'cluster', 'biblio.ui.cluster', true) +
@@ -9044,9 +9052,11 @@ var biblioWorkspace = {
         parts.push(this._diffParts());
         body.innerHTML = parts.join('');
         /* The three pickers are rebuilt with the body, so they arrive as plain native
-           controls — OS-drawn popup, white in a dark panel — until CustomSelect sees them.
-           Every other JS-built panel calls this after painting its markup. */
-        if (window.CustomSelect) CustomSelect.refreshAll();
+           controls — OS-drawn popup, white in a dark panel. The body-level observer would get
+           round to them on the next animation frame, which is a frame in which the panel shows
+           an un-themed control, and a panel that repaints on every keystroke never lets that
+           frame arrive. `scan` also prunes the wrappers of the selects that just died. */
+        if (window.CustomSelect) CustomSelect.scan(body);
         this._restoreFocus(body, keep);
     },
 

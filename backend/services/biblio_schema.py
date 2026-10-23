@@ -48,6 +48,11 @@ SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
 PRUNING_MODES = ('none', 'mst', 'pathfinder')
 PRUNING_SCOPES = ('slices', 'merged')
+#: Mantel's r-norm exponent for the Pathfinder reduction. ``inf`` is the classic PFNET
+#: (a path is as long as its weakest link, i.e. the maximin path), ``1`` sums the link
+#: distances, ``2`` takes their Euclidean norm. Stored as a string because the setting is
+#: a select; ``inf`` never becomes a float in a JSON canvas.
+PATHFINDER_R = ('1', '2', 'inf')
 LABEL_METHODS = ('llr', 'lsi', 'mi', 'tfidf')
 
 #: The canonical input column each entity kind reads. ``term`` reads two columns
@@ -125,6 +130,12 @@ DEFAULTS = {
     'lrf': 2.5,
     'pruning': 'none',
     'pruning_scope': 'slices',
+    # Pathfinder only. r is the Mantel exponent; lmax the longest indirect path considered
+    # (0 = every path, i.e. n-1 links); dmax the fraction of the surviving links to keep,
+    # strongest first (1.0 keeps all of them).
+    'pathfinder_r': 'inf',
+    'pathfinder_lmax': 0,
+    'pathfinder_dmax': 1.0,
     'cluster': True,
     'cluster_count': '',
     'label_method': 'llr',
@@ -146,6 +157,10 @@ LIMITS = {
     'max_nodes': 5000,
     'max_edges': 100000,
     'max_links_json': 200000,
+    #: Pathfinder compares every pair against every intermediate, so one network costs O(n³)
+    #: dense numpy work. A slice is TopN-bounded and cheap; a merged network is not, and above
+    #: this size the node refuses by name rather than hanging the run.
+    'max_pfnet_nodes': 400,
 }
 
 BASE_COLUMNS = (
@@ -325,6 +340,10 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     if scope not in PRUNING_SCOPES:
         errors.append(_bad(nid, 'pruning_scope', scope, ', '.join(PRUNING_SCOPES)))
 
+    pf_r = str(params.get('pathfinder_r') or DEFAULTS['pathfinder_r']).strip()
+    if pf_r not in PATHFINDER_R:
+        errors.append(_bad(nid, 'pathfinder_r', pf_r, ', '.join(PATHFINDER_R)))
+
     label_method = str(params.get('label_method') or DEFAULTS['label_method']).strip()
     if label_method not in LABEL_METHODS:
         errors.append(_bad(nid, 'label_method', label_method, ', '.join(LABEL_METHODS)))
@@ -353,6 +372,10 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     )
     check(lambda: _whole(nid, 'citation_expansion', params.get('citation_expansion', 0), 0, 2))
     check(lambda: _number(nid, 'lrf', params.get('lrf', DEFAULTS['lrf']), 1.0, 100.0))
+    check(lambda: _whole(nid, 'pathfinder_lmax', params.get('pathfinder_lmax', DEFAULTS['pathfinder_lmax']), 0, 50))
+    check(
+        lambda: _number(nid, 'pathfinder_dmax', params.get('pathfinder_dmax', DEFAULTS['pathfinder_dmax']), 0.05, 1.0)
+    )
     check(lambda: _whole(nid, 'top_terms', params.get('top_terms', DEFAULTS['top_terms']), 1, 20))
     check(lambda: _number(nid, 'burst_gamma', params.get('burst_gamma', DEFAULTS['burst_gamma']), 0.01, 100.0))
     check(
@@ -454,6 +477,13 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'lrf': _number(nid, 'lrf', params.get('lrf', DEFAULTS['lrf']), 1.0, 100.0),
         'pruning': str(params.get('pruning') or DEFAULTS['pruning']).strip(),
         'pruning_scope': str(params.get('pruning_scope') or DEFAULTS['pruning_scope']).strip(),
+        'pathfinder_r': str(params.get('pathfinder_r') or DEFAULTS['pathfinder_r']).strip(),
+        'pathfinder_lmax': _whole(
+            nid, 'pathfinder_lmax', params.get('pathfinder_lmax', DEFAULTS['pathfinder_lmax']), 0, 50
+        ),
+        'pathfinder_dmax': _number(
+            nid, 'pathfinder_dmax', params.get('pathfinder_dmax', DEFAULTS['pathfinder_dmax']), 0.05, 1.0
+        ),
         'cluster': as_bool(params.get('cluster'), DEFAULTS['cluster']),
         'cluster_count': count,
         'label_method': str(params.get('label_method') or DEFAULTS['label_method']).strip(),

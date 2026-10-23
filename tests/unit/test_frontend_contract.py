@@ -24,10 +24,12 @@ from node_runner import run_node
 import i18n
 from crawlers import CRAWLERS, is_crawlable
 from services.biblio_schema import (
+    DEFAULTS,
     ENTITY_TYPES,
     LABEL_METHODS,
     LINK_MEASURES,
     OUTPUT_SHAPES,
+    PATHFINDER_R,
     PRUNING_MODES,
     PRUNING_SCOPES,
     SELECTION_MODES,
@@ -342,9 +344,21 @@ class TestBiblioPanelContract:
         assert self._js_array('BIBLIO_LINK_MEASURES') == list(LINK_MEASURES)
         assert self._js_array('BIBLIO_PRUNING_MODES') == list(PRUNING_MODES)
         assert self._js_array('BIBLIO_PRUNING_SCOPES') == list(PRUNING_SCOPES)
+        assert self._js_array('BIBLIO_PATHFINDER_R') == list(PATHFINDER_R)
         assert self._js_array('BIBLIO_LABEL_METHODS') == list(LABEL_METHODS)
         assert self._js_array('BIBLIO_OUTPUT_SHAPES') == list(OUTPUT_SHAPES)
         assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
+
+    def test_a_new_biblio_parameter_is_seeded_on_a_new_node(self):
+        """``canvas.js`` seeds what a freshly dropped node holds; a parameter the server knows and
+        the seed does not is a box that renders its placeholder while the run uses the default —
+        the panel and the executor disagreeing about the same node."""
+        src = (JS_DIR / 'canvas.js').read_text(encoding='utf-8')
+        block = src[src.index("if (type === 'biblio') return {") :]
+        block = block[: block.index('\n        };')]
+        seeded = set(re.findall(r'(\w+):', block))
+        missing = sorted(set(DEFAULTS) - seeded)
+        assert missing == [], f'biblio defaults the canvas never seeds: {missing}'
 
     def test_bibliometric_labels_are_decluttered_before_render(self):
         src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')

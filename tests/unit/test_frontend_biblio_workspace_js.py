@@ -263,8 +263,11 @@ class TestTypingFields:
         assert placed['fields']['restore'] == ['[data-biblio-keep="search"]', 'focus', [2, 2]]
 
     def test_the_rebuilt_pickers_are_handed_to_custom_select(self, placed):
-        """A native <select> is OS-drawn: white in a dark panel, and un-themed by any rule here."""
-        assert placed['fields']['refreshes'] == 1
+        """A native <select> is OS-drawn: white in a dark panel. Waiting for the body-level
+        observer means a frame of un-themed control every keystroke, so the panel scans its own
+        subtree — and the scan has to be pointed AT that subtree, not at the whole document."""
+        assert placed['fields']['scans'] == 1
+        assert placed['fields']['scannedRoot'] == 'panel'
 
     def test_the_stylesheet_themes_the_panels_own_fields(self):
         """These inputs carry no .settings-input class, so without a rule of their own they are
