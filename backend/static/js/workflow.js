@@ -2265,6 +2265,18 @@ function sourceFieldHint(f) {
     return '';
 }
 
+/* The word for a node type. The key is computed, so the i18n audit cannot see the missing
+   half: a type this build's catalogue does not name (a canvas stored by a newer version, or a
+   node type added here and forgotten there) would otherwise print the identifier
+   「nodeType.fuse」 in the panel header. The raw type is the honest fallback — it is what the
+   file says, and it never claims to be a translation of something else. */
+function nodeTypeWord(type) {
+    if (!type) return '';
+    var key = 'nodeType.' + type;
+    var word = I18n.t(key);
+    return word === key ? type : word;
+}
+
 /* Settings Panel */
 function openSettings(nodeId) {
     var node = canvas.nodes[nodeId];
@@ -2288,12 +2300,12 @@ function openSettings(nodeId) {
     panel.classList.add('open');
     var html = '<div class="settings-group">' +
         '<label class="settings-label">' + I18n.t('settings.nodeType') + '</label>' +
-        '<span style="font-size:12px;color:var(--text-dim);">' + I18n.t('nodeType.' + node.type) + '</span>' +
+        '<span style="font-size:12px;color:var(--text-dim);">' + nodeTypeWord(node.type) + '</span>' +
         '</div>';
     /* The columns this node will emit — the edit-time lineage. A producer whose shape
        the server can see lists them; a crawl/comment/resume says so plainly rather than
        guessing. */
-    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'biblio', 'tokenize', 'resume', 'comment'];
+    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'tokenize', 'resume', 'comment'];
     if (OUTPUT_PRODUCERS.indexOf(node.type) >= 0 && typeof Diagnostics !== 'undefined') {
         var _oc = Diagnostics.outputColumns(nodeId);
         var _ocText = _oc === null
@@ -7977,9 +7989,7 @@ var runsManager = {
 
             function cardHtml(n) {
                 var info = self.nodeStatusInfo(n.status);
-                var typeLabel = n.node_type
-                    ? I18n.t('nodeType.' + n.node_type)
-                    : '';
+                var typeLabel = nodeTypeWord(n.node_type);
                 /* Re-run is offered only on a node that actually produced a reusable
                    result (done/restored with rows). Anything else has nothing downstream
                    could re-key off, so the button would only ever be refused. */
@@ -8586,6 +8596,16 @@ function toggleBiblioPanel() {
     biblioWorkspace.toggle();
 }
 
+/* The header word for a stored column name. Computed key, so a column this build has no word
+   for keeps the name it has on disk — the table is a view of durable rows, and inventing a
+   heading (or printing 「biblio.col.节点」) would describe a column that does not exist. */
+function biblioColumnWord(column) {
+    var name = String(column === null || column === undefined ? '' : column);
+    var key = 'biblio.col.' + name;
+    var word = I18n.t(key);
+    return word === key ? name : word;
+}
+
 var biblioWorkspace = {
     LIMIT: 200,
     _runs: [],
@@ -8922,6 +8942,11 @@ var biblioWorkspace = {
     render() {
         var body = document.getElementById('biblio-mgr-body');
         if (!body) return;
+        /* Every keystroke in the panel's own fields repaints the whole body, and a repaint
+           destroys the element the caret was in: the user types one character, the box loses
+           focus, and the next character needs another click (measured in Chrome 2026-10-24).
+           Ask which field had focus and where its caret sat BEFORE the markup goes away. */
+        var keep = this._focusedField(body);
         var self = this;
         var runs = this._runs || [];
         var parts = [];
@@ -8955,7 +8980,7 @@ var biblioWorkspace = {
             '<label>' + escapeHtml(I18n.t('biblioWs.node')) +
                 '<select onchange="biblioWorkspace.pickNode(this.value)"><option value="">' +
                 escapeHtml(I18n.t('biblioWs.chooseNode')) + '</option>' + nodeOptions + '</select></label>',
-            '<input type="search" value="' + escapeHtml(this._term) + '" placeholder="' +
+            '<input type="search" data-biblio-keep="search" value="' + escapeHtml(this._term) + '" placeholder="' +
                 escapeHtml(I18n.t('biblioWs.search')) + '" oninput="biblioWorkspace.filter(this.value)">',
             '</div>'
         );
@@ -8998,7 +9023,12 @@ var biblioWorkspace = {
                 var columns = table.columns || [];
                 parts.push(
                     '<table class="data-preview-table runs-mgr-table"><thead><tr>',
-                    columns.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join(''),
+                    /* The word, with the STORED name kept as the tooltip: the header is interface
+                       text, the name on disk is what the exported CSV/GraphML column is called,
+                       and a translation that hides the second one cannot be matched back to it. */
+                    columns.map(function (c) {
+                        return '<th title="' + escapeHtml(c) + '">' + escapeHtml(biblioColumnWord(c)) + '</th>';
+                    }).join(''),
                     '</tr></thead><tbody>',
                     view.rows.map(function (row) {
                         return '<tr>' + columns.map(function (c) {
@@ -9013,6 +9043,32 @@ var biblioWorkspace = {
         parts.push(this._captureParts());
         parts.push(this._diffParts());
         body.innerHTML = parts.join('');
+        /* The three pickers are rebuilt with the body, so they arrive as plain native
+           controls — OS-drawn popup, white in a dark panel — until CustomSelect sees them.
+           Every other JS-built panel calls this after painting its markup. */
+        if (window.CustomSelect) CustomSelect.refreshAll();
+        this._restoreFocus(body, keep);
+    },
+
+    /* Which of the panel's own typing fields held the caret, and where in it. Only the two
+       fields marked `data-biblio-keep` matter: a select that loses focus mid-repaint is the
+       picker firing its own change, and the pickers are rebuilt with the same value. */
+    _focusedField(body) {
+        var el = document.activeElement;
+        if (!el || !el.getAttribute || !body.contains(el)) return '';
+        var name = el.getAttribute('data-biblio-keep');
+        if (!name) return '';
+        return { name: name, start: el.selectionStart, end: el.selectionEnd };
+    },
+
+    _restoreFocus(body, keep) {
+        if (!keep) return;
+        var el = body.querySelector('[data-biblio-keep="' + keep.name + '"]');
+        if (!el || !el.focus) return;
+        el.focus();
+        if (el.setSelectionRange && keep.start !== undefined && keep.start !== null) {
+            el.setSelectionRange(keep.start, keep.end);
+        }
     },
 
     /* The project picker, the capture button and the list of what this project has kept.
@@ -9034,7 +9090,7 @@ var biblioWorkspace = {
             '<label>' + escapeHtml(I18n.t('biblioWs.project')) +
                 '<select onchange="biblioWorkspace.pickProject(this.value)"><option value="">' +
                 escapeHtml(I18n.t('biblioWs.chooseProject')) + '</option>' + options + '</select></label>',
-            '<input type="text" value="' + escapeHtml(this._label) + '" placeholder="' +
+            '<input type="text" data-biblio-keep="label" value="' + escapeHtml(this._label) + '" placeholder="' +
                 escapeHtml(I18n.t('biblioWs.snapshotLabel')) + '" oninput="biblioWorkspace.labelChanged(this.value)">',
             '<button class="runs-mgr-btn" type="button" onclick="biblioWorkspace.capture()"' +
                 (blocker ? ' disabled' : '') + '>' + escapeHtml(I18n.t('biblioWs.capture')) + '</button>',

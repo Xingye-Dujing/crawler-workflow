@@ -218,3 +218,60 @@ class TestLocateAndArtefacts:
         assert case['changed'] is True
         assert case['otherWordInAfter'] is True
         assert case['otherWordNotInBefore'] is True
+
+
+class TestColumnHeaders:
+    """A header is interface text; the name on disk is a separate fact the user still needs."""
+
+    def test_no_header_prints_its_catalogue_key(self, placed):
+        assert placed['headers']['rawKey'] is False
+
+    def test_every_header_is_the_word_this_language_holds_for_that_column(self, placed):
+        assert placed['headers']['agreed'] == [True] * len(placed['headers']['pairs']), placed['headers']
+
+    def test_a_column_this_build_has_no_word_for_keeps_its_stored_name(self, placed):
+        """Inventing a heading, or printing 「biblio.col.cluster_id」, both describe a column the
+        export does not have."""
+        assert placed['headers']['unknownKept'] is True
+
+    def test_the_stored_name_survives_as_the_tooltip(self, placed):
+        """The word replaces the name on screen, so the name — what the CSV/GraphML header says —
+        has to stay reachable or the table cannot be matched back to the file."""
+        assert [name for name, _word in placed['headers']['pairs']] == [
+            'map',
+            'source',
+            'weight',
+            'x',
+            'y',
+            'label',
+            'cluster_id',
+        ]
+
+
+class TestTypingFields:
+    def test_both_typing_fields_are_marked_for_the_repaint(self, placed):
+        assert placed['fields']['marked'] is True
+
+    def test_only_the_marked_field_inside_the_panel_is_asked_about(self, placed):
+        assert placed['fields']['askedInside'] is True
+        assert placed['fields']['askedOutside'] is True
+        assert placed['fields']['askedUnmarked'] is True
+
+    def test_the_caret_is_put_back_in_the_field_that_replaced_it(self, placed):
+        """The repaint destroys the element the user was typing in; a focus() without the caret
+        lands it at position 0, so the next character arrives in the middle of the word."""
+        assert placed['fields']['restore'] == ['[data-biblio-keep="search"]', 'focus', [2, 2]]
+
+    def test_the_rebuilt_pickers_are_handed_to_custom_select(self, placed):
+        """A native <select> is OS-drawn: white in a dark panel, and un-themed by any rule here."""
+        assert placed['fields']['refreshes'] == 1
+
+    def test_the_stylesheet_themes_the_panels_own_fields(self):
+        """These inputs carry no .settings-input class, so without a rule of their own they are
+        UA-painted: a white box with black text on the dark panel."""
+        css = (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
+        block = css[css.index('.biblio-bar select,') :]
+        rule = block[: block.index('}')]
+        for declaration in ('background: transparent', 'color: var(--text)', 'border: 1px solid var(--line)'):
+            assert declaration in rule, f'{declaration} missing from the field rule:\n{rule}'
+        assert '.biblio-bar input::placeholder {' in css, 'the placeholder has no themed colour'

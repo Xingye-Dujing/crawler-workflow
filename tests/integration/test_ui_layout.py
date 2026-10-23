@@ -718,6 +718,148 @@ def test_opening_the_settings_panel_lands_focus_in_and_closing_returns_it(driver
     assert facts['returned'], 'closing the panel did not return focus to the opener'
 
 
+#: Columns of a dual-map table: every one of them is an ASCII name on disk, which is the half
+#: that used to print as an identifier in a Chinese table. ``cluster_id`` is deliberately NOT in
+#: the catalogue — it is the control that proves an unknown column is shown as itself.
+_BIBLIO_COLUMNS = ['map', 'source', 'target', 'weight', 'x', 'label', 'cluster_id']
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_bibliometrics_panel_names_its_columns_and_keeps_the_caret(app_url, driver, lang):
+    """The workspace dock, measured in a real engine.
+
+    Three facts the node harness cannot reach. ``biblio.col.<column>`` is a COMPUTED key, so
+    whether a header reads as a word or as an identifier is only visible once the page has a
+    catalogue loaded. The panel's own fields are built as bare ``<input>``/``<select>`` markup
+    with no ``.settings-input`` class, so a theme that is not honoured is a white box with black
+    text on a dark panel — and a native ``<select>`` is OS-drawn until CustomSelect scans it. And
+    every keystroke repaints the whole body: the caret's element is destroyed, so the second
+    character needs a second click unless focus is handed back (measured lost 2026-10-24).
+
+    Nothing is written: the panel is painted from a stubbed ``/api/biblio/*`` answer.
+    """
+    driver.set_window_size(1650, 1080)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        document.documentElement.dataset.themeChoice = 'dark';
+        applyTheme();
+        I18n.apply();
+        window.__asked = [];
+        const rows = [{ map: 'journal', source: '中国人口·资源与环境', target: '', weight: 14,
+                        x: 150, label: '中国人口·资源与环境', cluster_id: 'c-1' }];
+        const payload = (u) => {
+            if (u.indexOf('/api/biblio/runs') >= 0) {
+                return { ok: true, runs: [{ run_id: 'r-1', workflow_name: '布局测量', started_at: '2026-10-24 01:00',
+                         status: 'completed', nodes: [{ node_id: 'n-dual', title: '双图叠加', status: 'done',
+                         row_count: 1, component_name: '', files: [] }] }] };
+            }
+            if (u.indexOf('/api/biblio/table') >= 0) {
+                return { ok: true, run_id: 'r-1', node_id: 'n-dual', title: '双图叠加', status: 'done',
+                         shape: 'dual_map', columns: arguments[1], rows: rows,
+                         total: 1, offset: 0, limit: 200, files: [] };
+            }
+            if (u.indexOf('/api/biblio/projects') >= 0) return { ok: true, projects: [] };
+            return { ok: true };
+        };
+        window.fetch = (url) => {
+            const u = String(url);
+            window.__asked.push(u);
+            const body = JSON.stringify(payload(u));
+            return Promise.resolve({
+                text: () => Promise.resolve(body),
+                json: () => Promise.resolve(body),
+                status: 200,
+            });
+        };
+        toggleBiblioPanel();
+        """,
+        lang,
+        _BIBLIO_COLUMNS,
+    )
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if not driver.execute_script("return !document.querySelector('#biblio-mgr-body table')"):
+            break
+        time.sleep(0.2)
+    # The W3C locator string: this tier drives the page through `execute_script` and imports no
+    # `By`, so a real keystroke is sent without adding a Selenium import to the module.
+    facts = driver.execute_script(
+        """
+        const body = document.getElementById('biblio-mgr-body');
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--text)';
+        document.body.appendChild(probe);
+        const ink = getComputedStyle(probe).color;
+        probe.remove();
+        const search = body.querySelector('input[type="search"]');
+        const cs = search ? getComputedStyle(search) : null;
+        const box = document.createElement('span');
+        box.style.background = 'transparent';
+        return {
+            theme: document.documentElement.dataset.theme,
+            ink: ink,
+            asked: window.__asked,
+            headers: Array.from(body.querySelectorAll('table thead th')).map(
+                (th) => [th.textContent, th.getAttribute('title')]),
+            rawKey: body.textContent.indexOf('biblio.col.') >= 0,
+            searchColor: cs ? cs.color : null,
+            searchBg: cs ? cs.backgroundColor : null,
+            uaWhite: cs ? (cs.backgroundColor === 'rgb(255, 255, 255)') : null,
+            cselects: body.querySelectorAll('.cselect').length,
+            selects: body.querySelectorAll('select').length,
+            rows: body.querySelectorAll('table tbody tr').length,
+        };
+        """,
+        [],
+    )
+    assert facts['theme'] == 'dark', f'the theme did not land: {facts["theme"]}'
+    assert facts['rawKey'] is False, 'a header printed its catalogue key instead of a word'
+    words = {
+        column: driver.execute_script("return I18n.t('biblio.col.' + arguments[0]);", column)
+        for column in _BIBLIO_COLUMNS
+    }
+    painted = dict((title, text) for text, title in facts['headers'])
+    for column in _BIBLIO_COLUMNS[:-1]:
+        assert words[column] != f'biblio.col.{column}', f'{column} has no word in {lang}'
+        shown = painted.get(column)
+        assert shown == words[column], f'{column} header reads {shown!r}, not the catalogue word {words[column]!r}'
+    # An unknown column is the stored name itself — never a key, never a guessed word.
+    assert painted.get('cluster_id') == 'cluster_id', facts['headers']
+    assert facts['searchColor'] == facts['ink'], (
+        f'the field text is {facts["searchColor"]}, the theme ink is {facts["ink"]}'
+    )
+    assert facts['uaWhite'] is False, 'the search box is still UA-painted white'
+    assert facts['searchBg'] == 'rgba(0, 0, 0, 0)', facts['searchBg']
+    assert facts['selects'] == 3, facts
+    assert facts['cselects'] == 3, f'the pickers were never upgraded: {facts["cselects"]} of {facts["selects"]}'
+    assert len(facts['headers']) == len(_BIBLIO_COLUMNS), facts['headers']
+    assert facts['rows'] == 1, facts['rows']
+
+    # Now type a term that MATCHES a row: the panel repaints its whole body on every keystroke,
+    # and the element under the caret is destroyed by that repaint.
+    driver.find_element('css selector', '#biblio-mgr-body input[type="search"]').send_keys('资源')
+    typed = driver.execute_script(
+        """
+        const body = document.getElementById('biblio-mgr-body');
+        const search = body.querySelector('input[type="search"]');
+        return {
+            value: search ? search.value : null,
+            focused: document.activeElement === search,
+            caret: search && search.selectionStart !== null ? search.selectionStart : null,
+            rows: body.querySelectorAll('table tbody tr').length,
+        };
+        """,
+        [],
+    )
+    assert typed['value'] == '资源', f'the typed text did not survive the repaint: {typed["value"]!r}'
+    assert typed['focused'] is True, 'typing in the panel still drops the caret'
+    assert typed['caret'] == 2, f'the caret was not put back where the user left it: {typed["caret"]}'
+    assert typed['rows'] == 1, f'the filter dropped the row it matches: {typed["rows"]}'
+
+
 @pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, lang):
     """The disable visuals, read from computed styles — not from the class list.

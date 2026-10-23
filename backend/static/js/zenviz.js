@@ -464,7 +464,7 @@ var chartStudio = {
 
     _nodeLabel(id, node) {
         node = node || {};
-        var type = node.type ? I18n.t('nodeType.' + node.type) : '';
+        var type = node.type ? nodeTypeWord(node.type) : '';
         var parts = ['#' + this._nodeSeq(id)];
         var title = (node.title || '').trim();
         /* Only a name the user actually chose is worth showing. */

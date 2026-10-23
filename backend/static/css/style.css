@@ -3222,8 +3222,25 @@ input:-webkit-autofill:focus {
 }
 .biblio-bar select,
 .biblio-bar input {
-  font-size: 12px;
+  /* The panel is JS-built, so these fields carry no .settings-input class, and an unstyled
+     <input> is UA-painted: a white box with black text on a dark panel, unreadable in the one
+     theme that needs a search box most. Transparent + tokens, like every other field here. */
   max-width: 260px;
+  padding: 3px 6px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.biblio-bar input::placeholder {
+  color: var(--text-dim);
+  opacity: 1;
+}
+.biblio-bar select:focus,
+.biblio-bar input:focus {
+  border-color: var(--ink);
 }
 .biblio-shape {
   margin-left: 6px;

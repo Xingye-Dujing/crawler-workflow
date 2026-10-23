@@ -421,3 +421,23 @@ matched keys, each unmatched `#k` gets its own console line, and `summary.cluste
 after a person overrode it is the same lie as a degraded analyzer printing the model it did not
 use). Filling the box while clustering is off is refused before the run: the labels choose names
 for objects that will not exist, which is a configuration mistake, not a preference.
+- **A computed i18n key is invisible to BOTH audits from the missing side, so the value universe has to be walked
+  from the other end.** `nodeType.<type>` and `biblio.col.<column>` are assembled at the call site: the reachability
+  audit walks keys that ARE defined (a missing one cannot appear in it) and parity compares the two languages with
+  each other, so both stay green while the shipped page prints an identifier. Measured twice on 2026-10-24: the
+  settings header read 「nodeType.fuse」 for a whole commit after the fusion node shipped, and a Chinese workspace
+  table printed `map` / `source` / `x` as column headers. The guard is therefore the *reference set*, not the call
+  site: `test_frontend_i18n_js.py::TestJsNodeTypeWords` walks `engine.workflow.NODE_TYPES` and
+  `::TestJsBiblioColumnWords` walks the ten column constants in `services/biblio_schema.py`, both in both languages.
+  A computed lookup still needs an honest fallback — the type or the stored column shown **as itself**, never the key
+  and never a guessed word (`nodeTypeWord()` / `biblioColumnWord()`), and where the word replaces a name the user may
+  need to match against an exported file, the name stays reachable (the `<th title>` is the disk spelling).
+- **A panel that repaints its whole body on every keystroke owes its own fields three things, and only a real engine
+  sees any of them.** (1) Bare `<input>`/`<select>` markup carries no `.settings-input` class, so it is UA-painted —
+  a white box with black text on a dark panel; (2) a native `<select>` is OS-drawn until `CustomSelect` scans it, and
+  a rebuilt body has never been seen; (3) the repaint destroys the element holding the caret, so the *second*
+  character needs a second click — measured with `document.activeElement === null` after one keystroke. The panel
+  marks its typing fields `data-biblio-keep`, records focus + `selectionStart/End` BEFORE assigning `innerHTML`, and
+  hands both back after. The node stub has no `activeElement` and no caret, so it can pin the markup and drive
+  `_focusedField`/`_restoreFocus` directly, but the three facts above are asserted from computed styles and
+  `document.activeElement` in `-m integration` (`test_ui_layout.py::test_the_bibliometrics_panel_names_its_columns_and_keeps_the_caret`).

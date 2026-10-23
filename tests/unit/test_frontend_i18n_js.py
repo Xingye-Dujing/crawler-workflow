@@ -313,6 +313,27 @@ class TestJsCatalogueParity:
         assert zh - en == set(), f'keys in zh but not en: {sorted(zh - en)}'
 
 
+class TestJsNodeTypeWords:
+    """The other half of the parity rule: a word for every type the ENGINE can execute.
+
+    ``nodeType.<type>`` is assembled at the call site, so both existing scans are blind to it from
+    the wrong side — the reachability audit walks keys that ARE defined (a missing one is invisible
+    to it by construction) and the parity audit only compares the two languages, which can both be
+    missing. The settings header and the run-detail card then print the identifier: 「nodeType.fuse」
+    was on screen for a whole commit after the fusion node shipped (measured 2026-10-24)."""
+
+    def test_every_engine_node_type_is_named_in_both_languages(self):
+        from engine.workflow import NODE_TYPES
+
+        catalogs = _catalogs()
+        missing = {
+            lang: sorted(f'nodeType.{t}' for t in NODE_TYPES if f'nodeType.{t}' not in table)
+            for lang, table in catalogs.items()
+        }
+        missing = {lang: keys for lang, keys in missing.items() if keys}
+        assert missing == {}, f'node types with no browser word: {missing}'
+
+
 class TestJsKeyReachability:
     """A browser word nothing renders is a removed feature waiting to be resurrected (AGENTS:
     a dead key is how a deleted button comes back). Mirrors ``TestKeyReachability`` on the Python
@@ -370,3 +391,39 @@ class TestTheScanFires:
             )
             == []
         )
+
+
+class TestJsBiblioColumnWords:
+    """…and the same for a stored column name, whose header word is computed too.
+
+    ``biblio.col.<column>`` is built at the call site, so a column the server can emit but the
+    browser cannot name reads as an identifier in the workspace table — 「map」 in the middle of a
+    Chinese table (the user's report, 2026-10-24). A column with no word is still shown as itself
+    rather than as a key, but that fallback must never be what a SHIPPED column relies on."""
+
+    def test_every_column_the_biblio_node_can_emit_has_a_word(self):
+        from services import biblio_schema
+
+        groups = (
+            biblio_schema.BASE_COLUMNS,
+            biblio_schema.CLUSTER_COLUMNS,
+            biblio_schema.BURST_COLUMNS,
+            biblio_schema.CITATION_METRIC_COLUMNS,
+            biblio_schema.USAGE_METRIC_COLUMNS,
+            biblio_schema.SOURCE_COLUMNS,
+            biblio_schema.EDGE_COLUMNS,
+            biblio_schema.DUAL_MAP_COLUMNS,
+            biblio_schema.CLUSTER_TABLE_COLUMNS,
+            biblio_schema.BURST_TABLE_COLUMNS,
+        )
+        columns = set()
+        for group in groups:
+            columns.update(group)
+        assert columns, 'the schema emits no columns at all — the matrix below is measuring nothing'
+        catalogs = _catalogs()
+        missing = {
+            lang: sorted(f'biblio.col.{c}' for c in columns if f'biblio.col.{c}' not in table)
+            for lang, table in catalogs.items()
+        }
+        missing = {lang: keys for lang, keys in missing.items() if keys}
+        assert missing == {}, f'stored columns with no header word: {missing}'

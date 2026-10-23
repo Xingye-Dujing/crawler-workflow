@@ -164,6 +164,7 @@ function world(answers) {
         return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(payload)), status: 200 });
     };
     return {
+        sandbox,
         x: sandbox.__x,
         requests,
         html: () => String(sandbox.__x.body().innerHTML),
@@ -419,6 +420,61 @@ const out = {};
         // Counted by the heading element, not by its word: 「Nodes」 is also a table column
         // header on this same panel, so a substring test would fail for the wrong reason.
         noHeadings: (empty.html().match(/class="sched-status"/g) || []).length === 0,
+    };
+}
+
+// 15 · a table header is interface text, and the stored column name stays reachable.
+{
+    const dual = {
+        ...TABLE,
+        shape: 'dual_map',
+        columns: ['map', 'source', 'weight', 'x', 'y', 'label', 'cluster_id'],
+        rows: [{ map: 'journal', source: '甲刊', target: '', weight: 14, x: 150, y: 50, label: '甲刊', cluster_id: 'c-1' }],
+    };
+    const w = await scenario({ runs: RUNS, table: dual });
+    const html = w.html();
+    const heads = [...html.matchAll(/<th title="([^"]*)"[^>]*>([^<]*)<\/th>/g)].map((m) => [m[1], m[2]]);
+    out.headers = {
+        pairs: heads,
+        rawKey: html.indexOf('biblio.col.') >= 0,
+        // Each word is exactly what this language's catalogue says for that stored name.
+        agreed: heads.map(([name, word]) => word === w.x.I18n.t('biblio.col.' + name) || name === word),
+        unknownKept: heads.some(([name, word]) => name === 'cluster_id' && word === 'cluster_id'),
+    };
+}
+
+// 16 · the fields survive the repaint their own typing causes.
+{
+    const w = await scenario({ runs: RUNS, table: { ...TABLE } });
+    const html = w.html();
+    /* The node DOM stub has no activeElement and no caret, so the two halves of the rule are
+       driven directly: which field `render` asks about, and what it does with the answer. */
+    w.sandbox.document.activeElement = {
+        getAttribute: (k) => (k === 'data-biblio-keep' ? 'search' : null),
+        selectionStart: 2,
+        selectionEnd: 2,
+    };
+    const inside = w.x.biblioWorkspace._focusedField({ contains: () => true });
+    const outside = w.x.biblioWorkspace._focusedField({ contains: () => false });
+    w.sandbox.document.activeElement = { getAttribute: () => null, selectionStart: 0, selectionEnd: 0 };
+    const unmarked = w.x.biblioWorkspace._focusedField({ contains: () => true });
+    const hits = [];
+    const fake = { focus: () => hits.push('focus'), setSelectionRange: (a, b) => hits.push([a, b]) };
+    w.x.biblioWorkspace._restoreFocus({ querySelector: (sel) => { hits.push(sel); return fake; } }, inside);
+    w.x.biblioWorkspace._restoreFocus({ querySelector: () => null }, inside);
+    w.x.biblioWorkspace._restoreFocus({ querySelector: () => fake }, '');
+    /* The pickers are rebuilt with the body, so the panel owes CustomSelect a look — measured
+       behind a patched global, because this harness does not load custom-select.js at all. */
+    let refreshes = 0;
+    w.sandbox.CustomSelect = { refreshAll: () => { refreshes += 1; }, ownsPopup: () => false };
+    w.x.biblioWorkspace.render();
+    out.fields = {
+        marked: ['search', 'label'].every((k) => html.indexOf(`data-biblio-keep="${k}"`) >= 0),
+        askedInside: inside && inside.name === 'search' && inside.start === 2,
+        askedOutside: outside === '',
+        askedUnmarked: unmarked === '',
+        restore: hits,
+        refreshes,
     };
 }
 
