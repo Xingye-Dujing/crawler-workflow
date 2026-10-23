@@ -3415,6 +3415,15 @@ function renderBiblioSettings(nodeId, p) {
         html += '<div class="settings-group" style="font-size:11px;color:#e67e22;">' + I18n.t('biblio.ui.burstCoupling') + '</div>';
     }
 
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.correction') + '</div>';
+    html += '<div class="settings-group"><label class="settings-label">' + I18n.t('biblio.ui.aliases') + '</label>' +
+        '<textarea class="settings-input" rows="4" placeholder="' + escapeHtml(I18n.t('biblio.ui.aliasesPlaceholder')) + '" ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'aliases\',this.value)">' + escapeHtml(p.aliases || '') + '</textarea></div>' +
+        '<div class="settings-group"><label class="settings-label">' + I18n.t('biblio.ui.exclusions') + '</label>' +
+        '<textarea class="settings-input" rows="4" placeholder="' + escapeHtml(I18n.t('biblio.ui.exclusionsPlaceholder')) + '" ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'exclude_values\',this.value)">' + escapeHtml(p.exclude_values || '') + '</textarea>' +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.correctionHint') + '</div></div>';
+
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.output') + '</div>';
     html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(BIBLIO_OUTPUT_SHAPES)) +
         renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +

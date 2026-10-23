@@ -1485,6 +1485,7 @@ const canvas = {
             link_measure: 'cosine', citation_expansion: 0, max_links_per_node: 10, lrf: 2.5, pruning: 'none', pruning_scope: 'slices',
             cluster: true, cluster_count: '', label_method: 'llr', top_terms: 5,
             burst: true, burst_gamma: 1.0, burst_min_duration: 2, burst_weight: 2.0, burst_top: 20,
+            aliases: '', exclude_values: '',
             output_shape: 'nodes',
             export_files: true
         };

@@ -189,6 +189,8 @@ _ZH = {
     'biblio.shape_needs_cluster': '{nid}：输出形态 clusters 需要开启聚类，请先开启或改回 nodes/edges',
     'biblio.shape_needs_burst': '{nid}：输出形态 bursts 需要开启突现检测，请先开启或改回 nodes/edges',
     'biblio.isolates_dropped': '{n} 个孤立节点在成图后没有连边，已从节点表移除',
+    'biblio.aliases_applied': '别名合并：{n} 个节点标签已按用户映射归一',
+    'biblio.exclusions_applied': '排除列表：{n} 个节点标签已按用户设置移除',
     'biblio.too_many_nodes': '节点数 {n} 超过上限 {cap}：请收紧 TopN 或缩短时间范围',
     'biblio.too_many_edges': '边数 {n} 超过上限 {cap}：请收紧 TopN/最大连边数',
     'biblio.links_too_large': '节点「{node}」的连接 JSON 超过 {cap} 字节：请降低最大连边数',
@@ -1754,6 +1756,8 @@ _EN = {
         '{nid}: output_shape bursts needs burst detection enabled; enable it or use nodes/edges'
     ),
     'biblio.isolates_dropped': '{n} isolated nodes had no edge after graph construction and were removed',
+    'biblio.aliases_applied': 'Alias merge: {n} node labels were normalized by the user mapping',
+    'biblio.exclusions_applied': 'Exclusion list: {n} node labels were removed by the user setting',
     'biblio.too_many_nodes': '{n} nodes exceed the cap ({cap}): narrow TopN or the time range',
     'biblio.too_many_edges': '{n} edges exceed the cap ({cap}): narrow TopN or max links per node',
     'biblio.links_too_large': 'Node "{node}" has a link JSON larger than {cap} bytes: lower max links per node',

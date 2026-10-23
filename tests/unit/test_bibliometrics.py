@@ -198,6 +198,22 @@ class TestCitations:
         params.pop('burst')
         assert normalize_params(params, 'test')['burst'] is False
 
+    def test_alias_and_exclusion_rules_run_before_the_graph(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': 'AI;人工智能;噪声', '摘要': ''},
+                {'题名': 'b', '年份': 2020, '关键词': 'AI;人工智能;噪声', '摘要': ''},
+            ]
+        )
+        result = bibliometrics.build(
+            frame,
+            _params(aliases='人工智能=AI', exclude_values='噪声'),
+            'test',
+        )
+        assert {row['节点'] for row in result['rows']} == {'人工智能'}
+        assert any('别名合并' in note or 'Alias merge' in note for note in result['notes'])
+        assert any('排除列表' in note or 'Exclusion list' in note for note in result['notes'])
+
     def test_citation_expansion_uses_references_from_records_in_the_table(self):
         frame = pd.DataFrame(
             [

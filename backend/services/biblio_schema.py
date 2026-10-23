@@ -136,6 +136,8 @@ DEFAULTS = {
     'burst_min_duration': 2,
     'burst_weight': 2.0,
     'burst_top': 20,
+    'aliases': '',
+    'exclude_values': '',
     'output_shape': 'nodes',
     'export_files': True,
 }
@@ -427,6 +429,8 @@ def normalize_params(params: dict, nid: str = '') -> dict:
             nid, 'burst_weight', params.get('burst_weight', DEFAULTS['burst_weight']), 1.0001, 100.0
         ),
         'burst_top': _whole(nid, 'burst_top', params.get('burst_top', DEFAULTS['burst_top']), 1, 500),
+        'aliases': str(params.get('aliases') or '').strip(),
+        'exclude_values': str(params.get('exclude_values') or '').strip(),
         'output_shape': str(params.get('output_shape') or DEFAULTS['output_shape']).strip(),
         'export_files': as_bool(params.get('export_files'), DEFAULTS['export_files']),
     }

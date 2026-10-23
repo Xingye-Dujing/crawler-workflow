@@ -439,6 +439,73 @@ def _node_metadata(docs: list[dict], params: dict, ref_nodes: dict) -> tuple[dic
     return labels, year_counts, node_docs, node_years
 
 
+def _parse_alias_map(text: str) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for line in str(text or '').splitlines():
+        if '=' not in line:
+            continue
+        canonical, _, aliases = line.partition('=')
+        canonical = canonical.strip()
+        if not canonical:
+            continue
+        mapping[canonical] = canonical
+        for alias in re.split(r'[;；|]+', aliases):
+            alias = alias.strip()
+            if alias:
+                mapping[alias] = canonical
+    return mapping
+
+
+def _parse_exclusion_set(text: str) -> set[str]:
+    return {line.strip() for line in str(text or '').splitlines() if line.strip()}
+
+
+def _apply_label_rules(
+    labels: dict[str, str],
+    year_counts: dict[str, Counter],
+    node_docs: dict[str, set[int]],
+    node_years: dict[str, int | None],
+    docs: list[dict],
+    params: dict,
+) -> tuple[dict, dict, dict, dict, list[str]]:
+    aliases = _parse_alias_map(params.get('aliases') or '')
+    exclusions = _parse_exclusion_set(params.get('exclude_values') or '')
+    if not aliases and not exclusions:
+        return labels, year_counts, node_docs, node_years, []
+
+    mapping: dict[str, str] = {}
+    new_labels: dict[str, str] = {}
+    new_year_counts: dict[str, Counter] = defaultdict(Counter)
+    new_node_docs: dict[str, set[int]] = defaultdict(set)
+    new_node_years: dict[str, int | None] = {}
+    excluded = aliased = 0
+    for key, label in labels.items():
+        canonical = aliases.get(label) or aliases.get(key) or label
+        if canonical != label:
+            aliased += 1
+        if canonical in exclusions or label in exclusions:
+            excluded += 1
+            continue
+        new_labels.setdefault(canonical, canonical)
+        mapping[key] = canonical
+        new_year_counts[canonical].update(year_counts.get(key, Counter()))
+        new_node_docs[canonical].update(node_docs.get(key, set()))
+        if new_node_years.get(canonical) is None:
+            new_node_years[canonical] = node_years.get(key)
+
+    for doc in docs:
+        doc['entities'] = [mapping[name] for name in doc['entities'] if name in mapping]
+        if doc.get('name') in mapping:
+            doc['name'] = mapping[doc['name']]
+
+    notes = []
+    if aliased:
+        notes.append(t('biblio.aliases_applied', n=aliased))
+    if excluded:
+        notes.append(t('biblio.exclusions_applied', n=excluded))
+    return new_labels, new_year_counts, new_node_docs, new_node_years, notes
+
+
 # ─── Selection, edges and pruning ───────────────────────────────
 
 
@@ -921,6 +988,10 @@ def build(df: pd.DataFrame, params: dict, nid: str = '') -> dict:
     notes += doc_notes
     params['start'] = window['start']
     labels, year_counts, node_docs, node_years = _node_metadata(docs, params, ref_nodes)
+    labels, year_counts, node_docs, node_years, rule_notes = _apply_label_rules(
+        labels, year_counts, node_docs, node_years, docs, params
+    )
+    notes += rule_notes
     if not labels:
         raise BiblioError(t('biblio.no_records'))
 

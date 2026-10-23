@@ -251,6 +251,7 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
 - **指标**：度、中介中心性（距离 = 1/权重，节点多时按 500 源点采样并播报）、特征向量中心性（按连通分量计算）、PageRank、Sigma = `(中介中心性+1)^突现强度`；输入含 `引用次数` 时追加 `总被引/H指数`，含 `使用次数` 时追加 `使用次数合计`。
 - **聚类**：归一化 Laplacian 谱聚类，聚类数留空时按特征值间隙自动选择；模块度 Q、逐节点/逐簇轮廓值写入运行摘要；标签支持 LLR / LSI / MI / TF-IDF，候选词来自簇内实体与关联文献的题名/摘要/关键词。
 - **突现**：两状态 Kleinberg Viterbi，按逐年文档数计算；每个节点保留最强突现区间，突现词表另写 CSV。耦合类节点是施引单元本身，禁止突现。
+- **人工校正**：`aliases` 每行 `规范名=别名1|别名2`，`exclude_values` 每行一个排除标签；两者在建图前合并/移除节点，并计入节点指纹，因此续跑不会复用未校正的图。
 - **输出**：默认 `output_shape=nodes`，一行一节点，固定列 `节点/类型/频次/首年/末年/年份序列/度/中介中心性/特征向量中心性/PageRank/Sigma/x/y/连接`；开启聚类追加 `聚类/聚类标签/轮廓值`，开启突现追加 `突现强度/突现起始/突现结束`。`连接` 与 `年份序列` 是规范 JSON 文本，图谱图直接读取；每个节点的 `连接` 存完整局部邻接，图构建时按端点对去重。`output_shape` 还可输出 `edges`/`clusters`/`bursts` 普通表，供下游继续处理。
 - **图**：`knowledge_graph`（固定布局知识图谱）、`circular`（环形图谱）、`cluster_timeline`（聚类时间线）、`landscape`（景观图）、`burst`（突现词图）、`timezone`（时区图）、`biblio_heatmap`（聚类—年份热力图），均仅 ECharts。缺列/无连边/未开聚类或突现时按名拒绝。七类图均有 TikZ/pgfplots LaTeX 图源与 booktabs 三线表，并附余弦、Dice、Jaccard、中介中心性、PageRank、Sigma 公式。前端 `labelLayout` 会按实际渲染矩形避让中文标签，放不下的低频标签隐藏并保留 hover。
 - **产物**：默认写 `<节点>_graph.graphml`、`_graph.gml`、`_graph.json`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。
