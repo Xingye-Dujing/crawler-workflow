@@ -180,7 +180,7 @@ class BilibiliCrawler(VideoCrawler):
         logger.info(t('crawl.bili.finished', n=self.collected(), total=target_count))
         return self.results()
 
-    def author(self, author: str, target_count: int = 200, **kwargs):
+    def author(self, author: str, target_count: int = 200, **_kwargs):
         """One creator's own uploads, read off their space page.
 
         The list is built from the same ``.bili-video-card`` container the keyword
@@ -227,7 +227,9 @@ class BilibiliCrawler(VideoCrawler):
         # answered 稿件不存在 must not be re-asked every round of the same walk.)
         seen: set[str] = {str(row.get('BV号') or '') for row in self.results() if row.get('BV号')}
 
-        def scrape(bvid: str, index: int) -> dict | None:
+        def scrape(bvid: str, _index: int) -> dict | None:
+            # ``_index`` is the screen slot ``feed.walk_feed`` hands every scrape callback;
+            # this walk's identity is the BV号 itself, so the slot is never read.
             if bvid in seen:
                 return None
             seen.add(bvid)
@@ -397,16 +399,16 @@ class BilibiliCrawler(VideoCrawler):
         stat = data.get('stat') or {}
         owner = data.get('owner') or {}
         season = data.get('ugc_season') or {}
-        bvid = Crawler._as_text(data.get('bvid'))
+        bvid = Crawler.as_text(data.get('bvid'))
         return {
-            '标题': Crawler._as_text(data.get('title')),
-            'UP主': Crawler._as_text(owner.get('name')),
+            '标题': Crawler.as_text(data.get('title')),
+            'UP主': Crawler.as_text(owner.get('name')),
             'UP主ID': str(owner.get('mid') or ''),
-            '正文': Crawler._as_text(data.get('desc')),
+            '正文': Crawler.as_text(data.get('desc')),
             '发布时间': _stamp(data.get('pubdate')),
             'BV号': bvid,
             '稿件ID': str(data.get('aid') or ''),
-            '合集': Crawler._as_text(season.get('title')),
+            '合集': Crawler.as_text(season.get('title')),
             '分P数': _as_int(data.get('videos')),
             '时长秒': _as_int(data.get('duration')),
             '播放数': _as_int(stat.get('view')),

@@ -67,7 +67,7 @@ BIBLIO_USABLE = {chart_type: {} for chart_type in BIBLIO_CHART_TYPES}
 # Group keys sort by code point, which is why 丙 precedes 乙 precedes 甲 here.
 #: The category axis keeps the TABLE's order — first appearance, not code-point order. This
 #: constant used to read ['丙', '乙', '甲'], which was the fixture's rows re-sorted by
-#: `_aggregate`'s `sort_index()`. That is the bug 图 3 showed: a phase table arrives sorted by
+#: `aggregate`'s `sort_index()`. That is the bug 图 3 showed: a phase table arrives sorted by
 #: 阶段序号, and a chart that alphabetises the axis puts 一次爆发期 in the first bar while the
 #: figure still looks complete.
 LABELS = ['甲', '乙', '丙']
@@ -320,7 +320,7 @@ class TestModelAgreement:
         )
 
     def test_pairwise_rate_and_diagonal_on_the_shared_rows(self):
-        cats, matrix = V._agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
+        _cats, matrix = V._agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
         assert matrix[0][0] == 100.0 == matrix[1][1], 'a model always agrees with itself'
         assert matrix[0][1] == pytest.approx(round(2 / 3 * 100, 2)), '2 of 3 shared rows agree'
         assert matrix[1][0] == matrix[0][1], 'the matrix is symmetric'
@@ -435,7 +435,7 @@ class TestEventMarkers:
         assert 'markLine' not in V.to_echarts_option(df, 'line', x='作者', y='点赞', annotations='  ')
 
     def test_the_box_axis_keeps_the_table_order_not_a_code_point_re_sort(self, df):
-        """The box used to call ``df.groupby(x)`` (default ``sort=True``) while ``_aggregate`` and
+        """The box used to call ``df.groupby(x)`` (default ``sort=True``) while ``aggregate`` and
         the bar/line paths use ``sort=False`` — so a box and a bar of the SAME phase column put the
         categories in different orders, and a phase table that arrives sorted by 阶段序号 rendered
         its boxes in code-point order. The box's axis must follow the table, like every other chart."""
@@ -703,7 +703,7 @@ class TestChartDisplayLocalisation:
 
         set_lang('zh')
         df = pd.DataFrame({'emotion': ['positive', 'negative', 'positive'], 'stage': ['发酵期', '发酵期', '爆发期']})
-        nodes, links = V._sankey_links(df, 'emotion', 'stage')
+        nodes, links = V.sankey_links(df, 'emotion', 'stage')
         assert {'正面', '负面', '发酵期', '爆发期'} == set(nodes)
         assert all(link['source'] in nodes and link['target'] in nodes for link in links), 'link names match node names'
 

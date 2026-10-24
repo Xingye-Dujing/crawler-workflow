@@ -626,8 +626,6 @@ class TestProbeBuysTheRightBrowser:
         """The red line this feature has to stay on the right side of: the probe opens
         a real page, and a check that saved whatever the site issued while it looked
         would overwrite the user's snapshot with a half-session."""
-        from services.cookie_manager import CookieManager
-
         with_cookie('zhihu')
 
         def forbid(*_args, **_kwargs):

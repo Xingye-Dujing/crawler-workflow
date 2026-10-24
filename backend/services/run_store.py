@@ -337,12 +337,12 @@ class RowCache:
         self._store = store
         self._scope = scope
 
-    def get(self, idx, thash: str):
+    def get(self, _idx, thash: str):
         value = self._store.cache_get(self._scope, thash)
         # The LLM runner expects a record carrying the result tuple.
         return {'r': value} if value is not None else None
 
-    def add(self, idx, thash: str, result):
+    def add(self, _idx, thash: str, result):
         self._store.cache_put(self._scope, thash, list(result))
 
     def discard(self):
@@ -577,7 +577,7 @@ class RunStore:
 
     # ── waiting-run queue (restart durability) ──────────────────
 
-    def save_queue(self, entries: list) -> None:
+    def save_queue(self, entries: list[dict]) -> None:
         """Mirror the in-memory queue to disk, exactly and in order.
 
         A wholesale replace (the queue is capped at QUEUE_MAX, so this is a handful of
@@ -602,7 +602,7 @@ class RunStore:
                 )
             self._conn.commit()
 
-    def load_queue(self) -> list:
+    def load_queue(self) -> list[dict]:
         """The parked requests in drain order, or [] when nothing survived the restart.
 
         A row whose payload will not parse is skipped rather than half-resurrected —

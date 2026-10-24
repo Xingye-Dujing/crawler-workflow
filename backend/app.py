@@ -53,6 +53,7 @@ from profiles import ensure_profile_template
 from state import (
     _RUN_QUEUE,
     LOG_KEEP,
+    QueueEntry,
     _completed_lock,
     _push_log,
     _results_snapshot,
@@ -194,14 +195,14 @@ def _origin_is_local(origin: str, server_host: str = '') -> bool:
         netloc = urlsplit(origin).netloc
     except ValueError:
         return False
-    host = netloc.rsplit('@', 1)[-1]
-    if host.startswith('['):  # IPv6 literal: [::1] or [::1]:5000 — the port is after the ]
-        host = host[1:].split(']', 1)[0]
-    elif ':' in host:
-        host = host.split(':', 1)[0]
-    if host in ('127.0.0.1', 'localhost', '::1'):
+    origin_host = netloc.rsplit('@', 1)[-1]
+    if origin_host.startswith('['):  # IPv6 literal: [::1] or [::1]:5000 — the port is after the ]
+        origin_host = origin_host[1:].split(']', 1)[0]
+    elif ':' in origin_host:
+        origin_host = origin_host.split(':', 1)[0]
+    if origin_host in ('127.0.0.1', 'localhost', '::1'):
         return True
-    return bool(server_host) and host == server_host.rsplit(':', 1)[0]
+    return bool(server_host) and origin_host == server_host.rsplit(':', 1)[0]
 
 
 @app.before_request
@@ -364,6 +365,10 @@ class _LogTee:
 
     def flush(self):
         self._original.flush()
+
+    def unwrap(self):
+        """The stream this tee replaced — how a caller takes the tee off without reaching in."""
+        return self._original
 
 
 class _RunLogWriter:
@@ -712,7 +717,9 @@ def _op_needs_llm(op: str, params: dict) -> bool:
     spec = PROCESS_ENUMS.get(op) or {}
     if 'mode' not in spec:
         return False
-    default, allowed = spec['mode']
+    # Only the declared DEFAULT is read here; the option list beside it is the panel's
+    # business (and an unlisted spelling is refused by name when the node runs).
+    default, _ = spec['mode']
     raw = str(params.get('mode') or '').strip()
     value = raw if raw else default
     # Only the mode that NAMES the model needs one. An unrecognised mode is not treated as
@@ -927,7 +934,7 @@ def index():
 
 
 @app.errorhandler(413)
-def _payload_too_large(error):
+def _payload_too_large(_error):
     """Answer the request-size ceiling in JSON, not with Werkzeug's HTML page.
 
     ``request.json()`` in the browser throws before the status is ever looked
@@ -1106,7 +1113,7 @@ def rename_workflow():
         # Renaming the canvas that is mid-run would re-key the record it is
         # writing; the panel refuses first, this holds the line regardless.
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
-    if os.path.exists(workflow_manager._path_for(new)):
+    if os.path.exists(workflow_manager.path_for(new)):
         return jsonify({'ok': False, 'error': t('api.workflowNameTaken', name=new)}), 409
     moved = workflow_manager.rename(old, new)
     if moved is None:
@@ -1114,7 +1121,7 @@ def rename_workflow():
         return jsonify({'ok': False, 'error': t('api.workflowMissing', name=old)}), 404
     refs = get_dataset_store().move_workflow(old, new)
     logger.info(t('api.workflowRenamed', old=old, new=new))
-    return jsonify({'ok': True, 'name': new, 'path': workflow_manager._path_for(new), 'datasets': refs})
+    return jsonify({'ok': True, 'name': new, 'path': workflow_manager.path_for(new), 'datasets': refs})
 
 
 @app.route('/api/workflow/delete', methods=['POST'])
@@ -1369,12 +1376,12 @@ def _load_pending_queue() -> int:
         if _RUN_QUEUE:
             return 0
         try:
-            restored = get_run_store().load_queue()
+            restored_requests = get_run_store().load_queue()
         except Exception:
             logger.exception(t('run.queueLoadFailed'))
             return 0
-        _RUN_QUEUE.extend(restored)
-    return len(restored)
+        _RUN_QUEUE.extend(restored_requests)
+    return len(restored_requests)
 
 
 def _start_next_queued() -> None:
@@ -1385,8 +1392,13 @@ def _start_next_queued() -> None:
     while it unwinds would make this call queue the next request behind itself —
     and nothing would ever start it again.
     """
+    # Declared with its type instead of `_RUN_QUEUE.pop(0) if _RUN_QUEUE else None`: the ternary
+    # makes pylint widen the entry to the list itself, and every subscript below then reads as an
+    # error. The shape is also the plainer one to read at the guard.
+    entry: QueueEntry | None = None
     with _queue_lock:
-        entry = _RUN_QUEUE.pop(0) if _RUN_QUEUE else None
+        if _RUN_QUEUE:
+            entry = _RUN_QUEUE.pop(0)
     # The pop removed an entry from the queue; mirror BEFORE branching so a run that
     # starts (and is never put back) leaves the disk mirror without it too.
     _mirror_queue()
@@ -2148,7 +2160,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         return dict(candidate)
                 return {}
 
-            def _component_run(index, sub_engine):
+            def _component_run(wf_idx, sub_engine):
                 """Open this workflow's own record and return the context its nodes run
                 under. Called as the turn arrives, which is what makes an unreached
                 workflow leave no record at all — the point of the split.
@@ -2156,10 +2168,14 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 Workflow zero takes the id the HTTP response already handed out, so the
                 browser, the status endpoint and the resume banner all name a row that
                 exists. The others are minted as they are reached.
+
+                ``wf_idx`` is the component's position, the same word the serial loop and
+                ``_wf_display_name`` use: naming it ``index`` here shadowed the module's
+                ``index()`` route for the whole closure, which is a footgun, not a shortcut.
                 """
-                name = _wf_display_name(sub_engine, index)
+                name = _wf_display_name(sub_engine, wf_idx)
                 earlier = _continue_record(name)
-                rid = str(earlier.get('run_id') or '') or (run_id if index == 0 else uuid.uuid4().hex[:12])
+                rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
                 store.start_run(
                     rid,
                     name,
@@ -2170,7 +2186,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     lang=execution_state.get('lang'),
                     node_total=len(sub_engine.nodes),
                     wf_count=1,
-                    skipped_workflows=skipped_str if index == 0 else '',
+                    skipped_workflows=skipped_str if wf_idx == 0 else '',
                 )
                 created.append(rid)
                 ctx['open_records'].append(rid)
@@ -2183,9 +2199,9 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 execution_state['run_id'] = rid
                 if earlier:
                     saved = sum(int(n.get('row_count') or 0) for n in earlier.get('nodes') or [])
-                    add_log(t('run.resume_from', at=earlier.get('started_at') or '?', rows=saved), wf_idx=index)
+                    add_log(t('run.resume_from', at=earlier.get('started_at') or '?', rows=saved), wf_idx=wf_idx)
                 else:
-                    add_log(t('run.started', rid=rid), wf_idx=index)
+                    add_log(t('run.started', rid=rid), wf_idx=wf_idx)
                 return dict(
                     ctx,
                     run_id=rid,
@@ -2198,7 +2214,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     export_stamp=_record_export_stamp(store, rid),
                 )
 
-            def _close_component_record(sub_engine, sub_ctx: dict) -> None:
+            def _close_component_record(sub_ctx: dict) -> None:
                 """Give one workflow its own verdict, the moment its turn ends.
 
                 The run-level finish line below can only speak for the whole canvas,
@@ -2206,6 +2222,9 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 workflow's row is closed here, so a canvas whose second workflow was
                 stopped while the first finished shows 已完成 and 已中断 side by side
                 instead of one verdict smeared over both.
+
+                It takes only the context: the verdict comes from the RECORD's own rows
+                (``settle_nodes`` re-reads them), so this never needed the sub-engine.
                 """
                 rid = sub_ctx['run_id']
                 store.settle_nodes(rid)
@@ -2247,7 +2266,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         _wf_local.idx = None
                         _wf_local.name = ''
                     if split_records:
-                        _close_component_record(se, sub_ctx)
+                        _close_component_record(sub_ctx)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
                 # published its partial rows, and they must survive the merge.
@@ -2363,7 +2382,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # OWN name-node label — a multi-workflow canvas must land in
                 # the history panel as separate named workflows, not all
                 # under whichever name node happens to come first.
-                for index, se in enumerate(sub_engines):
+                for wf_idx, se in enumerate(sub_engines):
                     snapshot = _results_snapshot()
                     sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
                     _record_execution_history(
@@ -2371,7 +2390,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         se,
                         sub_results,
                         _component_name(se) or workflow_name,
-                        log_label=_wf_display_name(se, index),
+                        log_label=_wf_display_name(se, wf_idx),
                     )
             # 'completed' must mean every node really finished. A node that failed
             # or stopped half-way leaves gaps; marking the run complete hid it from
@@ -2420,7 +2439,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # run; leaving it installed meant every later print — from any
             # request — also showed up in the console panel.
             if isinstance(sys.stdout, _LogTee):
-                sys.stdout = sys.stdout._original
+                sys.stdout = sys.stdout.unwrap()
             # Flush the run's own trailing console lines to the durable log, then disarm: the
             # sink must go before the slot is handed to the next run, so a queued run's first
             # line never writes into this run's batch. Flushing first loses the finish line —
@@ -3199,7 +3218,9 @@ def _run_bert_compare(op, params, df, text_column, run_ctx):
     models = bert_model_list(params)
     if len(models) < 2:
         raise UnknownOperationError(t('analysis.need_multi_models', op=op, n=len(models)))
-    label_col, score_col = BERT_RESULT_COLUMNS[op]
+    # The label/score columns are NOT read here on purpose: each analyzer writes its own
+    # pair (``BERT_RESULT_COLUMNS`` is the chart side's contract), so stacking the answers
+    # only needs ``模型`` and ``原行``.
     base = df.copy()
     base['原行'] = range(len(base))
     collected = []
@@ -4556,7 +4577,7 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     login_seen = False
     sessions = {}
 
-    def _writer_for(idx: int, url: str) -> PartWriter:
+    def _writer_for(idx: int) -> PartWriter:
         stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
         if stem not in writers:
             # Same ledger contract as a source crawl: shards are recorded as they land, and only
@@ -4694,7 +4715,7 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     risk_by.append(kind)
                 if getattr(_crawler, 'login_wall', False):
                     login_seen = True
-            writer = _writer_for(idx, url)
+            writer = _writer_for(idx)
             fresh = []
             for row in rows:
                 if row_sink is not None:
@@ -5867,7 +5888,10 @@ def save_cookies():
         # the console (its ``format`` is the message alone, so the traceback still goes
         # only to the log file) — the ``add_log`` beside it printed the same sentence a
         # second time, and the console showed 「保存 Cookie 失败」 twice in a row.
-        logger.exception(f'{t("misc.cookie_save_failed")}: {str(e)[:120]}')
+        # The reason travels as a catalogue parameter, the way every other console-level
+        # logger call here speaks: no interpolation in the code (pylint W1201/W1203) and no
+        # bare ``'%s'`` template for the untranslated-text guard to read as English prose.
+        logger.exception(t('misc.cookie_save_failed', err=str(e)[:120]))
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -6261,7 +6285,7 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
         job['error'] = str(e)[:300]
         # One line, one reason: the logger call already reaches the console (see the
         # cookie-save handler above), so the extra add_log said 「生成 Cookie 失败」 twice.
-        logger.exception(f'{t("misc.cookie_gen_failed")}: {str(e)[:120]}')
+        logger.exception(t('misc.cookie_gen_failed', err=str(e)[:120]))
     finally:
         _close_login_browser(crawler)
         with _COOKIE_JOB_LOCK:

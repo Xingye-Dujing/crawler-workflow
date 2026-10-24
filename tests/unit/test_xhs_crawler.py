@@ -536,7 +536,7 @@ class TestUnderTargetWiring:
 
 class TestNoteNavigation:
     def test_a_note_that_never_arrives_costs_its_row_and_not_the_crawl(self, make_crawler, monkeypatch):
-        crawler, driver = make_crawler(get_error=False)
+        crawler, _driver = make_crawler(get_error=False)
 
         class _Expired:
             def __init__(self, _driver, _timeout):

@@ -146,7 +146,7 @@ class TestTheGuidanceLine:
         assert probe.calls == [('cn', 'zhihu')], 'the region came from the matrix, not a guess'
 
     def test_a_measured_speed_is_offered_and_an_unmeasured_one_is_not(self, client, app_module, dying):
-        configure, _made, probe = dying
+        _configure, _made, probe = dying
         probe.answer['speed_kbps'] = 2048
         _run(client, app_module, 'pending-speed')
         assert t('net.speed', speed=2048) in ' \n '.join(_lines(client))

@@ -28,8 +28,10 @@ pytestmark = pytest.mark.unit
 #: safe ones are what Chrome makes before anyone signs in, the unsafe ones are where a
 #: login lives or a machine key is wrapped. ``Local State`` is deliberately on the unsafe
 #: side: it is not a session, but it is this machine's key material and Chrome rebuilds it.
-SAFE_ENTRIES = ['First Run', 'Last Version', 'Variations', 'DevToolsActivePort']
-UNSAFE_ENTRIES = ['Login Data', 'History', 'Web Data', 'Cookies', 'Preferences', 'Local State']
+#: Tuples, not lists: a helper below takes one as its default, and a shared mutable default
+#: is a fixture a single test can rewrite for every later one.
+SAFE_ENTRIES = ('First Run', 'Last Version', 'Variations', 'DevToolsActivePort')
+UNSAFE_ENTRIES = ('Login Data', 'History', 'Web Data', 'Cookies', 'Preferences', 'Local State')
 
 
 @pytest.fixture

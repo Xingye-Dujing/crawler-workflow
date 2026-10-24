@@ -854,7 +854,11 @@ def _mds_2d(distances):
             ]
         )
     for axis in range(len(order)):
-        tallest = max(range(len(coordinates)), key=lambda row: abs(coordinates[row][axis]))
+        # The axis' own column, read into a list first: a ``max(key=...)`` lambda naming the loop
+        # variable would capture the cell rather than its value, and the tallest row of the WRONG
+        # axis would decide the sign.
+        deviations = [abs(point[axis]) for point in coordinates]
+        tallest = deviations.index(max(deviations))
         if coordinates[tallest][axis] < 0:
             for row in coordinates:
                 row[axis] = -row[axis]
@@ -2131,7 +2135,13 @@ class DataAnalysisService:
                     words = [(str(vocabulary[position]), float(component[position])) for position in best]
                 if not words:
                     raise UnknownOperationError(t('analysis.topic_stage_words', stage=stage, topic=label))
-                ranked = sorted(range(len(texts)), key=lambda position: -float(doc_topic[position][topic_index]))
+                # This topic's mass per document, read out of the matrix BEFORE the sort: a key
+                # function naming the loop's ``doc_topic``/``topic_index`` captures those CELLS, so
+                # the next stage's fit would re-rank this row's samples (and 样例文本 is what a
+                # reader sees of it). ``reverse=True`` keeps the old negated-ascending tie order —
+                # the sort is stable either way.
+                topic_mass = [float(value) for value in doc_topic[:, topic_index]]
+                ranked = sorted(range(len(texts)), key=topic_mass.__getitem__, reverse=True)
                 samples = ' ／ '.join(texts[position][:80] for position in ranked[: max(0, int(sample_n))])
                 rows.append(
                     {
@@ -2145,7 +2155,14 @@ class DataAnalysisService:
                         'sample_texts': samples,
                     }
                 )
-                logger.info(f'{label}（{stage}）: {" ".join(word for word, _ in words)}')
+                logger.info(
+                    t(
+                        'analysis.topic_stage_topic_words',
+                        topic=label,
+                        stage=stage,
+                        words=' '.join(word for word, _ in words),
+                    )
+                )
         if not rows:
             # Unreachable while ``stages`` is non-empty (the guard above raises on an empty
             # stage), but a table with no topic rows must not settle the node DONE.
@@ -3153,7 +3170,7 @@ class DataAnalysisService:
                     'pairs_skipped': skipped,
                 }
             )
-            logger.info(f'n_topics={topics}  coherence={coherence}  perplexity={perplexity}')
+            logger.info(t('analysis.coherence_row', topics=topics, coherence=coherence, perplexity=perplexity))
         scored = [row for row in rows if row['coherence'] is not None]
         if not scored:
             raise UnknownOperationError(
@@ -3212,7 +3229,7 @@ class DataAnalysisService:
         counts: dict = {}
         documents = 0
         for text in df[column].dropna().tolist():
-            tokens = KeywordExtractor._tokenize(str(text), None)
+            tokens = KeywordExtractor.tokenize(str(text), None)
             sequence = [token for token in tokens if token in candidates]
             if len(sequence) < 2:
                 continue

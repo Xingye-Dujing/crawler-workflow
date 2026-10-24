@@ -10,6 +10,8 @@ exercised over a real RunStore on a throwaway database, because the keying rules
 that matter are the ones the store actually receives.
 """
 
+import types
+
 import pytest
 
 import analyzers.llm_client as lc
@@ -374,6 +376,9 @@ class TestDataframeRunner:
         class SpyCache:
             def __init__(self):
                 self.added = []
+                # A clean finish calls ``discard``; the flag starts out False so
+                # "never discarded" and "discarded" are the same kind of fact.
+                self.discarded = False
 
             def get(self, idx, thash):
                 return None
@@ -391,7 +396,7 @@ class TestDataframeRunner:
         # Clean finish calls discard() on whichever checkpoint object it got —
         # for the durable cache that is a no-op by contract, but it must not
         # raise, and the run must complete.
-        assert getattr(spy, 'discarded', False) is True
+        assert spy.discarded is True
         assert (df.loc[0, '情感'], df.loc[4, '情感']) == ('Joy', 'Joy')
 
 
@@ -427,9 +432,12 @@ class TestPromptVersion:
         assert prompt_version(make('三亚')) == prompt_version(make('海口'))
 
     def test_builder_without_source_falls_back_to_its_name(self):
-        namespace = {}
-        exec(compile('builder = lambda text: text', '<generated-template>', 'exec'), namespace)
-        builder = namespace['builder']
+        # A builder whose source cannot be read: what a template compiled at runtime
+        # (or stripped by ``-OO``) looks like. Assembled from the code object with
+        # ``types.FunctionType`` rather than by executing a string — nothing here runs
+        # generated source, and ``inspect`` still finds no file behind it.
+        generated = compile('lambda text: text', '<generated-template>', 'eval')
+        builder = types.FunctionType(generated.co_consts[0], {}, 'builder')
         version = prompt_version(builder)
         assert version.startswith('qualname:')
         assert prompt_version(builder) == version  # memoed like any other

@@ -34,7 +34,7 @@ def _bare(monkeypatch):
 def test_the_cursor_pins_at_the_first_failed_article(monkeypatch):
     crawler = _bare(monkeypatch)
     answers = {AAA: {'标题': 'a', '公众号': 'x'}, BAD: None, CCC: {'标题': 'c', '公众号': 'x'}}
-    monkeypatch.setattr(crawler, 'get_detail', lambda url: answers.get(url))
+    monkeypatch.setattr(crawler, 'get_detail', answers.get)
 
     crawler.search(urls=[AAA, BAD, CCC])
 
@@ -48,7 +48,7 @@ def test_a_clean_walk_advances_the_cursor_to_the_end(monkeypatch):
     # Positive control: with no hole, every link proves and the cursor reaches the total.
     crawler = _bare(monkeypatch)
     answers = {AAA: {'标题': 'a', '公众号': 'x'}, BAD: {'标题': 'b', '公众号': 'x'}, CCC: {'标题': 'c', '公众号': 'x'}}
-    monkeypatch.setattr(crawler, 'get_detail', lambda url: answers.get(url))
+    monkeypatch.setattr(crawler, 'get_detail', answers.get)
 
     crawler.search(urls=[AAA, BAD, CCC])
 

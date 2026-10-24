@@ -83,7 +83,7 @@ class SignificanceAnalyzer:
         if sig_method in SignificanceAnalyzer.MULTI_GROUP_METHODS and n_groups < 2:
             raise ValueError(t('sig.two_groups_required', method=sig_method, n=n_groups))
 
-        ordered = sorted(groups, key=lambda label: str(label))
+        ordered = sorted(groups, key=str)
         arrays = [np.asarray(groups[label], dtype=float) for label in ordered]
         group_sizes = ', '.join(str(len(a)) for a in arrays)
 

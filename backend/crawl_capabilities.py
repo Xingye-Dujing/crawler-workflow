@@ -456,7 +456,7 @@ def _hot_mode(
     target: int = 50,
     collects: str = 'fetch',
     board: bool = True,
-    needs_session: bool = True,
+    session_required: bool = True,
 ) -> Mode:
     """The site's own hot list — not a keyword's result page.
 
@@ -481,8 +481,10 @@ def _hot_mode(
             # A board is chosen by the site, but reading it can still be logged in —
             # only when it is (measured: zhihu's hot list 401s anonymously) does the
             # node get an account to pick; weibo's 热搜 answers anyone and keeps no
-            # choice it cannot honour.
-            *((_ACCOUNT,) if needs_session else ()),
+            # choice it cannot honour. The parameter is ``session_required``, not
+            # ``needs_session``: the module-level ``needs_session()`` is the question the
+            # cookie gate asks, and shadowing it in here made this builder unable to call it.
+            *((_ACCOUNT,) if session_required else ()),
             _RECOLLECT,
         ),
         # A board opens a page once then reads JSON: a visible window only sits there.
@@ -490,7 +492,7 @@ def _hot_mode(
         # holding its own opinion about which modes move the screen.
         note_key='settings.fetchQuietNote' if collects == 'fetch' else '',
         collects=collects,
-        needs_session=needs_session,
+        needs_session=session_required,
     )
 
 
@@ -692,7 +694,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             # planted cookie, profile and no cookie at all. One board, so no choice;
             # and because an anonymous browser is served too, this is the one crawl in
             # the matrix that must not make the canvas ask for a login.
-            _hot_mode(board=False, needs_session=False),
+            _hot_mode(board=False, session_required=False),
             _comment_mode('weibo', 'https://weibo.com/...'),
         ),
     ),
@@ -811,7 +813,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             # shape bilibili's board takes. Anonymous on purpose: measured 2026-10, every
             # board is served to a fresh browser with no cookie, which is why the node
             # carries no account field and the pre-run gate asks it no session question.
-            _hot_mode(_HONGGUO_BOARD, board=False, needs_session=False),
+            _hot_mode(_HONGGUO_BOARD, board=False, session_required=False),
             # Comments exist only in the app protocol; the crawl drives the desktop
             # player behind our own proxy and reads what it legitimately fetched
             # (docs/crawler_notes.md 红果短剧 for the whole measurement chain).
@@ -1041,7 +1043,7 @@ def fed_keys(mode: Mode, has_data_input: bool) -> frozenset[str]:
     return frozenset(f.key for f, _col in feed_of(mode))
 
 
-def required_missing(mode: Mode, params: dict, fed_keys: frozenset[str] = frozenset()) -> list[Field]:
+def required_missing(mode: Mode, params: dict, fed: frozenset[str] = frozenset()) -> list[Field]:
     """Required fields the node leaves empty — the whole of source validation.
 
     A field fed from an upstream column is not "empty" because its textarea is:
@@ -1049,7 +1051,7 @@ def required_missing(mode: Mode, params: dict, fed_keys: frozenset[str] = frozen
     """
     out = []
     for f in mode.fields:
-        if not f.required or f.key in fed_keys:
+        if not f.required or f.key in fed:
             continue
         value = f.value_from(params)
         empty = not value if f.is_link_list() else not str(value or '').strip()

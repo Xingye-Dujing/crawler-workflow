@@ -200,7 +200,7 @@ class TestMlMode:
         monkeypatch.setattr(ml_base, 'MODEL_DIR', str(tmp_path))
         with pytest.raises(ModelNotTrainedError) as refused:
             SentimentAnalyzer(mode='ml').analyze_dataframe(frame(), '正文')
-        assert SentimentAnalyzer(mode='ml')._ML_MODEL_NAME in str(refused.value), (
+        assert SentimentAnalyzer(mode='ml').ML_MODEL_NAME in str(refused.value), (
             'the refusal must name the model that is missing'
         )
 

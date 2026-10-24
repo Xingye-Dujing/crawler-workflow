@@ -222,7 +222,6 @@ class LatexChartService:
         y2=None,
         agg2=None,
         label_field='topic',
-        annotations='',
         stack_fields='',
         title='',
         tokenize=False,
@@ -257,7 +256,6 @@ class LatexChartService:
         label_field='topic',
         stack_fields='',
         title='',
-        tokenize=False,
         **_ignored,
     ) -> str:
         head, rows = cls._table_data(
@@ -270,7 +268,6 @@ class LatexChartService:
             y2=y2,
             label_field=label_field,
             stack_fields=stack_fields,
-            tokenize=tokenize,
         )
         return cls._document(cls._tabular(head, rows), chart_type, title, table=True)
 
@@ -315,7 +312,7 @@ class LatexChartService:
         return cls._standalone_head(kind, chart_type, title, caption) + cls._wrap_body(body) + '\n\\end{document}\n'
 
     @staticmethod
-    def _strip_shell(doc: str) -> str:
+    def strip_shell(doc: str) -> str:
         """The body this service put between the (exactly one) begin/end ``document`` of a standalone doc.
 
         Safe to split on those markers because every document consumed here was produced by ``_document``,
@@ -333,7 +330,7 @@ class LatexChartService:
         ``axis`` beside a ``tabular`` would otherwise collide). The stripped body is already box-wrapped by
         ``_wrap_body`` from its own source, so it is joined verbatim.
         """
-        bodies = [cls._strip_shell(doc) for doc in docs if doc]
+        bodies = [cls.strip_shell(doc) for doc in docs if doc]
         body = '\n\\par\n\n'.join(bodies)
         head = cls._standalone_head('组合', 'compile', '', _esc('图表'))
         return head + body + '\n\\end{document}\n'
@@ -378,7 +375,7 @@ class LatexChartService:
     def _require_pair(x, y, what):
         if not x or not y:
             raise ChartConfigError(f'{what} LaTeX requires both fields (x and y)')
-        VisualizationService._require_columns(pd.DataFrame({x: [0], y: [0]}), x, y)
+        VisualizationService.require_columns(pd.DataFrame({x: [0], y: [0]}), x, y)
 
     # ── categorical bar / line ────────────────────────────────────────
 
@@ -386,7 +383,7 @@ class LatexChartService:
     def _bars_or_line(cls, df, chart_type, x, y, agg):
         if not x:
             raise ChartConfigError(f'{chart_type} LaTeX requires a category field (x)')
-        labels, values = VisualizationService._aggregate(df, x, y, agg)
+        labels, values = VisualizationService.aggregate(df, x, y, agg)
         marks = ' '.join(f'({lab},{_num(v)})' for lab, v in zip(labels, values, strict=True))
         if chart_type == 'bar':
             # Reference fig-3: a solid bar wearing its own value on top, a width that narrows as categories crowd.
@@ -407,8 +404,8 @@ class LatexChartService:
     def _dual_line(cls, df, x, y, agg, y2, agg2):
         if not x or not y2:
             raise ChartConfigError('dual_line LaTeX requires a category field (x) and a second value field (y2)')
-        labels, left = VisualizationService._aggregate(df, x, y, agg)
-        _, right = VisualizationService._aggregate(df, x, y2, agg2 or 'mean')
+        labels, left = VisualizationService.aggregate(df, x, y, agg)
+        _, right = VisualizationService.aggregate(df, x, y2, agg2 or 'mean')
         pts_l = ' '.join(f'({lab},{_num(v)})' for lab, v in zip(labels, left, strict=True))
         pts_r = ' '.join(f'({lab},{_num(v)})' for lab, v in zip(labels, right, strict=True))
         ln = _esc(_localize_label(y) if y else t('chart.count'))
@@ -440,7 +437,7 @@ class LatexChartService:
             raise ChartConfigError('stack_pct LaTeX requires a category field (x)')
         if not fields:
             raise ChartConfigError('stack_pct LaTeX requires stacked fields (stack_fields)')
-        VisualizationService._require_columns(df, x, *fields)
+        VisualizationService.require_columns(df, x, *fields)
         grouped = df.groupby(x, sort=False)
         keys = list(grouped.groups.keys())
         labels = [str(k) for k in keys]
@@ -467,7 +464,7 @@ class LatexChartService:
     def _scatter(cls, df, x, y):
         if not x or not y:
             raise ChartConfigError('scatter LaTeX requires both x and y fields')
-        VisualizationService._require_columns(df, x, y)
+        VisualizationService.require_columns(df, x, y)
         xs = pd.to_numeric(df[x], errors='coerce')
         ys = pd.to_numeric(df[y], errors='coerce')
         pts = [f'({_num(a)},{_num(b)})' for a, b in zip(xs, ys, strict=True) if _finite([a, b])]
@@ -485,7 +482,7 @@ class LatexChartService:
     def _histogram(cls, df, x):
         if not x:
             raise ChartConfigError('histogram LaTeX requires a numeric field (x)')
-        VisualizationService._require_columns(df, x)
+        VisualizationService.require_columns(df, x)
         values = pd.to_numeric(df[x], errors='coerce').dropna()
         counts, edges = _histogram_bins(values)
         pts = ' '.join(f'({_num(edges[i])},{_num(c)})' for i, c in enumerate(counts))
@@ -544,7 +541,7 @@ class LatexChartService:
     def _pie(cls, df, x, y, agg):
         if not x:
             raise ChartConfigError('pie LaTeX requires a category field (x)')
-        labels, values = VisualizationService._aggregate(df, x, y, agg)
+        labels, values = VisualizationService.aggregate(df, x, y, agg)
         vals = [float(v) if _finite([v]) else 0.0 for v in values]
         total = sum(vals) or 1.0
         draws, angle = [], 0.0
@@ -578,7 +575,7 @@ class LatexChartService:
     def _heatmap(cls, df, x, y, value_field, agg):
         if not x or not y:
             raise ChartConfigError('heatmap LaTeX requires two category fields (x and y)')
-        xcats, ycats, matrix = VisualizationService._pivot(df, x, y, value_field, agg)
+        xcats, ycats, matrix = VisualizationService.pivot(df, x, y, value_field, agg)
         vmax = max(_finite(v for line in matrix for v in line) or [1.0]) or 1.0
         cells = []
         for j, row in enumerate(matrix):  # rows = y categories, drawn top-down
@@ -613,12 +610,14 @@ class LatexChartService:
     def _topic_map(cls, df, x, y, value_field, label_field):
         if not x or not y:
             raise ChartConfigError('topic_map LaTeX requires both coordinate fields (x=PC1, y=PC2)')
-        VisualizationService._require_columns(df, x, y)
+        VisualizationService.require_columns(df, x, y)
         first = pd.to_numeric(df[x], errors='coerce')
         second = pd.to_numeric(df[y], errors='coerce')
         has_size = bool(value_field) and value_field in df.columns
         sizes = pd.to_numeric(df[value_field], errors='coerce').tolist() if has_size else [None] * len(df)
-        biggest = max((s for s in sizes if s is not None and s == s), default=0.0)
+        # pd.to_numeric(errors='coerce') leaves NaN where a cell was not a number, and the
+        # no-value-field branch fills None; both mean "no bubble size here".
+        biggest = max((s for s in sizes if pd.notna(s)), default=0.0)
         has_label = bool(label_field) and label_field in df.columns
         names = df[label_field].tolist() if has_label else [''] * len(df)
         coords = [(first.iloc[i], second.iloc[i]) for i in range(len(df)) if _finite([first.iloc[i], second.iloc[i]])]
@@ -633,7 +632,7 @@ class LatexChartService:
                 continue
             r = 3.0
             size = sizes[i]
-            if biggest and size is not None and size == size:
+            if biggest and pd.notna(size):
                 r = max(3.0, 8.0 * math.sqrt(float(size) / biggest))
             shape = (
                 f'\\draw[fill=cA!28,draw=cA,line width=0.6pt] (axis cs:{_num(a)},{_num(b)}) circle[radius={r:.1f}pt];'
@@ -661,7 +660,7 @@ class LatexChartService:
     def _topic_terms(cls, df, x, y, y2):
         if not x or not y or not y2:
             raise ChartConfigError('topic_terms LaTeX requires the term field (x) and BOTH frequency fields (y, y2)')
-        VisualizationService._require_columns(df, x, y, y2)
+        VisualizationService.require_columns(df, x, y, y2)
         terms = [str(v) for v in df[x].tolist()]
         overall = pd.to_numeric(df[y], errors='coerce').tolist()
         within = pd.to_numeric(df[y2], errors='coerce').tolist()
@@ -684,10 +683,10 @@ class LatexChartService:
 
     @classmethod
     def _relation(cls, df, x, y, value_field, agg, *, ribbons: bool) -> str:
-        nodes, links = VisualizationService._sankey_links(df, x, y, value_field, agg)
+        _, links = VisualizationService.sankey_links(df, x, y, value_field, agg)
         if not links:
             raise ChartConfigError(f'{x}/{y} yields no {("sankey" if ribbons else "network")} edges to draw')
-        return cls._sankey_tikz(nodes, links) if ribbons else cls._graph_tikz(nodes, links)
+        return cls._sankey_tikz(links) if ribbons else cls._graph_tikz(links)
 
     @staticmethod
     def _incident(links):
@@ -698,7 +697,7 @@ class LatexChartService:
         return inc
 
     @classmethod
-    def _sankey_tikz(cls, nodes, links) -> str:
+    def _sankey_tikz(cls, links) -> str:
         left = list(dict.fromkeys(lk['source'] for lk in links))
         right = list(dict.fromkeys(lk['target'] for lk in links))
         inc = cls._incident(links)
@@ -809,7 +808,7 @@ class LatexChartService:
         return held
 
     @classmethod
-    def _graph_tikz(cls, nodes, links) -> str:
+    def _graph_tikz(cls, links) -> str:
         names = list(dict.fromkeys(nm for lk in links for nm in (lk['source'], lk['target'])))
         inc = cls._incident(links)
         max_inc = max(inc.values()) or 1.0
@@ -833,15 +832,15 @@ class LatexChartService:
             spots[name] = (x, y, r, x + ux * (r + 0.22), y + uy * (r + 0.22), 'east' if ux >= 0 else 'west')
         ranked = sorted(names, key=lambda name: (-inc.get(name, 0.0), name))
 
-        def _candidates(scale_cm: float) -> list:
+        def _candidates() -> list:
             return [(name, spots[name][5], spots[name][3], spots[name][4], fonts[name]) for name in ranked]
 
         # Sized in two passes because the two quantities depend on each other: the scale is set by the
         # widest label, and which labels survive the de-collision is decided at that scale.
         scale = cls._picture_scale(2 * radius, 2 * radius, max(cls._label_cm(n, fonts[n]) for n in names))
-        held = cls._fit_labels(_candidates(scale), scale)
+        held = cls._fit_labels(_candidates(), scale)
         scale = cls._picture_scale(2 * radius, 2 * radius, max(cls._label_cm(n, fonts[n]) for n in held))
-        held = cls._fit_labels(_candidates(scale), scale)
+        held = cls._fit_labels(_candidates(), scale)
         out = [f'\\coordinate (n{i}) at ({x:.2f},{y:.2f});' for i, (x, y) in enumerate(pos.values())]
         for lk in links:
             w = max(0.3, 4.0 * math.sqrt(lk['value'] / biggest_link))
@@ -872,7 +871,7 @@ class LatexChartService:
         if tokenize:
             labels, values = VisualizationService.tokenize_frequency(df, x)
         else:
-            labels, values = VisualizationService._aggregate(df, x, value_field, agg)
+            labels, values = VisualizationService.aggregate(df, x, value_field, agg)
         if not labels:
             raise ChartConfigError('word cloud has no words to show')
         top = list(zip(labels, values, strict=True))[:80]
@@ -902,7 +901,7 @@ class LatexChartService:
     def _map(cls, df, x, value_field, agg):
         if not x:
             raise ChartConfigError('map LaTeX requires a region-name field (x)')
-        labels, values = VisualizationService._aggregate(df, x, value_field, agg)
+        labels, values = VisualizationService.aggregate(df, x, value_field, agg)
         pairs = list(zip(labels, values, strict=True))
         vals = [float(v) if _finite([v]) else 0.0 for _, v in pairs]
         vmax = max(vals) or 1.0
@@ -966,7 +965,7 @@ class LatexChartService:
 
     @classmethod
     def _require_biblio(cls, df, *columns):
-        VisualizationService._require_columns(df, *columns)
+        VisualizationService.require_columns(df, *columns)
 
     @classmethod
     def _biblio_node_rows(cls, df, columns):
@@ -1128,12 +1127,12 @@ class LatexChartService:
                 lx, ly = x, y + (radius + 0.14 if dy >= 0 else -(radius + 0.14))
             spots[name] = (side, lx, ly)
 
-        def _candidates(scale_cm: float) -> list:
+        def _candidates() -> list:
             return [(name, spots[name][0], spots[name][1], spots[name][2], fonts[name]) for name in ranked[:120]]
 
-        labelled = cls._fit_labels(_candidates(scale), scale)
+        labelled = cls._fit_labels(_candidates(), scale)
         scale = cls._picture_scale(14.1, 8.1, max(cls._label_cm(n, fonts[n]) for n in labelled))
-        labelled = cls._fit_labels(_candidates(scale), scale)
+        labelled = cls._fit_labels(_candidates(), scale)
         max_weight = max((link['value'] for link in links), default=1.0) or 1.0
         out = []
         for link in links[:180]:
@@ -1171,8 +1170,7 @@ class LatexChartService:
     def _biblio_circular(cls, df) -> str:
         rows, names = cls._biblio_node_rows(df, ('节点', '连接', '频次'))
         links = cls._biblio_links(rows, names)
-        nodes = [{'source': link['source'], 'target': link['target'], 'value': link['value']} for link in links]
-        return cls._graph_tikz(nodes, links)
+        return cls._graph_tikz(links)
 
     @classmethod
     def _biblio_landscape(cls, df) -> str:
@@ -2086,14 +2084,14 @@ class LatexChartService:
     # ── booktabs three-line table ─────────────────────────────────────
 
     @classmethod
-    def _table_data(cls, df, chart_type, *, x, y, value_field, agg, y2, label_field, stack_fields, tokenize):
+    def _table_data(cls, df, chart_type, *, x, y, value_field, agg, y2, label_field, stack_fields):
         if chart_type in BIBLIO_CHART_TYPES:
             return cls._biblio_table_data(df, chart_type)
         if chart_type == 'stack_pct':
             fields = [s.strip() for s in str(stack_fields or '').replace('，', ',').split(',') if s.strip()]
             if not x or not fields:
                 raise ChartConfigError('stack_pct LaTeX table requires a category field (x) and stacked fields')
-            VisualizationService._require_columns(df, x, *fields)
+            VisualizationService.require_columns(df, x, *fields)
             grouped = df.groupby(x, sort=False)
             keys = list(grouped.groups.keys())
             cols = {f: grouped[f].sum().reindex(keys).fillna(0).tolist() for f in fields}
@@ -2105,11 +2103,11 @@ class LatexChartService:
             ]
             return head, rows
         if chart_type in ('sankey', 'network'):
-            nodes, links = VisualizationService._sankey_links(df, x, y, value_field, agg)
+            _, links = VisualizationService.sankey_links(df, x, y, value_field, agg)
             head = [_esc(_localize_label(x)), _esc(_localize_label(y)), _esc(value_field or t('chart.count'))]
             return head, [[_esc(lk['source']), _esc(lk['target']), _num(lk['value'])] for lk in links]
         if chart_type == 'topic_map':
-            VisualizationService._require_columns(df, x, y)
+            VisualizationService.require_columns(df, x, y)
             has_label = bool(label_field) and label_field in df.columns
             names = df[label_field].tolist() if has_label else [''] * len(df)
             a = pd.to_numeric(df[x], errors='coerce').tolist()
@@ -2121,7 +2119,7 @@ class LatexChartService:
             ]
             return head, [[_esc(str(nm)), _num(xa), _num(xb)] for nm, xa, xb in zip(names, a, b, strict=True)]
         if chart_type == 'topic_terms':
-            VisualizationService._require_columns(df, x, y, y2)
+            VisualizationService.require_columns(df, x, y, y2)
             terms = df[x].tolist()
             head = [_esc(_localize_label(x)), _esc(_localize_label(y)), _esc(_localize_label(y2))]
             return head, [
@@ -2133,7 +2131,7 @@ class LatexChartService:
         # the categorical/aggregated family (bar/line/dual_line/pie/scatter/histogram/box/heatmap/map/wordcloud)
         if not x:
             raise ChartConfigError(f'{chart_type} LaTeX table requires a category field (x)')
-        labels, values = VisualizationService._aggregate(df, x, y, agg)
+        labels, values = VisualizationService.aggregate(df, x, y, agg)
         head = [
             _esc(_localize_label(x)),
             _esc(_localize_label(y) if y else (value_field and _localize_label(value_field) or t('chart.count'))),

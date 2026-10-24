@@ -111,7 +111,12 @@ class WeightedTrainer(Trainer):
             return focal.mean()
         return torch.nn.functional.cross_entropy(logits, labels, weight=weight)
 
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        # `num_items_in_batch` matches the installed Trainer's contract (it passes the name as a
+        # keyword), but the custom losses below are deliberately per-step MEANS — the scaling this
+        # script's published models were trained under. Applying token-count normalisation here
+        # would silently change what those runs mean, so the value is dropped, not guessed at.
+        del num_items_in_batch
         labels = inputs.pop('labels')
         soft = inputs.pop('soft', None)
         outputs = model(**inputs)

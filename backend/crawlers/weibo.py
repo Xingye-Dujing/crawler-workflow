@@ -231,7 +231,7 @@ class WeiboCrawler(Crawler):
 
     # ─── the site's own board ─────────────────────────────────────────
 
-    def hot(self, target_count: int = 50, **kwargs):
+    def hot(self, target_count: int = 50, **_kwargs):
         """微博热搜 — the topic board the site ranks for itself.
 
         ``ajax/side/hotSearch`` is read from inside a loaded ``weibo.com`` document,

@@ -17,6 +17,7 @@ conftest puts it there at its own import, which is also how :mod:`run_wait` and
 :mod:`live_run_harness` resolve their imports.
 """
 
+from functools import lru_cache
 from pathlib import Path
 
 from services.cookie_manager import CookieManager
@@ -26,18 +27,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: The jar directory the user's own crawls and the cookie panel read and write.
 COOKIE_DIR = REPO_ROOT / 'data' / 'cookies'
 
-#: Built on first ask, never at import. ``CookieManager.__init__`` calls ``os.makedirs``, and
-#: a module-level instance would mean *collecting* the test suite creates ``data/cookies/`` in
-#: a fresh checkout — a directory the isolation guard does not watch (it fingerprints files), so
-#: the write would be silent. Answering the question must not be a write.
-_JAR: CookieManager | None = None
 
-
+@lru_cache(maxsize=1)
 def _jar() -> CookieManager:
-    global _JAR
-    if _JAR is None:
-        _JAR = CookieManager(str(COOKIE_DIR))
-    return _JAR
+    """The one :class:`CookieManager` over :data:`COOKIE_DIR`, built on first ask, never at import.
+
+    ``CookieManager.__init__`` calls ``os.makedirs``, and a module-level instance would mean
+    *collecting* the test suite creates ``data/cookies/`` in a fresh checkout — a directory the
+    isolation guard does not watch (it fingerprints files), so the write would be silent.
+    Answering the question must not be a write, so the cache holds nothing until someone asks.
+    """
+    return CookieManager(str(COOKIE_DIR))
 
 
 def has_cookie(platform: str, account: str = '') -> bool:

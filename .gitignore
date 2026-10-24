@@ -14,7 +14,9 @@ data/*
 # tiny, no secrets — version it so others get the same display names.
 !data/model_registry.json
 logs/
-.pylintrc
+# `.pylintrc` USED to be ignored here, which is why pylint was never a real review standard:
+# the configuration lived on one machine, CI could not read it, and a clone linted nothing.
+# The three tier configs (.pylintrc, .pylintrc.tests, .pylintrc.probes) are versioned on purpose.
 # backend/test_*.py are one-off measurement PROBES, kept out of git ON PURPOSE: ruff respects
 # .gitignore when discovering files, so tracking them would pull 125 never-authored-for-lint
 # throwaway scripts into CI's `ruff check backend/` and turn it red. The clean fix (move them to

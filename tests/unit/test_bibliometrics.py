@@ -148,8 +148,6 @@ class TestKeywordNetwork:
         assert not any('人工簇标签已应用' in note for note in result['notes'])
 
     def test_cluster_labels_without_clustering_are_refused_by_name(self):
-        from services.biblio_schema import collect_errors
-
         errors = collect_errors({'entity_type': 'keyword', 'cluster': False, 'cluster_labels': '#0=x'}, 'test')
         assert any('cluster_labels' in error or '聚类' in error for error in errors)
 
@@ -159,9 +157,7 @@ class TestKeywordNetwork:
         plain = bibliometrics.build(_keywords(), _params(), 'test')
         assert '来源' not in plain['rows'][0] and '跨源' not in plain['rows'][0]
         fused = [dict(row, 来源='文献') for row in _keywords().to_dict('records')]
-        import pandas as _pd
-
-        result = bibliometrics.build(_pd.DataFrame(fused), _params(), 'test')
+        result = bibliometrics.build(pd.DataFrame(fused), _params(), 'test')
         assert {'来源', '跨源'} <= set(result['rows'][0])
         assert all(row['来源'] == '文献' and row['跨源'] is False for row in result['rows'])
 
@@ -510,14 +506,12 @@ class TestContracts:
 def test_a_stored_table_reads_back_the_shape_it_was_emitted_as(columns, shape):
     """The workspace labels a run's table with this, and the run record keeps no parameters —
     so the columns are the only honest evidence, and no evidence must answer "unknown"."""
-    from services.biblio_schema import classify_shape
-
     assert classify_shape(columns) == shape
 
 
 def test_every_output_shape_reads_back():
     """One direction without the other is how a new shape would silently lose its label."""
-    from services.biblio_schema import OUTPUT_SHAPES, classify_shape
+    from services.biblio_schema import OUTPUT_SHAPES
 
     for shape in OUTPUT_SHAPES:
         assert classify_shape(output_columns({'output_shape': shape})) == shape

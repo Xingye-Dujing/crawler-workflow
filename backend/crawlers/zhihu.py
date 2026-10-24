@@ -396,7 +396,7 @@ class ZhihuCrawler(Crawler):
 
     # ─── one creator's own list ───────────────────────────────────────
 
-    def author(self, author: str, target_count: int = 50, **kwargs):
+    def author(self, author: str, target_count: int = 50, **_kwargs):
         """One account's answers and articles, read from their own profile tabs.
 
         Both tabs are walked, answers first: 「作品」 for zhihu means the 回答 and the
@@ -506,8 +506,12 @@ class ZhihuCrawler(Crawler):
         # this walk has none — so the crawl stays ``end_reason=None`` (the gate is silent) until
         # the platform surfaces a real end marker. See crawlers/base.py:LICENSED_ENDS.
 
-    def _profile_card(self, card, index: int = 0) -> dict | None:
-        """One profile row → a row, with the body unclamped before it is read."""
+    def _profile_card(self, card, _index: int = 0) -> dict | None:
+        """One profile row → a row, with the body unclamped before it is read.
+
+        ``_index`` is only the screen slot ``feed.walk_feed`` hands a scrape callback; a
+        profile row is identified by its own ``data-zop`` payload, never by its position.
+        """
         self._expand_body(card)
         item = self._scrape_card(card)
         meta = zhihu_item_meta(card.get_attribute('data-zop') or '')

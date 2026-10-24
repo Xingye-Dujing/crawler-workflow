@@ -61,11 +61,16 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
         os.makedirs(export_dir, exist_ok=True)
         with open(tex_path, 'w', encoding='utf-8') as handle:
             handle.write(tex)
+        # ``check=False`` on purpose: xelatex's non-zero exit is this function's own ``error``
+        # answer (with the log tail), which the node reports and the run survives. Raising here
+        # would replace a stated refusal with a traceback out of the worker thread. The return
+        # code is read below, together with "did a PDF actually appear".
         result = subprocess.run(
             [xelatex, '-interaction=batchmode', '-halt-on-error', '-output-directory', work, 'main.tex'],
             cwd=work,
             capture_output=True,
             timeout=120,
+            check=False,
         )
     except (subprocess.SubprocessError, OSError) as e:
         shutil.rmtree(work, ignore_errors=True)

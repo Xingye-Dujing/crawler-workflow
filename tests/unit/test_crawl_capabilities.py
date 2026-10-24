@@ -722,8 +722,6 @@ class TestRegions:
             assert region_of(cap.platform) == cap.region
 
     def test_the_overseas_set_is_stated_rather_than_fallen_into(self):
-        from crawl_capabilities import platform_ids
-
         overseas = sorted(cap.platform for cap in CAPABILITIES if cap.region == 'overseas')
         assert overseas == ['twitter', 'youtube'], (
             f'which platforms need a foreign network is a decision, not a default: {overseas}. '
@@ -896,7 +894,7 @@ class TestFeed:
         assert [f.key for f in required_missing(mode, {'urls': ''})] == ['urls']
         fed = fed_keys(mode, has_data_input=True)
         assert fed == frozenset({'urls'})
-        assert required_missing(mode, {'urls': ''}, fed_keys=fed) == []
+        assert required_missing(mode, {'urls': ''}, fed=fed) == []
         # A wired node that never named its column is still feed-EXPECTED (the textarea
         # must not be re-required behind the wire; validation names the blank column
         # itself). Without a data parent nothing is fed and the pasted box rules.

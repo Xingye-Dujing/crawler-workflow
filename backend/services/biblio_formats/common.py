@@ -2,6 +2,7 @@
 
 import csv
 import io
+import math
 import re
 
 import pandas as pd
@@ -17,7 +18,7 @@ _YEAR = re.compile(r'(?:19|20)\d{2}')
 def text(value) -> str:
     if value is None:
         return ''
-    if isinstance(value, float) and value != value:  # NaN
+    if isinstance(value, float) and math.isnan(value):
         return ''
     return str(value).strip()
 

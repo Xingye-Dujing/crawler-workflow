@@ -337,7 +337,7 @@ class PlayerUI:
         walk(win, 0)
         return items
 
-    def _find(self, win, needle, ctype=None, depth=0):
+    def _find(self, win, needle, ctype=None):
         """First control whose Name contains *needle* — via the warming full walk."""
         if win is None:
             return None
@@ -1262,7 +1262,7 @@ class HongguoCommentHarness:
                     return str(holder[key])
         return ''
 
-    def _await_page(self, series_id, seconds, allow_repeat=False, stamp=None):
+    def _await_page(self, _series_id, seconds, allow_repeat=False, stamp=None):
         """Block until a fresh ``comment/list`` page of THIS drama lands in the capture.
 
         Fresh = a group this walk has not harvested (``allow_repeat`` additionally
@@ -1283,7 +1283,8 @@ class HongguoCommentHarness:
         same drama is ``series_id=7696437705822981182`` on the web page and
         ``book_id=7697823071830297624`` in the client, two separate id spaces, so comparing
         them would refuse every page a LINK-fed walk asked for correctly. *series_id* stays
-        in the signature because callers pass it; the identity answer comes from the traffic.
+        in the signature (spelled ``_series_id`` because nothing reads it) because callers pass
+        it; the identity answer comes from the traffic.
         """
         deadline = time.time() + max(5, int(seconds))
         while time.time() < deadline:
@@ -1629,8 +1630,6 @@ def _int_setting(key, default) -> int:
 
 
 def _bool_setting(key, default) -> bool:
-    from utils.helpers import as_bool
-
     raw = get_setting(key)
     return default if raw is None or str(raw).strip() == '' else as_bool(raw, default)
 
@@ -1671,7 +1670,6 @@ class _Crypt32:
     """
 
     def __init__(self):
-        import ctypes
         from ctypes import wintypes
 
         self._ctypes = ctypes
@@ -1715,8 +1713,11 @@ class _Crypt32:
         (measured — one hit out of 79, and a probe that sees one cert calls every
         CA untrusted).
         """
-        ctypes = self._ctypes
-        crypt32 = ctypes.windll.crypt32
+        # The module this instance was built with, read back from ``self``: ``_CERT_CONTEXT``
+        # declared its fields through it, so casting into ``POINTER(that structure)`` has to come
+        # from the same module or ctypes refuses the type.
+        ct = self._ctypes
+        crypt32 = ct.windll.crypt32
         store = self._root()
         if not store:
             return set()
@@ -1724,8 +1725,8 @@ class _Crypt32:
         try:
             ctx = crypt32.CertEnumCertificatesInStore(store, None)
             while ctx:
-                cc = ctypes.cast(ctx, ctypes.POINTER(self._CERT_CONTEXT)).contents
-                der = ctypes.string_at(cc.pbCertEncoded, cc.cbCertEncoded)
+                cc = ct.cast(ctx, ct.POINTER(self._CERT_CONTEXT)).contents
+                der = ct.string_at(cc.pbCertEncoded, cc.cbCertEncoded)
                 found.add(hashlib.sha1(der).digest())
                 ctx = crypt32.CertEnumCertificatesInStore(store, ctx)
         finally:

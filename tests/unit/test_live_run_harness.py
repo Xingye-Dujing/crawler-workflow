@@ -653,7 +653,7 @@ class TestCanvasAgainstTheMatrix:
         assert [(field.key, column) for field, column in capabilities.feed_of(mode)] == [('urls', 'input_column')]
         assert comments['params']['urls'] == '', 'a fed node keeps its textarea empty; the column replaces it'
         assert comments['params']['input_column'] == harness.LINK_COLUMN
-        assert capabilities.required_missing(mode, comments['params'], fed_keys=capabilities.fed_keys(mode, True)) == []
+        assert capabilities.required_missing(mode, comments['params'], fed=capabilities.fed_keys(mode, True)) == []
         # Without the parent table the same node IS incomplete: fed-ness comes from the wire.
         assert [f.key for f in capabilities.required_missing(mode, comments['params'])] == ['urls']
 
@@ -776,8 +776,8 @@ class TestSessionDiesAfter:
                 super().__init__()
                 self._pages = list(pages)
 
-            def search(self, keyword='', target_count=20, **kwargs):
-                self.asked.append({'target_count': target_count, 'resume': kwargs.get('resume')})
+            def search(self, keyword='', target_count=20, limit=20, full_body=True, resume=None, **_kwargs):
+                self.asked.append({'target_count': target_count, 'limit': limit, 'resume': resume})
                 return self._pages.pop(0) if self._pages else []
 
         crawler = _EmptyThenRows([[], [{'链接': 'https://www.zhihu.com/q/1'}, {'链接': 'https://www.zhihu.com/q/2'}]])

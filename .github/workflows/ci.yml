@@ -44,6 +44,45 @@ jobs:
       - name: Format
         run: .venv/Scripts/ruff.exe format --check backend/ tests/
 
+      # Pylint runs THREE times with three standards, because the honest answer differs by tree:
+      # product code may not be exempt from anything; `tests/` is exempt only from the three
+      # messages pytest's design makes meaningless (fixture-name shadowing, fixture arguments that
+      # ARE the usage, deliberate white-box private access); `backend/test_*.py` are the manual
+      # measurement scripts AGENTS.md keeps out of pytest, whose sys.path bootstrap must precede
+      # their imports. Nested config files are NOT read by pylint (measured), so each tier is its
+      # own invocation with an explicit --rcfile. Targets are listed as FILES, never as the bare
+      # word `packaging`: that resolves to the PyPA distribution in site-packages, and the gate
+      # would lint a third-party library instead of this repository. Every step refuses an empty
+      # target list, because a gate that silently checks nothing is worse than no gate.
+      #
+      # `--disable=C,R --fail-on=W,E,F` is the standard the user set: FATAL, ERROR and WARNING must
+      # be zero. It is scoped on the COMMAND LINE, never in the tier configs, so nothing is hidden
+      # from a local run. pylint's exit code is a bitmap of the categories it saw, and CONVENTION
+      # and REFACTOR advice is present by design (624 `import-outside-toplevel` are deliberate lazy
+      # imports that break real cycles), so without the scoping the gate would be red forever and
+      # everyone would learn to ignore it. Run the same command without the flag to see the full 900+.
+      - name: Pylint — product
+        run: |
+          $targets = @(
+            (Get-ChildItem backend -Recurse -Filter *.py -File | Where-Object Name -notlike 'test_*'),
+            (Get-ChildItem packaging, tools, 'ml_train/scripts' -Filter *.py -File)
+          ) | ForEach-Object FullName
+          if (-not $targets) { throw 'no product sources found to lint' }
+          .venv/Scripts/pylint.exe --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $targets
+
+      - name: Pylint — tests
+        run: |
+          $targets = Get-ChildItem tests -Recurse -Filter *.py -File | ForEach-Object FullName
+          if (-not $targets) { throw 'no test sources found to lint' }
+          .venv/Scripts/pylint.exe --persistent=n --rcfile=.pylintrc.tests --disable=C,R --fail-on=W,E,F --jobs=2 $targets
+
+      # NO third CI step on purpose. The measurement scripts (`backend/test_*.py`) are gitignored on
+      # purpose — see .gitignore — so a hosted runner has zero of them to lint. A CI step that
+      # "passed" over an empty target list would be exactly the silent green this workflow refuses
+      # to produce, so the third tier (`.pylintrc.probes`) is a LOCAL standard: run it before
+      # handing a probe to anyone, with
+      #     .venv/Scripts/pylint.exe --rcfile=.pylintrc.probes (Get-ChildItem backend -Filter test_*.py)
+
       # `node` is on the runner image, so the frontend harness cases run rather than skip.
       - name: Fast tier
         run: .venv/Scripts/python.exe -m pytest -q

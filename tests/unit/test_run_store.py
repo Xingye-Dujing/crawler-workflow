@@ -521,8 +521,8 @@ class TestLifecycle:
         run = store.get_run('r1')
         assert run['node_total'] == 3 and run['node_done'] == 0, 'a resumed run showed old progress'
 
-        """A named workflow the user switched off for this attempt owns no row of its own, so the
-        record's only trace of it is ``skipped_workflows`` — what the panel names under 跳过."""
+        # A named workflow the user switched off for this attempt owns no row of its own, so the
+        # record's only trace of it is ``skipped_workflows`` — what the panel names under 跳过.
         store.start_run('r-skip', '跑', 'fp-s', wf_count=1, skipped_workflows='不跑 + 也不跑')
         run = store.get_run('r-skip')
         assert run['skipped_workflows'] == '不跑 + 也不跑'

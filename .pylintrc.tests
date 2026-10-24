@@ -1,0 +1,24 @@
+# Test-tree standard. Same rule set as `.pylintrc`, plus three messages that pytest's own
+# design makes meaningless here. Nothing else is exempt: naming, unused variables, exception
+# handling, abstract-class instantiation and the rest are still checked and still fixed.
+#
+# An inline `# pylint: disable` remains unacceptable (AGENTS.md); this file is the one place
+# the exception is written down, with the reason.
+
+[MAIN]
+init-hook="import sys; sys.path.insert(0, 'backend'); sys.path.insert(0, 'tests/unit')"
+
+[MESSAGES CONTROL]
+# Inherited product list, then the three pytest idioms:
+#   W0621 redefined-outer-name — a fixture is requested BY NAME, so the test parameter and the
+#          module-level fixture function must be the same name. Renaming either breaks collection.
+#   W0613 unused-argument — an autouse or requested fixture's argument IS the use: asking for it
+#          runs its setup/teardown (`clean_globals`, `seeded_logins`). Prefixing it would stop
+#          pytest from injecting it.
+#   W0212 protected-access — these are white-box assertions on purpose. Half this suite exists to
+#          watch a private field (`store._conn`, `canvas._nodeEl`, `execution_state`), because the
+#          public surface is exactly what is being questioned.
+disable=C0114,C0115,C0116,C0302,R0902,R0904,R0903,R0911,R0912,R0913,R0914,R0915,R0917,R0801,W0718,W0621,W0613,W0212
+
+[FORMAT]
+max-line-length=120

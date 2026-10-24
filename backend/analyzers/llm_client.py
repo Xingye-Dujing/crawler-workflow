@@ -631,9 +631,13 @@ def run_llm_rows(
         """Drain a batch: (future, row_index, text_hash) triples, finish order."""
         nonlocal failures
         futures = [f for f, _i, _h in pending]
-        meta = {id(f): (i, h) for f, i, h in pending}
+        # Only the hash travels with the future: the row index the answer carries (``got_idx``
+        # below) is the one ``_call_row`` was submitted with, so the table's own index is the
+        # authority and the pending slot would only duplicate it. The hash is the fallback for
+        # an answer that came back without one.
+        hashes = {id(f): h for f, _i, h in pending}
         for fut in as_completed(futures):
-            idx, thash = meta[id(fut)]
+            thash = hashes[id(fut)]
             try:
                 got_idx, got_hash, result = fut.result()
                 _complete(got_idx, got_hash or thash, result)
@@ -867,7 +871,9 @@ def run_llm_dataframe(
             cancel_event=cfg.get('cancel_event'),
             batch_size=max(1, int(cfg.get('batch_size') or 10)),
             workers=max(1, int(cfg.get('workers') or 1)),
-            log=lambda msg: logger.info(msg),
+            # ``run_llm_rows`` calls ``log`` with exactly the one message it builds, so the
+            # logger's own method is the callback — no wrapper to keep in step with it.
+            log=logger.info,
             label=label,
         )
     except LLMError as e:

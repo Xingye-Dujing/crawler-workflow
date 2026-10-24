@@ -204,8 +204,6 @@ class TestVariationView:
         """A node that moved in one pair and not in the other is still a mover; keeping only
         nodes that moved repeatedly would quietly turn the figure into a story about the
         persistent nodes."""
-        import pandas as pd
-
         frame = pd.DataFrame(
             {
                 '节点': ['甲', '甲', '丙'],
@@ -223,8 +221,6 @@ class TestVariationView:
         assert '丙' not in option['xAxis']['data']
 
     def test_the_column_is_capped_and_the_cap_names_itself(self):
-        import pandas as pd
-
         from services.chart_contracts import VARIATION_ROW_LIMIT
 
         rows = [
@@ -246,8 +242,6 @@ class TestVariationView:
         assert option['yAxis']['data'][0] == '词0'
 
     def test_a_table_with_no_scored_move_refuses_by_name(self):
-        import pandas as pd
-
         empty = pd.DataFrame(
             {
                 '节点': ['甲'],

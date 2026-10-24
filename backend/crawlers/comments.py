@@ -623,7 +623,6 @@ return (function () {
         (measured: 13-21 ``<article>`` nodes on screen while 139 distinct replies
         passed through in eight scrolls).
         """
-        from .engine import feed
         from .twitter import EXTRACT_CARD_JS, WINDOW_LINKS_JS, TwitterCrawler, tweet_id_of
 
         root = tweet_id_of(url)
@@ -645,7 +644,10 @@ return (function () {
         rows: list[dict] = []
         seen: set[str] = set()
 
-        def scrape(card, index):
+        def scrape(card, _index):
+            # ``_index`` is the walk's screen slot, fixed by ``feed.walk_feed``'s
+            # ``scrape(card, index)`` contract; a reply's identity is its own 评论ID, so the
+            # position the card sat at in this round says nothing about it.
             try:
                 data = self.driver.execute_script(EXTRACT_CARD_JS, card)
             except (StaleElementReferenceException, JavascriptException):
@@ -667,7 +669,7 @@ return (function () {
             cards_of,
             scrape,
             keep,
-            scroll=lambda: self._scroll_replies(),
+            scroll=self._scroll_replies,
             target=limit or math.inf,
             collected=lambda: len(rows),
             # Same rule as the timeline: the reply list recycles its nodes, so the

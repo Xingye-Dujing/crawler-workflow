@@ -29,18 +29,23 @@ from utils.helpers import as_bool
 from utils.helpers import json_safe_records as _json_safe_records
 
 
-def execute_name_node(node: dict) -> list:
+def execute_name_node(_node: dict) -> list:
     """The name node is metadata, not data: its label was already lifted into
     ``workflow_name`` before the run started (so the history panel can group by
     it). It produces no rows — downstream source/upload nodes read nothing
-    from their inputs, which is exactly why the node must connect to one."""
+    from their inputs, which is exactly why the node must connect to one.
+
+    ``_node`` is the dispatch's node dict, read by nothing here: every executor is called with
+    it, and this one has no parameter to honour.
+    """
     return []
 
 
-def execute_compile_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
-    """Compile node: read the LaTeX one or more ``visualize`` parents produced — from their DICT results in
-    ``upstream``, because a visualize emits no rows so ``current_input`` is empty here — assemble it into
-    ONE document, and compile it to a staged PDF with the user's MiKTeX.
+def execute_compile_node(node: dict, _current_input: list, upstream: list = None, ctx: dict = None):
+    """Compile node: read the LaTeX one or more ``visualize`` parents produced — from their DICT
+    results in ``upstream``, because a visualize emits no rows so ``_current_input`` arrives empty
+    and is read by nothing — assemble it into ONE document, and compile it to a staged PDF with
+    the user's MiKTeX.
 
     ``emit_latex``/``emit_latex_table`` already guarantee a source exists (``validate`` refuses a both-off
     visualize upstream before a run); if nothing arrives anyway — a parent that failed — refuse BY NAME and
@@ -201,7 +206,7 @@ def execute_resume_node(node: dict, ctx: dict):
     return rows
 
 
-def execute_upload_node(node: dict, headless: bool = True):
+def execute_upload_node(node: dict):
     """Upload node — the one place a file can enter a workflow.
 
     It publishes a stored file (``data/datasets.db``) as ordinary rows, so
@@ -373,10 +378,10 @@ def _watch_totals(diff: dict | None) -> dict:
     }
 
 
-def execute_fuse_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
+def execute_fuse_node(node: dict, _current_input: list, upstream: list = None, ctx: dict = None):
     """Fusion node: several source tables in, ONE normalized record table out.
 
-    It reads ``upstream`` rather than ``current_input`` on purpose: the engine's fan-in merge has
+    It reads ``upstream`` rather than ``_current_input`` on purpose: the engine's fan-in merge has
     already flattened the parents into one row list and lost which table each row came from, and
     the whole point of this node is that a term carries its source. The output is a plain row
     table in the canonical record shape, so any ``biblio`` node downstream needs no remapping.

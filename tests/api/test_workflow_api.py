@@ -772,7 +772,9 @@ class _ScriptedCrawler:
     boom = False
 
     def __init__(self, *args, **kwargs):
-        pass
+        # The executor installs its sink through ``set_sink``; declaring the slot here keeps
+        # ``search`` honest when a test path never reaches that call.
+        self._sink = None
 
     def set_sink(self, sink):
         self._sink = sink
@@ -1605,6 +1607,7 @@ class TestConsoleReadabilityRegression:
 
             def __init__(self, *a, **k):
                 self.driver = None
+                self._s = None
 
             def set_sink(self, s):
                 self._s = s
@@ -1876,7 +1879,7 @@ class TestACommentNodeHonoursHeadless:
         logs = []
         monkeypatch.setattr(app_module, 'get_crawler', _make)
         monkeypatch.setattr(comments_module, 'CommentSession', _FakeSession)
-        monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+        monkeypatch.setattr(app_module, 'add_log', logs.append)
         monkeypatch.setitem(app_module.execution_state, 'running', True)
         node = {
             'id': 'node-1',

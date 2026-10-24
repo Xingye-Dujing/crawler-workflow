@@ -395,7 +395,7 @@ class TestCommentRows:
     def test_two_comments_become_two_rows(self):
         rows = parse_youtube_comments(self.payload(), 'https://www.youtube.com/watch?v=9Hku_7e-JSk')
         assert len(rows) == 2
-        first, second = rows
+        first = rows[0]
         assert first['平台'] == 'youtube'
         assert first['评论者'] == '@yunguchaxiang'
         assert first['评论者主页'] == 'https://www.youtube.com/@yunguchaxiang'

@@ -242,7 +242,7 @@ def test_wait_for_pays_no_time_when_the_content_is_already_there(monkeypatch):
     from crawlers.engine import feed as feed_module
 
     slept = []
-    monkeypatch.setattr(feed_module.time, 'sleep', lambda s: slept.append(s))
+    monkeypatch.setattr(feed_module.time, 'sleep', slept.append)
     assert wait_for(lambda: 9, 1) == 9
     assert slept == []
 

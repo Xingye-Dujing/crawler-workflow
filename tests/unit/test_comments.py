@@ -38,6 +38,10 @@ class El:
         self.text = text
         self._attrs = attrs or {}
         self._kids = kids or {}
+        # Declared here so the click below is a write to a known field: tests read it with
+        # ``getattr(el, 'clicked', False)``, and an attribute that only exists after a click is
+        # how a double silently stops proving that anything was clicked.
+        self.clicked = False
 
     def get_attribute(self, name):
         return self._attrs.get(name, '')

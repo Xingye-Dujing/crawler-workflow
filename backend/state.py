@@ -102,11 +102,18 @@ execution_state: dict = {
     'cookie_expired': False,
 }
 
+#: One parked Run request, in the shape ``app._begin_run`` re-dials it: the payload the
+#: browser sent, the language to answer in, and the identity the queue lists and mirrors.
+#: Named so the queue and its disk mirror agree on one shape instead of each writing
+#: ``dict`` and letting every reader guess the keys.
+QueueEntry = dict
+
+
 #: Queued requests live in memory only. A restart drops them, which is the honest
 #: behaviour for a list of intentions nobody is here to confirm. The queue is guarded by
 #: app's `_queue_lock`; the list itself is only ever appended to / slice-cleared, never
 #: rebound.
-_RUN_QUEUE: list = []
+_RUN_QUEUE: list[QueueEntry] = []
 
 #: Read-through cache of loaded datasets. The store is the source of truth, so anything
 #: registered days ago still resolves even after this empties; entries are inserted, popped

@@ -47,7 +47,7 @@ class TestBatching:
         return w, parts, info
 
     def test_parts_visible_mid_run_and_merged_at_end(self, tmp_path):
-        _, parts, info = self._two_batches(tmp_path)
+        _, _parts, info = self._two_batches(tmp_path)
         assert info['parts'] == 2 and info['removed_parts'] == 0 and info['rows'] == 12
         frame = pd.read_csv(info['path'])
         assert len(frame) == 12 and list(frame.columns) == ['评论者', '评论内容', '文章URL']

@@ -1023,7 +1023,7 @@ def _patch_harness(monkeypatch, seen, fail_url=None):
     monkeypatch.setattr(
         hongguo_module.HongguoCrawler,
         'browserless_comment_harness',
-        staticmethod(lambda **kw: _Harness(**kw)),
+        staticmethod(_Harness),
     )
 
 
@@ -1095,7 +1095,7 @@ def test_the_fed_column_hands_the_crawler_its_list_in_order_with_blanks_and_dups
     seen = []
     _patch_session(monkeypatch, seen)
     logs = []
-    monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+    monkeypatch.setattr(app_module, 'add_log', logs.append)
     u1 = _SAMPLES[('urls', 'zhihu')]
     u2 = u1 + '2'
     node = _comments_feed_node('zhihu')
@@ -1266,7 +1266,7 @@ def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monk
     seen: list = []
     _patch_session(monkeypatch, seen)
     logs: list = []
-    monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+    monkeypatch.setattr(app_module, 'add_log', logs.append)
 
     first = app_module._execute_source_node(node, headless=True, ctx=ctx)
     assert len(first) == 1, f'the first pass must file the comment before a repeat means anything: {first}'

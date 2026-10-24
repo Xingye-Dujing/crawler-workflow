@@ -485,7 +485,7 @@ class VisualizationService:
     # ── Shared data prep ────────────────────────────────────────
 
     @staticmethod
-    def _require_columns(df: pd.DataFrame, *names):
+    def require_columns(df: pd.DataFrame, *names):
         """Every builder indexes the frame by user-configured field names.
 
         A renamed or mistyped column must say so: a bare ``KeyError: 'nope'``
@@ -497,7 +497,7 @@ class VisualizationService:
                 raise ChartConfigError(f'Field not found in the data: {name}')
 
     @staticmethod
-    def _aggregate(df: pd.DataFrame, x: str, y: str = None, agg: str = 'sum'):
+    def aggregate(df: pd.DataFrame, x: str, y: str = None, agg: str = 'sum'):
         """Group by *x* and aggregate *y* (or count rows if y is None).
 
         The category order is the TABLE's, not an alphabetical one. This step is the last chance to
@@ -506,7 +506,7 @@ class VisualizationService:
         group that appears again later keeps its first position (`sort=False`), because "where the
         user put it" is the only ordering this layer is allowed to trust.
         """
-        VisualizationService._require_columns(df, x, y)
+        VisualizationService.require_columns(df, x, y)
         if y:
             numeric = pd.to_numeric(df[y], errors='coerce')
             grouped = numeric.groupby(df[x], sort=False).agg(agg)
@@ -705,7 +705,7 @@ class VisualizationService:
         if chart_type == 'pie':
             if not x:
                 raise ChartConfigError('Pie chart requires a category field (x)')
-            labels, values = cls._aggregate(df, x, y, agg)
+            labels, values = cls.aggregate(df, x, y, agg)
             base['tooltip']['formatter'] = '{b}: {c} ({d}%)'
             base['legend'] = {
                 'data': labels,
@@ -751,7 +751,7 @@ class VisualizationService:
         if chart_type == 'scatter':
             if not x or not y:
                 raise ChartConfigError('Scatter chart requires both x and y fields')
-            cls._require_columns(df, x, y)
+            cls.require_columns(df, x, y)
             xs = pd.to_numeric(df[x], errors='coerce')
             ys = pd.to_numeric(df[y], errors='coerce')
             base['grid'] = dict(_GRID)
@@ -788,7 +788,7 @@ class VisualizationService:
         if chart_type == 'histogram':
             if not x:
                 raise ChartConfigError('Histogram requires a numeric field (x)')
-            cls._require_columns(df, x)
+            cls.require_columns(df, x)
             values = pd.to_numeric(df[x], errors='coerce').dropna()
             counts, edges = _histogram_bins(values)
             labels_bin = [f'{e:.1f}' for e in edges[:-1]]
@@ -827,11 +827,11 @@ class VisualizationService:
             # CATEGORY column x as numeric when a typo'd ``y`` was absent, producing a plausible
             # all-zero box whose axis was a phase name — the figure lied.
             if y:
-                VisualizationService._require_columns(df, y)
+                VisualizationService.require_columns(df, y)
                 # Grouped box plot: x = category, y = numeric value
                 if not x:
                     raise ChartConfigError('Box plot requires a category field (x) for grouping')
-                VisualizationService._require_columns(df, x)
+                VisualizationService.require_columns(df, x)
                 groups = [
                     (_localize_label(name), pd.to_numeric(group[y], errors='coerce').dropna())
                     for name, group in df.groupby(x, sort=False)
@@ -843,7 +843,7 @@ class VisualizationService:
                     for v in vals.tolist():
                         scatter_data.append([i, v])
             elif x:
-                VisualizationService._require_columns(df, x)
+                VisualizationService.require_columns(df, x)
                 # Single box plot: x = numeric value (backward compat)
                 values = pd.to_numeric(df[x], errors='coerce').dropna()
                 stats = _box_stats(values)
@@ -888,7 +888,7 @@ class VisualizationService:
         if chart_type == 'heatmap':
             if not x or not y:
                 raise ChartConfigError('Heatmap requires two category fields (x and y)')
-            xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg)
+            xcats, ycats, matrix = cls.pivot(df, x, y, value_field, agg)
             # Bounds come from the usable numbers only: an all-missing cell makes
             # the aggregate NaN, and NaN bounds would leave the colour scale blank.
             vals = _finite(v for row in matrix for v in row)
@@ -913,7 +913,7 @@ class VisualizationService:
         if chart_type == 'sankey':
             if not x or not y:
                 raise ChartConfigError('Sankey diagram requires a source field (x) and a target field (y)')
-            nodes, links = cls._sankey_links(df, x, y, value_field, agg)
+            nodes, links = cls.sankey_links(df, x, y, value_field, agg)
             base['tooltip']['formatter'] = '<b>{b}</b><br/>{c}'
             base['series'] = [
                 {
@@ -946,7 +946,7 @@ class VisualizationService:
         if chart_type == 'network':
             if not x or not y:
                 raise ChartConfigError('Network graph requires a source field (x) and a target field (y)')
-            nodes, links = cls._sankey_links(df, x, y, value_field, agg)
+            nodes, links = cls.sankey_links(df, x, y, value_field, agg)
             if not links:
                 # The sankey would draw an empty frame and look like a finished figure; a graph
                 # with no edge is not "a sparse relationship network", it is nothing measured.
@@ -1021,7 +1021,7 @@ class VisualizationService:
             if kwargs.get('tokenize'):
                 labels, values = cls.tokenize_frequency(df, x)
             else:
-                labels, values = cls._aggregate(df, x, value_field, agg)
+                labels, values = cls.aggregate(df, x, value_field, agg)
             style_name = kwargs.get('wordcloud_style', 'vibrant')
             # Deliberate fallback, unlike the parameters that choose *data* or *cost*:
             # a word cloud's palette is decoration, and an unknown name (a preset this
@@ -1063,7 +1063,7 @@ class VisualizationService:
         if chart_type == 'map':
             if not x:
                 raise ChartConfigError('Map chart requires a region-name field (x)')
-            labels, values = cls._aggregate(df, x, value_field, agg)
+            labels, values = cls.aggregate(df, x, value_field, agg)
             # NaN would poison the colour scale's upper bound.
             max_val = max(_finite(values) or [1]) or 1
             base['tooltip']['formatter'] = '<b>{b}</b><br/>{c}'
@@ -1104,23 +1104,25 @@ class VisualizationService:
         if chart_type == 'topic_map':
             if not x or not y:
                 raise ChartConfigError('Intertopic map needs both coordinate fields (x = PC1, y = PC2)')
-            VisualizationService._require_columns(df, x, y)
+            VisualizationService.require_columns(df, x, y)
             # ``x``/``y`` are refused by name above; the label and size fields must hold the same
             # line. A field the user TYPED into a box but that the table does not hold used to
             # read as "no label", so every bubble came out with an empty name at the floor radius
             # and the figure looked like a valid map of nothing — the rename-on-one-side / silent-
             # empty-figure this project bans. A blank box is genuinely "no labels" and stays.
             if label_field:
-                VisualizationService._require_columns(df, label_field)
+                VisualizationService.require_columns(df, label_field)
             if value_field:
-                VisualizationService._require_columns(df, value_field)
+                VisualizationService.require_columns(df, value_field)
             has_label = bool(label_field)
             has_size = bool(value_field)
             first = pd.to_numeric(df[x], errors='coerce').tolist()
             second = pd.to_numeric(df[y], errors='coerce').tolist()
             labels = [_localize_label(name) for name in (df[label_field].tolist() if has_label else [''] * len(df))]
             sizes = pd.to_numeric(df[value_field], errors='coerce').tolist() if has_size else [None] * len(df)
-            biggest = max((float(size) for size in sizes if size == size and size is not None), default=0.0)
+            # A coerced cell is NaN and the unsized branch fills None: pd.notna is the one test
+            # that means "there is a real bubble size here".
+            biggest = max((float(size) for size in sizes if pd.notna(size)), default=0.0)
             points = []
             for position, name in enumerate(labels):
                 size = sizes[position]
@@ -1128,11 +1130,7 @@ class VisualizationService:
                 # twice the share reads as four times the share, which is the mistake the
                 # original figure's square root is there to avoid. The floor is what keeps a
                 # zero-share (or unsized) topic visible rather than absent from the map.
-                radius = (
-                    10.0
-                    if not biggest or size != size or size is None
-                    else max(10.0, 70.0 * (float(size) / biggest) ** 0.5)
-                )
+                radius = 10.0 if not biggest or pd.isna(size) else max(10.0, 70.0 * (float(size) / biggest) ** 0.5)
                 points.append(
                     {
                         'value': [_json_safe(first[position]), _json_safe(second[position])],
@@ -1189,7 +1187,7 @@ class VisualizationService:
                 raise ChartConfigError(
                     'Salient terms chart needs BOTH frequency fields (y = corpus-wide, y2 = within the topic)'
                 )
-            VisualizationService._require_columns(df, x, y, y2)
+            VisualizationService.require_columns(df, x, y, y2)
             terms = [str(name) for name in df[x].tolist()]
             overall = pd.to_numeric(df[y], errors='coerce').tolist()
             within = pd.to_numeric(df[y2], errors='coerce').tolist()
@@ -1238,10 +1236,10 @@ class VisualizationService:
             # Display names only; the grouping below still reads the raw columns.
             left_name = _localize_label(y) if y else f'{t("chart.count")}（{_localize_label(x)}）'
             y2_name = _localize_label(y2)
-            labels, left = cls._aggregate(df, x, y, agg)
+            labels, left = cls.aggregate(df, x, y, agg)
             # Both series group by the SAME x, so they share the category axis by
             # construction; only the second series' values are wanted here.
-            _, right = cls._aggregate(df, x, y2, agg2 or agg)
+            _, right = cls.aggregate(df, x, y2, agg2 or agg)
             base['grid'] = {**_GRID, 'right': 60}
             base['legend'] = {'data': [left_name, y2_name], 'top': 28, 'textStyle': _TEXT_STYLE}
             base['xAxis'] = {
@@ -1317,7 +1315,7 @@ class VisualizationService:
                 raise ChartConfigError('stack_pct chart requires stacked fields (stack_fields)')
             # One message shape for a missing column across every chart type, so a wrong field
             # name reads the same whether it is the axis or one of the stacked shares.
-            cls._require_columns(df, x, *stack_fields)
+            cls.require_columns(df, x, *stack_fields)
             grouped = df.groupby(x, sort=False)
             keys = list(grouped.groups.keys())
             labels = [str(k) for k in keys]
@@ -1346,7 +1344,7 @@ class VisualizationService:
         # ── Bar / Line ──
         if not x:
             raise ChartConfigError(f'{chart_type} chart requires a category field (x)')
-        labels, values = cls._aggregate(df, x, y, agg)
+        labels, values = cls.aggregate(df, x, y, agg)
         base['grid'] = dict(_GRID)
         base['xAxis'] = {
             'type': 'category',
@@ -1423,7 +1421,7 @@ class VisualizationService:
         this used to carry: a cloud drawn from a different vocabulary than 表 1's 特征词 is two
         measurements of the same corpus that a reader cannot put side by side.
         """
-        VisualizationService._require_columns(df, column)
+        VisualizationService.require_columns(df, column)
         from analyzers.stopwords import is_meaningful
 
         texts = df[column].dropna().astype(str).tolist()
@@ -1511,16 +1509,16 @@ class VisualizationService:
         chose the same label), aligned by ``id_col`` across the tidy multi-model table.
 
         The model order is the TABLE's first-appearance order (never alphabetical), for the
-        same reason `_aggregate`/`_pivot` keep it: the canvas put the models somewhere, and
+        same reason `aggregate`/`pivot` keep it: the canvas put the models somewhere, and
         an off-diagonal cell is read against that axis. A pair is scored only over rows where
         BOTH models answered (a row one model left blank cannot be an agreement or a
         disagreement); the diagonal is 100 by definition. Fewer than two models refuses — a
         1×1 square is not a comparison and would hide that the node ran one model.
         """
-        cls._require_columns(df, model_col, id_col)
+        cls.require_columns(df, model_col, id_col)
         if not label_col:
             raise ChartConfigError('model_agreement needs the label column (agreement_label_field)')
-        cls._require_columns(df, label_col)
+        cls.require_columns(df, label_col)
         order = []
         for value in df[model_col].astype(str):
             if value not in order:
@@ -1555,15 +1553,15 @@ class VisualizationService:
         return cats, matrix
 
     @staticmethod
-    def _pivot(df: pd.DataFrame, x: str, y: str, value_field: str = None, agg: str = 'count'):
+    def pivot(df: pd.DataFrame, x: str, y: str, value_field: str = None, agg: str = 'count'):
         """Build a y-by-x matrix for a heatmap: counts co-occurrences of
         (x, y) pairs, or aggregates value_field over each pair if given.
 
-        Both axes keep the table's order, for the same reason `_aggregate` does — `pivot_table`
+        Both axes keep the table's order, for the same reason `aggregate` does — `pivot_table`
         sorts its index and columns, which would put a heatmap's phases in code-point order and
         make the picture disagree with the 表 it was built from.
         """
-        VisualizationService._require_columns(df, x, y)
+        VisualizationService.require_columns(df, x, y)
         work = df[[x, y]].copy()
         xcats = [str(value) for value in pd.unique(df[x].astype(str))]
         ycats = [str(value) for value in pd.unique(df[y].astype(str))]
@@ -1572,7 +1570,7 @@ class VisualizationService:
         if value_field:
             # A value field named but absent is refused by name, not silently replaced by a row
             # count — a heatmap the user asked to aggregate by 「分值」 that quietly showed 条数 lies.
-            VisualizationService._require_columns(df, value_field)
+            VisualizationService.require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
             grouped = work.groupby(['_yc', '_xc'], sort=False)['_v'].agg(agg)
         else:
@@ -1585,14 +1583,14 @@ class VisualizationService:
         return [_localize_label(value) for value in xcats], [_localize_label(value) for value in ycats], matrix
 
     @staticmethod
-    def _sankey_links(df: pd.DataFrame, source: str, target: str, value_field: str = None, agg: str = 'count'):
+    def sankey_links(df: pd.DataFrame, source: str, target: str, value_field: str = None, agg: str = 'count'):
         """Build ECharts sankey nodes+links from a source/target column pair
         (e.g. platform -> emotion), weighted by row count or value_field."""
-        VisualizationService._require_columns(df, source, target)
+        VisualizationService.require_columns(df, source, target)
         work = df[[source, target]].copy()
         work.columns = ['_s', '_t']
         if value_field:
-            VisualizationService._require_columns(df, value_field)
+            VisualizationService.require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
             grouped = work.groupby(['_s', '_t'])['_v'].agg(agg).reset_index()
         else:
@@ -1682,12 +1680,12 @@ class VisualizationService:
         elif chart_type in ('pie', 'histogram', 'box', 'line', 'bar', 'stack_pct') and not x:
             raise ChartConfigError(f'{chart_type} chart requires a field (x)')
         # Every branch below indexes the frame by the configured field names.
-        cls._require_columns(df, x, y)
+        cls.require_columns(df, x, y)
 
         fig, ax = plt.subplots(figsize=(7, 4.2), dpi=130)
         try:
             if chart_type == 'pie':
-                labels, values = cls._aggregate(df, x, y, agg)
+                labels, values = cls.aggregate(df, x, y, agg)
                 ax.pie(values, labels=labels, autopct='%1.1f%%', textprops={'fontsize': 8})
             elif chart_type == 'scatter':
                 ax.scatter(pd.to_numeric(df[x], errors='coerce'), pd.to_numeric(df[y], errors='coerce'), s=18)
@@ -1700,7 +1698,7 @@ class VisualizationService:
             elif chart_type == 'box':
                 if y:
                     # One grouping, ``sort=False``: a box must sit under the same phase order the
-                    # bar/_aggregate paths use, not pandas' default code-point sort (which put
+                    # bar/aggregate paths use, not pandas' default code-point sort (which put
                     # 二次爆发期 before 发酵期). One pass keeps labels and data aligned by construction.
                     grouped = df.groupby(x, sort=False)
                     groups = [pd.to_numeric(g[y], errors='coerce').dropna().values for _, g in grouped]
@@ -1710,7 +1708,7 @@ class VisualizationService:
                 else:
                     _boxplot(ax, pd.to_numeric(df[x], errors='coerce').dropna(), [x])
             elif chart_type == 'heatmap':
-                xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg if value_field else 'count')
+                xcats, ycats, matrix = cls.pivot(df, x, y, value_field, agg if value_field else 'count')
                 im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto')
                 ax.set_xticks(range(len(xcats)))
                 ax.set_xticklabels(xcats, rotation=45, ha='right', fontsize=8)
@@ -1718,14 +1716,14 @@ class VisualizationService:
                 ax.set_yticklabels(ycats, fontsize=8)
                 fig.colorbar(im, ax=ax)
             elif chart_type == 'line':
-                labels, values = cls._aggregate(df, x, y, agg)
+                labels, values = cls.aggregate(df, x, y, agg)
                 ax.plot(labels, values, marker='o')
                 ax.tick_params(axis='x', rotation=45)
             elif chart_type == 'stack_pct':
                 fields = [s.strip() for s in str(stack_fields or '').replace('，', ',').split(',') if s.strip()]
                 if not fields:
                     raise ChartConfigError('stack_pct chart requires stacked fields (stack_fields)')
-                cls._require_columns(df, *fields)
+                cls.require_columns(df, *fields)
                 grouped = df.groupby(x, sort=False)
                 keys = list(grouped.groups.keys())
                 cats = [str(k) for k in keys]
@@ -1747,7 +1745,7 @@ class VisualizationService:
                 ax.legend(frameon=False, fontsize=8, ncol=len(fields))
                 ax.tick_params(axis='x', rotation=45)
             else:  # bar
-                labels, values = cls._aggregate(df, x, y, agg)
+                labels, values = cls.aggregate(df, x, y, agg)
                 ax.bar(labels, values)
                 ax.tick_params(axis='x', rotation=45)
 

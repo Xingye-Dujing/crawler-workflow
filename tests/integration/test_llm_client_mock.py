@@ -45,7 +45,7 @@ def no_sleep(monkeypatch):
     """Retry paths sleep — remove the delay but count the calls so tests can
     assert backoff actually happened."""
     calls = []
-    monkeypatch.setattr(lc.time, 'sleep', lambda s: calls.append(s))
+    monkeypatch.setattr(lc.time, 'sleep', calls.append)
     return calls
 
 
@@ -303,7 +303,7 @@ class TestInterruptibleBackoff:
 
     def test_sleep_uses_the_clock_when_nothing_can_cancel_it(self, monkeypatch):
         slept = []
-        monkeypatch.setattr(lc.time, 'sleep', lambda s: slept.append(s))
+        monkeypatch.setattr(lc.time, 'sleep', slept.append)
         LLMClient()._sleep(1.25)
         assert slept == [1.25]
 

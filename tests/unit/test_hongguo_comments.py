@@ -260,7 +260,7 @@ class TestReplyShape:
             ],
             total=4,
         )
-        rows, dropped, total, has_more = hg_comment_rows(
+        rows, dropped, _total, _has_more = hg_comment_rows(
             payload, ARTICLE, first_floor=9, parent_floor=2, drama_title='某剧', episode_index=1
         )
         assert dropped == 0, 'a real child row is not a danmaku prompt'

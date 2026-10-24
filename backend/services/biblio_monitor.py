@@ -110,7 +110,7 @@ def watch(
     )
 
     diff = None if baseline is None else compare_snapshots(biblio.get_snapshot(baseline['snapshot_id']), snapshot)
-    watch_rows = _rows_of(diff, baseline, snapshot, project_name)
+    watch_rows = _rows_of(diff, snapshot, project_name)
     path = _write(watch_rows, export_dir, f'{workflow_name or "biblio"}-{node_id}-watch.csv')
     notes.extend(_narrate(diff, baseline, snapshot, project_name))
     return {
@@ -133,7 +133,10 @@ def _brief(snapshot: dict) -> dict:
     }
 
 
-def _rows_of(diff: dict | None, baseline: dict | None, snapshot: dict, project_name: str) -> list[dict]:
+def _rows_of(diff: dict | None, snapshot: dict, project_name: str) -> list[dict]:
+    # ``baseline`` is deliberately not a parameter (``_narrate`` beside this does read it): every
+    # 前值/后值 pair a row carries already came out of the comparison, so the table needs nothing
+    # but the diff and this capture.
     if diff is None:
         return [
             {

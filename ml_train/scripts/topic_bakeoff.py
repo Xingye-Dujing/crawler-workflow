@@ -29,7 +29,10 @@ def tokens(texts, jieba):
     return [' '.join(w.strip() for w in jieba.cut(str(t)) if len(w.strip()) >= 2) for t in texts]
 
 
-def npmi(top_words, binary, index, n_docs):
+def npmi(top_words, binary, index):
+    # No document count: every p below is a mean over the binary matrix's own rows, so the
+    # corpus size is already in it (and an unused parameter here would read like a normalisation
+    # the formula skipped).
     idx = [index[w] for w in top_words if w in index]
     if len(idx) < 2:
         return None
@@ -45,8 +48,8 @@ def npmi(top_words, binary, index, n_docs):
     return float(np.mean(vals)) if vals else None
 
 
-def avg_coherence(groups, binary, index, n_docs):
-    sc = [c for c in (npmi(g, binary, index, n_docs) for g in groups) if c is not None]
+def avg_coherence(groups, binary, index):
+    sc = [c for c in (npmi(g, binary, index) for g in groups) if c is not None]
     return float(np.mean(sc)) if sc else None
 
 
@@ -74,7 +77,6 @@ def main():
     names = cv.get_feature_names_out()
     index = {w: i for i, w in enumerate(names)}
     binary = (counts.toarray() > 0).astype(np.int8)
-    n_docs = counts.shape[0]
 
     out = {'corpus': a.corpus, 'n_texts': len(texts), 'k': a.k, 'emb_model': a.emb}
 
@@ -84,7 +86,7 @@ def main():
     out['lda_seconds'] = round(time.perf_counter() - t0, 2)
     out['lda_topics'] = int(a.k)
     out['lda_coherence'] = avg_coherence(
-        [list(names[c.argsort()[::-1][: a.topw]]) for c in lda.components_], binary, index, n_docs
+        [list(names[c.argsort()[::-1][: a.topw]]) for c in lda.components_], binary, index
     )
 
     # 2) sentence-transformer embeddings + KMeans, timed (embed time separate from cluster).
@@ -109,24 +111,30 @@ def main():
         centroid = np.asarray(tf[m].sum(axis=0)).ravel()
         groups.append(list(tn[centroid.argsort()[::-1][: a.topw]]))
     out['embed_topics'] = len(groups)
-    out['embed_coherence'] = avg_coherence(groups, binary, index, n_docs)
+    out['embed_coherence'] = avg_coherence(groups, binary, index)
 
     # 3) BERTopic on the SAME embeddings (UMAP+HDBSCAN+c-TF-IDF), timed.
     try:
         from bertopic import BERTopic
 
         t0 = time.perf_counter()
+        # ``vectorizer_model`` is the keyword BERTopic takes (0.17.x); ``vectorizer=`` was never a
+        # parameter of its constructor, so the call raised TypeError on every run and the except
+        # below filed it as ``bertopic_error`` — the bake-off scored two methods and printed a
+        # BERTopic row that had never actually been computed. An explicit CountVectorizer is also
+        # how the same vocabulary floor (min_df=2, 4 000 terms) reaches c-TF-IDF: handing BERTopic
+        # a vectorizer skips its English ``stop_words`` default, which is right for jieba tokens.
         topic_model = BERTopic(
             nr_topics=a.k,
             verbose=False,
-            vectorizer=CountVectorizer(min_df=2, max_features=4000),
+            vectorizer_model=CountVectorizer(min_df=2, max_features=4000),
         )
         _docs, _topics = topic_model.fit_transform(texts_tok, embeddings=vectors)
         out['bertopic_seconds'] = round(time.perf_counter() - t0, 2)
         reps = topic_model.get_topics()
         bgroups = [list(w[: a.topw]) for t, w in reps.items() if t != -1]
         out['bertopic_topics'] = len(bgroups)
-        out['bertopic_coherence'] = avg_coherence(bgroups, binary, index, n_docs)
+        out['bertopic_coherence'] = avg_coherence(bgroups, binary, index)
     except Exception as e:  # noqa: BLE001 - bake-off script: report, do not crash the sweep
         out['bertopic_error'] = str(e)[:200]
 

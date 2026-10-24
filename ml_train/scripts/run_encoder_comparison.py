@@ -57,7 +57,10 @@ def run_one(name, extra):
     os.makedirs(out_dir, exist_ok=True)
     cmd = [sys.executable, TRAIN, '--no-save', '--out', out_dir, *extra]
     print(f'\n=== {name}: {" ".join(extra)} ===', flush=True)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # ``check=False``: one configuration crashing is one row of the comparison table, not the end
+    # of the sweep. The failure is read out of the child's own output below (rc lands in the
+    # error entry when no RESULT_JSON came back).
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     log_path = os.path.join(LOGS, f'cmp_{name}.log')
     with open(log_path, 'w', encoding='utf-8') as fh:
         fh.write(proc.stdout or '')

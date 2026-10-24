@@ -1,0 +1,24 @@
+# Standard for `backend/test_*.py`: the manual measurement scripts AGENTS.md keeps out of
+# pytest ("the home for a one-off measurement"). They are run directly, once, against a real
+# site or browser, and their shape is what makes them usable.
+
+[MAIN]
+init-hook="import sys; sys.path.insert(0, 'backend'); sys.path.insert(0, 'tests/unit')"
+
+[MESSAGES CONTROL]
+# Inherited product list, then the two things a standalone script must do:
+#   C0413 wrong-import-position — the script puts `backend` on sys.path BEFORE it can import
+#          `config`, `crawlers.*`. Reordering the imports would make it unrunnable as
+#          `python test_douyin_probe.py`, which is its only purpose.
+#   W0603 global-statement — a one-shot probe accumulates counters and the current page at module
+#          scope; passing a mutable context object through every measurement helper would only
+#          obscure what was measured where.
+#   W0212              protected-access. A measurement instrument exists to read the internals a
+#                      public surface does not expose — `backend/test_zhihu_rowshape.py` calls the
+#                      per-card readers (`_get_vote_count`, `_expand_body`) because the point is to
+#                      measure one card, not to run a crawl. Promoting seven internal readers to
+#                      public API to satisfy a probe would widen the crawler for no user reason.
+disable=C0114,C0115,C0116,C0302,R0902,R0904,R0903,R0911,R0912,R0913,R0914,R0915,R0917,R0801,W0718,W0603,C0413,W0212
+
+[FORMAT]
+max-line-length=120

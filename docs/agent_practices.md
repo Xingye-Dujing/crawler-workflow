@@ -558,3 +558,50 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   → `build/tmp` and `--no-cache-dir`. Reproduced: index answered 200 in 1.5 s, pip printed one line and never
   returned; with the relocation the same install finished.
 
+## Lint 标准 / Lint standards
+
+### pylint is three tiers, because one honest answer does not fit three kinds of file
+
+Product code takes `.pylintrc`; `tests/` takes `.pylintrc.tests`; the `backend/test_*.py` measurement scripts take
+`.pylintrc.probes`. **Nested config files are ignored by pylint** — measured: a `.pylintrc` in a subdirectory did not
+apply to files under it (the run from the repo root used the root config for both), so each tier is its own
+invocation with an explicit `--rcfile`. `tests/unit/test_lint_gate.py` pins the shape of the exemptions: the pytest
+idioms may not appear in the product list, `C0413` may not either, and `exclude-protected` is a named member, not a
+message.
+
+- **`pylint packaging` is not our folder.** It resolves to the PyPA `packaging` distribution in site-packages, so a
+  CI target spelled as a bare directory name lints a third-party library and passes over our files. The gate lists
+  FILES, and refuses to run on an empty list — a gate that checks nothing is worse than no gate.
+- **Why the test tree is exempt from exactly three messages.** `W0621`: a fixture is requested BY NAME, so the test
+  parameter and the module-level fixture must share it — renaming either stops collection. `W0613`: an autouse or
+  requested fixture's argument IS the use (`clean_globals`, `seeded_logins`). `W0212`: half this suite exists to
+  watch a private field, because the public surface is what is being questioned. Those three are still findings in
+  product code, where the same access means a helper was left private by accident.
+- **`global` in product code is a seam, not a smell — where it is one.** All 14 sites are state a caller rebinds on
+  purpose: the store singletons a conftest points at a tmp data root, `settings_store`'s cache, `state.set_log_sink`,
+  the scheduler's starter and its counters. `W0603` is exempted in `.pylintrc` and `.pylintrc.probes` with that
+  written down, and NOT in `.pylintrc.tests` — a test that rebinds module state is a different problem.
+- **A checker's false positive is usually an imprecise type, and fixing the type is the real fix.**
+  `_RUN_QUEUE: list = []` made every queue subscript an `E1136`; naming the element (`QueueEntry`) plus declaring the
+  local in `_start_next_queued` cleared all ten. `report_service`'s `E1135` survived a `TypedDict`, because pylint
+  traces the returned dict back to the `None` literal in `DEFAULT_OPTIONS`; a frozen `@dataclass` with typed fields
+  is what it can read. `_abort = None` on the crawler class produced `E1102 not-callable` — annotating the contract
+  (`Callable[[], bool] | None`) and reading `self._abort` instead of `getattr(self, '_abort', None)` removed both the
+  error and the defensive lookup. `sys.stdout._original` became `unwrap()` on the tee: a method that answers the
+  question, instead of a caller reaching into someone's private.
+- **`webdriver.Chrome` is invisible to checkers** because `selenium.webdriver`'s exports are lazy (`__getattr__` over
+  a table). Importing `selenium.webdriver.chrome.webdriver.WebDriver` by name removed the only inline
+  `# pylint: disable` in the crawler core. **It also moved a test seam**: `tests/unit/test_driver_options.py` patched
+  `base_module.webdriver.Chrome`, and the suite only complained when it actually ran (11 ERROR, not FAILED, and 53
+  passed hid them). Patch the name the module constructs — and read the whole summary line, not the pass count.
+- **`W1203` cannot be fixed by lazy `%` here.** `tests/unit/test_i18n.py::TestNoHardcodedConsoleText` counts `%s`
+  tokens as untranslated prose, and `t(key) + ': %s'` only trades the finding for `W1201`. The console-level answer
+  is the pattern the rest of the codebase already uses: the reason travels as a named catalogue slot
+  (`t('misc.cookie_save_failed', err=...)`), in both languages.
+- **Unused arguments find real bugs.** `browser_profiles.status(size=False)` was documented twice as skipping the
+  profile walk and never read the flag: `/api/cookies/status` re-walked every profile (measured 236 MB) once per
+  account row. That is what the check is for.
+- **The formatting hook eats an import added before its first use.** `ruff check --fix` deletes the unused import at
+  that moment, so `import math` added one edit early silently disappears (`F821` later). Add the import in the same
+  edit that uses it.
+

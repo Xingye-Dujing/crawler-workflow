@@ -169,7 +169,7 @@ class TestAwaitSearchPage:
     def test_qr_redirect_with_url_still_on_passport_is_not_a_wall(self, make_crawler):
         # The facade in its purest form: the URL says passport, but the feed
         # DOM is already rendered. The old code read the URL first and died.
-        crawler, driver = make_crawler(final_url=PASSPORT, cards=True)
+        crawler, _driver = make_crawler(final_url=PASSPORT, cards=True)
         assert crawler._await_search_page(PASSPORT) is True
         assert crawler.login_wall is False
 
@@ -490,7 +490,7 @@ class TestTheWindowWalkStopsOnAnyRefusal:
     @pytest.fixture
     def make_walk(self, make_crawler, monkeypatch):
         def _make(flag, urls=3):
-            crawler, driver = make_crawler(cards=True)
+            crawler, _driver = make_crawler(cards=True)
             monkeypatch.setattr(Crawler, '_polite_pause', staticmethod(lambda *a: None))
             crawler._build_urls = lambda keyword, start, end: [f'{FEED}&w={i}' for i in range(urls)]
             asked = []

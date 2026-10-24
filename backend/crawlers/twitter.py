@@ -313,7 +313,7 @@ class TwitterCrawler(Crawler):
     #: a row; the row budget is scrolls, not requests.
     SCROLL_STEP = 0.9
 
-    def search(self, keyword: str, target_count: int = 50, **kwargs) -> list[dict]:
+    def search(self, keyword: str, target_count: int = 50, **_kwargs) -> list[dict]:
         """Latest-first keyword search (``f=live``).
 
         ``f=top`` is deliberately not offered as the default: it is a small
@@ -329,7 +329,7 @@ class TwitterCrawler(Crawler):
         logger.info(t('crawl.x.start', kw=keyword, n=target_count))
         return self._walk(url, target_count, keyword=keyword)
 
-    def author(self, author: str, target_count: int = 50, **kwargs) -> list[dict]:
+    def author(self, author: str, target_count: int = 50, **_kwargs) -> list[dict]:
         """One account's own posts (the Posts tab, which is the default)."""
         handle = handle_of(author)
         if not handle:

@@ -614,6 +614,7 @@ _ZH = {
     ),
     'analysis.topic_stage_unused': '阶段「{stage}」的 {topic} 没有分到任何文本（doc_n=0），特征词改用该主题的词分布',
     'analysis.topic_stage_done': '阶段「{stage}」：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}',
+    'analysis.topic_stage_topic_words': '{topic}（{stage}）: {words}',
     # 主题可视化（pyLDAvis 那两张图的数据面）。λ 是「按主题自身概率」还是「按相对全库的溢出」
     # 排序，同一模型会给出两份不同的词表，所以用了哪个值必须随表一起说出来。
     'analysis.topic_map_done': (
@@ -716,6 +717,7 @@ _ZH = {
     'analysis.coherence_range': '主题数扫描的起点不能大于终点：{low} > {high}',
     'analysis.coherence_sampled': '主题数扫描只抽 {used} 篇文本（共 {total} 篇可用），换个样本数字会变',
     'analysis.coherence_capped': '文本只有 {rows} 篇，扫描的终点从 {high} 个主题降到 {rows} 个',
+    'analysis.coherence_row': 'n_topics={topics}  coherence={coherence}  perplexity={perplexity}',
     'analysis.coherence_pairs': (
         '每主题取 {topn} 个词，但这些词没有一对出现在同一篇文本里（跳过 {pairs} 对）：一致性无法测量，只有困惑度可读'
     ),
@@ -1158,8 +1160,8 @@ _ZH = {
     'misc.save_workflow_failed': '保存工作流失败',
     'misc.i18nAudit': '文本目录有问题（不影响运行，但请修复）：{issue}',
     'misc.exportDeleteFailed': '无法删除导出文件 {name}：{err}',
-    'misc.cookie_save_failed': '保存 Cookie 失败',
-    'misc.cookie_gen_failed': '生成 Cookie 失败',
+    'misc.cookie_save_failed': '保存 Cookie 失败: {err}',
+    'misc.cookie_gen_failed': '生成 Cookie 失败: {err}',
     'misc.studio_source_failed': '图表工坊合并载入：来源读取失败',
     'misc.source_probe_failed': '数据源探测失败',
     'misc.studio_saved': '图表工坊已保存 {path}（{bytes} 字节）',
@@ -2415,6 +2417,7 @@ _EN = {
         'so its feature words come from the topic distribution'
     ),
     'analysis.topic_stage_done': 'phase "{stage}": {n} topics over {rows} texts, perplexity {perplexity}',
+    'analysis.topic_stage_topic_words': '{topic} (phase "{stage}"): {words}',
     'analysis.topic_map_done': (
         'intertopic map: {n} topics over {rows} texts, perplexity {perplexity} '
         '(bubble size = topic share; coordinates = MDS of the Jensen-Shannon distance between word distributions)'
@@ -2548,6 +2551,7 @@ _EN = {
     'analysis.coherence_capped': (
         'only {rows} texts are available, so the sweep stops at {rows} topics instead of {high}'
     ),
+    'analysis.coherence_row': 'n_topics={topics}  coherence={coherence}  perplexity={perplexity}',
     'analysis.coherence_pairs': (
         'no pair of the {topn} top words of any topic appears in one text ({pairs} pairs skipped): '
         'coherence is unmeasurable here, only perplexity is readable'
@@ -3045,8 +3049,8 @@ _EN = {
     'misc.save_workflow_failed': 'Failed to save workflow',
     'misc.i18nAudit': 'the message catalogue has a problem (harmless to run, please fix): {issue}',
     'misc.exportDeleteFailed': 'could not delete the exported file {name}: {err}',
-    'misc.cookie_save_failed': 'Failed to save cookies',
-    'misc.cookie_gen_failed': 'Failed to generate cookies',
+    'misc.cookie_save_failed': 'Failed to save cookies: {err}',
+    'misc.cookie_gen_failed': 'Failed to generate cookies: {err}',
     'misc.studio_source_failed': 'Merged studio load: source failed',
     'misc.source_probe_failed': 'Source probe failed',
     'misc.studio_saved': 'Chart studio saved {path} ({bytes} bytes)',
@@ -3833,7 +3837,7 @@ def t(key: str, **params) -> str:
     if template is None:
         template = MESSAGES.get(DEFAULT_LANG, {}).get(key)
     if template is None:
-        logger.debug(f'i18n: missing message key "{key}"')
+        logger.debug('i18n: missing message key "%s"', key)
         return key
     if not params:
         return template
@@ -3841,7 +3845,7 @@ def t(key: str, **params) -> str:
     try:
         return template.format(**params)
     except (KeyError, IndexError, ValueError):
-        logger.debug(f'i18n: bad params for "{key}": {params!r}')
+        logger.debug('i18n: bad params for "%s": %r', key, params)
         return template
 
 

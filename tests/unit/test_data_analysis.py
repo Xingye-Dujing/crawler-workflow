@@ -24,7 +24,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import services.data_analysis as _data_analysis_module
+# One alias for the live module: the encoder tests patch its module state, and the source
+# guards below read its ``__file__`` — both need the module object, not a copy of a name.
+import services.data_analysis as m
 from services.data_analysis import DataAnalysisService as D
 from services.data_analysis import UnknownOperationError, _stage_order
 
@@ -77,7 +79,7 @@ OPERATIONS = [
 # adding one to the panel made a node raise. These helpers read the *sources* so
 # the assertions below compare names without becoming a fourth copy of them.
 
-DATA_ANALYSIS_PY = Path(_data_analysis_module.__file__)
+DATA_ANALYSIS_PY = Path(m.__file__)
 WORKFLOW_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js'
 
 
@@ -2144,8 +2146,6 @@ class TestTopicModelEmbedding:
         )
 
     def test_a_missing_encoder_is_refused_by_name_not_fallen_back(self, monkeypatch):
-        import services.data_analysis as m
-
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
             m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, method='embedding')
@@ -2155,8 +2155,6 @@ class TestTopicModelEmbedding:
         import types
 
         import numpy as np
-
-        import services.data_analysis as m
 
         class _FakeST:
             def __init__(self, name):
@@ -2182,8 +2180,6 @@ class TestTopicModelEmbedding:
         import types
 
         import numpy as np
-
-        import services.data_analysis as m
 
         builds = []
 
@@ -2247,8 +2243,6 @@ class TestTopicViewsEmbedding:
 
         import numpy as np
 
-        import services.data_analysis as m
-
         class _FakeST:
             def __init__(self, name):
                 self.name = name
@@ -2262,8 +2256,6 @@ class TestTopicViewsEmbedding:
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
 
     def test_a_missing_encoder_is_refused_by_name_for_all_three_views(self, monkeypatch):
-        import services.data_analysis as m
-
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
             m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
@@ -2275,8 +2267,6 @@ class TestTopicViewsEmbedding:
             )
 
     def test_embedding_topic_map_reproduces_the_lda_columns(self, monkeypatch):
-        import services.data_analysis as m
-
         lda = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2)
         self._install_encoder(monkeypatch)
         emb = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
@@ -2286,8 +2276,6 @@ class TestTopicViewsEmbedding:
         assert all(str(words) for words in emb['feature_words'])
 
     def test_embedding_topic_salience_reproduces_the_lda_columns(self, monkeypatch):
-        import services.data_analysis as m
-
         lda = m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2)
         self._install_encoder(monkeypatch)
         emb = m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2, method='embedding')
@@ -2296,8 +2284,6 @@ class TestTopicViewsEmbedding:
         assert len(emb) > 0 and all(str(t) for t in emb['term'])
 
     def test_embedding_topic_by_stage_reproduces_the_lda_columns(self, monkeypatch):
-        import services.data_analysis as m
-
         lda = m.DataAnalysisService.topic_by_stage(self._frame(), '正文', stage_col='阶段', topics=[2, 2])
         self._install_encoder(monkeypatch)
         emb = m.DataAnalysisService.topic_by_stage(
@@ -2343,8 +2329,6 @@ class TestTopicMethodAuto:
 
         import numpy as np
 
-        import services.data_analysis as m
-
         class _FakeST:
             def __init__(self, name):
                 self.name = name
@@ -2358,15 +2342,11 @@ class TestTopicMethodAuto:
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
 
     def test_auto_uses_the_encoder_and_gives_the_embedding_table(self, monkeypatch):
-        import services.data_analysis as m
-
         self._install_encoder(monkeypatch)
         out = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='auto')
         assert list(out.columns) == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
 
     def test_auto_falls_back_to_lda_without_raising_when_the_encoder_is_absent(self, monkeypatch):
-        import services.data_analysis as m
-
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
         # No encoder available and none installed on this path: auto must answer with a real LDA
         # table for BOTH figure steps, not refuse the untouched default.
@@ -2375,8 +2355,6 @@ class TestTopicMethodAuto:
         assert not mp.empty and not sl.empty, 'auto fell through but produced nothing'
 
     def test_auto_falls_back_for_the_staged_step_too(self, monkeypatch):
-        import services.data_analysis as m
-
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
         out = m.DataAnalysisService.topic_by_stage(
             self._frame(), '正文', stage_col='阶段', topics=[2, 2], method='auto'
@@ -2388,8 +2366,6 @@ class TestTopicMethodAuto:
         machine with no torch/sentence-transformers that default must return a real LDA table —
         the optional encoder can never block the generic path. Only an EXPLICIT embedding choice
         refuses (see the next test), because a model the user named is not silently swapped."""
-        import services.data_analysis as m
-
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers, torch')
         out = m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, topn=5, method='auto')
         assert list(out.columns) == ['topic', 'rank', 'keyword', 'weight'], 'same shape whether LDA or embedding ran'
@@ -2397,8 +2373,6 @@ class TestTopicMethodAuto:
         assert out['topic'].str.startswith('Topic-').all(), 'auto fell through but emitted no topic rows'
 
     def test_explicit_embedding_still_refuses_by_name_when_absent(self, monkeypatch):
-        import services.data_analysis as m
-
         monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
             m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')

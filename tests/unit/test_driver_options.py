@@ -48,7 +48,10 @@ def captured_options(monkeypatch):
         def execute_cdp_cmd(self, name, params=None):
             box['cdp'].append((name, params or {}))
 
-    monkeypatch.setattr(base_module.webdriver, 'Chrome', FakeChrome)
+    # Patched on the module that constructs it: base imports the Chrome WebDriver class by name
+    # (selenium re-exports it lazily through ``__getattr__``, which no checker can see as callable),
+    # so the seam is the class, not an attribute of the ``selenium.webdriver`` package.
+    monkeypatch.setattr(base_module, 'ChromeWebDriver', FakeChrome)
     monkeypatch.setattr(base_module, 'Service', lambda executable_path=None: ('service', executable_path))
     return box
 

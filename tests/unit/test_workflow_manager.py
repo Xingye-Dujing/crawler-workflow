@@ -54,7 +54,7 @@ class TestNameCleaning:
     def test_control_characters_become_underscores(self, manager):
         # They are replaced, not removed: the name stays addressable afterwards.
         assert manager.clean_name('\x01\x02') == '__'
-        assert manager._path_for('\x01\x02').endswith('__.json')
+        assert manager.path_for('\x01\x02').endswith('__.json')
 
 
 class TestSaveLoad:

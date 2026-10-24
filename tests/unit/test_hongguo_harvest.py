@@ -731,7 +731,8 @@ class TestBoardSwitcherIsOpenedFirst:
         """
         state = {'switcher_open': False}
         ui = PlayerUI(log=lambda _m: None)
-        ui._board_toggle = lambda: object()
+        # Any non-None control answers: the walk only needs something to click.
+        ui._board_toggle = object
 
         def _click(_ctrl):
             state['switcher_open'] = True
@@ -1240,8 +1241,35 @@ class _FakeControl:
         self.BoundingRectangle = rect
 
 
+class _FakeInput:
+    """The uiautomation handle as the player sees it: every synthetic gesture it is given is inert.
+
+    PascalCase is what the real library exposes, so the methods stay lowercase for the linter and
+    are handed out under the name the product code calls (the same shape as ``_FakeAuto.Click``)."""
+
+    def __init__(self):
+        self.WheelDown = self._noop
+        self.SendKeys = self._noop
+
+    @staticmethod
+    def _noop(*_a, **_k):
+        return None
+
+
+class _FakeWindow:
+    """A player window that takes ``SetFocus()`` — the foreground step is what is under test."""
+
+    def __init__(self):
+        self.SetFocus = self._noop
+
+    @staticmethod
+    def _noop(*_a, **_k):
+        return None
+
+
 def _window(left=0, top=0, right=1920, bottom=1040):
-    return lambda: type('W', (), {'BoundingRectangle': _FixedRect(left, top, right, bottom)})()
+    """A stand-in for :meth:`PlayerUI.window`: one read, one window reporting that rect."""
+    return lambda: _FakeControl(_FixedRect(left, top, right, bottom))
 
 
 class TestGuardedClick:
@@ -1300,7 +1328,7 @@ class TestBoardScanProgress:
         ui._pick_board = lambda label: True
         ui.collect = lambda max_depth=20: [('x', 'TextControl', '无关剧名', _AnyRect())]
         ui._play_for_title = lambda title, items=None: None  # never matches → not-found grind
-        ui._ensure_library = lambda: type('A', (), {'WheelDown': lambda *a, **k: None})()
+        ui._ensure_library = _FakeInput
 
         assert ui.open_drama('不存在这部剧') is False
         # One progress line per board announced (not a silent grind), with the drama named.
@@ -1313,7 +1341,7 @@ class TestInputFocus:
     nothing moved until the user physically clicked). Every input path must activate first."""
 
     def _fake_auto(self):
-        return type('A', (), {'WheelDown': lambda *a, **k: None, 'SendKeys': lambda *a, **k: None})()
+        return _FakeInput()
 
     def test_scroll_drawer_foregrounds_before_wheeling(self):
         called = []
@@ -1327,7 +1355,7 @@ class TestInputFocus:
         called = []
         ui = PlayerUI(log=lambda _m: None)
         ui._activate = lambda: called.append('activate')
-        ui.window = lambda: type('W', (), {'SetFocus': lambda _s: None})()
+        ui.window = _FakeWindow
         ui._ensure_library = self._fake_auto
         assert ui.next_episode() is True
         assert 'activate' in called, 'the {Down} was sent without foregrounding the player'

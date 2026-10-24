@@ -325,7 +325,9 @@ class _GatedCrawler:
     release = None
 
     def __init__(self, *args, **kwargs):
-        pass
+        # The executor installs its sink through ``set_sink``; an interrupted-run test
+        # that never got that far still reads the attribute, so it starts out as None.
+        self._sink = None
 
     def set_sink(self, sink):
         self._sink = sink
@@ -358,7 +360,7 @@ class TestResumeAfterInterruption:
         _GatedCrawler.gate = threading.Event()
         _GatedCrawler.release = threading.Event()
         _GatedCrawler.emitted = 3
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _GatedCrawler(*a, **k))
+        monkeypatch.setattr(app_module, 'get_crawler', _GatedCrawler)
         yield
         # Whatever the test did, the crawler must not stay parked on its gate:
         # a worker thread still inside `search` would make the NEXT test wait for
@@ -439,6 +441,10 @@ class TestContinueAfterAnEdit:
 
     STEPS_A = [{'op': 'filter_rows', 'params': {'column': '城市', 'op': 'eq', 'value': '三亚'}}]
     STEPS_B = [{'op': 'filter_rows', 'params': {'column': '城市', 'op': 'eq', 'value': '海口'}}]
+    # Filled by the autouse `_data` fixture below, which writes it on the CLASS so every
+    # instance of one test shares the one uploaded dataset; declared here so the reader
+    # in `_flow` names a member that always exists.
+    dataset = ''
 
     def _flow(self, steps, export_format):
         return _wf(
@@ -707,7 +713,7 @@ class TestUploadNodeLosesItsFile:
         _GatedCrawler.gate = threading.Event()
         _GatedCrawler.release = threading.Event()
         _GatedCrawler.emitted = 2
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _GatedCrawler(*a, **k))
+        monkeypatch.setattr(app_module, 'get_crawler', _GatedCrawler)
         yield
         _GatedCrawler.release.set()
 

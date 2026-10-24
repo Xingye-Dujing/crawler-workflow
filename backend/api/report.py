@@ -255,7 +255,10 @@ def report_pdf():
         Path(html_path).as_uri(),
     ]
     try:
-        result = subprocess.run(command, capture_output=True, timeout=90)
+        # ``check=False`` on purpose: a Chrome that refuses to print is reported to the user as
+        # this endpoint's own 500 with the tail of its stderr, not as an uncaught
+        # ``CalledProcessError`` inside the request handler. The return code is read below.
+        result = subprocess.run(command, capture_output=True, timeout=90, check=False)
     except (subprocess.SubprocessError, OSError) as e:
         shutil.rmtree(profile_dir, ignore_errors=True)
         add_log(t('run.reportPdfFailed', err=e))

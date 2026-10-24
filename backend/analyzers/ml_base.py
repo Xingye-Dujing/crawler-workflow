@@ -130,7 +130,7 @@ class MLClassifier:
         joblib.dump({'pipeline': self.pipeline, 'label_map': self._label_map}, self._path)
         return self
 
-    def predict(self, texts: list[str], neutral: str = 'Neutral') -> list[tuple[str, float]]:
+    def predict(self, texts: list[str], _neutral: str = 'Neutral') -> list[tuple[str, float]]:
         if not self._fitted:
             if os.path.exists(self._path):
                 data = joblib.load(self._path)

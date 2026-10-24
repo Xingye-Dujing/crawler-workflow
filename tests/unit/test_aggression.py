@@ -114,7 +114,7 @@ class TestDataframe:
         pay for a pass the user did not ask for."""
         calls = []
         frame = pd.DataFrame({'正文': ['傻逼滚开']})
-        monkey_client = {'client': object(), 'node_id': 'n1', 'publish': lambda df: calls.append(df)}
+        monkey_client = {'client': object(), 'node_id': 'n1', 'publish': calls.append}
         out = AggressionAnalyzer(mode='lexicon').analyze_dataframe(frame, '正文', ctx=monkey_client)
         assert calls == []
         assert list(out['aggression']) == ['severe']

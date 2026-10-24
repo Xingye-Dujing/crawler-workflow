@@ -381,7 +381,7 @@ class WorkflowEngine:
                     errors.append(t('engine.source_feed_no_column', nid=label, field=t(field.name_key)))
         elif feed and any(str(params.get(col) or '').strip() for _field, col in feed):
             errors.append(t('engine.source_feed_no_input', nid=label))
-        for field in capabilities.required_missing(mode, params, fed_keys=fed):
+        for field in capabilities.required_missing(mode, params, fed):
             errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
         for field, value in capabilities.unoffered_selections(mode, params):
             errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))

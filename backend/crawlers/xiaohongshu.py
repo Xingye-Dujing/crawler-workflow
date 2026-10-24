@@ -54,6 +54,12 @@ class XiaohongshuCrawler(Crawler):
     #: means. The note's own 评论数 is a different thing and is always kept.
     DEFAULT_COMMENT_PREVIEW = 5
 
+    #: The preview size the crawl asked for, folded from the node's parameters at the top of
+    #: ``search``. A class default so a detail read that never went through ``search``
+    #: (``get_detail``, a resumed cursor landing straight on a note) gets the documented default
+    #: instead of an AttributeError — the value is never invented per row.
+    comment_preview = DEFAULT_COMMENT_PREVIEW
+
     def search(self, keyword: str, target_count: int = 50, **_kwargs):
         self.comment_preview = self._comment_preview_of(_kwargs)
         resume = self.resume_of(_kwargs)
@@ -335,7 +341,7 @@ class XiaohongshuCrawler(Crawler):
         comment_count = self._engage_count('chat-wrapper')
         logger.info(t('crawl.xhs.metrics', likes=like_count, favs=collect_count, comments=comment_count))
 
-        comments = self.extract_comments(max_comments=getattr(self, 'comment_preview', self.DEFAULT_COMMENT_PREVIEW))
+        comments = self.extract_comments(max_comments=self.comment_preview)
         logger.info(t('crawl.xhs.comment_count', n=len(comments)))
 
         return {

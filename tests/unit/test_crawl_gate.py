@@ -284,7 +284,7 @@ class TestStrictQueue:
         stopped = threading.Event()
         stopped.set()
         try:
-            with pytest.raises(RuntimeError) as caught, crawl_gate.hold('weibo', abort=lambda: stopped.is_set()):
+            with pytest.raises(RuntimeError) as caught, crawl_gate.hold('weibo', abort=stopped.is_set):
                 pass
             text = str(caught.value)
             assert '取消' in text or 'cancel' in text.lower(), f'not the cancellation line: {text}'
@@ -417,7 +417,7 @@ class TestStaggerOnly:
         stopped = threading.Event()
         stopped.set()
         try:
-            with crawl_gate.hold('zhihu', abort=lambda: stopped.is_set()) as waited:
+            with crawl_gate.hold('zhihu', abort=stopped.is_set) as waited:
                 assert waited is True
         finally:
             release.set()

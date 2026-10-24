@@ -44,7 +44,9 @@ def run_one(name, extra):
     os.makedirs(out_dir, exist_ok=True)
     cmd = [sys.executable, TRAIN, '--no-save', '--out', out_dir, *extra]
     print(f'=== {name}: {" ".join(extra)} ===', flush=True)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # ``check=False``: a configuration that OOMs or diverges must still leave the other three
+    # measured. The failure answer is the ``{'error': …}`` entry built from this child's output.
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     log = (proc.stdout or '') + '\n----STDERR----\n' + (proc.stderr or '')
     with open(os.path.join(LOGS, f'tune_{name}.log'), 'w', encoding='utf-8') as fh:
         fh.write(log)

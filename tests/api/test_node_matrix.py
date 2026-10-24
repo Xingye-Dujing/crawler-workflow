@@ -336,7 +336,7 @@ class TestProcessNodeOperations:
     def test_a_process_node_on_a_missing_text_column_fails_instead_of_answering_blanks(self, client, app_module, paste):
         # The rule that keeps a mis-typed column from becoming the study's finding: "this corpus
         # contains no violent speech" is what an all-blank column would have said.
-        _run, status, rows = _run_node(
+        _run, status, _rows = _run_node(
             client,
             app_module,
             paste,
@@ -366,7 +366,7 @@ class TestProcessNodeParameterEdges:
 
     @pytest.mark.parametrize('columns', ['', '   ', ',,,', '不存在的列', '点赞, 城市'])
     def test_whitespace_and_unknown_column_lists_are_survivable(self, client, app_module, paste, columns):
-        _run, status, rows = _run_node(
+        _run, status, _rows = _run_node(
             client,
             app_module,
             paste,
@@ -401,7 +401,7 @@ class TestProcessNodeParameterEdges:
         assert status['status'] in ('done', 'failed'), status
 
     def test_text_column_naming_a_numeric_column_is_not_a_crash(self, client, app_module, paste):
-        _run, status, rows = _run_node(
+        _run, status, _rows = _run_node(
             client,
             app_module,
             paste,
@@ -615,7 +615,9 @@ class TestAnalysisNodeOperations:
         column the user named was never created — a failure that reaches the user two
         nodes later, as a chart with nothing in it, instead of as its own reason here.
         """
-        _run, status, rows = self._run(client, app_module, paste, 'column_calc', {'new_col': '坏', 'expr': '序号 @@ 2'})
+        _run, status, _rows = self._run(
+            client, app_module, paste, 'column_calc', {'new_col': '坏', 'expr': '序号 @@ 2'}
+        )
         assert status['status'] == 'failed', status
         assert '序号 @@ 2' in (status.get('error') or ''), status.get('error')
 
@@ -1757,7 +1759,7 @@ class TestFeedSourceFromUpload:
         seen = []
         self._fake_comment_engine(app_module, monkeypatch, seen)
         links = [{'链接': 'https://www.zhihu.com/question/101'}]
-        _run_id, status, rows = _run_node(
+        _run_id, status, _rows = _run_node(
             client,
             app_module,
             paste,

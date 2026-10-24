@@ -63,7 +63,6 @@ def walk_pages(
     the sink decides, which is the right default (it holds the ledger).
     """
     walk = PageWalk(cursor=start_cursor)
-    seen = seen
     while collected() < target:
         if alive is not None and not alive():
             walk.stopped_reason = walk.stopped_reason or 'stopped'

@@ -265,13 +265,17 @@ def _label_columns(df: pd.DataFrame, params: dict, columns: dict) -> dict:
 
 
 def _doc_terms(
-    row: dict, columns: dict, entity: str, source: str = 'all', label_columns: dict | None = None
+    row: dict, columns: dict, _entity: str, source: str = 'all', label_columns: dict | None = None
 ) -> list[str]:
     """Terms one document offers to the cluster-labelling methods.
 
     ``source`` chooses the fields: ``all`` = keywords + title + abstract (the behaviour this node
     always had), or exactly one of title / abstract / keywords / author. A keyword or author
     source is split, not tokenised — those cells already hold terms.
+
+    ``_entity`` is the entity type the graph is built on. Nothing here reads it: the fields to
+    pull are already resolved in ``columns``, and it sits in the signature so this stays the
+    positional twin of :func:`_document_reference_nodes` beside it.
     """
     label_columns = label_columns or {}
     keywords = []
@@ -286,7 +290,7 @@ def _doc_terms(
         parts.append(str(row.get(label_columns.get('abstract', columns['abstract'])) or ''))
     text = ' '.join(parts)
     try:
-        tokens = KeywordExtractor._tokenize(text, _TERM_POS)
+        tokens = KeywordExtractor.tokenize(text, _TERM_POS)
     except Exception:
         tokens = []
     counts = Counter(tokens)
@@ -298,7 +302,7 @@ def _doc_terms(
 def _term_entities(row: dict, columns: dict) -> list[str]:
     text = ' '.join(str(row.get(columns[name]) or '') for name in ('title', 'abstract'))
     try:
-        tokens = KeywordExtractor._tokenize(text, _TERM_POS)
+        tokens = KeywordExtractor.tokenize(text, _TERM_POS)
     except Exception:
         tokens = []
     counts = Counter(tokens)
@@ -670,7 +674,9 @@ def _select(freq: Counter, params: dict) -> set[str]:
 
 
 def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, Counter, Counter, dict, dict]:
-    labels, year_counts, node_docs, node_years = node_meta
+    # A slice re-derives everything it labels from the documents in it, so the display labels and
+    # the per-node years (both whole-corpus answers the caller already holds) are not read here.
+    _labels, year_counts, node_docs, _node_years = node_meta
     entity = params['entity_type']
     start = params['start']
     width = params['slice_years']
@@ -1253,7 +1259,9 @@ def _metrics(graph: nx.Graph, nodes: list[str], notes: list[str]) -> dict[str, d
             # ("k >= N-1"), which a test would otherwise have to mute.
             try:
                 ordered = list(sub.nodes())
-                values, vectors = np.linalg.eigh(nx.to_numpy_array(sub, nodelist=ordered, weight='weight'))
+                # Only the LAST column is read (the principal vector, since ``eigh`` returns an
+                # ascending spectrum); the eigenvalues themselves are centrality's, not needed here.
+                _, vectors = np.linalg.eigh(nx.to_numpy_array(sub, nodelist=ordered, weight='weight'))
                 principal = np.abs(vectors[:, -1])
                 norm = float(np.linalg.norm(principal))
                 if norm <= 0:
@@ -1429,9 +1437,10 @@ def _layout(graph: nx.Graph, nodes: list[str]) -> dict[str, tuple[float, float]]
 # ─── Public build ───────────────────────────────────────────────
 
 
-def _basemap_lookup(basemap_df: pd.DataFrame) -> tuple[dict[str, list[str]], list[str], list[str]]:
+def _basemap_lookup(basemap_df: pd.DataFrame, nid: str = '') -> dict[str, list[str]]:
+    """The journal → categories table a dual-map reads, or the refusal that names the node."""
     if basemap_df is None or basemap_df.empty:
-        raise BiblioError(t('biblio.dual_map_needs_basemap', nid='(biblio)'))
+        raise BiblioError(t('biblio.dual_map_needs_basemap', nid=nid or '(biblio)'))
     journal_column = next(
         (c for c in basemap_df.columns if _ref_key(c) in {'期刊', 'journal', 'source', '来源期刊'}), ''
     )
@@ -1455,13 +1464,13 @@ def _basemap_lookup(basemap_df: pd.DataFrame) -> tuple[dict[str, list[str]], lis
         for category in categories:
             if category not in mapping[journal]:
                 mapping[journal].append(category)
-    return dict(mapping), list(mapping), sorted({category for values in mapping.values() for category in values})
+    return dict(mapping)
 
 
 def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | None, nid: str = '') -> dict:
     """Build the journal/category dual-map table from records plus a basemap."""
     columns = _require_columns(df, params)
-    mapping, journals, categories = _basemap_lookup(basemap_df)
+    mapping = _basemap_lookup(basemap_df, nid)
     cited_edges: Counter = Counter()
     category_edges: Counter = Counter()
     overlay: Counter = Counter()
@@ -1469,7 +1478,7 @@ def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | No
     for _, row in df.iterrows():
         record = row.to_dict()
         raw_refs, structured = _document_references(record, columns)
-        nodes, direct, _total = _reference_nodes(raw_refs, 'journal_cocitation', structured)
+        nodes, _, _ = _reference_nodes(raw_refs, 'journal_cocitation', structured)
         cited = []
         for key, info in nodes.items():
             label = str(info.get('label') or key).strip()

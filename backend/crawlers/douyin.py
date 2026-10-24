@@ -32,6 +32,10 @@ class DouyinCrawler(VideoCrawler):
     #: / the slide never painted), after their bounded retries were used up. Named at the end of the
     #: walk so a shortfall is a stated fact, never a silent 完成.
     _modal_deferred = 0
+    #: Whether the list page published its own end-of-list marker (「暂时没有更多了」). A class
+    #: default so a read before ``author`` (which resets it per crawl) says "the site never said
+    #: so" rather than raising AttributeError: only a site-attested drain may license a shortfall.
+    _list_end_attested = False
     #: The account's (粉丝, 获赞), read once off the profile page in ``author`` for the overlay rows
     #: (the slide does not carry them). A class default so any read before ``author`` sets it is
     #: blank rather than an AttributeError — blank, never a fabricated 0.
@@ -133,7 +137,7 @@ class DouyinCrawler(VideoCrawler):
     #: complaint this round exists to answer).
     LIST_END_MARKS = ('暂时没有更多了', '没有更多了')
 
-    def author(self, author: str, target_count: int = 50, **kwargs):
+    def author(self, author: str, target_count: int = 50, **_kwargs):
         """One creator's own posts, read off their profile grid.
 
         The row budget is the detail visit: the grid's card carries an address, a 置顶
@@ -198,7 +202,9 @@ class DouyinCrawler(VideoCrawler):
         self._profile_totals = self._read_profile_totals()
         self._open_each(
             url,
-            lambda: self._grid_ids(),
+            # Passed as the method itself: ``_harvest_pool`` calls ``read_ids()`` with no
+            # arguments, exactly as it calls the ``_scroll_profile`` handed to it beside this.
+            self._grid_ids,
             self._scroll_profile,
             done,
             target_count,
@@ -238,7 +244,7 @@ class DouyinCrawler(VideoCrawler):
 
     # ─── the site's own hot board ──────────────────────────────────────
 
-    def hot(self, target_count: int = 50, **kwargs):
+    def hot(self, target_count: int = 50, **_kwargs):
         """抖音热榜 — one answer, which IS the whole board.
 
         The page is opened for two reasons and neither is the rows: it is the same-origin

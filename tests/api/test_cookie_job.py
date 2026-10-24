@@ -48,7 +48,7 @@ class FakeDriver:
 
 
 class FakeCrawler:
-    def __init__(self, login_block=None, facts=None, hold=None):
+    def __init__(self, login_block=None, facts=None, hold=None, requested=None):
         self.domain = 'example.com'
         self.login_url = 'https://example.com/login'
         self.driver = FakeDriver(self)
@@ -63,6 +63,10 @@ class FakeCrawler:
         # A probe that answers instantly is never caught mid-flight by a poller,
         # so a test that wants to act *during* one holds it here.
         self._hold = hold
+        # What the window was built for, recorded so a test can assert it: a login
+        # browser that does not ask for images cannot show a QR code. The factory
+        # fills it from the arguments the app passed to ``get_crawler``.
+        self.requested = requested or {}
 
     def close(self):
         self.closed = True
@@ -83,10 +87,14 @@ def job(monkeypatch, app_module):
     state = {'facts': None, 'hold': None}
 
     def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None, account=''):
-        crawler = FakeCrawler(login_block=block, facts=state['facts'], hold=state['hold'])
-        # What the window was built for, recorded so a test can assert it: a login
-        # browser that does not ask for images cannot show a QR code.
-        crawler.requested = {'headless': headless, 'for_login': for_login, 'account': account}
+        # Records the call shape on the fake it hands back, so a test can ask what
+        # window the app asked for.
+        crawler = FakeCrawler(
+            login_block=block,
+            facts=state['facts'],
+            hold=state['hold'],
+            requested={'headless': headless, 'for_login': for_login, 'account': account},
+        )
         made.append(crawler)
         return crawler
 

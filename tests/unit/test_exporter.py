@@ -101,9 +101,6 @@ class TestFormatSelection:
         literal in the file is collected and one of them has to be the whole
         supported list; pinning "the first match" would test the wrong node.
         """
-        import re
-        from pathlib import Path
-
         assert E.SUPPORTED_FORMATS == ('csv', 'json', 'excel', 'txt', 'html', 'markdown', 'parquet')
         source = (Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js').read_text(
             encoding='utf-8'
@@ -257,12 +254,10 @@ class TestSave:
     def test_parquet_without_an_engine_refuses_by_name(self, df, tmp_path, monkeypatch):
         # Force the engine to be missing and confirm the refusal is a named UnsupportedFormatError,
         # not a bare ImportError escaping from pandas.
-        import pandas as _pd
-
         def _boom(*_a, **_k):
             raise ImportError('no engine')
 
-        monkeypatch.setattr(_pd.DataFrame, 'to_parquet', _boom)
+        monkeypatch.setattr(pd.DataFrame, 'to_parquet', _boom)
         with pytest.raises(UnsupportedFormatError, match='pyarrow'):
             E.save(df, str(tmp_path / 'x.parquet'), fmt='parquet')
 

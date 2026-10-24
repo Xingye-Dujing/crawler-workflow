@@ -167,7 +167,7 @@ class TestThePlantItself:
         """The profile now answers differently than the one the last probe looked at."""
         factory()
         seen = []
-        monkeypatch.setattr(app_module.cookie_preflight, 'invalidate', lambda platform: seen.append(platform))
+        monkeypatch.setattr(app_module.cookie_preflight, 'invalidate', seen.append)
         _save(client)
         assert 'weibo' in seen
 

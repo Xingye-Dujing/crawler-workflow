@@ -221,7 +221,10 @@ def normalize(raw, existing: dict = None, now: datetime = None) -> tuple:
     if error:
         return {}, error
     zone_name = str(raw.get('timezone') or '').strip()
-    zone, error = cron.zone_for(zone_name)
+    # The zone OBJECT is not kept: the task stores the name and the clock resolves it at each
+    # fire (``cron.zone_for`` beside ``next_run_local``). Asking for it here is how a name
+    # ``zoneinfo`` refuses never reaches a stored task.
+    _, error = cron.zone_for(zone_name)
     if error:
         return {}, error
     previous = existing or {}

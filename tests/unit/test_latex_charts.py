@@ -415,7 +415,7 @@ class TestThePictureFitsItsPage:
         """The sizing is only real if the widest thing this service draws still fits: every figure's
         own coordinate span, times its scale, plus its labels, must stay in ``GRAPH_BOX_CM``."""
         for chart_type in ('knowledge_graph', 'circular', 'landscape'):
-            df, kw = CASES[chart_type]
+            _df, kw = CASES[chart_type]
             out = L.to_latex_document(_dense(30), chart_type, title='图', **kw)
             head = [line for line in out.splitlines() if line.startswith(r'\begin{tikzpicture}')]
             assert head, chart_type

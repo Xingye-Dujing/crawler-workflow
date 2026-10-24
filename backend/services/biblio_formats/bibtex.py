@@ -56,7 +56,9 @@ def _balanced(text: str, start: int, opening: str, closing: str) -> int:
     return -1
 
 
-def _value(text: str, start: int, opening: str, closing: str) -> tuple[str, int]:
+def _value(text: str, start: int) -> tuple[str, int]:
+    # Unlike :func:`_balanced`, this reads whichever delimiter the field actually opens with
+    # (``{…}``, ``"…"`` or a bare token), so no pair is handed in.
     while start < len(text) and text[start].isspace():
         start += 1
     if start >= len(text):
@@ -108,7 +110,7 @@ def _fields(body: str) -> dict[str, str]:
             index += 1
         if index >= len(body) or body[index] != '=':
             continue
-        value, index = _value(body, index + 1, '{', '}')
+        value, index = _value(body, index + 1)
         if value:
             fields[name] = _clean(value)
     return fields

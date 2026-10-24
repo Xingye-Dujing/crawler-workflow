@@ -63,7 +63,7 @@ def canvas(app_module):
     yield _make
     for name in made:
         with contextlib.suppress(OSError):
-            os.remove(manager._path_for(name))
+            os.remove(manager.path_for(name))
 
 
 def _save_payload(workflow, **over):
@@ -119,7 +119,7 @@ class TestReadingThePanel:
 
     def test_a_broken_canvas_file_is_not_offered_at_all(self, client, app_module, canvas):
         name = canvas('坏文件', [NAME_NODE])
-        with open(app_module.workflow_manager._path_for(name), 'w', encoding='utf-8') as handle:
+        with open(app_module.workflow_manager.path_for(name), 'w', encoding='utf-8') as handle:
             handle.write('{not json')
 
         # ``describe`` marks it broken and keeps it deletable in the 画布 panel; the schedule picker
@@ -236,7 +236,7 @@ class TestTheRunVerb:
             app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'run-7'}}
         )
         lines = []
-        monkeypatch.setattr(app_module, 'add_log', lambda line: lines.append(line))
+        monkeypatch.setattr(app_module, 'add_log', lines.append)
 
         body = client.post('/api/schedules/run', json={'id': task['id']}).get_json()
 
@@ -253,7 +253,7 @@ class TestTheRunVerb:
             app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'queued': True}}
         )
         lines = []
-        monkeypatch.setattr(app_module, 'add_log', lambda line: lines.append(line))
+        monkeypatch.setattr(app_module, 'add_log', lines.append)
 
         body = client.post('/api/schedules/run', json={'id': task['id']}).get_json()
 
@@ -356,7 +356,7 @@ class TestTheGlueAppInstalled:
             app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'r1'}}
         )
         lines = []
-        monkeypatch.setattr(app_module, 'add_log', lambda line: lines.append(line))
+        monkeypatch.setattr(app_module, 'add_log', lines.append)
 
         app_module._start_scheduled_run(task, False)
         app_module._start_scheduled_run(task, True)

@@ -53,6 +53,10 @@ def run_node(script: str, *args: str, timeout: int = 90, tz: str | None = None) 
                 stderr=err_sink,
                 timeout=timeout,
                 env=child_env,
+                # A harness that exits non-zero IS the measurement: the caller asserts on
+                # ``returncode`` and prints ``stderr`` (one even asserts a *non-zero* syntax
+                # check), so raising here would swallow the report instead of making it.
+                check=False,
             )
         with open(out_path, encoding='utf-8', errors='replace') as produced:
             stdout = produced.read()

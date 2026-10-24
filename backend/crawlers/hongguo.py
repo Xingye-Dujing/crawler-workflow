@@ -313,18 +313,18 @@ class HongguoCrawler(Crawler):
         episodes = item.get('episodeVids')
         return {
             '排名': cls._rank(item.get('rank')),
-            '作品名': Crawler._as_text(item.get('title')),
+            '作品名': Crawler.as_text(item.get('title')),
             '评分': cls._rating(item.get('scoreText')),
             '热度': cls._count(item.get('heatText')),
             '收藏': cls._count(item.get('favoriteText')),
             '点赞': cls._count(item.get('likeText')),
             # The site's own tags, in its own order and wording — including the literal ``205``
             # one board prints instead of a name (docs/crawler_notes.md 红果短剧).
-            '分类': ' | '.join(tag for tag in (Crawler._as_text(v) for v in item.get('tags') or []) if tag),
-            '状态标签': ' | '.join(tag for tag in (Crawler._as_text(v) for v in item.get('statusTags') or []) if tag),
+            '分类': ' | '.join(tag for tag in (Crawler.as_text(v) for v in item.get('tags') or []) if tag),
+            '状态标签': ' | '.join(tag for tag in (Crawler.as_text(v) for v in item.get('statusTags') or []) if tag),
             '集数': len(episodes) if isinstance(episodes, list) else '',
-            '简介': Crawler._as_text(item.get('description')),
-            '作品ID': Crawler._as_text(item.get('seriesId') or item.get('id')),
+            '简介': Crawler.as_text(item.get('description')),
+            '作品ID': Crawler.as_text(item.get('seriesId') or item.get('id')),
             '链接': cls._absolute(item.get('href')),
             '播放链接': cls._absolute(item.get('playHref')),
             '封面': cls._absolute(item.get('cover')),
@@ -353,7 +353,7 @@ class HongguoCrawler(Crawler):
     @staticmethod
     def _absolute(url) -> str:
         """The site's own link, completed against the host that served it."""
-        text = Crawler._as_text(url)
+        text = Crawler.as_text(url)
         if text.startswith('http://') or text.startswith('https://'):
             return text
         if text.startswith('//'):

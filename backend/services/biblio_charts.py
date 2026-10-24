@@ -112,7 +112,7 @@ def _node_rows(df: pd.DataFrame, *, require_coordinates: bool = False):
     return rows, names
 
 
-def _categories(rows: dict[str, dict], names: list[str], base: dict, frame: pd.DataFrame):
+def _categories(rows: dict[str, dict], names: list[str], frame: pd.DataFrame):
     use_clusters = '聚类' in frame.columns and '聚类标签' in frame.columns
     category_names: list[str] = []
     category_index: dict[str, int] = {}
@@ -352,7 +352,7 @@ def _legend(category_names: list[str]) -> dict:
 
 def _graph_option(df: pd.DataFrame, base: dict, *, layout: str, require_coordinates: bool) -> dict:
     rows, names = _node_rows(df, require_coordinates=require_coordinates)
-    categories = _categories(rows, names, base, df)
+    categories = _categories(rows, names, df)
     data = _node_data(rows, names, base, layout=layout, categories=categories)
     links = _graph_links(rows, names)
     base['legend'] = _legend(categories[1])

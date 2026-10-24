@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import time
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -53,6 +54,26 @@ POSITION_COLUMNS = frozenset({'row', 'start', 'end'})
 #: A cell longer than this is trimmed for reading; the CSV export stays whole.
 MAX_CELL_CHARS = 300
 _SAFE_STEM = re.compile(r'[^0-9A-Za-z_\u4e00-\u9fa5.-]+')
+
+
+@dataclass(frozen=True)
+class ReportOptions:
+    """What :meth:`build_html` may trust: four booleans, one bounded int, two optional lists.
+
+    A raw body may carry a ``'7'`` where an int belongs or omit a key entirely, so the shape is
+    resolved once in :func:`_normalize_options` and every reader gets attributes instead of
+    re-guessing a dict. `node_ids`/`images` keep ``None`` as "no filter given": an empty list means
+    the caller named nothing to keep, which is a different answer from not asking.
+    """
+
+    show_charts: bool = True
+    show_tables: bool = True
+    show_facts: bool = True
+    show_conclusion: bool = True
+    max_rows: int = MAX_TABLE_ROWS
+    node_ids: list[str] | None = None
+    images: list[str] | None = None
+
 
 #: The optional parts of a report, every switch on by default. A request body
 #: that names nothing still produces the whole document: losing a section to a
@@ -102,26 +123,30 @@ def _as_str_list(value):
     return None
 
 
-def _normalize_options(options) -> dict:
+def _normalize_options(options) -> ReportOptions:
     """The caller's switches over :data:`DEFAULT_OPTIONS`, tolerating odd input.
 
     The booleans, the row cap and the two lists are all read here so each reader
     downstream can trust the shape: a report is a deliverable, and it must not
     abort because a stray ``'7'`` arrived where an int belongs.
     """
-    opts = dict(DEFAULT_OPTIONS)
+    raw = dict(DEFAULT_OPTIONS)
     if isinstance(options, dict):
-        opts.update(options)
-    for key in ('show_charts', 'show_tables', 'show_facts', 'show_conclusion'):
-        opts[key] = True if opts.get(key) is None else bool(opts.get(key))
+        raw.update(options)
+    flags = {
+        key: True if raw.get(key) is None else bool(raw.get(key))
+        for key in ('show_charts', 'show_tables', 'show_facts', 'show_conclusion')
+    }
     try:
-        limit = int(opts['max_rows']) if opts['max_rows'] not in (None, '') else MAX_TABLE_ROWS
+        limit = int(raw['max_rows']) if raw['max_rows'] not in (None, '') else MAX_TABLE_ROWS
     except (TypeError, ValueError):
         limit = MAX_TABLE_ROWS
-    opts['max_rows'] = max(MIN_TABLE_ROWS, min(limit, MAX_TABLE_ROWS_CAP))
-    opts['node_ids'] = _as_str_list(opts.get('node_ids'))
-    opts['images'] = _as_str_list(opts.get('images'))
-    return opts
+    return ReportOptions(
+        max_rows=max(MIN_TABLE_ROWS, min(limit, MAX_TABLE_ROWS_CAP)),
+        node_ids=_as_str_list(raw.get('node_ids')),
+        images=_as_str_list(raw.get('images')),
+        **flags,
+    )
 
 
 def safe_stem(name: str, fallback: str = 'report') -> str:
@@ -327,7 +352,7 @@ class ReportService:
         df = entry['frame']
         # Match the file exports: the 平台 column shows the word the reader knows (微博, not
         # weibo). The stored frame keeps the raw key; only this rendered copy is translated.
-        df = DataExporter._localized_platform(df)
+        df = DataExporter.localized_platform(df)
         rows = len(df)
         if rows == 0:
             return f'<p class="muted">{_cell(entry["title"])} — {html.escape(t("report.no_rows"))}</p>'
@@ -357,7 +382,7 @@ class ReportService:
         rather than a partial one (see :data:`DEFAULT_OPTIONS`).
         """
         opts = _normalize_options(options)
-        keep = opts['node_ids']
+        keep = opts.node_ids
         frames = []
         for entry in nodes:
             ident = _text(entry.get('id'))
@@ -382,7 +407,7 @@ class ReportService:
         )
         summary = f'<p>{html.escape(t("report.summary", nodes=len(frames), rows=total_rows, tables=non_empty))}</p>'
         conclusion_block = ''
-        if str(conclusion or '').strip() and opts['show_conclusion']:
+        if str(conclusion or '').strip() and opts.show_conclusion:
             paragraphs = ''.join(f'<p>{_cell(part)}</p>' for part in str(conclusion).split('\n\n') if part.strip())
             conclusion_block = f'<section><h2>{html.escape(t("report.conclusion"))}</h2>{paragraphs}</section>'
         generated = _text(meta.get('generated_at')) or time.strftime('%Y-%m-%d %H:%M:%S')
@@ -391,14 +416,14 @@ class ReportService:
             f'<p class="meta">{html.escape(t("report.generated"))} {html.escape(generated)}</p></header>'
         )
         sections = ''
-        if opts['show_charts']:
-            charts_html = self._chart_block(frames, opts['images'])
+        if opts.show_charts:
+            charts_html = self._chart_block(frames, opts.images)
             sections += f'<section><h2>{html.escape(t("report.charts"))}</h2>{charts_html}</section>'
-        if opts['show_facts'] and fact_rows:
+        if opts.show_facts and fact_rows:
             facts_html = f'<table class="facts">{fact_rows}</table>'
             sections += f'<section><h2>{html.escape(t("report.run_facts"))}</h2>{facts_html}</section>'
-        if opts['show_tables']:
-            tables_html = ''.join(self._table_block(frame, opts['max_rows']) for frame in frames)
+        if opts.show_tables:
+            tables_html = ''.join(self._table_block(frame, opts.max_rows) for frame in frames)
             sections += f'<section><h2>{html.escape(t("report.tables"))}</h2>{tables_html}</section>'
         return (
             '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'

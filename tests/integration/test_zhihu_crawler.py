@@ -525,7 +525,7 @@ class TestLinkFallback:
         # link-less row. The fake gains its anchor between scrapes.
         texts = dict(CARD_1)
         card = _card(texts, CARD_1_BUTTONS, hrefs=None)
-        crawler, driver = make_crawler([card])
+        crawler, _driver = make_crawler([card])
         original_scrape = crawler._scrape_card
 
         def scraping(card_obj):
@@ -853,8 +853,6 @@ class TestZhihuHotBoard:
         assert crawler.hot(target_count=5)[0]['热度'] == 3980000
 
     def test_a_walled_session_is_named_not_answered_with_an_empty_board(self, make_board):
-        import i18n
-
         crawler, driver = make_board(_board([_hot_row()]), wall=True)
         with pytest.raises(RuntimeError) as caught:
             crawler.hot(target_count=10)
@@ -862,8 +860,6 @@ class TestZhihuHotBoard:
         assert driver.fetched == [], 'a session already held at the sign-in page must not pay for the endpoint'
 
     def test_an_answer_that_is_not_a_board_raises(self, make_board):
-        import i18n
-
         crawler, _driver = make_board({'status': 401, 'error': {'code': 101, 'name': 'AuthenticationError'}})
         with pytest.raises(RuntimeError) as caught:
             crawler.hot(target_count=10)

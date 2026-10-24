@@ -147,7 +147,7 @@ class DataExporter:
         dict with keys: path, format, rows
         """
         df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data or [])
-        df = cls._localized_platform(df)
+        df = cls.localized_platform(df)
         fmt = cls.resolve(fmt) or cls.infer_format(filepath)
         if fmt not in cls.SUPPORTED_FORMATS:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
@@ -177,7 +177,7 @@ class DataExporter:
     # ── Individual writers ──────────────────────────────────────
 
     @staticmethod
-    def _localized_platform(df: pd.DataFrame) -> pd.DataFrame:
+    def localized_platform(df: pd.DataFrame) -> pd.DataFrame:
         """Show the 「平台」 column as the word the user reads (抖音, not ``douyin``).
 
         The stored column is the raw key — the row's identity, used for dedupe and platform

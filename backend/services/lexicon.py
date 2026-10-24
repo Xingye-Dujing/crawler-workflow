@@ -113,7 +113,7 @@ def reload_userdict() -> int:
     try:
         from analyzers import keyword
 
-        keyword._loaded_userdict = None
+        keyword.forget_userdict()
     except Exception:
         pass
     load_userdict()

@@ -517,7 +517,7 @@ class TestOneBrowserPerProfile:
         give_up = threading.Event()
         give_up.set()
         started = time.monotonic()
-        lock = browser_profiles.acquire_profile(path, timeout=20, abort=lambda: give_up.is_set())
+        lock = browser_profiles.acquire_profile(path, timeout=20, abort=give_up.is_set)
         release.set()
         thread.join(30)
         assert lock is None, 'the aborted wait still took the profile'
@@ -527,9 +527,7 @@ class TestOneBrowserPerProfile:
         """The crawl side of the same promise: the executor's "run is over" check
         reaches the profile wait, and a crawler that gives up the queue says it
         gave up — not blames a browser that was never left open."""
-        import crawlers
-
-        monkeypatch.setattr(crawlers.browser_profiles.Config, 'PROFILE_LOCK_TIMEOUT', 20)
+        monkeypatch.setattr(crawlers_pkg.browser_profiles.Config, 'PROFILE_LOCK_TIMEOUT', 20)
         path = str(tmp_path / 'weibo')
         held = browser_profiles.acquire_profile(path, timeout=20)
         assert held is not None
@@ -606,27 +604,33 @@ class TestCrawlerHoldsItsProfile:
 
     @staticmethod
     def _probe_class(name, domain, driver_raises=False):
+        """A :class:`Crawler` subclass with the real profile plumbing and no Selenium session.
+
+        Written as a ``class`` statement rather than assembled with ``type(name, bases, ns)``:
+        the double has to *implement* the two abstract methods, and a namespace dict hides them
+        from every static reader — a subclass that answers nothing would then instantiate
+        without anyone noticing, which is exactly what the claim "the claim, not the browser,
+        is what is under test" rests on.
+        """
         from crawlers.base import Crawler
 
-        namespace = {
-            'domain': domain,
-            'login_url': f'https://www.{domain}.com/',
-            'get_detail': lambda self, url: None,
-            'search': lambda self, **kw: [],
-        }
-        if driver_raises:
+        class _Probe(Crawler):
+            def search(self, keyword, **_kwargs):
+                return []
 
-            def _create(self):
-                raise RuntimeError('session not created')
+            def get_detail(self, url):
+                return None
 
-            namespace['_create_driver'] = _create
-        else:
-
-            def _create(self):
+            def _create_driver(self):
+                if driver_raises:
+                    # What a refused chromedriver says, before any profile bookkeeping.
+                    raise RuntimeError('session not created')
                 self.driver = None
 
-            namespace['_create_driver'] = _create
-        return type(name, (Crawler,), namespace)
+        _Probe.__name__ = _Probe.__qualname__ = name
+        _Probe.domain = domain
+        _Probe.login_url = f'https://www.{domain}.com/'
+        return _Probe
 
     @staticmethod
     def _held_elsewhere(path):
@@ -706,3 +710,34 @@ class TestCrawlerHoldsItsProfile:
         assert crawler._profile_lock is None
         crawler.close()
         crawler.close()  # idempotent — callers close in a finally
+
+
+class TestTheSizeFlagSkipsTheWalk:
+    """``size=False`` was documented twice and never read.
+
+    The cookie rows ask for state without the directory walk, but `status()` ignored the flag, so
+    every account row of `/api/cookies/status` re-walked a used profile — measured 236 MB of files,
+    once per row, on a panel the user opens to look at cookie dates.
+    """
+
+    def test_the_size_is_reported_only_when_it_was_asked_for(self, profiles_on):
+        root = Path(browser_profiles.profile_dir_for('weibo'))
+        root.mkdir(parents=True, exist_ok=True)
+        (root / 'history').write_bytes(b'x' * (2 * 1024 * 1024))  # 2 MB: `size_mb` rounds, a KiB reads as 0
+
+        walked = browser_profiles.status('weibo')
+        assert walked['size_mb'] > 0, 'the tmp profile is not being measured at all'
+
+        skipped = browser_profiles.status('weibo', size=False)
+        assert skipped['size_mb'] == 0
+        # The flag chooses the walk, nothing else: every other field must say the same thing.
+        assert {k: v for k, v in skipped.items() if k != 'size_mb'} == {
+            k: v for k, v in walked.items() if k != 'size_mb'
+        }
+
+    def test_a_refused_walk_is_not_even_attempted(self, profiles_on, monkeypatch):
+        def explode(path):
+            raise AssertionError('size=False must not walk the profile directory')
+
+        monkeypatch.setattr(browser_profiles, '_dir_size_mb', explode)
+        assert browser_profiles.status('weibo', size=False)['size_mb'] == 0

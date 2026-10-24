@@ -32,9 +32,9 @@ bp = Blueprint('analysis', __name__)
 #: maps to ``data/models/<name>.pkl``, so an un-listed value was a filesystem write
 #: (and a later ``joblib.load``) under an attacker-chosen path, not a choice to guess.
 _ML_MODEL_TYPES = (
-    EmotionAnalyzer._ML_MODEL_NAME,
-    TendencyAnalyzer._ML_MODEL_NAME,
-    SentimentAnalyzer._ML_MODEL_NAME,
+    EmotionAnalyzer.ML_MODEL_NAME,
+    TendencyAnalyzer.ML_MODEL_NAME,
+    SentimentAnalyzer.ML_MODEL_NAME,
 )
 
 #: The column each classifier's own operation writes its labels into, so training from

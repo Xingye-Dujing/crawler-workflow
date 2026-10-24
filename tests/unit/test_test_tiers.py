@@ -317,9 +317,7 @@ class TestIsolationRunsBeforeTheAppIsImported:
         ``cookie_manager.cookie_dir`` that a cookie save actually writes through — and that is the
         value a too-early import would have frozen onto the user's directory.
         """
-        from pathlib import Path as _Path
-
-        captured = _Path(app_module.cookie_manager.cookie_dir).resolve()
+        captured = Path(app_module.cookie_manager.cookie_dir).resolve()
         assert captured.is_relative_to(data_root.resolve()), (
             f'the application under test writes cookies to {captured}, outside the throwaway root '
             f'{data_root} — something captured the real path before the harness redirected it'
@@ -359,8 +357,6 @@ class TestUserDirectoryStaysReadOnly:
 
     def _every_captured_path(self) -> dict:
         """Each place a module-level singleton wrote down a path, as it stands right now."""
-        import sys
-
         import settings_store
         from analyzers import ml_base
         from config import Config
@@ -528,7 +524,11 @@ class TestUserDirectoryStaysReadOnly:
         import subprocess
 
         def run(source: str) -> dict:
-            out = subprocess.run([sys.executable, '-c', source], capture_output=True, text=True, timeout=180)
+            # check=False on purpose: a child that failed is this assertion's evidence (its stderr
+            # is what names the ordering bug), not something to raise past.
+            out = subprocess.run(
+                [sys.executable, '-c', source], capture_output=True, text=True, timeout=180, check=False
+            )
             assert out.returncode == 0, out.stderr[-1500:]
             return json.loads(out.stdout.strip().splitlines()[-1])
 
@@ -592,7 +592,6 @@ class TestLiveCrawlerFixture:
     """
 
     def _drive(self, monkeypatch, raises=None):
-        import contextlib
         import importlib.util
 
         import crawl_gate
@@ -657,7 +656,7 @@ class TestLiveCrawlerFixture:
         return factory, events, made, finish
 
     def test_asking_twice_for_one_platform_hands_the_turn_back_first(self, monkeypatch):
-        factory, events, made, finish = self._drive(monkeypatch)
+        factory, events, _made, finish = self._drive(monkeypatch)
         try:
             first = factory('zhihu')
             second = factory('zhihu')

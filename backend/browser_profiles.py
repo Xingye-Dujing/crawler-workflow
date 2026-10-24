@@ -753,6 +753,10 @@ def status(
 
     ``account`` scopes the whole answer to one account's device; the blank account is
     the platform's default device, unchanged from before multi-account existed.
+
+    ``size=False`` opts out of the directory walk: ``size_mb`` then reports 0. The
+    cookie-management rows pass it because walking a used profile (hundreds of
+    thousands of files) to fill a row nobody reads is not worth the request time.
     """
     path = platform_dir(platform, account)
     exists = os.path.isdir(path)
@@ -766,7 +770,7 @@ def status(
         'exists': exists,
         'imported': bool(marker.get('imported_at')),
         'used_at': str(marker.get('used_at') or ''),
-        'size_mb': _dir_size_mb(path) if exists else 0,
+        'size_mb': _dir_size_mb(path) if (exists and size) else 0,
         'has_saved_cookie': bool(has_cookie),
         'needs_refresh': bool(cookie_path) and needs_refresh(platform, cookie_path, account),
     }

@@ -110,9 +110,14 @@ def _canvas(nodes, mode='parallel', **settings):
     return {'nodes': nodes, 'connections': [], 'settings': dict({'mode': mode, 'headless': True}, **settings)}
 
 
-def _overlaps(spans=SPANS):
-    """Pairs of crawls that were holding a browser at the same moment."""
-    settled = [tuple(entry) for entry in spans if entry[1] is not None]
+def _overlaps(spans: list | None = None):
+    """Pairs of crawls that were holding a browser at the same moment.
+
+    ``SPANS`` is read at call time and never used as a default: the fixture clears that
+    one list per test, so a default bound at definition time would hand a later test the
+    spans the earlier one recorded.
+    """
+    settled = [tuple(entry) for entry in (SPANS if spans is None else spans) if entry[1] is not None]
     return [(a, b) for index, a in enumerate(settled) for b in settled[index + 1 :] if a[0] < b[1] and b[0] < a[1]]
 
 

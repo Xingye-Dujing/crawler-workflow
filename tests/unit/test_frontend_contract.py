@@ -910,12 +910,10 @@ class TestChromeOfThePageItself:
             'the tab template exists more than once, so the two bars can disagree'
         )
 
-        """The browser labels a platform from ``platform.*`` in app.js and the backend from
-        ``i18n._PLATFORM_LABELS``. Two lists of the same nine words drift the moment one of
-        them is edited — and the console and the dialog would then name the same site
-        differently, in the same language, on the same screen."""
-        import i18n
-
+        # The browser labels a platform from ``platform.*`` in app.js and the backend from
+        # ``i18n._PLATFORM_LABELS``. Two lists of the same nine words drift the moment one of
+        # them is edited — and the console and the dialog would then name the same site
+        # differently, in the same language, on the same screen.
         source = (JS_DIR / 'app.js').read_text(encoding='utf-8')
         for lang, body in (
             ('en', source[source.index('dict: {') : source.index('zh: {')]),

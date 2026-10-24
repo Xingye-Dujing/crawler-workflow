@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 def slept(monkeypatch):
     """Capture every sleep this module would take, without actually waiting."""
     calls: list[float] = []
-    monkeypatch.setattr(base_module.time, 'sleep', lambda s: calls.append(s))
+    monkeypatch.setattr(base_module.time, 'sleep', calls.append)
     return calls
 
 

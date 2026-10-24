@@ -363,10 +363,10 @@ class TestAccounts:
 
     def test_names_that_are_not_account_files_are_ignored(self, manager):
         os.makedirs(manager.cookie_dir, exist_ok=True)
-        with open(os.path.join(manager.cookie_dir, 'zhihu_cookies.json'), 'w') as f:
+        with open(os.path.join(manager.cookie_dir, 'zhihu_cookies.json'), 'w', encoding='utf-8') as f:
             f.write('[]')
-        with open(os.path.join(manager.cookie_dir, 'zhihu@_cookies.json'), 'w') as f:
+        with open(os.path.join(manager.cookie_dir, 'zhihu@_cookies.json'), 'w', encoding='utf-8') as f:
             f.write('[]')
-        with open(os.path.join(manager.cookie_dir, 'zhihu@Bad-Name_cookies.json'), 'w') as f:
+        with open(os.path.join(manager.cookie_dir, 'zhihu@Bad-Name_cookies.json'), 'w', encoding='utf-8') as f:
             f.write('[]')
         assert manager.account_files('zhihu') == [], 'only well-formed named files count'

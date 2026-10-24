@@ -334,9 +334,9 @@ class TestCustomization:
         # cap is a ceiling the writer enforces whatever the body claims.
         from services.report_service import MAX_TABLE_ROWS_CAP, _normalize_options
 
-        assert _normalize_options({'max_rows': 999999})['max_rows'] == MAX_TABLE_ROWS_CAP
-        assert _normalize_options({'max_rows': 0})['max_rows'] == 1
-        assert _normalize_options({'max_rows': 'nonsense'})['max_rows'] == MAX_TABLE_ROWS
+        assert _normalize_options({'max_rows': 999999}).max_rows == MAX_TABLE_ROWS_CAP
+        assert _normalize_options({'max_rows': 0}).max_rows == 1
+        assert _normalize_options({'max_rows': 'nonsense'}).max_rows == MAX_TABLE_ROWS
 
     def test_a_saved_studio_picture_is_inlined_as_a_figure(self, service):
         os.makedirs(service.export_dir, exist_ok=True)

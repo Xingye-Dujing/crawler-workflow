@@ -27,12 +27,12 @@ class WorkflowManager:
         clean = sanitize_filename(name)[: self.MAX_NAME_LENGTH]
         return clean or self.DEFAULT_NAME
 
-    def _path_for(self, name: str) -> str:
+    def path_for(self, name: str) -> str:
         return os.path.join(self.workflow_dir, f'{self.clean_name(name)}.json')
 
     def save(self, name: str, workflow: dict) -> str:
         clean = self.clean_name(name)
-        path = self._path_for(clean)
+        path = self.path_for(clean)
         # The name travels inside the file too: a run reports it to the
         # execution history, and a reloaded canvas has to know its own name.
         payload = dict(workflow or {})
@@ -44,7 +44,7 @@ class WorkflowManager:
 
     def load(self, name: str) -> dict | None:
         try:
-            with open(self._path_for(name), encoding='utf-8') as f:
+            with open(self.path_for(name), encoding='utf-8') as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return None
@@ -140,10 +140,10 @@ class WorkflowManager:
         CALLER (the route answers 409); this method never overwrites, so a rename
         cannot destroy a third workflow the way a same-name save deliberately does.
         """
-        src = self._path_for(old)
+        src = self.path_for(old)
         if not os.path.exists(src):
             return None
-        dst = self._path_for(new)
+        dst = self.path_for(new)
         if os.path.exists(dst):
             raise FileExistsError(dst)
         try:
@@ -164,6 +164,6 @@ class WorkflowManager:
         return self.clean_name(new)
 
     def delete(self, name: str):
-        path = self._path_for(name)
+        path = self.path_for(name)
         if os.path.exists(path):
             os.remove(path)

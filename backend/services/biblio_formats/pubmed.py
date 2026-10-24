@@ -132,7 +132,7 @@ def _references(element, citation) -> tuple[list[str], list[dict]]:
     return raw, structured
 
 
-def _row(element, book: bool) -> dict | None:
+def _row(element) -> dict | None:
     citation = element if _local(element.tag) == 'MedlineCitation' else _first(element, 'MedlineCitation')
     article = _first(citation, 'Article') if citation is not None else None
     if article is None:
@@ -282,7 +282,7 @@ def parse(text: str) -> tuple[list[dict], int]:
     for record in records:
         if _local(record.tag) == 'PubmedArticleSet':
             continue
-        row = _row(record, book=_local(record.tag) == 'PubmedBookArticle')
+        row = _row(record)
         if row is None:
             skipped += 1
             continue

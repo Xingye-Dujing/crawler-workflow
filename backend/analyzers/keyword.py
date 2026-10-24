@@ -79,6 +79,17 @@ def _ensure_userdict() -> None:
         jieba.load_userdict(path)
 
 
+def forget_userdict() -> None:
+    """Drop the remembered userdict path so the next :func:`_ensure_userdict` re-reads the file.
+
+    ``services.lexicon.reload_userdict`` calls this after a panel edit: the file at the same path
+    now holds different words, and a guard keyed on the PATH alone cannot see that a rewrite
+    happened. The remembered path is a cache marker, not an answer, so only this module clears it.
+    """
+    global _loaded_userdict
+    _loaded_userdict = None
+
+
 # ─── POS filtering ───
 
 
@@ -124,7 +135,7 @@ class KeywordExtractor:
     """
 
     @staticmethod
-    def _tokenize(text: str, pos_tags: frozenset[str] | None) -> list[str]:
+    def tokenize(text: str, pos_tags: frozenset[str] | None) -> list[str]:
         """Split one document into candidate terms, keeping only the requested POS categories.
 
         The shape rule (two characters or more, some letter or digit) and the stop-word list are the
@@ -182,7 +193,7 @@ class KeywordExtractor:
         _ensure_userdict()
         pos_tags = _pos_tags(allow_pos)
         documents = [(idx, str(text)) for idx, text in df[text_column].items() if pd.notna(text) and str(text).strip()]
-        tokenized = [self._tokenize(text, pos_tags) for _, text in documents]
+        tokenized = [self.tokenize(text, pos_tags) for _, text in documents]
 
         # sklearn raises "empty vocabulary" for a corpus with no token at all — which is a real
         # answer here (every row blank, or every token filtered out), not an error condition.

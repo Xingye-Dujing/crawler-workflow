@@ -206,7 +206,6 @@ def _read_url_json(url: str):
     Used where the fact under test is the SERVER's answer (a static asset's route), which is not
     something a stubbed ``window.fetch`` can prove.
     """
-    import json as _json
     import urllib.error
     import urllib.request
 
@@ -214,7 +213,7 @@ def _read_url_json(url: str):
         with urllib.request.urlopen(url, timeout=15) as response:
             if response.status != 200:
                 return None
-            return _json.loads(response.read().decode('utf-8'))
+            return json.loads(response.read().decode('utf-8'))
     except (urllib.error.URLError, OSError, ValueError):
         return None
 
@@ -1158,6 +1157,10 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
     assert again['head']['powerTitle'] and 'ctx.' not in again['head']['powerTitle'], (
         f'the power tooltip is untranslated in {lang}: {again["head"]["powerTitle"]!r}'
     )
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_hostile_workflow_name_stays_text_and_inside_its_attribute(app_url, driver, lang):
     """The 工作流文件 table draws a user-chosen stem twice: as text, and inside the
     ``onclick="wfFiles.rename('…')"`` attribute the row buttons are made of.
 
@@ -4023,8 +4026,6 @@ def test_the_world_map_loads_its_shipped_basemap_and_prints_no_colliding_labels(
 
 def _overlay_options(lang: str) -> dict:
     """The two overlay options, built by the service in the run's language."""
-    import json as _json
-
     import pandas as pd
 
     from i18n import set_lang
@@ -4035,16 +4036,16 @@ def _overlay_options(lang: str) -> dict:
             '节点': ['数字治理', '数据要素', '公共服务', '协同监管'],
             '频次': [30, 26, 22, 20],
             '情感分布': [
-                _json.dumps({'positive': 6, 'neutral': 3, 'negative': 1}),
-                _json.dumps({'negative': 5, 'neutral': 2, 'positive': 1}),
-                _json.dumps({'neutral': 4, 'positive': 1}),
-                _json.dumps({'positive': 2, 'negative': 2}),
+                json.dumps({'positive': 6, 'neutral': 3, 'negative': 1}),
+                json.dumps({'negative': 5, 'neutral': 2, 'positive': 1}),
+                json.dumps({'neutral': 4, 'positive': 1}),
+                json.dumps({'positive': 2, 'negative': 2}),
             ],
             '话题分布': [
-                _json.dumps({'T1': 7, 'T2': 3}),
-                _json.dumps({'T2': 6, 'T1': 1}),
-                _json.dumps({'T1': 5}),
-                _json.dumps({'T2': 2}),
+                json.dumps({'T1': 7, 'T2': 3}),
+                json.dumps({'T2': 6, 'T1': 1}),
+                json.dumps({'T1': 5}),
+                json.dumps({'T2': 2}),
             ],
         }
     )

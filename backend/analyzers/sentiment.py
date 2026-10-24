@@ -130,7 +130,7 @@ class SentimentAnalyzer:
     Mode ``bert``: a transformer pipeline, when this machine can actually run one.
     """
 
-    _ML_MODEL_NAME = 'sentiment'
+    ML_MODEL_NAME = 'sentiment'
 
     def __init__(
         self,
@@ -163,7 +163,7 @@ class SentimentAnalyzer:
         if self._ml_instance is None:
             from analyzers.ml_base import get_classifier
 
-            self._ml_instance = get_classifier(self._ML_MODEL_NAME)
+            self._ml_instance = get_classifier(self.ML_MODEL_NAME)
         return self._ml_instance
 
     # ── score-shaped modes ────────────────────────────────────────────
@@ -368,7 +368,7 @@ Analyze strictly and output only the required plain string."""
             # 'neutral' is this operation's own neutral word: MLClassifier answers an
             # untrained model with the CALLER's neutral, and a leaked 'Neutral' from the
             # emotion label set would be a class these charts have never seen.
-            predictions = self._ml.predict(texts, neutral='neutral')
+            predictions = self._ml.predict(texts, _neutral='neutral')
         except Exception as e:
             # Refused, not manufactured — see the same guard in emotion.py. The caller's neutral is
             # still the right WORD for a real prediction (a leaked 'Neutral' from the emotion label
@@ -420,7 +420,6 @@ Analyze strictly and output only the required plain string."""
         self,
         df: pd.DataFrame,
         text_column: str = '正文',
-        max_retries: int = 2,
         ctx: dict = None,
     ) -> pd.DataFrame:
         # Named one at a time, never branched on "not this one". An ``!= 'ml'`` test is how

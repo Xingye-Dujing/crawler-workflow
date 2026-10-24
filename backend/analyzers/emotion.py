@@ -26,7 +26,7 @@ class EmotionAnalyzer:
     unrunnable explicit ``bert`` to ``ml`` before reaching here and prints which mode ran.
     """
 
-    _ML_MODEL_NAME = 'emotion'
+    ML_MODEL_NAME = 'emotion'
 
     def __init__(
         self,
@@ -63,7 +63,7 @@ class EmotionAnalyzer:
         if self._ml_instance is None:
             from analyzers.ml_base import get_classifier
 
-            self._ml_instance = get_classifier(self._ML_MODEL_NAME)
+            self._ml_instance = get_classifier(self.ML_MODEL_NAME)
         return self._ml_instance
 
     # ── LLM mode ────────────────────────────────────────────────
@@ -157,7 +157,6 @@ Analyze strictly and output only the required plain string."""
         self,
         df: pd.DataFrame,
         text_column: str = '正文',
-        max_retries: int = 2,
         ctx: dict = None,
     ) -> pd.DataFrame:
         if self.mode == 'ml':

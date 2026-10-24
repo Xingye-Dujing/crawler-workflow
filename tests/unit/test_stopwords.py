@@ -147,7 +147,7 @@ class TestTheStepsAgree:
     def test_the_keyword_node_shares_the_list(self):
         from analyzers.keyword import KeywordExtractor
 
-        tokens = KeywordExtractor._tokenize('因为网暴，这个孩子已经失去了自己', None)
+        tokens = KeywordExtractor.tokenize('因为网暴，这个孩子已经失去了自己', None)
         assert '网暴' in tokens
         assert not set(tokens) & {'因为', '这个', '已经', '自己'}
 

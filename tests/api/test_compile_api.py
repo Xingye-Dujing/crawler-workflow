@@ -78,7 +78,7 @@ class TestCompileService:
     def test_a_failed_xelatex_leaves_no_half_written_pdf(self, tmp_path, monkeypatch):
         monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
         monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(False, returncode=1, stderr=b'boom'))
-        out, name = latex_compile.compile_pdf('x', 'x.pdf', str(tmp_path))
+        out, _name = latex_compile.compile_pdf('x', 'x.pdf', str(tmp_path))
         assert 'error' in out and not (tmp_path / 'x.pdf').exists()
 
 

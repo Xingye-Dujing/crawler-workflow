@@ -5,12 +5,13 @@ import random
 import re
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 import browser_profiles
-from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
 from selenium.webdriver.support.ui import WebDriverWait
 
 from config import Config
@@ -263,7 +264,7 @@ class Crawler(ABC):
     #: "May this crawl stop?" — installed by the runner, defaulted on the class so a
     #: test double that subclasses Crawler without calling ``__init__`` still answers
     #: it (False) instead of raising AttributeError from inside ``emit``.
-    _abort = None
+    _abort: Callable[[], bool] | None = None
 
     #: How many readings a suspected wall has to survive before it is believed.
     #: Measured on weibo: a logged-in visit to a search URL flashes the passport page
@@ -306,7 +307,7 @@ class Crawler(ABC):
         cookie_path: str | None = None,
         for_login: bool = False,
         profile_dir: str | None = None,
-        abort=None,
+        abort: Callable[[], bool] | None = None,
     ):
         self.headless = headless
         self.cookie_path = cookie_path
@@ -447,7 +448,9 @@ class Crawler(ABC):
         A crawl therefore stops at its own next boundary, which costs one round rather
         than one page, and the node reports 被停止 rather than "the site had no more".
         """
-        abort = getattr(self, '_abort', None)
+        # The class attribute is defaulted, so the attribute always exists — reading it through
+        # getattr hid its type from every checker and bought an "abort is not callable" error.
+        abort = self._abort
         return bool(abort is not None and abort())
 
     # ── streaming hooks (installed by the runner) ───────────────
@@ -639,7 +642,11 @@ class Crawler(ABC):
         if browser_binary:
             opts.binary_location = browser_binary
         service = Service(executable_path=get_setting('driver_path'))
-        self.driver: webdriver.Chrome = webdriver.Chrome(options=opts, service=service)  # pylint: disable=not-callable
+        # The class itself, not ``webdriver.Chrome``: that name is a re-export the package
+        # builds at import time, which no type checker can see as callable, so annotating with
+        # it read as an error and needed a suppression. Importing the real class states what is
+        # constructed and keeps the declared type honest.
+        self.driver: ChromeWebDriver = ChromeWebDriver(options=opts, service=service)
         # A headless browser must not announce itself as headless. Measured 2026-09-26 (#148): a
         # bare --headless=new reveals only two things a desktop does not — a UA containing
         # "HeadlessChrome", and an 800×600 virtual display. Zhihu's 某作者的作品 page hands the
@@ -1230,12 +1237,13 @@ class Crawler(ABC):
                 if probe():
                     self.pending_waits = 0
                     return {'arrived': True, 'waited': time.monotonic() - started, 'verdict': '', 'gave_up': 0}
-            except CrawlerStopped:
-                raise
             except Exception as exc:
                 # A probe that cannot answer is not a page that arrived. Logged, because
                 # the alternative is a wait that burns its whole budget on a selector the
                 # site changed, and nothing afterwards explains why.
+                # Consulting may_stop() beats a pass-through `except CrawlerStopped: raise`.
+                if self.may_stop():
+                    raise CrawlerStopped(t('crawl.stopped')) from exc
                 logger.debug('first-content probe failed: %s', exc)
             if tick == 0 and self.pending_waits >= self.MAX_PENDING_WAITS:
                 # The breaker, consulted only after the page was actually asked once: a
@@ -1294,7 +1302,7 @@ class Crawler(ABC):
         throttled_sleep(max(0.2, base + random.uniform(-spread, spread)))
 
     @staticmethod
-    def _as_text(value) -> str:
+    def as_text(value) -> str:
         return '' if value is None else str(value).strip()
 
     @staticmethod

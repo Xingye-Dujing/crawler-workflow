@@ -94,7 +94,7 @@ class TestFallback:
         answer was — so the refusal stands whichever word the caller offers."""
         classifier = MLClassifier(model_name=_unique_name('tendency-ish'))
         with pytest.raises(ml_base.ModelNotTrainedError):
-            classifier.predict(['一句话'], neutral='Objective Statement')
+            classifier.predict(['一句话'], _neutral='Objective Statement')
 
     def test_no_text_still_means_no_answers_but_the_model_is_still_missing(self, model_dir):
         """Absence is answered by absence, not by a crash-free empty table: a caller that asks

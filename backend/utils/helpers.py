@@ -1,4 +1,5 @@
 import io
+import math
 import os
 import re
 from datetime import datetime
@@ -115,7 +116,7 @@ def as_bool(value, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
-        if value != value:  # a NaN is a missing value, not the answer "off"
+        if math.isnan(value):  # a NaN is a missing value, not the answer "off"
             return default
         return value != 0
     text = str(value).strip().lower()

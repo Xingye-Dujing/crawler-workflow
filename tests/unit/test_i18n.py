@@ -233,8 +233,6 @@ class TestCatalogueHealth:
         assert len(i18n._ZH) == len(i18n._EN)
 
     def test_placeholders_match_between_languages(self):
-        import re
-
         pattern = re.compile(r'\{([a-zA-Z0-9_]+)\}')
         for key, template in i18n._ZH.items():
             assert sorted(set(pattern.findall(template))) == sorted(set(pattern.findall(i18n._EN[key]))), key
@@ -294,8 +292,6 @@ class TestKeyReachability:
 
     @staticmethod
     def _sources():
-        from pathlib import Path
-
         root = Path(__file__).resolve().parents[2]
         files = list((root / 'backend').rglob('*.py')) + list((root / 'backend' / 'static').rglob('*.js'))
         files += list((root / 'tests').rglob('*.py'))
@@ -356,8 +352,6 @@ class TestKeyReachability:
         ``ds.too_many_rows`` as an error message, three dedupe notes) because
         parity and reachability are both silent about a key that is *missing*.
         """
-        from pathlib import Path
-
         root = Path(__file__).resolve().parents[2]
         missing = []
         for path in sorted((root / 'backend').rglob('*.py')):
@@ -401,9 +395,6 @@ class TestCallSitePlaceholders:
         return names
 
     def _unfilled(self):
-        import ast
-        from pathlib import Path
-
         root = Path(__file__).resolve().parents[2]
         found = []
         for path in sorted((root / 'backend').rglob('*.py')):
@@ -437,8 +428,6 @@ class TestCallSitePlaceholders:
         """A guard that cannot fail is not a guard."""
         i18n._ZH['temp.scan'] = '两行：{a} 和 {b}'
         try:
-            import ast
-
             tree = ast.parse("t('temp.scan', a=1)")
             call = next(node for node in ast.walk(tree) if isinstance(node, ast.Call))
             given = {kw.arg for kw in call.keywords if kw.arg}
@@ -462,9 +451,6 @@ class TestNoDuplicateKeys:
 
     @staticmethod
     def _key_lists():
-        import ast
-        from pathlib import Path
-
         source = (Path(__file__).resolve().parents[2] / 'backend' / 'i18n.py').read_text(encoding='utf-8')
         found = {}
         for node in ast.walk(ast.parse(source)):
@@ -584,7 +570,7 @@ class TestNoHardcodedConsoleText:
 _JS_CATALOG = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'app.js'
 
 
-def _js_texts(key: str) -> tuple:
+def _js_texts(key: str) -> tuple[str, str]:
     """The English and Chinese values of one ``app.js`` catalogue key, as written."""
     src = _JS_CATALOG.read_text(encoding='utf-8')
     split = src.index('zh: {')
@@ -593,7 +579,8 @@ def _js_texts(key: str) -> tuple:
         at = block.find(f"'{key}'")
         assert at != -1, f'{key} is missing from one of the two interface catalogues'
         out.append(block[at : at + 900])
-    return tuple(out)
+    # Exactly two blocks are read, English first: the caller unpacks them as a pair.
+    return out[0], out[1]
 
 
 class TestTheOneSessionRuleIsSpoken:

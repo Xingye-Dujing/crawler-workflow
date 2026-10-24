@@ -148,8 +148,13 @@ class TestResolution:
         except (OSError, NotImplementedError):
             pass
         if not made and sys.platform == 'win32':
+            # check=False on purpose: a mklink that fails is this test's evidence that the machine
+            # can build neither a symlink nor a junction (it skips below), not an error to raise.
             made = (
-                subprocess.run(['cmd', '/c', 'mklink', '/J', link, str(outside)], capture_output=True).returncode == 0
+                subprocess.run(
+                    ['cmd', '/c', 'mklink', '/J', link, str(outside)], capture_output=True, check=False
+                ).returncode
+                == 0
             )
         if not made:
             pytest.skip('this machine can create neither a symlink nor a junction')

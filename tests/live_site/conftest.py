@@ -211,7 +211,10 @@ def live_crawler(cookie_dir_str):
 
     def release(crawler) -> None:
         """Close *crawler* and hand its platform's turn back."""
-        for entry in made:
+        # Over a copy: the loop body takes the entry out of ``made`` itself, and a
+        # teardown that skipped the entry next to the one it removed would be a leak
+        # of a live browser rather than a wrong number.
+        for entry in list(made):
             if entry[0] is crawler:
                 with contextlib.suppress(Exception):
                     crawler.close()

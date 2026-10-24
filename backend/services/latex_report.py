@@ -99,7 +99,7 @@ def _body(document: str) -> str:
     if not document:
         return ''
     try:
-        return LatexChartService._strip_shell(document)
+        return LatexChartService.strip_shell(document)
     except IndexError:
         # Not a document this service wrote (a hand-edited .txt in the export folder, say). Quoting
         # it raw would put a stray \begin{document} in the middle of the paper.

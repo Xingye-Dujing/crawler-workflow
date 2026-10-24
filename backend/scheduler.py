@@ -130,21 +130,24 @@ def _fire(task: dict, now: datetime, manual: bool = False) -> dict:
             answer = {'ok': False, 'error': str(e)[:200]}
             crashed = True
     if answer.get('ok'):
-        status = 'queued' if answer.get('queued') else 'started'
+        status_token = 'queued' if answer.get('queued') else 'started'
         note = str(answer.get('note') or '')
         run_id = str(answer.get('run_id') or '')
     else:
         # A refusal is the executor saying no (a canvas that needs a model, a queue that is full);
         # a crash here is a bug, and the two read differently in the history a user comes back to.
-        status = 'error' if crashed else 'refused'
+        status_token = 'error' if crashed else 'refused'
         note = str(answer.get('error') or '')
         run_id = ''
-    saved = store.record_event(task.get('id'), status, note=note, run_id=run_id, at=now, advance=not manual)
+    # ``status_token``, not ``status``: the module-level ``status()`` below is the clock
+    # endpoint the panel reads, and naming a local after it made this function unable to
+    # ask that question. The token is what the history row and 状态 chip carry.
+    saved = store.record_event(task.get('id'), status_token, note=note, run_id=run_id, at=now, advance=not manual)
     _count_fire()
     return {
         'id': str(task.get('id') or ''),
         'name': name,
-        'status': status,
+        'status': status_token,
         'note': note,
         'run_id': run_id,
         'manual': bool(manual),

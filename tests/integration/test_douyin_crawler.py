@@ -64,6 +64,12 @@ class El:
         # only exposed once the thread is expanded (``_expanded``). A non-thread item leaves both empty.
         self._replies = list(replies) if replies else None
         self._expanded = False
+        # The rest of one thread's bookkeeping, declared so a failure message can print a count
+        # that was never incremented: how many times the opener was clicked (``data-dy-tried`` in
+        # the browser), whether the click rendered replies, and the item an opener belongs to.
+        self._tries = 0
+        self._expandable = True
+        self._parent = None
 
     def get_attribute(self, name):
         return self._attrs.get(name, '')
@@ -525,7 +531,7 @@ class TestPureHelpers:
 
     def test_comment_fields_tolerate_a_sparse_block(self):
         author, content, when, region, likes, subs = douyin_comment_fields('路人\n只有一句话')
-        assert (author, content, when, likes, subs) == ('路人', '只有一句话', '', 0, 0)
+        assert (author, content, when, region, likes, subs) == ('路人', '只有一句话', '', '', 0, 0)
         assert douyin_comment_fields('') == ('', '', '', '', 0, 0)
 
     def test_a_wrapped_comment_keeps_every_line_and_its_own_numbers(self):
@@ -550,7 +556,7 @@ class TestPureHelpers:
         a timestamp. Nothing is invented in its place: the text stays empty and the caller drops the row,
         which costs a line and does not buy a lie.
         """
-        author, content, when, region, likes, subs = douyin_comment_fields('路人\n1天前·北京\n5')
+        _author, content, when, region, likes, _subs = douyin_comment_fields('路人\n1天前·北京\n5')
         assert (when, region, likes) == ('1天前', '北京', 5)
         assert content == '', f'the anchor line was filed as the comment: {content!r}'
 
@@ -836,7 +842,7 @@ class TestAuthorProfile:
         # The first read is the empty one; every later read (including the ones the remount wait itself
         # makes) sees the card, which is what the wait is for.
         reads = iter([[], *([[ID]] * 8)])
-        pool, drained, screens = crawler._harvest_pool(lambda: list(next(reads)), lambda: False, set(), 1)
+        pool, _drained, screens = crawler._harvest_pool(lambda: list(next(reads)), lambda: False, set(), 1)
         assert pool == [ID], pool
         assert screens == 1, f'the empty read cost a screen: {screens}'
 
@@ -960,7 +966,7 @@ class TestComments:
         return CommentSession(driver, log=lambda m: None, nap=lambda s: None)
 
     def test_the_panel_is_scrolled_and_rows_deduped(self, make_crawler):
-        crawler, driver = make_crawler(cards=[])
+        _crawler, driver = make_crawler(cards=[])
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK
@@ -977,29 +983,9 @@ class TestComments:
         on the opener, which marks the thread expanded so the next panel read returns its reply —
         proving the product reads replies it actually opened, not a declared count.
         """
-
-        class FakeActionChains:
-            def __init__(self, driver):
-                self._el = None
-
-            def move_to_element(self, el):
-                self._el = el
-                return self
-
-            def pause(self, *a):
-                return self
-
-            def click(self):
-                if self._el is not None:
-                    self._el.click()
-                return self
-
-            def perform(self):
-                pass
-
         monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
         parent = El('路人甲\n主评论\n1天前·北京\n2\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
-        crawler, driver = make_crawler(cards=[], comment_items=[parent], comment_count='0')
+        _crawler, driver = make_crawler(cards=[], comment_items=[parent], comment_count='0')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK, status
@@ -1021,7 +1007,7 @@ class TestComments:
         monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
         dead = El('甲\n主评论\n1天前·北京\n0\n展开2条回复', replies=['x', 'y'])
         dead._expandable = False
-        crawler, driver = make_crawler(cards=[], comment_items=[dead], comment_count='0')
+        _crawler, driver = make_crawler(cards=[], comment_items=[dead], comment_count='0')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK, status
@@ -1042,7 +1028,7 @@ class TestComments:
         parent = El('甲\n主评论\n1天前·北京\n0\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
         # The same reply ALSO mounted as its own top-level comment-item (what re-mounting produces).
         reply_as_top = El('路人乙\n子回复\n1天前·上海\n0')
-        crawler, driver = make_crawler(cards=[], comment_items=[parent, reply_as_top], comment_count='0')
+        _crawler, driver = make_crawler(cards=[], comment_items=[parent, reply_as_top], comment_count='0')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK, status
@@ -1052,7 +1038,7 @@ class TestComments:
         assert rows[1]['父楼层'] == 1, 'the reply stays attributed to its parent, not a top-level row'
 
     def test_a_link_without_an_id_is_dead_and_costs_no_navigation(self, make_crawler):
-        crawler, driver = make_crawler(cards=[])
+        _crawler, driver = make_crawler(cards=[])
         session = self._session(driver)
         rows, status = session.crawl_douyin('https://www.douyin.com/jingxuan', 5)
         assert rows == [] and status == DEAD
@@ -1064,27 +1050,27 @@ class TestComments:
         an empty table for a video reporting 6 295 comments — the exact shape of
         false data this project refuses.
         """
-        crawler, driver = make_crawler(cards=[], comment_items=[])
+        _crawler, driver = make_crawler(cards=[], comment_items=[])
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 40)
         assert rows == []
         assert status == BLOCKED, 'a video with a non-zero counter and no readable list is a failed read'
 
     def test_a_video_that_really_has_no_comments_is_an_answer(self, make_crawler):
-        crawler, driver = make_crawler(cards=[], comment_items=[], comment_count='0')
+        _crawler, driver = make_crawler(cards=[], comment_items=[], comment_count='0')
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 40)
         assert rows == [] and status == OK
 
     def test_items_that_yield_no_readable_text_are_a_failure_too(self, make_crawler):
         # The panel is full of nodes; not one of them carries comment text.
-        crawler, driver = make_crawler(cards=[], comment_items=[El(''), El('   ')])
+        _crawler, driver = make_crawler(cards=[], comment_items=[El(''), El('   ')])
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 40)
         assert rows == [] and status == BLOCKED
 
     def test_a_blocked_page_never_becomes_an_empty_table(self, make_crawler):
-        crawler, driver = make_crawler(cards=[], video_body='当前请求存在异常，暂时限制访问')
+        _crawler, driver = make_crawler(cards=[], video_body='当前请求存在异常，暂时限制访问')
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 5)
         assert rows == [] and status == BLOCKED
@@ -1099,7 +1085,7 @@ class TestComments:
         """
         first = [El(COMMENT_BLOCK), El('路人\n第二条评论\n3天前·广东\n1')]
         second = first + [El('第三个人\n第三条内容\n2天前·上海\n4'), El('第四个人\n第四条内容\n1天前·广州\n2')]
-        crawler, driver = make_crawler(cards=[], comment_pages=[first, second])
+        _crawler, driver = make_crawler(cards=[], comment_pages=[first, second])
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK
@@ -1116,7 +1102,7 @@ class TestComments:
         screens = []
         for total in range(1, 46):
             screens.append([El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(total)])
-        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='0')
+        _crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='0')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK
@@ -1131,7 +1117,7 @@ class TestComments:
         gives. The line therefore reports all four figures and compares against ``declared - nested``.
         """
         screens = [[El('路人1\n第一条\n1天前·北京\n0'), El('路人2\n第二条\n1天前·上海\n3\n展开3条回复')]]
-        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
+        _crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
         said: list = []
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
         rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
@@ -1160,7 +1146,7 @@ class TestComments:
             [El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(1, 4)],
             [El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(4, 7)],
         ]
-        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
+        _crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
         said: list = []
         session = CommentSession(driver, log=said.append, nap=lambda s: None, abort=lambda: True)
         rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
@@ -1179,7 +1165,7 @@ class TestComments:
     def test_an_ask_that_is_met_does_not_complain_about_the_thread(self, make_crawler):
         """``limit`` is the user's ask: stopping on it is obeying, not a hole in the table."""
         screens = [[El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(1, 6)]]
-        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
+        _crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
         said: list = []
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
         rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 5)
@@ -1190,7 +1176,7 @@ class TestComments:
 
     def test_a_walk_that_reads_everything_says_nothing_about_a_gap(self, make_crawler):
         screens = [[El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(1, 4)]]
-        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='3')
+        _crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='3')
         said: list = []
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
         rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
@@ -1209,7 +1195,7 @@ class TestComments:
         """
         asked = 'https://www.douyin.com/video/7000000000000000001'
         shown = 'https://www.douyin.com/jingxuan?modal_id=7668278352603630898'
-        crawler, driver = make_crawler(cards=[], comment_items=[], comment_count='1214', redirects={asked: shown})
+        _crawler, driver = make_crawler(cards=[], comment_items=[], comment_count='1214', redirects={asked: shown})
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(asked, 8)
         assert rows == [] and status == DEAD, f'a substituted page must be DEAD, not a wall: {status!r}'
@@ -1221,7 +1207,7 @@ class TestComments:
         Same address, no panel, no counter: that IS the shape meaning "this session is not getting in",
         and it is what feeds 继续 and the cookie banner.
         """
-        crawler, driver = make_crawler(cards=[], video_body='正在加载', comment_items=[], comment_count='')
+        _crawler, driver = make_crawler(cards=[], video_body='正在加载', comment_items=[], comment_count='')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 8)
         assert rows == [] and status == BLOCKED, f'no panel and no substitution is a wall: {status!r}'
@@ -1235,7 +1221,7 @@ class TestComments:
         """
         asked = 'https://www.douyin.com/video/7000000000000000001'
         shown = 'https://www.douyin.com/jingxuan?modal_id=7668278352603630898'
-        crawler, driver = make_crawler(cards=[], redirects={asked: shown})
+        _crawler, driver = make_crawler(cards=[], redirects={asked: shown})
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(asked, 8)
         assert rows == [] and status == DEAD, f'a mounted substitute must not be walked: {status!r}'
@@ -1250,7 +1236,7 @@ class TestComments:
         """
         asked = f'https://www.douyin.com/video/{ID}'
         moved = 'https://www.douyin.com/jingxuan?modal_id=7668278352603630898'
-        crawler, driver = make_crawler(cards=[], moves_on_scroll=moved)
+        _crawler, driver = make_crawler(cards=[], moves_on_scroll=moved)
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(asked, 40)
         assert rows == [] and status == DEAD, f"the substitute's comments were kept: {status!r} {rows[:1]}"
@@ -1267,7 +1253,7 @@ class TestComments:
         screens = []
         for total in range(2, 12):
             screens.append([El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(total)])
-        crawler, driver = make_crawler(cards=[], comment_pages=screens)
+        _crawler, driver = make_crawler(cards=[], comment_pages=screens)
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK and len(rows) == 11, (status, len(rows))
@@ -1286,7 +1272,7 @@ class TestComments:
         """
         first = [El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(6)]
         recycled = [El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(3, 10)]
-        crawler, driver = make_crawler(cards=[], comment_pages=[first, recycled, recycled])
+        _crawler, driver = make_crawler(cards=[], comment_pages=[first, recycled, recycled])
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
         assert status == OK

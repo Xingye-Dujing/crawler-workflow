@@ -23,7 +23,7 @@ class TendencyAnalyzer:
     the stack or model is missing and never falls back to ``llm``/``ml``.
     """
 
-    _ML_MODEL_NAME = 'tendency'
+    ML_MODEL_NAME = 'tendency'
 
     def __init__(
         self,
@@ -61,7 +61,7 @@ class TendencyAnalyzer:
         if self._ml_instance is None:
             from analyzers.ml_base import get_classifier
 
-            self._ml_instance = get_classifier(self._ML_MODEL_NAME)
+            self._ml_instance = get_classifier(self.ML_MODEL_NAME)
         return self._ml_instance
 
     # ── LLM mode ────────────────────────────────────────────────
@@ -156,7 +156,7 @@ Analyze strictly and output only the required plain string."""
     def _ml_predict(self, texts: list[str]) -> list[tuple[str, float]]:
         # 'Objective Statement' is tendency's own neutral (a valid label in its set);
         # the shared classifier defaults to 'Neutral', which is NOT one of them.
-        return self._ml.predict(texts, neutral='Objective Statement')
+        return self._ml.predict(texts, _neutral='Objective Statement')
 
     # ── Main entry ──────────────────────────────────────────────
 
@@ -164,7 +164,6 @@ Analyze strictly and output only the required plain string."""
         self,
         df: pd.DataFrame,
         text_column: str = '正文',
-        max_retries: int = 2,
         ctx: dict = None,
     ) -> pd.DataFrame:
         if self.mode == 'ml':
