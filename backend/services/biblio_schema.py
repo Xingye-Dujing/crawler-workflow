@@ -121,6 +121,11 @@ DEFAULTS = {
     'reference_column': '参考文献',
     'tc_column': '引用次数',
     'usage_column': '使用次数',
+    # Optional overlays of a label column an upstream step already wrote (sentiment/emotion/
+    # tendency, or a per-document topic). Blank = the node behaves exactly as it did before
+    # these parameters existed; a NAMED column that is absent is refused by name at the run.
+    'sentiment_column': '',
+    'topic_column': '',
     'time_start': '',
     'time_end': '',
     'slice_years': 1,
@@ -217,6 +222,13 @@ USAGE_METRIC_COLUMNS = ('使用次数合计',)
 #: an entity appears in, and whether that is more than one.
 SOURCE_COLUMNS = ('来源', '跨源')
 
+#: Emitted only when the node maps an upstream label column. ``情感分布`` / ``话题分布`` are
+#: canonical JSON (label → number of mentioning documents), like ``年份序列``, so a stored row,
+#: a CSV export and a resume all parse back to the same counts; ``情感倾向`` / ``主导话题`` are
+#: the label the node's mentioning documents use most (ties broken by label, never by row order).
+SENTIMENT_COLUMNS = ('情感倾向', '情感分布')
+TOPIC_COLUMNS = ('主导话题', '话题分布')
+
 EDGE_COLUMNS = ('source', 'target', 'weight', 'count')
 DUAL_MAP_COLUMNS = ('map', 'source', 'target', 'weight', 'label', 'x', 'y')
 CLUSTER_TABLE_COLUMNS = ('聚类', '聚类标签', '节点数', '节点', '轮廓值')
@@ -289,6 +301,13 @@ def output_columns(params: dict, input_columns: list[str] | None = None) -> list
     # Provenance travels only from a fused record table.
     if '来源' in available:
         cols += list(SOURCE_COLUMNS)
+    # The overlay columns exist only when the node maps a column AND the input carries it — the
+    # same evidence rule the citation metrics follow, so diagnostics never promise a column the
+    # run cannot fill.
+    if str(params.get('sentiment_column') or '').strip() in available:
+        cols += list(SENTIMENT_COLUMNS)
+    if str(params.get('topic_column') or '').strip() in available:
+        cols += list(TOPIC_COLUMNS)
     return cols
 
 
@@ -516,6 +535,8 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         or DEFAULTS['reference_column'],
         'tc_column': str(params.get('tc_column') or DEFAULTS['tc_column']).strip() or DEFAULTS['tc_column'],
         'usage_column': str(params.get('usage_column') or DEFAULTS['usage_column']).strip() or DEFAULTS['usage_column'],
+        'sentiment_column': str(params.get('sentiment_column') or '').strip(),
+        'topic_column': str(params.get('topic_column') or '').strip(),
         'time_start': start,
         'time_end': end,
         'slice_years': _whole(nid, 'slice_years', params.get('slice_years', 1), 1, 50),

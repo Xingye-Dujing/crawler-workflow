@@ -444,6 +444,10 @@ def referenced_columns(nodes: dict) -> dict:
                 found.append(columns['tc'])
             if str(params.get('min_usage') or '').strip():
                 found.append(columns['usage'])
+            for key in ('sentiment_column', 'topic_column'):
+                value = str(params.get(key) or '').strip()
+                if value:
+                    found.append(value)
             if str(params.get('output_shape') or '') == 'dual_map':
                 found += ['参考文献', '来源期刊', '学科', '年份']
         elif ntype == 'analysis':

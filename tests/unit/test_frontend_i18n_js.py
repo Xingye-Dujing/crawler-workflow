@@ -416,6 +416,8 @@ class TestJsBiblioColumnWords:
             biblio_schema.CLUSTER_TABLE_COLUMNS,
             biblio_schema.BURST_TABLE_COLUMNS,
             biblio_schema.VARIATION_COLUMNS,
+            biblio_schema.SENTIMENT_COLUMNS,
+            biblio_schema.TOPIC_COLUMNS,
         )
         columns = set()
         for group in groups:

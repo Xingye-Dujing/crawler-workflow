@@ -17,6 +17,8 @@ BIBLIO_CHART_TYPES = (
     'variation',
     'dual_map',
     'geo_map',
+    'sentiment_overlay',
+    'topic_overlay',
 )
 
 #: Charts whose x axis is not a user-selected column. Validation must not demand
@@ -28,6 +30,28 @@ NO_X_TYPES = frozenset(('model_agreement',) + BIBLIO_CHART_TYPES)
 #: names end up printed on top of each other — so the cap is a legibility limit, not a data
 #: limit: the CSV and the three-line table still carry every mover.
 VARIATION_ROW_LIMIT = 20
+
+#: Rows the two overlay views draw. Like ``VARIATION_ROW_LIMIT`` this is a legibility limit, not
+#: a data limit: a y-axis row must be tall enough to carry its own Chinese node name, and the
+#: node table, the CSV export and the three-line table still carry every node's distribution.
+OVERLAY_ROW_LIMIT = 20
+
+#: Topic columns a topic overlay draws. Twelve Chinese topic heads fit across the preview panel
+#: before they need rotation past legibility; the JSON distribution column keeps the rest.
+OVERLAY_TOPIC_LIMIT = 12
+
+#: Rows the printed overlay tables carry. A paper table is an excerpt — the run's CSV and the
+#: node table's distribution column are the complete record, and the figure note says so.
+OVERLAY_TABLE_LIMIT = 40
+
+#: The polarity values the sentiment step writes, in print order (negative → neutral → positive).
+#: A column holding any other label set (emotion/tendency/a user's own topic names) is drawn in
+#: descending frequency order instead, because those labels have no left-to-right polarity.
+POLARITY_LABELS = ('negative', 'neutral', 'positive')
+
+#: One colour per polarity label, shared by the ECharts view and the TikZ figure so the two
+#: projections of the same data read the same way.
+POLARITY_COLORS = {'negative': '#A85442', 'neutral': '#9AA0A6', 'positive': '#4F7355'}
 
 #: The fixed columns each bibliometric chart REQUIRES. Optional decorating
 #: columns (cluster colour, burst rings) are read when present; a chart that
@@ -47,4 +71,9 @@ BIBLIO_CHART_READS = {
     # The choropleth reads the node table's own names and counts; the geometry is the committed
     # basemap, so no coordinate column is asked of the data.
     'geo_map': ('节点', '频次'),
+    # The overlay views read only the distribution columns the biblio node writes when its
+    # sentiment/topic mapping is filled. Requiring them is how a chart over an unlabelled table
+    # becomes a named refusal instead of a blank frame.
+    'sentiment_overlay': ('节点', '情感分布'),
+    'topic_overlay': ('节点', '话题分布'),
 }

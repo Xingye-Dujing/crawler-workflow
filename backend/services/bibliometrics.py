@@ -261,6 +261,24 @@ def _term_entities(row: dict, columns: dict) -> list[str]:
     return [token for token, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))][:_MAX_TERMS_PER_DOC]
 
 
+def _label_value(value) -> str:
+    """One upstream label cell as a graph-ready string, or '' for "no label".
+
+    A missing cell is '' — 「没有判断」 is not a category, and the text ``nan`` must never become a
+    label called nan. An integral float (a cluster id that survived a CSV round trip as ``2.0``)
+    loses its ``.0``, so the same document does not land in two categories across a resume.
+    """
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (float, np.floating)) and math.isfinite(float(value)) and float(value).is_integer():
+        return str(int(value))
+    text = str(value).strip()
+    return '' if text.lower() in ('nan', 'none', 'nat', '<na>') else text
+
+
 def _require_columns(df: pd.DataFrame, params: dict) -> dict:
     """Resolve the mapped columns and refuse a missing one by its real name."""
     entity = params['entity_type']
@@ -284,6 +302,12 @@ def _require_columns(df: pd.DataFrame, params: dict) -> dict:
     for column in required:
         if column and column not in df.columns:
             raise BiblioError(t('biblio.column_missing', col=column, entity=entity))
+    # A named overlay column is a hard read for the same reason a named entity column is: a typo
+    # silently ignored would produce a complete-looking graph whose overlay columns are all empty.
+    for param in ('sentiment_column', 'topic_column'):
+        column = str(params.get(param) or '').strip()
+        if column and column not in df.columns:
+            raise BiblioError(t('biblio.column_missing', col=column, entity=entity))
     return columns
 
 
@@ -294,6 +318,10 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
     entity = params['entity_type']
     columns = _require_columns(df, params)
     notes: list[str] = []
+    overlay_columns = {
+        'sentiment_label': str(params.get('sentiment_column') or '').strip(),
+        'topic_label': str(params.get('topic_column') or '').strip(),
+    }
     docs: list[dict] = []
     ref_nodes: dict[str, dict] = {}
     dropped_year = 0
@@ -400,11 +428,31 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
                 'source': str(record.get('来源') or '').strip() if '来源' in df.columns else '',
                 'tc': _numeric(record.get(columns['tc'])) if columns['tc'] in df.columns else None,
                 'usage': _numeric(record.get(columns['usage'])) if columns['usage'] in df.columns else None,
+                # The overlay labels travel WITH the document, because a node's distribution is
+                # aggregated over the documents that mentioned it — not over mentions, which would
+                # let one chatty document outvote five quiet ones.
+                'sentiment_label': _label_value(record.get(overlay_columns['sentiment_label']))
+                if overlay_columns['sentiment_label']
+                else '',
+                'topic_label': _label_value(record.get(overlay_columns['topic_label']))
+                if overlay_columns['topic_label']
+                else '',
             }
         )
 
     if not docs:
         raise BiblioError(t('biblio.no_records'))
+    for key, column in overlay_columns.items():
+        if not column:
+            continue
+        labelled = sum(1 for doc in docs if doc[key])
+        if not labelled:
+            # An all-blank column is not "no overlay requested": the box named a column, so the
+            # user believes labels are being aggregated. Say what happened instead of shipping
+            # two empty columns the chart then refuses with a message about the wrong node.
+            raise BiblioError(t('biblio.overlay_no_labels', col=column, n=len(docs)))
+        if labelled < len(docs):
+            notes.append(t('biblio.overlay_partial', col=column, n=len(docs) - labelled, total=len(docs)))
     if dropped_year:
         notes.append(t('biblio.year_missing', n=dropped_year))
     if skipped:
@@ -1087,6 +1135,26 @@ def _node_usage_stats(nodes: list[str], node_docs: dict[str, set[int]], docs: li
     return stats
 
 
+def _overlay_stats(
+    nodes: list[str], node_docs: dict[str, set[int]], docs: list[dict], label_key: str
+) -> dict[str, dict]:
+    """{node: dominant label + per-label document counts} for one mapped label column.
+
+    A document labels every entity it mentions once, so ``counts`` is a count of DOCUMENTS. A
+    document whose cell is blank contributes to none: 「没有判断」 is not a category, and folding
+    it into the neutral one would change the share the figure claims. Ties on the dominant label
+    break by label text, so two runs over the same table name the same winner.
+    """
+    stats: dict[str, dict] = {}
+    for name in nodes:
+        counts = Counter(label for index in node_docs.get(name, ()) if (label := docs[index].get(label_key) or ''))
+        if not counts:
+            continue
+        dominant = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+        stats[name] = {'dominant': dominant, 'counts': dict(sorted(counts.items()))}
+    return stats
+
+
 def _node_sources(nodes: list[str], node_docs: dict[str, set[int]], docs: list[dict]) -> dict[str, list[str]]:
     """Which corpora each entity actually appears in — the reading a fused graph exists for.
 
@@ -1543,6 +1611,21 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
     # Only a fused record table carries 来源, so only there does the node table grow the
     # provenance columns. A plain literature run must not gain an all-empty 来源 it cannot justify.
     source_stats = _node_sources(final_nodes, node_docs, docs) if '来源' in input_columns else {}
+    sentiment_stats = {}
+    topic_stats = {}
+    for param, key, bucket in (
+        ('sentiment_column', 'sentiment_label', sentiment_stats),
+        ('topic_column', 'topic_label', topic_stats),
+    ):
+        column = params[param]
+        if not column:
+            continue
+        bucket.update(_overlay_stats(final_nodes, node_docs, docs, key))
+        if not bucket:
+            # The column has labels (``_documents`` refused otherwise), but every labelled
+            # document's entities were dropped by selection/thresholds. The graph is still valid;
+            # the overlay is empty, and that is a fact about the run worth printing.
+            notes.append(t('biblio.overlay_no_nodes', col=column))
     bursts: dict[str, dict] = {}
     burst_rows: list[dict] = []
     if params['burst']:
@@ -1634,6 +1717,14 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         if source_stats:
             row['来源'] = ';'.join(source_stats.get(name) or [])
             row['跨源'] = len(source_stats.get(name) or ()) > 1
+        if params['sentiment_column']:
+            stat = sentiment_stats.get(name)
+            row['情感倾向'] = stat['dominant'] if stat else ''
+            row['情感分布'] = _json(stat['counts']) if stat else '{}'
+        if params['topic_column']:
+            stat = topic_stats.get(name)
+            row['主导话题'] = stat['dominant'] if stat else ''
+            row['话题分布'] = _json(stat['counts']) if stat else '{}'
         if clusters is not None:
             cluster = clusters['members'].get(name, {})
             row['聚类'] = int(cluster.get('cluster', 0))
@@ -1683,6 +1774,10 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         'output_shape': params['output_shape'],
         'notes': notes,
     }
+    if params['sentiment_column'] or params['topic_column']:
+        # Only when the node really overlaid something: an unconditional pair of blank strings
+        # would make every summary claim it had an overlay of nothing.
+        summary['overlay'] = {'sentiment': params['sentiment_column'], 'topic': params['topic_column']}
     return {
         'rows': rows,
         'edges': edge_rows,

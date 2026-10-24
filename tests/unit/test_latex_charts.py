@@ -113,6 +113,29 @@ def _dual():
     )
 
 
+def _overlay():
+    """A labelled node table: a polarity triple, a topic assignment and one unlabelled node."""
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '乙', '丙', '丁'],
+            '情感倾向': ['positive', 'negative', 'neutral', ''],
+            '情感分布': [
+                json.dumps({'positive': 6, 'neutral': 3, 'negative': 1}, ensure_ascii=False),
+                json.dumps({'negative': 5, 'neutral': 2, 'positive': 1}, ensure_ascii=False),
+                json.dumps({'neutral': 4, 'positive': 1}, ensure_ascii=False),
+                '{}',
+            ],
+            '主导话题': ['T1', 'T2', 'T1', ''],
+            '话题分布': [
+                json.dumps({'T1': 7, 'T2': 3}, ensure_ascii=False),
+                json.dumps({'T2': 6, 'T1': 1}, ensure_ascii=False),
+                json.dumps({'T1': 5}, ensure_ascii=False),
+                '{}',
+            ],
+        }
+    )
+
+
 def _variation():
     return pd.DataFrame(
         {
@@ -154,6 +177,8 @@ CASES = {
     'variation': (_variation(), dict()),
     'dual_map': (_dual(), dict()),
     'geo_map': (_geo(), dict()),
+    'sentiment_overlay': (_overlay(), dict()),
+    'topic_overlay': (_overlay(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),
 }

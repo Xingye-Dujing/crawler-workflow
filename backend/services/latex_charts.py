@@ -27,7 +27,14 @@ import pandas as pd
 from i18n import t
 from services.biblio_geo import aggregate as geo_aggregate
 from services.biblio_geo import display
-from services.chart_contracts import VARIATION_ROW_LIMIT
+from services.chart_contracts import (
+    BIBLIO_CHART_TYPES,
+    OVERLAY_ROW_LIMIT,
+    OVERLAY_TABLE_LIMIT,
+    OVERLAY_TOPIC_LIMIT,
+    POLARITY_LABELS,
+    VARIATION_ROW_LIMIT,
+)
 from services.visualizer import (
     ChartConfigError,
     VisualizationService,
@@ -93,6 +100,8 @@ def _preamble_extras() -> str:
         r'\setCJKmonofont[AutoFakeBold=2.0]{FangSong}',
     ]
     lines += [rf'\definecolor{{{n}}}{{HTML}}{{{h}}}' for n, h in zip(_CYCLE_NAMES, _PAPER_PALETTE, strict=False)]
+    # The sentiment overlay's neutral band, exactly the grey the screen uses (chart_contracts.POLARITY_COLORS).
+    lines.append(r'\definecolor{cNeutral}{HTML}{9AA0A6}')
     entries = ','.join(f'{{color={n},mark=*,solid,thick}}' for n in _CYCLE_NAMES[: len(_PAPER_PALETTE)])
     lines.append(rf'\pgfplotsset{{cycle list={{{entries}}}}}')
     lines.append(
@@ -353,19 +362,7 @@ class LatexChartService:
             return cls._topic_map(df, x, y, value_field, label_field)
         if chart_type == 'topic_terms':
             return cls._topic_terms(df, x, y, y2)
-        if chart_type in (
-            'knowledge_graph',
-            'cluster_timeline',
-            'burst',
-            'timezone',
-            'circular',
-            'landscape',
-            'biblio_heatmap',
-            'graph3d',
-            'variation',
-            'dual_map',
-            'geo_map',
-        ):
+        if chart_type in BIBLIO_CHART_TYPES:
             return cls._biblio_figure(df, chart_type)
         if chart_type == 'sankey':
             return cls._relation(df, x, y, value_field, agg, ribbons=True)
@@ -1054,6 +1051,33 @@ class LatexChartService:
                 if chart_type == 'geo_map'
                 else ''
             )
+            + (
+                # A share is only as meaningful as its denominator, and the denominator is the
+                # decision a reader cannot recover from the figure: it excludes documents with no
+                # judgement (「没有判断」 is not 中性), and both the figure and the table are excerpts.
+                '\\medskip\\par{\\footnotesize\\textbf{情感叠加公式：}'
+                r'节点 $v$ 的标签 $l$ 篇数 $n_{v,l}$ 为提及该节点的文档中标签为 $l$ 的篇数，'
+                r"占比 $p_{v,l}=n_{v,l}/\sum_{l'}n_{v,l'}$；没有标签的文档不计入分母（不当作中性）。"
+                f'图取前 {OVERLAY_ROW_LIMIT} 个节点、'
+                f'表取前 {OVERLAY_TABLE_LIMIT} 个，'
+                r'完整分布见节点表的「情感分布」列与 CSV 导出。'
+                '}\n'
+                if chart_type == 'sentiment_overlay'
+                else ''
+            )
+            + (
+                # Same denominator rule, plus the two axis caps: a heatmap that silently omits
+                # the eleventh topic would otherwise look like the whole topic space.
+                '\\medskip\\par{\\footnotesize\\textbf{话题叠加公式：}'
+                r'节点 $v$ 在话题 $t$ 上的文档数 $n_{v,t}$ 来自提及它的已标注文档，'
+                r"占比 $p_{v,t}=n_{v,t}/\sum_{t'}n_{v,t'}$；"
+                f'图取前 {OVERLAY_TOPIC_LIMIT} 个话题与前 {OVERLAY_ROW_LIMIT} 个节点，'
+                f'表取前 {OVERLAY_TOPIC_LIMIT} 个话题与前 {OVERLAY_TABLE_LIMIT} 个节点，'
+                r'完整分布见「话题分布」列与 CSV 导出。'
+                '}\n'
+                if chart_type == 'topic_overlay'
+                else ''
+            )
         )
 
     @classmethod
@@ -1423,6 +1447,151 @@ class LatexChartService:
         return pic
 
     @classmethod
+    def _overlay_items(cls, df, column: str, refusal: str) -> tuple[list, int]:
+        """[(node, {label: documents})] and how many nodes carry no distribution at all.
+
+        The same reading rule the ECharts builders apply (non-empty labels only, integer counts),
+        so the figure and the screen cannot disagree about which documents were counted."""
+        cls._require_biblio(df, '节点', column)
+        items = []
+        skipped = 0
+        for _, row in df.iterrows():
+            name = cls._biblio_text(row.get('节点'))
+            if not name:
+                continue
+            parsed = cls._biblio_parsed(row.get(column), column)
+            counts = {}
+            if isinstance(parsed, dict):
+                for label, value in parsed.items():
+                    text = cls._biblio_text(label)
+                    number = int(cls._biblio_float(value, 0.0))
+                    if text and number > 0:
+                        counts[text] = number
+            if counts:
+                items.append((name, counts))
+            else:
+                skipped += 1
+        if not items:
+            raise ChartConfigError(t(refusal))
+        return items, skipped
+
+    @staticmethod
+    def _overlay_order(items: list) -> list:
+        """The polarity order when the union of labels IS the three polarity values, else by frequency."""
+        totals = {}
+        for _name, counts in items:
+            for label, count in counts.items():
+                totals[label] = totals.get(label, 0) + count
+        labels = sorted(totals, key=lambda label: (-totals[label], label))
+        return list(POLARITY_LABELS) if set(labels) == set(POLARITY_LABELS) else labels
+
+    @staticmethod
+    def _overlay_ranked(items: list, polarity: bool) -> list:
+        if polarity:
+            return sorted(
+                items,
+                key=lambda item: (
+                    -item[1].get('positive', 0) / max(1, sum(item[1].values())),
+                    item[0],
+                ),
+            )
+        return sorted(items, key=lambda item: (-sum(item[1].values()), item[0]))
+
+    @classmethod
+    def _biblio_sentiment(cls, df) -> str:
+        """100 % stacked horizontal bars: each node's labelled documents by polarity.
+
+        ``xbar stacked`` draws the segments in ``\\addplot`` order, so negative sits left and
+        positive right — the way a Likert figure is read. The colours are the screen's own
+        (``chart_contracts.POLARITY_COLORS``): cB / the neutral grey / cC."""
+        items, skipped = cls._overlay_items(df, '情感分布', 'chart.biblio_no_sentiment')
+        labels = cls._overlay_order(items)
+        polarity = set(labels) == set(POLARITY_LABELS)
+        items = cls._overlay_ranked(items, polarity)[:OVERLAY_ROW_LIMIT]
+        names = [name for name, _counts in items]
+        coords = {name: _esc(name).replace(' ', '~') for name in names}
+        body = []
+        colors = {'negative': 'cB', 'neutral': 'cNeutral', 'positive': 'cC'}
+        for index, label in enumerate(labels):
+            color = colors.get(label) or cls._biblio_color(index)
+            points = []
+            for name, counts in items:
+                total = sum(counts.values())
+                share = round(100.0 * counts.get(label, 0) / total, 2) if total else 0.0
+                points.append(f'({share:g},{coords[name]})')
+            body.append(
+                f'\\addplot[fill={color}!88,draw=white,line width=0.4pt] coordinates {{' + ' '.join(points) + '};'
+            )
+            body.append(f'\\addlegendentry{{{_esc(_localize_label(label))}}}')
+        return (
+            '\\begin{tikzpicture}\\begin{axis}[cixi,xbar stacked,xmin=0,xmax=100,'
+            'width=15cm,height=' + f'{1.1 + len(items) * 0.62:.2f}' + 'cm,'
+            'symbolic y coords={' + _sym(names) + '},ytick=data,y dir=reverse,'
+            'yticklabel style={font=\\scriptsize},xmajorgrids=true,ymajorgrids=false,'
+            'xlabel={占比（\\%）},'
+            'legend style={font=\\scriptsize,draw=none,at={(0.5,1.02)},anchor=south,legend columns='
+            + str(max(1, len(labels)))
+            + '}]\n'
+            + '\n'.join(body)
+            + '\n\\end{axis}\\end{tikzpicture}'
+            + (
+                f'\n\\par{{\\footnotesize\\textcolor{{black!60}}{{另有 {skipped} 个节点无情感标签，未画出。}}}}\n'
+                if skipped
+                else ''
+            )
+        )
+
+    @classmethod
+    def _biblio_topic(cls, df) -> str:
+        """Node × topic grid of shares, drawn like the cluster heatmap.
+
+        A cell states the node's share of its labelled documents in that topic (percent), not a
+        raw count: with counts, one heavily mentioned node makes every other row look empty."""
+        items, skipped = cls._overlay_items(df, '话题分布', 'chart.biblio_no_topics')
+        totals = {}
+        for _name, counts in items:
+            for topic, count in counts.items():
+                totals[topic] = totals.get(topic, 0) + count
+        topics = sorted(totals, key=lambda topic: (-totals[topic], topic))[:OVERLAY_TOPIC_LIMIT]
+        items = sorted(items, key=lambda item: (-sum(item[1].values()), item[0]))[:OVERLAY_ROW_LIMIT]
+        body = []
+        for row, (_name, counts) in enumerate(items):
+            y = len(items) - row
+            total = sum(counts.values())
+            for column, topic in enumerate(topics):
+                share = 100.0 * counts.get(topic, 0) / total if total else 0.0
+                shade = int(10 + 80 * share / 100) if share > 0 else 0
+                fill = f'cA!{shade}' if shade else 'black!3'
+                body.append(
+                    f'\\draw[fill={fill},draw=black!10] ({column:.2f},{y:.2f})rectangle ({column + 1:.2f},{y + 1:.2f});'
+                )
+                if share > 0:
+                    color = 'white' if shade > 55 else 'black'
+                    body.append(
+                        f'\\node[font=\\scriptsize,text={color}] at ({column + 0.5:.2f},{y + 0.5:.2f}) '
+                        f'{{{_num(round(share, 1))}}};'
+                    )
+        for row, (name, _counts) in enumerate(items):
+            label = _fold_label(name, 10)
+            y = len(items) - row + 0.5
+            body.append(f'\\node[font=\\scriptsize,text=black,anchor=east] at (-0.15,{y:.2f}) {{{label}}};')
+        for column, topic in enumerate(topics):
+            body.append(
+                f'\\node[font=\\scriptsize,rotate=45,anchor=north west] at ({column + 0.5:.2f},0) '
+                f'{{{_esc(_localize_label(topic))}}};'
+            )
+        return (
+            '\\begin{tikzpicture}[x=0.86cm,y=0.62cm]\n'
+            + '\n'.join(body)
+            + '\n\\end{tikzpicture}'
+            + (
+                f'\n\\par{{\\footnotesize\\textcolor{{black!60}}{{另有 {skipped} 个节点无话题标签，未画出。}}}}\n'
+                if skipped
+                else ''
+            )
+        )
+
+    @classmethod
     def _biblio_graph3d(cls, df) -> str:
         rows, names = cls._biblio_node_rows(df, ('节点', 'x', 'y', '连接', '频次'))
         links = cls._biblio_links(rows, names)
@@ -1644,6 +1813,10 @@ class LatexChartService:
             pic = cls._biblio_variation(df)
         elif chart_type == 'geo_map':
             pic = cls._biblio_geo(df)
+        elif chart_type == 'sentiment_overlay':
+            pic = cls._biblio_sentiment(df)
+        elif chart_type == 'topic_overlay':
+            pic = cls._biblio_topic(df)
         elif chart_type == 'biblio_heatmap':
             pic = cls._biblio_heatmap(df)
         else:
@@ -1671,6 +1844,34 @@ class LatexChartService:
                         values.append(_num(cls._biblio_float(row.get(column), 0.0)))
                 rows.append(values)
             return head, rows
+        if chart_type == 'sentiment_overlay':
+            items, _skipped = cls._overlay_items(df, '情感分布', 'chart.biblio_no_sentiment')
+            labels = cls._overlay_order(items)
+            items = cls._overlay_ranked(items, set(labels) == set(POLARITY_LABELS))
+            head = [_esc(t('biblio.col.节点')), _esc(t('biblio.col.情感倾向'))] + [
+                _esc(_localize_label(label)) for label in labels
+            ]
+            table = []
+            for name, counts in items[:OVERLAY_TABLE_LIMIT]:
+                dominant = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+                table.append(
+                    [_esc(name), _esc(_localize_label(dominant))] + [_num(counts.get(label, 0)) for label in labels]
+                )
+            return head, table
+        if chart_type == 'topic_overlay':
+            items, _skipped = cls._overlay_items(df, '话题分布', 'chart.biblio_no_topics')
+            totals = {}
+            for _name, counts in items:
+                for topic, count in counts.items():
+                    totals[topic] = totals.get(topic, 0) + count
+            topics = sorted(totals, key=lambda topic: (-totals[topic], topic))[:OVERLAY_TOPIC_LIMIT]
+            items = sorted(items, key=lambda item: (-sum(item[1].values()), item[0]))
+            head = [_esc(t('biblio.col.节点'))] + [_esc(_localize_label(topic)) for topic in topics]
+            table = [
+                [_esc(name)] + [_num(counts.get(topic, 0)) for topic in topics]
+                for name, counts in items[:OVERLAY_TABLE_LIMIT]
+            ]
+            return head, table
         if chart_type == 'variation':
             cls._require_biblio(df, '节点', '起始年', '结束年', '结构变化', '前邻居', '后邻居', '新增邻居', '消失邻居')
             items = []
@@ -1886,19 +2087,7 @@ class LatexChartService:
 
     @classmethod
     def _table_data(cls, df, chart_type, *, x, y, value_field, agg, y2, label_field, stack_fields, tokenize):
-        if chart_type in (
-            'knowledge_graph',
-            'cluster_timeline',
-            'burst',
-            'timezone',
-            'circular',
-            'landscape',
-            'biblio_heatmap',
-            'graph3d',
-            'variation',
-            'dual_map',
-            'geo_map',
-        ):
+        if chart_type in BIBLIO_CHART_TYPES:
             return cls._biblio_table_data(df, chart_type)
         if chart_type == 'stack_pct':
             fields = [s.strip() for s in str(stack_fields or '').replace('，', ',').split(',') if s.strip()]

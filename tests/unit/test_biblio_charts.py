@@ -87,9 +87,44 @@ def geo_frame():
     )
 
 
+@pytest.fixture
+def overlay_frame():
+    """A node table with both overlay columns, plus one node carrying no label at all.
+
+    甲的 documents split 6/3/1 across positive/neutral/negative; 丁 was mentioned only by
+    documents the upstream step never labelled, so it must be left off the figures and named.
+    """
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '乙', '丙', '丁'],
+            '频次': [10, 8, 6, 3],
+            '情感倾向': ['positive', 'negative', 'neutral', ''],
+            '情感分布': [
+                json.dumps({'positive': 6, 'neutral': 3, 'negative': 1}),
+                json.dumps({'negative': 5, 'neutral': 2, 'positive': 1}),
+                json.dumps({'neutral': 4, 'positive': 1}),
+                '{}',
+            ],
+            '主导话题': ['T1', 'T2', 'T1', ''],
+            '话题分布': [
+                json.dumps({'T1': 7, 'T2': 3}),
+                json.dumps({'T2': 6, 'T1': 1}),
+                json.dumps({'T1': 5}),
+                '{}',
+            ],
+        }
+    )
+
+
 @pytest.mark.parametrize('chart_type', BIBLIO_CHART_TYPES)
-def test_each_view_builds_and_is_json_safe(frame, dual_frame, variation_frame, geo_frame, chart_type):
-    by_shape = {'variation': variation_frame, 'dual_map': dual_frame, 'geo_map': geo_frame}
+def test_each_view_builds_and_is_json_safe(frame, dual_frame, variation_frame, geo_frame, overlay_frame, chart_type):
+    by_shape = {
+        'variation': variation_frame,
+        'dual_map': dual_frame,
+        'geo_map': geo_frame,
+        'sentiment_overlay': overlay_frame,
+        'topic_overlay': overlay_frame,
+    }
     source = by_shape.get(chart_type, frame)
     option = VisualizationService.to_echarts_option(source, chart_type, title='知识图谱')
     assert option['series']
@@ -318,3 +353,99 @@ class TestTheGeoMap:
         option = VisualizationService.to_echarts_option(geo_frame, 'geo_map')
         assert option['visualMap']['min'] == 0
         assert option['visualMap']['max'] == 35.0
+
+
+class TestOverlayViews:
+    """Sentiment and topic overlays: the two views that read columns only an overlay writes."""
+
+    def test_sentiment_bars_split_each_node_into_one_hundred_percent(self, overlay_frame):
+        option = VisualizationService.to_echarts_option(overlay_frame, 'sentiment_overlay')
+        series = option['series']
+        assert [s['type'] for s in series] == ['bar', 'bar', 'bar']
+        assert all(s['stack'] == 'overlay' for s in series)
+        by_name = {
+            name: [series[i]['data'][index]['value'] for i in (0, 1, 2)]
+            for index, name in enumerate(option['yAxis']['data'])
+        }
+        assert by_name['甲'] == [10.0, 30.0, 60.0], 'negative → neutral → positive, not frequency order'
+        for shares in by_name.values():
+            assert round(sum(shares), 2) == 100.0
+
+    def test_polarity_is_ordered_by_meaning_not_frequency(self, overlay_frame):
+        from i18n import t
+
+        option = VisualizationService.to_echarts_option(overlay_frame, 'sentiment_overlay')
+        assert [s['name'] for s in option['series']] == [
+            t('chart.value.negative'),
+            t('chart.value.neutral'),
+            t('chart.value.positive'),
+        ]
+        # 甲 has more positive documents than negative ones, and it is still drawn on top
+        # because the figure ranks by positive SHARE (60 %), not by count or alphabet.
+        assert option['yAxis']['data'][0] == '甲'
+
+    def test_a_node_without_any_label_is_dropped_and_counted(self, overlay_frame):
+        option = VisualizationService.to_echarts_option(overlay_frame, 'sentiment_overlay')
+        assert '丁' not in option['yAxis']['data'], 'a row of zeros would read as "measured, and zero"'
+        assert '1' in option['title']['subtext']
+
+    def test_a_label_set_that_is_not_polarity_keeps_frequency_order(self):
+        from i18n import t
+
+        frame = pd.DataFrame(
+            {
+                '节点': ['甲', '乙'],
+                '情感分布': [
+                    json.dumps({'Joy': 1, 'Anger': 4}),
+                    json.dumps({'Sadness': 2, 'Anger': 1}),
+                ],
+            }
+        )
+        option = VisualizationService.to_echarts_option(frame, 'sentiment_overlay')
+        assert [s['name'] for s in option['series']] == [
+            t('chart.value.anger'),
+            t('chart.value.sadness'),
+            t('chart.value.joy'),
+        ]
+
+    def test_topic_cells_are_the_share_of_that_nodes_labelled_documents(self, overlay_frame):
+        option = VisualizationService.to_echarts_option(overlay_frame, 'topic_overlay')
+        series = option['series'][0]
+        names = option['yAxis']['data']
+        topics = option['xAxis']['data']
+        cells = {(names[int(v[1])], topics[int(v[0])]): v[2] for v in (item['value'] for item in series['data'])}
+        assert cells[('甲', 'T1')] == 70.0
+        assert cells[('乙', 'T2')] == 85.71
+        assert option['visualMap']['max'] == 100
+
+    def test_both_axes_are_capped_and_the_note_says_so(self):
+        from services.chart_contracts import OVERLAY_ROW_LIMIT, OVERLAY_TOPIC_LIMIT
+
+        rows = []
+        for index in range(OVERLAY_ROW_LIMIT + 4):
+            rows.append(
+                {
+                    '节点': f'词{index}',
+                    '话题分布': json.dumps({f'T{topic}': index + topic for topic in range(OVERLAY_TOPIC_LIMIT + 3)}),
+                }
+            )
+        option = VisualizationService.to_echarts_option(pd.DataFrame(rows), 'topic_overlay')
+        assert len(option['yAxis']['data']) == OVERLAY_ROW_LIMIT
+        assert len(option['xAxis']['data']) == OVERLAY_TOPIC_LIMIT
+        assert '话题' in option['title']['subtext'] and '节点' in option['title']['subtext']
+
+    def test_a_missing_overlay_column_is_refused_by_name(self, overlay_frame):
+        with pytest.raises(ChartConfigError, match='情感分布'):
+            VisualizationService.to_echarts_option(overlay_frame.drop(columns=['情感分布']), 'sentiment_overlay')
+        with pytest.raises(ChartConfigError, match='话题分布'):
+            VisualizationService.to_echarts_option(overlay_frame.drop(columns=['话题分布']), 'topic_overlay')
+
+    def test_a_table_where_every_node_lacks_a_label_is_refused(self):
+        frame = pd.DataFrame({'节点': ['甲', '乙'], '情感分布': ['{}', '{}']})
+        with pytest.raises(ChartConfigError):
+            VisualizationService.to_echarts_option(frame, 'sentiment_overlay')
+
+    def test_a_malformed_distribution_is_refused_rather_than_read_as_absent(self, overlay_frame):
+        broken = overlay_frame.assign(情感分布=['not json'] * len(overlay_frame))
+        with pytest.raises(ChartConfigError, match='情感分布'):
+            VisualizationService.to_echarts_option(broken, 'sentiment_overlay')

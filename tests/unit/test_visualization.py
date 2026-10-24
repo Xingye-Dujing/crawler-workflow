@@ -167,12 +167,34 @@ def geo_df():
     )
 
 
+@pytest.fixture
+def overlay_df():
+    """What a biblio node with its sentiment/topic columns mapped hands the overlay views."""
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '乙', '丙'],
+            '情感分布': [
+                json.dumps({'positive': 6, 'neutral': 3, 'negative': 1}),
+                json.dumps({'negative': 5, 'neutral': 2, 'positive': 1}),
+                json.dumps({'neutral': 4, 'positive': 1}),
+            ],
+            '话题分布': [
+                json.dumps({'T1': 7, 'T2': 3}),
+                json.dumps({'T2': 6, 'T1': 1}),
+                json.dumps({'T1': 5}),
+            ],
+        }
+    )
+
+
 #: A shape's table is not the node table, so the sweep picks the frame by chart type.
-def _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df):
+def _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df, overlay_df):
     return {
         'dual_map': dual_df,
         'variation': variation_df,
         'geo_map': geo_df,
+        'sentiment_overlay': overlay_df,
+        'topic_overlay': overlay_df,
     }.get(chart_type, biblio_df)
 
 
@@ -180,12 +202,12 @@ def _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df):
 
 
 class TestChartCatalogue:
-    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df, variation_df, geo_df):
+    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df, variation_df, geo_df, overlay_df):
         assert set(USABLE) | set(BIBLIO_USABLE) == set(CHART_TYPES)
         for chart_type, kwargs in USABLE.items():
             assert V.to_echarts_option(df, chart_type, **kwargs)['series'], chart_type
         for chart_type in BIBLIO_CHART_TYPES:
-            frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df)
+            frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df, overlay_df)
             assert V.to_echarts_option(frame, chart_type)['series'], chart_type
 
     def test_echarts_only_types_are_a_subset_of_the_catalogue(self):
@@ -691,9 +713,9 @@ class TestChartDisplayLocalisation:
 
 class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
-    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, variation_df, geo_df, chart_type):
+    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, variation_df, geo_df, overlay_df, chart_type):
         frame = (
-            _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df)
+            _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df, overlay_df)
             if chart_type in BIBLIO_CHART_TYPES
             else df
         )

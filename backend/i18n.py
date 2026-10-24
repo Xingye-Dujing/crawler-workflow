@@ -211,6 +211,11 @@ _ZH = {
     ),
     'biblio.variation_done': '结构变异：{rows} 行（最高 {node} {pair} = {score} bit，阈值 {floor}）',
     'biblio.variation_empty': '结构变异：没有节点在相邻切片间的连接模式变化达到阈值 {floor} bit',
+    'biblio.overlay_no_labels': (
+        '「{col}」列没有任何标签（{n} 条记录全为空）：无法叠加，请先检查上游情感/情绪/话题步骤是否真的写出了这一列'
+    ),
+    'biblio.overlay_partial': '「{col}」：{n}/{total} 条记录没有标签，未计入叠加（分母只含已标注文档）',
+    'biblio.overlay_no_nodes': '「{col}」有标签，但没有任何留下来的节点带标签，叠加列为空',
     'biblio.dual_map_needs_basemap': '{nid}：输出形态 dual_map 需要选择期刊—学科 basemap 数据集',
     'biblio.dual_map_columns': '双图叠加 basemap 需要期刊列（{journal}）和学科列（{category}）',
     'biblio.dual_map_done': '双图叠加已生成：期刊 {journals} 个 / 学科 {categories} 个',
@@ -287,6 +292,17 @@ _ZH = {
     'chart.biblio_variation': '结构变异',
     'chart.biblio_pair': '相邻切片',
     'chart.biblio_no_variation': '没有结构变异可画：请在上游节点开启 variation 并调整变异量阈值 variation_min',
+    'chart.biblio_no_sentiment': (
+        '这张表没有「情感分布」列：请在上游接入情感/情绪/倾向步骤，并在文献计量节点填写「情感/情绪列」'
+    ),
+    'chart.biblio_no_topics': (
+        '这张表没有「话题分布」列：请在上游接入文本聚类/话题步骤，并在文献计量节点填写「话题列」'
+    ),
+    'chart.biblio_overlay_unlabelled': '另有 {n} 个节点没有任何标签，图上从略',
+    'chart.biblio_overlay_truncated': '只画前 {shown}/{total} 个节点，完整分布见表格与 CSV',
+    'chart.biblio_topics_truncated': '只画前 {shown}/{total} 个话题',
+    'chart.biblio_share': '占比（%）',
+    'chart.biblio_topic_share': '话题占比',
     # The paper's three-line table prints the variation columns by name, so the server needs the
     # words too — same keys the browser catalogue uses for the panel's table headers.
     'biblio.col.节点': '节点',
@@ -297,6 +313,10 @@ _ZH = {
     'biblio.col.后邻居': '后邻居',
     'biblio.col.新增邻居': '新增邻居',
     'biblio.col.消失邻居': '消失邻居',
+    'biblio.col.情感倾向': '情感倾向',
+    'biblio.col.情感分布': '情感分布',
+    'biblio.col.主导话题': '主导话题',
+    'biblio.col.话题分布': '话题分布',
     'chart.biblio_activity': '年度活动',
     'chart.biblio_nodes': '节点',
     'chart.biblio_links': '连线',
@@ -1936,6 +1956,16 @@ _EN = {
     'biblio.variation_empty': (
         'Structural variation: no node moved its connection pattern by {floor} bits between consecutive slices'
     ),
+    'biblio.overlay_no_labels': (
+        'Column "{col}" holds no labels at all ({n} records are blank), so nothing can be overlaid — '
+        'check that the upstream sentiment/emotion/topic step really wrote this column'
+    ),
+    'biblio.overlay_partial': (
+        'Column "{col}": {n} of {total} records carry no label and are left out of the overlay '
+        '(the denominator is labelled documents only)'
+    ),
+    'biblio.overlay_no_nodes': 'Column "{col}" has labels, but no surviving node carries one; '
+    'the overlay columns are empty',
     'biblio.dual_map_needs_basemap': '{nid}: output_shape dual_map needs a journal-category basemap dataset',
     'biblio.dual_map_columns': (
         'The dual-map basemap needs a journal column ({journal}) and a category column ({category})'
@@ -2027,6 +2057,20 @@ _EN = {
     'chart.biblio_no_variation': (
         'No structural variation to draw: enable variation upstream and adjust its variation_min threshold'
     ),
+    'chart.biblio_no_sentiment': (
+        'This table has no 情感分布 column: run a sentiment/emotion/tendency step upstream and name '
+        "its column in the biblio node's sentiment field"
+    ),
+    'chart.biblio_no_topics': (
+        'This table has no 话题分布 column: run a clustering/topic step upstream and name its column '
+        "in the biblio node's topic field"
+    ),
+    'chart.biblio_overlay_unlabelled': '{n} nodes carry no label and are left off this figure',
+    'chart.biblio_overlay_truncated': 'Showing the first {shown} of {total} nodes; '
+    'the table and CSV carry the full distribution',
+    'chart.biblio_topics_truncated': 'Showing the first {shown} of {total} topics',
+    'chart.biblio_share': 'Share (%)',
+    'chart.biblio_topic_share': 'Topic share',
     'biblio.col.节点': 'Node',
     'biblio.col.起始年': 'From year',
     'biblio.col.结束年': 'To year',
@@ -2035,6 +2079,10 @@ _EN = {
     'biblio.col.后邻居': 'Neighbours after',
     'biblio.col.新增邻居': 'Gained neighbours',
     'biblio.col.消失邻居': 'Lost neighbours',
+    'biblio.col.情感倾向': 'Dominant sentiment',
+    'biblio.col.情感分布': 'Sentiment distribution',
+    'biblio.col.主导话题': 'Dominant topic',
+    'biblio.col.话题分布': 'Topic distribution',
     'chart.biblio_activity': 'Yearly activity',
     'chart.biblio_nodes': 'Nodes',
     'chart.biblio_links': 'Links',

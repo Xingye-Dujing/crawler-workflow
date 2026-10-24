@@ -47,7 +47,7 @@ def test_every_bibliometric_view_is_on_the_demo_canvas():
 
 def test_the_dual_map_chain_is_off_and_names_the_dataset_it_wants():
     off = [node for node in _draft()['nodes'] if not (node.get('params') or {}).get('enabled', True)]
-    assert {node['type'] for node in off} == {'analysis', 'biblio', 'visualize', 'fuse', 'upload'}
+    assert {node['type'] for node in off} == {'analysis', 'biblio', 'visualize', 'fuse', 'upload', 'process'}
     shapes = {str((node.get('params') or {}).get('output_shape') or '') for node in off if node['type'] == 'biblio'}
     assert shapes == {'nodes', 'dual_map'}, shapes
     dual = next(
@@ -70,6 +70,41 @@ def test_the_variation_table_is_on_the_demo_canvas_and_runs():
     params = variation[0]['params']
     assert params['variation'] is True
     assert params['cluster'] is False and params['burst'] is False
+
+
+def _parent(draft: dict, node_id: str) -> dict:
+    """The one node wired into ``node_id``; the demo's single-input chains depend on it."""
+    source = next(conn['from'] for conn in draft['connections'] if conn['to'] == node_id)
+    return next(node for node in draft['nodes'] if node['id'] == source)
+
+
+def test_the_overlay_chain_is_wired_but_ships_off_because_the_free_model_is_biased():
+    """The chain runs end to end (sentiment → cluster → biblio → two views), but it is switched
+    off on purpose: SnowNLP — the only sentiment mode that costs nothing here — labels every one
+    of the CNKI abstracts positive, so a live demo would draw a solid green bar and read as a
+    broken figure. The views are for real labels (a sentiment step over crawled posts); the API
+    end-to-end test proves that path with a labelled table, and the node titles say so on the
+    canvas."""
+    draft = _draft()
+    overlay = [
+        node
+        for node in draft['nodes']
+        if (node.get('params') or {}).get('chart_type') in ('sentiment_overlay', 'topic_overlay')
+    ]
+    assert len(overlay) == 2
+    assert not any((node.get('params') or {}).get('enabled', True) for node in overlay)
+    labelled = next(node for node in draft['nodes'] if (node.get('params') or {}).get('sentiment_column'))
+    assert labelled['type'] == 'biblio'
+    assert labelled['params']['sentiment_column'] == 'sentiment'
+    assert labelled['params']['topic_column'] == 'cluster'
+    assert labelled['params']['enabled'] is False
+    topic_step = _parent(draft, labelled['id'])
+    assert topic_step['type'] == 'process' and topic_step['params']['operation'] == 'cluster'
+    sentiment_step = _parent(draft, topic_step['id'])
+    assert sentiment_step['params']['operation'] == 'sentiment'
+    live_ids = {node['id'] for node in effective_workflow(_graph(draft))['nodes']}
+    off_ids = {node['id'] for node in overlay} | {labelled['id'], topic_step['id'], sentiment_step['id']}
+    assert not (off_ids & live_ids), 'the disabled chain must not reach validation or the run'
 
 
 def test_the_fusion_chain_is_off_until_the_third_dataset_is_uploaded():

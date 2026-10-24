@@ -778,6 +778,93 @@
       "x": 640,
       "y": 2320,
       "folded": false
+    },
+    {
+      "id": "node-33",
+      "type": "process",
+      "title": "情感极性（SnowNLP；学术摘要常全判正面，默认关闭）",
+      "params": {
+        "enabled": false,
+        "operation": "sentiment",
+        "text_column": "摘要",
+        "mode": "snownlp"
+      },
+      "x": 320,
+      "y": 2460,
+      "folded": false
+    },
+    {
+      "id": "node-34",
+      "type": "process",
+      "title": "文本聚类（话题代理）",
+      "params": {
+        "enabled": false,
+        "operation": "cluster",
+        "text_column": "摘要",
+        "cluster_method": "kmeans",
+        "n_clusters": 5
+      },
+      "x": 600,
+      "y": 2460,
+      "folded": false
+    },
+    {
+      "id": "node-35",
+      "type": "biblio",
+      "title": "关键词网络·情感/话题叠加（演示，默认关闭）",
+      "params": {
+        "enabled": false,
+        "entity_type": "keyword",
+        "year_column": "年份",
+        "title_column": "题名",
+        "abstract_column": "摘要",
+        "sentiment_column": "sentiment",
+        "topic_column": "cluster",
+        "selection": "top_n",
+        "top_n": 50,
+        "min_count": 1,
+        "link_measure": "cosine",
+        "pruning": "none",
+        "cluster": false,
+        "burst": false,
+        "output_shape": "nodes",
+        "export_files": true
+      },
+      "x": 880,
+      "y": 2460,
+      "folded": false
+    },
+    {
+      "id": "node-36",
+      "type": "visualize",
+      "title": "情感叠加图（需真实情感标签）",
+      "params": {
+        "enabled": false,
+        "chart_type": "sentiment_overlay",
+        "engine": "echarts",
+        "title": "关键词节点的情感叠加",
+        "emit_latex": true,
+        "emit_latex_table": true
+      },
+      "x": 1180,
+      "y": 2420,
+      "folded": false
+    },
+    {
+      "id": "node-37",
+      "type": "visualize",
+      "title": "话题叠加热力图",
+      "params": {
+        "enabled": false,
+        "chart_type": "topic_overlay",
+        "engine": "echarts",
+        "title": "关键词节点的话题叠加",
+        "emit_latex": true,
+        "emit_latex_table": true
+      },
+      "x": 1180,
+      "y": 2540,
+      "folded": false
     }
   ],
   "connections": [
@@ -811,7 +898,12 @@
     { "from": "node-2", "to": "node-28" },
     { "from": "node-1", "to": "node-29" },
     { "from": "node-30", "to": "node-31" },
-    { "from": "node-31", "to": "node-32" }
+    { "from": "node-31", "to": "node-32" },
+    { "from": "node-1", "to": "node-33" },
+    { "from": "node-33", "to": "node-34" },
+    { "from": "node-34", "to": "node-35" },
+    { "from": "node-35", "to": "node-36" },
+    { "from": "node-35", "to": "node-37" }
   ],
   "settings": {
     "mode": "parallel",

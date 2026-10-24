@@ -1,6 +1,7 @@
 """Upload → biblio → knowledge graph, through the real HTTP routes."""
 
 import io
+import json
 import time
 from pathlib import Path
 
@@ -23,9 +24,17 @@ def _upload(client, name: str):
 
 
 def _wait_for_worker(app_module, timeout: float = 30.0) -> bool:
+    """Wait until the server would ACCEPT a start, not merely until ``running`` is false.
+
+    ``_begin_run`` counts a still-alive worker thread as busy (it clears ``running`` a moment
+    before the thread exits, so a Stop → Run cannot overlap two writers), and a start sent in
+    that window is QUEUED — a 200 with no ``run_id``. Asking the server's own question here is
+    what keeps a second run in one test from intermittently landing in the queue.
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if not app_module.execution_state.get('running'):
+        thread = app_module.execution_state.get('thread')
+        if not app_module.execution_state.get('running') and not (thread is not None and thread.is_alive()):
             return True
         time.sleep(0.05)
     return False
@@ -315,6 +324,107 @@ def test_structural_variation_table_runs_end_to_end(client, app_module):
 
 
 @pytest.mark.serial
+def test_sentiment_and_topic_columns_reach_both_overlay_charts(client, app_module):
+    """A label column an upstream step wrote becomes a node attribute and a figure.
+
+    The table is an ordinary CSV (an upstream sentiment step writes this shape), the biblio
+    node names both columns, and the two views read only what the biblio table emits — so this
+    is the whole overlay path through the real executor: aggregate → columns → chart → LaTeX
+    figure plus three-line table.
+    """
+    payload = (
+        '题名,年份,关键词,摘要,sentiment,cluster\n'
+        't1,2019,甲;乙,甲 乙,positive,1\n'
+        't2,2020,甲;乙,甲 乙,negative,1\n'
+        't3,2020,乙;丙,乙 丙,neutral,2\n'
+        't4,2021,甲;丙,甲 丙,,\n'
+    )
+    uploaded = client.post(
+        '/api/data/upload',
+        data={'file': (io.BytesIO(payload.encode('utf-8')), 'labelled.csv')},
+        content_type='multipart/form-data',
+    ).get_json()
+    assert uploaded['columns'] == ['题名', '年份', '关键词', '摘要', 'sentiment', 'cluster'], uploaded
+    params = {
+        'entity_type': 'keyword',
+        'year_column': '年份',
+        'abstract_column': '摘要',
+        'min_count': 1,
+        'cluster': False,
+        'burst': False,
+        'pruning': 'none',
+        'sentiment_column': 'sentiment',
+        'topic_column': 'cluster',
+        'export_files': False,
+    }
+    workflow = {
+        'nodes': [
+            {
+                'id': 'node-1',
+                'type': 'upload',
+                'title': '上传带标签的表',
+                'params': {'dataset_id': uploaded['dataset_id'], 'dataset_name': 'labelled.csv', 'row_count': 4},
+            },
+            {'id': 'node-2', 'type': 'biblio', 'title': '关键词图谱·叠加', 'params': params},
+            {
+                'id': 'node-3',
+                'type': 'visualize',
+                'title': '情感叠加图',
+                'params': {
+                    'chart_type': 'sentiment_overlay',
+                    'engine': 'echarts',
+                    'title': '情感叠加',
+                    'emit_latex': True,
+                    'emit_latex_table': True,
+                },
+            },
+            {
+                'id': 'node-4',
+                'type': 'visualize',
+                'title': '话题叠加图',
+                'params': {
+                    'chart_type': 'topic_overlay',
+                    'engine': 'echarts',
+                    'title': '话题叠加',
+                    'emit_latex': False,
+                    'emit_latex_table': False,
+                },
+            },
+        ],
+        'connections': [
+            {'from': 'node-1', 'to': 'node-2'},
+            {'from': 'node-2', 'to': 'node-3'},
+            {'from': 'node-2', 'to': 'node-4'},
+        ],
+        'settings': {'mode': 'serial', 'headless': True, 'max_workers': 1},
+    }
+    started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'overlay-e2e'})
+    assert started.status_code == 200, started.get_json()
+    run_id = started.get_json()['run_id']
+    assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
+    status = client.get('/api/workflow/status').get_json()
+    assert status['completed_nodes'] == 4, status['logs']
+
+    rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+    by_name = {row['节点']: row for row in rows}
+    assert {'情感倾向', '情感分布', '主导话题', '话题分布'} <= set(by_name['甲'])
+    assert json.loads(by_name['甲']['情感分布']) == {'negative': 1, 'positive': 1}
+    assert by_name['甲']['情感倾向'] == 'negative', 'a tie resolves by label, not by row order'
+    log_text = ' '.join(status['logs'])
+    assert '1/4' in log_text or '1 of 4' in log_text, 'the unlabelled record is reported, not silently dropped'
+
+    sentiment = status['chart_results']['node-3']
+    assert sentiment['option']['series'][0]['type'] == 'bar'
+    assert len(sentiment['option']['series']) == 3
+    assert sentiment['latex_file'] and sentiment['latex_table_file']
+    topic = status['chart_results']['node-4']
+    assert topic['option']['series'][0]['type'] == 'heatmap'
+    assert topic['option']['visualMap']['max'] == 100
+    kinds = {record['kind'] for record in app_module._RUN_STORE.files_for_run(run_id)}
+    assert {'latex', 'latex_table'} <= kinds
+
+
+@pytest.mark.serial
 def test_a_biblio_cluster_reaches_the_review_step_by_its_default_names(client, app_module, monkeypatch):
     """The claim the whole 簇综述 feature rests on, measured through the real run path: the columns
     a ``biblio`` node writes (聚类 / 聚类标签 / 节点 / 频次 / 首年 / 末年) ARE the columns
@@ -426,8 +536,9 @@ def _execute(client, workflow, name):
     console wording that inherits the process default would pass on this box and fail on CI.
     """
     started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name, 'lang': 'zh'})
-    assert started.status_code == 200, started.get_json()
-    return started.get_json()['run_id']
+    body = started.get_json()
+    assert started.status_code == 200 and body.get('run_id'), body
+    return body['run_id']
 
 
 @pytest.mark.serial

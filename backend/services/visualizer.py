@@ -72,6 +72,8 @@ CHART_TYPES = (
     'variation',
     'dual_map',
     'geo_map',
+    'sentiment_overlay',
+    'topic_overlay',
     'wordcloud',
     'map',
 )
@@ -433,6 +435,8 @@ ECHARTS_ONLY_TYPES = (
     'variation',
     'dual_map',
     'geo_map',
+    'sentiment_overlay',
+    'topic_overlay',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other

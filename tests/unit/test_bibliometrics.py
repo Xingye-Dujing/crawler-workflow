@@ -827,3 +827,96 @@ class TestFractionalCounting:
     def test_normalizing_twice_changes_nothing(self):
         once = normalize_params(_params(counting='fractional'), 'test')
         assert normalize_params(once, 'test') == once
+
+
+class TestSentimentAndTopicOverlay:
+    """A label column an upstream step wrote, aggregated per node as document counts."""
+
+    @staticmethod
+    def _frame():
+        return pd.DataFrame(
+            [
+                {'题名': 't1', '年份': 2019, '关键词': '甲;乙', '摘要': '甲 乙', 'sentiment': 'positive', 'cluster': 1},
+                {'题名': 't2', '年份': 2020, '关键词': '甲;乙', '摘要': '甲 乙', 'sentiment': 'negative', 'cluster': 1},
+                {'题名': 't3', '年份': 2020, '关键词': '乙;丙', '摘要': '乙 丙', 'sentiment': 'positive', 'cluster': 2},
+                {'题名': 't4', '年份': 2021, '关键词': '甲;丙', '摘要': '甲 丙', 'sentiment': '', 'cluster': 2},
+            ]
+        )
+
+    def test_without_a_mapping_the_table_is_byte_for_byte_what_it_was(self):
+        result = bibliometrics.build(self._frame(), _params(), 'test')
+        assert not ({'情感倾向', '情感分布', '主导话题', '话题分布'} & set(result['rows'][0]))
+        assert 'overlay' not in result['summary']
+
+    def test_the_distribution_counts_the_documents_that_mention_the_node(self):
+        result = bibliometrics.build(
+            self._frame(), _params(sentiment_column='sentiment', topic_column='cluster'), 'test'
+        )
+        by_name = {row['节点']: row for row in result['rows']}
+        assert json.loads(by_name['乙']['情感分布']) == {'negative': 1, 'positive': 2}
+        # 甲 is mentioned by t1, t2 and t4; t4 has no label, so the denominator is two documents.
+        assert json.loads(by_name['甲']['情感分布']) == {'negative': 1, 'positive': 1}
+        assert json.loads(by_name['甲']['话题分布']) == {'1': 2, '2': 1}
+        assert by_name['乙']['主导话题'] == '1'
+        assert by_name['丙']['情感倾向'] == 'positive'
+        assert result['summary']['overlay'] == {'sentiment': 'sentiment', 'topic': 'cluster'}
+
+    def test_a_tie_is_broken_by_label_not_by_row_order(self):
+        """甲乙 each appear in a positive and a negative document; whichever document comes
+        first must not decide the dominant label — otherwise two orderings of one corpus
+        disagree about the node."""
+        frame = self._frame()
+        forward = bibliometrics.build(frame, _params(sentiment_column='sentiment'), 'test')
+        backward = bibliometrics.build(
+            frame.iloc[::-1].reset_index(drop=True), _params(sentiment_column='sentiment'), 'test'
+        )
+        labels = {row['节点']: row['情感倾向'] for row in forward['rows']}
+        assert labels == {row['节点']: row['情感倾向'] for row in backward['rows']}
+        assert labels['甲'] == 'negative', 'tie between negative and positive resolves to the label text'
+
+    def test_a_partly_unlabelled_column_is_printed_not_silently_narrowed(self):
+        result = bibliometrics.build(self._frame(), _params(sentiment_column='sentiment'), 'test')
+        assert any('sentiment' in note and '1/4' in note for note in result['notes']), result['notes']
+
+    def test_a_named_column_the_table_does_not_carry_refuses_by_name(self):
+        with pytest.raises(bibliometrics.BiblioError, match='sentiment'):
+            bibliometrics.build(
+                self._frame().drop(columns=['sentiment']), _params(sentiment_column='sentiment'), 'test'
+            )
+
+    def test_a_column_with_no_labels_at_all_refuses_instead_of_shipping_empty_columns(self):
+        frame = self._frame().assign(sentiment='')
+        with pytest.raises(bibliometrics.BiblioError, match='sentiment'):
+            bibliometrics.build(frame, _params(sentiment_column='sentiment'), 'test')
+
+    def test_an_integral_float_label_loses_its_point_zero(self):
+        """A cluster id that round-tripped through a CSV as 2.0 is the same category as 2;
+        keyed apart, one cluster would be drawn as two topics."""
+        frame = self._frame().assign(cluster=[1.0, 1.0, 2.0, 2.0])
+        result = bibliometrics.build(frame, _params(topic_column='cluster'), 'test')
+        by_name = {row['节点']: row for row in result['rows']}
+        assert set(json.loads(by_name['乙']['话题分布'])) == {'1', '2'}
+        assert by_name['乙']['主导话题'] == '1'
+
+    def test_the_columns_are_promised_only_when_the_input_carries_them(self):
+        params = _params(sentiment_column='sentiment', topic_column='cluster')
+        columns = output_columns(params, ['题名', '年份', '关键词', 'sentiment'])
+        assert '情感倾向' in columns and '情感分布' in columns
+        assert '主导话题' not in columns, 'the topic column is not in this input'
+        assert '话题分布' not in columns
+
+    def test_a_surviving_node_fed_only_by_unlabelled_documents_says_so(self):
+        """A node can survive the graph on documents the upstream step never labelled: its
+        cells must be empty, not a fabricated 中性. The partial-label note already says how
+        many documents the denominator left out."""
+        frame = pd.DataFrame(
+            [
+                {'题名': 't1', '年份': 2019, '关键词': '甲;乙', '摘要': '', 'sentiment': 'positive'},
+                {'题名': 't2', '年份': 2019, '关键词': '丙;丁', '摘要': '', 'sentiment': ''},
+            ]
+        )
+        result = bibliometrics.build(frame, _params(sentiment_column='sentiment'), 'test')
+        by_name = {row['节点']: row for row in result['rows']}
+        assert json.loads(by_name['甲']['情感分布']) == {'positive': 1}
+        assert by_name['丙']['情感分布'] == '{}'
+        assert by_name['丙']['情感倾向'] == ''

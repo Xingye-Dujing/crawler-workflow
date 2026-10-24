@@ -3838,3 +3838,123 @@ def test_the_world_map_loads_its_shipped_basemap_and_prints_no_colliding_labels(
     assert facts['measured'] >= 4, f'only {facts["measured"]} labels measured; the audit is hollow'
     assert facts['overlaps'] == 0, f'country labels collide: {facts["pairs"]}'
     assert facts['outside'] == [], f'labels run past the canvas: {facts["outside"]}'
+
+
+def _overlay_options(lang: str) -> dict:
+    """The two overlay options, built by the service in the run's language."""
+    import json as _json
+
+    import pandas as pd
+
+    from i18n import set_lang
+    from services.visualizer import VisualizationService
+
+    frame = pd.DataFrame(
+        {
+            '节点': ['数字治理', '数据要素', '公共服务', '协同监管'],
+            '频次': [30, 26, 22, 20],
+            '情感分布': [
+                _json.dumps({'positive': 6, 'neutral': 3, 'negative': 1}),
+                _json.dumps({'negative': 5, 'neutral': 2, 'positive': 1}),
+                _json.dumps({'neutral': 4, 'positive': 1}),
+                _json.dumps({'positive': 2, 'negative': 2}),
+            ],
+            '话题分布': [
+                _json.dumps({'T1': 7, 'T2': 3}),
+                _json.dumps({'T2': 6, 'T1': 1}),
+                _json.dumps({'T1': 5}),
+                _json.dumps({'T2': 2}),
+            ],
+        }
+    )
+    set_lang(lang)
+    try:
+        return {
+            'sentiment_overlay': VisualizationService.to_echarts_option(
+                frame, 'sentiment_overlay', title='overlay-probe'
+            ),
+            'topic_overlay': VisualizationService.to_echarts_option(frame, 'topic_overlay', title='overlay-probe'),
+        }
+    finally:
+        set_lang('zh')
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_overlay_views_print_every_label_inside_the_preview_panel(app_url, driver, lang):
+    """Both overlay views, measured at the preview panel's own 400 px.
+
+    What only a browser can say: a 200 px ``axisLabel.width`` hangs 46 px LEFT of a 400 px canvas
+    and the node names are cut away entirely (measured, then narrowed to 96 px); a scroll legend
+    adds a ``1/1`` page marker that lands on the first row's text; and the theme patcher rewrites
+    a series label colour for the background, so a white number inside a coloured segment has to
+    be stated per data item. The note under the title and the legend share the top band, which is
+    why the sentiment grid starts at a fixed 112 px rather than a percentage.
+    """
+    driver.set_window_size(1650, 1080)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        document.documentElement.dataset.themeChoice = 'dark';
+        applyTheme();
+        I18n.apply();
+        """,
+        lang,
+    )
+    totals = {}
+    for chart_type, option in _overlay_options(lang).items():
+        driver.execute_script(
+            """
+            const old = document.getElementById('overlay-measure-host');
+            if (old) old.remove();
+            const host = document.createElement('div');
+            host.id = 'overlay-measure-host';
+            host.style.cssText = 'position:fixed;left:0;top:0;width:400px;height:600px;background:#fff';
+            document.body.appendChild(host);
+            window.__overlay = echarts.init(host, null, { renderer: 'svg' });
+            applyEchartsOption(window.__overlay, arguments[0]);
+            """,
+            option,
+        )
+        time.sleep(1.4)
+        facts = driver.execute_script(
+            """
+            const host = document.getElementById(arguments[0]);
+            const rect = host.getBoundingClientRect();
+            const painted = Array.from(host.querySelectorAll('svg text')).map(function (t) {
+                return { text: t.textContent, box: t.getBoundingClientRect() };
+            }).filter(function (item) { return item.text.trim() && item.box.width > 0 && item.box.height <= 24; });
+            let overlaps = 0;
+            const pairs = [];
+            for (let i = 0; i < painted.length; i++) {
+                for (let j = i + 1; j < painted.length; j++) {
+                    const a = painted[i].box, b = painted[j].box;
+                    const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+                    const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+                    if (x > 1 && y > 1) {
+                        overlaps++;
+                        if (pairs.length < 5) pairs.push([painted[i].text, painted[j].text]);
+                    }
+                }
+            }
+            const outside = painted.filter(function (item) {
+                const b = item.box;
+                return b.left < rect.left - 1 || b.right > rect.right + 1
+                    || b.top < rect.top - 1 || b.bottom > rect.bottom + 1;
+            }).map(function (item) { return item.text.slice(0, 24); });
+            return { measured: painted.length, overlaps: overlaps, pairs: pairs, outside: outside };
+            """,
+            'overlay-measure-host',
+        )
+        driver.execute_script(
+            """
+            if (window.__overlay) { window.__overlay.dispose(); }
+            document.getElementById('overlay-measure-host').remove();
+            """
+        )
+        assert facts['measured'] >= 12, f'{chart_type}: only {facts["measured"]} labels measured'
+        assert facts['overlaps'] == 0, f'{chart_type} labels collide: {facts["pairs"]}'
+        assert facts['outside'] == [], f'{chart_type} labels run past the canvas: {facts["outside"]}'
+        totals[chart_type] = facts['measured']
+    assert set(totals) == {'sentiment_overlay', 'topic_overlay'}
