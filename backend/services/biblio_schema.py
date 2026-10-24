@@ -186,10 +186,9 @@ LIMITS = {
     'max_nodes': 5000,
     'max_edges': 100000,
     'max_links_json': 200000,
-    #: Pathfinder compares every pair against every intermediate, so one network costs O(n³)
-    #: dense numpy work. A slice is TopN-bounded and cheap; a merged network is not, and above
-    #: this size the node refuses by name rather than hanging the run.
-    'max_pfnet_nodes': 400,
+    # Pathfinder's guard is the WORK budget (``bibliometrics._PFNET_WORK_BUDGET``), not a node
+    # count: the classic r=∞ / unlimited-depth case is a spanning forest at O(m log n) and must
+    # not be refused for size, while a 500-node general DP is 6×10^10 element operations.
 }
 
 BASE_COLUMNS = (

@@ -422,6 +422,14 @@ class TestBiblioPanelContract:
         assert self._js_array('BIBLIO_OUTPUT_SHAPES') == list(OUTPUT_SHAPES)
         assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
 
+    def test_every_bibliometric_view_has_a_word_in_both_catalogues(self):
+        """``chart.<type>`` is a computed key: the dropdown asks for it by concatenation, so a
+        type with no entry renders as the raw key in one language. Both catalogues live in
+        ``app.js``, so the key must appear at least twice."""
+        src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        missing = [chart for chart in BIBLIO_CHART_TYPES if src.count(f"'chart.{chart}'") < 2]
+        assert missing == [], f'bibliometric views with no zh/en word: {missing}'
+
     def test_a_new_biblio_parameter_is_seeded_on_a_new_node(self):
         """``canvas.js`` seeds what a freshly dropped node holds; a parameter the server knows and
         the seed does not is a box that renders its placeholder while the run uses the default —

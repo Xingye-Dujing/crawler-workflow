@@ -6,11 +6,24 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from services.biblio_formats import FORMAT_SPECS
 from services.biblio_import import CNKI, CSSCI, detect_format, parse_bytes, parse_frame, parse_text
 
 pytestmark = pytest.mark.unit
 
 SAMPLES = Path(__file__).resolve().parents[2] / 'samples'
+
+#: One sample per registered international format: (file, format id, record count).
+FORMAT_CASES = [
+    ('biblio_wos_demo.txt', 'WoS', 3),
+    ('biblio_scopus_demo.csv', 'Scopus', 3),
+    ('biblio_dimensions_demo.csv', 'Dimensions', 2),
+    ('biblio_lens_demo.csv', 'Lens', 2),
+    ('biblio_pubmed_demo.xml', 'PubMed', 2),
+    ('biblio_ris_demo.ris', 'RIS', 2),
+    ('biblio_bibtex_demo.bib', 'BibTeX', 2),
+    ('biblio_endnote_demo.enw', 'EndNote', 2),
+]
 
 
 def _sample(name: str) -> bytes:
@@ -91,19 +104,7 @@ class TestDetection:
 
 
 class TestInternationalFormats:
-    @pytest.mark.parametrize(
-        ('name', 'fmt', 'rows'),
-        [
-            ('biblio_wos_demo.txt', 'WoS', 3),
-            ('biblio_scopus_demo.csv', 'Scopus', 3),
-            ('biblio_dimensions_demo.csv', 'Dimensions', 2),
-            ('biblio_lens_demo.csv', 'Lens', 2),
-            ('biblio_pubmed_demo.xml', 'PubMed', 2),
-            ('biblio_ris_demo.ris', 'RIS', 2),
-            ('biblio_bibtex_demo.bib', 'BibTeX', 2),
-            ('biblio_endnote_demo.enw', 'EndNote', 2),
-        ],
-    )
+    @pytest.mark.parametrize(('name', 'fmt', 'rows'), FORMAT_CASES)
     def test_every_registered_format_normalizes_to_the_same_columns(self, name, fmt, rows):
         parsed = parse_bytes(_sample(name), name)
         assert parsed['format'] == fmt
@@ -116,6 +117,12 @@ class TestInternationalFormats:
         assert first['作者']
         assert first['引文']
         assert json.loads(first['引文'])[0]['title']
+
+    def test_the_case_list_and_the_registry_name_the_same_formats(self):
+        """A format registered without a sample parses nowhere and is tested nowhere."""
+        assert {fmt for _name, fmt, _rows in FORMAT_CASES} == {spec.id for spec in FORMAT_SPECS}
+        for name, _fmt, _rows in FORMAT_CASES:
+            assert (SAMPLES / name).is_file(), f'{name} is missing'
 
     def test_wos_keeps_author_commas_and_each_cited_reference_separate(self):
         parsed = parse_bytes(_sample('biblio_wos_demo.txt'), 'wos.txt')

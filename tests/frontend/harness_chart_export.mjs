@@ -529,6 +529,12 @@ async function latexBarCase(render) {
     const html = String((bar && bar.innerHTML) || '');
     const askedBefore = w.requests.length;
     const filename = await w.x.saveChartPdf();
+    /* Read the toast BEFORE draining macrotasks, for the reason ``previewNothingCase``
+       documents: the stub remaps setTimeout to 0 ms, so ``await ticks()`` here fires
+       showToast's hide first and ``shown`` flips under full-suite load (measured: one red
+       run of the inline case that passed alone and on every rerun). The continuation is a
+       microtask, so the ``.show`` class is still present at this point. */
+    const toast = w.toast();
     await ticks();
     const post = w.requests.slice(askedBefore).pop();
     return {
@@ -540,7 +546,7 @@ async function latexBarCase(render) {
         sentName: post && post.body ? post.body.name : null,
         sentSource: post && post.body ? Object.keys(post.body) : null,
         asked: w.requests.length - askedBefore,
-        toast: w.toast(),
+        toast,
     };
 }
 
