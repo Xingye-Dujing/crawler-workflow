@@ -197,6 +197,11 @@ _ZH = {
     'biblio.shape_needs_cluster': '{nid}：输出形态 clusters 需要开启聚类，请先开启或改回 nodes/edges',
     'biblio.shape_needs_burst': '{nid}：输出形态 bursts 需要开启突现检测，请先开启或改回 nodes/edges',
     'biblio.shape_needs_variation': '{nid}：输出形态 variation 需要开启结构变异检测，请先开启或改回其它形态',
+    'biblio.counting_no_coupling': (
+        '{nid}：耦合网络（{entity}）里两篇施引文献就是连边的两端，没有第三方文档的信用可拆分，'
+        '分数计数（fractional）不适用；请改回 full 或换用共被引/共现类型'
+    ),
+    'biblio.counting_fractional': '分数计数：每篇文档把 1 份信用均分给它承载的实体，{docs} 篇文档参与折算',
     'biblio.variation_needs_slices': (
         '结构变异要比较相邻两个切片，本次只有 {n} 个切片可比（请缩小 slice_years 或放宽年份范围）'
     ),
@@ -1826,6 +1831,15 @@ _EN = {
     ),
     'biblio.shape_needs_variation': (
         '{nid}: output_shape variation needs structural-variation detection enabled; enable it or use another shape'
+    ),
+    'biblio.counting_no_coupling': (
+        '{nid}: in a coupling network ({entity}) the two citing documents ARE the endpoints of the link, so there '
+        'is no third document whose credit could be split — fractional counting does not apply; use full counting '
+        'or a co-citation / co-occurrence node type'
+    ),
+    'biblio.counting_fractional': (
+        'Fractional counting: each document spreads one unit of credit over the entities it carries '
+        '({docs} documents contributed)'
     ),
     'biblio.variation_needs_slices': (
         'Structural variation compares consecutive slices, and this run has only {n} slice to compare '

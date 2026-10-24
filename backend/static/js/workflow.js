@@ -3321,6 +3321,7 @@ function renderAnalysisSettings(nodeId, p) {
 var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'journal', 'source', 'funder', 'grant', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'article', 'document', 'bibliographic_coupling'];
 var BIBLIO_SELECTION_MODES = ['top_n', 'top_pct', 'g_index', 'threshold'];
 var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
+var BIBLIO_COUNTING = ['full', 'fractional'];
 var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
 var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
 var BIBLIO_PATHFINDER_R = ['1', '2', 'inf'];
@@ -3342,6 +3343,9 @@ function biblioSelectionOptions(values) {
 }
 function biblioMeasureOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.measure.' + value)); });
+}
+function biblioCountingOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.counting.' + value)); });
 }
 function biblioPruningOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.pruning.' + value)); });
@@ -3438,6 +3442,8 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'min_usage', 'biblio.ui.minUsage', 'number', '') +
         renderParamCheckbox(nodeId, p, 'largest_component', 'biblio.ui.largestComponent', false);
     html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(BIBLIO_LINK_MEASURES)) +
+        renderParamSelect(nodeId, p, 'counting', 'biblio.ui.counting', 'full', biblioCountingOptions(BIBLIO_COUNTING)) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.countingHint') + '</div>' +
         renderParamInput(nodeId, p, 'citation_expansion', 'biblio.ui.citationExpansion', 'number', 0) +
         renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
         renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +

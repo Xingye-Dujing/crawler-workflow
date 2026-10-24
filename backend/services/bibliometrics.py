@@ -575,7 +575,7 @@ def _select(freq: Counter, params: dict) -> set[str]:
     return {name for name in names if freq[name] >= floor}
 
 
-def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, Counter, dict, dict]:
+def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, Counter, Counter, dict, dict]:
     labels, year_counts, node_docs, node_years = node_meta
     entity = params['entity_type']
     start = params['start']
@@ -585,6 +585,9 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
         slices[(doc['year'] - start) // width].append(doc)
 
     merged_edges: Counter = Counter()
+    # The numerator the link measure reads: identical to the raw count under full counting, one
+    # unit per document spread over its pairs under fractional counting.
+    merged_weights: Counter = Counter()
     edge_slices: dict[tuple[str, str], set[int]] = defaultdict(set)
     total_freq: Counter = Counter()
     for name, counts in year_counts.items():
@@ -631,7 +634,17 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
         # constant 1 document that carries its own year. This is what the node
         # size and the selection threshold read.
         total_freq = Counter(strength)
-        return total_freq, merged_edges, edge_slices, {'slices': len(slices), 'node_docs': node_docs}
+        # Coupling refuses fractional counting, so the numerator IS the raw count here.
+        return (
+            total_freq,
+            merged_edges,
+            merged_edges,
+            edge_slices,
+            {
+                'slices': len(slices),
+                'node_docs': node_docs,
+            },
+        )
 
     look_back = params.get('look_back_years') or 0
     # Structural variation reads one network per slice, so it needs the pair counts and the
@@ -656,13 +669,26 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
         else:
             selected = _select(slice_freq, params)
         slice_counts: Counter = Counter()
+        # Fractional counting spreads ONE unit of credit per document over the pairs it carries,
+        # so a citing article with 150 references contributes no more to the network than one
+        # with 12. The RAW count is kept alongside it: `threshold_cc` and the displayed 次数
+        # answer "how often did these two actually meet", which normalization must not rewrite.
+        fractional = params['counting'] == 'fractional'
+        divided = 0
         for doc in members:
             chosen = sorted(name for name in doc['entities'] if name in selected)
+            pairs = len(chosen) * (len(chosen) - 1) / 2
+            weight = (1.0 / pairs) if (fractional and pairs > 0) else 1.0
+            if fractional and pairs > 1:
+                divided += 1
             for left, right in combinations(chosen, 2):
                 key = (left, right) if left < right else (right, left)
                 merged_edges[key] += 1
+                merged_weights[key] += weight
                 edge_slices[key].add(slice_id)
-                slice_counts[key] += 1
+                slice_counts[key] += weight
+        if fractional and divided:
+            params.setdefault('_notes', []).append(t('biblio.counting_fractional', docs=divided))
         if keep_slices:
             counts_by_slice[slice_id] = slice_counts
             freqs_by_slice[slice_id] = Counter(slice_freq)
@@ -670,6 +696,7 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
     return (
         total_freq,
         merged_edges,
+        merged_weights,
         edge_slices,
         {
             'slices': len(slices),
@@ -680,22 +707,32 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
     )
 
 
-def _normalized_edges(merged: Counter, total_freq: Counter, measure: str) -> dict[tuple[str, str], dict]:
+def _normalized_edges(
+    merged: Counter,
+    total_freq: Counter,
+    measure: str,
+    numerators: Counter | None = None,
+) -> dict[tuple[str, str], dict]:
+    """Strength is read off the numerator (the raw count, or its fractional-counting version)
+    while ``count`` stays the raw number of times the two met — the threshold and the table both
+    answer that question, and normalization must not rewrite it."""
+    numerators = merged if numerators is None else numerators
     edges = {}
     for (left, right), count in merged.items():
+        c = float(numerators.get((left, right), count))
         fi = float(total_freq.get(left, 0))
         fj = float(total_freq.get(right, 0))
         if not fi or not fj:
             continue
         if measure == 'cosine':
-            weight = count / math.sqrt(fi * fj)
+            weight = c / math.sqrt(fi * fj)
         elif measure == 'dice':
-            weight = 2.0 * count / (fi + fj)
+            weight = 2.0 * c / (fi + fj)
         elif measure == 'jaccard':
-            denominator = fi + fj - count
+            denominator = fi + fj - c
             weight = count / denominator if denominator > 0 else 0.0
         else:
-            weight = count / (fi * fj)
+            weight = c / (fi * fj)
         if weight <= 0:
             continue
         edges[(left, right)] = {'weight': weight, 'count': count}
@@ -1440,7 +1477,7 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         node_docs = {display[key]: indices for key, indices in node_docs.items()}
         node_years = {display[key]: year for key, year in node_years.items()}
 
-    total_freq, merged_edges, edge_slices, slice_meta = _slice_graphs(
+    total_freq, merged_edges, merged_weights, edge_slices, slice_meta = _slice_graphs(
         docs, params, (labels, year_counts, node_docs, node_years)
     )
     notes += params.pop('_notes', [])
@@ -1455,7 +1492,7 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         notes += variation_notes
     if not merged_edges:
         raise BiblioError(t('biblio.no_edges', start=window['start'], end=window['end']))
-    edges = _normalized_edges(merged_edges, total_freq, params['link_measure'])
+    edges = _normalized_edges(merged_edges, total_freq, params['link_measure'], merged_weights)
     if not edges:
         raise BiblioError(t('biblio.no_edges', start=window['start'], end=window['end']))
     edges = _threshold_edges(edges, total_freq, params)

@@ -24,6 +24,7 @@ from node_runner import run_node
 import i18n
 from crawlers import CRAWLERS, is_crawlable
 from services.biblio_schema import (
+    COUNTING_MODES,
     DEFAULTS,
     ENTITY_TYPES,
     LABEL_METHODS,
@@ -342,6 +343,7 @@ class TestBiblioPanelContract:
         assert self._js_array('BIBLIO_ENTITY_TYPES') == list(ENTITY_TYPES)
         assert self._js_array('BIBLIO_SELECTION_MODES') == list(SELECTION_MODES)
         assert self._js_array('BIBLIO_LINK_MEASURES') == list(LINK_MEASURES)
+        assert self._js_array('BIBLIO_COUNTING') == list(COUNTING_MODES)
         assert self._js_array('BIBLIO_PRUNING_MODES') == list(PRUNING_MODES)
         assert self._js_array('BIBLIO_PRUNING_SCOPES') == list(PRUNING_SCOPES)
         assert self._js_array('BIBLIO_PATHFINDER_R') == list(PATHFINDER_R)

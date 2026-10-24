@@ -46,6 +46,12 @@ OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts', 'variation', 'dual_map'
 
 SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
+#: How much a mediating document contributes to a link. ``full`` counts it once per pair it
+#: contains; ``fractional`` divides its credit across the entries it carries, so one article
+#: with 150 references stops outranking one with 12 — the standard full-vs-fractional
+#: counting distinction in bibliometrics. Applied where a THIRD document mediates the link
+#: (co-occurrence inside a document, co-citation inside a citing document).
+COUNTING_MODES = ('full', 'fractional')
 PRUNING_MODES = ('none', 'mst', 'pathfinder')
 PRUNING_SCOPES = ('slices', 'merged')
 #: Mantel's r-norm exponent for the Pathfinder reduction. ``inf`` is the classic PFNET
@@ -125,6 +131,7 @@ DEFAULTS = {
     'min_usage': '',
     'largest_component': False,
     'link_measure': 'cosine',
+    'counting': 'full',
     'citation_expansion': 0,
     'max_links_per_node': 10,
     'lrf': 2.5,
@@ -355,6 +362,14 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     if measure not in LINK_MEASURES:
         errors.append(_bad(nid, 'link_measure', measure, ', '.join(LINK_MEASURES)))
 
+    counting = str(params.get('counting') or DEFAULTS['counting']).strip()
+    if counting not in COUNTING_MODES:
+        errors.append(_bad(nid, 'counting', counting, ', '.join(COUNTING_MODES)))
+    elif counting == 'fractional' and entity in COUPLING_TYPES:
+        # In a coupling network the two citing documents ARE the endpoints, so there is no third
+        # document whose credit could be split: fractional counting has nothing to divide.
+        errors.append(t('biblio.counting_no_coupling', nid=nid or '(biblio)', entity=entity))
+
     pruning = str(params.get('pruning') or DEFAULTS['pruning']).strip()
     if pruning not in PRUNING_MODES:
         errors.append(_bad(nid, 'pruning', pruning, ', '.join(PRUNING_MODES)))
@@ -498,6 +513,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'min_usage': _optional_whole(nid, 'min_usage', params.get('min_usage', DEFAULTS['min_usage'])),
         'largest_component': as_bool(params.get('largest_component'), DEFAULTS['largest_component']),
         'link_measure': str(params.get('link_measure') or DEFAULTS['link_measure']).strip(),
+        'counting': str(params.get('counting') or DEFAULTS['counting']).strip(),
         'citation_expansion': _whole(nid, 'citation_expansion', params.get('citation_expansion', 0), 0, 2),
         'max_links_per_node': _whole(
             nid, 'max_links_per_node', params.get('max_links_per_node', DEFAULTS['max_links_per_node']), 1, 200

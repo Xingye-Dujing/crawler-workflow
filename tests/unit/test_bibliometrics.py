@@ -747,3 +747,83 @@ class TestStructuralVariation:
         files = bibliometrics.export_result(result, str(tmp_path), 'sv')
         assert 'biblio_variation' in files
         assert '结构变化' in Path(files['biblio_variation']).read_text(encoding='utf-8-sig')
+
+
+def _counting_frame():
+    """Two short documents that pair 甲 with 乙, and one long document that pairs five terms."""
+    return pd.DataFrame(
+        [
+            {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+            {'题名': 'b', '年份': 2020, '关键词': '甲;乙;丙;丁;戊', '摘要': ''},
+            {'题名': 'c', '年份': 2021, '关键词': '甲;乙', '摘要': ''},
+        ]
+    )
+
+
+def _edge(result, left, right):
+    key = (left, right) if left < right else (right, left)
+    for row in result['edges']:
+        if (row['source'], row['target']) == key:
+            return row
+    return None
+
+
+class TestFractionalCounting:
+    def test_one_document_buys_one_unit_of_credit_whatever_it_carries(self):
+        """Cosine on the raw counts gives 甲乙 1.0 (three meetings of two nodes that each occur
+        three times). Fractional counting spreads the long document's single unit over its ten
+        pairs, so the same edge reads 2.1/3 — the two short documents now outweigh the one long
+        one, which is the whole point."""
+        full = bibliometrics.build(_counting_frame(), _params(counting='full'), 'test')
+        split = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        assert _edge(full, '甲', '乙')['weight'] == pytest.approx(1.0)
+        assert _edge(split, '甲', '乙')['weight'] == pytest.approx(0.7)
+
+    def test_the_reported_count_is_still_the_number_of_times_they_met(self):
+        """Normalization belongs to the strength only. A table whose 次数 quietly became 0.1 is a
+        table that no longer answers the question the column asks."""
+        split = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        assert _edge(split, '甲', '乙')['count'] == 3
+        assert _edge(split, '丙', '丁')['count'] == 1
+
+    def test_a_long_list_no_longer_buys_six_strong_links(self):
+        full = bibliometrics.build(_counting_frame(), _params(counting='full'), 'test')
+        split = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        assert _edge(full, '甲', '丙') is not None
+        assert _edge(split, '甲', '丙') is None
+
+    def test_the_console_says_the_counting_ran_and_which_documents_were_split(self):
+        quiet = bibliometrics.build(_counting_frame(), _params(counting='full'), 'test')
+        loud = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        assert not any('分数' in note or 'ractional' in note for note in quiet['notes'])
+        assert any(('1 篇' in note or '1 document' in note) for note in loud['notes']), loud['notes']
+
+    def test_two_documents_have_nothing_to_split_and_say_so(self):
+        """A document carrying one pair already spends its unit on that pair; counting it as
+        "renormalized" would claim a change that did not happen."""
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2021, '关键词': '丙;丁', '摘要': ''},
+            ]
+        )
+        result = bibliometrics.build(frame, _params(counting='fractional'), 'test')
+        assert not any('分数' in note or 'ractional' in note for note in result['notes'])
+
+    def test_coupling_has_no_third_document_to_split_and_refuses_by_name(self):
+        # Refused at the parameter gate, before any data is read: the rule is about the node
+        # type, not about what the corpus happens to contain.
+        with pytest.raises(ValueError) as exc:
+            normalize_params(_params(entity_type='bibliographic_coupling', counting='fractional', burst=False), 'test')
+        text = str(exc.value)
+        assert 'fractional' in text and 'bibliographic_coupling' in text, text
+
+    def test_the_default_is_full_counting_so_no_existing_canvas_moves(self):
+        assert normalize_params(_params(), 'test')['counting'] == 'full'
+
+    def test_an_unknown_counting_mode_is_refused_by_name(self):
+        assert any('counting' in line for line in collect_errors(_params(counting='half'), 'test'))
+
+    def test_normalizing_twice_changes_nothing(self):
+        once = normalize_params(_params(counting='fractional'), 'test')
+        assert normalize_params(once, 'test') == once
