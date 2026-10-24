@@ -54,6 +54,7 @@ OPERATIONS = [
     'topic_by_stage',
     'topic_label',
     'cluster_label',
+    'cluster_review',
     'topic_map',
     'topic_salience',
     'topic_timeline',
@@ -1918,7 +1919,7 @@ class TestTopicLabel:
     def test_the_gate_knows_its_columns_and_its_switch(self):
         from services.data_analysis import LLM_OPS, STEP_PARAMS, normalize_step_params, validate_step
 
-        assert frozenset({'topic_label', 'cluster_label'}) == LLM_OPS
+        assert frozenset({'topic_label', 'cluster_label', 'cluster_review'}) == LLM_OPS
         params = normalize_step_params('topic_label', {'words_col': ' 词 ', 'summary_col': ' 概括 ', 'on_fail': ''})
         assert params['words_col'] == '词' and params['summary_col'] == '概括'
         assert params['on_fail'] == 'abort', 'a blank select is the declared default'
@@ -1967,6 +1968,15 @@ class TestClusterLabel:
         assert list(out.columns) == ['cluster', 'n_docs', '摘要']
         assert len(out) == 3, 'three clusters → three rows, whatever the document count'
         assert (out['n_docs'] == [2, 2, 1]).all()
+
+    def test_the_grouping_column_keeps_the_name_the_user_gave_it(self):
+        """The output's first column used to be the literal ``cluster`` whatever ``group_col`` said,
+        so pointing the step at 簇 produced a table whose key was a column the user never named —
+        and every downstream chart had to be told about a column the input does not have."""
+        frame = pd.DataFrame({'簇': [0, 0, 1], '正文': ['甲', '乙', '丙']})
+        out = D.cluster_label(frame, llm=self._Client(), group_col='簇', summary_col='概述')
+        assert list(out.columns) == ['簇', 'n_docs', '概述']
+        assert out['簇'].tolist() == [0, 1]
 
     def test_a_missing_group_column_is_refused_by_name(self):
         frame = pd.DataFrame({'正文': ['甲']})
@@ -3371,3 +3381,149 @@ class TestDiffRows:
         d = D.diff(a, a.copy())
         assert d['added_count'] == d['removed_count'] == d['changed_count'] == 0
         assert d['row_delta'] == 0
+
+
+class TestClusterReview:
+    """簇综述·研究前沿: the model reads the cluster's OWN METRICS (not its texts) and writes what
+    a clustering cannot — which research front the group forms. Same paid-step discipline."""
+
+    class _Client:
+        label = 'ollama:stub'
+
+        def __init__(self, answer='该簇围绕政府数字化转型展开，下一步可能转向数据要素。'):
+            self.prompts = []
+            self.answer = answer
+
+        def chat(self, prompt, max_retries=2):
+            self.prompts.append(prompt)
+            return self.answer
+
+    class _Failing(_Client):
+        def chat(self, prompt, max_retries=2):
+            from analyzers.llm_client import LLMError
+
+            self.prompts.append(prompt)
+            raise LLMError('model is offline')
+
+    class _Store:
+        def __init__(self):
+            self._d = {}
+
+        def cache_get(self, scope, key):
+            return self._d.get(scope + '|' + key)
+
+        def cache_put(self, scope, key, value):
+            self._d[scope + '|' + key] = value
+
+    @staticmethod
+    def _clusters() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                '聚类': [0, 0, 1, 1, 1],
+                '聚类标签': ['数字治理', '数字治理', '乡村振兴', '乡村振兴', '乡村振兴'],
+                '节点': ['数字政府', '政务服务', '乡村治理', '数字乡村', '共同富裕'],
+                '频次': [12, 7, 9, 5, 3],
+                '首年': [2018, 2019, 2020, 2021, 2021],
+                '末年': [2022, 2022, 2022, 2022, 2022],
+            }
+        )
+
+    def test_one_review_row_per_cluster_with_the_facts_beside_it(self):
+        out = D.cluster_review(self._clusters(), llm=self._Client())
+        assert list(out.columns) == ['聚类', '节点数', '代表节点', '年份跨度', '聚类标签', '簇综述']
+        assert len(out) == 2
+        assert (out['节点数'] == [2, 3]).all()
+        assert out['年份跨度'].tolist() == ['2018–2022', '2020–2022']
+        assert out['代表节点'].tolist() == ['数字政府；政务服务', '乡村治理；数字乡村；共同富裕']
+
+    def test_the_prompt_carries_the_metrics_not_the_prose(self):
+        """The whole difference from 聚类摘要 is what goes IN: the numbers the graph measured, so a
+        paragraph that never saw them could have been written about any cluster."""
+        client = self._Client()
+        D.cluster_review(self._clusters(), llm=client, members=2)
+        assert len(client.prompts) == 2
+        first = client.prompts[0]
+        assert 'LLR 标签：数字治理' in first
+        assert '簇内节点数：2' in first
+        assert '数字政府(12)' in first and '政务服务(7)' in first
+        assert '共同富裕' not in first, 'members is a cap the prompt has to honour'
+        assert '2018–2022' in first
+
+    def test_a_missing_group_or_member_column_is_refused_by_name(self):
+        with pytest.raises(UnknownOperationError, match='聚类'):
+            D.cluster_review(pd.DataFrame({'节点': ['甲']}), llm=self._Client())
+        with pytest.raises(UnknownOperationError, match='节点'):
+            D.cluster_review(pd.DataFrame({'聚类': [0]}), llm=self._Client())
+
+    def test_no_model_is_a_refusal_before_anything_is_spent(self):
+        from i18n import t
+
+        with pytest.raises(UnknownOperationError) as exc:
+            D.cluster_review(self._clusters(), llm=None)
+        assert t('analysis.label_no_llm', op='cluster_review') in str(exc.value)
+
+    def test_a_stopped_run_marks_the_clusters_the_model_never_saw(self):
+        class _Stop:
+            def __init__(self):
+                self.seen = 0
+
+            def is_set(self):
+                self.seen += 1
+                return self.seen > 1
+
+        from analyzers.llm_client import ABORT_MARK
+
+        client = self._Client()
+        out = D.cluster_review(self._clusters(), llm=client, cancel=_Stop())
+        assert len(client.prompts) == 1, 'Stop is checked before every call, not after the pass'
+        assert list(out['簇综述'][1:]) == [ABORT_MARK]
+
+    def test_the_answer_is_cached_so_a_re_run_does_not_re_pay(self):
+        store = self._Store()
+        client = self._Client()
+        D.cluster_review(self._clusters(), llm=client, store=store)
+        assert len(client.prompts) == 2
+        again = self._Client()
+        D.cluster_review(self._clusters(), llm=again, store=store)
+        assert again.prompts == [], 'the same table is replayed from the cache'
+
+    def test_a_cluster_count_over_the_cap_is_refused_with_both_numbers(self):
+        with pytest.raises(UnknownOperationError, match='2 行'):
+            D.cluster_review(self._clusters(), llm=self._Client(), max_groups=1)
+
+    def test_a_fallback_says_in_the_cell_that_no_model_wrote_it(self):
+        """AGENTS: a sanctioned degradation must print the method that ran. The console line is
+        half of it; the cell is what leaves the app, so the disclaimer travels with the text."""
+        client = self._Failing()
+        out = D.cluster_review(self._clusters(), llm=client, on_fail='fallback')
+        assert len(out) == 2
+        for text in out['簇综述']:
+            assert '未经模型' in text and '数字政府' in text or '未经模型' in text and '乡村治理' in text
+
+    def test_an_refused_cluster_aborts_rather_than_filing_a_blank(self):
+        client = self._Failing()
+        with pytest.raises(UnknownOperationError, match='model is offline'):
+            D.cluster_review(self._clusters(), llm=client)
+
+    def test_it_reaches_the_pipeline_only_through_llm_ops(self):
+        client = self._Client()
+        result, report = D.run_pipeline(
+            self._clusters(),
+            [
+                {
+                    'op': 'cluster_review',
+                    'params': {'group_col': '聚类', 'name_col': '节点', 'summary_col': '簇综述'},
+                }
+            ],
+            llm=client,
+        )
+        assert [entry['op'] for entry in report] == ['cluster_review']
+        assert len(result) == 2 and len(client.prompts) == 2
+
+    def test_a_table_without_the_year_columns_asks_for_no_span_it_cannot_support(self):
+        """A line reading 年份跨度：未知 in front of the model invites it to invent a trajectory."""
+        frame = self._clusters().drop(columns=['首年', '末年'])
+        client = self._Client()
+        out = D.cluster_review(frame, llm=client)
+        assert '年份跨度' not in client.prompts[0]
+        assert '年份跨度' not in list(out.columns)

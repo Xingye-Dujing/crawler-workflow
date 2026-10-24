@@ -117,7 +117,7 @@ STEP_REPLACE: dict[str, tuple[str, ...]] = {
 }
 
 #: Ops whose whole output is a fresh table whose names come from the node's own parameters.
-STEP_DYNAMIC_REPLACE = ('compare_platform', 'sentiment_evolution')
+STEP_DYNAMIC_REPLACE = ('compare_platform', 'sentiment_evolution', 'cluster_label')
 
 
 def _replaced_columns(op: str, step: dict) -> list[str] | None:
@@ -129,6 +129,15 @@ def _replaced_columns(op: str, step: dict) -> list[str] | None:
     column, while ``sentiment_evolution`` claimed ``intensity``/``score_n`` even when no
     score column was given — a chart would read those and only find out at run time.
     """
+    if op == 'cluster_label':
+        # The summariser REDUCES the table: one row per cluster, three columns. Declaring it as
+        # "upstream columns + 摘要" promised every input column downstream, so a chart fed by it
+        # was told 节点/频次 would be there and found only cluster/n_docs/摘要 at run time.
+        group_col = str(step.get('group_col') or 'cluster').strip()
+        summary_col = str(step.get('summary_col') or '摘要').strip()
+        if not group_col or not summary_col:
+            return None
+        return [group_col, 'n_docs', summary_col]
     if op == 'compare_platform':
         platform_col = str(step.get('platform_col') or 'platform').strip()
         cols = [platform_col, 'n']
@@ -163,7 +172,6 @@ STEP_ADD_ONE: dict[str, tuple[str, str]] = {
     'bin_time': ('new_col', '阶段'),
     'column_calc': ('new_col', ''),
     'topic_label': ('summary_col', '主题概括'),
-    'cluster_label': ('summary_col', '摘要'),
 }
 
 # analysis steps that may ALSO add a further column, only when its box is filled.

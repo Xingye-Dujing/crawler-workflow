@@ -2951,7 +2951,7 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
 }
 
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'cluster_review', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -3090,6 +3090,21 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'cluster_sample_n', 'settings.clusterSampleN', 'number', 8);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.clusterLabelHint') + '</div></div>';
+    }
+    if (op === 'cluster_review') {
+        html += renderParamInput(nodeId, p, 'review_group_col', 'settings.reviewGroupColumn', 'text', '聚类');
+        html += renderParamInput(nodeId, p, 'review_label_col', 'settings.reviewLabelColumn', 'text', '聚类标签');
+        html += renderParamInput(nodeId, p, 'review_name_col', 'settings.reviewNameColumn', 'text', '节点');
+        html += renderParamInput(nodeId, p, 'review_freq_col', 'settings.reviewFreqColumn', 'text', '频次');
+        html += renderParamInput(nodeId, p, 'review_summary_col', 'settings.reviewSummaryColumn', 'text', '簇综述');
+        html += renderParamSelect(nodeId, p, 'review_on_fail', 'settings.clusterOnFail', 'abort',
+            [{ v: 'abort', l: I18n.t('settings.labelOnFailAbort') },
+             { v: 'blank', l: I18n.t('settings.labelOnFailBlank') },
+             { v: 'fallback', l: I18n.t('settings.labelOnFailFallback') }]);
+        html += renderParamInput(nodeId, p, 'review_max_groups', 'settings.clusterMaxGroups', 'number', 60);
+        html += renderParamInput(nodeId, p, 'review_members', 'settings.reviewMembers', 'number', 12);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.clusterReviewHint') + '</div></div>';
     }
     if (op === 'topic_map') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
@@ -8642,7 +8657,7 @@ function _processLlm(op, p) {
    table, not the handful of topic/cluster rows the node actually reads, so the cap — not
    the row sum — is what bounds the real spend. Defaults match the node renderers. */
 function _isLabelOp(op) {
-    return op === 'topic_label' || op === 'cluster_label';
+    return op === 'topic_label' || op === 'cluster_label' || op === 'cluster_review';
 }
 
 function _labelCallCap(op, src) {
@@ -8654,6 +8669,10 @@ function _labelCallCap(op, src) {
     if (op === 'cluster_label') {
         var g = parseInt(s.cluster_max_groups, 10);
         return isNaN(g) ? 60 : g;
+    }
+    if (op === 'cluster_review') {
+        var rv = parseInt(s.review_max_groups, 10);
+        return isNaN(rv) ? 60 : rv;
     }
     return 0;
 }

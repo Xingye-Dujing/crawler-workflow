@@ -429,9 +429,24 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   table printed `map` / `source` / `x` as column headers. The guard is therefore the *reference set*, not the call
   site: `test_frontend_i18n_js.py::TestJsNodeTypeWords` walks `engine.workflow.NODE_TYPES` and
   `::TestJsBiblioColumnWords` walks the ten column constants in `services/biblio_schema.py`, both in both languages.
+  The same class bit a third time from the other direction: `op.<name>` is assembled from the dropdown arrays in
+  `workflow.js`, so `test_frontend_contract.py::TestFrontendCatalog` now walks `ANALYSIS_OPS` ∪ `PROCESS_OPS` and asks
+  for a word in both catalogues — measured green the day `cluster_review` shipped, which is the point: the guard is
+  there for the next op, not for this one.
   A computed lookup still needs an honest fallback — the type or the stored column shown **as itself**, never the key
   and never a guessed word (`nodeTypeWord()` / `biblioColumnWord()`), and where the word replaces a name the user may
   need to match against an exported file, the name stays reachable (the `<th title>` is the disk spelling).
+- **A step writes the column names it is PARAMETERISED on, and the lineage table may only promise those.**
+  `cluster_label` took a `group_col` and then built every row as `{'cluster': …}`, so pointing it at 簇 produced a
+  table keyed by a column the user never named; the same step sat in `STEP_ADD_ONE`, which tells the canvas "upstream
+  columns + 摘要" for a step that actually REDUCES the table to three columns — a chart downstream was promised 节点/频次
+  and met them as an absence at run time. Both halves are now pinned (`test_a_summarising_step_declares_only_the_columns_it_actually_writes`,
+  `test_the_grouping_column_keeps_the_name_the_user_gave_it`), and a step whose row shape depends on which optional
+  columns exist answers `None` — "cannot tell" — rather than guessing a lineage.
+- **A shared helper's argument that only describes the caller still has to be the caller.** `_execute_analysis_node`
+  handed `_llm_run_ctx(node, 'topic_label', ctx)` for every labelling step; the value sizes the answer and names the
+  step in the log, so a cluster review was capped and reported as a topic summary. The name now comes out of the
+  steps themselves.
 - **A panel that repaints its whole body on every keystroke owes its own fields three things, and only a real engine
   sees any of them.** (1) Bare `<input>`/`<select>` markup carries no `.settings-input` class, so it is UA-painted —
   a white box with black text on a dark panel; (2) a native `<select>` is OS-drawn until `CustomSelect` scans it, and

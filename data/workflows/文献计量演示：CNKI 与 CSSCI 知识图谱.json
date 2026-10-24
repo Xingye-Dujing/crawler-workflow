@@ -672,6 +672,25 @@
       "x": 980,
       "y": 1900,
       "folded": false
+    },
+    {
+      "id": "node-28",
+      "type": "analysis",
+      "title": "簇综述·研究前沿",
+      "params": {
+        "enabled": false,
+        "operation": "cluster_review",
+        "review_group_col": "",
+        "review_label_col": "",
+        "review_name_col": "",
+        "review_freq_col": "",
+        "review_summary_col": "",
+        "review_members": "",
+        "review_max_groups": ""
+      },
+      "x": 980,
+      "y": 2040,
+      "folded": false
     }
   ],
   "connections": [
@@ -701,7 +720,8 @@
     { "from": "node-23", "to": "node-24" },
     { "from": "node-24", "to": "node-25" },
     { "from": "node-1", "to": "node-26" },
-    { "from": "node-26", "to": "node-27" }
+    { "from": "node-26", "to": "node-27" },
+    { "from": "node-2", "to": "node-28" }
   ],
   "settings": {
     "mode": "parallel",

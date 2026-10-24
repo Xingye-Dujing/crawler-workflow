@@ -166,7 +166,7 @@ ON_FAIL = ('abort', 'blank', 'fallback')
 #: Steps that need the run's LLM client, and so are handed it by :func:`run_pipeline`.
 #: Kept out of the step's own ``params`` because the pipeline report — which the console
 #: prints and the run record keeps — echoes every parameter it is given.
-LLM_OPS = frozenset({'topic_label', 'cluster_label'})
+LLM_OPS = frozenset({'topic_label', 'cluster_label', 'cluster_review'})
 
 #: What :meth:`DataAnalysisService.forecast` extrapolates with. Both are computed in this
 #: module: statsmodels is not a dependency of this project, and a two-parameter smoothing
@@ -258,6 +258,14 @@ STEP_PARAMS: dict = {
     # column it writes — nonblank because an unnamed output column would "succeed" invisibly.
     'cluster_label': {
         'one': ('group_col', 'text_col'),
+        'nonblank': ('summary_col',),
+        'enums': {'on_fail': ('abort', ON_FAIL)},
+    },
+    # The frontier reviewer groups on the cluster column and names members through the node
+    # column, so both are hard reads: a guessed "whichever column looks like a name" would write
+    # a paragraph about the wrong set of entities and still print a full table.
+    'cluster_review': {
+        'one': ('group_col', 'name_col'),
         'nonblank': ('summary_col',),
         'enums': {'on_fail': ('abort', ON_FAIL)},
     },
@@ -898,6 +906,91 @@ def _label_from(answer) -> str:
         if phrase and any(char.isalnum() for char in phrase):
             return phrase[:60]
     return ''
+
+
+def _review_language() -> str:
+    """The language the answer must be written in.
+
+    A Chinese table read through an English prompt tends to come back in English, and the
+    paragraph then has to be translated before it goes into the paper — so the run's own
+    interface language is stated in the request."""
+    from i18n import get_lang
+
+    return '中文' if (get_lang() or 'zh') == 'zh' else 'English'
+
+
+def _cluster_facts(
+    slice_: pd.DataFrame,
+    name_col: str,
+    freq_col: str,
+    first_col: str,
+    last_col: str,
+    label_col: str,
+    take: int,
+) -> dict:
+    """What the graph already measured about one cluster, as the prompt's fact block.
+
+    Only columns that exist contribute a line: a bibliometrics node table carries 频次/首年/末年
+    and a cluster table does not, and inventing "年份跨度：未知" for a table that never had years
+    would put a claim the data cannot support in front of the model."""
+    names: list[str] = []
+    pairs: list[tuple[str, float]] = []
+    weights = slice_[freq_col].tolist() if freq_col and freq_col in slice_.columns else [0.0] * len(slice_)
+    # The two lists are built from the same slice, so unequal length is a bug, not a shape.
+    for value, freq in zip(slice_[name_col].tolist(), weights, strict=True):
+        label = str(value or '').strip()
+        if not label:
+            continue
+        try:
+            weight = float(freq)
+        except (TypeError, ValueError):
+            weight = 0.0
+        pairs.append((label, weight))
+    pairs.sort(key=lambda item: (-item[1], item[0]))
+    names = [name for name, _weight in pairs[: max(1, take)]]
+
+    lines = [t('analysis.review_fact_size', n=len(slice_))]
+    if label_col and label_col in slice_.columns:
+        labels = [str(v).strip() for v in slice_[label_col].dropna().tolist() if str(v).strip()]
+        if labels:
+            lines.append(t('analysis.review_fact_label', label=labels[0]))
+    if pairs:
+        if freq_col and freq_col in slice_.columns:
+            shown = '；'.join(f'{name}({weight:g})' for name, weight in pairs[: max(1, take)])
+        else:
+            shown = '；'.join(name for name, _weight in pairs[: max(1, take)])
+        lines.append(t('analysis.review_fact_members', members=shown))
+    span = _review_span(slice_, first_col, last_col)
+    if span:
+        lines.append(t('analysis.review_fact_span', span=span))
+    return {'size': len(slice_), 'names': names, 'span': span, 'block': '\n'.join(lines)}
+
+
+def _review_span(slice_: pd.DataFrame, first_col: str, last_col: str) -> str:
+    years: list[int] = []
+    for column in (first_col, last_col):
+        if not column or column not in slice_.columns:
+            continue
+        for value in slice_[column].tolist():
+            try:
+                year = int(float(str(value).strip()))
+            except (TypeError, ValueError):
+                continue
+            if 1000 < year < 3000:
+                years.append(year)
+    if not years:
+        return ''
+    low, high = min(years), max(years)
+    return str(low) if low == high else f'{low}–{high}'
+
+
+def _review_fallback(facts: dict) -> str:
+    """The no-model answer: the cluster's own facts, in a sentence, with the method in it.
+
+    AGENTS: a sanctioned degradation must PRINT the method that ran. This one also says so in
+    the cell, because the table is what leaves the app — a paragraph that reads like a model
+    wrote it, in a column called 簇综述, is how a fabrication reaches a footnote."""
+    return t('analysis.review_fallback_text', size=facts['size'], members='；'.join(facts['names'][:6]))
 
 
 def normalize_step_params(op: str, params: dict) -> dict:
@@ -2246,7 +2339,7 @@ class DataAnalysisService:
             if cancel is not None and cancel.is_set():
                 for rest in order[idx:]:
                     rows.append(
-                        {'cluster': rest, 'n_docs': int((groups['_grp'] == rest).sum()), summary_col: ABORT_MARK}
+                        {group_col: rest, 'n_docs': int((groups['_grp'] == rest).sum()), summary_col: ABORT_MARK}
                     )
                 logger.warning(t('analysis.cluster_cancelled', n=len(order) - idx))
                 return pd.DataFrame(rows)
@@ -2274,7 +2367,7 @@ class DataAnalysisService:
                     else:
                         answer = ''
                         logger.warning(t('analysis.cluster_failed', group=key, err=e))
-                    rows.append({'cluster': key, 'n_docs': n_docs, summary_col: answer})
+                    rows.append({group_col: key, 'n_docs': n_docs, summary_col: answer})
                     if answer:
                         summarised += 1
                     continue
@@ -2288,10 +2381,136 @@ class DataAnalysisService:
                     raise UnknownOperationError(t('analysis.cluster_empty', group=key))
                 else:
                     logger.warning(t('analysis.cluster_empty', group=key))
-            rows.append({'cluster': key, 'n_docs': n_docs, summary_col: summary})
+            rows.append({group_col: key, 'n_docs': n_docs, summary_col: summary})
             if summary:
                 summarised += 1
         logger.info(t('analysis.cluster_done', n=summarised, model=getattr(llm, 'label', '')))
+        if store is not None:
+            logger.info(t('analysis.label_cached', asked=asked, replayed=replayed))
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def cluster_review(
+        df: pd.DataFrame,
+        llm=None,
+        cancel=None,
+        store=None,
+        group_col: str = '聚类',
+        label_col: str = '聚类标签',
+        name_col: str = '节点',
+        freq_col: str = '频次',
+        first_col: str = '首年',
+        last_col: str = '末年',
+        summary_col: str = '簇综述',
+        members: int = 12,
+        on_fail: str = 'abort',
+        max_groups: int = 60,
+    ) -> pd.DataFrame:
+        """One research-frontier paragraph per bibliometric cluster.
+
+        :meth:`cluster_label` summarises what a cluster's TEXTS say. This reads what the GRAPH
+        already measured — the LLR label, the size, the strongest members by frequency, the years
+        they span — and asks the model for the one thing clustering cannot produce: what front
+        this group forms and which way it is moving. Every number in the prompt comes from the
+        table, the prose comes from the model, and the model's own name is logged with the result.
+
+        Same discipline as the other paid steps, because the failure modes are identical: no
+        model is a refusal BEFORE anything is spent, Stop marks the clusters not yet reached
+        ``ABORT_MARK`` so the node settles PARTIAL rather than DONE, and each answer is cached
+        under its prompt so a resume re-reads what it paid for instead of paying twice. A
+        ``fallback`` answer is built from the table's own facts and says so in the console — never
+        a paragraph that looks like the model wrote it.
+        """
+        from analyzers.llm_client import ABORT_MARK, LLMError
+
+        for column in (group_col, name_col):
+            if column not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='cluster_review', col=column))
+        if not str(summary_col or '').strip():
+            raise UnknownOperationError(t('analysis.need_param', op='cluster_review', param='summary_col'))
+        if llm is None and on_fail != 'fallback':
+            raise UnknownOperationError(t('analysis.label_no_llm', op='cluster_review'))
+
+        work = df.copy()
+        work['_grp'] = pd.to_numeric(work[group_col], errors='coerce')
+        work = work[work['_grp'].notna()]
+        order = sorted(int(key) for key in work['_grp'].unique())
+        if not order:
+            raise UnknownOperationError(t('analysis.review_no_groups', col=group_col))
+        if len(order) > int(max_groups):
+            raise UnknownOperationError(t('analysis.label_too_many', rows=len(order), limit=int(max_groups)))
+
+        take = max(3, int(members))
+        scope = f'cluster_review:{getattr(llm, "label", "") or "model"}'
+
+        def row(key: int, facts: dict | None) -> dict:
+            out: dict = {group_col: key}
+            if facts:
+                out['节点数'] = facts['size']
+                out['代表节点'] = '；'.join(facts['names'])
+                if facts.get('span'):
+                    out['年份跨度'] = facts['span']
+            if label_col and label_col in work.columns:
+                values = [str(v).strip() for v in work.loc[work['_grp'] == key, label_col].dropna().tolist()]
+                out[label_col] = values[0] if values else ''
+            return out
+
+        rows: list[dict] = []
+        written = 0
+        asked = 0
+        replayed = 0
+        for position, key in enumerate(order):
+            slice_ = work[work['_grp'] == key]
+            facts = _cluster_facts(slice_, name_col, freq_col, first_col, last_col, label_col, take)
+            if cancel is not None and cancel.is_set():
+                for rest in order[position:]:
+                    rows.append(
+                        row(
+                            rest,
+                            _cluster_facts(
+                                work[work['_grp'] == rest], name_col, freq_col, first_col, last_col, label_col, take
+                            ),
+                        )
+                        | {summary_col: ABORT_MARK}
+                    )
+                logger.warning(t('analysis.review_cancelled', n=len(order) - position))
+                return pd.DataFrame(rows)
+            prompt = t('analysis.review_prompt', facts=facts['block'], language=_review_language())
+            cache_key = hashlib.sha1(prompt.encode('utf-8')).hexdigest()
+            answer = store.cache_get(scope, cache_key) if store is not None else None
+            if answer is not None:
+                replayed += 1
+            else:
+                asked += 1
+                try:
+                    answer = llm.chat(prompt)
+                except LLMError as e:
+                    if on_fail == 'fallback':
+                        answer = _review_fallback(facts)
+                        logger.warning(t('analysis.review_failed_fallback', group=key, err=e))
+                    elif on_fail != 'blank':
+                        raise UnknownOperationError(t('analysis.review_failed', group=key, err=e)) from e
+                    else:
+                        answer = ''
+                        logger.warning(t('analysis.review_failed_blank', group=key, err=e))
+                    rows.append(row(key, facts) | {summary_col: answer})
+                    if answer:
+                        written += 1
+                    continue
+                if store is not None:
+                    store.cache_put(scope, cache_key, answer)
+            text = str(answer or '').strip()
+            if not text:
+                if on_fail == 'fallback':
+                    text = _review_fallback(facts)
+                elif on_fail != 'blank':
+                    raise UnknownOperationError(t('analysis.review_empty', group=key))
+                else:
+                    logger.warning(t('analysis.review_empty', group=key))
+            rows.append(row(key, facts) | {summary_col: text})
+            if text:
+                written += 1
+        logger.info(t('analysis.review_done', n=written, model=getattr(llm, 'label', '') or ''))
         if store is not None:
             logger.info(t('analysis.label_cached', asked=asked, replayed=replayed))
         return pd.DataFrame(rows)
@@ -3613,6 +3832,7 @@ class DataAnalysisService:
             'topic_by_stage': cls.topic_by_stage,
             'topic_label': cls.topic_label,
             'cluster_label': cls.cluster_label,
+            'cluster_review': cls.cluster_review,
             'topic_map': cls.topic_map,
             'topic_salience': cls.topic_salience,
             'topic_timeline': cls.topic_timeline,

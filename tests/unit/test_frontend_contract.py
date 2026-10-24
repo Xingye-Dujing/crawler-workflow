@@ -328,6 +328,25 @@ class TestFrontendCatalog:
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
         assert len(_DATA_I18N.findall(html)) > 50
 
+    def test_every_operation_the_dropdowns_offer_has_a_word_in_both_languages(self):
+        """``op.<name>`` is built at the call site (``I18n.t('op.' + op)``), so neither the parity
+        audit nor the reachability audit can see it — both walk the keys that are DEFINED, never
+        the names that get looked up. Measured from the dropdown arrays themselves, which are the
+        universe of what can be asked: an op added to ``ANALYSIS_OPS`` without a catalogue entry
+        prints ``op.cluster_review`` on the node card and in the 步骤 list, in one language only.
+        """
+        js = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        offered = set()
+        for name in ('ANALYSIS_OPS', 'PROCESS_OPS'):
+            body = js[js.index(f'var {name} = [') :]
+            offered.update(re.findall(r"'([a-z_]+)'", body[: body.index('];')]))
+        assert len(offered) > 40, offered
+        named = {lang: {key[3:] for key in table if key.startswith('op.')} for lang, table in _catalog_keys().items()}
+        missing = [
+            f'op.{op} missing from {lang}' for op in sorted(offered) for lang in ('zh', 'en') if op not in named[lang]
+        ]
+        assert not missing, '\n'.join(missing)
+
 
 class TestBiblioPanelContract:
     """The panel's option lists are the Python enums, not a second opinion."""

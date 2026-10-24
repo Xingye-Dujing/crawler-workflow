@@ -726,6 +726,14 @@ const clNode = addCanvasNode('analysis', { operation: 'cluster_label', cluster_m
 pa.canvas.connections = [{ from: clSrc, to: clNode }];
 out.diagnostics_cost_top_level_cluster = pa.estimateCost();
 
+/* cluster_review is the third paid label step: one call per cluster, so its own cap
+   (review_max_groups) bounds it and a 2000-row upstream table must not. */
+fresh();
+const rvSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '2000' });
+const rvNode = addCanvasNode('analysis', { operation: 'cluster_review', review_max_groups: '18' });
+pa.canvas.connections = [{ from: rvSrc, to: rvNode }];
+out.diagnostics_cost_cluster_review = pa.estimateCost();
+
 /* The pre-existing p.steps shape still contributes, capped by the step's own max. */
 fresh();
 const stSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '60' });

@@ -312,3 +312,72 @@ def test_structural_variation_table_runs_end_to_end(client, app_module):
     assert '结构变化' in rows[0] and '连接' not in rows[0]
     assert {'起始年', '结束年', '新增邻居', '消失邻居'} <= set(rows[0])
     assert any('结构变异' in line or 'Structural variation' in line for line in status['logs'])
+
+
+@pytest.mark.serial
+def test_a_biblio_cluster_reaches_the_review_step_by_its_default_names(client, app_module, monkeypatch):
+    """The claim the whole 簇综述 feature rests on, measured through the real run path: the columns
+    a ``biblio`` node writes (聚类 / 聚类标签 / 节点 / 频次 / 首年 / 末年) ARE the columns
+    ``cluster_review`` reads when every box in its panel is left blank.
+
+    Only the model is stubbed — the upload, the graph, the clustering and the row ledger are the
+    ones that ship. A unit test that hands the step a hand-written frame proves nothing about that
+    alignment, and a mis-named default is exactly the bug that would show up as an empty review
+    column in a paper rather than as a red test.
+    """
+    records = _upload(client, 'biblio_cnki_demo.txt')
+    workflow = _workflow(records['dataset_id'], '关键词')
+    workflow['nodes'].append(
+        {
+            'id': 'node-4',
+            'type': 'analysis',
+            'title': '簇综述',
+            'operation': 'cluster_review',
+            'params': {'operation': 'cluster_review'},
+            'x': 480,
+            'y': 220,
+        }
+    )
+    workflow['connections'].append({'from': 'node-2', 'to': 'node-4'})
+
+    prompts = []
+
+    class _Client:
+        label = 'ollama:stub'
+
+        def chat(self, prompt, max_retries=2):
+            prompts.append(prompt)
+            return '该簇围绕数字政府与政务服务展开，下一步可能转向数据要素。'
+
+    monkeypatch.setattr(
+        app_module, '_llm_run_ctx', lambda node, op, ctx=None: {'client': _Client(), 'cancel_event': None}
+    )
+    started = client.post(
+        '/api/workflow/execute',
+        json={
+            'workflow': workflow,
+            'workflow_name': 'biblio-review',
+            'llm': {'provider': 'ollama', 'model': 'qwen3'},
+            # Pinned because the fact lines are worded in the run's own language: a worker thread
+            # that forgot to set its language would answer in the server default, and this
+            # assertion would then be the thing that broke.
+            'lang': 'zh',
+        },
+    )
+    assert started.status_code == 200, started.get_json()
+    run_id = started.get_json()['run_id']
+    assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
+    status = client.get('/api/workflow/status').get_json()
+    assert status['completed_nodes'] == 4, status['logs']
+
+    graph_rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+    reviews = app_module._RUN_STORE.load_rows(run_id, 'node-4')
+    clusters = {int(row['聚类']) for row in graph_rows if str(row.get('聚类', '')).strip() != ''}
+    assert {int(row['聚类']) for row in reviews} == clusters, 'one review per cluster the graph found'
+    labels = {str(row['聚类标签']) for row in graph_rows if str(row.get('聚类标签') or '').strip()}
+    assert labels and labels <= {str(row['聚类标签']) for row in reviews}
+    # The prompt is made of the graph's own numbers, so a paragraph can be traced back to a cell.
+    assert prompts, 'the review step asked the model'
+    assert any(any(label in prompt for label in labels) for prompt in prompts)
+    assert all('簇内节点数' in prompt for prompt in prompts)
+    assert all(str(row['簇综述']).strip() for row in reviews)

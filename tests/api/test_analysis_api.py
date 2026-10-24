@@ -912,6 +912,30 @@ NORMALIZED = {
         },
         {'words_col': '词', 'samples_col': '样本', 'summary_col': '概括', 'on_fail': 'blank', 'max_topics': 5},
     ),
+    'cluster_review': (
+        {
+            'review_group_col': '簇号',
+            'review_label_col': '簇标签',
+            'review_name_col': '术语',
+            'review_freq_col': '词频',
+            'review_summary_col': '前沿',
+            'review_on_fail': 'blank',
+            'review_max_groups': '4',
+            'review_members': '5',
+        },
+        {
+            'group_col': '簇号',
+            'label_col': '簇标签',
+            'name_col': '术语',
+            'freq_col': '词频',
+            'first_col': '首年',
+            'last_col': '末年',
+            'summary_col': '前沿',
+            'members': 5,
+            'on_fail': 'blank',
+            'max_groups': 4,
+        },
+    ),
     'cluster_label': (
         {
             'cluster_group_col': '簇',
@@ -1134,6 +1158,18 @@ BLANK_FORM = {
         'samples_col': 'sample_texts',
         'on_fail': 'abort',
         'max_topics': 30,
+    },
+    'cluster_review': {
+        'group_col': '聚类',
+        'label_col': '聚类标签',
+        'name_col': '节点',
+        'freq_col': '频次',
+        'first_col': '首年',
+        'last_col': '末年',
+        'summary_col': '簇综述',
+        'members': 12,
+        'on_fail': 'abort',
+        'max_groups': 60,
     },
     'cluster_label': {
         'group_col': 'cluster',
@@ -1789,6 +1825,14 @@ PARSED_FIELDS = {
     'label_max_topics',
     # The cluster summariser re-shapes all six: three fall back to a column name when blank,
     # one is a select with a declared default, two are counts.
+    'review_group_col',
+    'review_label_col',
+    'review_name_col',
+    'review_freq_col',
+    'review_summary_col',
+    'review_on_fail',
+    'review_max_groups',
+    'review_members',
     'cluster_group_col',
     'cluster_text_col',
     'cluster_summary_col',
@@ -1927,6 +1971,30 @@ class TestTheLabellingStepNeedsTheRunModel:
             self._node('select_columns', columns='stage, topic'), list(self.TOPICS)
         )
         assert set(rows[0]) == {'stage', 'topic'}
+
+    def test_the_review_step_names_itself_to_the_client_builder(self, app_module, monkeypatch):
+        """``_llm_run_ctx`` reads the operation to size the answer, and the run console prints it.
+        A hardcoded ``'topic_label'`` used to mean a cluster review was logged — and capped — as
+        if it were a topic summary."""
+        clusters = [
+            {'聚类': 0, '聚类标签': '数字治理', '节点': '数字政府', '频次': 12},
+            {'聚类': 0, '聚类标签': '数字治理', '节点': '政务服务', '频次': 7},
+            {'聚类': 1, '聚类标签': '乡村振兴', '节点': '乡村治理', '频次': 9},
+        ]
+        client = self._Client()
+        seen = {}
+
+        def fake_ctx(node, op, ctx=None):
+            seen['op'] = op
+            return {'client': client, 'cancel_event': None}
+
+        monkeypatch.setattr(app_module, '_llm_run_ctx', fake_ctx)
+        monkeypatch.setitem(app_module.execution_state, 'llm', {'provider': 'ollama', 'model': 'qwen3'})
+        rows = app_module._execute_analysis_node(self._node('cluster_review'), clusters)
+        assert seen == {'op': 'cluster_review'}
+        assert len(rows) == 2, 'one review row per cluster'
+        assert len(client.prompts) == 2
+        assert 'LLR 标签：数字治理' in client.prompts[0]
 
 
 class TestJunkAcrossEveryField:
@@ -2557,6 +2625,14 @@ PANEL_VALUE = {
     'label_summary_col': '概括',
     'label_on_fail': 'blank',
     'label_max_topics': '5',
+    'review_group_col': '簇号',
+    'review_label_col': '簇标签',
+    'review_name_col': '术语',
+    'review_freq_col': '词频',
+    'review_summary_col': '前沿',
+    'review_on_fail': 'blank',
+    'review_max_groups': '4',
+    'review_members': '5',
     'cluster_group_col': '簇',
     'cluster_text_col': '内容',
     'cluster_summary_col': '概述',

@@ -595,6 +595,25 @@ _ZH = {
     'analysis.cluster_failed': '簇 {group} 的摘要失败：{err}',
     'analysis.cluster_cancelled': '已停止：还有 {n} 个簇没问模型，它们的摘要标为未处理',
     'analysis.cluster_no_texts': '簇 {group} 里没有可摘要的文本，无法问模型',
+    'analysis.review_prompt': (
+        '你是文献计量与科学计量研究员。下面是一个知识图谱聚类簇的**既有度量**（全部来自表格，不是推测）。'
+        '请据此写出 3–5 句该簇所代表的研究前沿：它关注什么问题、由哪些概念支撑、'
+        '在给定年份区间里可能的演化方向。只写分析本身，不要复述数据、不要列点、不要客套；用{language}回答。'
+        '\n'
+        '{facts}'
+    ),
+    'analysis.review_fact_size': '簇内节点数：{n}',
+    'analysis.review_fact_label': 'LLR 标签：{label}',
+    'analysis.review_fact_members': '代表节点（按频次）：{members}',
+    'analysis.review_fact_span': '年份跨度：{span}',
+    'analysis.review_done': '簇综述：{n} 个簇已写出（模型 {model}）',
+    'analysis.review_failed': '簇 {group} 的综述失败：{err}',
+    'analysis.review_failed_fallback': '簇 {group} 的综述失败，已改用表格事实生成的兜底句：{err}',
+    'analysis.review_failed_blank': '簇 {group} 的综述失败，按要求留空：{err}',
+    'analysis.review_empty': '簇 {group} 的综述返回为空',
+    'analysis.review_cancelled': '已停止：还有 {n} 个簇没问模型，它们的综述标为未处理',
+    'analysis.review_no_groups': '簇综述找不到分组列 {col}：请先让上游文献计量节点开启聚类',
+    'analysis.review_fallback_text': '（未经模型，按表格事实生成）该簇含 {size} 个节点，代表节点：{members}',
     'analysis.cluster_empty': '簇 {group} 的摘要返回为空',
     'analysis.reply_graph_no_edges': (
         '回复传播图找不到可关联的回复：请确认「评论者」「楼层」「父楼层」三列存在，'
@@ -2293,6 +2312,34 @@ _EN = {
     'analysis.cluster_cancelled': 'stopped: {n} clusters were never asked, and their summaries are marked 未处理',
     'analysis.cluster_no_texts': 'cluster {group} has no text to summarise, so the model cannot be asked',
     'analysis.cluster_empty': 'the summary for cluster {group} came back empty',
+    'analysis.review_prompt': (
+        'You are a scientometrics researcher. Below are the EXISTING metrics of one cluster of a '
+        'knowledge map (every figure comes from the table, not from speculation). From them write '
+        '3-5 sentences on the research front this cluster forms: what problem it addresses, which '
+        'concepts hold it up, and the direction it is likely moving in over the given year span. '
+        'Give the analysis only - do not restate the data, do not bullet, do not preamble. '
+        'Answer in {language}.'
+        '\n'
+        '{facts}'
+    ),
+    'analysis.review_fact_size': 'nodes in cluster: {n}',
+    'analysis.review_fact_label': 'LLR label: {label}',
+    'analysis.review_fact_members': 'strongest members (by frequency): {members}',
+    'analysis.review_fact_span': 'year span: {span}',
+    'analysis.review_done': 'cluster review: {n} clusters written (model {model})',
+    'analysis.review_failed': 'the review of cluster {group} failed: {err}',
+    'analysis.review_failed_fallback': (
+        'the review of cluster {group} failed; a sentence built from the table facts was used instead: {err}'
+    ),
+    'analysis.review_failed_blank': 'the review of cluster {group} failed and was left blank as asked: {err}',
+    'analysis.review_empty': 'the review for cluster {group} came back empty',
+    'analysis.review_cancelled': 'stopped: {n} clusters were never asked, their reviews are marked unprocessed',
+    'analysis.review_no_groups': (
+        'cluster review cannot find its grouping column {col}: enable clustering upstream first'
+    ),
+    'analysis.review_fallback_text': (
+        '(generated from the table, not by a model) this cluster holds {size} nodes; strongest members: {members}'
+    ),
     'analysis.reply_graph_no_edges': (
         'the reply graph found no resolvable reply: check that 评论者 / 楼层 / 父楼层 exist and '
         "that some reply's parent floor matches a top-level comment's floor"

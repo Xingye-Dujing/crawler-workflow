@@ -157,6 +157,27 @@ class TestTheShapeTheCanvasActuallyStores:
         counts_only = self._analysis({'operation': 'compare_platform', 'compare_platform_col': '平台'})
         assert compute_columns(counts_only, [])['a'] == ['平台', 'n'], 'no value box means no aggregate column'
 
+    def test_a_summarising_step_declares_only_the_columns_it_actually_writes(self):
+        """聚类摘要 REDUCES the table to one row per cluster, so promising the upstream columns
+        was a lie in the other direction: a chart fed by it was told 节点/频次 would be there and
+        met them only at run time — as an absence."""
+        nodes = self._analysis(
+            {
+                'operation': 'cluster_label',
+                'cluster_group_col': '簇',
+                'cluster_text_col': '正文',
+                'cluster_summary_col': '概述',
+            }
+        )
+        assert compute_columns(nodes, [])['a'] == ['簇', 'n_docs', '概述']
+
+    def test_a_review_step_says_it_cannot_tell_rather_than_guessing_its_columns(self):
+        """簇综述's row shape depends on which fact columns the upstream table has (年份跨度 only
+        when 首年/末年 exist, 聚类标签 only when the node emitted one), so the honest answer is
+        unknown — the panel then refuses to claim a lineage it has not measured."""
+        nodes = self._analysis({'operation': 'cluster_review', 'review_summary_col': '前沿'})
+        assert compute_columns(nodes, [])['a'] is None
+
     def test_sentiment_evolution_reports_the_index_name_and_only_the_score_columns_given(self):
         without_score = self._analysis(
             {

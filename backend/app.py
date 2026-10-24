@@ -4085,6 +4085,22 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'max_groups': _optional_int(params.get('cluster_max_groups')) or 60,
             'sample_n': _optional_int(params.get('cluster_sample_n')) or 8,
         }
+    if op == 'cluster_review':
+        # The bibliometric sibling of ``cluster_label``: the columns default to what a ``biblio``
+        # node writes (聚类 / 聚类标签 / 节点 / 频次 / 首年 / 末年), so an untouched form reviews
+        # the knowledge-map clusters rather than guessing at whichever columns came first.
+        return {
+            'group_col': str(params.get('review_group_col') or '聚类').strip(),
+            'label_col': str(params.get('review_label_col') or '聚类标签').strip(),
+            'name_col': str(params.get('review_name_col') or '节点').strip(),
+            'freq_col': str(params.get('review_freq_col') or '频次').strip(),
+            'first_col': str(params.get('review_first_col') or '首年').strip(),
+            'last_col': str(params.get('review_last_col') or '末年').strip(),
+            'summary_col': str(params.get('review_summary_col') or '簇综述').strip(),
+            'members': _optional_int(params.get('review_members')) or 12,
+            'on_fail': params.get('review_on_fail') or 'abort',
+            'max_groups': _optional_int(params.get('review_max_groups')) or 60,
+        }
     if op == 'reply_graph':
         # Three column names, each defaulting to what a comment crawl writes, so an untouched
         # form reads the crawl's own reply relation. They go through `or` (blank = the default),
@@ -4196,12 +4212,16 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     # here would be a second opinion about which model this run is using.
     llm = None
     cancel = None
-    if any(str(step.get('op')) in LLM_OPS for step in steps):
+    labelling = [str(step.get('op')) for step in steps if str(step.get('op')) in LLM_OPS]
+    if labelling:
         cfg = execution_state.get('llm') or {}
         node_model = str((node.get('params') or {}).get('model') or '').strip()
         if not str(cfg.get('model') or '').strip() and not node_model:
             raise UnknownOperationError(t('wf.analysis_llm_no_model'))
-        run_ctx = _llm_run_ctx(node, 'topic_label', ctx)
+        # Named by the step that needs it, not by whichever step was first: the context reads the
+        # operation to size the answer, and a log line that says ``topic_label`` for a cluster
+        # review is a second, wrong opinion about what this node is doing.
+        run_ctx = _llm_run_ctx(node, labelling[0], ctx)
         llm = run_ctx['client']
         cancel = run_ctx.get('cancel_event')
 

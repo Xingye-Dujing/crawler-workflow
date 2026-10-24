@@ -369,6 +369,13 @@ class TestDiagnostics:
         cost = pa['diagnostics_cost_top_level_cluster']
         assert cost['llmCalls'] == 40, 'cluster_label caps at cluster_max_groups (40), not a flat 30'
 
+    def test_the_cluster_review_caps_by_its_own_group_limit(self, pa):
+        """A 2000-row table in front of a per-cluster step is not 2000 paid calls: the estimate has
+        to read ``review_max_groups`` the way it reads the other two label caps."""
+        cost = pa['diagnostics_cost_cluster_review']
+        assert cost['crawlRows'] == 2000
+        assert cost['llmCalls'] == 18
+
     def test_a_label_step_is_still_counted(self, pa):
         """The pre-existing p.steps shape must not regress when the top-level one was added."""
         cost = pa['diagnostics_cost_step_label']

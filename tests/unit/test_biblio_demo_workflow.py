@@ -47,7 +47,7 @@ def test_every_bibliometric_view_is_on_the_demo_canvas():
 
 def test_the_dual_map_chain_is_off_and_names_the_dataset_it_wants():
     off = [node for node in _draft()['nodes'] if not (node.get('params') or {}).get('enabled', True)]
-    assert {node['type'] for node in off} == {'biblio', 'visualize', 'fuse', 'upload'}
+    assert {node['type'] for node in off} == {'analysis', 'biblio', 'visualize', 'fuse', 'upload'}
     shapes = {str((node.get('params') or {}).get('output_shape') or '') for node in off if node['type'] == 'biblio'}
     assert shapes == {'nodes', 'dual_map'}, shapes
     dual = next(
@@ -84,3 +84,23 @@ def test_the_fusion_chain_is_off_until_the_third_dataset_is_uploaded():
     assert len(parents) == 2, 'fusion with one wire is not fusion'
     graph = effective_workflow(_graph(draft))
     assert fuse['id'] not in graph['nodes'], 'the off chain must not reach validation or the run'
+
+
+def test_the_cluster_review_node_ships_off_because_it_costs_model_calls():
+    """The research-front review is the demo's one step that pays Ollama once per cluster, so it
+    cannot be left switched on the way the variation table is — and it must be attached to a
+    biblio node that actually clusters, or the server refuses it for want of a 聚类 column.
+
+    Its column boxes ship blank on purpose: the defaults are the names a ``biblio`` node writes
+    (聚类 / 聚类标签 / 节点 / 频次 / 首年 / 末年), and a demo that hard-copied them into the file
+    would stop testing the thing that matters — that an untouched form lines up with the node.
+    """
+    draft = _draft()
+    review = next(node for node in draft['nodes'] if (node.get('params') or {}).get('operation') == 'cluster_review')
+    assert not (review['params']).get('enabled', True)
+    assert not [key for key, value in review['params'].items() if key.startswith('review_') and str(value or '')]
+    parents = [conn['from'] for conn in draft['connections'] if conn['to'] == review['id']]
+    assert len(parents) == 1
+    upstream = next(node for node in draft['nodes'] if node['id'] == parents[0])
+    assert upstream['type'] == 'biblio' and (upstream.get('params') or {}).get('cluster') is True
+    assert review['id'] not in effective_workflow(_graph(draft))['nodes']
