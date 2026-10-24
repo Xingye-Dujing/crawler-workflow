@@ -103,6 +103,16 @@ class TestCompare:
         )
         assert diff['params_differ']['items'] == [{'name': 'slice_years', 'a': 2, 'b': 3}]
 
+    def test_a_parameter_the_older_capture_never_had_is_a_difference_not_a_crash(self):
+        """The comparison indexed the LEFT dict while iterating both key sets, so the first capture
+        filed after a parameter was ADDED raised ``KeyError`` against every snapshot older than it —
+        which is every user's history the day a setting ships."""
+        diff = compare_snapshots(
+            _snapshot([], [], {'top_n': 50}),
+            _snapshot([], [], {'top_n': 50, 'counting': 'fractional'}),
+        )
+        assert diff['params_differ']['items'] == [{'name': 'counting', 'a': None, 'b': 'fractional'}]
+
     def test_a_diff_section_says_how_much_it_cut(self):
         wide_a = [{'节点': f'词{i}', '频次': 1} for i in range(DIFF_LIMIT + 25)]
         diff = compare_snapshots(_snapshot([], []), _snapshot(wide_a, []))
@@ -186,6 +196,19 @@ class TestStore:
     def test_an_empty_name_is_not_a_project(self, store):
         assert store.create_project('  ').get('name') == ''
         assert store.rename_project('whatever', '   ') is False
+
+    def test_newest_first_means_newest_even_inside_one_second(self, store):
+        """``created_at`` is second-granular, so captures filed together tie — and the tie used to
+        be broken by LABEL, which for Chinese names is codepoint order and has nothing to do with
+        time. A monitor asks for "the capture before this one"; an alphabetical answer is wrong."""
+        project = store.create_project('排序')
+        for label in ('第三次', '基线', '第二次'):
+            store.add_snapshot(project_id=project['project_id'], label=label, nodes=[], edges=[])
+        assert [entry['label'] for entry in store.list_snapshots(project['project_id'])] == [
+            '第二次',
+            '基线',
+            '第三次',
+        ]
 
     def test_a_list_never_carries_the_captured_rows(self, store):
         """The list backs a picker; shipping every captured table through it would be the panel's

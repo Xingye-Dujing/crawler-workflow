@@ -104,3 +104,24 @@ def test_the_cluster_review_node_ships_off_because_it_costs_model_calls():
     upstream = next(node for node in draft['nodes'] if node['id'] == parents[0])
     assert upstream['type'] == 'biblio' and (upstream.get('params') or {}).get('cluster') is True
     assert review['id'] not in effective_workflow(_graph(draft))['nodes']
+
+
+def test_the_watch_node_ships_off_because_it_writes_outside_the_run():
+    """Monitoring is the one demo capability whose effect outlives the run: enabling it files a
+    capture into ``data/biblio.db`` on EVERY run and keeps a history the user never asked for while
+    trying the charts out. So it ships switched off, with the project name already filled in — the
+    reader sees what to type rather than discovering it from a manual.
+
+    It is wired to its own ``biblio`` node rather than reusing 节点 2 because the watched node is
+    the one that must carry clustering and bursting: those are what the diff has to say anything
+    about (新簇 / 新突现).
+    """
+    draft = _draft()
+    watched = [node for node in draft['nodes'] if str((node.get('params') or {}).get('watch_project') or '').strip()]
+    assert len(watched) == 1
+    params = watched[0]['params']
+    assert params['enabled'] is False
+    assert params['cluster'] is True and params['burst'] is True
+    assert not str(params.get('watch_baseline') or '').strip(), 'the default baseline is the capture before'
+    graph = effective_workflow(_graph(draft))
+    assert watched[0]['id'] not in graph['nodes'], 'the off watch must not file anything during the demo'

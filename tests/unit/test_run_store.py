@@ -176,6 +176,25 @@ class TestFingerprints:
         ordered = _node(params={'dataset_id': 'd1', 'layout_order': '3'})
         assert node_fingerprint(plain) == node_fingerprint(ordered)
 
+    def test_where_a_run_gets_filed_is_not_a_new_computation(self):
+        """The monitor's three boxes decide WHERE the capture goes, which capture to compare with
+        and what to call it — not one row of the node's table. Keyed in, renaming a capture would
+        invalidate a paid-for graph; that is the same mistake 排布顺序 used to make."""
+        plain = _node(ntype='biblio', params={'entity_type': 'keyword'})
+        watched = _node(
+            ntype='biblio',
+            params={
+                'entity_type': 'keyword',
+                'watch_project': '数字治理',
+                'watch_baseline': '上月',
+                'watch_label': '本周',
+            },
+        )
+        assert node_fingerprint(plain) == node_fingerprint(watched)
+        assert node_fingerprint(watched) != node_fingerprint(_node(ntype='biblio', params={'entity_type': 'author'})), (
+            'a real setting still has to move the fingerprint'
+        )
+
     def test_renaming_the_workflow_is_not_a_new_computation(self):
         """A 工作流命名 label describes the record, not the data.
 

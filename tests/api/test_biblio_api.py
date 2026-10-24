@@ -381,3 +381,125 @@ def test_a_biblio_cluster_reaches_the_review_step_by_its_default_names(client, a
     assert any(any(label in prompt for label in labels) for prompt in prompts)
     assert all('簇内节点数' in prompt for prompt in prompts)
     assert all(str(row['簇综述']).strip() for row in reviews)
+
+
+def _watch_workflow(dataset_id: str, extra: dict) -> dict:
+    """Upload → 关键词图谱, with the monitor's project box filled in."""
+    params = {
+        'entity_type': 'keyword',
+        'year_column': '年份',
+        'title_column': '题名',
+        'abstract_column': '摘要',
+        'slice_years': 1,
+        'selection': 'top_n',
+        'top_n': 50,
+        'link_measure': 'cosine',
+        'pruning': 'none',
+        'cluster': True,
+        'label_method': 'llr',
+        'burst': False,
+        'export_files': False,
+        'watch_project': '数字治理监测',
+    }
+    params.update(extra)
+    return {
+        'nodes': [
+            {
+                'id': 'node-1',
+                'type': 'upload',
+                'title': '上传文献',
+                'params': {'dataset_id': dataset_id, 'dataset_name': 'cnki.txt', 'row_count': 36},
+                'x': 0,
+                'y': 0,
+            },
+            {'id': 'node-2', 'type': 'biblio', 'title': '关键词图谱', 'params': params, 'x': 240, 'y': 0},
+        ],
+        'connections': [{'from': 'node-1', 'to': 'node-2'}],
+        'settings': {'mode': 'serial', 'headless': True, 'max_workers': 1},
+    }
+
+
+def _execute(client, workflow, name):
+    """Run a canvas and wait for it.
+
+    ``lang`` is pinned because the monitor narrates itself in the RUN's language: an assertion on
+    console wording that inherits the process default would pass on this box and fail on CI.
+    """
+    started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name, 'lang': 'zh'})
+    assert started.status_code == 200, started.get_json()
+    return started.get_json()['run_id']
+
+
+@pytest.mark.serial
+def test_a_watched_canvas_files_one_capture_per_run_and_says_so(client, app_module):
+    """The monitor's whole point is the SECOND run: the first has nothing to compare with, and the
+    second must find the first, report what moved, and leave a file the panel can hand over."""
+    from stores import get_biblio_store
+
+    records = _upload(client, 'biblio_cnki_demo.txt')
+    first = _execute(client, _watch_workflow(records['dataset_id'], {}), 'watch-repeat')
+    assert _wait_for_worker(app_module)
+    assert client.get('/api/workflow/status').get_json()['completed_nodes'] == 2
+    # The first run files a capture even though it has nothing to compare with — otherwise a
+    # monitor's history would start at its second run and the first week would be missing.
+    assert [
+        entry
+        for entry in app_module._RUN_STORE.files_for_run(first, node_id='node-2')
+        if entry['kind'] == 'biblio_watch'
+    ]
+
+    biblio = get_biblio_store()
+    projects = [p for p in biblio.list_projects() if p['name'] == '数字治理监测']
+    assert len(projects) == 1, 'the second run must not create a second project of the same name'
+    assert len(biblio.list_snapshots(projects[0]['project_id'])) == 1
+
+    second = _execute(client, _watch_workflow(records['dataset_id'], {}), 'watch-repeat')
+    assert _wait_for_worker(app_module)
+    status = client.get('/api/workflow/status').get_json()
+    assert status['completed_nodes'] == 2, status['logs']
+    snapshots = biblio.list_snapshots(projects[0]['project_id'])
+    assert len(snapshots) == 2
+
+    logs = '\n'.join(status['logs'])
+    assert '[监测]' in logs, status['logs']
+    assert '无变化' in logs, 'the same data through the same settings has to be reported as unchanged'
+    files = app_module._RUN_STORE.files_for_run(second, node_id='node-2')
+    watch_files = [entry for entry in files if entry['kind'] == 'biblio_watch']
+    assert len(watch_files) == 1, files
+    assert watch_files[0]['name'].endswith('-watch.csv')
+    # The panel's own door: it lists a node's artefacts by the ledger's kind filter, so the change
+    # table has to be reachable there rather than only on disk.
+    page = client.get(f'/api/biblio/table?run_id={second}&node_id=node-2').get_json()
+    assert [entry['name'] for entry in page['files']] == [watch_files[0]['name']], page['files']
+
+    rows = app_module._RUN_STORE.load_rows(second, 'node-2')
+    assert rows and '节点' in rows[0], 'watching must not change what the node hands downstream'
+
+
+@pytest.mark.serial
+def test_a_narrower_window_is_reported_as_a_parameter_change_not_as_a_vanishing_field(client, app_module):
+    """A monitor that blames the field for someone editing the node is worse than no monitor."""
+    from stores import get_biblio_store
+
+    records = _upload(client, 'biblio_cssci_demo.txt')
+    _execute(client, _watch_workflow(records['dataset_id'], {'watch_project': '窗口监测'}), 'watch-window')
+    assert _wait_for_worker(app_module)
+    run_id = _execute(
+        client,
+        _watch_workflow(records['dataset_id'], {'watch_project': '窗口监测', 'top_n': 6}),
+        'watch-window',
+    )
+    assert _wait_for_worker(app_module)
+    status = client.get('/api/workflow/status').get_json()
+    assert status['completed_nodes'] == 2, status['logs']
+    logs = '\n'.join(status['logs'])
+    assert 'top_n' in logs, f'the changed parameter must be named: {status["logs"]}'
+    assert '参数' in logs or '监测' in logs, status['logs']
+    projects = [p for p in get_biblio_store().list_projects() if p['name'] == '窗口监测']
+    assert len(projects) == 1
+    assert len(get_biblio_store().list_snapshots(projects[0]['project_id'])) == 2
+    assert [
+        entry
+        for entry in app_module._RUN_STORE.files_for_run(run_id, node_id='node-2')
+        if entry['kind'] == 'biblio_watch'
+    ]

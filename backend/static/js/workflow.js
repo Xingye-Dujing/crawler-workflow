@@ -3528,6 +3528,10 @@ function renderBiblioSettings(nodeId, p) {
         basemapOptions + '</select>' +
         '<button class="menu-btn" onclick="dataNodes.loadBiblioBasemapOptions(\'' + nodeId + '\')">' + I18n.t('settings.capLoaded') + '</button>' +
         '<div class="settings-hint">' + I18n.t('biblio.ui.basemapHint') + '</div></div>';
+    html += renderParamInput(nodeId, p, 'watch_project', 'biblio.ui.watchProject', 'text', '') +
+        renderParamInput(nodeId, p, 'watch_baseline', 'biblio.ui.watchBaseline', 'text', '') +
+        renderParamInput(nodeId, p, 'watch_label', 'biblio.ui.watchLabel', 'text', '') +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.watchHint') + '</div>';
     html += renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.exportHint') + '</div>' +
         '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';

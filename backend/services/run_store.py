@@ -223,6 +223,13 @@ _VOLATILE_PARAMS = frozenset(
         'filename_time_range',
         'emit_latex',
         'emit_latex_table',
+        # Cross-run monitoring: none of these changes a single row the node produces — they say
+        # where its capture is filed, which capture to compare with, and what to call it. Keyed in,
+        # renaming a capture would recompute a paid-for graph; keyed out, the graph is reused and
+        # the monitoring still files whatever run actually executed the node.
+        'watch_project',
+        'watch_baseline',
+        'watch_label',
     }
 )
 

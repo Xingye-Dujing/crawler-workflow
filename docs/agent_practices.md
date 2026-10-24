@@ -402,6 +402,24 @@ edges keyed by their canonical endpoint pair — a node table lists every link f
 comparing rows in arrival order reports a weight change on every edge that merely came from the
 other side.
 
+**A monitor reads history, so it is the first caller to meet an older row shape.** Two defects lived
+in that comparison until cross-run monitoring (`services/biblio_monitor.py`) walked in front of it:
+
+* `params_differ` indexed the LEFT dict (`a_params[key]`) while iterating `set(a) | set(b)`, so the
+  first capture filed after a parameter was ADDED raised `KeyError` when compared with an old
+  snapshot that never had the key. Read both sides with `.get()` — "the older capture had no such
+  setting" is a real difference to report, not a crash.
+* `list_snapshots` ordered by `created_at DESC, label`. `created_at` is second-granular, so two
+  captures filed in the same second tie and the tie-break is a **name**: for Chinese labels that is
+  codepoint order, which has nothing to do with time, and "compare with the capture before this
+  one" silently compared with an arbitrary older one. The tie-break is `rowid` (insertion order).
+
+**A side-effect parameter belongs to neither the fingerprint nor the captured settings.** `watch_*`
+changes no row the node emits, so keying it in would recompute a paid-for graph whenever the user
+renamed a capture; and filing it with the settings that produced the graph would make every capture
+differ from its baseline by its own name, which kills the one signal (「参数变了」) that tells a
+reader to suspect an edited node rather than a moving field.
+
 **An `onclick` attribute is two grammars and the DOM stub will not tell you.** The workspace's
 新建 button was built as `'… onclick="x.createProject(' + "document.getElementById('id').value)" + '>…'`
 — the fragment that looked like it ended the attribute ended the *string* instead, so the quote

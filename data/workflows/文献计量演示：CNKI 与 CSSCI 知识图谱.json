@@ -691,6 +691,36 @@
       "x": 980,
       "y": 2040,
       "folded": false
+    },
+    {
+      "id": "node-29",
+      "type": "biblio",
+      "title": "关键词图谱·跨 run 监测",
+      "params": {
+        "enabled": false,
+        "entity_type": "keyword",
+        "year_column": "年份",
+        "title_column": "题名",
+        "abstract_column": "摘要",
+        "reference_column": "参考文献",
+        "slice_years": 1,
+        "selection": "top_n",
+        "top_n": 50,
+        "min_count": 1,
+        "link_measure": "cosine",
+        "pruning": "none",
+        "cluster": true,
+        "label_method": "llr",
+        "burst": true,
+        "watch_project": "关键词监测（演示）",
+        "watch_baseline": "",
+        "watch_label": "",
+        "output_shape": "nodes",
+        "export_files": true
+      },
+      "x": 640,
+      "y": 2180,
+      "folded": false
     }
   ],
   "connections": [
@@ -721,7 +751,8 @@
     { "from": "node-24", "to": "node-25" },
     { "from": "node-1", "to": "node-26" },
     { "from": "node-26", "to": "node-27" },
-    { "from": "node-2", "to": "node-28" }
+    { "from": "node-2", "to": "node-28" },
+    { "from": "node-1", "to": "node-29" }
   ],
   "settings": {
     "mode": "parallel",

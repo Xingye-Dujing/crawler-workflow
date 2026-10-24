@@ -44,6 +44,12 @@ COUPLING_TYPES = ('document', 'bibliographic_coupling', 'journal', 'source')
 
 OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts', 'variation', 'dual_map')
 
+#: Shapes whose rows are NOT one row per entity: ``variation`` repeats a node once per slice pair,
+#: ``clusters``/``bursts`` are per-cluster or per-burst rows. A cross-run monitor captures an
+#: entity table, so filing one of these would store a graph whose node count is a multiple of the
+#: real one and make every later comparison a comparison of two different questions.
+WATCH_UNSHAPED = ('variation', 'clusters', 'bursts')
+
 SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
 #: How much a mediating document contributes to a link. ``full`` counts it once per pair it
@@ -161,6 +167,12 @@ DEFAULTS = {
     'exclude_values': '',
     'cluster_labels': '',
     'basemap_dataset_id': '',
+    # Cross-run monitoring (定时任务 + 快照): each run files its own capture into this project
+    # and diffs it against the previous one. Blank project = the node behaves exactly as before
+    # the parameter existed.
+    'watch_project': '',
+    'watch_baseline': '',
+    'watch_label': '',
     'output_shape': 'nodes',
     'export_files': True,
 }
@@ -454,6 +466,15 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
         # Naming clusters that will not exist is a stale box, not a preference: say which switch
         # is missing instead of quietly ignoring the labels the user typed.
         errors.append(t('biblio.cluster_labels_need_cluster', nid=nid or '(biblio)'))
+    watch_project = str(params.get('watch_project') or '').strip()
+    if not watch_project and (
+        str(params.get('watch_baseline') or '').strip() or str(params.get('watch_label') or '').strip()
+    ):
+        # A baseline and a capture name belong to a project; filing them with none would let the
+        # node look configured while it watches nothing at all.
+        errors.append(t('biblio.watch_needs_project', nid=nid or '(biblio)'))
+    if watch_project and shape in WATCH_UNSHAPED:
+        errors.append(t('biblio.watch_needs_entity_table', nid=nid or '(biblio)', shape=shape))
     return errors
 
 
@@ -549,6 +570,9 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'exclude_values': str(params.get('exclude_values') or '').strip(),
         'cluster_labels': str(params.get('cluster_labels') or '').strip(),
         'basemap_dataset_id': str(params.get('basemap_dataset_id') or '').strip(),
+        'watch_project': str(params.get('watch_project') or '').strip(),
+        'watch_baseline': str(params.get('watch_baseline') or '').strip(),
+        'watch_label': str(params.get('watch_label') or '').strip(),
         'output_shape': str(params.get('output_shape') or DEFAULTS['output_shape']).strip(),
         'export_files': as_bool(params.get('export_files'), DEFAULTS['export_files']),
     }

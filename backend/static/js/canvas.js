@@ -1488,6 +1488,7 @@ const canvas = {
             burst: true, burst_gamma: 1.0, burst_min_duration: 2, burst_weight: 2.0, burst_top: 20,
             variation: false, variation_min: 0.05,
             aliases: '', exclude_values: '', cluster_labels: '', basemap_dataset_id: '',
+            watch_project: '', watch_baseline: '', watch_label: '',
             output_shape: 'nodes',
             export_files: true
         };

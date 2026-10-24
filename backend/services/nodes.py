@@ -277,6 +277,32 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
     for note in result.get('notes') or []:
         add_log(note)
 
+    shape = str(summary.get('output_shape') or params.get('output_shape') or 'nodes')
+    rows = {
+        'edges': result['edges'],
+        'clusters': result['clusters'],
+        'bursts': result['bursts'],
+        'variation': result['variation'],
+        'dual_map': result['rows'],
+    }.get(shape, result['rows'])
+
+    # Cross-run monitoring runs BEFORE the export so the JSON artifact carries what was filed. Its
+    # failures are NOT swallowed: a monitor that ate its own error would report a clean run while
+    # watching nothing at all.
+    watch = _watch_capture(node, ctx, params, rows, shape, entity)
+    if watch:
+        for note in watch['notes']:
+            add_log(note)
+        summary['watch'] = {
+            'project': watch['project']['name'],
+            'snapshot': watch['snapshot'],
+            'baseline': watch['baseline'],
+            'totals': _watch_totals(watch['diff']),
+        }
+        if ctx and ctx.get('store') and ctx.get('run_id'):
+            with contextlib.suppress(Exception):
+                ctx['store'].record_file(ctx['run_id'], str(node.get('id') or ''), watch['file'], 'biblio_watch')
+
     if as_bool(params.get('export_files'), True):
         try:
             files = bibliometrics.export_result(result, Config.EXPORT_DIR, f'{label}-{node.get("id") or "biblio"}')
@@ -297,15 +323,54 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
             end=window.get('end', ''),
         )
     )
-    shape = str(summary.get('output_shape') or params.get('output_shape') or 'nodes')
-    rows = {
-        'edges': result['edges'],
-        'clusters': result['clusters'],
-        'bursts': result['bursts'],
-        'variation': result['variation'],
-        'dual_map': result['rows'],
-    }.get(shape, result['rows'])
     return _json_safe_records(pd.DataFrame(rows))
+
+
+def _watch_capture(node: dict, ctx: dict | None, params: dict, rows: list, shape: str, entity: str) -> dict | None:
+    """File this run's network into a project and diff it against the capture before it.
+
+    ``None`` when the node watches nothing, which is every canvas written before the parameter
+    existed. The run record is read for the workflow's name and start moment because a capture
+    labelled with an opaque id cannot be read back as a timeline in the panel.
+    """
+    if not str(params.get('watch_project') or '').strip():
+        return None
+    from stores import get_biblio_store
+
+    from services import biblio_monitor
+
+    store = (ctx or {}).get('store')
+    run_id = str((ctx or {}).get('run_id') or '')
+    run = store.get_run(run_id) if store and run_id else None
+    return biblio_monitor.watch(
+        rows,
+        params,
+        node_id=str(node.get('id') or 'biblio'),
+        run_id=run_id,
+        workflow_name=str((run or {}).get('workflow_name') or ''),
+        entity_type=entity,
+        shape=shape,
+        biblio=get_biblio_store(),
+        export_dir=Config.EXPORT_DIR,
+        stamp=str((run or {}).get('started_at') or ''),
+    )
+
+
+def _watch_totals(diff: dict | None) -> dict:
+    """The uncapped counts of the comparison, so the artifact says how much there was even though
+    the diff caps what it names."""
+    if not diff:
+        return {}
+    return {
+        f'{group}.{key}': int((diff[group][key] or {}).get('total') or 0)
+        for group, keys in (
+            ('nodes', ('added', 'removed', 'changed')),
+            ('edges', ('added', 'removed', 'weight_changed')),
+            ('clusters', ('added', 'removed', 'relabeled', 'size_changed')),
+            ('bursts', ('added', 'removed', 'strength_changed')),
+        )
+        for key in keys
+    }
 
 
 def execute_fuse_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):

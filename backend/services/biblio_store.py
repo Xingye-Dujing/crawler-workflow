@@ -154,7 +154,11 @@ def compare_snapshots(a: dict, b: dict) -> dict:
     b_params = b.get('params') or {}
     params_differ = sorted(
         (
-            {'name': key, 'a': a_params[key], 'b': b_params.get(key)}
+            # Read with .get() on BOTH sides: a parameter that did not exist when the older
+            # capture was filed is a real difference (``None`` vs its default), and indexing the
+            # left dict made the comparison of an old snapshot with a new one raise KeyError the
+            # day any parameter was added.
+            {'name': key, 'a': a_params.get(key), 'b': b_params.get(key)}
             for key in set(a_params) | set(b_params)
             if str(a_params.get(key)) != str(b_params.get(key))
         ),
@@ -419,7 +423,14 @@ class BiblioStore:
         return self.get_snapshot(snapshot_id)
 
     def list_snapshots(self, project_id: str = None) -> list:
-        """Snapshot headers, newest first — never the captured rows (those are per-detail)."""
+        """Snapshot headers, newest first — never the captured rows (those are per-detail).
+
+        ``created_at`` is second-granular, so two captures filed in the same second tie, and the
+        old tie-break was the LABEL — which for Chinese names is a codepoint order that has nothing
+        to do with time. A monitor that picked "the capture before this one" off that list could
+        compare against an arbitrary older one. ``rowid`` is insertion order, so a tie resolves to
+        the one filed later.
+        """
         sql = (
             'SELECT snapshot_id, project_id, label, created_at, run_id, node_id, workflow_name, '
             'entity_type, shape, params_verified, node_count, edge_count FROM biblio_snapshots'
@@ -428,7 +439,7 @@ class BiblioStore:
         if project_id:
             sql += ' WHERE project_id = ?'
             params.append(str(project_id))
-        sql += ' ORDER BY created_at DESC, label'
+        sql += ' ORDER BY created_at DESC, rowid DESC'
         return [dict(row) for row in self._query(sql, tuple(params))]
 
     def get_snapshot(self, snapshot_id: str) -> dict | None:
