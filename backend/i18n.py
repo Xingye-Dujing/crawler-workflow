@@ -1374,6 +1374,10 @@ _ZH = {
     'api.needLabeledRows': '至少需要 10 行带标签的数据，当前只有 {n} 行',
     'api.noSourceTable': '所选节点都没有可用的数据表',
     'api.badRequest': '请求格式不对：{what}',
+    'api.svgNotSvg': 'SVG 保存被拒：内容不是以 <svg 开头或缺少 xmlns 声明',
+    'api.svgTruncated': 'SVG 保存被拒：文件没有以 </svg> 结束（可能被截断）',
+    'api.svgRefused': 'SVG 保存被拒：图中含有 {found}，这类标记可能带脚本或外部引用',
+    'api.svgTooLarge': 'SVG 保存被拒：内容 {cap} 字节已是上限，这不像是画出来的图',
     # ── 运行时设置校验 ────────────────────────────────────────
     'set.driverMissing': '驱动文件不存在：{path}',
     'set.driverEmpty': '驱动路径为空，已恢复默认值',
@@ -3167,6 +3171,10 @@ _EN = {
     'api.needLabeledRows': 'At least 10 labelled rows are needed, this data has {n}',
     'api.noSourceTable': 'None of the selected nodes could supply a table',
     'api.badRequest': 'Malformed request: {what}',
+    'api.svgNotSvg': 'SVG refused: the content does not start with <svg or has no xmlns declaration',
+    'api.svgTruncated': 'SVG refused: the file does not end with </svg> (it looks truncated)',
+    'api.svgRefused': 'SVG refused: the markup carries {found}, which can smuggle a script or an external reference',
+    'api.svgTooLarge': 'SVG refused: {cap} bytes is the cap, and that is not a drawn chart',
     # ── runtime settings validation ───────────────────────────
     'set.driverMissing': 'Driver file does not exist: {path}',
     'set.driverEmpty': 'Driver path was empty — restored the default',

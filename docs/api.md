@@ -85,6 +85,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/studio/dataset` | POST | 把画布任意节点/数据集的完整表格交给 Studio（支持多源合并） |
 | `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据（与预览同一套取行规则：带 `workflow_name`，不按裸 id 猜） |
 | `/api/studio/save-image` | POST | 把 Studio 成品图保存为 PNG 到导出目录 |
+| `/api/studio/save-vector` | POST | 把浏览器画好的 ECharts 图存为矢量 SVG；非 `<svg>`／缺 xmlns／被截断／含脚本或外部引用／超尺寸都**按名拒绝**，不做「洗一遍再写」 |
 
 ### 统计与历史
 

@@ -205,3 +205,80 @@ class TestStudioSaveImage:
         response = client.post('/api/studio/save-image', json={'image': PNG_DATA_URL})
         assert response.status_code == 400
         assert 'image too large' in response.get_json()['error']
+
+
+SVG_GOOD = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700">'
+    '<path d="M0 0 L10 10" fill="#22557A"/><text x="4" y="8">数字治理</text></svg>'
+)
+
+
+class TestStudioSaveVector:
+    def test_an_svg_chart_becomes_a_vector_file_in_the_export_dir(self, client, data_root):
+        body = client.post('/api/studio/save-vector', json={'svg': SVG_GOOD, 'name': '知识图谱'}).get_json()
+        assert body['ok'] is True
+        assert body['filename'].startswith('知识图谱-')
+        assert body['filename'].endswith('.svg')
+        written = data_root / 'data' / 'exports' / body['filename']
+        assert written.read_text(encoding='utf-8') == SVG_GOOD
+
+    def test_the_leading_xml_declaration_is_accepted(self, client):
+        body = client.post(
+            '/api/studio/save-vector',
+            json={'svg': '<?xml version="1.0" encoding="UTF-8"?>' + SVG_GOOD, 'name': 'x'},
+        ).get_json()
+        assert body['ok'] is True
+
+    def test_saving_twice_never_reuses_a_file_name(self, client):
+        first = client.post('/api/studio/save-vector', json={'svg': SVG_GOOD, 'name': 'same'}).get_json()
+        second = client.post('/api/studio/save-vector', json={'svg': SVG_GOOD, 'name': 'same'}).get_json()
+        assert first['filename'] != second['filename']
+
+    def test_a_traversal_in_the_chart_name_stays_inside_the_export_dir(self, client, data_root):
+        body = client.post('/api/studio/save-vector', json={'svg': SVG_GOOD, 'name': '../../evil'}).get_json()
+        assert body['ok'] is True
+        assert '/' not in body['filename'] and chr(92) not in body['filename']
+        assert (data_root / 'data' / 'exports' / body['filename']).exists()
+        assert not (data_root / 'evil.svg').exists()
+
+    @pytest.mark.parametrize(
+        ('markup', 'expected'),
+        [
+            ('', 'svg markup'),
+            ('<div>not a chart</div>', '<svg'),
+            # An SVG without its namespace is not an SVG document; browsers disagree with
+            # whatever else parses it, and the file would open as a blank page.
+            ('<svg width="10"><path/></svg>', 'xmlns'),
+            (SVG_GOOD.replace('</svg>', ''), '</svg>'),
+        ],
+    )
+    def test_markup_that_is_not_a_whole_svg_document_is_refused(self, client, markup, expected):
+        response = client.post('/api/studio/save-vector', json={'svg': markup})
+        assert response.status_code == 400
+        assert expected in response.get_json()['error']
+
+    @pytest.mark.parametrize(
+        'payload',
+        [
+            '<svg xmlns="s"><script>alert(1)</script></svg>',
+            '<svg xmlns="s"><rect onload="alert(1)"/></svg>',
+            '<svg xmlns="s"><image href="http://evil/x.png"/></svg>',
+            '<svg xmlns="s"><a xlink:href="javascript:alert(1)">x</a></svg>',
+            '<!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="s"/>',
+            '<svg xmlns="s"><foreignObject><div xmlns="http://www.w3.org/1999/xhtml">hi</div></foreignObject></svg>',
+        ],
+    )
+    def test_markup_that_could_carry_a_script_is_refused_by_name(self, client, payload, data_root):
+        """An .svg served from our own origin is a script tag with a filename. The refusal names
+        what it found rather than quietly stripping it: a sanitized file that parses differently
+        than the bytes the user inspected is worse than no file."""
+        response = client.post('/api/studio/save-vector', json={'svg': payload, 'name': 'refused-chart'})
+        assert response.status_code == 400
+        assert 'SVG' in response.get_json()['error']
+        assert not list((data_root / 'data' / 'exports').glob('refused-chart-*.svg'))
+
+    def test_an_oversized_markup_is_refused_before_it_is_buffered_to_disk(self, client):
+        huge = '<svg xmlns="s">' + ('<path d="M0 0"/>' * 600000) + '</svg>'
+        response = client.post('/api/studio/save-vector', json={'svg': huge, 'name': 'x'})
+        assert response.status_code == 400
+        assert 'bytes' in response.get_json()['error']

@@ -75,6 +75,7 @@ BODY_ROUTES = [
     '/api/settings',
     '/api/studio/dataset',
     '/api/studio/save-image',
+    '/api/studio/save-vector',
     '/api/studio/sources',
     '/api/visualize/render',
     '/api/workflow/delete',

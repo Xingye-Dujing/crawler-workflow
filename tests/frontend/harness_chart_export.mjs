@@ -89,6 +89,7 @@ function world(render) {
     vm.runInContext(
         `${sources}\n;globalThis.__x = { canvas, dataNodes, dashboard, I18n,` +
             ' savePreviewImage, saveDashboardImage, saveChartPicture,' +
+            ' savePreviewVector, saveChartVector, chartSvgMarkup,' +
             ' openChartFullscreen, closeChartFullscreen, saveFullscreenImage,' +
             ' getFullscreenInstance: () => _chartFullscreenInstance,' +
             ' getPreviewNodeId: () => _chartPreviewNodeId };',
@@ -99,7 +100,9 @@ function world(render) {
         const u = String(url);
         const body = init && init.body ? JSON.parse(init.body) : null;
         requests.push({ url: u, body });
-        const payload = u.indexOf('/api/studio/save-image') >= 0 ? answers.save : answers.render;
+        const payload = u.indexOf('/api/studio/save-image') >= 0 || u.indexOf('/api/studio/save-vector') >= 0
+            ? answers.save
+            : answers.render;
         return Promise.resolve({ json: () => Promise.resolve(payload), status: 200 });
     };
 
@@ -405,6 +408,7 @@ out.catalog = {
     saveNothing: probe.x.I18n.t('chart.saveNothing'),
     saved: probe.x.I18n.t('studio.saved'),
     saveFailed: probe.x.I18n.t('studio.saveFailed'),
+    saveVectorFailed: probe.x.I18n.t('chart.saveVectorFailed'),
     fullscreen: probe.x.I18n.t('chart.fullscreen'),
     lang: probe.x.I18n.lang,
 };
@@ -415,9 +419,36 @@ out.panel_markup = {
     fullscreen_open_from_preview: panelMarkup.indexOf('openChartFullscreen(_chartPreviewNodeId)') >= 0,
     fullscreen_close: panelMarkup.indexOf('closeChartFullscreen()') >= 0,
     fullscreen_save: panelMarkup.indexOf('saveFullscreenImage()') >= 0,
+    preview_save_vector: panelMarkup.indexOf('savePreviewVector()') >= 0,
+    fullscreen_save_vector: panelMarkup.indexOf('saveFullscreenVector()') >= 0,
     fullscreen_title_id: panelMarkup.indexOf('id="chart-fullscreen-title"') >= 0,
     keys: Array.from(panelMarkup.matchAll(/data-i18n="([^"]+)"/g), (m) => m[1]),
     onclicks: Array.from(panelMarkup.matchAll(/onclick="([^"]+)"/g), (m) => m[1]),
 };
+
+/* ── Vector export ────────────────────────────────────────────────────────────
+ * The success path needs a real SVG renderer, so it is measured in the browser tier
+ * (`test_ui_layout.py` paints an option and reads the markup back). What is provable HERE is
+ * that both ways the vector path fails are NAMED and send no request: a button that silently
+ * does nothing reads as a broken app, and posting an empty body would blame the server. */
+async function vectorNothingCase() {
+    const w = world();
+    const name = await w.x.savePreviewVector();
+    return { name, toast: w.toast(), asked: w.requests.map((r) => r.url) };
+}
+
+async function vectorNoMarkupCase() {
+    const w = world();
+    const name = await w.x.saveChartVector({ series: [{ type: 'bar' }] }, '图23', 'chart-preview-echarts');
+    return {
+        name,
+        toast: w.toast(),
+        asked: w.requests.map((r) => r.url),
+        markup: w.x.chartSvgMarkup({ series: [{ type: 'bar' }] }, 800, 600),
+    };
+}
+
+out.vector_nothing_drawn = await vectorNothingCase();
+out.vector_no_markup = await vectorNoMarkupCase();
 
 process.stdout.write(JSON.stringify(out));

@@ -3516,3 +3516,66 @@ def test_batch_paste_and_apply_to_all_reach_the_real_dom(app_url, driver):
     assert facts['pasteDom'] == facts['copyCount0'] + 2, f'batch paste must add 2 real boxes: {facts}'
     assert facts['targets'] >= 2, 'the same-type group must resolve to a multi-edit set'
     assert all(k == '写到全部' for k in facts['keywords']), f'apply-to-all must reach every node: {facts["keywords"]}'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_saving_a_chart_as_svg_hands_over_a_real_vector_document(app_url, driver, lang):
+    r"""The node harness can only prove the vector path's refusals: serializing an SVG needs a real
+    renderer, and the stub has no `outerHTML`. Only a browser can show that the bytes the button
+    posts are a vector figure at all — with the chart's own Chinese words as `<text>` elements
+    (a raster with a `.svg` name would pass a size check and fail a reader), the requested size
+    written into the document, and nothing that could carry a script.
+
+    The off-screen surface is the other half: an export that leaves a hidden chart instance and a
+    stray `<div>` on the page leaks on every click.
+    """
+    driver.set_window_size(1650, 1080)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        r"""
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        const option = {
+            title: { text: '主题分布' },
+            xAxis: { type: 'category', data: ['数字治理', '乡村振兴', '公共服务'] },
+            yAxis: { type: 'value' },
+            series: [{ type: 'bar', name: '频次', data: [12, 7, 4] }],
+        };
+        const before = document.body.children.length;
+        const markup = chartSvgMarkup(option, 900, 520);
+        const after = document.body.children.length;
+        const host = document.createElement('div');
+        host.style.cssText = 'position:fixed;left:0;top:0;width:900px;height:520px;';
+        document.body.appendChild(host);
+        const painted = echarts.init(host, null, { renderer: 'svg' });
+        painted.setOption(option);
+        const texts = Array.from(host.querySelectorAll('text')).map((t) => t.textContent);
+        painted.dispose();
+        host.remove();
+        return {
+            length: markup.length,
+            starts: markup.slice(0, 60),
+            hasXmlns: markup.indexOf('xmlns=') >= 0,
+            width: (markup.match(/width="900"/) || []).length,
+            height: (markup.match(/height="520"/) || []).length,
+            hasText: markup.indexOf('<text') >= 0,
+            namesInMarkup: ['数字治理', '乡村振兴', '公共服务'].every((n) => markup.indexOf(n) >= 0),
+            script: /<\s*script|\son[a-z]+\s*=|\bhref\s*=/i.test(markup),
+            closed: markup.trim().endsWith('</svg>'),
+            leaked: after - before,
+            paintedTexts: texts.length,
+        };
+        """,
+        lang,
+    )
+    assert facts['length'] > 500, f'the serializer returned almost nothing: {facts["starts"]!r}'
+    assert facts['starts'].lstrip().startswith('<svg'), facts['starts']
+    assert facts['hasXmlns'] is True, 'an SVG without its namespace is not a document'
+    assert facts['closed'] is True, 'the document was truncated'
+    assert facts['width'] == 1 and facts['height'] == 1, f'the requested size is not written in: {facts}'
+    assert facts['hasText'] is True, 'labels must be text, not paths, or the figure is a picture'
+    assert facts['namesInMarkup'] is True, 'the chart’s own category names must survive into the file'
+    assert facts['script'] is False, 'the markup carries something the server would (rightfully) refuse'
+    assert facts['paintedTexts'] > 0, 'the SVG renderer painted no labels, so the measurement is hollow'
+    assert facts['leaked'] == 0, 'the off-screen surface was left on the page'

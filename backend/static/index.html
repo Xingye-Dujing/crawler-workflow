@@ -489,6 +489,13 @@
         </button>
         <button
           class="panel-close"
+          data-i18n="chart.saveVector"
+          onclick="savePreviewVector()"
+        >
+          Save SVG
+        </button>
+        <button
+          class="panel-close"
           data-i18n="stats.close"
           onclick="toggleChartPreview()"
         >
@@ -505,6 +512,9 @@
         <span id="chart-fullscreen-title">Chart</span>
         <button class="panel-close" data-i18n="chart.saveImage" onclick="saveFullscreenImage()">
           Save image
+        </button>
+        <button class="panel-close" data-i18n="chart.saveVector" onclick="saveFullscreenVector()">
+          Save SVG
         </button>
         <button class="panel-close" data-i18n="stats.close" onclick="closeChartFullscreen()">
           Close

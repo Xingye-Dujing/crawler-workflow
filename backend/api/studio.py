@@ -357,6 +357,58 @@ def studio_sources():
     return jsonify({'ok': True, 'sources': sources})
 
 
+#: An .svg served back from our own origin is a script tag with a filename, so the markup the
+#: browser hands over is checked before it is written. Anything that could carry a script, an
+#: event handler, an external reference or an entity declaration is REFUSED BY NAME — silently
+#: "sanitizing" it would leave a file that parses differently than the bytes the user inspected.
+SVG_FORBIDDEN = re.compile(
+    r'<\s*script'
+    r'|\son[a-z]+\s*='
+    r'|\bhref\s*='
+    r'|<\s*(!\s*(DOCTYPE|ENTITY|SYSTEM)|foreignObject|iframe|embed|object)'
+    r'|\bjavascript\s*:',
+    re.IGNORECASE,
+)
+#: A full-canvas vector chart is tens of KB; past this the payload is a mistake, not a chart.
+SVG_MAX_BYTES = 8 * 1024 * 1024
+
+
+@bp.route('/api/studio/save-vector', methods=['POST'])
+def studio_save_vector():
+    """Persist an SVG chart drawn in the browser into EXPORT_DIR as a vector file."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    markup = str(data.get('svg') or '').strip()
+    if not markup:
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='svg markup')}), 400
+    if len(markup.encode('utf-8')) > SVG_MAX_BYTES:
+        return jsonify({'ok': False, 'error': t('api.svgTooLarge', cap=SVG_MAX_BYTES)}), 400
+    body = re.sub(r'^\s*<\?xml[^>]*\?>\s*', '', markup, flags=re.IGNORECASE)
+    if not body.lstrip().startswith('<svg') or 'xmlns=' not in body:
+        return jsonify({'ok': False, 'error': t('api.svgNotSvg')}), 400
+    if not body.rstrip().endswith('</svg>'):
+        return jsonify({'ok': False, 'error': t('api.svgTruncated')}), 400
+    danger = SVG_FORBIDDEN.search(body)
+    if danger:
+        return jsonify({'ok': False, 'error': t('api.svgRefused', found=danger.group(0).strip()[:40])}), 400
+
+    name = data.get('name') or 'studio-chart'
+    name = re.sub(r'\.(svg|xml)$', '', str(name), flags=re.IGNORECASE)
+    filename = sanitize_filename(f'{name}-{uuid.uuid4().hex[:8]}.svg')
+    filepath = os.path.join(Config.EXPORT_DIR, filename)
+    try:
+        os.makedirs(Config.EXPORT_DIR, exist_ok=True)
+        with open(filepath, 'w', encoding='utf-8') as handle:
+            handle.write(markup)
+    except OSError as e:
+        return jsonify({'ok': False, 'error': f'Could not write file: {e}'}), 500
+
+    size = os.path.getsize(filepath)
+    logger.info(t('misc.studio_saved', path=filepath, bytes=size))
+    return jsonify({'ok': True, 'filename': filename, 'path': filepath, 'bytes': size})
+
+
 @bp.route('/api/studio/save-image', methods=['POST'])
 def studio_save_image():
     """Persist a chart rendered in the studio (PNG data URL) into EXPORT_DIR."""

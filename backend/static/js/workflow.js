@@ -4420,6 +4420,78 @@ function savePreviewImage() {
     return saveChartPicture(dataUrl, _chartPreviewName || 'chart-preview');
 }
 
+/* ── Vector export ────────────────────────────────────────────────────────────
+   A 2× PNG is a photograph of a figure: a reviewer zooming in sees dots, and a
+   publisher asking for vector art cannot use the file at all. ECharts can draw the
+   SAME option through its SVG renderer, so the vector twin is produced off-screen
+   from the raw option the surface was painted from — never from a live instance's
+   getOption(), which returns an ECharts-resolved tree that is not meant to be fed
+   back as an authoring option. A Matplotlib chart has no browser-side option to
+   redraw, so that path says so rather than handing over a raster with .svg on it. */
+function chartSvgMarkup(option, width, height) {
+    if (!option || typeof echarts === 'undefined' || !echarts.init) return '';
+    var host = document.createElement('div');
+    host.style.cssText =
+        'position:absolute;left:-10000px;top:0;width:' + width + 'px;height:' + height + 'px;';
+    document.body.appendChild(host);
+    var instance = null;
+    var markup = '';
+    try {
+        instance = echarts.init(host, null, { renderer: 'svg' });
+        instance.setOption(option);
+        var svg = host.querySelector('svg');
+        if (svg) {
+            if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            svg.setAttribute('width', String(width));
+            svg.setAttribute('height', String(height));
+            markup = svg.outerHTML || '';
+        }
+    } catch (e) {
+        markup = '';
+    }
+    if (instance) instance.dispose();
+    host.remove();
+    return markup;
+}
+
+function _surfaceSize(hostId, fallback) {
+    var el = document.getElementById(hostId);
+    var width = el && el.clientWidth ? el.clientWidth : fallback[0];
+    var height = el && el.clientHeight ? el.clientHeight : fallback[1];
+    return [Math.max(320, Math.round(width)), Math.max(240, Math.round(height))];
+}
+
+async function saveChartVector(option, name, hostId) {
+    if (!option) {
+        showToast(I18n.t('chart.saveNothing'));
+        return null;
+    }
+    var size = _surfaceSize(hostId, [1200, 700]);
+    var markup = chartSvgMarkup(option, size[0], size[1]);
+    if (!markup) {
+        showToast(I18n.t('chart.saveVectorFailed'));
+        return null;
+    }
+    try {
+        var resp = await fetch('/api/studio/save-vector', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ svg: markup, name: name || 'chart' }),
+        });
+        var result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'request failed');
+        showToast(I18n.t('studio.saved').replace('{path}', result.filename));
+        return result.filename;
+    } catch (e) {
+        showToast(I18n.t('studio.saveFailed') + ': ' + e.message);
+        return null;
+    }
+}
+
+function savePreviewVector() {
+    return saveChartVector(_chartPreviewOption, _chartPreviewName || 'chart-preview', 'chart-preview-echarts');
+}
+
 function saveDashboardImage(nodeId) {
     var inst = dashboard._instances[nodeId];
     var dataUrl = inst
@@ -4921,6 +4993,15 @@ function saveFullscreenImage() {
     }
     var titleEl = document.getElementById('chart-fullscreen-title');
     return saveChartPicture(dataUrl, (titleEl && titleEl.textContent) || 'chart-fullscreen');
+}
+
+function saveFullscreenVector() {
+    var titleEl = document.getElementById('chart-fullscreen-title');
+    return saveChartVector(
+        _chartPreviewOption,
+        (titleEl && titleEl.textContent) || 'chart-fullscreen',
+        'chart-fullscreen-echarts'
+    );
 }
 
 /* ── Data Preview: generic paginated table for any dataset ──

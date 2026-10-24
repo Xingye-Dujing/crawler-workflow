@@ -258,3 +258,44 @@ class TestPageMarkupAgreesWithTheCode:
         assert catalog['saveNothing'].startswith('Nothing to save yet')
         assert '{path}' in catalog['saved'], 'the saved toast has to carry the file name'
         assert catalog['fullscreen'] and catalog['fullscreen'] != 'chart.fullscreen', 'the 全屏 key resolves'
+
+
+class TestVectorSave:
+    """The two ways the vector path fails are named; its success is measured in the browser tier.
+
+    Serializing an SVG needs a real renderer — the node DOM stub has no `outerHTML` and the stub
+    ECharts paints nothing — so this harness proves the refusals, and
+    `test_ui_layout.py::test_saving_a_chart_as_svg_hands_over_a_real_vector_document` draws one
+    and reads the document back."""
+
+    def test_nothing_drawn_is_refused_with_a_sentence_and_no_request(self, saved):
+        case = saved['vector_nothing_drawn']
+        assert case['name'] is None
+        assert case['asked'] == [], 'a save with no chart must not reach the server'
+        assert case['toast']['shown'] is True
+        assert case['toast']['text'] == saved['catalog']['saveNothing']
+
+    def test_a_chart_that_cannot_be_redrawn_says_so_instead_of_posting_an_empty_body(self, saved):
+        case = saved['vector_no_markup']
+        assert case['markup'] == '', 'the serializer must not invent markup'
+        assert case['name'] is None
+        assert case['asked'] == []
+        assert case['toast']['text'] == saved['catalog']['saveVectorFailed']
+        assert case['toast']['shown'] is True
+
+    def test_both_surfaces_offer_the_vector_button(self, saved):
+        markup = saved['panel_markup']
+        assert markup['preview_save_vector'] is True, 'the preview panel lost 存为 SVG'
+        assert markup['fullscreen_save_vector'] is True, 'the full-screen window lost 存为 SVG'
+        assert 'chart.saveVector' in markup['keys']
+
+    def test_the_serializer_asks_echarts_for_the_svg_renderer(self):
+        """The vector file comes from a SECOND instance drawn through the SVG renderer; a button
+        that re-encodes the canvas PNG would ship pixels wearing a .svg extension."""
+        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        body = source[source.index('function chartSvgMarkup(') :]
+        body = body[: body.index('\nfunction ')]
+        assert "renderer: 'svg'" in body
+        assert "setAttribute('width'" in body and "setAttribute('height'" in body
+        assert 'instance.dispose()' in body, 'the off-screen instance must not leak'
+        assert 'host.remove()' in body, 'the off-screen host must not stay on the page'
