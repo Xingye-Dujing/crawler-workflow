@@ -514,3 +514,47 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   network (scaling against the frame's maximum would leave an approximation nobody measured, and the export button
   would file it). The harness pins that equality, the untouched stored option, and that an export carries the frame
   actually on screen.
+
+## 桌面打包 / Desktop packaging
+
+- **A double-clicked exe can only be accepted by double-clicking it.** Measured 2026-10-24: the shipped
+  `CaiXiHui.exe` flashed a console and exited, and my own verification had been `CIXI_NO_BROWSER=1` plus an
+  explicit `CRAWLER_DATA_ROOT` inside the workspace — precisely the two things that hid the failing line
+  (`main()`'s first statement `root.mkdir()` on `%APPDATA%\CaiXiHui` raising `PermissionError [WinError 5]`).
+  `packaging/README.md` already listed "double-click" as step 1 of acceptance; skipping it is why the build shipped.
+- **Windows destroys the console when the process exits**, so for a frozen entry point a printed error is an
+  invisible error. Every exit path must (a) block in a `MessageBoxW`, (b) append the traceback to
+  `startup_error.log` under data root → exe folder → `%LOCALAPPDATA%` → temp, tried in turn. A short sentence goes
+  in the dialog, the traceback in the file: a message box cannot scroll. `input('按回车关闭窗口…')` is not
+  visibility — it covered two paths and its `suppress` swallowed the EOFError on a redirected console.
+- **A location is probed, never declared.** `_root_is_writable()` creates the directory and actually writes and
+  removes a probe file; on refusal the next candidate is taken and the refused path plus the OS's own words are
+  printed. Antivirus / Controlled Folder Access denying an unsigned exe write access to `Roaming` is the real
+  scenario this exists for. `mkdir` alone is not the test: a protected folder can accept a directory and refuse
+  the first file inside it.
+- **An isolation root must not fall through.** `CRAWLER_DATA_ROOT` is the ONLY candidate when set, and a refusal
+  there is a named startup refusal rather than a fallback: silently joining the shared AppData root would let a
+  smoke run's `promote_stale_runs()` settle the user's live run. The fallback chain (Roaming → Local → exe folder)
+  exists for the double-click default only, and the candidate that already holds a `data/` is tried first so a
+  fallback survives to the next launch.
+- **The mutex is per data root.** "One server per data root" is the app's rule, so the mutex name hashes the root.
+  A root-blind name let an installed copy refuse a portable one, which then had no `instance.json` in its own root
+  to open — one flash, no message. Measured in review, not in a live double-click.
+- **A failure reporter must not be able to fail first.** `fail_loudly` files the log and shows the dialog BEFORE
+  printing: on a redirected console with a non-UTF codepage the first Chinese character raises
+  `UnicodeEncodeError`, so printing first loses both the file and the dialog. `_print_safe` degrades to the byte
+  buffer (`sys.stdout.buffer`), never back through the stream that just threw — the retry that re-`print`ed
+  replacement text to the same broken writer was caught by its own test.
+- **The acceptance run is part of the artifact.** Double-clicking `dist/CaiXiHui/CaiXiHui.exe` writes `data/`,
+  `logs/`, `mplconfig/`, `instance.json` into the folder the zip and the installer pack, and the existing-data rule
+  then pins every recipient's data home to the maintainer's install folder. `prune_dist.py` clears them before
+  compression; `portable.txt` and `drivers/` are user choices and survive.
+- **Dialogs are frozen-only.** A source run has a live terminal, and an unattended build check must not stall on a
+  box nobody clicks: `_message_box()` returns unless `is_frozen()`. The stub in `tests/unit/test_desktop_packaging.py`
+  asserts the `MessageBoxW` call really happens when frozen — an early-return test alone kept passing after the
+  dialog call was deleted.
+- **pip hangs on a restricted workspace at `Looking in indexes`, with the network fine.** It unpacks into `%TEMP%`
+  and caches under `%LOCALAPPDATA%\pip`, and both writes are denied. Fix in `build_windows.ps1`: `TMP`/`TEMP`/`TMPDIR`
+  → `build/tmp` and `--no-cache-dir`. Reproduced: index answered 200 in 1.5 s, pip printed one line and never
+  returned; with the relocation the same install finished.
+

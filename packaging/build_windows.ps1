@@ -25,6 +25,14 @@ $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
 # a previous build or endpoint protection; a project-local cache keeps rebuilds clean.
 $env:PYINSTALLER_CONFIG_DIR = Join-Path $PSScriptRoot '.pyinstaller-cache'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+# pip unpacks into %TEMP% and keeps its HTTP cache under %LOCALAPPDATA%. A restricted
+# workspace denies both writes, and the symptom is a silent hang right after
+# "Looking in indexes" — so temp and cache go inside the repo, and the cache is off.
+$BuildTemp = Join-Path $RepoRoot 'build\tmp'
+New-Item -ItemType Directory -Force -Path $BuildTemp | Out-Null
+$env:TMP = $BuildTemp
+$env:TEMP = $BuildTemp
+$env:TMPDIR = $BuildTemp
 $Venv = Join-Path $PSScriptRoot '.venv-build'
 $VenvPython = Join-Path $Venv 'Scripts\python.exe'
 $DistRoot = Join-Path $RepoRoot 'dist'
@@ -76,11 +84,11 @@ if (-not (Test-Path $VenvPython)) {
 if ($SkipInstall) {
     Write-Host 'Skipping dependency installation (-SkipInstall).'
 } else {
-    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--progress-bar', 'off', '--upgrade', 'setuptools==78.1.0', 'wheel')
+    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '--upgrade', 'setuptools==78.1.0', 'wheel')
     $RuntimeReq = Join-Path $PSScriptRoot 'requirements-runtime.txt'
     $BuildReq = Join-Path $PSScriptRoot 'requirements-build.txt'
-    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--progress-bar', 'off', '--no-build-isolation', '-r', $RuntimeReq)
-    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--progress-bar', 'off', '-r', $BuildReq)
+    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '--no-build-isolation', '-r', $RuntimeReq)
+    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '-r', $BuildReq)
 }
 
 Write-Step "PyInstaller onedir"

@@ -33,6 +33,13 @@ DEAD_FILES = (
     'tk86t.dll',
 )
 
+#: Runtime state a verification run leaves beside the exe, cleared before the folder is zipped.
+#: Shipping it would hand every user the maintainer's ``runs.db``, datasets and saved logins
+#: (``data/cookies/*`` is a second device for that account), and the launcher's own
+#: existing-data rule would then keep that folder as the user's data home for good.
+USER_STATE_DIRS = ('data', 'logs', 'mplconfig')
+USER_STATE_FILES = ('instance.json', 'startup_error.log')
+
 
 def _size(path: Path) -> int:
     if path.is_file():
@@ -69,6 +76,24 @@ def prune(dist: Path) -> list[tuple[str, int]]:
         freed = _remove(internal / relative)
         if freed:
             removed.append((relative, freed))
+    removed.extend(strip_user_state(dist))
+    return removed
+
+
+def strip_user_state(dist: Path) -> list[tuple[str, int]]:
+    """Delete the run state a test launch left in the delivery folder, nothing else.
+
+    ``portable.txt`` and ``drivers/`` are the user's choices and are never touched.
+    """
+    removed = []
+    for name in USER_STATE_DIRS:
+        freed = _remove(dist / name)
+        if freed:
+            removed.append((name, freed))
+    for name in USER_STATE_FILES:
+        freed = _remove(dist / name)
+        if freed:
+            removed.append((name, freed))
     return removed
 
 

@@ -53,7 +53,9 @@ python app.py
 `packaging/` 提供 PyInstaller **onedir** 打包：生成一个文件夹（外加压缩 zip，可选 Inno Setup 安装包），
 双击 `CaiXiHui.exe` 即启动本地服务并打开浏览器，运行时不需要装 Python 或第三方库。
 构建命令、体积边界与首启依赖自检见 [`packaging/README.md`](packaging/README.md)；数据默认在
-`%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt` 可切成便携模式。
+`%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt` 可切成便携模式。那个位置写不进去时会自动换到
+`%LOCALAPPDATA%\CaiXiHui` 或 exe 所在文件夹并在控制台点名原因；真的一个都写不进去时会**弹窗**说明并把
+traceback 写进 `startup_error.log`——控制台窗口随进程消失，不弹窗就等于没报错。
 Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上传/分析，不装 Ollama 用 OpenRouter 或不用模型节点。
 
 **5. 可选：OpenRouter / 云端部署** — 不设任何旗标就是本机形状。要放到服务器上给别人访问，用
