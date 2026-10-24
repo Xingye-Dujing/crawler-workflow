@@ -102,6 +102,21 @@ def _dual():
     )
 
 
+def _variation():
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '甲', '乙', '丙'],
+            '起始年': [2020, 2021, 2021, 2020],
+            '结束年': [2021, 2022, 2022, 2021],
+            '结构变化': [1.0, 0.311278, 0.5, 0.02],
+            '前邻居': [1, 1, 2, 3],
+            '后邻居': [1, 2, 1, 2],
+            '新增邻居': ['丙', '乙', '', '丁;戊'],
+            '消失邻居': ['乙', '', '甲;丙', ''],
+        }
+    )
+
+
 # One usable spec + one frame per chart type, so the happy path is swept in one test.
 CASES = {
     'bar': (_cat(), dict(x='g', y='v')),
@@ -125,6 +140,7 @@ CASES = {
     'landscape': (_biblio(), dict()),
     'biblio_heatmap': (_biblio(), dict()),
     'graph3d': (_biblio(), dict()),
+    'variation': (_variation(), dict()),
     'dual_map': (_dual(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),

@@ -69,6 +69,7 @@ CHART_TYPES = (
     'landscape',
     'biblio_heatmap',
     'graph3d',
+    'variation',
     'dual_map',
     'wordcloud',
     'map',
@@ -428,6 +429,7 @@ ECHARTS_ONLY_TYPES = (
     'landscape',
     'biblio_heatmap',
     'graph3d',
+    'variation',
     'dual_map',
 )
 
@@ -547,11 +549,22 @@ class VisualizationService:
                 label['fontFamily'] = PRINT_FONT
                 label.setdefault('fontSize', 10)
                 if axis.get('type') == 'category' and len(label.get('data') or axis.get('data') or []) > 12:
-                    # Rotated and never dropped: the alternative is a figure whose axis lies about
-                    # its own granularity.
-                    label['rotate'] = 45
-                    label['interval'] = 0
-                    label['hideOverlap'] = False
+                    if axis_key == 'yAxis':
+                        # A y category axis already has the whole left margin for its width and
+                        # one row per label; rotating turns each name into a vertical column as
+                        # tall as the label is long, which is precisely how the names start
+                        # printing over each other (measured on the variation view, and the same
+                        # crowding the burst/heatmap views reach at 13+ rows). Drop what cannot
+                        # fit instead — the row and its marker stay, and the CSV plus the
+                        # three-line table still carry every entry.
+                        label['rotate'] = 0
+                        label['hideOverlap'] = True
+                    else:
+                        # Rotated and never dropped: the alternative is a figure whose axis lies
+                        # about its own granularity.
+                        label['rotate'] = 45
+                        label['interval'] = 0
+                        label['hideOverlap'] = False
                 if axis.get('name'):
                     axis['nameLocation'] = axis.get('nameLocation') or 'middle'
                     axis['nameGap'] = axis.get('nameGap') or (28 if axis_key == 'yAxis' else 34)

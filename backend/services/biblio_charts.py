@@ -16,6 +16,7 @@ import math
 import pandas as pd
 
 from i18n import t
+from services.chart_contracts import VARIATION_ROW_LIMIT
 
 #: Node labels beyond this are hover-only. A 500-node knowledge graph with every
 #: label painted is not a figure; it is a smudge. The bubbles stay drawn.
@@ -470,7 +471,7 @@ def _burst(df: pd.DataFrame, base: dict) -> dict:
         'type': 'category',
         'data': names,
         'inverse': True,
-        'axisLabel': {'fontSize': 9, 'width': 220, 'overflow': 'break', 'interval': 0},
+        'axisLabel': {'fontSize': 9, 'width': 220, 'overflow': 'truncate', 'interval': 'auto'},
     }
     base['xAxis'] = {
         'type': 'value',
@@ -944,6 +945,97 @@ def _dual_map(df: pd.DataFrame, base: dict) -> dict:
     return base
 
 
+def _variation(df: pd.DataFrame, base: dict) -> dict:
+    """One marker per (node, consecutive slice pair): where a node's connection pattern moved.
+
+    Position says WHEN, size and colour both say HOW MUCH — size survives a greyscale print,
+    colour survives a dense column. A cell with no marker is not a zero: the node had no link in
+    both slices of that pair, so nothing was measured, which is the distinction the algorithm
+    refuses to invent a number for."""
+    _require(df, '节点', '起始年', '结束年', '结构变化')
+    base['tooltip']['trigger'] = 'item'
+    base['tooltip']['formatter'] = None
+    rows = []
+    for _, row in df.iterrows():
+        name = _text(row['节点'])
+        score = _number(row['结构变化'], 0.0)
+        start = int(_number(row['起始年'], 0))
+        end = int(_number(row['结束年'], 0))
+        if not name or score <= 0 or not start or not end or end <= start:
+            continue
+        rows.append((name, start, end, score, _text(row.get('新增邻居')), _text(row.get('消失邻居'))))
+    if not rows:
+        raise BiblioChartError(t('chart.biblio_no_variation'))
+
+    pairs = sorted({(start, end) for _name, start, end, _score, _gained, _lost in rows})
+    pair_at = {pair: position for position, pair in enumerate(pairs)}
+    strongest: dict[str, float] = {}
+    for name, _start, _end, score, _gained, _lost in rows:
+        strongest[name] = max(score, strongest.get(name, 0.0))
+    names = [name for name, _ in sorted(strongest.items(), key=lambda item: (-item[1], item[0]))]
+    names = names[:VARIATION_ROW_LIMIT]
+    shown = set(names)
+    kept = [row for row in rows if row[0] in shown]
+    max_score = max(row[3] for row in kept)
+
+    base['grid'] = {'left': '26%', 'right': '18%', 'top': '12%', 'bottom': '18%', 'containLabel': True}
+    base['xAxis'] = {
+        'type': 'category',
+        'data': [f'{start}→{end}' for start, end in pairs],
+        'name': t('chart.biblio_pair'),
+        'axisLabel': {'interval': 0, 'rotate': 30 if len(pairs) > 4 else 0, 'fontSize': 9},
+    }
+    base['yAxis'] = {
+        'type': 'category',
+        'data': names,
+        'inverse': True,
+        # Horizontal, never auto-rotated: a CJK name turned vertical is as tall as it is long,
+        # so with 20 rows the neighbours print over each other (measured in Chrome).
+        # `hideOverlap` drops a name that still cannot fit — the marker stays, and the CSV plus
+        # the three-line table carry every mover.
+        'axisLabel': {
+            'fontSize': 9,
+            'rotate': 0,
+            'width': 200,
+            'overflow': 'truncate',
+            'hideOverlap': True,
+            'interval': 0,
+        },
+    }
+    base['visualMap'] = {
+        'min': 0,
+        'max': round(max_score, 4),
+        'dimension': 2,
+        'calculable': True,
+        'orient': 'vertical',
+        'right': 8,
+        'top': 'middle',
+        'itemWidth': 12,
+        'itemHeight': 120,
+        'textGap': 10,
+        'text': [f'{round(max_score, 3)} bit', '0'],
+        'textStyle': {'fontSize': 9},
+    }
+    data = []
+    for name, start, _end, score, gained, lost in kept:
+        data.append(
+            {
+                'value': [pair_at[(start, _end)], names.index(name), round(score, 6), name, gained, lost],
+                # Radius follows the square root so equal CHANGES draw equal AREAS.
+                'symbolSize': round(6 + 22 * math.sqrt(min(1.0, score / max_score)), 2),
+            }
+        )
+    base['series'] = [
+        {
+            'type': 'scatter',
+            'name': t('chart.biblio_variation'),
+            'data': data,
+            'emphasis': {'scale': False},
+        }
+    ]
+    return base
+
+
 BUILDERS = {
     'knowledge_graph': _knowledge_graph,
     'cluster_timeline': _cluster_timeline,
@@ -953,6 +1045,7 @@ BUILDERS = {
     'landscape': _landscape,
     'biblio_heatmap': _biblio_heatmap,
     'graph3d': _graph3d,
+    'variation': _variation,
     'dual_map': _dual_map,
 }
 

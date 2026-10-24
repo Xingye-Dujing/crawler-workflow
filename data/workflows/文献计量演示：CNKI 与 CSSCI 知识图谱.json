@@ -657,6 +657,21 @@
       "x": 640,
       "y": 1900,
       "folded": false
+    },
+    {
+      "id": "node-27",
+      "type": "visualize",
+      "title": "结构变异图",
+      "params": {
+        "chart_type": "variation",
+        "engine": "echarts",
+        "title": "关键词结构变异（相邻切片之间）",
+        "emit_latex": true,
+        "emit_latex_table": true
+      },
+      "x": 980,
+      "y": 1900,
+      "folded": false
     }
   ],
   "connections": [
@@ -685,7 +700,8 @@
     { "from": "node-22", "to": "node-23" },
     { "from": "node-23", "to": "node-24" },
     { "from": "node-24", "to": "node-25" },
-    { "from": "node-1", "to": "node-26" }
+    { "from": "node-1", "to": "node-26" },
+    { "from": "node-26", "to": "node-27" }
   ],
   "settings": {
     "mode": "parallel",

@@ -52,9 +52,25 @@ def dual_frame():
     )
 
 
+@pytest.fixture
+def variation_frame():
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '甲', '乙', '乙'],
+            '起始年': [2020, 2021, 2020, 2021],
+            '结束年': [2021, 2022, 2021, 2022],
+            '结构变化': [1.0, 0.311278, 0.5, 0.02],
+            '前邻居': [1, 1, 2, 3],
+            '后邻居': [1, 2, 1, 2],
+            '新增邻居': ['丙', '乙', '', '丁'],
+            '消失邻居': ['乙', '', '甲', ''],
+        }
+    )
+
+
 @pytest.mark.parametrize('chart_type', BIBLIO_CHART_TYPES)
-def test_each_view_builds_and_is_json_safe(frame, dual_frame, chart_type):
-    source = dual_frame if chart_type == 'dual_map' else frame
+def test_each_view_builds_and_is_json_safe(frame, dual_frame, variation_frame, chart_type):
+    source = variation_frame if chart_type == 'variation' else (dual_frame if chart_type == 'dual_map' else frame)
     option = VisualizationService.to_echarts_option(source, chart_type, title='知识图谱')
     assert option['series']
     assert json.dumps(option, allow_nan=False)
@@ -111,3 +127,89 @@ def test_burst_without_any_burst_is_refused(frame):
     broken = frame.assign(突现强度=0.0)
     with pytest.raises(ChartConfigError):
         VisualizationService.to_echarts_option(broken, 'burst')
+
+
+class TestVariationView:
+    def test_the_marker_carries_the_score_and_the_pair(self, variation_frame):
+        option = VisualizationService.to_echarts_option(variation_frame, 'variation')
+        series = option['series'][0]
+        assert series['type'] == 'scatter'
+        # value = [pair index, node index, score, node, gained, lost]
+        assert {tuple(item['value'])[:1] for item in series['data']}
+        assert option['visualMap']['min'] == 0
+        assert option['visualMap']['max'] == 1.0
+
+    def test_a_bigger_change_draws_a_bigger_marker(self, variation_frame):
+        option = VisualizationService.to_echarts_option(variation_frame, 'variation')
+        by_score = sorted(option['series'][0]['data'], key=lambda item: item['value'][2])
+        sizes = [item['symbolSize'] for item in by_score]
+        assert sizes == sorted(sizes), f'marker size must follow the score: {sizes}'
+
+    def test_a_node_that_only_moved_once_still_gets_its_row(self):
+        """A node that moved in one pair and not in the other is still a mover; keeping only
+        nodes that moved repeatedly would quietly turn the figure into a story about the
+        persistent nodes."""
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                '节点': ['甲', '甲', '丙'],
+                '起始年': [2020, 2021, 2021],
+                '结束年': [2021, 2022, 2022],
+                '结构变化': [1.0, 0.3, 0.7],
+                '前邻居': [1, 1, 2],
+                '后邻居': [1, 2, 1],
+                '新增邻居': ['丙', '乙', ''],
+                '消失邻居': ['乙', '', '甲'],
+            }
+        )
+        option = VisualizationService.to_echarts_option(frame, 'variation')
+        assert '丙' in option['yAxis']['data']
+        assert '丙' not in option['xAxis']['data']
+
+    def test_the_column_is_capped_and_the_cap_names_itself(self):
+        import pandas as pd
+
+        from services.chart_contracts import VARIATION_ROW_LIMIT
+
+        rows = [
+            {
+                '节点': f'词{i}',
+                '起始年': 2020,
+                '结束年': 2021,
+                '结构变化': 0.9 - i * 0.001,
+                '前邻居': 1,
+                '后邻居': 2,
+                '新增邻居': '乙',
+                '消失邻居': '甲',
+            }
+            for i in range(VARIATION_ROW_LIMIT + 12)
+        ]
+        option = VisualizationService.to_echarts_option(pd.DataFrame(rows), 'variation')
+        assert len(option['yAxis']['data']) == VARIATION_ROW_LIMIT
+        # The strongest movers are the ones kept, not the first rows of the table.
+        assert option['yAxis']['data'][0] == '词0'
+
+    def test_a_table_with_no_scored_move_refuses_by_name(self):
+        import pandas as pd
+
+        empty = pd.DataFrame(
+            {
+                '节点': ['甲'],
+                '起始年': [2020],
+                '结束年': [2021],
+                '结构变化': [0.0],
+                '前邻居': [1],
+                '后邻居': [1],
+                '新增邻居': [''],
+                '消失邻居': [''],
+            }
+        )
+        with pytest.raises(ChartConfigError) as exc:
+            VisualizationService.to_echarts_option(empty, 'variation')
+        assert 'variation_min' in str(exc.value) or 'variation' in str(exc.value)
+
+    def test_a_frame_without_the_variation_columns_refuses_naming_the_column(self, frame):
+        with pytest.raises(ChartConfigError) as exc:
+            VisualizationService.to_echarts_option(frame, 'variation')
+        assert '结构变化' in str(exc.value)

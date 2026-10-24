@@ -25,6 +25,7 @@ import re
 import pandas as pd
 
 from i18n import t
+from services.chart_contracts import VARIATION_ROW_LIMIT
 from services.visualizer import (
     ChartConfigError,
     VisualizationService,
@@ -332,6 +333,7 @@ class LatexChartService:
             'landscape',
             'biblio_heatmap',
             'graph3d',
+            'variation',
             'dual_map',
         ):
             return cls._biblio_figure(df, chart_type)
@@ -903,7 +905,7 @@ class LatexChartService:
         return colors
 
     @staticmethod
-    def _biblio_formulas() -> str:
+    def _biblio_formulas(chart_type: str = '') -> str:
         # A CiteSpace-style method note belongs inside the figure: the reader should not
         # have to hunt through prose to learn which normalized link and centrality numbers
         # were plotted. Every formula is the one this implementation actually computes.
@@ -915,6 +917,16 @@ class LatexChartService:
             r'$PR(p)=\frac{1-d}{N}+d\sum_{q\to p}PR(q)/L(q)$；'
             r'$\Sigma=(g(v)+1)^B$。'
             '}\n'
+        ) + (
+            # The variation figure plots one more thing, and its own formula: what the marker
+            # size means is not guessable from a picture.
+            '\\medskip\\par{\\footnotesize\\textbf{结构变异公式：}'
+            r'节点 $v$ 在相邻两期 $t$ 与 $t{+}1$ 的连边强度分布 $p,q$（各自归一化后取并集支撑）'
+            r'之间的 Jensen--Shannon 散度 $D_{\mathrm{JS}}(p\|q)=\frac12 D_{\mathrm{KL}}(p\|m)'
+            r'+\frac12 D_{\mathrm{KL}}(q\|m)$，其中 $m=\frac12(p+q)$，$0\le D_{\mathrm{JS}}\le 1$ 比特。'
+            '}\n'
+            if chart_type == 'variation'
+            else ''
         )
 
     @classmethod
@@ -1260,6 +1272,80 @@ class LatexChartService:
         return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
     @classmethod
+    def _biblio_variation(cls, df) -> str:
+        """Where each node's connection pattern moved, one marker per node × slice pair.
+
+        Radius follows the square root of the divergence so equal CHANGES cover equal AREAS, and
+        the fill darkens with it — the same two encodings the ECharts view uses, so a reader who
+        saw the screen reads the paper. An empty cell is not zero: the node had no link in both
+        slices of that pair, which is the case the algorithm refuses to score.
+
+        Plain tikz coordinates, not a pgfplots axis with symbolic coords: the same lesson the
+        heatmap figure learned, where ``xtick=data`` over an axis with no plotted series enumerates
+        every coordinate again and the markers never land on the page."""
+        cls._require_biblio(df, '节点', '起始年', '结束年', '结构变化')
+        items = []
+        for _, row in df.iterrows():
+            name = cls._biblio_text(row.get('节点'))
+            score = cls._biblio_float(row.get('结构变化'), 0.0)
+            start = int(cls._biblio_float(row.get('起始年'), 0))
+            end = int(cls._biblio_float(row.get('结束年'), 0))
+            if not name or score <= 0 or not start or not end or end <= start:
+                continue
+            items.append((name, start, end, score))
+        if not items:
+            raise ChartConfigError(t('chart.biblio_no_variation'))
+        pairs = sorted({(start, end) for _name, start, end, _score in items})
+        strongest: dict[str, float] = {}
+        for name, _start, _end, score in items:
+            strongest[name] = max(score, strongest.get(name, 0.0))
+        names = [name for name, _ in sorted(strongest.items(), key=lambda item: (-item[1], item[0]))][
+            :VARIATION_ROW_LIMIT
+        ]
+        shown = set(names)
+        max_score = max(score for name, *_rest, score in items if name in shown) or 1.0
+        pair_at = {pair: index for index, pair in enumerate(pairs)}
+        node_at = {name: index for index, name in enumerate(names)}
+        cell_w = min(3.2, max(1.6, 12.0 / max(1, len(pairs))))
+        cell_h = 0.85
+        body = []
+        for column in range(len(pairs) + 1):
+            body.append(
+                f'\\draw[black!8] ({column * cell_w:.2f},0) -- ({column * cell_w:.2f},{len(names) * cell_h:.2f});'
+            )
+        for row in range(len(names) + 1):
+            body.append(f'\\draw[black!8] (0,{row * cell_h:.2f}) -- ({len(pairs) * cell_w:.2f},{row * cell_h:.2f});')
+        for name, start, end, score in items:
+            if name not in shown:
+                continue
+            ratio = min(1.0, score / max_score)
+            center_x = (pair_at[(start, end)] + 0.5) * cell_w
+            center_y = (len(names) - node_at[name] - 0.5) * cell_h
+            radius = 0.06 + 0.17 * math.sqrt(ratio)
+            shade = int(30 + 65 * ratio)
+            body.append(
+                f'\\fill[cA!{shade}] ({center_x:.2f},{center_y:.2f}) circle[radius={radius:.3f}cm];'
+                f'\\node[font=\\tiny,text=black!70,anchor=west] at '
+                f'({center_x + radius + 0.06:.2f},{center_y:.2f}) {{{_num(round(score, 3))}}};'
+            )
+        for index, name in enumerate(names):
+            y = (len(names) - index - 0.5) * cell_h
+            body.append(
+                f'\\node[font=\\scriptsize,text=black,anchor=east] at (-0.12,{y:.2f}) {{{_fold_label(name, 11)}}};'
+            )
+        for index, (start, end) in enumerate(pairs):
+            x = (index + 0.5) * cell_w
+            body.append(
+                f'\\node[font=\\scriptsize,rotate=35,anchor=north west,text=black!75] at ({x:.2f},-0.12) '
+                f'{{{start}--{end}}};'
+            )
+        body.append(
+            f'\\node[font=\\scriptsize,text=black!55,anchor=north] at '
+            f'({len(pairs) * cell_w / 2:.2f},{-2.05 * cell_h:.2f}) {{{_esc(t("chart.biblio_pair"))}}};'
+        )
+        return '\\begin{tikzpicture}[x=1cm,y=1cm]\n' + '\n'.join(body) + '\n\\end{tikzpicture}'
+
+    @classmethod
     def _biblio_dual_map(cls, df) -> str:
         cls._require_biblio(df, 'map', 'source', 'target', 'weight')
         edges = []
@@ -1355,11 +1441,13 @@ class LatexChartService:
             pic = cls._biblio_graph3d(df)
         elif chart_type == 'dual_map':
             pic = cls._biblio_dual_map(df)
+        elif chart_type == 'variation':
+            pic = cls._biblio_variation(df)
         elif chart_type == 'biblio_heatmap':
             pic = cls._biblio_heatmap(df)
         else:
             raise ChartConfigError(f'no bibliometric LaTeX figure for {chart_type}')
-        return '\\begin{minipage}{17.5cm}\n' + pic + '\n' + cls._biblio_formulas() + '\n\\end{minipage}'
+        return '\\begin{minipage}{17.5cm}\n' + pic + '\n' + cls._biblio_formulas(chart_type) + '\n\\end{minipage}'
 
     @classmethod
     def _biblio_table_data(cls, df, chart_type: str):
@@ -1381,6 +1469,51 @@ class LatexChartService:
                     else:
                         values.append(_num(cls._biblio_float(row.get(column), 0.0)))
                 rows.append(values)
+            return head, rows
+        if chart_type == 'variation':
+            cls._require_biblio(df, '节点', '起始年', '结束年', '结构变化', '前邻居', '后邻居', '新增邻居', '消失邻居')
+            items = []
+            for _, row in df.iterrows():
+                name = cls._biblio_text(row.get('节点'))
+                score = cls._biblio_float(row.get('结构变化'), 0.0)
+                if not name or score <= 0:
+                    continue
+                items.append(
+                    (
+                        name,
+                        int(cls._biblio_float(row.get('起始年'), 0)),
+                        int(cls._biblio_float(row.get('结束年'), 0)),
+                        score,
+                        int(cls._biblio_float(row.get('前邻居'), 0)),
+                        int(cls._biblio_float(row.get('后邻居'), 0)),
+                        cls._biblio_text(row.get('新增邻居')),
+                        cls._biblio_text(row.get('消失邻居')),
+                    )
+                )
+            items.sort(key=lambda item: (-item[3], item[0], item[1]))
+            head = [
+                _esc(t('biblio.col.节点')),
+                _esc(t('biblio.col.起始年')),
+                _esc(t('biblio.col.结束年')),
+                _esc(t('biblio.col.结构变化')),
+                _esc(t('biblio.col.前邻居')),
+                _esc(t('biblio.col.后邻居')),
+                _esc(t('biblio.col.新增邻居')),
+                _esc(t('biblio.col.消失邻居')),
+            ]
+            rows = [
+                [
+                    _esc(name),
+                    _num(start),
+                    _num(end),
+                    _num(round(score, 4)),
+                    _num(before),
+                    _num(after),
+                    _esc(gained) or '—',
+                    _esc(lost) or '—',
+                ]
+                for name, start, end, score, before, after, gained, lost in items
+            ]
             return head, rows
         if chart_type == 'dual_map':
             cls._require_biblio(df, 'map', 'source', 'target', 'weight')
@@ -1529,6 +1662,7 @@ class LatexChartService:
             'landscape',
             'biblio_heatmap',
             'graph3d',
+            'variation',
             'dual_map',
         ):
             return cls._biblio_table_data(df, chart_type)

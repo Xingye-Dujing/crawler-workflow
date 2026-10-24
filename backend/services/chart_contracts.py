@@ -14,12 +14,19 @@ BIBLIO_CHART_TYPES = (
     'landscape',
     'biblio_heatmap',
     'graph3d',
+    'variation',
     'dual_map',
 )
 
 #: Charts whose x axis is not a user-selected column. Validation must not demand
 #: ``x_field`` for these, and the Visualize panel hides the box.
 NO_X_TYPES = frozenset(('model_agreement',) + BIBLIO_CHART_TYPES)
+
+#: Rows a structural-variation figure draws. A y-axis row has to be tall enough to carry its
+#: own Chinese node name at the preview's height, and a forced label per row is exactly how the
+#: names end up printed on top of each other — so the cap is a legibility limit, not a data
+#: limit: the CSV and the three-line table still carry every mover.
+VARIATION_ROW_LIMIT = 20
 
 #: The fixed columns each bibliometric chart REQUIRES. Optional decorating
 #: columns (cluster colour, burst rings) are read when present; a chart that
@@ -34,5 +41,6 @@ BIBLIO_CHART_READS = {
     'landscape': ('节点', '聚类', '聚类标签', '频次'),
     'biblio_heatmap': ('节点', '聚类', '聚类标签', '年份序列', '频次'),
     'graph3d': ('节点', 'x', 'y', '连接', '频次'),
+    'variation': ('节点', '起始年', '结束年', '结构变化'),
     'dual_map': ('map', 'source', 'target', 'weight'),
 }

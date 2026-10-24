@@ -134,16 +134,42 @@ def dual_df():
     )
 
 
+@pytest.fixture
+def variation_df():
+    """What a ``biblio`` node with ``output_shape=variation`` emits: one row per node per
+    pair of consecutive slices."""
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '甲', '乙', '乙'],
+            '起始年': [2020, 2021, 2020, 2021],
+            '结束年': [2021, 2022, 2021, 2022],
+            '结构变化': [1.0, 0.311278, 0.5, 0.02],
+            '前邻居': [1, 1, 2, 3],
+            '后邻居': [1, 2, 1, 2],
+            '新增邻居': ['丙', '乙', '', '丁'],
+            '消失邻居': ['乙', '', '甲', ''],
+        }
+    )
+
+
+#: A shape's table is not the node table, so the sweep picks the frame by chart type.
+def _biblio_frame(chart_type, biblio_df, dual_df, variation_df):
+    return {
+        'dual_map': dual_df,
+        'variation': variation_df,
+    }.get(chart_type, biblio_df)
+
+
 # ─── catalogue ─────────────────────────────────────────────────────────
 
 
 class TestChartCatalogue:
-    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df):
+    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df, variation_df):
         assert set(USABLE) | set(BIBLIO_USABLE) == set(CHART_TYPES)
         for chart_type, kwargs in USABLE.items():
             assert V.to_echarts_option(df, chart_type, **kwargs)['series'], chart_type
         for chart_type in BIBLIO_CHART_TYPES:
-            frame = dual_df if chart_type == 'dual_map' else biblio_df
+            frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df)
             assert V.to_echarts_option(frame, chart_type)['series'], chart_type
 
     def test_echarts_only_types_are_a_subset_of_the_catalogue(self):
@@ -649,8 +675,8 @@ class TestChartDisplayLocalisation:
 
 class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
-    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, chart_type):
-        frame = (dual_df if chart_type == 'dual_map' else biblio_df) if chart_type in BIBLIO_CHART_TYPES else df
+    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, variation_df, chart_type):
+        frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df) if chart_type in BIBLIO_CHART_TYPES else df
         kwargs = BIBLIO_USABLE[chart_type] if chart_type in BIBLIO_USABLE else USABLE[chart_type]
         option = V.to_echarts_option(frame, chart_type, title='标题', **kwargs)
         assert json.dumps(option, allow_nan=False)
@@ -712,6 +738,31 @@ class TestOptionJsonSafety:
         assert option['xAxis']['axisLabel']['hideOverlap'] is False
         assert option['grid']['containLabel'] is True
         assert option['grid']['bottom'] >= 96
+
+    def test_a_dense_y_axis_is_never_rotated(self):
+        """Rotation is an x-axis remedy; on a y category axis it causes the very overlap it
+        is meant to cure. A vertical Chinese name is as tall as it is long, so 13+ rows print
+        over each other — measured on the structural-variation view, where the same rule had
+        been silently hitting the burst and heatmap rows too."""
+        rows = [f'术语{i}' for i in range(18)]
+        frame = pd.DataFrame(
+            {
+                '节点': rows,
+                '起始年': [2020] * 18,
+                '结束年': [2021] * 18,
+                '结构变化': [round(0.99 - i * 0.01, 4) for i in range(18)],
+                '前邻居': [1] * 18,
+                '后邻居': [2] * 18,
+                '新增邻居': [''] * 18,
+                '消失邻居': [''] * 18,
+            }
+        )
+        option = V.to_echarts_option(frame, 'variation')
+        assert len(option['yAxis']['data']) == 18
+        assert option['yAxis']['axisLabel']['rotate'] == 0
+        assert option['yAxis']['axisLabel']['hideOverlap'] is True
+        # The x axis of the same figure is sparse, so the dense rule must not touch it either.
+        assert option['xAxis']['axisLabel'].get('rotate', 0) == 0
 
     def test_a_short_category_axis_is_not_forced_to_the_dense_rule(self, df):
         """The rotate/interval rule fires on crowding, not on every axis.
