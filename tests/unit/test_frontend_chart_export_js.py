@@ -322,3 +322,61 @@ class TestLatexBarPdf:
         assert case['filename'] is None
         assert case['toast']['shown'] is True
         assert case['toast']['text'] != 'chart.pdfNoSource', 'the refusal must resolve to a sentence'
+
+
+class TestReplayingTheNetwork:
+    """The preview and full-screen windows can replay a knowledge map year by year, and the bar
+    may not lie about the figure it is cutting frames from: the LAST frame has to be the whole
+    network byte for byte, the stored option has to survive every seek, an export has to carry
+    what is on screen, and a chart with nothing to replay offers no button at all."""
+
+    def test_a_graph_with_two_years_of_activity_offers_a_bar(self, saved):
+        case = saved['replay']['first']
+        assert case['bar'] is True
+        assert case['years'] == [2020, 2021]
+        assert case['sliderMax'] == '1' and case['sliderValue'] == '1', 'it opens on the whole figure'
+        assert case['readout'] == case['readoutWord'] != 'chart.replayAllYears'
+        assert case['playLabel'] == case['playWord']
+        assert case['hint'] == case['hintWord'], 'the rule about links is stated where the button is'
+
+    def test_an_earlier_frame_hides_the_future_without_rewriting_the_figure(self, saved):
+        case = saved['replay']['afterFirst']
+        assert case['futureNodeHidden'] is True, 'a node first counted in 2021 is not in the 2020 frame'
+        assert case['linkAcrossTheGapHidden'] is True, 'a link to it is not either'
+        assert case['linkInsideTheFrameShown'] is True
+        assert case['pastNodeSize'] < 20 <= case['untouchedNodeSize'], 'growth is measured, not guessed'
+        assert case['readout'] == case['readoutExpected'] != 'chart.replayYear'
+        assert case['optionUntouched'] is True, 'frames are cut from the option, never carved out of it'
+        assert case['exportIsTheFrame'] is True
+
+    def test_the_last_frame_is_the_figure_itself(self, saved):
+        case = saved['replay']['lastFrame']
+        assert case['sizesAreTheFigures'] is True, 'playing to the end must not leave an approximation'
+        assert case['nothingHidden'] is True
+        assert case['linksUntouched'] is True
+
+    def test_showing_the_whole_network_again_clears_the_frame(self, saved):
+        case = saved['replay']['reset']
+        assert case['current'] is None
+        assert case['readout'] == saved['replay']['first']['readoutWord']
+        assert case['exportIsTheStoredOption'] is True
+        assert case['repaintedWholeOption'] is True, 'the reset repaints the stored option, not a copy'
+
+    def test_closing_the_surface_leaves_no_bar_and_no_timer(self, saved):
+        case = saved['replay']['detached']
+        assert case['bar'] is False
+        assert case['state'] is None, 'a detached interval would keep cutting frames from a dead instance'
+
+    @pytest.mark.parametrize('case', ['replay_absent_for_a_plain_bar', 'replay_absent_for_one_year'])
+    def test_a_chart_with_nothing_to_replay_offers_no_button(self, saved, case):
+        assert saved[case] == {'bar': False, 'state': None}
+
+    def test_the_full_screen_window_remembers_the_option_it_was_given(self, saved):
+        """It used to have no option of its own, so its 存为 SVG handed the PREVIEW's stored
+        option to the server — the wrong chart whenever the window was opened from a board cell,
+        and the wrong frame whenever the user had scrubbed one."""
+        case = saved['fullscreen_keeps_its_own_option']
+        assert case['opened']['hasOption'] is True
+        assert case['opened']['years'] == [2020, 2021]
+        assert case['opened']['bar'] is True and case['opened']['state'] is True
+        assert case['closed'] == {'hasOption': False, 'bar': False}

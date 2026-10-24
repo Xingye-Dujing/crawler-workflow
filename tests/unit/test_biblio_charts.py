@@ -213,3 +213,41 @@ class TestVariationView:
         with pytest.raises(ChartConfigError) as exc:
             VisualizationService.to_echarts_option(frame, 'variation')
         assert '结构变化' in str(exc.value)
+
+
+class TestTheReplayData:
+    """The browser replays the network slice by slice, and the only honest source for that is the
+    node table's own ``年份序列``. Shipping it inside the option means one request, one artifact,
+    and a frame that cannot disagree with the figure it was cut from."""
+
+    @staticmethod
+    def _by_name(option):
+        return {node['name']: node for node in option['series'][0]['data']}
+
+    def test_a_graph_node_carries_its_year_counts_oldest_first(self, frame):
+        option = VisualizationService.to_echarts_option(frame, 'knowledge_graph')
+        assert self._by_name(option)['甲']['yearSeries'] == [[2020, 1.0], [2021, 2.0]]
+        assert self._by_name(option)['乙']['yearSeries'] == [[2020, 2.0]]
+
+    def test_a_table_without_the_series_column_still_draws_and_ships_nothing_to_replay(self, frame):
+        """``年份序列`` is not one of this view's required columns, so a hand-made table stays
+        drawable — and the play bar has to be able to tell "no series" from "series of zeroes"."""
+        option = VisualizationService.to_echarts_option(frame.drop(columns=['年份序列']), 'knowledge_graph')
+        assert all('yearSeries' not in node for node in self._by_name(option).values())
+
+    def test_a_node_that_was_never_counted_in_any_year_ships_no_frame(self, frame):
+        empty = frame.assign(年份序列=['{}', '{}', '{}'])
+        option = VisualizationService.to_echarts_option(empty, 'knowledge_graph')
+        assert all('yearSeries' not in node for node in self._by_name(option).values())
+
+    def test_a_malformed_series_is_refused_by_name_rather_than_played_as_absent(self, frame):
+        broken = frame.assign(年份序列=['{not json', '{}', '{}'])
+        with pytest.raises(ChartConfigError) as err:
+            VisualizationService.to_echarts_option(broken, 'knowledge_graph')
+        assert '年份序列' in str(err.value)
+
+    def test_the_circular_view_replays_from_the_same_field(self, frame):
+        """Both graph layouts share the node builder, so a frame cut from either one is the same
+        network — a second copy of the series would be a second answer to the same question."""
+        option = VisualizationService.to_echarts_option(frame, 'circular')
+        assert self._by_name(option)['丙']['yearSeries'] == [[2021, 1.0]]

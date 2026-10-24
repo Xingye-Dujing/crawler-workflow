@@ -260,6 +260,12 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
 - **人工校正**：`aliases` 每行 `规范名=别名1|别名2`，`exclude_values` 每行一个排除标签；两者在建图前合并/移除节点，并计入节点指纹，因此续跑不会复用未校正的图。`cluster_labels` 每行 `#簇号 = 标签`，在 LLR/LSI/MI/TF-IDF 之后覆盖簇名（同样计入指纹）；指到本次运行不存在的簇会在控制台点名该行未生效，摘要里的标签方法会加写 `+manual`，只按**真正落地的条数**计数。填了人工簇标签却没开聚类 → 运行前按名拒绝。
 - **输出**：默认 `output_shape=nodes`，一行一节点，固定列 `节点/类型/频次/首年/末年/年份序列/度/中介中心性/特征向量中心性/PageRank/Sigma/x/y/连接`；开启聚类追加 `聚类/聚类标签/轮廓值`，开启突现追加 `突现强度/突现起始/突现结束`。`连接` 与 `年份序列` 是规范 JSON 文本，图谱图直接读取；每个节点的 `连接` 存完整局部邻接，图构建时按端点对去重。`output_shape` 还可输出 `edges`/`clusters`/`bursts` 普通表，供下游继续处理；`dual_map` 输出 `map/source/target/weight/label/x/y` 的叠加表（`map` 取 `journal`/`category`/`overlay`，端点为空的行是该侧的一个节点），需要 `basemap_dataset_id` 指向一份自备的「期刊—学科」两列表，缺基线按名拒绝。
 - **图**：`knowledge_graph`（固定布局知识图谱）、`circular`（环形图谱）、`cluster_timeline`（聚类时间线）、`landscape`（景观图）、`burst`（突现词图）、`timezone`（时区图）、`biblio_heatmap`（聚类—年份热力图）、`graph3d`（三维图谱，ECharts GL）、`variation`（结构变异：x 为相邻切片对、y 为节点，标记的**面积与深浅**都随散度增大——面积按平方根映射，所以等量的变化画出等大的面；空格子不是 0，而是该节点在那一对切片里没有可比连接）、`dual_map`（双图叠加：左期刊列、右学科列、中间叠加引用弧），均仅 ECharts。缺列/无连边/未开聚类、突现或结构变异时按名拒绝。十类图均有 TikZ/pgfplots LaTeX 图源与 booktabs 三线表，并附余弦、Dice、Jaccard、中介中心性、PageRank、Sigma 公式（结构变异图另附 Jensen–Shannon 散度公式）；`emit_latex` / `emit_latex_table` 在节点上默认开启，画出来的图与论文里的图是同一份行的两个投影。前端 `labelLayout` 按实际渲染矩形避让中文标签，并且只在 series 自己声明的 `left/top/right/bottom` 预留带内落位（带上沿是标题与聚类图例），放不下的标签隐藏并保留 hover。y 轴分类标签**永不旋转**：竖排中文名有多长就有多高，13 行以上就会互相压字（`_print_style` 的密轴规则因此只对 x 轴生效）。
+- **按年份回放**：图谱与环形图的每个节点都带自己的 `yearSeries`（就是节点表的 `年份序列`，随选项一起发到浏览器），
+  所以预览窗口与全屏窗口下方多一条回放条：播放/暂停、逐年拖动、看完整图。节点按**到这一年为止累计的频次**长大，
+  连边在**两端都已出现**的那一年才出现——选项里没有逐年的连边，所以不替它声称一条它没有的边（这条规则写在按钮旁边，不藏在文档里）。
+  最后一帧与完整图**逐字节相同**（每格按该节点自己的总量归一，不是按当帧最大值），所以"播完"就是"回到那张图"；
+  回放只改浏览器里的一次 `setOption`，**已存的 PNG/SVG/LaTeX 仍是完整网络**——动画不能印在纸上。
+  只有 ECharts 画的图型有这条；Matplotlib 出的是位图、只有一年的表、或没有 `年份序列` 列的手作表，都**不出现回放条**。
 - **产物**：默认写 `<节点>_graph.graphml`、`_graph.gml`、`_graph.json`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。`dual_map` 形态没有单一网络图，只写表。
 - **边界**：CNKI 无被引次数与 CR，因此无共被引/耦合/引用突现；双图叠加的期刊—学科基线由用户导入（`samples/biblio_basemap_demo.csv` 是合成样例），不内置任何商业 JCR 数据，缺文件按名拒绝而不是画空图。
 

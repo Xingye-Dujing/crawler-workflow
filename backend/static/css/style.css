@@ -1814,6 +1814,44 @@ body.style-menu-open #workspace #resume-banner {
   display: block;
 }
 
+/* ── Year-by-year replay bar ─────────────────────────────────────────────
+   Appended under the chart in both the preview panel and the full-screen window (both are
+   flex columns, so the chart keeps the height and the bar takes its own row). The slider is a
+   native range input: left alone it is OS-painted, which is the same defect the bibliometrics
+   dock shipped twice — a control that ignores the theme is unreadable on a dark panel. */
+.chart-replay-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+}
+.chart-replay-range {
+  flex: 1;
+  min-width: 90px;
+  accent-color: var(--accent);
+  background: transparent;
+}
+.chart-replay-range:focus {
+  outline: 1px solid var(--accent);
+}
+.chart-replay-year {
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.chart-replay-hint {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 /* ── Full-screen chart window (draggable + resizable, one chart at a time) ── */
 /* Starts centred via transform; makeDraggable's convertToFloating reads that transform
    on first mousedown and pins left/top in its place, so the window is both centred and

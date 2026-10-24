@@ -4388,10 +4388,238 @@ var _chartPreviewNodeId = '';
    different chart never paints into a stale canvas. */
 var _chartFullscreenInstance = null;
 var _chartFullscreenImage = '';
+/* The option the full-screen window was actually given. It is not always the preview's: the
+   window can be opened from a dashboard tile, or re-render from the server for a node the
+   preview never showed, and an export button has to describe the picture it is sitting under. */
+var _chartFullscreenOption = null;
 /* The raw option each surface was drawn from. The full-screen window reuses THIS rather
    than a live instance's getOption(), which returns an ECharts-resolved tree that is not
    meant to be fed back as an authoring option. */
 var _chartPreviewOption = null;
+
+/* ── Replay the network year by year ───────────────────────────────────────
+   CiteSpace's animation is the one reading of a knowledge map a table cannot give: which
+   cluster the field was growing at the time. The durable artifacts (PNG/SVG/LaTeX) stay the
+   COMPLETE figure — an animation does not print — so this is an inspection affordance over
+   the option the node already shipped, driven by each node's own 年份序列. Nothing is
+   re-requested and no callback is stored in the option, so a saved chart is still the same
+   JSON it was before the button existed.
+
+   A link appears once BOTH of its endpoints have: the option carries no per-slice edges, and
+   inventing an edge-year would put a claim the data does not make into a measured figure.
+   The bar says so in its own words for the same reason. */
+var _replaySurfaces = {};
+var _REPLAY_TICK_MS = 900;
+
+function _replayGraphSeries(option) {
+    var series = option && (option.series || [])[0];
+    return series && series.type === 'graph' && Array.isArray(series.data) && series.data.length ? series : null;
+}
+
+function _replayNodeName(series, ref) {
+    if (typeof ref === 'number' && series.data[ref]) return String(series.data[ref].name);
+    return String(ref);
+}
+
+function _replayYears(option) {
+    var series = _replayGraphSeries(option);
+    if (!series) return [];
+    var seen = {};
+    var years = [];
+    series.data.forEach(function (node) {
+        (node.yearSeries || []).forEach(function (pair) {
+            var year = Number(pair[0]);
+            if (!isFinite(year) || seen[year]) return;
+            seen[year] = true;
+            years.push(year);
+        });
+    });
+    return years.sort(function (a, b) { return a - b; });
+}
+
+/* A frame is cut from the ORIGINAL option, never from the previous frame: a size scaled twice
+   would be a size nobody measured, and the complete figure has to stay reachable. Each node is
+   therefore scaled against ITS OWN total, so the last frame is byte-for-byte the whole network
+   rather than an approximation of it. */
+function _replayFrame(option, year) {
+    var series = _replayGraphSeries(option);
+    if (!series) return option;
+    var totals = {};
+    var grown = {};
+    series.data.forEach(function (node) {
+        var total = 0;
+        var cum = 0;
+        (node.yearSeries || []).forEach(function (pair) {
+            var value = Number(pair[1]) || 0;
+            total += value;
+            if (Number(pair[0]) <= year) cum += value;
+        });
+        totals[String(node.name)] = total;
+        grown[String(node.name)] = cum;
+    });
+    var frame = JSON.parse(JSON.stringify(option));
+    var target = frame.series[0];
+    target.data.forEach(function (node) {
+        var name = String(node.name);
+        var cum = grown[name] || 0;
+        if (!cum) {
+            node.symbolSize = 1;
+            node.itemStyle = Object.assign({}, node.itemStyle, { opacity: 0 });
+            node.label = Object.assign({}, node.label, { show: false });
+            return;
+        }
+        var base = Number(node.symbolSize) || 10;
+        var scale = totals[name] ? Math.sqrt(cum / totals[name]) : 1;
+        node.symbolSize = Math.max(4, Math.round(base * scale * 100) / 100);
+    });
+    (target.links || []).forEach(function (link) {
+        var live = (grown[_replayNodeName(series, link.source)] || 0) > 0
+            && (grown[_replayNodeName(series, link.target)] || 0) > 0;
+        if (!live) link.lineStyle = Object.assign({}, link.lineStyle, { opacity: 0 });
+    });
+    return frame;
+}
+
+function _replayInstance(key) {
+    return key === 'fullscreen' ? _chartFullscreenInstance : _chartPreviewInstance;
+}
+
+function _replayStop(key) {
+    var state = _replaySurfaces[key];
+    if (state && state.timer) {
+        clearInterval(state.timer);
+        state.timer = null;
+    }
+}
+
+function _replayDetach(key) {
+    _replayStop(key);
+    var panel = _replayPanel(key);
+    var bar = panel ? panel.querySelector('.chart-replay-bar') : null;
+    if (bar) bar.remove();
+    delete _replaySurfaces[key];
+}
+
+function _replayPanel(key) {
+    return document.getElementById(key === 'fullscreen' ? 'chart-fullscreen-panel' : 'chart-preview-panel');
+}
+
+function _replayShow(key, index) {
+    var state = _replaySurfaces[key];
+    if (!state) return;
+    var clamped = Math.max(0, Math.min(state.years.length - 1, index));
+    state.index = clamped;
+    var frame = _replayFrame(state.option, state.years[clamped]);
+    var instance = _replayInstance(key);
+    if (instance) {
+        instance.setOption({ series: [{ data: frame.series[0].data, links: frame.series[0].links }] });
+    }
+    state.current = frame;
+    var panel = _replayPanel(key);
+    if (!panel) return;
+    var slider = panel.querySelector('.chart-replay-range');
+    if (slider) slider.value = String(clamped);
+    var readout = panel.querySelector('.chart-replay-year');
+    if (readout) readout.textContent = I18n.t('chart.replayYear', { year: state.years[clamped] });
+}
+
+function _replayAll(key) {
+    var state = _replaySurfaces[key];
+    if (!state) return;
+    _replayStop(key);
+    state.current = null;
+    var instance = _replayInstance(key);
+    if (instance) applyEchartsOption(instance, state.option);
+    var panel = _replayPanel(key);
+    var slider = panel ? panel.querySelector('.chart-replay-range') : null;
+    if (slider) slider.value = String(state.years.length - 1);
+    var readout = panel ? panel.querySelector('.chart-replay-year') : null;
+    if (readout) readout.textContent = I18n.t('chart.replayAllYears');
+    var play = panel ? panel.querySelector('.chart-replay-play') : null;
+    if (play) play.textContent = I18n.t('chart.replayPlay');
+}
+
+function _replayTick(key) {
+    var state = _replaySurfaces[key];
+    if (!state) return;
+    if (state.index >= state.years.length - 1) {
+        _replayStop(key);
+        var done = _replayPanel(key);
+        var button = done ? done.querySelector('.chart-replay-play') : null;
+        if (button) button.textContent = I18n.t('chart.replayReplay');
+        return;
+    }
+    _replayShow(key, state.index + 1);
+}
+
+function _replayAttach(key, option) {
+    var panel = _replayPanel(key);
+    if (!panel) return;
+    _replayDetach(key);
+    var years = _replayYears(option);
+    if (years.length < 2) return;
+    var state = { option: option, years: years, index: years.length - 1, timer: null, current: null };
+    _replaySurfaces[key] = state;
+    var bar = document.createElement('div');
+    bar.className = 'chart-replay-bar';
+    var play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'chart-replay-play runs-mgr-btn';
+    play.textContent = I18n.t('chart.replayPlay');
+    play.onclick = function () {
+        if (state.timer) {
+            _replayStop(key);
+            play.textContent = I18n.t('chart.replayPlay');
+            return;
+        }
+        if (state.index >= years.length - 1) _replayShow(key, 0);
+        play.textContent = I18n.t('chart.replayPause');
+        state.timer = setInterval(function () { _replayTick(key); }, _REPLAY_TICK_MS);
+    };
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'chart-replay-range';
+    slider.min = '0';
+    slider.max = String(years.length - 1);
+    slider.step = '1';
+    slider.value = String(years.length - 1);
+    slider.title = I18n.t('chart.replayHint');
+    slider.oninput = function () {
+        _replayStop(key);
+        play.textContent = I18n.t('chart.replayPlay');
+        _replayShow(key, parseInt(slider.value, 10));
+    };
+    var readout = document.createElement('span');
+    readout.className = 'chart-replay-year';
+    readout.textContent = I18n.t('chart.replayAllYears');
+    var reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'chart-replay-reset runs-mgr-btn';
+    reset.textContent = I18n.t('chart.replayReset');
+    reset.onclick = function () { _replayAll(key); };
+    var hint = document.createElement('span');
+    hint.className = 'chart-replay-hint';
+    hint.textContent = I18n.t('chart.replayHint');
+    [play, slider, readout, reset, hint].forEach(function (el) { bar.appendChild(el); });
+    panel.appendChild(bar);
+    // The canvas was sized for a panel with no bar under it. Measured in Chrome: the stale
+    // absolutely-positioned canvas kept the height, overflowed the row the bar had just taken,
+    // and swallowed the click meant for 播放 — the bar painted and did nothing.
+    var instance = _replayInstance(key);
+    if (instance) instance.resize();
+}
+
+function _replayCurrentOption(key) {
+    var state = _replaySurfaces[key];
+    return state && state.current ? state.current : null;
+}
+
+/* What an export of this surface should contain: the frame on screen if there is one, the whole
+   figure otherwise. A file that disagrees with the picture the user just looked at is worse than
+   no file, and the PNG path already gets this for free (it screenshots the instance). */
+function _surfaceOption(key, stored) {
+    return _replayCurrentOption(key) || stored;
+}
 
 /* ── Saving a drawn chart as a file ─────────────────────────────────────────
    A chart exists on screen in three places — the studio, the preview panel and a
@@ -4504,7 +4732,13 @@ async function saveChartVector(option, name, hostId) {
 }
 
 function savePreviewVector() {
-    return saveChartVector(_chartPreviewOption, _chartPreviewName || 'chart-preview', 'chart-preview-echarts');
+    // Whatever is on screen: a vector cut from the whole network while the window shows 2019
+    // would be a file that disagrees with the figure the user just looked at.
+    return saveChartVector(
+        _surfaceOption('preview', _chartPreviewOption),
+        _chartPreviewName || 'chart-preview',
+        'chart-preview-echarts'
+    );
 }
 
 function saveDashboardImage(nodeId) {
@@ -4541,6 +4775,7 @@ function renderChartPreview(result) {
     var imgEl = document.getElementById('chart-preview-image');
     if (result.engine === 'matplotlib') {
         _chartPreviewOption = null;
+        _replayDetach('preview');
         echartsDiv.style.display = 'none';
         echartsDiv.innerHTML = '';
         imgEl.style.display = 'block';
@@ -4558,6 +4793,7 @@ function renderChartPreview(result) {
             }
         }
         applyEchartsOption(_chartPreviewInstance, result.option);
+        _replayAttach('preview', result.option);
     }
     _renderLatexBar(result);
 }
@@ -4893,6 +5129,9 @@ var runLogViewer = {
 function toggleChartPreview() {
     var panel = document.getElementById('chart-preview-panel');
     panel.classList.remove('open');
+    // The timer belongs to the window that was closed: a detached interval keeps cutting frames
+    // out of an option whose instance is already gone.
+    _replayDetach('preview');
     if (_chartPreviewInstance) {
         _chartPreviewInstance.dispose();
         _chartPreviewInstance = null;
@@ -4994,13 +5233,17 @@ function _paintFullscreenOption(option) {
     div.style.display = 'block';
     div.innerHTML = '';
     _chartFullscreenInstance = echarts.init(div);
+    _chartFullscreenOption = option;
     applyEchartsOption(_chartFullscreenInstance, option);
+    _replayAttach('fullscreen', option);
 }
 
 function _paintFullscreenImage(dataUrl) {
     var div = document.getElementById('chart-fullscreen-echarts');
     var img = document.getElementById('chart-fullscreen-image');
     _disposeFullscreenInstance();
+    _replayDetach('fullscreen');
+    _chartFullscreenOption = null;
     div.style.display = 'none';
     div.innerHTML = '';
     _chartFullscreenImage = dataUrl || '';
@@ -5020,6 +5263,8 @@ function _paintFullscreenError(message, isNote) {
     var div = document.getElementById('chart-fullscreen-echarts');
     var img = document.getElementById('chart-fullscreen-image');
     _disposeFullscreenInstance();
+    _replayDetach('fullscreen');
+    _chartFullscreenOption = null;
     _chartFullscreenImage = '';
     if (img) img.style.display = 'none';
     div.style.display = 'block';
@@ -5028,6 +5273,8 @@ function _paintFullscreenError(message, isNote) {
 
 function closeChartFullscreen() {
     document.getElementById('chart-fullscreen-panel').classList.remove('open');
+    _replayDetach('fullscreen');
+    _chartFullscreenOption = null;
     _disposeFullscreenInstance();
     _chartFullscreenImage = '';
 }
@@ -5046,7 +5293,10 @@ function saveFullscreenImage() {
 function saveFullscreenVector() {
     var titleEl = document.getElementById('chart-fullscreen-title');
     return saveChartVector(
-        _chartPreviewOption,
+        // The full-screen window's OWN option, and the frame it is showing: this button used to
+        // hand over the preview panel's stored option, so a window opened from a dashboard tile
+        // (or scrubbed to 2019) saved a different picture than the one on screen.
+        _surfaceOption('fullscreen', _chartFullscreenOption),
         (titleEl && titleEl.textContent) || 'chart-fullscreen',
         'chart-fullscreen-echarts'
     );

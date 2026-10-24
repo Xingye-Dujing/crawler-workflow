@@ -3579,3 +3579,118 @@ def test_saving_a_chart_as_svg_hands_over_a_real_vector_document(app_url, driver
     assert facts['script'] is False, 'the markup carries something the server would (rightfully) refuse'
     assert facts['paintedTexts'] > 0, 'the SVG renderer painted no labels, so the measurement is hollow'
     assert facts['leaked'] == 0, 'the off-screen surface was left on the page'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, driver, lang):
+    """The year-by-year replay, measured where it is painted.
+
+    Two facts only a real engine gives, and both were paid for on 2026-10-24:
+
+    * the bar is appended UNDER a canvas ECharts sized at ``init``, so without a ``resize()`` the
+      canvas keeps the old height and swallows the click meant for 播放 — Chrome answered
+      ``ElementClickInterceptedException`` naming the ``<canvas>`` while the bar looked perfect in
+      a screenshot;
+    * a frame reaches the screen through a partial ``setOption`` merge, and whether a graph node
+      actually disappears is ECharts' decision, not the option author's.
+
+    Nothing is written: the option is handed straight to the preview window in the shape
+    ``services/biblio_charts`` ships it (every node carrying its own ``yearSeries``).
+    """
+    driver.set_window_size(1650, 1080)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        document.documentElement.dataset.themeChoice = 'dark';
+        applyTheme();
+        I18n.apply();
+        renderChartPreview({ ok: true, engine: 'echarts', option: {
+            series: [{
+                type: 'graph', layout: 'none', left: 30, top: 60, right: 30, bottom: 90,
+                data: [
+                    { name: '甲', x: 0, y: 0, symbolSize: 30, label: { show: true },
+                      yearSeries: [[2018, 1], [2019, 2]] },
+                    { name: '乙', x: 60, y: 0, symbolSize: 20, label: { show: true },
+                      yearSeries: [[2018, 2]] },
+                    { name: '丙', x: 30, y: 60, symbolSize: 14, label: { show: true },
+                      yearSeries: [[2019, 1]] },
+                ],
+                links: [
+                    { source: '甲', target: '乙', value: 2 },
+                    { source: '甲', target: '丙', value: 1 },
+                ],
+            }],
+        } });
+        """,
+        lang,
+    )
+    time.sleep(1.0)
+
+    def measure():
+        return driver.execute_script(
+            """
+            const panel = document.getElementById('chart-preview-panel');
+            const bar = panel.querySelector('.chart-replay-bar');
+            const host = document.getElementById('chart-preview-echarts');
+            const barRect = bar.getBoundingClientRect();
+            const hostRect = host.getBoundingClientRect();
+            const inst = echarts.getInstanceByDom(host);
+            const series = inst.getOption().series[0];
+            const shown = series.data.filter(function (node) {
+                return (node.itemStyle || {}).opacity !== 0 && Number(node.symbolSize) > 2;
+            }).map(function (node) { return node.name; });
+            const hiddenLinks = (series.links || []).filter(function (link) {
+                return (link.lineStyle || {}).opacity === 0;
+            }).length;
+            return {
+                barHeight: Math.round(barRect.height),
+                gapBelowChart: Math.round(barRect.top - hostRect.bottom),
+                shown: shown,
+                hiddenLinks: hiddenLinks,
+                readout: bar.querySelector('.chart-replay-year').textContent,
+                playLabel: bar.querySelector('.chart-replay-play').textContent,
+                allWord: I18n.t('chart.replayAllYears'),
+                playWord: I18n.t('chart.replayPlay'),
+                pauseWord: I18n.t('chart.replayPause'),
+                year2018: I18n.t('chart.replayYear', { year: 2018 }),
+                storedUntouched: JSON.stringify(_chartPreviewOption).indexOf('"symbolSize":30') >= 0,
+            };
+            """
+        )
+
+    whole = measure()
+    assert whole['barHeight'] > 20, f'the bar painted {whole["barHeight"]}px of nothing'
+    assert whole['gapBelowChart'] >= -1, (
+        f'the bar is under the chart, not below it: it starts {whole["gapBelowChart"]}px above the '
+        'canvas bottom, so a click on it hits the canvas'
+    )
+    assert len(whole['shown']) == 3, whole['shown']
+    assert whole['hiddenLinks'] == 0
+    assert whole['readout'] == whole['allWord'] != 'chart.replayAllYears'
+
+    # The button has to answer a real mouse, not just exist in the DOM. The handler runs inside
+    # the click, so the frame it cut is measurable the moment the call returns — no sleeping on
+    # the 900 ms tick, which is a race this tier must not lose on a loaded machine.
+    driver.find_element('css selector', '#chart-preview-panel .chart-replay-play').click()
+    playing = measure()
+    assert playing['readout'] == playing['year2018'], f'播放 did not land on the first year: {playing["readout"]}'
+    assert len(playing['shown']) == 2, f'the 2018 frame still shows every node: {playing["shown"]}'
+    assert playing['playLabel'] == playing['pauseWord'], 'the button must say what it will do next'
+    driver.execute_script('_replayStop("preview");')
+
+    driver.execute_script('_replayShow("preview", 0);')
+    time.sleep(0.6)
+    first = measure()
+    assert sorted(first['shown']) == ['乙', '甲'], f'the 2018 frame shows the wrong set: {first["shown"]}'
+    assert first['hiddenLinks'] == 1, 'the link to a node that has not happened yet must not be drawn'
+    assert first['readout'] == first['year2018'] != 'chart.replayYear'
+    assert first['storedUntouched'] is True, 'frames must be cut from the option, never carved out of it'
+
+    driver.find_element('css selector', '#chart-preview-panel .chart-replay-reset').click()
+    time.sleep(0.8)
+    reset = measure()
+    assert len(reset['shown']) == 3 and reset['hiddenLinks'] == 0, '看完整图 did not restore the figure'
+    assert reset['readout'] == reset['allWord']
+    assert reset['playLabel'] == reset['playWord']

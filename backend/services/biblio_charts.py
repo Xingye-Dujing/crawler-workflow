@@ -194,6 +194,30 @@ def _resolve_fixed_labels(rows: dict[str, dict], names: list[str], center_x: flo
     return placements
 
 
+def _activity(row: dict) -> list:
+    """The node's per-year counts as ``[[year, count], …]``, oldest first.
+
+    The graph's own ``年份序列`` column, shipped through to the browser so the network can be
+    replayed slice by slice without a second request. Pairs rather than a dict because the order
+    IS the answer, and a JSON object would have it re-sorted by whoever read it. A node with no
+    series at all gets nothing: a play bar with one dimmed dot is worse than no play bar.
+    """
+    if '年份序列' not in row:
+        return []
+    parsed = _parsed(row.get('年份序列'), '年份序列')
+    if not isinstance(parsed, dict):
+        raise BiblioChartError(t('chart.biblio_bad_json', col='年份序列'))
+    frames = []
+    for key, count in parsed.items():
+        try:
+            year = int(float(str(key).strip()))
+            value = float(count)
+        except (TypeError, ValueError):
+            continue
+        frames.append([year, value])
+    return sorted(frames)
+
+
 def _node_data(rows: dict[str, dict], names: list[str], base: dict, *, layout: str, categories):
     use_clusters, category_names, category_index = categories
     max_freq = max((_number(rows[name]['频次'], 0.0) for name in names), default=1.0) or 1.0
@@ -237,6 +261,9 @@ def _node_data(rows: dict[str, dict], names: list[str], base: dict, *, layout: s
             'itemStyle': item_style,
             'label': label,
         }
+        activity = _activity(row)
+        if activity:
+            item['yearSeries'] = activity
         if layout == 'none':
             item['x'] = x
             item['y'] = y

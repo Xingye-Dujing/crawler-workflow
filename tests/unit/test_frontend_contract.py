@@ -49,22 +49,43 @@ CANVAS_JS = JS_DIR / 'canvas.js'
 # Files whose I18n.t('literal') calls are audited against the catalogues.
 I18N_USERS = ['app.js', 'canvas.js', 'workflow.js', 'menu.js', 'stats.js', 'schedules.js']
 
-_KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*\)""")
+_KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*(?:,|\))""")
+# A call that passes variables used to be invisible here: the pattern demanded the closing paren
+# right after the key, so every 「{n}」「{platform}」 toast in the app was unaudited for existence.
+# ``_VAR_CALL`` is the same audit widened, and ``_SLOT`` feeds the fill check below.
+_VAR_CALL = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*,\s*\{([^{}]*)\}\s*\)""")
+_SLOT = re.compile(r'\{(\w+)\}')
 _DICT_KEY = re.compile(r"""['"]([A-Za-z][\w.]*)['"]\s*:\s*['"]""")
 _DATA_I18N = re.compile(r'data-i18n="([A-Za-z][\w.]*)"')
 
 
-def _catalog_keys():
-    """{lang: set(keys)} parsed out of app.js's I18n.dict literals."""
+def _catalog_bodies():
+    """{lang: the source slice of that language's dict} — the one place that knows where the two
+    catalogues live in app.js, so a second reader cannot disagree about which half it parsed."""
     src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
     en_start = src.index('dict: {')
-    en_body = src[en_start : src.index('zh: {', en_start)]
-    zh_body = src[src.index('zh: {', en_start) : src.index('_missing:')]
+    return {
+        'en': src[en_start : src.index('zh: {', en_start)],
+        'zh': src[src.index('zh: {', en_start) : src.index('_missing:')],
+    }
 
-    def grab(block):
-        return {m.group(1) for m in _DICT_KEY.finditer(block)}
 
-    return {'en': grab(en_body), 'zh': grab(zh_body)}
+def _catalog_keys():
+    """{lang: set(keys)} parsed out of app.js's I18n.dict literals."""
+    return {lang: {m.group(1) for m in _DICT_KEY.finditer(body)} for lang, body in _catalog_bodies().items()}
+
+
+_TEXT_ENTRY = re.compile(r"""['"]([A-Za-z][\w.]*)['"]\s*:\s*'([^'\n]*)'""")
+
+
+def _catalog_texts():
+    """{lang: {key: text}} for the entries written on ONE line.
+
+    A template split across lines is left out rather than half-parsed: its slots are still
+    covered by the parity audit, and a regex that guessed at multi-line strings would report a
+    slot that is not there.
+    """
+    return {lang: dict(_TEXT_ENTRY.findall(body)) for lang, body in _catalog_bodies().items()}
 
 
 class TestCanvasSerialization:
@@ -303,6 +324,37 @@ class TestLlmGateParity:
                     if key not in table:
                         missing.append(f'{name}: {key} missing from {lang}')
         assert not missing, '\n'.join(missing)
+
+    def test_a_variable_call_fills_every_slot_it_is_handed(self):
+        """``I18n.t('chart.replayYear', {year: 2019})`` names its key at the call site and fills
+        it through ``I18n.fill``, which replaces what it is given and leaves the rest — so a
+        forgotten slot prints 「{n}」 inside a toast, and a key nobody defined prints the key.
+
+        Only single-line variable objects are read; a call whose vars span lines is skipped, and
+        the count below fails if the pattern has stopped matching anything at all.
+        """
+        catalogs = _catalog_keys()
+        texts = _catalog_texts()
+        checked = 0
+        problems = []
+        for name in I18N_USERS:
+            src = (JS_DIR / name).read_text(encoding='utf-8')
+            for match in _VAR_CALL.finditer(src):
+                key, body = match.group(2), match.group(3)
+                given = set(re.findall(r'(?:^|[,{])\s*(\w+)\s*:', body))
+                checked += 1
+                for lang, table in catalogs.items():
+                    if key not in table:
+                        problems.append(f'{name}: {key} missing from {lang}')
+                        continue
+                    template = texts[lang].get(key)
+                    if template is None:
+                        continue  # a multi-line template: its slots are the parity audit's business
+                    for slot in sorted(set(_SLOT.findall(template))):
+                        if slot not in given:
+                            problems.append(f'{name}: {key} leaves {{{slot}}} unfilled in {lang}')
+        assert checked >= 10, f'the variable-call pattern matched {checked} call sites — it has rotted'
+        assert not problems, '\n'.join(sorted(set(problems)))
 
 
 class TestFrontendCatalog:

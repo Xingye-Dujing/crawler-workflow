@@ -56,6 +56,45 @@ const RENDER_LATEX_INLINE = {
     latex_table: 'TABLE SOURCE',
 };
 const RENDER_IMAGE = { ok: true, engine: 'matplotlib', image: 'data:image/png;base64,MATPLOTLIBPICTURE' };
+
+/* A knowledge-map option in the shape `biblio_charts._node_data` ships: every node carries its
+   own ``yearSeries`` so the browser can replay the network without a second request. */
+const GRAPH_OPTION = () => ({
+    series: [
+        {
+            type: 'graph',
+            layout: 'none',
+            categories: [{ name: '全部' }],
+            data: [
+                { name: '甲', x: 0, y: 0, symbolSize: 30, label: { show: true }, yearSeries: [[2020, 1], [2021, 2]] },
+                { name: '乙', x: 10, y: 0, symbolSize: 20, label: { show: true }, yearSeries: [[2020, 2]] },
+                { name: '丙', x: 20, y: 0, symbolSize: 10, label: { show: true }, yearSeries: [[2021, 1]] },
+            ],
+            links: [
+                { source: '甲', target: '乙', value: 2 },
+                { source: '甲', target: '丙', value: 1 },
+            ],
+        },
+    ],
+});
+const RENDER_GRAPH = { ok: true, engine: 'echarts', option: GRAPH_OPTION() };
+/* One year of activity is a picture, not a timeline: the bar would offer a single frame. */
+const RENDER_ONE_YEAR = {
+    ok: true,
+    engine: 'echarts',
+    option: {
+        series: [
+            {
+                type: 'graph',
+                data: [
+                    { name: '甲', symbolSize: 30, yearSeries: [[2020, 3]] },
+                    { name: '乙', symbolSize: 20, yearSeries: [[2020, 2]] },
+                ],
+                links: [],
+            },
+        ],
+    },
+};
 const SAVE_OK = { ok: true, filename: 'tu23-a1b2c3.png' };
 const SAVE_REFUSED = { ok: false, error: 'image too large' };
 
@@ -76,7 +115,8 @@ function world(render) {
         echarts: {
             init(el) {
                 const inst = {
-                    setOption() {},
+                    applied: [],
+                    setOption(opt) { inst.applied.push(opt); },
                     resize() {},
                     disposed: 0,
                     dispose() { inst.disposed += 1; },
@@ -111,7 +151,16 @@ function world(render) {
             ' saveChartPdf, getLatexFile: () => _lastLatexFile,' +
             ' openChartFullscreen, closeChartFullscreen, saveFullscreenImage,' +
             ' getFullscreenInstance: () => _chartFullscreenInstance,' +
-            ' getPreviewNodeId: () => _chartPreviewNodeId };',
+            ' getFullscreenOption: () => _chartFullscreenOption,' +
+            ' getPreviewNodeId: () => _chartPreviewNodeId,' +
+            ' replay: {' +
+            '   years: (o) => _replayYears(o), frame: (o, y) => _replayFrame(o, y),' +
+            '   show: (k, i) => _replayShow(k, i), all: (k) => _replayAll(k),' +
+            '   detach: (k) => _replayDetach(k), current: (k) => _replayCurrentOption(k),' +
+            '   surface: (k, stored) => _surfaceOption(k, stored),' +
+            '   state: (k) => _replaySurfaces[k] || null,' +
+            '   storedOption: (k) => (k === "preview" ? _chartPreviewOption : _chartFullscreenOption),' +
+            ' } };',
         sandbox
     );
 
@@ -500,5 +549,110 @@ out.latex_bar_inline_only = await latexBarCase(RENDER_LATEX_INLINE);
 
 out.vector_nothing_drawn = await vectorNothingCase();
 out.vector_no_markup = await vectorNoMarkupCase();
+
+/* ── Replay the network year by year ───────────────────────────────────────
+   The bar is an inspection affordance, so what matters is that it never lies about the
+   figure: the last frame has to BE the whole network, the stored option has to survive
+   every seek, an export has to carry what is on screen, and a window with nothing to
+   replay (a bar chart, or one year of data) has to offer no button at all.
+   Wording is read back through `I18n.t`, never pasted. */
+async function replayCase() {
+    const w = world(RENDER_GRAPH);
+    addChart(w, 'v-9', '关键词知识图谱');
+    await w.x.dataNodes.previewVisualize('v-9');
+    await ticks();
+    const doc = w.sandbox.document;
+    const panel = doc.getElementById('chart-preview-panel');
+    const bar = panel.querySelector('.chart-replay-bar');
+    const readout = () => panel.querySelector('.chart-replay-year').textContent;
+    const slider = panel.querySelector('.chart-replay-range');
+    const instance = () => w.created[0];
+    const applied = () => instance().applied[instance().applied.length - 1];
+    const before = JSON.stringify(w.x.replay.storedOption('preview'));
+
+    const first = {
+        bar: !!bar,
+        sliderMax: slider ? slider.max : null,
+        sliderValue: slider ? slider.value : null,
+        readout: readout(),
+        readoutWord: w.x.I18n.t('chart.replayAllYears'),
+        playLabel: panel.querySelector('.chart-replay-play').textContent,
+        playWord: w.x.I18n.t('chart.replayPlay'),
+        hint: panel.querySelector('.chart-replay-hint').textContent,
+        hintWord: w.x.I18n.t('chart.replayHint'),
+        years: w.x.replay.years(w.x.replay.storedOption('preview')),
+    };
+
+    w.x.replay.show('preview', 0);
+    const frameData = {};
+    applied().series[0].data.forEach((node) => { frameData[node.name] = node; });
+    const frameLinks = applied().series[0].links;
+    const afterFirst = {
+        readout: readout(),
+        readoutExpected: w.x.I18n.t('chart.replayYear', { year: 2020 }),
+        sliderValue: slider.value,
+        futureNodeHidden: frameData['丙'].itemStyle.opacity === 0 && frameData['丙'].label.show === false,
+        pastNodeSize: frameData['甲'].symbolSize,
+        untouchedNodeSize: frameData['乙'].symbolSize,
+        linkAcrossTheGapHidden: frameLinks[1].lineStyle ? frameLinks[1].lineStyle.opacity === 0 : false,
+        linkInsideTheFrameShown: !frameLinks[0].lineStyle || frameLinks[0].lineStyle.opacity !== 0,
+        optionUntouched: JSON.stringify(w.x.replay.storedOption('preview')) === before,
+        exportIsTheFrame: w.x.replay.surface('preview', w.x.replay.storedOption('preview')) === w.x.replay.current('preview'),
+    };
+
+    w.x.replay.show('preview', first.years.length - 1);
+    const lastData = {};
+    applied().series[0].data.forEach((node) => { lastData[node.name] = node; });
+    const lastFrame = {
+        sizesAreTheFigures: Object.keys(lastData).every((name) => lastData[name].symbolSize === GRAPH_OPTION().series[0].data.find((n) => n.name === name).symbolSize),
+        nothingHidden: Object.keys(lastData).every((name) => !lastData[name].itemStyle || lastData[name].itemStyle.opacity === undefined),
+        linksUntouched: applied().series[0].links.every((l) => !l.lineStyle || l.lineStyle.opacity === undefined),
+    };
+
+    w.x.replay.all('preview');
+    const reset = {
+        readout: readout(),
+        current: w.x.replay.current('preview'),
+        exportIsTheStoredOption: w.x.replay.surface('preview', w.x.replay.storedOption('preview')) === w.x.replay.storedOption('preview'),
+        repaintedWholeOption: applied() === w.x.replay.storedOption('preview'),
+    };
+
+    w.x.replay.detach('preview');
+    const detached = { bar: !!panel.querySelector('.chart-replay-bar'), state: w.x.replay.state('preview') };
+
+    return { first, afterFirst, lastFrame, reset, detached };
+}
+
+async function noReplayCase(render) {
+    const w = world(render);
+    addChart(w, 'v-8', '没有可回放的图');
+    await w.x.dataNodes.previewVisualize('v-8');
+    await ticks();
+    const panel = w.sandbox.document.getElementById('chart-preview-panel');
+    return { bar: !!panel.querySelector('.chart-replay-bar'), state: w.x.replay.state('preview') };
+}
+
+async function fullscreenOptionCase() {
+    const w = world(RENDER_GRAPH);
+    addChart(w, 'v-7', '关键词知识图谱');
+    await w.x.dataNodes.previewVisualize('v-7');
+    await ticks();
+    await w.x.openChartFullscreen('v-7');
+    await ticks();
+    const fsPanel = w.sandbox.document.getElementById('chart-fullscreen-panel');
+    const opened = {
+        hasOption: !!w.x.getFullscreenOption(),
+        bar: !!fsPanel.querySelector('.chart-replay-bar'),
+        state: !!w.x.replay.state('fullscreen'),
+        years: w.x.replay.years(w.x.getFullscreenOption()),
+    };
+    w.x.closeChartFullscreen();
+    return { opened, closed: { hasOption: !!w.x.getFullscreenOption(), bar: !!fsPanel.querySelector('.chart-replay-bar') } };
+}
+
+out.replay = await replayCase();
+out.replay_absent_for_a_plain_bar = await noReplayCase(RENDER_ECHARTS);
+out.replay_absent_for_one_year = await noReplayCase(RENDER_ONE_YEAR);
+out.fullscreen_keeps_its_own_option = await fullscreenOptionCase();
 
 process.stdout.write(JSON.stringify(out));

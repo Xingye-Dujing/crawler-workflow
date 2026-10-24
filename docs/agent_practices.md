@@ -456,3 +456,13 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   hands both back after. The node stub has no `activeElement` and no caret, so it can pin the markup and drive
   `_focusedField`/`_restoreFocus` directly, but the three facts above are asserted from computed styles and
   `document.activeElement` in `-m integration` (`test_ui_layout.py::test_the_bibliometrics_panel_names_its_columns_and_keeps_the_caret`).
+- **Appending a row under an ECharts canvas without resizing it buries the row.** The canvas is absolutely positioned
+  and keeps the height it was given at `init`, so a control bar added afterwards sits UNDER it: it paints, it looks
+  right in a screenshot, and the click goes to the chart. Measured in Chrome on 2026-10-24 — the replay bar's 播放
+  button answered `ElementClickInterceptedException` naming the `<canvas>` that should have been shorter. Call
+  `instance.resize()` after the DOM change; the node stub has no layout, so nothing but a real engine can see this.
+- **An affordance that cuts frames out of a figure has to end where the figure began.** Every frame is derived from
+  the stored option and each node is scaled against its OWN total, so the last frame is byte-for-byte the whole
+  network (scaling against the frame's maximum would leave an approximation nobody measured, and the export button
+  would file it). The harness pins that equality, the untouched stored option, and that an export carries the frame
+  actually on screen.
