@@ -1587,12 +1587,21 @@ def workflow_rerun_node():
     status = store.get_node_status(run_id, node_id)
     if status not in (NODE_DONE, NODE_RESTORED):
         return jsonify({'ok': False, 'error': t('api.rerunNoRows', node=node_label(target, node_id))}), 409
+    # Another run may still be writing. The wipe below deletes this subtree's rows
+    # BEFORE the start path can serialize, so refusing here is what keeps those rows
+    # from disappearing under a rerun that then has to wait (or is refused) anyway.
+    live_thread = execution_state.get('thread')
+    if execution_state.get('running') or (live_thread is not None and live_thread.is_alive()):
+        return jsonify({'ok': False, 'error': t('api.rerunBusy')}), 409
 
     invalidated = _downstream_closure(effective, node_id)
     store.invalidate_nodes(run_id, invalidated)
 
     # Replay through the ordinary start path as a resume of the very run we just pruned.
+    # Never park it: the wipe above already deleted this subtree's rows, and a queued
+    # rerun would leave that hole visible until some other run finishes.
     data['resume_run_id'] = run_id
+    data['queue'] = False
     answer = _begin_run(data, request.headers.get('X-Lang') or '')
     body = dict(answer['body'])
     body['rerun_from'] = node_id
@@ -1802,6 +1811,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # exactly the rows this run owns and a later reconciler can tell an
             # unwinding worker's rows from a dead one's.
             execution_state['open_records'] = []
+            execution_state['attempt_records'] = set()
             execution_state['outcome'] = ''
             execution_state['cookie_expired'] = False
             execution_state['_mode'] = mode
@@ -2096,6 +2106,8 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 created.append(run_id)
                 ctx['open_records'].append(run_id)
                 execution_state['owned_records'].add(run_id)
+                with _completed_lock:
+                    execution_state['attempt_records'].add(run_id)
                 # Read *after* start_run so nodes left 'running' by the promotion
                 # are visible as partial, which is what makes them resumable.
                 ctx['statuses'] = store.node_statuses(run_id)
@@ -2163,6 +2175,8 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 created.append(rid)
                 ctx['open_records'].append(rid)
                 execution_state['owned_records'].add(rid)
+                with _completed_lock:
+                    execution_state['attempt_records'].add(rid)
                 # The status endpoint and the resume banner follow the record that is
                 # being written RIGHT NOW, so a stop mid-run leaves the panel offering
                 # the workflow that was interrupted rather than the first one.
@@ -5364,6 +5378,33 @@ def workflow_status():
                 chart_results[nid] = data
 
     thread = execution_state.get('thread')
+    # Per-node verdicts for THIS attempt, so the canvas can paint live spinners and
+    # green/red badges without a second poll. Parallel nodes really do run at once,
+    # so this is a map, not "the current node": every node holding ``running`` is
+    # spinning. Included after the run settles too — the browser's final tick must
+    # be able to paint the last verdict, and the next attempt clears the list.
+    with _completed_lock:
+        attempt_records = [str(rid) for rid in sorted(execution_state.get('attempt_records') or ())]
+    if not attempt_records and execution_state.get('run_id'):
+        attempt_records = [str(execution_state['run_id'])]
+    node_states = {}
+    if attempt_records:
+        # Badges are an enhancement, not a verdict: a runs.db that cannot open must
+        # not turn every console poll into an HTML 500 (the run itself already
+        # reports that failure). The map is simply absent until the store answers.
+        try:
+            store = get_run_store()
+            for rid in attempt_records:
+                for nid, state in store.node_statuses(rid).items():
+                    node_states[str(nid)] = {
+                        'status': str(state.get('status') or ''),
+                        'row_count': int(state.get('row_count') or 0),
+                        'error': str(state.get('error') or ''),
+                        'run_id': rid,
+                    }
+        except Exception as e:
+            logger.debug('node_states unavailable: %s', e)
+            node_states = {}
     return jsonify(
         {
             'running': execution_state['running'],
@@ -5380,6 +5421,8 @@ def workflow_status():
             'workflows': wf_list,
             'mode': mode,
             'results': list(results.keys()),
+            'run_ids': attempt_records,
+            'node_states': node_states,
             'total_nodes': execution_state['total_nodes'],
             'completed_nodes': execution_state['completed_nodes'],
             # What the run decided about itself. The browser used to infer
@@ -6578,6 +6621,46 @@ def runs_resumable():
     # dead process were already promoted to 'interrupted' at startup.
     runs = [r for r in found if r.get('status') != RUN_RUNNING]
     return jsonify({'ok': True, 'runs': runs})
+
+
+@app.route('/api/runs/for-workflow', methods=['POST'])
+def runs_for_workflow():
+    """Every recorded run of the workflow currently on the canvas, newest first.
+
+    This is the 运行记录 panel's 当前工作流 tab: unlike ``/resumable`` it keeps
+    finished runs (their node outputs are what the canvas loads by default),
+    and unlike ``/list`` it refuses to offer runs whose canvas has since been
+    rewired. Matching is on structure exactly as a 继续 does — node ids, types
+    and wiring — because loading rows under node ids the canvas no longer has
+    would put another workflow's table behind the user's box. Editing a
+    parameter keeps the identity; adding or removing a node changes it, and
+    that run stops being offered rather than quietly mismatching.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    workflow = data.get('workflow') or {}
+    empty = {'ok': True, 'runs': [], 'latest_run_id': '', 'workflow_fingerprint': '', 'queue': queue_snapshot()}
+    if not isinstance(workflow, dict) or not workflow.get('nodes'):
+        return jsonify(empty)
+    shape_error = _workflow_shape_error({'workflow': workflow})
+    if shape_error:
+        return jsonify({'ok': False, 'error': shape_error}), 400
+    limit = _safe_int(data.get('limit'), 50, minimum=1, maximum=200)
+    # Opening this tab is also a moment to repair a record whose worker died in a
+    # previous process — same as the resumable list, so both doors agree.
+    _settle_orphaned_records()
+    fingerprint = workflow_fingerprint(effective_workflow(workflow))
+    runs = get_run_store().list_resumable(fingerprint, limit=limit, include_finished=True)
+    return jsonify(
+        {
+            'ok': True,
+            'runs': runs,
+            'latest_run_id': runs[0]['run_id'] if runs else '',
+            'workflow_fingerprint': fingerprint,
+            'queue': queue_snapshot(),
+        }
+    )
 
 
 @app.route('/api/runs/list', methods=['GET'])

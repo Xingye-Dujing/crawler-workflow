@@ -56,6 +56,127 @@ def _seed(store, run_id='r1', name='wf', fingerprint='fp-a', status=RUN_RUNNING,
     return run_id
 
 
+class TestRunsForWorkflow:
+    """The 当前工作流 tab asks for the runs OF THIS CANVAS — finished ones included.
+
+    This is a different question from ``/resumable`` (only unfinished attempts) and
+    from ``/list`` (every record, orphans included). The identity is the same
+    structure fingerprint a 继续 uses, so a parameter edit still finds the run while
+    a node added or removed since does not: loading rows under ids the canvas no
+    longer has would put another shape's table behind the user's boxes.
+    """
+
+    def test_finished_and_live_runs_of_this_structure_come_newest_first(self, client, app_module):
+        workflow = _workflow()
+        fingerprint = workflow_fingerprint(workflow)
+        store = app_module._RUN_STORE
+        _seed(
+            store,
+            'old',
+            name='wf',
+            fingerprint=fingerprint,
+            status=RUN_COMPLETED,
+            nodes=[('node-1', 'source', NODE_DONE, 3)],
+            total=1,
+        )
+        _seed(
+            store,
+            'live',
+            name='wf',
+            fingerprint=fingerprint,
+            status=RUN_RUNNING,
+            nodes=[('node-1', 'source', NODE_PARTIAL, 2)],
+            total=1,
+        )
+        _seed(store, 'other', name='a stranger', fingerprint='fp-other', status=RUN_COMPLETED)
+
+        body = client.post('/api/runs/for-workflow', json={'workflow': workflow}).get_json()
+        assert [run['run_id'] for run in body['runs']] == ['live', 'old']
+        assert body['latest_run_id'] == 'live'
+        assert body['workflow_fingerprint'] == fingerprint
+        assert body['queue'] == []
+        by_id = {run['run_id']: run for run in body['runs']}
+        assert by_id['old']['nodes'][0]['status'] == NODE_DONE
+        assert by_id['live']['nodes'][0]['status'] == NODE_PARTIAL
+
+    def test_a_parameter_edit_still_finds_the_runs_but_a_rewire_does_not(self, client, app_module):
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', name='wf', fingerprint=workflow_fingerprint(_workflow()), status=RUN_COMPLETED)
+        tweaked = client.post('/api/runs/for-workflow', json={'workflow': _workflow(keyword='海口')}).get_json()
+        assert [run['run_id'] for run in tweaked['runs']] == ['r1']
+        rewired = {
+            'nodes': _workflow()['nodes'] + [{'id': 'node-2', 'type': 'output', 'params': {}}],
+            'connections': [{'from': 'node-1', 'to': 'node-2'}],
+        }
+        assert client.post('/api/runs/for-workflow', json={'workflow': rewired}).get_json()['runs'] == []
+
+    def test_an_empty_canvas_asks_nothing_and_answers_honestly(self, client):
+        body = client.post('/api/runs/for-workflow', json={'workflow': {'nodes': [], 'connections': []}}).get_json()
+        assert body == {'ok': True, 'runs': [], 'latest_run_id': '', 'workflow_fingerprint': '', 'queue': []}
+
+    def test_a_malformed_structure_is_refused_by_name_not_crashed(self, client):
+        response = client.post('/api/runs/for-workflow', json={'workflow': {'nodes': 'not-a-list'}})
+        assert response.status_code == 400
+        assert response.get_json()['ok'] is False
+        assert response.get_json()['error'], 'a refusal must name what is wrong'
+
+    def test_the_limit_is_clamped_instead_of_paging_off_the_end(self, client, app_module):
+        store = app_module._RUN_STORE
+        fingerprint = workflow_fingerprint(_workflow())
+        for i in range(3):
+            _seed(store, f'r{i}', name='wf', fingerprint=fingerprint, status=RUN_COMPLETED)
+        body = client.post('/api/runs/for-workflow', json={'workflow': _workflow(), 'limit': 2}).get_json()
+        assert [run['run_id'] for run in body['runs']] == ['r2', 'r1']
+        assert (
+            len(client.post('/api/runs/for-workflow', json={'workflow': _workflow(), 'limit': 0}).get_json()['runs'])
+            == 1
+        )
+
+
+class TestLiveNodeStates:
+    """The console poll also carries per-node verdicts, so the canvas can paint
+    spinners and checks without a second request. Two nodes can be `running` at
+    once, and only THIS attempt's records may answer: a record this process opened
+    last week is still in ``owned_records`` and must not leak into tonight's run."""
+
+    def test_the_attempts_records_answer_with_every_nodes_status(self, client, app_module):
+        store = app_module._RUN_STORE
+        store.start_run('live', 'wf', 'fp-a', node_total=2)
+        store.begin_node('live', 'node-1', 'source', fingerprint='fp-1')
+        store.append_rows('live', 'node-1', _rows(2))
+        store.finish_node('live', 'node-1', NODE_DONE)
+        store.begin_node('live', 'node-2', 'process', fingerprint='fp-2')
+        app_module.execution_state['attempt_records'] = {'live'}
+        app_module.execution_state['run_id'] = 'live'
+
+        status = client.get('/api/workflow/status').get_json()
+        assert status['run_ids'] == ['live']
+        assert status['node_states']['node-1'] == {
+            'status': NODE_DONE,
+            'row_count': 2,
+            'error': '',
+            'run_id': 'live',
+        }
+        # Still in flight: the spinner state is in the map too, and more than one
+        # node may hold it at the same time in a parallel run.
+        assert status['node_states']['node-2']['status'] == 'running'
+
+    def test_an_earlier_process_record_does_not_leak_into_this_attempt(self, client, app_module):
+        store = app_module._RUN_STORE
+        store.start_run('old', 'wf', 'fp-a')
+        store.begin_node('old', 'node-old', 'source', fingerprint='fp-old')
+        store.finish_node('old', 'node-old', NODE_DONE)
+        store.start_run('live', 'wf', 'fp-a')
+        store.begin_node('live', 'node-new', 'source', fingerprint='fp-new')
+        store.finish_node('live', 'node-new', NODE_DONE)
+        app_module.execution_state['owned_records'] = {'old', 'live'}
+        app_module.execution_state['attempt_records'] = {'live'}
+        app_module.execution_state['run_id'] = 'live'
+
+        status = client.get('/api/workflow/status').get_json()
+        assert set(status['node_states']) == {'node-new'}
+
+
 class TestRunListing:
     def test_list_includes_finished_runs_newest_first(self, client, app_module):
         store = app_module._RUN_STORE

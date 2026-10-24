@@ -436,6 +436,21 @@ const canvas = {
                 foldItem.style.display = 'none';
                 typeItem.style.display = 'none';
             }
+            /* 从此节点重跑 is offered only when the loaded run can really replay this
+               node: it must hold a settled result with rows, and nothing may be
+               running (the backend refuses a live target, and an offered button
+               that only ever refuses is worse than no button). */
+            const rerunItem = document.getElementById('ctx-rerun-node');
+            if (rerunItem) {
+                const busy = typeof RunState !== 'undefined' && RunState.running;
+                const canRerun =
+                    node &&
+                    !busy &&
+                    typeof runResults !== 'undefined' &&
+                    typeof runResults.canRerun === 'function' &&
+                    runResults.canRerun(node.id);
+                rerunItem.style.display = canRerun ? 'block' : 'none';
+            }
             /* Clamped by what the menu actually is, not by a guessed 200 px: the
                language changes its width and folding an item changes its height, so a
                constant either leaves the menu off-screen or stops it far too early.
@@ -514,6 +529,11 @@ const canvas = {
                     break;
                 case 'ctxRename':
                     if (this._contextNode) this.renameNode(this._contextNode);
+                    break;
+                case 'ctxRerunNode':
+                    if (this._contextNode && typeof runResults !== 'undefined') {
+                        runResults.rerunFrom(this._contextNode);
+                    }
                     break;
                 case 'ctxCopy':
                     if (this._contextNode) {
@@ -1335,6 +1355,7 @@ const canvas = {
             '  </div>',
             '</div>',
             '<div class="node-state-badge"></div>',
+            '<div class="node-run-badge" role="img"></div>',
             '<div class="node-validate-badge" style="display:none"></div>',
             '<div class="node-content"></div>',
             '<div class="node-port node-port-in" data-port="in"></div>',
@@ -2967,6 +2988,74 @@ const canvas = {
                         : '';
                 badge.style.display = state === 'on' ? 'none' : '';
             }
+        });
+    },
+
+    /* Paint the loaded run's per-node verdicts on the boxes themselves.
+
+       The three shapes are one vocabulary, not three separate ornaments: a green
+       check means the run really finished with rows in hand (``done`` and
+       ``restored`` are both settled), a yellow spinner means THIS node is running
+       right now, and a red X means it did not finish successfully (failed, partial,
+       skipped, or a status this build does not know — never paint an unknown word
+       green). The map comes from the run ledger, keyed by node id, so parallel
+       execution just means several entries say ``running`` at once.
+
+       A node absent from the map carries no badge: "never reached in this run" is
+       not the same claim as "failed", and a grey mark on every untouched chart
+       would read as one. */
+    applyRunStatuses(statuses) {
+        const map = statuses || {};
+        Object.keys(this.nodes).forEach((id) => {
+            const el = this._nodeEl(id);
+            const badge = el && el.querySelector('.node-run-badge');
+            if (!badge) return;
+            const info = map[id];
+            const status = String((info && info.status) || '');
+            if (!status) {
+                badge.className = 'node-run-badge';
+                badge.innerHTML = '';
+                badge.style.display = 'none';
+                badge.title = '';
+                badge.setAttribute('aria-label', '');
+                badge.dataset.status = '';
+                badge.dataset.signature = '';
+                return;
+            }
+            const settled = status === 'done' || status === 'restored';
+            const running = status === 'running';
+            const kind = settled ? 'run-done' : running ? 'run-running' : 'run-failed';
+            /* The status poll runs once a second; an unchanged node must not rewrite
+               its SVG every tick. The signature includes the localized title, so a
+               language switch (same status) still repaints the tooltip. */
+            const known = ['pending', 'running', 'done', 'partial', 'failed', 'skipped', 'restored'];
+            const word = known.indexOf(status) >= 0 ? I18n.t('runsMgr.node.' + status) : status;
+            const rows = Number((info && info.row_count) || 0);
+            const title = I18n.t('runsMgr.runStatus').replace('{status}', word) +
+                (rows > 0 ? ' · ' + rows + ' ' + I18n.t('runsMgr.colRows') : '');
+            const signature = kind + '|' + status + '|' + rows + '|' + title;
+            if (badge.dataset.signature === signature) {
+                badge.style.display = 'flex';
+                return;
+            }
+            badge.className = 'node-run-badge ' + kind;
+            badge.dataset.status = status;
+            badge.dataset.signature = signature;
+            if (running) {
+                badge.innerHTML = '<span class="node-run-spinner"></span>';
+            } else if (settled) {
+                badge.innerHTML =
+                    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.4l3.1 3.1 6.5-7"/></svg>';
+            } else {
+                badge.innerHTML =
+                    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6"/></svg>';
+            }
+            /* The status word is the record's, localized; an unrecognised one shows
+               itself (the i18n reader echoes an unknown key) rather than borrowing
+               a friendlier verdict. Rows are only appended when the record has them. */
+            badge.title = title;
+            badge.setAttribute('aria-label', title);
+            badge.style.display = 'flex';
         });
     },
 

@@ -63,6 +63,11 @@ execution_state: dict = {
     # settle a row its own worker abandoned without ever touching a row another
     # server instance might be writing right now.
     'owned_records': set(),
+    # The records THIS attempt opened (one per workflow in a split serial run),
+    # cleared when a run claims the slot. The status endpoint reads their node
+    # states to paint live spinners; ``owned_records`` outlives the attempt and
+    # would keep serving an old run's verdicts as if they were this one's.
+    'attempt_records': set(),
     # Node ids the CURRENT attempt visited. `runs.db` keeps the status of every
     # node ever run under this run id, including ones the canvas has since
     # deleted, so a verdict read from the whole record can blame today's run for

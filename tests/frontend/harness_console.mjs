@@ -314,6 +314,10 @@ sandbox.fetch = (url) => {
     return statusFetch(url);
 };
 sandbox.__byId('runs-panel').classList.add('open');
+/* These scenarios stub /api/runs/list; the panel's real default is 当前工作流,
+   which correctly asks the server nothing on this empty canvas. Pin the global
+   list so the await loop is what is under test. */
+sandbox.runsManager._tab = 'all';
 
 listScript = ['stopping', 'stopping', 'stopping', 'interrupted'];
 listReads.n = 0;

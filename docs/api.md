@@ -17,7 +17,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/workflow/delete` | POST | 删除工作流 |
 | `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，那时宁可立刻 400 说明原因，也不会悄悄变成一次从零重爬 |
 | `/api/workflow/stop` | POST | 停止执行：浏览器在后台关、请求立即返回；`browsers` 是这次交出去关掉的浏览器数，`records` 是本请求已经就地改判为 `stopping` 的运行行（结论仍由运行自己写） |
-| `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表；`stopping`/`settling` 说明"已叫停但结论还没写"，浏览器据此续读而不是抢答） |
+| `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表；`stopping`/`settling` 说明"已叫停但结论还没写"，浏览器据此续读而不是抢答）。另带 `run_ids`（本次尝试打开的全部记录 id，串行分段运行时不止一个）与 `node_states`（`{node_id: {status,row_count,error,run_id}}`，从 `node_runs` 读）：画布据此给节点画绿勾/黄转圈/红叉，并行时多个节点可同时为 `running`。`owned_records` 跨运行留存，**不**用于这里，否则上一轮的状态会冒充本轮 |
 | `/api/workflow/queue` | GET | 列出排队中的请求 |
 | `/api/workflow/queue/cancel` | POST | 按 `id` 取消一个排队请求（绝不触碰正在跑的运行） |
 | `/api/workflow/queue/clear` | POST | 清空队列 |
@@ -29,6 +29,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/api/runs/resumable` | POST | 查询指定工作流最近一次可续跑的中断运行（读之前先顺手判定本进程遗留的"运行中/正在停止"行，不重启服务也能进入续跑横幅） |
+| `/api/runs/for-workflow` | POST | **运行记录「当前工作流」页签**的数据源：`{workflow, limit?}`，按与「继续」相同的**结构指纹**（节点 id/类型/连线；改参数仍匹配，增删节点或改线不匹配）列出该画布的运行，**包含已完成/运行中**，新→旧；每条带 `nodes`（节点状态/行数）、`resumable`、`rows_kept`、`duration_seconds`；响应另含 `latest_run_id`、`workflow_fingerprint` 与 `queue`。空/畸形画布返回空列表（畸形结构 400 并具名） |
 | `/api/runs/list` | GET | 分页列出运行记录（每条带 `workflow_name`（并行时为全部工作流名，` + ` 连接）、`wf_count`、`mode`、`headless`、`forced_visible`（遗留字段，恒 0：#148 后再没有把无头换成窗口的强制，故不再被写、也不再参与展示），面板据此打「并行 ×N / 串行 ×N」与「无头 / 窗口」标；`status` 可能是 `running` / `stopping` / `interrupted` / `completed` / `failed` / `abandoned`，其中 `stopping` 由「停止」请求就地写入、结论仍由运行自己写。每条还带 `duration_seconds`（运行时长 = `finished_at` − `started_at`；续跑从不刷新 `started_at`，故它是**跨所有尝试的总墙钟时间**；运行中/无法解析时为空），运行记录面板据此多出一列「运行时长」（`MM:SS`，过一小时 `H:MM:SS`，无值为破折号——不谎报 0）。这次读取同时是本进程遗留记录的修复时机） |
 | `/api/runs/status` | GET | 单条运行的节点级状态 |
 | `/api/runs/stats` | GET | 全局运行统计 |
@@ -47,7 +48,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
 | `/api/data/inspect` | POST | 查看数据集的空值/类型/重复行统计 |
-| `/api/data/preview` | POST | 分页查看数据集的原始表格（数据预览面板）；按 `node_id` 取历史行时须带 `workflow_name`——`node-2` 在每个画布上都存在，只凭 id 不猜（重启后没有身份就明确回答"无记录"，返回 `code:no_run_data`，前端显示"请先运行一次"而非原始报错） |
+| `/api/data/preview` | POST | 分页查看数据集的原始表格（数据预览面板）；按 `node_id` 取历史行时须带 `workflow_name`——`node-2` 在每个画布上都存在，只凭 id 不猜（重启后没有身份就明确回答"无记录"，返回 `code:no_run_data`，前端显示"请先运行一次"而非原始报错）。可选 `run_id` **精确锁定一次运行**：带了就只读该运行的 `node_rows`（连内存里的实时结果也不看，避免把新一轮的行混进历史），运行不存在→400 并报出 id；不带才回落到"最新一次"的旧行为 |
 | `/api/data/clear` | POST | 数据集文件-store 的清理：**默认只扫孤儿**（没有已存工作流引用、且久未读取的文件），带 `{"all": true}` 或 `?all=1` 才是真正的清空（连被工作流引用的也删，面板「清空」按钮走这条）；返回 `{ok, removed, ...}` |
 | `/api/runs/clear` | POST | 清空全部运行记录，**必须带 `{"confirm": true}`**（否则 400）：正在跑的那条被豁免而不是整体拒绝；被删运行占的"已采集"认领一并交回（清空是"从头开始"，留着台账会让下次同样的采集静默少给条目），而 LLM 答案缓存**故意留下**——一次回答是为它的提问付的钱，不是为那条运行记录 |
 
@@ -57,7 +58,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 |------|------|------|
 | `/api/analysis/run` | POST | 对数据集执行清洗流水线，返回新数据集 id 及报告 |
 | `/api/analysis/train` | POST | 从已有 LLM 标注数据集训练传统 ML 模型（情感/倾向） |
-| `/api/visualize/render` | POST | 对数据集渲染图表，返回 ECharts option 或 Matplotlib 图片；带 `emit_latex`/`emit_latex_table`（两者默认开）时另返回 `latex`/`latex_file`、`latex_table`/`latex_table_file` 并写入导出目录；上游节点尚无运行数据时返回 **HTTP 200** + `code:no_run_data`（预期空态，不刷控制台 400），前端显示"请先运行一次" |
+| `/api/visualize/render` | POST | 对数据集渲染图表，返回 ECharts option 或 Matplotlib 图片；带 `emit_latex`/`emit_latex_table`（两者默认开）时另返回 `latex`/`latex_file`、`latex_table`/`latex_table_file` 并写入导出目录；上游节点尚无运行数据时返回 **HTTP 200** + `code:no_run_data`（预期空态，不刷控制台 400），前端显示"请先运行一次"。按 `node_id` 取历史行时同样接受可选 `run_id`（与预览同一解析器），载入某次运行后画布上每张图都读那一次的行 |
 | `/api/export/save` | POST | 将数据集导出为指定格式文件 |
 | `/api/exports/list` | GET | 按时间倒序列出导出文件（名称/类型/大小/可下载标记）与目录合计 |
 | `/api/exports/download` | GET | 按**文件名**下载某个导出文件（越界名→404，脚本类扩展名→404） |
@@ -84,7 +85,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/api/studio/dataset` | POST | 把画布任意节点/数据集的完整表格交给 Studio（支持多源合并） |
-| `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据（与预览同一套取行规则：带 `workflow_name`，不按裸 id 猜） |
+| `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据（与预览同一套取行规则：带 `workflow_name`，不按裸 id 猜；载荷带 `run_id` 时只预检该次运行，避免把新一轮的行算进已载入的历史结果） |
 | `/api/studio/save-image` | POST | 把 Studio 成品图保存为 PNG 到导出目录 |
 | `/api/studio/save-vector` | POST | 把浏览器画好的 ECharts 图存为矢量 SVG；非 `<svg>`／缺 xmlns／被截断／含脚本或外部引用／超尺寸都**按名拒绝**，不做「洗一遍再写」 |
 | `/api/studio/save-pdf` | POST | 把该图**已登记**的 LaTeX 源编译成矢量 PDF（连同同节点的三线表一次编译）；浏览器只送文件名，不在台账里的一律按名拒绝——绝不把浏览器贴来的 LaTeX 交给 xelatex |

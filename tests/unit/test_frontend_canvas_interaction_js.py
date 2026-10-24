@@ -44,6 +44,63 @@ class TestSelection:
         assert ix['selection']['statusText'].endswith('2')
 
 
+class TestRunStatusBadges:
+    """The canvas draws the loaded run's verdict on each node.
+
+    Green check and red X are claims about a run, so they come only from the run
+    ledger's own status map. Parallel runs legitimately spin more than one node at
+    the same time, an unfamiliar status must never borrow the green success mark,
+    and a node the loaded run never reached carries no badge at all.
+    """
+
+    def test_done_is_a_green_check_with_its_row_count_and_a_failed_node_is_red(self, ix):
+        badges = ix['run_badges']
+        assert badges['done']['cls'].endswith('run-done')
+        assert badges['done']['display'] == 'flex'
+        assert badges['done']['spinner'] is False
+        assert badges['done']['title'] == 'RUN-STATUS Done · 4 rows'
+        assert badges['failed']['cls'].endswith('run-failed')
+        assert badges['failed']['status'] == 'failed'
+
+    def test_two_nodes_can_be_running_at_once_and_both_spin(self, ix):
+        """Parallel execution is the reason this is a map, not "the current node"."""
+        badges = ix['run_badges']
+        assert badges['bothRunningSpin'] is True
+        assert badges['runningA']['cls'].endswith('run-running')
+        assert badges['runningB']['cls'].endswith('run-running')
+        assert badges['runningA']['spinner'] and badges['runningB']['spinner']
+
+    def test_anything_not_settled_is_red_and_an_unknown_word_never_turns_green(self, ix):
+        badges = ix['run_badges']
+        assert badges['pending']['cls'].endswith('run-failed'), 'pending is not success'
+        assert badges['unknown']['cls'].endswith('run-failed')
+        assert badges['unknown']['title'] == 'RUN-STATUS mystery-vocabulary', 'the stored word is shown'
+
+    def test_a_node_the_run_never_reached_has_no_badge(self, ix):
+        assert ix['run_badges']['unseen']['display'] == 'none'
+        assert ix['run_badges']['unseen']['status'] == ''
+
+    def test_clearing_the_loaded_run_clears_every_badge(self, ix):
+        cleared = ix['run_badges_cleared']
+        assert len(cleared) == 7
+        assert all(entry['display'] == 'none' and entry['cls'] == 'node-run-badge' for entry in cleared)
+
+    def test_rerun_from_a_node_uses_the_record_that_owns_its_result(self, ix):
+        """A split serial attempt can own several run rows; the node's verdict says
+        which one, and replaying the canvas's first id would wipe the wrong record."""
+        action = ix['context_menu']['rerun_from_node']
+        assert action['visibleForSettled'] == 'block'
+        assert len(action['calls']) == 1
+        node_id, run_id = action['calls'][0]
+        assert node_id.startswith('node-')
+        assert run_id == 'run-second'
+
+    def test_rerun_is_not_offered_without_a_replayable_result_or_during_a_run(self, ix):
+        gated = ix['context_menu']['rerun_gated']
+        assert gated['hiddenNoRows'] == 'none', 'a zero-row node has nothing to replay from'
+        assert gated['hiddenWhileRunning'] == 'none', 'the backend refuses live targets; do not offer'
+
+
 class TestConnections:
     def test_dragging_from_an_out_port_to_an_in_port_wires_them(self, ix):
         made = ix['connect_created']

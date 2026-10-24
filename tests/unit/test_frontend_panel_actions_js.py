@@ -135,10 +135,11 @@ class TestRunRecordActions:
 
     def test_an_unknown_status_is_not_shown_as_success(self, pa):
         """A vocabulary the front end has never seen must not colour itself green —
-        the whole point of the badge is that it can be wrong."""
+        the whole point of the badge is that it can be wrong. It shows the stored
+        token in a neutral chip instead of borrowing 已完成."""
         mystery = pa['node_status_map']['mystery']
-        assert mystery['key'] == 'runsMgr.node.done'
-        assert pa['node_status_map']['empty']['key'] == 'runsMgr.node.done'
+        assert mystery == {'cls': 'st-unknown', 'key': 'mystery-vocabulary'}
+        assert pa['node_status_map']['empty'] == {'cls': 'st-unknown', 'key': ''}
 
 
 class TestExportActions:

@@ -179,18 +179,20 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
     node_id = payload.get('node_id')
     if not node_id:
         return False, 0, SRC_NO_UPSTREAM, []
-    result = execution_state['results'].get(node_id)
-    if isinstance(result, list):
-        rows = len(result)
-        if not rows:
-            return False, 0, SRC_EMPTY, []
-        first = result[0]
-        cols = list(first.keys()) if isinstance(first, dict) else []
-        return True, rows, '', [str(c) for c in cols[:PROBE_MAX_COLUMNS]]
+    run_id = str(payload.get('run_id') or '').strip()
+    if not run_id:
+        result = execution_state['results'].get(node_id)
+        if isinstance(result, list):
+            rows = len(result)
+            if not rows:
+                return False, 0, SRC_EMPTY, []
+            first = result[0]
+            cols = list(first.keys()) if isinstance(first, dict) else []
+            return True, rows, '', [str(c) for c in cols[:PROBE_MAX_COLUMNS]]
 
-    # Nothing live: fall back to the rows the node last stored, so a probe right
-    # after a page refresh answers instead of reporting "no data".
-    stored = _durable_node_rows(node_id, payload.get('workflow_name') or '')
+    # Nothing live (or a pinned run): fall back to the rows the node stored, so a
+    # probe right after a page refresh answers instead of reporting "no data".
+    stored = _durable_node_rows(node_id, payload.get('workflow_name') or '', run_id)
     if stored:
         cols = list(stored[0].keys()) if isinstance(stored[0], dict) else []
         return True, len(stored), '', [str(c) for c in cols[:PROBE_MAX_COLUMNS]]

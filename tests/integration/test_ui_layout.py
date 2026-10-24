@@ -628,6 +628,187 @@ def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, l
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_loading_a_run_paints_node_verdicts_and_marks_the_record(driver, app_url, lang):
+    """The loaded-run UI, measured where a user meets it.
+
+    The node harness can prove the map/serialization; only a real engine can prove
+    the badges are visible circles with distinct colours, that two parallel nodes
+    both spin, that the panel's new tab bar and load action fit, and that loading an
+    older record really repaints the nodes. ``fetch`` is stubbed throughout — this
+    tier performs no server writes and starts no run.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {}; canvas.connections = []; canvas.selectedNodes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+        const a = canvas.addNode('upload', 80, 60);
+        const b = canvas.addNode('process', 360, 60);
+        canvas.connections = [{ from: a, to: b }];
+        canvas.scheduleRender();
+        const RUNS = [
+            { run_id: 'r-new', workflow_name: '测试画布', status: 'completed',
+              started_at: '2026-10-24T10:00:00', node_done: 1, node_total: 2, rows_kept: 3,
+              wf_count: 1, mode: 'serial', headless: 1,
+              nodes: [
+                  { node_id: a, status: 'failed', row_count: 0 },
+                  { node_id: b, status: 'done', row_count: 3 },
+              ] },
+            { run_id: 'r-old', workflow_name: '测试画布', status: 'completed',
+              started_at: '2026-10-23T10:00:00', node_done: 2, node_total: 2, rows_kept: 7,
+              wf_count: 1, mode: 'serial', headless: 1,
+              nodes: [
+                  { node_id: a, status: 'done', row_count: 5 },
+                  { node_id: b, status: 'restored', row_count: 2 },
+              ] },
+        ];
+        window.fetch = function (url) {
+            if (String(url).indexOf('/api/runs/for-workflow') >= 0) {
+                return Promise.resolve({ json: () => Promise.resolve({
+                    ok: true, runs: RUNS, latest_run_id: 'r-new',
+                    workflow_fingerprint: 'fp-test', queue: [],
+                }) });
+            }
+            return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+        };
+        const panel = document.getElementById('runs-panel');
+        panel.classList.add('open');
+        panel.style.height = '320px';
+        runsManager._tab = 'workflow';
+        runsManager._detail = null;
+        runResults.refresh().then(() => runsManager.refresh()).then(() => {
+            const badgeOf = (id) => canvas._nodeEl(id).querySelector('.node-run-badge');
+            const describe = (id) => {
+                const badge = badgeOf(id);
+                const cs = getComputedStyle(badge);
+                const rect = badge.getBoundingClientRect();
+                return {
+                    cls: badge.className,
+                    display: cs.display,
+                    bg: cs.backgroundColor,
+                    title: badge.title,
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height),
+                    clipped: rect.right > document.querySelector('#nodes-container').getBoundingClientRect().right + 1,
+                };
+            };
+            const rows = Array.from(document.querySelectorAll('#runs-panel tbody tr'));
+            const of = (rid) => rows.filter((r) => (r.getAttribute('data-run-id') || '') === rid)[0];
+            const table = document.querySelector('#runs-panel table');
+            const tabs = document.getElementById('runs-tabs');
+            done({
+                a, b,
+                badges: [describe(a), describe(b)],
+                runId: runResults.runId,
+                tabs: tabs ? tabs.textContent : '',
+                tabCount: tabs ? tabs.querySelectorAll('.runs-tab').length : 0,
+                loadedChipOnNew: !!(of('r-new') && of('r-new').querySelector('.runs-mgr-tag.loaded')),
+                oldHasLoadButton: !!(of('r-old') && Array.from(of('r-old').querySelectorAll('.runs-mgr-btn'))
+                    .some((btn) => String(btn.getAttribute('onclick') || '').indexOf('loadRun') >= 0)),
+                tableOverflow: table ? table.scrollWidth - table.clientWidth : null,
+                tabsOverflow: tabs ? tabs.scrollWidth - tabs.clientWidth : null,
+                pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+            });
+        }).catch((e) => done({ error: String(e) }));
+        """,
+        [lang],
+    )
+    assert not facts.get('error'), facts
+    assert facts['runId'] == 'r-new', f'the latest run was not the default: {facts}'
+    # Green check and red X are different shapes AND different colours on screen.
+    assert facts['badges'][0]['cls'].endswith('run-failed'), facts['badges']
+    assert facts['badges'][1]['cls'].endswith('run-done'), facts['badges']
+    assert facts['badges'][0]['bg'] != facts['badges'][1]['bg'], facts['badges']
+    assert all(b['display'] == 'flex' and b['width'] >= 12 and b['height'] >= 12 for b in facts['badges']), facts[
+        'badges'
+    ]
+    assert all(b['clipped'] is False for b in facts['badges']), f'a badge hangs off the canvas box: {facts["badges"]}'
+    assert facts['tabCount'] == 2, f'the two views did not render: {facts["tabs"]!r}'
+    assert facts['loadedChipOnNew'] is True, 'the loaded record was not marked'
+    assert facts['oldHasLoadButton'] is True, 'the older record offered no way to load it'
+    assert facts['tableOverflow'] <= 1 and facts['tabsOverflow'] <= 1, facts
+    assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the new buttons grew a page-level bar: {facts["pageBar"]}'
+
+    # Parallel: several nodes can be spinning at once, with a real animation.
+    spinning = driver.execute_script(
+        """
+        const [a, b] = arguments;
+        canvas.applyRunStatuses({
+            [a]: { status: 'running', row_count: 0 },
+            [b]: { status: 'running', row_count: 0 },
+        });
+        const items = [a, b].map((id) => {
+            const badge = canvas._nodeEl(id).querySelector('.node-run-badge');
+            const spinner = badge.querySelector('.node-run-spinner');
+            return {
+                badgeCls: badge.className,
+                display: getComputedStyle(badge).display,
+                bg: getComputedStyle(badge).backgroundColor,
+                spinner: !!spinner,
+            };
+        });
+        /* This fixture installs `animation: none !important` so rects are measured after
+           transitions; the keyframes themselves are still in the shipped stylesheet. */
+        const keyframes = Array.from(document.styleSheets).some((sheet) => {
+            try {
+                return Array.from(sheet.cssRules).some(
+                    (rule) => rule.type === CSSRule.KEYFRAMES_RULE && rule.name === 'node-run-spin'
+                );
+            } catch (e) {
+                return false;
+            }
+        });
+        return { items, keyframes };
+        """,
+        facts['a'],
+        facts['b'],
+    )
+    assert all(item['badgeCls'].endswith('run-running') for item in spinning['items']), spinning
+    assert all(item['display'] == 'flex' and item['spinner'] for item in spinning['items']), spinning
+    assert spinning['keyframes'] is True, 'the loading spinner has no animation rule in the shipped CSS'
+    assert all(item['bg'].startswith('rgb(224, 168, 0') for item in spinning['items']), (
+        f'a running node is not yellow: {spinning}'
+    )
+
+    loaded = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        runsManager.loadRun('r-old').then(() => {
+            const badgeOf = (id) => canvas._nodeEl(id).querySelector('.node-run-badge');
+            const row = Array.from(document.querySelectorAll('#runs-panel tbody tr'))
+                .filter((r) => (r.getAttribute('data-run-id') || '') === 'r-old')[0];
+            const toast = document.getElementById('toast');
+            done({
+                runId: runResults.runId,
+                isLoaded: runResults.isLoaded('r-old'),
+                oldChip: !!(row && row.querySelector('.runs-mgr-tag.loaded')),
+                newChip: !!Array.from(document.querySelectorAll('#runs-panel tbody tr'))
+                    .filter((r) => (r.getAttribute('data-run-id') || '') === 'r-new')[0]
+                    .querySelector('.runs-mgr-tag.loaded'),
+                badges: [badgeOf(arguments[0]), badgeOf(arguments[1])].map((b) => b.className),
+                toast: toast ? toast.textContent : '',
+            });
+        }).catch((e) => done({ error: String(e) }));
+        """,
+        facts['a'],
+        facts['b'],
+    )
+    assert not loaded.get('error'), loaded
+    assert loaded['runId'] == 'r-old' and loaded['isLoaded'] is True, loaded
+    assert loaded['oldChip'] is True and loaded['newChip'] is False, 'the marker did not move with the selection'
+    assert all(cls.endswith(('run-done', 'run-running')) for cls in loaded['badges']), loaded
+    assert loaded['badges'][0].endswith('run-done') and loaded['badges'][1].endswith('run-done'), loaded
+    assert loaded['toast'], 'loading a run said nothing'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_the_help_overlay_opens_over_the_page_without_breaking_layout(driver, app_url, lang):
     """The cheat sheet is a fixed full-viewport backdrop; if its sheet or a row overflowed
     (long English labels) it would grow a horizontal bar over the whole page. Opened in a

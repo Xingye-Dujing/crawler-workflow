@@ -68,6 +68,7 @@ BODY_ROUTES = [
     '/api/runs/clear',
     '/api/runs/delete',
     '/api/runs/discard',
+    '/api/runs/for-workflow',
     '/api/runs/resumable',
     '/api/schedules/delete',
     '/api/schedules/run',

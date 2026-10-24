@@ -515,6 +515,9 @@ var chartStudio = {
         if (typeof workflow !== 'undefined' && workflow.runName) {
             payload.workflow_name = workflow.runName();
         }
+        /* The studio reads the same run the canvas is showing; without this pin it
+           would independently pick each node's newest rows and could mix attempts. */
+        if (typeof runResults !== 'undefined' && runResults.payload) runResults.payload(payload);
         return payload;
     },
 

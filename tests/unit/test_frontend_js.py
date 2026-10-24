@@ -1434,6 +1434,33 @@ class TestRunRecordsPanel:
         assert runsmgr['twoNodeToasts'] == [], f'a refused run would show as a missing POST: {runsmgr["twoNodeToasts"]}'
 
 
+class TestRunRecordsTabs:
+    """当前工作流 vs 全部记录, and the one record whose results are on screen.
+
+    These are different questions: the first decides what this canvas may load,
+    the second manages every run this machine ever made. Loading is offered only
+    in the first, because rows keyed by node id are guaranteed to line up there —
+    an orphan record from another shape must not graft its table onto this one.
+    """
+
+    def test_the_current_workflow_tab_posts_the_canvas_and_marks_the_loaded_run(self, runsmgr):
+        tab = runsmgr['runsTab']
+        assert tab['posted'] == 1, 'the tab did not ask the server once'
+        assert tab['bodyHasWorkflow'] is True, 'the question needs the canvas structure, not a name'
+        assert tab['tabLabels'] == [True, True], 'both tabs must be named'
+        assert tab['activeIsWorkflow'] is True, tab
+        assert tab['loadedNote'] is True, 'the loaded record was not announced above the table'
+        assert tab['loadedTagRows'] == 1, 'exactly one row is the loaded one'
+        assert tab['loadButtons'] == 2, 'every row in this tab must be loadable'
+        assert tab['reloadButton'] is True and tab['loadButton'] is True, tab
+
+    def test_the_all_records_tab_keeps_the_state_but_offers_no_cross_workflow_load(self, runsmgr):
+        tab = runsmgr['runsTab']
+        assert tab['allActive'] is True
+        assert tab['allHasNoLoad'] is True, 'an unrelated run must not offer to load into this canvas'
+        assert tab['allStillMarksLoaded'] is True, 'switching lists must not hide which run is loaded'
+
+
 class TestThePanelFollowsALiveRun:
     """The 运行记录 panel is now a live view, not a snapshot.
 

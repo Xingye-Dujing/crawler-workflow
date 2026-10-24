@@ -34,6 +34,14 @@ const I18n = {
             'runsMgr.tagParallel': 'PARALLEL({n})', 'runsMgr.tagSerial': 'SERIAL({n})',
             'runsMgr.tagHeadless': 'HEADLESS', 'runsMgr.tagWindow': 'WINDOW',
             'runsMgr.skipped': 'SKIPPED({names})',
+            'runsMgr.tabWorkflow': 'CURRENT-WF', 'runsMgr.tabAll': 'ALL-RUNS',
+            'runsMgr.loadResult': 'LOAD', 'runsMgr.reloadResult': 'RELOAD',
+            'runsMgr.loaded': 'LOADED-TAG',
+            'runsMgr.loadedNote': 'SHOWING {when} / {rid}',
+            'runsMgr.emptyWorkflow': 'NO-WF-RUNS',
+            'runsMgr.loadedToast': 'LOADED-TOAST {when}',
+            'runsMgr.loadFailed': 'LOAD-FAILED {rid}',
+            'runsMgr.runStatus': 'STATUS {status}',
         },
         zh: {},
     },
@@ -63,7 +71,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__wf = { runsManager, workflow, dataNodes };', sandbox);
+vm.runInContext(src + '\n;globalThis.__wf = { runsManager, workflow, dataNodes, runResults };', sandbox);
 /* Assigned after the script ran: workflow.js declares showToast itself, and a
    function declaration in the script wins over anything seeded before it. */
 sandbox.showToast = (msg) => captured.toasts.push(String(msg));
@@ -80,6 +88,9 @@ sandbox.fetch = (url, options) => {
 };
 sandbox.__byId('runs-mgr-body').innerHTML = '';
 const manager = sandbox.__wf.runsManager;
+/* The older scenarios below are about the ALL-records list (its buttons and its
+   live follow); the 当前工作流 tab gets its own scenarios at the end. */
+manager._tab = 'all';
 manager._queue = runs.queue || [];
 manager.render(runs.runs);
 const html = sandbox.__byId('runs-mgr-body').innerHTML;
@@ -496,6 +507,75 @@ sandbox.fetch = realFetch;
 await goneInFlight;
 race.vanishedDrawsNothing = liveDetailRows() === 0 && manager._detail === null;
 
+/* ─── the 当前工作流 tab: one canvas's runs, and which one is loaded ────────
+   The panel used to be one global list. Loading a result needs the opposite
+   question — "which of THIS canvas's runs?" — and the answer must say which one
+   is on screen, or the button is a choice without a state. */
+const runResults = sandbox.__wf.runResults;
+const loadedRun = {
+    run_id: 'r-loaded',
+    workflow_name: '当前画布',
+    workflow_fingerprint: 'fp-this',
+    status: 'completed',
+    started_at: '2026-10-24T09:00:00',
+    node_done: 2,
+    node_total: 2,
+    rows_kept: 9,
+    wf_count: 1,
+    mode: 'serial',
+    headless: 1,
+    nodes: [
+        { node_id: 'node-1', status: 'done', row_count: 7 },
+        { node_id: 'node-2', status: 'done', row_count: 2 },
+    ],
+};
+const olderRun = Object.assign({}, loadedRun, { run_id: 'r-older', started_at: '2026-10-23T09:00:00' });
+runResults.runId = 'r-loaded';
+runResults.runIds = ['r-loaded'];
+runResults.runs = [loadedRun, olderRun];
+sandbox.__routes['/api/runs/for-workflow'] = {
+    ok: true,
+    runs: [loadedRun, olderRun],
+    latest_run_id: 'r-loaded',
+    workflow_fingerprint: 'fp-this',
+    queue: [],
+};
+/* getter-only from the settle scenarios above; redefine rather than assign. */
+Object.defineProperty(sandbox.__routes, '/api/runs/list', {
+    configurable: true,
+    writable: true,
+    value: { ok: true, runs: [loadedRun, olderRun], queue: [] },
+});
+manager._tab = 'workflow';
+manager._detail = null;
+const postsBeforeWorkflow = captured.posts.length;
+await manager.refresh();
+const workflowHtml = sandbox.__byId('runs-mgr-body').innerHTML;
+const workflowTabs = sandbox.__byId('runs-tabs').innerHTML;
+const workflowRequests = captured.posts
+    .slice(postsBeforeWorkflow)
+    .filter((p) => String(p.url).indexOf('/api/runs/for-workflow') >= 0);
+const tabScenario = {
+    posted: workflowRequests.length,
+    bodyHasWorkflow: !!(workflowRequests[0] && workflowRequests[0].body && workflowRequests[0].body.workflow),
+    tabLabels: [workflowTabs.indexOf('CURRENT-WF') >= 0, workflowTabs.indexOf('ALL-RUNS') >= 0],
+    activeIsWorkflow: /runs-tab active[^>]*>CURRENT-WF/.test(workflowTabs),
+    loadedNote: workflowHtml.indexOf('SHOWING 2026-10-24T09:00:00 / r-loaded') >= 0,
+    loadedTagRows: (workflowHtml.match(/LOADED-TAG/g) || []).length,
+    loadButtons: (workflowHtml.match(/runsManager\.loadRun\(/g) || []).length,
+    reloadButton: workflowHtml.indexOf('>RELOAD<') >= 0,
+    loadButton: workflowHtml.indexOf('>LOAD<') >= 0,
+};
+/* Switching to the global list must not carry the load action with it: those rows
+   are not guaranteed to share this canvas's node ids. */
+manager.switchTab('all');
+await new Promise((r) => setImmediate(r));
+const allHtml = sandbox.__byId('runs-mgr-body').innerHTML;
+const allTabs = sandbox.__byId('runs-tabs').innerHTML;
+tabScenario.allActive = /runs-tab active[^>]*>ALL-RUNS/.test(allTabs);
+tabScenario.allHasNoLoad = !/runsManager\.loadRun\(/.test(allHtml);
+tabScenario.allStillMarksLoaded = allHtml.indexOf('LOADED-TAG') >= 0;
+
 process.stdout.write(
     JSON.stringify({
         follow,
@@ -514,6 +594,7 @@ process.stdout.write(
         twoNodeBody: twoNodePost ? twoNodePost.body : null,
         twoNodeToasts,
         tagCases,
+        runsTab: tabScenario,
         grouped: {
             html: groupedHtml,
             tally: groupTally,

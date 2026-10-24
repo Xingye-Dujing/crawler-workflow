@@ -169,6 +169,25 @@ class TestRerunEndpoint:
         # The claim is still held → the running worker's dedupe was not released under it.
         assert store.claim_item('item:node-n2', 'ITEM-A', 'live1') is False, 'a live run lost its dedupe claim'
 
+    def test_another_live_run_is_refused_before_the_wipe_keeps_the_rows(self, client, app_module, fake_begin):
+        """The wipe runs before the start path serializes. If some other run is live,
+        deleting this subtree now would leave a hole visible until that run ends (or
+        forever, if the rerun is then refused) — so the busy check comes first."""
+        store = app_module.get_run_store()
+        _seed_completed_run(store, app_module)
+        app_module.execution_state['running'] = True
+        try:
+            response = client.post(
+                '/api/workflow/rerun-node',
+                json={'workflow': _workflow(), 'workflow_name': 'wf', 'node_id': 'n2', 'resume_run_id': 'rerun1'},
+            )
+        finally:
+            app_module.execution_state['running'] = False
+        assert response.status_code == 409
+        assert response.get_json()['error']
+        assert fake_begin == [], 'a refused rerun must not start anything'
+        assert store.get_node_status('rerun1', 'n2') == app_module.NODE_DONE, 'the rows were wiped before the refusal'
+
     def test_a_live_run_is_refused_even_on_the_probe_path(self, client, app_module, fake_begin):
         """The records panel always sends ``resume_run_id``, but a hand-built call omits it and the
         endpoint's ``include_finished=True`` probe would otherwise pick the newest (running) row."""

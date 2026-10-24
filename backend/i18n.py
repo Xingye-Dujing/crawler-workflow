@@ -1658,6 +1658,7 @@ _ZH = {
     'api.rerunNoNode': '当前画布里没有节点「{node}」，无从重跑',
     'api.rerunNoRows': '节点「{node}」在上次运行里没有可用的完成结果，无从重跑',
     'api.rerunRunLive': '该运行仍在进行中（或正在停止），不能重跑它的节点——请等它跑完或先停止它',
+    'api.rerunBusy': '另一个运行仍在进行中：重跑会先删掉这部分已存结果，请等它跑完再重试',
     'api.rerunFingerprintMismatch': '画布与所选运行记录不是同一份工作流，无法复用其结果，请从运行详情重跑该节点',
     'api.historyNoRunId': '没有指定运行 ID，未删除任何执行历史',
     'run.store_unavailable': '本次运行无法开始：运行记录库打不开（磁盘满、文件损坏或被占用），未产生任何记录',
@@ -3622,6 +3623,10 @@ _EN = {
     'api.rerunRunLive': (
         'this run is still executing (or stopping), so none of its nodes can be re-run — '
         'wait for it to finish or stop it first'
+    ),
+    'api.rerunBusy': (
+        "another run is still executing: a re-run deletes this subtree's saved rows first, "
+        'so wait for it to finish before trying again'
     ),
     'api.rerunFingerprintMismatch': 'the canvas is not the same workflow as the chosen run, so its results cannot be '
     'reused safely — re-run the node from the run details',

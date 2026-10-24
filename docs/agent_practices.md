@@ -130,6 +130,13 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   node_fingerprint`), so a *name* inside one invalidates a whole chain and moves the other. `_VOLATILE_PARAMS` (labels +
   switches like `recrawl`/`enabled`) answers "does this parameter choose data, or just describe the record?" — ids stay
   in, labels and switches out.
+- **A result view is pinned to a RUN, not to each node's newest rows.** `latest_rows(node_id, workflow_name)` answers
+  "show me the latest table" one node at a time; loaded together that can stitch node-1 from last night to node-2 from
+  this morning and present a run that never happened. `/api/runs/for-workflow` lists this canvas's records by the same
+  structure fingerprint a 继续 uses, the browser pins `run_id` into every preview/chart/dashboard payload, and the
+  resolver then reads **only** that run's rows (not even the live dict). Live node states come from `attempt_records`
+  (reset per attempt), never `owned_records` (kept across runs) — otherwise a previous run's verdicts would paint
+  themselves over tonight's canvas and a parallel run's several `running` nodes would collapse into one "current" node.
 - **A disabled node is not on the canvas:** `effective_workflow` drops it (`enabled` off, type off, or all upstream gone
   — cascades down; fan-in survives on one live input); validate/naming/fingerprint/execution all run on that graph, so
   disabling a workflow is disabling its head node.

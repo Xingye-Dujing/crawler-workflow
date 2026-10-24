@@ -225,17 +225,23 @@ const workflow = {
        "loaded" toast is raised on this silent refresh; it is boot, not a user action. */
     async reloadOpenFile() {
         var name = this.currentFile;
-        if (!name) return;
-        try {
-            var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
-            var result = await resp.json();
-            if (result && result.ok && result.workflow) {
-                if (this.loadFromJSON(result.workflow)) canvas.markSaved();
+        var loaded = false;
+        if (name) {
+            try {
+                var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
+                var result = await resp.json();
+                if (result && result.ok && result.workflow) {
+                    loaded = this.loadFromJSON(result.workflow);
+                    if (loaded) canvas.markSaved();
+                }
+            } catch (e) {
+                /* offline at boot, or the file is gone: leave the draft as-is, never throw into boot */
             }
-        } catch (e) {
-            /* offline at boot, or the file is gone: leave the draft as-is, never throw into boot */
         }
         if (typeof resumeBar !== 'undefined' && resumeBar && resumeBar.refresh) resumeBar.refresh();
+        /* A draft that was restored without a server file still has results filed
+           under its structure. loadFromJSON already asks; this is the no-file case. */
+        if (!loaded && typeof runResults !== 'undefined' && runResults.refresh) runResults.refresh();
     },
 
     async save() {
@@ -388,6 +394,9 @@ const workflow = {
             showToast(I18n.t('toast.workflowFileInvalid'));
             return false;
         }
+        /* The badges on screen describe the PREVIOUS canvas until this one has a
+           run's statuses of its own; loadFromJSON asks for them at the end. */
+        if (typeof runResults !== 'undefined') runResults.clear();
         document.getElementById('nodes-container').innerHTML = '';
         canvas.nodes = {};
         canvas.connections = [];
@@ -447,10 +456,14 @@ const workflow = {
         if (settings.view) canvas._applyView(settings.view);
         canvas.saveState();
         canvas.scheduleRender();
+        /* Default result view: the newest run of this exact structure, with its node
+           verdicts, as soon as a canvas is open. */
+        if (typeof runResults !== 'undefined' && runResults.refresh) runResults.refresh();
         return true;
     },
 
     newFile() {
+        if (typeof runResults !== 'undefined') runResults.clear();
         document.getElementById('nodes-container').innerHTML = '';
         canvas.nodes = {};
         canvas.connections = [];
@@ -778,8 +791,25 @@ const workflow = {
             showToast((result && result.error) || I18n.t('toast.rerunFailed'));
             return null;
         }
+        if (result.queued) {
+            /* Parked behind a live run: nothing has started, so neither the badges
+               nor the console change — and the toast must not claim a rerun began. */
+            showToast(result.message || I18n.t('runsMgr.busy'));
+            if (window.runsManager) runsManager.refreshIfOpen();
+            return result;
+        }
         showToast(I18n.t('toast.rerunStarted', { n: (result.invalidated || []).length }));
+        /* The same run id is being re-executed, but its statuses are new: clear the
+           old subtree's marks, follow this attempt, and put the console back on
+           screen — a rerun that starts without a log looks like nothing happened. */
+        if (typeof runResults !== 'undefined') runResults.beginLive(result.run_id || runId);
         if (typeof RunState !== 'undefined' && RunState.setRunning) RunState.setRunning(true);
+        var statusText = document.getElementById('status-text');
+        if (statusText) statusText.textContent = I18n.t('status.running');
+        closeDockedPanels('console-panel');
+        document.getElementById('console-panel').classList.add('open');
+        if (window.runsManager) runsManager.refreshIfOpen();
+        this.pollStatus();
         return result;
     },
 
@@ -1029,6 +1059,10 @@ const workflow = {
             if (result.ok) {
                 var statusText = document.getElementById('status-text');
                 statusText.textContent = I18n.t('status.running');
+                /* The canvas now follows THIS run: the previous run's green/red marks
+                   are history the moment a new attempt starts. */
+                if (typeof runResults !== 'undefined') runResults.beginLive(result.run_id);
+                if (window.runsManager) runsManager.refreshIfOpen();
                 /* One bottom slot for console / run records / export artefacts.
                    Cleared only now: until this answer there was no run of ours. */
                 closeDockedPanels('console-panel');
@@ -1191,6 +1225,12 @@ const workflow = {
             try {
                 var resp = await fetch('/api/workflow/status');
                 var result = await resp.json();
+                /* The run ledger's per-node verdicts. Applied outside the log branch:
+                   a quiet node can change status between lines, and the final tick
+                   after `running` turns false is the one that paints the last one. */
+                if (typeof runResults !== 'undefined' && result.node_states) {
+                    runResults.applyLive(result.node_states, result.run_ids);
+                }
                 if (result.cookie_expired && !cookieWarned) {
                     cookieWarned = true;
                     showToast(I18n.t('toast.cookieExpired'));
@@ -1293,6 +1333,10 @@ const workflow = {
                     if (!result.running) {
                         self._stopPoll();
                         RunState.setRunning(false);
+                        /* Re-read the finished record: the panel marker and the node
+                           map should come from what was persisted, not from the last
+                           tick that may have raced the worker's final write. */
+                        if (typeof runResults !== 'undefined') runResults.finishLive();
                         if (result.logs && result.logs.length) {
                             document.getElementById('status-text').textContent = I18n.t('status.completed');
                         }
@@ -4122,6 +4166,9 @@ var dataNodes = {
            so send the same identity `previewData` sends, or a chart cannot be brought
            back once the process that ran it is gone. */
         payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
+        /* Pin the run the user loaded, so a historical preview does not read the
+           newest rows of each node independently. */
+        if (typeof runResults !== 'undefined') runResults.payload(payload);
         /* Show panel with loading spinner immediately */
         var panel = document.getElementById('chart-preview-panel');
         panel.classList.add('open');
@@ -4190,6 +4237,7 @@ var dataNodes = {
             /* Which workflow's rows this is: recorded rows are looked up by name
                once the live results are gone (a refresh, a server restart). */
             payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
+            if (typeof runResults !== 'undefined') runResults.payload(payload);
         }
         await dataPreview.open(payload);
     },
@@ -4213,6 +4261,7 @@ async function trainMLModel(nodeId, modelType) {
     // restart), and that store refuses a bare node id — name the workflow so training can
     // still find the labels after the process that produced them is gone.
     payload.workflow_name = workflow.runName();
+    if (typeof runResults !== 'undefined') runResults.payload(payload);
     payload.model_type = modelType;
     payload.text_column = node.params.text_column || '正文';
     /* Which column holds the labels is the BACKEND's answer, not this file's. It used to be
@@ -5245,6 +5294,7 @@ async function openChartFullscreen(nodeId) {
     // canvas): name the workflow so the upstream rows resolve from the run store, not just
     // from a live process that may have restarted.
     payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
+    if (typeof runResults !== 'undefined') runResults.payload(payload);
     try {
         var resp = await fetch('/api/visualize/render', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -5623,6 +5673,7 @@ var dashboard = {
         // cell still resolves its upstream rows after a page refresh AND a server restart,
         // when the in-memory result that first painted it is gone.
         payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
+        if (typeof runResults !== 'undefined') runResults.payload(payload);
 
         try {
             var resp = await fetch('/api/visualize/render', {
@@ -6339,6 +6390,9 @@ function setLang(nextLang) {
        had just turned Chinese. One call, because the state is computed for the whole canvas
        at once and asking per node would recompute the same answer N times. */
     canvas.applyDisabledVisuals();
+    /* Run verdicts carry a localized status word in their tooltip; the badge holds
+       no state of its own, so repainting from the loaded map is the whole update. */
+    if (typeof runResults !== 'undefined') canvas.applyRunStatuses(runResults.statuses);
     if (canvas._settingsNodeId) openSettings(canvas._settingsNodeId);
     /* Keep the flat bar's active-language marker truthful. */
     if (window.TopMenu) TopMenu.refresh();
@@ -7936,6 +7990,261 @@ var resumeBar = {
     },
 };
 
+/* ── Loaded run results ──────────────────────────────────────
+   The canvas shows ONE run's results at a time. On entry that is the newest
+   run filed under this workflow's structure (the default the user asked for);
+   运行记录 ▸ 当前工作流 can load any earlier one. The id is pinned into every
+   preview/chart/dashboard payload, so the server reads that exact attempt
+   instead of independently picking each node's newest rows — which could stitch
+   last night's node-1 to this morning's node-2 and call it one table.
+
+   Node verdicts come from the run ledger (`/api/runs/for-workflow` and the live
+   `/api/workflow/status`), never from the canvas's own guesses: several nodes
+   can be `running` at once in parallel mode, and `done`/`restored` are the only
+   two words that mean success. */
+var runResults = {
+    runId: '',
+    runIds: [],
+    run: null,
+    runs: [],
+    statuses: {},
+    followLive: false,
+    workflowFingerprint: '',
+    _seq: 0,
+    _lastApplied: '',
+
+    isLoaded(runId) {
+        var id = String(runId || '');
+        return !!id && (id === this.runId || this.runIds.indexOf(id) >= 0);
+    },
+
+    /* The record that actually holds a node's verdict. In a split serial canvas one
+       attempt owns several run rows, and a node belongs to exactly one of them. */
+    runIdFor(nodeId) {
+        var info = this.statuses && this.statuses[nodeId];
+        return String((info && info.run_id) || this.runId || '');
+    },
+
+    async refresh(selectRunId) {
+        /* A canvas with nothing on it has no structure to match — and the server
+           must not be asked to fingerprint an empty workflow. */
+        if (typeof canvas === 'undefined' || !canvas || !Object.keys(canvas.nodes || {}).length) {
+            this.clear();
+            return null;
+        }
+        var seq = ++this._seq;
+        var result;
+        try {
+            var resp = await fetch('/api/runs/for-workflow', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workflow: canvas.toWorkflowJSON(), limit: 50 }),
+            });
+            result = await resp.json();
+        } catch (e) {
+            return null;
+        }
+        /* A second refresh started while this one was in flight (a run finishing
+           during boot, a quick tab switch). The newer answer is the truth. */
+        if (seq !== this._seq) return null;
+        if (!result || !result.ok) return null;
+        this.runs = result.runs || [];
+        this.workflowFingerprint = result.workflow_fingerprint || '';
+        var wanted = String(selectRunId || this.runId || '');
+        var run =
+            this.runs.filter(function (r) {
+                return r.run_id === wanted;
+            })[0] ||
+            this.runs[0] ||
+            null;
+        if (!run) {
+            this.clear();
+            return null;
+        }
+        this._apply(run, { live: run.status === 'running' });
+        return run;
+    },
+
+    /* One run's node statuses → the canvas badges. The map is replaced, not merged:
+       loading another run must not leave a green check from the previous one. */
+    _apply(run, opts) {
+        var live = !!(opts && opts.live);
+        this.run = run;
+        this.runId = String(run.run_id || '');
+        this.runIds = this.runId ? [this.runId] : [];
+        this.followLive = live;
+        var map = {};
+        (run.nodes || []).forEach(function (n) {
+            var nid = String(n.node_id || '');
+            if (!nid) return;
+            map[nid] = {
+                status: String(n.status || ''),
+                row_count: Number(n.row_count || 0),
+                error: String(n.error || ''),
+                run_id: String(run.run_id || ''),
+            };
+        });
+        this.statuses = map;
+        if (typeof canvas !== 'undefined' && canvas && canvas.applyRunStatuses) canvas.applyRunStatuses(map);
+        if (this._lastApplied !== this.runId) {
+            this._lastApplied = this.runId;
+            this._repaint();
+        }
+    },
+
+    /* Load an arbitrary record from 运行记录. The list the panel already holds
+       carries the node map, so the common path costs no request; a run that has
+       since been deleted falls back to one detail read and says so when that
+       fails too. */
+    async load(runId) {
+        var id = String(runId || '').trim();
+        if (!id) return null;
+        /* A selection is newer than any read already in flight: without this a
+           boot-time refresh could land afterwards and put today's latest run back. */
+        this._seq += 1;
+        var found = (this.runs || []).filter(function (r) {
+            return r.run_id === id;
+        })[0];
+        if (!found) {
+            try {
+                var resp = await fetch('/api/runs/' + encodeURIComponent(id));
+                var result = await resp.json();
+                if (result && result.ok && result.run) found = result.run;
+            } catch (e) {
+                found = null;
+            }
+        }
+        if (!found) {
+            showToast(I18n.t('runsMgr.loadFailed').replace('{rid}', id));
+            return null;
+        }
+        /* Reloading the same record is a real request to repaint (its rows may
+           have changed, or a cell failed last time). */
+        this._lastApplied = '';
+        this._apply(found, { live: found.status === 'running' });
+        if (window.runsManager) runsManager.refreshIfOpen();
+        var when = found.started_at || found.run_id || id;
+        showToast(I18n.t('runsMgr.loadedToast').replace('{when}', when));
+        return found;
+    },
+
+    /* A run just started (Run or 从此节点重跑). Old verdicts go away immediately;
+       the first status tick paints the nodes the worker has reached. */
+    beginLive(runId) {
+        /* The new attempt outranks any read that started before it. */
+        this._seq += 1;
+        this.runId = String(runId || '');
+        this.runIds = this.runId ? [this.runId] : [];
+        this.run = null;
+        this.statuses = {};
+        this.followLive = true;
+        this._lastApplied = this.runId;
+        if (typeof canvas !== 'undefined' && canvas && canvas.applyRunStatuses) canvas.applyRunStatuses({});
+    },
+
+    /* Live status map from /api/workflow/status. Ignored when the user has
+       deliberately loaded an older run mid-flight — following the worker would
+       yank their choice out from under them. */
+    applyLive(states, runIds) {
+        if (!this.followLive) return;
+        if (Array.isArray(runIds) && runIds.length) {
+            this.runIds = runIds.map(String);
+            if (!this.runId || this.runIds.indexOf(this.runId) < 0) this.runId = this.runIds[0] || '';
+        }
+        var map = Object.assign({}, this.statuses || {});
+        Object.keys(states || {}).forEach(function (nid) {
+            var s = states[nid];
+            if (!s) return;
+            map[nid] = {
+                status: String(s.status || ''),
+                row_count: Number(s.row_count || 0),
+                error: String(s.error || ''),
+                run_id: String(s.run_id || ''),
+            };
+        });
+        this.statuses = map;
+        if (typeof canvas !== 'undefined' && canvas && canvas.applyRunStatuses) canvas.applyRunStatuses(map);
+    },
+
+    /* The worker wrote its verdict. Re-read the record so the panel's marker and
+       the node map agree with what was persisted, and stop following its stream. */
+    finishLive() {
+        if (!this.followLive) return;
+        this.followLive = false;
+        /* A split serial attempt owns several run records, one per workflow. The
+           live map already covers every component's nodes; re-reading just one id
+           would drop the other components' badges. The panel still refreshes, and
+           a single-record run is re-read so its final row counts are authoritative. */
+        if (this.runIds.length > 1) {
+            if (window.runsManager) runsManager.refreshIfOpen();
+            return;
+        }
+        /* The record now holds the final rows, even though the id did not change;
+           clearing the applied marker makes the refresh repaint open panels. */
+        this._lastApplied = '';
+        this.refresh(this.runId);
+        if (window.runsManager) runsManager.refreshIfOpen();
+    },
+
+    canRerun(nodeId) {
+        var info = this.statuses && this.statuses[nodeId];
+        if (!info || !this.runIdFor(nodeId)) return false;
+        return (info.status === 'done' || info.status === 'restored') && Number(info.row_count || 0) > 0;
+    },
+
+    rerunFrom(nodeId) {
+        if (!this.canRerun(nodeId)) {
+            showToast(I18n.t('toast.rerunNoResult'));
+            return;
+        }
+        var runId = this.runIdFor(nodeId);
+        if (typeof workflow === 'undefined' || !workflow.rerunNode) return;
+        workflow.rerunNode(nodeId, runId);
+    },
+
+    /* Every preview of a node's rows carries the loaded run, so one screen never
+       mixes two attempts. */
+    payload(payload) {
+        if (this.runId) payload.run_id = this.runId;
+        return payload;
+    },
+
+    /* Panels already on screen follow the newly loaded run instead of continuing to
+       show the previous one's picture. Closed panels are left closed: loading a
+       run is not a request to open a chart. */
+    _repaint() {
+        if (typeof document === 'undefined' || !document.getElementById) return;
+        var chartPanel = document.getElementById('chart-preview-panel');
+        if (chartPanel && chartPanel.classList.contains('open') && _chartPreviewNodeId) {
+            dataNodes.previewVisualize(_chartPreviewNodeId);
+        }
+        var dash = document.getElementById('dashboard-panel');
+        if (dash && dash.classList.contains('open') && typeof dashboard !== 'undefined') {
+            dashboard.open();
+        }
+        var preview = document.getElementById('data-preview-panel');
+        if (preview && preview.classList.contains('open') && dataPreview._payload && dataPreview._payload.node_id) {
+            dataPreview._payload.run_id = this.runId || undefined;
+            if (!dataPreview._payload.run_id) delete dataPreview._payload.run_id;
+            dataPreview._offset = 0;
+            dataPreview._fetch();
+        }
+    },
+
+    clear() {
+        this._seq += 1;
+        this.runId = '';
+        this.runIds = [];
+        this.run = null;
+        this.runs = [];
+        this.statuses = {};
+        this.followLive = false;
+        this.workflowFingerprint = '';
+        this._lastApplied = '';
+        if (typeof canvas !== 'undefined' && canvas && canvas.applyRunStatuses) canvas.applyRunStatuses({});
+    },
+};
+
 /* ── Run records manager ──────────────────────────────────────
    Every recorded run — including orphans the resume banner can no longer
    match (the workflow was rewired or deleted since). Each row offers the
@@ -7943,6 +8252,11 @@ var resumeBar = {
    scratch, delete outright, and a per-node breakdown. The panel itself is
    docked at the bottom of the window, console-style. */
 var runsManager = {
+    /* 当前工作流 is the default view: it answers "which results can this canvas
+       load?" without making the user scan every unrelated record. '' until the
+       panel first opens. */
+    _tab: 'workflow',
+
     panel() {
         return document.getElementById('runs-panel');
     },
@@ -7974,9 +8288,31 @@ var runsManager = {
     async refresh() {
         var body = document.getElementById('runs-mgr-body');
         if (!body) return;
+        this.renderTabs();
         try {
-            var resp = await fetch('/api/runs/list?limit=50');
-            var result = await resp.json();
+            var result;
+            if (this._tab === 'workflow') {
+                /* A POST because the question is "which runs belong to THIS canvas",
+                   and the answer is its structure fingerprint. A GET with the whole
+                   workflow in a query string is not an option. */
+                var wf = typeof canvas !== 'undefined' && canvas ? canvas.toWorkflowJSON() : null;
+                if (!wf || !wf.nodes || !wf.nodes.length) {
+                    this._lastRuns = [];
+                    this._queue = [];
+                    this.render([]);
+                    this._detail = null;
+                    return;
+                }
+                var resp = await fetch('/api/runs/for-workflow', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ workflow: wf, limit: 50 }),
+                });
+                result = await resp.json();
+            } else {
+                var allResp = await fetch('/api/runs/list?limit=50');
+                result = await allResp.json();
+            }
             this._lastRuns = (result.ok && result.runs) || [];
             /* Waiting requests come back with the records: the panel that shows
                what has run is where someone looks for what has not started. */
@@ -7988,6 +8324,37 @@ var runsManager = {
         } catch (e) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
         }
+    },
+
+    /* The two views are different questions, so they are tabs rather than one table
+       with a filter: 当前工作流 is "load a result into this canvas", 全部记录 is
+       "manage every run this machine ever made". */
+    renderTabs() {
+        var tabs = document.getElementById('runs-tabs');
+        if (!tabs) return;
+        var current = this._tab === 'workflow';
+        var count = (this._lastRuns || []).length;
+        var label = function (key, isActive) {
+            return (
+                '<div class="runs-tab' + (isActive ? ' active' : '') +
+                '" role="tab" aria-selected="' + (isActive ? 'true' : 'false') +
+                '" onclick="runsManager.switchTab(\'' + key + '\')">' +
+                I18n.t(key === 'workflow' ? 'runsMgr.tabWorkflow' : 'runsMgr.tabAll') +
+                (isActive && count ? ' (' + count + ')' : '') +
+                '</div>'
+            );
+        };
+        tabs.innerHTML = label('workflow', current) + label('all', !current);
+    },
+
+    switchTab(tab) {
+        var next = tab === 'all' ? 'all' : 'workflow';
+        if (next === this._tab) return;
+        this._tab = next;
+        this._detail = null;
+        this._lastRuns = [];
+        this._shown = [];
+        this.refresh();
     },
 
     refreshIfOpen() {
@@ -8107,6 +8474,7 @@ var runsManager = {
     onLanguageChange() {
         var panel = this.panel();
         if (!panel || !panel.classList.contains('open')) return;
+        this.renderTabs();
         if (this._lastRuns) this.render(this._lastRuns);
         else this.refresh();
     },
@@ -8169,13 +8537,46 @@ var runsManager = {
            that has no finished records at all, and hiding it there would hide
            the one request the user is waiting for. */
         var queue = this._queueBlock();
+        /* Which record the canvas is showing, said once above the table as well as
+           on its row: after scrolling a long history the row is off screen, and the
+           question the tab exists to answer would need a hunt. */
+        var loadedId = typeof runResults !== 'undefined' ? runResults.runId : '';
+        var loadedRow = runs.filter(function (r) {
+            return r.run_id === loadedId;
+        })[0];
+        var loadedNote = loadedId
+            ? '<div class="runs-mgr-loaded">' +
+              escapeHtml(
+                  I18n.t('runsMgr.loadedNote')
+                      .replace('{when}', (loadedRow && loadedRow.started_at) || loadedId)
+                      .replace('{rid}', loadedId)
+              ) +
+              '</div>'
+            : '';
         if (!runs.length) {
-            body.innerHTML = queue + '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
+            body.innerHTML =
+                queue +
+                loadedNote +
+                '<div class="runs-mgr-empty">' +
+                I18n.t(this._tab === 'workflow' ? 'runsMgr.emptyWorkflow' : 'runsMgr.empty') +
+                '</div>';
+            this.renderTabs();
             return;
         }
         var rows = runs.map(function (r) {
             var resumable = !!r.resumable;
+            var isLoaded = typeof runResults !== 'undefined' && runResults.isLoaded(r.run_id);
+            /* Only 当前工作流 offers 载入: its rows are guaranteed to belong to this
+               canvas's node ids. An unrelated record in 全部记录 stays manageable
+               (continue/delete/report) but cannot silently graft its table here. */
             var ops = '';
+            if (runsManager._tab === 'workflow') {
+                ops +=
+                    '<button class="runs-mgr-btn' + (isLoaded ? ' loaded' : '') +
+                    '" onclick="runsManager.loadRun(\'' + r.run_id + '\')">' +
+                    I18n.t(isLoaded ? 'runsMgr.reloadResult' : 'runsMgr.loadResult') +
+                    '</button>';
+            }
             if (resumable) {
                 ops += '<button class="runs-mgr-btn" onclick="runsManager.continueRun(\'' + r.run_id + '\')">' + I18n.t('runsMgr.resume') + '</button>';
                 ops += '<button class="runs-mgr-btn" onclick="runsManager.restart(\'' + r.run_id + '\')">' + I18n.t('runsMgr.restart') + '</button>';
@@ -8196,7 +8597,9 @@ var runsManager = {
                 return '<span class="runs-mgr-tag">' + escapeHtml(text) + '</span>';
             }).join('');
             return '<tr data-run-id="' + escapeHtml(r.run_id) + '" data-run-name="' + escapeHtml(r.workflow_name || '') + '">' +
-                '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + tags + '</td>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + tags +
+                (isLoaded ? '<span class="runs-mgr-tag loaded">' + I18n.t('runsMgr.loaded') + '</span>' : '') +
+                '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(r.run_id) + '</td>' +
                 '<td><span class="runs-mgr-status st-' + escapeHtml(r.status || '') + '">' + I18n.t(runsManager.statusKey(r.status)) + '</span></td>' +
                 '<td>' + (r.node_done || 0) + '/' + (r.node_total || 0) + '</td>' +
@@ -8208,6 +8611,7 @@ var runsManager = {
         }).join('');
         body.innerHTML =
             queue +
+            loadedNote +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
             '<th>' + I18n.t('runsMgr.colWorkflow') + '</th>' +
             '<th>run_id</th>' +
@@ -8218,6 +8622,7 @@ var runsManager = {
             '<th>' + I18n.t('runsMgr.colDuration') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + rows + '</tbody></table>';
+        this.renderTabs();
     },
 
     _formatDuration: function (seconds) {
@@ -8255,6 +8660,15 @@ var runsManager = {
             return r.run_id === runId;
         })[0] || {};
         exportsManager.report(runId, row.workflow_name || '');
+    },
+
+    /* Load one record's results into the canvas: node verdicts, previews and every
+       chart re-render now read that attempt. This does not run anything — the panel
+       stays open so the 已载入 marker is visible where the choice was made. */
+    async loadRun(runId) {
+        if (typeof runResults === 'undefined' || !runResults.load) return;
+        await runResults.load(runId);
+        this.render(this._shown || []);
     },
 
     continueRun(runId) {
@@ -8317,6 +8731,10 @@ var runsManager = {
             showToast(I18n.t('runsMgr.removeFailed'));
         }
         this.refresh();
+        /* Deleting the record whose results are on screen would leave markers and
+           previews pointing at a row nobody can read; fall back to the newest run of
+           this workflow (or no run at all). */
+        if (typeof runResults !== 'undefined' && runResults.isLoaded(runId)) runResults.refresh();
         if (window.resumeBar) resumeBar.refresh();
     },
 
@@ -8349,6 +8767,8 @@ var runsManager = {
         } catch (e) {
             showToast(I18n.t('runsMgr.clearAllFailed'));
         }
+        /* Every record is gone, including the one the canvas was reading. */
+        if (typeof runResults !== 'undefined') runResults.clear();
         this.refresh();
         if (window.resumeBar) resumeBar.refresh();
     },
@@ -8368,10 +8788,12 @@ var runsManager = {
         };
         var known = ['pending', 'running', 'done', 'partial', 'failed', 'skipped', 'restored'];
         var s = String(status || '');
-        return {
-            cls: map[s] || 'st-completed',
-            key: known.indexOf(s) >= 0 ? 'runsMgr.node.' + s : 'runsMgr.node.done',
-        };
+        /* An unfamiliar word is NOT retro-fitted to 已完成: the badge exists to say
+           what the record actually claims. It shows the stored token in a neutral
+           chip instead, so a status from a newer/older build cannot masquerade as
+           success. (Canvas badges treat "not settled" as red — see applyRunStatuses.) */
+        if (known.indexOf(s) < 0) return { cls: 'st-unknown', key: s };
+        return { cls: map[s], key: 'runsMgr.node.' + s };
     },
 
     // One definition of "settled", shared with the backend's node_done: a node that

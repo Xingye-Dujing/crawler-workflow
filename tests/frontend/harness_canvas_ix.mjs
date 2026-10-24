@@ -52,6 +52,17 @@ const KEYS = {
     'toast.connRemoved': 'CONN-REMOVED',
     'ctx.edit': 'edit',
     'ctx.delete': 'delete',
+    'ctx.rerunFromHere': 'RERUN-FROM-HERE',
+    'runsMgr.runStatus': 'RUN-STATUS {status}',
+    'runsMgr.colRows': 'rows',
+    'runsMgr.node.pending': 'Pending',
+    'runsMgr.node.running': 'Running',
+    'runsMgr.node.done': 'Done',
+    'runsMgr.node.partial': 'Partial',
+    'runsMgr.node.failed': 'Failed',
+    'runsMgr.node.skipped': 'Skipped',
+    'runsMgr.node.restored': 'Restored',
+    'toast.rerunNoResult': 'NO-RERUN-RESULT',
     'canvas.fold': 'FOLD',
     'canvas.unfold': 'UNFOLD',
     /* Keyboard link-mode (L) sentinels so a scenario asserts WHICH hint fired, not a
@@ -173,7 +184,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__canvas = canvas; globalThis.__wf = workflow; globalThis.__outline = Outline; globalThis.__clipboard = Clipboard;', sandbox);
+vm.runInContext(src + '\n;globalThis.__canvas = canvas; globalThis.__wf = workflow; globalThis.__outline = Outline; globalThis.__clipboard = Clipboard; globalThis.__runResults = runResults;', sandbox);
 
 /* Re-seeded after the load: workflow.js declares both of these itself, and a
    function declaration inside the script wins over anything seeded before it. */
@@ -2442,7 +2453,98 @@ function keyboardNavigationScenario() {
     };
 }
 
+/* ── loaded-run badges + 从此节点重跑 ───────────────────────────────────
+   A canvas node carries the verdict of the run whose results are loaded: green
+   check = done/restored, yellow spinner = running (several at once is legal in
+   parallel mode), red X = anything that did not finish successfully. An unknown
+   status wears red, never green. The context menu offers 从此节点重跑 only for a
+   node the loaded run can actually replay (settled WITH rows, nothing running). */
+function runBadgesScenario() {
+    freshWorld();
+    const badgeNode = (id) => doc.getElementById(id).querySelector('.node-run-badge');
+    const readBadge = (id) => {
+        const el = badgeNode(id);
+        return {
+            cls: el.className,
+            display: el.style.display,
+            status: el.dataset.status,
+            title: el.title,
+            spinner: !!el.querySelector('.node-run-spinner'),
+        };
+    };
+    const ids = {
+        done: addNode('source', 0, 0),
+        failed: addNode('process', 120, 0),
+        runningA: addNode('analysis', 240, 0),
+        runningB: addNode('visualize', 360, 0),
+        pending: addNode('output', 480, 0),
+        unseen: addNode('process', 600, 0),
+        rerun: addNode('process', 720, 0),
+    };
+    canvas.applyRunStatuses({
+        [ids.done]: { status: 'done', row_count: 4 },
+        [ids.failed]: { status: 'failed', row_count: 0 },
+        [ids.runningA]: { status: 'running', row_count: 0 },
+        [ids.runningB]: { status: 'running', row_count: 0 },
+        [ids.pending]: { status: 'pending', row_count: 0 },
+        /* A vocabulary from a newer build: not success. */
+        [ids.rerun]: { status: 'mystery-vocabulary', row_count: 0 },
+    });
+    out.run_badges = {
+        done: readBadge(ids.done),
+        failed: readBadge(ids.failed),
+        runningA: readBadge(ids.runningA),
+        runningB: readBadge(ids.runningB),
+        pending: readBadge(ids.pending),
+        unknown: readBadge(ids.rerun),
+        unseen: readBadge(ids.unseen),
+        bothRunningSpin: !!badgeNode(ids.runningA).querySelector('.node-run-spinner') &&
+            !!badgeNode(ids.runningB).querySelector('.node-run-spinner'),
+    };
+    canvas.applyRunStatuses({});
+    out.run_badges_cleared = ['done', 'failed', 'runningA', 'runningB', 'pending', 'rerun', 'unseen'].map(
+        (key) => readBadge(ids[key])
+    );
+
+    /* Which run would 从此节点重跑 replay? The loaded record that owns the node. */
+    const RR = sandbox.__runResults;
+    RR.runId = 'run-main';
+    RR.runIds = ['run-main', 'run-second'];
+    RR.statuses = {
+        [ids.rerun]: { status: 'done', row_count: 3, run_id: 'run-second' },
+    };
+    const onRerunNode = { closest: (sel) => (sel === '.node' ? doc.getElementById(ids.rerun) : null) };
+    dispatchOn(workspace, 'contextmenu', ev({ clientX: 220, clientY: 240, target: onRerunNode }));
+    const rerunItem = doc.getElementById('ctx-rerun-node');
+    const visibleForSettled = rerunItem.style.display;
+    const calls = [];
+    const originalRerun = sandbox.__wf.rerunNode;
+    sandbox.__wf.rerunNode = (nodeId, runId) => calls.push([nodeId, runId]);
+    clickItem('ctxRerunNode');
+    sandbox.__wf.rerunNode = originalRerun;
+    out.context_menu.rerun_from_node = {
+        visibleForSettled,
+        calls,
+        label: rerunItem.textContent,
+    };
+    /* No rows: nothing to replay from (the backend would refuse, so do not offer). */
+    RR.statuses = { [ids.rerun]: { status: 'done', row_count: 0, run_id: 'run-main' } };
+    dispatchOn(workspace, 'contextmenu', ev({ clientX: 220, clientY: 240, target: onRerunNode }));
+    const hiddenNoRows = rerunItem.style.display;
+    /* A live run is not a rerun target; the menu hides instead of offering a refusal. */
+    RR.statuses = { [ids.rerun]: { status: 'done', row_count: 3, run_id: 'run-main' } };
+    sandbox.RunState.running = true;
+    dispatchOn(workspace, 'contextmenu', ev({ clientX: 220, clientY: 240, target: onRerunNode }));
+    const hiddenWhileRunning = rerunItem.style.display;
+    sandbox.RunState.running = false;
+    out.context_menu.rerun_gated = { hiddenNoRows, hiddenWhileRunning };
+    RR.statuses = {};
+    RR.runId = '';
+    RR.runIds = [];
+}
+
 resizeRepaintScenario();
+runBadgesScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
 clipDragToCanvasScenario();

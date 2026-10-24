@@ -158,6 +158,10 @@ function fresh() {
     Object.keys(routes).forEach((key) => delete routes[key]);
     Object.assign(routes, defaultRoutes());
     pa.resumeBar.hide();
+    /* These scenarios exercise panel ACTIONS, not the 当前工作流 tab. The canvas is
+       empty here, so the workflow tab (the real default) legitimately asks the server
+       nothing; pin the all-records list so "reloads after a write" stays observable. */
+    pa.runsManager._tab = 'all';
     pa.runsManager._shown = [];
     pa.exportsManager._last = [];
     pa.datasetManager._last = [];

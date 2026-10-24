@@ -1401,6 +1401,63 @@ body.style-menu-open #workspace #resume-banner {
 .node.node-starved .node-state-badge {
   background: #b58900;
 }
+/* The loaded run's verdict, on the box itself: green check = finished with rows,
+   yellow spinner = running right now (parallel runs spin several at once), red X =
+   anything that did not finish successfully. Placed on the opposite corner from
+   the disabled/starved badge so the two can be read at the same time. */
+.node-run-badge {
+  position: absolute;
+  top: -9px;
+  left: 6px;
+  z-index: 36;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-round);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.node-run-badge svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.node-run-badge.run-done {
+  background: var(--ok);
+}
+.node-run-badge.run-failed {
+  background: var(--err);
+}
+.node-run-badge.run-running {
+  /* Yellow rather than --warn: a spinner is a motion cue, and the muted brown
+     disappears against the node header in the light theme. */
+  background: #e0a800;
+}
+.node-run-spinner {
+  width: 9px;
+  height: 9px;
+  border: 2px solid rgba(58, 44, 0, 0.28);
+  border-top-color: #3a2c00;
+  border-radius: var(--radius-round);
+  animation: node-run-spin 0.8s linear infinite;
+}
+@keyframes node-run-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .node-run-spinner {
+    animation-duration: 2.4s;
+  }
+}
 #svg-layer .conn-line.conn-disabled {
   stroke: #b9bdc4;
   opacity: 0.4;
@@ -2194,6 +2251,19 @@ button.history-del:hover {
   color: var(--text-dim);
   white-space: nowrap;
 }
+/* The one record whose results the canvas is showing. Green is the same "settled"
+   reading the node badges use; it marks a choice, not a verdict. */
+.runs-mgr-tag.loaded {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.runs-mgr-loaded {
+  padding: 7px 8px 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+  overflow-wrap: anywhere;
+}
 .runs-mgr-id {
   font-size: 10px;
   color: var(--text-dim);
@@ -2230,6 +2300,17 @@ button.history-del:hover {
 .runs-mgr-status.st-abandoned {
   background: rgba(140, 40, 40, 0.1);
   color: #8c2828;
+}
+/* A status word this build does not know: shown as the stored token in a neutral
+   chip, never translated into a friendlier verdict it never gave. */
+.runs-mgr-status.st-unknown {
+  background: rgba(26, 26, 26, 0.06);
+  color: var(--text-dim);
+  font-style: italic;
+}
+.runs-mgr-btn.loaded {
+  border-color: var(--ok);
+  color: var(--ok);
 }
 .runs-mgr-ops {
   white-space: nowrap;
@@ -3039,13 +3120,18 @@ input:-webkit-autofill:focus {
   color: var(--text-dim);
 }
 
-#console-tabs {
+#console-tabs,
+#runs-tabs {
   display: flex;
   border-bottom: 1px solid var(--line2);
   flex-shrink: 0;
   overflow-x: auto;
 }
-.console-tab {
+#runs-tabs:empty {
+  display: none;
+}
+.console-tab,
+.runs-tab {
   padding: 5px 14px;
   font-size: 10px;
   letter-spacing: 0.5px;
@@ -3057,11 +3143,13 @@ input:-webkit-autofill:focus {
     color 0.1s;
   white-space: nowrap;
 }
-.console-tab:hover {
+.console-tab:hover,
+.runs-tab:hover {
   background: var(--hover);
   color: var(--text);
 }
-.console-tab.active {
+.console-tab.active,
+.runs-tab.active {
   background: var(--hover);
   color: var(--text);
   box-shadow: inset 0 -2px 0 var(--ink);

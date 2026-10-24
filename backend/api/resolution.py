@@ -14,6 +14,8 @@ from flask import jsonify
 from state import execution_state
 from stores import _load_dataset, get_run_store
 
+from i18n import t
+
 
 class NoRunDataError(KeyError):
     """Asked to draw from a node that produced no rows live and filed none away.
@@ -27,13 +29,18 @@ class NoRunDataError(KeyError):
     code = 'no_run_data'
 
 
-def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
+def _durable_node_rows(node_id: str, workflow_name: str = '', run_id: str = '') -> list:
     """Rows this node produced in an earlier run, newest first — or [].
 
     Previews, charts and exports all resolve a node by id, and
     execution_state['results'] only exists while the process has been running
     without a refresh. Everything since then is in the run store, so asking
     there is what keeps a reopened workflow inspectable instead of blank.
+
+    A ``run_id`` pins the EXACT attempt. Without it the newest row per node is
+    picked independently, which can stitch node-1 from last night's run to node-2
+    from this morning's — a table nobody ever produced. The run picker in 运行记录
+    sends this id, so every preview drawn under one loaded run reads one run.
 
     Asking by id alone is the trap: ``node-2`` exists on every canvas ever
     drawn, so a lookup with no workflow attached to it would happily return a
@@ -44,6 +51,9 @@ def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
     empty, and the panel says there is nothing recorded.
     """
     store = get_run_store()
+    pinned = str(run_id or '').strip()
+    if pinned:
+        return store.load_rows(pinned, node_id)
     requested = str(workflow_name or '').strip()
     if requested:
         exact = store.latest_rows(node_id, workflow_name=requested)
@@ -83,12 +93,20 @@ def _resolve_dataframe(payload: dict) -> pd.DataFrame:
 
     node_id = payload.get('node_id')
     if node_id:
-        result = execution_state['results'].get(node_id)
-        if isinstance(result, list):
-            return pd.DataFrame(result)
-        # Nothing live: fall back to the rows this node last filed away, which
+        run_id = str(payload.get('run_id') or '').strip()
+        if run_id:
+            # A pinned run is a promise to the reader: every table and figure on
+            # screen belongs to that attempt. Reading the live result here would
+            # silently mix a newer run's rows into a historical one.
+            if get_run_store().get_run(run_id) is None:
+                raise KeyError(t('api.runNotFound', rid=run_id))
+        else:
+            result = execution_state['results'].get(node_id)
+            if isinstance(result, list):
+                return pd.DataFrame(result)
+        # Nothing live (or a pinned run): use the rows this node filed away, which
         # is also the only copy left after a restart.
-        rows = _durable_node_rows(node_id, payload.get('workflow_name') or '')
+        rows = _durable_node_rows(node_id, payload.get('workflow_name') or '', run_id)
         if rows:
             return pd.DataFrame(rows)
         raise NoRunDataError(f'No tabular result available for node: {node_id}')

@@ -611,6 +611,11 @@ STATUS_FIELDS = {
     'chart_results',
     'cookie_expired',
     'queue',
+    # Per-node verdicts for the canvas badges, plus the records this attempt owns.
+    # ``node_states`` is a map because parallel nodes can be running together; the
+    # ids let a split serial attempt mark all of its records as the loaded one.
+    'run_ids',
+    'node_states',
 }
 
 
