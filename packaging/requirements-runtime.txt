@@ -1,0 +1,29 @@
+# Runtime-only dependency set for the Windows onedir build.
+#
+# This is intentionally NOT requirements.txt: the dev/test tools (ruff, pylint, pytest)
+# and the optional multi-gigabyte stacks (torch, transformers, sentence-transformers,
+# pyarrow, mitmproxy) are absent. The app already degrades without the optional stack and
+# prints the method that actually ran; see requirements-optional.txt and AGENTS.md.
+#
+# Versions are the ones this checkout was measured against. Keep them pinned so two
+# builders produce the same folder and the same size.
+
+Flask==3.1.0
+flask-cors==6.0.5
+requests==2.34.2
+urllib3==2.7.0
+selenium==4.45.0
+pandas==3.0.3
+numpy==2.4.6
+matplotlib==3.11.0
+openpyxl==3.1.5
+ollama==0.6.2
+joblib==1.5.3
+jieba==0.42.1
+scipy==1.17.1
+scikit-learn==1.9.0
+snownlp==0.12.3
+networkx==3.6.1
+# jieba imports pkg_resources when it is present; keeping it explicit avoids a
+# warning-only dependency on whatever a bare venv happens to include.
+setuptools==78.1.0

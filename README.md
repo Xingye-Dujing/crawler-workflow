@@ -48,6 +48,14 @@ python app.py
 同时开两个实例（比如端口 5000 与 5057 各一个）时，后启动的会立刻把前一个正在写入的运行标成中断，两边还会互相改写同一节点的行与游标——要换端口就先停掉旧实例，别并行开着。确需第二个实例（跑验证脚本、测试里自启的那台），用
 `CRAWLER_DATA_ROOT=<目录>` 给它一份自己的 `data/`+`logs/`，两边互不干涉。
 
+**4b. Windows 免环境桌面版（给不装 Python 的人）**
+
+`packaging/` 提供 PyInstaller **onedir** 打包：生成一个文件夹（外加压缩 zip，可选 Inno Setup 安装包），
+双击 `CaiXiHui.exe` 即启动本地服务并打开浏览器，运行时不需要装 Python 或第三方库。
+构建命令、体积边界与首启依赖自检见 [`packaging/README.md`](packaging/README.md)；数据默认在
+`%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt` 可切成便携模式。
+Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上传/分析，不装 Ollama 用 OpenRouter 或不用模型节点。
+
 **5. 可选：OpenRouter / 云端部署** — 不设任何旗标就是本机形状。要放到服务器上给别人访问，用
 `python app.py cloud`（或 `CRAWLER_CLOUD=1`）：同时关掉本地模型界面、强制无头抓取、拒绝浏览器生成。
 云端开关、隐私边界与 profile 模板规则的完整说明见 [`docs/config.md`](docs/config.md)。

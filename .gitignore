@@ -37,3 +37,16 @@ ml_train/*
 # Project-local pip download cache + build temp (kept off the C: drive on purpose).
 .pip-cache/
 .tmp/
+# Windows packaging: the build env, PyInstaller work dir and release artifacts are
+# reproducible from packaging/ and must never be committed.
+build/
+dist/
+packaging/.venv-build/
+packaging/.pyinstaller-cache/
+# Pip sometimes falls back to cwd for temporary build dirs on restricted Windows
+# sandboxes; these are never source and must not be committed.
+pip-build-*/
+pip-install-*/
+pip-unpack-*/
+pip-ephem-wheel-cache-*/
+jieba.cache
