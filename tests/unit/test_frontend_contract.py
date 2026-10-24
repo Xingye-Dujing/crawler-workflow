@@ -28,6 +28,7 @@ from services.biblio_schema import (
     DEFAULTS,
     ENTITY_TYPES,
     LABEL_METHODS,
+    LABEL_SOURCES,
     LINK_MEASURES,
     OUTPUT_SHAPES,
     PATHFINDER_R,
@@ -419,6 +420,7 @@ class TestBiblioPanelContract:
         assert self._js_array('BIBLIO_PRUNING_SCOPES') == list(PRUNING_SCOPES)
         assert self._js_array('BIBLIO_PATHFINDER_R') == list(PATHFINDER_R)
         assert self._js_array('BIBLIO_LABEL_METHODS') == list(LABEL_METHODS)
+        assert self._js_array('BIBLIO_LABEL_SOURCES') == list(LABEL_SOURCES)
         assert self._js_array('BIBLIO_OUTPUT_SHAPES') == list(OUTPUT_SHAPES)
         assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
 
@@ -429,6 +431,11 @@ class TestBiblioPanelContract:
         src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
         missing = [chart for chart in BIBLIO_CHART_TYPES if src.count(f"'chart.{chart}'") < 2]
         assert missing == [], f'bibliometric views with no zh/en word: {missing}'
+
+    def test_every_label_source_has_a_word_in_both_catalogues(self):
+        src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        missing = [source for source in LABEL_SOURCES if src.count(f"'biblio.label_source.{source}'") < 2]
+        assert missing == [], f'label sources with no zh/en word: {missing}'
 
     def test_a_new_biblio_parameter_is_seeded_on_a_new_node(self):
         """``canvas.js`` seeds what a freshly dropped node holds; a parameter the server knows and

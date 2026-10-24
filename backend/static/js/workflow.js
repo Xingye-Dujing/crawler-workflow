@@ -3341,6 +3341,7 @@ var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
 var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
 var BIBLIO_PATHFINDER_R = ['1', '2', 'inf'];
 var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
+var BIBLIO_LABEL_SOURCES = ['all', 'title', 'abstract', 'keywords', 'author'];
 var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts', 'variation', 'dual_map'];
 
 function biblioOption(value, label) {
@@ -3373,6 +3374,9 @@ function biblioPathfinderOptions(values) {
 }
 function biblioLabelOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.label.' + value)); });
+}
+function biblioLabelSourceOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.label_source.' + value)); });
 }
 function biblioOutputShapeOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.shape.' + value)); });
@@ -3473,7 +3477,9 @@ function renderBiblioSettings(nodeId, p) {
     html += renderParamCheckbox(nodeId, p, 'cluster', 'biblio.ui.cluster', true) +
         renderParamInput(nodeId, p, 'cluster_count', 'biblio.ui.clusterCount', 'number', '') +
         renderParamSelect(nodeId, p, 'label_method', 'biblio.ui.labelMethod', 'llr', biblioLabelOptions(BIBLIO_LABEL_METHODS)) +
+        renderParamSelect(nodeId, p, 'label_source', 'biblio.ui.labelSource', 'all', biblioLabelSourceOptions(BIBLIO_LABEL_SOURCES)) +
         renderParamInput(nodeId, p, 'top_terms', 'biblio.ui.topTerms', 'number', 5) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.labelSourceHint') + '</div>' +
         '<div class="settings-hint">' + I18n.t('biblio.ui.clusterHint') + '</div>';
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.burst') + '</div>';

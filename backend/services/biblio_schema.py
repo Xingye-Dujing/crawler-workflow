@@ -66,6 +66,11 @@ PRUNING_SCOPES = ('slices', 'merged')
 #: a select; ``inf`` never becomes a float in a JSON canvas.
 PATHFINDER_R = ('1', '2', 'inf')
 LABEL_METHODS = ('llr', 'lsi', 'mi', 'tfidf')
+#: Which fields a cluster label draws its words from. ``all`` is the node's historical mix
+#: (title + abstract + the graph's own keyword/entity values) — authors are deliberately NOT
+#: folded into it, because an author name inside a keyword-cluster label is a claim the user did
+#: not ask for; ``author`` is its own choice.
+LABEL_SOURCES = ('all', 'title', 'abstract', 'keywords', 'author')
 
 #: The canonical input column each entity kind reads. ``term`` reads two columns
 #: and the citation kinds read ``参考文献``; see :data:`ENTITY_REQUIRED`.
@@ -157,6 +162,7 @@ DEFAULTS = {
     'cluster': True,
     'cluster_count': '',
     'label_method': 'llr',
+    'label_source': 'all',
     'top_terms': 5,
     'burst': True,
     'burst_gamma': 1.0,
@@ -416,6 +422,10 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     if label_method not in LABEL_METHODS:
         errors.append(_bad(nid, 'label_method', label_method, ', '.join(LABEL_METHODS)))
 
+    label_source = str(params.get('label_source') or DEFAULTS['label_source']).strip()
+    if label_source not in LABEL_SOURCES:
+        errors.append(_bad(nid, 'label_source', label_source, ', '.join(LABEL_SOURCES)))
+
     shape = str(params.get('output_shape') or DEFAULTS['output_shape']).strip()
     if shape not in OUTPUT_SHAPES:
         errors.append(_bad(nid, 'output_shape', shape, ', '.join(OUTPUT_SHAPES)))
@@ -572,6 +582,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'cluster': as_bool(params.get('cluster'), DEFAULTS['cluster']),
         'cluster_count': count,
         'label_method': str(params.get('label_method') or DEFAULTS['label_method']).strip(),
+        'label_source': str(params.get('label_source') or DEFAULTS['label_source']).strip(),
         'top_terms': _whole(nid, 'top_terms', params.get('top_terms', DEFAULTS['top_terms']), 1, 20),
         'burst': as_bool(params.get('burst'), False if entity in COUPLING_TYPES else DEFAULTS['burst']),
         'burst_gamma': _number(nid, 'burst_gamma', params.get('burst_gamma', DEFAULTS['burst_gamma']), 0.01, 100.0),

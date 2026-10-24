@@ -920,3 +920,73 @@ class TestSentimentAndTopicOverlay:
         assert json.loads(by_name['甲']['情感分布']) == {'positive': 1}
         assert by_name['丙']['情感分布'] == '{}'
         assert by_name['丙']['情感倾向'] == ''
+
+
+class TestClusterLabelSource:
+    """Which fields a cluster label reads: the old mix, or exactly one of the four."""
+
+    ROW = {'题名': 'alpha beta', '摘要': 'gamma delta', '关键词': '甲;乙', '作者': 'A;B'}
+    COLUMNS = {'title': '题名', 'abstract': '摘要', 'keywords': '关键词', 'author': '作者'}
+
+    def terms(self, source):
+        columns = {
+            'entity': '关键词',
+            'title': '题名',
+            'abstract': '摘要',
+            'reference': '参考文献',
+            'tc': '引用次数',
+            'usage': '使用次数',
+            'year': '年份',
+        }
+        return bibliometrics._doc_terms(self.ROW, columns, 'keyword', source, self.COLUMNS)
+
+    def test_all_is_the_mix_this_node_always_used(self):
+        terms = self.terms('all')
+        assert {'甲', '乙'} <= set(terms)
+        assert {'alpha', 'beta', 'gamma', 'delta'} <= set(terms)
+
+    def test_each_explicit_source_reads_only_its_own_field(self):
+        assert set(self.terms('title')) == {'alpha', 'beta'}
+        assert set(self.terms('abstract')) == {'gamma', 'delta'}
+        assert self.terms('keywords') == ['甲', '乙']
+        assert self.terms('author') == ['A', 'B']
+
+    def test_an_explicit_source_with_no_column_refuses_by_name(self):
+        frame = _keywords().drop(columns=['摘要'])
+        with pytest.raises(bibliometrics.BiblioError, match='摘要'):
+            bibliometrics.build(frame, _params(label_source='abstract'), 'test')
+        with pytest.raises(bibliometrics.BiblioError, match='作者'):
+            bibliometrics.build(_keywords().drop(columns=['作者']), _params(label_source='author'), 'test')
+        # A non-keyword graph asks the canonical 关键词 column for the keyword source.
+        author_frame = pd.DataFrame([{'题名': 't', '年份': 2020, '作者': 'A;B', '摘要': 'x'}])
+        with pytest.raises(bibliometrics.BiblioError, match='关键词'):
+            bibliometrics.build(author_frame, _params(entity_type='author', label_source='keywords'), 'test')
+
+    def test_an_unknown_source_is_refused_by_name(self):
+        assert any('label_source' in message for message in collect_errors(_params(label_source='body'), 'test'))
+
+    def test_the_default_keeps_the_labels_an_old_canvas_produced(self):
+        assert normalize_params(_params(), 'test')['label_source'] == 'all'
+        old = bibliometrics.build(_keywords(), _params(cluster=True, cluster_count=2), 'test')
+        explicit = bibliometrics.build(_keywords(), _params(cluster=True, cluster_count=2, label_source='all'), 'test')
+        assert [row['聚类标签'] for row in old['rows']] == [row['聚类标签'] for row in explicit['rows']]
+
+
+class TestPajekExport:
+    def test_the_network_is_written_as_pajek_with_quoted_names_and_weights(self, tmp_path):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '协同 监管;数字治理', '摘要': ''},
+                {'题名': 'b', '年份': 2021, '关键词': '协同 监管;数字治理', '摘要': ''},
+            ]
+        )
+        result = bibliometrics.build(frame, _params(), 'test')
+        files = bibliometrics.export_result(result, str(tmp_path), 'demo')
+        assert files['biblio_pajek'].endswith('_graph.net')
+        text = Path(files['biblio_pajek']).read_text(encoding='utf-8')
+        assert text.startswith('*Vertices 2\n'), text
+        assert '"协同 监管"' in text, 'a name with a space must be quoted'
+        edge_lines = text.split('*Edges\n', 1)[1].strip().splitlines()
+        assert len(edge_lines) == len(result['edges'])
+        assert all(len(line.split()) == 3 for line in edge_lines)
+        assert all(0 < float(line.split()[2]) <= 1 for line in edge_lines)

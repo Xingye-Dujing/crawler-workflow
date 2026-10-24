@@ -238,9 +238,53 @@ def _document_reference_nodes(
     return nodes, direct, len(raw_refs) if raw_refs else len(direct)
 
 
-def _doc_terms(row: dict, columns: dict, entity: str) -> list[str]:
-    keywords = _split(row.get(columns['entity'])) if entity == 'keyword' else []
-    text = ' '.join(str(row.get(columns[name]) or '') for name in ('title', 'abstract'))
+def _label_columns(df: pd.DataFrame, params: dict, columns: dict) -> dict:
+    """The columns the chosen cluster-label source reads, refusing a missing one by name.
+
+    ``all`` is the node's historical mix and stays LENIENT: a crawled table without 摘要 still
+    labels from its keywords, exactly as it did before the selector existed. An EXPLICIT source
+    is a hard read — "label from the abstract" against a table with no abstract column is a
+    misconfiguration, not a licence to fall back to the title.
+    """
+    entity = params['entity_type']
+    source = str(params.get('label_source') or 'all')
+    resolved = {
+        'title': columns['title'],
+        'abstract': columns['abstract'],
+        # A keyword graph's own entity column is its author-supplied tags; any other graph's
+        # keyword source is the canonical 关键词 column (CiteSpace's DE).
+        'keywords': columns['entity'] if entity == 'keyword' else '关键词',
+        # Same rule for AU: an author graph's entity column, otherwise the canonical 作者.
+        'author': columns['entity'] if entity == 'author' else '作者',
+    }
+    if source != 'all':
+        column = resolved.get(source, '')
+        if not column or column not in df.columns:
+            raise BiblioError(t('biblio.column_missing', col=column or source, entity=entity))
+    return resolved
+
+
+def _doc_terms(
+    row: dict, columns: dict, entity: str, source: str = 'all', label_columns: dict | None = None
+) -> list[str]:
+    """Terms one document offers to the cluster-labelling methods.
+
+    ``source`` chooses the fields: ``all`` = keywords + title + abstract (the behaviour this node
+    always had), or exactly one of title / abstract / keywords / author. A keyword or author
+    source is split, not tokenised — those cells already hold terms.
+    """
+    label_columns = label_columns or {}
+    keywords = []
+    if source in ('all', 'keywords'):
+        keywords = _split(row.get(label_columns.get('keywords', columns['entity'])))
+    if source == 'author':
+        return _split(row.get(label_columns.get('author', '作者')))[:_MAX_LABEL_TERMS]
+    parts = []
+    if source in ('all', 'title'):
+        parts.append(str(row.get(label_columns.get('title', columns['title'])) or ''))
+    if source in ('all', 'abstract'):
+        parts.append(str(row.get(label_columns.get('abstract', columns['abstract'])) or ''))
+    text = ' '.join(parts)
     try:
         tokens = KeywordExtractor._tokenize(text, _TERM_POS)
     except Exception:
@@ -317,6 +361,8 @@ def _require_columns(df: pd.DataFrame, params: dict) -> dict:
 def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, list[str]]:
     entity = params['entity_type']
     columns = _require_columns(df, params)
+    label_columns = _label_columns(df, params, columns)
+    label_source = str(params.get('label_source') or 'all')
     notes: list[str] = []
     overlay_columns = {
         'sentiment_label': str(params.get('sentiment_column') or '').strip(),
@@ -420,7 +466,7 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
                 'index': len(docs),
                 'year': year,
                 'entities': list(dict.fromkeys(entities)),
-                'terms': _doc_terms(record, columns, entity),
+                'terms': _doc_terms(record, columns, entity, label_source, label_columns),
                 'name': name,
                 # Only a fused table carries 来源; a plain literature or crawl table never does,
                 # and then the node table grows neither column (an all-empty provenance column
@@ -1859,6 +1905,33 @@ def _as_list(value) -> list[dict]:
     return [item for item in value if isinstance(item, dict)]
 
 
+def _pajek_label(name: str) -> str:
+    """One node name as a Pajek label: always quoted, inner quotes and line breaks folded."""
+    text = ' '.join(str(name).split()) or 'node'
+    return '"' + text.replace('"', "'") + '"'
+
+
+def _pajek_text(graph) -> str:
+    """The network as Pajek ``.net``: vertices in a stable order, then weighted edges.
+
+    Written here rather than through ``networkx.write_pajek`` because that writer emits a
+    ``UserWarning`` for every non-string edge attribute (ours carries ``count``) — a warning is
+    a defect this project fixes, never mutes — and its trailing coordinate columns are noise in
+    a file someone opens in Pajek.
+    """
+    names = sorted(str(name) for name in graph.nodes())
+    index = {name: position + 1 for position, name in enumerate(names)}
+    lines = [f'*Vertices {len(names)}']
+    lines += [f'{index[name]} {_pajek_label(name)}' for name in names]
+    lines.append('*Edges')
+    edges = []
+    for left, right, data in graph.edges(data=True):
+        a, b = index[str(left)], index[str(right)]
+        edges.append((min(a, b), max(a, b), float(data.get('weight') or 0.0)))
+    lines += [f'{a} {b} {weight:.6f}' for a, b, weight in sorted(edges)]
+    return '\n'.join(lines) + '\n'
+
+
 def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
     """Write GraphML + CSV summaries; return {kind: path} for the run ledger."""
     target = Path(out_dir)
@@ -1874,6 +1947,10 @@ def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
         gml_path = target / f'{safe}_graph.gml'
         nx.write_gml(graph, gml_path)
         files['biblio_gml'] = str(gml_path)
+
+        pajek_path = target / f'{safe}_graph.net'
+        pajek_path.write_text(_pajek_text(graph), encoding='utf-8')
+        files['biblio_pajek'] = str(pajek_path)
 
     json_path = target / f'{safe}_graph.json'
     snapshot = {

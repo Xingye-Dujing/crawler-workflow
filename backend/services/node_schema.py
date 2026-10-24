@@ -448,6 +448,17 @@ def referenced_columns(nodes: dict) -> dict:
                 value = str(params.get(key) or '').strip()
                 if value:
                     found.append(value)
+            # An explicit label source is a hard read; ``all`` is the lenient historical mix and
+            # asks nothing (a table without 摘要 still labels from its keywords).
+            source = str(params.get('label_source') or 'all')
+            if source == 'title':
+                found.append(columns['title'])
+            elif source == 'abstract':
+                found.append(columns['abstract'])
+            elif source == 'keywords':
+                found.append(columns['entity'] if entity == 'keyword' else '关键词')
+            elif source == 'author':
+                found.append(columns['entity'] if entity == 'author' else '作者')
             if str(params.get('output_shape') or '') == 'dual_map':
                 found += ['参考文献', '来源期刊', '学科', '年份']
         elif ntype == 'analysis':
