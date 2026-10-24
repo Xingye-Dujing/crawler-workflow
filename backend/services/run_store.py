@@ -910,6 +910,23 @@ class RunStore:
         )
         return True
 
+    def find_file(self, name: str) -> dict | None:
+        """The ledger row for one exported file, by basename — the resolver a request that
+        arrives with only a NAME has to pass through.
+
+        ``run_files`` stores basenames only, so this is the one way to ask "did we write this?".
+        A newest-first single row: the same file name re-recorded by a later run is the same
+        bytes on disk (the export folder is flat and names are stamped), and the row is only
+        ever used to attribute the result back to a run and a node.
+        """
+        clean = os.path.basename(str(name or '').replace('\\', '/'))
+        if not clean:
+            return None
+        sql = 'SELECT run_id, node_id, name, kind FROM run_files WHERE name = ? ORDER BY rowid DESC'
+        for row in self._query(sql, (clean,)):
+            return dict(row)
+        return None
+
     def files_for_run(self, run_id: str, node_id: str = None, kind: str = None) -> list:
         """The files a run wrote, optionally narrowed to one node and/or one kind."""
         sql = 'SELECT name, kind, node_id FROM run_files WHERE run_id = ?'

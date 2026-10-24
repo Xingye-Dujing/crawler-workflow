@@ -86,6 +86,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据（与预览同一套取行规则：带 `workflow_name`，不按裸 id 猜） |
 | `/api/studio/save-image` | POST | 把 Studio 成品图保存为 PNG 到导出目录 |
 | `/api/studio/save-vector` | POST | 把浏览器画好的 ECharts 图存为矢量 SVG；非 `<svg>`／缺 xmlns／被截断／含脚本或外部引用／超尺寸都**按名拒绝**，不做「洗一遍再写」 |
+| `/api/studio/save-pdf` | POST | 把该图**已登记**的 LaTeX 源编译成矢量 PDF（连同同节点的三线表一次编译）；浏览器只送文件名，不在台账里的一律按名拒绝——绝不把浏览器贴来的 LaTeX 交给 xelatex |
 
 ### 统计与历史
 

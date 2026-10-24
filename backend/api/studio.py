@@ -17,14 +17,24 @@ import uuid
 import pandas as pd
 from flask import Blueprint, jsonify
 from state import _results_snapshot, execution_state
-from stores import _load_dataset
+from stores import _load_dataset, get_run_store
 
 from api.http import _bad_body, _json_body, _safe_int
 from api.resolution import _durable_node_rows, _resolve_dataframe
 from config import Config
 from i18n import t
+from services import latex_compile
 from utils.helpers import json_safe_records as _json_safe_records
 from utils.helpers import sanitize_filename
+
+
+def _read_text(path: str) -> str:
+    """A LaTeX source this program wrote, read back for compilation. Undecodable bytes become
+    replacement characters rather than an exception: the file is the ledger's, so a refusal to
+    read it would leave a button that fails with nothing to show."""
+    with open(path, encoding='utf-8', errors='replace') as handle:
+        return handle.read()
+
 
 logger = logging.getLogger(__name__)
 
@@ -407,6 +417,56 @@ def studio_save_vector():
     size = os.path.getsize(filepath)
     logger.info(t('misc.studio_saved', path=filepath, bytes=size))
     return jsonify({'ok': True, 'filename': filename, 'path': filepath, 'bytes': size})
+
+
+@bp.route('/api/studio/save-pdf', methods=['POST'])
+def studio_save_pdf():
+    """Compile a chart's ALREADY-REGISTERED LaTeX source into a vector PDF.
+
+    The browser sends a NAME and nothing else, and the source is read back only when the run
+    ledger says this program wrote that file. A client may not hand ``xelatex`` a document of its
+    own: LaTeX pulls arbitrary readable files into its output, and the resulting PDF is served
+    back from our origin — so "compile what you pasted" is an information-disclosure route with a
+    friendly button on it. The node's own three-line table is compiled alongside the figure when
+    the ledger holds one for the same node, which is what the compile node does.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    raw = str(data.get('name') or '')
+    name = os.path.basename(raw.replace('\\', '/'))
+    if not name or name != raw.strip():
+        return jsonify({'ok': False, 'error': t('api.pdfNeedsName')}), 400
+    row = get_run_store().find_file(name)
+    if row is None:
+        return jsonify({'ok': False, 'error': t('api.pdfUnregistered', name=name)}), 400
+    if row.get('kind') != 'latex':
+        return jsonify({'ok': False, 'error': t('api.pdfWrongKind', kind=row.get('kind') or '')}), 400
+    figure = os.path.join(Config.EXPORT_DIR, name)
+    if not os.path.isfile(figure):
+        return jsonify({'ok': False, 'error': t('api.pdfMissingFile', name=name)}), 400
+
+    docs = [_read_text(figure)]
+    store = get_run_store()
+    for sibling in store.files_for_run(row['run_id'], row.get('node_id') or None, 'latex_table'):
+        path = os.path.join(Config.EXPORT_DIR, sibling['name'])
+        if os.path.isfile(path):
+            docs.append(_read_text(path))
+    out_name = re.sub(r'\.txt$', '', name, flags=re.IGNORECASE) + '.pdf'
+    out, staged = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    if 'error' in out:
+        return jsonify({'ok': False, 'error': out['error']}), 500
+    store.record_file(row['run_id'], str(row.get('node_id') or ''), staged, 'pdf')
+    logger.info(t('misc.chartPdfSaved', name=staged, bytes=out.get('pdf_bytes', 0)))
+    return jsonify(
+        {
+            'ok': True,
+            'filename': staged,
+            'bytes': out.get('pdf_bytes', 0),
+            'run_id': row['run_id'],
+            'node_id': row.get('node_id') or '',
+        }
+    )
 
 
 @bp.route('/api/studio/save-image', methods=['POST'])

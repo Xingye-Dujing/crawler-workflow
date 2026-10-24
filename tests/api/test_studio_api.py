@@ -282,3 +282,128 @@ class TestStudioSaveVector:
         response = client.post('/api/studio/save-vector', json={'svg': huge, 'name': 'x'})
         assert response.status_code == 400
         assert 'bytes' in response.get_json()['error']
+
+
+LATEX_FIGURE = (
+    r'\documentclass[border=6pt]{standalone}'
+    '\n'
+    r'\begin{document}'
+    '\n'
+    r'\begin{tikzpicture}\end{tikzpicture}'
+    '\n'
+    r'\end{document}'
+    '\n'
+)
+LATEX_TABLE = (
+    r'\documentclass[border=6pt]{standalone}'
+    '\n'
+    r'\begin{document}'
+    '\n'
+    r'\begin{tabular}{lr}\toprule 城市 & 分数 \\'
+    '\n'
+    r'\bottomrule\end{tabular}'
+    '\n'
+    r'\end{document}'
+    '\n'
+)
+
+
+def _register(data_root, name, kind='latex', run_id='run-pdf', node_id='node-2', content=None):
+    """File a source in the export folder AND in the run ledger, the way a visualize node does."""
+    from stores import get_run_store
+
+    exports = data_root / 'data' / 'exports'
+    exports.mkdir(parents=True, exist_ok=True)
+    (exports / name).write_text(content or LATEX_FIGURE, encoding='utf-8')
+    assert get_run_store().record_file(run_id, node_id, name, kind)
+    return run_id, node_id
+
+
+@pytest.fixture
+def fake_xelatex(monkeypatch):
+    """The compiler is the user's own MiKTeX, so nothing here shells out: `_find_xelatex` and
+    ``subprocess.run`` are stood in for, exactly as ``test_compile_api`` does."""
+    import os
+    from types import SimpleNamespace
+
+    import services.latex_compile as latex_compile
+
+    monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+
+    def run(command, *args, **kwargs):
+        outdir = None
+        for i, arg in enumerate(command):
+            if arg == '-output-directory':
+                outdir = command[i + 1]
+        if outdir:
+            with open(os.path.join(outdir, 'main.pdf'), 'wb') as handle:
+                handle.write(b'%PDF-1.4 fake')
+        return SimpleNamespace(returncode=0, stderr=b'')
+
+    monkeypatch.setattr(latex_compile.subprocess, 'run', run)
+    return latex_compile
+
+
+class TestStudioSavePdf:
+    def test_a_registered_latex_source_compiles_into_a_pdf_next_to_it(self, client, data_root, fake_xelatex):
+        run_id, node_id = _register(data_root, '图23-a1b2.txt')
+        body = client.post('/api/studio/save-pdf', json={'name': '图23-a1b2.txt'}).get_json()
+        assert body['ok'] is True, body
+        assert body['filename'] == '图23-a1b2.pdf'
+        assert body['run_id'] == run_id and body['node_id'] == node_id
+        written = data_root / 'data' / 'exports' / body['filename']
+        assert written.read_bytes().startswith(b'%PDF')
+        # Recorded under the SAME run and node, so the export panel and 智能清除 see it.
+        from stores import get_run_store
+
+        rows = get_run_store().files_for_run(run_id, node_id, 'pdf')
+        assert [row['name'] for row in rows] == ['图23-a1b2.pdf']
+
+    def test_the_figure_and_its_three_line_table_become_one_document(
+        self, client, data_root, fake_xelatex, monkeypatch
+    ):
+        _register(data_root, 'fig-9.txt')
+        _register(data_root, 'fig-9-table.txt', kind='latex_table', content=LATEX_TABLE)
+        seen = {}
+
+        def capture(tex, out_name, export_dir):
+            seen['tex'] = tex
+            return {'pdf_file': out_name, 'pdf_bytes': 7}, out_name
+
+        monkeypatch.setattr(fake_xelatex, 'compile_pdf', capture)
+        body = client.post('/api/studio/save-pdf', json={'name': 'fig-9.txt'}).get_json()
+        assert body['ok'] is True
+        assert 'tikzpicture' in seen['tex'] and 'tabular' in seen['tex'], 'both boxes must be in one pass'
+
+    def test_a_name_the_ledger_does_not_know_is_refused_by_name(self, client, data_root):
+        (data_root / 'data' / 'exports').mkdir(parents=True, exist_ok=True)
+        response = client.post('/api/studio/save-pdf', json={'name': 'invented.txt'})
+        assert response.status_code == 400
+        assert 'invented.txt' in response.get_json()['error']
+
+    def test_a_path_in_the_name_is_refused_rather_than_resolved(self, client, data_root):
+        for hostile in ('../../etc/passwd', r'..\windows\system.ini', ''):
+            response = client.post('/api/studio/save-pdf', json={'name': hostile})
+            assert response.status_code == 400, hostile
+
+    def test_a_registered_file_that_is_not_latex_is_refused(self, client, data_root):
+        _register(data_root, 'nodes-1.txt', kind='biblio_nodes')
+        response = client.post('/api/studio/save-pdf', json={'name': 'nodes-1.txt'})
+        assert response.status_code == 400
+        assert 'biblio_nodes' in response.get_json()['error']
+
+    def test_a_ledger_row_whose_file_was_cleared_says_so(self, client, data_root):
+        _register(data_root, 'gone-1.txt')
+        (data_root / 'data' / 'exports' / 'gone-1.txt').unlink()
+        response = client.post('/api/studio/save-pdf', json={'name': 'gone-1.txt'})
+        assert response.status_code == 400
+        assert 'gone-1.txt' in response.get_json()['error']
+
+    def test_a_missing_compiler_fails_with_its_own_reason(self, client, data_root, monkeypatch):
+        import services.latex_compile as latex_compile
+
+        _register(data_root, 'nofont.txt')
+        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: '')
+        response = client.post('/api/studio/save-pdf', json={'name': 'nofont.txt'})
+        assert response.status_code == 500
+        assert 'xelatex' in response.get_json()['error']

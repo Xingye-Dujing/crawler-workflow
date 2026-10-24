@@ -299,3 +299,26 @@ class TestVectorSave:
         assert "setAttribute('width'" in body and "setAttribute('height'" in body
         assert 'instance.dispose()' in body, 'the off-screen instance must not leak'
         assert 'host.remove()' in body, 'the off-screen host must not stay on the page'
+
+
+class TestLatexBarPdf:
+    """The one-click PDF posts a NAME, never a source.
+
+    Compiling what the browser pasted would hand xelatex a document chosen by the page — LaTeX
+    pulls readable files into its output, and the PDF comes back from our origin."""
+
+    def test_a_registered_source_offers_the_button_and_sends_only_its_name(self, saved):
+        case = saved['latex_bar_registered']
+        assert case['hasPdfButton'] is True, case['html']
+        assert case['url'] == '/api/studio/save-pdf', case
+        assert case['sentName'] == case['registered'] == 'tu30-a1b2.txt', case
+        assert case['sentSource'] == ['name'], f'the request must carry the name only: {case["sentSource"]}'
+        assert case['asked'] == 1
+
+    def test_an_inline_preview_offers_no_button_and_sends_nothing(self, saved):
+        case = saved['latex_bar_inline_only']
+        assert case['hasPdfButton'] is False, 'nothing is registered, so there is nothing to compile'
+        assert case['asked'] == 0
+        assert case['filename'] is None
+        assert case['toast']['shown'] is True
+        assert case['toast']['text'] != 'chart.pdfNoSource', 'the refusal must resolve to a sentence'

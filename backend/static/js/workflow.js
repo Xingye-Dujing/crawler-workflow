@@ -4571,6 +4571,11 @@ function _renderLatexBar(result) {
         html += '<button class="menu-btn" onclick="copyLatexSource(\'fig\')">' + I18n.t('chart.copyLatex') + '</button>' +
             '<button class="menu-btn" onclick="downloadLatexFile(\'fig\')">' + I18n.t('chart.downloadLatex') + '</button>';
     }
+    if (_lastLatexFile) {
+        /* Only a source the run LEDGER knows about can be compiled — the button sends the name
+           and nothing else, so an inline preview with no filed source offers nothing to compile. */
+        html += '<button class="menu-btn" onclick="saveChartPdf()">' + I18n.t('chart.makePdf') + '</button>';
+    }
     if (_lastLatexTable) {
         html += '<button class="menu-btn" onclick="copyLatexSource(\'tab\')">' + I18n.t('chart.copyTable') + '</button>' +
             '<button class="menu-btn" onclick="downloadLatexFile(\'tab\')">' + I18n.t('chart.downloadTable') + '</button>';
@@ -4605,6 +4610,34 @@ function _fallbackCopy(text) {
     ta.select();
     try { document.execCommand('copy'); } catch (e) { /* clipboard blocked: the download path still works */ }
     document.body.removeChild(ta);
+}
+
+/* One click from a drawn chart to a vector PDF: the request carries only the NAME of the LaTeX
+   source this node filed, and the server compiles what its own ledger vouches for. Sending the
+   source instead would hand xelatex a document chosen by the page — LaTeX pulls readable files
+   into its output, and the PDF comes back from our origin. */
+async function saveChartPdf() {
+    if (!_lastLatexFile) {
+        showToast(I18n.t('chart.pdfNoSource'));
+        return null;
+    }
+    /* A xelatex pass takes seconds; the default 2.5 s toast would be gone before the answer. */
+    showToast(I18n.t('chart.pdfWorking'), 20000);
+    try {
+        var resp = await fetch('/api/studio/save-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: _lastLatexFile }),
+        });
+        var result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'request failed');
+        showToast(I18n.t('studio.saved').replace('{path}', result.filename));
+        window.location.href = '/api/exports/download?name=' + encodeURIComponent(result.filename);
+        return result.filename;
+    } catch (e) {
+        showToast(I18n.t('studio.saveFailed') + ': ' + e.message);
+        return null;
+    }
 }
 
 function downloadLatexFile(kind) {

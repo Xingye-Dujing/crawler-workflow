@@ -1090,6 +1090,7 @@ _ZH = {
     'misc.studio_source_failed': '图表工坊合并载入：来源读取失败',
     'misc.source_probe_failed': '数据源探测失败',
     'misc.studio_saved': '图表工坊已保存 {path}（{bytes} 字节）',
+    'misc.chartPdfSaved': '图表 PDF 已生成：{name}（{bytes} 字节）',
     'misc.browser_open_failed': '无法打开浏览器：{err}',
     'misc.server_starting': '爬虫工作流服务启动，端口 {port}',
     'misc.visualize_failed': '图表渲染失败：{err}',
@@ -1378,6 +1379,10 @@ _ZH = {
     'api.svgTruncated': 'SVG 保存被拒：文件没有以 </svg> 结束（可能被截断）',
     'api.svgRefused': 'SVG 保存被拒：图中含有 {found}，这类标记可能带脚本或外部引用',
     'api.svgTooLarge': 'SVG 保存被拒：内容 {cap} 字节已是上限，这不像是画出来的图',
+    'api.pdfNeedsName': 'PDF 生成被拒：请给出该图已登记的 LaTeX 文件名',
+    'api.pdfUnregistered': 'PDF 生成被拒：{name} 不在运行台账里，本程序没写过这个文件，不交给 xelatex 编译',
+    'api.pdfWrongKind': 'PDF 生成被拒：{kind} 不是 LaTeX 源文件，只有本程序登记的 .txt 图源可以编译',
+    'api.pdfMissingFile': 'PDF 生成被拒：台账记着 {name}，但导出目录里已找不到它（可能被清除）',
     # ── 运行时设置校验 ────────────────────────────────────────
     'set.driverMissing': '驱动文件不存在：{path}',
     'set.driverEmpty': '驱动路径为空，已恢复默认值',
@@ -2851,6 +2856,7 @@ _EN = {
     'misc.studio_source_failed': 'Merged studio load: source failed',
     'misc.source_probe_failed': 'Source probe failed',
     'misc.studio_saved': 'Chart studio saved {path} ({bytes} bytes)',
+    'misc.chartPdfSaved': 'Chart PDF compiled: {name} ({bytes} bytes)',
     'misc.browser_open_failed': 'Could not open browser: {err}',
     'misc.server_starting': 'Starting crawler workflow server on port {port}',
     'misc.visualize_failed': 'Chart rendering failed: {err}',
@@ -3175,6 +3181,14 @@ _EN = {
     'api.svgTruncated': 'SVG refused: the file does not end with </svg> (it looks truncated)',
     'api.svgRefused': 'SVG refused: the markup carries {found}, which can smuggle a script or an external reference',
     'api.svgTooLarge': 'SVG refused: {cap} bytes is the cap, and that is not a drawn chart',
+    'api.pdfNeedsName': 'PDF refused: name the registered LaTeX source of this chart',
+    'api.pdfUnregistered': (
+        'PDF refused: {name} is not in the run ledger, so this program never wrote it and xelatex will not be handed it'
+    ),
+    'api.pdfWrongKind': 'PDF refused: {kind} is not a LaTeX source; only a .txt this program registered is compiled',
+    'api.pdfMissingFile': (
+        'PDF refused: the ledger knows {name}, but the export folder no longer has it (it was cleared)'
+    ),
     # ── runtime settings validation ───────────────────────────
     'set.driverMissing': 'Driver file does not exist: {path}',
     'set.driverEmpty': 'Driver path was empty — restored the default',

@@ -37,6 +37,24 @@ const [jsDir, panelMarkupPath] = process.argv.slice(2);
 const panelMarkup = fs.readFileSync(panelMarkupPath, 'utf8');
 
 const RENDER_ECHARTS = { ok: true, engine: 'echarts', option: { series: [{ type: 'bar' }] } };
+/* A node that files its LaTeX writes a real .txt into the export folder and registers it; an
+   inline-only preview has nothing registered, so there is nothing the server may compile. */
+const RENDER_LATEX = {
+    ok: true,
+    engine: 'echarts',
+    option: { series: [{ type: 'bar' }] },
+    latex: 'FIGURE SOURCE',
+    latex_table: 'TABLE SOURCE',
+    latex_file: 'tu30-a1b2.txt',
+    latex_table_file: 'tu30-a1b2-table.txt',
+};
+const RENDER_LATEX_INLINE = {
+    ok: true,
+    engine: 'echarts',
+    option: { series: [{ type: 'bar' }] },
+    latex: 'FIGURE SOURCE',
+    latex_table: 'TABLE SOURCE',
+};
 const RENDER_IMAGE = { ok: true, engine: 'matplotlib', image: 'data:image/png;base64,MATPLOTLIBPICTURE' };
 const SAVE_OK = { ok: true, filename: 'tu23-a1b2c3.png' };
 const SAVE_REFUSED = { ok: false, error: 'image too large' };
@@ -90,6 +108,7 @@ function world(render) {
         `${sources}\n;globalThis.__x = { canvas, dataNodes, dashboard, I18n,` +
             ' savePreviewImage, saveDashboardImage, saveChartPicture,' +
             ' savePreviewVector, saveChartVector, chartSvgMarkup,' +
+            ' saveChartPdf, getLatexFile: () => _lastLatexFile,' +
             ' openChartFullscreen, closeChartFullscreen, saveFullscreenImage,' +
             ' getFullscreenInstance: () => _chartFullscreenInstance,' +
             ' getPreviewNodeId: () => _chartPreviewNodeId };',
@@ -100,9 +119,12 @@ function world(render) {
         const u = String(url);
         const body = init && init.body ? JSON.parse(init.body) : null;
         requests.push({ url: u, body });
-        const payload = u.indexOf('/api/studio/save-image') >= 0 || u.indexOf('/api/studio/save-vector') >= 0
-            ? answers.save
-            : answers.render;
+        const payload =
+            u.indexOf('/api/studio/save-image') >= 0 ||
+            u.indexOf('/api/studio/save-vector') >= 0 ||
+            u.indexOf('/api/studio/save-pdf') >= 0
+                ? answers.save
+                : answers.render;
         return Promise.resolve({ json: () => Promise.resolve(payload), status: 200 });
     };
 
@@ -447,6 +469,34 @@ async function vectorNoMarkupCase() {
         markup: w.x.chartSvgMarkup({ series: [{ type: 'bar' }] }, 800, 600),
     };
 }
+
+/* ── The LaTeX bar's one-click PDF ─────────────────────────────────────────── */
+async function latexBarCase(render) {
+    const w = world(render);
+    addChart(w, 'v-1', '图30 结构变异');
+    await w.x.dataNodes.previewVisualize('v-1');
+    await ticks();
+    const bar = w.sandbox.document.getElementById('latex-action-bar');
+    const html = String((bar && bar.innerHTML) || '');
+    const askedBefore = w.requests.length;
+    const filename = await w.x.saveChartPdf();
+    await ticks();
+    const post = w.requests.slice(askedBefore).pop();
+    return {
+        html,
+        hasPdfButton: html.indexOf('saveChartPdf()') >= 0,
+        registered: w.x.getLatexFile(),
+        filename,
+        url: post ? post.url : null,
+        sentName: post && post.body ? post.body.name : null,
+        sentSource: post && post.body ? Object.keys(post.body) : null,
+        asked: w.requests.length - askedBefore,
+        toast: w.toast(),
+    };
+}
+
+out.latex_bar_registered = await latexBarCase(RENDER_LATEX);
+out.latex_bar_inline_only = await latexBarCase(RENDER_LATEX_INLINE);
 
 out.vector_nothing_drawn = await vectorNothingCase();
 out.vector_no_markup = await vectorNoMarkupCase();
