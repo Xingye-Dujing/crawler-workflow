@@ -254,6 +254,11 @@ def test_dual_map_overlay_runs_end_to_end(client, app_module):
     # LaTeX for the overlay figure and its appendix table ships with the chart result.
     assert status['chart_results']['node-3']['latex']
     assert status['chart_results']['node-3']['latex_table']
+    # The chart's own LaTeX is FILED and registered, not just returned inline: that name is the
+    # only handle the panel's 编译为 PDF button may send, and the server compiles nothing else.
+    assert str(status['chart_results']['node-3'].get('latex_file') or '').endswith('.txt')
+    ledger = app_module._RUN_STORE.files_for_run(run_id, 'node-3')
+    assert {row['kind'] for row in ledger} == {'latex', 'latex_table'}, ledger
 
 
 @pytest.mark.serial
