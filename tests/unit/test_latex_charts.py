@@ -12,6 +12,7 @@ import json
 import pandas as pd
 import pytest
 
+import services.latex_charts as lc
 from services.chart_contracts import BIBLIO_CHART_TYPES
 from services.latex_charts import LatexChartService as L
 from services.visualizer import CHART_TYPES, LATEX_UNBUILDABLE_TYPES, ChartConfigError
@@ -297,3 +298,102 @@ class TestTable:
         out = L.to_latex_table(_dual(), 'dual_map', title='表 X')
         assert '图层' in out and '权重' in out
         assert '期刊网络' in out and '学科网络' in out
+
+
+def _dense(count: int) -> pd.DataFrame:
+    """A ring of ``count`` nodes, each linked to its two neighbours, with Chinese names of the
+    lengths a keyword list really has. One fixture for every "does this still fit" question."""
+    names = [f'关键词{i}号' for i in range(count)]
+    links = []
+    for i in range(count):
+        neighbours = [names[(i - 1) % count], names[(i + 1) % count]]
+        links.append(json.dumps([{'target': n, 'value': 1.0, 'count': 2} for n in neighbours], ensure_ascii=False))
+    return pd.DataFrame(
+        {
+            '节点': names,
+            'x': [i * 100.0 / max(count - 1, 1) for i in range(count)],
+            'y': [(i % 7) * 10.0 for i in range(count)],
+            '连接': links,
+            '频次': [count - i for i in range(count)],
+            '度': [2] * count,
+            '中介中心性': [0.1] * count,
+            '特征向量中心性': [0.2] * count,
+            'PageRank': [0.05] * count,
+            'Sigma': [1.0] * count,
+            '聚类': [i % 3 for i in range(count)],
+            '聚类标签': (['甲组', '乙组', '丙组'] * (count // 3 + 1))[:count],
+        }
+    )
+
+
+class TestThePictureFitsItsPage:
+    """A picture is sized to the page it prints on. The layouts grow with what they draw — a ring's
+    radius is ``0.46 × nodes`` so labels have arc to sit on — while the tikz unit stayed 1 cm, so a
+    49-node ring measured 46 cm across and the paper's A4 page cut its right half off."""
+
+    def test_a_label_estimate_errs_wide_never_narrow(self):
+        assert L._label_cm('关键词', r'\small') > L._label_cm('关键词', r'\tiny')
+        assert L._label_cm('关键词一' * 4, r'\tiny') > L._label_cm('关键词一', r'\small')
+        # An unrecognised font size takes the widest factor: under-estimating is what overflows a page.
+        assert L._label_cm('关键词', 'weird') == L._label_cm('关键词', r'\small')
+
+    def test_a_picture_that_already_fits_is_not_blowed_up(self):
+        assert L._picture_scale(5.6, 5.6, 1.0) == 1.0
+
+    def test_a_ring_grown_by_node_count_is_scaled_onto_the_page(self):
+        radius = 0.46 * 49
+        scale = L._picture_scale(2 * radius, 2 * radius, 2.0)
+        assert scale < 1.0
+        # Width pays for the label on both sides; height pays for one line, which is what a label is.
+        assert 2 * radius * scale + 2 * 2.0 <= lc.GRAPH_BOX_CM[0] + 0.01
+        assert 2 * radius * scale + 2 * lc.GRAPH_LINE_CM <= lc.GRAPH_BOX_CM[1] + 0.01
+
+    def test_labels_that_would_cover_each_other_are_dropped_and_counted(self):
+        held = L._fit_labels(
+            [('甲', 'east', 1.0, 0.0, r'\tiny'), ('乙', 'east', 1.0, 0.05, r'\tiny')],
+            1.0,
+        )
+        assert held == {'甲'}, 'the first arrival keeps its space'
+        apart = L._fit_labels(
+            [('甲', 'east', 1.0, 0.0, r'\tiny'), ('乙', 'east', 1.0, 9.0, r'\tiny')],
+            1.0,
+        )
+        assert apart == {'甲', '乙'}
+
+    def test_an_east_label_and_a_north_label_collide_too(self):
+        """Sweeping each side on its own would call both of these fine; they print over each other."""
+        held = L._fit_labels(
+            [('甲', 'east', 0.0, 0.0, r'\tiny'), ('乙', 'north', 0.3, -0.2, r'\tiny')],
+            1.0,
+        )
+        assert held == {'甲'}
+
+    def test_a_dense_ring_scales_its_picture_and_says_what_it_dropped(self):
+        out = L.to_latex_document(_dense(40), 'circular', title='环形')
+        assert '[x=0.' in out, out[:200]
+        assert '个会互相遮盖的节点标签' in out and '完整节点见三线表' in out
+        assert out.count(r'\draw[leadline]') < 40, 'a 40-node ring cannot label 40 nodes legibly'
+
+    def test_a_small_graph_still_carries_every_label_at_its_old_size(self):
+        out = L.to_latex_document(_biblio(), 'circular', title='环形')
+        assert out.count(r'\draw[leadline]') == 3
+        assert '会互相遮盖' not in out
+        assert '[x=1.000cm,y=1.000cm]' in out, 'a picture that fits is left the size it always was'
+
+    def test_a_dense_knowledge_graph_also_fits_and_also_counts(self):
+        out = L.to_latex_document(_dense(40), 'knowledge_graph', title='图谱')
+        assert '[x=0.' in out
+        assert '个会互相遮盖的节点标签' in out
+        assert out.count(r'\draw[leadline]') < 40
+
+    def test_the_shipped_figures_all_stay_inside_the_print_box(self):
+        """The sizing is only real if the widest thing this service draws still fits: every figure's
+        own coordinate span, times its scale, plus its labels, must stay in ``GRAPH_BOX_CM``."""
+        for chart_type in ('knowledge_graph', 'circular', 'landscape'):
+            df, kw = CASES[chart_type]
+            out = L.to_latex_document(_dense(30), chart_type, title='图', **kw)
+            head = [line for line in out.splitlines() if line.startswith(r'\begin{tikzpicture}')]
+            assert head, chart_type
+            assert '[x=' in head[0], f'{chart_type} draws a network but declares no size'
+            unit = float(head[0].split('[x=')[1].split('cm')[0])
+            assert 0.02 <= unit <= 1.0, f'{chart_type} scaled by {unit}'

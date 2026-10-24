@@ -76,6 +76,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/report/generate` | POST | 生成自包含 HTML 运行报告（本次运行的表格，或按 `run_id` 读历史运行；可选 AI 结论；可选 `options` 定制：`show_charts/tables/facts`、`max_rows`、`node_ids` 选节点、`images` 内联导出目录里的成图） |
 | `/api/report/view` | GET | 按名查看报告：仅接受 `report-` 前缀的 `.html`，响应带禁脚本 CSP |
 | `/api/report/pdf` | POST | 把已生成的报告按名用无头 Chrome 打印成 PDF（找不到 Chrome 或非报告名 → 报错，HTML 不受影响） |
+| `/api/report/latex` | POST | **论文成稿**：只收 `{"run_id","title"}`，图与三线表一律从这次运行**已登记的 LaTeX 源文件**里读回来，合成一份 `article`+`ctex` 文档（方法段 + 逐图逐表），先写 `.tex` 再用本机 `xelatex` 编译成 PDF 并记回台账。浏览器**永不**上传 LaTeX 源码（那等于给编译器一条读任意文件的路）。运行不存在 / 没有登记任何 LaTeX 源 / 没有编译器 → 按名报错且不留半份 PDF |
 | `/api/report/studio-images` | GET | 列出导出目录里的成图（图片扩展名）供报告内联选择 |
 
 ### Chart Studio

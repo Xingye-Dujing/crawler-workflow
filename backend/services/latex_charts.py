@@ -69,6 +69,16 @@ _PAPER_PALETTE = [
 ]
 
 
+#: The box a network picture is sized into, in centimetres. A4 with the paper's 1.5 cm margins leaves
+#: 18 cm of text and a bibliometric figure's own minipage is 17.5 cm wide, so a picture that fits here
+#: cannot run off the page — and height binds first, because a ring is as tall as it is wide while the
+#: caption and the formula paragraph have to reach the same page.
+GRAPH_BOX_CM = (15.0, 10.5)
+
+#: One line of a Chinese label, tall enough to count as overhang when sizing.
+GRAPH_LINE_CM = 0.6
+
+
 def _preamble_extras() -> str:
     """仿宋 CJK text + the paper palette + the shared ``cixi`` axis style and two reusable tikz styles.
 
@@ -121,6 +131,12 @@ def _esc(value) -> str:
     return ''.join(out)
 
 
+#: The same escaper under a public name: anything that pastes free text (a node title, a method
+#: sentence) into a document assembled elsewhere has to go through it — ``top_n=50`` in a caption
+#: is a ``Missing $ inserted`` error without it.
+esc = _esc
+
+
 def _num(value) -> str:
     """A finite number as clean LaTeX (drop a trailing .0); never emit a nan/inf token."""
     try:
@@ -168,6 +184,17 @@ def _cat_axis(labels, xlabel='') -> str:
 def _label_key(chart_type, title) -> str:
     base = re.sub(r'[^0-9a-zA-Z]+', '-', str(title or chart_type)).strip('-').lower()
     return (base or chart_type)[:40]
+
+
+def paper_preamble() -> str:
+    """ctex + fontspec + pgfplots + booktabs + the palette + the shared tikz styles.
+
+    Every source this service writes defines ``cA``…``cJ``, ``lblbox``, ``leadline`` and the
+    ``cixi`` axis style in its own preamble. A document that pastes their BODIES has to carry the
+    same definitions, or the first ``\\draw[cA,...]`` dies with ``Undefined color`` — which is why
+    the paper report asks for this instead of writing its own package list.
+    """
+    return _PACKAGES + _preamble_extras()
 
 
 class LatexChartService:
@@ -722,6 +749,68 @@ class LatexChartService:
             )
         return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
+    # ── network sizing ────────────────────────────────────────────────
+
+    @staticmethod
+    def _label_cm(name, font: str) -> float:
+        r"""A Chinese label's width in cm, estimated per glyph: \small 0.34, \scriptsize 0.28, \tiny 0.23.
+
+        TeX's font metrics are not ours to consult here, and the number only ever sizes a picture, so
+        it errs wide (the ``+0.2`` is the ``lblbox`` padding, and an unknown font takes the widest
+        factor). Sizing from an estimate is only safe in one direction: over-estimate and the picture
+        is a little small, under-estimate and it runs off the page — which is the bug this prevents.
+        """
+        per_glyph = {r'\small': 0.34, r'\scriptsize': 0.28, r'\tiny': 0.23}.get(font, 0.34)
+        return len(str(name)) * per_glyph + 0.2
+
+    @classmethod
+    def _picture_scale(cls, extent_x: float, extent_y: float, widest_label_cm: float) -> float:
+        """cm per layout unit, so a picture that spans ``extent`` units still fits ``GRAPH_BOX_CM``.
+
+        A layout's span grows with what it draws — a ring's radius is ``0.46 × nodes`` so its labels
+        have arc to sit on — while the unit stayed 1 cm, so a 49-node ring measured 46 cm across and
+        the paper's page cut its right half off. Clamped at 1: a picture that already fits is not
+        blown up to fill the box, because then a two-node graph would print as two dots 15 cm apart.
+        """
+        room_x = max(1.5, GRAPH_BOX_CM[0] - 2 * widest_label_cm)
+        room_y = max(1.5, GRAPH_BOX_CM[1] - 2 * GRAPH_LINE_CM)
+        return max(0.02, min(1.0, room_x / max(extent_x, 0.1), room_y / max(extent_y, 0.1)))
+
+    @classmethod
+    def _fit_labels(cls, candidates, scale_cm: float) -> set:
+        """The labels that can be drawn without covering one another, as a set of node names.
+
+        ``candidates`` is ``[(name, side, x, y, font)]`` in layout units, in priority order: the first
+        arrival keeps its space and a later one that would cover it is dropped (the caller counts what
+        it dropped out loud). Rectangles rather than a per-side sweep, because an east label from one
+        node and a north label from its neighbour collide just the same.
+
+        The width is ``_label_cm`` — an estimate — so this is a de-collision pass, not a proof. Under-
+        estimating is the one failure mode to avoid, which is why that estimate errs wide.
+        """
+        unit = max(scale_cm, 1e-6)
+        line = GRAPH_LINE_CM / unit
+        kept: list = []
+        held: set = set()
+        for name, side, x, y, font in candidates:
+            width = cls._label_cm(name, font) / unit
+            if side == 'east':
+                box = (x, y - line / 2, x + width, y + line / 2)
+            elif side == 'west':
+                box = (x - width, y - line / 2, x, y + line / 2)
+            elif side == 'north':
+                box = (x - width / 2, y, x + width / 2, y + line)
+            elif side == 'south':
+                box = (x - width / 2, y - line, x + width / 2, y)
+            else:
+                box = (x - width / 2, y - line / 2, x + width / 2, y + line / 2)
+            x0, y0, x1, y1 = box
+            if any(x0 < kx1 and kx0 < x1 and y0 < ky1 and ky0 < y1 for kx0, ky0, kx1, ky1 in kept):
+                continue
+            kept.append(box)
+            held.add(name)
+        return held
+
     @classmethod
     def _graph_tikz(cls, nodes, links) -> str:
         names = list(dict.fromkeys(nm for lk in links for nm in (lk['source'], lk['target'])))
@@ -734,6 +823,28 @@ class LatexChartService:
             ang = 360.0 * i / len(names)
             pos[name] = (radius * math.cos(math.radians(ang)), radius * math.sin(math.radians(ang)))
         idx = {n: i for i, n in enumerate(names)}
+        fonts = {name: r'\small' if inc.get(name, 0.0) / max_inc >= 0.6 else r'\tiny' for name in names}
+        # A hub label is pulled outward on a leader line and sits on its own side, so words in the left
+        # half no longer run over the centre like they did with a fixed anchor=west. The side recorded
+        # here is the direction the label GROWS in, which is the opposite of its tikz anchor name.
+        spots = {}
+        for name in names:
+            x, y = pos[name]
+            r = 0.14 + 0.5 * math.sqrt(inc.get(name, 0.0) / max_inc)
+            norm = math.hypot(x, y) or 1.0
+            ux, uy = x / norm, y / norm
+            spots[name] = (x, y, r, x + ux * (r + 0.22), y + uy * (r + 0.22), 'east' if ux >= 0 else 'west')
+        ranked = sorted(names, key=lambda name: (-inc.get(name, 0.0), name))
+
+        def _candidates(scale_cm: float) -> list:
+            return [(name, spots[name][5], spots[name][3], spots[name][4], fonts[name]) for name in ranked]
+
+        # Sized in two passes because the two quantities depend on each other: the scale is set by the
+        # widest label, and which labels survive the de-collision is decided at that scale.
+        scale = cls._picture_scale(2 * radius, 2 * radius, max(cls._label_cm(n, fonts[n]) for n in names))
+        held = cls._fit_labels(_candidates(scale), scale)
+        scale = cls._picture_scale(2 * radius, 2 * radius, max(cls._label_cm(n, fonts[n]) for n in held))
+        held = cls._fit_labels(_candidates(scale), scale)
         out = [f'\\coordinate (n{i}) at ({x:.2f},{y:.2f});' for i, (x, y) in enumerate(pos.values())]
         for lk in links:
             w = max(0.3, 4.0 * math.sqrt(lk['value'] / biggest_link))
@@ -741,22 +852,21 @@ class LatexChartService:
             b = idx[lk['target']]
             out.append(f'\\draw[black!12,line width={w:.2f}pt] (n{a}) -- (n{b});')
         for i, name in enumerate(names):
-            r = 0.14 + 0.5 * math.sqrt(inc.get(name, 0.0) / max_inc)
-            x, y = pos[name]
-            # A hub label is pulled outward on a leader line and sits on its own side, so words in the left half
-            # no longer run over the centre like they did with a fixed anchor=west.
-            norm = math.hypot(x, y) or 1.0
-            ux, uy = x / norm, y / norm
-            ex, ey = x + ux * r, y + uy * r
-            lx, ly = x + ux * (r + 0.22), y + uy * (r + 0.22)
-            anchor = 'west' if ux >= 0 else 'east'
-            font = '\\small' if inc.get(name, 0.0) / max_inc >= 0.6 else '\\tiny'
+            x, y, r, lx, ly, side = spots[name]
+            draw = f'\\draw[fill=cA!55,draw=cA,line width=0.7pt] (n{i}) circle ({r:.2f});'
+            if name in held:
+                anchor = 'west' if side == 'east' else 'east'
+                draw += (
+                    f'\\draw[leadline] ({x + (lx - x) * 0.7:.2f},{y + (ly - y) * 0.7:.2f}) -- ({lx:.2f},{ly:.2f});'
+                    f'\\node[font={fonts[name]},anchor={anchor},text=black] at ({lx:.2f},{ly:.2f}) {{{_esc(name)}}};'
+                )
+            out.append(draw)
+        if len(held) < len(names):
             out.append(
-                f'\\draw[fill=cA!55,draw=cA,line width=0.7pt] (n{i}) circle ({r:.2f});'
-                f'\\draw[leadline] ({ex:.2f},{ey:.2f}) -- ({lx:.2f},{ly:.2f});'
-                f'\\node[font={font},anchor={anchor},text=black] at ({lx:.2f},{ly:.2f}) {{{_esc(name)}}};'
+                f'\\node[font=\\scriptsize,text=black!55,anchor=north] at (0,{-(radius + 1.0):.2f})'
+                f'{{已省略 {len(names) - len(held)} 个会互相遮盖的节点标签；完整节点见三线表。}};'
             )
-        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+        return f'\\begin{{tikzpicture}}[x={scale:.3f}cm,y={scale:.3f}cm]\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
     @classmethod
     def _wordcloud(cls, df, x, value_field, agg, tokenize):
@@ -967,7 +1077,39 @@ class LatexChartService:
         center_x = sum(value[0] for value in positions.values()) / len(positions)
         center_y = sum(value[1] for value in positions.values()) / len(positions)
         ranked = sorted(names, key=lambda name: (-cls._biblio_float(rows[name]['频次'], 0.0), name))
-        labelled = set(ranked[:120])
+        fonts = {
+            name: r'\small' if cls._biblio_float(rows[name]['频次'], 0.0) / max_freq >= 0.65 else r'\scriptsize'
+            for name in names
+        }
+        widest = max(cls._label_cm(name, fonts[name]) for name in names)
+        # The field itself spans 13.5 x 7.5 units; the labels hang off both sides of it, so they are
+        # what the page has room for. See ``_graph_tikz`` for why the layout is sized instead of the unit.
+        scale = cls._picture_scale(14.1, 8.1, widest)
+        # Each label sits on the far side of its own dot, measured from the middle of the field, and
+        # grows away from it — the direction ``_fit_labels`` needs.
+        radii = {
+            name: 0.08 + 0.52 * math.sqrt(max(0.0, cls._biblio_float(rows[name]['频次'], 0.0) / max_freq))
+            for name in names
+        }
+        spots = {}
+        for name in names:
+            x, y = positions[name]
+            radius = radii[name]
+            dx, dy = x - center_x, y - center_y
+            if abs(dx) >= abs(dy):
+                side = 'east' if dx >= 0 else 'west'
+                lx, ly = x + (radius + 0.14 if dx >= 0 else -(radius + 0.14)), y
+            else:
+                side = 'north' if dy >= 0 else 'south'
+                lx, ly = x, y + (radius + 0.14 if dy >= 0 else -(radius + 0.14))
+            spots[name] = (side, lx, ly)
+
+        def _candidates(scale_cm: float) -> list:
+            return [(name, spots[name][0], spots[name][1], spots[name][2], fonts[name]) for name in ranked[:120]]
+
+        labelled = cls._fit_labels(_candidates(scale), scale)
+        scale = cls._picture_scale(14.1, 8.1, max(cls._label_cm(n, fonts[n]) for n in labelled))
+        labelled = cls._fit_labels(_candidates(scale), scale)
         max_weight = max((link['value'] for link in links), default=1.0) or 1.0
         out = []
         for link in links[:180]:
@@ -977,8 +1119,7 @@ class LatexChartService:
             out.append(f'\\draw[black!18,line width={width:.2f}pt] ({x1:.2f},{y1:.2f}) -- ({x2:.2f},{y2:.2f});')
         for name in names:
             x, y = positions[name]
-            frequency = cls._biblio_float(rows[name]['频次'], 0.0)
-            radius = 0.08 + 0.52 * math.sqrt(max(0.0, frequency / max_freq))
+            radius = radii[name]
             cluster = cls._biblio_text(rows[name].get('聚类'))
             label = cls._biblio_text(rows[name].get('聚类标签')) or f'#{cluster}'
             color = colors.get(f'#{cluster} {label}', 'cA')
@@ -989,28 +1130,18 @@ class LatexChartService:
                 f'\\draw[fill={color}!55,draw={border},line width={width}] ({x:.2f},{y:.2f}) circle ({radius:.2f});'
             )
             if name in labelled:
-                dx, dy = x - center_x, y - center_y
-                if abs(dx) >= abs(dy):
-                    direction, anchor, xoff = (
-                        ('east', 'west', radius + 0.14) if dx >= 0 else ('west', 'east', radius + 0.14)
-                    )
-                else:
-                    direction, anchor = ('north', 'south') if dy >= 0 else ('south', 'north')
-                    xoff = 0.0
-                lx = x + (xoff if abs(dx) >= abs(dy) else 0)
-                ly = y + (0 if abs(dx) >= abs(dy) else (radius + 0.14 if dy >= 0 else -(radius + 0.14)))
-                font = '\\small' if frequency / max_freq >= 0.65 else '\\scriptsize'
+                side, lx, ly = spots[name]
+                anchor = {'east': 'west', 'west': 'east', 'north': 'south', 'south': 'north'}[side]
                 out.append(
                     f'\\draw[leadline] ({x:.2f},{y:.2f}) -- ({lx:.2f},{ly:.2f});'
-                    f'\\node[font={font},anchor={anchor},lblbox] at ({lx:.2f},{ly:.2f}) {{{_esc(name)}}};'
+                    f'\\node[font={fonts[name]},anchor={anchor},lblbox] at ({lx:.2f},{ly:.2f}) {{{_esc(name)}}};'
                 )
-        if len(names) > 120:
-            omitted = len(names) - 120
+        if len(labelled) < len(names):
             out.append(
                 '\\node[font=\\scriptsize,text=black!55,anchor=south west] at (0,0)'
-                f'{{已省略 {omitted} 个低频节点标签；完整节点见三线表。}};'
+                f'{{已省略 {len(names) - len(labelled)} 个会互相遮盖的节点标签；完整节点见三线表。}};'
             )
-        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+        return f'\\begin{{tikzpicture}}[x={scale:.3f}cm,y={scale:.3f}cm]\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
     @classmethod
     def _biblio_circular(cls, df) -> str:
@@ -1040,7 +1171,7 @@ class LatexChartService:
         ordered = sorted(clusters.items(), key=lambda item: (-item[1]['frequency'], item[0]))[:30]
         max_frequency = max((group['frequency'] for _, group in ordered), default=1.0) or 1.0
         radius = max(2.4, 0.48 * len(ordered))
-        out = []
+        placed = []
         for index, (name, group) in enumerate(ordered):
             angle = 360.0 * index / len(ordered)
             if group['x'] and group['y']:
@@ -1051,12 +1182,23 @@ class LatexChartService:
                 y = radius * math.sin(math.radians(angle)) + 4.5
             size = 0.35 + 1.05 * math.sqrt(max(0.0, group['frequency'] / max_frequency))
             color = cls._biblio_color(index)
+            # The label is folded at 12 glyphs and centred, so half of it hangs past the bubble.
+            text = f'{_fold_label(name, 12)}\\\\{group["nodes"]}项'
+            placed.append((x, y, size, color, text, cls._label_cm(name[:12] + f'{group["nodes"]}项', r'\scriptsize')))
+        # Sized to the page like every other network picture (see ``_picture_scale``): the fallback ring
+        # above grows with the cluster count, and 30 clusters once made a 29 cm bubble field on a 21 cm
+        # sheet of paper.
+        span_x = max(item[0] for item in placed) - min(item[0] for item in placed) + 2 * max(item[2] for item in placed)
+        span_y = max(item[1] for item in placed) - min(item[1] for item in placed) + 2 * max(item[2] for item in placed)
+        scale = cls._picture_scale(span_x, span_y, max(item[5] for item in placed) / 2.0)
+        out = []
+        for x, y, size, color, text, _cm in placed:
             out.append(
                 f'\\draw[fill={color}!55,draw={color},line width=0.7pt,opacity=0.78]'
                 f' ({x:.2f},{y:.2f}) circle ({size:.2f});'
-                f'\\node[lblbox,anchor=center] at ({x:.2f},{y:.2f}) {{{_fold_label(name, 12)}\\\\{group["nodes"]}项}};'
+                f'\\node[lblbox,anchor=center] at ({x:.2f},{y:.2f}) {{{text}}};'
             )
-        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+        return f'\\begin{{tikzpicture}}[x={scale:.3f}cm,y={scale:.3f}cm]\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
     @classmethod
     def _biblio_timeline(cls, df) -> str:

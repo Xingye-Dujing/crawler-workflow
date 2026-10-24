@@ -39,6 +39,11 @@ const I18n = {
             'exportsMgr.reportGo': 'CREATE',
             'exportsMgr.reportAi': 'CREATE-AI',
             'exportsMgr.reportPdf': 'CREATE-PDF',
+            'exportsMgr.reportLatex': 'PAPER',
+            'exportsMgr.reportLatexNoRun': 'NO-RUN',
+            'exportsMgr.reportLatexWorking': 'WORKING',
+            'exportsMgr.reportLatexDone': 'PAPERDONE',
+            'exportsMgr.reportLatexFailed': 'PAPERFAILED',
             'exportsMgr.reportTCharts': 'CHARTS',
             'exportsMgr.reportTTables': 'TABLES',
             'exportsMgr.reportTFacts': 'FACTS',
@@ -100,6 +105,8 @@ Object.assign(sandbox, {
             answer = { ok: true, removed: 2, skipped_locked: 1, missing: 0, requested: 3, name: body.name };
         } else if (body && url.indexOf('/report/pdf') >= 0) {
             answer = { ok: true, name: 'report-x.pdf', bytes: 9 };
+        } else if (body && url.indexOf('/report/latex') >= 0) {
+            answer = { ok: true, name: 'report-x.pdf', tex: 'report-x.tex', figures: 2, tables: 2 };
         } else if (body) {
             answer = { ok: true, name: 'report-x.html' };
         } else {
@@ -192,6 +199,21 @@ await exportsManager.report('run-7', 'stored name');
 // defaults, never a silently-thinned document.
 dialogAnswer.value = { value: 'pdf', input: 'minimal' };
 await exportsManager.report();
+/* ── the paper document: a different deliverable with a narrower request ─────
+   The server assembles it from the LaTeX this run ALREADY filed, so the browser sends the run id
+   and the title and nothing else — no toggles, no row cap, and above all no LaTeX source (a
+   compiler that reads what a page pastes is a route for reading arbitrary files). Answered without
+   a run, it names that and asks nothing of the server. */
+const paperPosts = captured.posts.length;
+dialogAnswer.value = { value: 'latex', input: '  论文标题  ' };
+await exportsManager.report('run-9', 'stored name');
+out.paper = captured.posts.slice(paperPosts).map((p) => ({ url: p.url, keys: Object.keys(p.body), body: p.body }));
+const paperOpens = captured.opens.length;
+dialogAnswer.value = { value: 'latex', input: 'x' };
+await exportsManager.report();
+out.paperPostsWithoutRun = captured.posts.length - paperPosts;
+out.paperToastWithoutRun = captured.toasts.slice(-1)[0];
+out.paperOpened = captured.opens.slice(paperOpens);
 dialogAnswer.value = null;
 await exportsManager.report();
 

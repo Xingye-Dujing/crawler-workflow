@@ -218,29 +218,12 @@ def biblio_snapshot_create():
 def _captured_params(workflow_name: str, node_id: str, fingerprint: str) -> tuple[dict, bool]:
     """The node's own parameters, and whether they are provably the ones that ran.
 
-    A run record stores a node's fingerprint but not its settings — the canvas file does. When
-    the recomputed fingerprint matches the recorded one the parameters are the run's; when it
-    does not (the canvas was rewired, or the file is gone) the snapshot says so rather than
-    filing a plausible-looking guess as provenance.
+    Lives on ``WorkflowManager`` because the LaTeX report asks the same question of the same files;
+    a second reader of the canvas would be a second opinion about what produced these rows.
     """
     from services.workflow_manager import WorkflowManager
 
-    if not workflow_name:
-        return {}, False
-    draft = WorkflowManager().load(workflow_name)
-    if not draft:
-        return {}, False
-    nodes = (draft.get('nodes') or []) + [
-        node for group in draft.get('serialGroups') or [] for node in (group.get('nodes') or [])
-    ]
-    node = next((n for n in nodes if isinstance(n, dict) and str(n.get('id')) == str(node_id)), None)
-    if node is None:
-        return {}, False
-    from services.run_store import fingerprints_for_workflow
-
-    computed = fingerprints_for_workflow({'nodes': nodes, 'connections': draft.get('connections') or []})
-    verified = str(computed.get(str(node_id)) or '') == str(fingerprint or '')
-    return dict(node.get('params') or {}), verified
+    return WorkflowManager().captured_params(workflow_name, node_id, fingerprint)
 
 
 @bp.route('/api/biblio/snapshots/<snapshot_id>', methods=['GET'])

@@ -49,6 +49,42 @@ class WorkflowManager:
         except (FileNotFoundError, json.JSONDecodeError):
             return None
 
+    @staticmethod
+    def _draft_nodes(draft: dict) -> list:
+        """Every node on a saved canvas, serial groups included — a grouped run's members are nodes
+        too, and a parameter read that skips them reports a node it simply never looked for."""
+        return list(draft.get('nodes') or []) + [
+            node for group in draft.get('serialGroups') or [] for node in (group.get('nodes') or [])
+        ]
+
+    def captured_params(self, name: str, node_id: str, fingerprint: str) -> tuple[dict, bool]:
+        """The node's parameters, and whether they are provably the ones that ran.
+
+        A run record stores a node's fingerprint but not its settings — the canvas file does. When
+        the recomputed fingerprint matches the recorded one the parameters are the run's; when it
+        does not (the canvas was rewired, or the file is gone) the caller is told so it can say
+        「未核对」 rather than filing a plausible-looking guess as provenance.
+
+        Shared by the snapshot capture (``api/biblio``) and the LaTeX report: two readers of "what
+        produced these rows" is how one of them starts disagreeing with the run. The report asks per
+        node, so this reads the canvas once rather than once for the parameters and again for the
+        fingerprint.
+        """
+        from services.run_store import fingerprints_for_workflow
+
+        if not str(name or '').strip():
+            return {}, False
+        draft = self.load(name)
+        if not draft:
+            return {}, False
+        nodes = self._draft_nodes(draft)
+        node = next((n for n in nodes if isinstance(n, dict) and str(n.get('id')) == str(node_id)), None)
+        if node is None:
+            return {}, False
+        computed = fingerprints_for_workflow({'nodes': nodes, 'connections': draft.get('connections') or []})
+        verified = str(computed.get(str(node_id)) or '') == str(fingerprint or '')
+        return dict(node.get('params') or {}), verified
+
     def list_workflows(self) -> list:
         if not os.path.exists(self.workflow_dir):
             return []

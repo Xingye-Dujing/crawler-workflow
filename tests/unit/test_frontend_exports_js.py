@@ -162,13 +162,14 @@ class TestReportButton:
     def test_the_dialog_offers_a_form_and_remembers_the_typed_title(self, results):
         first = results['dialogs'][0]
         assert first['hasInput'] is True
-        # Four outcomes now: cancel, plain, plain-with-AI, and plain-then-PDF.
+        # Five outcomes now: cancel, plain, plain-with-AI, plain-then-PDF, and the paper document.
         # Every creating button collects the form; cancel throws it away.
         assert first['buttons'] == [
             ['CANCEL', None, False],
             ['CREATE-AI', 'ai', True],
             ['CREATE', 'go', True],
             ['CREATE-PDF', 'pdf', True],
+            ['PAPER', 'latex', True],
         ]
         assert first['toggles'] == ['rpt-sec-charts', 'rpt-sec-tables', 'rpt-sec-facts', 'rpt-img-0']
         assert first['fields'] == ['rpt-rows']
@@ -221,7 +222,22 @@ class TestReportButton:
         pdf = results['posts'][3]
         assert pdf['url'] == '/api/report/pdf'
         assert pdf['body'] == {'name': 'report-x.html'}
-        assert results['opens'] == ['/api/report/view?name=ENC(report-x.html)'] * 3
+        assert results['opens'][:3] == ['/api/report/view?name=ENC(report-x.html)'] * 3
+
+    def test_the_paper_button_asks_for_a_run_id_and_nothing_else(self, results):
+        """The document is assembled server-side from the LaTeX this run already filed, so the
+        browser sends an address, not contents. A posted LaTeX source would hand xelatex a route for
+        reading files nobody asked it to open — and the toggles and row cap belong to the HTML
+        report, not to this one."""
+        assert [(p['url'], sorted(p['keys'])) for p in results['paper']] == [
+            ('/api/report/latex', ['run_id', 'title'])
+        ], results['paper']
+        assert results['paper'][0]['body'] == {'run_id': 'run-9', 'title': '论文标题'}, 'the title is trimmed'
+
+    def test_the_paper_button_without_a_finished_run_says_so_and_asks_nothing(self, results):
+        assert results['paperPostsWithoutRun'] == 1, 'only the run-addressed call went out'
+        assert results['paperToastWithoutRun'] == 'NO-RUN'
+        assert results['paperOpened'] == [], 'nothing was opened for a document that does not exist'
 
     def test_the_request_language_travels_as_every_other_call_does(self, results):
         for post in results['posts']:
@@ -232,13 +248,22 @@ class TestReportButton:
                 assert post['body']['lang'] == 'en', 'and the body repeats it, as the report route reads it there'
 
     def test_cancel_requests_nothing(self, results):
-        # Three create outcomes each hit generate; only the PDF one also printed.
-        assert len(results['posts']) == 4, 'the cancelled dialog must not have POSTed'
-        assert len(results['dialogs']) == 4
+        # Three create outcomes each hit generate, one printed, one assembled the paper document.
+        assert len(results['posts']) == 5, 'the cancelled dialog must not have POSTed'
+        assert len(results['dialogs']) == 6
 
     def test_a_written_report_is_opened_and_the_panel_refreshed(self, results):
-        # Two plain creates, then the PDF create (PDF toast, then the open toast).
-        assert results['toasts'] == ['DONE', 'DONE', 'PDFDONE', 'DONE']
+        # Two plain creates, the PDF create (PDF toast, then the open toast), then the paper
+        # document: a working toast that outlives a compile, the finished name, and the download.
+        assert results['toasts'] == [
+            'DONE',
+            'DONE',
+            'PDFDONE',
+            'DONE',
+            'WORKING',
+            'PAPERDONE: report-x.pdf',
+            'NO-RUN',
+        ]
 
 
 class TestSmartClear:

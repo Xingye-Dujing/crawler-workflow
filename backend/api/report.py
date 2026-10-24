@@ -272,6 +272,46 @@ def report_pdf():
     return jsonify({'ok': True, 'name': pdf_name, 'bytes': os.path.getsize(pdf_path)})
 
 
+@bp.route('/api/report/latex', methods=['POST'])
+def report_latex():
+    """One paper document from a run: its registered figures, its three-line tables, and a method
+    section that states the parameters the run actually used.
+
+    The request carries a ``run_id`` and a title, nothing else — the sources are read out of the
+    run's own file ledger, the same rule the chart panel's 「编译为 PDF」 button follows. Re-rendering
+    charts here would let the paper's figure and the preview's figure disagree, and accepting LaTeX
+    from the browser would hand ``xelatex`` a document chosen by the page.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    run_id = str(data.get('run_id') or '').strip()
+    title = str(data.get('title') or '').strip()[:120]
+    from services import latex_report
+
+    result = latex_report.generate(run_id, title=title, store=get_run_store(), export_dir=Config.EXPORT_DIR)
+    # The source is registered even when the compiler refused: it is the artifact the reader can
+    # act on (paste into their own paper, or run xelatex by hand), and the refusal above would
+    # otherwise leave nothing behind but a log line.
+    produced_tex = str(result.get('tex_file') or '')
+    if produced_tex:
+        get_run_store().record_file(run_id, '', os.path.join(Config.EXPORT_DIR, produced_tex), 'latex_doc')
+    if result.get('error'):
+        add_log(t('run.reportLatexFailed', err=result['error']))
+        return jsonify({'ok': False, 'error': result['error'], 'tex': produced_tex or None}), 400
+    get_run_store().record_file(run_id, '', os.path.join(Config.EXPORT_DIR, result['pdf_file']), 'report_pdf')
+    add_log(t('run.reportLatexSaved', name=result['pdf_file'], figures=result['figures'], tables=result['tables']))
+    return jsonify(
+        {
+            'ok': True,
+            'name': result['pdf_file'],
+            'tex': result['tex_file'],
+            'figures': result['figures'],
+            'tables': result['tables'],
+        }
+    )
+
+
 @bp.route('/api/report/studio-images', methods=['GET'])
 def report_studio_images():
     """Saved Chart-Studio pictures the report may inline, newest first.

@@ -9853,9 +9853,14 @@ var exportsManager = {
                 { label: I18n.t('exportsMgr.reportAi'), value: 'ai', collect: true },
                 { label: I18n.t('exportsMgr.reportGo'), value: 'go', collect: true, primary: true },
                 { label: I18n.t('exportsMgr.reportPdf'), value: 'pdf', collect: true },
+                { label: I18n.t('exportsMgr.reportLatex'), value: 'latex', collect: true },
             ],
         });
         if (!answer || !answer.value) return;
+        if (answer.value === 'latex') {
+            await this.latexPaper(runId, String(answer.input || '').trim());
+            return;
+        }
         var t = answer.toggles || {};
         // A switch the answer does not name is left at its default rather than
         // read as "off": an older or partial dialog must still yield a full
@@ -9922,6 +9927,33 @@ var exportsManager = {
             showToast(I18n.t('exportsMgr.reportPdfDone'));
         } catch (e) {
             showToast(I18n.t('exportsMgr.reportPdfFailed') + ': ' + (e.message || e));
+        }
+    },
+
+    /* The paper document: the run's OWN filed figures and three-line tables, assembled into one
+       article+ctex source and compiled here. The request carries a run id and a title — never LaTeX —
+       because the compiler is the user's xelatex and it must only ever read what this app filed.
+       It is slow (one or two xelatex passes), so the toast stays up long enough to be seen, and a
+       refusal is shown with the server's reason rather than a shrug. */
+    async latexPaper(runId, title) {
+        if (!runId) {
+            showToast(I18n.t('exportsMgr.reportLatexNoRun'));
+            return;
+        }
+        showToast(I18n.t('exportsMgr.reportLatexWorking'), 20000);
+        try {
+            var resp = await fetch('/api/report/latex', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify({ run_id: runId, title: title || '' }),
+            });
+            var result = await resp.json();
+            if (!result.ok) throw new Error(result.error || 'report failed');
+            showToast(I18n.t('exportsMgr.reportLatexDone') + ': ' + result.name, 20000);
+            this.refresh();
+            window.open('/api/exports/download?name=' + encodeURIComponent(result.name), '_blank');
+        } catch (e) {
+            showToast(I18n.t('exportsMgr.reportLatexFailed') + ': ' + (e.message || e), 20000);
         }
     },
 
