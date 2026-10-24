@@ -267,6 +267,11 @@ _ZH = {
     'biblio.export_failed': '文献计量导出失败：{err}',
     'chart.biblio_missing': '文献计量图缺少列：{cols}（请让上游文献计量节点输出完整表）',
     'chart.biblio_no_nodes': '文献计量图没有可画的节点',
+    'chart.biblio_geo_none': '地理图画不出来：{names} 等名称都不在世界底图里（请检查「节点」列是否为国家/地区名）',
+    'chart.biblio_geo_unknown': '底图无此区域 {n} 个：{names}',
+    'chart.biblio_geo_merged': '并入其他区域 {n} 处：{detail}',
+    'chart.biblio_geo': '国家/地区',
+    'chart.biblio_geo_note': '纸质图按发文量排序画出前若干国家/地区（世界地图的几何不进 LaTeX），全部数值见三线表',
     'chart.biblio_no_links': '知识图谱没有连接：请检查“连接”列或降低筛选阈值',
     'chart.biblio_no_years': '文献计量图没有可用的年份：请检查首年/末年或年份序列',
     'chart.biblio_no_clusters': '文献计量图没有聚类结果：请在上游节点开启聚类',
@@ -1977,6 +1982,13 @@ _EN = {
         'Bibliometric chart is missing column(s): {cols} (let the upstream biblio node emit the full table)'
     ),
     'chart.biblio_no_nodes': 'The bibliometric chart has no nodes to draw',
+    'chart.biblio_geo_none': 'The geo map cannot be drawn: none of {names} is a region of the world '
+    'basemap (is 节点 a country/region column?)',
+    'chart.biblio_geo_unknown': '{n} name(s) have no region in the basemap: {names}',
+    'chart.biblio_geo_merged': '{n} name(s) drawn inside another region: {detail}',
+    'chart.biblio_geo': 'Country / region',
+    'chart.biblio_geo_note': 'The printed figure ranks the leading countries/regions by output '
+    '(world geometry is not drawn in LaTeX); every value is in the table',
     'chart.biblio_no_links': 'The knowledge graph has no links: check the 连接 column or lower the selection threshold',
     'chart.biblio_no_years': 'The bibliometric chart has no usable years: check 首年/末年 or 年份序列',
     'chart.biblio_no_clusters': 'The bibliometric chart has no clusters: enable clustering in the upstream biblio node',

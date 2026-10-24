@@ -3539,8 +3539,8 @@ function renderBiblioSettings(nodeId, p) {
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'wordcloud', 'map'];
-var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'geo_map', 'wordcloud', 'map'];
+var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'geo_map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -3566,7 +3566,7 @@ var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreemen
 // rare word look bigger than a common one.
 var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
 var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'geo_map'];
 // The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
 // on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
 // tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
@@ -4234,12 +4234,29 @@ async function trainMLModel(nodeId, modelType) {
 var _mapRegistryPromises = {};
 function ensureMapRegistered(mapName) {
     if (_mapRegistryPromises[mapName]) return _mapRegistryPromises[mapName];
-    var urls = { china: 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json' };
+    /* The world basemap is a file the app ships (Natural Earth, public domain — see
+       tools/build_world_geojson.py): a country figure has to draw on an offline machine, and the
+       China basemap already depends on one third-party host, so putting the world map behind a
+       second one would be one network outage from a blank figure. Both entries read the SAME file
+       and differ only in which name column ECharts keys the data on, so the map and its labels
+       stay in the run's language. */
+    var WORLD = '/geo/world.json';  // static_url_path is '' — the app serves its assets at the root
+    var urls = {
+        china: 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
+        world: WORLD,
+        world_zh: WORLD
+    };
     var url = urls[mapName];
     if (!url) return Promise.resolve(false);
     _mapRegistryPromises[mapName] = fetch(url)
         .then(function (r) { return r.json(); })
-        .then(function (geoJson) { echarts.registerMap(mapName, geoJson); return true; })
+        .then(function (geoJson) {
+            // ECharts 5 takes {geoJSON, nameProperty}; the Chinese world map keys on the file's
+            // own `zh` column so a Chinese run's data names and its printed labels are the same
+            // words. The China basemap has one spelling per region and needs nothing here.
+            echarts.registerMap(mapName, mapName === 'world_zh' ? { geoJSON: geoJson, nameProperty: 'zh' } : geoJson);
+            return true;
+        })
         .catch(function () { showToast(I18n.t('toast.mapLoadFailed')); return false; });
     return _mapRegistryPromises[mapName];
 }
@@ -4366,6 +4383,15 @@ function applyEchartsOption(instance, option) {
     (option.series || []).forEach(function (s) {
         if (s && (s.type === 'graph' || s.type === 'scatter') && Array.isArray(s.data) && s.data.length) {
             s.labelLayout = _graphLabelLayout(s, instance);
+        }
+        /* A choropleth's labels sit on geometry the author cannot shift: at the preview panel's
+           width two neighbouring countries' names land on each other (measured: 德国 over 英国,
+           中华人民共和国 over 日本). ECharts' own overlap hiding is the honest answer — the region
+           stays coloured and answers on hover, only the printed name goes away. `moveOverlap` is
+           deliberately NOT set: measured, adding 'shiftY' turns hideOverlap off again (12 labels
+           with the two collisions back, against 10 with them dropped). */
+        if (s && s.type === 'map') {
+            s.labelLayout = { hideOverlap: true };
         }
     });
     var mapSeries = (option.series || []).find(function (s) { return s.type === 'map'; });

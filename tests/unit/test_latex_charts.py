@@ -91,6 +91,16 @@ def _biblio():
     )
 
 
+def _geo():
+    """A country graph: two spellings of China, one folded UK part, one unknown name."""
+    return pd.DataFrame(
+        {
+            '节点': ['China', 'Peoples R China', 'United States', 'England', 'Atlantis'],
+            '频次': [30, 5, 22, 9, 3],
+        }
+    )
+
+
 def _dual():
     return pd.DataFrame(
         {
@@ -142,6 +152,7 @@ CASES = {
     'graph3d': (_biblio(), dict()),
     'variation': (_variation(), dict()),
     'dual_map': (_dual(), dict()),
+    'geo_map': (_geo(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),
 }

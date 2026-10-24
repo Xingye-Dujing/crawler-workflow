@@ -15,7 +15,8 @@ import math
 
 import pandas as pd
 
-from i18n import t
+from i18n import get_lang, t
+from services.biblio_geo import aggregate, display
 from services.chart_contracts import VARIATION_ROW_LIMIT
 
 #: Node labels beyond this are hover-only. A 500-node knowledge graph with every
@@ -35,6 +36,16 @@ GRAPH_BOTTOM = 30
 #: A dual map draws two stacked label columns; past this many names per side the
 #: column is taller than the canvas, so the tail belongs in the CSV/LaTeX table.
 DUAL_MAP_SIDE_LIMIT = 80
+#: The colour ramp of a choropleth, light to dark. Shared with the LaTeX figure so the printed
+#: ranking and the drawn map agree about what "high" looks like.
+GEO_RAMP = ['#ffffff', '#fef0d9', '#fdcc8a', '#fc8d59', '#e34a33', '#b30000']
+#: The band a choropleth is drawn inside. Measured in Chrome: with ECharts' own centring, the
+#: label of the easternmost country ran past the preview panel's edge and was cut mid-word. The
+#: right gutter is where that label lands instead, and the bottom band is the colour bar's.
+GEO_LEFT = 12
+GEO_RIGHT = 96
+GEO_TOP = 74
+GEO_BOTTOM = 96
 
 
 class BiblioChartError(ValueError):
@@ -1063,6 +1074,97 @@ def _variation(df: pd.DataFrame, base: dict) -> dict:
     return base
 
 
+#: How many regions get their name printed on the map. Every label on a 239-region world map is
+#: no label at all; the rest answer on hover, and the LaTeX figure prints them as a ranked bar.
+GEO_LABELS = 12
+
+
+def _geo_map(df: pd.DataFrame, base: dict) -> dict:
+    """A world choropleth of one bibliometric entity type, keyed through the basemap's codes.
+
+    The rows are the node table of a ``country`` graph (or any table whose 节点 column holds
+    country/region names). Names are resolved to ISO codes and summed PER CODE, not per spelling:
+    a corpus that says ``England``, ``Scotland`` and ``United Kingdom`` describes three rows of one
+    region on this basemap, and drawing them as three would be a map of the spellings rather than
+    of the world.
+
+    Both facts the map cannot show are printed in the figure itself rather than only in a log the
+    reader has already scrolled past: how many names the basemap does not know, and which names
+    were merged into one region.
+    """
+    _require(df, '节点', '频次')
+    lang = 'zh' if (get_lang() or 'zh') == 'zh' else 'en'
+    result = aggregate(df.to_dict('records'))
+    ordered = result['regions']
+    unknown = result['unknown']
+    if not ordered:
+        raise BiblioChartError(t('chart.biblio_geo_none', names='、'.join(unknown[:5]) or t('chart.biblio_no_nodes')))
+
+    max_value = ordered[0][1] or 1.0
+    labelled = {iso for iso, _value, _names in ordered[:GEO_LABELS]}
+    merged = [f'{"、".join(names[:3])}→{display(iso, lang)}' for iso, _value, names in ordered if names]
+    notes = []
+    if unknown:
+        notes.append(t('chart.biblio_geo_unknown', n=len(unknown), names='、'.join(unknown[:3])))
+    if merged:
+        notes.append(t('chart.biblio_geo_merged', n=len(merged), detail='；'.join(merged[:4])))
+
+    base['tooltip']['trigger'] = 'item'
+    base['tooltip']['formatter'] = '{b}: {c}'
+    if notes:
+        # Inset and wrapped: at the preview panel's 400 px the one-line note used to run past the
+        # canvas, which is the same "figure wider than the page" defect the printed views guard.
+        base['title']['subtext'] = ' · '.join(notes)
+        base['title']['subtextStyle'] = {'fontSize': 9, 'color': '#888', 'width': 330, 'overflow': 'break'}
+        base['title']['left'] = GEO_LEFT
+        base['title']['right'] = 12
+    base['visualMap'] = {
+        'min': 0,
+        'max': round(max_value, 4),
+        'left': GEO_LEFT + 4,
+        'bottom': 22,
+        'calculable': True,
+        'orient': 'vertical',
+        'itemWidth': 12,
+        'itemHeight': 88,
+        'textGap': 8,
+        'text': [t('chart.range.high'), t('chart.range.low')],
+        'textStyle': {'fontSize': 10},
+        'inRange': {'color': GEO_RAMP},
+    }
+    base['series'] = [
+        {
+            'type': 'map',
+            # The basemap is one file with both spellings of every region; the run's language picks
+            # which column ECharts keys the data on, so the map and its labels stay in one language.
+            'map': 'world_zh' if lang == 'zh' else 'world',
+            'nameProperty': 'zh' if lang == 'zh' else 'name',
+            'roam': True,
+            'selectedMode': 'multiple',
+            'left': GEO_LEFT,
+            'right': GEO_RIGHT,
+            'top': GEO_TOP,
+            'bottom': GEO_BOTTOM,
+            'aspectScale': 0.92,
+            'label': {'show': False, 'fontSize': 10},
+            'emphasis': {
+                'label': {'show': True, 'fontSize': 11, 'fontWeight': 'bold'},
+                'itemStyle': {'areaColor': '#f46d43'},
+            },
+            'itemStyle': {'borderColor': 'rgba(120,120,120,0.35)', 'borderWidth': 0.6},
+            'data': [
+                {
+                    'name': display(iso, lang),
+                    'value': round(value, 4),
+                    'label': {'show': iso in labelled},
+                }
+                for iso, value, _names in ordered
+            ],
+        }
+    ]
+    return base
+
+
 BUILDERS = {
     'knowledge_graph': _knowledge_graph,
     'cluster_timeline': _cluster_timeline,
@@ -1074,6 +1176,7 @@ BUILDERS = {
     'graph3d': _graph3d,
     'variation': _variation,
     'dual_map': _dual_map,
+    'geo_map': _geo_map,
 }
 
 

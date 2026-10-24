@@ -68,9 +68,29 @@ def variation_frame():
     )
 
 
+@pytest.fixture
+def geo_frame():
+    """A ``country`` graph's node table: real region names, and one the basemap cannot place.
+
+    The spellings are deliberately mixed (``China`` beside ``Peoples R China``, ``England`` on its
+    own) because that is what a WoS export actually contains, and the map has to fold them into
+    one region while SAYING it did.
+    """
+    return pd.DataFrame(
+        {
+            '节点': ['China', 'Peoples R China', 'United States', 'England', 'Atlantis'],
+            'x': [0.0, 10.0, 20.0, 30.0, 40.0],
+            'y': [0.0, 10.0, 20.0, 30.0, 40.0],
+            '连接': ['[]'] * 5,
+            '频次': [30, 5, 22, 9, 3],
+        }
+    )
+
+
 @pytest.mark.parametrize('chart_type', BIBLIO_CHART_TYPES)
-def test_each_view_builds_and_is_json_safe(frame, dual_frame, variation_frame, chart_type):
-    source = variation_frame if chart_type == 'variation' else (dual_frame if chart_type == 'dual_map' else frame)
+def test_each_view_builds_and_is_json_safe(frame, dual_frame, variation_frame, geo_frame, chart_type):
+    by_shape = {'variation': variation_frame, 'dual_map': dual_frame, 'geo_map': geo_frame}
+    source = by_shape.get(chart_type, frame)
     option = VisualizationService.to_echarts_option(source, chart_type, title='知识图谱')
     assert option['series']
     assert json.dumps(option, allow_nan=False)
@@ -251,3 +271,50 @@ class TestTheReplayData:
         network — a second copy of the series would be a second answer to the same question."""
         option = VisualizationService.to_echarts_option(frame, 'circular')
         assert self._by_name(option)['丙']['yearSeries'] == [[2021, 1.0]]
+
+
+class TestTheGeoMap:
+    """The choropleth's promises are about names, not pixels: what it merges, what it refuses to
+    place, and where it says so."""
+
+    def test_several_spellings_of_one_region_are_one_value(self, geo_frame):
+        option = VisualizationService.to_echarts_option(geo_frame, 'geo_map')
+        data = {item['name']: item['value'] for item in option['series'][0]['data']}
+        assert data['中华人民共和国'] == 35.0, 'China + Peoples R China are one region, not two'
+        assert 'Peoples R China' not in ' '.join(data)
+        assert len(data) == 3, f'Atlantis is not a region, so it is not a row either: {data}'
+
+    def test_what_the_basemap_cannot_place_is_named_on_the_figure(self, geo_frame):
+        """A region missing from a choropleth reads as "that country published nothing" — the one
+        mistake a map must not make quietly."""
+        option = VisualizationService.to_echarts_option(geo_frame, 'geo_map')
+        subtext = option['title']['subtext']
+        assert 'Atlantis' in subtext
+        assert 'England→英国' in subtext, 'a fold into a bigger region is said too'
+
+    def test_only_the_leading_regions_are_labelled(self, geo_frame):
+        option = VisualizationService.to_echarts_option(geo_frame, 'geo_map')
+        assert all(item['label']['show'] for item in option['series'][0]['data']), 'a small set still labels'
+
+    def test_the_run_language_picks_both_the_keying_and_the_labels(self, geo_frame):
+        from i18n import set_lang
+
+        try:
+            set_lang('en')
+            option = VisualizationService.to_echarts_option(geo_frame, 'geo_map')
+        finally:
+            set_lang('zh')
+        series = option['series'][0]
+        assert series['map'] == 'world' and series['nameProperty'] == 'name'
+        assert {item['name'] for item in series['data']} == {'China', 'United States of America', 'United Kingdom'}
+
+    def test_a_table_of_things_that_are_not_countries_refuses_and_shows_what_it_read(self):
+        frame = pd.DataFrame({'节点': ['甲', '乙'], '频次': [3, 2]})
+        with pytest.raises(ChartConfigError) as err:
+            VisualizationService.to_echarts_option(frame, 'geo_map')
+        assert '甲' in str(err.value), 'the refusal quotes the names it could not place'
+
+    def test_the_colour_scale_spans_the_largest_region(self, geo_frame):
+        option = VisualizationService.to_echarts_option(geo_frame, 'geo_map')
+        assert option['visualMap']['min'] == 0
+        assert option['visualMap']['max'] == 35.0

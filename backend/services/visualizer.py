@@ -71,6 +71,7 @@ CHART_TYPES = (
     'graph3d',
     'variation',
     'dual_map',
+    'geo_map',
     'wordcloud',
     'map',
 )
@@ -431,6 +432,7 @@ ECHARTS_ONLY_TYPES = (
     'graph3d',
     'variation',
     'dual_map',
+    'geo_map',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other

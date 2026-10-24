@@ -86,6 +86,32 @@ def test_the_fusion_chain_is_off_until_the_third_dataset_is_uploaded():
     assert fuse['id'] not in graph['nodes'], 'the off chain must not reach validation or the run'
 
 
+def test_the_geo_chain_is_off_until_a_country_bearing_export_is_uploaded():
+    """The world map needs a 国家 column, and neither bundled sample carries one: CNKI exports no
+    country at all, which is a fact about the export format rather than something the demo can
+    invent. So the chain ships switched off with the file it wants named in the node's own title —
+    and the chart type is still proven present by ``test_every_bibliometric_view_is_on_the_demo_canvas``.
+    """
+    draft = _draft()
+    geo = next(node for node in draft['nodes'] if (node.get('params') or {}).get('chart_type') == 'geo_map')
+    assert not (geo['params']).get('enabled', True)
+    country = next(
+        node
+        for node in draft['nodes']
+        if node['id'] == next(c['from'] for c in draft['connections'] if c['to'] == geo['id'])
+    )
+    assert (country.get('params') or {}).get('entity_type') == 'country'
+    upload = next(
+        node
+        for node in draft['nodes']
+        if node['id'] == next(c['from'] for c in draft['connections'] if c['to'] == country['id'])
+    )
+    assert upload['type'] == 'upload' and not str(upload['params'].get('dataset_id') or '').strip()
+    assert 'wos' in str(upload['params'].get('dataset_name') or '').lower(), 'the node says which file to upload'
+    graph = effective_workflow(_graph(draft))
+    assert geo['id'] not in graph['nodes'] and country['id'] not in graph['nodes']
+
+
 def test_the_cluster_review_node_ships_off_because_it_costs_model_calls():
     """The research-front review is the demo's one step that pays Ollama once per cluster, so it
     cannot be left switched on the way the variation table is — and it must be attached to a

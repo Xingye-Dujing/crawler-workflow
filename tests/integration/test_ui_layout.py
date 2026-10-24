@@ -200,6 +200,25 @@ _AUDIT_JS = """
     """
 
 
+def _read_url_json(url: str):
+    """Fetch a URL from the tier's own private server and parse it, or ``None``.
+
+    Used where the fact under test is the SERVER's answer (a static asset's route), which is not
+    something a stubbed ``window.fetch`` can prove.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=15) as response:
+            if response.status != 200:
+                return None
+            return _json.loads(response.read().decode('utf-8'))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 def _kill_animations(driver):
     """Slide-in panels are laid out at their open position only after a transition;
     a rect measured mid-slide reports them as off-screen."""
@@ -3694,3 +3713,128 @@ def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, dr
     assert len(reset['shown']) == 3 and reset['hiddenLinks'] == 0, '看完整图 did not restore the figure'
     assert reset['readout'] == reset['allWord']
     assert reset['playLabel'] == reset['playWord']
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_world_map_loads_its_shipped_basemap_and_prints_no_colliding_labels(app_url, driver, lang):
+    """The country choropleth, measured in the browser that has to draw it.
+
+    Three things the Python tier cannot reach:
+
+    * the basemap is a FILE the app serves, and ``static_url_path`` is ``''`` here — a guessed
+      ``/static/geo/...`` is a 404 and a toast the user reads as "maps are broken";
+    * ``registerMap(name, {geoJSON, nameProperty})`` is what makes a Chinese run's data names and
+      its printed labels the same words; ECharts 5 alone decides whether it honours that;
+    * whether the country labels collide. Measured at the preview panel's own 400 px: 德国 over 英国
+      and 中华人民共和国 over 日本 until ``labelLayout.hideOverlap`` was set WITHOUT ``moveOverlap``
+      (adding 'shiftY' switches hiding off again — 12 labels with the collisions, against 10 without).
+
+    Nothing is written to the server; the option is built in the page in the shape
+    ``services/biblio_charts`` ships.
+    """
+    driver.set_window_size(1650, 1080)
+    served = _read_url_json(app_url + '/geo/world.json')
+    assert served is not None, 'the basemap is not served — static_url_path is "", so the app path is /geo/...'
+    features = served.get('features') or []
+    assert len(features) > 150, f'the served basemap carries only {len(features)} regions'
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        document.documentElement.dataset.themeChoice = 'dark';
+        applyTheme();
+        I18n.apply();
+        ensureMapRegistered(arguments[1] === 'zh' ? 'world_zh' : 'world');
+        """,
+        lang,
+        lang,
+    )
+    deadline = time.time() + 25
+    while time.time() < deadline:
+        ready = driver.execute_script(
+            'return !!(echarts.getMap && echarts.getMap(arguments[0]));', 'world_zh' if lang == 'zh' else 'world'
+        )
+        if ready:
+            break
+        time.sleep(0.4)
+    assert driver.execute_script(
+        'return !!(echarts.getMap && echarts.getMap(arguments[0]));', 'world_zh' if lang == 'zh' else 'world'
+    ), 'the basemap never registered with ECharts'
+
+    host = 'geo-measure-host'
+    driver.execute_script(
+        """
+        const lang = arguments[0], hostId = arguments[1];
+        const zh = lang === 'zh';
+        const names = zh
+            ? ['中华人民共和国', '美国', '英国', '德国', '日本', '法国', '印度', '澳大利亚']
+            : ['China', 'United States of America', 'United Kingdom', 'Germany', 'Japan', 'France', 'India',
+               'Australia'];
+        const host = document.createElement('div');
+        host.id = hostId;
+        host.style.cssText = 'position:fixed;left:0;top:0;width:400px;height:600px;background:#fff';
+        document.body.appendChild(host);
+        const inst = echarts.init(host, null, { renderer: 'svg' });
+        window.__geo = { inst: inst, host: host };
+        applyEchartsOption(inst, {
+            title: { text: I18n.t('chart.geo_map'), subtext: I18n.t('chart.biblio_geo_merged',
+                                                                      { n: 1, detail: 'England→x' }) },
+            tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+            visualMap: { min: 0, max: 35, left: 16, bottom: 22, itemWidth: 12, itemHeight: 88,
+                         inRange: { color: ['#ffffff', '#fdcc8a', '#e34a33'] } },
+            series: [{
+                type: 'map', map: zh ? 'world_zh' : 'world', nameProperty: zh ? 'zh' : 'name',
+                left: 12, right: 96, top: 74, bottom: 96, aspectScale: 0.92, label: { show: false },
+                data: names.map(function (n, i) {
+                    return { name: n, value: 35 - i * 3, label: { show: true } };
+                })
+            }]
+        });
+        """,
+        lang,
+        host,
+    )
+    time.sleep(1.8)
+    facts = driver.execute_script(
+        """
+        const host = document.getElementById(arguments[0]);
+        const rect = host.getBoundingClientRect();
+        const painted = Array.from(host.querySelectorAll('svg text')).map(function (t) {
+            return { text: t.textContent, box: t.getBoundingClientRect() };
+        }).filter(function (item) { return item.text.trim() && item.box.width > 0 && item.box.height <= 18; });
+        let overlaps = 0;
+        const pairs = [];
+        for (let i = 0; i < painted.length; i++) {
+            for (let j = i + 1; j < painted.length; j++) {
+                const a = painted[i].box, b = painted[j].box;
+                const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+                const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+                if (x > 1 && y > 1) {
+                    overlaps++;
+                    if (pairs.length < 5) pairs.push([painted[i].text, painted[j].text]);
+                }
+            }
+        }
+        const outside = painted.filter(function (item) {
+            const b = item.box;
+            return b.right > rect.right + 1 || b.left < rect.left - 1 || b.bottom > rect.bottom + 1;
+        }).map(function (item) { return item.text.slice(0, 24); });
+        const paths = host.querySelectorAll('svg path').length;
+        return { measured: painted.length, paths: paths, overlaps: overlaps, pairs: pairs, outside: outside };
+        """,
+        host,
+    )
+    driver.execute_script(
+        """
+        const host = document.getElementById(arguments[0]);
+        if (window.__geo) { window.__geo.inst.dispose(); }
+        host.remove();
+        """,
+        host,
+    )
+    assert facts['paths'] > 100, f'the map drew {facts["paths"]} shapes — that is not a world map'
+    assert facts['measured'] >= 4, f'only {facts["measured"]} labels measured; the audit is hollow'
+    assert facts['overlaps'] == 0, f'country labels collide: {facts["pairs"]}'
+    assert facts['outside'] == [], f'labels run past the canvas: {facts["outside"]}'

@@ -152,11 +152,27 @@ def variation_df():
     )
 
 
+@pytest.fixture
+def geo_df():
+    """What a ``country`` graph hands the geo map: real region names, mixed spellings, and one
+    name the world basemap does not carry (which the figure must count and name, not drop)."""
+    return pd.DataFrame(
+        {
+            '节点': ['China', 'Peoples R China', 'United States', 'England', 'Atlantis'],
+            'x': [0.0, 10.0, 20.0, 30.0, 40.0],
+            'y': [0.0, 10.0, 20.0, 30.0, 40.0],
+            '连接': ['[]'] * 5,
+            '频次': [30, 5, 22, 9, 3],
+        }
+    )
+
+
 #: A shape's table is not the node table, so the sweep picks the frame by chart type.
-def _biblio_frame(chart_type, biblio_df, dual_df, variation_df):
+def _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df):
     return {
         'dual_map': dual_df,
         'variation': variation_df,
+        'geo_map': geo_df,
     }.get(chart_type, biblio_df)
 
 
@@ -164,12 +180,12 @@ def _biblio_frame(chart_type, biblio_df, dual_df, variation_df):
 
 
 class TestChartCatalogue:
-    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df, variation_df):
+    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df, variation_df, geo_df):
         assert set(USABLE) | set(BIBLIO_USABLE) == set(CHART_TYPES)
         for chart_type, kwargs in USABLE.items():
             assert V.to_echarts_option(df, chart_type, **kwargs)['series'], chart_type
         for chart_type in BIBLIO_CHART_TYPES:
-            frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df)
+            frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df)
             assert V.to_echarts_option(frame, chart_type)['series'], chart_type
 
     def test_echarts_only_types_are_a_subset_of_the_catalogue(self):
@@ -675,8 +691,12 @@ class TestChartDisplayLocalisation:
 
 class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
-    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, variation_df, chart_type):
-        frame = _biblio_frame(chart_type, biblio_df, dual_df, variation_df) if chart_type in BIBLIO_CHART_TYPES else df
+    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, variation_df, geo_df, chart_type):
+        frame = (
+            _biblio_frame(chart_type, biblio_df, dual_df, variation_df, geo_df)
+            if chart_type in BIBLIO_CHART_TYPES
+            else df
+        )
         kwargs = BIBLIO_USABLE[chart_type] if chart_type in BIBLIO_USABLE else USABLE[chart_type]
         option = V.to_echarts_option(frame, chart_type, title='标题', **kwargs)
         assert json.dumps(option, allow_nan=False)

@@ -16,6 +16,7 @@ BIBLIO_CHART_TYPES = (
     'graph3d',
     'variation',
     'dual_map',
+    'geo_map',
 )
 
 #: Charts whose x axis is not a user-selected column. Validation must not demand
@@ -43,4 +44,7 @@ BIBLIO_CHART_READS = {
     'graph3d': ('节点', 'x', 'y', '连接', '频次'),
     'variation': ('节点', '起始年', '结束年', '结构变化'),
     'dual_map': ('map', 'source', 'target', 'weight'),
+    # The choropleth reads the node table's own names and counts; the geometry is the committed
+    # basemap, so no coordinate column is asked of the data.
+    'geo_map': ('节点', '频次'),
 }

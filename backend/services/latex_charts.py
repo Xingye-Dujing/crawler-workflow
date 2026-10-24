@@ -25,6 +25,8 @@ import re
 import pandas as pd
 
 from i18n import t
+from services.biblio_geo import aggregate as geo_aggregate
+from services.biblio_geo import display
 from services.chart_contracts import VARIATION_ROW_LIMIT
 from services.visualizer import (
     ChartConfigError,
@@ -335,6 +337,7 @@ class LatexChartService:
             'graph3d',
             'variation',
             'dual_map',
+            'geo_map',
         ):
             return cls._biblio_figure(df, chart_type)
         if chart_type == 'sankey':
@@ -910,23 +913,37 @@ class LatexChartService:
         # have to hunt through prose to learn which normalized link and centrality numbers
         # were plotted. Every formula is the one this implementation actually computes.
         return (
-            '\\medskip\\par{\\footnotesize\\textbf{计量公式：}'
-            r'余弦 $\cos(C_i,C_j)=w_{ij}/\sqrt{w_i w_j}$；Dice $2w_{ij}/(w_i+w_j)$；'
-            r'Jaccard $w_{ij}/(w_i+w_j-w_{ij})$。中介中心性 '
-            r'$g(v)=\sum_{s\ne v\ne t}\sigma_{st}(v)/\sigma_{st}$；PageRank '
-            r'$PR(p)=\frac{1-d}{N}+d\sum_{q\to p}PR(q)/L(q)$；'
-            r'$\Sigma=(g(v)+1)^B$。'
-            '}\n'
-        ) + (
-            # The variation figure plots one more thing, and its own formula: what the marker
-            # size means is not guessable from a picture.
-            '\\medskip\\par{\\footnotesize\\textbf{结构变异公式：}'
-            r'节点 $v$ 在相邻两期 $t$ 与 $t{+}1$ 的连边强度分布 $p,q$（各自归一化后取并集支撑）'
-            r'之间的 Jensen--Shannon 散度 $D_{\mathrm{JS}}(p\|q)=\frac12 D_{\mathrm{KL}}(p\|m)'
-            r'+\frac12 D_{\mathrm{KL}}(q\|m)$，其中 $m=\frac12(p+q)$，$0\le D_{\mathrm{JS}}\le 1$ 比特。'
-            '}\n'
-            if chart_type == 'variation'
-            else ''
+            (
+                '\\medskip\\par{\\footnotesize\\textbf{计量公式：}'
+                r'余弦 $\cos(C_i,C_j)=w_{ij}/\sqrt{w_i w_j}$；Dice $2w_{ij}/(w_i+w_j)$；'
+                r'Jaccard $w_{ij}/(w_i+w_j-w_{ij})$。中介中心性 '
+                r'$g(v)=\sum_{s\ne v\ne t}\sigma_{st}(v)/\sigma_{st}$；PageRank '
+                r'$PR(p)=\frac{1-d}{N}+d\sum_{q\to p}PR(q)/L(q)$；'
+                r'$\Sigma=(g(v)+1)^B$。'
+                '}\n'
+            )
+            + (
+                # The variation figure plots one more thing, and its own formula: what the marker
+                # size means is not guessable from a picture.
+                '\\medskip\\par{\\footnotesize\\textbf{结构变异公式：}'
+                r'节点 $v$ 在相邻两期 $t$ 与 $t{+}1$ 的连边强度分布 $p,q$（各自归一化后取并集支撑）'
+                r'之间的 Jensen--Shannon 散度 $D_{\mathrm{JS}}(p\|q)=\frac12 D_{\mathrm{KL}}(p\|m)'
+                r'+\frac12 D_{\mathrm{KL}}(q\|m)$，其中 $m=\frac12(p+q)$，$0\le D_{\mathrm{JS}}\le 1$ 比特。'
+                '}\n'
+                if chart_type == 'variation'
+                else ''
+            )
+            + (
+                # The choropleth's colour and the table's share both come off the same totals, and
+                # neither is guessable from the picture: how a shade was chosen is stated here, which
+                # spellings collapsed into one region is stated in the figure.
+                '\\medskip\\par{\\footnotesize\\textbf{地理图公式：}'
+                r'地区 $r$ 的发文量 $v_r=\sum_{i\in r} f_i$（同名异写并入同一地区），占比 $s_r=v_r/\sum_j v_j$；'
+                r'色阶按 $c_r=v_r/\max_j v_j$ 线性取色，底图无此区域者不计入并在图上点名。'
+                '}\n'
+                if chart_type == 'geo_map'
+                else ''
+            )
         )
 
     @classmethod
@@ -1137,6 +1154,46 @@ class LatexChartService:
             + ']\n'
             + '\n'.join(body)
             + '\n\\end{axis}\\end{tikzpicture}'
+        )
+
+    @classmethod
+    def _biblio_geo(cls, df) -> str:
+        """The printed twin of the choropleth: the same regions, the same totals, ranked.
+
+        A world map's geometry does not belong in a .tex file (it is 200 KB of coastline and reads
+        as a smudge at column width), so the figure prints what a reader actually compares — which
+        countries lead and by how much — while the three-line table carries every value. The
+        grouping is the map's own ``biblio_geo.aggregate``, so the bar and the colour cannot
+        disagree about what ``England`` plus ``United Kingdom`` add up to.
+        """
+        result = geo_aggregate(df.to_dict('records'))
+        regions = result['regions'][:18]
+        if not regions:
+            raise ChartConfigError(t('chart.biblio_geo_none', names='、'.join(result['unknown'][:5]) or '—'))
+        total = sum(value for _iso, value, _names in result['regions']) or 1.0
+        top = regions[0][1] or 1.0
+        categories = [display(iso, 'zh') or iso for iso, _value, _names in regions]
+        body = []
+        color = cls._biblio_color(0)
+        for iso, value, _names in regions:
+            label = _esc(display(iso, 'zh') or iso).replace(' ', '~')
+            width = round(value / top * 12.0, 3)
+            body.append(
+                f'\\draw[{color},fill={color}!55,rounded corners=1pt] (axis cs:0,{label}) rectangle '
+                f'(axis cs:{width},{label});'
+                f'\\node[font=\\scriptsize,anchor=west] at (axis cs:{round(width + 0.15, 3)},{label}) '
+                f'{{{_num(value)} · {round(value / total * 100, 1)}\\%}};'
+            )
+        height = f'{1 + len(regions) * 1.1:.2f}cm'
+        note = _esc(t('chart.biblio_geo_note'))
+        return (
+            '\\begin{tikzpicture}\\begin{axis}[axis y line=none,axis x line=bottom,y=-1.1cm,'
+            'symbolic y coords={' + _sym(categories) + '},ytick=data,xmin=0,xmax=15,'
+            'yticklabel style={font=\\scriptsize,align=right},xlabel={频次},width=16cm,height='
+            + height
+            + f']\n{chr(10).join(body)}\n\\end{{axis}}'
+            + '\\node[font=\\scriptsize,text=gray,anchor=north west,align=left] at (current axis.south west) '
+            + f'{{{note}}};\\end{{tikzpicture}}'
         )
 
     @classmethod
@@ -1443,6 +1500,8 @@ class LatexChartService:
             pic = cls._biblio_dual_map(df)
         elif chart_type == 'variation':
             pic = cls._biblio_variation(df)
+        elif chart_type == 'geo_map':
+            pic = cls._biblio_geo(df)
         elif chart_type == 'biblio_heatmap':
             pic = cls._biblio_heatmap(df)
         else:
@@ -1647,6 +1706,38 @@ class LatexChartService:
                     [_esc(key), _num(len(group['nodes'])), _num(round(group['frequency'], 4)), _esc(representatives)]
                 )
             return head, table
+        if chart_type == 'geo_map':
+            cls._require_biblio(df, '节点', '频次')
+            result = geo_aggregate(df.to_dict('records'))
+            total = sum(value for _iso, value, _names in result['regions']) or 1.0
+            head = [_esc(t('chart.biblio_geo')), _esc('频次'), _esc('占比'), _esc('并入的写法')]
+            rows = [
+                [
+                    _esc(display(iso, 'zh') or iso),
+                    _num(round(value, 4)),
+                    _num(round(value / total * 100, 2)),
+                    _esc('、'.join(names)) if names else '—',
+                ]
+                for iso, value, names in result['regions']
+            ]
+            if result['unknown']:
+                # A row for what the map could not place: dropping it would make the table's total
+                # look like the whole corpus when part of it simply has no region.
+                rows.append(
+                    [
+                        _esc(
+                            t(
+                                'chart.biblio_geo_unknown',
+                                n=len(result['unknown']),
+                                names='、'.join(result['unknown'][:5]),
+                            )
+                        ),
+                        _num(0),
+                        _num(0),
+                        '—',
+                    ]
+                )
+            return head, rows
         raise ChartConfigError(f'no bibliometric LaTeX table for {chart_type}')
 
     # ── booktabs three-line table ─────────────────────────────────────
@@ -1664,6 +1755,7 @@ class LatexChartService:
             'graph3d',
             'variation',
             'dual_map',
+            'geo_map',
         ):
             return cls._biblio_table_data(df, chart_type)
         if chart_type == 'stack_pct':
