@@ -56,6 +56,7 @@ const DICT = {
         'reusable.colName': 'Template',
         'reusable.colNodes': 'Nodes / inputs',
         'reusable.colUpdated': 'Updated',
+        'reusable.preview': 'Preview',
         'reusable.insert': 'Insert',
         'reusable.removeTemplate': 'Delete template',
         'reusable.confirmRemoveTemplate': 'Delete template "{name}"?',
@@ -65,6 +66,13 @@ const DICT = {
         'reusable.none': 'NO-TEMPLATES',
         'reusable.inserted': 'INSERTED',
         'reusable.insertFailed': 'INSERT-FAILED',
+        'reusable.previewFailed': 'PREVIEW-FAILED',
+        'reusable.rename': 'Rename',
+        'reusable.renamePrompt': 'Rename "{name}":',
+        'reusable.renamePlaceholder': 'Template name',
+        'reusable.renamed': 'RENAMED',
+        'reusable.renameFailed': 'RENAME-FAILED',
+        'reusable.nameRequired': 'NAME-REQUIRED',
         'toast.layoutApplied': 'LAYOUT-APPLIED',
         'dialog.cancel': 'Cancel',
     },
@@ -84,14 +92,22 @@ const DICT = {
         'reusable.colName': '模板',
         'reusable.colNodes': '节点 / 输入',
         'reusable.colUpdated': '更新时间',
+        'reusable.preview': '预览',
         'reusable.insert': '插入',
         'reusable.removeTemplate': '删除模板',
+        'reusable.rename': '重命名',
     },
 };
 const I18n = {
     lang: 'en',
-    t(key) {
-        return (DICT[this.lang] || {})[key] || DICT.en[key] || key;
+    t(key, vars) {
+        let text = (DICT[this.lang] || {})[key] || DICT.en[key] || key;
+        if (vars) {
+            Object.keys(vars).forEach((name) => {
+                text = text.split('{' + name + '}').join(String(vars[name]));
+            });
+        }
+        return text;
     },
 };
 
@@ -122,6 +138,7 @@ const TEMPLATES = [
 let requests = [];
 let toasts = [];
 let dialogAnswer = true;
+let dialogMessages = [];
 let typed = '手动存档';
 let routes = {
     list: ROWS,
@@ -132,10 +149,29 @@ let routes = {
     delete: { ok: true, deleted: true, baselines_cleared: [] },
     reusableList: TEMPLATES,
     reusableDelete: { ok: true, deleted: true },
+    reusableRename: { ok: true, template: { id: 'r-000000000001', name: '清洗流水线 v2' } },
+    reusableGet: {
+        ok: true,
+        template: {
+            id: 'r-000000000001',
+            name: '清洗流水线',
+            description: '两步',
+            nodes: [
+                { id: 'n1', type: 'process', title: '清洗', params: {}, x: 0, y: 0, w: 220, h: 90 },
+                { id: 'n2', type: 'analysis', title: '去空', params: {}, x: 300, y: 0, w: 220, h: 80 },
+            ],
+            connections: [{ from: 'n1', to: 'n2' }],
+            inputs: ['n1'],
+            outputs: ['n2'],
+        },
+    },
 };
 
 sandbox.showToast = (message) => toasts.push(String(message));
-sandbox.showDialog = async (spec) => (spec && spec.input ? typed : dialogAnswer);
+sandbox.showDialog = async (spec) => {
+    dialogMessages.push(String((spec && spec.message) || ''));
+    return spec && spec.input ? typed : dialogAnswer;
+};
 sandbox.fetch = (url, options) => {
     const target = String(url);
     const method = (options && options.method) || 'GET';
@@ -148,6 +184,10 @@ sandbox.fetch = (url, options) => {
         payload = method === 'POST' ? { ok: true, layout: routes.layoutResult } : { ok: true, layout: routes.layout };
     } else if (target.indexOf('/api/workflow/history') >= 0) {
         payload = { ok: true, snapshots: routes.list, max: 100 };
+    } else if (target.indexOf('/api/reusable/rename') >= 0) {
+        payload = routes.reusableRename;
+    } else if (target.indexOf('/api/reusable/get') >= 0) {
+        payload = routes.reusableGet;
     } else if (target.indexOf('/api/reusable/delete') >= 0) {
         payload = routes.reusableDelete;
     } else if (target.indexOf('/api/reusable') >= 0) {
@@ -189,6 +229,7 @@ const out = {};
 const resetCalls = () => {
     requests = [];
     toasts = [];
+    dialogMessages = [];
     dialogAnswer = true;
     sandbox.RunState.running = false;
 };
@@ -405,6 +446,38 @@ out.reusable_list = {
     html: body.innerHTML,
     img_elements: doc.querySelectorAll('img').length,
 };
+
+resetCalls();
+const previewCalls = [];
+sandbox.ReusableNodes = {
+    previewTemplate: function (template) { previewCalls.push(template); },
+};
+await wfFiles.previewTemplate('r-000000000001');
+out.reusable_preview = {
+    calls: previewCalls.map((t) => ({ id: t.id, name: t.name })),
+    gets: requests.filter((r) => r.url.indexOf('/api/reusable/get') >= 0).map((r) => r.url),
+    toasts: toasts.slice(),
+};
+
+resetCalls();
+typed = '清洗流水线 v2';
+routes.reusableList = [{ ...TEMPLATES[0], name: '清洗流水线 v2' }];
+await wfFiles.renameTemplate('r-000000000001');
+const renameRequest = requests.find((r) => r.url.indexOf('/api/reusable/rename') >= 0);
+out.reusable_rename = {
+    body: renameRequest ? JSON.parse(renameRequest.body) : null,
+    messages: dialogMessages.slice(),
+    toasts: toasts.slice(),
+    reads: requests.filter((r) => r.url === '/api/reusable').length,
+    name: (wfFiles._templates || [])[0].name,
+};
+
+resetCalls();
+typed = '';
+routes.reusableList = TEMPLATES;
+await wfFiles.renameTemplate('r-000000000001');
+out.reusable_rename_blank = { requests: requests.length, toasts: toasts.slice() };
+typed = '手动存档';
 
 resetCalls();
 routes.reusableList = [TEMPLATES[0]];

@@ -24,6 +24,8 @@ var REUSABLE_PREVIEW_MAX_H = 660;
 
 var ReusableNodes = {
     _previewGroup: null,
+    _previewTemplate: null,
+    _previewLabel: '',
     _wired: false,
 
     /* ── selection → template ─────────────────────────────────────── */
@@ -39,6 +41,7 @@ var ReusableNodes = {
     },
 
     _statusOf(groupId, innerId) {
+        if (!groupId) return null;
         var map = (typeof runResults !== 'undefined' && runResults.statuses) || {};
         return map[this.innerId(groupId, innerId)] || map[innerId] || null;
     },
@@ -786,6 +789,24 @@ var ReusableNodes = {
     preview(id) {
         var node = canvas.nodes[id];
         if (!node || node.type !== 'reusable') return;
+        this._previewGroup = id;
+        this._previewTemplate = null;
+        this._previewLabel = '';
+        this._openPreview();
+    },
+
+    /* The template tab can show a saved fragment before it is inserted. It has no
+       canvas instance, so there are no run statuses to paint — the same stage and
+       side panel, fed by the stored template alone. */
+    previewTemplate(template) {
+        if (!template || typeof template !== 'object') return;
+        this._previewGroup = null;
+        this._previewTemplate = template;
+        this._previewLabel = String(template.name || '');
+        this._openPreview();
+    },
+
+    _openPreview() {
         var overlay = document.getElementById('reusable-preview-overlay');
         if (!overlay) return;
         if (!this._wired) {
@@ -794,28 +815,41 @@ var ReusableNodes = {
                 if (e.target === overlay) ReusableNodes.closePreview();
             });
         }
-        this._previewGroup = id;
         overlay.classList.add('open');
         this._paintPreview();
     },
 
     closePreview() {
         this._previewGroup = null;
+        this._previewTemplate = null;
+        this._previewLabel = '';
         var overlay = document.getElementById('reusable-preview-overlay');
         if (overlay) overlay.classList.remove('open');
     },
 
     repaintPreview() {
-        if (this._previewGroup) this._paintPreview();
+        if (this._previewGroup || this._previewTemplate) this._paintPreview();
     },
 
     _paintPreview() {
         var groupId = this._previewGroup;
         var node = groupId && canvas.nodes[groupId];
-        if (!node || node.type !== 'reusable') return;
-        var p = node.params || {};
-        var template = p.template || {};
-        var name = String(p.template_name || '').trim() || node.title || I18n.t('reusable.untitled');
+        var template;
+        var name;
+        var statusGroup = null;
+        var agg = null;
+        if (node && node.type === 'reusable') {
+            var p = node.params || {};
+            template = p.template || {};
+            name = String(p.template_name || '').trim() || node.title || I18n.t('reusable.untitled');
+            statusGroup = groupId;
+            agg = this.aggregate(groupId, (typeof runResults !== 'undefined' && runResults.statuses) || {});
+        } else if (this._previewTemplate) {
+            template = this._previewTemplate;
+            name = String(this._previewLabel || template.name || '').trim() || I18n.t('reusable.untitled');
+        } else {
+            return;
+        }
         var title = document.getElementById('reusable-preview-title');
         if (title) title.textContent = I18n.t('reusable.previewTitle', { name: name });
         var meta = document.getElementById('reusable-preview-meta');
@@ -824,7 +858,6 @@ var ReusableNodes = {
         var outputs = Array.isArray(template.outputs) ? template.outputs : [];
         var byId = {};
         nodes.forEach(function (n) { byId[n.id] = n; });
-        var agg = this.aggregate(groupId, (typeof runResults !== 'undefined' && runResults.statuses) || {});
         if (meta) {
             meta.textContent =
                 I18n.t('reusable.nodeCount', { n: nodes.length }) + ' · ' +
@@ -833,7 +866,7 @@ var ReusableNodes = {
         }
         var stage = document.getElementById('reusable-preview-stage');
         if (stage) {
-            var built = this._stageHtml(groupId, template, {
+            var built = this._stageHtml(statusGroup, template, {
                 maxW: REUSABLE_PREVIEW_MAX_W,
                 maxH: REUSABLE_PREVIEW_MAX_H,
             });
@@ -849,7 +882,7 @@ var ReusableNodes = {
             );
         }, this).join('');
         var rows = nodes.map(function (inner) {
-            var info = this._statusOf(groupId, inner.id);
+            var info = this._statusOf(statusGroup, inner.id);
             var status = info && info.status ? info.status : '';
             return (
                 '<li class="rps-node">' +

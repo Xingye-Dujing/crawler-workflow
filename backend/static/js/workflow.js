@@ -11475,8 +11475,12 @@ var wfFiles = {
                 : '';
             var ops = '';
             if (!row.broken) {
+                ops += '<button class="runs-mgr-btn" onclick="wfFiles.previewTemplate(\'' + self._quote(row.id) + '\')">' +
+                    I18n.t('reusable.preview') + '</button>';
                 ops += '<button class="runs-mgr-btn" onclick="wfFiles.insertTemplate(\'' + self._quote(row.id) + '\')">' +
                     I18n.t('reusable.insert') + '</button>';
+                ops += '<button class="runs-mgr-btn" onclick="wfFiles.renameTemplate(\'' + self._quote(row.id) + '\')">' +
+                    I18n.t('reusable.rename') + '</button>';
             }
             ops += '<button class="runs-mgr-btn del" onclick="wfFiles.removeTemplate(\'' + self._quote(row.id) + '\')">' +
                 I18n.t('reusable.removeTemplate') + '</button>';
@@ -11501,6 +11505,51 @@ var wfFiles = {
     _templateRow(id) {
         var wanted = String(id || '');
         return (this._templates || []).find(function (row) { return String(row.id) === wanted; }) || null;
+    },
+
+    async previewTemplate(id) {
+        if (typeof ReusableNodes === 'undefined' || !ReusableNodes.previewTemplate) {
+            showToast(I18n.t('reusable.previewFailed'));
+            return;
+        }
+        var result = await fetchJSON('/api/reusable/get?id=' + encodeURIComponent(id));
+        if (!result || !result.ok || !result.template) {
+            showToast((result && result.error) || I18n.t('reusable.previewFailed'));
+            return;
+        }
+        ReusableNodes.previewTemplate(result.template);
+    },
+
+    async renameTemplate(id) {
+        var row = this._templateRow(id);
+        if (!row || row.broken) return;
+        var current = String(row.name || '');
+        var answer = await showDialog({
+            message: I18n.t('reusable.renamePrompt', { name: current }),
+            input: { value: current, placeholder: I18n.t('reusable.renamePlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('reusable.rename'), primary: true },
+            ],
+        });
+        if (answer === null) return;
+        var name = String(answer || '').trim();
+        if (!name) {
+            showToast(I18n.t('reusable.nameRequired'));
+            return;
+        }
+        if (name === current) return;
+        var result = await fetchJSON('/api/reusable/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ id: id, name: name }),
+        });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('reusable.renameFailed'));
+            return;
+        }
+        showToast(I18n.t('reusable.renamed'));
+        await this.refreshReusable();
     },
 
     async removeTemplate(id) {

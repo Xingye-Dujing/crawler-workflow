@@ -148,6 +148,14 @@ class TestPreview:
         assert preview['slots'] == 2
         assert preview['closed'] is True
 
+    def test_a_saved_template_can_be_read_before_it_is_inserted(self, ru):
+        preview = ru['template_preview']
+        assert preview['open'] is True
+        assert preview['title'] == 'INSIDE 模板直看'
+        assert preview['stage_cards'] == 2
+        assert preview['side_nodes'] == 2
+        assert preview['statuses'] == 0, 'a template without an instance has no run status to paint'
+
     def test_the_settings_form_names_the_slots_and_escapes_the_template_name(self, ru):
         settings = ru['settings']
         assert settings['has_slot_rows'] == 2

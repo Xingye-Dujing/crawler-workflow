@@ -6,7 +6,14 @@ import pytest
 
 from config import Config
 from services import reusable_store
-from services.reusable_store import TemplateCorruptError, delete_template, get_template, list_templates, save_template
+from services.reusable_store import (
+    TemplateCorruptError,
+    delete_template,
+    get_template,
+    list_templates,
+    rename_template,
+    save_template,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -89,6 +96,49 @@ class TestSaveAndRead:
     def test_a_template_survives_a_restart(self):
         saved = save_template(fragment())
         assert get_template(saved['id'])['name'] == '清洗流水线'
+
+
+class TestRename:
+    def test_rename_changes_the_name_and_nothing_else(self):
+        first = save_template(fragment())
+        renamed = rename_template(first['id'], '  清洗流水线 v2  ')
+        assert renamed['id'] == first['id']
+        assert renamed['name'] == '清洗流水线 v2'
+        full = get_template(first['id'])
+        assert full['name'] == '清洗流水线 v2'
+        assert full['nodes'] == first['nodes']
+        assert full['connections'] == first['connections']
+        assert full['created_at'] == first['created_at']
+        assert list_templates()[0]['name'] == '清洗流水线 v2'
+
+    def test_a_duplicate_blank_or_over_long_name_is_refused(self):
+        first = save_template(fragment())
+        save_template(fragment(name='另一个模板'))
+        with pytest.raises(ValueError) as exc:
+            rename_template(first['id'], '另一个模板')
+        assert '另一个模板' in str(exc.value)
+        with pytest.raises(ValueError) as exc:
+            rename_template(first['id'], '   ')
+        assert str(exc.value)
+        with pytest.raises(ValueError) as exc:
+            rename_template(first['id'], 'x' * 81)
+        assert '80' in str(exc.value)
+        assert get_template(first['id'])['name'] == '清洗流水线'
+
+    def test_a_missing_or_malformed_id_is_named(self):
+        assert rename_template('r-000000000000', '新名字') is None
+        with pytest.raises(ValueError) as exc:
+            rename_template('bad', '新名字')
+        assert 'bad' in str(exc.value)
+
+    def test_a_corrupt_file_is_refused_instead_of_overwritten(self):
+        saved = save_template(fragment())
+        path = reusable_store._path(saved['id'])
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('{not json')
+        with pytest.raises(ValueError) as exc:
+            rename_template(saved['id'], '新名字')
+        assert saved['id'] in str(exc.value)
 
 
 class TestValidation:

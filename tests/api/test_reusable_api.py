@@ -82,6 +82,29 @@ class TestReusableApi:
         assert response.status_code == 400
         assert '清洗流水线' in response.get_json()['error']
 
+    def test_rename_updates_the_list_and_refuses_a_duplicate(self, client):
+        first = client.post('/api/reusable/save', json=FRAGMENT).get_json()['template']
+        second_body = dict(FRAGMENT)
+        second_body['name'] = '另一个模板'
+        second = client.post('/api/reusable/save', json=second_body).get_json()['template']
+        renamed = client.post('/api/reusable/rename', json={'id': first['id'], 'name': '清洗流水线 v2'})
+        assert renamed.status_code == 200
+        assert renamed.get_json()['template']['name'] == '清洗流水线 v2'
+        names = [row['name'] for row in client.get('/api/reusable').get_json()['templates']]
+        assert '清洗流水线 v2' in names
+        assert client.get('/api/reusable/get?id=' + first['id']).get_json()['template']['name'] == '清洗流水线 v2'
+        duplicate = client.post('/api/reusable/rename', json={'id': first['id'], 'name': second['name']})
+        assert duplicate.status_code == 400
+        assert second['name'] in duplicate.get_json()['error']
+
+    def test_rename_refuses_a_missing_id_and_non_strings(self, client):
+        missing = client.post('/api/reusable/rename', json={'id': 'r-000000000000', 'name': 'x'})
+        assert missing.status_code == 404
+        assert 'r-000000000000' in missing.get_json()['error']
+        for body in ({'id': 3, 'name': 'x'}, {'id': 'r-000000000000', 'name': 3}, {'name': 'x'}, {}):
+            response = client.post('/api/reusable/rename', json=body)
+            assert response.status_code == 400, body
+
     def test_delete_is_idempotent(self, client):
         template = client.post('/api/reusable/save', json=FRAGMENT).get_json()['template']
         assert client.post('/api/reusable/delete', json={'id': template['id']}).get_json()['deleted'] is True

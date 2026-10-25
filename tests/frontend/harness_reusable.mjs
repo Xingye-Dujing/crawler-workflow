@@ -375,6 +375,27 @@ out.preview = {
 ReusableNodes.closePreview();
 out.preview.closed = !overlay.classList.contains('open');
 
+/* A saved template can be previewed from the manager before it is inserted: there is
+   no instance and therefore no run status to paint. */
+ReusableNodes.previewTemplate({
+    name: '模板直看',
+    nodes: [
+        { id: 'a', type: 'process', title: '清洗', params: {}, x: 0, y: 0, w: 220, h: 90 },
+        { id: 'b', type: 'analysis', title: '去空', params: {}, x: 300, y: 0, w: 220, h: 80 },
+    ],
+    connections: [{ from: 'a', to: 'b' }],
+    inputs: ['a'],
+    outputs: ['b'],
+});
+out.template_preview = {
+    open: overlay.classList.contains('open'),
+    title: doc.getElementById('reusable-preview-title').textContent,
+    stage_cards: doc.getElementById('reusable-preview-stage').querySelectorAll('.reusable-inner-node').length,
+    side_nodes: (doc.getElementById('reusable-preview-side').innerHTML.match(/class="rps-node"/g) || []).length,
+    statuses: (doc.getElementById('reusable-preview-stage').innerHTML.match(/rin-status/g) || []).length,
+};
+ReusableNodes.closePreview();
+
 /* The settings form names the slots and escapes the template name. */
 const safeName = canvas.nodes[gid].params.template_name;
 canvas.nodes[gid].params.template_name = '<img src=x onerror=alert(1)>';

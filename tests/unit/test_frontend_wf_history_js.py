@@ -245,10 +245,29 @@ class TestReusableTemplateTab:
         assert '&lt;img' in html
         assert wfh['reusable_list']['img_elements'] == 0
         assert '>2 / 1<' in html
-        # The broken row has no insert door but stays deletable.
+        # The broken row has no preview/rename/insert door but stays deletable.
         assert html.count('wfFiles.insertTemplate(') == 1
+        assert html.count('wfFiles.previewTemplate(') == 1
+        assert html.count('wfFiles.renameTemplate(') == 1
         assert html.count('wfFiles.removeTemplate(') == 2
         assert 'unreadable' in html
+
+    def test_preview_reads_the_template_and_hands_it_to_the_shared_preview(self, wfh):
+        preview = wfh['reusable_preview']
+        assert preview['gets'] == ['/api/reusable/get?id=r-000000000001']
+        assert preview['calls'] == [{'id': 'r-000000000001', 'name': '清洗流水线'}]
+        assert preview['toasts'] == [], 'a successful preview has nothing to apologise for'
+
+    def test_rename_posts_the_new_name_and_refreshes_the_list(self, wfh):
+        renamed = wfh['reusable_rename']
+        assert renamed['body'] == {'id': 'r-000000000001', 'name': '清洗流水线 v2'}
+        assert renamed['messages'] == ['Rename "清洗流水线":']
+        assert renamed['toasts'] == ['RENAMED']
+        assert renamed['reads'] == 1, 'the template list must be re-read after a rename'
+        assert renamed['name'] == '清洗流水线 v2'
+
+    def test_a_blank_rename_is_refused_without_a_request(self, wfh):
+        assert wfh['reusable_rename_blank'] == {'requests': 0, 'toasts': ['NAME-REQUIRED']}
 
     def test_delete_names_the_template_and_refreshes_the_list(self, wfh):
         deleted = wfh['reusable_delete']

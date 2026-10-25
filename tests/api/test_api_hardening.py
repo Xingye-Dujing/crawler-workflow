@@ -65,6 +65,7 @@ BODY_ROUTES = [
     '/api/report/generate',
     '/api/report/latex',
     '/api/reusable/delete',
+    '/api/reusable/rename',
     '/api/reusable/save',
     '/api/runs/clear',
     '/api/runs/delete',

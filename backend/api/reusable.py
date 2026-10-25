@@ -14,6 +14,7 @@ from services.reusable_store import (
     delete_template,
     get_template,
     list_templates,
+    rename_template,
     save_template,
 )
 
@@ -50,6 +51,26 @@ def reusable_save():
         template = save_template(data)
     except ValueError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True, 'template': template})
+
+
+@bp.route('/api/reusable/rename', methods=['POST'])
+def reusable_rename():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    template_id = data.get('id')
+    name = data.get('name')
+    if not isinstance(template_id, str):
+        return _bad_param('id')
+    if not isinstance(name, str):
+        return _bad_param('name')
+    try:
+        template = rename_template(template_id, name)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    if template is None:
+        return jsonify({'ok': False, 'error': t('reusable.missing', id=template_id or '(empty)')}), 404
     return jsonify({'ok': True, 'template': template})
 
 

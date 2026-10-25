@@ -203,6 +203,28 @@ def _load_file(path: str) -> dict:
     return payload
 
 
+def _summary(payload: dict) -> dict:
+    return {
+        'id': str(payload.get('id')),
+        'name': str(payload.get('name') or ''),
+        'description': str(payload.get('description') or ''),
+        'nodes': len(payload.get('nodes') or []),
+        'connections': len(payload.get('connections') or []),
+        'inputs': len(payload.get('inputs') or []),
+        'updated_at': str(payload.get('updated_at') or ''),
+        'broken': False,
+    }
+
+
+def _write_payload(payload: dict) -> None:
+    os.makedirs(Config.REUSABLE_DIR, exist_ok=True)
+    target = _path(str(payload['id']))
+    tmp = target + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, target)
+
+
 def list_templates() -> list:
     directory = Config.REUSABLE_DIR
     if not os.path.isdir(directory):
@@ -217,18 +239,7 @@ def list_templates() -> list:
             continue
         try:
             payload = _load_file(path)
-            out.append(
-                {
-                    'id': str(payload.get('id')),
-                    'name': str(payload.get('name') or ''),
-                    'description': str(payload.get('description') or ''),
-                    'nodes': len(payload.get('nodes') or []),
-                    'connections': len(payload.get('connections') or []),
-                    'inputs': len(payload.get('inputs') or []),
-                    'updated_at': str(payload.get('updated_at') or ''),
-                    'broken': False,
-                }
-            )
+            out.append(_summary(payload))
         except (OSError, ValueError, TemplateCorruptError):
             # A broken file is still a row: the picker must be able to delete it.
             out.append(
@@ -299,13 +310,45 @@ def save_template(raw) -> dict:
             'created_at': str((existing or {}).get('created_at') or now),
             'updated_at': now,
         }
-        os.makedirs(Config.REUSABLE_DIR, exist_ok=True)
-        target = _path(template_id)
-        tmp = target + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, target)
+        _write_payload(payload)
         return payload
+
+
+def rename_template(template_id: str, name: str) -> dict | None:
+    """Rename one template without touching its nodes, wiring or timestamps.
+
+    An empty name is refused here like it is on save; a blank label is not a valid
+    identity for the picker. ``None`` means the id names no stored template.
+    """
+    wanted = str(template_id or '')
+    if not _ID.match(wanted):
+        raise ValueError(t('reusable.badId', id=wanted or '(empty)'))
+    clean_name = str(name or '').strip()
+    if not clean_name:
+        raise ValueError(t('reusable.nameRequired'))
+    if len(clean_name) > MAX_NAME:
+        raise ValueError(t('reusable.nameTooLong', n=MAX_NAME))
+    with _lock:
+        try:
+            payload = _load_file(_path(wanted))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as e:
+            raise ValueError(t('reusable.corrupt', id=wanted)) from e
+        duplicate = next(
+            (
+                row
+                for row in list_templates()
+                if not row['broken'] and row['id'] != wanted and row['name'].casefold() == clean_name.casefold()
+            ),
+            None,
+        )
+        if duplicate is not None:
+            raise ValueError(t('reusable.nameTaken', name=clean_name))
+        payload['name'] = clean_name
+        payload['updated_at'] = _now()
+        _write_payload(payload)
+        return _summary(payload)
 
 
 def delete_template(template_id: str) -> bool:
