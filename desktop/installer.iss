@@ -1,7 +1,7 @@
 ; Inno Setup 6 script for the portable CaiXiHui onedir build.
 ;
 ; Build the folder first:
-;   powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+;   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
 ; Then compile this file with ISCC.exe (the build script does it with -Installer).
 ;
 ; User data is NOT installed here and NOT deleted on uninstall: the app stores it in

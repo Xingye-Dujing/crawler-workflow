@@ -12,9 +12,9 @@
 要求：Windows x64、Python 3.11（仓库里的 `.venv` 即可）、能访问 PyPI。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
 # 可选：同时用 Inno Setup 6 生成安装包
-powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 -Installer
+powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 ```
 
 产物：
@@ -26,7 +26,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 -Installer
 | `dist/CaiXiHui-Setup.exe` | 可选安装包（需要本机装有 Inno Setup 6） |
 
 常用参数：`-Clean` 重建构建环境与产物；`-NoZip` 跳过压缩；`-KeepWork` 保留
-PyInstaller 中间目录；`-RemoveBuildEnv` 构建后删掉 `packaging/.venv-build`（省几百 MB，
+PyInstaller 中间目录；`-RemoveBuildEnv` 构建后删掉 `desktop/.venv-build`（省几百 MB，
 下次重建会重新安装依赖）；`-Upx` 用 UPX 压缩 pyd/dll；`-SkipInstall` 跳过依赖安装（构建环境
 已经准备好时用）。
 
@@ -34,10 +34,10 @@ PyInstaller 中间目录；`-RemoveBuildEnv` 构建后删掉 `packaging/.venv-bu
 UPX 更容易被杀软启发式误报，所以默认关闭。给普通用户分发建议用默认包；要极限压缩再加 `-Upx`。
 
 如果依赖安装阶段在**非交互终端/后台任务**里停住而没有任何报错，先在同一台机器用交互式
-PowerShell 执行 `packaging\.venv-build\Scripts\python.exe -m pip install --no-build-isolation -r packaging\requirements-runtime.txt`
+PowerShell 执行 `desktop\.venv-build\Scripts\python.exe -m pip install --no-build-isolation -r desktop\requirements-runtime.txt`
 （以及 `requirements-build.txt`），之后加 `-SkipInstall` 重新运行构建脚本。
 
-构建环境是独立的 `packaging/.venv-build`，只安装 `requirements-runtime.txt` 和
+构建环境是独立的 `desktop/.venv-build`，只安装 `requirements-runtime.txt` 和
 `requirements-build.txt`: **不含** torch / transformers / sentence-transformers / pyarrow /
 mitmproxy / pytest / ruff，因此这些包不会被 PyInstaller 收进发行包。`caixihui.spec` 再把
 Matplotlib 的 GUI 后端、Selenium 的 Linux/macOS driver 等无用负载排掉；`prune_dist.py`
@@ -115,7 +115,7 @@ snownlp/jieba 是主要部分）。以下能力被有意排除，以换取可接
 
 ```powershell
 $env:TMP = "$PWD\build\tmp"; $env:TEMP = "$PWD\build\tmp"
-packaging\.venv-build\Scripts\python.exe -m pip install --no-cache-dir --no-build-isolation -r packaging\requirements-runtime.txt
+desktop\.venv-build\Scripts\python.exe -m pip install --no-cache-dir --no-build-isolation -r desktop\requirements-runtime.txt
 ```
 
 ## 验证构建

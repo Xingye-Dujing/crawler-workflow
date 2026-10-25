@@ -19,7 +19,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO = Path(__file__).resolve().parents[2]
-PACKAGING = REPO / 'packaging'
+PACKAGING = REPO / 'desktop'
 
 
 def _load(name: str, path: Path):

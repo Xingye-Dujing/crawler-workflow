@@ -22,7 +22,7 @@ renders a drag-and-drop workflow canvas.
   so imports are top-level like `from config import Config`); never add a `backend.` prefix.
 - Lint: `ruff check backend/ tests/` and `ruff format --check backend/ tests/` (fast gate, same scope as CI), **plus
   pylint — three standards, three runs, all clean**: `.pylintrc` for product code (`backend` minus its
-  `test_*.py`, `packaging`, `tools`, `ml_train/scripts`), `.pylintrc.tests` for `tests/`, `.pylintrc.probes` for the
+  `test_*.py`, `desktop`, `tools`, `ml_train/scripts`), `.pylintrc.tests` for `tests/`, `.pylintrc.probes` for the
   `backend/test_*.py` measurement scripts. Nested config files are ignored by pylint (measured), so each tier is
   its own call with an explicit `--rcfile`. **Never write `# pylint: disable` or `# noqa`** and never widen a
   `.pylintrc*` to make a finding go away: fix the cause, and where a message is truly meaningless for that tree

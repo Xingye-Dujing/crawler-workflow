@@ -98,8 +98,9 @@ class TestTheStandards:
         assert 'exclude-protected' not in tests and 'exclude-protected' not in probes
 
     def test_ci_runs_the_two_tiers_it_can_and_says_why_not_the_third(self):
-        """`pylint packaging` resolves to the PyPA distribution in site-packages, not to this
-        repository's folder of that name — so the workflow must pass explicit files.
+        """The workflow must pass explicit FILES, and no project directory may share a name with
+        an installed distribution: a target spelled `packaging` resolved to the PyPA library in
+        site-packages, so the gate linted somebody else's code (the folder is `desktop/` now).
 
         The third tier stays local: the measurement scripts are gitignored on purpose, so a runner
         has none of them, and a CI step that "passed" over an empty list is the silent green this
@@ -120,6 +121,10 @@ class TestTheStandards:
         ]
         assert len(scoped) == 2, 'exactly the two CI steps must carry the FATAL/ERROR/WARNING scoping'
         assert '--disable=C,R' not in (REPO / '.pylintrc').read_text(encoding='utf-8')
+        # The renamed folder is part of the gate, not a tidy-up: `Get-ChildItem packaging` would
+        # silently lint the installed distribution again.
+        assert 'Get-ChildItem desktop' in ci, 'the product tier must list the desktop/ build sources'
+        assert not (REPO / 'packaging').exists(), 'no project directory may shadow an installed distribution'
         assert '--disable=C,R' not in (REPO / '.pylintrc.tests').read_text(encoding='utf-8')
         # The probes tier may be DOCUMENTED in this file (the local command is worth writing down),
         # but no step may RUN it — a step over an empty target list is the silent green we refuse.

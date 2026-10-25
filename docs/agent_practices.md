@@ -521,7 +521,7 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   `CaiXiHui.exe` flashed a console and exited, and my own verification had been `CIXI_NO_BROWSER=1` plus an
   explicit `CRAWLER_DATA_ROOT` inside the workspace — precisely the two things that hid the failing line
   (`main()`'s first statement `root.mkdir()` on `%APPDATA%\CaiXiHui` raising `PermissionError [WinError 5]`).
-  `packaging/README.md` already listed "double-click" as step 1 of acceptance; skipping it is why the build shipped.
+  `desktop/README.md` already listed "double-click" as step 1 of acceptance; skipping it is why the build shipped.
 - **Windows destroys the console when the process exits**, so for a frozen entry point a printed error is an
   invisible error. Every exit path must (a) block in a `MessageBoxW`, (b) append the traceback to
   `startup_error.log` under data root → exe folder → `%LOCALAPPDATA%` → temp, tried in turn. A short sentence goes
@@ -569,9 +569,12 @@ invocation with an explicit `--rcfile`. `tests/unit/test_lint_gate.py` pins the 
 idioms may not appear in the product list, `C0413` may not either, and `exclude-protected` is a named member, not a
 message.
 
-- **`pylint packaging` is not our folder.** It resolves to the PyPA `packaging` distribution in site-packages, so a
-  CI target spelled as a bare directory name lints a third-party library and passes over our files. The gate lists
-  FILES, and refuses to run on an empty list — a gate that checks nothing is worse than no gate.
+- **`pylint packaging` was never our folder — and the directory is now `desktop/` for that reason.**
+  A bare target named `packaging` resolved to the PyPA distribution in site-packages, so the gate
+  lints a third-party library and passes over our files. Two independent fixes, both kept: the
+  workflow lists FILES and refuses an empty list (a gate that checks nothing is worse than no gate),
+  and no project directory may share a name with an installed distribution, because every tool that
+  resolves imports by `sys.path` — not only pylint — will pick whichever comes first.
 - **Why the test tree is exempt from exactly three messages.** `W0621`: a fixture is requested BY NAME, so the test
   parameter and the module-level fixture must share it — renaming either stops collection. `W0613`: an autouse or
   requested fixture's argument IS the use (`clean_globals`, `seeded_logins`). `W0212`: half this suite exists to

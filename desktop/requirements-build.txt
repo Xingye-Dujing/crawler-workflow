@@ -1,0 +1,3 @@
+# Build-only tools. These are installed into desktop/.venv-build, never into the app's
+# runtime environment and never shipped in dist/.
+pyinstaller>=6.10,<7

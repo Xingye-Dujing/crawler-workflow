@@ -1,10 +1,10 @@
 # Build the Windows onedir release and (optionally) the Inno Setup installer.
 #
-#   powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
-#   powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 -Installer
+#   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
+#   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 #
 # The build environment is separate from the project .venv on purpose: it contains only
-# packaging/requirements-runtime.txt plus PyInstaller, so torch/transformers/pyarrow and
+# desktop/requirements-runtime.txt plus PyInstaller, so torch/transformers/pyarrow and
 # the test tools cannot leak into the distributed folder.
 
 param(
