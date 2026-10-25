@@ -77,6 +77,15 @@ class WorkflowManager:
         draft = self.load(name)
         if not draft:
             return {}, False
+        # A saved canvas keeps reusable nodes as groups; a RUN record and its captured
+        # nodes use the expanded child ids. Expand before the lookup, or every method
+        # paragraph/report for a reusable node would be filed as "unverified" even
+        # though the file (and the fingerprint) are right there.
+        from services.reusable_expand import expand_reusable_workflow
+
+        expanded, error = expand_reusable_workflow(draft)
+        if not error:
+            draft = expanded
         nodes = self._draft_nodes(draft)
         node = next((n for n in nodes if isinstance(n, dict) and str(n.get('id')) == str(node_id)), None)
         if node is None:

@@ -70,6 +70,14 @@ class Config:
     # snapshot is curated — the user names it and decides what to keep — while a run record is
     # whatever happened, and retention sweeps may drop the latter.
     BIBLIO_DB = os.path.join(DATA_DIR, 'biblio.db')
+    # Canvas history: whole-canvas snapshots the user names, plus the per-workflow layout
+    # baseline pointer that the second auto-layout strategy reads. Curated state, so it lives
+    # outside ``runs.db`` and retention never sweeps it.
+    WORKFLOW_HISTORY_DB = os.path.join(DATA_DIR, 'workflow_history.db')
+    # Reusable-node templates: authored workflow fragments, one JSON file each. They are
+    # user work (like WORKFLOW_DIR), not runtime state, so they live in a visible directory
+    # and are copied/backed up with the data root.
+    REUSABLE_DIR = os.path.join(DATA_DIR, 'reusable_nodes')
     # Housekeeping: keep the newest N runs per workflow, and never keep
     # anything older than this many days. Runs that finished cleanly are the
     # first to go; interrupted ones are kept to the end because they are the
@@ -179,5 +187,14 @@ class Config:
     #: size, and a body over it still carries the trailing ``…`` marker.
     WECHAT_BODY_MAX_CHARS = 0
 
-    for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR, BROWSER_PROFILE_DIR, HARVEST_DIR]:
+    for d in [
+        COOKIE_DIR,
+        EXPORT_DIR,
+        WORKFLOW_DIR,
+        LOG_DIR,
+        LLM_CHECKPOINT_DIR,
+        BROWSER_PROFILE_DIR,
+        HARVEST_DIR,
+        REUSABLE_DIR,
+    ]:
         os.makedirs(d, exist_ok=True)

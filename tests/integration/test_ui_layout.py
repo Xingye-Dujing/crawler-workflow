@@ -4370,3 +4370,159 @@ def test_the_export_guide_lists_a_link_the_user_can_copy(app_url, driver, lang):
     )
     assert scrim_and_sheet['afterScrim'] is False, 'a click on the dimmed backdrop closes the guide'
     assert scrim_and_sheet['afterSheet'] is True, 'a click inside the sheet must not close it'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_reusable_node_expands_inside_its_own_border_and_aggregates_statuses(driver, app_url, lang):
+    """The inside of a reusable node is a real browser render, not a list.
+
+    What only pixels can settle: the group's outer border encloses its inside cards
+    (the inside never becomes unrelated top-level nodes), the two inside boxes do not
+    overlap, the inside stage does not overflow the group, a collapsed/expanded toggle
+    is immediate, and the group badge is the aggregate of the children (running wins
+    over done). The template save is stubbed in the page: this module performs no
+    server writes.
+    """
+    driver.get(app_url + '/')
+    facts = driver.execute_async_script(
+        """
+        const lang = arguments[0];
+        const done = arguments[arguments.length - 1];
+        document.body.dataset.lang = lang;
+        I18n.apply();
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        canvas.selectedNodes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+
+        const realFetch = window.fetch;
+        const realDialog = window.showDialog;
+        window.fetch = function (url, opts) {
+            if (String(url).indexOf('/api/reusable/save') >= 0) {
+                const body = JSON.parse(opts.body);
+                const payload = { ok: true, template: Object.assign({ id: 'r-000000000001' }, body) };
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(payload),
+                    text: () => Promise.resolve(JSON.stringify(payload)),
+                });
+            }
+            return realFetch.apply(window, arguments);
+        };
+        window.showDialog = async function (spec) {
+            if (spec && spec.input) return lang === 'zh' ? '浏览器验收' : 'Browser check';
+            return true;
+        };
+
+        (async () => {
+            try {
+                const up = canvas.addNode('process', 320, 90);
+                const a = canvas.addNode('process', 620, 90);
+                const b = canvas.addNode('analysis', 920, 90);
+                const down = canvas.addNode('output', 1220, 90);
+                canvas.connections = [
+                    { from: up, to: a },
+                    { from: a, to: b },
+                    { from: b, to: down },
+                ];
+                canvas.setSelectedNodes([a, b]);
+                await ReusableNodes.createFromSelection();
+                const group = Object.keys(canvas.nodes).find((id) => canvas.nodes[id].type === 'reusable');
+                if (!group) throw new Error('no reusable group was created');
+                const el = canvas._nodeEl(group);
+                document.getElementById('reusable-auto-layout').checked = false;
+                ReusableNodes.toggle(group);
+                await new Promise((r) => setTimeout(r, 250));
+
+                const stage = el.querySelector('.reusable-stage');
+                const cards = Array.from(el.querySelectorAll('.reusable-inner-node'));
+                const rects = cards.map((c) => c.getBoundingClientRect());
+                let overlap = false;
+                for (let i = 0; i < rects.length; i += 1) {
+                    for (let j = i + 1; j < rects.length; j += 1) {
+                        const x = rects[i];
+                        const y = rects[j];
+                        if (
+                            Math.min(x.right, y.right) - Math.max(x.left, y.left) > 1 &&
+                            Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 1
+                        ) {
+                            overlap = true;
+                        }
+                    }
+                }
+
+                ReusableNodes.preview(group);
+                const overlay = document.getElementById('reusable-preview-overlay');
+                const box = document.getElementById('reusable-preview-box');
+                const previewStage = document.getElementById('reusable-preview-stage');
+                const preview = {
+                    open: overlay.classList.contains('open'),
+                    cards: previewStage.querySelectorAll('.reusable-inner-node').length,
+                    inside:
+                        box.getBoundingClientRect().right <= window.innerWidth + 1 &&
+                        box.getBoundingClientRect().bottom <= window.innerHeight + 1,
+                };
+                ReusableNodes.closePreview();
+
+                const template = canvas.nodes[group].params.template;
+                const map = {};
+                map[ReusableNodes.innerId(group, template.nodes[0].id)] = { status: 'done', row_count: 6 };
+                map[ReusableNodes.innerId(group, template.nodes[1].id)] = { status: 'running', row_count: 0 };
+                runResults.statuses = map;
+                canvas.applyRunStatuses(map);
+                const badge = el.querySelector('.node-run-badge');
+                const result = {
+                    ok: true,
+                    group,
+                    up,
+                    down,
+                    model: Object.keys(canvas.nodes),
+                    connections: canvas.connections.map((c) => [c.from, c.to]),
+                    cards: cards.length,
+                    paths: stage.querySelectorAll('path').length,
+                    overlap,
+                    stageInside: stage.scrollWidth <= stage.clientWidth + 1,
+                    border: getComputedStyle(el).borderStyle !== 'none',
+                    badge: badge ? badge.dataset.status : '',
+                    runningDots: el.querySelectorAll('.rin-status.st-running').length,
+                    doneDots: el.querySelectorAll('.rin-status.st-done').length,
+                    preview,
+                    controls: {
+                        styleStrategy: !!document.getElementById('layout-strategy'),
+                        styleCheckbox: !!document.getElementById('reusable-auto-layout'),
+                        toggle: !!el.querySelector('.node-reusable-toggle'),
+                        insidePreview: !!el.querySelector('.node-reusable-preview'),
+                    },
+                    summary: el.querySelector('.node-content').textContent,
+                };
+                window.fetch = realFetch;
+                window.showDialog = realDialog;
+                done(result);
+            } catch (e) {
+                window.fetch = realFetch;
+                window.showDialog = realDialog;
+                done({ ok: false, error: String(e), stack: e && e.stack });
+            }
+        })();
+        """,
+        lang,
+    )
+    assert facts.get('ok') is True, facts
+    assert len(facts['model']) == 3, facts['model']
+    assert facts['group'] in facts['model']
+    assert facts['connections'] == [
+        [facts['up'], facts['group']],
+        [facts['group'], facts['down']],
+    ], facts['connections']
+    assert facts['cards'] == 2, 'both saved nodes render inside the expanded group'
+    assert facts['paths'] == 1, 'the wire between the inside nodes is painted in the stage'
+    assert facts['overlap'] is False, 'inside cards may not cover each other'
+    assert facts['stageInside'] is True, 'the inside stage may not overflow the group horizontally'
+    assert facts['border'] is True, 'the group needs the outer border that frames its inside'
+    assert facts['badge'] == 'running', 'running must win over a settled sibling'
+    assert facts['runningDots'] == 1 and facts['doneDots'] == 1, facts
+    assert facts['preview'] == {'open': True, 'cards': 2, 'inside': True}, facts['preview']
+    assert all(facts['controls'].values()), facts['controls']
+    assert '2' in facts['summary'], facts['summary']

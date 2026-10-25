@@ -475,6 +475,14 @@ class TestAutoLayout:
     def test_a_blank_layout_order_keeps_creation_order(self, ix):
         assert ix['auto_layout_order_default']['a_above_b'] is True
 
+    def test_a_batched_restore_records_one_undo_step(self, ix):
+        """Inside the batch the flag is up (no per-node entries), and the one save
+        after it is the net snapshot Ctrl+Z returns to."""
+        assert ix['batch_history'] == {'seen': [True, True, False]}
+
+    def test_the_layout_button_asks_the_strategy_before_the_algorithm(self, ix):
+        assert ix['run_auto_layout'] == {'handled_runs': 0, 'fallback_runs': 1}
+
 
 class TestOutline:
     """The right-side outline: a flat map of every node; a row jump selects + centred the camera."""

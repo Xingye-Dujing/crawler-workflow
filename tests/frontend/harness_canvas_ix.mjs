@@ -656,6 +656,43 @@ canvas.autoLayout();
 const islands = box([iA, iB]);
 out.auto_layout_two_components = { positions: islands, separated: islands[0][1] !== islands[1][1] };
 
+/* A restore/load is ONE undo step. batchHistory suppresses the per-node pushes and
+   takes one net snapshot after the work; the three readings are the flag inside the
+   work, the flag inside an intermediate saveState, and the flag on the final save. */
+freshWorld();
+const batchSeen = [];
+const realSaveState = canvas.saveState;
+canvas.saveState = function () { batchSeen.push(canvas._historySaving); };
+canvas.batchHistory(function () {
+    batchSeen.push(canvas._historySaving);
+    canvas.saveState();
+});
+canvas.saveState = realSaveState;
+out.batch_history = { seen: batchSeen };
+
+/* The Layout button asks the strategy first; false is the ordinary algorithm, true
+   means the strategy arranged (or refused) and autoLayout must not also run. */
+freshWorld();
+const stratA = addNode('source', 0, 0);
+const stratB = addNode('output', 0, 0);
+canvas.connections = [{ from: stratA, to: stratB }];
+const realStrategyLayout = sandbox.LayoutStrategy.layout;
+let algorithmRuns = 0;
+const realAutoLayout = canvas.autoLayout;
+canvas.autoLayout = function (...args) {
+    algorithmRuns += 1;
+    return realAutoLayout.apply(this, args);
+};
+sandbox.LayoutStrategy.layout = () => true;
+await canvas.runAutoLayout();
+const handledRuns = algorithmRuns;
+sandbox.LayoutStrategy.layout = () => false;
+await canvas.runAutoLayout();
+const fallbackRuns = algorithmRuns;
+sandbox.LayoutStrategy.layout = realStrategyLayout;
+canvas.autoLayout = realAutoLayout;
+out.run_auto_layout = { handled_runs: handledRuns, fallback_runs: fallbackRuns };
+
 /* 排布顺序 (layout_order) overrides creation order: numbered components stack ascending
    (a LOWER number sits HIGHER), a blank one falls below every numbered one and keeps its
    place among the other blanks. Creation order here is 1,2,3 but the numbers are 2,1,'' so

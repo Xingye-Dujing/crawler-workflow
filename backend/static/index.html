@@ -107,7 +107,7 @@
         <button
           class="menu-btn"
           type="button"
-          onclick="canvas.autoLayout()"
+          onclick="canvas.runAutoLayout()"
           data-i18n="canvas.autoLayout"
         >
           Layout
@@ -955,6 +955,20 @@
           </button>
         </div>
       </div>
+      <div id="workflows-tabs"></div>
+      <div id="workflows-history-bar" class="wf-history-bar" hidden>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="wfFiles.saveSnapshot()"
+          data-i18n="wfHistory.save"
+        >
+          Save this canvas
+        </button>
+        <span class="wf-history-hint" data-i18n="wfHistory.saveHint">
+          Snapshots stay on this machine and do not touch the workflow file.
+        </span>
+      </div>
       <div id="workflows-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
@@ -1201,6 +1215,23 @@
       <div class="ctx-divider"></div>
       <div
         class="ctx-item"
+        id="ctx-create-reusable"
+        data-action="ctxCreateReusable"
+        data-i18n="ctx.createReusable"
+      >
+        Create Reusable Node
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-insert-reusable"
+        data-action="ctxInsertReusable"
+        data-i18n="ctx.insertReusable"
+      >
+        Insert Reusable Node
+      </div>
+      <div class="ctx-divider"></div>
+      <div
+        class="ctx-item"
         id="ctx-edit"
         data-action="ctxEdit"
         data-i18n="ctx.edit"
@@ -1214,6 +1245,24 @@
         data-i18n="ctx.rename"
       >
         Rename Node
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-preview-reusable"
+        data-action="ctxPreviewReusable"
+        data-i18n="ctx.previewReusable"
+        style="display: none"
+      >
+        Preview Inside
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-toggle-reusable"
+        data-action="ctxToggleReusable"
+        data-i18n="ctx.expandReusable"
+        style="display: none"
+      >
+        Expand Inside
       </div>
       <div
         class="ctx-item"
@@ -1365,6 +1414,26 @@
         </div>
         <div class="help-body" id="source-help-body">
           <div class="source-help-loading" data-i18n="sourceHelp.loading">Loading the export guide…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reusable-node inside preview. The shell is static; the stage and the node
+         list are built from the group's stored template, so a collapsed node can be
+         inspected without expanding it on the canvas. -->
+    <div id="reusable-preview-overlay">
+      <div id="reusable-preview-box">
+        <div class="panel-header">
+          <span id="reusable-preview-title"></span>
+          <button class="panel-close" type="button" onclick="ReusableNodes.closePreview()" data-i18n="reusable.previewClose">Close</button>
+        </div>
+        <div class="reusable-preview-meta" id="reusable-preview-meta"></div>
+        <div class="reusable-preview-body">
+          <div class="reusable-preview-stage" id="reusable-preview-stage"></div>
+          <div class="reusable-preview-side" id="reusable-preview-side"></div>
+        </div>
+        <div class="reusable-preview-note" data-i18n="reusable.readOnly">
+          Inside nodes are shown for reading; create a new template to change them.
         </div>
       </div>
     </div>
@@ -1628,6 +1697,49 @@
           <button class="theme-opt" type="button" data-theme-choice="light" data-i18n="style.themeLight" data-i18n-title="style.themeLight" onclick="setTheme('light')">Light</button>
           <button class="theme-opt" type="button" data-theme-choice="dark" data-i18n="style.themeDark" data-i18n-title="style.themeDark" onclick="setTheme('dark')">Dark</button>
         </div>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
+        <span data-i18n="style.layout">Auto layout</span>
+        <span class="dd-ctrl">
+          <select
+            id="layout-strategy"
+            class="settings-select"
+            onchange="LayoutStrategy.setStrategy(this.value)"
+            data-i18n-title="style.layoutHint"
+          >
+            <option value="algorithm" data-i18n="style.layoutAlgorithm">Algorithm</option>
+            <option value="baseline" data-i18n="style.layoutBaseline">History baseline</option>
+          </select>
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="style.layoutBaselineLabel">Layout baseline</span>
+        <span class="dd-ctrl">
+          <span id="layout-baseline-hint" class="layout-baseline-hint"></span>
+          <button
+            class="menu-btn"
+            type="button"
+            onclick="wfFiles.openHistory()"
+            data-i18n="wfHistory.openHistory"
+          >
+            Open canvas history
+          </button>
+        </span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
+        <span data-i18n="reusable.autoLayoutOnExpand">Auto-layout when expanding</span>
+        <span class="dd-ctrl">
+          <input
+            type="checkbox"
+            id="reusable-auto-layout"
+            class="settings-checkbox"
+            checked
+            data-i18n-title="reusable.autoLayoutHint"
+            onchange="ReusableNodes.setAutoLayoutOnExpand(this.checked)"
+          />
+        </span>
       </div>
       <div class="dd-divider"></div>
       <div class="dd-item-row">
@@ -2151,6 +2263,9 @@
     <script src="/js/zenviz.js"></script>
     <script src="/js/custom-select.js"></script>
     <script src="/js/app.js"></script>
+    <!-- Reusable-node templates, inside view and run expansion. After app.js so the
+         Style menu's preference and the i18n catalogue are already defined. -->
+    <script src="/js/reusable.js"></script>
     <script src="/js/schedules.js"></script>
   </body>
 </html>

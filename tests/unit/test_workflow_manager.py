@@ -142,3 +142,42 @@ class TestListingAndDeleting:
         monkeypatch.setattr(Config, 'WORKFLOW_DIR', str(target))
         manager = WorkflowManager()
         assert manager.workflow_dir == str(target) and target.is_dir()
+
+
+class TestCapturedParamsWithReusableNodes:
+    def test_a_run_node_inside_a_group_is_found_by_its_expanded_id(self, manager):
+        """A run records expanded child ids; the saved file keeps the group. Without
+        expanding before the lookup, every method paragraph/report node inside a
+        reusable node would be filed as unverified while the file was right there."""
+        from services.reusable_expand import expand_reusable_workflow
+        from services.run_store import fingerprints_for_workflow
+
+        draft = {
+            'nodes': [
+                {
+                    'id': 'g1',
+                    'type': 'reusable',
+                    'params': {
+                        'template_name': '组',
+                        'template': {
+                            'nodes': [
+                                {'id': 'a', 'type': 'process', 'params': {'operation': 'clean'}},
+                                {'id': 'b', 'type': 'analysis', 'params': {'operation': 'drop_null'}},
+                            ],
+                            'connections': [{'from': 'a', 'to': 'b'}],
+                            'inputs': ['a'],
+                            'outputs': ['b'],
+                        },
+                    },
+                },
+                {'id': 'up', 'type': 'process', 'params': {}},
+            ],
+            'connections': [{'from': 'up', 'to': 'g1'}],
+        }
+        manager.save('wf', draft)
+        expanded, error = expand_reusable_workflow(draft)
+        assert error == ''
+        fingerprint = fingerprints_for_workflow(expanded)['g1__b']
+        params, verified = manager.captured_params('wf', 'g1__b', fingerprint)
+        assert params == {'operation': 'drop_null'}
+        assert verified is True

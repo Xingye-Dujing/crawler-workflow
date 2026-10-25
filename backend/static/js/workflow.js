@@ -245,7 +245,10 @@ const workflow = {
     },
 
     async save() {
-        const workflowData = canvas.toWorkflowJSON();
+        /* The FILE keeps a reusable node as a group (its template and collapsed state);
+           only a RUN expands it. Using one shape for both would make Save silently
+           replace the group with its children, and reopening would lose the feature. */
+        const workflowData = canvas.toWorkflowJSON({ expandReusable: false });
         let name = this.currentFile;
         if (!name) {
             name = await showDialog({
@@ -258,6 +261,7 @@ const workflow = {
             });
             if (!name) return;
             this.currentFile = name;
+            if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
         }
         try {
             const resp = await fetch('/api/workflow/save', {
@@ -301,7 +305,7 @@ const workflow = {
             const resp = await fetch('/api/workflow/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: this.currentFile, workflow: canvas.toWorkflowJSON() }),
+                body: JSON.stringify({ name: this.currentFile, workflow: canvas.toWorkflowJSON({ expandReusable: false }) }),
             });
             const result = await resp.json();
             if (result.ok) {
@@ -371,6 +375,7 @@ const workflow = {
                 if (!this.loadFromJSON(result.workflow)) return;
                 this.currentFile = name;
                 this._persistOpenFile();
+                if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
                 canvas.markSaved();
                 showToast(I18n.t('toast.workflowLoaded') + ': ' + name);
                 /* The workflow we just opened may have an unfinished run filed
@@ -385,7 +390,16 @@ const workflow = {
         }
     },
 
-    loadFromJSON(workflowData) {
+    /* Restoring a snapshot is ONE undo step. The file-open path is unchanged: it
+       deliberately records its own entries (a file load is not a canvas edit). */
+    loadFromJSON(workflowData, options) {
+        if (options && options.history === 'single') {
+            return canvas.batchHistory(() => this._loadFromJSON(workflowData));
+        }
+        return this._loadFromJSON(workflowData);
+    },
+
+    _loadFromJSON(workflowData) {
         /* Checked BEFORE anything is torn down: the old order cleared the canvas,
            then died on `workflowData.nodes.forEach` for a file without a node
            list, so opening a foreign or half-written JSON cost the user the
@@ -490,6 +504,7 @@ const workflow = {
         this.currentFile = null;
         localStorage.removeItem('crawler_canvas');
         this._persistOpenFile();
+        if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
         /* An empty canvas has nothing to save, so it is clean — and markSaved resets the
            baseline, since 新建 rebuilds the canvas without going through saveState. */
         canvas.markSaved();
@@ -923,6 +938,12 @@ const workflow = {
         opts = opts || {};
         /* Validate before running */
         var validationErrors = this.validate();
+        /* A reusable node's errors exist only in the expanded graph, so the canvas's
+           own validate() cannot see them. Asking here means a bad group refuses the
+           press by name instead of sending a graph the engine will reject halfway. */
+        if (typeof ReusableNodes !== 'undefined' && ReusableNodes.errors) {
+            validationErrors = validationErrors.concat(ReusableNodes.errors());
+        }
         /* NO cookie check here. This used to ask /api/cookies/status and push 「缺少 Cookie」 for
            every source node whose platform was not in its `cookies` map — a second, weaker opinion
            about the same question the run gate already answers, and wrong in three ways measured on
@@ -2482,6 +2503,11 @@ function openSettings(nodeId) {
         }
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' +
             I18n.t('btn.previewData') + '</button></div>';
+    } else if (node.type === 'reusable') {
+        /* The group's form is about its boundary: the template it carries, the ordered
+           input slots an outside wire lands in, its single output, and the two view
+           controls. The inside is read-only here — see ReusableNodes. */
+        if (typeof ReusableNodes !== 'undefined') html += ReusableNodes.settingsHtml(nodeId);
     } else if (node.type === 'biblio') {
         html += renderBiblioSettings(nodeId, node.params);
     } else if (node.type === 'fuse') {
@@ -6466,6 +6492,9 @@ function setLang(nextLang) {
     if (typeof lexiconManager !== 'undefined') lexiconManager.onLanguageChange();
     if (typeof historyPanel !== 'undefined') historyPanel.onLanguageChange();
     if (typeof wfFiles !== 'undefined') wfFiles.onLanguageChange();
+    /* The Style menu's baseline hint is painted by JS from the last layout read, so a
+       language switch must re-stamp it rather than leave one English line in a Chinese menu. */
+    if (typeof LayoutStrategy !== 'undefined') LayoutStrategy._paint();
     /* The scheduled-task dock is JS-rendered like those, and its table says 「下次运行」 in the
        task's own zone — a row left in the old language would be the one word in the panel that
        did not switch. */
@@ -6473,6 +6502,9 @@ function setLang(nextLang) {
     /* The bibliometrics dock prints its run/node pickers, the shape of the stored table and the
        paging line from here, so nothing `I18n.apply()` re-stamps reaches them. */
     if (typeof biblioWorkspace !== 'undefined') biblioWorkspace.onLanguageChange();
+    /* A reusable node's inside preview is JS-painted (title, meta, slot labels,
+       statuses), so an open preview would otherwise keep the old language. */
+    if (typeof ReusableNodes !== 'undefined' && ReusableNodes.repaintPreview) ReusableNodes.repaintPreview();
 }
 
 function showToast(msg, ms) {
@@ -11243,6 +11275,14 @@ function refuseWhileRunning() {
    guessing which stems exist. It reuses the runs/dataset panels' delegated-button +
    escaping shape, not a second invention. */
 var wfFiles = {
+    /* The panel answers two different questions: which files exist (open/rename/delete),
+       and which canvas states the user kept (restore/delete/baseline). They are tabs
+       rather than two panels because both are about "this canvas", and the dock slot is
+       already the place a person looks for a saved canvas. */
+    _tab: 'files',
+    _history: null,
+    _historyMax: 0,
+
     panel() {
         return document.getElementById('workflows-panel');
     },
@@ -11269,6 +11309,13 @@ var wfFiles = {
     async refresh() {
         var body = document.getElementById('workflows-mgr-body');
         if (!body) return;
+        this.renderTabs();
+        var bar = document.getElementById('workflows-history-bar');
+        if (bar) bar.hidden = this._tab !== 'history';
+        if (this._tab === 'history') {
+            await this.refreshHistory();
+            return;
+        }
         body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.loading') + '</div>';
         var result = await fetchJSON('/api/workflow/list').catch(function () { return null; });
         if (!result || !result.ok) {
@@ -11279,9 +11326,212 @@ var wfFiles = {
         this.render();
     },
 
+    /* Two views, one body. 工作流文件 is "what is on disk"; 画布历史 is "what this
+       canvas has been". Keeping the label of the inactive tab out of the table means
+       the switch is a repaint, not a second panel with its own close button. */
+    renderTabs() {
+        var tabs = document.getElementById('workflows-tabs');
+        if (!tabs) return;
+        var count = (this._history || []).length;
+        var self = this;
+        var label = function (key, textKey) {
+            var active = self._tab === key;
+            return (
+                '<div class="runs-tab' + (active ? ' active' : '') +
+                '" role="tab" aria-selected="' + (active ? 'true' : 'false') +
+                '" onclick="wfFiles.switchTab(\'' + key + '\')">' +
+                I18n.t(textKey) +
+                (key === 'history' && count ? ' (' + count + ')' : '') +
+                '</div>'
+            );
+        };
+        tabs.innerHTML = label('files', 'wfHistory.tabFiles') + label('history', 'wfHistory.tabHistory');
+    },
+
+    switchTab(tab) {
+        var next = tab === 'history' ? 'history' : 'files';
+        if (next === this._tab) return;
+        this._tab = next;
+        this.refresh();
+    },
+
+    /* Reachable from the Style menu's baseline row: a person choosing a baseline needs
+       the list in front of them, not a second place that merely mentions it. */
+    openHistory() {
+        var panel = this.panel();
+        if (!panel) return;
+        if (typeof closeStyleMenu === 'function') closeStyleMenu();
+        if (!panel.classList.contains('open')) {
+            closeDockedPanels('workflows-panel');
+            panel.classList.add('open');
+        }
+        this._tab = 'history';
+        this.refresh();
+    },
+
+    async refreshHistory() {
+        var body = document.getElementById('workflows-mgr-body');
+        if (!body) return;
+        body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.loading') + '</div>';
+        var result = await fetchJSON('/api/workflow/history');
+        if (!result || !result.ok) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.loadFailed') + '</div>';
+            return;
+        }
+        this._history = result.snapshots || [];
+        this._historyMax = result.max || 0;
+        /* The baseline tag belongs to the same row list; one read keeps the tag and
+           the Style menu's hint from disagreeing after a delete. */
+        if (typeof LayoutStrategy !== 'undefined') await LayoutStrategy.refresh();
+        this.renderTabs();
+        this.renderHistory();
+    },
+
+    renderHistory() {
+        var body = document.getElementById('workflows-mgr-body');
+        if (!body) return;
+        var rows = this._history || [];
+        if (!rows.length) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.empty') + '</div>';
+            return;
+        }
+        var self = this;
+        var layout = (typeof LayoutStrategy !== 'undefined' && LayoutStrategy.current) ? LayoutStrategy.current() : {};
+        var baselineId = (layout.snapshot && layout.snapshot.id) || '';
+        var html = rows.map(function (row) {
+            var name = String(row.label || '') || I18n.t('wfHistory.untitled');
+            var source = String(row.workflow_name || '') || I18n.t('wfHistory.noWorkflow');
+            var tag = row.id === baselineId
+                ? '<span class="wf-snap-baseline">' + escapeHtml(I18n.t('wfHistory.baselineTag')) + '</span>'
+                : '';
+            var ops =
+                '<button class="runs-mgr-btn" onclick="wfFiles.restoreSnapshot(\'' + self._quote(row.id) + '\')">' +
+                I18n.t('wfHistory.restore') + '</button>' +
+                '<button class="runs-mgr-btn" onclick="wfFiles.setBaseline(\'' + self._quote(row.id) + '\')">' +
+                I18n.t('wfHistory.baseline') + '</button>' +
+                '<button class="runs-mgr-btn del" onclick="wfFiles.deleteSnapshot(\'' + self._quote(row.id) + '\')">' +
+                I18n.t('wfHistory.remove') + '</button>';
+            return '<tr>' +
+                '<td class="runs-mgr-wf"><span class="wf-snap-name">' + escapeHtml(name) + tag + '</span>' +
+                '<span class="wf-snap-source">' + escapeHtml(source) + '</span></td>' +
+                '<td>' + (row.nodes || 0) + ' / ' + (row.connections || 0) + '</td>' +
+                '<td class="runs-mgr-id">' + escapeHtml(self._when(row.created_at)) + '</td>' +
+                '<td class="runs-mgr-ops">' + ops + '</td>' +
+                '</tr>';
+        }).join('');
+        body.innerHTML =
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('wfHistory.colSnapshot') + '</th>' +
+            '<th>' + I18n.t('wfHistory.colNodes') + '</th>' +
+            '<th>' + I18n.t('wfHistory.colSaved') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    _snapshotRow(id) {
+        var wanted = String(id || '');
+        return (this._history || []).find(function (row) { return String(row.id) === wanted; }) || null;
+    },
+
+    _snapshotLabel(row) {
+        return (row && String(row.label || '')) || I18n.t('wfHistory.untitled');
+    },
+
+    async saveSnapshot() {
+        /* A manual snapshot is quick on purpose: the name is optional, and a blank one
+           is displayed as 未命名快照 + its time rather than baked into the row. */
+        var label = await showDialog({
+            message: I18n.t('wfHistory.savePrompt'),
+            input: { value: '', placeholder: I18n.t('wfHistory.savePlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('wfHistory.save'), primary: true },
+            ],
+        });
+        if (label === null) return;
+        var result = await fetchJSON('/api/workflow/history/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({
+                label: label,
+                workflow_name: (typeof workflow !== 'undefined' && workflow.runName) ? workflow.runName() : '',
+                workflow: (typeof canvas !== 'undefined' && canvas) ? canvas.toWorkflowJSON({ expandReusable: false }) : null,
+            }),
+        });
+        if (result && result.ok) {
+            showToast(I18n.t('wfHistory.saved'));
+            this._tab = 'history';
+            await this.refresh();
+        } else {
+            showToast((result && result.error) || I18n.t('wfHistory.saveFailed'));
+        }
+    },
+
+    async restoreSnapshot(id) {
+        if (refuseWhileRunning()) return;
+        var row = this._snapshotRow(id);
+        var label = this._snapshotLabel(row);
+        var ok = await showDialog({
+            message: I18n.t('wfHistory.restoreConfirm').replace('{label}', label),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('wfHistory.restore'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/workflow/history/get?id=' + encodeURIComponent(id));
+        if (!result || !result.ok || !result.snapshot) {
+            showToast((result && result.error) || I18n.t('wfHistory.restoreFailed'));
+            return;
+        }
+        /* One undo step: a snapshot restore is one user action, not one step per node. */
+        if (!workflow.loadFromJSON(result.snapshot.workflow, { history: 'single' })) return;
+        if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
+        showToast(I18n.t('wfHistory.restored'));
+    },
+
+    async setBaseline(id) {
+        if (typeof LayoutStrategy === 'undefined') return;
+        await LayoutStrategy.setBaseline(id);
+        if (this._tab === 'history') this.renderHistory();
+    },
+
+    async deleteSnapshot(id) {
+        var row = this._snapshotRow(id);
+        var ok = await showDialog({
+            message: I18n.t('wfHistory.confirmRemove').replace('{label}', this._snapshotLabel(row)),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('wfHistory.remove'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/workflow/history/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ id: id }),
+        });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('wfHistory.removeFailed'));
+            return;
+        }
+        var message = I18n.t('wfHistory.removed');
+        var cleared = (result.baselines_cleared || []).length;
+        if (cleared) message += I18n.t('wfHistory.baselineClearedByDelete').replace('{n}', cleared);
+        showToast(message);
+        if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
+        await this.refreshHistory();
+    },
+
     onLanguageChange() {
         var panel = this.panel();
         if (!panel || !panel.classList.contains('open')) return;
+        this.renderTabs();
+        if (this._tab === 'history') {
+            if (this._history) this.renderHistory();
+            else this.refresh();
+            return;
+        }
         if (this._last) this.render();
         else this.refresh();
     },
@@ -11383,6 +11633,7 @@ var wfFiles = {
                recreate the just-renamed-away file. */
             if (typeof workflow !== 'undefined' && workflow.currentFile === name) workflow.currentFile = result.name;
             if (typeof workflow !== 'undefined') workflow._persistOpenFile();
+            if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
             showToast(I18n.t('wfMgr.renameDone'));
             this.refresh();
         } else {
@@ -11409,8 +11660,176 @@ var wfFiles = {
            friendly 「这一项已被锁定…」 reason; surfacing result.error (as rename does)
            tells the user WHY it failed, instead of a bare generic 删除失败 toast. */
         showToast(result && result.ok ? I18n.t('wfMgr.removeDone') : ((result && result.error) || I18n.t('wfMgr.removeFailed')));
+        if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
         if (typeof resumeBar !== 'undefined' && resumeBar.refresh) resumeBar.refresh();
         this.refresh();
+    },
+};
+
+function toggleDatasetPanel() {
+    datasetManager.toggle();
+}
+
+/* ── Auto-layout strategy (Style menu) ──────────────────────────
+   The Layout button has two answers: the topological algorithm, or the positions
+   from a canvas snapshot the user designated as this workflow's baseline. The
+   baseline is per SAVED workflow (its file stem), stored server-side, because "where
+   this canvas belongs" is part of the canvas's state — not a global preference.
+   Nodes the snapshot does not know keep the algorithm's placement, so a later-added
+   node is still laid out instead of staying on top of an old one. */
+var LayoutStrategy = {
+    _layout: null,
+    _snapshot: null,
+
+    current() {
+        return this._layout || {};
+    },
+
+    reset() {
+        this._layout = null;
+        this._snapshot = null;
+    },
+
+    _workflowName() {
+        return (typeof workflow !== 'undefined' && workflow.currentFile) || '';
+    },
+
+    async refresh() {
+        var name = this._workflowName();
+        if (!name) {
+            this._layout = { workflow_name: '', strategy: 'algorithm', snapshot: null, baseline_missing: false };
+            this._paint();
+            return this._layout;
+        }
+        var result = await fetchJSON('/api/workflow/history/layout?workflow=' + encodeURIComponent(name));
+        if (result && result.ok && result.layout) {
+            this._layout = result.layout;
+        } else if (!this._layout || this._layout.workflow_name !== name) {
+            /* A read failure leaves the select on the algorithm, which is the strategy
+               that always works. It must not claim a baseline it could not read. */
+            this._layout = { workflow_name: name, strategy: 'algorithm', snapshot: null, baseline_missing: false };
+        }
+        this._paint();
+        return this._layout;
+    },
+
+    _paint() {
+        var layout = this._layout || { workflow_name: '', strategy: 'algorithm', snapshot: null, baseline_missing: false };
+        var select = document.getElementById('layout-strategy');
+        if (select) select.value = layout.strategy === 'baseline' ? 'baseline' : 'algorithm';
+        /* The style menu's select is themed by CustomSelect: setting the native value
+           updates the control but not the visible trigger, so the menu would say
+           「算法排布」 while the saved strategy is 「按历史基准」. */
+        if (typeof CustomSelect !== 'undefined' && CustomSelect.refreshAll) CustomSelect.refreshAll();
+        var hint = document.getElementById('layout-baseline-hint');
+        if (!hint) return;
+        hint.classList.toggle('missing', !!layout.baseline_missing);
+        if (layout.baseline_missing) {
+            hint.textContent = I18n.t('style.layoutBaselineMissing');
+            hint.title = I18n.t('style.layoutBaselineMissing');
+        } else if (layout.snapshot) {
+            var label = String(layout.snapshot.label || '') || I18n.t('wfHistory.untitled');
+            hint.textContent = label + (wfFiles._when(layout.snapshot.created_at) ? ' · ' + wfFiles._when(layout.snapshot.created_at) : '');
+            hint.title = label;
+        } else {
+            hint.textContent = this._workflowName() ? I18n.t('style.layoutBaselineNone') : I18n.t('wfHistory.needSaved');
+            hint.title = '';
+        }
+    },
+
+    async setStrategy(strategy) {
+        var name = this._workflowName();
+        if (!name) {
+            showToast(I18n.t('wfHistory.needSaved'));
+            this._paint();
+            return;
+        }
+        var wanted = strategy === 'baseline' ? 'baseline' : 'algorithm';
+        var snapshotId = (this._layout && this._layout.snapshot && this._layout.snapshot.id) || '';
+        if (wanted === 'baseline' && !snapshotId) {
+            showToast(I18n.t('wfHistory.noBaseline'));
+            this._paint();
+            return;
+        }
+        var result = await fetchJSON('/api/workflow/history/layout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ workflow_name: name, strategy: wanted, snapshot_id: snapshotId }),
+        });
+        if (result && result.ok) {
+            this._layout = result.layout;
+            this._paint();
+            if (wanted === 'baseline') showToast(I18n.t('wfHistory.baselineSet'));
+        } else {
+            showToast((result && result.error) || I18n.t('wfHistory.baselineFailed'));
+            this._paint();
+        }
+    },
+
+    async setBaseline(snapshotId) {
+        var name = this._workflowName();
+        if (!name) {
+            showToast(I18n.t('wfHistory.needSaved'));
+            return;
+        }
+        var result = await fetchJSON('/api/workflow/history/layout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ workflow_name: name, strategy: 'baseline', snapshot_id: snapshotId }),
+        });
+        if (result && result.ok) {
+            this._layout = result.layout;
+            this._snapshot = null;
+            this._paint();
+            showToast(I18n.t('wfHistory.baselineSet'));
+        } else {
+            showToast((result && result.error) || I18n.t('wfHistory.baselineFailed'));
+        }
+    },
+
+    /* Returns true when this strategy owned the action (arranged, or refused by name);
+       false lets the caller run the ordinary algorithm. */
+    async layout() {
+        var name = this._workflowName();
+        if (!name) return false;
+        if (!this._layout || this._layout.workflow_name !== name) await this.refresh();
+        var layout = this._layout || {};
+        if (layout.strategy !== 'baseline') return false;
+        if (layout.baseline_missing || !layout.snapshot) {
+            showToast(I18n.t(layout.baseline_missing ? 'style.layoutBaselineMissing' : 'wfHistory.noBaseline'));
+            return true;
+        }
+        if (!this._snapshot || this._snapshot.id !== layout.snapshot.id) {
+            var result = await fetchJSON('/api/workflow/history/get?id=' + encodeURIComponent(layout.snapshot.id));
+            if (!result || !result.ok || !result.snapshot) {
+                showToast((result && result.error) || I18n.t('wfHistory.baselineFailed'));
+                return true;
+            }
+            this._snapshot = result.snapshot;
+        }
+        var saved = {};
+        ((this._snapshot.workflow && this._snapshot.workflow.nodes) || []).forEach(function (node) {
+            if (node && node.id !== undefined && node.id !== null) saved[String(node.id)] = node;
+        });
+        canvas.batchHistory(function () {
+            /* Algorithm first, so nodes the baseline never saw get a real place; then
+               the saved positions replace it for the nodes it knows. */
+            canvas.autoLayout({ silent: true });
+            Object.keys(canvas.nodes).forEach(function (id) {
+                var node = saved[String(id)];
+                var el = canvas._nodeEl(id);
+                if (!node || !el) return;
+                var x = Number(node.x);
+                var y = Number(node.y);
+                if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+                el.style.left = Math.round(x) + 'px';
+                el.style.top = Math.round(y) + 'px';
+            });
+            canvas.scheduleRender();
+        });
+        canvas.resetView();
+        showToast(I18n.t('toast.layoutApplied'));
+        return true;
     },
 };
 

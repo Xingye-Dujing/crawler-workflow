@@ -15,6 +15,12 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/workflow/list` | GET | 列出所有已保存工作流，**每个文件一条对象**（`name`/`nodes`/`labels`/`size`/`mtime`/`broken`），供底部「工作流文件」面板直接绘制；读不开的文件也占一行并带 `broken`，好让用户能删掉它 |
 | `/api/workflow/rename` | POST | 重命名工作流文件（`{name, new_name}`）：同时改写文件内的 name 与数据集里对旧名的引用，返回 `{ok, name, path, datasets}`；目标名已存在 409、旧名不存在 404、新旧同名 400，正在跑的那份被改名 409，绝不覆盖已有文件 |
 | `/api/workflow/delete` | POST | 删除工作流 |
+| `/api/workflow/history` | GET | 画布历史列表：`{ok, snapshots:[{id,label,workflow_name,created_at,nodes,connections}], max}`；**不返回画布内容**（列表要轻），内容按 id 取 |
+| `/api/workflow/history/save` | POST | `{label?, workflow_name?, workflow}` 存一份命名快照；`workflow` 必须是带 `nodes` 列表的文件形状（含可复用组）。超过 100 份时 409 按名拒绝，不淘汰旧快照 |
+| `/api/workflow/history/get` | GET | `?id=` 取一份快照的完整 `workflow`；找不到 404，内容损坏 409，都带快照 id |
+| `/api/workflow/history/delete` | POST | `{id}` 删除快照；`baselines_cleared` 列出因此被清空布局基准的工作流名；缺 id 幂等返回 `deleted:false` |
+| `/api/workflow/history/layout` | GET | `?workflow=` 读该工作流的自动排布策略与基准快照头（`strategy`/`snapshot`/`baseline_missing`） |
+| `/api/workflow/history/layout` | POST | `{workflow_name, strategy:'algorithm'\|'baseline', snapshot_id?}` 按工作流保存策略；baseline 必须有存在的快照，未保存的草稿没有工作流名 → 400 |
 | `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，那时宁可立刻 400 说明原因，也不会悄悄变成一次从零重爬 |
 | `/api/workflow/stop` | POST | 停止执行：浏览器在后台关、请求立即返回；`browsers` 是这次交出去关掉的浏览器数，`records` 是本请求已经就地改判为 `stopping` 的运行行（结论仍由运行自己写） |
 | `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表；`stopping`/`settling` 说明"已叫停但结论还没写"，浏览器据此续读而不是抢答）。另带 `run_ids`（本次尝试打开的全部记录 id，串行分段运行时不止一个）与 `node_states`（`{node_id: {status,row_count,error,run_id}}`，从 `node_runs` 读）：画布据此给节点画绿勾/黄转圈/红叉，并行时多个节点可同时为 `running`。`owned_records` 跨运行留存，**不**用于这里，否则上一轮的状态会冒充本轮 |
@@ -23,6 +29,18 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/workflow/queue/clear` | POST | 清空队列 |
 | `/api/workflow/processes` | GET | 列出执行器/浏览器子进程 |
 | `/api/workflow/processes/kill` | POST | 强杀残留进程 |
+
+### 可复用节点模板
+
+模板是用户编排的片段，存成 `data/reusable_nodes/<id>.json`；服务端只校验和存取，**不执行**模板。执行前的展开发生在浏览器
+（`canvas.toWorkflowJSON()` 默认展开；保存文件用 `{expandReusable:false}` 保留组）。同一模板可以重复插入多个实例，实例带模板快照。
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/reusable` | GET | 模板列表（含损坏文件行，便于删除）；每项有 `id/name/nodes/connections/inputs/updated_at/broken` |
+| `/api/reusable/get` | GET | `?id=` 取完整模板；损坏 409、不存在 404，均带 id |
+| `/api/reusable/save` | POST | `{name, description?, nodes, connections, inputs, outputs, id?}` 新建或按 id 更新。按名拒绝：名字重复/为空、无节点、未知类型、悬空或重复连线、有环、输入槽指向不存在节点、输出不是恰好一个末端节点；source/upload/comment/resume/name/可复用节点本身不能进模板 |
+| `/api/reusable/delete` | POST | `{id}` 删除模板文件；缺 id 返回 `deleted:false`（幂等），已经插入的实例不受影响（它们存着自己的模板快照） |
 
 ### 运行记录 / 断点续跑
 

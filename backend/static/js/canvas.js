@@ -420,8 +420,11 @@ const canvas = {
                 /* The element `closest()` answered with IS the node box; looking it up
                    by id again used to resolve to whatever page element shared that id
                    (see `_nodeEl`). */
+                const reusable = !!this.nodes[node.id] && this.nodes[node.id].type === 'reusable';
                 const folded = node.classList.contains('node-folded');
-                foldItem.style.display = 'block';
+                /* A reusable node's visible collapse is its own inside view; the generic
+                   fold would hide the whole box and have no relationship to it. */
+                foldItem.style.display = reusable ? 'none' : 'block';
                 foldItem.textContent = folded ? I18n.t('canvas.unfold') : I18n.t('canvas.fold');
                 foldItem.dataset.action = folded ? 'ctxUnfoldNode' : 'ctxFoldNode';
                 /* Switching a node TYPE off is the one control no single node's header can
@@ -436,6 +439,35 @@ const canvas = {
                 foldItem.style.display = 'none';
                 typeItem.style.display = 'none';
             }
+            /* Reusable-node doors. 创建 needs a selection of ordinary nodes (a group
+               cannot contain another group, and a source/upload has no place inside a
+               fragment); 插入 is always offered because it is how a saved template
+               enters a fresh canvas. The two per-node items exist only on a group.
+               A right-click on an UNSELECTED node acts on that node, matching 复制 —
+               otherwise the item silently groups whatever stale selection was left. */
+            const groupIds =
+                this.selectedNodes.length > 0 && node && this.selectedNodes.indexOf(node.id) >= 0
+                    ? this.selectedNodes
+                    : (node ? [node.id] : []);
+            const canGroup =
+                groupIds.length > 0 &&
+                groupIds.every((id) => this.nodes[id] && this.nodes[id].type !== 'reusable');
+            const createItem = document.getElementById('ctx-create-reusable');
+            if (createItem) createItem.style.display = canGroup ? 'block' : 'none';
+            const insertItem = document.getElementById('ctx-insert-reusable');
+            if (insertItem) insertItem.style.display = 'block';
+            const reusableNode = node && this.nodes[node.id] && this.nodes[node.id].type === 'reusable' ? this.nodes[node.id] : null;
+            const previewItem = document.getElementById('ctx-preview-reusable');
+            if (previewItem) previewItem.style.display = reusableNode ? 'block' : 'none';
+            const toggleItem = document.getElementById('ctx-toggle-reusable');
+            if (toggleItem) {
+                toggleItem.style.display = reusableNode ? 'block' : 'none';
+                if (reusableNode) {
+                    toggleItem.textContent = I18n.t(
+                        (reusableNode.params || {}).collapsed === false ? 'ctx.collapseReusable' : 'ctx.expandReusable'
+                    );
+                }
+            }
             /* 从此节点重跑 is offered only when the loaded run can really replay this
                node: it must hold a settled result with rows, and nothing may be
                running (the backend refuses a live target, and an offered button
@@ -446,6 +478,8 @@ const canvas = {
                 const canRerun =
                     node &&
                     !busy &&
+                    this.nodes[node.id] &&
+                    this.nodes[node.id].type !== 'reusable' &&
                     typeof runResults !== 'undefined' &&
                     typeof runResults.canRerun === 'function' &&
                     runResults.canRerun(node.id);
@@ -530,6 +564,24 @@ const canvas = {
                 case 'ctxRename':
                     if (this._contextNode) this.renameNode(this._contextNode);
                     break;
+                case 'ctxCreateReusable':
+                    if (typeof ReusableNodes !== 'undefined') {
+                        const ids =
+                            this.selectedNodes.length && this._contextNode && this.selectedNodes.indexOf(this._contextNode) >= 0
+                                ? this.selectedNodes.slice()
+                                : (this._contextNode ? [this._contextNode] : []);
+                        ReusableNodes.createFromSelection(ids);
+                    }
+                    break;
+                case 'ctxInsertReusable':
+                    if (typeof ReusableNodes !== 'undefined') ReusableNodes.pickAndInsert();
+                    break;
+                case 'ctxPreviewReusable':
+                    if (this._contextNode && typeof ReusableNodes !== 'undefined') ReusableNodes.preview(this._contextNode);
+                    break;
+                case 'ctxToggleReusable':
+                    if (this._contextNode && typeof ReusableNodes !== 'undefined') ReusableNodes.toggle(this._contextNode);
+                    break;
                 case 'ctxRerunNode':
                     if (this._contextNode && typeof runResults !== 'undefined') {
                         runResults.rerunFrom(this._contextNode);
@@ -594,7 +646,7 @@ const canvas = {
                     this.redo();
                     break;
                 case 'autoLayout':
-                    this.autoLayout();
+                    this.runAutoLayout();
                     break;
                 case 'ctxAlign':
                     this.alignSelected(item.dataset.mode);
@@ -737,6 +789,7 @@ const canvas = {
                 closeSettings();
                 if (typeof closeShortcutsHelp === 'function') closeShortcutsHelp();
                 if (typeof closeSourceHelp === 'function') closeSourceHelp();
+                if (typeof ReusableNodes !== 'undefined' && ReusableNodes.closePreview) ReusableNodes.closePreview();
                 return;
             }
             /* Undo / Redo */
@@ -1327,6 +1380,7 @@ const canvas = {
             compile: I18n.t('node.compile'),
             resume: I18n.t('node.resume'),
             comment: I18n.t('node.comment'),
+            reusable: I18n.t('node.reusable'),
         };
         const title = labels[type] || 'Node';
         const el = document.createElement('div');
@@ -1391,6 +1445,16 @@ const canvas = {
         });
         this.nodesContainer.appendChild(el);
         this.nodes[id] = { id: id, type: type, title: title, el: el, params: params, x: el.offsetLeft, y: el.offsetTop };
+        /* A reusable node owns an inside view (toggle + preview) that lives beside the
+           normal node shell. Guarded because a canvas-only harness loads no workflow
+           code; the node is still a valid (empty) group without it. */
+        if (type === 'reusable' && typeof ReusableNodes !== 'undefined' && ReusableNodes.decorate) {
+            try {
+                ReusableNodes.decorate(id);
+            } catch (e) {
+                console.error('reusable decorate failed', e);
+            }
+        }
         /* A wire's `d` freezes LITERAL coordinates, while the port dot it must meet
            is CSS (`top:50%`) and follows the box forever. Boot proves the two drift
            apart twice over: the webfont lands after the first paint and grows every
@@ -1493,6 +1557,13 @@ const canvas = {
            panel and an optional 排布顺序 for auto-layout — both metadata, not data,
            so its params never choose a crawl. layout_order blank = keep creation order. */
         if (type === 'name') return { workflow_name: '', layout_order: '' };
+        if (type === 'reusable') return {
+            template_id: '',
+            template_name: '',
+            description: '',
+            template: { nodes: [], connections: [], inputs: [], outputs: [] },
+            collapsed: true,
+        };
         if (type === 'source') return this._defaultSourceParams();
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
@@ -1683,6 +1754,26 @@ const canvas = {
         if (type === 'compile') {
             /* No fields to show: it compiles whatever LaTeX its upstream visualize node emitted. */
             return I18n.t('compile.summary');
+        }
+        if (type === 'reusable') {
+            var group = params.template || {};
+            var groupNodes = Array.isArray(group.nodes) ? group.nodes : [];
+            var groupName = String(params.template_name || '').trim() || I18n.t('reusable.untitled');
+            var lines = [
+                groupName + ' · ' + I18n.t('reusable.summary', {
+                    n: groupNodes.length,
+                    inputs: (group.inputs || []).length,
+                }),
+            ];
+            var outputId = (group.outputs || [])[0];
+            var outputNode = groupNodes.filter(function (n) { return String(n.id) === String(outputId); })[0];
+            if (outputNode) {
+                lines.push(I18n.t('reusable.outputLine', {
+                    name: outputNode.title || I18n.t('node.' + outputNode.type),
+                }));
+            }
+            if (params.collapsed === false) lines.push(I18n.t('reusable.expandedLine'));
+            return lines.join('\n');
         }
         return '';
     },
@@ -2713,6 +2804,21 @@ const canvas = {
     },
 
     /* ── Undo / Redo ── */
+    /* Run `fn` while every per-change history entry is suppressed, then record the
+       net change as ONE undo step. A file load rebuilds node by node, so without
+       this a restored snapshot would leave one entry per node — Ctrl+Z would peel
+       the snapshot apart instead of returning to the canvas it replaced. */
+    batchHistory(fn) {
+        const outerSaving = this._historySaving;
+        this._historySaving = true;
+        try {
+            return fn();
+        } finally {
+            this._historySaving = outerSaving;
+            if (!outerSaving) this.saveState();
+        }
+    },
+
     _pushState() {
         if (this._historySaving) return;
         const state = this.getState();
@@ -2814,6 +2920,15 @@ const canvas = {
         const btns = el.querySelectorAll('.node-action-btn');
         if (btns[0]) btns[0].title = I18n.t('ctx.edit');
         if (btns[1]) btns[1].title = I18n.t('ctx.delete');
+        /* A reusable node's inside view is rebuilt from the params this call just
+           re-read: expanding/collapsing is a param write, and a load/undo lands here. */
+        if (node.type === 'reusable' && typeof ReusableNodes !== 'undefined' && ReusableNodes.renderStage) {
+            try {
+                ReusableNodes.renderStage(id);
+            } catch (e) {
+                console.error('reusable stage failed', e);
+            }
+        }
     },
 
     saveState() {
@@ -3005,6 +3120,53 @@ const canvas = {
        A node absent from the map carries no badge: "never reached in this run" is
        not the same claim as "failed", and a grey mark on every untouched chart
        would read as one. */
+    _paintRunBadge(badge, status, rows) {
+        if (!badge) return;
+        if (!status) {
+            badge.className = 'node-run-badge';
+            badge.innerHTML = '';
+            badge.style.display = 'none';
+            badge.title = '';
+            badge.setAttribute('aria-label', '');
+            badge.dataset.status = '';
+            badge.dataset.signature = '';
+            return;
+        }
+        const settled = status === 'done' || status === 'restored';
+        const running = status === 'running';
+        const kind = settled ? 'run-done' : running ? 'run-running' : 'run-failed';
+        /* The status poll runs once a second; an unchanged node must not rewrite
+           its SVG every tick. The signature includes the localized title, so a
+           language switch (same status) still repaints the tooltip. */
+        const known = ['pending', 'running', 'done', 'partial', 'failed', 'skipped', 'restored'];
+        const word = known.indexOf(status) >= 0 ? I18n.t('runsMgr.node.' + status) : status;
+        const title = I18n.t('runsMgr.runStatus').replace('{status}', word) +
+            (rows > 0 ? ' · ' + rows + ' ' + I18n.t('runsMgr.colRows') : '');
+        const signature = kind + '|' + status + '|' + rows + '|' + title;
+        if (badge.dataset.signature === signature) {
+            badge.style.display = 'flex';
+            return;
+        }
+        badge.className = 'node-run-badge ' + kind;
+        badge.dataset.status = status;
+        badge.dataset.signature = signature;
+        if (running) {
+            badge.innerHTML = '<span class="node-run-spinner"></span>';
+        } else if (settled) {
+            badge.innerHTML =
+                '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.4l3.1 3.1 6.5-7"/></svg>';
+        } else {
+            badge.innerHTML =
+                '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6"/></svg>';
+        }
+        /* The status word is the record's, localized; an unrecognised one shows
+           itself (the i18n reader echoes an unknown key) rather than borrowing
+           a friendlier verdict. Rows are only appended when the record has them. */
+        badge.title = title;
+        badge.setAttribute('aria-label', title);
+        badge.style.display = 'flex';
+    },
+
     applyRunStatuses(statuses) {
         const map = statuses || {};
         Object.keys(this.nodes).forEach((id) => {
@@ -3012,52 +3174,18 @@ const canvas = {
             const badge = el && el.querySelector('.node-run-badge');
             if (!badge) return;
             const info = map[id];
-            const status = String((info && info.status) || '');
-            if (!status) {
-                badge.className = 'node-run-badge';
-                badge.innerHTML = '';
-                badge.style.display = 'none';
-                badge.title = '';
-                badge.setAttribute('aria-label', '');
-                badge.dataset.status = '';
-                badge.dataset.signature = '';
-                return;
-            }
-            const settled = status === 'done' || status === 'restored';
-            const running = status === 'running';
-            const kind = settled ? 'run-done' : running ? 'run-running' : 'run-failed';
-            /* The status poll runs once a second; an unchanged node must not rewrite
-               its SVG every tick. The signature includes the localized title, so a
-               language switch (same status) still repaints the tooltip. */
-            const known = ['pending', 'running', 'done', 'partial', 'failed', 'skipped', 'restored'];
-            const word = known.indexOf(status) >= 0 ? I18n.t('runsMgr.node.' + status) : status;
-            const rows = Number((info && info.row_count) || 0);
-            const title = I18n.t('runsMgr.runStatus').replace('{status}', word) +
-                (rows > 0 ? ' · ' + rows + ' ' + I18n.t('runsMgr.colRows') : '');
-            const signature = kind + '|' + status + '|' + rows + '|' + title;
-            if (badge.dataset.signature === signature) {
-                badge.style.display = 'flex';
-                return;
-            }
-            badge.className = 'node-run-badge ' + kind;
-            badge.dataset.status = status;
-            badge.dataset.signature = signature;
-            if (running) {
-                badge.innerHTML = '<span class="node-run-spinner"></span>';
-            } else if (settled) {
-                badge.innerHTML =
-                    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.4l3.1 3.1 6.5-7"/></svg>';
-            } else {
-                badge.innerHTML =
-                    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6"/></svg>';
-            }
-            /* The status word is the record's, localized; an unrecognised one shows
-               itself (the i18n reader echoes an unknown key) rather than borrowing
-               a friendlier verdict. Rows are only appended when the record has them. */
-            badge.title = title;
-            badge.setAttribute('aria-label', title);
-            badge.style.display = 'flex';
+            this._paintRunBadge(badge, String((info && info.status) || ''), Number((info && info.row_count) || 0));
         });
+        /* A reusable node has no row of its own in the run graph: its internals run
+           under expanded ids, and the group badge is their aggregate. One hook keeps
+           the collapsed verdict and the expanded inside view in step with the poll. */
+        if (typeof ReusableNodes !== 'undefined' && ReusableNodes.paintStatuses) {
+            try {
+                ReusableNodes.paintStatuses(map);
+            } catch (e) {
+                console.error('reusable status paint failed', e);
+            }
+        }
     },
 
     /* Paint the edit-time diagnostics: a count badge + a red frame on every node that
@@ -3112,7 +3240,12 @@ const canvas = {
     },
 
     /* ── Auto-layout: topological ranks sized by the REAL boxes ── */
-    autoLayout() {
+    autoLayout(options) {
+        /* `silent` is for the baseline strategy: it wants the algorithm's placement
+           as the fallback for nodes the baseline does not know, then applies the
+           saved positions itself and fits the camera ONCE. Suppressing the toast and
+           the camera here keeps that one user action from reporting twice. */
+        const silent = !!(options && options.silent);
         /* The old fixed 280×120 lattice laid nodes out as if every box were that size.
            .node grows to max-width 340 with content, and .node-content wraps a link list
            into ever more height — so wide/tall nodes bled into the next rank and the one
@@ -3285,14 +3418,35 @@ const canvas = {
            resetView, the same rule the 适应 button uses (measured workspace box, a
            shrink-only zoom, top clearance for the menu bar). Keeping one fit routine
            means a relayout and a 适应 press can never disagree about "everything visible". */
-        this.resetView();
-        showToast(I18n.t('toast.layoutApplied'));
+        if (!silent) {
+            this.resetView();
+            showToast(I18n.t('toast.layoutApplied'));
+        }
     },
 
-    toWorkflowJSON() {
-        const nodes = [];
+    /* The 排布 entry point: the chosen strategy decides whether the algorithm or a
+       saved layout baseline arranges the canvas. `autoLayout` itself stays the pure
+       algorithm (callers and tests of that contract are unchanged). */
+    async runAutoLayout() {
+        if (typeof LayoutStrategy !== 'undefined' && LayoutStrategy && LayoutStrategy.layout) {
+            const handled = await LayoutStrategy.layout();
+            if (handled) return;
+        }
+        this.autoLayout();
+    },
+
+    toWorkflowJSON(options) {
+        /* Two shapes, one serializer. A FILE and a RUN are not the same graph when a
+           reusable node is on the canvas: the file must keep the group (its template,
+           the collapsed state, its external wires); the run must receive the expanded
+           internal subgraph, because the engine has no idea what a group is. Callers
+           that only ever run/validate keep the default (expanded); save/autosave ask
+           for the file shape explicitly. */
+        const expandReusable = !(options && options.expandReusable === false);
+        let nodes = [];
         Object.keys(this.nodes).forEach(id => {
             const n = this.nodes[id];
+            if (expandReusable && n.type === 'reusable') return;
             const el = this._nodeEl(id);
             nodes.push({
                 id: id,
@@ -3310,9 +3464,15 @@ const canvas = {
                 folded: el ? el.classList.contains('node-folded') : false,
             });
         });
+        let connections = this.connections;
+        if (expandReusable && typeof ReusableNodes !== 'undefined' && ReusableNodes.expand) {
+            const expanded = ReusableNodes.expand(nodes, connections);
+            nodes = expanded.nodes;
+            connections = expanded.connections;
+        }
         return {
             nodes: nodes,
-            connections: this.connections,
+            connections: connections,
             settings: {
                 mode: RunState.parallel ? 'parallel' : 'serial',
                 headless: RunState.headless,

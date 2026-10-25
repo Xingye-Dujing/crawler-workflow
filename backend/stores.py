@@ -28,6 +28,7 @@ from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping
 from services.lexicon_store import LexiconStore
 from services.run_store import RunStore
+from services.workflow_history import WorkflowHistoryStore
 
 # ─── Durable run state ──────────────────────────────────────────
 
@@ -125,6 +126,23 @@ def get_biblio_store() -> BiblioStore:
             if _BIBLIO_STORE is None:
                 _BIBLIO_STORE = BiblioStore()
     return _BIBLIO_STORE
+
+
+# ─── Canvas history ────────────────────────────────────────────
+
+#: Named whole-canvas snapshots and the per-workflow layout baseline.
+_WORKFLOW_HISTORY_STORE = None
+_WORKFLOW_HISTORY_LOCK = threading.Lock()
+
+
+def get_workflow_history_store() -> WorkflowHistoryStore:
+    """The single store behind canvas history, opened on first use."""
+    global _WORKFLOW_HISTORY_STORE
+    if _WORKFLOW_HISTORY_STORE is None:
+        with _WORKFLOW_HISTORY_LOCK:
+            if _WORKFLOW_HISTORY_STORE is None:
+                _WORKFLOW_HISTORY_STORE = WorkflowHistoryStore()
+    return _WORKFLOW_HISTORY_STORE
 
 
 #: The read-through cache of loaded frames (``_dataset_cache``, from ``state``) is bounded so a

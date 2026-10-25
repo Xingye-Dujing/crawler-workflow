@@ -71,6 +71,9 @@ ISOLATED_PATHS = (
     # mitmdump run must not touch the user's data/harvest, and the isolation guard has to
     # be able to see the write.
     ('HARVEST_DIR', 'data/harvest'),
+    # Reusable-node templates are authored fragments; a test must never write a template into
+    # the user's data/reusable_nodes directory.
+    ('REUSABLE_DIR', 'data/reusable_nodes'),
     ('LOG_DIR', 'logs'),
 )
 
@@ -103,6 +106,7 @@ def _isolate_paths() -> Path:
     Config.DATASETS_DB = str(root / 'data' / 'datasets.db')
     Config.LEXICON_DB = str(root / 'data' / 'lexicon.db')
     Config.BIBLIO_DB = str(root / 'data' / 'biblio.db')
+    Config.WORKFLOW_HISTORY_DB = str(root / 'data' / 'workflow_history.db')
 
     import settings_store
 
@@ -448,6 +452,7 @@ def client(app_module, data_root, request):
     from services.dataset_store import DatasetStore
     from services.lexicon_store import LexiconStore
     from services.run_store import RunStore
+    from services.workflow_history import WorkflowHistoryStore
 
     # A serial test needs a genuinely quiet server before it presses Run.
     # This used to ``pytest.skip`` on a busy slot, which turned one slow run
@@ -473,16 +478,19 @@ def client(app_module, data_root, request):
     dataset_store = DatasetStore(str(data_root / f'api-datasets-{seq}.db'))
     lexicon_store = LexiconStore(str(data_root / f'api-lexicon-{seq}.db'))
     biblio_store = BiblioStore(str(data_root / f'api-biblio-{seq}.db'))
+    history_store = WorkflowHistoryStore(str(data_root / f'api-workflow-history-{seq}.db'))
     # Tripwire for that class of bug: a store built for this test holds nothing
     # but its own schema, so anything already in it means the file was shared.
     assert dataset_store.stats()['datasets'] == 0, f'{dataset_store.db_path} is not a fresh store'
     assert run_store.stats()['runs'] == 0, f'{run_store.db_path} is not a fresh store'
     assert lexicon_store.count() == 0, f'{lexicon_store.db_path} is not a fresh store'
     assert biblio_store.counts() == {'projects': 0, 'snapshots': 0}, f'{biblio_store.db_path} is not a fresh store'
+    assert history_store.counts() == {'snapshots': 0, 'baselines': 0}, f'{history_store.db_path} is not a fresh store'
     stores._RUN_STORE = run_store
     stores._DATASET_STORE = dataset_store
     stores._LEXICON_STORE = lexicon_store
     stores._BIBLIO_STORE = biblio_store
+    stores._WORKFLOW_HISTORY_STORE = history_store
     # The housekeeper caches both store handles, so it has to be rebuilt
     # alongside them or a later test would sweep an already-closed database.
     stores._HOUSEKEEPER = None
@@ -500,7 +508,7 @@ def client(app_module, data_root, request):
         _restore_state(module.execution_state, state_backup)
         module._RUN_QUEUE[:] = queue_backup
         module._dataset_cache.clear()
-        for store in (run_store, dataset_store, lexicon_store, biblio_store):
+        for store in (run_store, dataset_store, lexicon_store, biblio_store, history_store):
             with contextlib.suppress(Exception):
                 # ``close()`` rather than ``_conn.close()``: a run worker's housekeeping sweep
                 # may be inside ``execute`` on that very connection, and finalising the handle
@@ -510,6 +518,7 @@ def client(app_module, data_root, request):
         stores._DATASET_STORE = None
         stores._LEXICON_STORE = None
         stores._BIBLIO_STORE = None
+        stores._WORKFLOW_HISTORY_STORE = None
 
 
 def _restore_state(state: dict, backup: dict) -> None:

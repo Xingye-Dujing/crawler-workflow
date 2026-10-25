@@ -121,6 +121,9 @@ function toggleStyleMenu(e) {
     closeAiMenu();
     closeSettingsMenu();
     TopMenu.sync();               /* reflect current bg / radius before showing */
+    /* The layout baseline is per saved workflow, so it must be re-read when the
+       menu opens — another tab may have set one, and renaming a file changes the key. */
+    if (window.LayoutStrategy) LayoutStrategy.refresh();
     menu.classList.add('open');
     document.body.classList.add('style-menu-open');
     btn.classList.add('active');

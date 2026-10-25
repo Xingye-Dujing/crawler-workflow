@@ -817,3 +817,44 @@ message.
   dying at import. Write the import in the same edit as its first use, or delete the old binding
   first. The same rule cut the other way: while a module-level name still exists, a function-local
   twin is what gets deleted.
+
+### Canvas history, layout baselines and reusable nodes (measured 2026-10-26)
+
+- **A file and a run are two serializations of the same canvas once a reusable node exists.** The
+  file must keep the group (its template, its ordered input slots, its collapsed flag, its external
+  wires) or Save silently replaces the feature with its children; a run must receive the expanded
+  child graph or the engine sees an unknown node type. `canvas.toWorkflowJSON()` therefore defaults
+  to the RUN shape and save/autosave pass `{expandReusable:false}`. Forgetting one call site is
+  invisible until the next reopen — the file looks like a plain pipeline and the group is gone.
+- **A reusable node is ONE entry in `canvas.nodes`; its inside is DOM.** Its children are rendered
+  inside the group's own box from the stored template, never added to the model. That one decision
+  is what makes undo/history snapshot one object, keeps auto-layout from ranking or framing the
+  children separately, and stops an inside node from being dragged out as an unrelated top-level
+  node. The inside cards are read-only; changing the fragment means creating a new template.
+- **Input order is the order the wires enter the group, and a count mismatch is refused.** The
+  template's `inputs` list is the slot map; `canvas.connections` order is the assignment. A group
+  with more wires than slots, or fewer, is refused before the run (`reusable.missingInputs` /
+  `tooManyInputs`) instead of guessing which child should get the missing table.
+- **A snapshot restore must be one undo step.** A file load rebuilds node-by-node and pushes one
+  history entry per `addNode`; restoring a canvas snapshot through the same path left Ctrl+Z peeling
+  the snapshot apart. `canvas.batchHistory(fn)` suppresses per-change entries and records the net
+  state once, and `workflow.loadFromJSON(data,{history:'single'})` is the only snapshot-restore
+  door. The normal file-open path is deliberately unchanged.
+- **A layout baseline is positions, keyed by the saved workflow name, and a missing baseline is a
+  named refusal.** The baseline strategy runs the algorithm first (so nodes the snapshot has never
+  seen still get a place) and then overlays the saved x/y for matching ids. It lives in
+  `layout_baselines`, is cleared when its snapshot is deleted, and is refused by name when the
+  pointer survives without its row; falling back to the algorithm while the Style menu still says
+  「按历史基准」 would make the menu lie.
+- **An expanded group's stage needs its own width budget, and a real browser is the only proof.**
+  Setting the node's width from the stage plus padding still left the stage 2px wider than its
+  border-box (the SVG carried the stage's pixel width *including* the 1px borders); `.reusable-stage-lines
+  { width:100%; height:100% }` fixed the horizontal overflow. The screenshot also made the first
+  card look clipped — it was lying under the fixed left palette, which a rect comparison (node at
+  x=80, palette covering x<190) explained; neither the node harness nor a CSS-only read can tell
+  occlusion from clipping.
+- **The expand-time auto-layout preference is presentation, not canvas state.** It lives in
+  `localStorage` with the Style menu's other appearance choices and only decides whether opening a
+  group calls the current layout strategy once; the geometry of the group itself is still the
+  template's saved relative positions and measured sizes. Keeping it out of the canvas model means
+  toggling the preference never becomes an undo step or a file change.

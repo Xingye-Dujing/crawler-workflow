@@ -42,11 +42,13 @@ from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
 from api.report import bp as report_bp
+from api.reusable import bp as reusable_bp
 from api.schedules import bp as schedules_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from api.studio import bp as studio_bp
 from api.visualize import bp as visualize_bp
+from api.workflow_history import bp as workflow_history_bp
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from profiles import ensure_profile_template
@@ -71,6 +73,7 @@ from stores import (
     get_dataset_store,
     get_housekeeper,
     get_run_store,
+    get_workflow_history_store,
 )
 from transport import _local_transport_refusal
 
@@ -113,6 +116,7 @@ from services.nodes import execute_name_node as _execute_name_node
 from services.nodes import execute_resume_node as _execute_resume_node
 from services.nodes import execute_tokenize_node as _execute_tokenize_node
 from services.nodes import execute_upload_node as _execute_upload_node
+from services.reusable_expand import expand_reusable_workflow
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -1120,6 +1124,9 @@ def rename_workflow():
         # Unlike delete (idempotent), a rename of a missing file is a lost edit.
         return jsonify({'ok': False, 'error': t('api.workflowMissing', name=old)}), 404
     refs = get_dataset_store().move_workflow(old, new)
+    # A layout baseline is keyed by the saved file's stem; leaving it under the old
+    # name would silently switch the renamed canvas back to the algorithm.
+    get_workflow_history_store().rename_layout(old, new)
     logger.info(t('api.workflowRenamed', old=old, new=new))
     return jsonify({'ok': True, 'name': new, 'path': workflow_manager.path_for(new), 'datasets': refs})
 
@@ -1140,6 +1147,9 @@ def delete_workflow():
     # orphan is cleaned up later rather than on a deletion the user may undo
     # by saving something else with the same name.
     get_dataset_store().unbind(name)
+    # The snapshots stay (history is independent of the file), but a deleted canvas's
+    # layout pointer must not apply to the next workflow recreated under this name.
+    get_workflow_history_store().delete_layout(name)
     return jsonify({'ok': True})
 
 
@@ -1455,6 +1465,12 @@ def _scheduled_canvas(name: str) -> dict:
     workflow = workflow_manager.load(name)
     if not workflow:
         return {'workflow': None, 'error': t('sched.canvasMissing', name=name)}
+    # The saved file keeps reusable nodes as groups; this gate asks what a run will
+    # actually call, so expand before asking whether a model is needed. (The expanded
+    # graph is also what _begin_run receives; there it is already group-free.)
+    workflow, reusable_error = expand_reusable_workflow(workflow)
+    if reusable_error:
+        return {'workflow': None, 'error': reusable_error}
     if _workflow_needs_llm(workflow):
         return {'workflow': None, 'error': t('sched.canvasNeedsModel', name=name)}
     return {'workflow': workflow, 'error': ''}
@@ -1647,6 +1663,14 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         # must not become a failed run record, let alone a queued one that dies
         # in a thread nobody is watching.
         return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
+    # A saved workflow keeps a reusable node as ONE group (so reopening can render it);
+    # a run needs its children. The browser already expands on Run, but a scheduled fire
+    # starts from the file and every queued request must see the same graph, so the
+    # expansion happens here — before the claim, the mode/fingerprint and the queue.
+    workflow, reusable_error = expand_reusable_workflow(data.get('workflow') or {})
+    if reusable_error:
+        return {'status': 400, 'body': {'ok': False, 'error': reusable_error}}
+    data = {**data, 'workflow': workflow}
     # The run shape is asked BEFORE the claim too, and it raises rather than answering
     # "parallel" to a token it does not know: the mode decides both how many records this run
     # writes and whether two same-platform crawls may breathe at once on one profile. The
@@ -6607,6 +6631,13 @@ app.register_blueprint(schedules_bp)
 # "which runs hold a bibliometrics node" and "what did that node store" from the durable ledger,
 # so the panel holds no second opinion about either.
 app.register_blueprint(biblio_bp)
+# Canvas snapshots (and the per-workflow layout baseline) live in their own curated store;
+# restoring is done by the browser from the snapshot body this Blueprint returns.
+app.register_blueprint(workflow_history_bp)
+# Reusable-node templates: authored fragments offered by the canvas picker. Nothing here
+# executes them; the browser expands on Run and ``_begin_run``/``_scheduled_canvas`` expand a
+# saved file's group before the engine sees it.
+app.register_blueprint(reusable_bp)
 
 
 # ─── Resumable runs ────────────────────────────────────────────
