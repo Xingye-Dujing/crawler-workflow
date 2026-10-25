@@ -244,15 +244,19 @@ var ReusableNodes = {
 
     /* ── insert a saved template ──────────────────────────────────── */
 
-    _insertPos() {
-        if (canvas._contextMenuPos) {
-            return canvas._screenToCanvas(canvas._contextMenuPos.x - 110, canvas._contextMenuPos.y - 40);
-        }
+    _centerPos() {
         var ws = canvas.workspace || {};
         if (ws.clientWidth && ws.clientHeight && canvas._screenToCanvas) {
             return canvas._screenToCanvas(ws.clientWidth / 2 - 120, ws.clientHeight / 2 - 80);
         }
         return { x: 160, y: 120 };
+    },
+
+    _insertPos() {
+        if (canvas._contextMenuPos && canvas._screenToCanvas) {
+            return canvas._screenToCanvas(canvas._contextMenuPos.x - 110, canvas._contextMenuPos.y - 40);
+        }
+        return this._centerPos();
     },
 
     async pickAndInsert() {
@@ -277,17 +281,23 @@ var ReusableNodes = {
         if (!chosen) return;
         var index = labels.indexOf(chosen);
         if (index < 0) return;
-        var full = await fetchJSON('/api/reusable/get?id=' + encodeURIComponent(rows[index].id));
+        await this.insertTemplate(rows[index].id, false);
+    },
+
+    async insertTemplate(templateId, fromPanel) {
+        var full = await fetchJSON('/api/reusable/get?id=' + encodeURIComponent(templateId));
         if (!full || !full.ok || !full.template) {
             showToast((full && full.error) || I18n.t('reusable.insertFailed'));
-            return;
+            return null;
         }
-        var pos = this._insertPos();
-        this._insert(full.template, pos.x, pos.y);
+        var pos = fromPanel ? this._centerPos() : this._insertPos();
+        var newId = this._insert(full.template, pos.x, pos.y);
+        if (newId) canvas._ensureNodeVisible(newId);
+        return newId;
     },
 
     _insert(template, x, y) {
-        canvas.batchHistory(function () {
+        var newId = canvas.batchHistory(function () {
             var id = canvas.addNode('reusable', x, y);
             var group = canvas.nodes[id];
             group.title = template.name;
@@ -308,8 +318,128 @@ var ReusableNodes = {
             canvas.updateNodeDisplay(id);
             canvas.setSelectedNodes([id]);
             canvas.scheduleRender();
+            return id;
         });
         showToast(I18n.t('reusable.inserted'));
+        return newId;
+    },
+
+    /* Turn one instance back into ordinary canvas nodes. This is the editing door:
+       the inside is intentionally read-only while grouped, so a user who wants to
+       change a step unwraps, edits, and creates a template again. The saved template
+       is not deleted (other instances may still rely on their own snapshots). External
+       wires are reconnected by the same ordered input semantics a run uses, and the
+       whole unwrap is one undo step. */
+    async unwrap(groupId) {
+        var node = canvas.nodes[groupId];
+        if (!node || node.type !== 'reusable') return;
+        var params = node.params || {};
+        var template = params.template || {};
+        var nodes = Array.isArray(template.nodes) ? template.nodes : [];
+        var innerConnections = Array.isArray(template.connections) ? template.connections : [];
+        var inputs = Array.isArray(template.inputs) ? template.inputs : [];
+        var outputs = Array.isArray(template.outputs) ? template.outputs : [];
+        if (!nodes.length || outputs.length !== 1) {
+            showToast(I18n.t('reusable.noTemplateForRun', { name: params.template_name || node.title || groupId }));
+            return;
+        }
+        var innerIds = {};
+        var invalid = false;
+        nodes.forEach(function (inner) {
+            if (
+                !inner ||
+                !inner.id ||
+                innerIds[inner.id] ||
+                REUSABLE_ALLOWED_TYPES.indexOf(inner.type) < 0
+            ) {
+                invalid = true;
+                return;
+            }
+            innerIds[inner.id] = true;
+        });
+        if (
+            invalid ||
+            !innerIds[outputs[0]] ||
+            !inputs.every(function (id) { return innerIds[id]; })
+        ) {
+            showToast(I18n.t('reusable.badTemplate', {
+                name: params.template_name || node.title || groupId,
+            }));
+            return;
+        }
+        var incoming = canvas.connections.filter(function (c) { return c.to === groupId; });
+        if (incoming.length > inputs.length) {
+            showToast(I18n.t('reusable.unwrapTooManyInputs'));
+            return;
+        }
+        var name = String(params.template_name || '').trim() || node.title || groupId;
+        var ok = await showDialog({
+            message: I18n.t('reusable.unwrapConfirm', { name: name }),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('reusable.unwrap'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+
+        var groupEl = canvas._nodeEl(groupId);
+        var gx = groupEl ? parseInt(groupEl.style.left, 10) : node.x;
+        var gy = groupEl ? parseInt(groupEl.style.top, 10) : node.y;
+        gx = Number.isFinite(gx) ? gx : 0;
+        gy = Number.isFinite(gy) ? gy : 0;
+        var groupDisabled = params.enabled === false;
+        var newIds = [];
+        canvas.batchHistory(function () {
+            var original = canvas.connections.slice();
+            if (groupEl) groupEl.remove();
+            delete canvas.nodes[groupId];
+            var idMap = {};
+            nodes.forEach(function (inner) {
+                var nid = canvas.addNode(
+                    inner.type,
+                    gx + (Number(inner.x) || 0),
+                    gy + (Number(inner.y) || 0)
+                );
+                var added = canvas.nodes[nid];
+                if (!added) return;
+                idMap[inner.id] = nid;
+                newIds.push(nid);
+                added.params = JSON.parse(JSON.stringify(inner.params || {}));
+                if (groupDisabled) added.params.enabled = false;
+                added.title = String(inner.title || '').trim() || added.title;
+                var titleEl = added.el && added.el.querySelector('.node-title');
+                if (titleEl) titleEl.textContent = added.title;
+                canvas.updateNodeDisplay(nid);
+                if (inner.folded) canvas._setFolded(nid, true);
+            });
+            var inputIndex = 0;
+            var next = [];
+            var outputId = idMap[outputs[0]];
+            original.forEach(function (c) {
+                if (c.to === groupId) {
+                    var target = idMap[inputs[inputIndex]];
+                    inputIndex += 1;
+                    if (target) next.push({ from: c.from, to: target });
+                    return;
+                }
+                if (c.from === groupId) {
+                    if (outputId) next.push({ from: outputId, to: c.to });
+                    return;
+                }
+                next.push({ from: c.from, to: c.to });
+            });
+            innerConnections.forEach(function (c) {
+                if (idMap[c.from] && idMap[c.to]) next.push({ from: idMap[c.from], to: idMap[c.to] });
+            });
+            canvas.connections = next;
+            canvas.setSelectedNodes(newIds);
+            canvas.scheduleRender();
+            canvas.updateConnections();
+            canvas.applyDisabledVisuals();
+            canvas.saveState();
+        });
+        if (canvas._settingsNodeId === groupId) closeSettings();
+        showToast(I18n.t('reusable.unwrapped'));
     },
 
     /* ── the group's header controls and inside stage ─────────────── */
@@ -645,8 +775,11 @@ var ReusableNodes = {
             toggleLabel + '</button>' +
             '<button class="menu-btn" type="button" onclick="ReusableNodes.preview(\'' + idArg + '\')">' +
             I18n.t('reusable.preview') + '</button>' +
+            '<button class="menu-btn" type="button" style="color:var(--err)" onclick="ReusableNodes.unwrap(\'' + idArg + '\')">' +
+            I18n.t('reusable.unwrap') + '</button>' +
             '</div>' +
-            '<div class="settings-hint">' + I18n.t('reusable.readOnly') + '</div>'
+            '<div class="settings-hint">' + I18n.t('reusable.readOnly') + '</div>' +
+            '<div class="settings-hint">' + I18n.t('reusable.unwrapHint') + '</div>'
         );
     },
 

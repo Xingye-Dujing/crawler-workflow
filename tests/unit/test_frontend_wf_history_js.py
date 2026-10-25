@@ -227,3 +227,37 @@ class TestPageWiring:
             'style.layoutBaselineMissing',
         ):
             assert f"'{key}'" in app, key
+
+
+class TestReusableTemplateTab:
+    """The template store's delete endpoint needed a panel door, not just an API."""
+
+    def test_a_third_tab_lists_templates_and_counts_them(self, wfh):
+        tabs = wfh['reusable_tabs']['tabs']
+        assert 'Reusable nodes' in tabs
+        assert 'Reusable nodes (2)' in tabs
+        assert tabs.count('runs-tab active') == 1
+        assert "wfFiles.switchTab('reusable')" in tabs
+
+    def test_a_template_name_is_text_and_counts_are_per_row(self, wfh):
+        html = wfh['reusable_list']['html']
+        assert '清洗流水线' in html
+        assert '&lt;img' in html
+        assert wfh['reusable_list']['img_elements'] == 0
+        assert '>2 / 1<' in html
+        # The broken row has no insert door but stays deletable.
+        assert html.count('wfFiles.insertTemplate(') == 1
+        assert html.count('wfFiles.removeTemplate(') == 2
+        assert 'unreadable' in html
+
+    def test_delete_names_the_template_and_refreshes_the_list(self, wfh):
+        deleted = wfh['reusable_delete']
+        assert deleted['body'] == {'id': 'r-000000000001'}
+        assert deleted['toasts'] == ['TEMPLATE-DELETED']
+        assert deleted['reads'] == 1, 'the list must be re-read after a template delete'
+        assert deleted['rows'] == 1
+
+    def test_insert_hands_the_id_to_the_loader_and_closes_the_panel(self, wfh):
+        inserted = wfh['reusable_insert']
+        assert inserted['calls'] == [{'id': 'r-000000000001', 'fromPanel': True}]
+        assert inserted['panel_open'] is False, 'the panel closes so the inserted node is visible'

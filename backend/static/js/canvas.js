@@ -468,6 +468,8 @@ const canvas = {
                     );
                 }
             }
+            const unwrapItem = document.getElementById('ctx-unwrap-reusable');
+            if (unwrapItem) unwrapItem.style.display = reusableNode ? 'block' : 'none';
             /* 从此节点重跑 is offered only when the loaded run can really replay this
                node: it must hold a settled result with rows, and nothing may be
                running (the backend refuses a live target, and an offered button
@@ -581,6 +583,9 @@ const canvas = {
                     break;
                 case 'ctxToggleReusable':
                     if (this._contextNode && typeof ReusableNodes !== 'undefined') ReusableNodes.toggle(this._contextNode);
+                    break;
+                case 'ctxUnwrapReusable':
+                    if (this._contextNode && typeof ReusableNodes !== 'undefined') ReusableNodes.unwrap(this._contextNode);
                     break;
                 case 'ctxRerunNode':
                     if (this._contextNode && typeof runResults !== 'undefined') {

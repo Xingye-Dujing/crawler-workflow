@@ -4473,29 +4473,49 @@ def test_a_reusable_node_expands_inside_its_own_border_and_aggregates_statuses(d
                 runResults.statuses = map;
                 canvas.applyRunStatuses(map);
                 const badge = el.querySelector('.node-run-badge');
+                const groupModel = Object.keys(canvas.nodes);
+                const groupConnections = canvas.connections.map((c) => [c.from, c.to]);
+                const runningDots = el.querySelectorAll('.rin-status.st-running').length;
+                const doneDots = el.querySelectorAll('.rin-status.st-done').length;
+                const summary = el.querySelector('.node-content').textContent;
+
+                const beforeUnwrap = Object.keys(canvas.nodes).length;
+                await ReusableNodes.unwrap(group);
+                await new Promise((r) => setTimeout(r, 120));
+                const unwrapGroupGone = !canvas.nodes[group];
+                const unwrapCount = Object.keys(canvas.nodes).length;
+                canvas.undo();
+                await new Promise((r) => setTimeout(r, 120));
+
                 const result = {
                     ok: true,
                     group,
                     up,
                     down,
-                    model: Object.keys(canvas.nodes),
-                    connections: canvas.connections.map((c) => [c.from, c.to]),
+                    model: groupModel,
+                    connections: groupConnections,
                     cards: cards.length,
                     paths: stage.querySelectorAll('path').length,
                     overlap,
                     stageInside: stage.scrollWidth <= stage.clientWidth + 1,
                     border: getComputedStyle(el).borderStyle !== 'none',
                     badge: badge ? badge.dataset.status : '',
-                    runningDots: el.querySelectorAll('.rin-status.st-running').length,
-                    doneDots: el.querySelectorAll('.rin-status.st-done').length,
+                    runningDots,
+                    doneDots,
                     preview,
+                    unwrap: {
+                        before: beforeUnwrap,
+                        groupGone: unwrapGroupGone,
+                        after: unwrapCount,
+                        groupBack: !!canvas.nodes[group],
+                    },
                     controls: {
                         styleStrategy: !!document.getElementById('layout-strategy'),
                         styleCheckbox: !!document.getElementById('reusable-auto-layout'),
                         toggle: !!el.querySelector('.node-reusable-toggle'),
                         insidePreview: !!el.querySelector('.node-reusable-preview'),
                     },
-                    summary: el.querySelector('.node-content').textContent,
+                    summary,
                 };
                 window.fetch = realFetch;
                 window.showDialog = realDialog;
@@ -4524,5 +4544,8 @@ def test_a_reusable_node_expands_inside_its_own_border_and_aggregates_statuses(d
     assert facts['badge'] == 'running', 'running must win over a settled sibling'
     assert facts['runningDots'] == 1 and facts['doneDots'] == 1, facts
     assert facts['preview'] == {'open': True, 'cards': 2, 'inside': True}, facts['preview']
+    assert facts['unwrap']['groupGone'] is True, facts['unwrap']
+    assert facts['unwrap']['after'] == 4, facts['unwrap']  # up + down + the two inside nodes
+    assert facts['unwrap']['groupBack'] is True, 'undo must restore the group as one history step'
     assert all(facts['controls'].values()), facts['controls']
     assert '2' in facts['summary'], facts['summary']

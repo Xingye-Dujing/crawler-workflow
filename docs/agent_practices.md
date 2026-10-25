@@ -858,3 +858,16 @@ message.
   group calls the current layout strategy once; the geometry of the group itself is still the
   template's saved relative positions and measured sizes. Keeping it out of the canvas model means
   toggling the preference never becomes an undo step or a file change.
+- **A read-only inside needs an unwrap door, and unwrap is a model operation, not a delete.** The
+  group's children are not top-level nodes, so "edit an inside step" is impossible without putting
+  them back. `ReusableNodes.unwrap` restores them at the template's positions/params, reconnects
+  external incoming wires by the same ordered slots the run expansion uses, rewires outgoing wires
+  from the single output, and records the whole thing through `batchHistory` as one undo step. A
+  group that was disabled must unwrap into disabled children — otherwise the edit silently makes a
+  paused pipeline runnable. The saved template is deliberately kept; the user edits and creates a
+  new one.
+- **A delete endpoint is not a UI feature until a list exists.** The reusable-template API had a
+  delete route but no surface; the only way to remove a template was a hand-made POST. The workflow
+  dock's third tab lists templates (including corrupt rows, which can only be deleted), offers insert
+  and delete per row, and says in the confirmation that existing instances keep their own snapshots.
+  The list re-reads after a delete and the insert action closes the dock so the new node is visible.

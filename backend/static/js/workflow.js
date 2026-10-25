@@ -11275,13 +11275,15 @@ function refuseWhileRunning() {
    guessing which stems exist. It reuses the runs/dataset panels' delegated-button +
    escaping shape, not a second invention. */
 var wfFiles = {
-    /* The panel answers two different questions: which files exist (open/rename/delete),
-       and which canvas states the user kept (restore/delete/baseline). They are tabs
-       rather than two panels because both are about "this canvas", and the dock slot is
-       already the place a person looks for a saved canvas. */
+    /* The panel answers three different questions: which files exist (open/rename/delete),
+       which canvas states the user kept (restore/delete/baseline), and which reusable
+       templates are stored (insert/delete). They are tabs rather than panels because all
+       three are about "this canvas", and the dock slot is already the place a person looks
+       for a saved canvas. */
     _tab: 'files',
     _history: null,
     _historyMax: 0,
+    _templates: null,
 
     panel() {
         return document.getElementById('workflows-panel');
@@ -11316,6 +11318,10 @@ var wfFiles = {
             await this.refreshHistory();
             return;
         }
+        if (this._tab === 'reusable') {
+            await this.refreshReusable();
+            return;
+        }
         body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.loading') + '</div>';
         var result = await fetchJSON('/api/workflow/list').catch(function () { return null; });
         if (!result || !result.ok) {
@@ -11326,30 +11332,35 @@ var wfFiles = {
         this.render();
     },
 
-    /* Two views, one body. 工作流文件 is "what is on disk"; 画布历史 is "what this
-       canvas has been". Keeping the label of the inactive tab out of the table means
-       the switch is a repaint, not a second panel with its own close button. */
+    /* Three views, one body. 工作流文件 is "what is on disk"; 画布历史 is "what this
+       canvas has been"; 可复用节点 is "which saved fragments can be inserted or deleted".
+       Keeping the label of the inactive tab out of the table means the switch is a
+       repaint, not a second panel with its own close button. */
     renderTabs() {
         var tabs = document.getElementById('workflows-tabs');
         if (!tabs) return;
-        var count = (this._history || []).length;
+        var historyCount = (this._history || []).length;
+        var templateCount = (this._templates || []).length;
         var self = this;
-        var label = function (key, textKey) {
+        var label = function (key, textKey, count) {
             var active = self._tab === key;
             return (
                 '<div class="runs-tab' + (active ? ' active' : '') +
                 '" role="tab" aria-selected="' + (active ? 'true' : 'false') +
                 '" onclick="wfFiles.switchTab(\'' + key + '\')">' +
                 I18n.t(textKey) +
-                (key === 'history' && count ? ' (' + count + ')' : '') +
+                (count ? ' (' + count + ')' : '') +
                 '</div>'
             );
         };
-        tabs.innerHTML = label('files', 'wfHistory.tabFiles') + label('history', 'wfHistory.tabHistory');
+        tabs.innerHTML =
+            label('files', 'wfHistory.tabFiles', 0) +
+            label('history', 'wfHistory.tabHistory', historyCount) +
+            label('reusable', 'reusable.templatesTab', templateCount);
     },
 
     switchTab(tab) {
-        var next = tab === 'history' ? 'history' : 'files';
+        var next = tab === 'history' ? 'history' : (tab === 'reusable' ? 'reusable' : 'files');
         if (next === this._tab) return;
         this._tab = next;
         this.refresh();
@@ -11426,6 +11437,103 @@ var wfFiles = {
             '<th>' + I18n.t('wfHistory.colSaved') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    /* ── Reusable templates: insert / delete ─────────────────────────
+       The template store has had a delete endpoint since the feature landed;
+       without a list a saved template could only be removed through the API.
+       This is the management door, and it says plainly that deleting a template
+       does not touch instances (they carry their own snapshot). */
+    async refreshReusable() {
+        var body = document.getElementById('workflows-mgr-body');
+        if (!body) return;
+        body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.loading') + '</div>';
+        var result = await fetchJSON('/api/reusable');
+        if (!result || !result.ok) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('reusable.loadFailed') + '</div>';
+            return;
+        }
+        this._templates = result.templates || [];
+        this.renderTabs();
+        this.renderReusable();
+    },
+
+    renderReusable() {
+        var body = document.getElementById('workflows-mgr-body');
+        if (!body) return;
+        var rows = this._templates || [];
+        if (!rows.length) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('reusable.none') + '</div>';
+            return;
+        }
+        var self = this;
+        var html = rows.map(function (row) {
+            var name = String(row.name || '') || String(row.id || '');
+            var source = String(row.description || '') || String(row.id || '');
+            var broken = row.broken
+                ? ' <span class="runs-mgr-cur">' + escapeHtml(I18n.t('wfMgr.broken')) + '</span>'
+                : '';
+            var ops = '';
+            if (!row.broken) {
+                ops += '<button class="runs-mgr-btn" onclick="wfFiles.insertTemplate(\'' + self._quote(row.id) + '\')">' +
+                    I18n.t('reusable.insert') + '</button>';
+            }
+            ops += '<button class="runs-mgr-btn del" onclick="wfFiles.removeTemplate(\'' + self._quote(row.id) + '\')">' +
+                I18n.t('reusable.removeTemplate') + '</button>';
+            var seconds = Date.parse(String(row.updated_at || '')) / 1000;
+            return '<tr>' +
+                '<td class="runs-mgr-wf"><span class="wf-snap-name">' + escapeHtml(name) + broken + '</span>' +
+                '<span class="wf-snap-source">' + escapeHtml(source) + '</span></td>' +
+                '<td>' + (row.nodes || 0) + ' / ' + (row.inputs || 0) + '</td>' +
+                '<td class="runs-mgr-id">' + escapeHtml(self._when(seconds)) + '</td>' +
+                '<td class="runs-mgr-ops">' + ops + '</td>' +
+                '</tr>';
+        }).join('');
+        body.innerHTML =
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('reusable.colName') + '</th>' +
+            '<th>' + I18n.t('reusable.colNodes') + '</th>' +
+            '<th>' + I18n.t('reusable.colUpdated') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    _templateRow(id) {
+        var wanted = String(id || '');
+        return (this._templates || []).find(function (row) { return String(row.id) === wanted; }) || null;
+    },
+
+    async removeTemplate(id) {
+        var row = this._templateRow(id);
+        var name = (row && String(row.name || '')) || String(id);
+        var ok = await showDialog({
+            message: I18n.t('reusable.confirmRemoveTemplate', { name: name }),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('reusable.removeTemplate'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/reusable/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ id: id }),
+        });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('reusable.templateRemoveFailed'));
+            return;
+        }
+        showToast(I18n.t('reusable.templateRemoved'));
+        await this.refreshReusable();
+    },
+
+    async insertTemplate(id) {
+        if (typeof ReusableNodes === 'undefined' || !ReusableNodes.insertTemplate) {
+            showToast(I18n.t('reusable.insertFailed'));
+            return;
+        }
+        var newId = await ReusableNodes.insertTemplate(id, true);
+        if (newId) this.close();
     },
 
     _snapshotRow(id) {
@@ -11529,6 +11637,11 @@ var wfFiles = {
         this.renderTabs();
         if (this._tab === 'history') {
             if (this._history) this.renderHistory();
+            else this.refresh();
+            return;
+        }
+        if (this._tab === 'reusable') {
+            if (this._templates) this.renderReusable();
             else this.refresh();
             return;
         }

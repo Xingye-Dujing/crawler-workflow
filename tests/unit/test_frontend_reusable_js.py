@@ -156,6 +156,38 @@ class TestPreview:
         assert settings['preview_call'] is True
 
 
+class TestUnwrap:
+    def test_the_group_becomes_ordinary_nodes_and_the_outside_wires_survive(self, ru):
+        unwrap = ru['unwrap']
+        assert unwrap['group_gone'] is True
+        assert unwrap['inner_count'] == 3
+        inner = set(unwrap['inner_ids'])
+        conns = unwrap['connections']
+        assert [c for c in conns if c[0] == unwrap['up']][0][1] in inner
+        assert [c for c in conns if c[1] == unwrap['down']][0][0] in inner
+        assert len([c for c in conns if c[0] in inner and c[1] in inner]) == 2
+        assert unwrap['group'] not in {end for c in conns for end in c}
+        assert unwrap['toasts'] == ['UNWRAPPED']
+
+    def test_unwrap_is_one_undo_step(self, ru):
+        unwrap = ru['unwrap']
+        assert unwrap['undo_group_back'] is True
+        assert unwrap['undo_nodes'] == sorted([unwrap['up'], unwrap['down'], unwrap['group']])
+        assert not (set(unwrap['inner_ids']) & set(unwrap['undo_nodes']))
+
+    def test_too_many_external_wires_refuses_before_moving_anything(self, ru):
+        refused = ru['unwrap_too_many']
+        assert refused['group_still'] is True
+        assert len(refused['model']) == 4
+        assert refused['toasts'] == ['TOO-MANY-INPUTS']
+
+    def test_a_disabled_group_unwraps_into_disabled_children(self, ru):
+        assert ru['unwrap_disabled'] == {'count': 3, 'all_disabled': True, 'toasts': ['UNWRAPPED']}
+
+    def test_the_settings_form_offers_the_unwrap_door(self, ru):
+        assert ru['unwrap_settings'] == {'has_unwrap': True, 'has_hint': True}
+
+
 class TestAutoLayoutBlock:
     def test_the_expanded_group_is_one_measured_block_not_a_frame_around_neighbours(self, ru):
         block = ru['autolayout_block']
@@ -193,6 +225,7 @@ class TestContracts:
             'ctx-insert-reusable',
             'ctx-preview-reusable',
             'ctx-toggle-reusable',
+            'ctx-unwrap-reusable',
             'reusable-preview-overlay',
             'reusable-preview-stage',
             'reusable-preview-side',

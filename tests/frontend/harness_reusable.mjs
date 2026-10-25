@@ -79,6 +79,13 @@ const DICT = {
         'reusable.summary': '{n} nodes · {inputs} input(s)',
         'reusable.outputLine': 'output: {name}',
         'reusable.expandedLine': 'expanded',
+        'reusable.unwrap': 'Unwrap',
+        'reusable.unwrapConfirm': 'Unwrap "{name}"?',
+        'reusable.unwrapped': 'UNWRAPPED',
+        'reusable.unwrapTooManyInputs': 'TOO-MANY-INPUTS',
+        'reusable.unwrapHint': 'Unwrap hint',
+        'reusable.noTemplateForRun': 'NO-TEMPLATE',
+        'reusable.badTemplate': 'BAD-TEMPLATE',
     },
     zh: {},
 };
@@ -481,6 +488,78 @@ out.create_from_ids = {
     only,
     template_nodes: canvas.nodes[onlyGroup].params.template.nodes.map((n) => n.id),
     model: Object.keys(canvas.nodes),
+};
+
+/* ── unwrap: ordinary nodes return, external wires reconnected by slot ── */
+fresh();
+const uwUp = add('process', 0, 0);
+const uwDown = add('output', 900, 0);
+const uwGroup = canvas.addNode('reusable', 300, 100);
+canvas.nodes[uwGroup].params = JSON.parse(JSON.stringify(two));
+canvas.nodes[uwGroup].params.template.inputs = ['a'];
+canvas.nodes[uwGroup].params.template.outputs = ['c'];
+canvas.updateNodeDisplay(uwGroup);
+canvas.connections = [{ from: uwUp, to: uwGroup }, { from: uwGroup, to: uwDown }];
+toasts.length = 0;
+await ReusableNodes.unwrap(uwGroup);
+const unwrappedIds = Object.keys(canvas.nodes).filter((id) => id !== uwUp && id !== uwDown);
+out.unwrap = {
+    group_gone: !canvas.nodes[uwGroup],
+    group: uwGroup,
+    up: uwUp,
+    down: uwDown,
+    inner_ids: unwrappedIds,
+    inner_count: unwrappedIds.length,
+    connections: canvas.connections.map((c) => [c.from, c.to]),
+    toasts: toasts.slice(),
+};
+canvas.undo();
+out.unwrap.undo_group_back = !!canvas.nodes[uwGroup];
+out.unwrap.undo_nodes = Object.keys(canvas.nodes).sort();
+
+/* Too many external wires is refused before anything moves. */
+fresh();
+const mx = add('process', 0, 0);
+const my = add('process', 0, 100);
+const md = add('output', 900, 0);
+const mg = canvas.addNode('reusable', 300, 100);
+canvas.nodes[mg].params = JSON.parse(JSON.stringify(two));
+canvas.nodes[mg].params.template.inputs = ['a'];
+canvas.nodes[mg].params.template.outputs = ['c'];
+canvas.updateNodeDisplay(mg);
+canvas.connections = [{ from: mx, to: mg }, { from: my, to: mg }, { from: mg, to: md }];
+toasts.length = 0;
+await ReusableNodes.unwrap(mg);
+out.unwrap_too_many = {
+    group_still: !!canvas.nodes[mg],
+    model: Object.keys(canvas.nodes).sort(),
+    toasts: toasts.slice(),
+};
+
+/* A disabled group must not silently re-enable its children when unwrapped. */
+fresh();
+const dg = canvas.addNode('reusable', 100, 100);
+canvas.nodes[dg].params = JSON.parse(JSON.stringify(two));
+canvas.nodes[dg].params.enabled = false;
+canvas.updateNodeDisplay(dg);
+toasts.length = 0;
+await ReusableNodes.unwrap(dg);
+const disabledChildren = Object.keys(canvas.nodes).map((id) => canvas.nodes[id]);
+out.unwrap_disabled = {
+    count: disabledChildren.length,
+    all_disabled: disabledChildren.every((n) => n.params.enabled === false),
+    toasts: toasts.slice(),
+};
+
+/* The group settings form exposes the unwrap door. */
+fresh();
+const sg = canvas.addNode('reusable', 100, 100);
+canvas.nodes[sg].params = JSON.parse(JSON.stringify(two));
+canvas.updateNodeDisplay(sg);
+const unwrapSettingsHtml = ReusableNodes.settingsHtml(sg);
+out.unwrap_settings = {
+    has_unwrap: unwrapSettingsHtml.indexOf('ReusableNodes.unwrap(') >= 0,
+    has_hint: unwrapSettingsHtml.indexOf('Unwrap hint') >= 0,
 };
 
 process.stdout.write(JSON.stringify(out));

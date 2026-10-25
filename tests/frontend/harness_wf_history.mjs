@@ -51,6 +51,20 @@ const DICT = {
         'style.layoutBaselineMissing': 'BASELINE-GONE',
         'style.layoutHint': 'Applied by Layout',
         'wfMgr.busy': 'BUSY',
+        'wfMgr.broken': 'unreadable',
+        'reusable.templatesTab': 'Reusable nodes',
+        'reusable.colName': 'Template',
+        'reusable.colNodes': 'Nodes / inputs',
+        'reusable.colUpdated': 'Updated',
+        'reusable.insert': 'Insert',
+        'reusable.removeTemplate': 'Delete template',
+        'reusable.confirmRemoveTemplate': 'Delete template "{name}"?',
+        'reusable.templateRemoved': 'TEMPLATE-DELETED',
+        'reusable.templateRemoveFailed': 'TEMPLATE-DELETE-FAILED',
+        'reusable.loadFailed': 'TEMPLATES-LOAD-FAILED',
+        'reusable.none': 'NO-TEMPLATES',
+        'reusable.inserted': 'INSERTED',
+        'reusable.insertFailed': 'INSERT-FAILED',
         'toast.layoutApplied': 'LAYOUT-APPLIED',
         'dialog.cancel': 'Cancel',
     },
@@ -66,6 +80,12 @@ const DICT = {
         'wfHistory.remove': '删除',
         'wfHistory.baseline': '设为布局基准',
         'wfHistory.baselineTag': '基准',
+        'reusable.templatesTab': '可复用节点',
+        'reusable.colName': '模板',
+        'reusable.colNodes': '节点 / 输入',
+        'reusable.colUpdated': '更新时间',
+        'reusable.insert': '插入',
+        'reusable.removeTemplate': '删除模板',
     },
 };
 const I18n = {
@@ -94,6 +114,10 @@ const ROWS = [
     { id: 's1', label: '手动存档', workflow_name: '日报', created_at: 1760000000, nodes: 3, connections: 2 },
     { id: 's2', label: '<img src=x onerror=alert(1)>', workflow_name: 'q"uote', created_at: 1760003600, nodes: 1, connections: 0 },
 ];
+const TEMPLATES = [
+    { id: 'r-000000000001', name: '清洗流水线', description: '两步', nodes: 2, connections: 1, inputs: 1, updated_at: '2026-10-26T01:00:00', broken: false },
+    { id: 'r-000000000002', name: '<img src=x onerror=alert(1)>', description: '', nodes: 0, connections: 0, inputs: 0, updated_at: '', broken: true },
+];
 
 let requests = [];
 let toasts = [];
@@ -106,6 +130,8 @@ let routes = {
     snapshot: { ok: true, snapshot: { id: 's1', workflow: SNAP_WORKFLOW } },
     save: { ok: true, snapshot: { id: 's9' } },
     delete: { ok: true, deleted: true, baselines_cleared: [] },
+    reusableList: TEMPLATES,
+    reusableDelete: { ok: true, deleted: true },
 };
 
 sandbox.showToast = (message) => toasts.push(String(message));
@@ -122,6 +148,10 @@ sandbox.fetch = (url, options) => {
         payload = method === 'POST' ? { ok: true, layout: routes.layoutResult } : { ok: true, layout: routes.layout };
     } else if (target.indexOf('/api/workflow/history') >= 0) {
         payload = { ok: true, snapshots: routes.list, max: 100 };
+    } else if (target.indexOf('/api/reusable/delete') >= 0) {
+        payload = routes.reusableDelete;
+    } else if (target.indexOf('/api/reusable') >= 0) {
+        payload = { ok: true, templates: routes.reusableList };
     }
     const text = JSON.stringify(payload);
     return Promise.resolve({ ok: true, json: () => Promise.resolve(payload), text: () => Promise.resolve(text) });
@@ -364,5 +394,43 @@ I18n.lang = 'zh';
 wfFiles.onLanguageChange();
 out.language = { html: body.innerHTML, tabs: tabs.innerHTML };
 I18n.lang = 'en';
+
+/* ── the reusable-template tab: insert / delete ────────────────────── */
+wfFiles._tab = 'reusable';
+wfFiles._templates = TEMPLATES;
+wfFiles.renderTabs();
+wfFiles.renderReusable();
+out.reusable_tabs = { tabs: tabs.innerHTML };
+out.reusable_list = {
+    html: body.innerHTML,
+    img_elements: doc.querySelectorAll('img').length,
+};
+
+resetCalls();
+routes.reusableList = [TEMPLATES[0]];
+await wfFiles.removeTemplate('r-000000000001');
+const templateDeleteRequest = requests.find((r) => r.url.indexOf('/api/reusable/delete') >= 0);
+out.reusable_delete = {
+    body: templateDeleteRequest ? JSON.parse(templateDeleteRequest.body) : null,
+    toasts: toasts.slice(),
+    reads: requests.filter((r) => r.url === '/api/reusable').length,
+    rows: (wfFiles._templates || []).length,
+};
+
+resetCalls();
+const insertCalls = [];
+sandbox.ReusableNodes = {
+    insertTemplate: async function (id, fromPanel) {
+        insertCalls.push({ id: id, fromPanel: fromPanel });
+        return 'node-new';
+    },
+};
+panel.classList.add('open');
+wfFiles._templates = TEMPLATES;
+await wfFiles.insertTemplate('r-000000000001');
+out.reusable_insert = {
+    calls: insertCalls,
+    panel_open: panel.classList.contains('open'),
+};
 
 process.stdout.write(JSON.stringify(out));
