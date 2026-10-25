@@ -4066,6 +4066,117 @@ def _overlay_options(lang: str) -> dict:
         set_lang('zh')
 
 
+def _concentric_option(lang: str) -> dict:
+    """Three year rings, six Chinese keyword nodes: the layout at the preview panel's 400 px."""
+    import pandas as pd
+
+    from i18n import set_lang
+    from services.visualizer import VisualizationService
+
+    names = ['数字治理', '数据要素', '公共服务', '协同监管', '算法问责', '开放数据']
+    years = [2018, 2018, 2019, 2019, 2020, 2020]
+    links = [
+        json.dumps([{'target': names[(index + 1) % len(names)], 'value': 1.0}], ensure_ascii=False)
+        for index in range(len(names))
+    ]
+    frame = pd.DataFrame(
+        {
+            '节点': names,
+            '频次': [30, 26, 22, 20, 18, 16],
+            '连接': links,
+            '年份序列': [json.dumps({str(year): 2 + index % 3}) for index, year in enumerate(years)],
+        }
+    )
+    set_lang(lang)
+    try:
+        return VisualizationService.to_echarts_option(frame, 'concentric', title='concentric-probe')
+    finally:
+        set_lang('zh')
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_concentric_rings_draw_inside_the_preview_panel(app_url, driver, lang):
+    """The ring layout at 400×600: every node lands in the canvas, labels never stack, and the
+    explanatory note under the title is painted rather than clipped.
+
+    A graph with ``layout:'none'`` places nodes by their own coordinates, so the only way to know
+    the rings fit a narrow preview is to render them there; the note matters because "which ring
+    is which year" is not guessable from the picture alone.
+    """
+    driver.set_window_size(1650, 1080)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        document.documentElement.dataset.themeChoice = 'dark';
+        applyTheme();
+        I18n.apply();
+        const old = document.getElementById('ring-measure-host');
+        if (old) old.remove();
+        const host = document.createElement('div');
+        host.id = 'ring-measure-host';
+        host.style.cssText = 'position:fixed;left:0;top:0;width:400px;height:600px;background:#fff';
+        document.body.appendChild(host);
+        window.__ring = echarts.init(host, null, { renderer: 'svg' });
+        applyEchartsOption(window.__ring, arguments[1]);
+        """,
+        lang,
+        _concentric_option(lang),
+    )
+    time.sleep(1.4)
+    facts = driver.execute_script(
+        """
+        const host = document.getElementById('ring-measure-host');
+        const rect = host.getBoundingClientRect();
+        const painted = Array.from(host.querySelectorAll('svg text')).map(function (t) {
+            return { text: t.textContent, box: t.getBoundingClientRect() };
+        }).filter(function (item) { return item.text.trim() && item.box.width > 0; });
+        let overlaps = 0;
+        const pairs = [];
+        for (let i = 0; i < painted.length; i++) {
+            for (let j = i + 1; j < painted.length; j++) {
+                const a = painted[i].box, b = painted[j].box;
+                const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+                const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+                if (x > 1 && y > 1) {
+                    overlaps++;
+                    if (pairs.length < 5) pairs.push([painted[i].text, painted[j].text]);
+                }
+            }
+        }
+        const outside = painted.filter(function (item) {
+            const b = item.box;
+            return b.left < rect.left - 1 || b.right > rect.right + 1
+                || b.top < rect.top - 1 || b.bottom > rect.bottom + 1;
+        }).map(function (item) { return item.text.slice(0, 24); });
+        const symbols = host.querySelectorAll('svg path').length;
+        return {
+            symbols: symbols,
+            texts: painted.map(function (item) { return item.text; }),
+            overlaps: overlaps,
+            pairs: pairs,
+            outside: outside
+        };
+        """
+    )
+    driver.execute_script(
+        """
+        if (window.__ring) { window.__ring.dispose(); }
+        document.getElementById('ring-measure-host').remove();
+        """
+    )
+    joined = ' | '.join(facts['texts'])
+    assert facts['symbols'] >= 6, f'{facts["symbols"]} painted symbols for six nodes'
+    assert any(name in joined for name in ('数字治理', '数据要素')), joined
+    assert facts['overlaps'] == 0, f'labels collide: {facts["pairs"]}'
+    assert facts['outside'] == [], f'labels run past the canvas: {facts["outside"]}'
+    if lang == 'zh':
+        assert '同心环' in joined, 'the ring rule must be painted under the title'
+    else:
+        assert 'Concentric' in joined, 'the ring rule must be painted under the title'
+
+
 @pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_the_overlay_views_print_every_label_inside_the_preview_panel(app_url, driver, lang):
     """Both overlay views, measured at the preview panel's own 400 px.

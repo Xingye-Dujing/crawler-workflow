@@ -742,12 +742,14 @@ message.
   are now per-field candidate lists in both languages; the signature is "one of these columns per
   group" (`header_has_groups`), because a single required name is what refused the real files.
   Dimensions' first row is a copyright banner, so `frame_of`/`header_of` drop leading provenance lines
-  before reading the header. WoS' Excel download was measured twice: the first export left
+  before reading the header. WoS' Excel download was measured twice — the first export left
   `Cited References`, `Author Keywords`, `WoS Categories` and `Funding` empty for all thirty records,
   and after the user re-exported, keywords/categories/funding/usage arrived while `Cited References`
-  stayed empty with only `Cited Reference Count` written. So the guide says "plain text with Full
-  Record and Cited References for a citation network", not "prefer plain text" — the two downloads now
-  answer different questions.
+  stayed empty with only `Cited Reference Count` written. The user then said the site simply has no
+  such Excel field. **Name the FIELD that a vendor does not offer, not the whole format**: the WoS
+  guide now says "Excel has no Cited References column — citation work needs the plain text" while
+  keeping Excel as a working route for the keyword/subject/funding/usage networks. Declaring the
+  entire download unusable would throw away four networks the file really answers.
 - **A fixture may copy structure but never facts.** The committed `samples/biblio_*_demo.*` files
   reproduce a real export's tags, header order, spacing, separators and banner row, with every value
   from a small synthetic pool; the vendor files themselves are gitignored because the Dimensions
@@ -800,6 +802,14 @@ message.
   Scopus download went from 26 to 45 columns — and each time the honest fix was re-measuring
   (`scratchpad/upload_probe.py`, which goes through `/api/data/upload`) and rewriting the sentence, not
   widening it into something vague that stays true.
+- **A note added under a chart's title is paid for in that chart's own reserved band.** The
+  concentric view states its ring rule as `title.subtext`; at the preview's 400 px the English
+  sentence ran off the right edge (ECharts does not wrap a subtitle by itself — it needed
+  `subtextStyle.width` + `overflow: 'break'`), and the very first frame after shortening it had
+  the legend's `2018` entry sitting on the note, because the legend still started at its default
+  `top: 40` while the series started at `GRAPH_TOP`. Three numbers moved together (legend top 78,
+  series top +30, note width 330) and only a real browser can see any of it: the node harness has
+  no layout, and the option object looks correct either way.
 - **The lint hook deletes an import that is not used yet — three times this round.** Adding
   `import numpy as np` at module level while the last local twin still existed, or importing a
   helper a call site added one edit later, gets the new line removed by the PostToolUse

@@ -179,6 +179,7 @@ CASES = {
     'geo_map': (_geo(), dict()),
     'sentiment_overlay': (_overlay(), dict()),
     'topic_overlay': (_overlay(), dict()),
+    'concentric': (_biblio(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),
 }
@@ -347,6 +348,7 @@ def _dense(count: int) -> pd.DataFrame:
             'Sigma': [1.0] * count,
             '聚类': [i % 3 for i in range(count)],
             '聚类标签': (['甲组', '乙组', '丙组'] * (count // 3 + 1))[:count],
+            '年份序列': [json.dumps({str(2019 + i % 3): count - i}) for i in range(count)],
         }
     )
 
@@ -414,7 +416,7 @@ class TestThePictureFitsItsPage:
     def test_the_shipped_figures_all_stay_inside_the_print_box(self):
         """The sizing is only real if the widest thing this service draws still fits: every figure's
         own coordinate span, times its scale, plus its labels, must stay in ``GRAPH_BOX_CM``."""
-        for chart_type in ('knowledge_graph', 'circular', 'landscape'):
+        for chart_type in ('knowledge_graph', 'circular', 'landscape', 'concentric'):
             _df, kw = CASES[chart_type]
             out = L.to_latex_document(_dense(30), chart_type, title='图', **kw)
             head = [line for line in out.splitlines() if line.startswith(r'\begin{tikzpicture}')]
@@ -422,3 +424,18 @@ class TestThePictureFitsItsPage:
             assert '[x=' in head[0], f'{chart_type} draws a network but declares no size'
             unit = float(head[0].split('[x=')[1].split('cm')[0])
             assert 0.02 <= unit <= 1.0, f'{chart_type} scaled by {unit}'
+
+
+class TestTheConcentricFigure:
+    """The paper twin of the ring layout: one guide circle per first-appearance year."""
+
+    def test_each_ring_is_drawn_and_labelled_with_its_year(self):
+        out = L.to_latex_document(_biblio(), 'concentric', title='图 X')
+        assert out.count('dashed') >= 2, 'one dashed guide per ring'
+        assert '2020' in out and '2021' in out
+        assert out.count('\\coordinate') == 3
+
+    def test_the_table_has_one_row_per_ring_with_its_representatives(self):
+        out = L.to_latex_table(_biblio(), 'concentric', title='表 X')
+        assert '2020' in out and '2021' in out
+        assert '甲' in out, 'the ring row names its most frequent nodes'

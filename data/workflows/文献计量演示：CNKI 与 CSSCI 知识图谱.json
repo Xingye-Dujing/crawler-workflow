@@ -865,6 +865,21 @@
       "x": 1180,
       "y": 2540,
       "folded": false
+    },
+    {
+      "id": "node-38",
+      "type": "visualize",
+      "title": "同心环布局",
+      "params": {
+        "chart_type": "concentric",
+        "engine": "echarts",
+        "title": "关键词首次出现年份的同心环",
+        "emit_latex": true,
+        "emit_latex_table": true
+      },
+      "x": 980,
+      "y": 2140,
+      "folded": false
     }
   ],
   "connections": [
@@ -880,6 +895,7 @@
     { "from": "node-2", "to": "node-13" },
     { "from": "node-2", "to": "node-14" },
     { "from": "node-2", "to": "node-19" },
+    { "from": "node-2", "to": "node-38" },
     { "from": "node-7", "to": "node-8" },
     { "from": "node-9", "to": "node-10" },
     { "from": "node-9", "to": "node-15" },

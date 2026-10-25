@@ -88,6 +88,7 @@ CHART_TYPES = (
     'geo_map',
     'sentiment_overlay',
     'topic_overlay',
+    'concentric',
     'wordcloud',
     'map',
 )
@@ -451,6 +452,7 @@ ECHARTS_ONLY_TYPES = (
     'geo_map',
     'sentiment_overlay',
     'topic_overlay',
+    'concentric',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other

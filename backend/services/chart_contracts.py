@@ -19,6 +19,7 @@ BIBLIO_CHART_TYPES = (
     'geo_map',
     'sentiment_overlay',
     'topic_overlay',
+    'concentric',
 )
 
 #: Charts whose x axis is not a user-selected column. Validation must not demand
@@ -76,4 +77,8 @@ BIBLIO_CHART_READS = {
     # becomes a named refusal instead of a blank frame.
     'sentiment_overlay': ('节点', '情感分布'),
     'topic_overlay': ('节点', '话题分布'),
+    # Concentric rings are cut by each node's FIRST year, which only the per-year series carries
+    # for every entity table (``首年`` exists only when clustering ran). Requiring the series is
+    # how a table without a year column becomes a named refusal instead of one anonymous ring.
+    'concentric': ('节点', '年份序列', '频次'),
 }

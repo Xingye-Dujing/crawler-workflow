@@ -1029,6 +1029,18 @@ class LatexChartService:
                 '}\n'
             )
             + (
+                # The layout's two numbers are geometry the reader cannot recover from the picture:
+                # which ring a node sits on, and where inside the ring it was put.
+                '\\medskip\\par{\\footnotesize\\textbf{同心环布局：}'
+                r'第 $k$ 个环的半径 $r_k=r_0+k\,\Delta r$（$r_0=\Delta r$，内环为最早年份），'
+                r'环内按频次降序排布，第 $i$ 个节点的角度 $\theta_i=\frac{2\pi i}{n_k}+0.35k$，'
+                r'坐标为 $(r_k\cos\theta_i,\ r_k\sin\theta_i)$；'
+                r'没有年份的节点单独成最外一环并标明。'
+                '}\n'
+                if chart_type == 'concentric'
+                else ''
+            )
+            + (
                 # The variation figure plots one more thing, and its own formula: what the marker
                 # size means is not guessable from a picture.
                 '\\medskip\\par{\\footnotesize\\textbf{结构变异公式：}'
@@ -1171,6 +1183,102 @@ class LatexChartService:
         rows, names = cls._biblio_node_rows(df, ('节点', '连接', '频次'))
         links = cls._biblio_links(rows, names)
         return cls._graph_tikz(links)
+
+    @classmethod
+    def _biblio_concentric(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', '年份序列', '频次'))
+        links = cls._biblio_links(rows, names)
+        buckets: dict[int, list[str]] = {}
+        unknown: list[str] = []
+        for name in names:
+            parsed = cls._biblio_parsed(rows[name].get('年份序列'), '年份序列')
+            year = 0
+            if isinstance(parsed, dict) and parsed:
+                try:
+                    year = min(int(key) for key in parsed)
+                except (TypeError, ValueError):
+                    year = 0
+            if year:
+                buckets.setdefault(year, []).append(name)
+            else:
+                unknown.append(name)
+        if not buckets:
+            raise ChartConfigError(t('chart.biblio_no_years'))
+        rings = [(str(year), buckets[year]) for year in sorted(buckets)]
+        if unknown:
+            rings.append((t('chart.biblio_ring_unknown'), unknown))
+        max_freq = max((cls._biblio_float(rows[name]['频次'], 0.0) for name in names), default=1.0) or 1.0
+        pos: dict[str, tuple[float, float]] = {}
+        colors: dict[str, str] = {}
+        for ring, (_label, ring_names) in enumerate(rings):
+            radius = 1.9 * (ring + 1)
+            ordered = sorted(ring_names, key=lambda name: (-cls._biblio_float(rows[name]['频次'], 0.0), name))
+            for index, name in enumerate(ordered):
+                angle = 2.0 * math.pi * index / len(ordered) + 0.35 * ring
+                pos[name] = (radius * math.cos(angle), radius * math.sin(angle))
+                colors[name] = cls._biblio_color(ring)
+        order = [name for _label, ring_names in rings for name in ring_names]
+        index_of = {name: index for index, name in enumerate(order)}
+        spots = {}
+        for name in order:
+            x, y = pos[name]
+            radius = 0.12 + 0.42 * math.sqrt(max(0.0, cls._biblio_float(rows[name]['频次'], 0.0) / max_freq))
+            norm = math.hypot(x, y) or 1.0
+            ux, uy = x / norm, y / norm
+            spots[name] = (
+                x,
+                y,
+                radius,
+                x + ux * (radius + 0.22),
+                y + uy * (radius + 0.22),
+                'east' if ux >= 0 else 'west',
+            )
+        font = {name: r'\scriptsize' for name in order}
+        ranked = sorted(order, key=lambda name: (-cls._biblio_float(rows[name]['频次'], 0.0), name))
+
+        def _candidates() -> list:
+            return [(name, spots[name][5], spots[name][3], spots[name][4], font[name]) for name in ranked]
+
+        outer = 1.9 * len(rings)
+        scale = cls._picture_scale(2 * outer, 2 * outer, max(cls._label_cm(name, font[name]) for name in order))
+        held = cls._fit_labels(_candidates(), scale)
+        scale = cls._picture_scale(2 * outer, 2 * outer, max(cls._label_cm(name, font[name]) for name in held))
+        held = cls._fit_labels(_candidates(), scale)
+        out = [
+            f'\\coordinate (n{index}) at ({pos[name][0]:.2f},{pos[name][1]:.2f});' for index, name in enumerate(order)
+        ]
+        for ring, (label, _ring_names) in enumerate(rings):
+            radius = 1.9 * (ring + 1)
+            out.append(f'\\draw[black!10,dashed,line width=0.4pt] (0,0) circle ({radius:.2f});')
+            out.append(
+                f'\\node[font=\\scriptsize,text=black!55,anchor=east] at ({-radius - 0.1:.2f},0) {{{_esc(label)}}};'
+            )
+        biggest = max(link['value'] for link in links) or 1.0
+        for link in links:
+            width = max(0.3, 3.2 * math.sqrt(link['value'] / biggest))
+            out.append(
+                f'\\draw[black!12,line width={width:.2f}pt] '
+                f'(n{index_of[link["source"]]}) -- (n{index_of[link["target"]]});'
+            )
+        for name in order:
+            x, y, radius, lx, ly, side = spots[name]
+            draw = (
+                f'\\draw[fill={colors[name]}!45,draw={colors[name]},line width=0.7pt] '
+                f'(n{index_of[name]}) circle ({radius:.2f});'
+            )
+            if name in held:
+                anchor = 'west' if side == 'east' else 'east'
+                draw += (
+                    f'\\draw[leadline] ({x + (lx - x) * 0.7:.2f},{y + (ly - y) * 0.7:.2f}) -- ({lx:.2f},{ly:.2f});'
+                    f'\\node[font={font[name]},anchor={anchor},text=black] at ({lx:.2f},{ly:.2f}) {{{_esc(name)}}};'
+                )
+            out.append(draw)
+        if len(held) < len(order):
+            out.append(
+                f'\\node[font=\\scriptsize,text=black!55,anchor=north] at (0,{-(outer + 1.0):.2f})'
+                f'{{已省略 {len(order) - len(held)} 个会互相遮盖的节点标签；完整节点见三线表。}};'
+            )
+        return f'\\begin{{tikzpicture}}[x={scale:.3f}cm,y={scale:.3f}cm]\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
     @classmethod
     def _biblio_landscape(cls, df) -> str:
@@ -1817,6 +1925,8 @@ class LatexChartService:
             pic = cls._biblio_topic(df)
         elif chart_type == 'biblio_heatmap':
             pic = cls._biblio_heatmap(df)
+        elif chart_type == 'concentric':
+            pic = cls._biblio_concentric(df)
         else:
             raise ChartConfigError(f'no bibliometric LaTeX figure for {chart_type}')
         return '\\begin{minipage}{17.5cm}\n' + pic + '\n' + cls._biblio_formulas(chart_type) + '\n\\end{minipage}'
@@ -1869,6 +1979,49 @@ class LatexChartService:
                 [_esc(name)] + [_num(counts.get(topic, 0)) for topic in topics]
                 for name, counts in items[:OVERLAY_TABLE_LIMIT]
             ]
+            return head, table
+        if chart_type == 'concentric':
+            cls._require_biblio(df, '节点', '年份序列', '频次')
+            buckets: dict[int, list[tuple[float, str]]] = {}
+            unknown: list[tuple[float, str]] = []
+            for _, row in df.iterrows():
+                name = cls._biblio_text(row['节点'])
+                if not name:
+                    continue
+                frequency = cls._biblio_float(row.get('频次'), 0.0)
+                parsed = cls._biblio_parsed(row.get('年份序列'), '年份序列')
+                year = 0
+                if isinstance(parsed, dict) and parsed:
+                    try:
+                        year = min(int(key) for key in parsed)
+                    except (TypeError, ValueError):
+                        year = 0
+                if year:
+                    buckets.setdefault(year, []).append((frequency, name))
+                else:
+                    unknown.append((frequency, name))
+            if not buckets:
+                raise ChartConfigError(t('chart.biblio_no_years'))
+            rings = [(str(year), buckets[year]) for year in sorted(buckets)]
+            if unknown:
+                rings.append((t('chart.biblio_ring_unknown'), unknown))
+            head = [
+                _esc(t('biblio.col.年份')),
+                _esc(t('chart.biblio_ring_nodes')),
+                _esc(t('chart.biblio_ring_reps')),
+                _esc(t('chart.biblio_ring_total')),
+            ]
+            table = []
+            for label, items in rings:
+                ranked = sorted(items, key=lambda item: (-item[0], item[1]))
+                table.append(
+                    [
+                        _esc(label),
+                        _num(len(ranked)),
+                        _esc('、'.join(name for _frequency, name in ranked[:3])),
+                        _num(sum(frequency for frequency, _name in ranked)),
+                    ]
+                )
             return head, table
         if chart_type == 'variation':
             cls._require_biblio(df, '节点', '起始年', '结束年', '结构变化', '前邻居', '后邻居', '新增邻居', '消失邻居')

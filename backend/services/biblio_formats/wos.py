@@ -153,10 +153,11 @@ def parse_tagged(text: str) -> tuple[list[dict], int]:
 # export left Cited References, Author Keywords, WoS Categories and Funding empty for every row;
 # after the user re-exported, keywords (14/30), categories, research areas, funding and usage are
 # all present, while `Cited References` is STILL empty and only `Cited Reference Count` (a number)
-# is written. So a table-only upload builds keyword/subject/funding/usage networks but never a
-# citation network — the plain-text download is the one carrying CR. A Tab-delimited download is
-# not claimed anywhere: no such file has been measured, and its separators are not what the CSV
-# reader here is proved on.
+# is written — the user confirmed the site offers no such field in Excel at all. The guide therefore
+# names that FIELD as unavailable in Excel (citation work goes to the plain-text download, the one
+# carrying CR) while keeping Excel as a working route for the keyword/subject/funding/usage
+# networks. A Tab-delimited download is not claimed anywhere: no such file has been measured, and
+# its separators are not what the CSV reader here is proved on.
 
 
 def detect_frame(frame) -> bool:

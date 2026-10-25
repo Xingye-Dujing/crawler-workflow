@@ -399,6 +399,114 @@ def _circular(df: pd.DataFrame, base: dict) -> dict:
     return _graph_option(df, base, layout='circular', require_coordinates=False)
 
 
+def _ring_year(row: dict) -> int:
+    """The node's first appearance year, read from its own per-year series.
+
+    ``首年`` is only written when clustering ran, while ``年份序列`` is on every entity table —
+    reading the cluster columns would make this view refuse tables the timezone view can draw.
+    """
+    for year, count in _activity(row):
+        if count:
+            return int(year)
+    return int(_number(row.get('首年'), 0))
+
+
+def _concentric(df: pd.DataFrame, base: dict) -> dict:
+    """One ring per first-appearance year, oldest at the centre, frequency running clockwise.
+
+    This is a LAYOUT, not a time axis: the ``timezone`` view spreads nodes along x by year, while
+    here every year becomes a circle and the reader sees at a glance whether a field's vocabulary
+    accumulates at the rim (new terms keep arriving) or stays in the middle (a stable core).
+    """
+    _require(df, '节点', '年份序列', '频次')
+    _base_graph_series(base, base['title']['text'])
+    rows, names = _node_rows(df)
+    buckets: dict[int, list[str]] = {}
+    unknown: list[str] = []
+    for name in names:
+        year = _ring_year(rows[name])
+        if year:
+            buckets.setdefault(year, []).append(name)
+        else:
+            unknown.append(name)
+    if not buckets:
+        raise BiblioChartError(t('chart.biblio_no_years'))
+    rings: list[tuple[str, list[str]]] = [(str(year), buckets[year]) for year in sorted(buckets)]
+    if unknown:
+        # A node with no year at all cannot be placed on a time ring; it gets its own outer ring
+        # and a legend entry that says so, because dropping it would hide a node the table has.
+        rings.append((t('chart.biblio_ring_unknown'), unknown))
+    max_freq = max((_number(rows[name]['频次'], 0.0) for name in names), default=1.0) or 1.0
+    ranked = sorted(names, key=lambda name: (-_number(rows[name]['频次'], 0.0), name))
+    labelled = set(ranked[:LABEL_LIMIT]) if len(names) > LABEL_LIMIT else set(names)
+    data = []
+    for ring, (_label, ring_names) in enumerate(rings):
+        radius = float(ring + 1)
+        ordered = sorted(ring_names, key=lambda name: (-_number(rows[name]['频次'], 0.0), name))
+        for index, name in enumerate(ordered):
+            # A phase turn per ring keeps consecutive years from lining up into spokes, which
+            # would read as columns and hide that these are separate circles.
+            angle = 2.0 * math.pi * index / len(ordered) + 0.35 * ring
+            frequency = _number(rows[name]['频次'], 0.0)
+            data.append(
+                {
+                    'name': name,
+                    'value': round(frequency, 4),
+                    'x': round(radius * math.cos(angle), 6),
+                    'y': round(radius * math.sin(angle), 6),
+                    'symbolSize': round(10.0 + 26.0 * math.sqrt(max(0.0, frequency / max_freq)), 2),
+                    'category': ring,
+                    'itemStyle': {'color': base['color'][ring % len(base['color'])]},
+                    'label': {
+                        'show': name in labelled,
+                        'position': 'right',
+                        'fontSize': 10,
+                        'fontFamily': 'sans-serif',
+                    },
+                }
+            )
+    links = _graph_links(rows, names)
+    base['title']['subtext'] = t('chart.biblio_ring_rule', rings=len(rings))
+    # ECharts does not wrap a subtitle by itself: at the preview's 400 px the English note ran
+    # off the right edge (measured), so its width is stated and long text breaks instead.
+    base['title']['subtextStyle'] = {'fontSize': 11, 'overflow': 'break', 'width': 330}
+    base['legend'] = _legend([label for label, _ in rings])
+    # The rule is painted under the title, so the legend has to start below it as well: at its
+    # default ``top: 40`` the first year entry sat on the note in a real 400 px preview.
+    base['legend']['top'] = 78
+    base['series'] = [
+        {
+            'type': 'graph',
+            'layout': 'none',
+            'roam': True,
+            'draggable': False,
+            'left': GRAPH_LEFT,
+            # The ring rule sits under the title. Measured in a real browser at the preview's
+            # 400 px: the note wraps to two lines there and the innermost ring's year label
+            # landed on it, so this one view pays for the note in its reserved band.
+            'top': GRAPH_TOP + 30,
+            'right': GRAPH_RIGHT,
+            'bottom': GRAPH_BOTTOM,
+            'categories': [{'name': label} for label, _ in rings],
+            'data': data,
+            'links': sorted(links.values(), key=lambda item: (-item['value'], item['source'], item['target'])),
+            'label': {
+                'show': True,
+                'color': '#222',
+                'backgroundColor': 'rgba(255,255,255,0.82)',
+                'borderColor': 'rgba(0,0,0,0.08)',
+                'borderWidth': 1,
+                'borderRadius': 3,
+                'padding': [2, 4],
+            },
+            'labelLayout': {'hideOverlap': True, 'moveOverlap': 'shiftY'},
+            'lineStyle': {'color': 'source', 'curveness': 0.12},
+            'emphasis': {'focus': 'adjacency', 'lineStyle': {'width': 4}, 'label': {'show': True}},
+        }
+    ]
+    return base
+
+
 def _cluster_timeline(df: pd.DataFrame, base: dict) -> dict:
     _require(df, '节点', '聚类', '聚类标签', '首年', '末年', '频次')
     _base_graph_series(base, base['title']['text'])
@@ -1434,6 +1542,7 @@ BUILDERS = {
     'geo_map': _geo_map,
     'sentiment_overlay': _sentiment_overlay,
     'topic_overlay': _topic_overlay,
+    'concentric': _concentric,
 }
 
 

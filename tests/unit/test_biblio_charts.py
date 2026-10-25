@@ -1,6 +1,7 @@
 """The bibliometric ECharts views and their named refusals."""
 
 import json
+import math
 
 import pandas as pd
 import pytest
@@ -443,3 +444,63 @@ class TestOverlayViews:
         broken = overlay_frame.assign(情感分布=['not json'] * len(overlay_frame))
         with pytest.raises(ChartConfigError, match='情感分布'):
             VisualizationService.to_echarts_option(broken, 'sentiment_overlay')
+
+
+class TestTheConcentricRings:
+    """Rings by first-appearance year, oldest at the centre, frequency running clockwise."""
+
+    @staticmethod
+    def _radii(option):
+        return {item['name']: round(math.hypot(item['x'], item['y']), 6) for item in option['series'][0]['data']}
+
+    def test_rings_are_cut_by_first_year_inside_out(self, frame):
+        option = VisualizationService.to_echarts_option(frame, 'concentric')
+        radii = self._radii(option)
+        assert radii['甲'] == pytest.approx(1.0) and radii['乙'] == pytest.approx(1.0)
+        assert radii['丙'] == pytest.approx(2.0), 'the 2021 node belongs on the second ring out'
+        assert option['series'][0]['categories'] == [{'name': '2020'}, {'name': '2021'}]
+
+    def test_the_subtext_names_the_ring_rule(self, frame):
+        option = VisualizationService.to_echarts_option(frame, 'concentric')
+        assert option['title']['subtext']
+        assert '2' in option['title']['subtext']
+
+    def test_within_a_ring_the_most_frequent_node_starts_at_angle_zero(self, frame):
+        option = VisualizationService.to_echarts_option(frame, 'concentric')
+        item = next(entry for entry in option['series'][0]['data'] if entry['name'] == '甲')
+        assert item['x'] == pytest.approx(1.0)
+        assert abs(item['y']) < 1e-6
+
+    def test_a_node_without_any_year_gets_its_own_outer_ring(self):
+        from i18n import t
+
+        frame = pd.DataFrame(
+            {
+                '节点': ['甲', '丙'],
+                '连接': [
+                    json.dumps([{'target': '丙', 'value': 1.0}], ensure_ascii=False),
+                    json.dumps([{'target': '甲', 'value': 1.0}], ensure_ascii=False),
+                ],
+                '频次': [3, 1],
+                '年份序列': [json.dumps({'2020': 3}), '{}'],
+            }
+        )
+        option = VisualizationService.to_echarts_option(frame, 'concentric')
+        labels = [category['name'] for category in option['series'][0]['categories']]
+        assert labels == ['2020', t('chart.biblio_ring_unknown')]
+        assert self._radii(option)['丙'] == pytest.approx(2.0), 'the yearless node sits on the outer ring'
+
+    def test_a_table_without_year_data_refuses_by_name(self):
+        frame = pd.DataFrame(
+            {
+                '节点': ['甲', '丙'],
+                '连接': [
+                    json.dumps([{'target': '丙', 'value': 1.0}], ensure_ascii=False),
+                    json.dumps([{'target': '甲', 'value': 1.0}], ensure_ascii=False),
+                ],
+                '频次': [3, 1],
+                '年份序列': ['{}', '{}'],
+            }
+        )
+        with pytest.raises(ChartConfigError, match='年份'):
+            VisualizationService.to_echarts_option(frame, 'concentric')

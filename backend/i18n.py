@@ -303,6 +303,11 @@ _ZH = {
     'chart.biblio_topics_truncated': '只画前 {shown}/{total} 个话题',
     'chart.biblio_share': '占比（%）',
     'chart.biblio_topic_share': '话题占比',
+    'chart.biblio_ring_rule': '同心环 {rings} 个：内→外为首次出现年份',
+    'chart.biblio_ring_unknown': '未知年份',
+    'chart.biblio_ring_nodes': '节点数',
+    'chart.biblio_ring_reps': '代表节点',
+    'chart.biblio_ring_total': '频次合计',
     # The paper's three-line table prints the variation columns by name, so the server needs the
     # words too — same keys the browser catalogue uses for the panel's table headers.
     'biblio.col.节点': '节点',
@@ -368,10 +373,12 @@ _ZH = {
     '2. 勾选记录 →「导出」，记录内容选到最完整的一档：「全记录与引用的参考文献」'
     '（Full Record and Cited References）\n'
     '3. 文件格式首选「纯文本文件」，得到带 CR/TC/UT 标签的 .txt\n'
-    '4. 上传 .txt（Excel .xls/.xlsx、RIS、BibTeX 也认，但要按同一个记录内容选项导出）',
-    'source.WoS.missing': '实测 Excel 导出里 Cited References 整列为空（只有 Cited Reference Count 这个数字），'
-    '重导后 Author Keywords、WoS Categories、Research Areas、Funding 与使用次数都已经有值 ⇒ '
-    '只上 Excel 时建不了引文网络／引文突现；要引文分析请再用「纯文本 + 全记录与引用的参考文献」导一份 .txt',
+    '4. 上传 .txt；Excel（.xls/.xlsx）、RIS、BibTeX 也认——注意 Excel 里**没有 Cited References 列**'
+    '（站点不提供），引文分析要用纯文本',
+    'source.WoS.missing': 'Excel 的 Cited References 列不可用：站点在 Excel 导出里不提供这一列'
+    '（实测 30 条整列为空，只写 Cited Reference Count 这个数字）⇒ 用 Excel 时引文网络与引文突现做不了；'
+    '关键词（14/30）、学科、基金、使用次数在 Excel 里都可用。'
+    '要引文分析请用「纯文本 + 全记录与引用的参考文献」（23/30 条带 CR）',
     'source.Scopus.purpose': 'Scopus 的 CSV 下载：带参考文献、被引次数与作者单位，机构网络与国家网络都能建；'
     '中文界面导出的中文表头同样能读。',
     'source.Scopus.steps': '1. 在 Scopus 检索\n'
@@ -380,7 +387,8 @@ _ZH = {
     '——单位列决定机构网络与国家网络能不能建\n'
     '4. 上传 .csv——中文界面会得到 文献标题/来源出版物名称/施引文献/'
     '参考文献 等列名，本应用都认',
-    'source.Scopus.missing': '实测这份导出没有学科分类与使用次数（usage）列 ⇒ 学科共现与按使用次数筛选不可用；'
+    'source.Scopus.missing': 'Scopus 站点导出不提供 Subject area 与 usage 列（不是漏勾）⇒ '
+    '学科共现与按使用次数筛选不可用；'
     '英文界面的列名会随版本变化（Citation count / Cited by、Article number / Art. No.），'
     '两种写法都认',
     'source.Dimensions.purpose': 'Dimensions 的 Publication 导出（Export full record → CSV）：被引次数、学科分类、'
@@ -2168,6 +2176,11 @@ _EN = {
     'chart.biblio_topics_truncated': 'Showing the first {shown} of {total} topics',
     'chart.biblio_share': 'Share (%)',
     'chart.biblio_topic_share': 'Topic share',
+    'chart.biblio_ring_rule': 'Concentric rings ({rings}): first year inside out',
+    'chart.biblio_ring_unknown': 'year unknown',
+    'chart.biblio_ring_nodes': 'Nodes',
+    'chart.biblio_ring_reps': 'Representative nodes',
+    'chart.biblio_ring_total': 'Total frequency',
     'biblio.col.节点': 'Node',
     'biblio.col.起始年': 'From year',
     'biblio.col.结束年': 'To year',
@@ -2236,13 +2249,13 @@ _EN = {
     '2. Select records → Export, and choose the fullest record option: '
     '"Full Record and Cited References"\n'
     '3. Prefer "Plain Text" as the file format — that is the .txt carrying the CR/TC/UT tags\n'
-    '4. Upload the .txt (Excel .xls/.xlsx, RIS and BibTeX are read too, exported with the '
-    'same record option)',
-    'source.WoS.missing': 'Measured: the Excel export leaves Cited References empty for every record (it writes only '
-    'the Cited Reference Count number); Author Keywords, WoS Categories, Research Areas, Funding and '
-    'the usage counts are all present in the re-export ⇒ Excel alone cannot build a citation network '
-    'or citation bursts. Export a plain text file with "Full Record and Cited References" as well '
-    'when you need those',
+    '4. Upload the .txt; Excel (.xls/.xlsx), RIS and BibTeX are read too — note that Excel carries '
+    'no Cited References column (the site does not offer one), so citation work needs the plain text',
+    'source.WoS.missing': 'The Cited References field is unavailable in Excel: the site does not offer that column in '
+    'the Excel download (measured: all thirty rows empty, only the Cited Reference Count number) ⇒ '
+    'with Excel alone there is no citation network and no citation burst; keywords (14/30), '
+    'categories, funding and usage ARE usable from Excel. For citation analysis use "Plain Text with '
+    'Full Record and Cited References" (23/30 rows carry CR)',
     'source.Scopus.purpose': "Scopus' CSV download: references, times-cited and author affiliations are in it, so "
     'institution and country networks build, and the Chinese interface’s Chinese column headers '
     'are recognised too.',
@@ -2252,9 +2265,10 @@ _EN = {
     'decides whether institution and country networks can be built at all\n'
     '4. Upload the .csv (a Chinese-interface file arrives with 文献标题/来源出版物名称/'
     '施引文献/参考文献 columns, which the reader also accepts)',
-    'source.Scopus.missing': 'Measured: this export carries no subject-category and no usage-count column ⇒ subject '
-    'co-occurrence and the usage filter stay off; the English column names move between versions '
-    '(Citation count / Cited by, Article number / Art. No.) and both spellings are accepted',
+    'source.Scopus.missing': 'The Scopus site offers neither a Subject area nor a usage column in this export '
+    '(it is not a field you forgot to tick) ⇒ subject co-occurrence and the usage filter are unavailable; the '
+    'English column names move between versions (Citation count / Cited by, Article number / '
+    'Art. No.) and both spellings are accepted',
     'source.Dimensions.purpose': "Dimensions' full-record CSV export: times-cited, subject fields, funding and MeSH "
     'terms are present, and one export often holds hundreds of records.',
     'source.Dimensions.steps': '1. Search Dimensions\n'
