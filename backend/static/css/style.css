@@ -3348,6 +3348,12 @@ input:-webkit-autofill:focus {
   font-size: 10px;
   color: var(--text-dim);
 }
+.wf-history-capacity {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 .wf-snap-name {
   display: block;
   color: var(--text);

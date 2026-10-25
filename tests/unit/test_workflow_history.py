@@ -111,6 +111,28 @@ class TestSnapshots:
     def test_deleting_an_unknown_snapshot_is_not_an_error(self, store):
         assert store.delete_snapshot('missing') == (False, [])
 
+    def test_rename_changes_only_the_label(self, store):
+        saved = store.save_snapshot(canvas(2), 'before layout', '日报')
+        renamed = store.rename_snapshot(saved['id'], '  重新排布前  ')
+        assert renamed['label'] == '重新排布前'
+        assert renamed['created_at'] == saved['created_at']
+        assert renamed['nodes'] == saved['nodes']
+        full = store.get_snapshot(saved['id'])
+        assert full['label'] == '重新排布前'
+        assert full['workflow'] == canvas(2)
+        assert store.list_snapshots()[0]['label'] == '重新排布前'
+
+    def test_rename_allows_an_empty_label_but_refuses_a_long_one(self, store):
+        saved = store.save_snapshot(canvas(1), 'named', 'wf')
+        assert store.rename_snapshot(saved['id'], '')['label'] == ''
+        with pytest.raises(ValueError) as exc:
+            store.rename_snapshot(saved['id'], 'x' * 81)
+        assert '80' in str(exc.value)
+        assert store.get_snapshot(saved['id'])['label'] == ''
+
+    def test_renaming_a_missing_snapshot_returns_none(self, store):
+        assert store.rename_snapshot('missing', 'x') is None
+
 
 class TestLayoutBaseline:
     def test_a_workflow_without_a_row_uses_the_algorithm(self, store):

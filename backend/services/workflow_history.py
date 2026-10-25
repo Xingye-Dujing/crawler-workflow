@@ -176,6 +176,30 @@ class WorkflowHistoryStore:
             'connections': edge_count,
         }
 
+    def rename_snapshot(self, snapshot_id: str, label: str) -> dict | None:
+        """Change one snapshot's label without touching its payload or timestamp.
+
+        A blank label is allowed: that is the same "untitled" a blank save produces,
+        and renaming an untitled snapshot to blank must not turn into a refusal.
+        """
+        clean = str(label or '').strip()
+        if len(clean) > MAX_LABEL:
+            raise ValueError(t('wfHistory.labelTooLong', n=MAX_LABEL))
+        wanted = str(snapshot_id or '')
+        with self._lock:
+            rows = self._conn.execute(
+                'SELECT id, label, workflow_name, created_at, node_count, edge_count '
+                'FROM canvas_snapshots WHERE id = ?',
+                (wanted,),
+            ).fetchall()
+            if not rows:
+                return None
+            self._conn.execute('UPDATE canvas_snapshots SET label = ? WHERE id = ?', (clean, wanted))
+            self._conn.commit()
+            header = self._header(rows[0])
+            header['label'] = clean
+            return header
+
     def list_snapshots(self) -> list:
         rows = self._query(
             'SELECT id, label, workflow_name, created_at, node_count, edge_count '

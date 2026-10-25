@@ -59,6 +59,26 @@ def get_history():
     return jsonify({'ok': True, 'snapshot': snapshot})
 
 
+@bp.route('/api/workflow/history/rename', methods=['POST'])
+def rename_history():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    snapshot_id = data.get('id')
+    label = data.get('label', '')
+    if not isinstance(snapshot_id, str):
+        return _bad_param('id')
+    if not isinstance(label, str):
+        return _bad_param('label')
+    try:
+        snapshot = get_workflow_history_store().rename_snapshot(snapshot_id, label)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    if snapshot is None:
+        return jsonify({'ok': False, 'error': t('wfHistory.missing', id=snapshot_id or '(empty)')}), 404
+    return jsonify({'ok': True, 'snapshot': snapshot})
+
+
 @bp.route('/api/workflow/history/delete', methods=['POST'])
 def delete_history():
     data = _json_body()

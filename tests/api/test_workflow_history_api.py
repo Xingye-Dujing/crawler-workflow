@@ -49,6 +49,33 @@ class TestSnapshotsApi:
         assert deleted == {'ok': True, 'deleted': True, 'baselines_cleared': []}
         assert client.get('/api/workflow/history').get_json()['snapshots'] == []
 
+    def test_rename_updates_the_label_and_keeps_the_payload(self, client):
+        header = _save(client).get_json()['snapshot']
+        response = client.post('/api/workflow/history/rename', json={'id': header['id'], 'label': '重排前'})
+        assert response.status_code == 200
+        renamed = response.get_json()['snapshot']
+        assert renamed['label'] == '重排前'
+        assert renamed['created_at'] == header['created_at']
+        assert client.get('/api/workflow/history').get_json()['snapshots'][0]['label'] == '重排前'
+        assert client.get('/api/workflow/history/get?id=' + header['id']).get_json()['snapshot']['workflow'] == CANVAS
+
+    def test_rename_refuses_a_missing_snapshot_and_bad_types(self, client):
+        missing = client.post('/api/workflow/history/rename', json={'id': 'nope', 'label': 'x'})
+        assert missing.status_code == 404
+        assert 'nope' in missing.get_json()['error']
+        for body in (
+            {'id': 3, 'label': 'x'},
+            {'id': 'nope', 'label': 3},
+            {'label': 'x'},
+            {},
+        ):
+            response = client.post('/api/workflow/history/rename', json=body)
+            assert response.status_code == 400, body
+        saved = _save(client).get_json()['snapshot']
+        too_long = client.post('/api/workflow/history/rename', json={'id': saved['id'], 'label': 'x' * 81})
+        assert too_long.status_code == 400
+        assert '80' in too_long.get_json()['error']
+
     def test_a_missing_snapshot_is_a_named_404(self, client):
         response = client.get('/api/workflow/history/get?id=nope')
         assert response.status_code == 404

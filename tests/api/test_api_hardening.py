@@ -88,6 +88,7 @@ BODY_ROUTES = [
     '/api/workflow/execute',
     '/api/workflow/history/delete',
     '/api/workflow/history/layout',
+    '/api/workflow/history/rename',
     '/api/workflow/history/save',
     '/api/workflow/processes/kill',
     '/api/workflow/queue/cancel',

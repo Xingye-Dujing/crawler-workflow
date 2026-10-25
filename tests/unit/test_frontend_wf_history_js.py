@@ -55,6 +55,8 @@ class TestHistoryTable:
         assert '日报' in html
         assert '>3 / 2<' in html
         assert 'Untitled snapshot' not in html
+        assert wfh['history_render']['capacity'] == '2 / 100 snapshots'
+        assert wfh['history_empty']['capacity'] == '0 / 100 snapshots'
 
     def test_a_name_is_text_not_markup_and_keeps_its_action_callable(self, wfh):
         html = wfh['history_render']['html']
@@ -63,6 +65,7 @@ class TestHistoryTable:
         # The quote in the workflow name must not close the onclick attribute; ids,
         # not names, are what the action receives.
         assert re.search(r'onclick="wfFiles\.restoreSnapshot\(\'s1\'\)"', html)
+        assert re.search(r'onclick="wfFiles\.renameSnapshot\(\'s1\'\)"', html)
         assert re.search(r'onclick="wfFiles\.deleteSnapshot\(\'s1\'\)"', html)
         assert re.search(r'onclick="wfFiles\.setBaseline\(\'s1\'\)"', html)
         assert 'q&quot;uote' in html
@@ -98,6 +101,20 @@ class TestRestoring:
 
     def test_a_live_run_refuses_before_the_dialog(self, wfh):
         assert wfh['restore_busy'] == {'requests': 0, 'loaded': None, 'toasts': ['BUSY']}
+
+
+class TestRenaming:
+    def test_rename_posts_the_new_label_and_re_reads_the_list(self, wfh):
+        renamed = wfh['history_rename']
+        assert renamed['body'] == {'id': 's1', 'label': '重排前'}
+        assert renamed['messages'] == ['Rename "手动存档":']
+        assert renamed['toasts'] == ['RENAMED']
+        assert renamed['reads'] == 1, 'the table must re-read after a rename'
+        assert renamed['label'] == '重排前'
+        assert renamed['capacity'] == '2 / 100 snapshots'
+
+    def test_a_cancelled_rename_sends_nothing(self, wfh):
+        assert wfh['history_rename_cancelled'] == {'requests': 0, 'toasts': []}
 
 
 class TestDeleting:
@@ -175,12 +192,13 @@ class TestLayoutStrategy:
         assert '画布历史' in wfh['language']['tabs']
         assert '手动存档' in html
         assert '恢复' in html and '删除' in html
+        assert '重命名' in html
 
 
 class TestPageWiring:
     def test_the_history_containers_and_save_bar_exist(self):
         page = INDEX_HTML.read_text(encoding='utf-8')
-        for element_id in ('workflows-tabs', 'workflows-history-bar'):
+        for element_id in ('workflows-tabs', 'workflows-history-bar', 'workflows-history-capacity'):
             assert f'id="{element_id}"' in page
         assert 'onclick="wfFiles.saveSnapshot()"' in page
         assert 'wfFiles.openHistory()' in page
@@ -189,6 +207,7 @@ class TestPageWiring:
         css = STYLE_CSS.read_text(encoding='utf-8')
         assert '#workflows-tabs' in css
         assert '.wf-history-bar' in css
+        assert '.wf-history-capacity' in css
         assert '.wf-snap-baseline' in css
         assert '.layout-baseline-hint' in css
 

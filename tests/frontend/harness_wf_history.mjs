@@ -31,6 +31,12 @@ const DICT = {
         'wfHistory.restoreConfirm': 'Restore "{label}"?',
         'wfHistory.restored': 'RESTORED',
         'wfHistory.restoreFailed': 'RESTORE-FAILED',
+        'wfHistory.rename': 'Rename',
+        'wfHistory.renamePrompt': 'Rename "{label}":',
+        'wfHistory.renamePlaceholder': 'Snapshot name',
+        'wfHistory.renamed': 'RENAMED',
+        'wfHistory.renameFailed': 'RENAME-FAILED',
+        'wfHistory.capacity': '{n} / {max} snapshots',
         'wfHistory.remove': 'Delete',
         'wfHistory.confirmRemove': 'Delete "{label}"?',
         'wfHistory.removed': 'DELETED',
@@ -85,6 +91,7 @@ const DICT = {
         'wfHistory.untitled': '未命名快照',
         'wfHistory.noWorkflow': '未命名画布',
         'wfHistory.restore': '恢复',
+        'wfHistory.rename': '重命名',
         'wfHistory.remove': '删除',
         'wfHistory.baseline': '设为布局基准',
         'wfHistory.baselineTag': '基准',
@@ -147,6 +154,7 @@ let routes = {
     snapshot: { ok: true, snapshot: { id: 's1', workflow: SNAP_WORKFLOW } },
     save: { ok: true, snapshot: { id: 's9' } },
     delete: { ok: true, deleted: true, baselines_cleared: [] },
+    historyRename: { ok: true, snapshot: { id: 's1', label: '重排前' } },
     reusableList: TEMPLATES,
     reusableDelete: { ok: true, deleted: true },
     reusableRename: { ok: true, template: { id: 'r-000000000001', name: '清洗流水线 v2' } },
@@ -179,6 +187,7 @@ sandbox.fetch = (url, options) => {
     let payload = { ok: true };
     if (target.indexOf('/api/workflow/history/save') >= 0) payload = routes.save;
     else if (target.indexOf('/api/workflow/history/delete') >= 0) payload = routes.delete;
+    else if (target.indexOf('/api/workflow/history/rename') >= 0) payload = routes.historyRename;
     else if (target.indexOf('/api/workflow/history/get') >= 0) payload = routes.snapshot;
     else if (target.indexOf('/api/workflow/history/layout') >= 0) {
         payload = method === 'POST' ? { ok: true, layout: routes.layoutResult } : { ok: true, layout: routes.layout };
@@ -244,16 +253,21 @@ wfFiles.renderTabs();
 out.tabs_history = { html: tabs.innerHTML };
 
 LayoutStrategy._layout = { workflow_name: '日报', strategy: 'baseline', snapshot: { id: 's1' }, baseline_missing: false };
+wfFiles._historyMax = 100;
 wfFiles.renderHistory();
 out.history_render = {
     html: body.innerHTML,
     img_elements: doc.querySelectorAll('img').length,
     text: body.innerHTML,
+    capacity: doc.getElementById('workflows-history-capacity').textContent,
 };
 
 wfFiles._history = [];
 wfFiles.renderHistory();
-out.history_empty = { html: body.innerHTML };
+out.history_empty = {
+    html: body.innerHTML,
+    capacity: doc.getElementById('workflows-history-capacity').textContent,
+};
 wfFiles._history = ROWS;
 
 /* ── saving a snapshot ──────────────────────────────────────────────── */
@@ -303,6 +317,29 @@ sandbox.RunState.running = true;
 loaded = null;
 await wfFiles.restoreSnapshot('s1');
 out.restore_busy = { requests: requests.length, loaded: loaded, toasts: toasts.slice() };
+
+/* ── renaming a snapshot ───────────────────────────────────────────── */
+resetCalls();
+typed = '重排前';
+routes.list = [{ ...ROWS[0], label: '重排前' }, ROWS[1]];
+await wfFiles.renameSnapshot('s1');
+const renameHistoryRequest = requests.find((r) => r.url.indexOf('/history/rename') >= 0);
+out.history_rename = {
+    body: renameHistoryRequest ? JSON.parse(renameHistoryRequest.body) : null,
+    messages: dialogMessages.slice(),
+    toasts: toasts.slice(),
+    reads: requests.filter((r) => r.url === '/api/workflow/history').length,
+    label: (wfFiles._history || [])[0].label,
+    capacity: doc.getElementById('workflows-history-capacity').textContent,
+};
+typed = '手动存档';
+routes.list = ROWS;
+
+resetCalls();
+typed = null;
+await wfFiles.renameSnapshot('s1');
+out.history_rename_cancelled = { requests: requests.length, toasts: toasts.slice() };
+typed = '手动存档';
 
 /* ── deleting ──────────────────────────────────────────────────────── */
 resetCalls();

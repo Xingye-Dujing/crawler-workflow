@@ -11401,6 +11401,7 @@ var wfFiles = {
     renderHistory() {
         var body = document.getElementById('workflows-mgr-body');
         if (!body) return;
+        this._paintCapacity();
         var rows = this._history || [];
         if (!rows.length) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.empty') + '</div>';
@@ -11418,6 +11419,8 @@ var wfFiles = {
             var ops =
                 '<button class="runs-mgr-btn" onclick="wfFiles.restoreSnapshot(\'' + self._quote(row.id) + '\')">' +
                 I18n.t('wfHistory.restore') + '</button>' +
+                '<button class="runs-mgr-btn" onclick="wfFiles.renameSnapshot(\'' + self._quote(row.id) + '\')">' +
+                I18n.t('wfHistory.rename') + '</button>' +
                 '<button class="runs-mgr-btn" onclick="wfFiles.setBaseline(\'' + self._quote(row.id) + '\')">' +
                 I18n.t('wfHistory.baseline') + '</button>' +
                 '<button class="runs-mgr-btn del" onclick="wfFiles.deleteSnapshot(\'' + self._quote(row.id) + '\')">' +
@@ -11592,6 +11595,42 @@ var wfFiles = {
 
     _snapshotLabel(row) {
         return (row && String(row.label || '')) || I18n.t('wfHistory.untitled');
+    },
+
+    _paintCapacity() {
+        var el = document.getElementById('workflows-history-capacity');
+        if (!el) return;
+        var total = (this._history || []).length;
+        var max = Number(this._historyMax) || 0;
+        el.textContent = max ? I18n.t('wfHistory.capacity', { n: total, max: max }) : '';
+    },
+
+    async renameSnapshot(id) {
+        var row = this._snapshotRow(id);
+        if (!row) return;
+        var current = String(row.label || '');
+        var answer = await showDialog({
+            message: I18n.t('wfHistory.renamePrompt', { label: this._snapshotLabel(row) }),
+            input: { value: current, placeholder: I18n.t('wfHistory.renamePlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('wfHistory.rename'), primary: true },
+            ],
+        });
+        if (answer === null) return;
+        var label = String(answer || '').trim();
+        if (label === current) return;
+        var result = await fetchJSON('/api/workflow/history/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ id: id, label: label }),
+        });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('wfHistory.renameFailed'));
+            return;
+        }
+        showToast(I18n.t('wfHistory.renamed'));
+        await this.refreshHistory();
     },
 
     async saveSnapshot() {
