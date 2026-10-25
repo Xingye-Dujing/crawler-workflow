@@ -149,6 +149,12 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
   都没有时留空，由 Selenium Manager 在首次采集时下载匹配版本（需要联网）；
 - Ollama / xelatex：可选能力，缺了只影响对应节点。
 
+**`.xls`（老式 OLE2 Excel）靠包内的 `xlrd` 才读得动**：`openpyxl` 只处理 `.xlsx`，而 WoS 的 Excel 按钮
+给的就是 `.xls`。`xlrd` 是 `580fb15` 才写进 `desktop/requirements-runtime.txt` 的，因此**在此之前构建的
+交付包（含现有的 `dist/CaiXiHui-Setup.exe`）读不了 `.xls`**——上传会得到一句 400「解析失败：缺引擎」，
+不是 500。要用就重建：`powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Installer`。
+`.xlsx` 不受影响。
+
 `drivers/chromedriver.exe` 不会在构建时下载，因为正确版本取决于**最终用户**的 Chrome；如果要
 离线交付，请让用户按其 Chrome 版本放入该文件，或在设置面板里指定路径。
 

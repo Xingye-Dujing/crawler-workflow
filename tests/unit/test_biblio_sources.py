@@ -80,6 +80,31 @@ class TestEveryEntrySaysSomethingTrue:
         text = '\n'.join([str(entry['purpose']), *map(str, entry['steps']), *map(str, entry['missing'])])
         assert 'Scholarly Works' in text and 'Patents' in text, text
 
+    def test_the_steps_name_the_button_when_a_vendor_offers_several(self):
+        """Dimensions sells three look-alike downloads and Lens two collections.
+
+        "导出为 CSV" leaves the user to guess, and guessing wrong costs a search and a re-export,
+        so the option names are asserted in both languages — they are Latin literals in each,
+        which is what makes this check language-independent.
+        """
+        for fmt, required in (
+            ('Dimensions', ('Export full record', 'bibliometric mapping', 'reference manager')),
+            ('Lens', ('Scholarly Works', 'Patents')),
+            ('WoS', ('Full Record and Cited References',)),
+            ('Scopus', ('Affiliations', 'References')),
+        ):
+            entry = biblio_sources.source_for(fmt)
+            text = '\n'.join([str(entry['purpose']), *map(str, entry['steps']), *map(str, entry['missing'])])
+            for needle in required:
+                assert needle.lower() in text.lower(), f'{fmt}: the guide never names {needle!r}'
+
+    def test_the_lens_scholarly_entry_tells_the_user_its_references_are_ids(self):
+        """The refusal the node would print is useless after the fact; the guide says it first."""
+        entry = biblio_sources.source_for('Lens')
+        text = '\n'.join(map(str, entry['missing']))
+        assert '002-341-399-981-03X' in text, text
+        assert 'Source Country' in text, text
+
     def test_the_patent_collection_stays_a_refusal_and_not_a_source(self):
         """One vendor, two collections: the guide describes the readable one and refuses the other."""
         assert 'Lens Patents' not in EXPECTED

@@ -742,9 +742,10 @@ message.
   are now per-field candidate lists in both languages; the signature is "one of these columns per
   group" (`header_has_groups`), because a single required name is what refused the real files.
   Dimensions' first row is a copyright banner, so `frame_of`/`header_of` drop leading provenance lines
-  before reading the header. WoS' Excel download was proved to carry an empty `Cited References`
-  column, which is why the guide says "plain text with Full Record and Cited References" rather than
-  "any of them".
+  before reading the header. WoS' Excel download was proved to carry an empty `Cited References`,
+  `Author Keywords`, `WoS Categories` and `Funding` column for all thirty records while the plain-text
+  download of the same records carries them, which is why the guide says "plain text with Full Record
+  and Cited References" rather than "any of them".
 - **A fixture may copy structure but never facts.** The committed `samples/biblio_*_demo.*` files
   reproduce a real export's tags, header order, spacing, separators and banner row, with every value
   from a small synthetic pool; the vendor files themselves are gitignored because the Dimensions
@@ -787,6 +788,13 @@ message.
   VOSviewer/CiteSpace **network** file and a reference-manager BibTeX, and only the first is what
   this app reads (with its 500-items-per-download ceiling and 30-day Export center). Each source's
   steps now say which option to pick and which to avoid.
+- **A claim the readers were never shown cannot stay in the guide.** I had written that WoS reads
+  "Excel, Tab-delimited, RIS and BibTeX"; no `.tsv` file was ever measured and
+  `accepted_extensions()` does not list one, so the tab-delimited claim came out of the WoS steps in
+  both languages, out of `wos.py`'s comment and out of `docs/analysis.md`. The same applies to a
+  re-export: when the user replaces `samples/` files, `source.<id>.missing` sentences are claims about
+  *those* files and go stale silently — the WoS Excel entry gained `Affiliations` (so 国家 works now)
+  and still lacks `Cited References`, and Scopus gained it too.
 - **The lint hook deletes an import that is not used yet — three times this round.** Adding
   `import numpy as np` at module level while the last local twin still existed, or importing a
   helper a call site added one edit later, gets the new line removed by the PostToolUse

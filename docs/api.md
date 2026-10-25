@@ -43,7 +43,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls/.xlsm/.nbib/.ris/.bib/.bibtex/.enw/.net 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜）；**实测过的导出件**自动解析为文献记录表（CNKI 的 RefWorks / NoteExpress / EndNote 三种按钮、CSSCI 文本、WoS 纯文本·Excel·Tab·RIS·BibTeX、Scopus CSV 含中文表头、Dimensions CSV 含厂商横幅行、PubMed 的 Medline 文本与 CSV 摘要、RIS、BibTeX、EndNote），响应额外返回 `biblio_format`、`biblio_capabilities` 与 `warnings`，此时 `is_txt=false`；普通文本仍为单行 `content`、`is_txt=true`；认得出但不能读的先点名拒绝（例：Lens 专利集合），绝不静默存成一张看起来正常的表 |
+| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls/.xlsm/.nbib/.ris/.bib/.bibtex/.enw/.net 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜）；**实测过的导出件**自动解析为文献记录表（CNKI 的 RefWorks / NoteExpress / EndNote 三种按钮、CSSCI 文本、WoS 纯文本·Excel·RIS·BibTeX、Scopus CSV 含中文表头、Dimensions CSV 含厂商横幅行、Lens 学术文献集合（Scholarly Works）、PubMed 的 Medline 文本与 CSV 摘要、RIS、BibTeX、EndNote），响应额外返回 `biblio_format`、`biblio_capabilities` 与 `warnings`，此时 `is_txt=false`；普通文本仍为单行 `content`、`is_txt=true`；认得出但不能读的先点名拒绝（例：Lens 专利集合），绝不静默存成一张看起来正常的表 |
 | `/api/data/paste` | POST | 将粘贴的 JSON 数组注册为数据集 |
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
