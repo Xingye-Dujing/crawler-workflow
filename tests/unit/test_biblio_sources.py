@@ -6,6 +6,7 @@ remembers to update — and every assertion is about a claim the panel makes to 
 """
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,8 @@ from services import biblio_formats, biblio_sources
 from services.biblio_import import CNKI, CSSCI
 
 pytestmark = pytest.mark.unit
+
+SAMPLES = Path(__file__).resolve().parents[2] / 'samples'
 
 #: The sources the panel answers for: the registry's formats plus the two Chinese paths that
 #: live in ``biblio_import``. Read from the registry so a new format cannot ship unread.
@@ -67,10 +70,21 @@ class TestEveryEntrySaysSomethingTrue:
         steps = [str(line) for line in biblio_sources.source_for(fmt)['steps']]
         assert [line.split('.')[0] for line in steps] == [str(number) for number in range(1, len(steps) + 1)], steps
 
-    def test_lens_is_not_a_source_because_no_lens_file_was_ever_read(self):
-        """The only Lens export we were given is the patent collection, which is refused."""
-        assert 'Lens' not in EXPECTED
-        assert 'Lens' not in {spec.id for spec in biblio_formats.FORMAT_SPECS}
+    def test_lens_is_a_source_now_that_its_scholarly_export_was_read(self):
+        """The patent collection is still refused; the scholarly one has a reader and a guide."""
+        assert 'Lens' in EXPECTED
+        entry = biblio_sources.source_for('Lens')
+        assert entry['group'] == 'library'
+        # Both halves of the vendor's two collections are named, because the click that picks
+        # one is the click the user has to get right.
+        text = '\n'.join([str(entry['purpose']), *map(str, entry['steps']), *map(str, entry['missing'])])
+        assert 'Scholarly Works' in text and 'Patents' in text, text
+
+    def test_the_patent_collection_stays_a_refusal_and_not_a_source(self):
+        """One vendor, two collections: the guide describes the readable one and refuses the other."""
+        assert 'Lens Patents' not in EXPECTED
+        refusal = biblio_formats.detect_refusal(SAMPLES.joinpath('biblio_lens_patent_demo.csv').read_text('utf-8'))
+        assert 'Jurisdiction' in refusal, f'the refusal must name its evidence: {refusal!r}'
 
     def test_the_tag_folding_matches_what_cssci_actually_writes(self):
         assert biblio_sources.folded_tag('关 键 词') == '关键词'

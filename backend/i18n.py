@@ -354,7 +354,8 @@ _ZH = {
     'source.CSSCI.purpose': '中文社科文献的引文入口：CSSCI 导出带参考文献列表，所以共被引与文献耦合可用；'
     '它不带摘要与 DOI。',
     'source.CSSCI.steps': '1. 进入南京大学中国社会科学研究评价中心的检索页\n'
-    '2. 按年/来源/关键词检索后导出文本（每篇以【来源篇名】开头）\n'
+    '2. 按年/来源/关键词检索后导出文本，导出内容要含【参考文献】与【年代卷期】'
+    '（每篇以【来源篇名】开头）\n'
     '3. 标签里带对齐空格（【关 键 词】、【期    刊】、【基    金】），'
     '年份卷期合并在【年代卷期】的 2021,(2):146-155 里，机构写成【机构名称】=[作者]单位.院系——'
     '本应用就按这套真实写法解析\n'
@@ -364,35 +365,63 @@ _ZH = {
     'source.WoS.purpose': '英文文献的完整入口：参考文献、被引次数、使用次数、学科与国家都在这份导出里，'
     '共被引/耦合与国家级合作网络都能建。',
     'source.WoS.steps': '1. 在 Web of Science 核心合集检索\n'
-    '2. 勾选记录 →「导出」→ 选「纯文本文件」，记录内容选「全记录与引用的参考文献」\n'
-    '3. 上传 .txt（Excel、Tab 分隔、RIS、BibTeX 也支持）',
-    'source.WoS.missing': '实测 Excel 那份导出的 Cited References 整列为空 ⇒ 只上 Excel 时引文网络不可用，'
-    '请补一份纯文本导出',
-    'source.Scopus.purpose': 'Scopus 的 CSV 下载：带参考文献与被引次数；中文界面导出的中文表头同样能读。',
+    '2. 勾选记录 →「导出」，记录内容选到最完整的一档：「全记录与引用的参考文献」'
+    '（Full Record and Cited References）\n'
+    '3. 文件格式首选「纯文本文件」，得到带 CR/TC/UT 标签的 .txt\n'
+    '4. 上传 .txt（Excel .xls/.xlsx、RIS、BibTeX 也认，但要按同一个记录内容选项导出）',
+    'source.WoS.missing': '实测 Excel 那份导出的 Cited References、Author Keywords、WoS Categories、'
+    'Funding 四列整列为空 ⇒ 只上 Excel 时引文网络、关键词共现与学科都不可用；'
+    '同一批记录用纯文本导出就都齐了，请优先用 .txt',
+    'source.Scopus.purpose': 'Scopus 的 CSV 下载：带参考文献、被引次数与作者单位，机构网络与国家网络都能建；'
+    '中文界面导出的中文表头同样能读。',
     'source.Scopus.steps': '1. 在 Scopus 检索\n'
     '2. 勾选结果 →「下载」→ 格式选 CSV\n'
-    '3. 字段里勾上「参考文献」和「Affiliations（作者单位）」——'
-    '单位列决定机构网络与国家网络能不能建\n'
+    '3. 字段里务必勾上 References（参考文献）、Affiliations（作者单位）与 Cited by（施引文献）'
+    '——单位列决定机构网络与国家网络能不能建\n'
     '4. 上传 .csv——中文界面会得到 文献标题/来源出版物名称/施引文献/'
     '参考文献 等列名，本应用都认',
-    'source.Scopus.missing': '实测这份导出没有任何单位列 ⇒ 机构网络与国家网络出不来，补勾后重导',
-    'source.Dimensions.purpose': 'Dimensions 的 Publication CSV：被引次数、学科分类、基金与 MeSH 关键词都在，'
-    '一份常有数百条。',
+    'source.Scopus.missing': '实测这份导出没有学科分类与使用次数（usage）列 ⇒ 学科共现与按使用次数筛选不可用；'
+    '英文界面的列名会随版本变化（Citation count / Cited by、Article number / Art. No.），'
+    '两种写法都认',
+    'source.Dimensions.purpose': 'Dimensions 的 Publication 导出（Export full record → CSV）：被引次数、学科分类、'
+    '基金与 MeSH 主题词都在，一份常有数百条。',
     'source.Dimensions.steps': '1. 在 Dimensions 检索\n'
-    '2. 导出 Publication 数据 → CSV\n'
-    '3. 字段里尽量勾上 cited works / references（默认导出没有参考文献列）\n'
-    '4. 上传 .csv——它的第一行是版权横幅而不是表头，导入会先跳过横幅再读列名',
-    'source.Dimensions.missing': '实测这份导出没有 References 列 ⇒ 共被引、文献耦合、引文突现做不了',
+    '2. 勾选结果 → Export → 选「Export full record」，File format 保持「CSV - Comma separated」\n'
+    '3. 不要选「Export for bibliometric mapping」——那是给 VOSviewer/CiteSpace 的网络文件，'
+    '本应用读的是记录表；也不要用「Export for reference manager → BibTeX」，'
+    '那种文件能按 BibTeX 读，但被引次数、学科与基金都不在里面\n'
+    '4. 一次最多 500 条（All items - max 500 items per download），超出就分批导出或勾'
+    '「Send email when export is ready」——文件在 Export center 保留 30 天\n'
+    '5. 上传 .csv——它的第一行是版权横幅而不是表头，导入会先跳过横幅再读列名',
+    'source.Dimensions.missing': '实测这份导出没有 References 列 ⇒ 共被引、文献耦合、引文突现做不了\n'
+    '另两种导出（bibliometric mapping、reference manager）我们没有真实件，'
+    '所以不声明能读——要引文网络请补 WoS/Scopus/CSSCI',
+    'source.Lens.purpose': 'Lens 的学术文献（Scholarly Works）CSV 导出：作者、来源刊、年份、学科、MeSH、'
+    '关键词、摘要、DOI、被引次数与基金都在，一份可达上千条。',
+    'source.Lens.steps': '1. 在 Lens 检索，并把集合切到 Scholarly Works——不要停在 Patents，'
+    '专利导出会被点名拒绝\n'
+    '2. 勾选记录 → Export → CSV，字段里保留 Title / Author/s / Publication Year / Source Title / '
+    'Volume / Issue Number / Start Page / Keywords / MeSH Terms / Fields of Study / '
+    'Citing Works Count / Funding / DOI / Abstract\n'
+    '3. 上传 .csv（表头里必须有 Lens ID 与 Citing Works Count 或 Fields of Study，'
+    '否则识别不出这是学术集合）',
+    'source.Lens.missing': '实测这份导出的 References 列写的是 Lens 记录 ID（形如 002-341-399-981-03X），'
+    '不是引文文本 ⇒ 共被引与文献耦合做不了，需要引文网络请用 WoS/Scopus/CSSCI\n'
+    '没有任何作者单位或地址列 ⇒ 机构网络与国家网络做不了；'
+    'Source Country 是期刊所在国，本应用不会把它当成作者所在国\n'
+    '没有使用次数（usage）列 ⇒ 按使用次数筛选保持关闭',
     'source.PubMed.purpose': 'PubMed 免机构授权，适合生物医学文献的关键词/作者/机构/国家共现网络。',
     'source.PubMed.steps': '1. 在 PubMed 检索\n'
-    '2. 勾选记录 →「Save」→ 格式选 Text（Medline）\n'
-    '3. 上传 .txt 或 .nbib；CSV 摘要也能读，但它不含摘要与关键词，只适合当引用清单',
+    '2. 勾选记录 →「Save」→ Format 选「Text（Medline）」，Create File 后得到 .txt 或 .nbib\n'
+    '3. 上传它；Format 选「CSV」得到的摘要文件也读，但它不含摘要与关键词，只适合当引用清单',
     'source.PubMed.missing': '没有参考文献与被引次数 ⇒ 引文类分析不可用',
     'source.RIS.purpose': '通用引文交换格式，多数数据库与文献管理软件都能导出 .ris。',
-    'source.RIS.steps': '1. 在来源库或文献管理软件里选中记录\n2. 导出（Export）→ 选 RIS\n3. 上传 .ris',
+    'source.RIS.steps': '1. 在 Web of Science 里勾选记录 →「导出」→ 文件格式选「RIS File」\n'
+    '2. 或在 Zotero 里右键条目 →「导出条目」→ 格式选 RIS\n3. 上传 .ris',
     'source.RIS.missing': '实测 WoS 的 RIS 导出不含被引次数，单位里也不含国家 ⇒ 按被引筛选与国家网络不可用',
     'source.BibTeX.purpose': 'LaTeX 工作流的通用格式，Zotero 与 WoS 都能导出 .bib。',
-    'source.BibTeX.steps': '1. 选中记录 → 导出为 BibTeX（.bib）\n2. 上传 .bib',
+    'source.BibTeX.steps': '1. 在 Web of Science 的导出格式里选「BibTeX」，'
+    '或在 Zotero 里右键条目 →「导出条目」→ 格式选 BibTeX\n2. 上传 .bib',
     'source.BibTeX.missing': '字段随导出工具而异：缺作者的条目会被计入「跳过」并在控制台点名，不会被当成空记录',
     'source.EndNote.purpose': '知网的「EndNote 下载」按钮或 EndNote/Zotero 都能产出 .enw。',
     'source.EndNote.steps': '1. 知网导出页选「EndNote 下载」，或在文献管理软件里导出 .enw\n2. 上传 .enw',
@@ -2192,7 +2221,8 @@ _EN = {
     'source.CSSCI.purpose': 'The citation entry point for Chinese social science: the CSSCI export carries a '
     'reference list, so co-citation and coupling work; it carries no abstract and no DOI.',
     'source.CSSCI.steps': '1. Open the search page of the CSSCI centre at Nanjing University\n'
-    '2. Search by year, source or keyword and export the text (one record per 【来源篇名】)\n'
+    '2. Search by year, source or keyword and export the text, making sure the records include '
+    '【参考文献】and【年代卷期】(one record per 【来源篇名】)\n'
     '3. The real file pads its tags (【关 键 词】, 【期    刊】, 【基    金】), merges year, '
     'issue and pages into 【年代卷期】2021,(2):146-155, and writes affiliations as '
     '【机构名称】=[author]institute.department — the importer parses exactly that shape\n'
@@ -2203,44 +2233,77 @@ _EN = {
     'usage counts, research areas and countries, so co-citation, coupling and country '
     'collaboration networks all work.',
     'source.WoS.steps': '1. Search the Web of Science Core Collection\n'
-    '2. Select records → Export → choose "Plain Text" with "Full Record and Cited References"\n'
-    '3. Upload the .txt (Excel, Tab-delimited, RIS and BibTeX are read as well)',
-    'source.WoS.missing': 'Measured: the Excel export we were given has an empty Cited References column ⇒ with Excel '
-    'alone no citation network is possible; add a plain-text export',
-    'source.Scopus.purpose': "Scopus' CSV download: references and citation count are in it, and the Chinese "
-    'interface’s Chinese column headers are recognised too.',
+    '2. Select records → Export, and choose the fullest record option: '
+    '"Full Record and Cited References"\n'
+    '3. Prefer "Plain Text" as the file format — that is the .txt carrying the CR/TC/UT tags\n'
+    '4. Upload the .txt (Excel .xls/.xlsx, RIS and BibTeX are read too, exported with the '
+    'same record option)',
+    'source.WoS.missing': 'Measured: the Excel export we were given leaves Cited References, Author Keywords, '
+    'WoS Categories and Funding empty for every record ⇒ with Excel alone there is no citation '
+    'network, no keyword co-occurrence and no subject field; the same records exported as '
+    'plain text carry all of it, so prefer the .txt',
+    'source.Scopus.purpose': "Scopus' CSV download: references, times-cited and author affiliations are in it, so "
+    'institution and country networks build, and the Chinese interface’s Chinese column headers '
+    'are recognised too.',
     'source.Scopus.steps': '1. Search Scopus\n'
     '2. Select results → Download → format CSV\n'
-    '3. Tick "References" and "Affiliations" in the field list — the affiliation column '
+    '3. Tick References, Affiliations and Cited by in the field list — the affiliation column '
     'decides whether institution and country networks can be built at all\n'
     '4. Upload the .csv (a Chinese-interface file arrives with 文献标题/来源出版物名称/'
     '施引文献/参考文献 columns, which the reader also accepts)',
-    'source.Scopus.missing': 'Measured: this export has no affiliation column at all ⇒ institution and country '
-    'networks are empty until you re-export with Affiliations ticked',
-    'source.Dimensions.purpose': "Dimensions' Publication CSV: times-cited, subject fields, funding and MeSH terms "
-    'are present, and one export often holds hundreds of records.',
+    'source.Scopus.missing': 'Measured: this export carries no subject-category and no usage-count column ⇒ subject '
+    'co-occurrence and the usage filter stay off; the English column names move between versions '
+    '(Citation count / Cited by, Article number / Art. No.) and both spellings are accepted',
+    'source.Dimensions.purpose': "Dimensions' full-record CSV export: times-cited, subject fields, funding and MeSH "
+    'terms are present, and one export often holds hundreds of records.',
     'source.Dimensions.steps': '1. Search Dimensions\n'
-    '2. Export the Publication data as CSV\n'
-    '3. Tick cited works / references in the field list (the default export has none)\n'
-    '4. Upload the .csv — its first row is a copyright banner, not the header, and the '
+    '2. Select results → Export → choose "Export full record", and leave File format on '
+    '"CSV - Comma separated"\n'
+    '3. Do not choose "Export for bibliometric mapping" — that writes a VOSviewer/CiteSpace '
+    'network file, not the record table this app reads; and do not use "Export for reference '
+    'manager → BibTeX", which is readable as BibTeX but drops times-cited, subject fields and '
+    'funding\n'
+    '4. One download holds at most 500 items ("All items - max 500 items per download"), so '
+    'export in batches, or tick "Send email when export is ready" — the file stays in the '
+    'Export center for 30 days\n'
+    '5. Upload the .csv — its first row is a copyright banner, not the header, and the '
     'importer skips it before reading column names',
     'source.Dimensions.missing': 'Measured: this export carries no References column ⇒ co-citation, coupling and '
-    'citation bursts are unavailable',
+    'citation bursts are unavailable\n'
+    'We have no real file for the other two exports (bibliometric mapping, reference manager), '
+    'so we do not claim to read them — for a citation network add WoS/Scopus/CSSCI',
+    'source.Lens.purpose': "Lens' Scholarly Works CSV export: authors, source journal, year, subject fields, MeSH "
+    'terms, keywords, abstracts, DOIs, times-cited and funding are all in it, and one export can '
+    'hold over a thousand records.',
+    'source.Lens.steps': '1. Search Lens and switch the collection to Scholarly Works — do not stay on Patents, '
+    'whose export is refused by name\n'
+    '2. Select records → Export → CSV, keeping Title / Author/s / Publication Year / Source Title '
+    '/ Volume / Issue Number / Start Page / Keywords / MeSH Terms / Fields of Study / Citing Works '
+    'Count / Funding / DOI / Abstract in the field list\n'
+    '3. Upload the .csv (the header must contain Lens ID plus Citing Works Count or Fields of '
+    'Study, otherwise the file cannot be told apart from the patent collection)',
+    'source.Lens.missing': 'Measured: the References column of this export is a list of Lens record ids '
+    '(shaped like 002-341-399-981-03X), not citation text ⇒ co-citation and bibliographic coupling '
+    'are unavailable; use WoS/Scopus/CSSCI for a citation network\n'
+    'It has no affiliation or address column ⇒ institution and country networks cannot be built; '
+    'Source Country names the journal’s country, and this app will not present it as the authors’\n'
+    'No usage counts ⇒ the usage filter stays off',
     'source.PubMed.purpose': 'PubMed needs no institutional access and suits keyword, author, institution and '
     'country co-occurrence in biomedicine.',
     'source.PubMed.steps': '1. Search PubMed\n'
-    '2. Select records → Save → format Text (Medline)\n'
-    '3. Upload the .txt or .nbib; the CSV summary is read too, but it has no abstract and no '
+    '2. Select records → Save → Format "Text (Medline)", then Create File to get the .txt or .nbib\n'
+    '3. Upload it; the CSV summary is read too, but it has no abstract and no '
     'keywords, so it works as a citation list rather than an analysis source',
     'source.PubMed.missing': 'No references and no times-cited ⇒ citation analyses are unavailable',
     'source.RIS.purpose': 'A general citation-exchange format: most databases and reference managers export .ris.',
-    'source.RIS.steps': '1. Select records in the source database or reference manager\n'
-    '2. Export → RIS\n'
+    'source.RIS.steps': '1. In Web of Science: select records → Export → file format "RIS File"\n'
+    '2. Or in Zotero: right-click items → Export Items → format RIS\n'
     '3. Upload the .ris',
     'source.RIS.missing': 'Measured: WoS’ RIS export carries no times-cited and no country in the affiliation ⇒ '
     'count filtering and the country network are unavailable',
     'source.BibTeX.purpose': 'The format LaTeX workflows already use; Zotero and Web of Science both export .bib.',
-    'source.BibTeX.steps': '1. Select records → export as BibTeX (.bib)\n2. Upload the .bib',
+    'source.BibTeX.steps': '1. Choose "BibTeX" in Web of Science’s export format list, or in Zotero: '
+    'right-click items → Export Items → format BibTeX\n2. Upload the .bib',
     'source.BibTeX.missing': 'Fields vary by tool: a record without an author is counted in the skipped total and '
     'named in the console, never stored as an empty row',
     'source.EndNote.purpose': "The .enw that CNKI's EndNote button produces, or that EndNote/Zotero export.",

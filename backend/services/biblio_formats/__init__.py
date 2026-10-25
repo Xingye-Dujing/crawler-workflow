@@ -5,7 +5,18 @@ Chinese path); this package owns the international formats. Adding a format is
 one module exporting a :class:`FormatSpec`, plus one tuple entry below.
 """
 
-from services.biblio_formats import bibtex, dimensions, endnote, noteexpress, pubmed, ris, scopus, unsupported, wos
+from services.biblio_formats import (
+    bibtex,
+    dimensions,
+    endnote,
+    lens,
+    noteexpress,
+    pubmed,
+    ris,
+    scopus,
+    unsupported,
+    wos,
+)
 from services.biblio_formats.base import CAPABILITIES, FormatSpec
 
 FORMAT_SPECS: tuple[FormatSpec, ...] = (
@@ -17,6 +28,7 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
     noteexpress.SPEC,
     scopus.SPEC,
     dimensions.SPEC,
+    lens.SPEC,
 )
 
 FORMAT_BY_ID = {spec.id: spec for spec in FORMAT_SPECS}

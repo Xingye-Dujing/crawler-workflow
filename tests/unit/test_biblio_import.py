@@ -16,8 +16,9 @@ SAMPLES = Path(__file__).resolve().parents[2] / 'samples'
 #: One entry per fixture: (file, format id, record count, carries a reference list).
 #: The counts and dialects come from the real exports in ``samples/`` (see
 #: ``docs/analysis.md``); several formats genuinely have no reference list — CNKI, Dimensions,
-#: EndNote-as-CNKI-exports and PubMed among them — so `has_refs` is asserted per case instead of
-#: being demanded of every one, which would push a fixture to invent a field its vendor omits.
+#: EndNote-as-CNKI-exports, PubMed and Lens among them (Lens writes Lens record ids there, not
+#: citation text) — so `has_refs` is asserted per case instead of being demanded of every one,
+#: which would push a fixture to invent a field its vendor omits.
 FORMAT_CASES = [
     ('biblio_wos_demo.txt', 'WoS', 3, True),
     ('biblio_wos_table_demo.csv', 'WoS', 3, True),
@@ -29,6 +30,7 @@ FORMAT_CASES = [
     ('biblio_bibtex_demo.bib', 'BibTeX', 2, True),
     ('biblio_endnote_demo.enw', 'EndNote', 2, False),
     ('biblio_noteexpress_demo.net', 'NoteExpress', 2, False),
+    ('biblio_lens_demo.csv', 'Lens', 4, False),
 ]
 
 
@@ -156,6 +158,39 @@ class TestInternationalFormats:
         message = str(exc.value)
         assert '专利' in message or 'PATENT' in message.upper(), message
         assert 'Jurisdiction' in message, f'the refusal must name the evidence: {message}'
+
+    def test_a_lens_export_lands_what_its_own_columns_carry_and_nothing_more(self):
+        """The scholarly Lens download is read for its fields, and its two absences are the point."""
+        first = parse_bytes(_sample('biblio_lens_demo.csv'), 'lens-export.csv')['rows'][0]
+        assert first['题名'].startswith('Digital governance')
+        assert first['作者'] == 'Zhang, Yan;Li, Xin'
+        assert first['来源期刊'] == 'Government Information Quarterly'
+        assert first['年份'] == 2021
+        assert first['卷'] == '38' and first['期'] == '3'
+        assert first['页码'] == '101-119'
+        assert '数字' not in first['关键词']
+        assert first['关键词'].startswith('digital governance;city service portals')
+        assert 'Government Information Systems' in first['关键词']
+        assert first['引用次数'] == 17
+        assert 'National Science Foundation' in first['基金']
+        assert first['学科'].startswith('Public administration')
+        assert first['文献类型'] == 'journal article'
+        # References are Lens ids, and Source Country is the journal's, not the authors':
+        # both columns are absent rather than filled with something that means otherwise.
+        assert first['参考文献'] == ''
+        assert '国家' not in first
+
+    def test_scopus_column_names_move_between_versions_and_all_are_read(self):
+        """Measured: the same download has shipped as Citation count/Cited by and Article
+        number/Art. No. — a reader that remembered only one spelling loses the count."""
+        rows = parse_bytes(_sample('biblio_scopus_demo.csv'), 'scopus.csv')['rows']
+        assert [row['引用次数'] for row in rows] == [12, 7, 21]
+        assert rows[0]['页码'] == '100-120'
+        # An article-number row has no page range: the number is its 页码.
+        assert rows[1]['页码'] == '101500'
+        assert 'European Research Council' in rows[1]['基金']
+        assert 'Tsinghua University' in rows[0]['作者单位']
+        assert 'China' in rows[0]['国家']
 
     def test_wos_keeps_author_commas_and_each_cited_reference_separate(self):
         parsed = parse_bytes(_sample('biblio_wos_demo.txt'), 'wos.txt')

@@ -129,20 +129,28 @@ class TestBibliographicUpload:
         assert preview['参考文献'].startswith('1.')
 
     @pytest.mark.parametrize(
-        ('name', 'fmt', 'rows', 'capability'),
+        ('name', 'fmt', 'rows', 'capability', 'absent'),
         [
-            ('biblio_scopus_demo.csv', 'Scopus', 3, 'abstract'),
-            ('biblio_dimensions_demo.csv', 'Dimensions', 2, 'abstract'),
-            ('biblio_pubmed_demo.txt', 'PubMed', 2, 'abstract'),
-            ('biblio_pubmed_csv_demo.csv', 'PubMed', 3, 'doi'),
-            ('biblio_ris_demo.ris', 'RIS', 2, 'abstract'),
-            ('biblio_bibtex_demo.bib', 'BibTeX', 2, 'abstract'),
-            ('biblio_endnote_demo.enw', 'EndNote', 2, 'abstract'),
-            ('biblio_noteexpress_demo.net', 'NoteExpress', 2, 'abstract'),
-            ('biblio_wos_table_demo.csv', 'WoS', 3, 'abstract'),
+            ('biblio_scopus_demo.csv', 'Scopus', 3, 'abstract', 'usage'),
+            ('biblio_dimensions_demo.csv', 'Dimensions', 2, 'abstract', 'refs'),
+            ('biblio_pubmed_demo.txt', 'PubMed', 2, 'abstract', 'refs'),
+            ('biblio_pubmed_csv_demo.csv', 'PubMed', 3, 'doi', 'abstract'),
+            ('biblio_ris_demo.ris', 'RIS', 2, 'abstract', 'tc'),
+            ('biblio_bibtex_demo.bib', 'BibTeX', 2, 'abstract', 'country'),
+            ('biblio_endnote_demo.enw', 'EndNote', 2, 'abstract', 'refs'),
+            ('biblio_noteexpress_demo.net', 'NoteExpress', 2, 'abstract', 'refs'),
+            ('biblio_wos_table_demo.csv', 'WoS', 3, 'abstract', ''),
+            ('biblio_lens_demo.csv', 'Lens', 4, 'tc', 'country'),
         ],
     )
-    def test_international_exports_upload_as_records(self, client, name, fmt, rows, capability):
+    def test_international_exports_upload_as_records(self, client, name, fmt, rows, capability, absent):
+        """The capability map is read off the file, and the empty half of it is the guard.
+
+        ``docs/analysis.md`` promises a user which analyses each export can answer; every
+        ``absent`` entry below is a column that file shape genuinely does not write (measured on
+        the vendor exports in ``samples/``). A fixture that started carrying one would make that
+        promise and the parser disagree, and this is where it surfaces.
+        """
         body = _upload(client, name)
         assert body['biblio_format'] == fmt
         assert body['is_txt'] is False
@@ -151,6 +159,21 @@ class TestBibliographicUpload:
         # Which capability is asserted per case, because a real export that carries no
         # abstract must not be reported as if it did: the PubMed CSV summary is that file.
         assert body['biblio_capabilities'][capability] is True
+        if absent:
+            assert body['biblio_capabilities'][absent] is False
+
+    def test_a_lens_scholarly_export_reports_the_two_columns_it_does_not_carry(self, client):
+        """Its References column is Lens record ids and it has no affiliation column.
+
+        The upload response's capability map is what the biblio node refuses against, so a
+        Lens-shaped ``true`` here would promise a co-citation network the file cannot build.
+        """
+        body = _upload(client, 'biblio_lens_demo.csv')
+        assert body['biblio_format'] == 'Lens'
+        assert body['biblio_capabilities']['refs'] is False
+        assert body['biblio_capabilities']['country'] is False
+        assert '国家' not in body['columns']
+        assert body['biblio_capabilities']['tc'] is True
 
     def test_a_lens_patent_export_is_refused_with_a_reason(self, client):
         response = client.post(

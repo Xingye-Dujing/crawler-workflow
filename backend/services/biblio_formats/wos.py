@@ -143,13 +143,17 @@ def parse_tagged(text: str) -> tuple[list[dict], int]:
     return rows, skipped
 
 
-# ─── Table export (Excel / Tab delimited) ───────────────────────
+# ─── Table export (Excel, and a re-saved CSV of the same columns) ────────
 #
-# WoS also offers "Excel" and "Tab delimited" downloads whose column names are the long
-# English labels below — a different document from the tagged text, with the same content
-# and one extra thing the text does not carry: `180 Day Usage Count` / `Since 2013 Usage
-# Count` arrive as their own columns. Reading only the tagged file would refuse the export
-# most users click, since Excel is the button with the shortest name.
+# WoS' "Excel" download uses the long English labels below — a different document from the
+# tagged text, with the same content and extra things the text does not carry: `180 Day Usage
+# Count` / `Since 2013 Usage Count` and `Affiliations` arrive as their own columns. Reading only
+# the tagged file would refuse the export most users click, since Excel is the button with the
+# shortest name. The measured Excel download (thirty records) leaves Cited References, Author
+# Keywords, WoS Categories and Funding empty for every row, so a table-only upload cannot answer
+# for those networks; the plain-text download of the same records does. A Tab-delimited download
+# is not claimed anywhere: no such file has been measured, and its separators are not what the
+# CSV reader here is proved on.
 
 
 def detect_frame(frame) -> bool:

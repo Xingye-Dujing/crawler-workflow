@@ -4,7 +4,8 @@ These are not formats, so they are not in :data:`services.biblio_formats.FORMAT_
 accepting a file here would produce a table of the right shape and the wrong meaning. The
 evidence is a real Lens export whose columns are ``Jurisdiction``, ``Kind``,
 ``Application Number``, ``Inventors``, ``Applicants``, ``Owners`` and ``CPC Classifications``
-— the patent collection, sharing ``Title`` and ``Lens ID`` with the scholarly one.
+— the patent collection, sharing ``Title`` and ``Lens ID`` with the scholarly one that
+:mod:`services.biblio_formats.lens` reads.
 """
 
 from i18n import t
@@ -28,8 +29,9 @@ LENS_PATENT_MARKERS = frozenset(
 def lens_patents(value: str) -> str:
     """Name a Lens patent export, or return ``''`` when this is not one.
 
-    A refusal has to be certain: the scholarly collection is a file shape nobody on this
-    project has exported, so the only claim made here is about the patent columns.
+    The scholarly collection has its own reader now, so this is a check on the columns that
+    only the patent download writes — and it stays a refusal rather than a mapping because a
+    patent record's ``Inventors``/``Owners`` are not the authors of a publication.
     """
     names = {str(name or '').strip().lower() for name in header_of(str(value or ''))}
     if not {'lens id', 'title'} <= names:

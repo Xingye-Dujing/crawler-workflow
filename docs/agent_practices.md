@@ -728,11 +728,12 @@ message.
   measured by running the product's own readers over the files in `samples/`, after answers I had
   written from vendor documentation were proved wrong three times: PubMed has no XML download in the
   user's reach (the XML branch, its `.xml` upload slot and two i18n keys were deleted), the one
-  Lens file we were given is the **patent** collection (so Lens has no readable format here, only a
-  refusal by name), and the "Scopus/Dimensions column names" I had coded were the English UI's while
+  Lens file we were given is the **patent** collection (refused by name; its scholarly
+  collection only became a reader later, when a real Scholarly Works export arrived — see the
+  two-collections bullet below), and the "Scopus/Dimensions column names" I had coded were the English UI's while
   the user's Scopus CSV arrives with `文献标题/年份/来源出版物名称/施引文献/参考文献`. A format nobody
-  handed us a file for is not a format the app may claim, in code, in a fixture, in a doc or in the
-  help panel.
+  handed us a file for is not a format the app may claim, in code, in a fixture, in a doc or in
+  the help panel.
 - **Measured, then fixed:** CSSCI writes 【关 键 词】/【期    刊】/【基    金】 (alignment spaces inside
   the tag), names the author list 来源作者, merges year+issue+pages into 【年代卷期】`2021,(2):146-155`,
   prefixes each affiliation with `[作者]`, and numbers its reference list `1.` — not `[1]`, which the
@@ -755,6 +756,37 @@ message.
   read. `services/biblio_formats/unsupported.py` holds those refusals outside `FORMAT_SPECS` (a
   refusal is not a reader), and `biblio_import.parse_text` raises its sentence before the route falls
   back — a silently accepted patent export draws applicants and owners as authors and never says so.
+- **One vendor, two collections, overlapping column names: the signature must require the columns
+  that differ.** Lens' patent download shares `Lens ID` and `Title` with its Scholarly Works
+  download, so a scholarly reader keyed on those two would claim the patent file. `lens.py`
+  therefore requires `Citing Works Count` **or** `Fields of Study` — columns only the scholarly
+  collection writes — and `unsupported.lens_patents` still refuses the patent shape by name. Both
+  directions are tested, because either half failing silently produces a well-formed wrong figure.
+- **A column existing is not the same as a column being usable.** Lens writes its `References`
+  cell as a list of Lens record ids (`002-341-399-981-03X; …`): of the 24331 ids in the file we
+  measured, 1002 name a record the same export contains. Reading that as citation text yields a
+  co-citation network whose nodes are almost all opaque numbers, so `refs` is not declared and the
+  column is not read. The same test applies to `Source Country`, which is where the *journal* sits
+  and not where the authors do: filling 国家 with it would answer a different question than the
+  institution and country networks ask.
+- **Vendors rename their own columns between versions, so a measured file adds candidates and never
+  replaces them.** The Scopus download has shipped the times-cited column as both `Citation count`
+  and `Cited by`, the article number as both `Article number` and `Art. No.`, and funding as both
+  `Funding Text 1` and `Funding Texts`. Each rename silently zeroed one output column while
+  detection still matched — the file imported, the table just lost 引用次数/页码/基金, which is the
+  kind of failure no test fails for unless the fixture carries the new spelling.
+- **Re-measure after the user re-exports; the help text is a claim about a file, not about a site.**
+  The same filenames in `samples/` changed shape twice during this round (Scopus went from the
+  Chinese-UI header to an English one *with* `Affiliations`; the WoS Excel re-export still writes an
+  empty `Cited References`/`Author Keywords`/`WoS Categories`/`Funding`), and every one of those
+  changes makes a previously-true `source.<id>.missing` sentence false. `scratchpad/export_measure.py`
+  runs all of `samples/` through the product's own readers and prints the filled columns; run it
+  before touching the guide.
+- **The guide has to name the click, not the capability.** "Export the publication data as CSV" is
+  not actionable when the vendor offers three CSVs: Dimensions writes a full-record CSV, a
+  VOSviewer/CiteSpace **network** file and a reference-manager BibTeX, and only the first is what
+  this app reads (with its 500-items-per-download ceiling and 30-day Export center). Each source's
+  steps now say which option to pick and which to avoid.
 - **The lint hook deletes an import that is not used yet — three times this round.** Adding
   `import numpy as np` at module level while the last local twin still existed, or importing a
   helper a call site added one edit later, gets the new line removed by the PostToolUse

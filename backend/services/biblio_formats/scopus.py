@@ -1,10 +1,12 @@
 """Scopus CSV export.
 
 The download follows the browser's language: the same "Download" button writes
-``文献标题/年份/来源出版物名称/施引文献/参考文献`` for a Chinese UI and ``Title/Year/Source
-title/Citation count/References`` for an English one. Both spellings are candidates for
-every field, because a signature that only knows the English names refuses the real file
-the user actually has.
+``文献标题/年份/来源出版物名称/施引文献/参考文献`` for a Chinese UI and ``Title/Source
+title/Cited by/References`` for an English one. Both spellings are candidates for every
+field, because a signature that only knows one refuses the real file the user has. The
+English names are not stable either — the count column has shipped as both ``Citation
+count`` and ``Cited by``, and the article number as both ``Article number`` and
+``Art. No.`` — so a measured file adds candidates rather than replacing them.
 """
 
 import re
@@ -66,7 +68,7 @@ def parse_frame(frame) -> tuple[list[dict], int]:
         # number where the pages would be, and 论文编号 is that number.
         page_end = frame_cell(source, frame, 'Page end', '结束页码')
         if not page_start:
-            page_start = frame_cell(source, frame, 'Article number', '论文编号')
+            page_start = frame_cell(source, frame, 'Article number', 'Art. No.', '论文编号')
         keywords = ';'.join(
             part
             for part in (
@@ -95,12 +97,12 @@ def parse_frame(frame) -> tuple[list[dict], int]:
                 doi=frame_cell(source, frame, 'DOI'),
                 fmt=ID,
                 country=countries(frame_cell(source, frame, 'Affiliations', 'Authors with affiliations', '作者单位')),
-                tc=frame_cell(source, frame, 'Citation count', '施引文献'),
+                tc=frame_cell(source, frame, 'Citation count', 'Cited by', '施引文献'),
                 funding=';'.join(
                     part
                     for part in (
                         frame_cell(source, frame, 'Funding Details', '资助详情'),
-                        frame_cell(source, frame, 'Funding Text 1'),
+                        frame_cell(source, frame, 'Funding Texts', 'Funding Text 1'),
                     )
                     if part
                 ),

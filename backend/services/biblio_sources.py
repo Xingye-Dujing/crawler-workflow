@@ -10,8 +10,9 @@ vendor marketing pages or from what a format specification says *could* appear.
 Consequences worth stating:
 
 * No XML reader for PubMed exists here, because nobody has a PubMed XML export to test it.
-* Lens is not an importable format at all: the one Lens file we were given is its patent
-  collection, and it is refused by name (:mod:`services.biblio_formats.unsupported`).
+* Lens is readable in its scholarly-works shape (:mod:`services.biblio_formats.lens`) and
+  refused by name in its patent shape (:mod:`services.biblio_formats.unsupported`); the two
+  downloads share ``Lens ID`` and ``Title``, so only the columns that differ decide.
 * ``extensions`` and ``capabilities`` are read from the format registry, never restated, so
   the panel cannot disagree with the parser about what a file carries.
 """
@@ -32,7 +33,8 @@ SITES = {
     CSSCI: 'https://cssci.nju.edu.cn/',
     'WoS': 'https://www.webofscience.com/',
     'Scopus': 'https://www.scopus.com/',
-    'Dimensions': 'https://www.dimensions.ai/',
+    'Dimensions': 'https://app.dimensions.ai/',
+    'Lens': 'https://www.lens.org/',
     'PubMed': 'https://pubmed.ncbi.nlm.nih.gov/',
     'RIS': 'https://www.zotero.org/',
     'BibTeX': 'https://www.zotero.org/',
@@ -48,6 +50,7 @@ GROUPS = {
     'WoS': 'library',
     'Scopus': 'library',
     'Dimensions': 'library',
+    'Lens': 'library',
     'PubMed': 'library',
     'RIS': 'exchange',
     'BibTeX': 'exchange',
