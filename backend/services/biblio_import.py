@@ -57,9 +57,30 @@ _CNKI_TAG = re.compile(r'^([A-Z][A-Z0-9])(?:\s+(.*))?$')
 _CSSCI_TAG = re.compile(r'^【([^】]{1,20})】\s*(.*)$')
 _CSSCI_TITLE_TAG = re.compile(r'(?m)^\s*【(?:来源篇名|篇名|题名)】')
 _YEAR = re.compile(r'(?:19|20)\d{2}')
-_REF_START = re.compile(r'^\s*\[\d+\]')
+_REF_START = re.compile(r'^\s*(?:\[\d+\]|\d+[\.、\]])')
 _LIST_SPLIT = re.compile(r'[;；,，、]+')
 _AFF_SPLIT = re.compile(r'[;；]+')
+#: CSSCI separates authors, keywords and institutions with `/`, not `;`
+#: (`曾美红/李霞/何玉雪`, `关系自我扩展/恋爱关系稳定性`). Read with the CNKI separator
+#: the whole author list becomes one node and one keyword becomes one term, so the
+#: network would be wrong without ever raising an error.
+_CSSCI_SPLIT = re.compile(r'[/;｜|，,、]+')
+#: 【机构名称】prefixes every affiliation with its author: `[张静]黄淮学院.应用技术大学研究中心`.
+_CSSCI_AUTHOR_TAG = re.compile(r'\[[^\]]*\]')
+#: CSSCI pads its tag names to line the values up in a column, so the real file
+#: writes 关 键 词 / 期    刊 / 基    金 (U+3000 or ASCII spaces). Measured on the
+#: centre's own download: 13 tags, none of them spelled the way a human types them.
+_TAG_SPACE = re.compile(r'[ \t　]+')
+#: 【年代卷期】2021,(2):146-155 carries year, issue and pages in one field.
+#: All 18 forms in the real download: `2000,(5):22-25`, `2007,23(4):74-77`,
+#: `2013,21(3):508-511,378` (volume optional, pages may be a comma list), plus
+#: full-width brackets and a missing page range in `2003,(6):67`.
+_CSSCI_ISSUE = re.compile(
+    r'(?P<year>(?:19|20)\d{2})'
+    r'\s*[,,]?\s*(?:(?P<volume>\d{1,4})\s*[,,]?)?'
+    r'[（(]\s*(?P<issue>[^）)】]{1,12}?)\s*[）)]'
+    r'(?:\s*[:：]\s*(?P<pages>[\dA-Za-z,，\-—–\./\s]+))?'
+)
 
 CNKI = 'CNKI'
 CSSCI = 'CSSCI'
@@ -94,7 +115,7 @@ def detect_format(text: str) -> str | None:
     ``【`` or the word ``RT`` must keep the old single-column upload path;
     only the tag grammar that a real export uses switches to a record table.
     """
-    if _CSSCI_TITLE_TAG.search(text) and re.search(r'【年份】|【作者】|【关键词】', text):
+    if _CSSCI_TITLE_TAG.search(text) and _cssci_tags(text) & _CSSCI_RECORD_TAGS:
         return CSSCI
     if re.search(r'(?m)^RT\s+(?:Journal Article|Book|Conference|Dissertation|Report|Other)\b', text):
         # The RT marker alone is enough to take the record path: an export that
@@ -105,6 +126,26 @@ def detect_format(text: str) -> str | None:
     from services import biblio_formats
 
     return biblio_formats.detect_format(text)
+
+
+def _normalize_tag(name: str) -> str:
+    """Fold the padding CSSCI puts inside its tag names (``关 键 词`` -> ``关键词``)."""
+    return _TAG_SPACE.sub('', str(name or '')).strip()
+
+
+#: The tags that prove this is a CSSCI record table rather than a sentence that
+#: happens to contain 【. Measured from the centre's own download, which writes
+#: 年代卷期 / 来源作者 / 关 键 词 and never the 【年份】【作者】【关键词】 the
+#: synthetic fixture used — a gate on those three names silently refused every real file.
+_CSSCI_RECORD_TAGS = frozenset({'年代卷期', '来源作者', '第一作者', '期刊', '关键词', '机构名称', '年份', '作者'})
+
+
+def _cssci_tags(text: str) -> frozenset[str]:
+    """Every bracket tag in the file, spacing folded. Line by line, because
+    ``_CSSCI_TAG`` is anchored and is applied to a single line everywhere else."""
+    return frozenset(
+        _normalize_tag(match.group(1)) for line in _lines(text) if (match := _CSSCI_TAG.match(line.strip()))
+    )
 
 
 # ─── Shared record helpers ──────────────────────────────────────
@@ -346,7 +387,7 @@ def _cssci_fields(chunk: str) -> dict[str, list[str]]:
         line = raw.strip()
         match = _CSSCI_TAG.match(line)
         if match:
-            tag, value = match.group(1).strip(), match.group(2).strip()
+            tag, value = _normalize_tag(match.group(1)), match.group(2).strip()
             fields.setdefault(tag, []).append(value)
             current = tag
             continue
@@ -361,40 +402,78 @@ def _cssci_fields(chunk: str) -> dict[str, list[str]]:
     return fields
 
 
+def _cssci_bibliographic(fields: dict) -> tuple[str, str, str, str]:
+    """Split year / volume / issue / pages out of 【年代卷期】.
+
+    The centre writes ``2021,(2):146-155`` — one field for what CNKI splits across
+    年/卷/期/页码. Returning blanks (rather than putting the raw string into 年份)
+    keeps 年份 a number the slicer can group on, and a value it cannot read stays
+    empty so the import warning names it.
+    """
+    raw = _first(fields, '年代卷期', '年卷期', '卷期页')
+    match = _CSSCI_ISSUE.search(raw)
+    if not match:
+        return _year(raw), '', '', ''
+    pages = (match.group('pages') or '').strip('.,，。')
+    year = _year(match.group('year'))
+    volume = (match.group('volume') or '').strip()
+    issue = (match.group('issue') or '').strip()
+    return year, volume, issue, pages
+
+
 def _cssci_value(fields: dict, *tags) -> str:
     return _first(fields, *tags)
 
 
 def parse_cssci(text: str) -> tuple[list[dict], int]:
+    """Read the CSSCI centre's bracket-tag download.
+
+    Tag names below are the ones the real file carries (see ``samples/CSSCI.txt``):
+    来源作者 for the author list, 机构名称 for affiliations, 年代卷期 for the issue
+    block and 关 键 词 padded inside the brackets. The old names (作者/年份/关键词) stay
+    as candidates so a re-saved or older dialect still reads.
+    """
     rows = []
     skipped = 0
     for chunk in _cssci_chunks(text):
         fields = _cssci_fields(chunk)
         title = _cssci_value(fields, '来源篇名', '篇名', '题名')
-        authors = _cssci_value(fields, '作者')
+        if not fields:
+            # The copyright banner above the first record is not a dropped record.
+            continue
         if not title:
             skipped += 1
             continue
         refs = _refs_from_lines(fields.get('参考文献') or [])
+        year, volume, issue, pages = _cssci_bibliographic(fields)
+        authors = _join_list(_cssci_value(fields, '来源作者', '第一作者', '作者'), _CSSCI_SPLIT)
+        affiliations = _join_list(
+            _CSSCI_AUTHOR_TAG.sub('', _cssci_value(fields, '机构名称', '第一机构', '作者单位', '机构')),
+            _CSSCI_SPLIT,
+        )
+        keywords = _join_list(_cssci_value(fields, '关键词'), _CSSCI_SPLIT)
         rows.append(
             _row(
                 title=title,
                 authors=authors,
-                affiliations=_cssci_value(fields, '作者单位', '机构'),
-                journal=_cssci_value(fields, '刊名', '来源期刊', '期刊'),
-                year=_year(_cssci_value(fields, '年份')),
-                volume=_cssci_value(fields, '卷号', '卷'),
-                issue=_cssci_value(fields, '期号', '期'),
-                pages=_cssci_value(fields, '页码'),
-                keywords=_cssci_value(fields, '关键词'),
+                affiliations=affiliations,
+                journal=_cssci_value(fields, '期刊', '刊名', '来源期刊'),
+                year=year or _year(_cssci_value(fields, '年份')),
+                volume=volume or _cssci_value(fields, '卷号', '卷'),
+                issue=issue or _cssci_value(fields, '期号', '期'),
+                pages=pages or _cssci_value(fields, '页码'),
+                keywords=keywords,
                 abstract=_cssci_value(fields, '摘要'),
                 refs=refs,
                 doi=_cssci_value(fields, 'DOI'),
                 fmt=CSSCI,
                 country=_cssci_value(fields, '国家', '国别'),
-                category=_cssci_value(fields, '学科', '学科分类'),
+                # 中图类号 is a Chinese Library Classification code (B844.2), which is a
+                # subject taxonomy — but it is a code, not a discipline name, and the
+                # 学科 network reads whatever the file really offered.
+                category=_cssci_value(fields, '学科', '学科分类', '中图类号'),
                 tc=_cssci_value(fields, '引用次数', '被引次数'),
-                funding=_cssci_value(fields, '基金', '基金项目'),
+                funding=_join_list(_cssci_value(fields, '基金', '基金类别', '基金项目'), _CSSCI_SPLIT),
                 doctype=_cssci_value(fields, '文献类型', '文章类型'),
                 language=_cssci_value(fields, '语言'),
             )
@@ -465,9 +544,20 @@ def _finalize(rows: list[dict], fmt: str, skipped: int = 0) -> dict:
 
 
 def parse_text(text: str, fmt: str | None = None) -> dict | None:
-    """Parse a decoded export; ``None`` means "not a bibliographic file"."""
+    """Parse a decoded export; ``None`` means "not a bibliographic file".
+
+    A file that no format recognises is not automatically an ordinary table: a vendor
+    export can share column names with a format we read (Lens' patent download has a
+    ``Title`` and a ``Lens ID``). Those are refused by name, because storing them as a
+    plain table is how a wrong graph gets drawn without a single error message.
+    """
     fmt = fmt or detect_format(text)
     if fmt is None:
+        from services import biblio_formats
+
+        refusal = biblio_formats.detect_refusal(text)
+        if refusal:
+            raise ValueError(refusal)
         return None
     if fmt == CNKI:
         rows, skipped = parse_cnki(text)

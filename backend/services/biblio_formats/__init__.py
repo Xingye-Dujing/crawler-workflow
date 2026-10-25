@@ -5,7 +5,7 @@ Chinese path); this package owns the international formats. Adding a format is
 one module exporting a :class:`FormatSpec`, plus one tuple entry below.
 """
 
-from services.biblio_formats import bibtex, dimensions, endnote, lens, pubmed, ris, scopus, wos
+from services.biblio_formats import bibtex, dimensions, endnote, noteexpress, pubmed, ris, scopus, unsupported, wos
 from services.biblio_formats.base import CAPABILITIES, FormatSpec
 
 FORMAT_SPECS: tuple[FormatSpec, ...] = (
@@ -14,9 +14,9 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
     ris.SPEC,
     bibtex.SPEC,
     endnote.SPEC,
+    noteexpress.SPEC,
     scopus.SPEC,
     dimensions.SPEC,
-    lens.SPEC,
 )
 
 FORMAT_BY_ID = {spec.id: spec for spec in FORMAT_SPECS}
@@ -62,6 +62,24 @@ def parse_frame(frame, fmt: str) -> tuple[list[dict], int]:
     return spec.parse_frame(frame)
 
 
+def detect_refusal(text: str) -> str:
+    """A sentence naming why this file is a bibliographic export we cannot read, or ``''``.
+
+    Called when detection found nothing, before the upload route stores the file as an
+    ordinary table: a vendor can sell two different collections to one file type, and
+    silently accepting the unreadable one is how a well-formed, meaningless graph appears.
+    See :mod:`services.biblio_formats.unsupported`.
+    """
+    for (checker,) in unsupported.REFUSALS:
+        try:
+            note = str(checker(str(text or '')) or '')
+        except Exception:
+            continue
+        if note:
+            return note
+    return ''
+
+
 def capabilities(fmt: str) -> dict[str, bool]:
     spec = FORMAT_BY_ID.get(fmt)
     known = spec.capabilities if spec else frozenset()
@@ -86,6 +104,7 @@ __all__ = [
     'capabilities',
     'detect_format',
     'detect_frame',
+    'detect_refusal',
     'format_ids',
     'parse_format',
     'parse_frame',

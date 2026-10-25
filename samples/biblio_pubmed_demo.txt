@@ -1,0 +1,59 @@
+PMID- 38743863
+OWN - NLM
+STAT- MEDLINE
+DCOM- 20210113
+LR  - 20240806
+IS  - 1550-7416 (Electronic)
+IS  - 0360-4020 (Linking)
+VI  - 23
+IP  - 4
+DP  - 2021 Apr
+TI  - Synthetic study 1: digital governance in cities 1
+PG  - 100-112
+LID - 10.5555/demo.1 [doi]
+AB  - A synthetic Medline abstract written in the shape the site's Text download uses: the
+     tag column is four characters wide and a wrapped line is indented without a tag of its
+     own, which the importer must join back instead of dropping.
+FAU - Zhang, Ming
+AU  - Zhang M
+FAU - Zhou, Min
+AU  - Zhou M
+AD  - School of Public Policy and Management, Tsinghua University, Beijing, China
+LA  - eng
+PT  - Journal Article
+DEP - 20210318
+PL  - United States
+TA  - Public Adm Rev
+JT  - Public Administration Review
+JID - 0360402
+MH  - Digital Governance
+MH  - Public Participation
+OT  - collaborative governance
+OTO - NOTNLM
+SO  - Public Adm Rev. 2021 Apr;23(4):100-112. doi: 10.5555/demo.1.
+
+PMID- 38743864
+OWN - NLM
+STAT- MEDLINE
+DCOM- 20220201
+LR  - 20240806
+IS  - 0740-624X (Linking)
+VI  - 39
+IP  - 2
+DP  - 2022 Feb
+TI  - Synthetic study 2: algorithmic accountability in cities 2
+LID - 101500 [pii]
+LID - 10.5555/demo.2 [doi]
+AB  - A second synthetic Medline record: this one carries an article number instead of a page
+     range, which is how the export marks journals with no pagination.
+FAU - Chen, Hui
+AU  - Chen H
+AD  - School of Management, Zhejiang University, Hangzhou, China
+LA  - eng
+PT  - Journal Article
+PL  - United States
+TA  - Gov Inf Q
+JT  - Government Information Quarterly
+JID - 8701336
+MH  - Algorithms
+SO  - Gov Inf Q. 2022 Feb;39(2):101500. doi: 10.5555/demo.2.

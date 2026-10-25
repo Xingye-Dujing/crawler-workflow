@@ -13,16 +13,22 @@ pytestmark = pytest.mark.unit
 
 SAMPLES = Path(__file__).resolve().parents[2] / 'samples'
 
-#: One sample per registered international format: (file, format id, record count).
+#: One entry per fixture: (file, format id, record count, carries a reference list).
+#: The counts and dialects come from the real exports in ``samples/`` (see
+#: ``docs/analysis.md``); several formats genuinely have no reference list — CNKI, Dimensions,
+#: EndNote-as-CNKI-exports and PubMed among them — so `has_refs` is asserted per case instead of
+#: being demanded of every one, which would push a fixture to invent a field its vendor omits.
 FORMAT_CASES = [
-    ('biblio_wos_demo.txt', 'WoS', 3),
-    ('biblio_scopus_demo.csv', 'Scopus', 3),
-    ('biblio_dimensions_demo.csv', 'Dimensions', 2),
-    ('biblio_lens_demo.csv', 'Lens', 2),
-    ('biblio_pubmed_demo.xml', 'PubMed', 2),
-    ('biblio_ris_demo.ris', 'RIS', 2),
-    ('biblio_bibtex_demo.bib', 'BibTeX', 2),
-    ('biblio_endnote_demo.enw', 'EndNote', 2),
+    ('biblio_wos_demo.txt', 'WoS', 3, True),
+    ('biblio_wos_table_demo.csv', 'WoS', 3, True),
+    ('biblio_scopus_demo.csv', 'Scopus', 3, True),
+    ('biblio_dimensions_demo.csv', 'Dimensions', 2, False),
+    ('biblio_pubmed_demo.txt', 'PubMed', 2, False),
+    ('biblio_pubmed_csv_demo.csv', 'PubMed', 3, False),
+    ('biblio_ris_demo.ris', 'RIS', 2, True),
+    ('biblio_bibtex_demo.bib', 'BibTeX', 2, True),
+    ('biblio_endnote_demo.enw', 'EndNote', 2, False),
+    ('biblio_noteexpress_demo.net', 'NoteExpress', 2, False),
 ]
 
 
@@ -68,7 +74,9 @@ class TestCssci:
         assert first['来源期刊'] == '公共管理学报'
         assert first['年份'] == 2022
         assert first['参考文献'].count('\n') >= 5
-        assert '[1]' in first['参考文献']
+        # CSSCI numbers its reference list ``1.`` — not ``[1]`` — and the exporter writes the
+        # whole list into 【参考文献】 with each work on its own line.
+        assert first['参考文献'].startswith('1.')
 
     def test_a_record_without_a_title_is_skipped(self):
         text = (
@@ -104,25 +112,50 @@ class TestDetection:
 
 
 class TestInternationalFormats:
-    @pytest.mark.parametrize(('name', 'fmt', 'rows'), FORMAT_CASES)
-    def test_every_registered_format_normalizes_to_the_same_columns(self, name, fmt, rows):
+    @pytest.mark.parametrize(('name', 'fmt', 'rows', 'has_refs'), FORMAT_CASES)
+    def test_every_registered_format_normalizes_to_the_same_columns(self, name, fmt, rows, has_refs):
         parsed = parse_bytes(_sample(name), name)
         assert parsed['format'] == fmt
         assert len(parsed['rows']) == rows
         assert parsed['columns'][:3] == ['记录ID', '题名', '作者']
         first = parsed['rows'][0]
-        assert 'Digital governance' in first['题名']
-        assert first['年份'] == 2021
+        assert first['题名'].strip()
+        assert isinstance(first['年份'], int) and first['年份'] >= 2015
         assert first['格式'] == fmt
         assert first['作者']
-        assert first['引文']
-        assert json.loads(first['引文'])[0]['title']
+        assert bool(str(first['参考文献']).strip()) is has_refs
+        if has_refs:
+            assert json.loads(first['引文'])[0]['title']
 
     def test_the_case_list_and_the_registry_name_the_same_formats(self):
-        """A format registered without a sample parses nowhere and is tested nowhere."""
-        assert {fmt for _name, fmt, _rows in FORMAT_CASES} == {spec.id for spec in FORMAT_SPECS}
-        for name, _fmt, _rows in FORMAT_CASES:
+        """A format registered without a sample parses nowhere and is tested nowhere — and a
+        fixture nobody claims is a dialect the code does not actually read."""
+        registered = {spec.id for spec in FORMAT_SPECS}
+        assert {fmt for _name, fmt, _rows, _refs in FORMAT_CASES} == registered
+        for name, _fmt, _rows, _refs in FORMAT_CASES:
             assert (SAMPLES / name).is_file(), f'{name} is missing'
+        claimed = {name for name, _fmt, _rows, _refs in FORMAT_CASES}
+        for path in sorted(SAMPLES.glob('biblio_*_demo.*')):
+            # CNKI and CSSCI are read by services.biblio_import, not by the registry, so their
+            # fixtures are exempt from the registry side but not from being claimed below.
+            if path.name in claimed or path.name in ('biblio_cnki_demo.txt', 'biblio_cssci_demo.txt'):
+                continue
+            # The dual-map basemap is not an export at all: it is a two-column table the user
+            # supplies themselves, and tests/api/test_biblio_api.py reads it under that name.
+            if path.name == 'biblio_basemap_demo.csv':
+                continue
+            # The Lens patent file has no reader on purpose — its fixture exists to be refused.
+            if path.name == 'biblio_lens_patent_demo.csv':
+                continue
+            raise AssertionError(f'{path.name} is a fixture no reader owns')
+
+    def test_a_lens_patent_export_is_refused_by_name(self):
+        """The real file we were given is the patent collection; drawing it as authors is worse."""
+        with pytest.raises(ValueError) as exc:
+            parse_bytes(_sample('biblio_lens_patent_demo.csv'), 'lens-export.csv')
+        message = str(exc.value)
+        assert '专利' in message or 'PATENT' in message.upper(), message
+        assert 'Jurisdiction' in message, f'the refusal must name the evidence: {message}'
 
     def test_wos_keeps_author_commas_and_each_cited_reference_separate(self):
         parsed = parse_bytes(_sample('biblio_wos_demo.txt'), 'wos.txt')
@@ -140,17 +173,26 @@ class TestInternationalFormats:
         assert first['学科'] == 'Public Administration'
         assert first['文献类型'] == 'Article'
 
-    def test_pubmed_xml_keeps_structured_references_and_affiliation_countries(self):
-        parsed = parse_bytes(_sample('biblio_pubmed_demo.xml'), 'pubmed.xml')
+    def test_medline_text_keeps_wrapped_abstracts_and_affiliation_countries(self):
+        parsed = parse_bytes(_sample('biblio_pubmed_demo.txt'), 'pubmed.txt')
         first = parsed['rows'][0]
-        assert first['作者'] == 'Yan Zhang;Xin Li'
-        assert first['DOI'] == '10.0000/demo.pubmed.2021.001'
-        assert first['关键词'] == 'digital governance;public participation'
+        assert parsed['format'] == 'PubMed'
+        assert first['作者'] == 'Zhang, Ming;Zhou, Min'
+        assert first['DOI'] == '10.5555/demo.1'
+        assert 'digital governance' in first['关键词'].lower()
         assert 'China' in first['国家']
-        assert 'National Natural Science Foundation' in first['基金']
-        references = json.loads(first['引文'])
-        assert references[0]['journal'] == 'Public Administration Review'
-        assert references[0]['doi'] == '10.0000/demo.ref.2018.1'
+        # The abstract wraps without a tag on the second line; joining is the whole point.
+        assert 'the tag column is four characters wide' in first['摘要']
+        assert not any(row['参考文献'].strip() for row in parsed['rows']), 'this export carries no list'
+
+    def test_pubmed_csv_summary_reads_volume_and_pages_out_of_the_citation(self):
+        parsed = parse_bytes(_sample('biblio_pubmed_csv_demo.csv'), 'pubmed.csv')
+        first = parsed['rows'][0]
+        assert parsed['format'] == 'PubMed'
+        assert first['来源期刊'] == 'Public Administration Review'
+        assert (first['卷'], first['期']) == ('20', '1'), 'only the free citation string carries them'
+        assert first['页码'] == '100-112'
+        assert first['作者'] == 'Zhang M;Zhou L;Chen H'
 
     def test_scopus_csv_is_also_read_from_a_frame(self):
         frame = pd.read_csv(SAMPLES / 'biblio_scopus_demo.csv', dtype=str, keep_default_na=False)
@@ -166,13 +208,6 @@ class TestInternationalFormats:
 
     def test_a_plain_sentence_with_at_signs_stays_text(self):
         assert detect_format('我的邮箱是 someone@example.com，不是一条 BibTeX 记录。') is None
-
-    def test_pubmed_refuses_an_xml_entity_declaration(self):
-        with pytest.raises(ValueError, match='ENTITY|实体'):
-            parse_text(
-                '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY y "z">]><PubmedArticleSet><x>&y;</x></PubmedArticleSet>',
-                'PubMed',
-            )
 
     def test_an_unknown_registered_extension_is_refused_not_stored_as_text(self):
         with pytest.raises(ValueError):

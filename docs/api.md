@@ -43,7 +43,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls/.xml/.ris/.bib/.enw/.nbib 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜）；CNKI/CSSCI/WoS/Scopus/PubMed/Dimensions/Lens/RIS/BibTeX/EndNote 自动解析为文献记录表，响应额外返回 `biblio_format`、`biblio_capabilities` 与 `warnings`，此时 `is_txt=false`；普通文本仍为单行 `content`、`is_txt=true` |
+| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls/.xlsm/.nbib/.ris/.bib/.bibtex/.enw/.net 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜）；**实测过的导出件**自动解析为文献记录表（CNKI 的 RefWorks / NoteExpress / EndNote 三种按钮、CSSCI 文本、WoS 纯文本·Excel·Tab·RIS·BibTeX、Scopus CSV 含中文表头、Dimensions CSV 含厂商横幅行、PubMed 的 Medline 文本与 CSV 摘要、RIS、BibTeX、EndNote），响应额外返回 `biblio_format`、`biblio_capabilities` 与 `warnings`，此时 `is_txt=false`；普通文本仍为单行 `content`、`is_txt=true`；认得出但不能读的先点名拒绝（例：Lens 专利集合），绝不静默存成一张看起来正常的表 |
 | `/api/data/paste` | POST | 将粘贴的 JSON 数组注册为数据集 |
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
@@ -71,6 +71,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/exports/ledger` | GET | 列出**写过导出文件**的每一次运行及其文件清单（`run_id`/`workflow_name`/`started_at`/`files[{name,kind,node_id}]`）——「智能清除」选择器的数据源，读 `runs.db` 的运行→文件台账而非目录扫描，所以只给可操作的记录 |
 | `/api/biblio/runs` | GET | 文献计量工作区的数据源：按时间倒序列出**含 `biblio` 节点的运行**，每条带该运行里的节点（`node_id/title/status/row_count/component_name`）与其登记产物（`biblio_*` / `latex`）。判定「哪些算文献计量运行」是服务端对 `node_runs.node_type` 的读取，浏览器不再自己判断，因此重启后、刷新后、画布改过后仍能找回那次付费运行 |
 | `/api/biblio/table` | GET | 分页读回某运行某节点的已存表：`run_id` + `node_id` + `offset`/`limit`（默认 200，上限 1000，非法值收敛为更小的一页而非 500），返回 `columns/rows/total/offset/shape/files`。`shape` 由**列本身**判读（`classify_shape`：`nodes`/`edges`/`clusters`/`bursts`/`dual_map`，判不出为空串），面板据此显示「输出形态未知」而不是猜一个。运行不存在→404 并报出 id；节点不在该运行→404；节点不是文献计量→400；节点存在但没有已存行（被停止/失败/清理）→200 且带 `note` 指名该节点，绝不画成一张空表 |
+| `/api/biblio/sources` | GET | 「数据来源」浮层的全部内容：按检测顺序列出**可读的每个来源**，每条含官网链接、扩展名、该格式声明能带哪些字段，以及服务端按请求语言翻好的「怎么导出」与「这份导出实际缺什么」（句子来自 `backend/i18n.py`，与 cookie 指引同一约定 ⇒ 切换语言要重取，浏览器不再存一份）；`extensions` 就是上传框 `accept` 的来源，前端不再自己记哪些扩展名能读。只读：POST → 405 |
 | `/api/exports/clear-run` | POST | 按**一次运行**清除它产生的全部文件，**必须 `{"run_id","confirm":true}`**（缺 confirm→400、缺 run_id→400）：只删台账登记的这些名字（复用单条删除解析器），**「固定」条目跳过**、返回 `{removed,skipped_locked,missing,requested}`；有运行在跑时 409；只删磁盘产物，不动 `runs.db` 记录与其已存的行 |
 | `/api/exports/clear-run-parts` | POST | 按**一次运行 × 一个数据源节点**只清除其分片文件（`kind='part'`），**保留合并文件**；必须 `{"run_id","node_id","confirm":true}`。作用域锁在 `(run_id,node_id,'part')`，绝不碰别的运行、别的节点或合并/实时文件。删成功的名字同步从台账遗忘 |
 | `/api/exports/clear-name` | POST | 按**名字**清除某一批分片（面板分片行的「清除该批分片」按钮）：传入某个 `{stem}.part{NNN}{ext}`，删同名同扩展的全部 `.partNNN` 分片；**保留合并文件、别的 stem/扩展名与「固定」条目**，复用单条删除的解析器逐个删；必须 `{"name","confirm":true}`；传入的不是分片→400（点名）、有运行在跑→409；返回 `{removed,skipped_locked,missing,requested,name}` |

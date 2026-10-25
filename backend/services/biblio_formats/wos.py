@@ -4,16 +4,37 @@ import re
 from collections import defaultdict
 
 from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import countries, make_row, split_authors, split_keywords, year_of
+from services.biblio_formats.common import (
+    countries,
+    frame_cell,
+    frame_has_groups,
+    frame_of,
+    header_has_groups,
+    make_row,
+    references_from_field,
+    split_authors,
+    split_keywords,
+    structured_references,
+    year_of,
+)
 
 ID = 'WoS'
 LABEL = 'Web of Science'
 _TAG = re.compile(r'^([A-Z][A-Z0-9])\s+(.*)$')
 _CONTINUATION = re.compile(r'^\s{2,}\S')
+#: WoS' Excel / Tab-delimited download: a title column plus something only that table writes.
+_TABLE_GROUPS = (
+    ('Article Title',),
+    ('UT (Unique WOS ID)', 'Source Title', 'Times Cited, All Databases', 'Web of Science Record'),
+)
 
 
 def detect(text: str) -> bool:
-    return bool(re.search(r'(?m)^PT\s+\S', text) and re.search(r'(?m)^ER\s*$', text))
+    if re.search(r'(?m)^PT\s+\S', text) and re.search(r'(?m)^ER\s*$', text):
+        return True
+    # A user who opens the Excel export and re-saves it as CSV is the common case, and the
+    # upload route recognises formats from the text before it ever builds a frame.
+    return header_has_groups(text, _TABLE_GROUPS)
 
 
 def _blocks(text: str) -> list[dict[str, list[str]]]:
@@ -72,6 +93,18 @@ def _all(fields: dict[str, list[str]], *tags: str) -> str:
 
 
 def parse(text: str) -> tuple[list[dict], int]:
+    """Parse a WoS download from its text, choosing the reader by the file's shape.
+
+    The upload route recognises formats from the raw text, and a tab-delimited or
+    re-saved CSV WoS file answers to that same text — so a reader that only knew the
+    two-letter tags would refuse the table it had just claimed.
+    """
+    if header_has_groups(text, _TABLE_GROUPS):
+        return parse_frame(frame_of(text))
+    return parse_tagged(text)
+
+
+def parse_tagged(text: str) -> tuple[list[dict], int]:
     rows: list[dict] = []
     skipped = 0
     for fields in _blocks(text):
@@ -110,10 +143,80 @@ def parse(text: str) -> tuple[list[dict], int]:
     return rows, skipped
 
 
+# ─── Table export (Excel / Tab delimited) ───────────────────────
+#
+# WoS also offers "Excel" and "Tab delimited" downloads whose column names are the long
+# English labels below — a different document from the tagged text, with the same content
+# and one extra thing the text does not carry: `180 Day Usage Count` / `Since 2013 Usage
+# Count` arrive as their own columns. Reading only the tagged file would refuse the export
+# most users click, since Excel is the button with the shortest name.
+
+
+def detect_frame(frame) -> bool:
+    return frame_has_groups(frame, _TABLE_GROUPS)
+
+
+def parse_frame(frame) -> tuple[list[dict], int]:
+    rows: list[dict] = []
+    skipped = 0
+    for _, source in frame.iterrows():
+        title = frame_cell(source, frame, 'Article Title', 'Book Title', 'Item Title')
+        if not title:
+            skipped += 1
+            continue
+        refs = references_from_field(frame_cell(source, frame, 'Cited References'))
+        addresses = frame_cell(source, frame, 'Addresses', 'Reprint Addresses')
+        affiliations = frame_cell(source, frame, 'Affiliations') or addresses
+        rows.append(
+            make_row(
+                title=title,
+                authors=split_authors(frame_cell(source, frame, 'Author Full Names', 'Authors')),
+                affiliations=affiliations,
+                journal=frame_cell(source, frame, 'Source Title', 'Journal Abbreviation'),
+                year=year_of(frame_cell(source, frame, 'Publication Year', 'Publication Date')),
+                volume=frame_cell(source, frame, 'Volume'),
+                issue=frame_cell(source, frame, 'Issue'),
+                page_start=frame_cell(source, frame, 'Start Page', 'Article Number'),
+                page_end=frame_cell(source, frame, 'End Page'),
+                keywords=split_keywords(
+                    ';'.join(
+                        part
+                        for part in (
+                            frame_cell(source, frame, 'Author Keywords'),
+                            frame_cell(source, frame, 'Keywords Plus'),
+                        )
+                        if part
+                    )
+                ),
+                abstract=frame_cell(source, frame, 'Abstract'),
+                refs=refs,
+                structured_refs=structured_references(refs),
+                doi=frame_cell(source, frame, 'DOI'),
+                fmt=ID,
+                country=countries(addresses or affiliations),
+                category=frame_cell(source, frame, 'WoS Categories', 'Web of Science Categories', 'Research Areas'),
+                tc=frame_cell(source, frame, 'Times Cited, All Databases', 'Times Cited, WoS Core'),
+                usage=frame_cell(source, frame, '180 Day Usage Count'),
+                usage2013=frame_cell(source, frame, 'Since 2013 Usage Count'),
+                funding=';'.join(
+                    part
+                    for part in (
+                        frame_cell(source, frame, 'Funding Text', 'Funding Text 1'),
+                        frame_cell(source, frame, 'Funding Orgs', 'Funding Name Preferred'),
+                    )
+                    if part
+                ),
+                doctype=frame_cell(source, frame, 'Document Type'),
+                language=frame_cell(source, frame, 'Language', 'Language of Text'),
+            )
+        )
+    return rows, skipped
+
+
 SPEC = FormatSpec(
     id=ID,
     label=LABEL,
-    extensions=('.txt',),
+    extensions=('.txt', '.xls', '.xlsx'),
     capabilities=frozenset(
         (
             'refs',
@@ -132,4 +235,6 @@ SPEC = FormatSpec(
     ),
     detect=detect,
     parse=parse,
+    detect_frame=detect_frame,
+    parse_frame=parse_frame,
 )

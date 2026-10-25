@@ -125,27 +125,43 @@ class TestBibliographicUpload:
         assert body['row_count'] == 16
         assert '参考文献' in body['columns']
         preview = body['preview'][0]
-        assert '[1]' in preview['参考文献']
+        # CSSCI writes its list as ``1.作者.题名.刊名.年.(期)`` inside 【参考文献】.
+        assert preview['参考文献'].startswith('1.')
 
     @pytest.mark.parametrize(
-        ('name', 'fmt', 'rows'),
+        ('name', 'fmt', 'rows', 'capability'),
         [
-            ('biblio_scopus_demo.csv', 'Scopus', 3),
-            ('biblio_dimensions_demo.csv', 'Dimensions', 2),
-            ('biblio_lens_demo.csv', 'Lens', 2),
-            ('biblio_pubmed_demo.xml', 'PubMed', 2),
-            ('biblio_ris_demo.ris', 'RIS', 2),
-            ('biblio_bibtex_demo.bib', 'BibTeX', 2),
-            ('biblio_endnote_demo.enw', 'EndNote', 2),
+            ('biblio_scopus_demo.csv', 'Scopus', 3, 'abstract'),
+            ('biblio_dimensions_demo.csv', 'Dimensions', 2, 'abstract'),
+            ('biblio_pubmed_demo.txt', 'PubMed', 2, 'abstract'),
+            ('biblio_pubmed_csv_demo.csv', 'PubMed', 3, 'doi'),
+            ('biblio_ris_demo.ris', 'RIS', 2, 'abstract'),
+            ('biblio_bibtex_demo.bib', 'BibTeX', 2, 'abstract'),
+            ('biblio_endnote_demo.enw', 'EndNote', 2, 'abstract'),
+            ('biblio_noteexpress_demo.net', 'NoteExpress', 2, 'abstract'),
+            ('biblio_wos_table_demo.csv', 'WoS', 3, 'abstract'),
         ],
     )
-    def test_international_exports_upload_as_records(self, client, name, fmt, rows):
+    def test_international_exports_upload_as_records(self, client, name, fmt, rows, capability):
         body = _upload(client, name)
         assert body['biblio_format'] == fmt
         assert body['is_txt'] is False
         assert body['row_count'] == rows
         assert body['biblio_capabilities'] is not None
-        assert body['biblio_capabilities']['abstract'] is True
+        # Which capability is asserted per case, because a real export that carries no
+        # abstract must not be reported as if it did: the PubMed CSV summary is that file.
+        assert body['biblio_capabilities'][capability] is True
+
+    def test_a_lens_patent_export_is_refused_with_a_reason(self, client):
+        response = client.post(
+            '/api/data/upload',
+            data={'file': (io.BytesIO((SAMPLES / 'biblio_lens_patent_demo.csv').read_bytes()), 'lens-export.csv')},
+            content_type='multipart/form-data',
+        )
+        assert response.status_code == 400, response.get_json()
+        error = response.get_json()['error']
+        assert '专利' in error or 'PATENT' in error.upper(), error
+        assert 'Jurisdiction' in error, f'the refusal has to name what it saw: {error}'
 
     def test_an_ordinary_csv_is_still_an_ordinary_table(self, client):
         response = client.post(

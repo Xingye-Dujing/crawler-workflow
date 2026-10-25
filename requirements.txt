@@ -34,6 +34,10 @@ networkx
 # rather than torch's gigabytes, so they do not belong in requirements-optional.txt.
 onnxruntime
 tokenizers
+# Web of Science offers an "Excel" download that is legacy OLE2 `.xls`, and pandas reads
+# that format only through xlrd (openpyxl handles .xlsx). Without it the upload of a file
+# the vendor happily produces dies inside pandas. Measured on a real WoS Excel export.
+xlrd
 # tools/build_icon.py regenerates backend/static/icon.ico from the source art: PyInstaller stamps
 # that ICO into CaiXiHui.exe and Inno Setup refuses one that is not really an ICO, so the file is
 # generated rather than renamed. Already present transitively through matplotlib, declared here

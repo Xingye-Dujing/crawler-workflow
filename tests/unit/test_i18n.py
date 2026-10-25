@@ -286,6 +286,7 @@ class TestKeyReachability:
     # Keys assembled at runtime cannot appear as a literal in any source file.
     DYNAMIC_PREFIXES = (
         'cookie.',  # services/cookie_flow.py: t(f'cookie.{platform}.purpose')
+        'source.',  # services/biblio_sources.py: t(f'source.{fmt}.purpose') for each readable format
         'comment.status.',  # app.py: t(f'comment.status.{status}')
         'crawl.stopReason.',  # i18n.py: stop_reason_label maps a walk token through STOP_REASONS
     )
@@ -339,6 +340,10 @@ class TestKeyReachability:
         checked literally like everything else rather than hide in the allowlist."""
         sources = self._sources()
         assert "f'cookie." in sources and "f'comment.status." in sources
+        assert "f'source." in sources, (
+            'the export guide assembles source.<format>.* at runtime; if that stops, its keys '
+            'must be checked literally like every other key instead of hiding in the allowlist'
+        )
 
     #: A hand-written ``t('key')`` whose key the catalogue does not hold.
     _CALL = re.compile(r"\bt\(\s*['\"]([A-Za-z][A-Za-z0-9_.]*)['\"]")

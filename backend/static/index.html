@@ -147,6 +147,15 @@
         >
           Shortcuts
         </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="toggleSourceHelp()"
+          data-i18n="sourceHelp.menuEntry"
+          title="Where each bibliographic export comes from"
+        >
+          Data sources
+        </button>
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.style">Style</span>
@@ -693,11 +702,14 @@
       </div>
     </div>
 
-    <!-- Hidden file input used by the Upload node's settings panel to pick a CSV/JSON/TXT dataset -->
+    <!-- Hidden file input used by the Upload node's settings panel to pick a dataset. The
+         static list is the fallback before the export guide lands; afterwards
+         ``renderSourceHelp`` replaces it with ``extensions`` from the server, because the
+         formats a bibliographic reader accepts are the registry's business, not this page's. -->
     <input
       type="file"
       id="dataset-file-input"
-      accept=".csv,.tsv,.json,.txt,.xlsx,.xls"
+      accept=".csv,.tsv,.json,.txt,.xlsx,.xls,.nbib,.ris,.bib,.bibtex,.enw,.net"
       style="display: none"
       onchange="dataNodes.handleFileSelected(event)"
     />
@@ -1373,6 +1385,21 @@
           <div class="help-row"><span class="help-keys">0</span><span data-i18n="help.fit">Fit view</span></div>
           <div class="help-row"><span class="help-keys">? / F1</span><span data-i18n="help.open">Open this help</span></div>
           <div class="help-row"><span class="help-keys">Esc</span><span data-i18n="help.escape">Cancel / close / deselect</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export-guide overlay: where each bibliographic source comes from. The shell is static,
+         the content is served (GET /api/biblio/sources) because the browser may not hold a
+         second opinion about what a vendor's export contains. -->
+    <div id="source-help-overlay">
+      <div id="source-help-box">
+        <div class="panel-header">
+          <span data-i18n="sourceHelp.title">Where does the data come from?</span>
+          <button class="panel-close" type="button" onclick="closeSourceHelp()" data-i18n="sourceHelp.close">Close</button>
+        </div>
+        <div class="help-body" id="source-help-body">
+          <div class="source-help-loading" data-i18n="sourceHelp.loading">Loading the export guide…</div>
         </div>
       </div>
     </div>

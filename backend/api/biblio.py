@@ -20,7 +20,9 @@ from stores import get_biblio_store, get_run_store
 
 from api.http import _bad_body, _json_body
 from i18n import t
+from services.biblio_formats import accepted_extensions
 from services.biblio_schema import classify_shape
+from services.biblio_sources import all_sources
 from services.biblio_store import snapshot_header
 from services.bibliometrics import snapshot_capture
 
@@ -49,6 +51,18 @@ def biblio_runs():
     """Runs that contain a ``biblio`` node, newest first, with those nodes and their files."""
     limit = _int(request.args.get('limit'), 50, 1, 200)
     return jsonify({'ok': True, 'runs': get_run_store().list_biblio_runs(limit=limit)})
+
+
+@bp.route('/api/biblio/sources', methods=['GET'])
+def export_guide():
+    """The export guide: one entry per source the importer can read, in detection order.
+
+    Sentences are built here (``services.biblio_sources``) from the thread's language, exactly
+    like the cookie guide, so the browser draws what the server knows instead of keeping its
+    own copy of which site exports what. Extension and capability lists come from the format
+    registry, which is the only thing that can say what a parser accepts.
+    """
+    return jsonify({'ok': True, 'sources': all_sources(), 'extensions': list(accepted_extensions())})
 
 
 @bp.route('/api/biblio/table', methods=['GET'])

@@ -721,3 +721,44 @@ message.
   and fakes only the inference session — the piece a unit test genuinely cannot ship.
 
 
+
+## 文献导入与真实导出件 / Bibliographic imports and real exports
+
+- **A real export file is the only authority on what a source exports.** Everything below was
+  measured by running the product's own readers over the files in `samples/`, after answers I had
+  written from vendor documentation were proved wrong three times: PubMed has no XML download in the
+  user's reach (the XML branch, its `.xml` upload slot and two i18n keys were deleted), the one
+  Lens file we were given is the **patent** collection (so Lens has no readable format here, only a
+  refusal by name), and the "Scopus/Dimensions column names" I had coded were the English UI's while
+  the user's Scopus CSV arrives with `文献标题/年份/来源出版物名称/施引文献/参考文献`. A format nobody
+  handed us a file for is not a format the app may claim, in code, in a fixture, in a doc or in the
+  help panel.
+- **Measured, then fixed:** CSSCI writes 【关 键 词】/【期    刊】/【基    金】 (alignment spaces inside
+  the tag), names the author list 来源作者, merges year+issue+pages into 【年代卷期】`2021,(2):146-155`,
+  prefixes each affiliation with `[作者]`, and numbers its reference list `1.` — not `[1]`, which the
+  old detection gate and `_REF_START` both assumed, so a real CSSCI file was not detected at all and
+  its 291 references would have glued into one citation per record. Scopus/Dimensions/WoS-table names
+  are now per-field candidate lists in both languages; the signature is "one of these columns per
+  group" (`header_has_groups`), because a single required name is what refused the real files.
+  Dimensions' first row is a copyright banner, so `frame_of`/`header_of` drop leading provenance lines
+  before reading the header. WoS' Excel download was proved to carry an empty `Cited References`
+  column, which is why the guide says "plain text with Full Record and Cited References" rather than
+  "any of them".
+- **A fixture may copy structure but never facts.** The committed `samples/biblio_*_demo.*` files
+  reproduce a real export's tags, header order, spacing, separators and banner row, with every value
+  from a small synthetic pool; the vendor files themselves are gitignored because the Dimensions
+  download states in its own first row that redistribution is prohibited. `FORMAT_CASES` therefore
+  carries `has_refs` per case: asserting "every format has a reference list" is what would force a
+  fixture to invent a column its vendor does not export.
+- **Recognising a file is not the same as being able to read it.** Detection answers "not mine" with
+  a plain table, which is the wrong answer for a file that shares column names with a format we do
+  read. `services/biblio_formats/unsupported.py` holds those refusals outside `FORMAT_SPECS` (a
+  refusal is not a reader), and `biblio_import.parse_text` raises its sentence before the route falls
+  back — a silently accepted patent export draws applicants and owners as authors and never says so.
+- **The lint hook deletes an import that is not used yet — three times this round.** Adding
+  `import numpy as np` at module level while the last local twin still existed, or importing a
+  helper a call site added one edit later, gets the new line removed by the PostToolUse
+  `ruff check --fix`, and the failure surfaces as `NameError` (in `api/biblio.py`) or as 19 tests
+  dying at import. Write the import in the same edit as its first use, or delete the old binding
+  first. The same rule cut the other way: while a module-level name still exists, a function-local
+  twin is what gets deleted.

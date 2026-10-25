@@ -278,6 +278,7 @@ PANELS = [
     'context-menu',
     'dialog-overlay',
     'help-overlay',
+    'source-help-overlay',
     'cookie-dialog',
     'style-menu',
     'ai-menu',
@@ -337,6 +338,10 @@ MIN_MEASURED = {
     # a key span + a label span — 11 rows. 20 is a floor well under the ~39 real elements,
     # so it only fails if the overlay lost its content, never if it grows.
     'help-overlay': 20,
+    # The guide's own floor is low on purpose: this generic pass forces `.open` without stubbing
+    # the request, so the shell (title, close, body, waiting line) is all that is guaranteed.
+    # The content is measured by name in test_the_export_guide_lists_a_link_the_user_can_copy.
+    'source-help-overlay': 4,
     'cookie-dialog': 20,
     'style-menu': 10,
     'ai-menu': 32,
@@ -4140,3 +4145,107 @@ def test_the_overlay_views_print_every_label_inside_the_preview_panel(app_url, d
         assert facts['outside'] == [], f'{chart_type} labels run past the canvas: {facts["outside"]}'
         totals[chart_type] = facts['measured']
     assert set(totals) == {'sentiment_overlay', 'topic_overlay'}
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_export_guide_lists_a_link_the_user_can_copy(app_url, driver, lang):
+    """The overlay measured in a real engine: links copyable, wording translated, scrim only.
+
+    Three things only a browser can answer. The anchor must carry ``rel="noopener noreferrer"``
+    and show the URL as its own text, because the whole purpose of the guide is that a user
+    copies the address and searches there himself. The sentences arrive translated, so a switch
+    to the other language has to change them — a catalogue key reaching the screen is the failure
+    this tier exists to see. And the backdrop dismissal is an identity test against the overlay
+    element, which only a real click can prove is not fired by a click inside the sheet.
+    """
+    driver.set_window_size(1400, 900)
+    driver.get(app_url)
+    driver.execute_script(
+        """
+        const original = window.fetch;
+        const payload = {
+            ok: true,
+            extensions: ['.net', '.ris', '.txt'],
+            sources: [
+                { id: 'CSSCI', label: 'CSSCI', group: 'library', site: 'https://cssci.nju.edu.cn/',
+                  extensions: ['.txt'], capabilities: {},
+                  purpose: '合成说明一', steps: ['1. 检索', '2. 导出文本'], missing: ['无【摘要】'] },
+                { id: 'NoteExpress', label: 'NoteExpress', group: 'exchange', site: 'https://kns.cnki.net/',
+                  extensions: ['.net'], capabilities: {},
+                  purpose: '合成说明二', steps: ['1. 选 NoteExpress 下载'], missing: [] }
+            ]
+        };
+        window.__asked = [];
+        window.fetch = (url) => {
+            const u = String(url);
+            if (u.indexOf('/api/biblio/sources') >= 0) {
+                window.__asked.push(u);
+                const body = JSON.stringify(payload);
+                const answer = { text: () => Promise.resolve(body), json: () => Promise.resolve(body), status: 200 };
+                return Promise.resolve(answer);
+            }
+            return original.apply(window, arguments.length ? Array.prototype.slice.call(arguments) : []);
+        };
+        toggleSourceHelp();
+        """
+    )
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if driver.execute_script("return document.querySelectorAll('#source-help-body .source-help-item').length") >= 2:
+            break
+        time.sleep(0.2)
+
+    facts = driver.execute_script(
+        r"""
+        const body = document.getElementById('source-help-body');
+        const links = Array.from(body.querySelectorAll('a'));
+        const raw = [];
+        body.querySelectorAll('*').forEach(function (el) {
+            const text = (el.textContent || '').trim();
+            if (/^(sourceHelp|source)\.[\w.]+$/.test(text)) raw.push(text);
+        });
+        const box = document.getElementById('source-help-box').getBoundingClientRect();
+        return {
+            items: body.querySelectorAll('.source-help-item').length,
+            groups: body.querySelectorAll('.source-help-group').length,
+            linkTexts: links.map(function (a) { return a.textContent.trim(); }),
+            hrefs: links.map(function (a) { return a.getAttribute('href'); }),
+            rels: links.map(function (a) { return a.getAttribute('rel'); }),
+            targets: links.map(function (a) { return a.getAttribute('target'); }),
+            raw: raw,
+            missing: body.querySelectorAll('.source-help-missing').length,
+            steps: body.querySelectorAll('.source-help-steps li').length,
+            accepts: (document.getElementById('dataset-file-input').getAttribute('accept') || '').split(','),
+            insideViewport: box.right <= window.innerWidth + 1 && box.left >= -1,
+            opened: document.getElementById('source-help-overlay').classList.contains('open'),
+        };
+        """
+    )
+    assert facts['items'] == 2, facts
+    assert facts['groups'] == 2, 'both served groups are headed, in the page language'
+    assert facts['raw'] == [], f'an untranslated catalogue key reached the screen: {facts["raw"]}'
+    assert facts['hrefs'] and all(str(href).startswith('https://') for href in facts['hrefs']), facts['hrefs']
+    assert facts['linkTexts'] == facts['hrefs'], 'the visible text must be the URL, so it can be copied'
+    assert all(rel and 'noopener' in rel and 'noreferrer' in rel for rel in facts['rels']), facts['rels']
+    assert all(target == '_blank' for target in facts['targets']), facts['targets']
+    assert facts['steps'] >= 3 and facts['missing'] >= 1, facts
+    assert '.net' in facts['accepts'], f'the served extension never reached the picker: {facts["accepts"]}'
+    assert '.csv' in facts['accepts'], f'merging the list dropped what the picker already had: {facts["accepts"]}'
+    assert facts['insideViewport'] is True, 'a centred overlay may not hang outside the window'
+
+    scrim_and_sheet = driver.execute_script(
+        """
+        const overlay = document.getElementById('source-help-overlay');
+        const sheet = document.getElementById('source-help-box');
+        const isOpen = () => overlay.classList.contains('open');
+        overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const afterScrim = isOpen();
+        toggleSourceHelp();
+        sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const afterSheet = isOpen();
+        closeSourceHelp();
+        return { afterScrim, afterSheet };
+        """
+    )
+    assert scrim_and_sheet['afterScrim'] is False, 'a click on the dimmed backdrop closes the guide'
+    assert scrim_and_sheet['afterSheet'] is True, 'a click inside the sheet must not close it'

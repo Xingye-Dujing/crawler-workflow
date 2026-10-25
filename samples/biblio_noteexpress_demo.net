@@ -1,0 +1,34 @@
+{Reference Type}: Journal Article
+{Title}: Synthetic study 1: digital governance in cities 1
+{Author}: Zhang Ming; Zhou Min
+{Author Address}: School of Public Policy and Management, Tsinghua University; School of International Relations, Fudan University
+{Journal}: Public Administration Review
+{Year}: 2021
+{Volume}: 23
+{Issue}: 4
+{Pages}: 100-112
+{Keywords}: digital governance; public participation; collaborative governance
+{Abstract}: A synthetic NoteExpress record written in the exact shape CNKI's "NoteExpress 下载"
+button produces: one brace-quoted key per line, semicolons between authors, keywords and
+addresses, and an abstract that continues on the next physical line without a key of its own.
+{ISBN/ISSN}: 2050-1161
+{DOI}: 10.5555/demo.noteexpress.1
+{Notes}: 22-1357/C
+{URL}: https://demo.example.org/article/1
+{Database Provider}: CNKI
+
+{Reference Type}: Journal Article
+{Title}: Synthetic study 2: algorithmic accountability in cities 2
+{Author}: Chen Hui
+{Author Address}: School of Management, Zhejiang University
+{Journal}: Government Information Quarterly
+{Year}: 2022
+{Volume}: 39
+{Issue}: 2
+{Pages}: 101500
+{Keywords}: algorithmic accountability; public service
+{Abstract}: A second synthetic NoteExpress record, an article number with no page range.
+{ISBN/ISSN}: 0740-624X
+{DOI}: 10.5555/demo.noteexpress.2
+{URL}: https://demo.example.org/article/2
+{Database Provider}: CNKI

@@ -736,6 +736,7 @@ const canvas = {
                 this.deselectNode();
                 closeSettings();
                 if (typeof closeShortcutsHelp === 'function') closeShortcutsHelp();
+                if (typeof closeSourceHelp === 'function') closeSourceHelp();
                 return;
             }
             /* Undo / Redo */

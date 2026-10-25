@@ -31,6 +31,19 @@ backend/test_*.py
 htmlcov/
 
 scratchpad/
+# Real vendor exports stay on the machine they were downloaded on. Their own files say so:
+# the Dimensions download's first row is "Redistribution / external use of this work (or parts
+# thereof) is prohibited without prior written approval", and Scopus/WoS licences say the same
+# in their terms. The committed fixtures are the synthetic `*_demo.*` files beside these, which
+# are written to the *same* column names, tag spellings and separators — so every dialect
+# discovered here is still tested, without shipping anyone's data.
+samples/CNKI-*
+samples/CSSCI.txt
+samples/Scopus_*
+samples/Dimensions-*
+samples/WOS.*
+samples/lens-export.csv
+samples/pubmed-*
 # ml_train holds the fine-tuning workspace. Keep the big/private subdirs out (datasets = crawled
 # social content, models = 1.6G weights, logs), but VERSION the scripts + dir-map README so every
 # cited accuracy/F1 has its producing code in the repo. These scripts self-locate their sys.path.

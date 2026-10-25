@@ -37,6 +37,10 @@ snownlp==0.12.3
 networkx==3.6.1
 onnxruntime==1.31.0
 tokenizers==0.22.2
+# Web of Science sells an "Excel" download that is legacy OLE2 .xls; pandas opens that
+# only through xlrd (openpyxl reads .xlsx), so the packaged app needs it to accept a file
+# the vendor itself offers. Measured on a real WoS Excel export.
+xlrd==2.0.2
 # jieba imports pkg_resources when it is present; keeping it explicit avoids a
 # warning-only dependency on whatever a bare venv happens to include.
 setuptools==78.1.0

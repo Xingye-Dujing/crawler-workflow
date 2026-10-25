@@ -79,7 +79,7 @@ def upload_dataset():
                 is_txt = True
             else:
                 df = use_biblio(parsed)
-        elif name_lower.endswith(('.xml', '.ris', '.bib', '.bibtex', '.enw', '.nbib')):
+        elif name_lower.endswith(('.ris', '.bib', '.bibtex', '.enw', '.nbib', '.net')):
             raw = file.stream.read()
             parsed = parse_bytes(raw, filename)
             if parsed is None:

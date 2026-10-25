@@ -136,9 +136,7 @@ def make_row(
 
 def header_of(text_value: str) -> list[str]:
     """The first CSV line's column names, with a BOM removed."""
-    for line in str(text_value or '').splitlines():
-        if not line.strip():
-            continue
+    for line in data_lines(text_value):
         try:
             row = next(csv.reader([line]))
         except csv.Error:
@@ -147,14 +145,36 @@ def header_of(text_value: str) -> list[str]:
     return []
 
 
+#: A vendor preamble written as the first CSV row instead of a comment.
+_PROVENANCE = re.compile(r'^["\ufeff]?\s*(?:about the data|exported on|downloaded from)\b', re.I)
+
+
+def data_lines(text_value: str) -> list[str]:
+    """The CSV lines a reader should parse, with a leading provenance banner dropped.
+
+    Dimensions writes its copyright notice as the first row of the download, so pandas
+    reads that sentence as the column names and every format signature then fails on a
+    real file while passing the synthetic one. Only *leading* banner lines are dropped;
+    the notice never appears mid-table, and dropping a row that is not a banner would
+    shift a real header off, so the check stays anchored to the phrases above.
+    """
+    lines = [
+        line for line in str(text_value or '').replace('\r\n', '\n').replace('\r', '\n').split('\n') if line.strip()
+    ]
+    while lines and _PROVENANCE.match(lines[0]):
+        lines.pop(0)
+    return lines
+
+
 def frame_of(text_value: str) -> pd.DataFrame:
     """Read a bibliographic CSV without letting pandas invent nulls."""
+    lines = data_lines(text_value)
     header = header_of(text_value)
     delimiter = ','
     if header and header.count(';') > header.count(','):
         delimiter = ';'
     return pd.read_csv(
-        io.StringIO(str(text_value or '')),
+        io.StringIO('\n'.join(lines)),
         sep=delimiter,
         dtype=str,
         keep_default_na=False,
@@ -207,6 +227,25 @@ def header_has(text_value: str, required: tuple[str, ...], any_of: tuple[str, ..
 
 def countries(value: str) -> str:
     return ';'.join(countries_in(value))
+
+
+def _has_groups(names: set[str], groups: tuple[tuple[str, ...], ...]) -> bool:
+    """Every group answered by at least one column name.
+
+    Exports rename their columns by locale — the same Scopus download writes
+    ``文献标题`` where the English one writes ``Title`` — so a signature built from one
+    required name refuses a real file and passes the synthetic one. "this name or that
+    one", per group, is the honest shape.
+    """
+    return all(any(_norm(candidate) in names for candidate in group) for group in groups)
+
+
+def frame_has_groups(frame: pd.DataFrame, groups: tuple[tuple[str, ...], ...]) -> bool:
+    return _has_groups({_norm(column) for column in frame.columns}, groups)
+
+
+def header_has_groups(text_value: str, groups: tuple[tuple[str, ...], ...]) -> bool:
+    return _has_groups({_norm(name) for name in header_of(text_value)}, groups)
 
 
 def parse_ref(value: str) -> dict | None:
