@@ -96,11 +96,29 @@ class TestRestoring:
         assert wfh['restore']['batch_calls'] == 1, 'a restore must be one undo step, not one per node'
         assert wfh['restore']['toasts'] == ['RESTORED']
 
-    def test_declining_the_confirmation_reads_nothing(self, wfh):
-        assert wfh['restore_cancelled'] == {'requests': 0, 'loaded': None, 'toasts': []}
+    def test_declining_the_confirmation_reads_the_snapshot_but_loads_nothing(self, wfh):
+        # The diff has to be computed before the question is asked, so the read
+        # happens; declining still must not touch the canvas.
+        assert wfh['restore_cancelled'] == {'requests': 1, 'loaded': None, 'toasts': []}
 
     def test_a_live_run_refuses_before_the_dialog(self, wfh):
         assert wfh['restore_busy'] == {'requests': 0, 'loaded': None, 'toasts': ['BUSY']}
+
+
+class TestRestoreDiff:
+    def test_the_confirmation_names_what_returns_and_what_leaves(self, wfh):
+        diff = wfh['restore_diff']
+        assert diff['added_nodes'] == 1 and diff['removed_nodes'] == 1
+        assert diff['added_links'] == 1 and diff['removed_links'] == 1
+        assert diff['moved'] == 0 and diff['changed'] is True
+        assert diff['will_return'] == ['node-2']
+        assert diff['will_leave'] == ['node-1']
+        assert diff['gets'] == 1
+        assert diff['loaded'] is None, 'declining the diff question must not restore'
+        assert diff['message'] == ('Restore "手动存档"?\n\nCOUNTS 1/1 1/1 moved=0\nRETURN 恢复节点\nLEAVE 当前节点')
+
+    def test_an_identical_canvas_says_so_instead_of_listing_nothing(self, wfh):
+        assert wfh['diff_same'] == {'changed': False, 'message': 'SAME'}
 
 
 class TestRenaming:

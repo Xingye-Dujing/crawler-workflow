@@ -37,6 +37,11 @@ const DICT = {
         'wfHistory.renamed': 'RENAMED',
         'wfHistory.renameFailed': 'RENAME-FAILED',
         'wfHistory.capacity': '{n} / {max} snapshots',
+        'wfHistory.diffSame': 'SAME',
+        'wfHistory.diffCounts': 'COUNTS {nodesAdded}/{nodesRemoved} {linksAdded}/{linksRemoved} moved={moved}',
+        'wfHistory.diffWillReturn': 'RETURN {names}',
+        'wfHistory.diffWillLeave': 'LEAVE {names}',
+        'wfHistory.diffMore': ' +{n}',
         'wfHistory.remove': 'Delete',
         'wfHistory.confirmRemove': 'Delete "{label}"?',
         'wfHistory.removed': 'DELETED',
@@ -92,6 +97,7 @@ const DICT = {
         'wfHistory.noWorkflow': '未命名画布',
         'wfHistory.restore': '恢复',
         'wfHistory.rename': '重命名',
+        'wfHistory.diffSame': '一致',
         'wfHistory.remove': '删除',
         'wfHistory.baseline': '设为布局基准',
         'wfHistory.baselineTag': '基准',
@@ -231,6 +237,7 @@ sandbox.canvas = {
         return CANVAS;
     },
 };
+const originalToWorkflow = sandbox.canvas.toWorkflowJSON;
 workflow.currentFile = '日报';
 workflow.runName = () => '日报';
 
@@ -317,6 +324,51 @@ sandbox.RunState.running = true;
 loaded = null;
 await wfFiles.restoreSnapshot('s1');
 out.restore_busy = { requests: requests.length, loaded: loaded, toasts: toasts.slice() };
+
+/* The confirmation compares the snapshot (target) with the current file-shaped canvas,
+   so a person sees what comes back and what goes away before saying yes. */
+resetCalls();
+const DIFF_CURRENT = {
+    nodes: [
+        { id: 'node-0', type: 'name', title: '起点', x: 10, y: 20 },
+        { id: 'node-1', type: 'output', title: '当前节点', x: 0, y: 0 },
+    ],
+    connections: [{ from: 'node-0', to: 'node-1' }],
+};
+const DIFF_TARGET = {
+    nodes: [
+        { id: 'node-0', type: 'name', title: '起点', x: 10, y: 20 },
+        { id: 'node-2', type: 'process', title: '恢复节点', x: 0, y: 0 },
+    ],
+    connections: [{ from: 'node-0', to: 'node-2' }],
+};
+sandbox.canvas.toWorkflowJSON = () => DIFF_CURRENT;
+routes.snapshot = { ok: true, snapshot: { id: 's1', workflow: DIFF_TARGET } };
+dialogAnswer = false;
+loaded = null;
+workflow._loadFromJSON = (data) => {
+    loaded = data;
+    return true;
+};
+const diff = wfFiles._diffWorkflow(DIFF_TARGET, DIFF_CURRENT);
+await wfFiles.restoreSnapshot('s1');
+out.restore_diff = {
+    added_nodes: diff.addedNodes,
+    removed_nodes: diff.removedNodes,
+    added_links: diff.addedLinks,
+    removed_links: diff.removedLinks,
+    moved: diff.moved,
+    changed: diff.changed,
+    will_return: diff.willReturn.map((n) => n.id),
+    will_leave: diff.willLeave.map((n) => n.id),
+    message: dialogMessages[dialogMessages.length - 1],
+    gets: requests.filter((r) => r.url.indexOf('/history/get') >= 0).length,
+    loaded: loaded,
+};
+const same = wfFiles._diffWorkflow(DIFF_TARGET, DIFF_TARGET);
+out.diff_same = { changed: same.changed, message: wfFiles._diffMessage(same) };
+sandbox.canvas.toWorkflowJSON = originalToWorkflow;
+routes.snapshot = { ok: true, snapshot: { id: 's1', workflow: SNAP_WORKFLOW } };
 
 /* ── renaming a snapshot ───────────────────────────────────────────── */
 resetCalls();

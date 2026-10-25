@@ -11663,25 +11663,113 @@ var wfFiles = {
         }
     },
 
+    /* Restoring replaces the canvas, so the confirmation says what that replacement
+       costs before it happens. The comparison is between the snapshot (the target) and
+       the file-shaped current canvas, the same two serializations the save used. */
+    _diffWorkflow(target, current) {
+        var targetNodes = Array.isArray(target && target.nodes) ? target.nodes : [];
+        var currentNodes = Array.isArray(current && current.nodes) ? current.nodes : [];
+        var byTarget = {};
+        var byCurrent = {};
+        targetNodes.forEach(function (n) {
+            if (n && n.id !== undefined && n.id !== null) byTarget[String(n.id)] = n;
+        });
+        currentNodes.forEach(function (n) {
+            if (n && n.id !== undefined && n.id !== null) byCurrent[String(n.id)] = n;
+        });
+        var willReturn = targetNodes.filter(function (n) {
+            return n && n.id !== undefined && n.id !== null && !Object.prototype.hasOwnProperty.call(byCurrent, String(n.id));
+        });
+        var willLeave = currentNodes.filter(function (n) {
+            return n && n.id !== undefined && n.id !== null && !Object.prototype.hasOwnProperty.call(byTarget, String(n.id));
+        });
+        var moved = 0;
+        targetNodes.forEach(function (n) {
+            if (!n || n.id === undefined || n.id === null) return;
+            var other = byCurrent[String(n.id)];
+            if (!other) return;
+            if (Math.round(Number(n.x) || 0) !== Math.round(Number(other.x) || 0) ||
+                Math.round(Number(n.y) || 0) !== Math.round(Number(other.y) || 0)) moved += 1;
+        });
+        var edgeKey = function (c) { return String(c.from) + '\u0000' + String(c.to); };
+        var targetEdges = {};
+        var currentEdges = {};
+        (Array.isArray(target && target.connections) ? target.connections : []).forEach(function (c) {
+            if (c) targetEdges[edgeKey(c)] = true;
+        });
+        (Array.isArray(current && current.connections) ? current.connections : []).forEach(function (c) {
+            if (c) currentEdges[edgeKey(c)] = true;
+        });
+        var addedLinks = Object.keys(targetEdges).filter(function (key) { return !currentEdges[key]; }).length;
+        var removedLinks = Object.keys(currentEdges).filter(function (key) { return !targetEdges[key]; }).length;
+        return {
+            willReturn: willReturn,
+            willLeave: willLeave,
+            addedNodes: willReturn.length,
+            removedNodes: willLeave.length,
+            addedLinks: addedLinks,
+            removedLinks: removedLinks,
+            moved: moved,
+            changed: willReturn.length > 0 || willLeave.length > 0 || addedLinks > 0 || removedLinks > 0 || moved > 0,
+        };
+    },
+
+    _nodeNames(nodes) {
+        var names = nodes.slice(0, 6).map(function (n) {
+            var title = String((n && n.title) || '').trim();
+            if (title) return title;
+            var type = String((n && n.type) || '');
+            if (type && typeof nodeTypeWord === 'function') return nodeTypeWord(type) || type;
+            return type || String((n && n.id) || '');
+        });
+        var text = names.join(', ');
+        if (nodes.length > names.length) text += I18n.t('wfHistory.diffMore', { n: nodes.length - names.length });
+        return text;
+    },
+
+    _diffMessage(diff) {
+        if (!diff.changed) return I18n.t('wfHistory.diffSame');
+        var lines = [I18n.t('wfHistory.diffCounts', {
+            nodesAdded: diff.addedNodes,
+            nodesRemoved: diff.removedNodes,
+            linksAdded: diff.addedLinks,
+            linksRemoved: diff.removedLinks,
+            moved: diff.moved,
+        })];
+        if (diff.willReturn.length) {
+            lines.push(I18n.t('wfHistory.diffWillReturn', { names: this._nodeNames(diff.willReturn) }));
+        }
+        if (diff.willLeave.length) {
+            lines.push(I18n.t('wfHistory.diffWillLeave', { names: this._nodeNames(diff.willLeave) }));
+        }
+        return lines.join('\n');
+    },
+
     async restoreSnapshot(id) {
         if (refuseWhileRunning()) return;
         var row = this._snapshotRow(id);
         var label = this._snapshotLabel(row);
+        var result = await fetchJSON('/api/workflow/history/get?id=' + encodeURIComponent(id));
+        if (!result || !result.ok || !result.snapshot) {
+            showToast((result && result.error) || I18n.t('wfHistory.restoreFailed'));
+            return;
+        }
+        var target = result.snapshot.workflow || {};
+        var current = (typeof canvas !== 'undefined' && canvas && canvas.toWorkflowJSON)
+            ? canvas.toWorkflowJSON({ expandReusable: false })
+            : { nodes: [], connections: [] };
+        var message = I18n.t('wfHistory.restoreConfirm', { label: label }) +
+            '\n\n' + this._diffMessage(this._diffWorkflow(target, current));
         var ok = await showDialog({
-            message: I18n.t('wfHistory.restoreConfirm').replace('{label}', label),
+            message: message,
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: false },
                 { label: I18n.t('wfHistory.restore'), value: true, primary: true },
             ],
         });
         if (!ok) return;
-        var result = await fetchJSON('/api/workflow/history/get?id=' + encodeURIComponent(id));
-        if (!result || !result.ok || !result.snapshot) {
-            showToast((result && result.error) || I18n.t('wfHistory.restoreFailed'));
-            return;
-        }
         /* One undo step: a snapshot restore is one user action, not one step per node. */
-        if (!workflow.loadFromJSON(result.snapshot.workflow, { history: 'single' })) return;
+        if (!workflow.loadFromJSON(target, { history: 'single' })) return;
         if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
         showToast(I18n.t('wfHistory.restored'));
     },
