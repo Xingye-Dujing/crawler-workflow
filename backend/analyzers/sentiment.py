@@ -2,8 +2,10 @@ import contextlib
 import logging
 import os
 import re
+import sys
 from importlib.util import find_spec
 
+import numpy as np
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
@@ -41,13 +43,13 @@ class PolarityError(ValueError):
 
 
 def bert_backend() -> str:
-    """Which piece of the BERT path this machine does not have, or ``''`` when it has both.
+    """What this machine does not have for ``bert``, or ``''`` when it can run one of the runtimes.
 
-    ``find_spec`` rather than an ``import``: this runs on the path that decides whether to
-    REFUSE, and importing torch to discover it is absent costs seconds and a couple of
-    hundred MB of resident memory to learn a fact a directory listing already answers.
+    ``find_spec`` rather than an ``import``: this runs on the path that decides whether to REFUSE,
+    and importing torch to discover it is absent costs seconds and a couple of hundred MB of
+    resident memory to learn a fact a directory listing already answers.
     """
-    return ', '.join(name for name in ('torch', 'transformers') if find_spec(name) is None)
+    return '' if bert_runtime() else t('sentiment.bert_need_runtime')
 
 
 def bert_device() -> int:
@@ -67,6 +69,191 @@ def bert_device() -> int:
         if torch.cuda.is_available():
             return 0
     return -1
+
+
+def _importable(name: str) -> bool:
+    """Would ``import name`` work here — answered without importing it.
+
+    ``find_spec`` is the cheap answer for a module that has not been touched yet (importing torch
+    to learn it is missing costs seconds and a couple of hundred MB). It is the wrong answer for a
+    module already in ``sys.modules``: one placed there by another loader can be missing
+    ``__spec__``, and ``find_spec`` then raises ``ValueError`` rather than reporting what looking
+    the name up already told you.
+    """
+    if name in sys.modules:
+        return True
+    with contextlib.suppress(ValueError):
+        return find_spec(name) is not None
+    return False
+
+
+def bert_runtime() -> str:
+    """``'torch'`` / ``'onnx'`` / ``''`` — which BERT runtime this machine can actually run.
+
+    torch first, because the machine that has it is the one the models were trained on and it may
+    answer on a GPU. ``onnxruntime`` + ``tokenizers`` is what the packaged Windows app ships: an
+    ONNX graph needs neither torch nor transformers, and the standalone ``tokenizers`` crate reads
+    the same ``tokenizer.json`` the training script wrote. A machine with neither answers ``''``,
+    which is what makes the node refuse (or degrade, with the mode that ran printed).
+    """
+    if _importable('torch') and _importable('transformers'):
+        return 'torch'
+    if _importable('onnxruntime') and _importable('tokenizers'):
+        return 'onnx'
+    return ''
+
+
+#: The ONNX graph is fed the padding mask as an additive ``[batch, 1, query, key]`` tensor and the
+#: position ids read off that mask, instead of letting the model build them inside the traced
+#: forward. Measured with the plain 2D mask, the exporter froze transformers' padding branch into
+#: a constant and the same text answered up to 1.0 logit apart depending on how its batch happened
+#: to be padded; with these two as inputs the graph matches the torch model to 3e-07 with 243
+#: padding cells. ``ml_train/scripts/export_onnx_bert.py`` writes graphs in exactly this shape.
+ONNX_MASK_VALUE = -1e9
+ONNX_GRAPH_INPUTS = ('input_ids', 'position_ids', 'attention_mask_4d', 'token_type_ids')
+
+#: Live classifier sessions are the model in memory — 98 MB quantised, 390 MB unquantised — and a
+#: multi-model comparison can name four of them. Two at a time, oldest dropped, and the drop is
+#: printed: silently releasing a model the next batch will reload is a slow run nobody can explain.
+SESSION_LIMIT = 2
+_SESSIONS: dict = {}
+_SESSION_ORDER: list = []
+
+
+class BertClassifier:
+    """One loaded bert classifier: ``predict(texts)`` answers ``{'label', 'score'}`` per text.
+
+    The three operations that read a transformer (sentiment, emotion, tendency) used to build their
+    own ``pipeline`` inside their own ``_analyze_bert`` — which meant a fresh model load per call,
+    three copies of the same availability dance, and no answer to "which runtime produced this
+    column". All of it lives here. The answer shape is the pipeline's own, so ``_signed_polarity``
+    and each operation's label vocabulary are unchanged: a torch answer and an ONNX answer are
+    interchangeable values, not two dialects.
+    """
+
+    def __init__(self, model_path: str, *, task: str = 'text-classification', runtime: str = '', max_length: int = 128):
+        self.model_path = model_path
+        self.task = task
+        self.runtime = runtime or bert_runtime()
+        self.max_length = max_length
+        self.precision = ''
+        self.device = ''
+        if self.runtime == 'torch':
+            self._init_torch()
+        elif self.runtime == 'onnx':
+            self._init_onnx()
+        else:
+            raise ValueError(t('sentiment.bert_missing', need=bert_backend()))
+
+    def _init_torch(self) -> None:
+        from transformers import pipeline
+
+        device = bert_device()
+        self.device = 'cuda' if device >= 0 else 'cpu'
+        self.precision = 'fp32'
+        self._call = pipeline(self.task, model=self.model_path, device=device)
+
+    def _init_onnx(self) -> None:
+        """Load the graph, the tokenizer and the label vocabulary the export wrote beside it."""
+        import json
+
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+
+        folder = self.model_path if os.path.isdir(self.model_path) else os.path.dirname(self.model_path)
+        graph = os.path.join(folder, 'model.onnx')
+        if not os.path.isfile(graph):
+            raise ValueError(t('sentiment.bert_no_onnx', path=folder))
+        sidecar = {}
+        for name in ('cixi_bert.json', 'config.json'):
+            holder = os.path.join(folder, name)
+            if os.path.isfile(holder):
+                with open(holder, encoding='utf-8') as handle:
+                    sidecar = json.load(handle)
+                break
+        self.precision = str(sidecar.get('precision') or 'fp32')
+        self.device = 'cpu'
+        self._labels = {str(key): str(value) for key, value in (sidecar.get('id2label') or {}).items()}
+        if not self._labels:
+            raise ValueError(t('sentiment.bert_no_labels', path=folder))
+        self._session = ort.InferenceSession(graph, providers=['CPUExecutionProvider'])
+        names = [item.name for item in self._session.get_inputs()]
+        if tuple(names) != ONNX_GRAPH_INPUTS:
+            # A graph in another shape is not this code path's contract; answering it wrong is a
+            # silent numeric change, so name the inputs it expects instead of guessing at them.
+            raise ValueError(t('sentiment.bert_onnx_inputs', found=', '.join(names)))
+        self._tokenizer = Tokenizer.from_file(os.path.join(folder, 'tokenizer.json'))
+        self._tokenizer.enable_truncation(self.max_length)
+        self._tokenizer.enable_padding()  # to the longest row of this batch: the key dims are dynamic
+
+    def predict(self, texts: list) -> list:
+        if self.runtime == 'torch':
+            return list(self._call(list(texts), batch_size=len(texts), truncation=True, max_length=self.max_length))
+        return self._predict_onnx(list(texts))
+
+    def _predict_onnx(self, texts: list) -> list:
+        encodings = self._tokenizer.encode_batch(texts)
+        ids = np.asarray([item.ids for item in encodings], dtype=np.int64)
+        mask = np.asarray([item.attention_mask for item in encodings], dtype=np.int64)
+        # ``type_ids`` is what the crate calls token_type_ids — measured, not assumed: a stub that
+        # invents the friendlier name ships an AttributeError in the packaged app instead.
+        types = np.asarray([item.type_ids for item in encodings], dtype=np.int64)
+        # Padded cells get position 0 — not the last real index — because that is what
+        # ``ml_train/scripts/export_onnx_bert.py`` builds when it traces and verifies the graph. The
+        # two differ only on rows the mask already ignores, but a runtime that computes positions its
+        # own way is a number nobody measured, and the parity against torch was proven with this one.
+        positions = np.where(mask == 0, 0, np.cumsum(mask, axis=1) - 1)
+        additive = (1.0 - mask[:, None, None, :].astype(np.float32)) * ONNX_MASK_VALUE
+        logits = self._session.run(
+            None,
+            {
+                'input_ids': ids,
+                'position_ids': positions.astype(np.int64),
+                'attention_mask_4d': additive.astype(np.float32),
+                'token_type_ids': types,
+            },
+        )[0]
+        return [
+            {'label': self._label_of(row), 'score': float(value)}
+            for row, value in zip(logits, _softmax(logits), strict=True)
+        ]
+
+    def _label_of(self, row) -> str:
+        return self._labels[str(int(row.argmax()))]
+
+
+def _softmax(logits):
+    """Row-wise maximum probability, in the order the logits arrived.
+
+    The torch pipeline reports the winning label's probability; this is the same number, so a
+    score column means the same thing whichever runtime produced the row.
+    """
+    shifted = logits - logits.max(axis=1, keepdims=True)
+    exp = np.exp(shifted)
+    return (exp / exp.sum(axis=1, keepdims=True)).max(axis=1)
+
+
+def bert_classifier(model_path: str, *, task: str, runtime: str = '', max_length: int = 128) -> BertClassifier:
+    """A loaded classifier for this model, reused across the batches of a run.
+
+    Cache key is ``(path, task, runtime, max_length)``: the same folder answers a different question
+    under a different task, the torch and ONNX builds of one model are different answers on paper,
+    and the truncation length is baked into the tokenizer the loader configured — two nodes with
+    different 截断长度 sharing one session would silently truncate one of them wrong.
+    """
+    key = (str(model_path), str(task), runtime or bert_runtime(), int(max_length))
+    if key in _SESSIONS:
+        _SESSION_ORDER.remove(key)
+        _SESSION_ORDER.append(key)
+        return _SESSIONS[key]
+    holder = BertClassifier(model_path, task=task, runtime=runtime, max_length=max_length)
+    _SESSIONS[key] = holder
+    _SESSION_ORDER.append(key)
+    while len(_SESSION_ORDER) > SESSION_LIMIT:
+        dropped = _SESSION_ORDER.pop(0)
+        _SESSIONS.pop(dropped, None)
+        logger.info(t('sentiment.bert_session_dropped', model=dropped[0]))
+    return holder
 
 
 def resolve_bert_model(name: str) -> str:
@@ -210,13 +397,19 @@ class SentimentAnalyzer:
         if not model:
             raise ValueError(t('sentiment.bert_no_model'))
 
-        from transformers import pipeline
-
-        device = bert_device()
-        label_of = pipeline('sentiment-analysis', model=model, device=device)
-        # Said out loud, because "did this use my GPU" is otherwise only answerable by
-        # timing the run, and a laptop falling back to CPU is the common surprise.
-        logger.info(t('sentiment.bert_loaded', model=model, device='cuda' if device >= 0 else 'cpu'))
+        classifier = bert_classifier(model, task='sentiment-analysis', max_length=self.max_length)
+        # Said out loud, because "did this use my GPU, or the ONNX runtime, or the quantised
+        # weights" is otherwise only answerable by timing the run. The executor's degradation prints
+        # the MODE that ran; this prints which build of the model answered.
+        logger.info(
+            t(
+                'sentiment.bert_loaded',
+                model=model,
+                device=classifier.device,
+                runtime=classifier.runtime,
+                precision=classifier.precision,
+            )
+        )
 
         def read_many(texts: list) -> list:
             """One forward pass per chunk, one answer per text, failures as values.
@@ -224,11 +417,11 @@ class SentimentAnalyzer:
             A batch that raises answers every row of that batch with the same exception
             rather than ending the column: the per-row contract of this operation is that
             the rows that read are answered and the ones that did not stay blank.
-            Truncation lives in the pipeline call so the tokenizer's own limit is applied
-            to the batch, instead of this module guessing at a character count.
+            Truncation lives in the classifier so the tokenizer's own limit is applied to
+            the batch, instead of this module guessing at a character count.
             """
             try:
-                answers = label_of(list(texts), batch_size=len(texts), truncation=True, max_length=self.max_length)
+                answers = classifier.predict(list(texts))
             except Exception as e:
                 return [e] * len(texts)
             out = []

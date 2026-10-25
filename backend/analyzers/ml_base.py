@@ -2,12 +2,8 @@ import logging
 import os
 
 import jieba
-import joblib
 import numpy as np
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import FeatureUnion, Pipeline
 
 from analyzers.stopwords import STOPWORDS
 from config import Config
@@ -15,6 +11,11 @@ from i18n import t
 from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
+
+# sklearn and joblib are imported inside the functions that train or load a model, never here:
+# this module sits on the boot path (``analyzers`` is imported by ``app``), and pulling in all of
+# sklearn to answer a request that never trains an ML classifier cost 5.4 s of process start.
+# ``tests/unit/test_boot_import_budget.py`` fails if a top-level import comes back.
 
 
 class ModelNotTrainedError(ValueError):
@@ -65,6 +66,10 @@ def build_tfidf_pipeline(
     strongest no-deep-learning feature here. Default off keeps the plain word pipeline — and the
     already-saved word-model .pkl files — byte-for-byte unchanged.
     """
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import FeatureUnion, Pipeline
+
     if stop_words is None:
         stop_words = sorted(STOPWORDS)
     if classifier is None:
@@ -114,6 +119,8 @@ class MLClassifier:
         self._path = os.path.join(MODEL_DIR, f'{safe}.pkl')
 
     def fit(self, texts: list[str], labels: list[str]):
+        import joblib
+
         if not texts:
             raise ValueError(t('ml.no_training_rows'))
         unique = sorted(set(labels))
@@ -131,6 +138,8 @@ class MLClassifier:
         return self
 
     def predict(self, texts: list[str], _neutral: str = 'Neutral') -> list[tuple[str, float]]:
+        import joblib
+
         if not self._fitted:
             if os.path.exists(self._path):
                 data = joblib.load(self._path)

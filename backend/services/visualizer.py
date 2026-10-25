@@ -25,26 +25,40 @@ import re
 from collections import Counter
 
 import jieba
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from i18n import t
 from services.chart_contracts import BIBLIO_CHART_TYPES
 
-matplotlib.use('Agg')  # headless backend, safe for a web server
-plt.rcParams['font.sans-serif'] = [
-    'SimHei',
-    'Microsoft YaHei',
-    'WenQuanYi Micro Hei',
-    'DejaVu Sans',
-    'Arial Unicode MS',
-    'sans-serif',
-]
-plt.rcParams['axes.unicode_minus'] = False
-
 logger = logging.getLogger(__name__)
+
+
+def _pyplot():
+    """Import matplotlib and return ``pyplot`` with this app's headless CJK setup applied.
+
+    The three statements are one function and must stay that way: ``matplotlib.use('Agg')`` has
+    to run before ``pyplot`` is imported, and the CJK font list has to be set before any figure
+    is drawn. Importing them apart is how a server gains a window or a figure full of boxes
+    instead of Chinese labels. matplotlib costs about a second to import, and a canvas that only
+    renders ECharts never pays it — so nothing here is imported at module level.
+    """
+    import matplotlib
+
+    matplotlib.use('Agg')  # headless backend, safe for a web server
+    from matplotlib import pyplot as plt
+
+    plt.rcParams['font.sans-serif'] = [
+        'SimHei',
+        'Microsoft YaHei',
+        'WenQuanYi Micro Hei',
+        'DejaVu Sans',
+        'Arial Unicode MS',
+        'sans-serif',
+    ]
+    plt.rcParams['axes.unicode_minus'] = False
+    return plt
+
 
 CHART_TYPES = (
     'bar',
@@ -1682,6 +1696,7 @@ class VisualizationService:
         # Every branch below indexes the frame by the configured field names.
         cls.require_columns(df, x, y)
 
+        plt = _pyplot()
         fig, ax = plt.subplots(figsize=(7, 4.2), dpi=130)
         try:
             if chart_type == 'pie':

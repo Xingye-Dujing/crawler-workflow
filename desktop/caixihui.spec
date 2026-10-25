@@ -14,23 +14,15 @@ import glob
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 SPEC_DIR = Path(SPECPATH).resolve()
 ROOT = SPEC_DIR.parent
 BACKEND = ROOT / 'backend'
-# UPX shrinks many .pyd/.dll files, but packed binaries attract more antivirus
-# false positives. It is opt-in (`build_windows.ps1 -Upx`) and the Python/VC runtime
-# DLLs stay uncompressed so the bootloader can always start.
-USE_UPX = os.environ.get('CAIXIHUI_UPX') == '1'
-UPX_EXCLUDE = [
-    'python311.dll',
-    'vcruntime140.dll',
-    'vcruntime140_1.dll',
-    'msvcp140.dll',
-    'ucrtbase.dll',
-    'api-ms-win-*.dll',
-]
+# UPX is NOT applied here: PyInstaller compresses nothing and barely says so when the tool is
+# not on PATH, which would make the shipped folder's size a guess. `build_windows.ps1` runs
+# `compress_dist.py` after the prune step — it names the missing tool, verifies each file with
+# `upx -t` and restores anything it cannot prove. See desktop/compress_dist.py.
 
 datas = [
     # Flask serves index.html/JS/CSS itself; world.json is read directly by biblio_geo.
@@ -66,6 +58,14 @@ except Exception:
 for driver in glob.glob(str(ROOT / 'drivers' / 'chromedriver.exe')):
     binaries.append((driver, 'drivers'))
 
+# onnxruntime is the runtime the packaged app answers bert nodes with, and it loads its C++
+# backend as a DLL beside its own .pyd. Stated explicitly because a missing piece there is not a
+# boot failure — the import is lazy — it is a refusal on the first bert run on the user's machine.
+try:
+    binaries += collect_dynamic_libs('onnxruntime')
+except Exception:
+    pass
+
 hiddenimports = []
 for package in ('api', 'crawlers', 'services', 'analyzers', 'utils'):
     hiddenimports += collect_submodules(package)
@@ -77,6 +77,9 @@ hiddenimports += [
     'settings_store',
     'scheduler',
     'browser_profiles',
+    # Imported inside ``main()`` (the launcher keeps its boot path import-light), so state it
+    # rather than trusting the analysis to reach a function-level import in the entry script.
+    'bert_pack',
 ]
 
 # Optional/heavy stacks that are NOT part of the packaged runtime. The app already
@@ -153,8 +156,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=USE_UPX,
-    upx_exclude=UPX_EXCLUDE,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -170,7 +172,6 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=USE_UPX,
-    upx_exclude=UPX_EXCLUDE,
+    upx=False,
     name='CaiXiHui',
 )

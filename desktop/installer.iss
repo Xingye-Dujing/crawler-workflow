@@ -1,4 +1,5 @@
-; Inno Setup 6 script for the portable CaiXiHui onedir build.
+﻿; Inno Setup 6/7 script for the portable CaiXiHui onedir build (compiled with ISCC.exe; the UTF-8
+; BOM at the head of this file is what lets it carry Chinese — Inno reads a BOM-less .iss as ANSI).
 ;
 ; Build the folder first:
 ;   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
@@ -32,7 +33,8 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 Compression=lzma2/ultra64
 SolidCompression=yes
-LZMAUseSeparateProcess=yes
+; LZMAUseSeparateProcess was dropped in Inno Setup 7 (it prints
+; "directive ... is obsolete and ignored"); separate-process compression is the default now.
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no

@@ -336,6 +336,13 @@ def clean_globals(request):
     ml = sys.modules.get('analyzers.ml_base')
     if ml is not None:
         ml._shared_classifiers.clear()
+    # Same reason as the two caches below it: a BERT classifier holds the pipeline (or the ONNX
+    # session) a case installed by monkeypatching. Left alive, the next case's fake would never be
+    # constructed and its assertions would measure the previous case's model.
+    sa = sys.modules.get('analyzers.sentiment')
+    if sa is not None:
+        sa._SESSIONS.clear()
+        sa._SESSION_ORDER.clear()
     # The sentence-transformer weight cache is process-global for the same reason as the shared
     # classifiers: a fake encoder installed by one case must not answer the next case's embedding
     # call, or that case measures a model it never set up (a green that never built its own fake).

@@ -10,15 +10,21 @@ reported by the caller.
 
 import math
 from collections import Counter
+from typing import TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import silhouette_samples
 
 from i18n import t
+
+# sklearn is imported inside the three functions that cluster or label (``_tfidf_matrix``,
+# ``_label_cluster``, ``cluster_graph``): this module is reachable from ``app``'s import, and
+# loading all of sklearn to boot costs seconds even when no canvas asks for clustering.
+# networkx stays top-level because ``nx.Graph`` is evaluated in signatures at def time.
+if TYPE_CHECKING:
+    # Only the return annotation of ``_tfidf_matrix`` names this class, and a quoted forward
+    # reference has to resolve somewhere for the reader (and ruff) to trust it.
+    from sklearn.feature_extraction.text import TfidfVectorizer
 
 SEED = 42
 MAX_AUTO_K = 10
@@ -108,7 +114,9 @@ def _llr_scores(cluster_docs: list[int], other_docs: list[int], doc_terms: list[
     return scores
 
 
-def _tfidf_matrix(doc_terms: list[list[str]]) -> tuple[TfidfVectorizer, np.ndarray] | None:
+def _tfidf_matrix(doc_terms: list[list[str]]) -> tuple['TfidfVectorizer', np.ndarray] | None:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
     documents = [' '.join(terms) for terms in doc_terms]
     if not any(document.strip() for document in documents):
         return None
@@ -136,6 +144,8 @@ def _label_cluster(
     that fallback; a label that pretends to be LLR is the silent degradation
     this project forbids.
     """
+    from sklearn.decomposition import TruncatedSVD
+
     cluster_docs = sorted(docs)
     rest = sorted(other_docs)
     terms: list[str] = []
@@ -204,6 +214,9 @@ def cluster_graph(
     top_terms: int,
 ) -> dict:
     """Partition and label. Returns per-node cluster/label/silhouette and the summary."""
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_samples
+
     names = sorted(names)
     n = len(names)
     if n > MAX_CLUSTER_NODES:

@@ -468,25 +468,65 @@ def dependency_report(app_dir_path, *, env=None) -> dict:
     return {'chrome': chrome, 'driver': driver, 'xelatex': xelatex, 'ollama': ollama}
 
 
-def print_dependency_report(report: dict) -> None:
-    print('依赖自检（不影响启动，只说明哪类节点可用）：', flush=True)
-    print(
+def dependency_lines(report: dict) -> list:
+    """The self-check as text lines — one source of wording for both print paths below."""
+    return [
+        '依赖自检（不影响启动，只说明哪类节点可用）：',
         '  Chrome: ' + ('已找到' if report.get('chrome') else '未找到（采集节点需要安装 Chrome）'),
-        flush=True,
-    )
-    print(
         '  chromedriver: '
         + (report['driver'] if report.get('driver') else '未配置（首次采集会由 Selenium 自动下载匹配版本，需要联网）'),
-        flush=True,
-    )
-    print(
         '  Ollama: ' + ('运行中' if report.get('ollama') else '未检测到（只影响本地模型节点；可改用 OpenRouter）'),
-        flush=True,
-    )
-    print(
         '  xelatex: ' + (report['xelatex'] if report.get('xelatex') else '未找到（只影响 PDF / 论文成稿）'),
-        flush=True,
-    )
+    ]
+
+
+def print_dependency_report(report: dict) -> None:
+    for line in dependency_lines(report):
+        print(line, flush=True)
+
+
+def _print_dependencies(app_dir_path) -> None:
+    """Run the self-check and print it, on the background thread.
+
+    It probes four filesystem locations and opens a TCP socket, so on a machine with a cold
+    disk cache it is seconds — and it used to sit between picking the port and binding it,
+    which is why the window sat there before the browser could connect. It is deliberately not
+    a gate: whatever it finds, the server is already running. A failure inside the probe is
+    reported as its own line rather than killing the thread silently, because the absence of
+    the four lines is otherwise indistinguishable from a machine where the check passed quietly.
+
+    One write, not five: Flask's own startup lines land on the same console from another
+    thread, and five separate writes can be split apart mid-block.
+    """
+    try:
+        report = dependency_report(app_dir_path)
+    except Exception:  # a diagnostic must never break a start; the server is already running
+        print(f'依赖自检未能完成：{traceback.format_exc(limit=1).strip()}', flush=True)
+        return
+    print('\n'.join(dependency_lines(report)), flush=True)
+
+
+def sweep_startup_litter(install_dir) -> int:
+    """Remove the empty ``tmp…`` folders a launch leaves beside the exe, and report how many.
+
+    Measured: two per start, in the install folder, whatever TMP/TEMP/TMPDIR say — so they come from a
+    library resolving its scratch directory before (or ignoring) the redirect above, while the process
+    cwd is the exe folder. They are not ours to keep or to name: our own ``mkdtemp`` calls all pass a
+    ``cixi-`` prefix, and these carry the bare ``tmp`` + 8 random characters shape.
+
+    Only an **empty** directory matching that shape is removed, and a non-empty one is left exactly as
+    it is — this is housekeeping, not a cleanup of anything a user might have put there.
+    """
+    removed = 0
+    for holder in Path(install_dir).glob('tmp*'):
+        if not holder.is_dir():
+            continue
+        with contextlib.suppress(OSError):
+            if any(holder.iterdir()):
+                continue
+            holder.rmdir()
+            removed += 1
+    return removed
 
 
 def _wait_and_open(url: str) -> None:
@@ -530,6 +570,26 @@ def main(argv=None) -> int:
     # (possibly read-only) install folder, and never open a GUI backend in a server.
     os.environ.setdefault('MPLCONFIGDIR', str(root / 'mplconfig'))
     os.environ.setdefault('MPLBACKEND', 'Agg')
+    # Same reason, one level down: when the system temp directory is not writable (endpoint
+    # protection denying `%TEMP%` — the same denial that made pip hang in a restricted workspace),
+    # Python's tempfile falls back to the **current directory**, and `main()` chdir's to the install
+    # folder just below. Measured on a real launch: an empty `tmp9xh5hzc1`-style directory beside
+    # CaiXiHui.exe, one per start, in the folder users copy around. Scratch goes into the data root,
+    # which is user state and is stripped from the deliverable before it is zipped.
+    scratch = root / 'tmp'
+    with contextlib.suppress(OSError):
+        scratch.mkdir(parents=True, exist_ok=True)
+    # Set, not setdefault: a frozen bundle owns its scratch, and the alternative is measured — with
+    # `%TEMP%` denied, one empty `tmp…` directory appeared beside the exe **during startup**, before
+    # any request. `tempfile` caches the directory it settled on (`tempdir`, and it resolves to the
+    # current directory when the system one is unwritable), so the cache is dropped as well: without
+    # that line the assignment changes nothing for anything that touched tempfile earlier.
+    for _name in ('TMP', 'TEMP', 'TMPDIR'):
+        os.environ[_name] = str(scratch)
+    tempfile.tempdir = None
+    stale = sweep_startup_litter(base)
+    if stale:
+        _print_safe(f'已清理上次运行留下的空临时目录：{stale} 个')
     with contextlib.suppress(OSError):
         os.chdir(base)
 
@@ -567,6 +627,29 @@ def main(argv=None) -> int:
             detail=traceback.format_exc(),
         )
         return 1
+
+    # A BERT model pack the user unpacked beside the exe is otherwise invisible: the panel lists
+    # models from the registry file, not from the filesystem. Runs after the data root is settled
+    # and before the app is imported, so the first /api/models already sees the pack.
+    try:
+        from bert_pack import seed_registry
+
+        ledger = seed_registry(root / 'data', base / 'bert_models')
+    except Exception:
+        # A pack that will not register is a lost optional feature, not a reason to not start:
+        # the app works, uploading and crawling are unaffected, and the reason is printed.
+        ledger = {
+            'packs': 0,
+            'added': [],
+            'skipped': [],
+            'untouched': f'登记失败：{traceback.format_exc(limit=1).strip()}',
+        }
+    if ledger['added']:
+        print(f'已登记 BERT 模型包：{", ".join(ledger["added"])}', flush=True)
+    if ledger['skipped']:
+        print(f'模型包里这些名字已在注册表中，保留你原来的条目：{", ".join(ledger["skipped"])}', flush=True)
+    if ledger['packs'] and ledger['untouched']:
+        print(f'BERT 模型包未写入注册表：{ledger["untouched"]}', flush=True)
 
     try:
         from app import app as flask_app
@@ -609,7 +692,7 @@ def main(argv=None) -> int:
     if seeded:
         print(f'已放入首次示例文件：{", ".join(seeded)}', flush=True)
     print('关闭此窗口即可停止服务（运行中的数据会保留，下次可续跑）。', flush=True)
-    print_dependency_report(dependency_report(base))
+    threading.Thread(target=_print_dependencies, args=(base,), daemon=True).start()
 
     no_browser = os.environ.get('CIXI_NO_BROWSER') == '1' or '--no-browser' in argv
     if not no_browser:
@@ -628,6 +711,9 @@ def main(argv=None) -> int:
         return 1
     finally:
         clear_instance(root, port)
+        # Self-clean what this launch created; a killed process never gets the chance, which is why
+        # the same sweep also runs at start.
+        sweep_startup_litter(base)
     return 0
 
 

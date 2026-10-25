@@ -2,13 +2,12 @@ import logging
 
 import jieba
 import pandas as pd
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import silhouette_score
 
 from i18n import t
 
 logger = logging.getLogger(__name__)
+
+# sklearn is imported where it is used (see ``analyzers/anomaly.py`` for the measured cost).
 
 
 class TextCluster:
@@ -32,6 +31,8 @@ class TextCluster:
         "Number of labels is 3. Valid values are 2 to n_samples - 1" and kill
         the whole node.
         """
+        from sklearn.metrics import silhouette_score
+
         if not 1 < len(set(labels)) < n_rows:
             return 0.0
         try:
@@ -49,6 +50,9 @@ class TextCluster:
         min_samples: int = 2,
         max_features: int = 3000,
     ) -> pd.DataFrame:
+        from sklearn.cluster import DBSCAN, KMeans
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
         if text_column not in df.columns:
             logger.error(t('analysis.col_missing', col=text_column))
             return df

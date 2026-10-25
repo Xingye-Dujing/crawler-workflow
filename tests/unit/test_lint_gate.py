@@ -10,6 +10,7 @@ below rather than hidden in a config file.
 """
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,8 +18,16 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO = Path(__file__).resolve().parents[2]
-#: Sources the linters own. `.venv`, `dist`, `build` and the model/dataset trees are not our code.
-SKIP_DIRS = {'.venv', 'dist', 'build', '.git', 'node_modules', 'data', 'logs', 'scratchpad', 'ml_train'}
+#: Sources the linters own. `dist`, `build` and the model/dataset trees are not our code.
+SKIP_DIRS = {'dist', 'build', '.git', 'node_modules', 'data', 'logs', 'scratchpad', 'ml_train'}
+#: A Python environment is third-party code whatever it is called. Naming `.venv` was not enough:
+#: the packaging build keeps `desktop/.venv-build`, and the moment that folder existed on a developer
+#: machine this gate reported 185 inline suppressions in `site-packages` — files nobody here wrote,
+#: and a red gate nobody can act on is a gate that gets ignored. `pyvenv.cfg` is the marker,
+#: so the rule is the `.venv*` prefix plus `site-packages`, not one more directory name each time a
+#: second environment appears.
+VENV_DIR_PREFIX = '.venv'
+SITE_PACKAGES = 'site-packages'
 #: `ml_train/scripts` IS linted; only the trained models and datasets under it are not.
 LINTED_SUBTREES = {'ml_train': ('scripts',)}
 
@@ -26,16 +35,43 @@ INLINE_PYLINT_SUPPRESSION = re.compile(r'#\s*pylint:\s*disable')
 BLANKET_RUFF_SUPPRESSION = re.compile(r'^#\s*ruff:\s*noqa')
 
 
+def _is_third_party(parts) -> bool:
+    """True for anything inside an installed interpreter environment, by shape rather than by name."""
+    return any(part == SITE_PACKAGES or part.startswith(VENV_DIR_PREFIX) for part in parts)
+
+
 def _sources():
     for path in REPO.rglob('*.py'):
         relative = path.relative_to(REPO)
         parts = set(relative.parts)
-        if parts & SKIP_DIRS:
+        if parts & SKIP_DIRS or _is_third_party(relative.parts):
             continue
         top = relative.parts[0]
         if top in LINTED_SUBTREES and relative.parts[1:2] not in [(name,) for name in LINTED_SUBTREES[top]]:
             continue
         yield relative.as_posix(), path
+
+
+class TestTheGateKnowsWhatsOurs:
+    """`_sources()` decides what the gate can see, so its scope is a tested behaviour."""
+
+    def test_an_environment_is_skipped_having_any_name_and_at_any_depth(self, tmp_path, monkeypatch):
+        buried = tmp_path / 'desktop' / '.venv-build' / 'Lib' / 'site-packages' / 'sortedcontainers'
+        buried.mkdir(parents=True)
+        (buried / 'sortedlist.py').write_text('x = 1\n', encoding='utf-8')
+        odd = tmp_path / 'tools' / '.venv-check'
+        odd.mkdir(parents=True)
+        (odd / 'thing.py').write_text('x = 1\n', encoding='utf-8')
+        (tmp_path / 'desktop' / 'compress_dist.py').write_text('x = 1\n', encoding='utf-8')
+        monkeypatch.setattr(sys.modules[__name__], 'REPO', tmp_path)
+        assert [name for name, _ in _sources()] == ['desktop/compress_dist.py'], (
+            'a gate that reports other people code as our violation gets ignored, which is how a gate dies'
+        )
+
+    def test_the_real_tree_reports_no_environment_path_as_ours(self):
+        names = [name for name, _ in _sources()]
+        assert not [name for name in names if '.venv' in name or 'site-packages' in name], names[:5]
+        assert 'desktop/compress_dist.py' in names, 'the product tree has to still be inside the gate'
 
 
 class TestNoInlineSuppressions:

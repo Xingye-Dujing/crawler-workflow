@@ -1,8 +1,8 @@
-# Optional, per-feature dependencies — nothing here is needed for a crawl or a cleaning pass. The
+# Optional, per-feature dependencies -- nothing here is needed for a crawl or a cleaning pass. The
 # topic step's DEFAULT is `auto` (embedding when sentence-transformers is installed, else LDA) and the
-# sentiment/emotion/tendency nodes DEFAULT to bert (the recommended main model) — both fall back to a
+# sentiment/emotion/tendency nodes DEFAULT to bert (the recommended main model) -- both fall back to a
 # dependency-free mode (LDA / snownlp / sklearn ml) WITH a printed line naming the mode that actually
-# ran, so a torch-less machine still gets a working project. An EXPLICIT bert / 主题方法=embedding is
+# ran, so a torch-less machine still gets a working project. An EXPLICIT bert / topic-method=embedding is
 # never silently substituted. Installing this stack upgrades those defaults; explicit LDA / snownlp /
 # ml need nothing from here.
 #
@@ -11,29 +11,29 @@
 # (sentiment / emotion / tendency) import the packages inside a guard that PROBES for them first. A
 # machine without them STILL WORKS: the node executor degrades an unrunnable explicit `bert` to the
 # op's dependency-free mode and PRINTS which mode actually produced the column (never a silent
-# substitution), and the analyzer itself still refuses a direct, unrunnable bert by name — rather than
+# substitution), and the analyzer itself still refuses a direct, unrunnable bert by name -- rather than
 # a broken install or a quiet cross-model swap.
 #
 # So this file exists to keep one rule honest: every package the code imports is declared
 # somewhere it can be found, instead of being discovered by reading the source.
 #
-# Install (CUDA build — replace cu121 with the wheel matching your driver, or drop the
+# Install (CUDA build -- replace cu121 with the wheel matching your driver, or drop the
 # --extra-index-url entirely for the CPU build):
 #
 #     .venv/Scripts/pip.exe install -r requirements-optional.txt \
 #         --extra-index-url https://download.pytorch.org/whl/cu121
 #
-# Used by: the Process nodes' 情感极性 / 情绪 / 倾向 (sentiment / emotion / tendency) operations, mode
-# `bert`. The model itself is a separate download named in the node — see the README's bert note.
+# Used by: the Process nodes' sentiment / emotion / tendency operations, mode
+# `bert`. The model itself is a separate download named in the node -- see the README's bert note.
 
 torch
 transformers
 
-# ── Parquet export: the columnar engine behind the Output node's `parquet` format ───
+# -- Parquet export: the columnar engine behind the Output node's `parquet` format ----------
 # `df.to_parquet` needs an engine; `pyarrow` is the one this project names. pandas resolves it
 # itself (nothing in backend/ imports pyarrow directly), so on a machine without one the format
 # REFUSES BY NAME (services/exporter.py::_write_parquet catches the ImportError and says install
-# pyarrow) — never a bare traceback, and every other export format keeps working. It lives here
+# pyarrow) -- never a bare traceback, and every other export format keeps working. It lives here
 # rather than requirements.txt because it is a per-feature, sizeable wheel used by only the parquet
 # writer, mirroring the torch/transformers rule above.
 #
@@ -41,15 +41,16 @@ transformers
 
 pyarrow
 
-# ── Topic modeling: `auto` uses embedding when this stack is present, else LDA ─────
-# `sentence-transformers` (with torch/transformers) is imported by product code —
-# `services/data_analysis.py::_embed_vectors` — and is what EVERY topic step (主题模型 / 分阶段 /
-# 距离图 / 显著词) prefers on its `auto` default. When it is absent `_resolve_topic_method` falls
+# -- Topic modeling: `auto` uses embedding when this stack is present, else LDA -------------
+# `sentence-transformers` (with torch/transformers) is imported by product code --
+# `services/data_analysis.py::_embed_vectors` -- and is what EVERY topic step (topic model /
+# staged topic / topic distance / significant words) prefers on its `auto`
+# default. When it is absent `_resolve_topic_method` falls
 # back to LDA and LOGS that it did, so an `auto` result is never mislabeled; the step only REFUSES
-# by name when you EXPLICITLY pick embedding without the encoder. Installing this stack is optional —
+# by name when you EXPLICITLY pick embedding without the encoder. Installing this stack is optional --
 # it upgrades the default from LDA to the (measurably better) embedding path, nothing more.
 # The ml_train/scripts/topic_bakeoff.py comparison that justified the switch scored sklearn LDA
-# against embeddings + KMeans (and BERTopic) on the same NPMI coherence — with a real small Chinese
+# against embeddings + KMeans (and BERTopic) on the same NPMI coherence -- with a real small Chinese
 # encoder the embedding path won on both corpora. `bertopic`/`umap-learn`/`hdbscan` are used ONLY by
 # that offline script, not by the app (BERTopic was judged heavier for no gain and was not adopted).
 # None of these are CI-installed.
@@ -58,18 +59,32 @@ bertopic
 umap-learn
 hdbscan
 
-# ── 红果短剧 comment harvest: the desktop player's proxy signer needs both ──────
+# -- Hongguo short-drama comment harvest: the desktop player's proxy signer needs both ------
 # The Hongguo comment endpoint is signature-guarded (x-medusa/x-helios; a byte-identical
-# replay answers 110001 — docs/crawler_notes.md 红果短剧), so this crawl does not speak the
+# replay answers 110001 -- docs/crawler_notes.md, the Hongguo section), so this crawl does not speak the
 # protocol: it runs the third-party desktop player behind `mitmdump` and reads what the
 # player legitimately fetched. `mitmproxy` supplies the mitmdump executable AND the
 # presence probe the harness refuses by name without; `uiautomation` (Windows-only,
 # comtypes-based) drives the player's window. Both are imported/probed only inside
-# crawlers/hongguo_harvest.py — an absent stack is a NAMED refusal on that one node, every
+# crawlers/hongguo_harvest.py -- an absent stack is a NAMED refusal on that one node, every
 # other platform keeps working, and CI never installs them (Windows desktop feature, like
 # the player itself). mitmproxy pulls a large twisted/cryptography tree, hence this file.
 #
-# Used by: the Data Source node, platform 红果短剧, mode 评论.
+# Used by: the Data Source node, platform hongguo, mode comments.
 
 mitmproxy
 uiautomation
+
+# -- ONNX export of the fine-tuned BERTs: dev-only tools, NOT the runtime that answers --
+# `onnx` is imported by exactly one thing: `ml_train/scripts/export_onnx_bert.py`, which turns a
+# trained `model.safetensors` into the graph the packaged app runs. It also arrives transitively
+# with `optimum`/`sentence-transformers` on some pins, so it is declared here rather than leaned on.
+# The app itself never imports it: `analyzers/sentiment.py` loads a graph with `onnxruntime` +
+# `tokenizers` only, and BOTH of those are real dependencies (requirements.txt and
+# desktop/requirements-runtime.txt) -- they are what lets the packaged build answer `bert` without
+# torch. Quantising is done by `onnxruntime.quantization`, which needs `onnx` to rewrite the graph,
+# so the export step requires this line while a normal install does not.
+#
+# Used by: ml_train/scripts/export_onnx_bert.py, ml_train/scripts/eval_onnx_parity.py (offline).
+
+onnx

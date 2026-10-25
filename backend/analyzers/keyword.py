@@ -37,12 +37,13 @@ import jieba
 import jieba.analyse
 import jieba.posseg
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 from config import Config
 from i18n import t
 
 logger = logging.getLogger(__name__)
+
+# sklearn is imported where it is used (see ``analyzers/anomaly.py`` for the measured cost).
 
 #: The one method that scores against the user's own corpus instead of jieba's news IDF table.
 CORPUS_METHOD = 'tfidf_corpus'
@@ -209,6 +210,8 @@ class KeywordExtractor:
                     t('analysis.keyword_pos_no_match', tags='、'.join(sorted(pos_tags)), rows=len(documents))
                 )
             return self._empty_result(merge)
+
+        from sklearn.feature_extraction.text import TfidfVectorizer
 
         vectorizer = TfidfVectorizer(
             # The tokens were produced above and joined with spaces, so this tokenizer is the

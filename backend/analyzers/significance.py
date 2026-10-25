@@ -2,11 +2,13 @@ import logging
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 from i18n import t
 
 logger = logging.getLogger(__name__)
+
+# scipy is imported where it is used: ``analyzers`` is on the boot path, and scipy.stats drags
+# the interpolate/spatial subtrees in at process start.
 
 
 class SignificanceAnalyzer:
@@ -131,6 +133,8 @@ def _run_test(sig_method: str, arrays: list) -> tuple:
     """Dispatch the chosen scipy test and return ``(statistic, p_value)``. Every result is
     read from the result object's ``.statistic`` / ``.pvalue``, so a scipy release that
     reshapes the return type still yields the same two numbers by name."""
+    from scipy import stats
+
     if sig_method == 'ttest':
         result = stats.ttest_ind(arrays[0], arrays[1], equal_var=False)
     elif sig_method == 'anova':

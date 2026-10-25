@@ -157,7 +157,9 @@ class TestBertMode:
 
     def test_the_gpu_is_handed_to_the_pipeline_when_there_is_one(self, monkeypatch):
         calls = _install_bert_stub(monkeypatch, lambda t: {'label': 'Satire/Mockery', 'score': 0.6})
-        monkeypatch.setattr(tendency_module, 'bert_device', lambda: 0)
+        # The device choice lives in the shared classifier (``analyzers.sentiment``), not in this
+        # operation: the three bert operations answer through one loader now.
+        monkeypatch.setattr('analyzers.sentiment.bert_device', lambda: 0)
         TendencyAnalyzer(mode='bert', bert_model='m').analyze_dataframe(frame(), '正文')
         assert calls[0]['device'] == 0, 'a card the machine has must not be left idle'
 

@@ -3,7 +3,7 @@ flask-cors
 requests
 # Directly imported by backend/test_dead_driver.py (Retry). Declared rather than leaned on:
 # urllib3 arrives today only as requests' own dependency, and a transitive package is not an
-# API another module may import through — a resolver change would break the probe silently.
+# API another module may import through -- a resolver change would break the probe silently.
 urllib3
 selenium
 pandas
@@ -27,3 +27,15 @@ snownlp
 # Bibliometric graphs (metrics, pruning, GraphML export); installed in .venv but
 # previously relied on transitively, which a resolver change could break.
 networkx
+# The second BERT runtime: `analyzers/sentiment.py` answers a `bert` node through onnxruntime +
+# tokenizers when torch/transformers are absent -- which is exactly the packaged Windows app, whose
+# runtime list carries both. They are declared here too because product code imports them directly
+# (AGENTS: every directly-imported package is declared, not discovered), and they are tens of MB
+# rather than torch's gigabytes, so they do not belong in requirements-optional.txt.
+onnxruntime
+tokenizers
+# tools/build_icon.py regenerates backend/static/icon.ico from the source art: PyInstaller stamps
+# that ICO into CaiXiHui.exe and Inno Setup refuses one that is not really an ICO, so the file is
+# generated rather than renamed. Already present transitively through matplotlib, declared here
+# because the tool imports PIL directly.
+Pillow

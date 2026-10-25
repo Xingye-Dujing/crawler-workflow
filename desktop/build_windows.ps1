@@ -13,7 +13,9 @@ param(
     [switch]$Installer,
     [switch]$KeepWork,
     [switch]$RemoveBuildEnv,
-    [switch]$Upx,
+    # UPX compression of the collected binaries is ON by default (it roughly halves the folder);
+    # pass -NoUpx on a machine without the tool, or when shipping a build you cannot re-sign.
+    [switch]$NoUpx,
     [switch]$SkipInstall
 )
 
@@ -27,7 +29,7 @@ $env:PYINSTALLER_CONFIG_DIR = Join-Path $PSScriptRoot '.pyinstaller-cache'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 # pip unpacks into %TEMP% and keeps its HTTP cache under %LOCALAPPDATA%. A restricted
 # workspace denies both writes, and the symptom is a silent hang right after
-# "Looking in indexes" — so temp and cache go inside the repo, and the cache is off.
+# "Looking in indexes" - so temp and cache go inside the repo, and the cache is off.
 $BuildTemp = Join-Path $RepoRoot 'build\tmp'
 New-Item -ItemType Directory -Force -Path $BuildTemp | Out-Null
 $env:TMP = $BuildTemp
@@ -67,7 +69,27 @@ function Get-FolderSize([string]$Path) {
         Measure-Object -Property Length -Sum).Sum
 }
 
+# The icon is stamped into both deliverables: PyInstaller copies it into CaiXiHui.exe and Inno
+# Setup refuses to compile a file that is not really an ICO ("Resource update error: Icon file is
+# invalid"). A PNG wearing an .ico name is shown happily by a browser and copied silently by
+# PyInstaller, so the header is checked here - before the build spends ten minutes on it.
+$Icon = Join-Path $RepoRoot 'backend\static\icon.ico'
+if (-not (Test-Path $Icon)) {
+    throw "missing icon: $Icon (regenerate it with tools\build_icon.py)"
+}
+$iconHead = [System.IO.File]::ReadAllBytes($Icon)[0..3]
+if ($iconHead -join '.' -ne '0.0.1.0') {
+    throw "$Icon is not an ICO (header must be 00 00 01 00): run .venv\Scripts\python.exe tools\build_icon.py"
+}
+
 Write-Step "Build environment"
+# -Clean and -SkipInstall contradict each other: -Clean deletes the build environment below, and
+# -SkipInstall then refuses to reinstall it, so the run recreates an empty venv and fails at
+# "No module named PyInstaller" several minutes later with no connection to the real cause.
+# Measured: one wasted build. Refuse the pair at once instead.
+if ($Clean -and $SkipInstall) {
+    throw '-Clean deletes the build environment, so -SkipInstall cannot follow it: drop one of the two flags.'
+}
 $BasePython = Join-Path $RepoRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path $BasePython)) {
     $BasePython = (Get-Command python -ErrorAction Stop).Source
@@ -96,16 +118,20 @@ if ($Clean) {
     Remove-Item -LiteralPath $Dist -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
 }
-if ($Upx) {
-    $env:CAIXIHUI_UPX = '1'
-    Write-Host 'UPX compression is ON (smaller folder, more antivirus false positives possible).'
-} else {
-    Remove-Item Env:CAIXIHUI_UPX -ErrorAction SilentlyContinue
-}
+# PyInstaller is deliberately NOT given upx=True: when it cannot find the tool it compresses
+# nothing and says so only in a line most people scroll past, which would make the folder's
+# advertised size a guess. The explicit pass below fails by name instead.
 Invoke-Exe $VenvPython @('-m', 'PyInstaller', '--noconfirm', '--clean', '--distpath', $DistRoot, '--workpath', $Work, $Spec)
 
 Write-Step "Prune unused platform/test payloads"
 Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'prune_dist.py'), $Dist)
+
+if (-not $NoUpx) {
+    Write-Step "Compress binaries with UPX"
+    Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'compress_dist.py'), $Dist)
+} else {
+    Write-Host 'UPX compression SKIPPED (-NoUpx): the folder keeps its full size.'
+}
 
 $folderBytes = Get-FolderSize $Dist
 Write-Host ("Folder: {0}  ({1:N1} MB)" -f $Dist, ($folderBytes / 1MB))
@@ -126,19 +152,29 @@ if (-not $NoZip) {
 
 if ($Installer) {
     Write-Step "Inno Setup"
+    # Version- and drive-agnostic on purpose. Hardcoding "Program Files\Inno Setup 6" misses a real
+    # install: measured here, the tool lives at `E:\Inno Setup 7\ISCC.exe` -- a different major
+    # version on a different drive -- and the build reported "not found" for an installer that was
+    # installed. Set CIXI_ISCC to ISCC.exe if the tool is somewhere this walk does not cover.
     $candidates = @()
-    if (${env:ProgramFiles(x86)}) {
-        $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
+    if ($env:CIXI_ISCC) { $candidates += $env:CIXI_ISCC }
+    foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA)) {
+        if ($root) {
+            $candidates += (Get-ChildItem -Path $root -Filter 'ISCC.exe' -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.FullName })
+        }
     }
-    if ($env:ProgramFiles) {
-        $candidates += (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+    foreach ($drive in (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)) {
+        $candidates += (Get-ChildItem -Path (Join-Path $drive.Root 'Inno Setup *\ISCC.exe') -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.FullName })
     }
+    $candidates += (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
     $iscc = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
     if (-not $iscc) {
-        Write-Warning 'Inno Setup 6 not found; the portable folder/zip is still usable.'
+        Write-Warning 'ISCC.exe not found (checked Program Files, LOCALAPPDATA, every drive root for "Inno Setup *\ISCC.exe", PATH, and $env:CIXI_ISCC); the portable folder/zip is still usable.'
     } else {
-        & $iscc (Join-Path $PSScriptRoot 'installer.iss')
-        if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
+        Write-Host ("Using ISCC: {0}" -f $iscc)
+        Invoke-Exe $iscc @((Join-Path $PSScriptRoot 'installer.iss'))
         $setup = Join-Path $DistRoot 'CaiXiHui-Setup.exe'
         if (Test-Path $setup) {
             Write-Host ("Setup:  {0}  ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))

@@ -24,6 +24,29 @@ DEAD_DIRS = (
     'scipy/tests',
     'sklearn/tests',
     'pandas/tests',
+    # jieba's LAC tagger model (13 MB) is only reachable through ``cut(..., use_paddle=True)``,
+    # which requires paddle to be installed (jieba/__init__.py:301-305, jieba/posseg/__init__.py
+    # :281-285). No analyzer passes that flag and paddle is not a dependency of this project.
+    'jieba/lac_small',
+)
+
+#: Package DATA files copied by ``collect_data_files`` that this app never opens. Each one is
+#: matched by exact name, because the sibling that IS read has an almost identical name.
+DEAD_PACKAGE_FILES = (
+    # snownlp stores its models twice: ``utils/tnt.py`` and ``classification/bayes.py`` both
+    # append ``.3`` to the path when running on Python 3, so the extension-less file is the
+    # Python-2 copy. The build is Python 3.11, and each ``*.marshal`` loads fine without it.
+    'snownlp/seg/seg.marshal',
+    'snownlp/tag/tag.marshal',
+    'snownlp/sentiment/sentiment.marshal',
+    # Training corpora, read only by snownlp's ``train()`` entry points. This app scores text
+    # with the shipped models (``SnowNLP(text).sentiments``) and never retrains them; without
+    # the marshal file the loader raises on import, without these it simply never learns a new
+    # model — which is the behaviour we ship.
+    'snownlp/seg/data.txt',
+    'snownlp/tag/199801.txt',
+    'snownlp/sentiment/neg.txt',
+    'snownlp/sentiment/pos.txt',
 )
 
 #: Individual files PyInstaller may keep even when tkinter is excluded.
@@ -37,7 +60,7 @@ DEAD_FILES = (
 #: Shipping it would hand every user the maintainer's ``runs.db``, datasets and saved logins
 #: (``data/cookies/*`` is a second device for that account), and the launcher's own
 #: existing-data rule would then keep that folder as the user's data home for good.
-USER_STATE_DIRS = ('data', 'logs', 'mplconfig')
+USER_STATE_DIRS = ('data', 'logs', 'mplconfig', 'tmp')
 USER_STATE_FILES = ('instance.json', 'startup_error.log')
 
 
@@ -71,12 +94,42 @@ def prune(dist: Path) -> list[tuple[str, int]]:
         freed = _remove(target)
         if freed:
             removed.append((name, freed))
+    for relative in DEAD_PACKAGE_FILES:
+        freed = _remove(internal / relative)
+        if freed:
+            removed.append((relative, freed))
+    removed.extend(_strip_font_cache_dirs(dist))
     # Tcl/Tk data lives in sibling directories; remove only if present.
     for relative in ('tcl', 'tk', 'tcl8', 'tk8'):
         freed = _remove(internal / relative)
         if freed:
             removed.append((relative, freed))
     removed.extend(strip_user_state(dist))
+    return removed
+
+
+def _strip_font_cache_dirs(dist: Path) -> list[tuple[str, int]]:
+    """Delete scratch directories an older build left beside the exe, and nothing else.
+
+    Two shapes are removed: matplotlib's font-cache folder (it holds a ``fontlist-*.json``) and an
+    **empty** ``tmp*`` folder. Both were measured in ``dist/CaiXiHui`` — ``tmp5ttn736f/``,
+    ``tmpciehu6a_/`` with a fontlist, and then four empty ``tmp…`` directories after one launch each,
+    because ``tempfile`` falls back to the current directory when ``%TEMP%`` is denied and the
+    launcher's cwd is the install folder. The launcher now points TMP/TEMP/TMPDIR at
+    ``<data root>/tmp``, so these are the residue of earlier builds; a ``tmp*`` folder with anything
+    in it that is not a font cache is not ours to delete.
+    """
+    removed = []
+    for holder in sorted(dist.glob('tmp*')):
+        if not holder.is_dir():
+            continue
+        contents = list(holder.iterdir())
+        is_font_cache = any(path.name.startswith('fontlist-') for path in contents)
+        if contents and not is_font_cache:
+            continue
+        freed = _remove(holder)
+        if freed or not contents:
+            removed.append((holder.name, freed))
     return removed
 
 

@@ -2,11 +2,13 @@ import logging
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import IsolationForest
 
 from i18n import t
 
 logger = logging.getLogger(__name__)
+
+# IsolationForest is imported where it is used: this module is on the boot path through
+# ``analyzers``, and ``sklearn.ensemble`` alone measured 5.4 s of process start.
 
 
 class AnomalyDetector:
@@ -34,6 +36,8 @@ class AnomalyDetector:
         contamination: float = 0.1,
         random_state: int = 42,
     ) -> pd.DataFrame:
+        from sklearn.ensemble import IsolationForest
+
         work = df.copy()
 
         numeric_cols = work.select_dtypes(include=[np.number]).columns.tolist()

@@ -50,13 +50,22 @@ python app.py
 
 **4b. Windows 免环境桌面版（给不装 Python 的人）**
 
-`desktop/` 提供 PyInstaller **onedir** 打包：生成一个文件夹（外加压缩 zip，可选 Inno Setup 安装包），
+`desktop/` 提供 PyInstaller **onedir** 打包：生成一个文件夹（外加压缩 zip，`-Installer` 再出一个
+Inno Setup 安装包 `CaiXiHui-Setup.exe`），
 双击 `CaiXiHui.exe` 即启动本地服务并打开浏览器，运行时不需要装 Python 或第三方库。
 构建命令、体积边界与首启依赖自检见 [`desktop/README.md`](desktop/README.md)；数据默认在
 `%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt` 可切成便携模式。那个位置写不进去时会自动换到
 `%LOCALAPPDATA%\CaiXiHui` 或 exe 所在文件夹并在控制台点名原因；真的一个都写不进去时会**弹窗**说明并把
 traceback 写进 `startup_error.log`——控制台窗口随进程消失，不弹窗就等于没报错。
 Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上传/分析，不装 Ollama 用 OpenRouter 或不用模型节点。
+打包**默认用 UPX 压一遍 pyd/dll**（`-NoUpx` 关掉；找不到 upx 就按名失败，不会假装压过），
+依赖自检（Chrome / chromedriver / Ollama / xelatex）挪到了端口绑定之后的一条后台线程里——
+它以前卡在绑定前面，是启动窗口空等的来源。
+微调 BERT 的四个模型**不在应用包里**：它们是单独的「模型包」zip（fp16 ONNX，解压后约 780MB、包体 756MB），
+解压后让 `bert_models/` 与 `CaiXiHui.exe` 同级即可，下次启动会自动登记进模型列表；不放模型包时
+应用照常工作，只是那三个节点会降级并打印实际模式。
+**要求分发只给一个文件**的话就给 `CaiXiHui-Setup.exe`：它把解压这件事一次性做完在安装动作里，程序本体
+仍是解开的文件夹——每次启动不用重新解压（运行时单文件 onefile 被明确排除，理由见 `desktop/README.md`）。
 
 **5. 可选：OpenRouter / 云端部署** — 不设任何旗标就是本机形状。要放到服务器上给别人访问，用
 `python app.py cloud`（或 `CRAWLER_CLOUD=1`）：同时关掉本地模型界面、强制无头抓取、拒绝浏览器生成。
@@ -71,7 +80,8 @@ Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上�
   输出带 剧名 / 集序号 / 分集ID，某集没收满、某部剧进不去、或播放流中途切到了别的剧都会在结束时
   **具名报错**（陌生剧的行按请求体的 book 丢弃，绝不盖本剧剧名）、已采行照常保留，
   采集量只由你填的目标数决定，支持分批输出、上游喂链接、多账号与持久 Profile。→ [`docs/collection.md`](docs/collection.md)
-- **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调）、
+- **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调；
+  BERT 有**两个运行时**——装了 torch/transformers 就用它（开发机可上 GPU），否则用 onnxruntime + tokenizers 跑导出的 ONNX 图，**打包版就是这一条**，日志会说明是哪个运行时、什么精度答的）、
   情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
 - **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、分组聚合（多指标）、**事件研究套件**（阶段划分 / 分阶段 LDA /
   主题流向 / 情感演化 / 二次爆发预警 / 曲线外推（移动平均 · Holt · 季节 Holt-Winters/朴素）），主题步骤（主题模型 / 分阶段 / 距离图 / 显著词）默认

@@ -10,6 +10,19 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
 - **逐节点模型**：AI 面板选的是整轮运行的默认模型；每个用本地 Ollama 的分析节点（清洗 / 情感 / 倾向 / NER）
   还可在自己的面板单独挑一个模型，不必与其他节点一致。默认「跟随全局」即沿用运行级模型；OpenRouter 运行不提供此下拉
 - **为什么默认主推微调 BERT（而非通用大模型）**：见 [`docs/why_finetuned_bert.md`](why_finetuned_bert.md)——质量、速度、成本、确定性四维对比，含本机实测的 accuracy/F1
+- **BERT 有两个运行时，打包版走第二个**：`sentiment` / `emotion` / `tendency` 三个节点的 `bert` 模式都通过
+  `analyzers/sentiment.py` 里**同一个加载器**回答，返回同一种 `{'label','score'}` 值，所以 `_signed_polarity`
+  与各类别的标签校验不需要知道背后是谁。选择顺序是：装了 `torch`+`transformers` 就用它（开发机，有显卡就上显卡），
+  否则用 `onnxruntime`+`tokenizers` 跑导出的 ONNX 图（**Windows 桌面版就是这一条**，包里没有 torch），两者都没有才按名拒绝/降级。
+  日志一定写明 `runtime=` 与 `precision=`，"用我的模型答的"和"用别的答的"必须能从控制台区分。
+  导出与实测：`ml_train/scripts/export_onnx_bert.py`（把 `model.safetensors` 导成图并验证 logits 与判定类别，
+  不同就删目录按名拒绝）+ `ml_train/scripts/eval_onnx_parity.py`（同一批**人工标注**语料，torch / fp32 图 / 待发精度三方
+  对 accuracy 与 macro-F1）。**打包配方的实测结论**：fp32 图与 torch 逐条判定完全一致（120 行/模型，Δmacro-F1 0.0000），
+  fp16（195 MB）与 fp32 也完全一致，而 int8（98 MB）会让 **6.7–14.2% 的行改判定**——所以默认发 fp16，
+  int8 只作为显式选项保留。模型本体不进应用包，作为单独的模型包解压到 exe 旁的 `bert_models/`；
+  放置与登记见 [`desktop/README.md`](../desktop/README.md)。
+  下面各条里「缺 `torch`/`transformers` 就降级」的说法要按这条读：**两种运行时都不可用**才降级。
+
 - **情感分析（三模式）**：LLM 逐行深度分析、传统 ML（sklearn TF-IDF + 逻辑回归）批量推理，或**微调 BERT**；
   情绪标签集现按 **SMP2020-EWECT 六类**（`Anger`/`Fear`/`Joy`/`Neutral`/`Sadness`/`Surprise`，此前是少了 `Surprise` 的五类）。
   - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram（字+词 FeatureUnion）。

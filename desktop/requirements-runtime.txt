@@ -5,6 +5,17 @@
 # pyarrow, mitmproxy) are absent. The app already degrades without the optional stack and
 # prints the method that actually ran; see requirements-optional.txt and AGENTS.md.
 #
+# onnxruntime + tokenizers ARE here, and they are what makes that degradation unnecessary:
+# they run the fine-tuned BERT checkpoints from an exported ONNX graph, so the packaged app
+# answers `bert` nodes instead of falling back to snownlp/ml. Together they cost tens of MB
+# against torch's gigabytes, and `tokenizers` reads the trainer's own `tokenizer.json` --
+# which is why transformers itself stays out. See analyzers/sentiment.py:bert_runtime().
+#
+# ASCII ONLY. pip decodes a requirements file with `locale.getpreferredencoding()` unless the
+# file carries a UTF-8 BOM, so a Chinese comment here is a `UnicodeDecodeError: 'gbk' codec
+# can't decode byte ...` and the dependency install dies before downloading anything. Measured
+# on this machine when such a comment was added: the build stopped at "Build environment".
+#
 # Versions are the ones this checkout was measured against. Keep them pinned so two
 # builders produce the same folder and the same size.
 
@@ -24,6 +35,8 @@ scipy==1.17.1
 scikit-learn==1.9.0
 snownlp==0.12.3
 networkx==3.6.1
+onnxruntime==1.31.0
+tokenizers==0.22.2
 # jieba imports pkg_resources when it is present; keeping it explicit avoids a
 # warning-only dependency on whatever a bare venv happens to include.
 setuptools==78.1.0

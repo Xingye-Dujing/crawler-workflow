@@ -4,7 +4,7 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
-from analyzers.sentiment import BERT_BATCH, bert_backend, bert_device, resolve_bert_model
+from analyzers.sentiment import BERT_BATCH, bert_backend, bert_classifier, resolve_bert_model
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -243,11 +243,18 @@ Analyze strictly and output only the required plain string."""
             logger.error(t('ml.missing_col', col=text_column))
             return df
 
-        from transformers import pipeline
-
-        device = bert_device()
-        classify = pipeline('text-classification', model=model, device=device)
-        logger.info(t('tendency.bert_loaded', model=model, device='cuda' if device >= 0 else 'cpu'))
+        classify = bert_classifier(model, task='text-classification', max_length=self.max_length)
+        # Which build of the model answered is printed, not inferred: torch-on-GPU, torch-on-CPU and
+        # the quantised ONNX graph are three answers a reader cannot tell apart from the column.
+        logger.info(
+            t(
+                'tendency.bert_loaded',
+                model=model,
+                device=classify.device,
+                runtime=classify.runtime,
+                precision=classify.precision,
+            )
+        )
 
         mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
         indices = df[mask].index.tolist()
@@ -262,7 +269,7 @@ Analyze strictly and output only the required plain string."""
             chunk = indices[start : start + self.batch_size]
             texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
             try:
-                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=self.max_length))
+                answers = list(classify.predict(texts))
             except Exception as e:  # a batch that raises leaves only its own rows blank
                 logger.error(t('tendency.bert_failed', err=e))
                 failed += len(chunk)

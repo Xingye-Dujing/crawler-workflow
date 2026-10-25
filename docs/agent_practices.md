@@ -557,6 +557,65 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   and caches under `%LOCALAPPDATA%\pip`, and both writes are denied. Fix in `build_windows.ps1`: `TMP`/`TEMP`/`TMPDIR`
   → `build/tmp` and `--no-cache-dir`. Reproduced: index answered 200 in 1.5 s, pip printed one line and never
   returned; with the relocation the same install finished.
+- **A UTF-8 Chinese string in a `.ps1` can stop the build from starting at all.** Windows PowerShell 5.1 reads a
+  script **without a BOM** in the machine's ANSI codepage, so a `Write-Host '中文…'` literal arrives as GBK bytes;
+  one of those bytes looks like a quote terminator and the parser reports `字符串缺少终止符` — on a line hundreds of
+  characters away from the real one. Measured: `build_windows.ps1` aborted before any step ran, and because the
+  failure was a parse error the pipeline still looked like success. `desktop/build_windows.ps1` is therefore
+  ASCII-only (pinned by `test_the_files_other_tools_parse_are_pure_ascii`), and the builder's own messages stay
+  English like the
+  rest of the file — user-facing Chinese belongs in `backend/i18n.py` / `app.js`, not in a batch script. To find this
+  without running the build:
+  `[System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errs)`.
+- **The same locale trap eats `requirements-*.txt`, and one em dash is enough.** pip's `auto_decode` uses
+  `locale.getpreferredencoding()` and honours UTF-8 **only** with a BOM, so a Chinese comment — or a single `—` —
+  inside `desktop/requirements-runtime.txt` is `UnicodeDecodeError: 'gbk' codec can't decode byte 0x94` on the very
+  first pip call. It cost a second full build attempt that never got past `Build environment`. Cheap local proof
+  before building: `open(p,'rb').read().decode('gbk')`. The test checks the raw bytes of the ps1, both
+  `desktop/requirements-*.txt` **and the two root requirement files a user installs from** — an em dash in
+  `requirements.txt` is the same crash one keystroke away from the README's install command, and it sat there because
+  only the build's own file had ever been measured. A file that legitimately needs Chinese (`installer.iss`, whose
+  wizard text is Chinese) declares it with a UTF-8 BOM instead, which the same test asserts.
+- **UPX: do the pass yourself, and never trust a packer that skips quietly.** PyInstaller's `upx=True` compresses
+  nothing when it cannot find the tool and reports that only in a line people scroll past, so "we shipped the
+  compressed build" becomes a guess. `desktop/compress_dist.py` runs after the prune step with `upx --best --force`,
+  treats a missing `upx` on PATH as a **build failure by name**, verifies every output with `upx -t`, restores any file
+  it cannot verify (a half-packed binary is the flash-quit bug class again, discovered by the user), skips files that
+  already carry the `UPX!` marker, and prints the byte delta. Two measured details: UPX 5.0.2 **rejects**
+  `--no-version-info` (exit 1 — which would have made every file a silent no-op), and `--best` costs ~30 s on the
+  20 MB OpenBLAS DLL, so the pass is parallel across 307 PE files. And it is not free at start: packed PEs unpack
+  into memory as they load, so size and boot time are measured together, on the same machine and data root, only
+  switching `-NoUpx`.
+- **Dead payload is only dead when you can name the reader.** Measured and dropped by `prune_dist.py`:
+  `jieba/lac_small` (13 MB — reachable only through `cut(..., use_paddle=True)` with paddle installed, which no
+  analyzer asks for); snownlp's Python-2 marshals `seg.marshal`/`tag.marshal`/`sentiment.marshal` (`utils/tnt.py` and
+  `classification/bayes.py` both append `.3` on Python 3, so on 3.11 the extension-less copies are read by nothing
+  while the `.3` files are the models — a suffix three characters long decides whether the sentiment fallback boots);
+  and the training corpora `seg/data.txt`, `tag/199801.txt`, `sentiment/neg.txt|pos.txt` (only `train()` opens them).
+  What is **not** droppable, measured: `scipy/spatial` and `scipy/interpolate` (reached through `scipy.stats` and
+  `sklearn.cluster._optics` / `metrics.pairwise` — excluding them kills `from app import app` inside the frozen
+  launcher) and matplotlib's DejaVu fonts (the fallback when SimHei/YaHei are missing).
+- **A file's extension is a promise to some readers and a suggestion to others.** `backend/static/icon.ico` was the
+  app's PNG renamed. Three consumers read that one file and each told a different story: the browser content-sniffs
+  it, so the site favicon looked correct for the file's whole life; PyInstaller copied the invalid bytes into
+  `CaiXiHui.exe` and printed `Copying icon to EXE` as if it had succeeded; Inno Setup refused to compile the
+  installer at all — `Resource update error: Icon file is invalid` — and said so only *after* the folder build and the
+  zip had taken their ten minutes. Fix: `tools/build_icon.py` generates the ICO from `backend/static/icon.png`
+  (16/24/32/48/64/128/256), `tests/unit/test_desktop_packaging.py::TestTheIconIsWhatItsNameSays` parses the directory
+  and every frame offset, and `build_windows.ps1` checks the four header bytes **before** `Write-Step
+  "Build environment"`, with an ordering assertion so the free check cannot drift after the expensive ones. The
+  remaining question is answered on the artifact, not by reading the format spec: `[System.Drawing.Icon]
+  ::ExtractAssociatedIcon($exe)` is what the shell does, so it is what acceptance runs.
+- **A background build's exit code is only as trustworthy as the command that wrapped it.** The notification for the
+  run that failed on the icon said *completed (exit code 0)*, because the command I launched ended with an `echo`
+  that reported the summary — the log's own last line was `powershell exit=1`. Two builds in this session were lost
+  the same way (the other was the `.ps1` parse error). Launch the build as the **last** thing the shell does
+  (`powershell … > log 2>&1`) and read the log's own summary lines as the evidence; never append a `; echo` after it.
+- **A packer's warning is a switch you think is on.** Inno Setup 7 prints `The [Setup] section directive
+  "LZMAUseSeparateProcess" is obsolete and ignored`. It changes nothing about the bytes we ship, but it makes the
+  `.iss` a description of a build that isn't happening, so the line is gone. Same class as the matplotlib/GUI-backend
+  exclusions: an option the tool ignores is documentation, not configuration — and `installer.iss` is now verified by
+  compiling it, not by reading it.
 
 ## Lint 标准 / Lint standards
 
@@ -607,4 +666,58 @@ message.
 - **The formatting hook eats an import added before its first use.** `ruff check --fix` deletes the unused import at
   that moment, so `import math` added one edit early silently disappears (`F821` later). Add the import in the same
   edit that uses it.
+- **…and it eats one added a second too late, from the other side.** Moving `from scipy import stats` into the function
+  that uses it, while the module-level twin still existed, made the local name a **redefinition** — ruff's `F811`
+  autofix deleted the new one, and six suites then died on `NameError`. When relocating an import, delete the old
+  binding in the same edit or first; a green `Edit` result is not evidence the line survived, so grep for the symbol
+  before believing the refactor.
+
+## 启动路径与 BERT 运行时 / Boot path and BERT runtimes
+
+- **Process start is a budget, and it was being spent on libraries no request asked for.** Measured here:
+  `python -X importtime -c "import app"` = **9.2 s**, of which **5.4 s** was a single top-level
+  `from sklearn.ensemble import IsolationForest` in `analyzers/anomaly.py` — `app` imports `analyzers`, `analyzers`
+  is an eager barrel, so all of sklearn loaded even for a canvas with no ML node. Moving the heavy third-party imports
+  (sklearn/scipy/matplotlib/joblib) into the functions that use them brought it to **2.07 s**. The `analyzers`
+  barrel itself is deliberately untouched: `api/analysis.py` reads `EmotionAnalyzer.ML_MODEL_NAME` at class level,
+  `tests/api/test_node_matrix.py` resolves op→class through `importlib`, `tests/conftest.py` clears
+  `sys.modules['analyzers.ml_base']._shared_classifiers`, and `test_multi_model_api.py` patches
+  `app_module.<AnalyzerClass>` — a PEP 562 lazy barrel would break all four at once.
+- **Pin a budget with a module census, never with a stopwatch.** `tests/unit/test_boot_import_budget.py` walks the
+  module bodies with `ast` (names the file to fix) and imports `app` in a fresh subprocess to read
+  `sys.modules` (catches transitive leakage). A wall-clock assertion would fail a slow runner and pass a fast one
+  while proving nothing either way.
+- **Two frontend-adjacent traps found by the same move:** `services/biblio_cluster.py:111`'s return annotation
+  `tuple[TfidfVectorizer, …]` is evaluated at `def` time, so the class has to be quoted *and* kept visible to
+  readers (`if TYPE_CHECKING:` — ruff calls an unquoted string to a function-local import `F821`); and in
+  `services/visualizer.py`, `matplotlib.use('Agg')` plus the CJK `rcParams` block must travel **with** the import
+  into one helper, because splitting them is how a server gains a window or a figure of tofu boxes instead of Chinese
+  labels.
+- **The desktop self-check was sitting between picking the port and binding it.** Four filesystem probes and a TCP
+  connect ran on the main thread after `pick_port()`, so the console printed the URL while nothing could accept it.
+  It now runs on a daemon thread: the mutex and `instance.json` are already written ahead of it, so nothing about
+  single-instance ownership changed, and the exception path prints a named line because four absent lines look
+  exactly like a quiet pass. Its five lines are emitted as **one** write — Flask's own startup lines land on the same
+  console from another thread and would split a five-write block apart.
+- **A frozen app's ONNX export must be fed its mask, not let it build one.** Tracing transformers' own
+  `attention_mask` handling freezes `masking_utils`' `if padding_length := … > 0` branch (the `TracerWarning` says so
+  out loud): the exported fp32 graph answered up to **1.0 logit** differently depending on how the batch happened to be
+  padded, while agreeing to 4e-07 on unpadded input — measured, not theorised. Fix: the graph takes
+  `position_ids` and an additive `attention_mask_4d` as **inputs** built by the caller; the same comparison then
+  measures **3.1e-06** max absolute logit difference over a batch with 243 padding cells. `attn_implementation='eager'`
+  is required for the same reason (sdpa's shape-dependent booleans bake), and `dynamo=False` is stated rather than
+  inherited because torch 2.9+ flipped the exporter default and the dynamo path needs `onnxscript` (not installed).
+- **`torch.onnx.export` leaves the module in training mode.** A verification pass computed right after the export
+  therefore runs BERT's 10% dropout: the "graph is wrong" number changed on every run (0.14, 0.35, 0.99) while the
+  graph itself was stable to 3e-07. Call `model.eval()` again before comparing — and note the reference must be the
+  model's own **2D-mask** call, which is the answer the app is trying to reproduce.
+- **Quantisation is judged on decisions, not on distance.** int8 (per-tensor and per-channel) holds macro-F1 within
+  noise but flips **6.7–14.2%** of the labelled rows' class, because the loss shows up on near-ties — where the label,
+  not the score, is the answer the user puts in a table. fp16 flipped none and costs 195 MB against int8's 98 MB, so
+  the pack ships fp16. Record agreement *and* ΔF1 *and* bytes; a single number hides which of the three is the reason.
+- **A stub that invents an API ships an `AttributeError` in the packaged app.** The `tokenizers` crate exposes
+  `type_ids`; the hand-written fake said `token_type_ids`, and every stubbed case stayed green until the real graph
+  was run. `tests/unit/test_bert_onnx_real_crate.py` therefore uses the **installed** crate (a declared dependency)
+  and fakes only the inference session — the piece a unit test genuinely cannot ship.
+
 
