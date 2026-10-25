@@ -288,13 +288,20 @@ var ReusableNodes = {
     },
 
     async insertTemplate(templateId, fromPanel) {
+        var pos = fromPanel ? this._centerPos() : this._insertPos();
+        return this.insertTemplateAt(templateId, pos.x, pos.y);
+    },
+
+    /* A drag from the template manager names its own landing point. The fetch and
+       insert are the same ones the button uses, so a dropped group is identical to
+       an inserted one (template snapshot, selected, one undo step). */
+    async insertTemplateAt(templateId, x, y) {
         var full = await fetchJSON('/api/reusable/get?id=' + encodeURIComponent(templateId));
         if (!full || !full.ok || !full.template) {
             showToast((full && full.error) || I18n.t('reusable.insertFailed'));
             return null;
         }
-        var pos = fromPanel ? this._centerPos() : this._insertPos();
-        var newId = this._insert(full.template, pos.x, pos.y);
+        var newId = this._insert(full.template, Number(x) || 0, Number(y) || 0);
         if (newId) canvas._ensureNodeVisible(newId);
         return newId;
     },

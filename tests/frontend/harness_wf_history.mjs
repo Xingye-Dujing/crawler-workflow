@@ -84,6 +84,7 @@ const DICT = {
         'reusable.renamed': 'RENAMED',
         'reusable.renameFailed': 'RENAME-FAILED',
         'reusable.nameRequired': 'NAME-REQUIRED',
+        'reusable.dragHint': 'DRAG-HINT',
         'toast.layoutApplied': 'LAYOUT-APPLIED',
         'dialog.cancel': 'Cancel',
     },
@@ -109,6 +110,7 @@ const DICT = {
         'reusable.insert': '插入',
         'reusable.removeTemplate': '删除模板',
         'reusable.rename': '重命名',
+        'reusable.dragHint': '拖拽提示',
     },
 };
 const I18n = {
@@ -534,6 +536,28 @@ out.reusable_tabs = { tabs: tabs.innerHTML };
 out.reusable_list = {
     html: body.innerHTML,
     img_elements: doc.querySelectorAll('img').length,
+};
+
+resetCalls();
+const dragData = {
+    values: {},
+    setData(type, value) { this.values[type] = String(value); },
+    effectAllowed: '',
+};
+const dragHandle = {
+    classes: [],
+    classList: {
+        add(name) { dragHandle.classes.push('+' + name); },
+        remove(name) { dragHandle.classes.push('-' + name); },
+    },
+};
+wfFiles.dragTemplate({ dataTransfer: dragData, currentTarget: dragHandle }, 'r-000000000001');
+wfFiles.dragTemplate({ dataTransfer: dragData, currentTarget: dragHandle }, 'r-000000000002');
+wfFiles.endTemplateDrag({ currentTarget: dragHandle });
+out.reusable_drag = {
+    data: dragData.values,
+    effect: dragData.effectAllowed,
+    classes: dragHandle.classes.slice(),
 };
 
 resetCalls();

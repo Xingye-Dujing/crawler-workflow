@@ -11476,6 +11476,12 @@ var wfFiles = {
             var broken = row.broken
                 ? ' <span class="runs-mgr-cur">' + escapeHtml(I18n.t('wfMgr.broken')) + '</span>'
                 : '';
+            var handle = row.broken
+                ? ''
+                : '<span class="wf-template-drag" draggable="true" title="' +
+                    escapeHtml(I18n.t('reusable.dragHint')) + '"' +
+                    ' ondragstart="wfFiles.dragTemplate(event, \'' + self._quote(row.id) + '\')"' +
+                    ' ondragend="wfFiles.endTemplateDrag(event)">⋮⋮</span>';
             var ops = '';
             if (!row.broken) {
                 ops += '<button class="runs-mgr-btn" onclick="wfFiles.previewTemplate(\'' + self._quote(row.id) + '\')">' +
@@ -11489,7 +11495,8 @@ var wfFiles = {
                 I18n.t('reusable.removeTemplate') + '</button>';
             var seconds = Date.parse(String(row.updated_at || '')) / 1000;
             return '<tr>' +
-                '<td class="runs-mgr-wf"><span class="wf-snap-name">' + escapeHtml(name) + broken + '</span>' +
+                '<td class="runs-mgr-wf"><span class="wf-snap-name">' +
+                handle + escapeHtml(name) + broken + '</span>' +
                 '<span class="wf-snap-source">' + escapeHtml(source) + '</span></td>' +
                 '<td>' + (row.nodes || 0) + ' / ' + (row.inputs || 0) + '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(self._when(seconds)) + '</td>' +
@@ -11497,12 +11504,31 @@ var wfFiles = {
                 '</tr>';
         }).join('');
         body.innerHTML =
+            '<div class="wf-tab-hint">' + I18n.t('reusable.dragHint') + '</div>' +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
             '<th>' + I18n.t('reusable.colName') + '</th>' +
             '<th>' + I18n.t('reusable.colNodes') + '</th>' +
             '<th>' + I18n.t('reusable.colUpdated') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    /* HTML5 drag from the template row: the private MIME type tells the canvas which
+       template is in flight; the landing coordinates come from the drop event, so a
+       drag can never be confused with the panel's fixed-position insertion. */
+    dragTemplate(event, id) {
+        if (!event || !event.dataTransfer) return;
+        var row = this._templateRow(id);
+        if (!row || row.broken) return;
+        event.dataTransfer.setData('application/x-reusable-template', String(id));
+        event.dataTransfer.effectAllowed = 'copy';
+        if (event.currentTarget && event.currentTarget.classList) event.currentTarget.classList.add('dragging');
+    },
+
+    endTemplateDrag(event) {
+        if (event && event.currentTarget && event.currentTarget.classList) {
+            event.currentTarget.classList.remove('dragging');
+        }
     },
 
     _templateRow(id) {

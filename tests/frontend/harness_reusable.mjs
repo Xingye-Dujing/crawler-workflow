@@ -583,4 +583,17 @@ out.unwrap_settings = {
     has_hint: unwrapSettingsHtml.indexOf('Unwrap hint') >= 0,
 };
 
+/* A drag names its landing point; the insert itself is the same one the button uses.
+   Kept last so the extra node id cannot shift the ids earlier scenarios pinned. */
+fresh();
+const atBefore = Object.keys(canvas.nodes).length;
+const atId = await ReusableNodes.insertTemplateAt('r-000000000002', 444, 333);
+const atEl = atId && canvas._nodeEl(atId);
+out.insert_at = {
+    added: Object.keys(canvas.nodes).length - atBefore,
+    name: atId ? canvas.nodes[atId].params.template_name : '',
+    x: atEl ? parseInt(atEl.style.left, 10) : null,
+    y: atEl ? parseInt(atEl.style.top, 10) : null,
+};
+
 process.stdout.write(JSON.stringify(out));

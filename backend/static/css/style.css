@@ -3354,6 +3354,24 @@ input:-webkit-autofill:focus {
   color: var(--text-dim);
   white-space: nowrap;
 }
+.wf-tab-hint {
+  padding: 8px 8px 0;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.wf-template-drag {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--text-dim);
+  cursor: grab;
+  user-select: none;
+  letter-spacing: -2px;
+  vertical-align: middle;
+}
+.wf-template-drag.dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
 .wf-snap-name {
   display: block;
   color: var(--text);

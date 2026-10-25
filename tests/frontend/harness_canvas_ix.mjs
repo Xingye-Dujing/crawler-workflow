@@ -1687,6 +1687,31 @@ function clipDragToCanvasScenario() {
     };
 }
 
+/* A reusable template dragged out of the workflow panel lands where it was dropped,
+   not at the panel's fixed insertion point. The drop names the template under a
+   private MIME type and hands the converted canvas coordinates to the one inserter
+   both the button and the drag use. */
+function reusableTemplateDropScenario() {
+    freshWorld();
+    const calls = [];
+    sandbox.ReusableNodes = {
+        insertTemplateAt(id, x, y) {
+            calls.push({ id, x, y });
+            return Promise.resolve('node-new');
+        },
+    };
+    const idsBefore = Object.keys(canvas.nodes).length;
+    dispatchOn(canvas.workspace, 'drop', ev({
+        target: { closest: () => null }, clientX: 410, clientY: 140,
+        dataTransfer: { getData: (t) => (t === 'application/x-reusable-template' ? 'r-000000000001' : '') },
+    }));
+    out.reusable_template_drop = {
+        calls,
+        nodes_added: Object.keys(canvas.nodes).length - idsBefore,
+    };
+    delete sandbox.ReusableNodes;
+}
+
 /* ── keyboard node-connect (L link mode) + the connectNodes seam ───── */
 /* The wire that used to be creatable only by dragging an out-port onto an in-port is now
    also reachable from the keyboard. `connectNodes` is the single synchronous model mutation
@@ -2585,6 +2610,7 @@ runBadgesScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
 clipDragToCanvasScenario();
+reusableTemplateDropScenario();
 keyboardNavigationScenario();
 keyboardConnectScenario();
 modalAndUndoSelectionScenario();

@@ -72,6 +72,9 @@ class TestInsert:
         assert ru['insert']['nodes'] == 2
         assert ru['insert']['toasts'] == ['INSERTED']
 
+    def test_a_dropped_template_uses_the_landing_point_it_was_given(self, ru):
+        assert ru['insert_at'] == {'added': 1, 'name': '已保存的模板', 'x': 444, 'y': 333}
+
 
 class TestRunVersusFile:
     def test_a_run_expands_the_inside_and_namespaces_every_child(self, ru):

@@ -287,7 +287,16 @@ class TestReusableTemplateTab:
         assert html.count('wfFiles.previewTemplate(') == 1
         assert html.count('wfFiles.renameTemplate(') == 1
         assert html.count('wfFiles.removeTemplate(') == 2
+        assert html.count('wfFiles.dragTemplate(') == 1
+        assert 'draggable="true"' in html
+        assert 'DRAG-HINT' in html
         assert 'unreadable' in html
+
+    def test_a_drag_writes_only_the_template_id_and_marks_the_handle(self, wfh):
+        drag = wfh['reusable_drag']
+        assert drag['data'] == {'application/x-reusable-template': 'r-000000000001'}
+        assert drag['effect'] == 'copy'
+        assert drag['classes'] == ['+dragging', '-dragging']
 
     def test_preview_reads_the_template_and_hands_it_to_the_shared_preview(self, wfh):
         preview = wfh['reusable_preview']

@@ -630,6 +630,17 @@ class TestClipboardDragToCanvas:
         assert c['textDragWroteNothing'] is True, 'dragging a text row must put nothing on the canvas'
 
 
+class TestReusableTemplateDrop:
+    """A reusable template dragged from the workflow panel lands where the pointer is,
+    through the same inserter the panel button uses, and never falls through to the
+    palette's text/plain route."""
+
+    def test_the_drop_names_the_template_and_the_converted_landing_point(self, ix):
+        drop = ix['reusable_template_drop']
+        assert drop['calls'] == [{'id': 'r-000000000001', 'x': 300, 'y': 100}]
+        assert drop['nodes_added'] == 0, 'the drop must not also add a palette node'
+
+
 class TestNodeClipboardShortcuts:
     """Ctrl+C / Ctrl+V / arrow-nudge — the keyboard routes that the copy/paste menu already
     served. They must reach the SAME shared methods, so a pasted node comes out identical

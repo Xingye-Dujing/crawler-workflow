@@ -4549,3 +4549,146 @@ def test_a_reusable_node_expands_inside_its_own_border_and_aggregates_statuses(d
     assert facts['unwrap']['groupBack'] is True, 'undo must restore the group as one history step'
     assert all(facts['controls'].values()), facts['controls']
     assert '2' in facts['summary'], facts['summary']
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_template_dragged_from_the_manager_lands_where_it_was_dropped(driver, app_url, lang):
+    """The template tab's drag handle is a real drop source, not a decorated row.
+
+    What only a browser settles: a real ``DragEvent`` with a real ``DataTransfer``
+    carries the private MIME type from the row to the canvas, the canvas converts the
+    pointer position under its current pan/zoom, and the fetched template becomes one
+    reusable node whose screen box starts at the drop point. The template read is
+    stubbed: this module performs no server writes.
+    """
+    driver.get(app_url + '/')
+    facts = driver.execute_async_script(
+        """
+        const lang = arguments[0];
+        const done = arguments[arguments.length - 1];
+        document.body.dataset.lang = lang;
+        I18n.apply();
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        canvas.selectedNodes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+
+        const realFetch = window.fetch;
+        window.fetch = function (url, opts) {
+            if (String(url).indexOf('/api/reusable/get') >= 0) {
+                const name = lang === 'zh' ? '拖拽模板' : 'Dragged template';
+                const payload = {
+                    ok: true,
+                    template: {
+                        id: 'r-000000000001',
+                        name,
+                        description: '',
+                        nodes: [
+                            { id: 'a', type: 'process', title: 'A', params: {}, x: 0, y: 0, w: 220, h: 80 },
+                            { id: 'b', type: 'output', title: 'B', params: {}, x: 260, y: 0, w: 220, h: 80 },
+                        ],
+                        connections: [{ from: 'a', to: 'b' }],
+                        inputs: ['a'],
+                        outputs: ['b'],
+                    },
+                };
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(payload),
+                    text: () => Promise.resolve(JSON.stringify(payload)),
+                });
+            }
+            return realFetch.apply(window, arguments);
+        };
+
+        (async () => {
+            try {
+                const name = lang === 'zh' ? '拖拽模板' : 'Dragged template';
+                document.getElementById('workflows-panel').classList.add('open');
+                wfFiles._templates = [
+                    {
+                        id: 'r-000000000001',
+                        name,
+                        description: '',
+                        nodes: 2,
+                        connections: 1,
+                        inputs: 1,
+                        updated_at: '',
+                        broken: false,
+                    },
+                ];
+                wfFiles._tab = 'reusable';
+                wfFiles.renderTabs();
+                wfFiles.renderReusable();
+
+                const handle = document.querySelector('#workflows-mgr-body .wf-template-drag');
+                const ws = document.getElementById('workspace');
+                const rect = ws.getBoundingClientRect();
+                const dropX = rect.left + 500;
+                const dropY = rect.top + 300;
+                const dt = new DataTransfer();
+                handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+                const carried = dt.getData('application/x-reusable-template');
+                const duringCursor = getComputedStyle(handle).cursor;
+                const duringClass = handle.classList.contains('dragging');
+                const before = Object.keys(canvas.nodes).length;
+                ws.dispatchEvent(
+                    new DragEvent('drop', {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: dropX,
+                        clientY: dropY,
+                        dataTransfer: dt,
+                    })
+                );
+                for (let i = 0; i < 40 && Object.keys(canvas.nodes).length === before; i += 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 25));
+                }
+                handle.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer: dt }));
+                const afterCursor = getComputedStyle(handle).cursor;
+                const afterClass = handle.classList.contains('dragging');
+                const group = Object.keys(canvas.nodes).find((id) => canvas.nodes[id].type === 'reusable');
+                const el = group ? canvas._nodeEl(group) : null;
+                const box = el ? el.getBoundingClientRect() : null;
+                const result = {
+                    ok: true,
+                    handle: !!handle,
+                    carried,
+                    duringCursor,
+                    duringClass,
+                    afterClass,
+                    group: !!group,
+                    nodes: Object.keys(canvas.nodes).length - before,
+                    name: group ? canvas.nodes[group].params.template_name : '',
+                    left: box ? Math.round(box.left) : null,
+                    top: box ? Math.round(box.top) : null,
+                    expectedLeft: Math.round(dropX - 110),
+                    expectedTop: Math.round(dropY - 40),
+                    hint:
+                        (document.getElementById('workflows-mgr-body').textContent || '').indexOf(
+                            I18n.t('reusable.dragHint')
+                        ) >= 0,
+                    handleCursor: afterCursor,
+                };
+                window.fetch = realFetch;
+                done(result);
+            } catch (e) {
+                window.fetch = realFetch;
+                done({ ok: false, error: String(e), stack: e && e.stack });
+            }
+        })();
+        """,
+        lang,
+    )
+    assert facts.get('ok') is True, facts
+    assert facts['handle'] is True, 'the template row must expose a drag handle'
+    assert facts['carried'] == 'r-000000000001', 'the drag must carry the template id'
+    assert facts['group'] is True and facts['nodes'] == 1, facts
+    assert facts['name'] in ('拖拽模板', 'Dragged template'), facts
+    assert abs(facts['left'] - facts['expectedLeft']) <= 2, facts
+    assert abs(facts['top'] - facts['expectedTop']) <= 2, facts
+    assert facts['hint'] is True, 'the manager must say that a template can be dragged'
+    assert facts['duringClass'] is True and facts['duringCursor'] == 'grabbing', facts
+    assert facts['afterClass'] is False and facts['handleCursor'] == 'grab', facts

@@ -754,6 +754,19 @@ const canvas = {
                 Clipboard.paste(clipId, pos);
                 return;
             }
+            /* A template dragged out of the workflow panel lands where the pointer is,
+               not at the panel's fixed insertion spot. Checked before text/plain, which
+               a template drag leaves empty. */
+            const reusableId = e.dataTransfer.getData('application/x-reusable-template');
+            if (reusableId) {
+                const pos = this._screenToCanvas(e.clientX - 110, e.clientY - 40);
+                if (typeof ReusableNodes !== 'undefined' && ReusableNodes.insertTemplateAt) {
+                    ReusableNodes.insertTemplateAt(reusableId, pos.x, pos.y);
+                } else if (typeof showToast === 'function' && typeof I18n !== 'undefined') {
+                    showToast(I18n.t('reusable.insertFailed'));
+                }
+                return;
+            }
             const type = e.dataTransfer.getData('text/plain');
             if (type) {
                 const pos = this._screenToCanvas(e.clientX - 110, e.clientY - 40);
