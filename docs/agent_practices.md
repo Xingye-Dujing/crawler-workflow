@@ -742,10 +742,12 @@ message.
   are now per-field candidate lists in both languages; the signature is "one of these columns per
   group" (`header_has_groups`), because a single required name is what refused the real files.
   Dimensions' first row is a copyright banner, so `frame_of`/`header_of` drop leading provenance lines
-  before reading the header. WoS' Excel download was proved to carry an empty `Cited References`,
-  `Author Keywords`, `WoS Categories` and `Funding` column for all thirty records while the plain-text
-  download of the same records carries them, which is why the guide says "plain text with Full Record
-  and Cited References" rather than "any of them".
+  before reading the header. WoS' Excel download was measured twice: the first export left
+  `Cited References`, `Author Keywords`, `WoS Categories` and `Funding` empty for all thirty records,
+  and after the user re-exported, keywords/categories/funding/usage arrived while `Cited References`
+  stayed empty with only `Cited Reference Count` written. So the guide says "plain text with Full
+  Record and Cited References for a citation network", not "prefer plain text" — the two downloads now
+  answer different questions.
 - **A fixture may copy structure but never facts.** The committed `samples/biblio_*_demo.*` files
   reproduce a real export's tags, header order, spacing, separators and banner row, with every value
   from a small synthetic pool; the vendor files themselves are gitignored because the Dimensions
@@ -793,8 +795,11 @@ message.
   `accepted_extensions()` does not list one, so the tab-delimited claim came out of the WoS steps in
   both languages, out of `wos.py`'s comment and out of `docs/analysis.md`. The same applies to a
   re-export: when the user replaces `samples/` files, `source.<id>.missing` sentences are claims about
-  *those* files and go stale silently — the WoS Excel entry gained `Affiliations` (so 国家 works now)
-  and still lacks `Cited References`, and Scopus gained it too.
+  *those* files and go stale silently. It happened twice in one round — the WoS Excel gained
+  `Affiliations` then keywords/categories/funding/usage (only `Cited References` stayed empty), and the
+  Scopus download went from 26 to 45 columns — and each time the honest fix was re-measuring
+  (`scratchpad/upload_probe.py`, which goes through `/api/data/upload`) and rewriting the sentence, not
+  widening it into something vague that stays true.
 - **The lint hook deletes an import that is not used yet — three times this round.** Adding
   `import numpy as np` at module level while the last local twin still existed, or importing a
   helper a call site added one edit later, gets the new line removed by the PostToolUse

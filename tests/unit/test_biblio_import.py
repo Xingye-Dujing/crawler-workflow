@@ -192,6 +192,27 @@ class TestInternationalFormats:
         assert 'Tsinghua University' in rows[0]['作者单位']
         assert 'China' in rows[0]['国家']
 
+    def test_a_wos_excel_shape_without_cited_references_still_imports(self):
+        """Measured on the re-exported Excel: keywords/categories/funding/usage are filled, but
+        ``Cited References`` stays empty and only ``Cited Reference Count`` (a number) is written.
+
+        Detection must not depend on CR being present — refusing the file would throw away the
+        four networks it *can* answer — and the capability map has to say ``refs: false`` so the
+        biblio node refuses citation analyses by name instead of drawing an empty graph.
+        """
+        text = (
+            'Article Title,Source Title,Publication Year,Author Keywords,WoS Categories,'
+            'Cited References,Cited Reference Count,UT (Unique WOS ID)\n'
+            'A synthetic title,Journal A,2021,kw one; kw two,Public Administration,,"7",WOS:1\n'
+        )
+        parsed = parse_text(text)
+        assert parsed['format'] == 'WoS'
+        assert parsed['rows'][0]['关键词'] == 'kw one;kw two'
+        assert parsed['rows'][0]['学科'] == 'Public Administration'
+        assert parsed['rows'][0]['参考文献'] == ''
+        assert parsed['capabilities']['keywords'] is True
+        assert parsed['capabilities']['refs'] is False
+
     def test_wos_keeps_author_commas_and_each_cited_reference_separate(self):
         parsed = parse_bytes(_sample('biblio_wos_demo.txt'), 'wos.txt')
         first = parsed['rows'][0]

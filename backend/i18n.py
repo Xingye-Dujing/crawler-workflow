@@ -369,9 +369,9 @@ _ZH = {
     '（Full Record and Cited References）\n'
     '3. 文件格式首选「纯文本文件」，得到带 CR/TC/UT 标签的 .txt\n'
     '4. 上传 .txt（Excel .xls/.xlsx、RIS、BibTeX 也认，但要按同一个记录内容选项导出）',
-    'source.WoS.missing': '实测 Excel 那份导出的 Cited References、Author Keywords、WoS Categories、'
-    'Funding 四列整列为空 ⇒ 只上 Excel 时引文网络、关键词共现与学科都不可用；'
-    '同一批记录用纯文本导出就都齐了，请优先用 .txt',
+    'source.WoS.missing': '实测 Excel 导出里 Cited References 整列为空（只有 Cited Reference Count 这个数字），'
+    '重导后 Author Keywords、WoS Categories、Research Areas、Funding 与使用次数都已经有值 ⇒ '
+    '只上 Excel 时建不了引文网络／引文突现；要引文分析请再用「纯文本 + 全记录与引用的参考文献」导一份 .txt',
     'source.Scopus.purpose': 'Scopus 的 CSV 下载：带参考文献、被引次数与作者单位，机构网络与国家网络都能建；'
     '中文界面导出的中文表头同样能读。',
     'source.Scopus.steps': '1. 在 Scopus 检索\n'
@@ -2238,10 +2238,11 @@ _EN = {
     '3. Prefer "Plain Text" as the file format — that is the .txt carrying the CR/TC/UT tags\n'
     '4. Upload the .txt (Excel .xls/.xlsx, RIS and BibTeX are read too, exported with the '
     'same record option)',
-    'source.WoS.missing': 'Measured: the Excel export we were given leaves Cited References, Author Keywords, '
-    'WoS Categories and Funding empty for every record ⇒ with Excel alone there is no citation '
-    'network, no keyword co-occurrence and no subject field; the same records exported as '
-    'plain text carry all of it, so prefer the .txt',
+    'source.WoS.missing': 'Measured: the Excel export leaves Cited References empty for every record (it writes only '
+    'the Cited Reference Count number); Author Keywords, WoS Categories, Research Areas, Funding and '
+    'the usage counts are all present in the re-export ⇒ Excel alone cannot build a citation network '
+    'or citation bursts. Export a plain text file with "Full Record and Cited References" as well '
+    'when you need those',
     'source.Scopus.purpose': "Scopus' CSV download: references, times-cited and author affiliations are in it, so "
     'institution and country networks build, and the Chinese interface’s Chinese column headers '
     'are recognised too.',
