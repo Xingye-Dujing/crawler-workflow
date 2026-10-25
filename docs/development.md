@@ -93,7 +93,7 @@ crawler_workflow/
 │   │   ├── workflow_manager.py   # 工作流持久化
 │   │   ├── exporter.py           # 通用多格式导出服务（Output 节点）
 │   │   ├── export_browser.py     # 导出目录的读取侧：列表/下载/删除与路径安全
-│   │   ├── report_service.py     # 一键自包含 HTML 运行报告（内容可定制；配无头 Chrome 打印 PDF）
+│   │   ├── report_service.py     # 一键自包含 HTML 运行报告（内容可定制；PDF 只走 LaTeX 成稿）
 │   │   ├── part_writer.py        # 分批落盘与实时快照（断点安全写）
 │   │   ├── housekeeping.py       # 运行记录/孤立文件/缓存的自动清理
 │   │   ├── data_analysis.py      # 通用数据清洗服务（Analysis 节点）

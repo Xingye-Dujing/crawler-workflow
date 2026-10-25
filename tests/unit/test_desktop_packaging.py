@@ -993,3 +993,17 @@ class TestTheIconIsWhatItsNameSays:
         builder = _load('build_icon', self.GENERATOR)
         with pytest.raises(SystemExit):
             builder.build(tmp_path / 'no-such-art.png', tmp_path / 'icon.ico')
+
+
+def test_the_launcher_starts_the_clock_the_serving_process_needs():
+    """``python app.py`` starts the scheduler inside its ``__main__``; the frozen entry imports the
+    module and runs Flask itself, so ``__main__`` never ran there.
+
+    Measured on the built exe: the 定时任务 panel said 「调度线程没有运行——任务已保存，但到点不会
+    执行」 because no tick thread existed. The launcher must therefore call the same shared starter,
+    once, before it starts serving.
+    """
+    source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
+    assert 'from app import start_background_services' in source
+    assert source.count('start_background_services()') == 1
+    assert source.index('start_background_services()') < source.index('flask_app.run(')

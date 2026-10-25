@@ -3144,31 +3144,36 @@ def test_a_tall_panel_scrolls_itself_instead_of_hanging_off_the_screen(app_url, 
         const out = {{}};
         for (const id of ['node-settings', 'cookie-dialog']) {{
             const box = document.getElementById(id);
-            box.innerHTML = '';
+            /* The node panel scrolls its CONTENT (#settings-content) so the header and the
+               resize grip stay put; the cookie dialog still scrolls itself. The rows go into
+               whichever element is the scroller. */
+            const scroller = id === 'node-settings' ? box.querySelector('#settings-content') : box;
+            scroller.innerHTML = '';
             for (let i = 0; i < 24; i += 1) {{
                 const row = document.createElement('div');
                 row.className = 'settings-group';
                 row.innerHTML = '<label>' + 'a'.repeat(46) + ' ' + i + '</label>';
-                box.appendChild(row);
+                scroller.appendChild(row);
             }}
             box.classList.add('open');
             box.classList.remove('hidden');
             const rect = box.getBoundingClientRect();
-            const cs = getComputedStyle(box);
+            const cs = getComputedStyle(scroller);
             out[id] = {{
-                rows: box.querySelectorAll('.settings-group').length,
+                rows: scroller.querySelectorAll('.settings-group').length,
                 top: Math.round(rect.top),
                 bottom: Math.round(rect.bottom),
-                maxHeight: cs.maxHeight,
+                maxHeight: getComputedStyle(box).maxHeight,
                 overflowY: cs.overflowY,
-                scrollHeight: box.scrollHeight,
-                clientHeight: box.clientHeight,
+                panelOverflowY: getComputedStyle(box).overflowY,
+                scrollHeight: scroller.scrollHeight,
+                clientHeight: scroller.clientHeight,
                 innerHeight: window.innerHeight,
                 pageV: [document.documentElement.scrollHeight, document.documentElement.clientHeight],
                 pageH: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
             }};
             box.classList.remove('open');
-            box.innerHTML = '';
+            scroller.innerHTML = '';
         }}
         return out;
         """,
@@ -3185,6 +3190,11 @@ def test_a_tall_panel_scrolls_itself_instead_of_hanging_off_the_screen(app_url, 
             f'#{panel_id} did not have to scroll, so this case stopped stressing it: {box}'
         )
         assert box['overflowY'] == 'auto', f'#{panel_id} lost its own scroll: {box["overflowY"]}'
+        if panel_id == 'node-settings':
+            assert box['panelOverflowY'] == 'hidden', (
+                'the panel itself must not scroll: the grip and the header stay put while the '
+                f'content moves (measured {box["panelOverflowY"]})'
+            )
         assert box['pageH'][0] <= box['pageH'][1] + 1, f'#{panel_id} grew a page-level horizontal bar'
 
 

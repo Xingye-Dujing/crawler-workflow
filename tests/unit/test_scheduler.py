@@ -289,3 +289,20 @@ class TestStatus:
         assert scheduler_module.local_zone_name().startswith('Asia/Shanghai')
         monkeypatch.delenv('TZ')
         assert scheduler_module.local_zone_name(), 'the OS answer is missing entirely'
+
+
+def test_the_shared_starter_is_retention_queue_then_clock(monkeypatch):
+    """One definition, two entry points (`__main__` and the frozen launcher).
+
+    The order matters: a parked request is restored before serving starts, and the clock's first
+    tick records the moments that passed while the server was down — so both run before the tick
+    thread exists, not after.
+    """
+    import app as app_module
+
+    calls = []
+    monkeypatch.setattr(app_module, '_housekeep', lambda *args, **kwargs: calls.append('housekeep'))
+    monkeypatch.setattr(app_module, '_load_pending_queue', lambda: 0)
+    monkeypatch.setattr(app_module.scheduler, 'start', lambda: calls.append('clock') or True)
+    app_module.start_background_services()
+    assert calls == ['housekeep', 'clock']

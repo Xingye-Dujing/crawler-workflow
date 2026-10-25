@@ -162,13 +162,13 @@ class TestReportButton:
     def test_the_dialog_offers_a_form_and_remembers_the_typed_title(self, results):
         first = results['dialogs'][0]
         assert first['hasInput'] is True
-        # Five outcomes now: cancel, plain, plain-with-AI, plain-then-PDF, and the paper document.
-        # Every creating button collects the form; cancel throws it away.
+        # Four outcomes: cancel, plain, plain-with-AI and the paper document. Every creating
+        # button collects the form; cancel throws it away. (The Chrome-printed PDF went with its
+        # route; paper output is the LaTeX button only.)
         assert first['buttons'] == [
             ['CANCEL', None, False],
             ['CREATE-AI', 'ai', True],
             ['CREATE', 'go', True],
-            ['CREATE-PDF', 'pdf', True],
             ['PAPER', 'latex', True],
         ]
         assert first['toggles'] == ['rpt-sec-charts', 'rpt-sec-tables', 'rpt-sec-facts', 'rpt-img-0']
@@ -216,13 +216,14 @@ class TestReportButton:
         assert 'max_rows' not in body['options']
         # The only studio picture is checked by default.
         assert body['options']['images'] == ['scatter-abc.png']
-
-    def test_the_pdf_button_prints_after_writing_the_html(self, results):
-        # The PDF call rides on the name the generate request just returned.
-        pdf = results['posts'][3]
-        assert pdf['url'] == '/api/report/pdf'
-        assert pdf['body'] == {'name': 'report-x.html'}
+        # Every one of the three answers opened the HTML it had just written.
         assert results['opens'][:3] == ['/api/report/view?name=ENC(report-x.html)'] * 3
+
+    def test_the_report_dialog_offers_html_and_the_latex_paper_only(self, results):
+        """PDF used to be a fourth button that printed the HTML with Chrome; that route is gone,
+        so the dialog must not promise it — paper output comes from the LaTeX button alone."""
+        first = results['dialogs'][0]
+        assert [button[1] for button in first['buttons']] == [None, 'ai', 'go', 'latex']
 
     def test_the_paper_button_asks_for_a_run_id_and_nothing_else(self, results):
         """The document is assembled server-side from the LaTeX this run already filed, so the
@@ -248,17 +249,16 @@ class TestReportButton:
                 assert post['body']['lang'] == 'en', 'and the body repeats it, as the report route reads it there'
 
     def test_cancel_requests_nothing(self, results):
-        # Three create outcomes each hit generate, one printed, one assembled the paper document.
-        assert len(results['posts']) == 5, 'the cancelled dialog must not have POSTed'
+        # Three create outcomes each hit generate, one assembled the paper document.
+        assert len(results['posts']) == 4, 'the cancelled dialog must not have POSTed'
         assert len(results['dialogs']) == 6
 
     def test_a_written_report_is_opened_and_the_panel_refreshed(self, results):
-        # Two plain creates, the PDF create (PDF toast, then the open toast), then the paper
-        # document: a working toast that outlives a compile, the finished name, and the download.
+        # Two plain creates, the AI one, then the paper document: a working toast that outlives a
+        # compile, the finished name, and the download.
         assert results['toasts'] == [
             'DONE',
             'DONE',
-            'PDFDONE',
             'DONE',
             'WORKING',
             'PAPERDONE: report-x.pdf',

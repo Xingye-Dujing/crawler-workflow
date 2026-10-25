@@ -1099,8 +1099,31 @@ body.style-menu-open #workspace #resume-banner {
 .dataset-hint {
   margin-top: 4px;
 }
+/* The upload node's two buttons and its status word: one row when it fits, wrapping when the
+   panel narrows, so 已加载 never gets pushed past the frame. */
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  row-gap: 6px;
+}
+.upload-status {
+  font-size: 11px;
+  color: var(--text-dim);
+  /* A long file name may wrap inside the status word, not overflow the panel. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .dataset-detail {
   margin-top: 8px;
+}
+/* The search box and the picker are two controls in one group; flush against each other the
+   dropdown reads as part of the search field. */
+.dataset-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .dataset-detail-table {
   width: 100%;
@@ -2520,7 +2543,11 @@ button.history-del:hover {
   transition:
     right 0.3s,
     opacity 0.3s;
-  overflow-y: auto;
+  /* The CONTENT scrolls, not the panel: the header and the resize grip then stay exactly where
+     they are while a long node form moves under them (the grip used to ride up with the scroll). */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
   box-shadow: var(--shadow);
@@ -2529,6 +2556,11 @@ button.history-del:hover {
   right: 12px;
   opacity: 1;
   pointer-events: all;
+}
+#settings-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .settings-header {
   cursor: grab;
@@ -2883,7 +2915,10 @@ input:-webkit-autofill:focus {
   color: var(--text-faint);
   letter-spacing: 0.4px;
   line-height: 1.5;
-  margin-top: 5px;
+  /* Wrapped hint text used to start flush against the panel's frame; a little air on both
+     sides is what makes it read as a note rather than as a clipped label. */
+  margin: 5px 0 4px;
+  padding: 0 8px;
 }
 
 .node-action-btn.settings-open {

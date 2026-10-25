@@ -289,6 +289,7 @@ var schedulesManager = {
                     label: I18n.t('schedMgr.fAt'),
                     type: 'text',
                     value: trigger.at || '08:00',
+                    onlyWhen: { field: SCHED_FIELD.kind, values: ['daily', 'weekly'] },
                 },
                 {
                     id: SCHED_FIELD.weekday,
@@ -296,6 +297,7 @@ var schedulesManager = {
                     type: 'select',
                     options: this._weekdayOptions(),
                     value: String(trigger.weekday || 1),
+                    onlyWhen: { field: SCHED_FIELD.kind, values: ['weekly'] },
                 },
                 {
                     id: SCHED_FIELD.interval,
@@ -304,12 +306,14 @@ var schedulesManager = {
                     value: String(trigger.minutes || 30),
                     min: '1',
                     max: '10080',
+                    onlyWhen: { field: SCHED_FIELD.kind, values: ['interval'] },
                 },
                 {
                     id: SCHED_FIELD.cron,
                     label: I18n.t('schedMgr.fCron'),
                     type: 'text',
                     value: trigger.expr || '',
+                    onlyWhen: { field: SCHED_FIELD.kind, values: ['cron'] },
                 },
                 {
                     id: SCHED_FIELD.zone,

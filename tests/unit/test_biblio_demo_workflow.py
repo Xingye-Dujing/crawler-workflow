@@ -47,7 +47,9 @@ def test_every_bibliometric_view_is_on_the_demo_canvas():
 
 def test_the_dual_map_chain_is_off_and_names_the_dataset_it_wants():
     off = [node for node in _draft()['nodes'] if not (node.get('params') or {}).get('enabled', True)]
-    assert {node['type'] for node in off} == {'analysis', 'biblio', 'visualize', 'fuse', 'upload', 'process'}
+    # `name` is the fusion chain's own naming node: it ships off with the chain it names, so the
+    # default run's composed name stays exactly the demo's title.
+    assert {node['type'] for node in off} == {'analysis', 'biblio', 'visualize', 'fuse', 'upload', 'process', 'name'}
     shapes = {str((node.get('params') or {}).get('output_shape') or '') for node in off if node['type'] == 'biblio'}
     assert shapes == {'nodes', 'dual_map'}, shapes
     dual = next(

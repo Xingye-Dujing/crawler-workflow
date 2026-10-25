@@ -2,19 +2,16 @@
 
 The one-click report: gather a run's tables (from the store, or from the run this page is
 holding in memory), build a self-contained HTML report into the export directory, serve it back
-through a locked-down door, optionally print it to PDF with the user's own Chrome, and offer the
-saved Chart-Studio pictures it can inline. The two helpers here (``_report_nodes`` gathering the
-tables, ``_find_chrome`` locating the print binary) are report-only, so they moved with the routes
-rather than staying in ``app``. Every dependency is reachable without importing ``app``; the
+through a locked-down door, and offer the saved Chart-Studio pictures it can inline. The helper
+here (``_report_nodes`` gathering the tables) is report-only, so it moved with the routes rather
+than staying in ``app``. Every dependency is reachable without importing ``app``; the
 ``report_service``/``export_browser`` modules stay imported lazily, exactly as before.
+A PDF is no longer printed from the HTML: paper output comes only from the LaTeX route, so the
+figures and tables in it are the ones the run filed.
 Paths and behaviour are unchanged.
 """
 
-import contextlib
 import os
-import shutil
-import subprocess
-import tempfile
 
 from flask import Blueprint, jsonify, request
 from state import _results_snapshot, add_log, execution_state
@@ -25,7 +22,6 @@ from analyzers.llm_client import LLMClient
 from api.http import _bad_body, _bad_param, _json_body
 from config import Config
 from i18n import normalize, t
-from settings_store import get_setting
 from utils.helpers import as_bool
 
 bp = Blueprint('report', __name__)
@@ -187,92 +183,6 @@ def report_view():
     )
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
-
-
-def _find_chrome() -> str:
-    """The Chrome (not chromedriver) binary used to print a report to PDF.
-
-    The browser is a separate executable from the driver the crawler drives, so
-    it is located on its own: an explicit ``browser_binary`` the user set first,
-    then a ``chrome.exe`` sitting beside a configured chromedriver, then the
-    platform default, then anything on PATH. Empty when none is found — PDF is
-    then refused with a reason, never a stack trace.
-    """
-    explicit = str(get_setting('browser_binary') or '').strip()
-    if explicit and os.path.isfile(explicit):
-        return explicit
-    driver = str(get_setting('driver_path') or getattr(Config, 'DRIVER_PATH', '') or '').strip()
-    if driver:
-        sibling = os.path.join(os.path.dirname(driver), 'chrome.exe')
-        if os.path.isfile(sibling):
-            return sibling
-    for candidate in (
-        r'C:\Program Files\Google\Chrome\Application\chrome.exe',
-        r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
-    ):
-        if os.path.isfile(candidate):
-            return candidate
-    return shutil.which('chrome') or shutil.which('google-chrome') or shutil.which('chromium') or ''
-
-
-@bp.route('/api/report/pdf', methods=['POST'])
-def report_pdf():
-    """Print an already-generated report to PDF with the user's own Chrome.
-
-    A report is HTML this writer built from crawled text, and the highest-
-    fidelity way to a PDF is the same engine a browser uses — so this drives a
-    throwaway headless Chrome rather than adding a rendering dependency. It is
-    best-effort: no Chrome, or a Chrome that will not print, becomes an error the
-    panel can show, never a crash and never a half-written file left behind. The
-    profile directory is fresh and deleted afterwards: a print must never touch a
-    platform's real login profile.
-    """
-    from pathlib import Path
-
-    from services.export_browser import resolve_report_path
-
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    name = str(data.get('name') or '').strip()
-    html_path = resolve_report_path(Config.EXPORT_DIR, name)
-    if not html_path:
-        return jsonify({'ok': False, 'error': t('api.reportPdfNotFound', name=name)}), 404
-    chrome = _find_chrome()
-    if not chrome:
-        return jsonify({'ok': False, 'error': t('api.reportPdfNoChrome')}), 500
-    pdf_name = os.path.splitext(os.path.basename(html_path))[0] + '.pdf'
-    pdf_path = os.path.join(os.path.dirname(html_path), pdf_name)
-    profile_dir = tempfile.mkdtemp(prefix='cixi-pdf-')
-    command = [
-        chrome,
-        '--headless=new',
-        '--disable-gpu',
-        '--no-sandbox',
-        '--no-pdf-header-footer',
-        f'--user-data-dir={profile_dir}',
-        f'--print-to-pdf={pdf_path}',
-        Path(html_path).as_uri(),
-    ]
-    try:
-        # ``check=False`` on purpose: a Chrome that refuses to print is reported to the user as
-        # this endpoint's own 500 with the tail of its stderr, not as an uncaught
-        # ``CalledProcessError`` inside the request handler. The return code is read below.
-        result = subprocess.run(command, capture_output=True, timeout=90, check=False)
-    except (subprocess.SubprocessError, OSError) as e:
-        shutil.rmtree(profile_dir, ignore_errors=True)
-        add_log(t('run.reportPdfFailed', err=e))
-        return jsonify({'ok': False, 'error': str(e)}), 500
-    shutil.rmtree(profile_dir, ignore_errors=True)
-    if result.returncode != 0 or not os.path.isfile(pdf_path):
-        with contextlib.suppress(OSError):
-            if os.path.isfile(pdf_path):
-                os.remove(pdf_path)
-        detail = (result.stderr or b'').decode('utf-8', 'replace')[-300:]
-        add_log(t('run.reportPdfFailed', err=detail))
-        return jsonify({'ok': False, 'error': t('api.reportPdfFailed', err=detail)}), 500
-    add_log(t('run.reportPdfSaved', name=pdf_name, size=os.path.getsize(pdf_path)))
-    return jsonify({'ok': True, 'name': pdf_name, 'bytes': os.path.getsize(pdf_path)})
 
 
 @bp.route('/api/report/latex', methods=['POST'])

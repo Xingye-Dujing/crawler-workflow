@@ -116,10 +116,11 @@ with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe
 still reach a raw `app` global (`analysis`/`output`/`process`/`visualize`/`comment`/`source`) stay in `app.py`
 until their web is service-level — the visualize node's TikZ/`chart_engine` web is already in `services/`.
 **The finding that reshaped the plan** still holds: `app.py` module globals are used as *monkeypatch seams* by
-the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app._find_chrome`, `app.MAX_IMAGE_BYTES`,
+the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app.MAX_IMAGE_BYTES`,
 `app._ML_MODEL_TYPES`, …), so each extraction that moves such a function/name re-points the tests that patch it
-(browser_profiles, studio `MAX_IMAGE_BYTES`, analysis `_ML_*`, run-races/conftest store writes, report
-`_find_chrome`/`subprocess.run`). Every step was landed as its own full-suite-green, lint-clean commit.
+(browser_profiles, studio `MAX_IMAGE_BYTES`, analysis `_ML_*`, run-races/conftest store writes). Every step was
+landed as its own full-suite-green, lint-clean commit. (The report module's `_find_chrome` seam is gone with the
+Chrome-printed report PDF: paper output is the LaTeX route only.)
 
 ### E. Store-registry keystone — design (EXECUTED: `backend/stores.py` now owns the registry; kept here as the design record)
 

@@ -6960,6 +6960,24 @@ except Exception:  # a broken user dict must never stop the server from booting
     logging.getLogger(__name__).warning('user dict load at startup skipped', exc_info=True)
 
 
+def start_background_services() -> None:
+    """Retention, the restored queue and the scheduled-task clock.
+
+    Extracted from ``__main__`` because the frozen launcher imports this module and calls Flask
+    itself: ``__main__`` never ran there, so the packaged app served requests with no tick thread
+    and the 定时任务 panel truthfully said 「调度线程没有运行——任务已保存，但到点不会执行」.
+    Both entry points run this once, in the serving process (under the reloader, only the child).
+    """
+    # Retention is applied on its own, not only when somebody remembers to
+    # click: startup is the other moment nothing is writing.
+    _housekeep(force=True)
+    # A restart must not silently drop the requests the user already parked.
+    restored = _load_pending_queue()
+    if restored:
+        logger.info(t('run.queue_restored', n=restored))
+    scheduler.start()
+
+
 if __name__ == '__main__':
     # Local by default: this server drives a browser, holds crawl cookies and can
     # run arbitrary code through the debugger, so it must not reach the LAN unless
@@ -6980,17 +6998,10 @@ if __name__ == '__main__':
     if debug and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         threading.Timer(1.5, _open_browser, args=(f'http://{browse_host}:{port}',)).start()
     logger.info(t('misc.server_starting', port=port))
-    # Retention is applied on its own, not only when somebody remembers to
-    # click: startup is the other moment nothing is writing.
-    _housekeep(force=True)
-    # A restart must not silently drop the requests the user already parked.
-    restored = _load_pending_queue()
-    if restored:
-        logger.info(t('run.queue_restored', n=restored))
-    # The scheduled-task clock. Started in the SERVING process only: with the reloader on this
-    # module is imported twice (the watcher and the child), and two clocks would fire one moment
-    # twice. ``start()`` also records whichever moments passed while the server was down, before
-    # its first tick — a restart counts what it missed, it never replays it.
+    # Retention, the parked queue and the scheduled-task clock. Started in the SERVING process
+    # only: with the reloader on this module is imported twice (the watcher and the child), and
+    # two clocks would fire one moment twice. The frozen launcher calls the same function for the
+    # same reason (see ``start_background_services``).
     if not debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        scheduler.start()
+        start_background_services()
     app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=debug)

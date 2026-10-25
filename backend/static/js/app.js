@@ -27,7 +27,7 @@ const I18n = {
     lang: 'en',
     dict: {
         en: {
-            'menu.file': 'File', 'menu.save': 'Save', 'menu.load': 'Load', 'menu.new': 'New', 'menu.import': 'Import',
+            'menu.file': 'File', 'menu.save': 'Save', 'menu.new': 'New', 'menu.import': 'Import',
             'menu.edit': 'Edit',
             'menu.view': 'View',
             'menu.style': 'Style', 'style.bg': 'Background', 'style.radius': 'Radius',
@@ -53,8 +53,7 @@ const I18n = {
             'help.escape': 'Cancel / close / deselect',
             'sourceHelp.title': 'Where does the data come from?',
             'sourceHelp.close': 'Close',
-            'sourceHelp.menuEntry': 'Data sources',
-            'sourceHelp.button': 'How do I get this file?',
+            'sourceHelp.button': 'How to obtain the bibliographic data',
             'sourceHelp.loading': 'Loading the export guide…',
             'sourceHelp.unavailable': 'The export guide could not be loaded, so nothing is listed here:',
             'sourceHelp.groupLibrary': 'Literature databases',
@@ -805,6 +804,7 @@ const I18n = {
             'dataSource.loaded': 'Loaded',
             'dataSource.none': 'No file uploaded yet',
             'dataSource.persisted': 'Stored in the database — still attached after a refresh or reopening this workflow',
+            'dataSource.detailFailed': 'Could not read this dataset’s details: {err}',
             'settings.chooseDataset': 'Choose a saved dataset',
             'settings.datasetFilter': 'Search datasets…',
             'settings.datasetDetail': 'Details',
@@ -1280,20 +1280,16 @@ const I18n = {
             'exportsMgr.download': 'Download',
             'exportsMgr.view': 'Open report',
             'exportsMgr.report': 'Report',
-            'exportsMgr.reportHint': 'One self-contained HTML file: every table this run produced, plus charts.',
             'exportsMgr.reportPlaceholder': 'Report title (empty = the workflow name)',
-            'exportsMgr.reportGo': 'Create',
+            'exportsMgr.reportGo': 'Create HTML report',
             'exportsMgr.reportAi': 'Create with AI conclusion',
             'exportsMgr.reportDone': 'Report created',
             'exportsMgr.reportFailed': 'Report failed',
-            'exportsMgr.reportPdf': 'Create + PDF',
             'exportsMgr.reportLatex': 'Paper document (LaTeX PDF)',
             'exportsMgr.reportLatexNoRun': 'No finished run to assemble: run the canvas first, or open the report from 运行记录.',
             'exportsMgr.reportLatexWorking': 'Assembling and compiling the paper document (xelatex)…',
             'exportsMgr.reportLatexDone': 'Paper document ready',
             'exportsMgr.reportLatexFailed': 'Paper document failed',
-            'exportsMgr.reportPdfDone': 'PDF exported',
-            'exportsMgr.reportPdfFailed': 'PDF export failed',
             'exportsMgr.reportTCharts': 'Include charts',
             'exportsMgr.reportTTables': 'Include data tables',
             'exportsMgr.reportTFacts': 'Include run details',
@@ -1614,7 +1610,7 @@ const I18n = {
             'schedMgr.canvasLocked': 'cannot be scheduled',
         },
         zh: {
-            'menu.file': '文件', 'menu.save': '保存', 'menu.load': '打开', 'menu.new': '新建', 'menu.import': '导入',
+            'menu.file': '文件', 'menu.save': '保存', 'menu.new': '新建', 'menu.import': '导入',
             'menu.edit': '编辑',
             'menu.view': '视图',
             'menu.style': '样式', 'style.bg': '背景', 'style.radius': '圆角',
@@ -1640,8 +1636,7 @@ const I18n = {
             'help.escape': '取消 / 关闭 / 取消选择',
             'sourceHelp.title': '数据从哪里来？',
             'sourceHelp.close': '关闭',
-            'sourceHelp.menuEntry': '数据来源',
-            'sourceHelp.button': '这份文件怎么导出？',
+            'sourceHelp.button': '文献数据文件如何获得？',
             'sourceHelp.loading': '正在载入导出指引…',
             'sourceHelp.unavailable': '导出指引没能载入，所以这里什么都不列：',
             'sourceHelp.groupLibrary': '文献数据库',
@@ -2368,6 +2363,7 @@ const I18n = {
             'dataSource.loaded': '已加载',
             'dataSource.none': '尚未上传文件',
             'dataSource.persisted': '已存入数据库：刷新页面或重开工作流后依然带着这个文件',
+            'dataSource.detailFailed': '读不到这个数据集的详情：{err}',
             'settings.chooseDataset': '从已保存数据集选择',
             'settings.datasetFilter': '搜索数据集…',
             'settings.datasetDetail': '详情',
@@ -2825,20 +2821,16 @@ const I18n = {
             'exportsMgr.download': '下载',
             'exportsMgr.view': '查看报告',
             'exportsMgr.report': '生成报告',
-            'exportsMgr.reportHint': '生成一个自包含 HTML 文件：本次运行的每张表格，外加图表。',
             'exportsMgr.reportPlaceholder': '报告标题（留空则用工作流名）',
-            'exportsMgr.reportGo': '生成',
+            'exportsMgr.reportGo': '生成 Html 报告',
             'exportsMgr.reportAi': '生成并附 AI 结论',
             'exportsMgr.reportDone': '报告已生成',
             'exportsMgr.reportFailed': '报告生成失败',
-            'exportsMgr.reportPdf': '生成并导出 PDF',
             'exportsMgr.reportLatex': '论文成稿（LaTeX PDF）',
             'exportsMgr.reportLatexNoRun': '没有可合成的已完成运行：请先运行画布，或从「运行记录」里打开那次运行的报告。',
             'exportsMgr.reportLatexWorking': '正在合成并编译论文成稿（xelatex）……',
             'exportsMgr.reportLatexDone': '论文成稿已生成',
             'exportsMgr.reportLatexFailed': '论文成稿失败',
-            'exportsMgr.reportPdfDone': 'PDF 已导出',
-            'exportsMgr.reportPdfFailed': 'PDF 导出失败',
             'exportsMgr.reportTCharts': '包含图表',
             'exportsMgr.reportTTables': '包含数据表',
             'exportsMgr.reportTFacts': '包含运行信息',
@@ -4215,6 +4207,20 @@ function makeResizable(el, opts) {
         handle.className = 'resize-handle';
         el.appendChild(handle);
     }
+
+    /* A scrollable panel carries its absolutely-positioned handle away with the content:
+       ``bottom: 0`` is the padding box's bottom, so scrolling up by N moves the grip up by N
+       and past the frame it disappears. Cancelling the scroll keeps it in the visible corner
+       (measured on #node-settings, whose form outgrows the panel). */
+    const pinHandle = function () {
+        handle.style.transform = 'translate(' + el.scrollLeft + 'px,' + el.scrollTop + 'px)';
+    };
+    if (!el.dataset._handlePinned) {
+        el.dataset._handlePinned = '1';
+        el.addEventListener('scroll', pinHandle, { passive: true });
+        window.addEventListener('resize', pinHandle);
+    }
+    pinHandle();
 
     let rs = {};
     handle.style.touchAction = 'none'; /* a finger drag on the handle is ours, not the page's scroll */

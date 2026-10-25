@@ -38,7 +38,6 @@ const I18n = {
             'exportsMgr.reportPlaceholder': 'PLACEHOLDER',
             'exportsMgr.reportGo': 'CREATE',
             'exportsMgr.reportAi': 'CREATE-AI',
-            'exportsMgr.reportPdf': 'CREATE-PDF',
             'exportsMgr.reportLatex': 'PAPER',
             'exportsMgr.reportLatexNoRun': 'NO-RUN',
             'exportsMgr.reportLatexWorking': 'WORKING',
@@ -50,8 +49,6 @@ const I18n = {
             'exportsMgr.reportRows': 'ROWS',
             'exportsMgr.reportDone': 'DONE',
             'exportsMgr.reportFailed': 'FAILED',
-            'exportsMgr.reportPdfDone': 'PDFDONE',
-            'exportsMgr.reportPdfFailed': 'PDFFAILED',
             'exportsMgr.remove': 'Delete',
             'exportsMgr.confirmRemove': 'CONFIRM-REMOVE',
             'exportsMgr.removeDone': 'DELETED',
@@ -103,8 +100,6 @@ Object.assign(sandbox, {
         } else if (body && url.indexOf('/clear-name') >= 0) {
             // 依据名字清除该批分片: a batch of shards gone, one 固定 kept.
             answer = { ok: true, removed: 2, skipped_locked: 1, missing: 0, requested: 3, name: body.name };
-        } else if (body && url.indexOf('/report/pdf') >= 0) {
-            answer = { ok: true, name: 'report-x.pdf', bytes: 9 };
         } else if (body && url.indexOf('/report/latex') >= 0) {
             answer = { ok: true, name: 'report-x.pdf', tex: 'report-x.tex', figures: 2, tables: 2 };
         } else if (body) {
@@ -197,7 +192,7 @@ dialogAnswer.value = {
 await exportsManager.report('run-7', 'stored name');
 // A button that names no switch at all must still yield a full report — the
 // defaults, never a silently-thinned document.
-dialogAnswer.value = { value: 'pdf', input: 'minimal' };
+dialogAnswer.value = { value: 'go', input: 'minimal' };
 await exportsManager.report();
 /* ── the paper document: a different deliverable with a narrower request ─────
    The server assembles it from the LaTeX this run ALREADY filed, so the browser sends the run id

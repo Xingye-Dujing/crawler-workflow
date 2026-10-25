@@ -8,7 +8,6 @@ assertions here are about which names resolve, what policy the response carries,
 and that a report never fails because a paragraph of AI prose failed.
 """
 
-import api.report
 import pytest
 
 pytestmark = pytest.mark.api
@@ -289,76 +288,6 @@ class TestStudioImages:
         text = _report_text(client, app_module, name)
         assert 'data:image/png;base64,' in text
         assert 'bar-xyz' in text
-
-
-def _fake_print_run(writes_pdf, returncode=0, stderr=b''):
-    """A stand-in for ``subprocess.run`` that honours the --print-to-pdf target.
-
-    The PDF route is under test here, not Chrome: the fake reads the output path
-    off the command and creates (or refuses to create) that file, so the route's
-    own success/failure branches can be checked without a browser on PATH.
-    """
-    from types import SimpleNamespace
-
-    def run(command, *args, **kwargs):
-        for arg in command:
-            if arg.startswith('--print-to-pdf=') and writes_pdf:
-                with open(arg.split('=', 1)[1], 'wb') as handle:
-                    handle.write(b'%PDF-1.4 fake')
-        return SimpleNamespace(returncode=returncode, stderr=stderr)
-
-    return run
-
-
-class TestPdf:
-    def test_a_report_prints_to_a_pdf_next_to_it(self, client, app_module, monkeypatch):
-        app_module.execution_state['results'] = {'node-1': ROWS}
-        name = client.post('/api/report/generate', json={}).get_json()['name']
-        monkeypatch.setattr(api.report, '_find_chrome', lambda: 'C:/chrome.exe')
-        monkeypatch.setattr(api.report.subprocess, 'run', _fake_print_run(True))
-        body = client.post('/api/report/pdf', json={'name': name}).get_json()
-        assert body['ok'] is True
-        assert body['name'] == name[: -len('.html')] + '.pdf'
-        assert body['bytes'] > 0
-
-    def test_a_name_that_is_not_a_report_is_not_found(self, client, app_module, monkeypatch):
-        monkeypatch.setattr(api.report, '_find_chrome', lambda: 'C:/chrome.exe')
-        response = client.post('/api/report/pdf', json={'name': 'notes.html'})
-        assert response.status_code == 404
-
-    def test_no_chrome_is_a_refusal_not_a_crash(self, client, app_module, monkeypatch):
-        app_module.execution_state['results'] = {'node-1': ROWS}
-        name = client.post('/api/report/generate', json={}).get_json()['name']
-        monkeypatch.setattr(api.report, '_find_chrome', lambda: '')
-        response = client.post('/api/report/pdf', json={'name': name})
-        assert response.status_code == 500
-        assert 'Chrome' in response.get_json()['error']
-
-    def test_a_print_that_fails_leaves_no_half_written_pdf(self, client, app_module, monkeypatch):
-        app_module.execution_state['results'] = {'node-1': ROWS}
-        name = client.post('/api/report/generate', json={}).get_json()['name']
-        monkeypatch.setattr(api.report, '_find_chrome', lambda: 'C:/chrome.exe')
-        monkeypatch.setattr(api.report.subprocess, 'run', _fake_print_run(True, returncode=1, stderr=b'crash'))
-        response = client.post('/api/report/pdf', json={'name': name})
-        assert response.status_code == 500
-        import os
-
-        from config import Config
-
-        pdf_path = os.path.join(Config.EXPORT_DIR, name[: -len('.html')] + '.pdf')
-        assert not os.path.exists(pdf_path), 'a failed print left the stub PDF on disk'
-
-    def test_a_chrome_that_will_not_start_is_reported(self, client, app_module, monkeypatch):
-        app_module.execution_state['results'] = {'node-1': ROWS}
-        name = client.post('/api/report/generate', json={}).get_json()['name']
-        import subprocess as _sp
-
-        def boom(command, *args, **kwargs):
-            raise _sp.SubprocessError('chrome died')
-
-        monkeypatch.setattr(api.report, '_find_chrome', lambda: 'C:/chrome.exe')
-        monkeypatch.setattr(api.report.subprocess, 'run', boom)
-        assert client.post('/api/report/pdf', json={'name': name}).status_code == 500
 
 
 def _report_text(client, app_module, name: str) -> str:

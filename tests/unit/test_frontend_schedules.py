@@ -212,9 +212,10 @@ def test_the_page_carries_the_panel_its_body_and_its_handle():
     assert 'id="schedules-mgr-body"' in html
 
 
-def test_three_places_open_the_panel_and_each_one_is_an_opening():
-    """The flat bar's Run group, the status bar's dock row, and the panel's own Close button."""
-    assert _html().count('onclick="toggleSchedulesPanel()"') == 3
+def test_two_places_open_the_panel_and_each_one_is_an_opening():
+    """The status bar's dock row and the panel's own Close button (the top bar's duplicate was
+    removed on request)."""
+    assert _html().count('onclick="toggleSchedulesPanel()"') == 2
 
 
 def test_the_panel_script_loads_after_the_two_files_it_borrows_from():

@@ -28,7 +28,6 @@ HARNESS = REPO / 'tests' / 'frontend' / 'harness_source_help.mjs'
 GUIDE_KEYS = [
     'sourceHelp.title',
     'sourceHelp.close',
-    'sourceHelp.menuEntry',
     'sourceHelp.button',
     'sourceHelp.loading',
     'sourceHelp.unavailable',
@@ -67,11 +66,12 @@ class TestTheOverlayIsBuiltLikeTheOthers:
         for holder in ('source-help-overlay', 'source-help-box', 'source-help-body'):
             assert f'id="{holder}"' in markup, f'{holder} is missing from the page'
 
-    def test_the_toggle_has_the_two_doors_and_the_same_function_behind_all_of_them(self):
+    def test_the_only_door_is_the_upload_panel_and_the_header_closes_it(self):
         markup = _markup()
-        assert markup.count('onclick="toggleSourceHelp()"') == 1, 'the menu opens it'
+        # The top menu used to carry a second entry; it was removed on request, so the one
+        # opener is the button beside the file picker (built in JS, not in the page).
+        assert 'onclick="toggleSourceHelp()"' not in markup
         assert markup.count('onclick="closeSourceHelp()"') == 1, 'the header closes it'
-        # The third door is in the upload node's panel, which is built in JS.
         assert _js('workflow.js').count('onclick="toggleSourceHelp()"') == 1
 
     def test_the_closer_is_reachable_from_escape_and_from_the_scrim_only(self):

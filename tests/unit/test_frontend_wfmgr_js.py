@@ -97,7 +97,9 @@ class TestPageWiring:
 
     def test_both_openers_call_the_global_toggler(self):
         page = INDEX_HTML.read_text(encoding='utf-8')
-        assert page.count('toggleWorkflowsPanel()') == 3, 'the menu, the status button and the panel close'
+        # The File menu's Load entry was removed on request; the status button and the panel's
+        # Close are the two that remain.
+        assert page.count('toggleWorkflowsPanel()') == 2, 'the status button and the panel close'
         assert 'wfFiles.refresh()' in page, 'the header button must re-read the list'
         source = WORKFLOW_JS.read_text(encoding='utf-8')
         assert re.search(r'function toggleWorkflowsPanel\(\)\s*\{\s*wfFiles\.toggle\(\);', source)

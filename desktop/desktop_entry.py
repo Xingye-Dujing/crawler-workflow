@@ -653,6 +653,7 @@ def main(argv=None) -> int:
 
     try:
         from app import app as flask_app
+        from app import start_background_services
     except Exception:
         fail_loudly(
             '启动失败：应用模块没有加载成功。请把日志文件发给维护者。',
@@ -697,6 +698,17 @@ def main(argv=None) -> int:
     no_browser = os.environ.get('CIXI_NO_BROWSER') == '1' or '--no-browser' in argv
     if not no_browser:
         threading.Thread(target=_wait_and_open, args=(url,), daemon=True).start()
+
+    # The same startup work ``python app.py`` does in its ``__main__``: this launcher imports the
+    # module and runs Flask itself, so ``__main__`` never ran here and the packaged app served
+    # requests with NO scheduled-task clock (the 定时任务 panel said so, truthfully).
+    try:
+        start_background_services()
+    except Exception:
+        # Retention and the queue are conveniences; the clock is the one thing whose absence the
+        # user sees in the panel. Say what failed and keep serving — but never hide it.
+        print('后台服务启动失败（定时任务可能不会触发）：', file=sys.stderr, flush=True)
+        traceback.print_exc()
 
     try:
         flask_app.run(host='127.0.0.1', port=port, use_reloader=False, threaded=True)

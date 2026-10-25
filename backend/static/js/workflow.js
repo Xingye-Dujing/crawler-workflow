@@ -2330,7 +2330,11 @@ function openSettings(nodeId) {
         canvas.closeSettingsIfStale();
         return;
     }
-    var wasOpen = !!canvas._settingsNodeId;
+    var previousNode = canvas._settingsNodeId;
+    var wasOpen = !!previousNode;
+    /* Rebuilding the SAME open panel (every parameter edit lands here) must keep its offset —
+       the caret may be near the bottom. Opening a DIFFERENT node starts at the top. */
+    var sameNode = previousNode === nodeId;
     canvas._settingsNodeId = nodeId;
     /* Focus moves into the panel only on a CLOSED→OPEN transition. openSettings is also the
        rebuild path after every parameter edit, and stealing focus there would drop the caret out
@@ -2425,12 +2429,14 @@ function openSettings(nodeId) {
         /* The single place a file enters a workflow: pick a CSV / JSON / TXT
            and this node publishes its rows to whatever is connected below. */
         var p = node.params;
-        html += '<div class="settings-group" style="display:flex;gap:8px;align-items:center;">' +
+        /* Two buttons and a status word share one row; a narrow panel has to wrap them instead
+           of pushing the status out of the frame (measured on a 300 px panel: 已加载 was cut). */
+        html += '<div class="settings-group upload-actions">' +
             '<button class="menu-btn" onclick="dataNodes.pickFile(\'' + nodeId + '\')">' + I18n.t('btn.uploadFile') + '</button>' +
             /* Asked where this file comes from at the moment the user is holding the picker,
                not from a menu he has to remember existed. */
             '<button class="menu-btn" onclick="toggleSourceHelp()">' + I18n.t('sourceHelp.button') + '</button>' +
-            '<span style="font-size:11px;color:var(--text-dim);">' +
+            '<span class="upload-status">' +
             (p.dataset_id ? I18n.t('dataSource.loaded') + ': ' + escapeHtml(p.dataset_name || p.dataset_id) : I18n.t('dataSource.none')) +
             '</span></div>';
         if (node._datasetMissing) {
@@ -2444,15 +2450,23 @@ function openSettings(nodeId) {
            valid dataset_id. The list is fetched and rendered after the panel opens
            (loadDatasetOptions), so it can be filtered and carry per-file metadata. */
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chooseDataset') + '</label>' +
+            '<div class="dataset-picker">' +
             '<input class="settings-input" id="dataset-filter-' + nodeId + '" placeholder="' +
             escapeHtml(I18n.t('settings.datasetFilter')) + '" oninput="dataNodes.filterDatasets(\'' + nodeId + '\', this.value)">' +
             '<select class="settings-select" id="dataset-pick-' + nodeId + '" ' +
             'onchange="dataNodes.pickFromDataset(\'' + nodeId + '\', this.value)">' +
             '<option value="' + escapeHtml(p.dataset_id || '') + '" selected>' +
             escapeHtml(p.dataset_name || I18n.t('dataSource.chooseLoading')) + '</option></select>' +
+            '</div>' +
             '<div id="dataset-hint-' + nodeId + '" class="dataset-hint" style="font-size:11px;color:var(--text-dim);"></div>' +
             '<div style="display:flex;gap:8px;margin-top:6px;">' +
-            '<button class="menu-btn" onclick="dataNodes.toggleDatasetDetail(\'' + nodeId + '\')">' + I18n.t('settings.datasetDetail') + '</button>' +
+            /* Only offered when there is a dataset to describe: with no file attached the old
+               button was rendered anyway and its handler returned without a word, so it looked
+               broken (the fused demo's upload node is exactly that state). */
+            (p.dataset_id
+                ? '<button class="menu-btn" onclick="dataNodes.toggleDatasetDetail(\'' + nodeId + '\')">' +
+                  I18n.t('settings.datasetDetail') + '</button>'
+                : '') +
             (p.dataset_id ? '<button class="menu-btn" onclick="dataNodes.applyToOtherUploadNodes(\'' + nodeId + '\')">' + I18n.t('settings.applyToOthers') + '</button>' : '') +
             '</div>' +
             '<div id="dataset-detail-' + nodeId + '" class="dataset-detail" style="display:none;"></div></div>';
@@ -2784,6 +2798,19 @@ function openSettings(nodeId) {
         }
     }
     content.innerHTML = html;
+    if (!sameNode) {
+        /* Opening for a DIFFERENT node starts at the top. The panel is the scroll container, and
+           it used to keep the previous form's offset: open a long node, scroll to its bottom,
+           then open a short one and the panel shows blank space below the content until you
+           scroll up yourself. A rebuild of the SAME open panel (every parameter edit) keeps its
+           offset — the caret may be down there. */
+        panel.scrollTop = 0;
+        content.scrollTop = 0;
+        /* The resize grip is pinned by cancelling the panel's scroll; after a reset the cancelling
+           transform has to follow the new offset or the grip lands somewhere else for a frame. */
+        var grip = panel.querySelector('.resize-handle');
+        if (grip) grip.style.transform = 'translate(0px,0px)';
+    }
     if (node.type === 'resume') renderResumeSettings(nodeId);
     if (node.type === 'upload') dataNodes.loadDatasetOptions(nodeId);
     if (
@@ -4001,8 +4028,15 @@ var dataNodes = {
         var cached = dataNodes._datasets && dataNodes._datasets[id];
         if (cached) { render(cached); return; }
         fetchJSON('/api/data/datasets/' + encodeURIComponent(id))
-            .then(function (res) { render(res && res.ok ? res.dataset : null); })
-            .catch(function () { /* offline: leave it hidden */ });
+            .then(function (res) {
+                if (res && res.ok && res.dataset) { render(res.dataset); return; }
+                /* The file is gone from the library, or the read failed. Hiding the box silently
+                   is what made 详情 look like a dead button — name the reason instead. */
+                showToast(I18n.t('dataSource.detailFailed').replace('{err}', (res && res.error) || ''));
+            })
+            .catch(function (e) {
+                showToast(I18n.t('dataSource.detailFailed').replace('{err}', (e && e.message) || ''));
+            });
     },
 
     /* One crawl paid for is worth reusing across every Upload node on the canvas:
@@ -6768,6 +6802,7 @@ function showDialog(opts) {
         }
         if (fieldIds.length) {
             listArea.style.display = 'block';
+            var fieldRows = {};
             opts.fields.forEach(function (f) {
                 var row = document.createElement('label');
                 row.className = 'dialog-field';
@@ -6803,7 +6838,33 @@ function showDialog(opts) {
                 }
                 row.appendChild(box);
                 listArea.appendChild(row);
+                fieldRows[f.id] = row;
             });
+            /* A field may declare which values of ANOTHER field it belongs to (the schedule
+               editor: a time only means something for daily/weekly, a cron expression only for
+               cron). Without this every trigger kind showed every box, and the ones that did not
+               apply were silently ignored on save — a form asking for four answers to one
+               question. The rule is read from the live select, so switching 触发方式 re-filters. */
+            var dependent = (opts.fields || []).filter(function (f) {
+                return f.onlyWhen && f.onlyWhen.field;
+            });
+            function applyFieldVisibility() {
+                dependent.forEach(function (f) {
+                    var row = fieldRows[f.id];
+                    var source = document.getElementById(f.onlyWhen.field);
+                    if (!row || !source) return;
+                    var wanted = f.onlyWhen.values || [];
+                    row.style.display = wanted.indexOf(source.value) >= 0 ? '' : 'none';
+                });
+            }
+            dependent.forEach(function (f) {
+                var source = document.getElementById(f.onlyWhen.field);
+                if (source && !source.dataset._onlyWhenBound) {
+                    source.dataset._onlyWhenBound = '1';
+                    source.addEventListener('change', applyFieldVisibility);
+                }
+            });
+            applyFieldVisibility();
         }
         function collectForm() {
             var toggles = {};
@@ -10446,7 +10507,6 @@ var exportsManager = {
             toggles.push({ id: 'rpt-img-' + i, label: img.name, checked: true });
         });
         var answer = await showDialog({
-            message: I18n.t('exportsMgr.reportHint'),
             input: { value: suggestedTitle || '', placeholder: I18n.t('exportsMgr.reportPlaceholder') },
             toggles: toggles,
             fields: [{ id: ROWS_FIELD, label: I18n.t('exportsMgr.reportRows'), type: 'number', value: '20', min: '1', max: '200' }],
@@ -10454,7 +10514,6 @@ var exportsManager = {
                 { label: I18n.t('dialog.cancel'), value: null },
                 { label: I18n.t('exportsMgr.reportAi'), value: 'ai', collect: true },
                 { label: I18n.t('exportsMgr.reportGo'), value: 'go', collect: true, primary: true },
-                { label: I18n.t('exportsMgr.reportPdf'), value: 'pdf', collect: true },
                 { label: I18n.t('exportsMgr.reportLatex'), value: 'latex', collect: true },
             ],
         });
@@ -10505,30 +10564,11 @@ var exportsManager = {
             });
             var result = await resp.json();
             if (!result.ok) throw new Error(result.error || 'report failed');
-            if (answer.value === 'pdf') await this.printPdf(result.name);
             showToast(I18n.t('exportsMgr.reportDone'));
             this.view(result.name);
             this.refresh();
         } catch (e) {
             showToast(I18n.t('exportsMgr.reportFailed') + ': ' + (e.message || e));
-        }
-    },
-
-    /* Print an already-generated report with the user's own headless Chrome. The
-       HTML has already landed, so a PDF that will not come is a note, not a
-       lost report: the failure is shown and the caller still opens the HTML. */
-    async printPdf(name) {
-        try {
-            var resp = await fetch('/api/report/pdf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
-                body: JSON.stringify({ name: name }),
-            });
-            var result = await resp.json();
-            if (!result.ok) throw new Error(result.error || 'pdf failed');
-            showToast(I18n.t('exportsMgr.reportPdfDone'));
-        } catch (e) {
-            showToast(I18n.t('exportsMgr.reportPdfFailed') + ': ' + (e.message || e));
         }
     },
 

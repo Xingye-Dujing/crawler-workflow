@@ -52,11 +52,13 @@ class TestTheDock:
         ):
             assert marker in _markup(), marker
 
-    def test_three_doors_open_it_and_all_three_use_the_one_toggle(self):
-        """Top bar, status bar and the panel's own Close — a Close wired to something else is a
-        panel that opens twice, and the dock matrix cannot see it because it drives the toggler."""
-        assert len(re.findall(r'onclick="toggleBiblioPanel\(\)"', _markup())) == 3
-        assert 'id="btn-biblio"' in _markup() and 'id="btn-biblio-dock"' in _markup()
+    def test_two_doors_open_it_and_both_use_the_one_toggle(self):
+        """Status bar and the panel's own Close — the top bar's duplicate was removed on request.
+        A Close wired to something else is a panel that opens twice, and the dock matrix cannot
+        see it because it drives the toggler."""
+        assert len(re.findall(r'onclick="toggleBiblioPanel\(\)"', _markup())) == 2
+        assert 'id="btn-biblio-dock"' in _markup()
+        assert 'id="btn-biblio"' not in _markup(), 'the top-bar duplicate is gone'
 
     def test_the_page_loads_the_file_that_defines_the_toggler(self):
         assert 'function toggleBiblioPanel()' in _js('workflow.js')
