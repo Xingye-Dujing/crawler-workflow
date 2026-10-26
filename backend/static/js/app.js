@@ -269,6 +269,7 @@ const I18n = {
             'toast.nodesPasted': '{n} nodes pasted',
             'toast.nodeJsonCopied': 'Node JSON copied to clipboard',
             'toast.nodeJsonInvalid': 'Not a valid node JSON (need a known "type" and a "params" object)',
+            'toast.nodeTypesFailed': 'The node catalogue could not be read ({err}); the canvas is using its built-in list',
             /* Clipboard drawer (right slide-in) — every copied node/text, kept in its own
                localStorage key, pasteable / renamable / pinnable / deletable one at a time. */
             'clipboard.title': 'Clipboard',
@@ -2099,6 +2100,7 @@ const I18n = {
             'toast.nodesPasted': '已粘贴 {n} 个节点',
             'toast.nodeJsonCopied': '节点 JSON 已复制到剪贴板',
             'toast.nodeJsonInvalid': '不是有效的节点 JSON（需已知的 "type" 与 "params" 对象）',
+            'toast.nodeTypesFailed': '节点类型目录读取失败（{err}）；画布改用内置清单',
             /* 剪贴板抽屉（右侧滑入）—— 复制过的节点/文本各自存于独立 localStorage 键，
                可逐条粘贴/重命名/置顶/删除/清空。 */
             'clipboard.title': '剪贴板',
@@ -4552,6 +4554,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     boot('settings', () => Settings.apply());
     boot('menu', () => TopMenu.init());
+    /* The catalogue is what the canvas validates restored nodes against and seeds new ones
+       from; it answers asynchronously, so a boot failure here is named by node-types.js and the
+       canvas falls back to its pinned table rather than refusing every draft. */
+    boot('nodeTypes', () => NodeTypes.load());
     boot('canvas', () => canvas.init());
     // Restore which saved file this draft belongs to BEFORE anything reads runName()
     // (resume bar, dashboard rehydrate, exports) — a refresh/restart reopens the file,

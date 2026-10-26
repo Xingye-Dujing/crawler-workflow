@@ -48,6 +48,7 @@ split must move that shared state to a place both `app.py` and `conftest.py` can
 | `app.js` | 3,845 LOC — i18n catalogs (en+zh) + `AppSettings`/`BrowserProfiles`/`CloudMode`/`RunState`/… namespaces, boot, cookie dialog, every dock's resize wiring. |
 | `canvas.js` | 3,379 LOC — node graph, camera (`pan/zoom`, kept out of `getState`), pointer/touch gestures. |
 | `schedules.js` | 462 LOC — the 定时任务 dock: it renders the server's payload (`/api/schedules*`) and nothing else. Deliberately **no** time arithmetic and **no** status vocabulary of its own (a token the catalogue does not know shows as itself) — see the 定时任务 rules in `AGENTS.md`. |
+| `node-types.js` | The served node catalogue (`/api/node-types`): types, word keys, groups and seed parameters. The canvas reads it as soon as it answers; its own literal table is the cold-page fallback, pinned to the server by tests. |
 | `custom-select.js`, `menu.js`, `stats.js`, `zenviz*.js` | widget + Chart-Studio host/bridge. |
 
 The codebase already uses a lightweight namespace convention (`const Foo = { … }`), but everything
@@ -88,6 +89,8 @@ Split it by responsibility into a few `<script>` files in load order (no bundler
 run-console, panels/settings renderers, Chart Studio, cookie-gate, i18n/bridge, state/history. Keep
 the `const Foo = {}` namespace style so the existing harness keeps loading real files. Goal is fewer
 implicit globals and a smaller blast radius per edit — **not** a framework rewrite.
+Phase 2 of the backend plan is done: the node catalogue and its seeds are served by `/api/node-types`
+and read by `node-types.js`; `canvas.js` keeps a pinned fallback for the cold page.
 
 ### C. Docs / rules
 Keep `AGENTS.md` as terse rules and push evidence here/`docs/`. Several rules already have a pinning

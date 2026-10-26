@@ -6,8 +6,9 @@ refusal at run time; an executor with no declaration is unreachable. Both are th
 registration a plugin architecture must make impossible to commit, so this file pins the two sets
 against each other and against the frontend's own paste guard.
 
-The frontend still carries its own ``_VALID_NODE_TYPES`` until Phase 2 (``docs/refactor_plan.md``);
-pinning it here is what keeps that duplication honest in the meantime.
+The frontend carries its own ``_VALID_NODE_TYPES``/seed table as the cold-page fallback; the
+catalogue payload is what a running page reads, and this file plus
+``test_frontend_node_types_js.py`` pin the fallback to the server so the two cannot drift.
 """
 
 import re
@@ -99,3 +100,26 @@ def test_categories_group_the_types_for_a_future_palette():
     assert {'source', 'upload', 'resume', 'comment'} <= set(catalog.types_in('data'))
     assert catalog.types_in('meta') == ('name',)
     assert set(catalog.types_in('visualize')) == {'visualize', 'compile'}
+
+
+def test_every_type_has_seed_parameters_except_the_one_derived_from_the_matrix():
+    """``GET /api/node-types`` seeds a new node from this table; a type missing here would be
+    created with no settings at all. ``source`` is the documented exception — its platform,
+    engine and mode come from the crawl matrix — and the payload marks that with
+    ``defaultsFrom``, so it cannot be mistaken for "no parameters"."""
+    from nodes.defaults import DYNAMIC_DEFAULTS, NODE_DEFAULTS
+
+    assert set(NODE_DEFAULTS) == set(catalog.NODE_TYPES) - set(DYNAMIC_DEFAULTS)
+    assert DYNAMIC_DEFAULTS == {'source': 'capabilities'}
+    for plugin in catalog.PLUGINS.values():
+        assert (plugin.type in NODE_DEFAULTS) or (plugin.type in DYNAMIC_DEFAULTS), plugin.type
+
+
+def test_the_page_loads_the_catalogue_before_the_canvas():
+    """The canvas reads the payload when it has answered; a page that never loads the module
+    would silently run on the fallback forever."""
+    html = (ROOT / 'backend' / 'static' / 'index.html').read_text(encoding='utf-8')
+    assert '/js/node-types.js' in html
+    assert html.index('/js/workflow.js') < html.index('/js/node-types.js') < html.index('/js/app.js')
+    boot = (JS / 'app.js').read_text(encoding='utf-8')
+    assert boot.index("boot('nodeTypes'") < boot.index("boot('canvas'")

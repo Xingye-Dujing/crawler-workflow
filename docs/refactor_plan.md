@@ -166,12 +166,20 @@ ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
 验收：`app.py` 行数明显下降（目标 < 4,500）；所有节点矩阵用例不变；fast 与设备档全绿。
 风险最高的 `source`（浏览器/队列/CatBus 分支）与 `comment`（评论引擎）放最后，避免在重构期同时改采集行为。
 
-### Phase 2 — 前端目录服务化
+### Phase 2 — 前端目录服务化（已完成）
 
-- 新 `GET /api/node-types` + `tests/api/test_node_types_api.py`（只读、形状、类型全集、默认值与 `canvas.js` 旧值逐项相等）。
-- `canvas.js` 的菜单/默认值/粘贴白名单改为读 payload；`NODE_TYPE_LABELS` 只留作词条；
-  harness `harness_capabilities`/`harness_canvas_ix` 增加“payload 缺一项时菜单不画空”的场景；真机 `test_ui_layout` 复测。
-- 验收：前端没有任何一份节点类型字面量清单；粘贴导入、菜单、默认值、语言切换全绿。
+- 新 `GET /api/node-types`（`api/node_types.py`）：类型、`labelKey`、分类、行形态、quiet、**新节点种子**
+  （`nodes/defaults.py`；`biblio` 直接取 `biblio_schema.DEFAULTS`，不再在画布抄第二份）。`source` 的种子
+  随采集矩阵生成，payload 用 `defaultsFrom: 'capabilities'` 标注而不是冻一个形状。
+- 新 `static/js/node-types.js`（`NodeTypes`）：`load/ready/types/defaults/labelKey/category/failure`；
+  `defaults()` 深拷贝，失败时**点名**（toast + `failure()`），绝不用空目录冒充"没有节点类型"。
+- `canvas.js`：`getDefaultParams` 先读 payload（缺省/动态类型才落到本地分支）；新增 `validNodeTypes()`，
+  粘贴/恢复校验读服务端列表；本地清单保留为**冷页兜底**，由 `test_node_plugins` 与
+  `test_frontend_node_types_js` 双向钉住（兜底种子逐项等于 `nodes/defaults.py`）。
+- 启动顺序：`boot('nodeTypes')` 在 `boot('canvas')` 之前；失败不阻断画布（兜底生效）。
+- 测试：`tests/api/test_node_types_api.py`（10 例：顺序/形状/biblio 契约/JSON 安全/只读）、
+  `tests/unit/test_frontend_node_types_js.py` + `harness_node_types.mjs`（4 例：深拷贝、失败点名、
+  兜底==Python、列表切换）、`test_node_plugins` 新增种子全集与页面加载契约。
 
 ### Phase 3 — 节点 schema 插件化
 

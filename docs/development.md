@@ -121,8 +121,9 @@ crawler_workflow/
 │       ├── css/style.css
 │       └── js/
 │           ├── app.js            # 入口（i18n fetch 注入、节点库）
-│           ├── canvas.js         # 画布与节点渲染
+│           ├── canvas.js         # 画布与节点渲染（类型校验/种子优先读 NodeTypes）
 │           ├── workflow.js       # 执行、文件管理、全部对话框
+│           ├── node-types.js     # 服务端节点目录：类型、词条、种子；失败点名并保留冷页兜底
 │           ├── menu.js           # 顶栏菜单状态
 │           ├── stats.js          # 情感/倾向性 ECharts 统计
 │           ├── custom-select.js  # 主题化下拉组件

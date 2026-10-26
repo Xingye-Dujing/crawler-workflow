@@ -1310,6 +1310,14 @@ const canvas = {
        pasteClipboardAt — one paste path, no second implementation to drift. */
     _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
 
+    /* The pinned list above is the cold-page fallback (the catalogue fetch is async and a
+       restored draft must still validate before it answers). ``tests/unit/test_node_plugins.py``
+       keeps it equal to the server's catalogue; once NodeTypes has answered, its list is read. */
+    validNodeTypes() {
+        if (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) return NodeTypes.types();
+        return this._VALID_NODE_TYPES;
+    },
+
     copyNodeAsJson(id) {
         const n = this.nodes[id];
         if (!n) return Promise.resolve(false);
@@ -1362,7 +1370,7 @@ const canvas = {
                 return null;
             }
             if (!parsed || typeof parsed !== 'object'
-                || this._VALID_NODE_TYPES.indexOf(parsed.type) < 0
+                || this.validNodeTypes().indexOf(parsed.type) < 0
                 || typeof parsed.params !== 'object' || parsed.params === null) {
                 if (typeof showToast === 'function') showToast(I18n.t('toast.nodeJsonInvalid'));
                 return null;
@@ -1575,6 +1583,15 @@ const canvas = {
     },
 
     getDefaultParams(type) {
+        /* The server's catalogue owns the seeds (``nodes/defaults.py``); ``null`` means this
+           type is derived where its facts live — source builds its defaults from the crawl
+           matrix, and reusable carries a template snapshot — so those fall through to the
+           branches below. The literal table here is the cold-page fallback, pinned to the
+           server by tests/unit/test_node_plugins.py. */
+        if (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) {
+            const served = NodeTypes.defaults(type);
+            if (served) return served;
+        }
         /* The name node carries the workflow's label for the Execution History
            panel and an optional 排布顺序 for auto-layout — both metadata, not data,
            so its params never choose a crawl. layout_order blank = keep creation order. */
@@ -3687,7 +3704,7 @@ const Clipboard = {
             return null;
         }
         if (!parsed || typeof parsed !== 'object'
-            || canvas._VALID_NODE_TYPES.indexOf(parsed.type) < 0
+            || canvas.validNodeTypes().indexOf(parsed.type) < 0
             || typeof parsed.params !== 'object' || parsed.params === null) {
             return null;
         }

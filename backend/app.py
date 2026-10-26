@@ -34,6 +34,7 @@ from api.http import (
 from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
+from api.node_types import bp as node_types_bp
 from api.project import bp as project_bp
 from api.report import bp as report_bp
 from api.reusable import bp as reusable_bp
@@ -3030,6 +3031,7 @@ def kill_process():
 # before_request / CORS still wrap it and the URLs are unchanged.
 app.register_blueprint(stats_bp)
 app.register_blueprint(locks_bp)
+app.register_blueprint(node_types_bp)
 app.register_blueprint(exports_bp)
 app.register_blueprint(data_bp)
 app.register_blueprint(diagnostics_bp)
