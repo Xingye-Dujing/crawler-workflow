@@ -57,7 +57,7 @@ _ROLES = (
     ('reference', 'reference_columns'),
 )
 
-#: The parameter names holding candidate column lists. ``node_schema`` reads them to report
+#: The parameter names holding candidate column lists. ``nodes/schema.py`` reads them to report
 #: which columns a fusion node depends on, so the list is part of the schema contract.
 ROLE_PARAMS = tuple(key for _role, key in _ROLES) + ('source_columns',)
 

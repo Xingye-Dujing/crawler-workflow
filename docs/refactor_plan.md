@@ -15,7 +15,7 @@
 | `backend/app.py` `_run_*` | 仍留在 app 的 6 个执行体（source/comment/process/analysis/visualize/output） | Phase 1b 迁到 `nodes/executors/` |
 | `backend/nodes/executors/*.py` | 8 个内置执行器（name/upload/resume/tokenize/accumulate/compile/biblio/fuse） | **Phase 1a 已迁** |
 | `backend/engine/workflow.py` | `NODE_TYPES` / `TABLE_NODE_TYPES` / `PDF_SOURCE_NODE_TYPES` | 从目录派生（Phase 0） |
-| `backend/services/node_schema.py` | 输出了哪些列 / 读了哪些列 | Phase 3 拆进每个插件 |
+| `backend/nodes/schema.py` | 输出了哪些列 / 读了哪些列（**Phase 3 已完成**：各 op 的表归各自的 params/插件模块，这里只聚合） | — |
 | `backend/static/js/canvas.js` | `_VALID_NODE_TYPES`、`getDefaultParams`、labels、摘要 | Phase 2 改为服务端下发 |
 | `backend/static/js/app.js` | `nodeType.*` / `node.*` 词条 | 保留（词条仍在前端，服务端只发 key） |
 
@@ -181,11 +181,16 @@ ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
   `tests/unit/test_frontend_node_types_js.py` + `harness_node_types.mjs`（4 例：深拷贝、失败点名、
   兜底==Python、列表切换）、`test_node_plugins` 新增种子全集与页面加载契约。
 
-### Phase 3 — 节点 schema 插件化
+### Phase 3 — 节点 schema 插件化（已完成）
 
-- `services/node_schema.py` 的 `PROCESS_ADD_COLUMNS` / `PROCESS_REPLACE_COLUMNS` / `STEP_REPLACE` / …按节点类型
-  拆进各自插件（`emits` / `reads`），`schema.py` 只做聚合与缓存。
-- 验收：`test_node_schema.py` 全量通过（它已经覆盖每种 op 的列契约）；新增节点类型时不再需要改 `node_schema`。
+- 列契约归各自的拥有者：进程 op 的 `OUTPUT_ADD_COLUMNS` / `OUTPUT_REPLACE_COLUMNS` / `READ_PARAMS` 与
+  `PROCESS_OPS` 进 `services/process_params.py`；分析步骤的 `STEP_REPLACE` / `STEP_ADD_*` /
+  `STEP_PASSTHROUGH` / `STEP_UNKNOWN` / `STEP_DYNAMIC_REPLACE` 与 `replaced_columns()` 进
+  `services/analysis_params.py`；tokenize 的三种输出形态与 visualize 的读取列表留在各自插件模块。
+- `services/node_schema.py` 已删除，计算逻辑搬到 `nodes/schema.py`（只聚合；tokenize/visualize 的常量在
+  用时惰性导入，避免把分析器拉进启动路径）。`api/diagnostics.py` 改读新模块。
+- 契约：`test_node_schema.py::TestTheTablesLiveWithTheirOwners` 4 例钉住「契约 op 集合 == 执行器 op 集合」
+  （进程 12 个、分析步骤全集、三种分词形态），并断言旧模块已不存在（第二个家会静默赢下先改的 importer）。
 
 ### Phase 4 — 目录分层
 

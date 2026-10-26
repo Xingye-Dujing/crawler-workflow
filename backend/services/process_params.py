@@ -54,8 +54,57 @@ PROCESS_ENUMS = {
     'significance': {'sig_method': ('ttest', ('ttest', 'anova', 'mannwhitney', 'kruskal'))},
 }
 
+#: Every operation the process executor dispatches, including the four with no select-shaped
+#: parameter (``PROCESS_ENUMS`` only lists the ones that have one). ``bot``/``anomaly``/
+#: ``correlation``/``significance`` read typed column names instead.
+PROCESS_OPS = frozenset(PROCESS_ENUMS) | {'bot', 'anomaly', 'correlation', 'significance'}
+
 #: The operations whose whole job is to read one text column of the table.
 _TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression')
+
+# ─── Column contract (what each op writes, what it reads) ───
+#: Ops that ADD these columns and pass the rest through (verified against each analyzer's
+#: write site; see the matching unit test).
+OUTPUT_ADD_COLUMNS: dict[str, tuple[str, ...]] = {
+    'clean': ('action', 'cleaned_text'),
+    'emotion': ('emotion', 'confidence'),
+    'tendency': ('tendency', 'tendency_confidence'),
+    'sentiment': ('sentiment', 'score'),
+    'aggression': ('aggression', 'aggression_score', 'aggression_hits'),
+    'anomaly': ('anomaly_score', 'is_anomaly'),
+}
+
+#: Ops that REPLACE the whole table with a fixed set (the analyzer returns a fresh frame;
+#: downstream can only read these).
+OUTPUT_REPLACE_COLUMNS: dict[str, tuple[str, ...]] = {
+    'correlation': ('col1', 'col2', 'method', 'correlation', 'abs_correlation'),
+    'significance': (
+        'method',
+        'group_column',
+        'value_column',
+        'statistic',
+        'p_value',
+        'n_groups',
+        'group_sizes',
+        'significant_005',
+    ),
+}
+
+#: Params that name a column the op reads from its input.
+READ_PARAMS: dict[str, tuple[str, ...]] = {
+    'clean': ('text_column',),
+    'emotion': ('text_column',),
+    'tendency': ('text_column',),
+    'sentiment': ('text_column',),
+    'aggression': ('text_column',),
+    'ner': ('text_column',),
+    'keyword': ('text_column',),
+    'cluster': ('text_column',),
+    'bot': ('text_column', 'author_column', 'time_column'),
+    'anomaly': (),
+    'correlation': (),
+    'significance': ('group_column', 'value_column'),
+}
 
 
 def enum_param(op: str, params: dict, key: str) -> str:

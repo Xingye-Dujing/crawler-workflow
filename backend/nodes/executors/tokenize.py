@@ -15,6 +15,17 @@ from services.visualizer import VisualizationService
 
 NODE_TYPE = 'tokenize'
 
+#: What a tokenize node emits, per ``output_mode``. The table is the node's own contract: the
+#: lineage model (``nodes/schema.py``) reads it instead of keeping a second copy.
+OUTPUT_COLUMNS: dict[str, tuple[str, ...]] = {
+    'word_freq': ('word', 'frequency'),
+    'words_only': ('word',),
+    'csv_line': ('words',),
+}
+
+#: The one column it reads from its input.
+READ_PARAMS = ('text_column',)
+
 
 def _tokenize_dataframe(df: pd.DataFrame, params: dict) -> pd.DataFrame | None:
     """Apply tokenization to a DataFrame and return the result, or None if the column is missing."""

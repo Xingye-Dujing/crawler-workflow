@@ -18,6 +18,10 @@ from utils.helpers import as_bool
 
 NODE_TYPE = 'visualize'
 
+#: The columns a chart reads from its upstream table (``stack_fields`` is split like a list by
+#: the lineage model; a biblio chart adds its own contract through ``chart_contracts``).
+READ_PARAMS = ('x_field', 'y_field', 'y2_field', 'label_field', 'value_field')
+
 
 def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     """Visualize node: builds a chart from the upstream data and returns a

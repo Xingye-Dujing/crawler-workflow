@@ -9,6 +9,10 @@ downstream of an unknown is unknown too, and an unknown never produces a
 missing-column flag: the whole point is to never tell the user a column is absent when
 we cannot actually see the table (AGENTS: refuse by name, never guess a shape).
 
+The per-op tables live beside the code that owns them now: process ops declare theirs in
+``services/process_params.py``, analysis steps in ``services/analysis_params.py``, and the
+tokenize/visualize read lists in their own plugins. This module only aggregates them.
+
 ``referenced_columns`` answers the other half: which columns a node will READ from its
 input, taken straight from the params the user typed (a chart's ``x_field``, an analysis
 step's ``column``). The frontend compares those against the upstream node's emitted
@@ -17,204 +21,43 @@ columns and flags a provable miss — the schema truth lives here, the wording l
 
 from __future__ import annotations
 
+from services.analysis_params import (
+    STEP_ADD_MAYBE,
+    STEP_ADD_ONE,
+    STEP_DYNAMIC_REPLACE,
+    STEP_PASSTHROUGH,
+    STEP_REPLACE,
+    STEP_UNKNOWN,
+    normalize_analysis_params,
+    replaced_columns,
+)
 from services.biblio_fuse import OUTPUT_COLUMNS as FUSE_OUTPUT_COLUMNS
 from services.biblio_fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
-from services.biblio_schema import (
-    CITATION_TYPES,
-    COUPLING_TYPES,
-)
-from services.biblio_schema import (
-    output_columns as biblio_output_columns,
-)
-from services.biblio_schema import (
-    read_columns as biblio_read_columns,
-)
+from services.biblio_schema import CITATION_TYPES, COUPLING_TYPES
+from services.biblio_schema import output_columns as biblio_output_columns
+from services.biblio_schema import read_columns as biblio_read_columns
 from services.chart_contracts import BIBLIO_CHART_READS
 from services.data_analysis import STEP_PARAMS
-
-# process ops that ADD these columns and pass the rest through (verified against each
-# analyzer's write site; see the matching unit test).
-PROCESS_ADD_COLUMNS: dict[str, tuple[str, ...]] = {
-    'clean': ('action', 'cleaned_text'),
-    'emotion': ('emotion', 'confidence'),
-    'tendency': ('tendency', 'tendency_confidence'),
-    'sentiment': ('sentiment', 'score'),
-    'aggression': ('aggression', 'aggression_score', 'aggression_hits'),
-    'anomaly': ('anomaly_score', 'is_anomaly'),
-}
-
-# process ops that REPLACE the whole table with a fixed set (the analyzer returns a fresh
-# frame; downstream can only read these).
-PROCESS_REPLACE_COLUMNS: dict[str, tuple[str, ...]] = {
-    'correlation': ('col1', 'col2', 'method', 'correlation', 'abs_correlation'),
-    'significance': (
-        'method',
-        'group_column',
-        'value_column',
-        'statistic',
-        'p_value',
-        'n_groups',
-        'group_sizes',
-        'significant_005',
-    ),
-}
-
-# tokenize replaces the table with a word list; the shape is fixed by output_mode.
-TOKENIZE_OUTPUT: dict[str, tuple[str, ...]] = {
-    'word_freq': ('word', 'frequency'),
-    'words_only': ('word',),
-    'csv_line': ('words',),
-}
-
-# analysis steps that emit a NEW table with a fixed column set (the chart contracts live
-# here: topic_map / topic_salience are what the 主题距离图 / 显著词图 read).
-STEP_REPLACE: dict[str, tuple[str, ...]] = {
-    'topic_model': ('topic', 'rank', 'keyword', 'weight'),
-    'topic_by_stage': (
-        'stage',
-        'stage_order',
-        'topic',
-        'feature_words',
-        'weights',
-        'doc_n',
-        'perplexity',
-        'sample_texts',
-    ),
-    'topic_map': ('topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words'),
-    'topic_salience': ('topic', 'rank', 'term', 'overall_freq', 'within_freq', 'relevance'),
-    'suggest_stages': ('序号', '起点', '终点', '天数', '行数', '峰值日', '峰值计数', '依据'),
-    'forecast': ('period', 'actual', 'predicted', 'lower', 'upper', 'horizon'),
-    'alert': ('period', 'signal', 'value', 'threshold', 'reason'),
-    'cooccur': ('source', 'target', 'value'),
-    'reply_graph': ('src_author', 'dst_author', 'weight'),
-    'topic_timeline': (
-        'topic',
-        'topic_words',
-        'first_stage',
-        'peak_stage',
-        'last_stage',
-        'stages_present',
-        'stage_path',
-        'size_total',
-        'peak_size',
-        'is_secondary',
-    ),
-    'topic_flow': (
-        'source',
-        'target',
-        'source_topic',
-        'target_topic',
-        'similarity',
-        'divergence',
-        'from_stage',
-        'to_stage',
-        'source_words',
-        'target_words',
-    ),
-    # ``compare_platform`` and ``sentiment_evolution`` also replace the table, but name a
-    # column after what the user typed into a box — they are modelled in
-    # :func:`_replaced_columns`, never as a fixed tuple here.
-}
-
-#: Ops whose whole output is a fresh table whose names come from the node's own parameters.
-STEP_DYNAMIC_REPLACE = ('compare_platform', 'sentiment_evolution', 'cluster_label')
+from services.process_params import OUTPUT_ADD_COLUMNS, OUTPUT_REPLACE_COLUMNS
+from services.process_params import READ_PARAMS as PROCESS_READ_PARAMS
 
 
-def _replaced_columns(op: str, step: dict) -> list[str] | None:
-    """The columns a dynamic replace-step will write, taken from its resolved kwargs.
+def _tokenize_contract():
+    """The tokenize plugin's output table and read list, imported lazily.
 
-    Both of these name a column after a box the user filled, so the fixed tuple they used
-    to carry was a lie in both directions: it promised a ``platform`` column a renamed 平台
-    never produced (a false missing-column flag downstream) and hid the real aggregate
-    column, while ``sentiment_evolution`` claimed ``intensity``/``score_n`` even when no
-    score column was given — a chart would read those and only find out at run time.
+    Importing ``nodes.executors`` runs its package initializer (which registers every
+    executor and therefore pulls the analyzers); the lineage view is requested long after
+    boot, so the import belongs at use time rather than at module load.
     """
-    if op == 'cluster_label':
-        # The summariser REDUCES the table: one row per cluster, three columns. Declaring it as
-        # "upstream columns + 摘要" promised every input column downstream, so a chart fed by it
-        # was told 节点/频次 would be there and found only cluster/n_docs/摘要 at run time.
-        group_col = str(step.get('group_col') or 'cluster').strip()
-        summary_col = str(step.get('summary_col') or '摘要').strip()
-        if not group_col or not summary_col:
-            return None
-        return [group_col, 'n_docs', summary_col]
-    if op == 'compare_platform':
-        platform_col = str(step.get('platform_col') or 'platform').strip()
-        cols = [platform_col, 'n']
-        value_col = str(step.get('value_col') or '').strip()
-        if value_col:
-            agg = str(step.get('agg') or 'mean').strip()
-            cols.append(f'{value_col}_{agg}')
-        return cols
-    if op == 'sentiment_evolution':
-        # The step ALWAYS renames its period column to 'period' (data_analysis.py:3178) regardless of
-        # the input name, so naming the OUTPUT after the box the user filled was a lie: a chart that
-        # reads 'period' (the produced name, and the downstream default) was flagged as a provable
-        # miss on a canvas that runs. The lineage must equal what the producer emits.
-        index_col = str(step.get('new_col') or 'sentiment_index').strip()
-        cols = ['period', index_col]
-        cols += ['positive_n', 'neutral_n', 'negative_n', 'total', 'other_n']
-        cols += ['positive_pct', 'neutral_pct', 'negative_pct', 'volume_pct']
-        if str(step.get('score_col') or '').strip():
-            cols += ['score_n', 'intensity']
-        return cols
-    return None
+    from nodes.executors import tokenize
+
+    return tokenize.OUTPUT_COLUMNS, tokenize.READ_PARAMS
 
 
-#: analysis steps that keep the upstream columns and add exactly one named column
-#: (value = the executor's own param holding that name, plus its default). These are the
-#: CANONICAL names — a panel's box (``phase_new_col``, ``label_summary_col``) is translated
-#: to them by :func:`_steps_of` through the executor's own normalizer, so one rule lives in
-#: one place and a renamed box can no longer hide the column it writes.
-STEP_ADD_ONE: dict[str, tuple[str, str]] = {
-    'bin_column': ('new_col', ''),  # blank answers f"{column}_bin", the executor's own rule
-    'extract_time': ('new_col', '日期'),
-    'bin_time': ('new_col', '阶段'),
-    'column_calc': ('new_col', ''),
-    'topic_label': ('summary_col', '主题概括'),
-}
+def _visualize_read_params():
+    from nodes.executors import visualize
 
-# analysis steps that may ALSO add a further column, only when its box is filled.
-# ``bin_time`` is the case: 阶段序号列 is what lets 各阶段 tables and charts keep the
-# lifecycle order across the node boundary that erases the categorical, so a canvas that
-# names one has to show it in the lineage — declared otherwise the panel hid the very
-# column its own downstream steps read, and an unselected box still stayed honest.
-STEP_ADD_MAYBE: dict[str, tuple[tuple[str, str], ...]] = {
-    'bin_time': (('order_new_col', ''),),
-}
-
-# analysis steps that pass the upstream columns through unchanged.
-STEP_PASSTHROUGH = {
-    'drop_null',
-    'fill_null',
-    'drop_duplicates',
-    'dedupe_similar',
-    'strip_whitespace',
-    'filter_rows',
-    'sort_rows',
-    'sample_rows',
-    'convert_type',
-}
-
-# steps whose output the server cannot enumerate without the data (unknown).
-STEP_UNKNOWN = {'groupby_agg', 'join_tables', 'rename_columns', 'topic_coherence'}
-
-# params that name a column the node reads from its input, per type.
-_PROCESS_READ_PARAMS = {
-    'clean': ('text_column',),
-    'emotion': ('text_column',),
-    'tendency': ('text_column',),
-    'sentiment': ('text_column',),
-    'aggression': ('text_column',),
-    'ner': ('text_column',),
-    'keyword': ('text_column',),
-    'cluster': ('text_column',),
-    'bot': ('text_column', 'author_column', 'time_column'),
-    'anomaly': (),
-    'correlation': (),
-    'significance': ('group_column', 'value_column'),
-}
-_VISUALIZE_READ_PARAMS = ('x_field', 'y_field', 'y2_field', 'label_field', 'value_field')
+    return visualize.READ_PARAMS
 
 
 def _split_columns(value) -> list[str]:
@@ -234,8 +77,6 @@ def _normalized_kwargs(op: str, params: dict) -> dict:
     had given a new one, hiding the very column downstream steps read.
     """
     try:
-        from services.analysis_params import normalize_analysis_params
-
         normalized = normalize_analysis_params(op, params)
     except Exception:  # a preview must degrade to "read what is there", never crash
         normalized = {}
@@ -301,7 +142,7 @@ def _analysis_output(params: dict, upstream: list[str] | None) -> list[str] | No
         if op in STEP_UNKNOWN:
             return None
         if op in STEP_DYNAMIC_REPLACE:
-            derived = _replaced_columns(op, step)
+            derived = replaced_columns(op, step)
             if derived is None:
                 return None
             cols = derived
@@ -373,13 +214,14 @@ def compute_columns(nodes: dict, connections: list) -> dict:
         elif ntype == 'upload':
             out[nid] = _dataset_columns(node)
         elif ntype == 'tokenize':
-            out[nid] = list(TOKENIZE_OUTPUT.get(str(params.get('output_mode') or 'word_freq'), ()))
+            tokenize_output, _reads = _tokenize_contract()
+            out[nid] = list(tokenize_output.get(str(params.get('output_mode') or 'word_freq'), ()))
         elif ntype == 'process':
             op = _node_operation(node)
-            if op in PROCESS_REPLACE_COLUMNS:
-                out[nid] = list(PROCESS_REPLACE_COLUMNS[op])
-            elif op in PROCESS_ADD_COLUMNS:
-                out[nid] = None if merged is None else merged + [c for c in PROCESS_ADD_COLUMNS[op] if c not in merged]
+            if op in OUTPUT_REPLACE_COLUMNS:
+                out[nid] = list(OUTPUT_REPLACE_COLUMNS[op])
+            elif op in OUTPUT_ADD_COLUMNS:
+                out[nid] = None if merged is None else merged + [c for c in OUTPUT_ADD_COLUMNS[op] if c not in merged]
             else:
                 out[nid] = None  # keyword/ner/cluster/bot/bert/…: data-dependent
         elif ntype == 'analysis':
@@ -408,16 +250,18 @@ def referenced_columns(nodes: dict) -> dict:
         params = node.get('params') or {}
         found: list[str] = []
         if ntype == 'process':
-            for p in _PROCESS_READ_PARAMS.get(_node_operation(node), ()):
+            for p in PROCESS_READ_PARAMS.get(_node_operation(node), ()):
                 v = str(params.get(p) or '').strip()
                 if v:
                     found.append(v)
         elif ntype == 'tokenize':
-            v = str(params.get('text_column') or '').strip()
-            if v:
-                found.append(v)
+            _output, tokenize_reads = _tokenize_contract()
+            for p in tokenize_reads:
+                v = str(params.get(p) or '').strip()
+                if v:
+                    found.append(v)
         elif ntype == 'visualize':
-            for p in _VISUALIZE_READ_PARAMS:
+            for p in _visualize_read_params():
                 v = str(params.get(p) or '').strip()
                 if v:
                     found.append(v)

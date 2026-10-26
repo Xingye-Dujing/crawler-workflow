@@ -120,7 +120,7 @@ class TestContract:
         assert all(set(row) == set(result['columns']) for row in result['rows'])
 
     def test_the_role_parameters_are_the_ones_the_panel_edits(self):
-        """``node_schema`` reports a fusion node's column dependencies from this list, so a
+        """``nodes/schema.py`` reports a fusion node's column dependencies from this list, so a
         parameter renamed on one side is a stale diagnostic on the other."""
         assert biblio_fuse.ROLE_PARAMS == (
             'entity_columns',

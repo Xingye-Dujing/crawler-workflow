@@ -2,7 +2,7 @@
 
 The panel stores everything as strings — a comma-separated column list, a text number, a
 checkbox spelled ``'true'`` — while ``DataAnalysisService`` takes typed kwargs. This module is
-the one translation layer; ``services/node_schema.py`` reads the same rules to say which columns
+the one translation layer; ``nodes/schema.py`` reads the same rules to say which columns
 a step consumes, so a new field is declared once instead of in two shapes.
 """
 
@@ -31,6 +31,143 @@ def apply_topic_method(result: dict, params: dict) -> dict:
     if embedding_model:
         result['embedding_model'] = embedding_model
     return result
+
+
+# ─── Column contract (what each step writes, what it reads) ───
+#: Steps that emit a NEW table with a fixed column set (the chart contracts live here:
+#: topic_map / topic_salience are what the 主题距离图 / 显著词图 read).
+STEP_REPLACE: dict[str, tuple[str, ...]] = {
+    'topic_model': ('topic', 'rank', 'keyword', 'weight'),
+    'topic_by_stage': (
+        'stage',
+        'stage_order',
+        'topic',
+        'feature_words',
+        'weights',
+        'doc_n',
+        'perplexity',
+        'sample_texts',
+    ),
+    'topic_map': ('topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words'),
+    'topic_salience': ('topic', 'rank', 'term', 'overall_freq', 'within_freq', 'relevance'),
+    'suggest_stages': ('序号', '起点', '终点', '天数', '行数', '峰值日', '峰值计数', '依据'),
+    'forecast': ('period', 'actual', 'predicted', 'lower', 'upper', 'horizon'),
+    'alert': ('period', 'signal', 'value', 'threshold', 'reason'),
+    'cooccur': ('source', 'target', 'value'),
+    'reply_graph': ('src_author', 'dst_author', 'weight'),
+    'topic_timeline': (
+        'topic',
+        'topic_words',
+        'first_stage',
+        'peak_stage',
+        'last_stage',
+        'stages_present',
+        'stage_path',
+        'size_total',
+        'peak_size',
+        'is_secondary',
+    ),
+    'topic_flow': (
+        'source',
+        'target',
+        'source_topic',
+        'target_topic',
+        'similarity',
+        'divergence',
+        'from_stage',
+        'to_stage',
+        'source_words',
+        'target_words',
+    ),
+    # ``compare_platform`` and ``sentiment_evolution`` also replace the table, but name a
+    # column after what the user typed into a box — they are modelled in
+    # :func:`replaced_columns`, never as a fixed tuple here.
+}
+
+#: Steps whose whole output is a fresh table whose names come from the node's own parameters.
+STEP_DYNAMIC_REPLACE = ('compare_platform', 'sentiment_evolution', 'cluster_label')
+
+
+def replaced_columns(op: str, step: dict) -> list[str] | None:
+    """The columns a dynamic replace-step will write, taken from its resolved kwargs.
+
+    Both of these name a column after a box the user filled, so the fixed tuple they used
+    to carry was a lie in both directions: it promised a ``platform`` column a renamed 平台
+    never produced (a false missing-column flag downstream) and hid the real aggregate
+    column, while ``sentiment_evolution`` claimed ``intensity``/``score_n`` even when no
+    score column was given — a chart would read those and only find out at run time.
+    """
+    if op == 'cluster_label':
+        # The summariser REDUCES the table: one row per cluster, three columns. Declaring it as
+        # "upstream columns + 摘要" promised every input column downstream, so a chart fed by it
+        # was told 节点/频次 would be there and found only cluster/n_docs/摘要 at run time.
+        group_col = str(step.get('group_col') or 'cluster').strip()
+        summary_col = str(step.get('summary_col') or '摘要').strip()
+        if not group_col or not summary_col:
+            return None
+        return [group_col, 'n_docs', summary_col]
+    if op == 'compare_platform':
+        platform_col = str(step.get('platform_col') or 'platform').strip()
+        cols = [platform_col, 'n']
+        value_col = str(step.get('value_col') or '').strip()
+        if value_col:
+            agg = str(step.get('agg') or 'mean').strip()
+            cols.append(f'{value_col}_{agg}')
+        return cols
+    if op == 'sentiment_evolution':
+        # The step ALWAYS renames its period column to 'period' (data_analysis.py:3178) regardless of
+        # the input name, so naming the OUTPUT after the box the user filled was a lie: a chart that
+        # reads 'period' (the produced name, and the downstream default) was flagged as a provable
+        # miss on a canvas that runs. The lineage must equal what the producer emits.
+        index_col = str(step.get('new_col') or 'sentiment_index').strip()
+        cols = ['period', index_col]
+        cols += ['positive_n', 'neutral_n', 'negative_n', 'total', 'other_n']
+        cols += ['positive_pct', 'neutral_pct', 'negative_pct', 'volume_pct']
+        if str(step.get('score_col') or '').strip():
+            cols += ['score_n', 'intensity']
+        return cols
+    return None
+
+
+#: Steps that keep the upstream columns and add exactly one named column
+#: (value = the executor's own param holding that name, plus its default). These are the
+#: CANONICAL names — a panel's box (``phase_new_col``, ``label_summary_col``) is translated
+#: to them by the lineage model through this module's own normalizer, so one rule lives in
+#: one place and a renamed box can no longer hide the column it writes.
+STEP_ADD_ONE: dict[str, tuple[str, str]] = {
+    'bin_column': ('new_col', ''),  # blank answers f"{column}_bin", the executor's own rule
+    'extract_time': ('new_col', '日期'),
+    'bin_time': ('new_col', '阶段'),
+    'column_calc': ('new_col', ''),
+    'topic_label': ('summary_col', '主题概括'),
+}
+
+#: Steps that may ALSO add a further column, only when its box is filled.
+#: ``bin_time`` is the case: 阶段序号列 is what lets 各阶段 tables and charts keep the
+#: lifecycle order across the node boundary that erases the categorical, so a canvas that
+#: names one has to show it in the lineage — declared otherwise the panel hid the very
+#: column its own downstream steps read, and an unselected box still stayed honest.
+STEP_ADD_MAYBE: dict[str, tuple[tuple[str, str], ...]] = {
+    'bin_time': (('order_new_col', ''),),
+}
+
+#: Steps that pass the upstream columns through unchanged.
+STEP_PASSTHROUGH = {
+    'drop_null',
+    'fill_null',
+    'drop_duplicates',
+    'dedupe_similar',
+    'strip_whitespace',
+    'filter_rows',
+    'sort_rows',
+    'sample_rows',
+    'convert_type',
+}
+
+#: Steps whose output the server cannot enumerate without the data (unknown).
+#: ``cluster_review`` is here on purpose: its 年份跨度 cell only exists when the table carries
+#: years, so a fixed tuple would promise a column some runs never write.
+STEP_UNKNOWN = {'groupby_agg', 'join_tables', 'rename_columns', 'topic_coherence', 'cluster_review'}
 
 
 def normalize_analysis_params(op: str, params: dict) -> dict:

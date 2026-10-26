@@ -10,10 +10,10 @@ produces. No prose is localised here — wording is the frontend's catalogue's j
 import logging
 
 from flask import Blueprint, jsonify
+from nodes.schema import compute_columns, referenced_columns
 
 from api.http import _bad_body, _json_body
 from engine.workflow import effective_workflow
-from services.node_schema import compute_columns, referenced_columns
 
 logger = logging.getLogger(__name__)
 

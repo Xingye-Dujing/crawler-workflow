@@ -1,13 +1,16 @@
-"""The edit-time output-column model (services/node_schema) and per-node validate.
+"""The edit-time output-column model (``nodes/schema.py``) and per-node validate.
 
 These are the truths behind the canvas badges: what a node emits, what it reads, and
 which node a validation message belongs to. The cardinal property under test is that an
 unknown producer (a crawl) is never turned into a false "missing column" downstream —
-the model returns None there, and None propagates.
+the model returns None there, and None propagates. The per-op tables live beside the code
+that owns them (process/analysis params, the tokenize/visualize plugins); this module only
+aggregates, so moving the same test here proves the aggregation kept every answer.
 """
 
+from nodes.schema import compute_columns, referenced_columns
+
 from engine.workflow import WorkflowEngine
-from services.node_schema import compute_columns, referenced_columns
 
 
 def _wf(nodes, connections):
@@ -242,3 +245,67 @@ class TestValidateDetailed:
         entries = engine.validate_detailed()
         assert entries[0]['id'] is None
         assert entries[0]['code'] == 'engine.empty_canvas'
+
+
+class TestTheTablesLiveWithTheirOwners:
+    """Phase 3: the column contract belongs to the code that produces it.
+
+    ``nodes/schema.py`` aggregates; a table that grows a new op (or an executor that grows one
+    without a contract) must be visible here rather than as a silently-unmodelled column set.
+    """
+
+    def test_every_process_contract_op_is_an_operation_the_executor_serves(self):
+        from services.process_params import (
+            OUTPUT_ADD_COLUMNS,
+            OUTPUT_REPLACE_COLUMNS,
+            PROCESS_OPS,
+            READ_PARAMS,
+        )
+
+        served = set(PROCESS_OPS)
+        assert set(OUTPUT_ADD_COLUMNS) <= served
+        assert set(OUTPUT_REPLACE_COLUMNS) <= served
+        assert set(READ_PARAMS) <= served
+        # The three data-dependent ops are intentionally unmodelled (unknown, never a guess).
+        assert served - set(OUTPUT_ADD_COLUMNS) - set(OUTPUT_REPLACE_COLUMNS) == {
+            'keyword',
+            'cluster',
+            'ner',
+            'bot',
+        }
+
+    def test_every_analysis_contract_op_is_a_step_the_service_serves(self):
+        from services.analysis_params import (
+            STEP_ADD_MAYBE,
+            STEP_ADD_ONE,
+            STEP_DYNAMIC_REPLACE,
+            STEP_PASSTHROUGH,
+            STEP_REPLACE,
+            STEP_UNKNOWN,
+        )
+        from services.data_analysis import DataAnalysisService
+
+        served = set(DataAnalysisService._operations())
+        declared = (
+            set(STEP_REPLACE)
+            | set(STEP_ADD_ONE)
+            | set(STEP_ADD_MAYBE)
+            | set(STEP_PASSTHROUGH)
+            | set(STEP_UNKNOWN)
+            | set(STEP_DYNAMIC_REPLACE)
+            | {'select_columns'}
+        )
+        assert declared <= served, f'contract names a step the service does not serve: {sorted(declared - served)}'
+        assert served - declared == set(), f'step with no lineage entry: {sorted(served - declared)}'
+
+    def test_the_tokenize_modes_are_exactly_the_shapes_it_can_write(self):
+        from nodes.executors.tokenize import OUTPUT_COLUMNS, READ_PARAMS
+
+        assert set(OUTPUT_COLUMNS) == {'word_freq', 'words_only', 'csv_line'}
+        assert READ_PARAMS == ('text_column',)
+
+    def test_the_old_service_module_is_gone(self):
+        """A second home would silently win for whichever importer was updated first."""
+        import importlib.util
+
+        assert importlib.util.find_spec('services.node_schema') is None
