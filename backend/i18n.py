@@ -2013,6 +2013,20 @@ _ZH = {
     'sched.startFailed': '定时任务「{name}」启动失败，已记入它的历史',
     'sched.missedLine': '定时任务「{name}」错过了一次触发（服务没在运行），已跳过并重排',
     'sched.tickFailed': '定时任务调度出错（这次的检查跳过了，下次照常）',
+    # 第二采集后端 CatBus（services/catbus_bridge.py）：每一句都点名缺的是哪一样。
+    # 一个读不到的答案不能变成空表，因为节点会在空表上判定完成。
+    'catbus.noNode': '这台机器上没有 Node 运行时，CatBus 后端因此不可用（可用 CIXI_NODE_BIN 指定）',
+    'catbus.noCli': (
+        '这台机器有 Node，但找不到 CatBus 的采析绘适配器（可用 CIXI_CATBUS_CLI 指定文件，'
+        '或用 CATBUS_HOME 指定它的源码目录）'
+    ),
+    'catbus.oldNode': 'CatBus 不接受这个 Node：{node} 报告 {version}（需要 22.22.2／24.15.0／26.0.0 以上）',
+    'catbus.probeFailed': 'CatBus 适配器没能给出能力清单：{detail}',
+    'catbus.probeUnreadable': 'CatBus 适配器返回的不是能读的答案：{detail}',
+    'catbus.notInManifest': 'CatBus 的清单里没有 {platform} / {mode} 这一格，不能用它采',
+    'catbus.timeout': 'CatBus 超过 {seconds} 秒没有返回，进程已被终止',
+    'catbus.stopped': '{platform} / {mode} 已通过 CatBus 停止，已经落库的行保留',
+    'catbus.columnDrift': 'CatBus 返回的列与能力清单不一致：缺少 {missing}，多出 {extra}',
 }
 
 _EN = {
@@ -4317,6 +4331,21 @@ _EN = {
         'scheduled task "{name}" missed a moment (the server was not running) — skipped and rescheduled'
     ),
     'sched.tickFailed': 'the scheduled-task clock hit an error (this check was skipped; the next one runs)',
+    # The second crawl backend, CatBus (services/catbus_bridge.py). Every sentence names which part
+    # is missing: an answer this side cannot read must never arrive as an empty table, because a node
+    # settles DONE on an empty table.
+    'catbus.noNode': 'this machine has no Node runtime, so the CatBus backend is unavailable (CIXI_NODE_BIN names one)',
+    'catbus.noCli': (
+        'this machine has Node but no CatBus adapter for 采析绘 — point CIXI_CATBUS_CLI at the entry file, '
+        'or CATBUS_HOME at a source checkout'
+    ),
+    'catbus.oldNode': 'CatBus will not run on this Node: {node} reports {version} (needs 22.22.2 / 24.15.0 / 26.0.0)',
+    'catbus.probeFailed': 'the CatBus adapter could not report its capability list: {detail}',
+    'catbus.probeUnreadable': 'the CatBus adapter answered with something unreadable: {detail}',
+    'catbus.notInManifest': 'the CatBus manifest has no {platform} / {mode} entry, so it cannot crawl that cell',
+    'catbus.timeout': 'CatBus did not return within {seconds} seconds; the process was terminated',
+    'catbus.stopped': '{platform} / {mode} was stopped through CatBus; the rows already stored are kept',
+    'catbus.columnDrift': 'the columns CatBus returned do not match the manifest: missing {missing}, extra {extra}',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}

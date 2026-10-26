@@ -1,11 +1,12 @@
 """Where the outside-world tools this app depends on live on this machine.
 
-The packaged build carries its own Python and every library it imports, but four things always
+The packaged build carries its own Python and every library it imports, but five things always
 belong to the machine rather than to the app: Chrome (which crawls), chromedriver (which drives it),
-xelatex (which typesets a paper) and an Ollama daemon (which answers an LLM node). Each probe lives
-here exactly once, because the desktop launcher's startup self-check and a crawler's refusal have to
-answer with the same facts — two lists of candidate paths is how a user ends up reading "Chrome not
-found" on the same machine where a crawl starts fine.
+xelatex (which typesets a paper), an Ollama daemon (which answers an LLM node) and a Node runtime
+plus the CatBus adapter (which is the second crawl backend). Each probe lives here exactly once,
+because the desktop launcher's startup self-check and a crawler's refusal have to answer with the
+same facts — two lists of candidate paths is how a user ends up reading "Chrome not found" on the
+same machine where a crawl starts fine.
 """
 
 from __future__ import annotations
@@ -264,3 +265,172 @@ def ollama_reachable(endpoint: str, timeout: float = 0.25) -> bool:
             return True
     except OSError:
         return False
+
+
+# ─── Node runtime and the CatBus backend ─────────────────────────────────────────────────────
+
+
+#: Environment variables that may name a Node runtime, most-explicit first. nvm, a distro package
+# and a container image each put ``node`` somewhere different, so an explicit name is the answer and
+# the tables below are only the fallback — exactly like ``CHROME_ENV_VARS`` above.
+NODE_ENV_VARS = ('CIXI_NODE_BIN', 'NODE_BIN')
+
+#: Windows roots that hold a ``nodejs`` install. ``LOCALAPPDATA`` is the per-user (nvm-windows) one,
+# which is what a machine without admin rights gets.
+NODE_WINDOWS_ROOTS = ('PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA')
+
+#: Absolute Node locations per OS that no environment variable names.
+NODE_PATHS = {
+    'linux': ('/usr/bin/node', '/usr/local/bin/node', '/snap/bin/node'),
+    'darwin': ('/usr/local/bin/node', '/opt/homebrew/bin/node'),
+    'win32': (),
+}
+
+#: Names looked up on ``PATH``, per OS. Windows' file is ``node.exe``; the other two have no suffix,
+# and a test that pins ``node.exe`` as the answer would pass on the machine it was written on only.
+NODE_PATH_NAMES = {
+    'linux': ('node',),
+    'darwin': ('node',),
+    'win32': ('node.exe',),
+}
+
+#: The Node releases CatBus's ``engines`` field accepts, as floors: ``^22.22.2 || ^24.15.0 ||
+# >=26.0.0``. Checked against these rather than against the range string because the range is only
+# readable as three numbers, and a too-old Node fails inside CatBus with a syntax error that names
+# nothing — which is how an unsupported runtime gets blamed on the platform being crawled.
+NODE_FLOORS = ((22, 22, 2), (24, 15, 0), (26, 0, 0))
+
+#: The adapter entry inside a CatBus install or checkout. It is deliberately the ``.js`` and not the
+# ``catbus-crawler-workflow`` bin: a global npm install drops a ``.cmd`` shim on Windows and a shell
+# shim on the other two, and one executable shape across three systems is the whole point.
+CATBUS_ENTRY = ('dist', 'integrations', 'crawler-workflow', 'cli.js')
+
+#: The npm package that ships the adapter (its ``bin`` name is ``catbus``).
+CATBUS_PACKAGE = 'catbus-cli'
+
+#: Environment variables that name the adapter entry — a ``.js`` file, or any executable that runs
+# it. Most-explicit first.
+CATBUS_ENV_VARS = ('CIXI_CATBUS_CLI', 'CATBUS_CLI')
+
+#: Environment variable naming a CatBus *source checkout*; the adapter is read straight out of it,
+# which is how the app talks to a development copy of CatBus that was never npm-installed.
+CATBUS_HOME_ENV = 'CATBUS_HOME'
+
+#: System-wide npm global roots, per OS. ``win32`` has none: npm puts a user's global packages under
+# ``%APPDATA%\npm``, which is environment-driven like the Chrome roots.
+CATBUS_GLOBAL_LIBS = {
+    'linux': ('/usr/local/lib/node_modules', '/usr/lib/node_modules'),
+    'darwin': ('/usr/local/lib/node_modules', '/opt/homebrew/lib/node_modules'),
+    'win32': (),
+}
+
+#: Roots a per-user npm prefix hangs off, per OS: ``$HOME/.npm-global`` on POSIX and
+# ``%APPDATA%\npm`` on Windows — the two spellings a machine without admin rights gets.
+CATBUS_USER_LIBS = {
+    'linux': (('.npm-global', 'lib', 'node_modules'),),
+    'darwin': (('.npm-global', 'lib', 'node_modules'),),
+    'win32': (),
+}
+
+
+def node_candidate_paths(system: str | None = None, env: dict | None = None) -> list[str]:
+    """Every place a Node runtime could be on this OS, most-explicit first, **without** touching the disk."""
+    env = os.environ if env is None else env
+    os_name = platform_name(system)
+    join, sep = _path_shape(os_name)
+    paths = [str(env.get(name) or '').strip() for name in NODE_ENV_VARS]
+    paths.extend(NODE_PATHS.get(os_name, ()))
+    if os_name == 'win32':
+        for root in NODE_WINDOWS_ROOTS:
+            base = str(env.get(root) or '').strip()
+            if base:
+                paths.append(join(base, 'nodejs', 'node.exe'))
+    for directory in str(env.get('PATH') or '').split(sep):
+        for name in NODE_PATH_NAMES.get(os_name, ()):
+            if directory:
+                paths.append(join(directory, name))
+    return [path for path in paths if path]
+
+
+def node_candidates(env: dict | None = None, system: str | None = None) -> list[str]:
+    """Node runtimes that actually exist on this OS's disk, most-explicit first."""
+    return [path for path in dict.fromkeys(node_candidate_paths(system, env)) if _is_executable(path)]
+
+
+def find_node(explicit: str = '', env: dict | None = None, system: str | None = None) -> str:
+    """The Node to run the CatBus adapter with, or '' when this machine has no Node at all.
+
+    Like :func:`find_chrome`, an explicit setting that does not exist answers '' — the caller names
+    the typo instead of quietly running a different runtime than the one the user pointed at.
+    """
+    explicit = str(explicit or '').strip()
+    if explicit:
+        return explicit if _is_executable(explicit) else ''
+    found = node_candidates(env, system)
+    return found[0] if found else ''
+
+
+def node_version_supported(text: str) -> bool:
+    """Whether ``node -v`` output is a release CatBus declares it runs on.
+
+    ``v24.21.0`` and a bare ``22.22.2`` both parse; anything unparseable is NOT supported, because an
+    answer this side cannot read is not evidence that the runtime is new enough.
+    """
+    digits = str(text or '').strip().lstrip('vV').split('-', 1)[0].split('.')
+    try:
+        version = tuple(int(part) for part in digits[:3])
+    except ValueError:
+        return False
+    if len(version) < 3:
+        return False
+    return any(version >= floor for floor in NODE_FLOORS)
+
+
+def catbus_candidate_paths(system: str | None = None, env: dict | None = None) -> list[str]:
+    """Every place the CatBus adapter entry could be on this OS, most-explicit first, without the disk."""
+    env = os.environ if env is None else env
+    os_name = platform_name(system)
+    join, sep = _path_shape(os_name)
+    norm = ntpath.normpath if os_name == 'win32' else posixpath.normpath
+    paths = [str(env.get(name) or '').strip() for name in CATBUS_ENV_VARS]
+    home = str(env.get(CATBUS_HOME_ENV) or '').strip()
+    if home:
+        paths.append(join(home, *CATBUS_ENTRY))
+    paths.extend(join(root, CATBUS_PACKAGE, *CATBUS_ENTRY) for root in CATBUS_GLOBAL_LIBS.get(os_name, ()))
+    # ``$HOME`` exists on POSIX; Windows keeps the per-user npm root in ``%APPDATA%`` instead.
+    user_home = str(env.get('HOME') or '').strip()
+    if os_name == 'win32':
+        appdata = str(env.get('APPDATA') or '').strip()
+        if appdata:
+            paths.append(join(appdata, 'npm', 'node_modules', CATBUS_PACKAGE, *CATBUS_ENTRY))
+    elif user_home:
+        for parts in CATBUS_USER_LIBS.get(os_name, ()):
+            paths.append(join(user_home, *parts, CATBUS_PACKAGE, *CATBUS_ENTRY))
+    for directory in str(env.get('PATH') or '').split(sep):
+        if not directory:
+            continue
+        # A POSIX npm prefix keeps packages in ``<prefix>/lib/node_modules`` while ``<prefix>/bin`` is
+        # what is on PATH, so the parent of a ``bin`` directory is the one worth asking. Normalized, so
+        # this candidate is the same string as the literal table above rather than a ``..`` twin of it.
+        parent = norm(join(directory, '..', 'lib', 'node_modules'))
+        paths.append(join(directory, CATBUS_PACKAGE, *CATBUS_ENTRY))
+        paths.append(join(parent, CATBUS_PACKAGE, *CATBUS_ENTRY))
+    return [path for path in paths if path]
+
+
+def catbus_candidates(env: dict | None = None, system: str | None = None) -> list[str]:
+    """CatBus adapter entries that actually exist on this OS's disk, most-explicit first."""
+    return [path for path in dict.fromkeys(catbus_candidate_paths(system, env)) if _is_executable(path)]
+
+
+def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | None = None) -> str:
+    """The adapter entry to call, or '' when this machine has no CatBus.
+
+    '' is a reason, not a failure: the CatBus backend then simply is not offered, and it is offered
+    nowhere in the UI either (see ``services/catbus_bridge.py``).
+    """
+    explicit = str(explicit or '').strip()
+    if explicit:
+        return explicit if _is_executable(explicit) else ''
+    found = catbus_candidates(env, system)
+    return found[0] if found else ''

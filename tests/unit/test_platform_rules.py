@@ -195,6 +195,80 @@ class TestChromeDiscoveryPerPlatform:
         assert machine_deps.find_chrome(str(tmp_path / 'nope'), {'PATH': ''}, 'darwin') == ''
 
 
+class TestNodeAndCatbusDiscoveryPerPlatform:
+    """The second crawl backend is two machine-level facts, so it is looked up like Chrome is.
+
+    A cloud server installs Node from a distro package and CatBus with npm into a prefix nobody
+    exports; the desktop build ships neither. Both answers have to come from one table per OS, or
+    「没有 CatBus」 and 「CatBus 坏了」 become the same message.
+    """
+
+    def test_linux_offers_the_runtimes_a_server_actually_has(self):
+        found = machine_deps.node_candidate_paths('linux', {'PATH': '/usr/bin:/usr/local/bin'})
+        assert '/usr/bin/node' in found
+        assert '/usr/local/bin/node' in found, 'a nodesource install lands here'
+        assert not any('node.exe' in path for path in found), 'a Linux answer has no Windows suffix'
+
+    def test_macos_and_linux_answers_stay_in_the_targets_separators(self):
+        for system in ('linux', 'darwin'):
+            found = machine_deps.node_candidate_paths(system, {'PATH': '/usr/local/bin'})
+            assert all('\\' not in path for path in found), f'{system} must not borrow the host separators'
+
+    def test_windows_still_builds_the_windows_spelling_from_its_roots(self):
+        found = machine_deps.node_candidate_paths('win32', {'PROGRAMFILES': 'C:\\Program Files', 'PATH': ''})
+        assert 'C:\\Program Files\\nodejs\\node.exe' in found
+
+    def test_an_explicit_node_variable_is_answered_before_any_root(self):
+        found = machine_deps.node_candidate_paths('linux', {'NODE_BIN': '/opt/nvm/v24/bin/node', 'PATH': '/usr/bin'})
+        assert found[0] == '/opt/nvm/v24/bin/node', 'an nvm install is not findable any other way'
+
+    def test_linux_offers_the_npm_roots_a_cloud_box_installs_into(self):
+        env = {'PATH': '/opt/node/bin:/usr/bin', 'HOME': '/srv/cixi'}
+        found = machine_deps.catbus_candidate_paths('linux', env)
+        tail = f'{machine_deps.CATBUS_PACKAGE}/' + '/'.join(machine_deps.CATBUS_ENTRY)
+        assert f'/usr/local/lib/node_modules/{tail}' in found, 'the npm default prefix'
+        assert f'/srv/cixi/.npm-global/lib/node_modules/{tail}' in found, (
+            'a prefix-less npm install is the unprivileged answer'
+        )
+        assert f'/opt/node/lib/node_modules/{tail}' in found, 'a PATH entry /opt/node/bin points one level up'
+        assert not any('\\' in path for path in found)
+
+    def test_a_source_checkout_is_named_by_its_root_not_its_file(self):
+        found = machine_deps.catbus_candidate_paths('linux', {'CATBUS_HOME': '/srv/catbus', 'PATH': ''})
+        assert '/srv/catbus/dist/integrations/crawler-workflow/cli.js' in found
+
+    def test_macos_offers_the_homebrew_prefix_and_windows_the_appdata_one(self):
+        mac = machine_deps.catbus_candidate_paths('darwin', {'PATH': '/opt/homebrew/bin'})
+        assert '/opt/homebrew/lib/node_modules/catbus-cli/dist/integrations/crawler-workflow/cli.js' in mac
+        assert all('\\' not in path for path in mac)
+        win = machine_deps.catbus_candidate_paths('win32', {'APPDATA': 'C:\\Users\\l\\AppData\\Roaming', 'PATH': ''})
+        assert 'C:\\Users\\l\\AppData\\Roaming\\npm\\node_modules\\catbus-cli\\dist' in '\\'.join(win)
+
+    def test_only_a_file_that_exists_is_an_answer(self, tmp_path):
+        real = tmp_path / 'cli.js'
+        real.write_text('// catbus\n', encoding='utf-8')
+        found = machine_deps.catbus_candidates({'CIXI_CATBUS_CLI': str(real), 'PATH': str(tmp_path)}, 'linux')
+        assert found[0] == str(real)
+        assert machine_deps.find_node('/nope/node', {'PATH': ''}, 'linux') == '', 'a typo names itself'
+        assert machine_deps.find_catbus_cli('/nope/cli.js', {'PATH': ''}, 'darwin') == ''
+
+    @pytest.mark.skipif(os.name == 'nt', reason='the executable bit is a POSIX fact')
+    def test_an_entry_without_the_executable_bit_is_refused_rather_than_run(self, tmp_path):
+        real = tmp_path / 'node'
+        real.write_bytes(b'#!/bin/sh\n')
+        os.chmod(real, 0o600)
+        assert machine_deps.node_candidates({'NODE_BIN': str(real), 'PATH': ''}, 'linux') == []
+
+    def test_the_version_floors_are_catbus_engines_translated(self):
+        assert machine_deps.node_version_supported('v24.21.0')
+        assert machine_deps.node_version_supported('v26.0.0')
+        assert machine_deps.node_version_supported('22.22.2')
+        assert not machine_deps.node_version_supported('v22.22.1'), 'the floor is a patch level, not a major'
+        assert not machine_deps.node_version_supported('v18.20.4'), 'Node 18 is outside the range'
+        assert not machine_deps.node_version_supported(''), 'an unreadable answer is not evidence of a new runtime'
+        assert not machine_deps.node_version_supported('v24')
+
+
 class TestTheMatplotlibFontStackHoldsEachOsNames:
     @pytest.fixture(autouse=True)
     def _fresh_caches(self):
@@ -312,6 +386,14 @@ class TestReapingABrowserWorksWhereTaskkillDoesNot:
 
     def test_posix_asks_for_no_taskkill(self):
         assert procs.reap_command(4321, 'linux') == []
+
+    def test_a_spawned_helper_gets_no_console_window_only_where_there_are_windows(self):
+        # The CatBus backend starts Node once per comment link. ``CREATE_NO_WINDOW`` exists only in
+        # Windows' subprocess module, so asking for it unconditionally is a Linux TypeError — and
+        # asking never is a Windows user watching a black window flash per link.
+        assert procs.popen_kwargs('win32') == {'creationflags': 0x08000000}
+        assert procs.popen_kwargs('linux') == {}
+        assert procs.popen_kwargs('darwin') == {}
 
     def test_windows_stops_the_whole_tree_in_one_command(self, monkeypatch):
         calls = []

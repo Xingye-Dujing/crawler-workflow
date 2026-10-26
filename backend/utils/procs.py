@@ -33,6 +33,19 @@ def reap_command(pid: int, system: str | None = None) -> list[str]:
     return []
 
 
+def popen_kwargs(system: str | None = None) -> dict:
+    """The keyword arguments that keep a spawned helper from opening a console window here.
+
+    The app boots short-lived helper processes (the Node that runs the CatBus backend, once per
+    comment link) from a server that may itself have no console. Without ``CREATE_NO_WINDOW`` the
+    user watches a black window appear for every one of them. That constant exists only in Windows'
+    ``subprocess`` module, so the POSIX answer is an empty dict rather than a keyword Python rejects
+    — and the name is read through ``getattr`` so this module imports on a Linux box too.
+    """
+    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+    return {'creationflags': flags} if machine_deps.is_windows(system) and flags else {}
+
+
 def child_pids(proc_root: str, parent: int) -> list[int]:
     """Direct children of ``parent``, read from a ``/proc``-shaped tree.
 
