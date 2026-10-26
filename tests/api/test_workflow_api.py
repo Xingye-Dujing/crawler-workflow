@@ -27,6 +27,22 @@ from run_wait import run_finished
 pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 
 
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """The crawl executor's seams now live in its plugin (``nodes/executors/source.py``).
+
+    These tests were written against ``app.get_crawler``/``app.add_log``; this forwards a
+    call-time lookup so an existing patch of the app module still reaches the executor, while
+    the plugin itself never imports the Flask module.
+    """
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
 # Six rows, two of which exist only to be removed: one has no score (a null step
 # must drop it) and one repeats a title (de-duplication must drop it).
 E2E_RECORDS = [
@@ -83,6 +99,12 @@ def _wait_for_worker(app_module, timeout: float = 30.0) -> bool:
     the only observation that guarantees the store is complete.
     """
     return run_finished(app_module, timeout)
+
+
+def _source_plugin():
+    from nodes.executors import source
+
+    return source
 
 
 def _llm_run_ctx(node, op, ctx=None):
@@ -1821,7 +1843,7 @@ class TestCrawlableGuard:
 
         monkeypatch.setattr(app_module, 'get_crawler', _no_browser)
         with pytest.raises(ValueError) as err:
-            app_module._execute_source_node(self._node('kuaishou'), headless=True)
+            _source_plugin().execute_source_node(self._node('kuaishou'), headless=True)
         message = str(err.value)
         assert t('run.notCrawlable', label='某平台源 #src-1', platform='kuaishou') in message
         assert 'src-1' in message, 'the refusal must speak with the user\u2019s node name'
@@ -1847,7 +1869,7 @@ class TestCrawlableGuard:
                 pass
 
         monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _One())
-        rows = app_module._execute_source_node(self._node('bilibili'), headless=True)
+        rows = _source_plugin().execute_source_node(self._node('bilibili'), headless=True)
         assert rows and seen['keyword'] == 'ai' and seen['target'] == 50
 
 

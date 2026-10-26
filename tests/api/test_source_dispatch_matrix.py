@@ -40,11 +40,33 @@ from crawlers.base import UNDER_TARGET, as_index
 pytestmark = pytest.mark.api
 
 
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """The crawl executor's seams now live in its plugin.
+
+    These tests were written against ``app.get_crawler``/``app.add_log``; this forwards a
+    call-time lookup so an existing patch of the app module still reaches the executor.
+    """
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
 def _comment_plugin():
     """The comment executor — a ``comments`` mode is routed to it, not to a crawler method."""
     from nodes.executors import comment
 
     return comment
+
+
+def _source_plugin():
+    """The source executor — every crawl method call goes through it."""
+    from nodes.executors import source
+
+    return source
 
 
 #: A value that survives each platform's own parser, per field key + platform.
@@ -270,7 +292,7 @@ def test_a_mode_reaches_the_handler_the_matrix_names(app_module, recorder, platf
     params = _params_for(platform, mode)
     node = {'id': 'node-1', 'type': 'source', 'title': '采集', 'params': params, 'platform': platform}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the dispatch below proves nothing'
     assert len(recorder) == 1, f'{platform}/{mode_key} reached {len(recorder)} crawler methods: {recorder}'
@@ -327,7 +349,7 @@ def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkey
     params = _params_for(platform, mode)
     node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': platform}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} returned no comment rows'
     assert recorder == [], f'{platform}/{mode_key} also ran a crawler method: {recorder}'
@@ -375,7 +397,7 @@ def test_a_harness_that_walked_short_names_the_gap(app_module, recorder, monkeyp
     params = _params_for('hongguo', mode)
     node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
     with pytest.raises(ValueError) as caught:
-        app_module._execute_source_node(node, headless=True, ctx=None)
+        _source_plugin().execute_source_node(node, headless=True, ctx=None)
     message = str(caught.value)
     assert '99' in message, f'the refusal must quote the site-attested total: {message}'
     assert recorder == [], 'a comments node must never fall through to the crawler'
@@ -419,7 +441,7 @@ def test_a_drama_the_client_would_not_open_is_named_at_the_end(app_module, recor
     params['urls'] = 'https://hongguoduanju.com/detail?series_id=7696063528179878937'
     node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
     with pytest.raises(ValueError) as caught:
-        app_module._execute_source_node(node, headless=True, ctx=None)
+        _source_plugin().execute_source_node(node, headless=True, ctx=None)
     message = str(caught.value)
     assert '甲剧' in message and '乙剧' in message, f'the refusal must name the dramas it skipped: {message}'
     assert recorder == [], 'a comments node must never fall through to the crawler'
@@ -464,7 +486,7 @@ def test_a_row_total_that_masks_a_short_episode_is_still_refused(app_module, rec
     params['urls'] = 'https://hongguoduanju.com/detail?series_id=7696063528179878937'
     node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
     with pytest.raises(ValueError) as caught:
-        app_module._execute_source_node(node, headless=True, ctx=None)
+        _source_plugin().execute_source_node(node, headless=True, ctx=None)
     message = str(caught.value)
     assert '520' in message, f'the refusal quotes what the table holds: {message}'
     # The denominator is the rows in hand PLUS the gap the harness named. Printing the site's
@@ -486,7 +508,7 @@ def test_a_fed_drama_name_reaches_the_harness_not_the_domain_router(app_module, 
     params['urls'] = '聚宝仙盆之杂灵根才是真BOSS'
     node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, 'a name-fed drama is an input, not a dropped line'
     assert seen and seen[0][1] == '聚宝仙盆之杂灵根才是真BOSS', f'reached the harness as {seen}'
@@ -634,7 +656,7 @@ def test_a_resumed_pair_is_handed_the_cursor_the_run_stored(app_module, advancin
         'skipped_seen': {},
     }
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=ctx)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=ctx)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the cursor hand-off below proves nothing'
     assert len(advancing) == 1, f'{platform}/{mode_key} reached {len(advancing)} crawler methods: {advancing}'
@@ -707,7 +729,7 @@ def test_the_option_the_user_picked_is_the_option_the_crawler_gets(
     params[field_key] = option
     node = {'id': 'node-1', 'type': 'source', 'title': '采集', 'params': params, 'platform': platform}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the argument below proves nothing'
     assert len(recorder) == 1, f'{platform}/{mode_key} reached {len(recorder)} crawler methods: {recorder}'
@@ -755,7 +777,7 @@ def test_a_required_field_never_arrives_empty(app_module, recorder, platform, mo
     params = _params_for(platform, mode)
     node = {'id': 'node-1', 'type': 'source', 'title': '采集', 'params': params, 'platform': platform}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the argument below proves nothing'
     assert len(recorder) == 1, f'{platform}/{mode_key} reached {len(recorder)} crawler methods: {recorder}'
@@ -853,7 +875,7 @@ def test_a_board_the_site_never_offered_is_not_sent_even_from_a_stale_node(app_m
     params['board'] = 'ranking'
     node = {'id': 'node-1', 'type': 'source', 'title': '热榜', 'params': params, 'platform': platform}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the argument list below proves nothing'
     assert len(recorder) == 1, f'{platform}/{mode_key} reached {len(recorder)} crawler methods: {recorder}'
@@ -890,7 +912,7 @@ def test_the_board_a_site_does_offer_reaches_the_crawler_as_a_value(app_module, 
     params['board'] = chosen
     node = {'id': 'node-1', 'type': 'source', 'title': '热榜', 'params': params, 'platform': platform}
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the argument below proves nothing'
     assert len(recorder) == 1, f'{platform}/{mode_key} reached {len(recorder)} crawler methods: {recorder}'
@@ -986,7 +1008,7 @@ def test_every_crawler_mode_is_built_headless_exactly_as_asked(app_module, brows
         'platform': platform,
     }
 
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the flag below proves nothing'
     assert browser_asked['headless'] is True, f'{platform}/{mode_key} opened a window nobody asked for'
@@ -1001,7 +1023,7 @@ def test_the_account_on_the_node_selects_the_browser(app_module, browser_asked):
     params = _params_for('zhihu', mode)
     params['account'] = 'work'
     node = {'id': 'node-1', 'type': 'source', 'title': '采集', 'params': params, 'platform': 'zhihu'}
-    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    rows = _source_plugin().execute_source_node(node, headless=True, ctx=None)
     assert rows
     assert browser_asked['account'] == 'work'
     # and the crawl method itself was NOT given the account
@@ -1090,7 +1112,7 @@ def test_a_fed_column_replaces_the_pasted_links(app_module, recorder, monkeypatc
     u1 = _SAMPLES[('urls', platform)]
     node = _comments_feed_node(platform)
     node['params']['urls'] = u1 + '-pasted'
-    rows_out = app_module._execute_source_node(
+    rows_out = _source_plugin().execute_source_node(
         node,
         headless=True,
         ctx=None,
@@ -1120,7 +1142,7 @@ def test_the_fed_column_hands_the_crawler_its_list_in_order_with_blanks_and_dups
     node = _comments_feed_node('zhihu')
     node['params']['urls'] = ''
     parent = [{'链接': u1}, {'链接': None}, {'链接': u1}, {'链接': '  '}, {}, {'链接': u2}]
-    app_module._execute_source_node(node, headless=True, ctx=None, upstream=[('node-0', parent)])
+    _source_plugin().execute_source_node(node, headless=True, ctx=None, upstream=[('node-0', parent)])
     assert [url for _a, url, _l in seen] == [u1, u2]
     assert t('source.feed_skipped', n=3) in logs, f'the skipped cells must be said, not silenced: {logs}'
 
@@ -1132,7 +1154,7 @@ def test_a_missing_fed_column_fails_by_name_not_with_an_empty_table(app_module, 
     node['params']['urls'] = ''
     u1 = _SAMPLES[('urls', 'zhihu')]
     with pytest.raises(ValueError) as exc:
-        app_module._execute_source_node(node, headless=True, ctx=None, upstream=[('n0', [{'链接': u1}])])
+        _source_plugin().execute_source_node(node, headless=True, ctx=None, upstream=[('n0', [{'链接': u1}])])
     assert '不存在的列' in str(exc.value), exc.value
     assert seen == [], 'a refused feed must not crawl anything'
 
@@ -1143,7 +1165,7 @@ def test_an_all_blank_feed_refuses_rather_than_crawling_nothing(app_module, reco
     node = _comments_feed_node('zhihu')
     node['params']['urls'] = ''
     with pytest.raises(ValueError) as exc:
-        app_module._execute_source_node(
+        _source_plugin().execute_source_node(
             node, headless=True, ctx=None, upstream=[('n0', [{'链接': None}, {'链接': ''}])]
         )
     assert seen == [], exc.value
@@ -1161,7 +1183,7 @@ def test_a_name_wire_alone_is_not_a_feed(app_module, recorder, monkeypatch):
     u1 = _SAMPLES[('urls', 'zhihu')]
     node = _comments_feed_node('zhihu')
     node['params']['urls'] = u1
-    app_module._execute_source_node(node, headless=True, ctx=None, upstream=[('name-1', [])])
+    _source_plugin().execute_source_node(node, headless=True, ctx=None, upstream=[('name-1', [])])
     assert [url for _a, url, _l in seen] == [u1], 'the pasted box still rules when the only wire is a name label'
 
 
@@ -1173,7 +1195,7 @@ def test_a_fed_wechat_column_reaches_the_article_reader(app_module, recorder):
     params['urls'] = ''
     node = {'id': 'node-1', 'type': 'source', 'title': '文章', 'params': params, 'platform': 'wechat'}
     u1 = _SAMPLES[('urls', 'wechat')]
-    rows = app_module._execute_source_node(
+    rows = _source_plugin().execute_source_node(
         node, headless=True, ctx=None, upstream=[('node-0', [{'链接': u1}, {'链接': u1 + '2'}])]
     )
     assert rows
@@ -1205,7 +1227,7 @@ def test_a_fed_resume_rebuilds_the_list_and_crawls_only_the_missing_one(app_modu
     node['params']['urls'] = ''
     ctx = {'store': store, 'run_id': 'r-feed', 'fingerprints': {'node-1': 'fp-node'}, 'skipped_seen': {}}
     with pytest.raises(RuntimeError):
-        app_module._execute_source_node(node, headless=True, ctx=ctx, upstream=[('node-0', parent)])
+        _source_plugin().execute_source_node(node, headless=True, ctx=ctx, upstream=[('node-0', parent)])
     assert [url for _a, url, _l in seen] == [u1, u2], 'the first attempt must have reached the wall'
     cursor = store.get_cursor('r-feed', 'node-1')
     assert cursor.get('url_index') == 1, f'the interrupted attempt must leave its position: {cursor}'
@@ -1214,7 +1236,7 @@ def test_a_fed_resume_rebuilds_the_list_and_crawls_only_the_missing_one(app_modu
     # table is the same — the resume must crawl u2 ONLY.
     seen2 = []
     _patch_session(monkeypatch, seen2)
-    rows = app_module._execute_source_node(
+    rows = _source_plugin().execute_source_node(
         node, headless=True, ctx=dict(ctx, resume=True), upstream=[('node-0', parent)]
     )
     assert [url for _a, url, _l in seen2] == [u2], f'继续 re-paid for a settled article: {seen2}'
@@ -1288,7 +1310,7 @@ def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monk
     monkeypatch.setattr(app_module, 'add_log', logs.append)
     monkeypatch.setattr(_comment_plugin(), 'add_log', logs.append)
 
-    first = app_module._execute_source_node(node, headless=True, ctx=ctx)
+    first = _source_plugin().execute_source_node(node, headless=True, ctx=ctx)
     assert len(first) == 1, f'the first pass must file the comment before a repeat means anything: {first}'
     assert seen, 'the comment engine was never reached, so nothing was actually deduped'
     # A first run files everything it read; nothing was skipped, so the narration stays silent.
@@ -1296,7 +1318,7 @@ def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monk
     assert t('run.dedupe_all_skipped') not in logs, logs
 
     logs.clear()
-    again = app_module._execute_source_node(node, headless=True, ctx=ctx)
+    again = _source_plugin().execute_source_node(node, headless=True, ctx=ctx)
     assert again == [], f'the repeat re-filed a comment the ledger already owns: {again}'
     assert t('run.dedupe_skipped', n=1) in logs, f'a re-run that skipped 1 named nothing: {logs}'
     assert t('run.dedupe_all_skipped') in logs, (

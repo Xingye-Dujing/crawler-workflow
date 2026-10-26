@@ -22,6 +22,24 @@ from services.run_store import RunStore
 
 pytestmark = pytest.mark.api
 
+
+def _source_plugin():
+    from nodes.executors import source
+
+    return source
+
+
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """Existing patches of ``app.get_crawler``/``app.add_log`` still reach the source executor."""
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
 _BILIBILI_LINK = 'https://www.bilibili.com/video/BV1xx411c7mD/'
 _SECOND_LINK = 'https://www.bilibili.com/video/BV2yy411c7mE/'
 
@@ -121,7 +139,7 @@ def _ctx(store, run_id='r-catbus'):
 
 class TestTheSourceNodeChoosesItsBackend:
     def test_a_catbus_node_reaches_the_adapter_and_no_browser(self, app_module, adapter):
-        rows = app_module._execute_source_node(
+        rows = _source_plugin().execute_source_node(
             _source_node(backend=capabilities.BACKEND_CATBUS), headless=True, ctx=None
         )
         assert len(rows) == 2
@@ -141,7 +159,7 @@ class TestTheSourceNodeChoosesItsBackend:
         session — and it is dropped one layer down, in :func:`catbus_bridge._params_payload`, which
         this case reaches by calling that function instead of stubbing past it.
         """
-        app_module._execute_source_node(
+        _source_plugin().execute_source_node(
             _source_node(backend='catbus', catbus_account='catbus-work'), headless=True, ctx=None
         )
         _site, _mode, params = adapter[0]
@@ -184,14 +202,14 @@ class TestTheSourceNodeChoosesItsBackend:
                 pass
 
         monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _Browser(**k))
-        rows = app_module._execute_source_node(_source_node(), headless=True, ctx=None)
+        rows = _source_plugin().execute_source_node(_source_node(), headless=True, ctx=None)
         assert rows == [{'标题': '露营'}]
         assert asked and 'account' in asked[0], 'the browser kept the arguments it always took'
 
     def test_the_rows_are_filed_in_the_durable_ledger_like_any_crawl(self, app_module, adapter):
         """Not only returned: CatBus rows go through the same row sink, one transaction per row."""
         ctx = _ctx(adapter.store)
-        rows = app_module._execute_source_node(_source_node(backend='catbus'), headless=True, ctx=ctx)
+        rows = _source_plugin().execute_source_node(_source_node(backend='catbus'), headless=True, ctx=ctx)
         assert len(rows) == 2
         assert len(adapter.store.load_rows(ctx['run_id'], 'node-1')) == 2, 'the ledger holds what the node yielded'
 
@@ -200,7 +218,9 @@ class TestTheSourceNodeChoosesItsBackend:
         monkeypatch.setattr(bridge, 'mode_state', lambda platform, mode: ('planned', '列映射尚未实现'))
         adapter.clear()
         with pytest.raises(ValueError) as raised:
-            app_module._execute_source_node(_source_node(platform='weibo', backend='catbus'), headless=True, ctx=None)
+            _source_plugin().execute_source_node(
+                _source_node(platform='weibo', backend='catbus'), headless=True, ctx=None
+            )
         assert '列映射尚未实现' in str(raised.value)
         assert adapter == [], 'a cell the manifest refuses must not start a child process'
 
@@ -238,7 +258,7 @@ class TestTheSourceNodeChoosesItsBackend:
             bridge, 'declared_params', lambda platform, mode: ('author', 'target_count', 'catbus_account')
         )
         monkeypatch.setattr(bridge, 'identity_for', lambda platform, mode: ('平台', '用户ID'))
-        rows = app_module._execute_source_node(
+        rows = _source_plugin().execute_source_node(
             _source_node(
                 platform='kuaishou',
                 collect='user.followers',
@@ -300,6 +320,9 @@ class TestTheCommentNodeChoosesItsBackend:
                 status='error', rows=0, message='user items 需要登录', hint='catbus bilibili auth login'
             )
 
+        # The assertion below is "THIS refusal did not raise the flag", so the flag must start
+        # clean rather than inherit whatever an earlier wall test left on the shared state.
+        monkeypatch.setitem(app_module.execution_state, 'cookie_expired', False)
         monkeypatch.setattr(bridge, 'run', fake_run)
         with pytest.raises(ValueError) as raised:
             comment_exec.execute_comment_node(self._node(_BILIBILI_LINK), headless=True, ctx=None)

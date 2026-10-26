@@ -32,6 +32,18 @@ from services.run_store import NODE_FAILED, RunStore
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
+
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """Existing patches of ``app.get_crawler``/``app.add_log`` still reach the source executor."""
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
 RECORDS = [{'标题': f'文{i}', '正文': f'正文{i}', '点赞': i} for i in range(1, 5)]
 #: The same table with one figure corrected: still 4 rows, still the same file
 #: name, and a different content hash — which is what makes a re-upload a new id.
@@ -906,7 +918,9 @@ class TestAStoppedRunOwnsItsThreads:
             assert leave.wait(30), 'the test released every node it parked'
             return [{'标题': '迟到的行'}]
 
-        monkeypatch.setattr(app_module, '_execute_source_node', _gated_source)
+        from nodes.executors import source as source_exec
+
+        monkeypatch.setattr(source_exec, 'execute_source_node', _gated_source)
         started = client.post(
             '/api/workflow/execute',
             json={'workflow': self._three_crawls(), 'workflow_name': 'stale-pool'},

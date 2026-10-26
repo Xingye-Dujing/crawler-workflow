@@ -79,8 +79,9 @@ for the "nothing skipped" closure gate.
    — now safe because they read/write through `state.py`, not module globals.
 4. **Move the node executors** (`_execute_*_node`) out of `app.py` into `backend/nodes/executors/`
    behind the `nodes.registry` table. This is the highest-value step: it stops `app.py` growing on every
-   feature. Phase 1a (8 built-in executors) and Phase 1b's `output`/`visualize`/`analysis`/`process`/`comment`
-   have landed; the last Phase 1b step moves `source` — see `docs/refactor_plan.md`.
+   feature. A-4 is complete: all 14 node executors live in `backend/nodes/executors/` behind
+   `nodes.registry` (Phase 1a + Phase 1b), and `app.py` is down to 4,410 lines of composition
+   root, run orchestration and HTTP handlers — see `docs/refactor_plan.md`.
 
 ### B. Frontend — modularize `workflow.js`
 Split it by responsibility into a few `<script>` files in load order (no bundler needed to start):
@@ -113,16 +114,12 @@ cluster). Seventeen Blueprints live in `backend/api/`: `history`, `stats`, `sett
 `diagnostics`, `lexicon`, `schedules` (+ `backend/scheduler.py`),
 with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe`/`_resolve_payload_dataframe`/
 `NoRunDataError`) shared. `app.py` shrank 8043 → **5,794 lines** in that work and has since grown back to
-**6,457** as later features landed. A-4 is partly landed: Phase 1a moved the
-`name`/`compile`/`tokenize`/`resume`/`accumulate`/`upload`/`biblio`/`fuse` executors into
-`backend/nodes/executors/` (each with `NODE_TYPE` + `run(node, call)`, registered in `nodes/registry.py`),
-and Phase 1b has since moved `output` (with `merge_upstream_tables` and the PDF path), `visualize`
-(with the chart/LaTeX add-ons), `analysis` (with `services/analysis_params.py` and
-`services/llm_run_context.py`, which also removed `node_schema`'s reverse import of `app`) and
-`process` (with `services/process_params.py`, the select-parameter matrix the schedule gate also reads) and
-`comment` (with `services/crawl_runtime.py` and `services/crawler_lifecycle.py`, the shared durable-crawl legs);
-the executor that still reaches a raw `app` global (`source`)
-stays in `app.py` until its web is service-level, and Phase 1b's last step moves it.
+**6,457** as later features landed. A-4 is now complete: Phase 1a moved the eight built-ins and Phase 1b
+moved `output`, `visualize`, `analysis`, `process`, `comment` and `source`, each behind a module with
+`NODE_TYPE` + `run(node, call)` registered in `nodes/registry.py` (shared legs live in
+`services/crawl_runtime.py`, `services/crawler_lifecycle.py`, `services/analysis_params.py`,
+`services/process_params.py`, `services/llm_run_context.py`). `app.py` now measures 4,410 lines and
+holds no executor body at all.
 **The finding that reshaped the plan** still holds: `app.py` module globals are used as *monkeypatch seams* by
 the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app.MAX_IMAGE_BYTES`,
 `app._ML_MODEL_TYPES`, …), so each extraction that moves such a function/name re-points the tests that patch it

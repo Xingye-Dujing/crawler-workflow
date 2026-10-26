@@ -830,10 +830,11 @@ class TestTheRecrawlSwitchIsOnEveryForm:
         future third one streaming rows would have to be added to this list, which is the
         kind of thing a passing test should make loud rather than miss.
         """
-        import app as app_module
+        from nodes.executors import comment as comment_exec
+        from nodes.executors import source as source_exec
 
-        for name in ('_execute_source_node', '_execute_comment_node'):
-            body = inspect.getsource(getattr(app_module, name))
+        for module, name in ((source_exec, 'execute_source_node'), (comment_exec, 'execute_comment_node')):
+            body = inspect.getsource(getattr(module, name))
             assert "params.get('recrawl')" in body, f'{name} never reads 重新采集'
             assert 'forget_items' in body, f'{name} logs the switch but releases nothing'
 

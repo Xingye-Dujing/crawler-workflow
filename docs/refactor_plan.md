@@ -142,8 +142,9 @@ backend/
 验收：fast **8071 passed, 3 skipped**；设备档 **192 passed**（重构前一轮；本轮执行体迁移未改采集路径）；
 ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
 
-**1b（进行中）**：按从依赖少到多的顺序迁剩余 6 个：`output`、`visualize`、`analysis`、`process`、`comment`
-（**均已完成**）→ 只剩 `source`。`source`（浏览器/队列/CatBus）最后，避免重构期同时改采集行为。
+**1b（已完成）**：`output` → `visualize` → `analysis` → `process` → `comment` → `source` 全部迁完；
+`app.py` 从 7,182 行降到 4,410 行，只剩组合根、运行编排（`_run_node_durable`）与 HTTP 处理器，
+`_execute_node` 只查 ``nodes.registry``。每个类型单独提交（`115649b`/`a54ba97`/`b21b4a2`/`6bf8490`/`9f0de55` + 本轮 source）。
 
 已落地的共享件：`services/run_files.py`（运行→文件台账的尽力登记）、
 `services/run_windows.py`（`note_window` / `window_for_save`：爬取时间窗随运行传到文件命名处）、

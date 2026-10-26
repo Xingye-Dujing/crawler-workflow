@@ -28,6 +28,18 @@ from i18n import t
 
 pytestmark = pytest.mark.api
 
+
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """Existing patches of ``app.get_crawler``/``app.add_log`` still reach the source executor."""
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
 _ROWS = [{'标题': f'条目{i}', '链接': f'https://example.com/{i}'} for i in range(1, 3)]
 
 
@@ -80,7 +92,9 @@ def _node(target_count):
 
 def _run(app_module, monkeypatch, stub):
     monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: stub)
-    return app_module._execute_source_node(_node(5), headless=True, ctx=None)
+    from nodes.executors import source
+
+    return source.execute_source_node(_node(5), headless=True, ctx=None)
 
 
 def test_a_silent_short_is_refused_by_name_and_not_settled_done(app_module, monkeypatch):

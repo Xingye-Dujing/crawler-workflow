@@ -20,6 +20,7 @@ from nodes.executors import (
     output,
     process,
     resume,
+    source,
     tokenize,
     upload,
     visualize,
@@ -40,6 +41,7 @@ _BUILTINS = (
     analysis,
     process,
     comment,
+    source,
 )
 
 for _module in _BUILTINS:

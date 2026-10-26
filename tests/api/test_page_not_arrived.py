@@ -91,10 +91,12 @@ class _Probe:
 @pytest.fixture
 def dying(monkeypatch, app_module):
     """Steers the crawler the executor builds and the probe it may consult."""
+    from nodes.executors import source as source_exec
+
     made = []
     plan = {'rows': ROWS, 'message': '页面没有内容', 'waited': 301.0, 'verdict': '', 'gave_up': 1}
     probe = _Probe()
-    monkeypatch.setattr(app_module, 'network_probe', probe)
+    monkeypatch.setattr(source_exec, 'network_probe', probe)
 
     def _configure(**changes):
         plan.update(changes)
@@ -105,6 +107,7 @@ def dying(monkeypatch, app_module):
         return crawler
 
     monkeypatch.setattr(app_module, 'get_crawler', fake_get_crawler)
+    monkeypatch.setattr(source_exec, 'get_crawler', fake_get_crawler)
     return _configure, made, probe
 
 

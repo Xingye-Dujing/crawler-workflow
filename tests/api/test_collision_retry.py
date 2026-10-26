@@ -27,6 +27,12 @@ import i18n
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
 
+def _source_plugin():
+    from nodes.executors import source
+
+    return source
+
+
 class _Crawler:
     """Answers the first call with a wall, the second one with rows."""
 
@@ -73,7 +79,7 @@ def _lines(state) -> list:
 
 def test_a_wall_before_the_first_row_is_asked_again_after_a_back_off(app_module, running):
     crawler = _Crawler()
-    rows = app_module._crawl_with_collision_retry(crawler, crawler.search, {'target_count': 3}, {}, 'weibo')
+    rows = _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {'target_count': 3}, {}, 'weibo')
     assert crawler.calls == 2, 'the collision shape was not retried'
     assert rows == [{'标题': '第二条'}]
     forms = ('weibo', i18n.platform_label('weibo', 'zh'), i18n.platform_label('weibo', 'en'))
@@ -85,7 +91,7 @@ def test_a_crawl_that_kept_rows_is_not_asked_again(app_module, running):
     """The mid-crawl cookie death: its path is 判失败 → 继续, never a second attempt."""
     crawler = _Crawler(raise_first=True, collected=7)
     with pytest.raises(RuntimeError):
-        app_module._crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
+        _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
     assert crawler.calls == 1
     assert _lines(running) == [], 'a refusal that is not retried must not also claim a retry'
 
@@ -95,7 +101,7 @@ def test_a_crawl_resumed_from_a_cursor_is_not_asked_again(app_module, running):
     the cookie's, and re-running the crawl would pay for rows the store kept."""
     crawler = _Crawler(raise_first=True)
     with pytest.raises(RuntimeError):
-        app_module._crawl_with_collision_retry(crawler, crawler.search, {}, {'url_index': 3}, 'weibo')
+        _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {'url_index': 3}, 'weibo')
     assert crawler.calls == 1
 
 
@@ -105,7 +111,7 @@ def test_a_stopped_run_does_not_start_another_crawl(app_module, running):
     running['running'] = False
     crawler = _Crawler(raise_first=True)
     with pytest.raises(RuntimeError):
-        app_module._crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
+        _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
     assert crawler.calls == 1
 
 
@@ -113,7 +119,7 @@ def test_an_empty_answer_with_no_wall_is_the_crawls_own(app_module, running):
     """「这个关键词就是没东西」is a result, not a refusal — retrying it would double
     every genuinely empty crawl."""
     crawler = _Crawler(rows_first=(), wall=False)
-    rows = app_module._crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
+    rows = _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
     assert rows == []
     assert crawler.calls == 1
 
@@ -122,7 +128,7 @@ def test_the_back_off_can_be_turned_off_entirely(app_module, monkeypatch):
     """0 is a supported answer, so an operator can restore the old single attempt."""
     monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0)
     crawler = _Crawler()
-    rows = app_module._crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
+    rows = _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
     assert rows == []
     assert crawler.calls == 1, 'a disabled back-off must not crawl twice'
 
@@ -141,7 +147,7 @@ def test_the_retry_forgets_the_wall_it_just_saw(app_module, running):
         seen['wall_at_second_return'] = crawler.login_wall
         return [{'标题': 'x'}]
 
-    app_module._crawl_with_collision_retry(crawler, search, {}, {}, 'weibo')
+    _source_plugin().crawl_with_collision_retry(crawler, search, {}, {}, 'weibo')
     assert seen['wall_at_second_return'] is False
 
 
@@ -156,7 +162,7 @@ def test_a_stop_cut_short_the_back_off_cancels_the_retry(app_module, running, mo
     running['cancel_event'].set()
     crawler = _Crawler()
     started = time.monotonic()
-    proceed = app_module._backoff_for_retry(crawler, 'weibo')
+    proceed = _source_plugin().backoff_for_retry(crawler, 'weibo')
     assert proceed is False, 'a cancelled wait must refuse the retry'
     assert time.monotonic() - started < 1, 'the wait slept past the Stop instead of waking on it'
 
@@ -169,5 +175,5 @@ def test_a_live_back_off_ends_by_itself_and_allows_the_retry(app_module, running
     monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0.05)
     running['cancel_event'] = threading.Event()
     crawler = _Crawler()
-    assert app_module._backoff_for_retry(crawler, 'weibo') is True
+    assert _source_plugin().backoff_for_retry(crawler, 'weibo') is True
     assert crawler.login_wall is False, 'the retry slate is still cleared on the run-out path'

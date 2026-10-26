@@ -20,6 +20,19 @@ from run_wait import run_finished
 from services.exporter import DataExporter
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
+
+
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """Existing patches of ``app.get_crawler``/``app.add_log`` still reach the source executor."""
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
 RECORDS = [
     {
         '标题': f'标题{i}',

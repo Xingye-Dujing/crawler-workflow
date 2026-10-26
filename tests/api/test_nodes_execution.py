@@ -20,6 +20,32 @@ from run_wait import run_finished
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
+
+@pytest.fixture(autouse=True)
+def _forward_executor_seams(monkeypatch):
+    """Existing patches of ``app.get_crawler``/``app.add_log`` still reach the source executor."""
+    import app as app_module
+    from executor_seams import forward
+    from nodes.executors import source
+
+    forward(monkeypatch, source, 'get_crawler', app_module)
+    forward(monkeypatch, source, 'add_log', app_module)
+
+
+def _note_window(*args):
+    """The crawl-window ledger now lives in ``services.run_windows`` (shared by output too)."""
+    from services.run_windows import note_window
+
+    return note_window(*args)
+
+
+def _name_parts(*args):
+    """The filename components now live in ``services.crawl_runtime``."""
+    from services.crawl_runtime import name_parts
+
+    return name_parts(*args)
+
+
 RECORDS = [
     {'标题': '三亚湾日落', '城市': 'Sanya', '分数': 3, '正文': '三亚的海滩很美 三亚湾日落真棒'},
     {'标题': '海口骑楼', '城市': 'Haikou', '分数': 5, '正文': '海口的老街骑楼很有味道'},
@@ -582,13 +608,13 @@ class TestWindowedFilenames:
         return output_plugin.execute_output_node(node, list(self.ROWS))
 
     def test_a_recorded_window_lands_before_the_extension(self, app_module, output_plugin, tmp_path, monkeypatch):
-        app_module._note_window(None, '2026-01-01', '2026-03-15')
+        _note_window(None, '2026-01-01', '2026-03-15')
         result = self._save(output_plugin, tmp_path, monkeypatch, filename='weibo.csv', filename_time_range=True)
         assert isinstance(result, list) and len(result) == 2, 'the table must still travel downstream'
         assert [p.name for p in tmp_path.iterdir()] == ['weibo_20260101_to_20260315.csv']
 
     def test_a_window_the_user_padded_still_names_the_file(self, app_module, output_plugin, tmp_path, monkeypatch):
-        app_module._note_window(None, ' 2026-01-01 ', '2026-03-15 00:00:00')
+        _note_window(None, ' 2026-01-01 ', '2026-03-15 00:00:00')
         self._save(output_plugin, tmp_path, monkeypatch, filename='w.csv', filename_time_range=True)
         assert [p.name for p in tmp_path.iterdir()] == ['w_20260101_to_20260315.csv']
 
@@ -609,8 +635,8 @@ class TestWindowedFilenames:
         """Two different windows on one path cannot be named honestly, so the tag is dropped
         rather than guessed — but the file is still produced: an ambiguous NAME is no reason to
         lose the data."""
-        app_module._note_window(None, '2026-01-01', '2026-01-31')
-        app_module._note_window(None, '2026-03-01', '2026-03-31')
+        _note_window(None, '2026-01-01', '2026-01-31')
+        _note_window(None, '2026-03-01', '2026-03-31')
         result = self._save(output_plugin, tmp_path, monkeypatch, filename='two.csv', filename_time_range=True)
         assert isinstance(result, list) and len(result) == 2, 'an ambiguous range is ignored, not fatal'
         assert [p.name for p in tmp_path.iterdir()] == ['two.csv'], 'written plain rather than mis-tagged'
@@ -618,29 +644,29 @@ class TestWindowedFilenames:
     def test_the_same_window_recorded_twice_is_still_one_window(self, app_module, output_plugin, tmp_path, monkeypatch):
         # Two crawl nodes over ONE range is the common shape of a keyword sweep. Calling
         # that an ambiguity would refuse a file with nothing ambiguous about it.
-        app_module._note_window(None, '2026-01-01', '2026-01-31')
-        app_module._note_window(None, '2026-01-01', '2026-01-31')
+        _note_window(None, '2026-01-01', '2026-01-31')
+        _note_window(None, '2026-01-01', '2026-01-31')
         self._save(output_plugin, tmp_path, monkeypatch, filename='twice.csv', filename_time_range=True)
         assert [p.name for p in tmp_path.iterdir()] == ['twice_20260101_to_20260131.csv']
 
     def test_ranges_are_kept_apart_per_workflow(self, app_module, output_plugin):
         """A parallel canvas runs several workflows at once, and naming A's file after B's
         window is precisely the wrong-month table this switch must never produce."""
-        app_module._note_window(0, '2026-01-01', '2026-01-31')
-        app_module._note_window(1, '2026-03-01', '2026-03-31')
+        _note_window(0, '2026-01-01', '2026-01-31')
+        _note_window(1, '2026-03-01', '2026-03-31')
         assert output_plugin.window_for_save(0)[0] == '_20260101_to_20260131'
         assert output_plugin.window_for_save(1)[0] == '_20260301_to_20260331'
         assert output_plugin.window_for_save(7) == ('', app_module.t('export.window_none'))
 
     def test_a_window_that_was_never_stated_is_never_recorded(self, app_module):
         for blank in ((None, None), ('2026-01-01', ''), ('nonsense', '2026-03-15')):
-            app_module._note_window(3, *blank)
+            _note_window(3, *blank)
         assert app_module.execution_state['_time_windows'].get(3, []) == [], (
             'a one-sided or unreadable range is the crawler’s own refusal, not half a name'
         )
 
     def test_a_new_run_starts_with_no_window_of_its_own(self, app_module):
-        app_module._note_window(0, '2026-01-01', '2026-01-31')
+        _note_window(0, '2026-01-01', '2026-01-31')
         app_module.reset_console_state()
         assert app_module.execution_state['_time_windows'] == {}, (
             'a run must not name its files after the stretch the last one walked'
@@ -650,16 +676,16 @@ class TestWindowedFilenames:
         """What the crawl node appends to its own stem: the window it was told to walk,
         then the record writing the file — and neither without its switch."""
         stated = {'start_time': '2026-01-01', 'end_time': '2026-03-15', 'part_timestamp': True}
-        assert app_module._name_parts(stated, '_20261002-1435-a1b2c3') == ('_20260101_to_20260315_20261002-1435-a1b2c3')
-        assert app_module._name_parts(stated) == '_20260101_to_20260315', 'no stamp was asked for'
-        assert app_module._name_parts({'part_timestamp': True}, '_20261002-1435-a1b2c3') == '_20261002-1435-a1b2c3'
-        assert app_module._name_parts({}) == '', 'an ordinary crawl keeps the name it always had'
+        assert _name_parts(stated, '_20261002-1435-a1b2c3') == ('_20260101_to_20260315_20261002-1435-a1b2c3')
+        assert _name_parts(stated) == '_20260101_to_20260315', 'no stamp was asked for'
+        assert _name_parts({'part_timestamp': True}, '_20261002-1435-a1b2c3') == '_20261002-1435-a1b2c3'
+        assert _name_parts({}) == '', 'an ordinary crawl keeps the name it always had'
         # The panel stores a checkbox as a real boolean, a workflow FILE as the text
         # 'true'/'false', and an exported draft as either: all three must read as asked.
         for spelling in (True, 'true', 'True', '1', 1):
-            assert app_module._name_parts({'part_timestamp': spelling}, '_S') == '_S', spelling
+            assert _name_parts({'part_timestamp': spelling}, '_S') == '_S', spelling
         for spelling in (False, 'false', '', None):
-            assert app_module._name_parts({'part_timestamp': spelling}, '_S') == '', spelling
+            assert _name_parts({'part_timestamp': spelling}, '_S') == '', spelling
 
     def test_the_stamp_a_resume_reuses_is_the_record_and_not_the_clock(self, app_module, tmp_path):
         """``PartWriter`` adopts the shards an interrupted attempt flushed by matching its

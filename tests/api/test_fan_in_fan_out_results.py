@@ -250,11 +250,13 @@ class TestFeedSourceTakesFirstDataParent:
         """A feed source reads the FIRST parent that actually holds a data table — a
         name node (no rows) is skipped, and any parent after the first is ignored. This is
         the backend fact behind the canvas's "uses at most one upstream" warning."""
+        from nodes.executors import source as source_exec
+
         rows_a = [{'正文': 'a'}]
         rows_b = [{'正文': 'b'}]
         # a name-like empty parent first, then two data parents → the FIRST data parent wins
-        assert app_module._feed_parent_rows([('node-1', []), ('node-2', rows_a), ('node-3', rows_b)]) == rows_a
+        assert source_exec.feed_parent_rows([('node-1', []), ('node-2', rows_a), ('node-3', rows_b)]) == rows_a
         # an immediately-data-bearing parent wins and the rest is ignored
-        assert app_module._feed_parent_rows([('node-1', rows_a), ('node-2', rows_b)]) == rows_a
+        assert source_exec.feed_parent_rows([('node-1', rows_a), ('node-2', rows_b)]) == rows_a
         # nothing carries rows → no feed (a crawl with no upstream table)
-        assert app_module._feed_parent_rows([('node-1', []), ('node-2', None)]) is None
+        assert source_exec.feed_parent_rows([('node-1', []), ('node-2', None)]) is None
