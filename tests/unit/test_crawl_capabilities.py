@@ -857,10 +857,10 @@ class TestTheCommentTimeFilterIsReachable:
         assert missing == [], f'comment forms whose time filter has no input: {missing}'
 
     def test_the_comment_executor_reads_the_filter_it_presents(self):
-        import app as app_module
+        from nodes.executors import comment as comment_exec
 
-        body = inspect.getsource(app_module._execute_comment_node)
-        assert '_filter_comments_by_time' in body, 'the comment node renders a range nothing runs'
+        body = inspect.getsource(comment_exec.execute_comment_node)
+        assert 'filter_comments_by_time' in body, 'the comment node renders a range nothing runs'
 
 
 class TestFeed:

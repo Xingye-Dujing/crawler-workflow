@@ -161,6 +161,18 @@ def any_run_live() -> bool:
     return bool(live_run_ids())
 
 
+def stop_requested() -> bool:
+    """Whether 停止 has been pressed for the run in flight.
+
+    Read ``stopping``, NOT ``not running``. The two look interchangeable and are not:
+    a helper or a test that calls an executor function directly has no claim in place
+    at all, and for it "nobody is running" is not an answer to "did the user end this
+    run" — inferring the second from the first made every such call refuse to work.
+    ``stopping`` is set only by the Stop handler and cleared when a run claims the slot.
+    """
+    return bool(execution_state.get('stopping'))
+
+
 def _results_snapshot() -> dict:
     """A private copy of ``execution_state['results']``, taken under ``_completed_lock``.
 

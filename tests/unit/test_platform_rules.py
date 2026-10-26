@@ -466,7 +466,11 @@ class TestReapingABrowserWorksWhereTaskkillDoesNot:
     def test_the_close_path_marks_the_session_dead_even_when_the_reap_refused(self):
         # The promise is about the worker's session, not about the process: leaving a live driver in place
         # is what made the next crawl of that platform wait out the profile lock.
-        block = _backend_source('app.py').split('def _close_login_browser', 1)[1].split('\ndef ', 1)[0]
+        block = (
+            _backend_source('services/crawler_lifecycle.py')
+            .split('def close_login_browser', 1)[1]
+            .split('\ndef ', 1)[0]
+        )
         assert 'procs.reap_process(' in block
         assert 'crawler.driver = DeadDriver()' in block
         assert 'suppress(Exception):\n            subprocess.run' not in block

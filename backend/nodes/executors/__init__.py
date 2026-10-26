@@ -14,6 +14,7 @@ from nodes.executors import (
     accumulate,
     analysis,
     biblio,
+    comment,
     fuse,
     name,
     output,
@@ -38,6 +39,7 @@ _BUILTINS = (
     visualize,
     analysis,
     process,
+    comment,
 )
 
 for _module in _BUILTINS:

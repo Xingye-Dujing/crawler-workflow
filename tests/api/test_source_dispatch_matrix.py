@@ -39,6 +39,14 @@ from crawlers.base import UNDER_TARGET, as_index
 
 pytestmark = pytest.mark.api
 
+
+def _comment_plugin():
+    """The comment executor — a ``comments`` mode is routed to it, not to a crawler method."""
+    from nodes.executors import comment
+
+    return comment
+
+
 #: A value that survives each platform's own parser, per field key + platform.
 _SAMPLES = {
     ('author', 'zhihu'): 'https://www.zhihu.com/people/abc',
@@ -159,7 +167,14 @@ class _AdvancingCrawler(_RecordingCrawler):
 @pytest.fixture
 def recorder(app_module, monkeypatch):
     _RecordingCrawler.calls = []
-    monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _RecordingCrawler())
+
+    def make(*a, **k):
+        return _RecordingCrawler()
+
+    monkeypatch.setattr(app_module, 'get_crawler', make)
+    # A ``comments`` mode is routed to the comment plugin, which resolves ``get_crawler`` in its
+    # own module: both doors are stubbed so the fixture means the same thing whichever path runs.
+    monkeypatch.setattr(_comment_plugin(), 'get_crawler', make)
     # The comment engine walks its links under `while execution_state['running']`, so
     # with the flag cleared it returns an empty table without reaching a single
     # adapter — and the test below would read that as "no rows" rather than as the
@@ -181,6 +196,7 @@ def advancing(app_module, recorder, monkeypatch):
     nothing" instead of as the run having been stopped.
     """
     monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _AdvancingCrawler())
+    monkeypatch.setattr(_comment_plugin(), 'get_crawler', lambda *a, **k: _AdvancingCrawler())
     return recorder
 
 
@@ -527,6 +543,7 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
         staticmethod(lambda **kw: _HoleHarness()),
     )
     monkeypatch.setattr(app_module, 'add_log', lambda _m: None)
+    monkeypatch.setattr(_comment_plugin(), 'add_log', lambda _m: None)
     mode = capabilities.mode_for('hongguo', 'comments')
     params = _params_for('hongguo', mode)
     params['urls'] = '\n'.join(urls)
@@ -538,7 +555,7 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
     ctx = {'store': store, 'run_id': 'r-hole', 'fingerprints': {'node-1': 'fp-node'}, 'skipped_seen': {}}
 
     with pytest.raises(ValueError) as caught:
-        app_module._execute_comment_node(node, headless=True, ctx=ctx)
+        _comment_plugin().execute_comment_node(node, headless=True, ctx=ctx)
     assert '乙剧' in str(caught.value), f'the refusal names the drama it could not open: {caught.value}'
     cursor = store.get_cursor('r-hole', 'node-1')
     assert cursor.get('url_index') == 1, f'the position may only rest past inputs this node PROVED complete: {cursor}'
@@ -546,7 +563,7 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
     # 继续: the hole is closed now, and the replay must re-walk BOTH the skipped drama and
     # everything after it — never start from the end of the list.
     seen.clear()
-    rows = app_module._execute_comment_node(node, headless=True, ctx=dict(ctx, resume=True))
+    rows = _comment_plugin().execute_comment_node(node, headless=True, ctx=dict(ctx, resume=True))
     assert seen == urls[1:], f'继续 re-walked {seen}, expected only the unproven tail {urls[1:]}'
     # Three, not four: the re-walk of the THIRD drama re-files nothing, because the ledger
     # already owns that comment. The replay costs the player its time and never costs the table
@@ -947,6 +964,7 @@ def browser_asked(app_module, recorder, monkeypatch):
         return _RecordingCrawler()
 
     monkeypatch.setattr(app_module, 'get_crawler', _make)
+    monkeypatch.setattr(_comment_plugin(), 'get_crawler', _make)
     return seen
 
 
@@ -1096,6 +1114,7 @@ def test_the_fed_column_hands_the_crawler_its_list_in_order_with_blanks_and_dups
     _patch_session(monkeypatch, seen)
     logs = []
     monkeypatch.setattr(app_module, 'add_log', logs.append)
+    monkeypatch.setattr(_comment_plugin(), 'add_log', logs.append)
     u1 = _SAMPLES[('urls', 'zhihu')]
     u2 = u1 + '2'
     node = _comments_feed_node('zhihu')
@@ -1231,7 +1250,7 @@ def test_a_comment_node_that_raises_still_publishes_its_part_files(app_module, r
     ctx = {'store': store, 'run_id': 'r-raise', 'fingerprints': {'node-1': 'fp-raise'}, 'skipped_seen': {}}
 
     with pytest.raises(RuntimeError):
-        app_module._execute_comment_node(node, headless=True, ctx=ctx)
+        _comment_plugin().execute_comment_node(node, headless=True, ctx=ctx)
     written = sorted(p.name for p in export.glob('*'))
     assert written, 'the walk raised after u1 landed, yet no merged file was published (orphaned rows)'
     body = '\n'.join(p.read_text(encoding='utf-8') for p in export.glob('*'))
@@ -1267,6 +1286,7 @@ def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monk
     _patch_session(monkeypatch, seen)
     logs: list = []
     monkeypatch.setattr(app_module, 'add_log', logs.append)
+    monkeypatch.setattr(_comment_plugin(), 'add_log', logs.append)
 
     first = app_module._execute_source_node(node, headless=True, ctx=ctx)
     assert len(first) == 1, f'the first pass must file the comment before a repeat means anything: {first}'

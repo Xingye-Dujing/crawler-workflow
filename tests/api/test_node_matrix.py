@@ -1252,9 +1252,15 @@ class TestCommentNodeFilesAndLimits:
             pass
 
     def _install(self, app_module, monkeypatch, session_class):
+        from nodes.executors import comment as comment_exec
+
         import crawlers.comments as comments_module
 
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: self._FakeCrawler())
+        def make(*a, **k):
+            return self._FakeCrawler()
+
+        monkeypatch.setattr(app_module, 'get_crawler', make)
+        monkeypatch.setattr(comment_exec, 'get_crawler', make)
         monkeypatch.setattr(comments_module, 'CommentSession', session_class)
 
     def _run(self, client, app_module, params, session_class, name='cmt'):
@@ -1381,7 +1387,13 @@ class TestCommentNodeRecrawl:
                 type(self).calls += 1
                 return [{'文章URL': url, '评论内容': f'{url}-甲'}, {'文章URL': url, '评论内容': f'{url}-乙'}], 'ok'
 
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: self._FakeCrawler())
+        from nodes.executors import comment as comment_exec
+
+        def make(*a, **k):
+            return self._FakeCrawler()
+
+        monkeypatch.setattr(app_module, 'get_crawler', make)
+        monkeypatch.setattr(comment_exec, 'get_crawler', make)
         monkeypatch.setattr(comments_module, 'CommentSession', _Session)
         return _Session
 
@@ -1736,7 +1748,14 @@ class TestFeedSourceFromUpload:
             def close(self):
                 pass
 
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _NoWindow())
+        monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+        from nodes.executors import comment as comment_exec
+
+        def make(*a, **k):
+            return _NoWindow()
+
+        monkeypatch.setattr(app_module, 'get_crawler', make)
+        monkeypatch.setattr(comment_exec, 'get_crawler', make)
 
     def test_the_fed_column_crawls_the_uploads_rows(self, client, app_module, paste, monkeypatch):
         seen = []

@@ -406,15 +406,17 @@ def _comment_node():
 
 
 def _drive_comment_block(app_module, monkeypatch, crawler):
+    from nodes.executors import comment as comment_exec
+
     monkeypatch.setitem(app_module.execution_state, 'running', True)
     # The flag is what the two assertions read, so it must start clean rather than inherit a
     # value some earlier source-wall test left on the shared execution_state (a state test that
     # passes for the wrong reason — the suite shares ONE dict across the whole run).
     monkeypatch.setitem(app_module.execution_state, 'cookie_expired', False)
-    monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: crawler)
+    monkeypatch.setattr(comment_exec, 'get_crawler', lambda *a, **k: crawler)
     monkeypatch.setattr(_comments, 'CommentSession', _BlockingSession)
     with pytest.raises(ValueError) as err:
-        app_module._execute_comment_node(_comment_node(), headless=True, ctx=None)
+        comment_exec.execute_comment_node(_comment_node(), headless=True, ctx=None)
     return str(err.value)
 
 

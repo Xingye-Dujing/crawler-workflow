@@ -1265,9 +1265,12 @@ class TestSourceCommentsMode:
             made['crawlers'] += 1
             return _FakeCrawler()
 
+        from nodes.executors import comment as comment_exec
+
         import crawlers.comments as comments_module
 
         monkeypatch.setattr(app_module, 'get_crawler', fake_get_crawler)
+        monkeypatch.setattr(comment_exec, 'get_crawler', fake_get_crawler)
         monkeypatch.setattr(comments_module, 'CommentSession', _FakeCommentSession)
 
         workflow = _workflow(
@@ -1338,6 +1341,8 @@ class TestSourceCommentsMode:
     def test_runtime_skips_foreign_links_and_refuses_when_none_match(self, app_module, monkeypatch):
         """The crawl-time second line of defence (a hand-made JSON that never
         passed validate() still must not crawl a platform nobody selected)."""
+        from nodes.executors import comment as comment_exec
+
         import crawlers.comments as comments_module
 
         crawled = []
@@ -1365,6 +1370,7 @@ class TestSourceCommentsMode:
                 return [], 'ok'
 
         monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _FakeCrawler())
+        monkeypatch.setattr(comment_exec, 'get_crawler', lambda *a, **k: _FakeCrawler())
         monkeypatch.setattr(comments_module, 'CommentSession', _RecordingSession)
         # setitem (not a bare assignment) so the flag is handed back at teardown —
         # a leaked running=True blocks the next test's execute (already-running).
@@ -1380,7 +1386,7 @@ class TestSourceCommentsMode:
                 'type': 'comment',
                 'params': {'platform': 'zhihu', 'urls': 'https://weibo.com/1/a\nhttps://www.zhihu.com/question/2'},
             }
-            rows = app_module._execute_comment_node(mixed)
+            rows = comment_exec.execute_comment_node(mixed)
             assert [r['评论内容'] for r in rows] == ['kept']
             assert crawled == ['https://www.zhihu.com/question/2'], 'only the selected platform may be crawled'
 
@@ -1390,7 +1396,7 @@ class TestSourceCommentsMode:
                 'params': {'platform': 'zhihu', 'urls': 'https://weibo.com/1/a'},
             }
             with pytest.raises(ValueError, match='conflicts with the selected platform'):
-                app_module._execute_comment_node(all_foreign)
+                comment_exec.execute_comment_node(all_foreign)
         finally:
             set_lang(previous)
 
@@ -1881,19 +1887,23 @@ class TestACommentNodeHonoursHeadless:
             seen['headless'].append(headless)
             return _FakeCrawler()
 
+        from nodes.executors import comment as comment_exec
+
         store = RunStore(str(tmp_path / 'honour.db'))
         store.start_run('r-h', 'wf', 'fp', headless=True)
         logs = []
         monkeypatch.setattr(app_module, 'get_crawler', _make)
+        monkeypatch.setattr(comment_exec, 'get_crawler', _make)
         monkeypatch.setattr(comments_module, 'CommentSession', _FakeSession)
         monkeypatch.setattr(app_module, 'add_log', logs.append)
+        monkeypatch.setattr(comment_exec, 'add_log', logs.append)
         monkeypatch.setitem(app_module.execution_state, 'running', True)
         node = {
             'id': 'node-1',
             'type': 'comment',
             'params': {'platform': 'zhihu', 'urls': 'https://www.zhihu.com/question/2'},
         }
-        app_module._execute_comment_node(node, headless=True, ctx={'run_id': 'r-h', 'store': store, 'nid': 'node-1'})
+        comment_exec.execute_comment_node(node, headless=True, ctx={'run_id': 'r-h', 'store': store, 'nid': 'node-1'})
         assert seen['headless'] == [True], 'the comment crawler is built exactly as the run asked'
         assert all('forcedVisible' not in m and '可见窗口' not in m for m in logs), logs
         row = next(r for r in store.list_resumable(limit=10, include_finished=True) if r['run_id'] == 'r-h')

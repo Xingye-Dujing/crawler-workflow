@@ -396,6 +396,9 @@ class TestNoFurtherWork:
             return crawler
 
         monkeypatch.setattr(app_module, 'get_crawler', factory)
+        from nodes.executors import comment as comment_exec
+
+        monkeypatch.setattr(comment_exec, 'get_crawler', factory)
         import crawlers.comments as comments_module
 
         gate = {'inside': threading.Event(), 'release': threading.Event()}
@@ -450,6 +453,9 @@ class TestNoFurtherWork:
             return crawler
 
         monkeypatch.setattr(app_module, 'get_crawler', factory)
+        from nodes.executors import comment as comment_exec
+
+        monkeypatch.setattr(comment_exec, 'get_crawler', factory)
         import crawlers.comments as comments_module
 
         gate = {'inside': threading.Event(), 'release': threading.Event()}
@@ -795,11 +801,15 @@ class TestABrowserWithNoProcessId:
         crawler.driver = _WedgedNoPid()
         killed = []
         said = []
-        monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: said.append(str(msg)))
+        from services import crawler_lifecycle
+
+        monkeypatch.setattr(crawler_lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
         # The seam is the reap helper, not ``subprocess``: which command stops a process is a
         # per-operating-system answer now, and a test that patched the Windows binary by name would
         # assert against a call site that no longer exists on a server.
-        monkeypatch.setattr(app_module.procs, 'reap_process', lambda pid, *a, **kw: killed.append(pid) or (True, ''))
+        monkeypatch.setattr(
+            crawler_lifecycle.procs, 'reap_process', lambda pid, *a, **kw: killed.append(pid) or (True, '')
+        )
         try:
             app_module._close_login_browser(crawler, quit_timeout=0.4)
         finally:
@@ -823,7 +833,9 @@ class TestABrowserWithNoProcessId:
         thread.start()
         time.sleep(0.2)
         try:
-            where = app_module._stuck_where(thread)
+            from services.crawler_lifecycle import stuck_where
+
+            where = stuck_where(thread)
         finally:
             thread.join(0.1)
         assert 'hang' in where and 'test_stop_path.py' in where, where
@@ -832,7 +844,9 @@ class TestABrowserWithNoProcessId:
         """The other direction, because a warning that fires on every normal close would
         teach the user to ignore the one time it means something."""
         said = []
-        monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: said.append(str(msg)))
+        from services import crawler_lifecycle
+
+        monkeypatch.setattr(crawler_lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
         crawler = _StreamingCrawler()
         crawler.driver = _SlowSession(pid=0)
         app_module._close_login_browser(crawler, quit_timeout=5.0)

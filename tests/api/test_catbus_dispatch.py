@@ -258,13 +258,19 @@ class TestTheSourceNodeChoosesItsBackend:
 
 
 class TestTheCommentNodeChoosesItsBackend:
+    @pytest.fixture
+    def comment_exec(self):
+        from nodes.executors import comment
+
+        return comment
+
     def _node(self, urls, **params):
         base = {'urls': urls, 'comment_limit': 20, 'backend': 'catbus', 'account': 'work'}
         base.update(params)
         return {'id': 'node-1', 'type': 'comment', 'title': '评论', 'params': base}
 
-    def test_one_link_one_adapter_call_and_no_session_browser(self, app_module, adapter):
-        rows = app_module._execute_comment_node(
+    def test_one_link_one_adapter_call_and_no_session_browser(self, comment_exec, adapter):
+        rows = comment_exec.execute_comment_node(
             self._node(f'{_BILIBILI_LINK}\n{_SECOND_LINK}'), headless=True, ctx=None
         )
         assert len(rows) == 4, 'two links, two calls, both sets of rows kept'
@@ -272,19 +278,21 @@ class TestTheCommentNodeChoosesItsBackend:
         assert [call[2]['urls'] for call in adapter] == [[_BILIBILI_LINK], [_SECOND_LINK]]
         assert adapter[0][2]['comment_limit'] == 20
 
-    def test_the_engine_owns_the_cursor_and_the_node_never_buys_a_profile(self, app_module, adapter):
+    def test_the_engine_owns_the_cursor_and_the_node_never_buys_a_profile(self, comment_exec, adapter):
         """With a run context the same engine advances ``url_index`` over proven links.
 
         CatBus supplies rows; the position, the dedupe ledger and the settlement stay the comment
         engine's, which is what makes 继续 mean the same thing on both backends.
         """
         ctx = _ctx(adapter.store)
-        rows = app_module._execute_comment_node(self._node(_BILIBILI_LINK), headless=True, ctx=ctx)
+        rows = comment_exec.execute_comment_node(self._node(_BILIBILI_LINK), headless=True, ctx=ctx)
         assert len(rows) == 2
         assert len(adapter.store.load_rows(ctx['run_id'], 'node-1')) == 2
         assert adapter.store.get_cursor(ctx['run_id'], 'node-1'), 'the walked link advanced the position'
 
-    def test_a_walled_link_refuses_naming_the_adapters_own_command(self, app_module, adapter, monkeypatch):
+    def test_a_walled_link_refuses_naming_the_adapters_own_command(
+        self, app_module, comment_exec, adapter, monkeypatch
+    ):
         """The engine's BLOCKED path is a cookie sentence, so this backend may not enter it."""
 
         def fake_run(site, mode, params, **kw):
@@ -294,7 +302,7 @@ class TestTheCommentNodeChoosesItsBackend:
 
         monkeypatch.setattr(bridge, 'run', fake_run)
         with pytest.raises(ValueError) as raised:
-            app_module._execute_comment_node(self._node(_BILIBILI_LINK), headless=True, ctx=None)
+            comment_exec.execute_comment_node(self._node(_BILIBILI_LINK), headless=True, ctx=None)
         assert 'catbus bilibili auth login' in str(raised.value)
         assert app_module.execution_state.get('cookie_expired') is not True, (
             'a CatBus wall is not a dead cookie, and the toast may not say otherwise'
