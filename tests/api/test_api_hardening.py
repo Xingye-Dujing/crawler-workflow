@@ -106,6 +106,7 @@ BODYLESS_POSTS = {
     '/api/cookies/generate/cancel': 'signals the login window to close',
     '/api/cookies/generate/confirm': 'signals the login window that the user is done',
     '/api/data/upload': 'multipart form field, not a JSON body',
+    '/api/project/import': 'multipart project bundle, not a JSON body',
     '/api/runs/purge': 'applies the retention policy, which lives in settings',
     '/api/workflow/queue/clear': 'drops every parked request',
     '/api/workflow/stop': 'sets the stop flag',

@@ -271,6 +271,11 @@ def get_template(template_id: str) -> dict | None:
         raise TemplateCorruptError(wanted) from e
 
 
+def validate_template(raw) -> dict:
+    """The validated shape of one template, without writing it (used by import)."""
+    return _validate(raw)
+
+
 def save_template(raw) -> dict:
     """Create or update one template. ``id`` in the payload means update."""
     clean = _validate(raw)

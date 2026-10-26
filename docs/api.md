@@ -21,6 +21,8 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/workflow/history/delete` | POST | `{id}` 删除快照；`baselines_cleared` 列出因此被清空布局基准的工作流名；缺 id 幂等返回 `deleted:false` |
 | `/api/workflow/history/layout` | GET | `?workflow=` 读该工作流的自动排布策略与基准快照头（`strategy`/`snapshot`/`baseline_missing`） |
 | `/api/workflow/history/layout` | POST | `{workflow_name, strategy:'algorithm'\|'baseline', snapshot_id?}` 按工作流保存策略；baseline 必须有存在的快照，未保存的草稿没有工作流名 → 400 |
+| `/api/project/export` | GET | `?workflow=` 导出当前已保存工作流，`?all=1` 导出全部；返回 zip（`manifest.json` + `workflows/` + `datasets/` + `templates/`）。工作流引用的数据集必须存在，否则按名拒绝；缺失的可复用模板只记入 manifest 警告（实例自带快照仍可用）。`X-Project-Warnings` 是警告条数 |
+| `/api/project/import` | POST | multipart `file` 上传项目 zip；导入时重新分配数据集/模板 id、改写工作流引用，同名工作流/模板自动加 ` (2)`，绝不覆盖已有文件；返回 `{ok, summary:{workflows,datasets,templates,warnings}}`。版本/校验和/路径/大小/结构任一不对都 400 具名拒绝 |
 | `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，那时宁可立刻 400 说明原因，也不会悄悄变成一次从零重爬 |
 | `/api/workflow/stop` | POST | 停止执行：浏览器在后台关、请求立即返回；`browsers` 是这次交出去关掉的浏览器数，`records` 是本请求已经就地改判为 `stopping` 的运行行（结论仍由运行自己写） |
 | `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表；`stopping`/`settling` 说明"已叫停但结论还没写"，浏览器据此续读而不是抢答）。另带 `run_ids`（本次尝试打开的全部记录 id，串行分段运行时不止一个）与 `node_states`（`{node_id: {status,row_count,error,run_id}}`，从 `node_runs` 读）：画布据此给节点画绿勾/黄转圈/红叉，并行时多个节点可同时为 `running`。`owned_records` 跨运行留存，**不**用于这里，否则上一轮的状态会冒充本轮 |

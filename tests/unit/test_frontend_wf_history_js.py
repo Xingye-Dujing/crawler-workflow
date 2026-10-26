@@ -213,18 +213,51 @@ class TestLayoutStrategy:
         assert '重命名' in html
 
 
+class TestProjectBundleUi:
+    def test_export_current_and_all_name_the_selection(self, wfh):
+        current = wfh['project_export']
+        assert current['urls'] == ['/api/project/export?workflow=%E6%97%A5%E6%8A%A5']
+        assert current['toasts'] == ['EXPORTED 2']
+        every = wfh['project_export_all']
+        assert every['urls'] == ['/api/project/export?all=1']
+        assert every['toasts'] == ['EXPORTED']
+
+    def test_an_unsaved_canvas_refuses_before_sending(self, wfh):
+        assert wfh['project_export_unsaved'] == {'requests': 0, 'toasts': ['SAVE-FIRST']}
+
+    def test_import_posts_one_file_and_reloads_the_list(self, wfh):
+        imported = wfh['project_import']
+        assert imported['method'] == 'POST'
+        assert imported['entries'][0][0] == 'file'
+        assert imported['entries'][0][1]['name'] == 'project.zip'
+        assert imported['input_value'] == ''
+        assert imported['list_reads'] == 1
+        assert imported['toasts'] == ['IMPORTED 1: 项目A (2)']
+
+
 class TestPageWiring:
     def test_the_history_containers_and_save_bar_exist(self):
         page = INDEX_HTML.read_text(encoding='utf-8')
-        for element_id in ('workflows-tabs', 'workflows-history-bar', 'workflows-history-capacity'):
+        for element_id in (
+            'workflows-tabs',
+            'workflows-history-bar',
+            'workflows-history-capacity',
+            'workflows-project-bar',
+            'project-bundle-input',
+        ):
             assert f'id="{element_id}"' in page
         assert 'onclick="wfFiles.saveSnapshot()"' in page
         assert 'wfFiles.openHistory()' in page
+        assert 'onclick="wfFiles.exportProject()"' in page
+        assert 'onclick="wfFiles.pickProjectBundle()"' in page
+        assert 'onchange="wfFiles.importProject(this)"' in page
 
     def test_the_tabs_share_the_run_panel_styles_and_the_bar_has_its_own(self):
         css = STYLE_CSS.read_text(encoding='utf-8')
         assert '#workflows-tabs' in css
         assert '.wf-history-bar' in css
+        assert '.wf-project-bar' in css
+        assert '.wf-project-hint' in css
         assert '.wf-history-capacity' in css
         assert '.wf-snap-baseline' in css
         assert '.layout-baseline-hint' in css

@@ -58,6 +58,20 @@ const DICT = {
         'wfHistory.savePlaceholder': 'e.g. before',
         'wfHistory.saved': 'SAVED',
         'wfHistory.saveFailed': 'SAVE-FAILED',
+        'wfProject.export': 'Export project',
+        'wfProject.import': 'Import project',
+        'wfProject.hint': 'PROJECT-HINT',
+        'wfProject.exportPrompt': 'Export which?',
+        'wfProject.current': 'This workflow',
+        'wfProject.all': 'All workflows',
+        'wfProject.noWorkflow': 'SAVE-FIRST',
+        'wfProject.exported': 'EXPORTED',
+        'wfProject.exportedWarn': 'EXPORTED {n}',
+        'wfProject.exportFailed': 'EXPORT-FAILED',
+        'wfProject.imported': 'IMPORTED {n}: {names}',
+        'wfProject.importedNone': 'IMPORTED-NONE',
+        'wfProject.warnings': '{n} warnings',
+        'wfProject.importFailed': 'IMPORT-FAILED',
         'style.layoutBaselineNone': 'NO-BASELINE-YET',
         'style.layoutBaselineMissing': 'BASELINE-GONE',
         'style.layoutHint': 'Applied by Layout',
@@ -100,6 +114,8 @@ const DICT = {
         'wfHistory.rename': '重命名',
         'wfHistory.diffSame': '一致',
         'wfHistory.remove': '删除',
+        'wfProject.export': '导出项目包',
+        'wfProject.import': '导入项目包',
         'wfHistory.baseline': '设为布局基准',
         'wfHistory.baselineTag': '基准',
         'reusable.templatesTab': '可复用节点',
@@ -166,6 +182,11 @@ let routes = {
     reusableList: TEMPLATES,
     reusableDelete: { ok: true, deleted: true },
     reusableRename: { ok: true, template: { id: 'r-000000000001', name: '清洗流水线 v2' } },
+    projectImport: {
+        ok: true,
+        summary: { workflows: [{ from: '项目A', to: '项目A (2)' }], datasets: [], templates: [], warnings: [] },
+    },
+    projectWarnings: 0,
     reusableGet: {
         ok: true,
         template: {
@@ -192,8 +213,25 @@ sandbox.fetch = (url, options) => {
     const target = String(url);
     const method = (options && options.method) || 'GET';
     requests.push({ url: target, method, body: options && options.body });
+    if (target.indexOf('/api/project/export') >= 0) {
+        const filename = 'attachment; filename="project.zip"';
+        return Promise.resolve({
+            ok: true,
+            headers: {
+                get(name) {
+                    if (name === 'Content-Disposition') return filename;
+                    if (name === 'X-Project-Warnings') return String(routes.projectWarnings || 0);
+                    return '';
+                },
+            },
+            blob: () => Promise.resolve({ size: 1 }),
+            json: () => Promise.resolve({ ok: true }),
+            text: () => Promise.resolve(''),
+        });
+    }
     let payload = { ok: true };
-    if (target.indexOf('/api/workflow/history/save') >= 0) payload = routes.save;
+    if (target.indexOf('/api/project/import') >= 0) payload = routes.projectImport;
+    else if (target.indexOf('/api/workflow/history/save') >= 0) payload = routes.save;
     else if (target.indexOf('/api/workflow/history/delete') >= 0) payload = routes.delete;
     else if (target.indexOf('/api/workflow/history/rename') >= 0) payload = routes.historyRename;
     else if (target.indexOf('/api/workflow/history/get') >= 0) payload = routes.snapshot;
@@ -617,6 +655,45 @@ await wfFiles.insertTemplate('r-000000000001');
 out.reusable_insert = {
     calls: insertCalls,
     panel_open: panel.classList.contains('open'),
+};
+
+/* ── project bundles: current/all choose, download, import ─────────── */
+resetCalls();
+dialogAnswer = 'current';
+routes.projectWarnings = 2;
+await wfFiles.exportProject();
+out.project_export = {
+    urls: requests.map((r) => r.url),
+    toasts: toasts.slice(),
+};
+
+resetCalls();
+dialogAnswer = 'all';
+routes.projectWarnings = 0;
+await wfFiles.exportProject();
+out.project_export_all = {
+    urls: requests.map((r) => r.url),
+    toasts: toasts.slice(),
+};
+
+resetCalls();
+workflow.currentFile = '';
+dialogAnswer = 'current';
+await wfFiles.exportProject();
+out.project_export_unsaved = { requests: requests.length, toasts: toasts.slice() };
+workflow.currentFile = '日报';
+dialogAnswer = true;
+
+resetCalls();
+const fakeInput = { value: 'project.zip', files: [{ name: 'project.zip' }] };
+await wfFiles.importProject(fakeInput);
+const importRequest = requests.find((r) => r.url.indexOf('/api/project/import') >= 0);
+out.project_import = {
+    method: importRequest ? importRequest.method : '',
+    entries: importRequest && importRequest.body && importRequest.body.entries ? importRequest.body.entries : [],
+    input_value: fakeInput.value,
+    list_reads: requests.filter((r) => r.url.indexOf('/api/workflow/list') >= 0).length,
+    toasts: toasts.slice(),
 };
 
 process.stdout.write(JSON.stringify(out));

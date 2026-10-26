@@ -955,6 +955,24 @@
           </button>
         </div>
       </div>
+      <div id="workflows-project-bar" class="wf-project-bar">
+        <button class="menu-btn" type="button" onclick="wfFiles.exportProject()" data-i18n="wfProject.export">
+          Export project bundle
+        </button>
+        <button class="menu-btn" type="button" onclick="wfFiles.pickProjectBundle()" data-i18n="wfProject.import">
+          Import project bundle
+        </button>
+        <span class="wf-project-hint" data-i18n="wfProject.hint">
+          A bundle carries the workflow, its datasets and its reusable templates.
+        </span>
+        <input
+          id="project-bundle-input"
+          type="file"
+          accept=".zip,application/zip"
+          hidden
+          onchange="wfFiles.importProject(this)"
+        />
+      </div>
       <div id="workflows-tabs"></div>
       <div id="workflows-history-bar" class="wf-history-bar" hidden>
         <button

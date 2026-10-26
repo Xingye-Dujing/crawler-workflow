@@ -871,3 +871,25 @@ message.
   dock's third tab lists templates (including corrupt rows, which can only be deleted), offers insert
   and delete per row, and says in the confirmation that existing instances keep their own snapshots.
   The list re-reads after a delete and the insert action closes the dock so the new node is visible.
+
+## Project bundles / 项目包 (measured 2026-10-26)
+
+- **A workflow file is not portable; its dataset references are.** The JSON names datasets by content id,
+  and those ids live in `datasets.db`. Copying only `workflows/` to another machine reopens every Upload
+  node empty. The bundle therefore carries the datasets and templates it can prove are referenced, and
+  import remaps every `dataset_id`/`*_dataset_id`/`template_id` before saving. A bundle without a referenced
+  dataset is refused at export; a missing template is only a warning because an instance carries its own
+  embedded snapshot.
+- **Content identity means the importer cannot promise a new dataset id.** `DatasetStore` hashes the rows,
+  so identical bytes imported into a fresh store intentionally keep the same id; the workflow ref is still
+  rewritten through the bundle map and `bind` ledger. Do not write a test that asserts "the id changed" —
+  assert that the pointer resolves to a stored table and that the ref ledger names it.
+- **Import must never overwrite authored names.** Workflow and template names are user work; a collision
+  becomes the next free ` (2)`/` (3)` and the summary says so. Dataset rows may dedupe by content, but names
+  do not get to replace an existing file.
+- **The manifest is a security boundary.** Import accepts only `workflows|datasets|templates/<NNN>.json`,
+  refuses traversal-shaped names, checks per-file SHA-1, total uncompressed size and entry count, and
+  validates every workflow/dataset/template before writing. A corrupt later entry must not leave a
+  half-imported project; the service validates all readable pieces first, then writes.
+- **Never package runtime state by accident.** Cookies, API keys, logs, run records, model weights and the
+  datasets database file are deliberately absent. The archive is plain JSON so a person can inspect it.

@@ -11009,6 +11009,7 @@ var datasetManager = {
             upload: 'datasetMgr.sourceUpload',
             paste: 'datasetMgr.sourcePaste',
             analysis: 'datasetMgr.sourceAnalysis',
+            import: 'datasetMgr.sourceImport',
         };
         var key = keys[source];
         return key ? I18n.t(key) : (source || '');
@@ -11306,6 +11307,86 @@ var wfFiles = {
         if (!panel) return;
         panel.classList.remove('open');
         panel.style.height = '';
+    },
+
+    /* ── project bundle: one zip for a canvas and the files it reads ──
+       The server decides what a bundle contains and rewrites ids on import; the
+       browser only chooses current/all, downloads the attachment, and explains
+       the rename/warning summary it gets back. */
+    async exportProject() {
+        var current = (typeof workflow !== 'undefined' && workflow.currentFile) || '';
+        var choice = await showDialog({
+            message: I18n.t('wfProject.exportPrompt'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('wfProject.current'), value: 'current', primary: true },
+                { label: I18n.t('wfProject.all'), value: 'all' },
+            ],
+        });
+        if (!choice) return;
+        if (choice === 'current' && !current) {
+            showToast(I18n.t('wfProject.noWorkflow'));
+            return;
+        }
+        var query = choice === 'all' ? 'all=1' : 'workflow=' + encodeURIComponent(current);
+        var response = await fetch('/api/project/export?' + query);
+        if (!response.ok) {
+            var detail = null;
+            try { detail = await response.json(); } catch (e) { detail = null; }
+            showToast((detail && detail.error) || I18n.t('wfProject.exportFailed'));
+            return;
+        }
+        var blob = await response.blob();
+        var filename = 'project.zip';
+        var disposition = response.headers.get('Content-Disposition') || '';
+        var match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disposition);
+        if (match) {
+            try { filename = decodeURIComponent(match[1].replace(/"/g, '')); } catch (e) { /* keep the fallback */ }
+        }
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        if (typeof link.click === 'function') link.click();
+        if (link.parentNode) link.parentNode.removeChild(link);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        var warnings = Number(response.headers.get('X-Project-Warnings') || 0) || 0;
+        showToast(warnings ? I18n.t('wfProject.exportedWarn', { n: warnings }) : I18n.t('wfProject.exported'));
+    },
+
+    pickProjectBundle() {
+        var input = document.getElementById('project-bundle-input');
+        if (!input) return;
+        input.value = '';
+        input.click();
+    },
+
+    async importProject(input) {
+        var file = input && input.files && input.files[0];
+        if (input) input.value = '';
+        if (!file) return;
+        var form = new FormData();
+        form.append('file', file, file.name || 'project.zip');
+        var response = await fetch('/api/project/import', { method: 'POST', body: form });
+        var result = null;
+        try { result = await response.json(); } catch (e) { result = null; }
+        if (!response.ok || !result || !result.ok) {
+            showToast((result && result.error) || I18n.t('wfProject.importFailed'));
+            return;
+        }
+        var summary = result.summary || {};
+        var workflows = summary.workflows || [];
+        var names = workflows.map(function (row) { return row.to || row.from; }).join(', ');
+        var message = workflows.length
+            ? I18n.t('wfProject.imported', { n: workflows.length, names: names })
+            : I18n.t('wfProject.importedNone');
+        var warnings = (summary.warnings || []).length;
+        if (warnings) message += ' ' + I18n.t('wfProject.warnings', { n: warnings });
+        showToast(message, 8000);
+        this._tab = 'files';
+        await this.refresh();
     },
 
     async refresh() {

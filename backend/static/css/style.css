@@ -3332,6 +3332,20 @@ input:-webkit-autofill:focus {
    The table reuses .runs-mgr-table; these carry the two lines in a snapshot
    cell (name over source workflow) and the chip that says which snapshot the
    auto-layout baseline points at. */
+.wf-project-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line2);
+  flex-shrink: 0;
+}
+.wf-project-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 0;
+}
 .wf-history-bar {
   display: flex;
   align-items: center;
