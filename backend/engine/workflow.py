@@ -111,7 +111,19 @@ def node_label(node: dict, nid: str) -> str:
 #: no rows is one the canvas draws and the run ignores — the silent half of the picture
 #: this rule exists to refuse.
 TABLE_NODE_TYPES = frozenset(
-    {'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'biblio', 'fuse', 'output'}
+    {
+        'source',
+        'upload',
+        'resume',
+        'comment',
+        'process',
+        'analysis',
+        'tokenize',
+        'biblio',
+        'fuse',
+        'accumulate',
+        'output',
+    }
 )
 
 #: Node types that carry a PDF-able LaTeX artifact downstream rather than a row table: ``visualize`` emits a
@@ -472,6 +484,34 @@ class WorkflowEngine:
                     add(nid, 'engine.source', msg)
             if ntype == 'upload' and not params.get('dataset_id'):
                 add(nid, 'engine.upload_no_file', t('engine.upload_no_file', nid=label))
+            if ntype == 'accumulate':
+                parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
+                name = str(params.get('lineage_name') or '').strip()
+                identity = str(params.get('identity') or 'row').strip().lower()
+                keys = [
+                    part.strip()
+                    for part in str(params.get('key_columns') or '').replace('，', ',').split(',')
+                    if part.strip()
+                ]
+                if not name:
+                    add(nid, 'engine.accumulate_no_name', t('engine.accumulate_no_name', nid=label))
+                if identity not in ('row', 'columns'):
+                    add(
+                        nid,
+                        'engine.accumulate_bad_identity',
+                        t('engine.accumulate_bad_identity', nid=label, value=identity),
+                    )
+                elif identity == 'columns' and not keys:
+                    add(nid, 'engine.accumulate_no_keys', t('engine.accumulate_no_keys', nid=label))
+                if len(parents) != 1:
+                    add(nid, 'engine.accumulate_one_parent', t('engine.accumulate_one_parent', nid=label))
+                elif (self.nodes.get(parents[0]) or {}).get('type') not in TABLE_NODE_TYPES:
+                    up = self.nodes.get(parents[0]) or {}
+                    add(
+                        nid,
+                        'engine.accumulate_bad_parent',
+                        t('engine.accumulate_bad_parent', nid=label, up=node_label(up, parents[0])),
+                    )
             if ntype == 'comment' and not str(params.get('urls') or '').strip():
                 add(nid, 'engine.comment_no_urls', t('engine.comment_no_urls', nid=label))
             elif ntype == 'comment':

@@ -34,6 +34,7 @@ import os
 import sqlite3
 import threading
 import time
+import uuid
 import zlib
 
 import pandas as pd
@@ -51,6 +52,7 @@ SOURCE_PASTE = 'paste'
 SOURCE_ANALYSIS = 'analysis'
 SOURCE_IMPORT = 'import'
 SOURCE_MERGE = 'merge'
+SOURCE_CUMULATIVE = 'cumulative'
 
 
 def safe_records(df: pd.DataFrame) -> list:
@@ -123,6 +125,27 @@ class DatasetStore:
                     updated_at TEXT,
                     PRIMARY KEY (workflow_name, node_id)
                 );
+                CREATE TABLE IF NOT EXISTS dataset_lineages (
+                    lineage_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    current_dataset_id TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT,
+                    updated_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS dataset_lineage_versions (
+                    lineage_id TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    dataset_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL DEFAULT '',
+                    node_id TEXT NOT NULL DEFAULT '',
+                    added_rows INTEGER NOT NULL DEFAULT 0,
+                    total_rows INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT,
+                    PRIMARY KEY (lineage_id, version)
+                );
+                CREATE INDEX IF NOT EXISTS idx_lineage_current ON dataset_lineages(current_dataset_id);
+                CREATE INDEX IF NOT EXISTS idx_lineage_version_dataset ON dataset_lineage_versions(dataset_id);
                 CREATE INDEX IF NOT EXISTS idx_datasets_used ON datasets(last_used_at);
                 CREATE INDEX IF NOT EXISTS idx_refs_dataset ON dataset_refs(dataset_id);
                 """
@@ -321,6 +344,267 @@ class DatasetStore:
         rows = self._query(sql, tuple(params))
         return str(rows[0]['dataset_id']) if rows else None
 
+    # ── cumulative lineages ─────────────────────────────────────
+    #
+    # A lineage is a named, append-only table: every version points at an
+    # ordinary immutable dataset row, and `current_dataset_id` names the newest.
+    # Content identity is untouched — the version history is the lineage's
+    # bookkeeping, not a mutation of a dataset.
+
+    def _lineage_header(self, row: sqlite3.Row) -> dict:
+        meta = self.meta(row['current_dataset_id']) or {}
+        return {
+            'lineage_id': str(row['lineage_id']),
+            'name': str(row['name']),
+            'current_dataset_id': str(row['current_dataset_id']),
+            'version': int(row['version']),
+            'created_at': str(row['created_at'] or ''),
+            'updated_at': str(row['updated_at'] or ''),
+            'rows': int(meta.get('row_count') or 0),
+            'columns': list(meta.get('columns') or []),
+            'source': str(meta.get('source') or ''),
+        }
+
+    def lineage(self, name: str) -> dict | None:
+        rows = self._query('SELECT * FROM dataset_lineages WHERE name = ?', (str(name or ''),))
+        return self._lineage_header(rows[0]) if rows else None
+
+    def list_lineages(self) -> list:
+        rows = self._query('SELECT * FROM dataset_lineages ORDER BY name')
+        return [self._lineage_header(row) for row in rows]
+
+    def lineage_history(self, name: str) -> list:
+        found = self.lineage(name)
+        if found is None:
+            return []
+        rows = self._query(
+            'SELECT * FROM dataset_lineage_versions WHERE lineage_id = ? ORDER BY version DESC',
+            (found['lineage_id'],),
+        )
+        return [
+            {
+                'version': int(row['version']),
+                'dataset_id': str(row['dataset_id']),
+                'run_id': str(row['run_id'] or ''),
+                'node_id': str(row['node_id'] or ''),
+                'added_rows': int(row['added_rows'] or 0),
+                'total_rows': int(row['total_rows'] or 0),
+                'created_at': str(row['created_at'] or ''),
+            }
+            for row in rows
+        ]
+
+    def dataset_lineage(self, dataset_id: str) -> dict | None:
+        """The lineage whose current version is *dataset_id* (for delete/purge guards)."""
+        rows = self._query(
+            'SELECT lineage_id FROM dataset_lineage_versions WHERE dataset_id = ? LIMIT 1',
+            (str(dataset_id or ''),),
+        )
+        if not rows:
+            return None
+        found = self._query('SELECT * FROM dataset_lineages WHERE lineage_id = ?', (rows[0]['lineage_id'],))
+        return self._lineage_header(found[0]) if found else None
+
+    @staticmethod
+    def _lineage_key(record: dict, columns: list) -> str:
+        return json.dumps([record.get(column) for column in columns], ensure_ascii=False, sort_keys=True, default=str)
+
+    def create_lineage(self, name: str, dataset_id: str, version: int = 1) -> dict:
+        """Attach an existing dataset as the first version of a lineage (bundle import)."""
+        clean = str(name or '').strip()
+        if not clean:
+            raise ValueError(t('ds.lineage_name_required'))
+        meta = self.meta(dataset_id)
+        if meta is None:
+            raise ValueError(t('ds.lineage_missing_dataset', id=dataset_id))
+        with self._lock:
+            existing = self._query('SELECT * FROM dataset_lineages WHERE name = ?', (clean,))
+            if existing:
+                return self._lineage_header(existing[0])
+            lineage_id = f'ln-{uuid.uuid4().hex[:12]}'
+            stamp = self.now()
+            self._conn.execute(
+                'INSERT INTO dataset_lineages'
+                ' (lineage_id, name, current_dataset_id, version, created_at, updated_at)'
+                ' VALUES (?, ?, ?, ?, ?, ?)',
+                (lineage_id, clean, str(dataset_id), max(1, int(version or 1)), stamp, stamp),
+            )
+            self._conn.execute(
+                'INSERT INTO dataset_lineage_versions'
+                ' (lineage_id, version, dataset_id, run_id, node_id, added_rows, total_rows, created_at)'
+                ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (
+                    lineage_id,
+                    max(1, int(version or 1)),
+                    str(dataset_id),
+                    '',
+                    '',
+                    int(meta.get('row_count') or 0),
+                    int(meta.get('row_count') or 0),
+                    stamp,
+                ),
+            )
+            self._conn.commit()
+        return self.lineage(clean)
+
+    def append_lineage(
+        self,
+        name: str,
+        df: pd.DataFrame,
+        identity: str = 'row',
+        key_columns: list = None,
+        run_id: str = '',
+        node_id: str = '',
+    ) -> dict:
+        """Append rows that are new by the chosen identity, and return the full table.
+
+        ``identity='row'`` treats a byte-identical row (all current columns) as a
+        duplicate; ``identity='columns'`` uses the named key columns and refuses a
+        missing one. The existing schema wins: new columns are a named refusal,
+        not an outer join. A no-new-rows call returns the current version and does
+        not create a version row.
+        """
+        clean = str(name or '').strip()
+        if not clean:
+            raise ValueError(t('ds.lineage_name_required'))
+        identity = str(identity or 'row').strip().lower()
+        if identity not in ('row', 'columns'):
+            raise ValueError(t('ds.lineage_identity', value=identity))
+        columns = [str(column) for column in (key_columns or []) if str(column).strip()]
+        with self._lock:
+            found = self._query('SELECT * FROM dataset_lineages WHERE name = ?', (clean,))
+            if not found:
+                lineage_id = f'ln-{uuid.uuid4().hex[:12]}'
+                current = pd.DataFrame(columns=[str(column) for column in df.columns])
+                version = 0
+                current_id = ''
+            else:
+                lineage = self._lineage_header(found[0])
+                lineage_id = lineage['lineage_id']
+                version = lineage['version']
+                current_id = lineage['current_dataset_id']
+                current = self.get(current_id)
+                if current is None:
+                    raise ValueError(t('ds.lineage_current_missing', name=clean, id=current_id))
+
+            new_columns = [str(column) for column in df.columns]
+            if len(current.columns) and set(new_columns) != set(current.columns):
+                extra = [column for column in new_columns if column not in current.columns]
+                missing = [column for column in current.columns if column not in new_columns]
+                raise ValueError(
+                    t(
+                        'ds.lineage_columns',
+                        name=clean,
+                        extra=', '.join(extra) or '-',
+                        missing=', '.join(missing) or '-',
+                    )
+                )
+            if not len(current.columns):
+                current = current.reindex(columns=new_columns)
+            incoming = df.reindex(columns=list(current.columns))
+            if identity == 'columns':
+                if not columns:
+                    raise ValueError(t('ds.lineage_keys_required'))
+                missing = [column for column in columns if column not in current.columns]
+                if missing:
+                    raise ValueError(t('ds.lineage_key_missing', cols=', '.join(missing)))
+                key_cols = columns
+            else:
+                key_cols = list(current.columns)
+
+            existing_keys = {self._lineage_key(row, key_cols) for row in current.to_dict('records')}
+            added = []
+            seen = set()
+            for row in incoming.to_dict('records'):
+                key = self._lineage_key(row, key_cols)
+                if key in existing_keys or key in seen:
+                    continue
+                seen.add(key)
+                added.append(row)
+            if len(current) + len(added) > Config.DATASET_MAX_ROWS:
+                raise ValueError(
+                    t('ds.lineage_too_large', name=clean, n=len(current) + len(added), max=Config.DATASET_MAX_ROWS)
+                )
+            if not added:
+                meta = self.meta(current_id) or {}
+                return {
+                    'lineage': {
+                        'lineage_id': lineage_id,
+                        'name': clean,
+                        'current_dataset_id': current_id,
+                        'version': version,
+                        'rows': len(current),
+                    },
+                    'dataset': meta,
+                    'frame': current,
+                    'rows': len(current),
+                    'added': 0,
+                    'changed': False,
+                }
+
+            merged = pd.concat([current, pd.DataFrame(added, columns=list(current.columns))], ignore_index=True)
+            meta = self.put(merged, name=clean, source=SOURCE_CUMULATIVE)
+            new_version = version + 1
+            now = self.now()
+            if not found:
+                self._conn.execute(
+                    'INSERT INTO dataset_lineages'
+                    ' (lineage_id, name, current_dataset_id, version, created_at, updated_at)'
+                    ' VALUES (?, ?, ?, ?, ?, ?)',
+                    (lineage_id, clean, meta['dataset_id'], new_version, now, now),
+                )
+            else:
+                self._conn.execute(
+                    'UPDATE dataset_lineages SET current_dataset_id = ?, version = ?, updated_at = ?'
+                    ' WHERE lineage_id = ?',
+                    (meta['dataset_id'], new_version, now, lineage_id),
+                )
+            self._conn.execute(
+                'INSERT INTO dataset_lineage_versions'
+                ' (lineage_id, version, dataset_id, run_id, node_id, added_rows, total_rows, created_at)'
+                ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (
+                    lineage_id,
+                    new_version,
+                    meta['dataset_id'],
+                    str(run_id or ''),
+                    str(node_id or ''),
+                    len(added),
+                    len(merged),
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return {
+            'lineage': {
+                'lineage_id': lineage_id,
+                'name': clean,
+                'current_dataset_id': meta['dataset_id'],
+                'version': new_version,
+                'rows': len(merged),
+            },
+            'dataset': meta,
+            'frame': merged,
+            'rows': len(merged),
+            'added': len(added),
+            'changed': True,
+        }
+
+    def reset_lineage(self, name: str) -> bool:
+        """Forget a lineage's history (datasets remain until their own cleanup)."""
+        clean = str(name or '').strip()
+        if not clean:
+            return False
+        with self._lock:
+            rows = self._query('SELECT lineage_id FROM dataset_lineages WHERE name = ?', (clean,))
+            if not rows:
+                return False
+            lineage_id = rows[0]['lineage_id']
+            self._conn.execute('DELETE FROM dataset_lineage_versions WHERE lineage_id = ?', (lineage_id,))
+            self._conn.execute('DELETE FROM dataset_lineages WHERE lineage_id = ?', (lineage_id,))
+            self._conn.commit()
+        return True
+
     def delete(self, dataset_id: str) -> bool:
         """Drop one file and every pointer to it."""
         cur = self._execute('DELETE FROM datasets WHERE dataset_id = ?', (str(dataset_id),))
@@ -344,8 +628,12 @@ class DatasetStore:
         return clean
 
     def clear(self) -> int:
-        cur = self._execute('DELETE FROM datasets')
-        self._execute('DELETE FROM dataset_refs')
+        with self._lock:
+            cur = self._conn.execute('DELETE FROM datasets')
+            self._conn.execute('DELETE FROM dataset_refs')
+            self._conn.execute('DELETE FROM dataset_lineage_versions')
+            self._conn.execute('DELETE FROM dataset_lineages')
+            self._conn.commit()
         return cur.rowcount
 
     # ── workflow ↔ file mapping ─────────────────────────────────
@@ -435,6 +723,7 @@ class DatasetStore:
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - keep_days * 86400))
         rows = self._query(
             'SELECT dataset_id FROM datasets WHERE dataset_id NOT IN (SELECT dataset_id FROM dataset_refs)'
+            ' AND dataset_id NOT IN (SELECT dataset_id FROM dataset_lineage_versions)'
             ' AND COALESCE(last_used_at, created_at) < ?',
             (cutoff,),
         )

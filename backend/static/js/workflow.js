@@ -1861,7 +1861,7 @@ function _outputParentTypes(nodeId) {
    NOT offered as PDF — it shows the tabular list without pdf, exactly as the backend refuses to merge a
    chart into a csv save. Mirrors the backend TABLE_NODE_TYPES; the backend is the authority. */
 function _outputIsPdfOnly(nodeId) {
-    var TABLE = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'];
+    var TABLE = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'accumulate', 'output'];
     var types = _outputParentTypes(nodeId);
     var pdfable = 0;
     var tabular = 0;
@@ -2374,7 +2374,7 @@ function openSettings(nodeId) {
     /* The columns this node will emit — the edit-time lineage. A producer whose shape
        the server can see lists them; a crawl/comment/resume says so plainly rather than
        guessing. */
-    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'tokenize', 'resume', 'comment'];
+    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'tokenize', 'resume', 'comment'];
     if (OUTPUT_PRODUCERS.indexOf(node.type) >= 0 && typeof Diagnostics !== 'undefined') {
         var _oc = Diagnostics.outputColumns(nodeId);
         var _ocText = _oc === null
@@ -2503,6 +2503,18 @@ function openSettings(nodeId) {
         }
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' +
             I18n.t('btn.previewData') + '</button></div>';
+    } else if (node.type === 'accumulate') {
+        /* The node appends this run's rows to a named, versioned table and passes the
+           full table downstream. Identity is an explicit choice: whole-row equality
+           or named key columns; the backend refuses a missing key by name. */
+        var p = node.params;
+        html += renderParamInput(nodeId, p, 'lineage_name', 'settings.accumulateName', 'text', '');
+        html += renderParamSelect(nodeId, p, 'identity', 'settings.accumulateIdentity', 'row', [
+            { v: 'row', l: I18n.t('settings.accumulateRow') },
+            { v: 'columns', l: I18n.t('settings.accumulateColumns') },
+        ]);
+        html += renderParamInput(nodeId, p, 'key_columns', 'settings.accumulateKeys', 'text', '');
+        html += '<div class="settings-hint">' + I18n.t('settings.accumulateHint') + '</div>';
     } else if (node.type === 'reusable') {
         /* The group's form is about its boundary: the template it carries, the ordered
            input slots an outside wire lands in, its single output, and the two view
@@ -9396,7 +9408,7 @@ workflow.validateDetailed = function () {
         var src = nodes[c.from];
         if (src && nodes[c.to]) (parentTypes[c.to] = parentTypes[c.to] || []).push(src.type);
     });
-    var TABLE_TYPES = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'biblio', 'tokenize', 'output'];
+    var TABLE_TYPES = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'biblio', 'accumulate', 'tokenize', 'output'];
 
     Object.keys(nodes).forEach(function (id) {
         var node = nodes[id];
@@ -9446,6 +9458,21 @@ workflow.validateDetailed = function () {
             }
             if (!hasOutput[id]) {
                 add(id, I18n.t('validate.uploadDownstream').replace('{title}', label));
+            }
+        }
+
+        if (type === 'accumulate') {
+            if (!String(params.lineage_name || '').trim()) {
+                add(id, I18n.t('validate.accumulateName').replace('{title}', label));
+            }
+            if (params.identity === 'columns' && !String(params.key_columns || '').trim()) {
+                add(id, I18n.t('validate.accumulateKeys').replace('{title}', label));
+            }
+            if ((inputCount[id] || 0) !== 1) {
+                add(id, I18n.t('validate.accumulateOneParent').replace('{title}', label));
+            }
+            if (!hasOutput[id]) {
+                add(id, I18n.t('validate.accumulateDownstream').replace('{title}', label));
             }
         }
 
@@ -11217,6 +11244,7 @@ var datasetManager = {
             analysis: 'datasetMgr.sourceAnalysis',
             import: 'datasetMgr.sourceImport',
             merge: 'datasetMgr.sourceMerge',
+            cumulative: 'datasetMgr.sourceCumulative',
         };
         var key = keys[source];
         return key ? I18n.t(key) : (source || '');

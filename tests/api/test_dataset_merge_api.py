@@ -50,6 +50,20 @@ class TestDatasetMergeApi:
             response = client.post('/api/data/merge', json=body)
             assert response.status_code == 400, body
 
+    def test_a_cumulative_current_version_is_protected_until_forced(self, client):
+        store = get_dataset_store()
+        created = store.append_lineage(
+            '累积关键词',
+            pd.DataFrame([{'标题': 'a'}], columns=['标题']),
+        )
+        dataset_id = created['lineage']['current_dataset_id']
+        refused = client.delete('/api/data/datasets/' + dataset_id)
+        assert refused.status_code == 409
+        assert '累积关键词' in refused.get_json()['error']
+        forced = client.delete('/api/data/datasets/' + dataset_id + '?force=1')
+        assert forced.status_code == 200
+        assert store.lineage('累积关键词') is None
+
     def test_the_merged_dataset_is_listable(self, client):
         a = _put('A.csv', [{'标题': 'a', '正文': 'x'}])
         b = _put('B.csv', [{'标题': 'b', '正文': 'y'}])

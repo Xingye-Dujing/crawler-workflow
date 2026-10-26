@@ -111,6 +111,7 @@ from services.cookie_manager import CookieManager
 from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.latex_outputs import build_latex_outputs as _latex_outputs
+from services.nodes import execute_accumulate_node as _execute_accumulate_node
 from services.nodes import execute_biblio_node as _execute_biblio_node
 from services.nodes import execute_compile_node as _execute_compile_node
 from services.nodes import execute_fuse_node as _execute_fuse_node
@@ -5148,6 +5149,8 @@ def _execute_node(
         # every such call instead of holding the lane.
         with crawl_gate.hold(platform, log=add_log, abort=stop_requested, account=account):
             return _execute_source_node(node, headless, ctx=ctx, upstream=upstream)
+    if ntype == 'accumulate':
+        return _execute_accumulate_node(node, current_input, ctx=ctx)
     if ntype == 'upload':
         return _execute_upload_node(node)
     if ntype == 'resume':

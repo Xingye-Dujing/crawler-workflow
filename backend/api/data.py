@@ -199,6 +199,11 @@ def dataset_delete(dataset_id: str):
     force = str(request.args.get('force') or '') in ('1', 'true', 'yes')
     if refs and not force:
         return jsonify({'ok': False, 'error': t('api.datasetInUse', workflows=', '.join(refs)), 'workflows': refs}), 409
+    lineage = store.dataset_lineage(dataset_id) if store.exists(dataset_id) else None
+    if lineage and not force:
+        return jsonify({'ok': False, 'error': t('api.datasetInLineage', name=lineage['name'])}), 409
+    if lineage:
+        store.reset_lineage(lineage['name'])
     removed = store.delete(dataset_id)
     _dataset_cache.pop(dataset_id, None)
     if not removed:

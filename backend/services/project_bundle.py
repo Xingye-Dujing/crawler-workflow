@@ -102,6 +102,29 @@ def _template_refs(workflow: dict) -> set:
     return refs
 
 
+def _lineage_names(workflow: dict) -> set:
+    """Cumulative-dataset names this canvas appends to."""
+    names = set()
+    for node in _nodes(workflow):
+        if node.get('type') != 'accumulate':
+            continue
+        params = node.get('params') or {}
+        clean = str(params.get('lineage_name') or '').strip()
+        if clean:
+            names.add(clean)
+    return names
+
+
+def _unique_lineage_name(original: str, taken: set) -> str:
+    base = str(original or '').strip() or t('ds.lineage_name_required')
+    candidate = base
+    suffix = 2
+    while candidate.casefold() in taken:
+        candidate = f'{base} ({suffix})'
+        suffix += 1
+    return candidate
+
+
 def _upload_refs(workflow: dict) -> dict:
     """The node → file ledger ``DatasetStore.bind`` expects, upload nodes only."""
     refs = {}
@@ -174,6 +197,24 @@ def build_bundle(workflow_names, dataset_store=None, workflow_manager=None) -> t
     dataset_ids = sorted({ref for _name, payload in workflows for ref in _dataset_refs(payload)})
     template_ids = sorted({ref for _name, payload in workflows for ref in _template_refs(payload)})
 
+    warnings = []
+    lineage_entries = []
+    for lineage_name in sorted({name for _name, payload in workflows for name in _lineage_names(payload)}):
+        lineage = store.lineage(lineage_name)
+        if lineage is None:
+            warnings.append(t('project.lineageMissing', name=lineage_name))
+            continue
+        current_id = str(lineage.get('current_dataset_id') or '')
+        if current_id and current_id not in dataset_ids:
+            dataset_ids.append(current_id)
+        lineage_entries.append(
+            {
+                'name': lineage_name,
+                'current_dataset_id': current_id,
+                'version': int(lineage.get('version') or 1),
+            }
+        )
+
     files = {}
     dataset_entries = []
     for index, dataset_id in enumerate(dataset_ids):
@@ -203,7 +244,6 @@ def build_bundle(workflow_names, dataset_store=None, workflow_manager=None) -> t
         )
 
     template_entries = []
-    warnings = []
     for index, template_id in enumerate(template_ids):
         try:
             template = reusable_store.get_template(template_id)
@@ -233,6 +273,7 @@ def build_bundle(workflow_names, dataset_store=None, workflow_manager=None) -> t
         'workflows': workflow_entries,
         'datasets': dataset_entries,
         'templates': template_entries,
+        'lineages': lineage_entries,
         'warnings': warnings,
         'counts': {
             'workflows': len(workflow_entries),
@@ -284,9 +325,12 @@ def _validate_manifest(manifest) -> None:
             raise ValueError(t('project.badManifest', section=section))
         if len(rows) > limit:
             raise ValueError(t('project.tooMany', section=section, max=limit))
+    lineages = manifest.get('lineages', [])
+    if not isinstance(lineages, list):
+        raise ValueError(t('project.badManifest', section='lineages'))
 
 
-def _rewrite_refs(workflow: dict, datasets: dict, templates: dict) -> None:
+def _rewrite_refs(workflow: dict, datasets: dict, templates: dict, lineages: dict = None) -> None:
     """Point every recognised reference at the id/name the import actually wrote."""
     for node in _nodes(workflow):
         params = node.get('params')
@@ -307,6 +351,10 @@ def _rewrite_refs(workflow: dict, datasets: dict, templates: dict) -> None:
         if found is not None:
             params['template_id'] = found['id']
             params['template_name'] = found['name']
+        old_lineage = str(params.get('lineage_name') or '')
+        found_lineage = (lineages or {}).get(old_lineage)
+        if found_lineage is not None:
+            params['lineage_name'] = found_lineage
 
 
 def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
@@ -385,6 +433,16 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
                 }
             )
 
+        lineage_entries = []
+        for entry in manifest.get('lineages', []):
+            if not isinstance(entry, dict):
+                raise ValueError(t('project.lineageInvalid'))
+            old_name = str(entry.get('name') or '').strip()
+            current_id = str(entry.get('current_dataset_id') or '').strip()
+            if not old_name or not current_id:
+                raise ValueError(t('project.lineageInvalid'))
+            lineage_entries.append({'name': old_name, 'current_dataset_id': current_id})
+
         dataset_ids = {row['id'] for row in datasets}
         template_ids = {row['id'] for row in templates}
         workflows = []
@@ -417,6 +475,19 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
                 'stored': bool(meta.get('stored')),
             }
 
+        taken_lineages = {row['name'].casefold() for row in store.list_lineages()}
+        lineage_map = {}
+        lineage_results = []
+        for entry in lineage_entries:
+            mapped = dataset_map.get(entry['current_dataset_id'])
+            if mapped is None:
+                raise ValueError(t('project.datasetRefMissing', id=entry['current_dataset_id']))
+            new_name = _unique_lineage_name(entry['name'], taken_lineages)
+            taken_lineages.add(new_name.casefold())
+            created = store.create_lineage(new_name, mapped['id'])
+            lineage_map[entry['name']] = new_name
+            lineage_results.append({'from': entry['name'], 'to': new_name, 'version': created['version']})
+
         taken_templates = {str(row['name']).casefold() for row in reusable_store.list_templates() if not row['broken']}
         template_map = {}
         for row in templates:
@@ -440,7 +511,7 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
             taken_workflows.add(imported_name.casefold())
             body = copy.deepcopy(payload)
             body['name'] = imported_name
-            _rewrite_refs(body, dataset_map, template_map)
+            _rewrite_refs(body, dataset_map, template_map, lineage_map)
             manager.save(imported_name, body)
             store.bind(imported_name, _upload_refs(body))
             workflow_results.append({'from': name, 'to': imported_name})
@@ -451,5 +522,6 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
         'templates': [
             {'from': old_id, 'to': meta['id'], 'name': meta['name']} for old_id, meta in template_map.items()
         ],
+        'lineages': lineage_results,
         'warnings': warnings,
     }

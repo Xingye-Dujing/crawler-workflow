@@ -1308,7 +1308,7 @@ const canvas = {
        back, so a node config travels between canvases, machines or a chat message. The snippet
        is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
        pasteClipboardAt — one paste path, no second implementation to drift. */
-    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
+    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
 
     copyNodeAsJson(id) {
         const n = this.nodes[id];
@@ -1396,6 +1396,7 @@ const canvas = {
             tokenize: I18n.t('node.tokenize'),
             output: I18n.t('node.output'),
             compile: I18n.t('node.compile'),
+            accumulate: I18n.t('node.accumulate'),
             resume: I18n.t('node.resume'),
             comment: I18n.t('node.comment'),
             reusable: I18n.t('node.reusable'),
@@ -1584,6 +1585,7 @@ const canvas = {
         };
         if (type === 'source') return this._defaultSourceParams();
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
+        if (type === 'accumulate') return { lineage_name: '', identity: 'row', key_columns: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
         if (type === 'biblio') return {
@@ -1703,6 +1705,13 @@ const canvas = {
             var rows = params.row_count || '';
             if (!name) return I18n.t('dataSource.none');
             return I18n.t('settings.file') + ': ' + name + (rows ? '\n' + rows + ' ' + I18n.t('settings.rows') : '');
+        }
+        if (type === 'accumulate') {
+            var lineage = String(params.lineage_name || '').trim() || I18n.t('settings.accumulateUntitled');
+            var policy = params.identity === 'columns'
+                ? I18n.t('settings.accumulateColumns') + ': ' + (String(params.key_columns || '').trim() || '—')
+                : I18n.t('settings.accumulateRow');
+            return I18n.t('settings.accumulateName') + ': ' + lineage + '\n' + policy;
         }
         if (type === 'process') {
             var op = params.operation || '';

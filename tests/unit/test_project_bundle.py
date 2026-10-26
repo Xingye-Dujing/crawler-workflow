@@ -143,6 +143,45 @@ class TestBuildAndImport:
         assert target_datasets.get(upload['dataset_id']) is not None
         assert target_datasets.refs_for('项目A')['node-0']['dataset_id'] == upload['dataset_id']
 
+    def test_a_cumulative_lineage_travels_with_the_bundle(self, stores, tmp_path, monkeypatch):
+        dataset, template = _seed(stores)
+        lineage = stores['datasets'].append_lineage(
+            '累积关键词',
+            pd.DataFrame([{'标题': '历史'}], columns=['标题']),
+        )
+        workflow = _workflow(dataset['dataset_id'], template['id'])
+        workflow['nodes'].append(
+            {
+                'id': 'node-9',
+                'type': 'accumulate',
+                'params': {'lineage_name': '累积关键词', 'identity': 'row', 'key_columns': ''},
+            }
+        )
+        workflow['connections'].append({'from': 'node-0', 'to': 'node-9'})
+        stores['workflows'].save('项目A', workflow)
+
+        payload, _filename, _warnings = build_bundle(
+            ['项目A'], dataset_store=stores['datasets'], workflow_manager=stores['workflows']
+        )
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            manifest = json.loads(archive.read('manifest.json'))
+            assert manifest['lineages'][0]['name'] == '累积关键词'
+            assert manifest['lineages'][0]['current_dataset_id'] == lineage['lineage']['current_dataset_id']
+            assert lineage['lineage']['current_dataset_id'] in {row['id'] for row in manifest['datasets']}
+
+        other = tmp_path / 'other'
+        monkeypatch.setattr(Config, 'REUSABLE_DIR', str(other / 'reusable_nodes'))
+        target_datasets = DatasetStore(str(other / 'datasets.db'))
+        target_workflows = WorkflowManager(str(other / 'workflows'))
+        target_datasets.append_lineage('累积关键词', pd.DataFrame([{'标题': '本地'}], columns=['标题']))
+        summary = import_bundle(io.BytesIO(payload), dataset_store=target_datasets, workflow_manager=target_workflows)
+        assert summary['lineages'] == [{'from': '累积关键词', 'to': '累积关键词 (2)', 'version': 1}]
+        imported = target_workflows.load('项目A')
+        node = next(row for row in imported['nodes'] if row.get('type') == 'accumulate')
+        assert node['params']['lineage_name'] == '累积关键词 (2)'
+        assert target_datasets.lineage('累积关键词 (2)')['rows'] == 1
+        assert target_datasets.lineage('累积关键词')['rows'] == 1
+
     def test_import_never_overwrites_existing_workflows_or_template_names(self, stores, tmp_path, monkeypatch):
         _seed(stores)
         payload, _filename, _warnings = build_bundle(

@@ -393,6 +393,10 @@ def compute_columns(nodes: dict, connections: list) -> dict:
             # is the whole point — downstream reads canonical names whatever the sources called
             # their columns.
             out[nid] = list(FUSE_OUTPUT_COLUMNS)
+        elif ntype == 'accumulate':
+            # It appends rows and passes the union through, so the schema is exactly the
+            # upstream schema (unknown when the upstream is unknown).
+            out[nid] = merged
         else:
             out[nid] = None  # source/comment/resume/visualize/output/compile: unknown or non-tabular
     return out

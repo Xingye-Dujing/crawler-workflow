@@ -14,6 +14,7 @@ takes the node dict, returns no rows), so it proves the pattern with zero behavi
 """
 
 import contextlib
+import re
 
 import pandas as pd
 from api.http import _optional_int, _safe_int
@@ -204,6 +205,38 @@ def execute_resume_node(node: dict, ctx: dict):
         rows = rows[:limit]
     add_log(t('resume.loaded', rid=run_id, nid=_adopted_label(node_id), n=len(rows)))
     return rows
+
+
+def execute_accumulate_node(node: dict, current_input: list, ctx: dict = None):
+    """Append this run's rows to a named lineage and pass the full table downstream.
+
+    The lineage is versioned in ``DatasetStore``; the node's output is the current
+    full table, so downstream analysis sees history, while the run record still
+    carries that version's row list. Identity is the user's explicit choice:
+    whole-row equality or named key columns — never an auto-picked key.
+    """
+    params = node.get('params') or {}
+    name = str(params.get('lineage_name') or '').strip()
+    identity = str(params.get('identity') or 'row').strip().lower()
+    key_columns = [part.strip() for part in re.split('[,，;；]', str(params.get('key_columns') or '')) if part.strip()]
+    result = get_dataset_store().append_lineage(
+        name,
+        pd.DataFrame(current_input or []),
+        identity=identity,
+        key_columns=key_columns,
+        run_id=str((ctx or {}).get('run_id') or ''),
+        node_id=str(node.get('id') or ''),
+    )
+    add_log(
+        t(
+            'accumulate.done',
+            name=name,
+            added=result['added'],
+            total=result['rows'],
+            version=result['lineage']['version'],
+        )
+    )
+    return result['frame'].to_dict('records')
 
 
 def execute_upload_node(node: dict):
