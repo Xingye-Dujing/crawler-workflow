@@ -8579,10 +8579,9 @@ var runsManager = {
             /* Waiting requests come back with the records: the panel that shows
                what has run is where someone looks for what has not started. */
             this._queue = (result.ok && result.queue) || [];
-            this.render(this._lastRuns);
-            /* The table was replaced: whatever row had been expanded is gone, and
-               a stale flag would silence auto-refresh for a detail nobody can see. */
             this._detail = null;
+            this._compare = null;
+            this.render(this._lastRuns);
         } catch (e) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
         }
@@ -8614,6 +8613,7 @@ var runsManager = {
         if (next === this._tab) return;
         this._tab = next;
         this._detail = null;
+        this._compare = null;
         this._lastRuns = [];
         this._shown = [];
         this.refresh();
@@ -8639,8 +8639,9 @@ var runsManager = {
            expanded row can only have come from the last render — and every path
            that wipes rows (a manual refresh, a re-render) clears the flag with
            them. A real `querySelector` here would ask the page a question the
-           panel's own bookkeeping already answers truthfully. */
-        return !!this._detail;
+           panel's own bookkeeping already answers truthfully. A comparison row
+           is the same kind of transient detail and pauses auto-refresh too. */
+        return !!this._detail || !!this._compare;
     },
 
     /* Any listed record still claiming that no verdict has been written for it.
@@ -8791,6 +8792,8 @@ var runsManager = {
         /* Remembered so a button can ask "which workflow is this row?" without
            the answer having to be woven into its onclick attribute. */
         this._shown = runs || [];
+        /* The table is about to be replaced; a comparison row cannot survive it. */
+        this._compare = null;
         var body = document.getElementById('runs-mgr-body');
         var count = document.getElementById('runs-mgr-count');
         if (!body) return;
@@ -8842,6 +8845,10 @@ var runsManager = {
             if (resumable) {
                 ops += '<button class="runs-mgr-btn" onclick="runsManager.continueRun(\'' + r.run_id + '\')">' + I18n.t('runsMgr.resume') + '</button>';
                 ops += '<button class="runs-mgr-btn" onclick="runsManager.restart(\'' + r.run_id + '\')">' + I18n.t('runsMgr.restart') + '</button>';
+            }
+            if (runsManager._tab === 'workflow' && runs.length > 1) {
+                ops += '<button class="runs-mgr-btn" onclick="runsManager.compare(\'' + r.run_id + '\')">' +
+                    I18n.t('runsMgr.compare') + '</button>';
             }
             ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + r.run_id + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\')">' + I18n.t('runsMgr.detail') + '</button>';
@@ -9099,6 +9106,142 @@ var runsManager = {
             if (rows[i].dataset && String(rows[i].dataset.runId) === String(runId)) return rows[i];
         }
         return null;
+    },
+
+    /* ── run-to-run comparison ─────────────────────────────────────
+       The server owns the diff (DataAnalysisService.diff); this panel only asks
+       which run to compare with, then draws the node summary and the chosen
+       node's added/removed samples. A comparison row lives beside the run row
+       that started it and survives until closed or the table is refreshed. */
+    async compare(runId) {
+        var others = (this._shown || []).filter(function (row) { return row.run_id !== runId; });
+        if (!others.length) {
+            showToast(I18n.t('runsMgr.compareNeedOther'));
+            return;
+        }
+        var labels = others.map(function (row) {
+            return row.run_id + ' · ' + (row.started_at || '') + ' · ' + (row.workflow_name || '');
+        });
+        var chosen = await showDialog({
+            message: I18n.t('runsMgr.comparePick'),
+            list: labels,
+            buttons: [{ label: I18n.t('dialog.cancel'), value: null }],
+        });
+        if (!chosen) return;
+        var other = others[labels.indexOf(chosen)];
+        if (!other) return;
+        try {
+            var resp = await fetch(
+                '/api/runs/compare?a=' + encodeURIComponent(runId) + '&b=' + encodeURIComponent(other.run_id)
+            );
+            var result = await resp.json();
+            if (!resp.ok || !result.ok || !result.diff) {
+                showToast((result && result.error) || I18n.t('runsMgr.compareFailed'));
+                return;
+            }
+            this.closeCompare();
+            var row = this._rowFor(runId);
+            if (!row) return;
+            this._compare = result.diff;
+            var tr = document.createElement('tr');
+            tr.id = 'runs-mgr-compare';
+            tr.innerHTML = '<td colspan="8" class="runs-mgr-detail runs-compare">' +
+                this._compareHtml(result.diff) + '</td>';
+            row.parentNode.insertBefore(tr, row.nextSibling);
+        } catch (e) {
+            showToast(I18n.t('runsMgr.compareFailed'));
+        }
+    },
+
+    closeCompare() {
+        var row = document.getElementById('runs-mgr-compare');
+        if (row && row.parentNode) row.parentNode.removeChild(row);
+        this._compare = null;
+    },
+
+    _compareValue(value) {
+        if (value === null || value === undefined) return '';
+        var text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        return text.length > 80 ? text.slice(0, 77) + '...' : text;
+    },
+
+    _compareSamples(titleKey, rows, total, columns) {
+        if (!total) return '';
+        var cols = (columns || []).slice(0, 8);
+        if (!cols.length && rows && rows.length) cols = Object.keys(rows[0]).slice(0, 8);
+        if (!cols.length) return '';
+        var head = cols.map(function (col) { return '<th>' + escapeHtml(col) + '</th>'; }).join('');
+        var body = (rows || []).slice(0, 10).map(function (row) {
+            return '<tr>' + cols.map(function (col) {
+                return '<td>' + escapeHtml(runsManager._compareValue(row[col])) + '</td>';
+            }).join('') + '</tr>';
+        }).join('');
+        var shown = Math.min((rows || []).length, 10);
+        var more = total > shown ? ' ' + I18n.t('runsMgr.compareMore', { n: total - shown }) : '';
+        return '<div class="runs-compare-samples">' +
+            '<div class="runs-compare-subtitle">' + I18n.t(titleKey) + ' (' + total + ')' + escapeHtml(more) + '</div>' +
+            '<div class="runs-compare-scroll">' +
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' + head + '</tr></thead><tbody>' +
+            body + '</tbody></table></div></div>';
+    },
+
+    _compareHtml(diff) {
+        var self = this;
+        var notes = [];
+        if (!diff.same_workflow) notes.push(I18n.t('runsMgr.compareWorkflowDiff'));
+        if (!diff.same_shape) notes.push(I18n.t('runsMgr.compareShapeDiff'));
+        if (diff.key_used) notes.push(I18n.t('runsMgr.compareKeyUsed', { key: diff.key_used }));
+        var nodes = (diff.nodes || []).map(function (node) {
+            var left = self.nodeStatusInfo(node.status_a);
+            var right = self.nodeStatusInfo(node.status_b);
+            return '<tr>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(node.title || node.node_id) +
+                '<span class="wf-snap-source">' + escapeHtml(node.node_id) + '</span></td>' +
+                '<td>' + escapeHtml(I18n.t(left.key)) + ' → ' + escapeHtml(I18n.t(right.key)) + '</td>' +
+                '<td>' + node.rows_a + ' → ' + node.rows_b + '</td>' +
+                '<td>' + (node.row_delta > 0 ? '+' : '') + node.row_delta + '</td>' +
+                '</tr>';
+        }).join('');
+        var node = diff.node || {};
+        var table = diff.diff || {};
+        var detail = '';
+        if (node.node_id) {
+            var columns = (table.columns_added || []).concat(table.columns_removed || []);
+            var columnNote = columns.length
+                ? '<div class="runs-compare-subtitle">' +
+                    I18n.t('runsMgr.compareColumns', {
+                        added: (table.columns_added || []).join(', ') || '-',
+                        removed: (table.columns_removed || []).join(', ') || '-',
+                    }) + '</div>'
+                : '';
+            detail = '<div class="runs-compare-detail">' +
+                '<div class="runs-compare-subtitle">' +
+                I18n.t('runsMgr.compareNode', { name: node.title || node.node_id }) + '</div>' +
+                '<div class="runs-compare-counts">' +
+                I18n.t('runsMgr.compareCounts', {
+                    added: table.added_count || 0,
+                    removed: table.removed_count || 0,
+                    changed: table.changed_count || 0,
+                }) + '</div>' +
+                columnNote +
+                (table.key_error ? '<div class="runs-compare-note">' + escapeHtml(table.key_error) + '</div>' : '') +
+                this._compareSamples('runsMgr.compareAdded', table.added, table.added_count, table.columns_common) +
+                this._compareSamples('runsMgr.compareRemoved', table.removed, table.removed_count, table.columns_common) +
+                '</div>';
+        }
+        return '<div class="runs-compare-head">' +
+            '<span class="rm-meta-title">' + I18n.t('runsMgr.compareTitle') + '</span>' +
+            '<span class="runs-compare-pair">' + escapeHtml(diff.a.run_id) + ' ↔ ' + escapeHtml(diff.b.run_id) + '</span>' +
+            '<button class="runs-mgr-btn" onclick="runsManager.closeCompare()">' +
+            I18n.t('runsMgr.compareClose') + '</button></div>' +
+            notes.map(function (note) { return '<div class="runs-compare-note">' + escapeHtml(note) + '</div>'; }).join('') +
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('runsMgr.compareColNode') + '</th>' +
+            '<th>' + I18n.t('runsMgr.compareColStatus') + '</th>' +
+            '<th>' + I18n.t('runsMgr.compareColRows') + '</th>' +
+            '<th>' + I18n.t('runsMgr.compareColDelta') + '</th>' +
+            '</tr></thead><tbody>' + nodes + '</tbody></table>' +
+            detail;
     },
 
     async detail(runId) {

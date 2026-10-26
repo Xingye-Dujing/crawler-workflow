@@ -44,6 +44,7 @@ from api.locks import bp as locks_bp
 from api.project import bp as project_bp
 from api.report import bp as report_bp
 from api.reusable import bp as reusable_bp
+from api.run_compare import bp as run_compare_bp
 from api.schedules import bp as schedules_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
@@ -6636,6 +6637,7 @@ app.register_blueprint(biblio_bp)
 # restoring is done by the browser from the snapshot body this Blueprint returns.
 app.register_blueprint(workflow_history_bp)
 app.register_blueprint(project_bp)
+app.register_blueprint(run_compare_bp)
 # Reusable-node templates: authored fragments offered by the canvas picker. Nothing here
 # executes them; the browser expands on Run and ``_begin_run``/``_scheduled_canvas`` expand a
 # saved file's group before the engine sees it.

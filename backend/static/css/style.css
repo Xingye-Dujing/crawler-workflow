@@ -2391,6 +2391,47 @@ button.history-del:hover {
   border-left: 3px solid var(--line);
   padding: 10px 12px;
 }
+.runs-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.runs-compare-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.runs-compare-pair {
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.runs-compare-note {
+  font-size: 10px;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+.runs-compare-detail {
+  border-top: 1px solid var(--line2);
+  padding-top: 8px;
+}
+.runs-compare-subtitle {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 6px 0 4px;
+}
+.runs-compare-counts {
+  font-size: 11px;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.runs-compare-scroll {
+  overflow-x: auto;
+}
+.runs-compare-samples {
+  margin-top: 4px;
+}
 .rm-meta {
   display: flex;
   align-items: center;

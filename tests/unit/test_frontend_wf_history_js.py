@@ -235,6 +235,25 @@ class TestProjectBundleUi:
         assert imported['toasts'] == ['IMPORTED 1: 项目A (2)']
 
 
+class TestRunCompareUi:
+    def test_choosing_the_other_run_draws_the_server_diff_beside_the_row(self, wfh):
+        compared = wfh['run_compare']
+        assert compared['requests'] == ['/api/runs/compare?a=r1&b=r2']
+        assert compared['messages'] == ['Compare with?']
+        assert compared['has_diff'] is True
+        assert compared['row_id'] == 'runs-mgr-compare'
+        html = compared['html']
+        for text in ('RUN-COMPARE', 'node-0', 'Added rows', 'Removed rows', '新条目', '旧条目'):
+            assert text in html, text
+        assert compared['toasts'] == []
+        assert compared['closed'] is True
+
+    def test_the_compare_door_is_only_on_the_workflow_tab(self):
+        source = WORKFLOW_JS.read_text(encoding='utf-8')
+        assert "runsManager._tab === 'workflow' && runs.length > 1" in source
+        assert 'runsManager.compare(' in source
+
+
 class TestPageWiring:
     def test_the_history_containers_and_save_bar_exist(self):
         page = INDEX_HTML.read_text(encoding='utf-8')

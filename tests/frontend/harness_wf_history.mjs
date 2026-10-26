@@ -72,6 +72,26 @@ const DICT = {
         'wfProject.importedNone': 'IMPORTED-NONE',
         'wfProject.warnings': '{n} warnings',
         'wfProject.importFailed': 'IMPORT-FAILED',
+        'runsMgr.compare': 'Compare',
+        'runsMgr.comparePick': 'Compare with?',
+        'runsMgr.compareNeedOther': 'NO-OTHER-RUN',
+        'runsMgr.compareFailed': 'COMPARE-FAILED',
+        'runsMgr.compareTitle': 'RUN-COMPARE',
+        'runsMgr.compareClose': 'Close comparison',
+        'runsMgr.compareColNode': 'Node',
+        'runsMgr.compareColStatus': 'Status',
+        'runsMgr.compareColRows': 'Rows',
+        'runsMgr.compareColDelta': 'Delta',
+        'runsMgr.compareNode': 'Table: {name}',
+        'runsMgr.compareCounts': 'ADDED {added} REMOVED {removed} CHANGED {changed}',
+        'runsMgr.compareColumns': 'COLUMNS +{added} / -{removed}',
+        'runsMgr.compareAdded': 'Added rows',
+        'runsMgr.compareRemoved': 'Removed rows',
+        'runsMgr.compareMore': '+{n} more',
+        'runsMgr.compareWorkflowDiff': 'WORKFLOW-DIFF',
+        'runsMgr.compareShapeDiff': 'SHAPE-DIFF',
+        'runsMgr.compareKeyUsed': 'KEY {key}',
+        'runsMgr.node.done': 'Done',
         'style.layoutBaselineNone': 'NO-BASELINE-YET',
         'style.layoutBaselineMissing': 'BASELINE-GONE',
         'style.layoutHint': 'Applied by Layout',
@@ -145,9 +165,9 @@ const I18n = {
 const sandbox = { ...baseSandbox(), I18n, RunState: { running: false } };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__wfh = { wfFiles, workflow, LayoutStrategy };', sandbox);
+vm.runInContext(src + '\n;globalThis.__wfh = { wfFiles, workflow, LayoutStrategy, runsManager };', sandbox);
 
-const { wfFiles, workflow, LayoutStrategy } = sandbox.__wfh;
+const { wfFiles, workflow, LayoutStrategy, runsManager } = sandbox.__wfh;
 const doc = sandbox.document;
 const body = doc.getElementById('workflows-mgr-body');
 const tabs = doc.getElementById('workflows-tabs');
@@ -187,6 +207,37 @@ let routes = {
         summary: { workflows: [{ from: '项目A', to: '项目A (2)' }], datasets: [], templates: [], warnings: [] },
     },
     projectWarnings: 0,
+    runCompare: {
+        ok: true,
+        diff: {
+            a: { run_id: 'r1', workflow_name: '日报', status: 'completed' },
+            b: { run_id: 'r2', workflow_name: '日报', status: 'completed' },
+            same_workflow: true,
+            same_shape: true,
+            nodes: [
+                {
+                    node_id: 'node-0',
+                    title: '输出',
+                    status_a: 'done',
+                    status_b: 'done',
+                    rows_a: 2,
+                    rows_b: 3,
+                    row_delta: 1,
+                },
+            ],
+            node: { node_id: 'node-0', title: '输出', rows_a: 2, rows_b: 3, row_delta: 1 },
+            diff: {
+                added_count: 1,
+                removed_count: 1,
+                changed_count: 0,
+                columns_common: ['标题'],
+                columns_added: [],
+                columns_removed: [],
+                added: [{ 标题: '新条目' }],
+                removed: [{ 标题: '旧条目' }],
+            },
+        },
+    },
     reusableGet: {
         ok: true,
         template: {
@@ -231,6 +282,7 @@ sandbox.fetch = (url, options) => {
     }
     let payload = { ok: true };
     if (target.indexOf('/api/project/import') >= 0) payload = routes.projectImport;
+    else if (target.indexOf('/api/runs/compare') >= 0) payload = routes.runCompare;
     else if (target.indexOf('/api/workflow/history/save') >= 0) payload = routes.save;
     else if (target.indexOf('/api/workflow/history/delete') >= 0) payload = routes.delete;
     else if (target.indexOf('/api/workflow/history/rename') >= 0) payload = routes.historyRename;
@@ -695,5 +747,35 @@ out.project_import = {
     list_reads: requests.filter((r) => r.url.indexOf('/api/workflow/list') >= 0).length,
     toasts: toasts.slice(),
 };
+
+/* ── run-to-run comparison: choose the other run, draw the server diff ── */
+resetCalls();
+runsManager._tab = 'workflow';
+runsManager._shown = [
+    { run_id: 'r1', started_at: '2026-10-26 10:00', workflow_name: '日报' },
+    { run_id: 'r2', started_at: '2026-10-26 10:05', workflow_name: '日报' },
+];
+let compareRow = null;
+runsManager._rowFor = () => ({
+    nextSibling: null,
+    parentNode: {
+        insertBefore(tr) {
+            compareRow = tr;
+        },
+    },
+});
+dialogAnswer = 'r2 · 2026-10-26 10:05 · 日报';
+await runsManager.compare('r1');
+out.run_compare = {
+    requests: requests.map((r) => r.url),
+    messages: dialogMessages.slice(),
+    has_diff: !!runsManager._compare,
+    row_id: compareRow ? compareRow.id : '',
+    html: compareRow ? compareRow.innerHTML : '',
+    toasts: toasts.slice(),
+};
+runsManager.closeCompare();
+out.run_compare.closed = runsManager._compare === null;
+dialogAnswer = true;
 
 process.stdout.write(JSON.stringify(out));

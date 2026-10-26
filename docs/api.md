@@ -48,6 +48,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
+| `/api/runs/compare` | GET | `?a=&b=&node=&key=&limit=` 对比两次运行：返回 `{a,b,same_workflow,same_shape,nodes,node,diff,key_used}`。`nodes` 是共同节点的状态/行数；`node` 默认取最近开始且有行的共同节点，`diff` 是它的新增/消失/变化行（`key` 仅显式给出时才判定 changed）。运行/节点不存在 404 或 400 具名拒绝；单节点超过 200000 行拒绝对比 |
 | `/api/runs/resumable` | POST | 查询指定工作流最近一次可续跑的中断运行（读之前先顺手判定本进程遗留的"运行中/正在停止"行，不重启服务也能进入续跑横幅） |
 | `/api/runs/for-workflow` | POST | **运行记录「当前工作流」页签**的数据源：`{workflow, limit?}`，按与「继续」相同的**结构指纹**（节点 id/类型/连线；改参数仍匹配，增删节点或改线不匹配）列出该画布的运行，**包含已完成/运行中**，新→旧；每条带 `nodes`（节点状态/行数）、`resumable`、`rows_kept`、`duration_seconds`；响应另含 `latest_run_id`、`workflow_fingerprint` 与 `queue`。空/畸形画布返回空列表（畸形结构 400 并具名） |
 | `/api/runs/list` | GET | 分页列出运行记录（每条带 `workflow_name`（并行时为全部工作流名，` + ` 连接）、`wf_count`、`mode`、`headless`、`forced_visible`（遗留字段，恒 0：#148 后再没有把无头换成窗口的强制，故不再被写、也不再参与展示），面板据此打「并行 ×N / 串行 ×N」与「无头 / 窗口」标；`status` 可能是 `running` / `stopping` / `interrupted` / `completed` / `failed` / `abandoned`，其中 `stopping` 由「停止」请求就地写入、结论仍由运行自己写。每条还带 `duration_seconds`（运行时长 = `finished_at` − `started_at`；续跑从不刷新 `started_at`，故它是**跨所有尝试的总墙钟时间**；运行中/无法解析时为空），运行记录面板据此多出一列「运行时长」（`MM:SS`，过一小时 `H:MM:SS`，无值为破折号——不谎报 0）。这次读取同时是本进程遗留记录的修复时机） |
