@@ -109,17 +109,21 @@ Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上�
   输出带 剧名 / 集序号 / 分集ID，某集没收满、某部剧进不去、或播放流中途切到了别的剧都会在结束时
   **具名报错**（陌生剧的行按请求体的 book 丢弃，绝不盖本剧剧名）、已采行照常保留，
   采集量只由你填的目标数决定，支持分批输出、上游喂链接、多账号与持久 Profile。→ [`docs/collection.md`](docs/collection.md)
-- **第二采集方式（CatBus）**：数据源与评论节点可以选择用 [CatBus](https://github.com/cv-cat/catbus) 代替本机浏览器。
-  它是一层子进程边界（`catbus-crawler-workflow` 的 JSONL stdout + stderr 摘要信封），不是第二个爬虫实现：
-  **哪些平台 × 模式可采、输出哪些列、哪一列是它的身份，全部读自适配器自己的 `capabilities` 清单**（按 5 分钟缓存），
-  所以本项目不抄一份能力表；清单里没有的组合，面板里那一格就置灰并写明原因，运行时也**按名拒绝**，绝不静默换后端、
-  换榜单或降级成一次空采集。行仍然一行一个事务落库、按行流式到达即入账，中途停止保留已采到的每一条。
+- **第二采集方式（CatBus）**：数据源与评论节点按 **平台 × 引擎 × 功能** 组织——先选平台，再选 Selenium 或
+  [CatBus](https://github.com/cv-cat/catbus)，功能列表随引擎变化。它是一层子进程边界（`catbus-crawler-workflow`
+  的 JSONL stdout + stderr 摘要信封），不是第二个爬虫实现：**哪些平台 × 功能可采、输出哪些列、参数是什么、
+  哪一列是它的身份，全部读自适配器自己的 `capabilities` 清单**（按 5 分钟缓存），所以本项目不抄一份能力表；
+  CatBus 独有的读命令（粉丝列表、热搜词、直播间、收藏夹、合集……）自动成为可选功能，写操作在清单生成时机械排除。
+  清单里不可运行的组合**列着、置灰、写明原因**，运行时也**按名拒绝**，绝不静默换后端、换榜单或降级成一次空采集；
+  节点上填了适配器不消费的采集条件（时间窗、评论预览等）同样在起子进程之前拒绝。行仍然一行一个事务落库、
+  按行流式到达即入账，中途停止保留已采到的每一条。
   两条与浏览器后端的真实差异都**打印出来**：CatBus 没有偏移量（续跑重放靠去重账本，不靠游标；
   跨运行水位因此只界定「哪些行入库」而不省请求），以及它用**自己的账号文件**（`catbus <平台> auth login`），
   与本项目存的 Cookie 互不相干——运行前的登录门按后端分别发问，键也分开（`bilibili@work#catbus`），
   一侧的死登录不会拦下另一侧的运行。可用性由本机决定：找不到 Node、找不到适配器、Node 版本过旧都各自有名有姓，
-  此时面板不再给出这一项。两个本机路径（适配器入口与 Node）在「设置」面板里填，**不必改 `PATH`**，
-  留空就按本机系统自动查找。启用方式见 [`docs/collection.md` 的「让它真的能跑」](docs/collection.md#让它真的能跑)。→ [`docs/collection.md`](docs/collection.md)
+  此时引擎选项仍在、置灰并写明原因。两个本机路径（适配器入口与 Node）在「设置」面板里填，**不必改 `PATH`**，
+  留空就按本机系统自动查找。快手 / TikTok / 京东 / 淘宝 / 闲鱼目前只有 CatBus 引擎。启用方式见
+  [`docs/collection.md` 的「让它真的能跑」](docs/collection.md#让它真的能跑)。→ [`docs/collection.md`](docs/collection.md)
 - **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调；
   BERT 有**两个运行时**——装了 torch/transformers 就用它（开发机可上 GPU），否则用 onnxruntime + tokenizers 跑导出的 ONNX 图，**打包版就是这一条**，日志会说明是哪个运行时、什么精度答的）、
   情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)

@@ -59,6 +59,10 @@ def adapter(app_module, monkeypatch, tmp_path):
     monkeypatch.setattr(bridge, 'mode_state', lambda platform, mode: ('available', ''))
     monkeypatch.setattr(bridge, 'columns_for', lambda platform, mode: ('标题', '链接', '评论ID', '文章URL'))
     monkeypatch.setattr(bridge, 'identity_for', lambda platform, mode: ('链接',))
+    # The real manifest declares which arguments a cell consumes; the stub adapter must answer the
+    # same question, or a keyword the scripted row set obviously used would be refused as an ignored
+    # condition before the fake walk is reached.
+    monkeypatch.setattr(bridge, 'declared_params', lambda platform, mode: ('keyword', 'target_count', 'catbus_account'))
 
     def fake_run(site, mode, params, **kw):
         first = (params.get('urls') or [''])[0]
@@ -91,7 +95,15 @@ def _source_node(**params):
         'recrawl': False,
     }
     base.update(params)
-    return {'id': 'node-1', 'type': 'source', 'title': '采集', 'params': base, 'platform': 'bilibili'}
+    # The canvas stores the platform twice (the node's own field and the form's copy); a fixture that
+    # updated only one would drive a different platform than the node claims to be.
+    return {
+        'id': 'node-1',
+        'type': 'source',
+        'title': '采集',
+        'params': base,
+        'platform': base['platform'],
+    }
 
 
 def _ctx(store, run_id='r-catbus'):
@@ -191,6 +203,58 @@ class TestTheSourceNodeChoosesItsBackend:
             app_module._execute_source_node(_source_node(platform='weibo', backend='catbus'), headless=True, ctx=None)
         assert '列映射尚未实现' in str(raised.value)
         assert adapter == [], 'a cell the manifest refuses must not start a child process'
+
+    def test_a_catbus_only_function_runs_through_the_generic_walk(self, app_module, adapter, monkeypatch):
+        """A platform CatBus alone offers, through a function Selenium never had.
+
+        The executor's dispatch is one ``getattr(crawler, mode.handler)``; the CatBus-only form names
+        ``catbus`` as its handler and carries the command as ``mode_key``, so no per-platform branch is
+        added anywhere. ``kuaishou`` has no Selenium crawler class at all, which is the point.
+        """
+        manifest = {
+            'kuaishou': {
+                'catbus_platform': 'kuaishou',
+                'label': '快手',
+                'modes': {
+                    'user.followers': {
+                        'status': 'available',
+                        'command': 'user followers',
+                        'args': ['user'],
+                        'optional': {'user': 'me'},
+                        'paged': True,
+                        'output': 'User',
+                        'params': ['author', 'target_count', 'catbus_account'],
+                        'columns': ['平台', '用户ID'],
+                        'identity': ['平台', '用户ID'],
+                        'auth': 'required',
+                    }
+                },
+            }
+        }
+        monkeypatch.setattr(bridge, 'manifest_platforms', lambda: manifest)
+        monkeypatch.setattr(bridge, 'supports', lambda platform, mode: True)
+        monkeypatch.setattr(bridge, 'mode_state', lambda platform, mode: ('available', ''))
+        monkeypatch.setattr(
+            bridge, 'declared_params', lambda platform, mode: ('author', 'target_count', 'catbus_account')
+        )
+        monkeypatch.setattr(bridge, 'identity_for', lambda platform, mode: ('平台', '用户ID'))
+        rows = app_module._execute_source_node(
+            _source_node(
+                platform='kuaishou',
+                collect='user.followers',
+                author='me',
+                # The base fixture carries a keyword for the search form; this cell takes an author,
+                # and a keyword it does not consume is exactly what the refusal tests cover elsewhere.
+                keyword='',
+                backend='catbus',
+            ),
+            headless=True,
+            ctx=None,
+        )
+        assert len(rows) == 2
+        site, mode, params = adapter[0]
+        assert (site, mode) == ('kuaishou', 'user.followers'), 'the manifest cell is the command that ran'
+        assert params['author'] == 'me' and params['target_count'] == 2
 
 
 class TestTheCommentNodeChoosesItsBackend:

@@ -671,11 +671,13 @@ class TestSettingsPanel:
         """The visible promise of the feed rule: once the column is named, the list
         box says in its own face that it will not be crawled."""
         fed = results['settings']['panel_zhihu_fed']
-        assert ' disabled>' in fed, fed
+        assert re.search(r'<textarea[^>]*disabled', fed), fed
         # the same panel without a column keeps the box editable — the disable is
-        # keyed off the fed column, not off comments mode in general
+        # keyed off the fed column, not off comments mode in general. Assert on the
+        # textarea rather than the whole panel: other controls (an unreachable engine
+        # option) are legitimately disabled and must not hide this rule.
         plain = results['settings']['panel_zhihu_comments']
-        assert ' disabled' not in plain
+        assert not re.search(r'<textarea[^>]*disabled', plain), plain
 
     def test_weibo_comments_panel_offers_only_weibo_links(self, results):
         html = results['settings']['panel_weibo_comments']

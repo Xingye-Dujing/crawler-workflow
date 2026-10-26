@@ -54,20 +54,42 @@ class TestTheAdapterAnswers:
         payload = bridge.status_payload()
         assert payload['available'] is True
         assert payload['panelKey'] == '', 'a machine that can run it has nothing to apologise for'
-        for key, state in payload['cells'].items():
-            platform, mode = key.split('.')
-            assert bridge.supports(platform, mode) is (state in ('available', 'partial')), key
+        for key, cell in payload['cells'].items():
+            # Mode keys may contain dots (``user.followers``), so only the first one divides.
+            platform, mode = key.split('.', 1)
+            assert bridge.supports(platform, mode) is bool(cell['runnable']), key
 
     def test_a_supported_cell_names_its_columns_and_its_identity(self, adapter):
         seen = []
-        for key, state in bridge.status_payload()['cells'].items():
-            if state not in bridge._RUNNABLE_STATES:
+        for key, cell in bridge.status_payload()['cells'].items():
+            if not cell['runnable']:
                 continue
-            platform, mode = key.split('.')
+            platform, mode = key.split('.', 1)
             seen.append(key)
             assert bridge.columns_for(platform, mode), f'{key} promises rows with no columns'
             assert bridge.identity_for(platform, mode), f'{key} promises rows nobody can dedupe'
         assert seen, 'no cell of this adapter is runnable, which is a different answer than the tier expects'
+
+    def test_every_read_function_the_real_manifest_offers_has_a_label_and_an_engine_cell(self, adapter):
+        """The 3-D panel is generated from the REAL manifest, so its label catalogue must cover it.
+
+        A mode added in CatBus is a new key here; a computed label would print the key itself, and a
+        matrix that silently dropped the mode would paint another function as the one stored. Both
+        halves are read off the adapter's own answer, not a fixture.
+        """
+        import crawl_capabilities as capabilities
+
+        for platform, entry in adapter.manifest['platforms'].items():
+            for mode in entry.get('modes') or {}:
+                assert capabilities.CATBUS_MODE_LABELS.get(mode), f'{platform}.{mode} has no panel label'
+        payload = capabilities.as_dict()
+        by_platform = {p['platform']: p for p in payload['platforms']}
+        for platform in adapter.manifest['platforms']:
+            assert platform in by_platform, f'{platform} did not reach the panel payload'
+            assert any(e['key'] == 'catbus' for e in by_platform[platform]['engines']), platform
+        # The manifest names platforms Selenium has no class for; they must be listed, CatBus-only.
+        assert 'kuaishou' in by_platform, 'a CatBus-only platform vanished from the panel'
+        assert [e['key'] for e in by_platform['kuaishou']['engines']] == ['catbus']
 
     def test_preflight_answers_without_touching_a_cookie_file(self, adapter, tmp_path, monkeypatch):
         """CatBus' login is its own; the question must not read or write our cookie directory.

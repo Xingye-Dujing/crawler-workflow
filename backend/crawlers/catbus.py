@@ -45,6 +45,24 @@ logger = logging.getLogger(__name__)
 # the one protocol fact this class knows about its caller.
 _COMMENT_PREFIX = 'crawl_'
 
+#: Fields that CHANGE WHAT IS COLLECTED. CatBus keeps unknown parameters on purpose (the adapter is
+#: shared with other callers), so a stored condition it does not consume would run as if it had: a
+#: time window on a search that has none, a comment preview on a backend that never expands them.
+#: A value equal to the field's declared default is not a condition the user chose (the canvas seeds
+#: every platform's defaults), so only a value that departs from it is refused.
+_DATA_PARAMS = (
+    'keyword',
+    'author',
+    'board',
+    'urls',
+    'comment_limit',
+    'start_time',
+    'end_time',
+    'comment_preview',
+    'with_facts',
+    'full_body',
+)
+
 
 class CatbusCrawler(Crawler):
     """One node's CatBus crawl: the source handlers and the comment adapter in one object."""
@@ -109,6 +127,21 @@ class CatbusCrawler(Crawler):
         """
         return self._collect('hot', {'board': board}, target_count)
 
+    def catbus(self, mode_key: str = '', target_count: int = 0, **kwargs):
+        """One CatBus-only read mode (``user.followers``, ``keyword.hot`` …).
+
+        The command is the mode: which arguments it takes, which columns it returns and whether it is
+        paged all come from the manifest through the bridge. A non-paged cell (a single item's detail,
+        a keyword board) declares no ``target_count``, so it is not measured against one — asking a
+        one-row answer to reach fifty and calling the gap 「采得不足」 would be a conviction for a
+        promise the cell never made.
+        """
+        self._guard(mode_key)
+        extra = {key: value for key, value in kwargs.items() if key not in ('resume', 'mode_key')}
+        if not target_count:
+            self._log(t('catbus.startOnce', mode=mode_key))
+        return self._collect(mode_key, extra, int(target_count or 0))
+
     def get_detail(self, url: str) -> dict | None:
         """Not this backend's job: the adapter resolves every card itself.
 
@@ -125,10 +158,12 @@ class CatbusCrawler(Crawler):
         has never seen rather than skip the ones it has.
         """
         self._guard(mode)
-        if self.collected() >= target_count:
+        if target_count and self.collected() >= target_count:
             self._log(t('catbus.targetReached', n=target_count))
             return self.results()
-        self._log(t('catbus.start', mode=mode, n=target_count))
+        self._unsupported_params(mode)
+        if target_count:
+            self._log(t('catbus.start', mode=mode, n=target_count))
         identity = self._identity_column(mode)
         if self.watermark and not identity:
             # A boundary compared against a column nobody declared would bound nothing while the
@@ -167,13 +202,16 @@ class CatbusCrawler(Crawler):
         kept = counts['kept']
         refused = counts['refused'] + len(outcome.warnings)
         self.target_total = target_count
-        if self.collected() < target_count:
+        if target_count and self.collected() < target_count:
             # Convicted, not excused: an adapter list that stopped growing is not proof the site ran
             # out — a soft throttle looks exactly the same — so a short table says 「采得不足」 with the
             # funnel instead of settling clean. The warnings are counted as refused because that is
             # what they are: cards the adapter asked for and did not bring back.
             self.note_end(UNDER_TARGET, scanned=counts['scanned'], kept=kept, refused=refused)
-        self._log(t('catbus.finished', n=kept, want=target_count))
+        if target_count:
+            self._log(t('catbus.finished', n=kept, want=target_count))
+        else:
+            self._log(t('catbus.finishedOnce', mode=mode, n=kept))
         return self.results()
 
     # ─── the comment engine's adapter ─────────────────────────────────────────────────────────
@@ -251,14 +289,36 @@ class CatbusCrawler(Crawler):
                 return str(name)
         return ''
 
+    def _unsupported_params(self, mode: str) -> None:
+        """Refuse a stored data condition this cell's adapter does not consume.
+
+        The adapter documents that unknown keys are kept and ignored, which is the right behaviour
+        for a shared subprocess boundary — but for a node it means a time window or a comment preview
+        the user asked for would produce a table that LOOKS like the condition ran. The manifest's
+        ``params`` list is the adapter's own answer to what it consumes; anything else that departs
+        from its declared default is refused here, before a child process is bought.
+        """
+        import crawl_capabilities as capabilities
+
+        accepted = set(bridge.declared_params(self.platform, mode))
+        defaults = capabilities.declared_defaults(self.platform)
+        ignored = [
+            key
+            for key in _DATA_PARAMS
+            if key not in accepted
+            and str(self.params.get(key) or '').strip()
+            and str(self.params.get(key)) != str(defaults.get(key))
+        ]
+        if ignored:
+            raise ValueError(t('catbus.paramUnsupported', platform=self.platform, mode=mode, params='、'.join(ignored)))
+
     def _run(self, mode: str, extra: dict, on_row, platform: str = '') -> bridge.Outcome:
         """One ``catbus-crawler-workflow run``, carrying the node's form plus this walk's arguments.
 
         Nothing is filtered out on the way. The manifest's ``params`` list says what a cell *takes as
-        an argument*, not what the user asked for, and dropping a stored condition over that difference
-        would produce a table that looks like the condition ran — the exact shape of bug this project
-        refuses elsewhere. The adapter documents that unknown keys are kept and not consumed, so the
-        cost of forwarding is noise; the cost of filtering is a silent wrong answer.
+        an argument*, not what the user asked for; a stored condition the cell does not consume is
+        refused by name before this call (:meth:`_unsupported_params`), never dropped on the way to a
+        table that would look like it ran.
 
         ``catbus_account`` is the only account the adapter may see: the node's ``account`` names a
         Selenium session this crawl never opens, and the bridge drops it (:func:`_params_payload`).

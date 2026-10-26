@@ -93,6 +93,15 @@ for (const sc of scenarios) {
         winDesktop: sandbox.document.documentElement.dataset.winDesktop || '',
         errors: sandbox.__sourceNodeErrors(canvas.nodes[id], 't', !!sc.hasDataInput).map(String),
     };
+    if (sc.switchBackend) {
+        /* The engine is a selector, not a label: switching it may have to move the stored mode to
+           one the new engine offers. Driven through the real handler, then read back from the node. */
+        vm.runInContext(`setSourceBackend(${JSON.stringify(id)}, ${JSON.stringify(sc.switchBackend)})`, sandbox);
+        out[sc.id].afterBackend = canvas.nodes[id].params.backend;
+        out[sc.id].afterMode = canvas.nodes[id].params.collect;
+        out[sc.id].afterHtml = sandbox.__byId('settings-content').innerHTML;
+        out[sc.id].afterErrors = sandbox.__sourceNodeErrors(canvas.nodes[id], 't', !!sc.hasDataInput).map(String);
+    }
     if (sc.refresh) {
         /* The matrix arrives after a restored draft has drawn its nodes, so the
            redraw on load is what turns "平台: 哔哩哔哩" into the board it is set to.

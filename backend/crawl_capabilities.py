@@ -28,6 +28,7 @@ derive columns from real crawls instead.
 import re
 from dataclasses import dataclass, replace
 
+from i18n import t
 from utils import machine_deps
 from utils.helpers import as_bool, split_urls
 
@@ -483,6 +484,139 @@ _BOARD = Field(
     default='popular',
     options=(('popular', 'settings.hotBoardPopular'), ('ranking', 'settings.hotBoardRanking')),
 )
+
+# ─── CatBus 独有模式的字段 ──────────────────────────────────────────────
+# CatBus 清单只声明参数名（``room``/``folder``/``series``…），按钮长什么样是采析绘的事：
+# 控件、标签、校验都在这里；服务端与面板读同一份。共享模式（posts/author/hot/comments）
+# 复用 Selenium 的表单，不在这里重复声明。
+_CATBUS_URLS = Field(
+    key='urls',
+    control='textarea',
+    label_key='settings.urls',
+    name_key='field.urls',
+    required=True,
+    coerce='urls',
+    fed_by='input_column',
+    placeholder='https://…',
+    hint_key='settings.catbusUrlsHint',
+)
+_CATBUS_ROOM = Field(
+    key='room', control='text', label_key='settings.catbusRoom', name_key='field.catbusRoom', required=True
+)
+_CATBUS_FOLDER = Field(
+    key='folder', control='text', label_key='settings.catbusFolder', name_key='field.catbusFolder', required=True
+)
+_CATBUS_SERIES = Field(
+    key='series', control='text', label_key='settings.catbusSeries', name_key='field.catbusSeries', required=True
+)
+_CATBUS_CONVERSATION = Field(
+    key='conversation',
+    control='text',
+    label_key='settings.catbusConversation',
+    name_key='field.catbusConversation',
+    required=True,
+)
+_CATBUS_PRODUCT = Field(
+    key='product',
+    control='text',
+    label_key='settings.catbusProduct',
+    name_key='field.catbusProduct',
+    required=True,
+)
+_CATBUS_COMMENT_ID = Field(
+    key='comment_id',
+    control='text',
+    label_key='settings.catbusCommentId',
+    name_key='field.catbusCommentId',
+    required=True,
+)
+_CATBUS_ACCOUNT = _BACKEND_FIELDS[1]
+
+#: 参数名 → 字段模板。清单里出现的参数都必须在这里有模板；没有就说明适配器加了新参数而
+#: 采析绘还没有对应的框，模式会被拒绝而不是画一个填不了的输入。
+_CATBUS_FIELD_TEMPLATES = {
+    'keyword': _KEYWORD,
+    'target_count': _TARGET,
+    'catbus_account': _CATBUS_ACCOUNT,
+    'author': _AUTHOR,
+    'urls': _CATBUS_URLS,
+    'comment_limit': _COMMENT_LIMIT,
+    'board': _BOARD,
+    'room': _CATBUS_ROOM,
+    'folder': _CATBUS_FOLDER,
+    'series': _CATBUS_SERIES,
+    'conversation': _CATBUS_CONVERSATION,
+    'product': _CATBUS_PRODUCT,
+    'comment_id': _CATBUS_COMMENT_ID,
+}
+
+#: CatBus 模式键 → 面板词。共享模式复用 Selenium 的词；独有模式各有自己的名字。
+#: 拼出来的键是审计盲区（可达性扫描只问它看得见的键），所以这里逐个写全，并有契约测试
+#: 用真实清单的每个模式键核对「有名字」。
+CATBUS_MODE_LABELS = {
+    'posts': 'settings.collectPosts',
+    'author': 'settings.collectAuthor',
+    'hot': 'settings.collectHot',
+    'comments': 'settings.collectComments',
+    'user.get': 'catbus.mode.userGet',
+    'user.search': 'catbus.mode.userSearch',
+    'user.followers': 'catbus.mode.userFollowers',
+    'user.following': 'catbus.mode.userFollowing',
+    'user.likes': 'catbus.mode.userLikes',
+    'user.collects': 'catbus.mode.userCollects',
+    'user.reposts': 'catbus.mode.userReposts',
+    'item.get': 'catbus.mode.itemGet',
+    'item.search': 'catbus.mode.itemSearch',
+    'item.related': 'catbus.mode.itemRelated',
+    'item.list': 'catbus.mode.itemList',
+    'item.media': 'catbus.mode.itemMedia',
+    'item.categories': 'catbus.mode.itemCategories',
+    'comment.list': 'catbus.mode.commentList',
+    'comment.replies': 'catbus.mode.commentReplies',
+    'live.get': 'catbus.mode.liveGet',
+    'live.list': 'catbus.mode.liveList',
+    'live.search': 'catbus.mode.liveSearch',
+    'live.categories': 'catbus.mode.liveCategories',
+    'live.gifts': 'catbus.mode.liveGifts',
+    'live.products': 'catbus.mode.liveProducts',
+    'live.media': 'catbus.mode.liveMedia',
+    'live.rank': 'catbus.mode.liveRank',
+    'live.replays': 'catbus.mode.liveReplays',
+    'keyword.hot': 'catbus.mode.keywordHot',
+    'keyword.suggest': 'catbus.mode.keywordSuggest',
+    'feed.list': 'catbus.mode.feedList',
+    'feed.categories': 'catbus.mode.feedCategories',
+    'folder.list': 'catbus.mode.folderList',
+    'folder.items': 'catbus.mode.folderItems',
+    'series.list': 'catbus.mode.seriesList',
+    'series.items': 'catbus.mode.seriesItems',
+    'history.list': 'catbus.mode.historyList',
+    'topic.search': 'catbus.mode.topicSearch',
+    'poi.search': 'catbus.mode.poiSearch',
+    'notice.list': 'catbus.mode.noticeList',
+    'product.get': 'catbus.mode.productGet',
+    'danmaku.list': 'catbus.mode.danmakuList',
+}
+
+#: 只有 CatBus 能爬、采析绘没有 Selenium 版的平台，以及它们的词。
+#: 平台是否真的出现、有哪些功能仍由适配器清单决定；这里只负责在清单不可用时也能
+#: 把面板上的这一行画出来并说明「引擎不可用」，而不是让已保存的画布变成一个不存在的平台。
+CATBUS_ONLY_PLATFORMS = {
+    'kuaishou': 'platform.kuaishou',
+    'tiktok': 'platform.tiktok',
+    'jd': 'platform.jd',
+    'taobao': 'platform.taobao',
+    'xianyu': 'platform.xianyu',
+}
+
+#: 只有 CatBus 能爬的平台各自的内容来自哪里（网络分组，不是可用性）。
+CATBUS_ONLY_REGIONS = {
+    'kuaishou': 'cn',
+    'tiktok': 'overseas',
+    'jd': 'cn',
+    'taobao': 'cn',
+    'xianyu': 'cn',
+}
 
 #: 红果短剧's four boards. Same shape as bilibili's choice (one board, one row shape), so it
 #: is the same field key and the same refusal path; the stored values are identifiers because
@@ -986,6 +1120,202 @@ def has_platform(platform: str) -> bool:
     return str(platform or '') in _BY_PLATFORM
 
 
+# ─── The engine dimension: 平台 × 引擎 × 功能 ────────────────────────────
+# The Selenium matrix above stays the browser half. CatBus is never copied into it: which modes a
+# platform has under CatBus, their columns, their parameters and their availability are read out of
+# the adapter's own manifest on every request (cached by the bridge). A mode that exists only on
+# CatBus (user.followers, keyword.hot …) is materialised here as an ordinary ``Mode`` so the panel,
+# validation and the executor keep speaking one language.
+
+
+def _catbus_status() -> dict:
+    from services import catbus_bridge
+
+    return catbus_bridge.status_payload()
+
+
+def _catbus_platforms() -> dict:
+    from services import catbus_bridge
+
+    return catbus_bridge.manifest_platforms()
+
+
+def catbus_platform_ids() -> tuple[str, ...]:
+    """Platforms the adapter offers at all — the CatBus-only entries among them."""
+    return tuple(_catbus_platforms())
+
+
+def can_crawl_platform(platform: str, params: dict | None = None) -> bool:
+    """Whether any engine can crawl *platform* for this node.
+
+    A CatBus-only platform (快手/TikTok/京东/淘宝/闲鱼) is crawlable **through CatBus** even though no
+    Selenium crawler class exists for it. ``params`` decides which engine the node asks for; without
+    it, either registry knowing the name is enough (the cookie panel's question).
+    """
+    if has_platform(platform):
+        return True
+    if params is None or is_catbus(params):
+        return str(platform or '') in catbus_platform_ids()
+    return False
+
+
+def engine_default(platform: str) -> str:
+    """Which engine a brand-new node of this platform starts on.
+
+    The browser when this platform has one — every saved canvas and every live-site rule is written
+    around it — and CatBus only where it is the only engine that exists.
+    """
+    return BACKEND_SELENIUM if has_platform(platform) else BACKEND_CATBUS
+
+
+def engine_state(platform: str, backend: str) -> tuple[bool, str]:
+    """``(available, reason_key_or_sentence)`` for one engine on one platform.
+
+    The payload wants a catalogue key (the browser translates it), while validation wants the
+    adapter's own sentence. Callers get the key here and ask :func:`catbus_run_errors` for the run-time
+    wording; the two cannot disagree because both read the same probe.
+    """
+    if backend == BACKEND_SELENIUM:
+        return has_platform(platform), ('' if has_platform(platform) else 'settings.backendNoSelenium')
+    if backend != BACKEND_CATBUS:
+        return False, 'settings.backendUnknown'
+    status = _catbus_status()
+    if not status.get('available'):
+        return False, str(status.get('panelKey') or 'settings.backendProbeFailed')
+    entry = _catbus_platforms().get(platform)
+    if not entry:
+        return False, 'settings.backendNoPlatform'
+    modes = entry.get('modes') or {}
+    if not any(str((cell or {}).get('status')) in ('available', 'partial') for cell in modes.values()):
+        return False, 'settings.backendNoRunnable'
+    return True, ''
+
+
+def engines_for(platform: str) -> tuple[dict, ...]:
+    """Every engine this platform offers, in the order the panel shows them.
+
+    Selenium first (the long-standing default), CatBus second. Only engines that exist for the
+    platform are listed: a CatBus-only platform has no browser entry to grey out, because there is
+    no browser crawl to wait for.
+    """
+    out: list[dict] = []
+    cap = capability(platform)
+    if cap is not None:
+        out.append(
+            {
+                'key': BACKEND_SELENIUM,
+                'labelKey': 'settings.backendSelenium',
+                'available': True,
+                'reasonKey': '',
+                'reason': '',
+                'modes': [m.key for m in cap.modes],
+            }
+        )
+    # Every platform carries the CatBus entry, even one the adapter does not list: the engine is a
+    # first-class choice, and 「CatBus 不提供这个平台」 is an answer the panel can show. Hiding the
+    # engine would make a saved CatBus node look like it had chosen Selenium.
+    available, reason_key = engine_state(platform, BACKEND_CATBUS)
+    entry = _catbus_platforms().get(platform) or {}
+    out.append(
+        {
+            'key': BACKEND_CATBUS,
+            'labelKey': 'settings.backendCatbus',
+            'available': available,
+            'reasonKey': reason_key,
+            'reason': '',
+            'modes': list((entry.get('modes') or {}).keys()),
+        }
+    )
+    return tuple(out)
+
+
+def _selenium_mode(platform: str, mode_key: str) -> Mode | None:
+    cap = capability(platform)
+    if cap is None:
+        return None
+    for mode in cap.modes:
+        if mode.key == mode_key:
+            return mode
+    return None
+
+
+def _catbus_mode_fields(cell: dict) -> tuple[Field, ...] | None:
+    """The form for a CatBus-only mode, from the manifest's declared parameters.
+
+    Returns ``None`` when the adapter declares a parameter this build has no input for: the panel
+    must not show a form missing a required box, so that mode is not offered until 采析绘 catches up.
+    """
+    params = [str(p) for p in (cell.get('params') or [])]
+    args = [str(a) for a in (cell.get('args') or [])]
+    optional = dict(cell.get('optional') or {})
+    required = {params[i] for i, arg in enumerate(args) if i < len(params) and arg not in optional}
+    fields: list[Field] = []
+    for name in params:
+        template = _CATBUS_FIELD_TEMPLATES.get(name)
+        if template is None:
+            return None
+        fields.append(
+            replace(template, required=name in required) if template.required != (name in required) else template
+        )
+    if _RECOLLECT not in fields:
+        fields.append(_RECOLLECT)
+    return tuple(fields)
+
+
+def _catbus_mode(mode_key: str, cell: dict) -> Mode | None:
+    """Materialise one CatBus-only mode as an ordinary ``Mode`` for the panel/validation/executor."""
+    fields = _catbus_mode_fields(cell)
+    if fields is None:
+        return None
+    output = str(cell.get('output') or '')
+    return Mode(
+        key=mode_key,
+        label_key=CATBUS_MODE_LABELS.get(mode_key, ''),
+        handler='catbus',
+        fields=fields,
+        rows='comments' if output == 'Comment' else 'posts',
+        note_key='settings.catbusModeNote',
+        collects='fetch',
+        # CatBus keeps its own account files; the browser pre-run gate is not the one to ask.
+        needs_session=False,
+    )
+
+
+def catbus_mode_objects(platform: str) -> tuple[Mode, ...]:
+    """Every mode the adapter offers for *platform*, shared keys reusing the Selenium declaration.
+
+    Reusing the Selenium ``Mode`` for posts/author/hot/comments keeps one form (keyword/target/board/
+    urls/account) for both engines; a CatBus-only key gets a form built from the manifest's parameters.
+    """
+    entry = _catbus_platforms().get(platform) or {}
+    out: list[Mode] = []
+    for mode_key, cell in (entry.get('modes') or {}).items():
+        existing = _selenium_mode(platform, mode_key)
+        mode = existing or _catbus_mode(mode_key, dict(cell or {}))
+        if mode is not None:
+            out.append(mode)
+    return tuple(out)
+
+
+def catbus_run_errors(platform: str, mode_key: str) -> list[str]:
+    """Why a CatBus run of this cell cannot start, as the detail of a refusal ('' when it can).
+
+    Asked before the run claims the slot. The adapter would refuse too, but a refusal after a browser,
+    an LLM step or a queue turn has been paid for is a refusal that cost the user the run. The caller
+    wraps each detail in ``engine.source_catbus`` so the node is named once, not twice.
+    """
+    from services import catbus_bridge
+
+    info = catbus_bridge.probe()
+    if not info.available:
+        return [t(info.reason_key, **info.reason_params)]
+    state, why = catbus_bridge.mode_state(platform, mode_key)
+    if state in ('available', 'partial'):
+        return []
+    label = str((_catbus_platforms().get(platform) or {}).get('label') or platform)
+    return [why or t('catbus.noRunnableCell', platform=label)]
+
+
 def capability(platform: str) -> Capability | None:
     return _BY_PLATFORM.get(str(platform or ''))
 
@@ -1004,7 +1334,9 @@ def region_of(platform: str) -> str:
     a platform is added.
     """
     cap = capability(platform)
-    return cap.region if cap else ''
+    if cap is not None:
+        return cap.region
+    return CATBUS_ONLY_REGIONS.get(str(platform or ''), '')
 
 
 def serial_only_of(platform: str) -> bool:
@@ -1023,15 +1355,23 @@ def serial_only_of(platform: str) -> bool:
 COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'modal_per_row', 'page_per_row', 'external_app')
 
 
-def needs_session(platform: str, mode_key: str) -> bool:
+def needs_session(platform: str, mode_key: str, backend: str = BACKEND_SELENIUM) -> bool:
     """Whether this crawl is a session crawl — the question the cookie gate asks.
 
     The gate probes per platform, so a canvas whose only node is weibo's 热搜 board
     would be refused for lacking a cookie the measured endpoint never wanted. Unknown
     platform or mode answers True: no answer is not evidence that a crawl is anonymous,
     and the gate staying on for something it cannot judge is the safe direction.
+
+    The engine is part of the question: a CatBus mode reads CatBus' own account files, and its
+    login gate is answered by the adapter's preflight, not by this matrix.
     """
-    mode = mode_for(platform, mode_key)
+    backend = str(backend or BACKEND_SELENIUM).strip().lower()
+    if backend == BACKEND_CATBUS:
+        from services import catbus_bridge
+
+        return catbus_bridge.needs_session(platform, mode_key)
+    mode = mode_for(platform, mode_key, backend)
     return True if mode is None else bool(mode.needs_session)
 
 
@@ -1050,30 +1390,58 @@ def split_regions(platforms) -> dict:
     return split
 
 
-def modes_for(platform: str) -> tuple[Mode, ...]:
+def modes_for(platform: str, backend: str = BACKEND_SELENIUM) -> tuple[Mode, ...]:
+    """The modes one engine offers on one platform.
+
+    ``selenium`` is the static matrix; ``catbus`` is materialised from the adapter's manifest. A
+    caller that does not name an engine keeps the browser answer, which is what every pre-engine
+    caller meant.
+    """
+    backend = str(backend or BACKEND_SELENIUM).strip().lower()
+    if backend == BACKEND_CATBUS:
+        return catbus_mode_objects(platform)
     cap = capability(platform)
     return () if cap is None else cap.modes
 
 
-def mode_keys_for(platform: str) -> tuple[str, ...]:
-    return tuple(m.key for m in modes_for(platform))
+def mode_keys_for(platform: str, backend: str = BACKEND_SELENIUM) -> tuple[str, ...]:
+    return tuple(m.key for m in modes_for(platform, backend))
 
 
-def mode_for(platform: str, mode_key: str) -> Mode | None:
-    """The declared mode, or the platform's first one for an unknown key.
+def mode_for(platform: str, mode_key: str, backend: str = BACKEND_SELENIUM) -> Mode | None:
+    """The declared mode for one engine, or that engine's first runnable mode on an unknown key.
 
-    Falling back is what keeps an old canvas (which never heard of 评论采集 or
-    renamed keys) opening a panel that matches what the executor will do,
-    instead of refusing to render.
+    Falling back is what keeps an old canvas (which never heard of 评论采集 or renamed keys) opening a
+    panel that matches what the executor will do, instead of refusing to render. The fallback is
+    engine-aware: a CatBus node whose stored key the adapter does not offer falls to the first cell
+    CatBus can actually crawl, never to a browser-only mode the CatBus adapter has no handler for.
+
+    When the adapter itself is unavailable, the browser declaration is used as the *shape* so
+    validation can reach :func:`catbus_run_errors` and name the engine's reason — reporting
+    「unknown platform」 for a node whose only problem is an uninstalled adapter would send the user
+    looking for the wrong thing.
     """
-    modes = modes_for(platform)
+    backend = str(backend or BACKEND_SELENIUM).strip().lower()
+    modes = modes_for(platform, backend)
+    if not modes and backend == BACKEND_CATBUS:
+        modes = modes_for(platform, BACKEND_SELENIUM)
     if not modes:
         return None
     wanted = str(mode_key or '').strip()
     for mode in modes:
         if mode.key == wanted:
             return mode
+    if backend == BACKEND_CATBUS:
+        for mode in modes:
+            if _catbus_runnable(platform, mode.key):
+                return mode
     return modes[0]
+
+
+def _catbus_runnable(platform: str, mode_key: str) -> bool:
+    from services import catbus_bridge
+
+    return catbus_bridge.supports(platform, mode_key)
 
 
 def requested_mode_key(node: dict) -> str:
@@ -1094,11 +1462,15 @@ def requested_mode_key(node: dict) -> str:
 
 
 def mode_of_node(node: dict) -> Mode | None:
-    """The mode a stored node asks for, read the way the executor reads it."""
+    """The mode a stored node asks for, read the way the executor reads it.
+
+    The engine is part of the reading: the same 平台 × 功能 can be a different form (and a different
+    handler) under CatBus, and a node's stored ``backend`` is what decides which one this run gets.
+    """
     node = node or {}
     params = node.get('params') or {}
     platform = str(node.get('platform') or params.get('platform') or '')
-    return mode_for(platform, requested_mode_key(node))
+    return mode_for(platform, requested_mode_key(node), backend_of(params))
 
 
 def mode_blocker(mode: Mode | None, system: str | None = None, cloud: bool | None = None) -> str:
@@ -1116,8 +1488,10 @@ def mode_blocker(mode: Mode | None, system: str | None = None, cloud: bool | Non
     return requirement_label_key(mode.requires)
 
 
-def fields_for(platform: str, mode_key: str, with_files: bool = True) -> tuple[Field, ...]:
-    mode = mode_for(platform, mode_key)
+def fields_for(
+    platform: str, mode_key: str, with_files: bool = True, backend: str = BACKEND_SELENIUM
+) -> tuple[Field, ...]:
+    mode = mode_for(platform, mode_key, backend)
     if mode is None:
         return ()
     return tuple(mode.fields) + (FILE_FIELDS if with_files else ())
@@ -1138,8 +1512,16 @@ _NOT_ARGS = frozenset({'recrawl', 'account', 'input_column', 'backend', 'catbus_
 
 
 def crawl_kwargs(mode: Mode, params: dict) -> dict:
-    """Coerce the node's stored parameters into crawler arguments."""
-    return {f.key: f.value_from(params) for f in crawler_fields(mode)}
+    """Coerce the node's stored parameters into crawler arguments.
+
+    A CatBus-only mode tells the executor *which* manifest cell to run through the ``mode_key``
+    argument, because its handler (``CatbusCrawler.catbus``) is one method for every read command —
+    the command itself is the mode, not a platform-specific method name.
+    """
+    out = {f.key: f.value_from(params) for f in crawler_fields(mode)}
+    if mode.handler == 'catbus':
+        out['mode_key'] = mode.key
+    return out
 
 
 def declared_defaults(platform: str) -> dict:
@@ -1148,12 +1530,17 @@ def declared_defaults(platform: str) -> dict:
     Two consumers, one source: the canvas seeds a new node from this, and the
     executor reads a node that never opened its panel as
     ``params.get(key, declared_default)`` — so a widget's preview and the run's
-    figure cannot drift apart.
+    figure cannot drift apart. Both engines are included: the panel switches forms
+    without re-seeding, and a CatBus-only field must already be at its default when
+    the user picks CatBus.
     """
     out: dict = {}
-    for mode in modes_for(platform):
-        for f in mode.fields + FILE_FIELDS:
-            out.setdefault(f.key, f.default)
+    for backend in BACKENDS:
+        for mode in modes_for(platform, backend):
+            for f in mode.fields + FILE_FIELDS:
+                out.setdefault(f.key, f.default)
+    if out or has_platform(platform) or str(platform or '') in CATBUS_ONLY_PLATFORMS:
+        out.setdefault('backend', engine_default(platform))
     return out
 
 
@@ -1271,28 +1658,112 @@ def is_url_cell(cell) -> bool:
     return '://' in text or bool(re.search(r'[?&][A-Za-z0-9_]+=', text))
 
 
-def as_dict() -> dict:
+def as_dict(catbus_status: dict | None = None) -> dict:
     """The whole matrix, ready for ``GET /api/capabilities``.
 
-    Keys are camelCased because the browser reads them directly, and labels
-    stay keys for the same reason: the payload has no language.
+    Three dimensions in one payload: every platform carries its **engines** (which tools can crawl it,
+    and whether THIS machine can start each), every mode names the engines that offer it, and every
+    mode × engine pair carries the **cell** answer (runnable, the adapter's own reason, columns and
+    identity). The browser renders from these; it never keeps a list of which platform or mode exists.
+
+    A CatBus-only platform (快手/TikTok/京东/淘宝/闲鱼) is appended with no browser engine. It is
+    listed even when the adapter is unavailable so the panel can say why nothing can run, instead of
+    silently omitting a platform the user's saved canvas may name.
     """
-    platforms = []
+    status = catbus_status if catbus_status is not None else _catbus_status()
+    cells = dict(status.get('cells') or {})
+    manifest = _catbus_platforms()
+    platforms: list[dict] = []
+
     for cap in CAPABILITIES:
+        modes: list[dict] = []
+        seen: set[str] = set()
+        for mode in cap.modes:
+            cell = _cell_payload(cells.get(f'{cap.platform}.{mode.key}'), status)
+            engines = [BACKEND_SELENIUM]
+            if cell['status'] != 'absent':
+                engines.append(BACKEND_CATBUS)
+            modes.append(
+                _mode_as_dict(
+                    mode,
+                    engines=engines,
+                    cells={BACKEND_SELENIUM: _available_cell(), BACKEND_CATBUS: cell},
+                )
+            )
+            seen.add(mode.key)
+        for mode in catbus_mode_objects(cap.platform):
+            if mode.key in seen:
+                continue
+            cell = _cell_payload(cells.get(f'{cap.platform}.{mode.key}'), status)
+            modes.append(_mode_as_dict(mode, engines=[BACKEND_CATBUS], cells={BACKEND_CATBUS: cell}))
         platforms.append(
             {
                 'platform': cap.platform,
-                'modes': [_mode_as_dict(m) for m in cap.modes],
+                'labelKey': f'platform.{cap.platform}',
+                'engines': list(engines_for(cap.platform)),
+                'modes': modes,
                 'profileRecommended': bool(cap.profile_recommended),
                 'region': cap.region,
                 'serialOnly': bool(cap.serial_only),
                 'parallelRecommended': bool(cap.parallel_recommended),
             }
         )
-    return {'platforms': platforms, 'fileFields': [_field_as_dict(f) for f in FILE_FIELDS]}
+
+    for platform, label_key in CATBUS_ONLY_PLATFORMS.items():
+        entry = manifest.get(platform) or {}
+        modes: list[dict] = []
+        for mode in catbus_mode_objects(platform):
+            cell = _cell_payload(cells.get(f'{platform}.{mode.key}'), status)
+            modes.append(_mode_as_dict(mode, engines=[BACKEND_CATBUS], cells={BACKEND_CATBUS: cell}))
+        platforms.append(
+            {
+                'platform': platform,
+                'labelKey': label_key,
+                'label': str(entry.get('label') or ''),
+                'engines': list(engines_for(platform)),
+                'modes': modes,
+                'profileRecommended': False,
+                'region': CATBUS_ONLY_REGIONS.get(platform, 'cn'),
+                'serialOnly': False,
+                'parallelRecommended': False,
+            }
+        )
+
+    return {
+        'platforms': platforms,
+        'fileFields': [_field_as_dict(f) for f in FILE_FIELDS],
+        'backends': {BACKEND_CATBUS: status},
+    }
 
 
-def _mode_as_dict(mode: Mode) -> dict:
+def _available_cell() -> dict:
+    return {'status': 'available', 'runnable': True, 'reason': '', 'reasonKey': '', 'columns': [], 'identity': []}
+
+
+def _cell_payload(cell: dict | None, status: dict) -> dict:
+    """One 功能 × 引擎 answer, from the adapter's cell plus this machine's probe verdict."""
+    if not status.get('available'):
+        return {
+            'status': 'unavailable',
+            'runnable': False,
+            'reason': '',
+            'reasonKey': str(status.get('panelKey') or 'settings.backendProbeFailed'),
+            'columns': [],
+            'identity': [],
+        }
+    if not cell:
+        return {'status': 'absent', 'runnable': False, 'reason': '', 'reasonKey': '', 'columns': [], 'identity': []}
+    return {
+        'status': str(cell.get('status') or ''),
+        'runnable': bool(cell.get('runnable')),
+        'reason': str(cell.get('reason') or ''),
+        'reasonKey': '',
+        'columns': list(cell.get('columns') or []),
+        'identity': list(cell.get('identity') or []),
+    }
+
+
+def _mode_as_dict(mode: Mode, engines: list[str] | None = None, cells: dict | None = None) -> dict:
     return {
         'key': mode.key,
         'labelKey': mode.label_key,
@@ -1306,6 +1777,11 @@ def _mode_as_dict(mode: Mode) -> dict:
         # The machine requirement travels as its token; whether THIS host meets it is the payload's
         # ``machine`` map. The browser needs both to grey the option out and to say why in its own language.
         'requires': mode.requires,
+        # Which engines offer this function, and what each says about this machine. The panel filters
+        # the mode list by the selected engine and greys a pair it cannot run — never removes it, so a
+        # canvas that STORED the value still shows what it holds.
+        'engines': list(engines if engines is not None else [BACKEND_SELENIUM]),
+        'cells': dict(cells if cells is not None else {BACKEND_SELENIUM: _available_cell()}),
         'fields': [_field_as_dict(f) for f in mode.fields],
     }
 

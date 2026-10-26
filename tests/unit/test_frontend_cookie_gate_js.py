@@ -47,7 +47,10 @@ MATRIX = capabilities.as_dict()
 #: The gate is a run-gate: it is reached only after the canvas validates, and a
 #: source node missing the field its mode requires is refused before any request is
 #: built. So the fixtures carry what the panel would have filled in.
-DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX['platforms']}
+#: Only platforms with at least one function: CatBus-only platforms appear in the payload even when
+#: the adapter is missing, carrying no modes (the engine reason is what the panel shows). The gate
+#: scenarios are all browser crawls, so those entries have nothing to select.
+DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX['platforms'] if entry['modes']}
 
 
 def _source(node_id, platform, mode=None, account=None, **extra):
@@ -166,10 +169,30 @@ def _matrix_with_catbus(cells, available=True):
     """The live matrix plus this machine's answer about the second crawl backend.
 
     Copy-on-write, so a scenario that grows a ``backends`` map cannot change the one every other
-    scenario reads.
+    scenario reads. The per-mode cell and the engine entry are updated too: the panel's validation
+    asks the mode's own ``cells`` map (the three-dimensional answer), not only ``backends`` — a
+    fixture that patched one and not the other would test a world the server cannot produce.
     """
     made = json.loads(json.dumps(MATRIX))
     made['backends'] = {'catbus': {'available': available, 'reasonKey': '', 'panelKey': '', 'cells': cells}}
+    for entry in made['platforms']:
+        engine = next((e for e in entry.get('engines', []) if e.get('key') == 'catbus'), None)
+        if engine is not None:
+            engine['available'] = available
+            engine['reasonKey'] = ''
+        for mode in entry.get('modes', []):
+            cell = cells.get(entry['platform'] + '.' + mode['key'])
+            if cell is None:
+                continue
+            if 'catbus' not in mode.get('engines', []):
+                mode.setdefault('engines', []).append('catbus')
+            mode.setdefault('cells', {})['catbus'] = {
+                **cell,
+                'reason': '',
+                'reasonKey': '',
+                'columns': [],
+                'identity': [],
+            }
     return made
 
 
@@ -868,7 +891,10 @@ class TestTheSecondBackendAtTheGate:
     def test_a_cell_this_machine_cannot_crawl_asks_nothing(self, gate):
         case = gate['catbus-cell-not-runnable-asks-nothing']
         assert case['asked'] is False
-        assert case['ran'] is True, 'the walk itself refuses, by name, with the manifest reason'
+        # The three-dimensional matrix answers this pair at page load, so the panel's own validation
+        # refuses it before the run is paid for — no browser, no preflight, no execute request. The
+        # walk never starts; the mode stays listed and says why (the manifest's own reason).
+        assert case['ran'] is False, 'a cell the engine cannot crawl must not reach the start path'
 
     def test_a_dead_catbus_login_still_refuses_but_offers_no_cookie_panel(self, gate):
         """Hard block, different remedy: 「去更新 Cookie」 would send the user to a session the run never reads."""

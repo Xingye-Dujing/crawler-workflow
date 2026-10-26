@@ -3005,7 +3005,15 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
         """,
         [],
     )
-    driver.execute_script("return runsManager.detail('grp1', document.querySelector('#runs-panel tbody tr'));", [])
+    # ``detail`` fetches and renders asynchronously. The old synchronous call returned before the
+    # microtask ran and only passed because the next WebDriver round trip happened to be slow enough —
+    # measured as a flake in the full tier, passing alone. Await the real promise instead of the clock.
+    driver.execute_async_script(
+        'const done = arguments[arguments.length - 1];'
+        "Promise.resolve(runsManager.detail('grp1', document.querySelector('#runs-panel tbody tr')))"
+        '.then(() => done(), () => done());',
+        [],
+    )
     facts = driver.execute_script(
         """
         const detail = document.getElementById('runs-mgr-detail-grp1');

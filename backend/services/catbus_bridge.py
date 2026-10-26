@@ -260,9 +260,10 @@ def status_payload() -> dict:
     ``auth`` (so the run gate asks the login question of the backend the node is about to use, instead
     of assuming the Selenium matrix's answer for a crawl that reads no cookie of ours).
 
-    Nothing travels as a sentence: the canvas translates a key, and an unknown one shows as itself. The
-    adapter's per-cell reasons are prose written by CatBus in its own language, so they stay out of the
-    payload and the console quotes them at run time, in the language that run uses.
+    Nothing travels as a sentence: the canvas translates a key, and an unknown one shows as itself. Each
+    cell also carries the adapter's own ``reason`` (prose, in CatBus' language) because the three-dimensional
+    panel lists a mode an engine cannot run and must say why — the generic ``settings.backendNoCell`` is the
+    fallback when the adapter gave no sentence, never a replacement for one it did give.
 
     The map is the adapter's, never a list kept here: a cell CatBus stops supporting disappears from the
     panel on the next probe rather than needing a change on this side.
@@ -276,6 +277,7 @@ def status_payload() -> dict:
                 'status': state,
                 'runnable': state in _RUNNABLE_STATES,
                 'auth': str((mode_entry or {}).get('auth') or 'required'),
+                'reason': str((mode_entry or {}).get('reason') or (mode_entry or {}).get('note') or ''),
             }
     return {
         'available': info.available,
@@ -283,6 +285,21 @@ def status_payload() -> dict:
         'panelKey': _PANEL_KEYS.get(info.reason_key, 'settings.backendProbeFailed') if not info.available else '',
         'cells': cells,
     }
+
+
+def manifest_platforms() -> dict:
+    """The adapter's platform entries (label, modes, columns, params), or ``{}`` when unavailable.
+
+    One accessor so the capability layer never reaches into a probe object: the manifest is the adapter's
+    own answer, and the Python matrix must read it rather than keep a second list of what CatBus can do.
+    """
+    info = probe()
+    return dict(info.manifest.get('platforms') or {}) if info.available else {}
+
+
+def manifest_mode(platform: str, mode: str) -> dict:
+    """One mode's full manifest entry (columns, params, args, optional, paged, handler), or ``{}``."""
+    return dict(probe().mode(platform, mode) or {}) if probe().available else {}
 
 
 def cell(platform: str, mode: str) -> dict:
@@ -314,6 +331,16 @@ def identity_for(platform: str, mode: str) -> tuple[str, ...]:
     promised: this is the shape a new platform lights up without any change on this side.
     """
     return tuple(probe().mode(platform, mode).get('identity') or ())
+
+
+def declared_params(platform: str, mode: str) -> tuple[str, ...]:
+    """The parameter names this cell's adapter actually consumes, in the manifest's own words.
+
+    The adapter keeps unknown keys on purpose (it is shared with other callers), so a stored data
+    condition it does not consume would run as if it had. Validation asks this list when deciding
+    whether a time window, a comment preview or a board was silently ignored.
+    """
+    return tuple(str(name) for name in (probe().mode(platform, mode).get('params') or ()))
 
 
 # ─── Command shape ────────────────────────────────────────────────────────────────────────────

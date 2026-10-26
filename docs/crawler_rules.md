@@ -380,6 +380,21 @@
   `login_wall` / `risk_blocked` 是"我们的浏览器会话死了／被风控了"的浏览器事实，catbus 后端**永不置位**
   （置了会翻 `execution_state['cookie_expired']`，把用户引向重存 Selenium Cookie 这条错建议），
   改为抛出自己那一句带 `catbus <平台> auth login` 的拒绝。
+- **只读能力才进清单，写操作机械排除。** CatBus 侧由 `write()` 声明的命令带 `mutating: true`，清单生成时机械排除；
+  适配器另外拒绝 `msg *`（私信是用户的私人通信，不是要采集的内容）。新增一个读命令时清单自动带上它，
+  不需要在采析绘里加一行；新增一个写命令也不可能自动出现在面板上。适配器测试同时从 `vocab.ts` 源码清点
+  `write(` 的键集合，与 `mutating` 字段双向核对——只靠字段自己作证，漏标一次就会把写命令暴露成采集模式。
+- **引擎是一等维度（平台 × 引擎 × 功能）。** `Mode`/`Capability` 之外，`crawl_capabilities` 从适配器清单
+  物化 CatBus 独有模式（`user.followers`、`keyword.hot`…），`modes_for/mode_for/mode_of_node/crawl_kwargs`
+  全部按引擎发问；`as_dict()` 给每个平台 `engines`、给每个模式 `engines` + `cells`（`runnable`／原因／列）。
+  面板按 平台 → 引擎 → 功能 渲染，功能列表随引擎变；不可运行的一对**列着、置灰、点名**——绝不消失，
+  也绝不把存了 CatBus 的节点画成 Selenium。运行前校验读同一份 `cells`，不可运行的一对不会买到一次运行；
+  CatBus-only 模式走 `CatbusCrawler.catbus(mode_key=…)`，命令本身来自清单，不新增平台分支。
+- **没被适配器消费的数据条件按名拒绝。** 适配器保留未知参数是子进程边界的设计（它还被别的调用方复用），
+  但对节点来说那等于「填了时间窗却跑了一张没按时间过滤的表」。`catbus_bridge.declared_params` 给出每个功能
+  真正消费的参数；节点上填了不在其中、且不等于默认值的 `start_time`／`end_time`／`comment_preview`／`board`
+  等条件时，`CatbusCrawler._unsupported_params` 在起子进程之前拒绝并点名。默认值不算用户的条件：
+  画布会给每个平台播种全部字段的默认值，把 `board=popular` 当成「要求榜单」会误伤所有非热榜模式。
 - **进程边界写死 UTF-8 与进程树。** 参数经 stdin（`--params -`）而不是 argv：中文关键词走命令行会被 Windows
   控制台代码页改写，长链接列表还会撞命令行长度上限；stdout/stderr 按字节读回再显式 decode；
   子进程按 token 登记，停止与超时都走 `utils/procs`（Windows 的 `CREATE_NO_WINDOW` 只在 Windows 存在，

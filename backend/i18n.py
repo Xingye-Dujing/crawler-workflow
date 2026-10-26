@@ -1507,6 +1507,9 @@ _ZH = {
     ),
     'engine.source_link_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
     'engine.source_needs_machine': '节点 {nid}：这台机器跑不了这种采集（{reason}），请换采集内容或在能跑的机器上运行',
+    'engine.source_bad_backend': '节点 {nid}：采集方式「{backend}」不存在，请改用 Selenium 或 CatBus',
+    'engine.source_catbus': '节点 {nid}：CatBus 引擎无法采集这一项：{detail}',
+    'catbus.noRunnableCell': 'CatBus 对这个平台没有任何可运行的读功能',
     'cap.requiresWindowsDesktop': '需要 Windows 桌面版：该模式要在本机驱动播放器或窗口',
     # Feeding a link mode from an upstream table column: the wire is allowed only where
     # the matrix declares a feed (Field.fed_by), and every mismatch is refused BY NAME —
@@ -1526,6 +1529,12 @@ _ZH = {
     'field.account': '登录账号',
     'field.backend': '采集方式',
     'field.catbusAccount': 'CatBus 账号',
+    'field.catbusRoom': '直播间',
+    'field.catbusFolder': '收藏夹',
+    'field.catbusSeries': '合集',
+    'field.catbusConversation': '会话 ID',
+    'field.catbusProduct': '商品',
+    'field.catbusCommentId': '评论 ID',
     'field.format': '格式',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
@@ -2036,12 +2045,18 @@ _ZH = {
     'catbus.noDetail': 'CatBus 后端不单独取详情（详情由适配器逐条补齐）：{url}',
     'catbus.targetReached': '目标 {n} 条已经在表里，CatBus 不再请求',
     'catbus.start': 'CatBus 开始采集：{mode}，目标 {n} 条',
+    'catbus.startOnce': 'CatBus 开始执行：{mode}',
     'catbus.watermarkNote': 'CatBus 没有偏移量：水位线只界定哪些行入库，更旧的条目仍会被请求一次',
     'catbus.watermarkHit': 'CatBus 采到水位线 {i}，更旧的条目不再入库',
     'catbus.finished': 'CatBus 采集结束：本次新增 {n} 条（目标 {want}）',
+    'catbus.finishedOnce': 'CatBus 执行结束：{mode}，本次新增 {n} 条',
     'catbus.warning': 'CatBus 报告：{text}',
     'catbus.refused': '{platform} / {mode} 通过 CatBus 采集失败：{detail}',
     'catbus.noIdentity': '{platform} / {mode} 的 CatBus 适配没有声明身份列，跨运行水位无法界定边界，因此拒绝',
+    'catbus.paramUnsupported': (
+        'CatBus 的 {platform} / {mode} 不接受这些采集条件：{params}。适配器会忽略它们，'
+        '而一张看起来执行过条件的表比拒绝更糟——请改用 Selenium，或在设置里去掉这些条件'
+    ),
     'catbus.pre.login': '{platform} 在 CatBus 里没有登录态',
 }
 
@@ -3740,6 +3755,9 @@ _EN = {
         'Node {nid}: this machine cannot run that collection mode ({reason}) — choose another mode or '
         'run the canvas on a machine that can'
     ),
+    'engine.source_bad_backend': 'Node {nid}: the crawl backend "{backend}" does not exist — pick Selenium or CatBus',
+    'engine.source_catbus': 'Node {nid}: the CatBus engine cannot crawl this cell: {detail}',
+    'catbus.noRunnableCell': 'CatBus has no runnable read function for this platform',
     'cap.requiresWindowsDesktop': 'it needs the Windows desktop build (a local player or window to drive)',
     'engine.source_feed_no_mode': (
         'Node {nid}: this collection mode cannot be fed from an upstream table — '
@@ -3760,6 +3778,12 @@ _EN = {
     'field.account': 'account',
     'field.backend': 'backend',
     'field.catbusAccount': 'CatBus account',
+    'field.catbusRoom': 'live room',
+    'field.catbusFolder': 'collection folder',
+    'field.catbusSeries': 'series',
+    'field.catbusConversation': 'conversation ID',
+    'field.catbusProduct': 'product',
+    'field.catbusCommentId': 'comment ID',
     'field.format': 'format',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
     'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
@@ -4369,16 +4393,23 @@ _EN = {
     'catbus.noDetail': 'this backend does not fetch a detail on its own (the adapter resolves each card): {url}',
     'catbus.targetReached': 'the target of {n} rows is already in the table, so CatBus asks for nothing',
     'catbus.start': 'CatBus starts crawling: {mode}, target {n} rows',
+    'catbus.startOnce': 'CatBus starts: {mode}',
     'catbus.watermarkNote': (
         'CatBus has no offset: the watermark bounds which rows are filed, while older items are still asked for'
     ),
     'catbus.watermarkHit': 'CatBus reached the watermark {i}; the older rows are not filed',
     'catbus.finished': 'CatBus finished: {n} new rows (target {want})',
+    'catbus.finishedOnce': 'CatBus finished: {mode}, {n} new rows',
     'catbus.warning': 'CatBus reported: {text}',
     'catbus.refused': '{platform} / {mode} could not be crawled through CatBus: {detail}',
     'catbus.noIdentity': (
         '{platform} / {mode} declares no identity column to CatBus, so the cross-run watermark has '
         'nothing to bound — refused'
+    ),
+    'catbus.paramUnsupported': (
+        'CatBus {platform} / {mode} does not accept these collection conditions: {params}. '
+        'The adapter would ignore them, and a table that looks like the condition ran is worse than '
+        'a refusal — switch to Selenium or remove those conditions'
     ),
     'catbus.pre.login': '{platform} has no logged-in CatBus account',
 }
@@ -4431,6 +4462,11 @@ _PLATFORM_LABELS = {
         'twitter': 'X（推特）',
         'instagram': 'Instagram',
         'youtube': 'YouTube',
+        'kuaishou': '快手',
+        'tiktok': 'TikTok',
+        'jd': '京东',
+        'taobao': '淘宝',
+        'xianyu': '闲鱼',
     },
     'en': {
         'zhihu': 'Zhihu',
@@ -4443,6 +4479,11 @@ _PLATFORM_LABELS = {
         'twitter': 'X (Twitter)',
         'instagram': 'Instagram',
         'youtube': 'YouTube',
+        'kuaishou': 'Kuaishou',
+        'tiktok': 'TikTok',
+        'jd': 'JD',
+        'taobao': 'Taobao',
+        'xianyu': 'Xianyu',
     },
 }
 

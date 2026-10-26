@@ -454,8 +454,8 @@ class TestDefaults:
         assert {'keyword', 'start_time', 'end_time'} <= set(kwargs), sorted(kwargs)
 
     def test_unknown_platform_offers_no_fields(self):
-        assert fields_for('kuaishou', 'posts') == ()
-        assert declared_defaults('kuaishou') == {}
+        assert fields_for('nope', 'posts') == ()
+        assert declared_defaults('nope') == {}
 
 
 class TestPayloadShape:
@@ -465,13 +465,24 @@ class TestPayloadShape:
         import json
 
         payload = json.loads(json.dumps(as_dict(), ensure_ascii=False))
-        assert set(payload) == {'platforms', 'fileFields'}
+        assert set(payload) == {'platforms', 'fileFields', 'backends'}
         first = payload['platforms'][0]
         # `profileRecommended` / `parallelRecommended` / `serialOnly` travel with the
         # platform, not the mode: running in a throwaway browser is punished per site, and
         # which shape to crawl in is a per-site verdict — the pre-run notice and the
         # advice panel (#181) read these, and the matrix is their only source.
-        assert set(first) == {'platform', 'modes', 'profileRecommended', 'region', 'serialOnly', 'parallelRecommended'}
+        # `engines` is the platform's engine dimension, and `labelKey` lets a CatBus-only
+        # platform name itself from the catalogue instead of the panel building `platform.<id>`.
+        assert set(first) == {
+            'platform',
+            'labelKey',
+            'engines',
+            'modes',
+            'profileRecommended',
+            'region',
+            'serialOnly',
+            'parallelRecommended',
+        }
         mode = first['modes'][0]
         assert set(mode) == {
             'key',
@@ -487,6 +498,11 @@ class TestPayloadShape:
             # host rides next to it as the payload's ``machine`` map, so the panel can grey a mode out and
             # the pre-run gate can refuse from one answer rather than two.
             'requires',
+            # The engine dimension: which engines offer this function, and each pair's verdict
+            # (runnable / reason / columns / identity). The panel filters the function list by the
+            # selected engine and greys a pair it cannot run — it never keeps its own list.
+            'engines',
+            'cells',
             'fields',
         }
         # `serialOnly` marks the platform the site walls on concurrent paging (weibo):

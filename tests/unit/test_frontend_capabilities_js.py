@@ -663,9 +663,9 @@ class TestAModeThisMachineCannotRun:
         assert 'cap.requiresWindowsDesktop' not in verdicts['desktop']['asked']
 
     def test_the_run_is_refused_before_it_is_paid_for(self, verdicts):
-        assert 'validate.modeNeedsMachine' in verdicts['server']['errors']
-        assert 'validate.modeNeedsMachine' not in verdicts['desktop']['errors']
-        assert 'validate.modeNeedsMachine' not in verdicts['noanswer']['errors']
+        assert 'validate.modeUnavailable' in verdicts['server']['errors']
+        assert 'validate.modeUnavailable' not in verdicts['desktop']['errors']
+        assert 'validate.modeUnavailable' not in verdicts['noanswer']['errors']
 
     def test_a_mode_without_a_requirement_is_never_collateral_damage(self, verdicts):
         # The harvest option stays greyed here (the node is on the board mode, but the machine still
@@ -720,6 +720,68 @@ class TestTheCrawlBackendOption:
                 'cells': {'bilibili.posts': _cell()} if cells is None else cells,
             }
         }
+        # ``as_dict()`` already materialised the engine dimension from the live probe; this fixture's
+        # world is the stub above, so the same answers have to land on the platform and the mode.
+        bili = next(p for p in matrix['platforms'] if p['platform'] == 'bilibili')
+        engine = next(e for e in bili['engines'] if e['key'] == 'catbus')
+        engine['available'] = available
+        engine['reasonKey'] = panel_key or ('catbus.noNode' if not available else '')
+        posts = next(m for m in bili['modes'] if m['key'] == 'posts')
+        if not available:
+            posts['cells']['catbus'] = {
+                'status': 'unavailable',
+                'runnable': False,
+                'reason': '',
+                'reasonKey': panel_key,
+                'columns': [],
+                'identity': [],
+            }
+            if 'catbus' not in posts['engines']:
+                posts['engines'].append('catbus')
+        else:
+            entry = (cells if cells is not None else {'bilibili.posts': _cell()}).get('bilibili.posts')
+            if entry is None:
+                posts['engines'] = [e for e in posts['engines'] if e != 'catbus']
+            else:
+                posts['cells']['catbus'] = {
+                    **entry,
+                    'reason': entry.get('reason', ''),
+                    'reasonKey': entry.get('reasonKey', ''),
+                    'columns': entry.get('columns', []),
+                    'identity': entry.get('identity', []),
+                }
+                if 'catbus' not in posts['engines']:
+                    posts['engines'].append('catbus')
+            # The rest of the engine's functions are reachable in this world; the scenario is about
+            # ONE cell the adapter does not list, not about an absent adapter.
+            for mode in bili['modes']:
+                if mode['key'] == 'posts' or 'catbus' not in mode['engines']:
+                    continue
+                mode['cells']['catbus'] = {
+                    **mode['cells'].get('catbus', {}),
+                    'status': 'available',
+                    'runnable': True,
+                    'reason': '',
+                    'reasonKey': '',
+                    'columns': [],
+                    'identity': [],
+                }
+        return matrix
+
+    @staticmethod
+    def _legacy_payload():
+        """An older server's payload: modes and fields, no engine dimension at all.
+
+        The panel must keep rendering the form's own 采集方式 select and must not grey CatBus from a
+        question that payload never answered.
+        """
+        matrix = _matrix()
+        matrix.pop('backends', None)
+        for cap in matrix['platforms']:
+            cap.pop('engines', None)
+            for mode in cap['modes']:
+                mode.pop('engines', None)
+                mode.pop('cells', None)
         return matrix
 
     @classmethod
@@ -755,7 +817,7 @@ class TestTheCrawlBackendOption:
             {
                 # An older server, a partial response: nothing was judged, so nothing is blocked.
                 'id': 'noanswer',
-                'payload': _matrix(),
+                'payload': cls._legacy_payload(),
                 'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'catbus'},
             },
         ]
@@ -780,8 +842,9 @@ class TestTheCrawlBackendOption:
 
     def test_a_cell_the_adapter_does_not_offer_is_greyed_and_named(self, options):
         made = options['nocell']
-        option = self._catbus_option(made['html'])
-        assert 'disabled' in option, option
+        # The engine itself is reachable; it is THIS function the adapter does not list. The function
+        # list under CatBus therefore falls back to a cell it does have, disabled and named.
+        assert 'disabled' not in self._catbus_option(made['html']), 'the engine is available'
         assert 'settings.backendNoCell' in made['asked'], made['asked']
         assert 'settings.backendNoCell' in made['html'], 'the reason is on screen, not only in a tooltip'
 

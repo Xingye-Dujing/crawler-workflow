@@ -2766,11 +2766,13 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     params = node.get('params', {})
     nid = str(node.get('id') or '')
     platform = node.get('platform', params.get('platform', ''))
-    if not is_crawlable(platform):
+    if not is_crawlable(platform) and not capabilities.can_crawl_platform(platform, params):
         # Cookie capture and crawling are different capabilities: bilibili and
         # douyin were added to the Cookie panel first, so a saved session exists
         # for a platform nothing can crawl. Refusing here by name beats the
         # alternative — an empty table that looks like an empty search.
+        # A CatBus-only platform (快手/TikTok/京东/淘宝/闲鱼) has no Selenium crawler class but
+        # is still crawlable through the second engine; the engine gate answers for it below.
         raise ValueError(t('run.notCrawlable', label=node_label(node, str(node.get('id') or '')), platform=platform))
     mode = capabilities.mode_of_node(node)
     # The mode is the whole decision that used to be a chain of platform tests:

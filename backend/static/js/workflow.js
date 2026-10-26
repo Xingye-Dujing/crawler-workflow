@@ -1455,19 +1455,38 @@ function sourceNodeErrors(node, label, hasDataInput) {
         return [I18n.t('validate.sourceUnknownPlatform', { title: label, platform: String(platform) })];
     }
     var wanted = String(params.collect || params.mode || '');
-    var offered = Capabilities.modes(platform);
-    var mode = Capabilities.mode(platform, wanted);
+    /* The engine is part of the question: the same platform offers a different function list under
+       each one, and the run will fall back inside THAT list. Asking the union would bless a stored
+       browser-only mode for a CatBus node the adapter has no handler for. */
+    var backend = String(params.backend || '') || Capabilities.defaultBackend(platform);
+    var offered = Capabilities.modes(platform, backend);
+    var mode = Capabilities.mode(platform, wanted, backend);
+    if (!mode) {
+        return [I18n.t('validate.sourceUnknownPlatform', { title: label, platform: String(platform) })];
+    }
     if (wanted && offered.length > 1 && mode.key !== wanted) {
         return [I18n.t('validate.sourceUnknownMode')
             .replace('{title}', label)
             .replace('{platform}', I18n.t('platform.' + platform))];
     }
-    if (!Capabilities.runnable(mode)) {
-        /* The server already answered that this machine cannot run the mode, so this is not a warning
-           about a risk — it is a refusal of a certainty, said before the run is paid for. The same rule
-           runs in ``engine/workflow.py``, and the wording is the catalogue's. */
+    var engine = Capabilities.engine(platform, backend);
+    if (engine && engine.available === false) {
         return [
-            I18n.t('validate.modeNeedsMachine', { title: label, reason: Capabilities.requirementWord(mode) }),
+            I18n.t('validate.modeUnavailable', {
+                title: label,
+                reason: I18n.t(engine.reasonKey || 'settings.backendProbeFailed'),
+            }),
+        ];
+    }
+    if (!Capabilities.runnable(mode) || !Capabilities.cellRunnable(mode, backend)) {
+        /* The server already answered that this machine or this engine cannot run the pair, so this is
+           not a warning about a risk — it is a refusal of a certainty, said before the run is paid
+           for. The same rule runs in ``engine/workflow.py``, and the wording is the catalogue's. */
+        return [
+            I18n.t('validate.modeUnavailable', {
+                title: label,
+                reason: Capabilities.modeRefusal(platform, mode, backend),
+            }),
         ];
     }
     var errors = [];
@@ -1615,24 +1634,101 @@ const Capabilities = {
         return null;
     },
 
-    modes(id) {
+    /* Every engine this platform offers, in the panel's order. The payload decides: a platform with
+       no browser crawl has no Selenium entry, and a CatBus-only platform still carries its engine so
+       the panel can say why nothing runs when the adapter is missing. */
+    engines(id) {
         var entry = this.platform(id);
-        return entry ? entry.modes : [];
+        return (entry && entry.engines) || [];
     },
 
-    /* An unknown or missing mode key resolves to the platform's first mode —
-       the same fallback the backend applies, so the panel can never show a form
-       the run would not use, and an old canvas opens the mode it will execute. */
-    mode(id, key) {
-        var modes = this.modes(id);
+    engine(id, key) {
+        var engines = this.engines(id);
+        for (var i = 0; i < engines.length; i++) {
+            if (engines[i].key === key) return engines[i];
+        }
+        return null;
+    },
+
+    /* Which engine a node with no stored choice starts on: the browser where it exists, CatBus only
+       where it is the platform's one engine. Mirrors ``crawl_capabilities.engine_default``. */
+    defaultBackend(id) {
+        var engines = this.engines(id);
+        for (var i = 0; i < engines.length; i++) {
+            if (engines[i].key === 'selenium' && engines[i].available !== false) return 'selenium';
+        }
+        return engines.length ? engines[0].key : 'selenium';
+    },
+
+    /* The functions one engine offers. Without an engine this is the union (old callers); with one,
+       only the modes whose ``engines`` list names it — the platform's Selenium-only modes do not
+       appear under CatBus and vice versa. */
+    modes(id, backend) {
+        var entry = this.platform(id);
+        if (!entry) return [];
+        var list = entry.modes || [];
+        /* An older payload has no engine dimension at all: filtering by one would hide every mode
+           from a panel that is otherwise readable, so the whole list stands. */
+        if (!backend || !(entry.engines || []).length) return list;
+        return list.filter(function (m) {
+            return (m.engines || ['selenium']).indexOf(backend) >= 0;
+        });
+    },
+
+    /* An unknown or missing mode key resolves to the engine's first RUNNABLE mode — the same fallback
+       the backend applies, so the panel can never show a form the run would not use, and an old canvas
+       opens the mode it will execute. Falling to a browser-only mode for a CatBus node would show a
+       form whose handler the CatBus adapter does not have. */
+    mode(id, key, backend) {
+        var modes = this.modes(id, backend);
         for (var i = 0; i < modes.length; i++) {
             if (modes[i].key === key) return modes[i];
+        }
+        if (backend && backend !== 'selenium') {
+            for (var j = 0; j < modes.length; j++) {
+                if (this.cellRunnable(modes[j], backend)) return modes[j];
+            }
         }
         return modes.length ? modes[0] : null;
     },
 
-    fields(id, key) {
-        var mode = this.mode(id, key);
+    cell(mode, backend) {
+        return (mode && mode.cells && mode.cells[backend]) || null;
+    },
+
+    /* Whether one function × engine pair can run on this machine, from the server's derived answer.
+       A mode with no ``cells`` map came from an older payload that never judged the question; an
+       unjudged answer is not evidence of failure, so it stays runnable (the run refuses by name if
+       it really cannot start). */
+    cellRunnable(mode, backend) {
+        if (!mode) return false;
+        if (!backend || backend === 'selenium') return true;
+        if (!mode.cells) return true;
+        var cell = this.cell(mode, backend);
+        return !!(cell && cell.runnable);
+    },
+
+    /* The sentence for why a function × engine pair cannot run, in the canvas's language. The
+       adapter's own prose wins when it gave one; a catalogue key is the fallback, never a sentence
+       invented here. */
+    modeRefusal(id, mode, backend) {
+        if (!mode) return '';
+        if (!this.runnable(mode)) return this.requirementWord(mode);
+        if (backend && backend !== 'selenium' && mode.cells) {
+            var engine = this.engine(id, backend);
+            if (engine && engine.available === false) {
+                return I18n.t(engine.reasonKey || 'settings.backendProbeFailed');
+            }
+            var cell = this.cell(mode, backend);
+            if (!cell || !cell.runnable) {
+                return (cell && cell.reason) || I18n.t((cell && cell.reasonKey) || 'settings.backendNoCell');
+            }
+        }
+        return '';
+    },
+
+    fields(id, key, backend) {
+        var mode = this.mode(id, key, backend);
         if (!mode) return [];
         return mode.fields.concat((this.data && this.data.fileFields) || []);
     },
@@ -1711,6 +1807,8 @@ const Capabilities = {
     defaults(id) {
         var out = {};
         if (!this.data) return out;
+        /* The union of both engines' forms: switching the engine must not re-seed the node, and a
+           CatBus-only field has to be at its declared default when the user picks CatBus. */
         var modes = this.modes(id);
         for (var i = 0; i < modes.length; i++) {
             var fields = modes[i].fields.concat(this.data.fileFields || []);
@@ -1718,6 +1816,7 @@ const Capabilities = {
                 if (!(fields[j].key in out)) out[fields[j].key] = fields[j].default;
             }
         }
+        if (!('backend' in out)) out.backend = this.defaultBackend(id);
         return out;
     },
 };
@@ -2261,10 +2360,34 @@ function reopenCall(nodeId) {
 function visibleSourceFields(fields, p) {
     var catbus = String(p.backend || '') === 'catbus';
     return fields.filter(function (f) {
+        /* 采集引擎 is rendered above the 采集内容 selector from the platform's engine list, so the
+           stored backend keeps one control on screen even though every shared form declares it.
+           A payload that predates the engine dimension has no such list; the old in-form select is
+           the only control then, and hiding it would leave the stored backend invisible. */
+        if (f.key === 'backend') return !Capabilities.engines(String(p.platform || '')).length;
         if (f.key === 'catbus_account') return catbus;
         if (f.key === 'account') return !catbus;
         return true;
     });
+}
+
+/* Switching the engine is a change of WHAT this node runs, not a cosmetic filter: if the stored mode
+   is not offered by the new engine, the node's ``collect`` moves to the mode the panel will show (the
+   engine's first runnable one) in the same write, so the saved canvas and the panel never disagree. */
+function setSourceBackend(nodeId, value) {
+    if (!ID_SHAPE.test(String(nodeId))) return;
+    var node = canvas.nodes[nodeId];
+    if (!node) return;
+    var params = node.params || {};
+    var platform = String(params.platform || '');
+    var current = String(params.collect || params.mode || '');
+    var offered = Capabilities.modes(platform, value);
+    var keys = offered.map(function (m) { return m.key; });
+    if (keys.length && keys.indexOf(current) < 0) {
+        var fallback = Capabilities.mode(platform, current, value);
+        if (fallback && fallback.key !== current) updateParam(nodeId, 'collect', fallback.key);
+    }
+    updateParam(nodeId, 'backend', value);
 }
 
 function sourcePanelHtml(nodeId, p) {
@@ -2280,52 +2403,120 @@ function sourcePanelHtml(nodeId, p) {
         );
     }
     var platform = String(p.platform || '');
-    var mode = Capabilities.mode(platform, p.collect || p.mode);
+    var backend = String(p.backend || '') || Capabilities.defaultBackend(platform);
     var pick = ID_SHAPE.test(String(nodeId)) ? "selectSourcePlatform('" + nodeId + "',this.value)" : '';
     var html = sourceSelectHtml(
         nodeId,
         'settings.platform',
         Capabilities.platforms().map(function (entry) {
-            return { value: entry.platform, labelKey: 'platform.' + entry.platform };
+            return { value: entry.platform, labelKey: entry.labelKey || 'platform.' + entry.platform };
         }),
         platform,
         pick
     );
+    /* 平台 → 引擎 → 功能, in that order. The engine is a first-class choice: it decides which
+       functions the next select offers, and a stored choice the adapter no longer supports stays on
+       screen, greyed and named, rather than being replaced by Selenium behind the user's back. */
+    var engines = Capabilities.engines(platform);
+    if (engines.length) {
+        var engineOptions = engines.map(function (e) {
+            var unavailable = e.available === false;
+            return {
+                value: e.key,
+                labelKey: e.labelKey,
+                disabled: unavailable,
+                labelSuffix: unavailable ? '（' + I18n.t(e.reasonKey || 'settings.backendProbeFailed') + '）' : '',
+            };
+        });
+        if (
+            backend &&
+            !engineOptions.some(function (o) {
+                return o.value === backend;
+            })
+        ) {
+            var gone = Capabilities.engine(platform, backend);
+            engineOptions.push({
+                value: backend,
+                labelKey: '',
+                disabled: true,
+                labelSuffix: '（' + I18n.t((gone && gone.reasonKey) || 'settings.backendUnknown') + '）',
+            });
+        }
+        html += sourceSelectHtml(
+            nodeId,
+            'settings.crawlEngine',
+            engineOptions,
+            backend,
+            ID_SHAPE.test(String(nodeId)) ? "setSourceBackend('" + nodeId + "',this.value)" : ''
+        );
+        html +=
+            '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);margin-top:-2px;">' +
+            I18n.t('settings.engineHint') +
+            '</div></div>';
+    }
+    var mode = Capabilities.mode(platform, p.collect || p.mode, backend);
     if (!mode) {
-        /* A platform the matrix does not describe cannot be crawled, and the
-           run would say so too — but saying it while the panel is open beats
-           letting the user fill a form and find out later. */
+        /* A platform × engine with no functions cannot be crawled, and the run
+           would say so too — but saying it while the panel is open beats letting
+           the user fill a form and find out later. The engine's own reason is
+           quoted when it has one (no Node, adapter not installed, platform not
+           listed, nothing runnable). */
+        var engine = Capabilities.engine(platform, backend);
+        var engineWhy =
+            engine && engine.available === false ? I18n.t(engine.reasonKey || 'settings.backendProbeFailed') : '';
         return (
             html +
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.capNoMode') +
+            (engineWhy ? '（' + engineWhy + '）' : '') +
             '</div>'
         );
     }
-    if (Capabilities.modes(platform).length > 1) {
+    var offeredModes = Capabilities.modes(platform, backend);
+    var wantedMode = String(p.collect || p.mode || '');
+    if (offeredModes.length > 1) {
         /* One mode is not a choice: WeChat offers a single form, and a select
            with one option only makes the panel look unfinished. */
+        var modeOptions = offeredModes.map(function (m) {
+            /* A mode this machine or engine cannot run stays in the list and says why, rather
+               than disappearing: a node restored from another canvas has that mode STORED, and
+               an option that is simply absent would show the engine's first mode instead — the
+               panel lying about what the run would do. Disabled + named is the honest shape. */
+            var runnable = Capabilities.runnable(m) && Capabilities.cellRunnable(m, backend);
+            var why = runnable ? '' : Capabilities.modeRefusal(platform, m, backend);
+            return {
+                value: m.key,
+                labelKey: m.labelKey,
+                disabled: !runnable,
+                labelSuffix: runnable ? '' : '（' + why + '）',
+            };
+        });
+        if (
+            wantedMode &&
+            !offeredModes.some(function (m) {
+                return m.key === wantedMode;
+            })
+        ) {
+            /* The stored function is not in this engine's list at all (an old canvas, or a cell
+               CatBus dropped). Keep it visible and named: removing it would paint a different
+               function as if it were the one written, which is the mismatch this panel exists to
+               prevent. The run refuses the stored key by name until the user picks another. */
+            modeOptions.unshift({
+                value: wantedMode,
+                labelKey: '',
+                disabled: true,
+                labelSuffix: '（' + I18n.t('settings.backendNoCell') + '）',
+            });
+        }
         html += sourceSelectHtml(
             nodeId,
             'settings.collect',
-            Capabilities.modes(platform).map(function (m) {
-                /* A mode this machine cannot run stays in the list and says why, rather than
-                   disappearing: a node restored from a Windows canvas has that mode STORED, and an
-                   option that is simply absent would show the platform's first mode instead — the
-                   panel lying about what the run would do. Disabled + named is the honest shape. */
-                var runnable = Capabilities.runnable(m);
-                return {
-                    value: m.key,
-                    labelKey: m.labelKey,
-                    disabled: !runnable,
-                    labelSuffix: runnable ? '' : '（' + Capabilities.requirementWord(m) + '）',
-                };
-            }),
+            modeOptions,
             mode.key,
             paramCall(nodeId, 'collect', 'this.value') + reopenCall(nodeId)
         );
     }
-    var fields = visibleSourceFields(Capabilities.fields(platform, mode.key), p);
+    var fields = visibleSourceFields(Capabilities.fields(platform, mode.key, backend), p);
     for (var i = 0; i < fields.length; i++) {
         html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key], p);
     }
@@ -6516,8 +6707,18 @@ function urlPlatform(url) {
    the panel by itself, so only the state has to be fixed here. */
 function selectSourcePlatform(nodeId, value) {
     var node = canvas.nodes[nodeId];
-    if (node && node.params && Capabilities.ready() && node.params.collect) {
-        node.params.collect = Capabilities.mode(value, node.params.collect).key;
+    if (node && node.params && Capabilities.ready()) {
+        /* A new platform may not offer the engine the old one used (a CatBus-only platform, or a
+           machine where CatBus cannot run). The stored engine and the stored mode both move to what
+           THIS platform can actually offer, in one write, so the panel and the saved node agree. */
+        var backend = String(node.params.backend || '') || Capabilities.defaultBackend(value);
+        var engine = Capabilities.engine(value, backend);
+        if (!engine || engine.available === false) backend = Capabilities.defaultBackend(value);
+        if (node.params.collect) {
+            var mode = Capabilities.mode(value, node.params.collect, backend);
+            if (mode) node.params.collect = mode.key;
+        }
+        node.params.backend = backend;
     }
     updateParam(nodeId, 'platform', value);
 }

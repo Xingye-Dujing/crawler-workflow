@@ -51,6 +51,13 @@ def session(monkeypatch):
     monkeypatch.setattr(bridge, 'mode_state', lambda platform, mode: ('available', ''))
     monkeypatch.setattr(bridge, 'columns_for', lambda platform, mode: ())
     monkeypatch.setattr(bridge, 'identity_for', lambda platform, mode: ('BV号',))
+    # The real manifest declares what each cell consumes; the stub says the same, so a keyword /
+    # board / limit the walk deliberately passes is not mistaken for an ignored data condition.
+    monkeypatch.setattr(
+        bridge,
+        'declared_params',
+        lambda platform, mode: ('keyword', 'author', 'board', 'target_count', 'comment_limit', 'catbus_account'),
+    )
     return made
 
 

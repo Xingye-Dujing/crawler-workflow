@@ -10,7 +10,6 @@ from flask import Blueprint, jsonify
 from state import cookie_manager
 
 import crawl_capabilities as capabilities
-from services import catbus_bridge
 from services.cookie_manager import CookieManager
 
 bp = Blueprint('capabilities', __name__)
@@ -38,11 +37,6 @@ def get_capabilities():
     # disagree about whether a click has a chance. Computed per request rather than baked into
     # ``as_dict()`` because the matrix itself is static data a unit test compares byte-for-byte.
     payload['machine'] = capabilities.machine_requirements()
-    # The second backend's availability travels the same way, and the matrix is NOT rewritten for it:
-    # the 采集方式 field is declared on every shared form (a declared field is what holds a stored
-    # value to its option list), and the panel hides the option this map does not offer. A cell
-    # CatBus drops therefore leaves the panel on the next probe, with nothing to update here.
-    payload['backends'] = {'catbus': catbus_bridge.status_payload()}
     for cap in payload.get('platforms', []):
         # Creation order, not alphabetical: the list the node picks from is "which logins does this
         # machine have", and a user who added work-then-home expects home to still be second.

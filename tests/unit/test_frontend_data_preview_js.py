@@ -206,7 +206,7 @@ SCENARIOS = [
         'rows': [
             {'平台': 'douyin', '评论内容': 'a'},
             {'平台': 'zhihu', '评论内容': 'b'},
-            {'平台': 'kuaishou', '评论内容': 'c'},
+            {'平台': 'myspace', '评论内容': 'c'},
         ],
         'lang': 'zh',
         'steps': ['open', {'do': 'lang', 'value': 'en'}, 'open'],
@@ -529,8 +529,8 @@ class TestPlatformColumnIsAName:
         """A platform the catalog has no name for still has to show *something* — the
         raw key — rather than a cell that vanished the value the user came to read."""
         report = case(world, 'platform-column-localized')
-        # 'kuaishou' is not in the platform catalog; the third row's platform cell stays raw.
-        assert report['trace'][0]['after']['table']['rows'][2][0]['text'] == 'kuaishou'
+        # 'myspace' is not in the platform catalog; the third row's platform cell stays raw.
+        assert report['trace'][0]['after']['table']['rows'][2][0]['text'] == 'myspace'
 
 
 # ─── language ─────────────────────────────────────────────────────────────

@@ -87,18 +87,18 @@ class TestCapabilitiesEndpoint:
         import crawl_capabilities
 
         body = client.get('/api/capabilities').get_json()
-        # The matrix is not copied here, and the two additions are per-machine answers about the
-        # request being served: ``machine`` (whether this server's OS can honour each requirement)
-        # and ``backends`` (what the second crawl backend reports about itself, read out of the
-        # adapter rather than restated here). Both are per request, so neither can live in
-        # ``as_dict()``, which a unit test compares byte-for-byte.
-        static = {key: value for key, value in body.items() if key not in ('machine', 'backends')}
+        # The matrix is not copied here, and the one addition is a per-machine answer about the
+        # request being served: ``machine`` (whether this server's OS can honour each requirement).
+        # It is per request, so it cannot live in ``as_dict()``, which a unit test compares
+        # byte-for-byte; the CatBus status map itself is part of ``as_dict()`` because every
+        # platform × engine cell is built from it.
+        static = {key: value for key, value in body.items() if key not in ('machine',)}
         assert static == crawl_capabilities.as_dict()
         assert body['machine'] == crawl_capabilities.machine_requirements()
         assert set(body['machine']) == set(crawl_capabilities.REQUIREMENTS)
         assert body['machine']['windows_desktop'] is (sys.platform.startswith('win')), body['machine']
-        # The backend answer is the bridge's own dict, and it travels as status tokens plus a
-        # catalogue key — a payload with no language must not ship a sentence.
+        # The backend answer is the bridge's own dict, and it travels as status tokens plus catalogue
+        # keys and the adapter's own per-cell prose (``reason``) — never invented here.
         from services import catbus_bridge
 
         assert body['backends'] == {'catbus': catbus_bridge.status_payload()}
@@ -118,10 +118,24 @@ class TestCapabilitiesEndpoint:
         monkeypatch.setattr(
             catbus_bridge,
             'status_payload',
-            lambda: {'available': True, 'reasonKey': '', 'cells': {'bilibili.comments': 'available'}},
+            lambda: {
+                'available': True,
+                'reasonKey': '',
+                'panelKey': '',
+                'cells': {
+                    'bilibili.comments': {
+                        'status': 'available',
+                        'runnable': True,
+                        'auth': 'required',
+                        'reason': '',
+                    }
+                },
+            },
         )
         body = client.get('/api/capabilities').get_json()
-        assert body['backends']['catbus']['cells'] == {'bilibili.comments': 'available'}
+        assert body['backends']['catbus']['cells'] == {
+            'bilibili.comments': {'status': 'available', 'runnable': True, 'auth': 'required', 'reason': ''}
+        }
         # The field is still declared for every mode (the matrix was not rewritten for this answer)…
         bilibili = next(cap for cap in body['platforms'] if cap['platform'] == 'bilibili')
         posts = next(mode for mode in bilibili['modes'] if mode['key'] == 'posts')
@@ -135,7 +149,14 @@ class TestCapabilitiesEndpoint:
         from crawlers import CRAWLERS, is_crawlable
 
         body = client.get('/api/capabilities').get_json()
-        assert [p['platform'] for p in body['platforms']] == [p for p in CRAWLERS if is_crawlable(p)]
+        selenium = [p for p in CRAWLERS if is_crawlable(p)]
+        assert [p['platform'] for p in body['platforms']][: len(selenium)] == selenium
+        # CatBus-only platforms (no Selenium crawler class) follow the browser ones; each is listed
+        # even when the adapter is unavailable so the panel can name the engine instead of inventing
+        # an empty platform. They never claim a browser engine.
+        for extra in body['platforms'][len(selenium) :]:
+            assert extra['platform'] in ('kuaishou', 'tiktok', 'jd', 'taobao', 'xianyu'), extra
+            assert [e['key'] for e in extra['engines']] == ['catbus'], extra
 
     def test_no_text_travels_to_the_browser(self, client):
         """Every word the panel shows is a catalogue key.

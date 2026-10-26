@@ -380,23 +380,39 @@ class WorkflowEngine:
         """
         if not platform:
             return [t('engine.source_no_platform', nid=label)]
+        backend = capabilities.backend_of(params)
         mode = capabilities.mode_of_node(node)
         if mode is None:
+            if capabilities.is_catbus(params):
+                # The adapter may simply be missing (or the manifest unreadable). That is an engine
+                # answer, not an unknown platform: name the reason the engine gave instead of sending
+                # the user to look for a platform typo that is not there.
+                details = capabilities.catbus_run_errors(platform, capabilities.requested_mode_key(node))
+                if details:
+                    return [t('engine.source_catbus', nid=label, detail=detail) for detail in details]
             return [t('engine.source_unknown_platform', nid=label, platform=platform)]
         wanted = capabilities.requested_mode_key(node)
-        offered = capabilities.mode_keys_for(platform)
+        offered = capabilities.mode_keys_for(platform, backend)
         if wanted and len(offered) > 1 and wanted not in offered:
-            # More than one mode on this platform means the fallback would have run
+            # More than one mode on this engine means the fallback would have run
             # a different kind of crawl than the node asked for. Named by what it
             # asked for, not by the field the substituted mode happens to require.
             return [t('engine.source_unknown_mode', nid=label, platform=platform)]
         errors = []
+        if backend not in capabilities.BACKENDS:
+            errors.append(t('engine.source_bad_backend', nid=label, backend=backend))
         blocked = capabilities.mode_blocker(mode)
         if blocked:
             # This machine can never run the mode, and that is known NOW — the node's own executor refuses
             # too, but a refusal after the run has claimed the slot, opened a browser and paid any LLM
             # steps upstream is a refusal that cost the user the run.
             return [t('engine.source_needs_machine', nid=label, reason=t(blocked))]
+        if capabilities.is_catbus(params):
+            # The adapter's own availability for THIS cell, before the run is paid for. Validation and
+            # the executor ask the same bridge; the refusal is the adapter's reason, never a generic
+            # 「CatBus cannot crawl」 invented here.
+            for detail in capabilities.catbus_run_errors(platform, mode.key):
+                errors.append(t('engine.source_catbus', nid=label, detail=detail))
         feed = capabilities.feed_of(mode)
         fed = capabilities.fed_keys(mode, has_data_input)
         if has_data_input and not feed:

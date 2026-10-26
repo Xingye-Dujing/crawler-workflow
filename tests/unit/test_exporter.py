@@ -323,11 +323,11 @@ class TestPlatformColumnIsLocalized:
         import i18n
 
         monkeypatch.setattr(i18n, 'get_lang', lambda: 'zh')
-        frame = pd.DataFrame({'平台': ['douyin', 'zhihu', 'kuaishou'], '标题': ['a', 'b', 'c']})
+        frame = pd.DataFrame({'平台': ['douyin', 'zhihu', 'myspace'], '标题': ['a', 'b', 'c']})
         out = str(tmp_path / 'p.csv')
         E.save(frame, out)
         written = pd.read_csv(out, keep_default_na=False)
-        assert list(written['平台']) == ['抖音', '知乎', 'kuaishou'], 'unknown key must fall back to itself, not blank'
+        assert list(written['平台']) == ['抖音', '知乎', 'myspace'], 'unknown key must fall back to itself, not blank'
         # the non-platform column is untouched
         assert list(written['标题']) == ['a', 'b', 'c']
 

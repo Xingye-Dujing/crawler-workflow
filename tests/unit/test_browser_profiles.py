@@ -427,7 +427,10 @@ class TestMatrixFlag:
         payload = crawl_capabilities.as_dict()
         by_platform = {cap['platform']: cap['profileRecommended'] for cap in payload['platforms']}
         assert by_platform['weibo'] is True and by_platform['zhihu'] is False
-        assert set(by_platform) == {cap.platform for cap in crawl_capabilities.CAPABILITIES}
+        expected = {cap.platform for cap in crawl_capabilities.CAPABILITIES} | set(
+            crawl_capabilities.CATBUS_ONLY_PLATFORMS
+        )
+        assert set(by_platform) == expected
 
 
 def _make_waiting_crawler(profile_dir: str):

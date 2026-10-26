@@ -672,6 +672,41 @@ message.
   binding in the same edit or first; a green `Edit` result is not evidence the line survived, so grep for the symbol
   before believing the refactor.
 
+### A lint gate is only a gate if it linted everything
+
+- **只 lint 改动文件 = 没 lint。** Running pylint over just the touched files is how three *already committed*
+  violations survived in the CatBus round: a `W0108` lambda in `test_catbus_bridge.py`, a `W0212` reaching into
+  `bridge._RUNNABLE_STATES`, and a `W0201` on a stub's attribute. Each had passed a "both tiers 10.00/10" claim
+  produced from a partial target list. The gate is the whole product tree (184 files) and the whole test tree
+  (**257** `tests/**/*.py`, not only the **246** `test_*.py` — conftest and helpers are linted too), every time.
+- **The target list must be absolute, forward-slashed and free of `\r`.** A pylint list generated relatively makes
+  `tests/` helpers report a dozen false `E0401` (they import each other by a path the relative run does not have);
+  backslashes written from Git Bash are eaten into `backendapp.py`; and Python's `write_text` on Windows writes CRLF,
+  so every argument ends in `\r` and all 184 files report `F0001` before any code is read. Generate the list as
+  absolute paths with `/` and invoke through `tr -d '\r'` (the CI does the same via
+  `Get-ChildItem … | ForEach-Object FullName`). The reproduction lives in `build/make_lint_lists.py` (ignored).
+- **A wrapper that reports the exit code is part of the gate.** A background command ending in `echo done`, or piping
+  the checker through `tail`, reports 0 even when the checker failed — the measured exit status must be the shell's
+  last one and the evidence must be the checker's own summary line.
+
+## 三维能力模型 / Platform × engine × function
+
+- **A computed label key is an audit blind spot, again.** The CatBus manifest can grow modes without a Python change,
+  so their labels must be a literal table (`CATBUS_MODE_LABELS`) and a contract test must walk the *manifest's* key
+  set — asking only the keys already in the table proves nothing. The same mistake in three earlier places (node
+  types, biblio columns, op names) is why this is a standing rule.
+- **A function the engine cannot run is still shown, greyed and named.** Removing it paints a stored value as option
+  #0 and makes the panel lie about the run. The three-dimensional payload therefore carries `engines` per platform,
+  `engines` + `cells` per function, and the adapter's own `reason` prose; validation refuses the same pair before the
+  run is started. The frontend holds no list of its own.
+- **A seeded default is not a condition the user chose.** The canvas seeds every platform's field defaults onto a new
+  node, so `board=popular` exists on a posts node that never asked for a board. Refusing an unconsumed parameter has
+  to compare it with the declared default first, or every CatBus node dies on a field it never filled.
+- **Read the manifest, never a list compiled beside it.** The CatBus adapter derives its read modes from the platform
+  registry (`write()`-declared commands carry `mutating` and are excluded mechanically); 采析绘 derives CatBus modes
+  from that manifest. A second table on either side is the copy that falls behind. The one deliberate exception is
+  `msg *` (private messages), excluded as a resource with the reason written in the code.
+
 ## 启动路径与 BERT 运行时 / Boot path and BERT runtimes
 
 - **Process start is a budget, and it was being spent on libraries no request asked for.** Measured here:
