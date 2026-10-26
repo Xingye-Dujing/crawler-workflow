@@ -2742,6 +2742,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     dropped rather than handed downstream twice).
     """
     params = node.get('params', {})
+    nid = str(node.get('id') or '')
     platform = node.get('platform', params.get('platform', ''))
     if not is_crawlable(platform):
         # Cookie capture and crawling are different capabilities: bilibili and
@@ -2811,6 +2812,19 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     # run's own 无头/窗口 choice is honoured as asked. The comment engine makes the same choice
     # verbatim now too: a headless Chrome even opens a scroll-only panel (see ``_execute_comment_node``).
 
+    watermark_scope = ''
+    watermark_found = None
+    if as_bool(params.get('watermark')):
+        if mode is None or platform != 'bilibili' or mode.handler != 'author':
+            raise ValueError(t('run.watermarkUnsupported', platform=platform, mode=getattr(mode, 'key', '')))
+        if as_bool(params.get('recrawl')):
+            raise ValueError(t('engine.watermarkRecrawl', nid=node_label(node, nid)))
+        fingerprint = str(((ctx or {}).get('fingerprints') or {}).get(nid) or '')
+        if not fingerprint or not (ctx or {}).get('store'):
+            raise ValueError(t('run.watermarkNoScope'))
+        watermark_scope = 'wm:' + fingerprint
+        watermark_found = ctx['store'].get_watermark(watermark_scope)
+
     crawler = get_crawler(
         platform,
         headless=headless,
@@ -2828,7 +2842,13 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     # not know about is a process left on the user's machine forever.
     execution_state['active_crawlers'].add(crawler)
     resume = {}
-    nid = str(node.get('id') or '')
+    seed_count = 0
+    if watermark_scope:
+        if watermark_found and watermark_found.get('last_key'):
+            crawler.set_watermark(watermark_found['last_key'])
+            add_log(t('run.watermarkLoaded', boundary=watermark_found['last_key']))
+        else:
+            add_log(t('run.watermarkFirst'))
 
     def _merge_parts(partial_rows) -> None:
         """Close the 分批输出 writer and announce the merged file — exactly once.
@@ -2917,6 +2937,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
             # honest: targeting 200 with 180 already saved asks the page for 20.
             saved = ctx['store'].load_rows(ctx['run_id'], nid)
             if saved:
+                seed_count = len(saved)
                 crawler.seed(saved)
                 add_log(t('run.resume_crawl', nid=node_label(node, nid), have=len(saved)))
                 if writer is not None and not writer.has_parts:
@@ -3035,6 +3056,13 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
             else ''
         )
         raise ValueError(t('run.underTargetShort', platform=platform, have=len(rows), want=target_count, walk=walk))
+    if watermark_scope:
+        candidate = str(getattr(crawler, '_watermark_candidate', '') or '')
+        if candidate:
+            ctx['store'].save_watermark(watermark_scope, platform, 'BV号', candidate, ctx['run_id'])
+            add_log(t('run.watermarkSaved', boundary=candidate, n=max(0, int(crawler.collected()) - seed_count)))
+        elif getattr(crawler, 'watermark', ''):
+            add_log(t('run.watermarkNoNew', boundary=crawler.watermark))
     return rows
 
 

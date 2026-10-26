@@ -230,6 +230,9 @@ class BilibiliCrawler(VideoCrawler):
         def scrape(bvid: str, _index: int) -> dict | None:
             # ``_index`` is the screen slot ``feed.walk_feed`` hands every scrape callback;
             # this walk's identity is the BV号 itself, so the slot is never read.
+            if self.watermark_boundary(bvid):
+                logger.info(t('crawl.bili.watermarkHit', i=bvid))
+                return None
             if bvid in seen:
                 return None
             seen.add(bvid)
@@ -238,7 +241,9 @@ class BilibiliCrawler(VideoCrawler):
                 if payload.get('code') is not None and payload.get('code') != CODE_GONE:
                     raise RuntimeError(t('crawl.bili.blocked', code=str(payload.get('code'))))
                 return None
-            return self._row(payload.get('data') or {})
+            row = self._row(payload.get('data') or {})
+            self.note_watermark(bvid)
+            return row
 
         def mark(position):
             self.mark_position(mid=mid, **position, done=self.collected())
@@ -251,7 +256,7 @@ class BilibiliCrawler(VideoCrawler):
             target=target_count,
             collected=self.collected,
             mark=mark,
-            stopped=lambda: self.login_wall or self.may_stop(),
+            stopped=lambda: self.login_wall or self.may_stop() or self._watermark_hit,
             stuck_rounds=2,
             settle_wait=self.CARD_WAIT,
             window=self._on_screen_key,

@@ -482,6 +482,12 @@ class WorkflowEngine:
                 platform = node.get('platform') or params.get('platform')
                 for msg in self._source_errors(node, params, platform, label, has_data_input=nid in data_inputs):
                     add(nid, 'engine.source', msg)
+                if as_bool(params.get('watermark')):
+                    mode = capabilities.mode_of_node(node)
+                    if platform != 'bilibili' or mode is None or mode.handler != 'author':
+                        add(nid, 'engine.watermarkUnsupported', t('engine.watermarkUnsupported', nid=label))
+                    if as_bool(params.get('recrawl')):
+                        add(nid, 'engine.watermarkRecrawl', t('engine.watermarkRecrawl', nid=label))
             if ntype == 'upload' and not params.get('dataset_id'):
                 add(nid, 'engine.upload_no_file', t('engine.upload_no_file', nid=label))
             if ntype == 'accumulate':

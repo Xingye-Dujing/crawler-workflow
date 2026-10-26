@@ -92,6 +92,24 @@ class _DepthLock:
 # ─── item identity ─────────────────────────────────────────────────────
 
 
+class TestWatermarks:
+    def test_round_trip_and_clear_all(self, store):
+        assert store.get_watermark('wm:fp') is None
+        store.save_watermark('wm:fp', 'bilibili', 'BV号', 'BV1', 'r1')
+        found = store.get_watermark('wm:fp')
+        assert found['last_key'] == 'BV1'
+        assert found['field'] == 'BV号'
+        assert found['run_id'] == 'r1'
+        store.save_watermark('wm:fp', 'bilibili', 'BV号', 'BV2', 'r2')
+        assert store.get_watermark('wm:fp')['last_key'] == 'BV2'
+        store.clear_all()
+        assert store.get_watermark('wm:fp') is None
+
+    def test_an_empty_key_is_not_saved(self, store):
+        store.save_watermark('wm:fp', 'bilibili', 'BV号', '', 'r1')
+        assert store.get_watermark('wm:fp') is None
+
+
 class TestItemKey:
     def test_url_field_wins_over_text(self):
         a = {'链接': 'https://x/1', '标题': 'T1', '正文': 'B'}

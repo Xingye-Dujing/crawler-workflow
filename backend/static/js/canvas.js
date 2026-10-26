@@ -1568,6 +1568,9 @@ const canvas = {
         const params = Capabilities.defaults(platform);
         params.platform = platform;
         params.collect = Capabilities.mode(platform, '').key;
+        /* A per-node choice, not a platform default: the watermark is opt-in and only
+           offered on modes whose walk has a stable newest-first identity. */
+        params.watermark = false;
         return params;
     },
 

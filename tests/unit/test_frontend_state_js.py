@@ -831,6 +831,7 @@ class TestNewSourceNodeCarriesTheMatrix:
         expected = crawl_capabilities.declared_defaults('zhihu')
         expected['platform'] = 'zhihu'
         expected['collect'] = 'posts'
+        expected['watermark'] = False
         assert node['params'] == expected, (
             'a node that never opened its panel must crawl with exactly the figures its panel would have previewed'
         )

@@ -277,7 +277,7 @@ class TestLoadedPanel:
     def test_a_fresh_node_is_seeded_from_the_matrix(self, panel):
         defaults = panel['loaded']['defaults']
         expected = crawl_capabilities.declared_defaults('zhihu')
-        expected.update({'platform': 'zhihu', 'collect': 'posts'})
+        expected.update({'platform': 'zhihu', 'collect': 'posts', 'watermark': False})
         assert defaults == expected
 
     def test_the_modes_it_lists_are_the_modes_the_server_has(self, panel):

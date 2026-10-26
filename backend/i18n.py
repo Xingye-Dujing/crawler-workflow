@@ -1043,6 +1043,7 @@ _ZH = {
     'crawl.bili.authorEmpty': '[哔哩哔哩] 没有填写 UP主（space.bilibili.com 链接或数字 mid）：{author}',
     'crawl.bili.authorNoVideos': '[哔哩哔哩] UP主 {mid} 的投稿列表没有渲染出视频（可能真的没投过稿）',
     'crawl.bili.authorDone': '[哔哩哔哩] 投稿列表采集结束，共 {n} 条（原因：{reason}）',
+    'crawl.bili.watermarkHit': '[哔哩哔哩] 遇到上次完成的边界 {i}，停止继续翻页',
     'crawl.bili.goneVideo': '[哔哩哔哩搜索] {i} 稿件不存在或已失效（{code}），跳过这一条',
     'crawl.bili.fetchEmpty': '[哔哩哔哩搜索] {i} 的稿件接口没有返回可读数据（非 JSON 或被 WAF 拦截），跳过这一条',
     'crawl.bili.rankingCapped': '[哔哩哔哩] {board}本次只有 {n} 条（目标 {total} 条）：榜单大小由站点决定',
@@ -1319,6 +1320,8 @@ _ZH = {
     'engine.accumulate_no_keys': '节点 {nid}：按列去重时必须填写去重列',
     'engine.accumulate_one_parent': '节点 {nid}：累积数据集节点必须恰好有一个上游',
     'engine.accumulate_bad_parent': '节点 {nid}：累积数据集的上游 {up} 不是表格节点',
+    'engine.watermarkUnsupported': '节点 {nid}：跨运行水位只支持哔哩哔哩作者投稿',
+    'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与「重新采集」不能同时开启',
     'node.accumulate': '累积数据集',
     'ds.purged': '已清理 {days} 天未使用且无工作流引用的文件：{n} 个',
     'ds.purge_result': '清理孤立文件 {n} 个，保留 {kept} 个仍在使用的文件',
@@ -1691,6 +1694,12 @@ _ZH = {
     'comment.time_filtered': '节点 {nid}：按评论时间 {start} ~ {end} 筛选，保留 {kept} 条、丢弃 {dropped} 条',
     'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
     'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
+    'run.watermarkUnsupported': '跨运行水位只支持哔哩哔哩作者投稿（当前平台/模式：{platform} / {mode}）',
+    'run.watermarkNoScope': '跨运行水位需要运行上下文里的节点指纹；直接调用执行器时不能启用',
+    'run.watermarkLoaded': '跨运行水位：从上次完成的边界 {boundary} 开始，遇到它即停止',
+    'run.watermarkFirst': '跨运行水位：这是第一次运行，完成后保存边界',
+    'run.watermarkSaved': '跨运行水位已更新：{boundary}（本次新采 {n} 条）',
+    'run.watermarkNoNew': '已到上次的边界 {boundary}，本次没有更新的条目',
     'run.dedupe_all_skipped': (
         '本节点的结果此前已全部采集，本次没有新数据传给下游；'
         '要重抓请在采集节点开启「重新采集」，要用旧数据请从运行记录导出或用断点续跑（Resume）节点续接'
@@ -3124,6 +3133,7 @@ _EN = {
     'crawl.bili.authorEmpty': '[Bilibili] no UP given (a space.bilibili.com link or a numeric mid): {author}',
     'crawl.bili.authorNoVideos': '[Bilibili] the upload list of UP {mid} rendered no video (possibly none published)',
     'crawl.bili.authorDone': '[Bilibili] upload list finished, {n} rows (stopped because: {reason})',
+    'crawl.bili.watermarkHit': "[Bilibili] reached the previous run's boundary {i}; stopped paging",
     'crawl.bili.goneVideo': '[Bilibili search] {i} is withdrawn or unavailable ({code}), skipped',
     'crawl.bili.fetchEmpty': '[Bilibili search] {i} returned no readable data (non-JSON or WAF-blocked), skipped',
     'crawl.bili.rankingCapped': "[Bilibili] the {board} had only {n} rows (target {total}): its size is the site's",
@@ -3422,6 +3432,8 @@ _EN = {
     'engine.accumulate_no_keys': 'Node {nid}: the named-columns policy needs key columns',
     'engine.accumulate_one_parent': 'Node {nid}: a cumulative dataset node needs exactly one upstream',
     'engine.accumulate_bad_parent': 'Node {nid}: upstream {up} is not a table node',
+    'engine.watermarkUnsupported': 'Node {nid}: cross-run watermark supports only Bilibili author uploads',
+    'engine.watermarkRecrawl': 'Node {nid}: cross-run watermark and re-crawl cannot both be on',
     'node.accumulate': 'Cumulative dataset',
     'ds.purged': 'Removed {n} file(s) unused for {days} days and referenced by no workflow',
     'ds.purge_result': 'Removed {n} orphaned file(s), kept {kept} still in use',
@@ -3842,6 +3854,18 @@ _EN = {
     'comment.bad_range': 'Node {nid}: the comment time range ends before it starts',
     'comment.time_filtered': 'Node {nid}: filtered comments by time {start} ~ {end}: kept {kept}, dropped {dropped}',
     'run.recrawl': 'Re-crawl: released {n} dedupe records; this node will collect again',
+    'run.watermarkUnsupported': (
+        'Cross-run watermark supports only Bilibili author uploads (this platform/mode: {platform} / {mode})'
+    ),
+    'run.watermarkNoScope': (
+        'A cross-run watermark needs the node fingerprint from a run context; a direct executor call cannot enable it'
+    ),
+    'run.watermarkLoaded': (
+        'Cross-run watermark: starting from the previous boundary {boundary}; stop when it is reached'
+    ),
+    'run.watermarkFirst': 'Cross-run watermark: first run; the boundary is saved on success',
+    'run.watermarkSaved': 'Cross-run watermark updated: {boundary} ({n} new rows this run)',
+    'run.watermarkNoNew': 'Reached the previous boundary {boundary}; no newer items this run',
     'run.dedupe_skipped': (
         'Incremental: {n} already-collected items were skipped (enable Recrawl on the source node to re-collect)'
     ),

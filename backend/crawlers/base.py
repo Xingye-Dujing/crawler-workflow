@@ -335,6 +335,16 @@ class Crawler(ABC):
         self._cursor_sink = None
         self._collected = []
         self._cursor = {}
+        #: A durable boundary from the last completed run of this source node. The
+        #: per-run cursor is not it: a new run has a new id, so without this the
+        #: walk starts at the top of the list again. Only platforms with a stable
+        #: item identity use it; the platform module calls watermark_boundary().
+        self.watermark = ''
+        self._watermark_hit = False
+        #: The newest item this run actually kept, recorded by the platform module
+        #: when its walk order is newest-first. The executor persists it only after
+        #: a clean finish (never after a wall, stop or shortfall).
+        self._watermark_candidate = ''
         # URLs this session actually asked for, in order. Kept because the cost
         # model of a crawl *is* its request count: a mode that promises "one request
         # per page" has to be measurable promising it, and a test that only checks
@@ -505,6 +515,27 @@ class Crawler(ABC):
         if not rows:
             return
         self._collected.extend(rows)
+
+    def set_watermark(self, key: str) -> None:
+        """Install the boundary the previous completed run left behind."""
+        self.watermark = str(key or '')
+        self._watermark_hit = False
+
+    def watermark_boundary(self, key: str) -> bool:
+        """True when *key* is the last item a previous run already had.
+
+        A walk calls this BEFORE fetching/scraping the item, then stops. That is the
+        whole network saving: the boundary item and everything older are not fetched.
+        """
+        if self.watermark and str(key or '') == self.watermark:
+            self._watermark_hit = True
+            return True
+        return False
+
+    def note_watermark(self, key: str) -> None:
+        """Record the first freshly kept item; newest-first walks pass it here."""
+        if not self._watermark_candidate and str(key or ''):
+            self._watermark_candidate = str(key)
 
     def mark_position(self, **position):
         """Record where the crawl has got to. Merged into the previous position

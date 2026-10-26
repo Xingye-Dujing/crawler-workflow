@@ -139,6 +139,9 @@ def bare(driver, **attrs):
     crawler.requests = []
     crawler._collected = []
     crawler._cursor = {}
+    crawler.watermark = ''
+    crawler._watermark_hit = False
+    crawler._watermark_candidate = ''
     crawler._sink = None
     crawler._cursor_sink = None
     for key, value in attrs.items():

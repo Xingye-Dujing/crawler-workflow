@@ -2388,6 +2388,20 @@ function openSettings(nodeId) {
            /api/capabilities (see Capabilities above), so the panel and the
            executor cannot disagree about what a platform offers. */
         html += sourcePanelHtml(nodeId, node.params);
+        /* Only a mode whose walk is newest-first and has a stable item identity can
+           stop at the previous completed run's boundary. Today that is Bilibili's
+           author uploads (BV号); the backend refuses the switch everywhere else. */
+        var wmPlatform = node.params.platform || node.platform || '';
+        var wmMode = (typeof Capabilities !== 'undefined' && Capabilities.ready())
+            ? Capabilities.mode(wmPlatform, node.params.collect || node.params.mode)
+            : null;
+        if (wmPlatform === 'bilibili' && wmMode && wmMode.handler === 'author') {
+            html += '<div class="settings-group"><label class="settings-label">' +
+                '<input type="checkbox" ' + (boolParam(node.params.watermark, false) ? 'checked' : '') + ' ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'watermark\',this.checked)"> ' +
+                I18n.t('settings.watermark') + '</label>' +
+                '<div class="settings-hint">' + I18n.t('settings.watermarkHint') + '</div></div>';
+        }
     } else if (node.type === 'comment') {
         /* Source-like crawler: article links go in, comment rows come out. The
            panel mirrors the WeChat source block (a multi-line textarea) and the

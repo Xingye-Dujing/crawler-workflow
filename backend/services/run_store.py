@@ -210,6 +210,7 @@ _VOLATILE_PARAMS = frozenset(
         'row_count',
         'workflow_name',
         'recrawl',
+        'watermark',
         'enabled',
         'layout_order',
         # output-shape only: never a choice of what is collected
@@ -452,6 +453,18 @@ class RunStore:
                     value TEXT,
                     created_at TEXT,
                     PRIMARY KEY (scope, cache_key)
+                );
+                -- The durable boundary for a NEW crawl of the same source node: unlike the
+                -- per-run cursor, this survives the run that wrote it and is read by the next
+                -- scheduled/manual run. scoped by node fingerprint, so a changed keyword/mode/
+                -- account starts fresh rather than inheriting another crawl's boundary.
+                CREATE TABLE IF NOT EXISTS source_watermarks (
+                    scope TEXT PRIMARY KEY,
+                    platform TEXT NOT NULL DEFAULT '',
+                    field TEXT NOT NULL DEFAULT '',
+                    last_key TEXT NOT NULL DEFAULT '',
+                    run_id TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT
                 );
                 -- Which files a run wrote into the export folder. The export listing is a flat
                 -- scan of the directory and carries no run identity (and shard names only embed
@@ -1089,7 +1102,41 @@ class RunStore:
                 totals[table] += int(counts.get(table) or 0)
             totals['item_claims'] += int(self.forget_run_items(run_id) or 0)
             totals['runs'] += 1
+        if not excluded:
+            # Emptying the history is starting from nothing; a watermark pointing at a
+            # deleted crawl would make the next run skip rows whose provenance is gone.
+            self._execute('DELETE FROM source_watermarks')
         return totals
+
+    # ── cross-run crawl watermark ───────────────────────────────
+
+    def get_watermark(self, scope: str) -> dict | None:
+        rows = self._query('SELECT * FROM source_watermarks WHERE scope = ?', (str(scope or ''),))
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            'scope': str(row['scope']),
+            'platform': str(row['platform'] or ''),
+            'field': str(row['field'] or ''),
+            'last_key': str(row['last_key'] or ''),
+            'run_id': str(row['run_id'] or ''),
+            'updated_at': str(row['updated_at'] or ''),
+        }
+
+    def save_watermark(self, scope: str, platform: str, field: str, key: str, run_id: str = '') -> None:
+        """Remember the newest item a completed crawl proved it saw."""
+        clean_scope = str(scope or '')
+        clean_key = str(key or '')
+        if not clean_scope or not clean_key:
+            return
+        self._execute(
+            'INSERT INTO source_watermarks (scope, platform, field, last_key, run_id, updated_at)'
+            ' VALUES (?, ?, ?, ?, ?, ?)'
+            ' ON CONFLICT(scope) DO UPDATE SET platform = excluded.platform, field = excluded.field,'
+            ' last_key = excluded.last_key, run_id = excluded.run_id, updated_at = excluded.updated_at',
+            (clean_scope, str(platform or ''), str(field or ''), clean_key, str(run_id or ''), self.now()),
+        )
 
     def purge(self, keep_per_workflow: int = None, keep_days: int = None, exclude_run_id=None) -> dict:
         """Age out old runs, in two independent sweeps that ADD.

@@ -140,7 +140,10 @@
   **浏览数 exists nowhere else**; one `execute_script` per card.
 - **bilibili**: `page=1` renders zero cards (request page one as the bare URL); comments have no DOM — only
   `x/v2/reply/main` by the server's own cursor; author mode is the space *page*, not the 403-wbi API; hot boards carry
-  `owner`/`stat` inline so `hot()` fetches nothing per row.
+  `owner`/`stat` inline so `hot()` fetches nothing per row. **A cross-run watermark is a content boundary, never a page
+  number:** only a newest-first walk with a stable item identity may stop at the previous completed run's newest id
+  (today Bilibili author / BV号), the boundary item itself is not fetched, and only a clean finish advances it —
+  wall/risk/stop/shortfall never do. Other modes refuse the switch by name; it is mutually exclusive with 重新采集.
 - **youtube**: JSON-first via `engine/innertube` POSTs issued *inside* one loaded page (never hardcode
   `INNERTUBE_*`); headless is fine; a channel's uploads come from the loaded `/@handle/videos` document; a
   continuation token is chosen by **which list it is an element of**.
