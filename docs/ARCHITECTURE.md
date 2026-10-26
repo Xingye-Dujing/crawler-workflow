@@ -90,7 +90,9 @@ run-console, panels/settings renderers, Chart Studio, cookie-gate, i18n/bridge, 
 the `const Foo = {}` namespace style so the existing harness keeps loading real files. Goal is fewer
 implicit globals and a smaller blast radius per edit — **not** a framework rewrite.
 Phase 2 of the backend plan is done: the node catalogue and its seeds are served by `/api/node-types`
-and read by `node-types.js`; `canvas.js` keeps a pinned fallback for the cold page.
+and read by `node-types.js`; `canvas.js` keeps a pinned fallback for the cold page. The staged
+frontend split (module boundaries, order, harness loader, verification per step) is written down in
+[`frontend_modules.md`](frontend_modules.md); `workflow.js` is ~13k lines and is the remaining target.
 
 ### C. Docs / rules
 Keep `AGENTS.md` as terse rules and push evidence here/`docs/`. Several rules already have a pinning
