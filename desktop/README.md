@@ -76,22 +76,22 @@ Matplotlib 的 GUI 后端、Selenium 的 Linux/macOS driver 等无用负载排�
 
 ## 体积边界
 
-**当前交付实测（同一台机、同一份源码，UPX 开，2026-10-26 可复用节点/画布历史轮重建）**：文件夹 **164.7 MB**、zip
-**123.9 MB**、安装包 `CaiXiHui-Setup.exe` **115.3 MB**（与上一轮同尺寸；再往前 157.9 / 121.5 / 113.8，
+**当前交付实测（同一台机、同一份源码，UPX 开，2026-10-26 项目包/运行对比/累积数据集/采集水位轮重建）**：
+文件夹 **164.8 MB**、zip **124.0 MB**、安装包 `CaiXiHui-Setup.exe` **115.4 MB**（再往前 164.7 / 123.9 / 115.3；
 最早是 301.4 MB / 153.6 MB，而且那时根本产不出安装包——图标是张换了名字的 PNG，Inno 直接拒绝编译）。
 拆开算：UPX 压 **268** 个二进制，`226.4 → 89.1 MB`（省 **137.3 MB**），0 跳过 0 失败。
-**本轮新静态能力已随包**：`/js/reusable.js`（含解包/模板管理）与 `workflow.js` 的第三页签都在；
-启动后 `/api/workflow/history`、`/api/reusable` 200，模板与画布快照均可写/读/删，
-隔离数据根里会生成 `data/workflow_history.db` 与 `data/reusable_nodes/`；exe 旁没有
-`data/logs/mplconfig/instance.json/tmp*`，zip 顶层也没有用户状态。
+**本轮新静态/接口已随包**：项目包入口（`exportProject`/`project-bundle-input`）、运行对比
+（`runsManager.compare`）、累积数据集节点与谱系重置（`canvas.js`/`workflow.js`/`app.js`）。启动后
+`/api/data/lineages` 200，`/api/project/export` 与 `/api/runs/compare` 在缺参数时按名 400；
+隔离数据根里会生成 `data/`、`logs/`、`mplconfig/`、`tmp/` 与 `instance.json`；exe 旁没有 `tmp*`，
+zip 顶层只有 `CaiXiHui/`（1634 条目、`testzip()` 为 None、无 `data/logs/mplconfig/instance.json/bert_models`）。
 
 **启动实测**（隔离数据根，`CIXI_NO_BROWSER=1` + exe 从终端跑，量到 `/api/config` 返回 200）：
-本轮构建 **1562 ms**（仅启动，单次；上一轮 1427 ms、再前 1470/1433 ms；解压 4 个 fp16 模型包之后再启动是 1373 ms），
-最早是 3423 ms。
+本轮构建 **1863 / 1647 ms**（首启 / 再启；上一轮 1562，再前 1427/1470/1433；最早 3423 ms）。
 UPX 是"载入时在每个进程内存里解压"，
 理论上会拖慢启动，所以这两个数字必须和体积一起看；实测被自检挪后 + 少加载一整套 sklearn 的收益盖过，
-**体积 −48%、启动 −51% 同时成立**。换机器时这两条都要按下面「验证构建」第 5、8 步重测（启动用同一隔离根，
-图标要和源图逐像素比——外壳读不出我们的图时会回落到默认图标并且照样 32×32）。
+相对最早的 301.4 MB / 3423 ms，**体积约 −45%、启动约 −52%**。换机器时这两条都要按下面「验证构建」
+第 5、8 步重测（启动用同一隔离根，图标要和源图逐像素比——外壳读不出我们的图时会回落到默认图标并且照样 32×32）。
 
 pandas/numpy/scipy/scikit-learn/matplotlib/snownlp/jieba 是包体的主要部分。以下能力被有意排除，以换取可接受的分发体积：
 
