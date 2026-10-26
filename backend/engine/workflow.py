@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 
 import cookie_preflight
 from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
+from nodes.labels import node_label
 
 import crawl_capabilities as capabilities
 from config import Config
@@ -80,28 +81,6 @@ def effective_workflow(workflow: dict) -> dict:
     kept_ids = {str(n.get('id')) for n in kept}
     connections = [c for c in raw_connections if str(c.get('from')) in kept_ids and str(c.get('to')) in kept_ids]
     return {'nodes': kept, 'connections': connections, 'settings': settings}
-
-
-def node_label(node: dict, nid: str) -> str:
-    """Console-friendly reference to a node: a name first, the id as suffix.
-
-    'node-7' means nothing once a canvas holds a dozen boxes. The name comes
-    from the user's title; older saved workflows (and any JSON built without
-    one) fall back to the node type's own label, so the console never speaks
-    in bare ids. The id stays appended because names repeat — '#node-7' is
-    what lets two nodes called 清洗 be told apart in the console.
-    """
-    node = node or {}
-    title = str(node.get('title') or '').strip()
-    if not title or title == nid:
-        ntype = str(node.get('type') or '').strip()
-        fallback = t(f'node.{ntype}') if ntype else ''
-        # t() echoes the key when it is missing — an unknown type must not
-        # print 'node. #nid'.
-        title = '' if not fallback or fallback.startswith('node.') else fallback
-    if title and title != nid:
-        return f'{title} #{nid}'
-    return nid
 
 
 #: The node-type sets come from the node catalogue (``nodes/catalog.py``): one declaration per type,

@@ -19,10 +19,10 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def exec_():
-    """The application module, imported inside the test and never at module scope."""
-    import app
+    """The save-node plugin, imported inside the test and never at module scope."""
+    from nodes.executors import output
 
-    return app
+    return output
 
 
 A = [{'正文': 'a1', '点赞数': 1}, {'正文': 'a2', '点赞数': 2}]
@@ -42,12 +42,12 @@ def _save_node():
 class TestMergingUpstreamTables:
     def test_one_upstream_hands_over_exactly_what_it_produced(self, exec_):
         node = _save_node()
-        rows = exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A))])
+        rows = exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A))])
         assert rows == A
 
     def test_two_upstreams_become_one_table_in_connection_order(self, exec_):
         node = _save_node()
-        rows = exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
+        rows = exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
         assert [r['正文'] for r in rows] == ['a1', 'a2', 'b1'], 'the order the wires were drawn is the order it reads'
         assert len(rows) == 3
 
@@ -55,13 +55,13 @@ class TestMergingUpstreamTables:
         """The reason to merge HERE rather than in a node of its own: a chain of analyses
         hangs off this node, so it has to hand on everything it wrote to the file."""
         node = _save_node()
-        rows = exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
+        rows = exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
         assert len(rows) == 3, 'a downstream node must see both tables'
 
     def test_the_exported_file_holds_the_merged_rows(self, exec_, tmp_path, monkeypatch):
         monkeypatch.setattr(exec_.Config, 'EXPORT_DIR', str(tmp_path))
         node = _save_node()
-        exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
+        exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
         written = pd.read_csv(tmp_path / 'merged.csv')
         assert len(written) == 3
         assert list(written.columns) == ['正文', '点赞数']
@@ -70,7 +70,7 @@ class TestMergingUpstreamTables:
         """An empty batch is a real answer — a crawl window with no posts — so the row
         counts of the others still add up and nothing is invented to fill the gap."""
         node = _save_node()
-        rows = exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', [])])
+        rows = exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', [])])
         assert len(rows) == 2
 
     def test_a_column_mismatch_is_refused_and_the_columns_are_named(self, exec_):
@@ -79,7 +79,7 @@ class TestMergingUpstreamTables:
         node = _save_node()
         other = [{'正文': 'b1', '转发数': 9}]
         with pytest.raises(ValueError) as err:
-            exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', other)])
+            exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', other)])
         message = str(err.value)
         assert 'node-2' in message, message
         assert '转发数' in message and '点赞数' in message, 'the refusal must name both sides'
@@ -89,7 +89,7 @@ class TestMergingUpstreamTables:
         table, and pandas aligns them by name."""
         node = _save_node()
         other = [{'点赞数': 3, '正文': 'b1'}]
-        rows = exec_._execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', other)])
+        rows = exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', other)])
         assert [r['正文'] for r in rows] == ['a1', 'a2', 'b1']
 
     def test_a_parent_that_carries_no_table_is_refused_by_name(self, exec_):
@@ -98,7 +98,7 @@ class TestMergingUpstreamTables:
         canvas had only those."""
         node = _save_node()
         with pytest.raises(ValueError) as err:
-            exec_._execute_output_node(
+            exec_.execute_output_node(
                 node,
                 list(A),
                 upstream=[('node-1', list(A)), ('node-2', {'engine': 'echarts', 'option': {}})],
@@ -110,7 +110,7 @@ class TestMergingUpstreamTables:
         # ``/api/analysis``-style callers and older tests call this with rows and nothing
         # else; there is no wire to merge, so the rows in hand are the whole answer.
         node = _save_node()
-        assert exec_._execute_output_node(node, list(A)) == A
+        assert exec_.execute_output_node(node, list(A)) == A
 
 
 class TestMergeIsGraphCheckedToo:

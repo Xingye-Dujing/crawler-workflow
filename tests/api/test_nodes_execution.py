@@ -48,6 +48,14 @@ def _upload(client, paste):
     return paste(RECORDS, name='nodes.csv')
 
 
+@pytest.fixture
+def output_plugin():
+    """The save-node plugin, imported inside the test like ``app_module`` (never at module scope)."""
+    from nodes.executors import output
+
+    return output
+
+
 class TestTokenizeNode:
     def test_tokenize_streams_word_frequencies_downstream(self, client, app_module, paste, data_root):
         ds = _upload(client, paste)
@@ -428,35 +436,35 @@ class TestMergePlatformStamp:
     parent crawled — the key 跨平台对比 reads. Stamping must be strictly ADDITIVE: it must not
     refuse a mix it used to accept, nor move or drop a row."""
 
-    def test_two_platforms_merge_to_one_table_carrying_platform(self, app_module):
+    def test_two_platforms_merge_to_one_table_carrying_platform(self, output_plugin):
         rows_a = [{'正文': '甲'}, {'正文': '乙'}]
         rows_b = [{'正文': '丙'}]
         upstream = [('node-1', rows_a), ('node-2', rows_b)]
-        merged, _ = app_module._merge_upstream_tables(
+        merged, _ = output_plugin.merge_upstream_tables(
             [], upstream, '导出', platform_of={'node-1': 'weibo', 'node-2': 'zhihu'}
         )
         assert [r['正文'] for r in merged] == ['甲', '乙', '丙'], 'merge order (and so row counts) is untouched'
         assert [r['platform'] for r in merged] == ['weibo', 'weibo', 'zhihu']
 
-    def test_an_upload_parent_is_stamped_blank_not_refused(self, app_module):
+    def test_an_upload_parent_is_stamped_blank_not_refused(self, output_plugin):
         upstream = [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])]
-        merged, _ = app_module._merge_upstream_tables([], upstream, '导出', platform_of={'node-1': 'weibo'})
+        merged, _ = output_plugin.merge_upstream_tables([], upstream, '导出', platform_of={'node-1': 'weibo'})
         assert [r['platform'] for r in merged] == ['weibo', '']
 
-    def test_no_platform_map_leaves_the_old_merge_shape(self, app_module):
-        merged, _ = app_module._merge_upstream_tables(
+    def test_no_platform_map_leaves_the_old_merge_shape(self, output_plugin):
+        merged, _ = output_plugin.merge_upstream_tables(
             [], [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])], '导出'
         )
         assert 'platform' not in merged[0], 'a direct caller without a platform map sees exactly the old columns'
 
-    def test_a_merge_refusal_names_its_parent_the_way_the_console_names_nodes(self, app_module):
+    def test_a_merge_refusal_names_its_parent_the_way_the_console_names_nodes(self, output_plugin):
         """The merge's refusals name THE PARENT — the wire the user has to go cut — so quoting a
         bare `node-2` sends them counting boxes on a dozen-node canvas to work out which one was
         meant. Every other console message goes through ``node_label``; these three did not."""
         labels = {'node-2': '微博第二批 #node-2'}
         name_parent = labels.get
         with pytest.raises(ValueError) as not_table:
-            app_module._merge_upstream_tables(
+            output_plugin.merge_upstream_tables(
                 [], [('node-1', [{'正文': '甲'}]), ('node-2', {'chart': 'spec'})], '导出', label_of=name_parent
             )
         assert '微博第二批 #node-2' in str(not_table.value), str(not_table.value)
@@ -467,15 +475,15 @@ class TestMergePlatformStamp:
             ('node-2', [{'正文': '乙'}]),
         ]
         with pytest.raises(ValueError) as columns:
-            app_module._merge_upstream_tables([], mismatch, '导出', label_of=name_parent)
+            output_plugin.merge_upstream_tables([], mismatch, '导出', label_of=name_parent)
         assert '微博第二批 #node-2' in str(columns.value), str(columns.value)
 
-    def test_the_merge_line_in_the_console_names_every_parent_it_joined(self, app_module, monkeypatch):
+    def test_the_merge_line_in_the_console_names_every_parent_it_joined(self, output_plugin, monkeypatch):
         """The 「已合并」 line is the receipt that says WHICH tables went in; bare ids make it a
         receipt the user cannot check against the canvas."""
         lines = []
-        monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: lines.append(msg))
-        merged, _ = app_module._merge_upstream_tables(
+        monkeypatch.setattr(output_plugin, 'add_log', lambda msg, **kw: lines.append(msg))
+        merged, _ = output_plugin.merge_upstream_tables(
             [],
             [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])],
             '导出',
@@ -559,8 +567,8 @@ class TestWindowedFilenames:
     """「文件名带时间范围」 and 「分片文件名加创建时间」 — the two components a crawl appends.
 
     The window is a fact about the CRAWL and a save node is handed only rows, so the range
-    travels through the run: ``_note_window`` records it where the crawl states it,
-    ``_window_for_save`` reads it back where the file is named. A range that cannot resolve
+    travels through the run: ``note_window`` records it where the crawl states it,
+    ``window_for_save`` reads it back where the file is named. A range that cannot resolve
     to exactly one window is IGNORED — the file is still written under its plain name. A time
     range in the filename is decoration and must never be the reason a result is withheld; the
     wrong-month table is avoided simply by not tagging, not by refusing the whole export.
@@ -568,57 +576,61 @@ class TestWindowedFilenames:
 
     ROWS = [{'正文': 'a'}, {'正文': 'b'}]
 
-    def _save(self, app_module, tmp_path, monkeypatch, **params):
-        monkeypatch.setattr(app_module.Config, 'EXPORT_DIR', str(tmp_path))
+    def _save(self, output_plugin, tmp_path, monkeypatch, **params):
+        monkeypatch.setattr(output_plugin.Config, 'EXPORT_DIR', str(tmp_path))
         node = _node('node-9', 'output', {'operation': 'save', 'format': 'csv', **params}, 'save')
-        return app_module._execute_output_node(node, list(self.ROWS))
+        return output_plugin.execute_output_node(node, list(self.ROWS))
 
-    def test_a_recorded_window_lands_before_the_extension(self, app_module, tmp_path, monkeypatch):
+    def test_a_recorded_window_lands_before_the_extension(self, app_module, output_plugin, tmp_path, monkeypatch):
         app_module._note_window(None, '2026-01-01', '2026-03-15')
-        result = self._save(app_module, tmp_path, monkeypatch, filename='weibo.csv', filename_time_range=True)
+        result = self._save(output_plugin, tmp_path, monkeypatch, filename='weibo.csv', filename_time_range=True)
         assert isinstance(result, list) and len(result) == 2, 'the table must still travel downstream'
         assert [p.name for p in tmp_path.iterdir()] == ['weibo_20260101_to_20260315.csv']
 
-    def test_a_window_the_user_padded_still_names_the_file(self, app_module, tmp_path, monkeypatch):
+    def test_a_window_the_user_padded_still_names_the_file(self, app_module, output_plugin, tmp_path, monkeypatch):
         app_module._note_window(None, ' 2026-01-01 ', '2026-03-15 00:00:00')
-        self._save(app_module, tmp_path, monkeypatch, filename='w.csv', filename_time_range=True)
+        self._save(output_plugin, tmp_path, monkeypatch, filename='w.csv', filename_time_range=True)
         assert [p.name for p in tmp_path.iterdir()] == ['w_20260101_to_20260315.csv']
 
-    def test_a_chain_with_no_crawl_ignores_the_range_and_still_writes_the_file(self, app_module, tmp_path, monkeypatch):
+    def test_a_chain_with_no_crawl_ignores_the_range_and_still_writes_the_file(
+        self, output_plugin, tmp_path, monkeypatch
+    ):
         """An upload feeding a save node has no window at all. The ticked switch cannot be
         honoured, so it is ignored and the file is written under its plain name — the user keeps
         their data. Refusing (the old behaviour) threw away the whole result over a filename
         label, which is exactly the bug reported."""
-        result = self._save(app_module, tmp_path, monkeypatch, filename='nowhere.csv', filename_time_range=True)
+        result = self._save(output_plugin, tmp_path, monkeypatch, filename='nowhere.csv', filename_time_range=True)
         assert isinstance(result, list) and len(result) == 2, 'a name we cannot honour must not block the table'
         assert [p.name for p in tmp_path.iterdir()] == ['nowhere.csv'], 'written plain, with no time-range tag'
 
-    def test_two_windows_are_ignored_and_the_file_is_still_written(self, app_module, tmp_path, monkeypatch):
+    def test_two_windows_are_ignored_and_the_file_is_still_written(
+        self, app_module, output_plugin, tmp_path, monkeypatch
+    ):
         """Two different windows on one path cannot be named honestly, so the tag is dropped
         rather than guessed — but the file is still produced: an ambiguous NAME is no reason to
         lose the data."""
         app_module._note_window(None, '2026-01-01', '2026-01-31')
         app_module._note_window(None, '2026-03-01', '2026-03-31')
-        result = self._save(app_module, tmp_path, monkeypatch, filename='two.csv', filename_time_range=True)
+        result = self._save(output_plugin, tmp_path, monkeypatch, filename='two.csv', filename_time_range=True)
         assert isinstance(result, list) and len(result) == 2, 'an ambiguous range is ignored, not fatal'
         assert [p.name for p in tmp_path.iterdir()] == ['two.csv'], 'written plain rather than mis-tagged'
 
-    def test_the_same_window_recorded_twice_is_still_one_window(self, app_module, tmp_path, monkeypatch):
+    def test_the_same_window_recorded_twice_is_still_one_window(self, app_module, output_plugin, tmp_path, monkeypatch):
         # Two crawl nodes over ONE range is the common shape of a keyword sweep. Calling
         # that an ambiguity would refuse a file with nothing ambiguous about it.
         app_module._note_window(None, '2026-01-01', '2026-01-31')
         app_module._note_window(None, '2026-01-01', '2026-01-31')
-        self._save(app_module, tmp_path, monkeypatch, filename='twice.csv', filename_time_range=True)
+        self._save(output_plugin, tmp_path, monkeypatch, filename='twice.csv', filename_time_range=True)
         assert [p.name for p in tmp_path.iterdir()] == ['twice_20260101_to_20260131.csv']
 
-    def test_ranges_are_kept_apart_per_workflow(self, app_module):
+    def test_ranges_are_kept_apart_per_workflow(self, app_module, output_plugin):
         """A parallel canvas runs several workflows at once, and naming A's file after B's
         window is precisely the wrong-month table this switch must never produce."""
         app_module._note_window(0, '2026-01-01', '2026-01-31')
         app_module._note_window(1, '2026-03-01', '2026-03-31')
-        assert app_module._window_for_save(0)[0] == '_20260101_to_20260131'
-        assert app_module._window_for_save(1)[0] == '_20260301_to_20260331'
-        assert app_module._window_for_save(7) == ('', app_module.t('export.window_none'))
+        assert output_plugin.window_for_save(0)[0] == '_20260101_to_20260131'
+        assert output_plugin.window_for_save(1)[0] == '_20260301_to_20260331'
+        assert output_plugin.window_for_save(7) == ('', app_module.t('export.window_none'))
 
     def test_a_window_that_was_never_stated_is_never_recorded(self, app_module):
         for blank in ((None, None), ('2026-01-01', ''), ('nonsense', '2026-03-15')):

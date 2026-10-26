@@ -46,7 +46,7 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
         return out
     # Register the staged PDF in the run→files ledger so 智能清除 can find a compile a chain
     # leaves in the export folder with no downstream save. A later output renames it and forgets
-    # this name (see app._output_pdf); recording here covers the no-save case, which owns the file.
+    # this name (see nodes/executors/output.py); recording here covers the no-save case, which owns the file.
     if ctx and ctx.get('store') and ctx.get('run_id'):
         with contextlib.suppress(Exception):
             ctx['store'].record_file(ctx['run_id'], str(node.get('id') or ''), name, 'compile')

@@ -91,11 +91,12 @@ def components(workflow: dict, *, file_name: str) -> list:
     def crawl_export(source_id: str) -> tuple:
         """The filename stem + per-article flag of the output nearest the source (the CRAWL file).
 
-        ``_execute_output_node`` names each export by that output node's own ``filename`` param, not by
-        the name node's label, so this — not the label — is how a component's file is addressed. BFS from
-        the source returns the first ``output`` it reaches: for a crawl→output chain that is the crawl
-        file itself; a comments chain whose output then feeds 处理→output nodes still lands on the crawl
-        output first (the analysis files are that component's downstream, not its table).
+        ``nodes.executors.output.execute_output_node`` names each export by that output node's own
+        ``filename`` param, not by the name node's label, so this — not the label — is how a component's
+        file is addressed. BFS from the source returns the first ``output`` it reaches: for a
+        crawl→output chain that is the crawl file itself; a comments chain whose output then feeds
+        处理→output nodes still lands on the crawl output first (the analysis files are that component's
+        downstream, not its table).
         """
         seen_bfs, queue = {source_id}, [source_id]
         while queue:
@@ -364,7 +365,7 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
     His canvas ends every chain in an 输出 node, which makes this the one shape in the whole tier that can
     walk the plan's L2 三一致 (file == store == preview) for every crawl of a multi-component run at once.
     A component's file is addressed by the **filename its crawl output node writes** (``part['export']``,
-    read off that node — ``_execute_output_node`` names the file by that param, never by the name node),
+    read off that node — ``execute_output_node`` names the file by that param, never by the name node),
     falling back to the label only when a canvas has no output node to read. This is the point twice over:
     a row count that ties only **in total** can hide a component that wrote nothing while another wrote
     twice, and a loose *substring* match hands the search component one of the comment files (the analysis
@@ -381,7 +382,7 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
         kept = harness.stored_rows(records[part['label']], part['source'])
         if kept == 0:
             # A named short that collected nothing (a walled hot board, a closed thread) owes NO file:
-            # ``_execute_output_node`` returns before writing when its input is empty, which is the right
+            # ``execute_output_node`` returns before writing when its input is empty, which is the right
             # answer for an empty table. ``audit_components`` already refused any SILENT zero upstream,
             # so a 0-row leg reaching here did it honestly and must not be convicted for a missing export.
             continue

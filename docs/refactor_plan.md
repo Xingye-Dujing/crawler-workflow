@@ -50,9 +50,10 @@ backend/nodes/
   registry.py          # EXECUTORS = {type: run}，唯一查找入口；重复注册按名拒绝（Phase 1a）
   schema.py            # Phase 3：聚合并发列/读取列（由各插件的 emits/reads 组成）
   executors/
-    __init__.py        # 导入 8 个内置插件并注册；由 registry.load_builtin_executors() 触发
-    name.py upload.py resume.py tokenize.py accumulate.py compile.py biblio.py fuse.py   # 已迁
-    source.py comment.py process.py analysis.py visualize.py output.py                   # Phase 1b
+    __init__.py        # 导入 9 个内置插件并注册；由 registry.load_builtin_executors() 触发
+    name.py upload.py resume.py tokenize.py accumulate.py compile.py biblio.py fuse.py output.py  # 已迁
+    source.py comment.py process.py analysis.py visualize.py                                     # Phase 1b 剩余
+  labels.py            # node_label：控制台命名，不拉入 engine/pandas（executors 可安全引用）
 ```
 
 `NodePlugin` 的最终形态（Phase 1 先只加 `execute`，其余字段在 Phase 3 补齐）：
@@ -141,8 +142,12 @@ backend/
 验收：fast **8071 passed, 3 skipped**；设备档 **192 passed**（重构前一轮；本轮执行体迁移未改采集路径）；
 ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
 
-**1b（待做）**：按从依赖少到多的顺序迁剩余 6 个：`output` → `visualize` → `analysis` → `process` →
-`comment` → `source`。`source`（浏览器/队列/CatBus）与 `comment`（评论引擎）最后，避免重构期同时改采集行为。
+**1b（进行中）**：按从依赖少到多的顺序迁剩余 6 个：`output`（**已完成**）→ `visualize` → `analysis` →
+`process` → `comment` → `source`。`source`（浏览器/队列/CatBus）与 `comment`（评论引擎）最后，避免重构期同时改采集行为。
+
+`output` 迁移同时落地的共享件：`services/run_files.py`（运行→文件台账的尽力登记）、
+`services/run_windows.py`（`note_window` / `window_for_save`：爬取时间窗随运行传到文件命名处）、
+`nodes/labels.py`（`node_label` 从 `engine.workflow` 搬到轻模块，执行器无需拉入 DAG/capability 依赖）。
 
 每一步：
 
