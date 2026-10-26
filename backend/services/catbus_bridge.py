@@ -55,6 +55,25 @@ _LOCK = threading.Lock()
 _PROBE: Probe | None = None
 _PROBE_AT = 0.0
 
+#: Every adapter process running right now, keyed by the caller's token. 停止 is raised on the
+# run-control thread while the worker sits inside :func:`run` reading a child's stdout, and a
+# blocking read cannot be interrupted by an ``abort`` predicate between rows — a child that stalls
+# mid-crawl would keep the run slot (and the site) busy until the deadline. A token lets the
+# stopping thread aim the reaper at exactly this caller's process, the way the browser path aims it
+# at exactly this session's driver.
+_ACTIVE: dict[str, subprocess.Popen] = {}
+_ACTIVE_LOCK = threading.Lock()
+
+
+def kill_running(token: str) -> bool:
+    """Reap whatever process ``token`` is running now. False when it has none (the honest answer)."""
+    with _ACTIVE_LOCK:
+        proc = _ACTIVE.get(str(token))
+    if proc is None:
+        return False
+    _reap(proc)
+    return True
+
 
 # ─── Probe: what this machine can actually do ────────────────────────────────────────────────
 
@@ -259,6 +278,7 @@ def _call(
     timeout: float | None = None,
     abort=None,
     capture: bool = False,
+    token: str = '',
 ) -> _Call:
     """Run one adapter command. stdout is read line by line as it arrives; stderr is drained whole.
 
@@ -276,7 +296,16 @@ def _call(
             stderr=subprocess.PIPE,
             **procs.popen_kwargs(),
         ) as proc:
-            _drive(proc, out, deadline=deadline, stdin_text=stdin_text, on_line=on_line, abort=abort, capture=capture)
+            _drive(
+                proc,
+                out,
+                deadline=deadline,
+                stdin_text=stdin_text,
+                on_line=on_line,
+                abort=abort,
+                capture=capture,
+                token=token,
+            )
     except (OSError, ValueError) as exc:
         out.code = -1
         out.spawn_error = str(exc)
@@ -292,6 +321,7 @@ def _drive(
     on_line,
     abort,
     capture: bool,
+    token: str = '',
 ) -> None:
     """Talk to one running adapter process, and never leave it running.
 
@@ -299,6 +329,9 @@ def _drive(
     would fill the pipe buffer and stall a child that is still producing rows. The deadline is a
     timer rather than a poll, because the blocking read is the thing that has to be interrupted.
     """
+    if token:
+        with _ACTIVE_LOCK:
+            _ACTIVE[token] = proc
     stderr: list[str] = []
 
     def _drain() -> None:
@@ -343,6 +376,10 @@ def _drive(
         timer.cancel()
         if proc.poll() is None:
             _reap(proc)
+        if token:
+            with _ACTIVE_LOCK:
+                if _ACTIVE.get(token) is proc:
+                    _ACTIVE.pop(token, None)
         watcher.join(5.0)
         out.timed_out = 'timeout' in killed
         out.stopped = 'stopped' in killed
@@ -483,11 +520,13 @@ def run(
     abort=None,
     account: str = '',
     timeout: float | None = None,
+    token: str = '',
 ) -> Outcome:
     """Crawl one 平台 × 模式 through CatBus, streaming rows into ``on_row``.
 
     A refusal never returns an empty table: ``on_row`` is only ever called with a row the adapter
-    produced, and every failure path carries the code and hint the adapter printed.
+    produced, and every failure path carries the code and hint the adapter printed. ``token`` lets
+    the caller's 停止 aim the reaper at this exact process (see :func:`kill_running`).
     """
     info = probe()
     if not info.available:
@@ -528,7 +567,7 @@ def run(
         if on_row is not None:
             on_row(row)
 
-    call = _call(argv, stdin_text=payload, on_line=_consume, abort=abort, timeout=timeout)
+    call = _call(argv, stdin_text=payload, on_line=_consume, abort=abort, timeout=timeout, token=token)
     if drift:
         return Outcome(status='error', rows=rows, exit_code=call.code, message=drift[0])
     summary = _summary_of(call)
