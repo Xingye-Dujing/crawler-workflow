@@ -584,6 +584,39 @@ requests.length = 0;
 await pa.datasetManager.mergeSelected();
 out.dataset_merge_refused = { toasts: toasts.slice() };
 
+/* A cumulative lineage gets its own reset door on the dataset row and in the
+   accumulate node's settings; it is separate from deleting the dataset. */
+fresh();
+pa.datasetManager._last = [
+    {
+        dataset_id: 'd1',
+        name: '累积A',
+        source: 'cumulative',
+        row_count: 4,
+        byte_size: 10,
+        workflows: [],
+        lineage: { name: '累积A', version: 3 },
+    },
+];
+pa.datasetManager.render();
+out.dataset_lineage_row = { html: id('dataset-mgr-body').innerHTML };
+answers.dialog = true;
+route('/api/data/lineages/reset', { ok: true, reset: true });
+requests.length = 0;
+await pa.datasetManager.resetLineage('累积A');
+out.dataset_lineage_reset = {
+    url: requests[0] ? requests[0].url : '',
+    method: requests[0] ? requests[0].method : '',
+    body: requests[0] ? JSON.parse(requests[0].body) : null,
+    toasts: toasts.slice(),
+};
+
+fresh();
+answers.dialog = false;
+requests.length = 0;
+await pa.datasetManager.resetLineage('累积A');
+out.dataset_lineage_reset_declined = { requested: requests.length };
+
 /* ── Upload node: attach a saved dataset ─────────────────────────────
    The run executor only needs a valid dataset_id, so selecting a stored file must
    write the same three params a fresh upload writes — and never re-hash or

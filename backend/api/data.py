@@ -309,6 +309,34 @@ def diff_datasets():
     return jsonify({'ok': True, 'diff': report})
 
 
+@bp.route('/api/data/lineages', methods=['GET'])
+def dataset_lineages():
+    store = get_dataset_store()
+    name = str(request.args.get('name') or '').strip()
+    if not name:
+        return jsonify({'ok': True, 'lineages': store.list_lineages()})
+    lineage = store.lineage(name)
+    if lineage is None:
+        return jsonify({'ok': False, 'error': t('api.lineageMissing', name=name)}), 404
+    return jsonify({'ok': True, 'lineage': lineage, 'history': store.lineage_history(name)})
+
+
+@bp.route('/api/data/lineages/reset', methods=['POST'])
+def dataset_lineage_reset():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    name = data.get('name')
+    if not isinstance(name, str):
+        return _bad_param('name')
+    clean = name.strip()
+    if not clean:
+        return _bad_param('name')
+    if not get_dataset_store().reset_lineage(clean):
+        return jsonify({'ok': False, 'error': t('api.lineageMissing', name=clean)}), 404
+    return jsonify({'ok': True, 'reset': True})
+
+
 @bp.route('/api/data/merge', methods=['POST'])
 def merge_dataset_rows():
     data = _json_body()

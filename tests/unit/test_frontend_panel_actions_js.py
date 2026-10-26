@@ -260,6 +260,22 @@ class TestDatasetActions:
     def test_a_column_refusal_is_the_message_the_user_sees(self, pa):
         assert pa['dataset_merge_refused']['toasts'] == ['COLUMNS-DIFFER']
 
+    def test_a_cumulative_row_has_a_reset_door_and_posts_the_name(self, pa):
+        row = pa['dataset_lineage_row']['html']
+        assert 'datasetManager.resetLineage(' in row
+        assert 'v3' in row
+        reset = pa['dataset_lineage_reset']
+        assert reset['url'] == '/api/data/lineages/reset'
+        assert reset['method'] == 'POST'
+        assert reset['body'] == {'name': '累积A'}
+        assert reset['toasts'], 'a successful reset must say so'
+        assert pa['dataset_lineage_reset_declined']['requested'] == 0
+
+    def test_the_accumulate_node_offers_the_same_reset(self):
+        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert "datasetManager.resetLineage(\\''" in source or 'datasetManager.resetLineage(' in source
+        assert 'settings.accumulateHint' in source
+
 
 class TestUploadDatasetPicker:
     """A saved file can be attached to an Upload node without re-uploading it.

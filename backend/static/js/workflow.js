@@ -2528,6 +2528,13 @@ function openSettings(nodeId) {
             { v: 'columns', l: I18n.t('settings.accumulateColumns') },
         ]);
         html += renderParamInput(nodeId, p, 'key_columns', 'settings.accumulateKeys', 'text', '');
+        var lineageArg = attrJsArg(String(p.lineage_name || '').trim());
+        if (lineageArg) {
+            html += '<div class="settings-group upload-actions">' +
+                '<button class="menu-btn" style="color:var(--err)" ' +
+                'onclick="datasetManager.resetLineage(\'' + lineageArg + '\')">' +
+                I18n.t('datasetMgr.lineageReset') + '</button></div>';
+        }
         html += '<div class="settings-hint">' + I18n.t('settings.accumulateHint') + '</div>';
     } else if (node.type === 'reusable') {
         /* The group's form is about its boundary: the template it carries, the ordered
@@ -11109,7 +11116,17 @@ var datasetManager = {
             var refs = row.workflows || [];
             var picked = self._compare.indexOf(id) >= 0;
             var mergePicked = self._merge.indexOf(id) >= 0;
-            var ops = '<button class="runs-mgr-btn" onclick="datasetManager.toggleCompare(\'' + self._quote(id) +
+            var lineage = row.lineage && row.lineage.name
+                ? '<span class="wf-snap-baseline">' + escapeHtml(I18n.t('datasetMgr.lineageVersion', {
+                    version: row.lineage.version,
+                })) + '</span>'
+                : '';
+            var ops = '';
+            if (row.lineage && row.lineage.name) {
+                ops += '<button class="runs-mgr-btn" onclick="datasetManager.resetLineage(\'' +
+                    self._quote(row.lineage.name) + '\')">' + I18n.t('datasetMgr.lineageReset') + '</button>';
+            }
+            ops += '<button class="runs-mgr-btn" onclick="datasetManager.toggleCompare(\'' + self._quote(id) +
                 '\')">' + I18n.t(picked ? 'datasetMgr.compareOn' : 'datasetMgr.compare') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="datasetManager.toggleMerge(\'' + self._quote(id) +
                 '\')">' + I18n.t(mergePicked ? 'datasetMgr.mergeOn' : 'datasetMgr.merge') + '</button>';
@@ -11119,7 +11136,7 @@ var datasetManager = {
                 '\', \'' + self._quote(row.name || '') + '\', ' + (refs.length ? 'true' : 'false') + ')">' +
                 I18n.t('datasetMgr.remove') + '</button>';
             return '<tr>' +
-                '<td class="runs-mgr-wf">' + escapeHtml(row.name || I18n.t('name.unnamed')) + '</td>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(row.name || I18n.t('name.unnamed')) + lineage + '</td>' +
                 '<td>' + escapeHtml(self._sourceLabel(row.source)) + '</td>' +
                 '<td>' + (row.row_count || 0) + '</td>' +
                 '<td>' + self.size(row.byte_size) + '</td>' +
@@ -11209,6 +11226,30 @@ var datasetManager = {
     clearMerge() {
         this._merge = [];
         this.render();
+    },
+
+    async resetLineage(name) {
+        var clean = String(name || '').trim();
+        if (!clean) return;
+        var ok = await showDialog({
+            message: I18n.t('datasetMgr.lineageResetConfirm', { name: clean }),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('datasetMgr.lineageReset'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/data/lineages/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ name: clean }),
+        }).catch(function () { return null; });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('datasetMgr.lineageResetFailed'));
+            return;
+        }
+        showToast(I18n.t('datasetMgr.lineageResetDone', { name: clean }));
+        await this.refresh();
     },
 
     async mergeSelected() {

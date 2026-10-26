@@ -298,6 +298,11 @@ class DatasetStore:
         )
         refs = self._ref_counts()
         out = []
+        lineage_rows = self._query('SELECT current_dataset_id, name, version FROM dataset_lineages')
+        lineages = {
+            str(row['current_dataset_id']): {'name': str(row['name']), 'version': int(row['version'])}
+            for row in lineage_rows
+        }
         for row in rows:
             item = {
                 'dataset_id': row['dataset_id'],
@@ -310,6 +315,7 @@ class DatasetStore:
                 'last_used_at': row['last_used_at'],
             }
             item['workflows'] = refs.get(row['dataset_id'], [])
+            item['lineage'] = lineages.get(str(row['dataset_id']))
             out.append(item)
         return out
 

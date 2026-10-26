@@ -50,6 +50,28 @@ class TestDatasetMergeApi:
             response = client.post('/api/data/merge', json=body)
             assert response.status_code == 400, body
 
+    def test_a_lineage_can_be_listed_and_reset_independently(self, client):
+        store = get_dataset_store()
+        created = store.append_lineage(
+            '累积关键词',
+            pd.DataFrame([{'标题': 'a'}, {'标题': 'b'}], columns=['标题']),
+        )
+        listed = client.get('/api/data/lineages').get_json()
+        assert listed['lineages'][0]['name'] == '累积关键词'
+        one = client.get('/api/data/lineages?name=累积关键词').get_json()
+        assert one['lineage']['rows'] == 2
+        assert one['history'][0]['added_rows'] == 2
+        dataset = client.get('/api/data/datasets').get_json()['datasets']
+        current = next(row for row in dataset if row['dataset_id'] == created['lineage']['current_dataset_id'])
+        assert current['lineage'] == {'name': '累积关键词', 'version': 1}
+        reset = client.post('/api/data/lineages/reset', json={'name': '累积关键词'})
+        assert reset.status_code == 200 and reset.get_json()['reset'] is True
+        assert store.lineage('累积关键词') is None
+        assert store.get(created['lineage']['current_dataset_id']) is not None
+        missing = client.post('/api/data/lineages/reset', json={'name': '累积关键词'})
+        assert missing.status_code == 404
+        assert client.get('/api/data/lineages?name=累积关键词').status_code == 404
+
     def test_a_cumulative_current_version_is_protected_until_forced(self, client):
         store = get_dataset_store()
         created = store.append_lineage(

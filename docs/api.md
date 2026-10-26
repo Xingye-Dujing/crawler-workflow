@@ -68,6 +68,8 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/data/paste` | POST | 将粘贴的 JSON 数组注册为数据集 |
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
+| `/api/data/lineages` | GET | 列出累积数据集谱系（名称/当前版本/行数/列/当前 dataset_id）；`?name=` 另带该谱系的版本历史；找不到 404 |
+| `/api/data/lineages/reset` | POST | `{name}` 清空一个累积谱系及其版本指针（已存数据集版本保留，可随后手动清理）；找不到 404。与「累积数据集」节点设置里的重置按钮、数据集面板的「重置累积数据集」同一入口 |
 | `/api/data/merge` | POST | `{dataset_ids:[...], name}` 把至少两个数据集按行合并成新数据集：列集合必须一致（按第一份的顺序，缺/多列按名拒绝），默认加 `来源` 列（已存在则保留）；结果走 `DatasetStore` 的内容身份，相同内容复用已有 id。超过 300000 行按名拒绝 |
 | `/api/data/inspect` | POST | 查看数据集的空值/类型/重复行统计 |
 | `/api/data/preview` | POST | 分页查看数据集的原始表格（数据预览面板）；按 `node_id` 取历史行时须带 `workflow_name`——`node-2` 在每个画布上都存在，只凭 id 不猜（重启后没有身份就明确回答"无记录"，返回 `code:no_run_data`，前端显示"请先运行一次"而非原始报错）。可选 `run_id` **精确锁定一次运行**：带了就只读该运行的 `node_rows`（连内存里的实时结果也不看，避免把新一轮的行混进历史），运行不存在→400 并报出 id；不带才回落到"最新一次"的旧行为 |

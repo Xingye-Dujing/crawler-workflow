@@ -1335,6 +1335,7 @@ _ZH = {
     'lex.needTerms': '请至少提供一个词。',
     'lex.userdictReadFailed': '读取用户词库失败，分词器保持不变。',
     'lex.userdictLoadFailed': '加载 jieba 用户词典失败。',
+    'api.lineageMissing': '没有这个累积数据集：{name}',
     'api.datasetInLineage': (
         '这份文件是累积数据集「{name}」的当前版本；删除会让累积历史断开（强制删除会同时重置该累积集）'
     ),
@@ -3447,6 +3448,7 @@ _EN = {
     'lex.needTerms': 'Provide at least one term.',
     'lex.userdictReadFailed': 'Could not read the user lexicon; leaving the tokenizer untouched.',
     'lex.userdictLoadFailed': 'Failed to load the jieba user dictionary.',
+    'api.lineageMissing': 'No cumulative dataset with that name: {name}',
     'api.datasetInLineage': (
         'This file is the current version of cumulative dataset “{name}”; '
         'deleting it would break the history (force also resets that lineage)'
