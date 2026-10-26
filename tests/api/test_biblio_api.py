@@ -498,8 +498,10 @@ def test_a_biblio_cluster_reaches_the_review_step_by_its_default_names(client, a
             prompts.append(prompt)
             return '该簇围绕数字政府与政务服务展开，下一步可能转向数据要素。'
 
+    from nodes.executors import analysis as analysis_plugin
+
     monkeypatch.setattr(
-        app_module, '_llm_run_ctx', lambda node, op, ctx=None: {'client': _Client(), 'cancel_event': None}
+        analysis_plugin, 'build_llm_run_ctx', lambda node, op, ctx=None: {'client': _Client(), 'cancel_event': None}
     )
     started = client.post(
         '/api/workflow/execute',

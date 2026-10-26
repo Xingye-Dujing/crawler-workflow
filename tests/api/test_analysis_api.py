@@ -755,9 +755,9 @@ class TestPanelParamsReachTheOperator:
 
     @staticmethod
     def _normalize(op, **params):
-        import app as app_module
+        from services.analysis_params import normalize_analysis_params
 
-        return app_module._normalize_analysis_params(op, params)
+        return normalize_analysis_params(op, params)
 
     def test_drop_null_how_survives(self):
         assert self._normalize('drop_null', columns='a, b', how='all') == {'columns': ['a', 'b'], 'how': 'all'}
@@ -1228,8 +1228,16 @@ CLEAN_TABLE = [
 ]
 
 
-def _normalize(app_module, op: str, params: dict) -> dict:
-    return app_module._normalize_analysis_params(op, params)
+def _normalize(op: str, params: dict) -> dict:
+    from services.analysis_params import normalize_analysis_params
+
+    return normalize_analysis_params(op, params)
+
+
+def _analysis_plugin():
+    from nodes.executors import analysis
+
+    return analysis
 
 
 def _registry() -> list:
@@ -1387,11 +1395,11 @@ class TestNormalizedKwargs:
     @pytest.mark.parametrize('op', sorted(NORMALIZED))
     def test_the_panel_payload_becomes_exactly_these_kwargs(self, app_module, op):
         params, expected = NORMALIZED[op]
-        assert _normalize(app_module, op, params) == expected
+        assert _normalize(op, params) == expected
 
     @pytest.mark.parametrize('op', sorted(BLANK_FORM))
     def test_an_untouched_form_becomes_exactly_these_kwargs(self, app_module, op):
-        assert _normalize(app_module, op, {}) == BLANK_FORM[op]
+        assert _normalize(op, {}) == BLANK_FORM[op]
 
     @pytest.mark.parametrize(
         ('op, cleared'),
@@ -1425,35 +1433,35 @@ class TestNormalizedKwargs:
             'join_how': '',
             'method': '',
         }
-        assert _normalize(app_module, op, cleared_form) == cleared
+        assert _normalize(op, cleared_form) == cleared
         assert cleared != blank, f'{op} does not distinguish a cleared field from an absent one'
 
     def test_a_cleared_switch_is_the_untouched_switch(self, app_module):
         """The one parameter deliberately moved out of the list above."""
-        assert _normalize(app_module, 'sort_rows', {'column': '序号', 'ascending': ''}) == _normalize(
-            app_module, 'sort_rows', {'column': '序号'}
+        assert _normalize('sort_rows', {'column': '序号', 'ascending': ''}) == _normalize(
+            'sort_rows', {'column': '序号'}
         )
-        assert _normalize(app_module, 'sort_rows', {'column': '序号'})['ascending'] is True
+        assert _normalize('sort_rows', {'column': '序号'})['ascending'] is True
 
     def test_a_cleared_number_is_not_a_zero_row_count(self, app_module):
         """The contrast that makes the six above survivable: the numeric fields all
         read a blank as "not configured", so clearing 行数 keeps every row — typing
         ``0`` into it is the only way to ask for none.
         """
-        assert _normalize(app_module, 'sample_rows', {'n': '', 'frac': '', 'seed': ''}) == {
+        assert _normalize('sample_rows', {'n': '', 'frac': '', 'seed': ''}) == {
             'n': None,
             'frac': None,
         }
-        assert _normalize(app_module, 'sample_rows', {'n': '0'})['n'] == 0
+        assert _normalize('sample_rows', {'n': '0'})['n'] == 0
         # An int 0 is falsy, so it is read as "the field was never written".
-        assert _normalize(app_module, 'sample_rows', {'n': 0})['n'] is None
+        assert _normalize('sample_rows', {'n': 0})['n'] is None
 
     def test_an_unknown_operation_gets_no_kwargs_and_is_refused_by_name(self, app_module, client, paste):
         """``return {}`` is the normalizer's last line, so a mistyped op arrives at
         the pipeline with nothing attached — which is only safe because the
         pipeline refuses the *name* rather than defaulting to some operator.
         """
-        assert _normalize(app_module, 'drop_rows', {'columns': 'a'}) == {}
+        assert _normalize('drop_rows', {'columns': 'a'}) == {}
         dataset_id = paste(CLEAN_TABLE, name='unknown-step.csv')
         response = client.post(
             '/api/analysis/run',
@@ -1474,7 +1482,7 @@ class TestNormalizedKwargs:
         from services.data_analysis import DataAnalysisService
 
         frame = pd.DataFrame(CLEAN_TABLE)
-        result, report = DataAnalysisService.run_pipeline(frame, [{'op': op, 'params': _normalize(app_module, op, {})}])
+        result, report = DataAnalysisService.run_pipeline(frame, [{'op': op, 'params': _normalize(op, {})}])
         assert len(result) == len(frame), f'{op} dropped rows it was never asked to drop'
         assert report[0]['rows_removed'] == 0
 
@@ -1490,7 +1498,7 @@ class TestNormalizedKwargs:
         from services.data_analysis import DataAnalysisService, UnknownOperationError
 
         frame = pd.DataFrame(CLEAN_TABLE)
-        params = _normalize(app_module, op, {})
+        params = _normalize(op, {})
         with pytest.raises(UnknownOperationError) as excinfo:
             DataAnalysisService.run_pipeline(frame, [{'op': op, 'params': params}])
         assert op in str(excinfo.value), str(excinfo.value)
@@ -1513,7 +1521,7 @@ class TestNormalizedKwargs:
         ``other_df`` is a caller error with a reason, never a 500 traceback.
         """
         dataset_id = paste(CLEAN_TABLE, name='half-a-join.csv')
-        steps = [{'op': 'join_tables', 'params': _normalize(app_module, 'join_tables', {})}]
+        steps = [{'op': 'join_tables', 'params': _normalize('join_tables', {})}]
         response = client.post('/api/analysis/run', json={'dataset_id': dataset_id, 'steps': steps})
         assert response.status_code == 400
         assert 'other_df' in response.get_json()['error']
@@ -1532,7 +1540,7 @@ class TestJunkInTheStringFields:
     @pytest.mark.parametrize('junk', JUNK)
     @pytest.mark.parametrize('op', [op for op in _ops_writing('columns') if op != 'drop_duplicates'])
     def test_columns_is_always_a_list_of_stripped_names(self, app_module, op, junk):
-        out = _normalize(app_module, op, {'columns': junk})
+        out = _normalize(op, {'columns': junk})
         assert isinstance(out['columns'], list)
         assert all(isinstance(name, str) and name == name.strip() and name for name in out['columns'])
 
@@ -1542,8 +1550,8 @@ class TestJunkInTheStringFields:
         because pandas reads ``subset=None`` as "the whole row" — which is what an
         empty box means, and what an empty list would not.
         """
-        names = _normalize(app_module, 'select_columns', {'columns': junk})['columns']
-        assert _normalize(app_module, 'drop_duplicates', {'columns': junk})['columns'] == (names or None)
+        names = _normalize('select_columns', {'columns': junk})['columns']
+        assert _normalize('drop_duplicates', {'columns': junk})['columns'] == (names or None)
 
     @pytest.mark.parametrize(
         ('junk, expected'),
@@ -1571,7 +1579,7 @@ class TestJunkInTheStringFields:
         asks for a column called ``True``. Pinned as-is: a caller that sends a
         non-string should be refused, not reinterpreted.
         """
-        assert _normalize(app_module, 'select_columns', {'columns': junk}) == {'columns': expected}
+        assert _normalize('select_columns', {'columns': junk}) == {'columns': expected}
 
     def test_a_name_that_is_not_a_column_is_refused_instead_of_widening_the_step(self, client, paste):
         """The service used to drop names it could not find, an empty selection meant
@@ -1613,9 +1621,9 @@ class TestJunkInTheStringFields:
         junk is forwarded to pandas verbatim. That is why the operators own the
         "column is not there" answer, not the normalizer.
         """
-        out = _normalize(app_module, 'filter_rows', {'column': junk, 'op': junk, 'value': junk})
+        out = _normalize('filter_rows', {'column': junk, 'op': junk, 'value': junk})
         assert out == {'column': junk, 'op': junk, 'value': junk}
-        assert _normalize(app_module, 'convert_type', {'column': junk, 'dtype': junk}) == {
+        assert _normalize('convert_type', {'column': junk, 'dtype': junk}) == {
             'column': junk,
             'dtype': junk,
         }
@@ -1627,13 +1635,13 @@ class TestJunkInTheStringFields:
         and not one that cleared it. The operator then refuses the name, which is
         the loud half of this contract.
         """
-        out = _normalize(app_module, 'filter_rows', {'column': 'a', 'op': junk})
+        out = _normalize('filter_rows', {'column': 'a', 'op': junk})
         assert out['op'] == junk
-        out = _normalize(app_module, 'convert_type', {'column': 'a', 'dtype': junk})
+        out = _normalize('convert_type', {'column': 'a', 'dtype': junk})
         assert out['dtype'] == junk
         # Only an absent key takes the documented default.
-        assert _normalize(app_module, 'filter_rows', {'column': 'a'})['op'] == 'eq'
-        assert _normalize(app_module, 'convert_type', {'column': 'a'})['dtype'] == 'str'
+        assert _normalize('filter_rows', {'column': 'a'})['op'] == 'eq'
+        assert _normalize('convert_type', {'column': 'a'})['dtype'] == 'str'
 
 
 class TestJunkInTheNumberFields:
@@ -1669,7 +1677,7 @@ class TestJunkInTheNumberFields:
         ],
     )
     def test_the_row_count_is_a_number_or_nothing_at_all(self, app_module, raw, expected):
-        out = _normalize(app_module, 'sample_rows', {'n': raw})
+        out = _normalize('sample_rows', {'n': raw})
         assert out['n'] == expected
         assert out['frac'] is None
 
@@ -1690,7 +1698,7 @@ class TestJunkInTheNumberFields:
         ],
     )
     def test_the_fraction_is_a_number_or_nothing_at_all(self, app_module, raw, expected):
-        assert _normalize(app_module, 'sample_rows', {'frac': raw})['frac'] == expected
+        assert _normalize('sample_rows', {'frac': raw})['frac'] == expected
 
     def test_a_cleared_number_is_not_a_request_to_empty_the_table(self, app_module, client, paste):
         """``n=''`` normalizes to None, which the service reads as "no bound", so
@@ -1698,7 +1706,7 @@ class TestJunkInTheNumberFields:
         form the user opened and never filled.
         """
         dataset_id = paste(CLEAN_TABLE, name='blank-n.csv')
-        steps = [{'op': 'sample_rows', 'params': _normalize(app_module, 'sample_rows', {'n': '', 'frac': ''})}]
+        steps = [{'op': 'sample_rows', 'params': _normalize('sample_rows', {'n': '', 'frac': ''})}]
         body = client.post('/api/analysis/run', json={'dataset_id': dataset_id, 'steps': steps}).get_json()
         assert body['row_count'] == len(CLEAN_TABLE)
 
@@ -1709,7 +1717,7 @@ class TestJunkInTheNumberFields:
         away the whole crawl instead of refusing it.
         """
         dataset_id = paste(CLEAN_TABLE, name='negative-n.csv')
-        params = _normalize(app_module, 'sample_rows', {'n': '-12'})
+        params = _normalize('sample_rows', {'n': '-12'})
         assert params['n'] == -12
         body = client.post(
             '/api/analysis/run', json={'dataset_id': dataset_id, 'steps': [{'op': 'sample_rows', 'params': params}]}
@@ -1743,18 +1751,18 @@ class TestJunkInTheNumberFields:
         all *omit* the key, which the service reads as "four buckets" — so a user
         who types 0 gets buckets, not an error.
         """
-        out = _normalize(app_module, 'bin_column', {'column': '序号', 'bins': raw})
+        out = _normalize('bin_column', {'column': '序号', 'bins': raw})
         if expected == 'omitted':
             assert 'bins' not in out, out
         else:
             assert out['bins'] == expected
 
     def test_labels_and_edges_are_parsed_independently(self, app_module):
-        out = _normalize(app_module, 'bin_column', {'column': 'a', 'bins': '0,1', 'bin_labels': 'lo,,hi'})
+        out = _normalize('bin_column', {'column': 'a', 'bins': '0,1', 'bin_labels': 'lo,,hi'})
         assert out['bins'] == [0.0, 1.0] and out['labels'] == ['lo', 'hi']
         # A label list with nothing in it is not a label list: pandas would then
         # refuse a bucket count that has no matching number of names.
-        assert 'labels' not in _normalize(app_module, 'bin_column', {'column': 'a', 'bins': '4', 'bin_labels': ','})
+        assert 'labels' not in _normalize('bin_column', {'column': 'a', 'bins': '4', 'bin_labels': ','})
 
 
 # ─── the twelve filter comparisons, as a node would send them ──────────
@@ -1941,10 +1949,12 @@ class TestTheLabellingStepNeedsTheRunModel:
         from services.data_analysis import UnknownOperationError
 
         calls = []
-        monkeypatch.setattr(app_module, '_llm_run_ctx', lambda *a, **k: calls.append(a) or {'client': None})
+        monkeypatch.setattr(
+            _analysis_plugin(), 'build_llm_run_ctx', lambda *a, **k: calls.append(a) or {'client': None}
+        )
         monkeypatch.setitem(app_module.execution_state, 'llm', {})
         with pytest.raises(UnknownOperationError, match='模型'):
-            app_module._execute_analysis_node(self._node(), list(self.TOPICS))
+            _analysis_plugin().execute_analysis_node(self._node(), list(self.TOPICS))
         assert calls == [], 'the refusal is issued before a client is even built'
 
     def test_a_node_model_override_counts_as_a_configured_model(self, app_module, monkeypatch):
@@ -1955,9 +1965,9 @@ class TestTheLabellingStepNeedsTheRunModel:
             seen['op'] = op
             return {'client': client, 'cancel_event': None}
 
-        monkeypatch.setattr(app_module, '_llm_run_ctx', fake_ctx)
+        monkeypatch.setattr(_analysis_plugin(), 'build_llm_run_ctx', fake_ctx)
         monkeypatch.setitem(app_module.execution_state, 'llm', {'provider': 'ollama', 'model': ''})
-        rows = app_module._execute_analysis_node(self._node(model='qwen3'), list(self.TOPICS))
+        rows = _analysis_plugin().execute_analysis_node(self._node(model='qwen3'), list(self.TOPICS))
         assert seen == {'op': 'topic_label'}, 'the step names itself so the client is built for it'
         assert [row['主题概括'] for row in rows] == ['网络暴力的谩骂'] * 2
         assert len(client.prompts) == 2
@@ -1966,8 +1976,8 @@ class TestTheLabellingStepNeedsTheRunModel:
         def boom(*_args, **_kwargs):
             raise AssertionError('a step that needs no model must not ask for one')
 
-        monkeypatch.setattr(app_module, '_llm_run_ctx', boom)
-        rows = app_module._execute_analysis_node(
+        monkeypatch.setattr(_analysis_plugin(), 'build_llm_run_ctx', boom)
+        rows = _analysis_plugin().execute_analysis_node(
             self._node('select_columns', columns='stage, topic'), list(self.TOPICS)
         )
         assert set(rows[0]) == {'stage', 'topic'}
@@ -1988,9 +1998,9 @@ class TestTheLabellingStepNeedsTheRunModel:
             seen['op'] = op
             return {'client': client, 'cancel_event': None}
 
-        monkeypatch.setattr(app_module, '_llm_run_ctx', fake_ctx)
+        monkeypatch.setattr(_analysis_plugin(), 'build_llm_run_ctx', fake_ctx)
         monkeypatch.setitem(app_module.execution_state, 'llm', {'provider': 'ollama', 'model': 'qwen3'})
-        rows = app_module._execute_analysis_node(self._node('cluster_review'), clusters)
+        rows = _analysis_plugin().execute_analysis_node(self._node('cluster_review'), clusters)
         assert seen == {'op': 'cluster_review'}
         assert len(rows) == 2, 'one review row per cluster'
         assert len(client.prompts) == 2
@@ -2019,7 +2029,7 @@ class TestJunkAcrossEveryField:
             for junk in JUNK:
                 payload = {key: PANEL_VALUE[key] for key in fields}
                 payload[field] = junk
-                assert isinstance(_normalize(app_module, op, payload), dict), (op, field, junk)
+                assert isinstance(_normalize(op, payload), dict), (op, field, junk)
 
     @pytest.mark.parametrize('op', sorted(_registry()))
     def test_a_word_field_reaches_the_operator_untouched(self, app_module, op):
@@ -2031,7 +2041,7 @@ class TestJunkAcrossEveryField:
             for junk in ['', 'abc', 999999, None, [], {'k': 1}, True]:
                 payload = {key: PANEL_VALUE[key] for key in _panel_fields(op)}
                 payload[field] = junk
-                out = _normalize(app_module, op, payload)
+                out = _normalize(op, payload)
                 assert junk in out.values(), (op, field, out)
 
 
@@ -2148,7 +2158,7 @@ class TestFilterOperatorsThroughTheApi:
     def test_the_measured_row_count_for_each_comparison(self, app_module, client, paste, case):
         column, op, value, expected = FILTER_SWEEP[case]
         dataset_id = paste(FILTER_TABLE, name=f'filter-{case}.csv')
-        params = _normalize(app_module, 'filter_rows', {'column': column, 'op': op, 'value': value})
+        params = _normalize('filter_rows', {'column': column, 'op': op, 'value': value})
         body = client.post(
             '/api/analysis/run', json={'dataset_id': dataset_id, 'steps': _step('filter_rows', params)}
         ).get_json()
@@ -2163,7 +2173,7 @@ class TestFilterOperatorsThroughTheApi:
         """
         dataset_id = paste(FILTER_TABLE, name='filter-ghost.csv')
         for op in sorted({row[1] for row in FILTER_SWEEP.values()}):
-            params = _normalize(app_module, 'filter_rows', {'column': '不存在', 'op': op, 'value': 'x'})
+            params = _normalize('filter_rows', {'column': '不存在', 'op': op, 'value': 'x'})
             response = client.post(
                 '/api/analysis/run', json={'dataset_id': dataset_id, 'steps': _step('filter_rows', params)}
             )
@@ -2179,7 +2189,7 @@ class TestFilterOperatorsThroughTheApi:
         what arrived.
         """
         dataset_id = paste(FILTER_TABLE, name='filter-bound.csv')
-        params = _normalize(app_module, 'filter_rows', {'column': '序号', 'op': op, 'value': value})
+        params = _normalize('filter_rows', {'column': '序号', 'op': op, 'value': value})
         body = {'dataset_id': dataset_id, 'steps': _step('filter_rows', params)}
         response = client.post('/api/analysis/run', json=body)
         assert response.status_code == 400
@@ -2200,7 +2210,7 @@ class TestFilterOperatorsThroughTheApi:
         dataset_id = paste(FILTER_TABLE, name='filter-unknown.csv')
         for op in sorted({row[1] for row in FILTER_SWEEP.values()}):
             unknown = f'{op}_nope'
-            params = _normalize(app_module, 'filter_rows', {'column': '城市', 'op': unknown, 'value': '北京'})
+            params = _normalize('filter_rows', {'column': '城市', 'op': unknown, 'value': '北京'})
             response = client.post(
                 '/api/analysis/run', json={'dataset_id': dataset_id, 'steps': _step('filter_rows', params)}
             )
@@ -2380,10 +2390,10 @@ class TestABooleanAndATextMeanTheSameThing:
         ],
     )
     def test_either_grammar_selects_the_same_direction(self, app_module, sent, ascending):
-        out = _normalize(app_module, 'sort_rows', {'column': '序号', 'ascending': sent})
+        out = _normalize('sort_rows', {'column': '序号', 'ascending': sent})
         assert out['ascending'] is ascending, sent
         # An absent field is the documented default, the only other way up.
-        assert _normalize(app_module, 'sort_rows', {'column': '序号'})['ascending'] is True
+        assert _normalize('sort_rows', {'column': '序号'})['ascending'] is True
 
     def test_a_boolean_true_sorts_the_table_up(self, client, app_module, paste):
         """The end-to-end half of the grid, from the workflow file a caller writes:
@@ -2420,10 +2430,8 @@ class TestRenameWithoutANewName:
     """
 
     def test_the_mapping_is_built_with_an_empty_target(self, app_module):
-        assert _normalize(app_module, 'rename_columns', {'rename_from': '城市'}) == {'mapping': {'城市': ''}}
-        assert _normalize(app_module, 'rename_columns', {'rename_from': '城市', 'rename_to': ''}) == {
-            'mapping': {'城市': ''}
-        }
+        assert _normalize('rename_columns', {'rename_from': '城市'}) == {'mapping': {'城市': ''}}
+        assert _normalize('rename_columns', {'rename_from': '城市', 'rename_to': ''}) == {'mapping': {'城市': ''}}
 
     @pytest.mark.parametrize('rename_from', [['a', 'b'], {'k': 1}])
     def test_an_unhashable_source_name_raises_inside_the_normalizer(self, app_module, rename_from):
@@ -2435,7 +2443,7 @@ class TestRenameWithoutANewName:
         branch normalizes junk into *kwargs* and lets the operator refuse by name.
         """
         with pytest.raises(TypeError) as excinfo:
-            _normalize(app_module, 'rename_columns', {'rename_from': rename_from, 'rename_to': '新'})
+            _normalize('rename_columns', {'rename_from': rename_from, 'rename_to': '新'})
         assert 'unhashable type' in str(excinfo.value)
 
     def test_a_rename_without_a_new_name_fails_the_node(self, client, app_module, paste):
@@ -2497,9 +2505,7 @@ class TestRenameWithoutANewName:
         ],
     )
     def test_only_a_falsy_source_names_nothing(self, app_module, rename_from, mapping):
-        assert _normalize(app_module, 'rename_columns', {'rename_from': rename_from, 'rename_to': '新'}) == {
-            'mapping': mapping
-        }
+        assert _normalize('rename_columns', {'rename_from': rename_from, 'rename_to': '新'}) == {'mapping': mapping}
 
 
 # ─── the two ways a step list reaches the operators ────────────────────
@@ -2529,7 +2535,7 @@ class TestBothStepPathsReadTheSameParameters:
     def test_the_same_words_as_a_single_operation_select_two_columns(self, client, app_module, paste):
         """The two spellings of one intent, side by side."""
         dataset_id = paste(FILTER_TABLE, name='normalized-step.csv')
-        params = _normalize(app_module, 'select_columns', {'columns': '名称, 城市'})
+        params = _normalize('select_columns', {'columns': '名称, 城市'})
         body = client.post(
             '/api/analysis/run', json={'dataset_id': dataset_id, 'steps': _step('select_columns', params)}
         ).get_json()
@@ -2737,17 +2743,17 @@ class TestPanelFieldsAndNormalizerKeysAgree:
         fields = sorted(_panel_fields(op))
         assert fields, f'{op} has no writable field in the panel'
         assert set(fields) <= set(PANEL_VALUE), f'no probe value for {sorted(set(fields) - set(PANEL_VALUE))}'
-        full = _normalize(app_module, op, {key: PANEL_VALUE[key] for key in fields})
+        full = _normalize(op, {key: PANEL_VALUE[key] for key in fields})
         for field in fields:
-            without = _normalize(app_module, op, {k: PANEL_VALUE[k] for k in fields if k != field})
+            without = _normalize(op, {k: PANEL_VALUE[k] for k in fields if k != field})
             assert without != full, f'{op}.{field} is written by the panel and ignored by the normalizer'
 
     @pytest.mark.parametrize('op', sorted(_registry()))
     def test_no_key_outside_the_panel_changes_the_kwargs(self, app_module, op):
         fields = sorted(_panel_fields(op))
-        full = _normalize(app_module, op, {key: PANEL_VALUE[key] for key in fields})
+        full = _normalize(op, {key: PANEL_VALUE[key] for key in fields})
         for stray in sorted(set(PANEL_VALUE) - set(fields)):
-            probe = _normalize(app_module, op, {**{key: PANEL_VALUE[key] for key in fields}, stray: PANEL_VALUE[stray]})
+            probe = _normalize(op, {**{key: PANEL_VALUE[key] for key in fields}, stray: PANEL_VALUE[stray]})
             assert probe == full, f'{op} reads {stray}, which its panel block never writes'
 
     def test_the_operation_picker_is_read_by_the_executor(self, app_module):
@@ -2755,7 +2761,7 @@ class TestPanelFieldsAndNormalizerKeysAgree:
         to choose which branch of the normalizer runs, so a panel that renamed it
         would leave every node configured but inert.
         """
-        assert _normalize(app_module, 'drop_null', {'operation': 'sort_rows'}) == {'columns': [], 'how': 'any'}
+        assert _normalize('drop_null', {'operation': 'sort_rows'}) == {'columns': [], 'how': 'any'}
 
 
 # ─── step order through the endpoint ───────────────────────────────────

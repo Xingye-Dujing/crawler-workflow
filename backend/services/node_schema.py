@@ -228,17 +228,15 @@ def _normalized_kwargs(op: str, params: dict) -> dict:
 
     A canvas stores each field FLAT beside ``operation`` under the *panel's* name
     (``phase_new_col``, ``label_summary_col``); the executor reads a *canonical* name
-    (``new_col``, ``summary_col``). app's single translator is the only authority on that
+    (``new_col``, ``summary_col``). ``services.analysis_params`` is the only authority on that
     mapping, so it is asked here rather than duplicated — the old ``[{'op': op}]`` threw
     every sibling away and the model computed the DEFAULT column name for a node the user
-    had given a new one, hiding the very column downstream steps read. Import is lazy (this
-    runs inside the request cycle, not module load) and a failure falls back to the raw
-    params so a lineage preview never turns into a 500.
+    had given a new one, hiding the very column downstream steps read.
     """
     try:
-        from app import _normalize_analysis_params
+        from services.analysis_params import normalize_analysis_params
 
-        normalized = _normalize_analysis_params(op, params)
+        normalized = normalize_analysis_params(op, params)
     except Exception:  # a preview must degrade to "read what is there", never crash
         normalized = {}
     return {**params, **normalized} if isinstance(normalized, dict) else dict(params)

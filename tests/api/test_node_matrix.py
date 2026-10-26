@@ -3,7 +3,7 @@
 The analyzers have unit tests, and the endpoints have API tests, but for most
 operations the piece never covered was the node itself: the settings panel's flat
 strings (`columns: "点赞, 阅读"`, `topk: "abc"`, `mode: "ml"`) go through
-`_normalize_analysis_params` / `_safe_int` / `_split_columns` before any analyzer
+`normalize_analysis_params` / `_safe_int` / `_split_columns` before any analyzer
 sees them, and a wrong name or a dropped key there is invisible to a test that
 calls the analyzer with clean kwargs. Emotion, tendency, keyword, cluster and
 correlation had never been executed as a node at all.
@@ -415,7 +415,7 @@ class TestProcessNodeParameterEdges:
 class TestAnalysisNodeOperations:
     """Every cleaning op the 分析 node offers, driven through a real run.
 
-    These are the kwargs `_normalize_analysis_params` builds out of the panel's
+    These are the kwargs `normalize_analysis_params` builds out of the panel's
     flat strings, so a key spelled there and read differently by
     `DataAnalysisService` shows up here as wrong data rather than as a passing
     unit test of the helper.

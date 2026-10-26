@@ -258,19 +258,21 @@ class TestNumericLimits:
             assert response.get_json()['ok'] is True
 
     def test_the_helpers_reject_every_non_finite_number(self, app_module):
-        assert app_module._safe_int('inf', 20) == 20
-        assert app_module._safe_int('nan', 20, minimum=1, maximum=10) == 20
-        assert app_module._safe_int(float('-inf'), 7) == 7
-        assert app_module._safe_int('1e999', 7) == 7
-        assert app_module._safe_int('3.9') == 3
-        assert app_module._safe_int(None) == 0
-        assert app_module._optional_int('inf') is None
-        assert app_module._optional_int('nan') is None
-        assert app_module._optional_int('12') == 12
-        assert app_module._optional_float('inf') is None
-        assert app_module._optional_float('0.4') == 0.4
-        assert app_module._safe_float('inf', 0.5) == 0.5
-        assert app_module._safe_float('2.5', 0.5) == 2.5
+        from api.http import _optional_float, _optional_int, _safe_float, _safe_int
+
+        assert _safe_int('inf', 20) == 20
+        assert _safe_int('nan', 20, minimum=1, maximum=10) == 20
+        assert _safe_int(float('-inf'), 7) == 7
+        assert _safe_int('1e999', 7) == 7
+        assert _safe_int('3.9') == 3
+        assert _safe_int(None) == 0
+        assert _optional_int('inf') is None
+        assert _optional_int('nan') is None
+        assert _optional_int('12') == 12
+        assert _optional_float('inf') is None
+        assert _optional_float('0.4') == 0.4
+        assert _safe_float('inf', 0.5) == 0.5
+        assert _safe_float('2.5', 0.5) == 2.5
 
     def test_the_upload_ceiling_parse_cannot_be_turned_off_by_a_typo(self, app_module, monkeypatch):
         # A garbage MAX_UPLOAD_MB must fall back, not leave the limit unset.
