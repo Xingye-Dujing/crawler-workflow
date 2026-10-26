@@ -142,7 +142,7 @@ backend/
 验收：fast **8071 passed, 3 skipped**；设备档 **192 passed**（重构前一轮；本轮执行体迁移未改采集路径）；
 ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
 
-**1b（进行中）**：按从依赖少到多的顺序迁剩余 6 个：`output`（**已完成**）→ `visualize` → `analysis` →
+**1b（进行中）**：按从依赖少到多的顺序迁剩余 6 个：`output`、`visualize`（**均已完成**）→ `analysis` →
 `process` → `comment` → `source`。`source`（浏览器/队列/CatBus）与 `comment`（评论引擎）最后，避免重构期同时改采集行为。
 
 `output` 迁移同时落地的共享件：`services/run_files.py`（运行→文件台账的尽力登记）、

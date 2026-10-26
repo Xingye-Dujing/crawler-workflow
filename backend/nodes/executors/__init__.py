@@ -10,10 +10,10 @@ against each other.
 """
 
 from nodes import registry
-from nodes.executors import accumulate, biblio, fuse, name, output, resume, tokenize, upload
+from nodes.executors import accumulate, biblio, fuse, name, output, resume, tokenize, upload, visualize
 from nodes.executors import compile as compile_plugin
 
-_BUILTINS = (name, upload, resume, tokenize, accumulate, compile_plugin, biblio, fuse, output)
+_BUILTINS = (name, upload, resume, tokenize, accumulate, compile_plugin, biblio, fuse, output, visualize)
 
 for _module in _BUILTINS:
     registry.register(_module.NODE_TYPE, _module.run)
