@@ -904,3 +904,68 @@ message.
   own provenance and win over the filename. The source files themselves are untouched.
 - **The result is an ordinary dataset.** It goes through `DatasetStore.put`, so content identity,
   dedupe, row caps and the dataset panel's list/preview all apply without a second storage path.
+
+## Vendored front-end assets and machine-level refusals / 前端资源入库与"缺什么就说什么"（measured 2026-10-26）
+
+- **A CDN dependency fails as a blank, not as an error.** `index.html` pulled ECharts, echarts-gl,
+  echarts-wordcloud and the Literata face from `cdn.jsdmirror.com` / `fonts.googleapis.com`, and the China
+  basemap from `geo.datav.aliyun.com`. On a machine with no network the figure area is simply empty —
+  nothing throws, nothing prints, so no tier of the suite could have noticed. Only an assertion over
+  `performance.getEntriesByType('resource')` says what the user sees: every resource must come from the
+  app's own origin (`tests/integration/test_ui_layout.py::test_the_shipped_page_draws_its_figures_...`).
+  Reproduce the old state by serving the page and blocking nothing — the proof is the resource list, not a screenshot.
+- **Redistributed bytes get a hash pin, not a fetch.** `tools/vendor_frontend_assets.py` stores the
+  SHA-256 it reviewed and refuses on mismatch (printing the hash it saw). "Download whatever upstream
+  serves today" hands a third party write access to what our users' screens execute, and makes a broken
+  build look like our bug. Upgrading is one edit with a diff: URL and `sha256` change together.
+- **Google's `css2` declares the same file once per requested weight.** Naming a font file per
+  `@font-face` block shipped 42 files / 2 MB of what is 14 files / 556 KB. Dedupe by URL, name by
+  (style, subset). And sweep your own orphans: packaging copies the whole `static/` tree, so a font the
+  stylesheet stopped referencing still ships — the tool deletes what it no longer names, and the test
+  asserts `referenced == on disk`.
+- **A basemap check must assert content, not parseability.** `china.json` still renders if a province
+  disappears; losing Taiwan or the nine-dash line is a factual defect in a figure destined for a Chinese
+  paper. Name which region went missing before the count ("lost 台湾省" beats "33 of 34"), and keep the
+  file byte-for-byte as served rather than re-deriving it.
+- **Two answers to one machine-level question is the defect.** The launcher kept its own Chrome candidate
+  list, its own MiKTeX scan, and a hardcoded `127.0.0.1:11434` — so a user who set 「设置 → Ollama 地址」 to
+  another machine read "Ollama 未检测到" one line before the app answered from that daemon. Both now call
+  `utils/machine_deps.py` / `services/latex_compile.find_xelatex()`.
+- **A default that points at a file which does not exist is a wrong default.** `Config.DRIVER_PATH` was
+  `C:\Program Files\Google\Chrome\Application\chromedriver.exe`; almost nothing installs a driver there, and
+  Selenium then dies with `The path is not a valid file`, naming a path the user never typed. Blank means
+  "let Selenium Manager fetch the driver matching the installed Chrome", which is the only answer that works
+  on an unknown machine — and it is why the driver is not bundled (driver↔Chrome major versions pair 1:1, so a
+  shipped driver is a shipped expiry date). Note the trap in `save_settings`: clearing the field used to
+  restore that broken default, so 「清空该设置」 advice was a loop, not a remedy.
+- **`xelatex -interaction=batchmode` puts the reason in `main.log`, not stderr.** Reading only stderr gave
+  "compilation failed" with 300 characters of near-nothing, about a missing `ctex.sty` that the log names in
+  its first line. Read the log before `rmtree` deletes the working directory, and translate the two fixable
+  shapes: ``File `X.sty' not found`` → name the package; `The font "X" cannot be found` → name the font
+  (English Windows needs the Simplified Chinese font feature).
+- **Chinese glyphs are a machine fact, and silence about it is a paper full of boxes.** Matplotlib falls back
+  per glyph since 3.6, so what matters is whether *any* family in the stack carries Han. `visualizer.cjk_font()`
+  asks `fontManager.findfont(name, fallback_to_default=False)` and the first warning prints once per wording —
+  cached per message, not by a boolean, because the console language is per thread and an English run deserves
+  its own line. LaTeX asks for `\setCJKmainfont{FangSong}` by name, so a missing font is a compile error, which
+  is why the log reading above names it.
+- **A refusal is only real if the exported figure carries it.** A map whose basemap did not register used to be
+  drawn anyway: ECharts paints an empty frame and the user exports it as a result. `applyEchartsOption` now
+  draws the refusal sentence *through the live instance* (`drawChartRefusal`), so the panel keeps an instance to
+  resize and dispose and the saved PNG/SVG contains the reason.
+- **Tests may not inherit the machine's browser set.** `_create_driver` now refuses when Chrome is missing,
+  which would make every crawler case depend on what the runner has installed; `tests/conftest.py` pins one
+  answer (`machine_has_a_browser`) and the tests *about* that refusal override it. Do not "fix" this by patching
+  `os.path.isfile` — that is process-wide, and the cookie/profile fixtures read the same function. Existence
+  questions get real files in `tmp_path` and paths that are simply absent.
+- **The DOM stub already defines `echarts`** (`harness_dom.mjs`), so a "library missing" scenario must
+  `delete sandbox.echarts`; leaving it makes the harness silently exercise the shared stub — my first run
+  recorded `hasLibrary: true` in a world built without a library and every case measured the stub instead of
+  the product. Same family as AGENTS' rule that a wrapper installed in another file is not the function you load.
+- **A docstring is input to other tests.** Adding the phrase ``from app import app`` to a comment in
+  `desktop_entry.py` broke a source-*order* contract (`seed_registry` must appear before the real import),
+  because the test compares `str.index()` positions and my sentence was earlier in the file. Product-behaviour
+  order was still right; the comment was reworded rather than the test weakened.
+- **The hook deletes an import added before its use — again.** `import re` (latex_compile) and `import sys`
+  (machine_deps) were both auto-removed by the PostToolUse `ruff check --fix` because nothing used them yet at
+  that instant. Write the use first, the import second.

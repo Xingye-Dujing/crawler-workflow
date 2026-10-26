@@ -321,14 +321,14 @@ def _register(data_root, name, kind='latex', run_id='run-pdf', node_id='node-2',
 
 @pytest.fixture
 def fake_xelatex(monkeypatch):
-    """The compiler is the user's own MiKTeX, so nothing here shells out: `_find_xelatex` and
+    """The compiler is the user's own MiKTeX, so nothing here shells out: `find_xelatex` and
     ``subprocess.run`` are stood in for, exactly as ``test_compile_api`` does."""
     import os
     from types import SimpleNamespace
 
     import services.latex_compile as latex_compile
 
-    monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+    monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
 
     def run(command, *args, **kwargs):
         outdir = None
@@ -403,7 +403,7 @@ class TestStudioSavePdf:
         import services.latex_compile as latex_compile
 
         _register(data_root, 'nofont.txt')
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: '')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: '')
         response = client.post('/api/studio/save-pdf', json={'name': 'nofont.txt'})
         assert response.status_code == 500
         assert 'xelatex' in response.get_json()['error']

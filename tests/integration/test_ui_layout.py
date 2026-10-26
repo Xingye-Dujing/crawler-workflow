@@ -4932,3 +4932,55 @@ def test_a_run_comparison_row_is_drawn_from_the_server_diff(driver, app_url, lan
     assert facts['row'] is True and facts['added'] is True, facts
     assert facts['old'] is True and facts['new_row'] is True, facts
     assert facts['closed'] is True, 'closing the comparison removes its row'
+
+
+def test_the_shipped_page_draws_its_figures_without_asking_anything_off_this_machine(app_url, driver):
+    """A double-clicked desktop app has to draw on a machine with no network.
+
+    Every figure on this UI is drawn by a bundle the app serves itself (``/vendor``), over basemaps
+    it ships (``/geo``), with the interface face in the same folder. Until that was true, a machine
+    without internet — or one whose network resets a given CDN host, which this project has measured
+    for ``raw.githubusercontent.com`` — showed an empty figure area and said nothing about why.
+
+    This is the proof from a real browser rather than a claim about code: not one network resource
+    left the origin, both shipped basemaps register, and the shipped webfont is the face the page
+    actually loaded. The count of measured resources is reported because "no foreign request" from a
+    page that loaded nothing would pass for the wrong reason.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    facts = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const origin = location.origin;
+        const entries = performance.getEntriesByType('resource').map((entry) => entry.name);
+        // An inlined data: URI never left the process, so it is not a network request.
+        const foreign = entries.filter((name) =>
+            name.indexOf(origin) !== 0 && name.indexOf('data:') !== 0);
+        Promise.all([ensureMapRegistered('china'), ensureMapRegistered('world_zh'), document.fonts.ready])
+            .then((answers) => {
+                const faces = Array.from(document.fonts)
+                    .filter((face) => face.family === 'Literata' && face.status === 'loaded');
+                done({
+                    origin: origin,
+                    resources: entries.length,
+                    foreign: foreign,
+                    china: answers[0],
+                    world: answers[1],
+                    chinaRegistered: !!echarts.getMap('china'),
+                    worldRegistered: !!echarts.getMap('world_zh'),
+                    faces: faces.length,
+                    library: typeof echarts !== 'undefined' && !!echarts.init,
+                });
+            }, (error) => done({ error: String(error) }));
+        """
+    )
+    assert 'error' not in facts, facts
+    assert facts['library'] is True, 'the chart library is not on the page at all'
+    assert facts['resources'] >= 8, f'only {facts["resources"]} resources measured — the page did not load'
+    assert facts['foreign'] == [], f'requests that left the origin: {facts["foreign"]}'
+    assert facts['china'] == '', f'china basemap refused: {facts["china"]}'
+    assert facts['chinaRegistered'] is True
+    assert facts['world'] == '', f'world basemap refused: {facts["world"]}'
+    assert facts['worldRegistered'] is True
+    assert facts['faces'] >= 1, 'the vendored webfont never loaded'

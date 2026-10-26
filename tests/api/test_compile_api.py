@@ -1,6 +1,6 @@
 """The MiKTeX compile node + PDF output, driven offline with a FAKE xelatex.
 
-The compiler is the user's own MiKTeX, so nothing here shells out: ``_find_xelatex`` and
+The compiler is the user's own MiKTeX, so nothing here shells out: ``find_xelatex`` and
 ``subprocess.run`` are stood in for exactly the way ``test_report_api`` does for Chrome, which lets the
 node's real branches be checked without a TeX install — a chart that emits LaTeX, one that emits neither
 box (rejected before a run), and a missing ``xelatex`` (the node FAILS with a named reason, the run does
@@ -68,7 +68,7 @@ class TestCompileService:
         assert 'Sanya' in merged, 'the data labels ride into the composed document'
 
     def test_no_xelatex_is_a_named_refusal_not_a_crash(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: '')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: '')
         out, name = latex_compile.compile_pdf(
             r'\documentclass{standalone}\begin{document}x\end{document}', 'x.pdf', str(tmp_path)
         )
@@ -76,7 +76,7 @@ class TestCompileService:
         assert not (tmp_path / 'x.pdf').exists()
 
     def test_a_failed_xelatex_leaves_no_half_written_pdf(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
         monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(False, returncode=1, stderr=b'boom'))
         out, _name = latex_compile.compile_pdf('x', 'x.pdf', str(tmp_path))
         assert 'error' in out and not (tmp_path / 'x.pdf').exists()
@@ -84,7 +84,7 @@ class TestCompileService:
 
 class TestCompileNodeAndPdf:
     def test_compile_node_stages_a_pdf(self, client, app_module, paste, data_root, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
         monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
@@ -105,7 +105,7 @@ class TestCompileNodeAndPdf:
         assert (data_root / 'data' / 'exports' / 'compile-cmpA.pdf').exists(), 'the compile node must stage a PDF'
 
     def test_visualize_to_output_writes_a_pdf(self, client, app_module, paste, data_root, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
         monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
@@ -125,7 +125,7 @@ class TestCompileNodeAndPdf:
         assert (data_root / 'data' / 'exports' / 'myfig.pdf').exists(), 'a chart wired to a save must export a PDF'
 
     def test_compile_to_output_renames_the_staged_pdf(self, client, app_module, paste, data_root, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
         monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
@@ -154,7 +154,7 @@ class TestCompileNodeAndPdf:
         )
 
     def test_both_boxes_off_is_rejected_before_the_run(self, client, app_module, paste, data_root, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
         monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
@@ -182,7 +182,7 @@ class TestCompileNodeAndPdf:
         assert not (data_root / 'data' / 'exports' / 'compile-cmpC.pdf').exists()
 
     def test_missing_xelatex_fails_the_node_not_the_run(self, client, app_module, paste, data_root, monkeypatch):
-        monkeypatch.setattr(latex_compile, '_find_xelatex', lambda: '')
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: '')
         ds = _upload(client, paste)
         workflow = _wf(
             [

@@ -40,6 +40,7 @@ import requests
 from config import Config
 from i18n import t
 from settings_store import get_setting
+from utils import machine_deps
 from utils.helpers import as_bool
 
 from .base import UNDER_TARGET, CrawlerStopped
@@ -1393,6 +1394,11 @@ class HongguoCommentHarness:
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing='Windows desktop (mitmdump + UIA)'))
         missing = [name for name in ('mitmproxy', 'uiautomation') if importlib.util.find_spec(name) is None]
         if missing:
+            if machine_deps.is_frozen():
+                # The desktop build does not carry this stack (mitmproxy pulls a large tree, and the
+                # harvest drives a real desktop window). 「pip install mitmproxy」 is not a thing
+                # anybody can do inside an exe, so name the build that can run the node instead.
+                raise ValueError(t('crawl.hg.cmt.needsExtrasFrozen', names=' / '.join(missing)))
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing=' / '.join(missing)))
         mitmdump = find_mitmdump()
         if not mitmdump:

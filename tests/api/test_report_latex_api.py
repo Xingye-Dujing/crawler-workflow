@@ -111,7 +111,7 @@ def _run_with_charts(app_module, data_root, monkeypatch, *, workflow_name='ÊàêÁ®
             'connections': [],
         },
     )
-    monkeypatch.setattr('services.latex_compile._find_xelatex', lambda: 'xelatex')
+    monkeypatch.setattr('services.latex_compile.find_xelatex', lambda: 'xelatex')
     monkeypatch.setattr('services.latex_compile.subprocess.run', _fake_xelatex())
     return store, export
 
@@ -187,7 +187,7 @@ class TestThePaperDocument:
 
     def test_a_missing_compiler_is_an_error_not_a_broken_file(self, client, app_module, data_root, monkeypatch):
         _store, export = _run_with_charts(app_module, data_root, monkeypatch)
-        monkeypatch.setattr('services.latex_compile._find_xelatex', lambda: '')
+        monkeypatch.setattr('services.latex_compile.find_xelatex', lambda: '')
         response = client.post('/api/report/latex', json={'run_id': 'run-tex-1'})
         assert response.status_code == 400
         assert not list(export.glob('report-run-tex-1.pdf')), 'nothing half-written survives a refusal'

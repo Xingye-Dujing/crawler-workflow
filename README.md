@@ -14,9 +14,15 @@
 
 **1. 环境要求**
 - Python 3.11+（代码使用 `zip(..., strict=True)`）
-- Chrome 浏览器（Selenium 驱动，驱动路径可在设置面板修改）
+- Chrome 浏览器（Selenium 驱动）。chromedriver **不随项目分发**：驱动与 Chrome 的大版本一对一绑定，
+  带一份固定驱动等于带一份会过期的东西，所以留空即可，Selenium 会在首次采集时自动取匹配版本（需要联网）；
+  设置面板里的「驱动路径」只用于你明确放置的那份，指向不存在的文件时采集会按名拒绝并说明怎么办
 - [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一即可）
-- 若用 Matplotlib 引擎渲染中文图表，服务器需安装中文字体（`fonts-wqy-microhei` / SimHei / Microsoft YaHei 任一；Linux 下 `apt install fonts-wqy-microhei`）
+- MiKTeX（或 TeX Live）的 `xelatex`：只有「编译为 PDF / 论文成稿」需要；没有它 LaTeX 源照出，PDF 按名拒绝
+- 若用 Matplotlib 引擎渲染中文图表，服务器需安装中文字体（`fonts-wqy-microhei` / SimHei / Microsoft YaHei 任一；Linux 下 `apt install fonts-wqy-microhei`）；
+  一个都没有时控制台会点名「找到的字体都不能显示汉字」，而不是静默画出满图方框
+- 前端资源已全部随仓库分发（ECharts 及其 GL / 词云扩展、中国与世界底图、界面字体，见 `backend/static/vendor/`），
+  因此离线的机器也画得出图；缺失文件时每个画图位置都会指名是哪个文件没加载
 
 **2. 建虚拟环境、装依赖**
 
@@ -57,7 +63,13 @@ Inno Setup 安装包 `CaiXiHui-Setup.exe`），
 `%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt` 可切成便携模式。那个位置写不进去时会自动换到
 `%LOCALAPPDATA%\CaiXiHui` 或 exe 所在文件夹并在控制台点名原因；真的一个都写不进去时会**弹窗**说明并把
 traceback 写进 `startup_error.log`——控制台窗口随进程消失，不弹窗就等于没报错。
-Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上传/分析，不装 Ollama 用 OpenRouter 或不用模型节点。
+Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上传/分析（缺 Chrome、设置里的浏览器路径不存在、
+驱动与 Chrome 版本不配对，这三种情况都按名拒绝并写出该怎么办）；不装 Ollama 就用 OpenRouter 或不用模型节点；
+不装 MiKTeX 就出得了 LaTeX 源、出不了 PDF。**chromedriver 不在包里**——驱动与 Chrome 的大版本一对一绑定，
+发一份固定驱动就是发一份会过期的东西，所以交给 Selenium 首次采集时自动取匹配版本（这一步需要联网）。
+界面本身不再依赖网络：ECharts 及其 GL / 词云扩展、中国与世界的底图、界面字体都在包里
+（`backend/static/vendor/`，由 `tools/vendor_frontend_assets.py` 按 SHA-256 钉住取回），
+断网的机器照样画得出图；真浏览器用例逐条核对过页面没有向本站之外的任何地址要过东西。
 打包**默认用 UPX 压一遍 pyd/dll**（`-NoUpx` 关掉；找不到 upx 就按名失败，不会假装压过），
 依赖自检（Chrome / chromedriver / Ollama / xelatex）挪到了端口绑定之后的一条后台线程里——
 它以前卡在绑定前面，是启动窗口空等的来源。

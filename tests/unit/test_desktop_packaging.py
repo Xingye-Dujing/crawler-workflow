@@ -5,16 +5,21 @@ launcher's writable-data choices, its first-run seeding (never overwrite), its d
 fallback, and the spec's exclusion list so a later dependency cannot silently pull a
 multi-gigabyte stack back into ``dist/``.
 
-Nothing here starts the server or needs a frozen exe; ``main()`` is not called.
+Nothing here runs the app's own server or needs a frozen exe, and ``main()`` is not called; one test
+stands up a throwaway stdlib HTTP server because the launcher's "is it up yet?" probe has to be
+answered by something before its browser hand-off can be measured.
 """
 
+import contextlib
 import importlib.util
 import json
 import socket
 import struct
 import sys
 import tempfile
+import threading
 import types
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -1007,3 +1012,69 @@ def test_the_launcher_starts_the_clock_the_serving_process_needs():
     assert 'from app import start_background_services' in source
     assert source.count('start_background_services()') == 1
     assert source.index('start_background_services()') < source.index('flask_app.run(')
+
+
+@contextlib.contextmanager
+def _served():
+    """A throwaway local server that answers 200 on ``/api/config``, as a context manager.
+
+    The launcher's open path needs a probe that succeeds — not our app, just an address that says
+    "here I am" once, so what is under test is what happens AFTER the server is confirmed reachable.
+    """
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{}')
+
+        # No ``log_message`` override: the access line goes to stderr, and the assertions below read
+        # stdout only — shadowing the base method's parameters is how this fixture once earned a
+        # pylint W0221.
+
+    server = HTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f'http://127.0.0.1:{server.server_port}'
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+class TestTheAddressSurvivesWhenNoBrowserExists:
+    """``webbrowser.open`` answers ``False`` when nothing is registered — it never raises.
+
+    A console that goes quiet right after the startup line is the failure this project has been asked
+    to remove twice, and both entries have the same hole: the launcher and ``app._open_browser``.
+    """
+
+    @pytest.mark.enable_socket
+    def test_the_launcher_prints_the_address_instead_of_going_quiet(self, desktop, capsys):
+        with _served() as url:
+            desktop._wait_and_open(url, open_url=lambda _target: False)
+            out = capsys.readouterr().out
+        assert '请手动打开' in out, out
+        assert url in out, 'the printed line has to carry the address it could not hand over'
+
+    @pytest.mark.enable_socket
+    def test_a_successful_open_adds_no_line_of_its_own(self, desktop, capsys):
+        opened = []
+        with _served() as url:
+            desktop._wait_and_open(url, open_url=lambda target: opened.append(target) or True)
+        assert opened == [url]
+        assert capsys.readouterr().out == ''
+
+    def test_the_source_startup_logs_the_same_fact(self, caplog, monkeypatch):
+        import webbrowser
+
+        import app as app_module
+
+        import i18n
+
+        monkeypatch.setattr(webbrowser, 'open', lambda _url: False)
+        with caplog.at_level('WARNING', logger='app'):
+            app_module._open_browser('http://127.0.0.1:5000')
+        said = [record.message for record in caplog.records if record.levelname == 'WARNING']
+        assert i18n.t('misc.browserNotFound', url='http://127.0.0.1:5000') in said, said

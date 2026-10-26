@@ -7004,7 +7004,11 @@ def _open_browser(url: str):
     try:
         import webbrowser
 
-        webbrowser.open(url)
+        # ``open()`` returns False when there is no browser to hand the URL to — it does not raise.
+        # A machine that never registered a browser would otherwise watch the console go quiet after
+        # the 「服务已启动」 line, which is the exact silence this project keeps being asked to remove.
+        if not webbrowser.open(url):
+            logger.warning(t('misc.browserNotFound', url=url))
     except Exception as e:
         # A headless box has no browser to open — warn, never crash the startup.
         logger.warning(t('misc.browser_open_failed', err=e))

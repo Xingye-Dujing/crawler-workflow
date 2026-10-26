@@ -14,7 +14,14 @@ DATA_ROOT = os.environ.get('CRAWLER_DATA_ROOT') or BASE_DIR
 
 
 class Config:
-    DRIVER_PATH = r'C:\Program Files\Google\Chrome\Application\chromedriver.exe'
+    #: chromedriver to launch with. Blank means "let Selenium Manager fetch the one that matches
+    # the installed Chrome", which is the answer that works on every machine: this used to be the
+    # hardcoded ``C:\\Program Files\\Google\\Chrome\\Application\\chromedriver.exe``, and because
+    # almost nothing installs a driver next to Chrome, a source run inherited a path to a file that
+    # does not exist and Selenium died with "The path is not a valid file" — a message that names no
+    # remedy. The desktop launcher still overwrites this with a driver it actually found (see
+    # ``desktop/desktop_entry.py::find_driver``, which keeps the legacy path as a *candidate*).
+    DRIVER_PATH = os.environ.get('CIXI_DRIVER_PATH', '')
 
     SECRET_KEY = os.environ.get('SECRET_KEY', 'crawler-workflow-secret-key')
 

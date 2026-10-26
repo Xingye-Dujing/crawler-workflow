@@ -254,8 +254,12 @@ class TestSettingsWrite:
         assert 'does not exist' in ghost['warnings'][0]
 
         empty = client.post('/api/settings', json={'driver_path': '   '}).get_json()
-        assert empty['settings']['driver_path'] == Config.DRIVER_PATH
-        assert 'restored the default' in empty['warnings'][0]
+        # The default IS blank now (it used to be a hardcoded Program Files path that almost nothing
+        # installs), so 「clear the field」 is a remedy and not a loop back into a missing file.
+        assert Config.DRIVER_PATH == ''
+        assert empty['settings']['driver_path'] == ''
+        assert 'Driver path was empty' in empty['warnings'][0]
+        assert 'Selenium' in empty['warnings'][0], 'the warning must say who fetches the driver instead'
 
 
 class TestLlmPanelEndpoints:

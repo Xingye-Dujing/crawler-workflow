@@ -430,42 +430,31 @@ def _open_existing_instance(data_root, *, dialog=_message_box, open_url=webbrows
 
 
 # ─── first-run diagnostics ───────────────────────────────────
-def _chrome_candidates(env=None):
-    env = os.environ if env is None else env
-    names = ('CHROME_PATH', 'CHROME_BIN')
-    paths = [env.get(name) for name in names]
-    for base in (env.get('PROGRAMFILES'), env.get('PROGRAMFILES(X86)'), env.get('LOCALAPPDATA')):
-        if base:
-            paths.append(str(Path(base) / 'Google' / 'Chrome' / 'Application' / 'chrome.exe'))
-    return [Path(p) for p in paths if p]
-
-
 def dependency_report(app_dir_path, *, env=None) -> dict:
     """What is present/missing, as facts for the console (never a blocking gate).
 
     Crawling needs Chrome and later a matching chromedriver; local LLM nodes need Ollama;
     PDF/paper nodes need xelatex. Uploading and analysing files works without any of them,
     so the launcher starts regardless and only tells the user what each status affects.
+
+    Every probe is the backend's own. This used to keep a second list of Chrome install paths, a
+    second MiKTeX scan, and a hardcoded 127.0.0.1:11434 — that last one told a user who pointed
+    「设置 → Ollama 地址」 at another machine that no daemon was running, one line before the app
+    answered from it. Two answers to the same machine-level question is the defect; the launcher
+    runs this on a background thread once the application module has been imported, so asking the
+    modules that own the answer costs nothing on the bind path.
     """
+    from services.latex_compile import find_xelatex
+    from settings_store import get_setting
+    from utils import machine_deps
+
     env = os.environ if env is None else env
-    chrome = next((str(p) for p in _chrome_candidates(env) if p.is_file()), '')
-    driver = find_driver(app_dir_path, env=env)
-    xelatex = shutil.which('xelatex') or ''
-    if not xelatex:
-        for base in (env.get('LOCALAPPDATA'), env.get('PROGRAMFILES')):
-            if not base:
-                continue
-            for name in ('MiKTeX/miktex/bin/x64/xelatex.exe', 'MiKTeX 2.9/miktex/bin/x64/xelatex.exe'):
-                candidate = Path(base) / name
-                if candidate.is_file():
-                    xelatex = str(candidate)
-                    break
-            if xelatex:
-                break
-    ollama = False
-    with contextlib.suppress(OSError), socket.create_connection(('127.0.0.1', 11434), timeout=0.25):
-        ollama = True
-    return {'chrome': chrome, 'driver': driver, 'xelatex': xelatex, 'ollama': ollama}
+    return {
+        'chrome': machine_deps.find_chrome(env=env),
+        'driver': find_driver(app_dir_path, env=env),
+        'xelatex': find_xelatex(),
+        'ollama': machine_deps.ollama_reachable(str(get_setting('ollama_host') or '')),
+    }
 
 
 def dependency_lines(report: dict) -> list:
@@ -529,14 +518,18 @@ def sweep_startup_litter(install_dir) -> int:
     return removed
 
 
-def _wait_and_open(url: str) -> None:
+def _wait_and_open(url: str, *, open_url=webbrowser.open) -> None:
     deadline = time.monotonic() + BROWSER_WAIT_SECONDS
     probe = url.rstrip('/') + '/api/config'
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(probe, timeout=1.5) as response:
                 if response.status == 200:
-                    webbrowser.open(url)
+                    if not open_url(url):
+                        # A machine with no registered browser does not raise: the call just answers
+                        # False, and the console would go quiet with a working server behind it.
+                        # Printing the address is the whole remedy — nothing else is missing.
+                        print(f'这台机器没有可接住地址的默认浏览器，请手动打开：{url}', flush=True)
                     return
         except OSError:
             time.sleep(0.5)

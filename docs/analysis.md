@@ -294,6 +294,14 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
   由 `tools/build_world_geojson.py` 生成并**随仓库分发**（`backend/static/geo/world.json`，239 个区域、约 200 KB）：
   只留 `name / zh / iso / alt` 四个属性、坐标取两位小数、110m 缺的 65 个小国（新加坡、巴林、毛里求斯、斐济……）从 1:50m 补进来——
   否则地图上画不出一个国家，读起来就像"那个国家没发文"。文件随仓库走而不是运行时抓第三方 CDN，因为这是台离线也要能出图的科研工具。
+- **界面用的第三方文件全部入库，页面不向本站之外要东西**：`tools/vendor_frontend_assets.py` 取回并钉住
+  ECharts 5.4.3 / echarts-gl 2.0.9 / echarts-wordcloud 2.1.0、界面字体 Literata 的 14 个 woff2（SIL OFL，按 URL 去重）、
+  以及 DataV 的中国省级底图 `backend/static/geo/china.json`（34 省级要素 + 九段线，逐字节保留）。
+  每个文件都有 SHA-256 断言（上游改字节 = 一次有 diff 的复核，不是构建时的意外），底图另有内容断言（少一个省照样画得出图，
+  但那是事实错误）。**缺失时的形状是"指名道姓"而不是空白**：图表库不在，预览/全屏/看板格/历史图各写一句"图表库没有加载
+  （/vendor/echarts.min.js）"；底图读不到，就把这句话**画进图里**（所以导出的 PNG 也带着原因）并点名文件与 HTTP 状态，
+  失败不缓存、下一张图重试；矢量导出直接拒绝且不发请求。真浏览器用例读 `performance.getEntriesByType('resource')` 证明
+  没有一个请求离开本站（`tests/integration/test_ui_layout.py`）。
   **一处明确的制图主张**：Natural Earth 把台湾记为独立区域（`NAME_ZH: 中华民国`），构建脚本把台湾、香港、澳门的几何并入中国
   （MultiPolygon 允许不相交的分片，所以是坐标拼接而不是重画），与本应用中国底图（DataV/高德）的画法一致；格陵兰、北塞浦路斯等
   仍按 Natural Earth 原样分开，因为 WoS 的地址字段就是这么给的。**并入是有代价的，所以图上点名**：
@@ -377,6 +385,9 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
   为此**输出节点的格式按上游锁定**：上游是可视化/编译节点时**只有 PDF 可选**，其它上游则**不出现 PDF**；前端 `validateWorkflow`
   与后端 `engine.validate` 同时把关——接可视化节点但两个 LaTeX 复选框都没开、或 PDF 输出混了表格上游，运行前就按名拒绝。
   `xelatex` 路径在**设置 → MiKTeX 编译程序路径**里指定（留空则自动探测 PATH 与常见安装位置）；找不到编译器只让该节点具名失败，不崩整轮。
+  编译失败时读的是 **`main.log` 而不是 stderr**：`-interaction=batchmode` 把真正的错误行写进日志、stderr 基本是空的，
+  所以只看 stderr 的失败消息等于只说"编译失败"。日志里能点名就点名——缺 `ctex.sty` 说成"缺宏包 ctex，用 MiKTeX 控制台补"、
+  `The font "FangSong" cannot be found` 说成"找不到字体 FangSong，英文版 Windows 要补中文（简体）字体功能"，两者都说不出时才退回第一条 `! ` 行。
 - **论文成稿（一键把这次运行排成一份 .tex/PDF）**：报告面板的运行下拉里多一个「**论文成稿（LaTeX）**」按钮，
   打 `POST /api/report/latex`，**请求只带 `run_id` 与标题**——图与三线表一律从这次运行**已登记的 LaTeX 源文件**读回来，
   所以论文里的图与预览里的图不可能各画一份，浏览器也没有把 LaTeX 交给编译器的路（那等于让它读任意文件）。

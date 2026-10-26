@@ -4387,34 +4387,82 @@ async function trainMLModel(nodeId, modelType) {
    script (loaded in index.html), and the map series type needs a GeoJSON
    registered via echarts.registerMap() first. This wraps setOption so
    every render path (chart preview, dashboard) gets that for free. */
+/* ── A bundle that did not load says so ────────────────────────────────────
+   The figure area is the only part of this UI that depends on a third-party bundle. It is served
+   from /vendor now, but a damaged install used to read as an empty panel: `echarts.init` threw in
+   the caller's try/catch, nothing was painted, and the user concluded the chart had no data. Each
+   render path now names the file that is missing — a refusal the user can act on, never a blank. */
+function hasChartLibrary() {
+    return typeof echarts !== 'undefined' && !!(echarts && echarts.init);
+}
+
+function chartLibraryMissingMessage() {
+    return I18n.t('chart.noLibrary', { file: '/vendor/echarts.min.js' });
+}
+
+/* textContent, never innerHTML: the wording comes from the language catalogue, which is text. */
+function paintChartLibraryNote(host) {
+    if (!host) return false;
+    host.textContent = '';
+    var note = document.createElement('div');
+    note.className = 'chart-missing';
+    note.textContent = chartLibraryMissingMessage();
+    host.appendChild(note);
+    return true;
+}
+
+/* Draw the refusal through the live instance instead of replacing its DOM: the surface keeps an
+   instance to resize, export and dispose, and the saved PNG/SVG carries the sentence rather than
+   showing an empty frame as if it were a result. */
+function drawChartRefusal(instance, message) {
+    if (!instance || !hasChartLibrary()) return;
+    instance.clear();
+    instance.setOption({
+        title: { text: message, left: 'center', top: 'middle', textStyle: { fontSize: 13, fontWeight: 'normal' } }
+    });
+}
+
 var _mapRegistryPromises = {};
+/* Resolves '' once the basemap is registered, otherwise the refusal sentence — ONE string used for
+   both the toast and the figure, because two wordings of the same failure drift and then one of
+   them is a lie. A failure is not cached: fixing the file needs no page reload, and every retry
+   says so again. */
 function ensureMapRegistered(mapName) {
     if (_mapRegistryPromises[mapName]) return _mapRegistryPromises[mapName];
-    /* The world basemap is a file the app ships (Natural Earth, public domain — see
-       tools/build_world_geojson.py): a country figure has to draw on an offline machine, and the
-       China basemap already depends on one third-party host, so putting the world map behind a
-       second one would be one network outage from a blank figure. Both entries read the SAME file
-       and differ only in which name column ECharts keys the data on, so the map and its labels
-       stay in the run's language. */
+    /* Both basemaps are files the app serves, so a map figure draws on a machine with no network:
+       the world map is Natural Earth (public domain, derived by tools/build_world_geojson.py) and
+       the China map is DataV.GeoAtlas province boundaries with the nine-dash line, vendored
+       byte-for-byte by tools/vendor_frontend_assets.py. The two world entries read the SAME file
+       and differ only in which name column ECharts keys the data on, so a Chinese run's data names
+       and its printed labels stay the same words. */
     var WORLD = '/geo/world.json';  // static_url_path is '' — the app serves its assets at the root
     var urls = {
-        china: 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
+        china: '/geo/china.json',
         world: WORLD,
         world_zh: WORLD
     };
     var url = urls[mapName];
-    if (!url) return Promise.resolve(false);
-    _mapRegistryPromises[mapName] = fetch(url)
-        .then(function (r) { return r.json(); })
+    if (!url) return Promise.resolve(I18n.t('chart.mapUnavailable', { file: mapName, reason: I18n.t('chart.mapNoFile') }));
+    var pending = fetch(url)
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
         .then(function (geoJson) {
             // ECharts 5 takes {geoJSON, nameProperty}; the Chinese world map keys on the file's
             // own `zh` column so a Chinese run's data names and its printed labels are the same
             // words. The China basemap has one spelling per region and needs nothing here.
             echarts.registerMap(mapName, mapName === 'world_zh' ? { geoJSON: geoJson, nameProperty: 'zh' } : geoJson);
-            return true;
+            return '';
         })
-        .catch(function () { showToast(I18n.t('toast.mapLoadFailed')); return false; });
-    return _mapRegistryPromises[mapName];
+        .catch(function (e) {
+            delete _mapRegistryPromises[mapName];
+            var message = I18n.t('chart.mapUnavailable', { file: url, reason: (e && e.message) || String(e) });
+            showToast(message);
+            return message;
+        });
+    _mapRegistryPromises[mapName] = pending;
+    return pending;
 }
 
 /* Theme-aware chart colours. patchOptionForTheme is the single chokepoint every console chart
@@ -4552,7 +4600,11 @@ function applyEchartsOption(instance, option) {
     });
     var mapSeries = (option.series || []).find(function (s) { return s.type === 'map'; });
     if (mapSeries) {
-        ensureMapRegistered(mapSeries.map || 'china').then(function () {
+        ensureMapRegistered(mapSeries.map || 'china').then(function (refusal) {
+            /* A basemap that would not register is refused on the figure, not drawn empty: an
+               option whose series names an unregistered map paints a blank box and prints nothing
+               about why, which a reader then exports as if it were a result. */
+            if (refusal) { drawChartRefusal(instance, refusal); return; }
             instance.setOption(option, true);
             instance.resize();
         });
@@ -4895,6 +4947,12 @@ async function saveChartVector(option, name, hostId) {
         showToast(I18n.t('chart.saveNothing'));
         return null;
     }
+    if (!hasChartLibrary()) {
+        /* The generic "vector export failed" would blame the exporter; the reason is that the
+           bundle which draws SVG is not on the page, and that is what the user can fix. */
+        showToast(chartLibraryMissingMessage());
+        return null;
+    }
     var size = _surfaceSize(hostId, [1200, 700]);
     var markup = chartSvgMarkup(option, size[0], size[1]);
     if (!markup) {
@@ -4970,6 +5028,13 @@ function renderChartPreview(result) {
         _chartPreviewOption = result.option;
         imgEl.style.display = 'none';
         echartsDiv.style.display = 'block';
+        if (!hasChartLibrary()) {
+            /* The option itself is real, so the LaTeX bar below still has something to offer: what
+               is missing is only the browser-side painter. Say which file is gone — never a box. */
+            paintChartLibraryNote(echartsDiv);
+            _renderLatexBar(result);
+            return;
+        }
         if (!_chartPreviewInstance) {
             echartsDiv.innerHTML = '';
             _chartPreviewInstance = echarts.init(echartsDiv);
@@ -5419,6 +5484,13 @@ function _paintFullscreenOption(option) {
     if (img) img.style.display = 'none';
     div.style.display = 'block';
     div.innerHTML = '';
+    if (!hasChartLibrary()) {
+        /* The window remembers its own option so the export buttons still answer with a sentence
+           rather than a file; what it cannot do is paint, and it says so. */
+        _chartFullscreenOption = option;
+        paintChartLibraryNote(div);
+        return;
+    }
     _chartFullscreenInstance = echarts.init(div);
     _chartFullscreenOption = option;
     applyEchartsOption(_chartFullscreenInstance, option);
@@ -5791,6 +5863,10 @@ var dashboard = {
             if (result.engine === 'matplotlib') {
                 body.innerHTML = '<img src="' + escapeHtml(result.image) + '" />';
                 this._images[nodeId] = result.image;
+            } else if (!hasChartLibrary()) {
+                /* A board cell that cannot paint names the bundle that is gone: an empty cell reads
+                   as "this node produced no chart", which is a different fact entirely. */
+                body.innerHTML = '<div class="dashboard-cell-note">' + escapeHtml(chartLibraryMissingMessage()) + '</div>';
             } else {
                 var inst = echarts.init(body);
                 this._instances[nodeId] = inst;
@@ -5958,6 +6034,10 @@ var historyPanel = {
 
     _ensureChart() {
         var el = document.getElementById('history-chart');
+        if (!hasChartLibrary()) {
+            paintChartLibraryNote(el);
+            return null;
+        }
         if (this._instance) return el;
         /* SVG renderer: the chart is real, interactive SVG — crisp at any zoom,
            printable, and resizable without a canvas re-alloc. */
@@ -5970,7 +6050,9 @@ var historyPanel = {
     },
 
     _renderChart(rows, metric) {
-        this._ensureChart();
+        /* null means "no chart library, and the panel already says so" — drawing on it would throw
+           and replace a named refusal with a console error. */
+        if (!this._ensureChart()) return;
         var inst = this._instance;
         var metricLabel = I18n.t('history.metric.' + (metric || 'rows'));
         var wf = document.getElementById('history-workflow-select').value;

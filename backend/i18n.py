@@ -270,6 +270,11 @@ _ZH = {
     'biblio.import_ok': '已识别 {format} 文献导出：{n} 条记录',
     'biblio.build_done': '文献计量完成：{entity}，{nodes} 个节点 / {edges} 条边（{start}–{end}）',
     'biblio.export_failed': '文献计量导出失败：{err}',
+    'chart.noCjkFont': (
+        '本机字体里没有能显示汉字的字体（已找过：{checked}）：'
+        'Matplotlib 出的 PNG 里中文会是方框，请安装 SimHei 或 Microsoft YaHei 后重启程序'
+        '（ECharts 的图用浏览器字体，LaTeX 的图用 ctex，均不受此影响）'
+    ),
     'chart.biblio_missing': '文献计量图缺少列：{cols}（请让上游文献计量节点输出完整表）',
     'chart.biblio_no_nodes': '文献计量图没有可画的节点',
     'chart.biblio_geo_none': '地理图画不出来：{names} 等名称都不在世界底图里（请检查「节点」列是否为国家/地区名）',
@@ -915,6 +920,15 @@ _ZH = {
     'sentiment.bert_loaded': 'BERT 情感模型已加载：{model}（{runtime}/{precision}，跑在 {device}，逐批）',
     'sentiment.bert_need_runtime': 'torch+transformers 或 onnxruntime+tokenizers',
     'sentiment.bert_no_onnx': '这个 BERT 模型目录里没有可加载的 ONNX 图：{path}',
+    'sentiment.bert_no_model_dir': '没有找到 BERT 模型目录：{path}。{remedy}',
+    'sentiment.packRemedyFrozen': (
+        '桌面版的 BERT 模型是一个单独的压缩包：把 CaiXiHui-bert-models-win64.zip 解压到程序目录下的 '
+        'bert_models\\，再重启程序'
+    ),
+    'sentiment.packRemedySource': (
+        '源码版需要先用 ml_train/scripts/export_onnx_bert.py 从训练好的权重导出 ONNX 目录，'
+        '或在节点的「模型」里填一个已存在的目录名'
+    ),
     'sentiment.bert_no_labels': '这个 BERT 模型目录没有 id2label 标签表，输出读不成类别：{path}',
     'sentiment.bert_onnx_inputs': '这个 ONNX 图的输入不是本程序约定的四路，实测：{found}',
     'sentiment.bert_session_dropped': '为控制内存已释放更早加载的 BERT 模型：{model}（后面再用到会重新加载）',
@@ -1088,6 +1102,9 @@ _ZH = {
     'crawl.hg.cmt.needsExtras': (
         '[红果短剧] 评论收割是 Windows 桌面功能，'
         '本机缺少 {missing}（按 requirements-optional.txt 安装；云端模式不可用）'
+    ),
+    'crawl.hg.cmt.needsExtrasFrozen': (
+        '[红果短剧] 桌面版未打包 {names}：评论收割要 mitmdump 与驱动桌面窗口的 UI Automation，只能在源码版运行该节点'
     ),
     'crawl.hg.cmt.caNotTrusted': (
         '[红果短剧] mitmproxy 根证书未受信任且自动安装未成功。手动命令（PowerShell）：{command}'
@@ -1365,6 +1382,7 @@ _ZH = {
     'misc.studio_saved': '图表工坊已保存 {path}（{bytes} 字节）',
     'misc.chartPdfSaved': '图表 PDF 已生成：{name}（{bytes} 字节）',
     'misc.browser_open_failed': '无法打开浏览器：{err}',
+    'misc.browserNotFound': '这台机器没有可接住地址的默认浏览器，请手动打开：{url}',
     'misc.server_starting': '爬虫工作流服务启动，端口 {port}',
     'misc.visualize_failed': '图表渲染失败：{err}',
     'misc.export_failed': '导出文件写入失败',
@@ -1658,7 +1676,7 @@ _ZH = {
     'api.pdfMissingFile': 'PDF 生成被拒：台账记着 {name}，但导出目录里已找不到它（可能被清除）',
     # ── 运行时设置校验 ────────────────────────────────────────
     'set.driverMissing': '驱动文件不存在：{path}',
-    'set.driverEmpty': '驱动路径为空，已恢复默认值',
+    'set.driverEmpty': '驱动路径为空：将由 Selenium 自动取与当前 Chrome 匹配的驱动（首次需要联网）',
     'set.browserMissing': '浏览器程序不存在：{path}',
     'set.latexMissing': 'MiKTeX 编译程序不存在：{path}',
     'set.harvestMissing': '红果收割组件（{tool}）不是已存在的文件：{path}',
@@ -1680,6 +1698,19 @@ _ZH = {
     'run.start_failed': '运行线程启动失败（{err}）：本次运行已放弃，队列继续处理下一个',
     'run.nodeStopped': '节点 {nid} 已按「停止」结束：本次保留 {n} 行',
     'run.finished.stopped': '，{n} 个被停止',
+    'crawl.chromeMissing': (
+        '本机没有可用的 Chrome，采集打不开浏览器。安装 Chrome，或在「设置 → 浏览器路径」里指向它的 chrome.exe'
+    ),
+    'crawl.browserBinaryMissing': '设置里的浏览器路径不存在：{path}。改正它，或清空让程序自己找 Chrome',
+    'crawl.driverMissing': (
+        '设置里的 chromedriver 路径不存在：{path}。'
+        '它多半是与当前 Chrome 版本不匹配而失效了：换成匹配的驱动，'
+        '或清空该设置让 Selenium 自己取（首次需要联网）'
+    ),
+    'crawl.browserStartFailed': (
+        '浏览器没有启动：{err}。常见原因是 chromedriver 与 Chrome 版本不匹配、'
+        '首次自动取驱动需要联网、或该 Chrome 配置目录正被另一个 Chrome 占用'
+    ),
     'crawl.stopped': '收到「停止」，本次抓取到此为止',
     # Said by a session whose browser process was already reaped, so it must not claim a person did
     # anything: the same object answers a cookie window that was closed after its grace ran out.
@@ -1877,6 +1908,14 @@ _ZH = {
     'run.compileFailed': 'LaTeX 编译失败：{err}',
     'api.compilePdfNoXelatex': '找不到 MiKTeX 的 xelatex，无法编译 PDF（可在设置里指定编译程序路径）',
     'api.compilePdfFailed': 'LaTeX 编译为 PDF 失败：{err}',
+    'api.compilePdfNoPackage': (
+        'LaTeX 缺宏包 {package}.sty：用 MiKTeX 控制台（或 miktex packages install）补上，'
+        '或在 MiKTeX 设置里允许「联网自动安装缺失包」后重试'
+    ),
+    'api.compilePdfNoFont': (
+        'LaTeX 找不到字体 {font}：本程序的纸质图用 ctex + 仿宋（FangSong），'
+        '需要系统装有该中文字体（英文版 Windows 要补「中文（简体）」字体功能）'
+    ),
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
         '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
@@ -2231,6 +2270,11 @@ _EN = {
     'biblio.import_ok': 'Recognised a {format} export: {n} records',
     'biblio.build_done': 'Bibliometrics done: {entity}, {nodes} nodes / {edges} edges ({start}–{end})',
     'biblio.export_failed': 'Bibliometric export failed: {err}',
+    'chart.noCjkFont': (
+        'No installed font carries Chinese glyphs (looked for: {checked}): Chinese labels in '
+        'Matplotlib PNG output will draw as boxes. Install SimHei or Microsoft YaHei and restart '
+        'the app (ECharts figures use browser fonts and LaTeX figures use ctex — neither is affected)'
+    ),
     'chart.biblio_missing': (
         'Bibliometric chart is missing column(s): {cols} (let the upstream biblio node emit the full table)'
     ),
@@ -2985,6 +3029,15 @@ _EN = {
     'sentiment.bert_bad_label': 'the BERT model answered an unrecognised label "{label}"',
     'sentiment.bert_loaded': 'BERT sentiment model loaded: {model} ({runtime}/{precision}, on {device}, in batches)',
     'sentiment.bert_need_runtime': 'torch+transformers or onnxruntime+tokenizers',
+    'sentiment.bert_no_model_dir': 'no BERT model folder was found: {path}. {remedy}',
+    'sentiment.packRemedyFrozen': (
+        'the desktop build gets its BERT models from a separate archive: unpack '
+        'CaiXiHui-bert-models-win64.zip into a bert_models\\ folder beside the exe and restart'
+    ),
+    'sentiment.packRemedySource': (
+        'a source checkout exports them first: ml_train/scripts/export_onnx_bert.py writes the ONNX '
+        "folder from the trained weights, or name an existing folder in the node's model field"
+    ),
     'sentiment.bert_no_onnx': 'no loadable ONNX graph in that BERT model folder: {path}',
     'sentiment.bert_no_labels': 'that BERT model folder has no id2label table, so an output is not a class: {path}',
     'sentiment.bert_onnx_inputs': 'this ONNX graph does not expose the four inputs this path expects; found: {found}',
@@ -3183,6 +3236,10 @@ _EN = {
     'crawl.hg.cmt.needsExtras': (
         '[Hongguo] the comment harvest is a Windows desktop feature and this machine lacks {missing} '
         '(install per requirements-optional.txt; unavailable in cloud mode)'
+    ),
+    'crawl.hg.cmt.needsExtrasFrozen': (
+        '[Hongguo] the desktop build does not carry {names}: the comment harvest needs mitmdump and '
+        'UI Automation over a real desktop window, so that node runs only in a source checkout'
     ),
     'crawl.hg.cmt.caNotTrusted': (
         '[Hongguo] the mitmproxy root certificate is not trusted and auto-install did not succeed. '
@@ -3479,6 +3536,7 @@ _EN = {
     'misc.studio_saved': 'Chart studio saved {path} ({bytes} bytes)',
     'misc.chartPdfSaved': 'Chart PDF compiled: {name} ({bytes} bytes)',
     'misc.browser_open_failed': 'Could not open browser: {err}',
+    'misc.browserNotFound': 'This machine has no default browser to hand the address to — open it by hand: {url}',
     'misc.server_starting': 'Starting crawler workflow server on port {port}',
     'misc.visualize_failed': 'Chart rendering failed: {err}',
     'misc.export_failed': 'Writing the export file failed',
@@ -3812,7 +3870,10 @@ _EN = {
     ),
     # ── runtime settings validation ───────────────────────────
     'set.driverMissing': 'Driver file does not exist: {path}',
-    'set.driverEmpty': 'Driver path was empty — restored the default',
+    'set.driverEmpty': (
+        'Driver path was empty — nothing is forced on it: Selenium fetches the driver matching the '
+        'installed Chrome (the first time needs network)'
+    ),
     'set.browserMissing': 'Browser executable does not exist: {path}',
     'set.latexMissing': 'MiKTeX compiler does not exist: {path}',
     'set.harvestMissing': 'Hongguo harvest component ({tool}) is not an existing file: {path}',
@@ -3838,6 +3899,21 @@ _EN = {
     'run.start_failed': 'Could not start the run worker ({err}): this run is dropped and the queue moves to the next',
     'run.nodeStopped': 'Node {nid} ended on Stop: {n} row(s) kept',
     'run.finished.stopped': ', {n} stopped',
+    'crawl.chromeMissing': (
+        'No Chrome on this machine, so a crawl has no browser to open. Install Chrome, or point '
+        'Settings → browser path at its chrome.exe'
+    ),
+    'crawl.browserBinaryMissing': (
+        'The configured browser path does not exist: {path}. Correct it, or clear it and let the app find Chrome'
+    ),
+    'crawl.driverMissing': (
+        'The configured chromedriver path does not exist: {path}. It usually went stale against a Chrome update — '
+        'point it at the matching driver, or clear it and let Selenium fetch one (needs network the first time)'
+    ),
+    'crawl.browserStartFailed': (
+        'The browser did not start: {err}. Usual causes: chromedriver does not match this Chrome build, the first '
+        'automatic driver fetch needs network, or that Chrome profile directory is held by another Chrome'
+    ),
     'crawl.stopped': 'Stop received — this crawl ends here',
     # Said by a session whose browser process was already reaped, so it must not claim a person did
     # anything: the same object answers a cookie window that was closed after its grace ran out.
@@ -4083,6 +4159,14 @@ _EN = {
         'MiKTeX xelatex was not found, so the PDF cannot be compiled (set the compiler path in Settings)'
     ),
     'api.compilePdfFailed': 'LaTeX to PDF compilation failed: {err}',
+    'api.compilePdfNoPackage': (
+        'LaTeX is missing the package {package}.sty: install it with the MiKTeX console '
+        '(or "miktex packages install"), or allow MiKTeX to fetch missing packages on the network and retry'
+    ),
+    'api.compilePdfNoFont': (
+        'LaTeX cannot find the font {font}: the paper figures use ctex with FangSong (仿宋), so the '
+        'system needs that Chinese font (an English Windows needs the Simplified Chinese font feature installed)'
+    ),
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (
         'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '

@@ -1,6 +1,7 @@
 import contextlib
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -8,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 
 import browser_profiles
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
@@ -17,6 +18,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from config import Config
 from i18n import t
 from settings_store import get_setting
+from utils import machine_deps
 
 from .engine import feed, popup
 from .engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
@@ -670,14 +672,39 @@ class Crawler(ABC):
         if prefs:
             opts.add_experimental_option('prefs', prefs)
         browser_binary = str(get_setting('browser_binary') or '').strip()
+        # Refuse before chromedriver is tried, and name the thing to fix. Three situations look
+        # identical from here (no Chrome at all, a 设置 path that points at nothing, a driver that
+        # cannot speak to the installed browser), and Selenium's own answer to the first two is an
+        # exception from a child process. The probe is :mod:`utils.machine_deps`, shared with the
+        # desktop launcher's self-check, so the two can never disagree about this machine.
+        resolved = machine_deps.find_chrome(browser_binary)
+        if browser_binary and not resolved:
+            raise ValueError(t('crawl.browserBinaryMissing', path=browser_binary))
+        if not resolved:
+            raise ValueError(t('crawl.chromeMissing'))
         if browser_binary:
             opts.binary_location = browser_binary
-        service = Service(executable_path=get_setting('driver_path'))
-        # The class itself, not ``webdriver.Chrome``: that name is a re-export the package
-        # builds at import time, which no type checker can see as callable, so annotating with
-        # it read as an error and needed a suppression. Importing the real class states what is
-        # constructed and keeps the declared type honest.
-        self.driver: ChromeWebDriver = ChromeWebDriver(options=opts, service=service)
+        driver_path = str(get_setting('driver_path') or '').strip()
+        if driver_path and not os.path.isfile(driver_path):
+            # Blank means "let Selenium Manager resolve a matching driver", which is the normal
+            # answer on a fresh machine; a filled-in path that is not a file is a stale setting,
+            # and Selenium Manager would be skipped because a path WAS given.
+            raise ValueError(t('crawl.driverMissing', path=driver_path))
+        service = Service(executable_path=driver_path)
+        try:
+            # The class itself, not ``webdriver.Chrome``: that name is a re-export the package
+            # builds at import time, which no type checker can see as callable, so annotating with
+            # it read as an error and needed a suppression. Importing the real class states what is
+            # constructed and keeps the declared type honest.
+            self.driver: ChromeWebDriver = ChromeWebDriver(options=opts, service=service)
+        except WebDriverException as exc:
+            # Kept as a refusal with the driver's own words inside it: that sentence names the
+            # versions it tried to pair, which is what the user has to act on. No single cause is
+            # claimed, because a version mismatch, a first-run download with no network and a
+            # profile Chrome refuses to share all arrive here.
+            raise ValueError(
+                t('crawl.browserStartFailed', err=str(exc).strip().splitlines()[0] if str(exc).strip() else repr(exc))
+            ) from exc
         # A headless browser must not announce itself as headless. Measured 2026-09-26 (#148): a
         # bare --headless=new reveals only two things a desktop does not — a UA containing
         # "HeadlessChrome", and an 800×600 virtual display. Zhihu's 某作者的作品 page hands the

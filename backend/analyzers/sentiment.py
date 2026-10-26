@@ -11,6 +11,7 @@ import pandas as pd
 from analyzers.llm_client import run_llm_dataframe
 from config import BASE_DIR
 from i18n import t
+from utils import machine_deps
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,14 @@ class BertClassifier:
         from tokenizers import Tokenizer
 
         folder = self.model_path if os.path.isdir(self.model_path) else os.path.dirname(self.model_path)
+        if not os.path.isdir(folder):
+            # A name that is no directory on this machine is the one BERT failure the user fixes
+            # themselves, and the fix differs by build: the desktop app reads a model pack the user
+            # unpacks beside the exe, a checkout exports one from its trained checkpoints. Naming
+            # both would make half the sentence noise, so the answer follows the build that is
+            # actually running — and the path in the message is the one the registry holds.
+            remedy = t('sentiment.packRemedyFrozen') if machine_deps.is_frozen() else t('sentiment.packRemedySource')
+            raise ValueError(t('sentiment.bert_no_model_dir', path=self.model_path, remedy=remedy))
         graph = os.path.join(folder, 'model.onnx')
         if not os.path.isfile(graph):
             raise ValueError(t('sentiment.bert_no_onnx', path=folder))

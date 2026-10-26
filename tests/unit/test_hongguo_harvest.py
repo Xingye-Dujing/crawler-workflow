@@ -365,6 +365,47 @@ class TestRefusals:
             harness.crawl_hongguo(ARTICLE, 0)
         assert i18n.t('crawl.hg.cmt.noPlayer', path='') in str(caught.value)
 
+    def test_the_desktop_build_names_the_build_that_can_run_this_node(self, tmp_path, monkeypatch):
+        """「pip install mitmproxy」 is not a thing anybody can do inside an exe.
+
+        The stack gate is the same code in both builds; only the remedy differs — and the wrong
+        remedy sends a desktop user looking for a terminal and a Python that are not there.
+        """
+        import sys
+
+        import crawlers.hongguo_harvest as harvest_module
+
+        monkeypatch.setattr(sys, 'platform', 'win32')  # the gate is a Windows-desktop question
+        monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: True)
+        monkeypatch.setattr(harvest_module.importlib.util, 'find_spec', lambda name: None)
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        del harness._ensure_stack  # drop the seam: run the real stack gate
+        with pytest.raises(ValueError) as caught:
+            harness.crawl_hongguo(ARTICLE, 0)
+        message = str(caught.value)
+        assert message == i18n.t('crawl.hg.cmt.needsExtrasFrozen', names='mitmproxy / uiautomation')
+        assert 'pip' not in message, 'a packaged app has no pip to point at'
+        assert '源码版' in message or 'source' in message.lower()
+
+    def test_the_source_build_names_the_missing_package(self, tmp_path, monkeypatch):
+        import sys
+
+        import crawlers.hongguo_harvest as harvest_module
+
+        monkeypatch.setattr(sys, 'platform', 'win32')
+        monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(
+            harvest_module.importlib.util, 'find_spec', lambda name: None if name == 'mitmproxy' else object()
+        )
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        del harness._ensure_stack
+        with pytest.raises(ValueError) as caught:
+            harness.crawl_hongguo(ARTICLE, 0)
+        assert str(caught.value) == i18n.t('crawl.hg.cmt.needsExtras', missing='mitmproxy')
+        assert 'requirements-optional.txt' in str(caught.value)
+
 
 class TestClose:
     def test_close_without_processes_is_safe_and_sweeps_the_capture(self, tmp_path):

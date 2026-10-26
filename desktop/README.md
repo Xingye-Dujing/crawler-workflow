@@ -150,10 +150,12 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 启动器会在控制台打印：
 
 - Python/依赖：已随包携带，无需安装；
+- 界面资源（ECharts + GL + 词云、中国与世界第一级底图、界面字体）：已随包携带，**断网也画得出图**（见下节）；
 - Chrome：采集节点需要，未找到时只提示，不阻止上传/分析；
 - chromedriver：优先用 `drivers/chromedriver.exe`（放在 exe 同目录）或设置里指定的路径；
   都没有时留空，由 Selenium Manager 在首次采集时下载匹配版本（需要联网）；
-- Ollama / xelatex：可选能力，缺了只影响对应节点。
+- Ollama：探测的是**设置里那个地址**（以前硬探 127.0.0.1:11434，把指向别处的守护进程报成"未检测到"）；
+- xelatex：用 `services/latex_compile.find_xelatex()` 的答案（与编译节点同一个查找），缺了只影响 PDF/成稿。
 
 **定时任务在打包版里一样会到点执行**：`python app.py` 在它的 `__main__` 里启动调度时钟，而打包启动器是
 `import app` 后自己跑 Flask——所以启动器现在调用同一个 `app.start_background_services()`（保留策略 + 排队恢复 +
@@ -168,11 +170,43 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 `drivers/chromedriver.exe` 不会在构建时下载，因为正确版本取决于**最终用户**的 Chrome；如果要
 离线交付，请让用户按其 Chrome 版本放入该文件，或在设置面板里指定路径。
 
-**自检不挡启动**：那四项探测（Chrome 候选路径、chromedriver、MiKTeX 目录扫描、11434 端口）
+**自检不挡启动**：那四项探测（Chrome、chromedriver、xelatex、设置里那个 Ollama 地址）
 以前夹在"选好端口"和"绑定端口"之间，冷盘上是几秒的空等窗口；现在它们在绑定之后的一条守护线程里跑，
 五行文字逐字不变，但改成**一次写出**（Flask 的启动行会从另一个线程落在同一个控制台，分五次写会被劈开）。
 探测本身抛异常时打印一条"依赖自检未能完成：…"，不会让四行文字静默消失——那看起来跟"检查过且都 healthy"
 一模一样。喂给 `config.DRIVER_PATH` 的驱动查找仍然同步，因为服务需要那个答案。
+四项探测现在**只有实现的一份**：Chrome 与 Ollama 走 `backend/utils/machine_deps.py`，xelatex 走
+`services/latex_compile.find_xelatex()`。启动器原来自己抄了一份 Chrome 候选目录、一份 MiKTeX 扫描和
+一个写死的 11434——两份意见的坏处不是多几行代码，是同一台机器上"自检说没有"与"节点说能跑"同时出现。
+
+## 离线可用：前端资源为什么进了仓库
+
+应用包过去在页面里引四个 CDN：ECharts 与其 GL / 词云扩展（jsdmirror）、界面字体 Literata（Google Fonts）、
+中国省级底图（DataV.GeoAtlas）。后果不是"少个字体"，而是**断网的机器图区一片空白**——`echarts` 没定义时
+产品只是画不出东西，面板上没有任何一句话解释为什么。`tools/vendor_frontend_assets.py` 把这些东西取回并写进
+`backend/static/vendor/`（+ `backend/static/geo/china.json`），页面从此只向本站要文件：
+
+| 文件 | 来源 | 许可 |
+| --- | --- | --- |
+| `vendor/echarts.min.js` | npm `echarts@5.4.3` | Apache-2.0（banner 在文件头） |
+| `vendor/echarts-gl.min.js` + `LICENSE.echarts-gl.txt` | npm `echarts-gl@2.0.9` | BSD-3-Clause（Baidu） |
+| `vendor/echarts-wordcloud.min.js` | npm `echarts-wordcloud@2.1.0` | ISC |
+| `vendor/fonts/literata.css` + 14 个 `.woff2` | Google Fonts 的 css2（含 7 个子集，去重按 URL） | SIL OFL 1.1 |
+| `geo/china.json` | DataV.GeoAtlas `100000_full.json`，**逐字节保留** | 行政区划数据；34 省级 + 九段线要素 |
+| `geo/world.json` | Natural Earth 1:110m（`tools/build_world_geojson.py` 派生） | public domain |
+
+三条刻意的规矩：
+
+1. **每个文件钉 SHA-256**（写在工具里，`tests/unit/test_vendored_assets.py` 复核）。第三方改了
+   我们分发出去的字节，应当是一次有 diff 的复核，不是构建时的意外；工具遇到不匹配会打印它看到的哈希
+   并拒绝覆盖。升级 = 同时改 URL 与 `sha256`，然后 `python tools/vendor_frontend_assets.py`。
+2. **底图要过内容断言，不只是"能解析"**：中国那份必须仍有 34 个省级要素、含台湾/香港/澳门与
+   `100000_JD` 九段线要素——少一个省照样能画图，那是事实错误而不是渲染错误。
+3. **字体按 (style, subset) 去重**：Google 的 css2 会为 5 个字重重复声明同一个 woff2 文件；
+   第一版按 `@font-face` 块命名，结果 42 个文件 2 MB 装的是 14 个文件 556 KB 的内容。工具会清掉
+   自己的孤儿文件，测试断言"磁盘上的 = CSS 引用的"，因为打包是整目录拷贝，没人引用的字体也照样发出去。
+
+`--check` 参数不联网，只核对磁盘上的字节与上面这些不变量（`python tools/vendor_frontend_assets.py --check`）。
 
 ## 数据与便携模式
 
@@ -243,6 +277,12 @@ desktop\.venv-build\Scripts\python.exe -m pip install --no-cache-dir --no-build-
    `powershell -Command "Add-Type -AssemblyName System.Drawing; $i=[System.Drawing.Icon]::ExtractAssociatedIcon('dist\CaiXiHui\CaiXiHui.exe'); $b=New-Object System.Drawing.Bitmap 32,32; $g=[System.Drawing.Graphics]::FromImage($b); $g.Clear([System.Drawing.Color]::White); $g.DrawIcon($i,0,0); $b.Save('build\tmp\exe_icon.png',[System.Drawing.Imaging.ImageFormat]::Png)"`。
    同一个量法也用在 `CaiXiHui-Setup.exe` 上。生成的 ICO 七档画框是 PNG 压缩的（Pillow 默认），
    Win10/11 的 GDI 解得开——这一点上面那两次取样就是证据，不是推测。
+9. **确认它真的不联网也能画图**：`python tools/vendor_frontend_assets.py --check`（不取网络，只核对
+   入库字节与底图内容断言），再加真浏览器用例
+   `pytest -q -m integration tests/integration/test_ui_layout.py::test_the_shipped_page_draws_its_figures_without_asking_anything_off_this_machine`
+   ——它读 `performance.getEntriesByType('resource')`，凡是 origin 不是本站的就失败，并核对中国与世界
+   底图都注册成功、Literata 字体状态是 loaded。这一步值得单独跑：CDN 依赖的失败形状是**空白图区**，
+   不看资源清单就没人知道自己已经断网了。
 
 **验收双击会往交付目录里写真数据**（`data/`、`logs/`、`mplconfig/`、`instance.json`），而 zip 与安装脚本
 打包的就是这个目录——`prune_dist.py` 在压缩前把这些一律清掉（`portable.txt` 与 `drivers/` 是用户的选择，

@@ -23,6 +23,7 @@ import logging
 import math
 import re
 from collections import Counter
+from functools import lru_cache
 
 import jieba
 import numpy as np
@@ -32,6 +33,61 @@ from i18n import t
 from services.chart_contracts import BIBLIO_CHART_TYPES
 
 logger = logging.getLogger(__name__)
+
+
+#: The font stack every Matplotlib figure is drawn with. Order is not a ranking here: since 3.6
+#: matplotlib falls through the list PER GLYPH, so a family that carries Chinese may sit behind
+#: DejaVu Sans and still do its job. ``sans-serif`` is matplotlib's own last resort.
+FONT_STACK = [
+    'SimHei',
+    'Microsoft YaHei',
+    'WenQuanYi Micro Hei',
+    'DejaVu Sans',
+    'Arial Unicode MS',
+    'sans-serif',
+]
+
+#: Entries above that hold no Chinese glyphs at all, so resolving one of them would answer the
+#: question below with a wrong yes.
+_NO_CHINESE = frozenset({'DejaVu Sans', 'sans-serif'})
+
+#: The CJK families this app asks for, in the order it asks.
+_CJK_CANDIDATES = [family for family in FONT_STACK if family not in _NO_CHINESE]
+
+
+@lru_cache(maxsize=1)
+def cjk_font() -> str:
+    """The first family in :data:`FONT_STACK` that is installed and carries Chinese, or ''.
+
+    Cached, and caching is the correct semantics rather than a shortcut: matplotlib builds its font
+    manager once per process, so a font installed after that point is invisible until a restart —
+    re-asking would just print the same sentence again on a machine that cannot act on it yet.
+
+    '' is a fact about the machine, not a failure: the figure still renders, its digits and Latin are
+    right, and every Han character is a box. That is why this is a printed warning instead of a
+    refusal — a 30-figure canvas must not die over a font, and silent boxes get typed into a paper.
+    """
+    from matplotlib import font_manager
+
+    for family in _CJK_CANDIDATES:
+        try:
+            font_manager.fontManager.findfont(family, fallback_to_default=False)
+        except ValueError:
+            continue
+        return family
+    return ''
+
+
+@lru_cache(maxsize=4)
+def _warn_missing_cjk_font(message: str) -> None:
+    """Print the missing-font line once per wording.
+
+    Cached on the message, not on a flag, because the console language is per thread: a Chinese run
+    and an English run each deserve their own single line, and a plain boolean would let the second
+    one say nothing at all. The run console forwards ``logger.warning``, so this is the user-visible
+    channel — thirty figures in one canvas must not print the sentence thirty times.
+    """
+    logger.warning(message)
 
 
 def _pyplot():
@@ -48,15 +104,10 @@ def _pyplot():
     matplotlib.use('Agg')  # headless backend, safe for a web server
     from matplotlib import pyplot as plt
 
-    plt.rcParams['font.sans-serif'] = [
-        'SimHei',
-        'Microsoft YaHei',
-        'WenQuanYi Micro Hei',
-        'DejaVu Sans',
-        'Arial Unicode MS',
-        'sans-serif',
-    ]
+    plt.rcParams['font.sans-serif'] = list(FONT_STACK)
     plt.rcParams['axes.unicode_minus'] = False
+    if not cjk_font():
+        _warn_missing_cjk_font(t('chart.noCjkFont', checked='、'.join(_CJK_CANDIDATES)))
     return plt
 
 
