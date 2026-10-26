@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import browser_profiles
@@ -52,6 +53,7 @@ from api.visualize import bp as visualize_bp
 from api.workflow_history import bp as workflow_history_bp
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
+from nodes.catalog import QUIET_NODE_TYPES as _QUIET_NODE_TYPES
 from profiles import ensure_profile_template
 from state import (
     _RUN_QUEUE,
@@ -4968,8 +4970,8 @@ _NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment', '
 #: nodes the lines that *do* matter — a crawl, a failure, a restored node — drowned
 #: in them. Only the generic per-node chatter is suppressed: what these nodes say
 #: about themselves (which file was loaded, how many rows) and anything that went
-#: wrong still reaches the console.
-_QUIET_NODE_TYPES = frozenset({'name', 'upload'})
+#: wrong still reaches the console. The set itself lives on each node's plugin
+#: (``nodes/catalog.py``), so a quiet type is declared once, not in a second list here.
 
 
 def _settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: int, err: str = ''):
@@ -5192,6 +5194,142 @@ def _run_node_durable(
     return result, NODE_DONE
 
 
+@dataclass(frozen=True)
+class _NodeCall:
+    """Everything a node executor needs besides its own node dict.
+
+    One uniform call shape is what turns the executor table into a registry instead of an if-chain:
+    Phase 2 of ``docs/refactor_plan.md`` moves each ``_run_*`` body into
+    ``backend/nodes/executors/<type>.py`` with this same signature, and this table does not change.
+    """
+
+    headless: bool
+    current_input: list
+    run_ctx: dict
+    upstream: list
+    ctx: dict
+    platform_of: dict | None
+    label_of: object
+
+
+def _run_name(node, _call):
+    return _execute_name_node(node)
+
+
+def _run_comment(node, call):
+    return _execute_comment_node(node, headless=call.headless, ctx=call.ctx)
+
+
+def _run_source(node, call):
+    """A crawl, with its platform lane held around the WHOLE node.
+
+    The lane splits per ACCOUNT (``crawl_gate._lane``): the measured wall is one SESSION searching
+    twice, so two logins of one platform are two lanes and may crawl at the same moment — which is
+    the whole reason accounts exist here. Holding it around the node (rather than around each
+    request) keeps a retry inside the turn: a retry that released the queue first would collide
+    with the very workflow it had been waiting behind. 评论采集 opens one browser per platform it
+    finds in its links and is NOT gated by this lane yet, so two comment crawls of one platform can
+    hold one session concurrently — a known gap, written up with the live-test rows that measure it
+    (``docs/live_test_plan.md``), not a promise.
+    """
+    platform = node.get('platform') or (node.get('params') or {}).get('platform', '')
+    account = str((node.get('params') or {}).get('account') or '').strip()
+    # ``upstream`` reaches the source node itself: a link-list mode fed by an upstream column reads
+    # the parent table here. Dropping it made the wire a lie — the canvas showed a feed and the
+    # crawl ran the pasted list nobody asked for.
+    # ``stop_requested()``, never ``not running``: its own docstring spells out why — a caller that
+    # reaches this function without a claim in place has no run to be "not running", and inferring
+    # 「the user pressed 停止」 from that abandoned the queue for every such call instead of holding
+    # the lane.
+    with crawl_gate.hold(platform, log=add_log, abort=stop_requested, account=account):
+        return _execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
+
+
+def _run_accumulate(node, call):
+    return _execute_accumulate_node(node, call.current_input, ctx=call.ctx)
+
+
+def _run_upload(node, _call):
+    return _execute_upload_node(node)
+
+
+def _run_resume(node, call):
+    return _execute_resume_node(node, call.ctx or {'store': get_run_store(), 'run_id': ''})
+
+
+def _run_process(node, call):
+    op = node.get('operation') or node.get('params', {}).get('operation', '')
+    return _execute_process_node(node, call.current_input, run_ctx=call.run_ctx or _llm_run_ctx(node, op, call.ctx))
+
+
+def _run_analysis(node, call):
+    return _execute_analysis_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
+
+
+def _run_biblio(node, call):
+    return _execute_biblio_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
+
+
+def _run_fuse(node, call):
+    # The parents' own tables, not the merged fan-in: a fused row has to know its source.
+    return _execute_fuse_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
+
+
+def _run_visualize(node, call):
+    return _execute_visualize_node(node, call.current_input, ctx=call.ctx)
+
+
+def _run_tokenize(node, call):
+    return _execute_tokenize_node(node, call.current_input)
+
+
+def _run_compile(node, call):
+    # ``upstream`` is the whole point: a compile node reads the LaTeX a visualize parent produced
+    # from the (parent_id, result-dict) pairs, NOT from ``current_input`` (a dict upstream arrives
+    # as []).
+    return _execute_compile_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
+
+
+def _run_output(node, call):
+    # ``upstream`` reaches it so several incoming tables become ONE: a crawl split over several
+    # batches is the normal reason a user wires two nodes into a save node, and taking only the
+    # first exported one of them as if it were all of them. ``platform_of`` (parent id → crawled
+    # platform, built by the run loop where the node graph is in scope) lets the merge stamp which
+    # rows came from which platform; it is None for a direct caller, which then sees exactly the
+    # pre-stamp merge shape.
+    return _execute_output_node(
+        node,
+        call.current_input,
+        upstream=call.upstream,
+        ctx=call.ctx,
+        platform_of=call.platform_of,
+        label_of=call.label_of,
+    )
+
+
+#: The executor registry. The catalogue (``nodes/catalog.py``) is the list of types; this table is
+#: pinned against it by ``tests/unit/test_node_plugins.py``, so a type cannot have a declaration
+#: without an executor, or an executor without a declaration. A new type is: one catalogue entry,
+#: one ``_run_<type>`` adapter here (Phase 2 moves the body to ``nodes/executors/``), and its
+#: frontend panel.
+_NODE_EXECUTORS = {
+    'name': _run_name,
+    'comment': _run_comment,
+    'source': _run_source,
+    'accumulate': _run_accumulate,
+    'upload': _run_upload,
+    'resume': _run_resume,
+    'process': _run_process,
+    'analysis': _run_analysis,
+    'biblio': _run_biblio,
+    'fuse': _run_fuse,
+    'visualize': _run_visualize,
+    'tokenize': _run_tokenize,
+    'compile': _run_compile,
+    'output': _run_output,
+}
+
+
 def _execute_node(
     node: dict,
     headless: bool,
@@ -5206,69 +5344,23 @@ def _execute_node(
     order — only the analysis node needs more than the first entry (a join uses
     the second one as its right-hand table)."""
     ntype = node.get('type')
-    if ntype == 'name':
-        return _execute_name_node(node)
-    if ntype == 'comment':
-        return _execute_comment_node(node, headless=headless, ctx=ctx)
-    if ntype == 'source':
-        # The platform's turn is taken *here*, around the whole node, so the retry
-        # inside the crawl runs within it: a retry that released the queue first would
-        # collide with the very workflow it had been waiting behind. 评论采集 opens one
-        # browser per platform it finds in its links and is NOT gated by this lane yet, so two
-        # comment crawls of one platform can hold one session concurrently — a known gap, written
-        # up with the live-test rows that measure it (docs/live_test_plan.md), not a promise.
-        platform = node.get('platform') or (node.get('params') or {}).get('platform', '')
-        # The lane splits per ACCOUNT (crawl_gate._lane): the measured wall is one
-        # SESSION searching twice, so two logins of one platform are two lanes and
-        # may crawl at the same moment — which is the whole reason accounts exist here.
-        account = str((node.get('params') or {}).get('account') or '').strip()
-        # ``upstream`` reaches the source node itself: a link-list mode fed by an
-        # upstream column reads the parent table here. Dropping it (the old behaviour)
-        # made the wire a lie — the canvas showed a feed and the crawl ran the pasted
-        # list nobody asked for.
-        # ``stop_requested()``, never ``not running``: its own docstring spells out why — a
-        # caller that reaches this function without a claim in place has no run to be "not
-        # running", and inferring 「the user pressed 停止」 from that abandoned the queue for
-        # every such call instead of holding the lane.
-        with crawl_gate.hold(platform, log=add_log, abort=stop_requested, account=account):
-            return _execute_source_node(node, headless, ctx=ctx, upstream=upstream)
-    if ntype == 'accumulate':
-        return _execute_accumulate_node(node, current_input, ctx=ctx)
-    if ntype == 'upload':
-        return _execute_upload_node(node)
-    if ntype == 'resume':
-        return _execute_resume_node(node, ctx or {'store': get_run_store(), 'run_id': ''})
-    if ntype == 'process':
-        op = node.get('operation') or node.get('params', {}).get('operation', '')
-        return _execute_process_node(node, current_input, run_ctx=run_ctx or _llm_run_ctx(node, op, ctx))
-    if ntype == 'analysis':
-        return _execute_analysis_node(node, current_input, upstream=upstream, ctx=ctx)
-    if ntype == 'biblio':
-        return _execute_biblio_node(node, current_input, upstream=upstream, ctx=ctx)
-    if ntype == 'fuse':
-        # The parents' own tables, not the merged fan-in: a fused row has to know its source.
-        return _execute_fuse_node(node, current_input, upstream=upstream, ctx=ctx)
-    if ntype == 'visualize':
-        return _execute_visualize_node(node, current_input, ctx=ctx)
-    if ntype == 'tokenize':
-        return _execute_tokenize_node(node, current_input)
-    if ntype == 'compile':
-        # ``upstream`` is the whole point: a compile node reads the LaTeX a visualize parent produced from
-        # the (parent_id, result-dict) pairs, NOT from ``current_input`` (a dict upstream arrives as []).
-        return _execute_compile_node(node, current_input, upstream=upstream, ctx=ctx)
-    if ntype == 'output':
-        # ``upstream`` reaches it so several incoming tables become ONE: a crawl split
-        # over several batches is the normal reason a user wires two nodes into a save
-        # node, and taking only the first exported one of them as if it were all of them.
-        # ``platform_of`` (parent id → crawled platform, built by the run loop where the node
-        # graph is in scope) lets the merge stamp which rows came from which platform; it is
-        # None for a direct caller, which then sees exactly the pre-stamp merge shape.
-        return _execute_output_node(
-            node, current_input, upstream=upstream, ctx=ctx, platform_of=platform_of, label_of=label_of
+    executor = _NODE_EXECUTORS.get(ntype)
+    if executor is not None:
+        return executor(
+            node,
+            _NodeCall(
+                headless=headless,
+                current_input=current_input,
+                run_ctx=run_ctx,
+                upstream=upstream,
+                ctx=ctx,
+                platform_of=platform_of,
+                label_of=label_of,
+            ),
         )
-    # No branch claimed this type. ``validate`` refuses an unknown type before a run, so
-    # this is defense in depth for a direct caller — but it must still refuse BY NAME:
-    # returning [] here would settle the node DONE over an empty table (see AGENTS.md).
+    # No plugin claimed this type. ``validate`` refuses an unknown type before a run, so this is
+    # defense in depth for a direct caller — but it must still refuse BY NAME: returning [] here
+    # would settle the node DONE over an empty table (see AGENTS.md).
     raise ValueError(t('engine.unknown_node_type', nid=node_label(node, node.get('id')), type=str(ntype)))
 
 

@@ -80,6 +80,8 @@ crawler_workflow/
 │   │   ├── ner.py                # 命名实体识别（正则规则 + LLM 双模式）
 │   │   ├── anomaly.py            # 异常检测（Isolation Forest）
 │   │   └── correlation.py        # 相关性分析（Pearson / Spearman / Kendall）
+│   ├── nodes/                    # 节点插件目录：catalog 是类型/行形态/分组/quiet 的唯一声明
+│   │   └── catalog.py            # 执行器表与前端粘贴白名单由 test_node_plugins 与它互相钉住
 │   ├── engine/                   # 工作流引擎
 │   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹
 │   │   ├── executor.py           # 线程池执行器

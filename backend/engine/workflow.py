@@ -4,6 +4,7 @@ import logging
 from collections import defaultdict, deque
 
 import cookie_preflight
+from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
 
 import crawl_capabilities as capabilities
 from config import Config
@@ -103,39 +104,13 @@ def node_label(node: dict, nid: str) -> str:
     return nid
 
 
-#: Node types whose result is a table of rows.
-#:
-#: A name node is metadata and a visualize node answers a chart SPEC, so neither can hand
-#: rows to anything downstream. That matters at exactly one place, and it is not obvious
-#: there: the save node now MERGES its incoming tables, so a wire from a node that carries
-#: no rows is one the canvas draws and the run ignores — the silent half of the picture
-#: this rule exists to refuse.
-TABLE_NODE_TYPES = frozenset(
-    {
-        'source',
-        'upload',
-        'resume',
-        'comment',
-        'process',
-        'analysis',
-        'tokenize',
-        'biblio',
-        'fuse',
-        'accumulate',
-        'output',
-    }
-)
-
-#: Node types that carry a PDF-able LaTeX artifact downstream rather than a row table: ``visualize`` emits a
-#: chart SPEC whose ``latex``/``latex_table`` fields a save node can compile, and ``compile`` emits the PDF
-#: it already built. Neither is in ``TABLE_NODE_TYPES`` (no rows), and they are the ONLY parents an output
-#: may have when its format is ``pdf`` — conversely a tabular format must never be fed by these.
-PDF_SOURCE_NODE_TYPES = frozenset({'visualize', 'compile'})
-
-#: Every node type the engine knows and can execute. A hand-edited canvas can name a node anything,
-#: and a type outside this set has no executor — so ``validate`` refuses it by name rather than letting
-#: the runner fall through to an empty table (which would settle the node DONE over nothing measured).
-NODE_TYPES = TABLE_NODE_TYPES | PDF_SOURCE_NODE_TYPES | frozenset({'name'})
+#: The node-type sets come from the node catalogue (``nodes/catalog.py``): one declaration per type,
+#: with its row shape and console quietness. The executor table in ``app.py`` is pinned against the
+#: same catalogue by a contract test, so a type cannot be half-registered. See
+#: ``docs/refactor_plan.md`` for the plugin architecture and its remaining phases.
+#
+# ``TABLE_NODE_TYPES`` is re-exported from the import above (the module-level names are kept because
+# tests and the executor read them), and so are ``PDF_SOURCE_NODE_TYPES`` and ``NODE_TYPES``.
 
 
 def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
