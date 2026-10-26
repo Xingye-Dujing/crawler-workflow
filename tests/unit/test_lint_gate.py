@@ -146,8 +146,14 @@ class TestTheStandards:
         assert ci.count('--rcfile=.pylintrc.tests') == 1
         assert re.search(r'--rcfile=\.pylintrc(?![.\w])', ci), 'the product tier is missing from CI'
         assert 'pylint.exe --persistent=n --rcfile=.pylintrc --ignore-patterns' not in ci
-        assert 'Get-ChildItem' in ci, 'targets must be enumerated as files, not as bare directory names'
-        assert ci.count('throw') >= 2, 'a tier that finds no sources must fail, not pass silently'
+        # Either shell may enumerate the targets, as long as it enumerates FILES and fails on an empty
+        # list. The bug this pins is a bare directory name reaching pylint as a package name — `packaging`
+        # resolved to the PyPA distribution in site-packages, so the gate linted somebody else's code —
+        # and that bug is identical on Windows and on Linux, so the rule is not "use PowerShell".
+        enumerated = 'Get-ChildItem' in ci or 'find ' in ci
+        assert enumerated, 'targets must be enumerated as files, not as bare directory names'
+        failing = ci.count('throw') + ci.count('-z "$') + ci.count('-z ${')
+        assert failing >= 2, 'a tier that finds no sources must fail, not pass silently'
         # The gate checks FATAL/ERROR/WARNING, and it does so on the command line: a `--disable=C,R`
         # living in a tier config would hide conventions from local runs too, which is not the deal.
         scoped = [

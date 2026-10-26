@@ -18,7 +18,8 @@
 # somewhere it can be found, instead of being discovered by reading the source.
 #
 # Install (CUDA build -- replace cu121 with the wheel matching your driver, or drop the
-# --extra-index-url entirely for the CPU build):
+# --extra-index-url entirely for the CPU build). The venv's tool directory is `Scripts` on Windows and
+# `bin` on Linux/macOS -- same command, different separator:
 #
 #     .venv/Scripts/pip.exe install -r requirements-optional.txt \
 #         --extra-index-url https://download.pytorch.org/whl/cu121
@@ -71,9 +72,16 @@ hdbscan
 # the player itself). mitmproxy pulls a large twisted/cryptography tree, hence this file.
 #
 # Used by: the Data Source node, platform hongguo, mode comments.
+#
+# Both lines carry a Windows marker, and the marker is the POINT rather than decoration:
+# `uiautomation` is a comtypes-based Windows package whose install fails outright on Linux and macOS, so
+# an unmarked file made `pip install -r requirements-optional.txt` a Windows-only command -- on a server
+# the optional stack could not be installed at all, over one node that could never run there. The mode
+# itself is gated by `crawl_capabilities.requirement_met('windows_desktop')`, which refuses it on any
+# non-Windows host or in cloud mode, and the panel greys the option out from the same answer.
 
-mitmproxy
-uiautomation
+mitmproxy; sys_platform == "win32"
+uiautomation; sys_platform == "win32"
 
 # -- ONNX export of the fine-tuned BERTs: dev-only tools, NOT the runtime that answers --
 # `onnx` is imported by exactly one thing: `ml_train/scripts/export_onnx_bert.py`, which turns a

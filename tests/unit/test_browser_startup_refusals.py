@@ -99,7 +99,10 @@ def test_an_empty_driver_path_is_left_for_selenium_manager(launches, monkeypatch
 
 
 def test_a_driver_that_exists_is_the_one_handed_to_the_service(launches, monkeypatch, tmp_path):
-    driver = tmp_path / 'chromedriver.exe'
+    # Named without an ``.exe`` on purpose: the question is "does the path the setting holds exist", and a
+    # Linux driver is ``/usr/bin/chromedriver``. Pinning the Windows spelling here would let a real
+    # portability bug through while still passing on the box that wrote it.
+    driver = tmp_path / 'chromedriver'
     driver.write_bytes(b'MZ')  # existence is the whole question here
     seen = {}
 

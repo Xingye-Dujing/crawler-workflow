@@ -31,6 +31,7 @@ import pandas as pd
 
 from i18n import t
 from services.chart_contracts import BIBLIO_CHART_TYPES
+from utils import machine_deps
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,21 @@ logger = logging.getLogger(__name__)
 #: The font stack every Matplotlib figure is drawn with. Order is not a ranking here: since 3.6
 #: matplotlib falls through the list PER GLYPH, so a family that carries Chinese may sit behind
 #: DejaVu Sans and still do its job. ``sans-serif`` is matplotlib's own last resort.
+#:
+#: The list has to hold each OS's own names, not just this box's: the Windows families are what a
+#: desktop has, while a Linux server's Chinese fonts come from the distro package (Noto Sans CJK SC,
+#: WenQuanYi Zen Hei — what ``fonts-noto-cjk`` / ``fonts-wqy-zenhei`` register) and a Mac's from the
+#: system (PingFang SC). Missing those names is not a cosmetic gap: matplotlib resolves to DejaVu,
+#: every Han character draws as a box, and the figure goes into a paper looking finished.
 FONT_STACK = [
     'SimHei',
     'Microsoft YaHei',
+    'Noto Sans CJK SC',
+    'Source Han Sans SC',
+    'WenQuanYi Zen Hei',
     'WenQuanYi Micro Hei',
+    'PingFang SC',
+    'Hiragino Sans GB',
     'DejaVu Sans',
     'Arial Unicode MS',
     'sans-serif',
@@ -107,7 +119,13 @@ def _pyplot():
     plt.rcParams['font.sans-serif'] = list(FONT_STACK)
     plt.rcParams['axes.unicode_minus'] = False
     if not cjk_font():
-        _warn_missing_cjk_font(t('chart.noCjkFont', checked='、'.join(_CJK_CANDIDATES)))
+        _warn_missing_cjk_font(
+            t(
+                'chart.noCjkFont',
+                checked='、'.join(_CJK_CANDIDATES),
+                remedy=machine_deps.remedy('deps.systemFont'),
+            )
+        )
     return plt
 
 

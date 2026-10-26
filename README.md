@@ -13,14 +13,23 @@
 > 所有运行与安装一律在项目虚拟环境 `.venv/`（Python 3.11）中进行，勿使用系统 Python。
 
 **1. 环境要求**
+> 本项目按 **Windows / Linux / macOS 三套系统**开发：源码版在三种系统上都能跑（云端部署目标是 Linux）。
+> 只有两处是系统专属：`desktop/` 打包目录（PyInstaller + UPX + Inno Setup，天生只出 Windows exe），
+> 以及「红果短剧评论收割」（要驱动本机播放器进程 + 装系统证书，只有 Windows 桌面做得到）。
+> 后者在 Linux/macOS 与 cloud 模式下**按名拒绝**，并且面板不再给出那个选项（不是等到运行才报错）。
+
 - Python 3.11+（代码使用 `zip(..., strict=True)`）
-- Chrome 浏览器（Selenium 驱动）。chromedriver **不随项目分发**：驱动与 Chrome 的大版本一对一绑定，
+- Chrome 浏览器（Selenium 驱动）。Linux 装 `chromium` + `chromium-driver`（或 Google 的 `google-chrome-stable`），
+  macOS 装 Chrome 的 `.app`；程序按当前系统去查这些位置，也认环境变量 `CHROME_PATH` / `CHROME_BIN`。
+  chromedriver **不随项目分发**：驱动与 Chrome 的大版本一对一绑定，
   带一份固定驱动等于带一份会过期的东西，所以留空即可，Selenium 会在首次采集时自动取匹配版本（需要联网）；
   设置面板里的「驱动路径」只用于你明确放置的那份，指向不存在的文件时采集会按名拒绝并说明怎么办
-- [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一即可）
-- MiKTeX（或 TeX Live）的 `xelatex`：只有「编译为 PDF / 论文成稿」需要；没有它 LaTeX 源照出，PDF 按名拒绝
-- 若用 Matplotlib 引擎渲染中文图表，服务器需安装中文字体（`fonts-wqy-microhei` / SimHei / Microsoft YaHei 任一；Linux 下 `apt install fonts-wqy-microhei`）；
-  一个都没有时控制台会点名「找到的字体都不能显示汉字」，而不是静默画出满图方框
+- [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一即可）；云端 `CRAWLER_CLOUD=1` 只留 OpenRouter
+- `xelatex`：只有「编译为 PDF / 论文成稿」需要。Windows 用 MiKTeX，Linux 用 `apt install texlive-xetex texlive-lang-chinese`，
+  macOS 用 MacTeX；没有它 LaTeX 源照出，PDF 按名拒绝（拒绝的话会按你所在的系统说该装哪一个）
+- 若用 Matplotlib 引擎渲染中文图表，需系统装有中文字体：Windows 自带黑体/微软雅黑，
+  Linux 用 `apt install fonts-noto-cjk`（或 `fonts-wqy-zenhei`），macOS 自带苹方/宋体；
+  一个都没有时控制台会点名「找过的字体名 + 该系统该怎么补」，而不是静默画出满图方框
 - 前端资源已全部随仓库分发（ECharts 及其 GL / 词云扩展、中国与世界底图、界面字体，见 `backend/static/vendor/`），
   因此离线的机器也画得出图；缺失文件时每个画图位置都会指名是哪个文件没加载
 
@@ -29,7 +38,8 @@
 ```bash
 cd crawler_workflow
 python -m venv .venv
-source .venv/Scripts/activate        # Windows Git Bash；cmd 下用 .venv\Scripts\activate
+source .venv/Scripts/activate        # Windows；cmd 下用 .venv\Scripts\activate
+source .venv/bin/activate            # Linux / macOS
 pip install -r requirements.txt
 ```
 
@@ -55,6 +65,9 @@ python app.py
 `CRAWLER_DATA_ROOT=<目录>` 给它一份自己的 `data/`+`logs/`，两边互不干涉。
 
 **4b. Windows 免环境桌面版（给不装 Python 的人）**
+> 这一节只关于 Windows：`desktop/` 是本项目里**唯一**故意写死系统的目录（PyInstaller + UPX + Inno Setup 只能产
+> 出 exe），它的 Windows 假设不外溢到 `backend/`。源码版（上面几节）在 Windows / Linux / macOS 都能跑，
+> 云端部署的目标是 Linux（`python app.py cloud`）。
 
 `desktop/` 提供 PyInstaller **onedir** 打包：生成一个文件夹（外加压缩 zip，`-Installer` 再出一个
 Inno Setup 安装包 `CaiXiHui-Setup.exe`），
@@ -88,6 +101,10 @@ Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上�
 - **多平台数据采集**：知乎 / 微博 / 小红书 / 微信公众号 / 哔哩哔哩 / 抖音 / 红果短剧 / YouTube / X（推特）
   （Instagram 已可存 Cookie，采集待接入），关键词 / 某作者的作品 / 热榜 / 评论多种模式，
   红果短剧的评论由带代理的桌面播放器旁听收割（App 协议签名不复刻，见 docs/collection.md）：
+  这条能力**只有 Windows 桌面做得到**（要驱动本机播放器进程、把抓包 CA 装进系统证书库），所以在 Linux、macOS
+  与 cloud 模式下它被**按名拒绝**，并且数据源面板里那一栏采集内容是**列着但置灰**的（括号里写明原因）——
+  节点存的正是这个模式，直接不列出会让面板画成「第一个模式」，那是面板在谎报这次运行会做什么；
+  四个只有桌面才需要设置的红果收割项也一并从设置面板收起：
   每行输入可以是剧集链接，也可以直接是**剧名**（在播放器自己的榜单里找——网页热榜与客户端榜单是两套排序），
   输出带 剧名 / 集序号 / 分集ID，某集没收满、某部剧进不去、或播放流中途切到了别的剧都会在结束时
   **具名报错**（陌生剧的行按请求体的 book 丢弃，绝不盖本剧剧名）、已采行照常保留，

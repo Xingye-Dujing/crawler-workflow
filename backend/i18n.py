@@ -270,9 +270,35 @@ _ZH = {
     'biblio.import_ok': '已识别 {format} 文献导出：{n} 条记录',
     'biblio.build_done': '文献计量完成：{entity}，{nodes} 个节点 / {edges} 条边（{start}–{end}）',
     'biblio.export_failed': '文献计量导出失败：{err}',
+    # ── 「缺什么、在这台机器上怎么补」的按系统分支 ──────────────────────────
+    # 一条补救说明在三套系统上说的是三件事：Windows 补字体功能、Linux 装发行包、macOS 用系统自带。
+    # 键名由 utils.machine_deps.remedy_key 拼出，所以全清单（前缀 × 平台）由
+    # tests/unit/test_missing_dependency_messages.py 从取值那头逐个查在不在。
+    'deps.systemFont.win32': '请安装仿宋/黑体等中文字体（英文版 Windows 要在「可选功能」里补中文简体字体）后重启程序',
+    'deps.systemFont.linux': '请安装中文字体（Debian/Ubuntu：apt-get install fonts-noto-cjk）后重启程序',
+    'deps.systemFont.darwin': 'macOS 自带苹方/宋体；若仍缺请装 Noto Sans CJK 后重启程序',
+    'deps.texFont.win32': (
+        '纸质图用 ctex + 仿宋（FangSong），需要系统装有该字体（英文版 Windows 要补「中文（简体）」字体功能）'
+    ),
+    'deps.texFont.linux': '非 Windows 上纸质图改用 ctex 自带的 fandol 中文字体集，需要 texlive-lang-chinese',
+    'deps.texFont.darwin': '非 Windows 上纸质图改用 ctex 的 macnew 字体集（系统自带宋体/黑体）',
+    'deps.texPackage.win32': (
+        '用 MiKTeX 控制台（或 miktex packages install）补上，或在 MiKTeX 设置里允许「联网自动安装缺失包」后重试'
+    ),
+    'deps.texPackage.linux': (
+        '用发行版包装对应宏包（Debian/Ubuntu：apt-get install texlive-lang-chinese texlive-latex-extra），'
+        '或 tlmgr install 该包'
+    ),
+    'deps.texPackage.darwin': 'MacTeX 下用 sudo tlmgr install 该包，或在 TeX Live Utility 里安装',
+    'deps.xelatex.win32': '找不到 xelatex，无法编译 PDF：请安装 MiKTeX，或在「设置」里指定编译程序路径',
+    'deps.xelatex.linux': (
+        '找不到 xelatex，无法编译 PDF：请安装 TeX Live 的 xelatex'
+        '（Debian/Ubuntu：apt-get install texlive-xetex），或在「设置」里指定路径'
+    ),
+    'deps.xelatex.darwin': '找不到 xelatex，无法编译 PDF：请安装 MacTeX（含 xelatex），或在「设置」里指定路径',
     'chart.noCjkFont': (
         '本机字体里没有能显示汉字的字体（已找过：{checked}）：'
-        'Matplotlib 出的 PNG 里中文会是方框，请安装 SimHei 或 Microsoft YaHei 后重启程序'
+        'Matplotlib 出的 PNG 里中文会是方框——{remedy}'
         '（ECharts 的图用浏览器字体，LaTeX 的图用 ctex，均不受此影响）'
     ),
     'chart.biblio_missing': '文献计量图缺少列：{cols}（请让上游文献计量节点输出完整表）',
@@ -1214,6 +1240,10 @@ _ZH = {
     'cookie.pre.timeout': '验证超时（{n} 秒）',
     'cookie.pre.riskControl': '页面回的是验证码/风控',
     'cookie.verify.unclear': '{platform} 的验证没有结论：页面回的是验证码/风控，与 Cookie 是否有效无关',
+    'cookie.verify.cloudHeadless': (
+        '本机是无窗口的服务器：上面这次验证只能用无头浏览器完成，而部分站点对无头访问回的是验证码或空白，'
+        '这不证明 Cookie 失效（要按登录态复核，请在有窗口的机器上验证）'
+    ),
     # The page never came from the site at all, so nothing about the cookie was tested —
     # and 「可用」 here would be cached and reused by every later run.
     'cookie.verify.unreachable': '{platform} 无法验证：浏览器自己没能打开这个地址（本机网络或 DNS），未检验到 Cookie',
@@ -1383,7 +1413,9 @@ _ZH = {
     'misc.chartPdfSaved': '图表 PDF 已生成：{name}（{bytes} 字节）',
     'misc.browser_open_failed': '无法打开浏览器：{err}',
     'misc.browserNotFound': '这台机器没有可接住地址的默认浏览器，请手动打开：{url}',
+    'misc.cloudNoBrowser': '云端模式不会尝试打开浏览器（服务器上没有浏览器可开）；请在自己机器上访问：{url}',
     'misc.server_starting': '爬虫工作流服务启动，端口 {port}',
+    'misc.consoleUtf8': ('本机的控制台编码 {streams} 写不出汉字，已改为 UTF-8（每个流只改一次，日志不会再因此丢行）'),
     'misc.visualize_failed': '图表渲染失败：{err}',
     'misc.export_failed': '导出文件写入失败',
     # ── 爬虫内部的调试信息 ────────────────────────────────────
@@ -1474,6 +1506,8 @@ _ZH = {
         '或在该节点改用已有 Cookie 的账号（不会借用别的账号登录，也不会静默少采）'
     ),
     'engine.source_link_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
+    'engine.source_needs_machine': '节点 {nid}：这台机器跑不了这种采集（{reason}），请换采集内容或在能跑的机器上运行',
+    'cap.requiresWindowsDesktop': '需要 Windows 桌面版：该模式要在本机驱动播放器或窗口',
     # Feeding a link mode from an upstream table column: the wire is allowed only where
     # the matrix declares a feed (Field.fed_by), and every mismatch is refused BY NAME —
     # a wired-but-unfed crawl would silently re-crawl the pasted list the user thinks
@@ -1678,7 +1712,7 @@ _ZH = {
     'set.driverMissing': '驱动文件不存在：{path}',
     'set.driverEmpty': '驱动路径为空：将由 Selenium 自动取与当前 Chrome 匹配的驱动（首次需要联网）',
     'set.browserMissing': '浏览器程序不存在：{path}',
-    'set.latexMissing': 'MiKTeX 编译程序不存在：{path}',
+    'set.latexMissing': 'LaTeX 编译程序（xelatex）不存在：{path}',
     'set.harvestMissing': '红果收割组件（{tool}）不是已存在的文件：{path}',
     'set.badWindow': '窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {default}',
     'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
@@ -1885,6 +1919,10 @@ _ZH = {
     'run.queueMirrorFailed': '写入待运行队列镜像失败（内存队列仍是权威，不受影响）',
     'run.queueLoadFailed': '重启读取待运行队列镜像失败（本轮从空队列开始）',
     'run.queueStartFailed': '排队的运行无法启动',
+    'run.browserReapFailed': (
+        '停止超时后仍未终止这个浏览器进程（PID {pid}）：{err}——它的窗口配置目录会一直被占着，'
+        '该平台下一次采集要等到锁超时'
+    ),
     'history.cleared': '执行历史已清空',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
     'api.workflowNodeNoId': (
@@ -1906,16 +1944,9 @@ _ZH = {
     'run.reportLatexFailed': '论文成稿失败：{err}',
     'run.compileSaved': 'PDF 已编译：{name}（{size} 字节）',
     'run.compileFailed': 'LaTeX 编译失败：{err}',
-    'api.compilePdfNoXelatex': '找不到 MiKTeX 的 xelatex，无法编译 PDF（可在设置里指定编译程序路径）',
     'api.compilePdfFailed': 'LaTeX 编译为 PDF 失败：{err}',
-    'api.compilePdfNoPackage': (
-        'LaTeX 缺宏包 {package}.sty：用 MiKTeX 控制台（或 miktex packages install）补上，'
-        '或在 MiKTeX 设置里允许「联网自动安装缺失包」后重试'
-    ),
-    'api.compilePdfNoFont': (
-        'LaTeX 找不到字体 {font}：本程序的纸质图用 ctex + 仿宋（FangSong），'
-        '需要系统装有该中文字体（英文版 Windows 要补「中文（简体）」字体功能）'
-    ),
+    'api.compilePdfNoPackage': 'LaTeX 缺宏包 {package}.sty：{remedy}',
+    'api.compilePdfNoFont': 'LaTeX 找不到字体 {font}：{remedy}',
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
         '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
@@ -2270,10 +2301,48 @@ _EN = {
     'biblio.import_ok': 'Recognised a {format} export: {n} records',
     'biblio.build_done': 'Bibliometrics done: {entity}, {nodes} nodes / {edges} edges ({start}–{end})',
     'biblio.export_failed': 'Bibliometric export failed: {err}',
+    'deps.systemFont.win32': (
+        'install a Chinese font such as SimHei/FangSong (an English Windows needs the Simplified Chinese '
+        'font feature under Settings > Optional features) and restart the app'
+    ),
+    'deps.systemFont.linux': (
+        'install a Chinese font (Debian/Ubuntu: apt-get install fonts-noto-cjk) and restart the app'
+    ),
+    'deps.systemFont.darwin': (
+        'macOS ships PingFang/Songti; if one is missing, install Noto Sans CJK and restart the app'
+    ),
+    'deps.texFont.win32': (
+        'the paper figures use ctex with FangSong (仿宋), so the system needs that font (an English Windows '
+        'needs the Simplified Chinese font feature installed)'
+    ),
+    'deps.texFont.linux': (
+        "off Windows the paper figures use ctex's own fandol CJK font set, which needs texlive-lang-chinese"
+    ),
+    'deps.texFont.darwin': "off Windows the paper figures use ctex's macnew font set (the system Songti/Heiti)",
+    'deps.texPackage.win32': (
+        'install it with the MiKTeX console (or "miktex packages install"), or allow MiKTeX to fetch missing '
+        'packages on the network and retry'
+    ),
+    'deps.texPackage.linux': (
+        'install the matching distro package (Debian/Ubuntu: apt-get install texlive-lang-chinese '
+        'texlive-latex-extra), or run tlmgr install <package>'
+    ),
+    'deps.texPackage.darwin': 'with MacTeX run sudo tlmgr install <package>, or install it in TeX Live Utility',
+    'deps.xelatex.win32': (
+        'xelatex was not found, so the PDF cannot be compiled: install MiKTeX, or set the compiler path in Settings'
+    ),
+    'deps.xelatex.linux': (
+        'xelatex was not found, so the PDF cannot be compiled: install it with TeX Live (Debian/Ubuntu: '
+        'apt-get install texlive-xetex), or set the compiler path in Settings'
+    ),
+    'deps.xelatex.darwin': (
+        'xelatex was not found, so the PDF cannot be compiled: install MacTeX (it ships xelatex), or set the '
+        'compiler path in Settings'
+    ),
     'chart.noCjkFont': (
-        'No installed font carries Chinese glyphs (looked for: {checked}): Chinese labels in '
-        'Matplotlib PNG output will draw as boxes. Install SimHei or Microsoft YaHei and restart '
-        'the app (ECharts figures use browser fonts and LaTeX figures use ctex — neither is affected)'
+        'No installed font carries Chinese glyphs (looked for: {checked}): Chinese labels in Matplotlib PNG '
+        'output will draw as boxes — {remedy} (ECharts figures use browser fonts and LaTeX figures use ctex, '
+        'neither is affected)'
     ),
     'chart.biblio_missing': (
         'Bibliometric chart is missing column(s): {cols} (let the upstream biblio node emit the full table)'
@@ -3349,6 +3418,11 @@ _EN = {
     'cookie.pre.busy': "{platform}'s browser is already held by something else",
     'cookie.pre.timeout': 'the check ran past {n} seconds',
     'cookie.pre.riskControl': 'the page answered with a captcha / risk control',
+    'cookie.verify.cloudHeadless': (
+        'this host is a windowless server: the check above could only run a HEADLESS browser, and some '
+        'sites answer headless with a captcha or a blank page — that is not proof the cookie expired '
+        '(verify on a machine with a window to judge the login state itself)'
+    ),
     'cookie.verify.unclear': '{platform} could not be verified: the page answered with a captcha or risk '
     'control, which says nothing about whether the cookie is valid',
     # The page never came from the site at all, so nothing about the cookie was tested —
@@ -3537,7 +3611,15 @@ _EN = {
     'misc.chartPdfSaved': 'Chart PDF compiled: {name} ({bytes} bytes)',
     'misc.browser_open_failed': 'Could not open browser: {err}',
     'misc.browserNotFound': 'This machine has no default browser to hand the address to — open it by hand: {url}',
+    'misc.cloudNoBrowser': (
+        'cloud mode does not try to open a browser (there is none on a server); reach this address from '
+        'your own machine: {url}'
+    ),
     'misc.server_starting': 'Starting crawler workflow server on port {port}',
+    'misc.consoleUtf8': (
+        'the console encoding {streams} of this machine cannot write Han characters — switched to UTF-8 '
+        '(each stream is changed once, so no log line is lost to it again)'
+    ),
     'misc.visualize_failed': 'Chart rendering failed: {err}',
     'misc.export_failed': 'Writing the export file failed',
     # ── crawler internals (debug level) ───────────────────────
@@ -3624,6 +3706,11 @@ _EN = {
         'silently under-collects)'
     ),
     'engine.source_link_mismatch': 'Node {nid}: {n} link(s) do not match the selected platform ({platform})',
+    'engine.source_needs_machine': (
+        'Node {nid}: this machine cannot run that collection mode ({reason}) — choose another mode or '
+        'run the canvas on a machine that can'
+    ),
+    'cap.requiresWindowsDesktop': 'it needs the Windows desktop build (a local player or window to drive)',
     'engine.source_feed_no_mode': (
         'Node {nid}: this collection mode cannot be fed from an upstream table — '
         'only link-list forms take a fed column; disconnect the wire or pick another mode'
@@ -3875,7 +3962,7 @@ _EN = {
         'installed Chrome (the first time needs network)'
     ),
     'set.browserMissing': 'Browser executable does not exist: {path}',
-    'set.latexMissing': 'MiKTeX compiler does not exist: {path}',
+    'set.latexMissing': 'LaTeX compiler (xelatex) does not exist: {path}',
     'set.harvestMissing': 'Hongguo harvest component ({tool}) is not an existing file: {path}',
     'set.badWindow': 'Window size must look like WIDTHxHEIGHT (e.g. 1920x1080) — restored the default {default}',
     'set.badNumber': '{setting} is not a number — restored the default {value}',
@@ -4123,6 +4210,10 @@ _EN = {
     'run.queueMirrorFailed': 'failed to mirror the waiting-run queue (the in-memory queue is still authoritative)',
     'run.queueLoadFailed': 'failed to load the persisted run queue at startup (starting from an empty queue)',
     'run.queueStartFailed': 'a queued run could not be started',
+    'run.browserReapFailed': (
+        'the browser process still did not die after the stop timeout (PID {pid}): {err} — its profile '
+        'directory stays claimed, so the next crawl of that platform waits for the lock to time out'
+    ),
     'history.cleared': 'Execution history cleared',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
     'api.workflowNodeNoId': (
@@ -4155,18 +4246,9 @@ _EN = {
     'run.reportLatexFailed': 'Paper document failed: {err}',
     'run.compileSaved': 'PDF compiled: {name} ({size} bytes)',
     'run.compileFailed': 'LaTeX compilation failed: {err}',
-    'api.compilePdfNoXelatex': (
-        'MiKTeX xelatex was not found, so the PDF cannot be compiled (set the compiler path in Settings)'
-    ),
     'api.compilePdfFailed': 'LaTeX to PDF compilation failed: {err}',
-    'api.compilePdfNoPackage': (
-        'LaTeX is missing the package {package}.sty: install it with the MiKTeX console '
-        '(or "miktex packages install"), or allow MiKTeX to fetch missing packages on the network and retry'
-    ),
-    'api.compilePdfNoFont': (
-        'LaTeX cannot find the font {font}: the paper figures use ctex with FangSong (仿宋), so the '
-        'system needs that Chinese font (an English Windows needs the Simplified Chinese font feature installed)'
-    ),
+    'api.compilePdfNoPackage': 'LaTeX is missing the package {package}.sty: {remedy}',
+    'api.compilePdfNoFont': 'LaTeX cannot find the font {font}: {remedy}',
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (
         'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '

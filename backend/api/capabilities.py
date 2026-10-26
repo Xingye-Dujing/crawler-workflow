@@ -32,6 +32,11 @@ def get_capabilities():
     the intent); the panel needs no new code to show a new account.
     """
     payload = capabilities.as_dict()
+    # One answer about THIS machine, next to the modes that ask for it: the panel greys an unreachable
+    # mode out of this map and the pre-run gate refuses from the same numbers, so the two can never
+    # disagree about whether a click has a chance. Computed per request rather than baked into
+    # ``as_dict()`` because the matrix itself is static data a unit test compares byte-for-byte.
+    payload['machine'] = capabilities.machine_requirements()
     for cap in payload.get('platforms', []):
         # Creation order, not alphabetical: the list the node picks from is "which logins does this
         # machine have", and a user who added work-then-home expects home to still be second.

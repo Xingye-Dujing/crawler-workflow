@@ -388,6 +388,39 @@ class TestRefusals:
         assert 'pip' not in message, 'a packaged app has no pip to point at'
         assert '源码版' in message or 'source' in message.lower()
 
+    def test_a_non_windows_machine_is_refused_before_any_package_is_asked_about(self, tmp_path, monkeypatch):
+        # The two cases above fake ``sys.platform`` to reach the Windows branch. On a Linux server the
+        # node is dead, and that has to be the ANSWER — otherwise the suite stays green while the feature
+        # is not, which is exactly how a platform gap survives a test run.
+        import sys
+
+        import crawlers.hongguo_harvest as harvest_module
+
+        for other in ('linux', 'darwin'):
+            monkeypatch.setattr(sys, 'platform', other)
+            monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
+            # Every package present: the refusal is about the machine, not about what is installed.
+            monkeypatch.setattr(harvest_module.importlib.util, 'find_spec', lambda name: object())
+            harness, _said = _harness(tmp_path, capture_lines=[])
+            del harness._ensure_stack
+            with pytest.raises(ValueError) as caught:
+                harness.crawl_hongguo(ARTICLE, 0)
+            assert 'Windows' in str(caught.value), (other, str(caught.value))
+
+    def test_a_cloud_windows_host_is_refused_too(self, tmp_path, monkeypatch):
+        # Same box, different job: a server has no desktop to drive even when its OS is Windows.
+        import sys
+
+        import crawlers.hongguo_harvest as harvest_module
+
+        monkeypatch.setattr(sys, 'platform', 'win32')
+        monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', True)
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        del harness._ensure_stack
+        with pytest.raises(ValueError) as caught:
+            harness.crawl_hongguo(ARTICLE, 0)
+        assert 'Windows' in str(caught.value)
+
     def test_the_source_build_names_the_missing_package(self, tmp_path, monkeypatch):
         import sys
 

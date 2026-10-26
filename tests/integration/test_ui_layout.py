@@ -4984,3 +4984,71 @@ def test_the_shipped_page_draws_its_figures_without_asking_anything_off_this_mac
     assert facts['world'] == '', f'world basemap refused: {facts["world"]}'
     assert facts['worldRegistered'] is True
     assert facts['faces'] >= 1, 'the vendored webfont never loaded'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_server_without_a_desktop_hides_the_windows_only_controls_and_greys_the_mode(app_url, driver, lang):
+    """What the machine verdict does to the page, measured in a real layout engine.
+
+    The node harness can prove the JS decides correctly; only a browser can prove the CSS rule that
+    consumes the flag actually removes the four 红果 harvest rows from the settings panel — a row that
+    is "hidden" by a selector that does not match is still on screen, and a Windows-only path setting
+    offered on a Linux server is exactly the advice nobody can follow. The same payload has to leave
+    the 采集内容 option LISTED but disabled: the node stores that mode, and an absent option would paint
+    the platform's first mode instead, which is a panel lying about what the run would do.
+    """
+    driver.get(app_url + '/')
+    # The matrix arrives asynchronously, and the panel is BUILT from it: asking for the mode select
+    # before the answer lands measures nothing (and used to throw on ``undefined.length``). Bounded, and
+    # named if it never arrives — a test that silently skips a load race proves nothing about the race.
+    deadline = time.time() + 20
+    while not driver.execute_script('return !!(window.Capabilities && Capabilities.ready());'):
+        if time.time() > deadline:
+            pytest.fail('/api/capabilities never loaded, so the mode select was never rendered')
+        time.sleep(0.1)
+    facts = driver.execute_script(
+        """
+        const lang = arguments[0];
+        document.body.dataset.lang = lang;
+        I18n.apply();
+        const rows = Array.from(document.querySelectorAll('.windows-only'));
+        const display = () => rows.map((el) => getComputedStyle(el).display);
+        const before = display();
+        Machine.apply({ machine: { windows_desktop: false } });
+        const after = display();
+        const flag = document.documentElement.dataset.winDesktop;
+        Capabilities.data = Object.assign({}, Capabilities.data, { machine: { windows_desktop: false } });
+        canvas.nodes = {};
+        canvas.connections = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        const id = canvas.addNode('source', 200, 200);
+        canvas.nodes[id].platform = 'hongguo';
+        canvas.nodes[id].params.platform = 'hongguo';
+        canvas.nodes[id].params.collect = 'comments';
+        openSettings(id);
+        const selects = Array.from(document.querySelectorAll('#settings-content select'));
+        const modeSel = selects.find((s) =>
+            Array.from(s.options).some((o) => o.value === 'comments'));
+        const options = modeSel
+            ? Array.from(modeSel.options).map((o) => ({
+                value: o.value, disabled: o.disabled, text: o.textContent.trim(),
+            }))
+            : null;
+        Machine.apply({ machine: { windows_desktop: true } });
+        const restored = display();
+        return { rows: rows.length, before, after, restored, flag, options };
+        """,
+        lang,
+    )
+    assert facts['rows'] == 4, f'the desktop-only rows are not the four declared ones: {facts["rows"]}'
+    assert all(value != 'none' for value in facts['before']), facts['before']
+    assert all(value == 'none' for value in facts['after']), f'CSS did not remove them: {facts["after"]}'
+    assert all(value != 'none' for value in facts['restored']), 'the flag must not hide them for good'
+    assert facts['flag'] == '0'
+    assert facts['options'], 'the 采集内容 select never rendered, so nothing about the option was measured'
+    harvest = next((o for o in facts['options'] if o['value'] == 'comments'), None)
+    assert harvest and harvest['disabled'] is True, facts['options']
+    reason = '桌面版' if lang == 'zh' else 'Windows desktop'
+    assert reason in harvest['text'], f'the greyed option says nothing about why: {harvest["text"]}'
+    board = next((o for o in facts['options'] if o['value'] == 'hot'), None)
+    assert board and board['disabled'] is False, 'a browser crawl must not be collateral damage'

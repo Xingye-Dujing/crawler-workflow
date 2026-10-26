@@ -37,6 +37,7 @@ import uuid
 
 import requests
 
+import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
 from settings_store import get_setting
@@ -1390,7 +1391,10 @@ class HongguoCommentHarness:
         """mitmdump → CA trust → player, each refused by name. Idempotent per node run."""
         if self._stack_up:
             return
-        if Config.CLOUD_MODE or sys.platform != 'win32':
+        # The SAME predicate the panel greys this mode out with and validation refuses a canvas with
+        # (:meth:`crawl_capabilities.mode_blocker`): a node that reaches here has already been paid for,
+        # so this line is the last of three answers and must not be a fourth opinion about the platform.
+        if not capabilities.requirement_met('windows_desktop'):
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing='Windows desktop (mitmdump + UIA)'))
         missing = [name for name in ('mitmproxy', 'uiautomation') if importlib.util.find_spec(name) is None]
         if missing:

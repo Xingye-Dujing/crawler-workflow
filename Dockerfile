@@ -18,9 +18,19 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# Selenium 在 Linux 下通过这两个设置找到浏览器与驱动（crawlers/base.py 使用 driver_path）
-ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+# Browser and driver, both by explicit path. ``CHROME_BIN``/``CHROME_PATH`` are read by
+# utils/machine_deps (the one Chrome probe the crawler and the launcher share); ``CIXI_DRIVER_PATH`` is
+# the name backend/config.py actually reads — the image used to export CHROMEDRIVER_PATH, which nothing
+# looked at, so the deploy knob was decoration.
 ENV CHROME_BIN=/usr/bin/chromium
+ENV CIXI_DRIVER_PATH=/usr/bin/chromedriver
+
+# The program's log lines and node names are Chinese, and a slim image starts with no locale: a C/ASCII
+# stdout raises UnicodeEncodeError inside the logging handler, which swallows it, so the line simply
+# vanishes. UTF-8 mode plus a UTF-8 locale is the container's own answer; backend/app.py also pins the
+# streams at import for anyone who runs this image with LANG overridden.
+ENV PYTHONUTF8=1
+ENV LANG=C.UTF-8
 
 WORKDIR /app
 COPY requirements.txt /app/backend/requirements.txt

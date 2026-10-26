@@ -1452,6 +1452,14 @@ function sourceNodeErrors(node, label, hasDataInput) {
             .replace('{title}', label)
             .replace('{platform}', I18n.t('platform.' + platform))];
     }
+    if (!Capabilities.runnable(mode)) {
+        /* The server already answered that this machine cannot run the mode, so this is not a warning
+           about a risk — it is a refusal of a certainty, said before the run is paid for. The same rule
+           runs in ``engine/workflow.py``, and the wording is the catalogue's. */
+        return [
+            I18n.t('validate.modeNeedsMachine', { title: label, reason: Capabilities.requirementWord(mode) }),
+        ];
+    }
     var errors = [];
     /* Feed gate, matrix-driven like the rest of this function: a field the matrix
        marks feedable (f.fedBy) reads an upstream table column, and a wired table
@@ -1526,6 +1534,14 @@ function sourceNodeErrors(node, label, hasDataInput) {
    missing here, or appear here while the server still refused it. One fetch now
    feeds one renderer, so the form is the matrix. Labels travel as catalogue keys
    because the payload carries no language: the canvas translates it. */
+/* The words for each machine requirement a mode can ask for, keyed by the server's token.
+   ``tests/unit/test_frontend_contract.py`` pins this object's keys against
+   ``crawl_capabilities.REQUIREMENTS``: a token the server may send with no entry here would print as
+   the empty string in a greyed-out option, which is the "silently looks available" failure in UI form. */
+const CAPABILITY_REQUIREMENT_WORDS = {
+    windows_desktop: 'cap.requiresWindowsDesktop',
+};
+
 const Capabilities = {
     data: null,
     error: '',
@@ -1546,6 +1562,7 @@ const Capabilities = {
             .then(function (payload) {
                 self.data = payload && Array.isArray(payload.platforms) && payload.platforms.length ? payload : null;
                 self.error = self.data ? '' : 'malformed';
+                if (self.data) Machine.apply(self.data);
                 /* The data-source card is written from this payload, and the nodes a
                    draft restored on a cold page were drawn before it arrived. Redraw
                    them here rather than at each caller, so no entry point (startup,
@@ -1622,6 +1639,28 @@ const Capabilities = {
         return mode.needsSession !== false;
     },
 
+    /* Whether THIS machine can run a mode, from the server's own verdict (``payload.machine``).
+
+       Three answers, deliberately different: a mode with no requirement is runnable anywhere; a
+       requirement the payload never judged (an older server, a partial response) is runnable rather than
+       silently hidden — hiding a working feature on a missing byte is worse than a run that refuses by
+       name; and a requirement the server judged false is NOT runnable, which is the case this exists for.
+       The harvest node itself still refuses at run time; this only keeps the panel from offering a mode
+       the machine cannot honour and keeps 执行 from paying for a start that is already decided. */
+    runnable(mode) {
+        if (!mode || !mode.requires) return true;
+        var machine = this.data && this.data.machine;
+        if (!machine) return true;
+        return machine[mode.requires] !== false;
+    },
+
+    requirementWord(mode) {
+        /* The words for what the mode asks of the machine, as a literal catalogue key per requirement —
+           never a computed one, which is how a greyed option would end up reading `cap.requires.windows`. */
+        if (!mode || !mode.requires) return '';
+        return I18n.t(CAPABILITY_REQUIREMENT_WORDS[mode.requires] || '');
+    },
+
     defaults(id) {
         var out = {};
         if (!this.data) return out;
@@ -1636,6 +1675,23 @@ const Capabilities = {
     },
 };
 window.Capabilities = Capabilities;
+
+/* What this machine cannot do, written onto the document so CSS can take the desktop-only rows out of
+   the settings panel instead of showing a Windows-only path setting on a Linux server.
+
+   The verdict is the server's (``/api/capabilities`` → ``machine``) because only the process knows its
+   operating system and whether it is a cloud host — the same rule 「the panel holds no second opinion」
+   already applies to time, to cookie accounts and to a schedule's next fire. A missing verdict leaves
+   the rows visible: hiding a setting on a byte that never arrived is how a panel loses a feature
+   nobody asked it to drop. */
+const Machine = {
+    apply(payload) {
+        var machine = payload && payload.machine;
+        var windowsDesktop = !machine || machine.windows_desktop !== false;
+        document.documentElement.dataset.winDesktop = windowsDesktop ? '1' : '0';
+    },
+};
+window.Machine = Machine;
 
 /* Registered fine-tuned models, fetched once at boot so the bert-mode picker can
    offer them by friendly NAME (「网暴模型」) instead of making the user type a path.
@@ -2139,7 +2195,17 @@ function sourcePanelHtml(nodeId, p) {
             nodeId,
             'settings.collect',
             Capabilities.modes(platform).map(function (m) {
-                return { value: m.key, labelKey: m.labelKey };
+                /* A mode this machine cannot run stays in the list and says why, rather than
+                   disappearing: a node restored from a Windows canvas has that mode STORED, and an
+                   option that is simply absent would show the platform's first mode instead — the
+                   panel lying about what the run would do. Disabled + named is the honest shape. */
+                var runnable = Capabilities.runnable(m);
+                return {
+                    value: m.key,
+                    labelKey: m.labelKey,
+                    disabled: !runnable,
+                    labelSuffix: runnable ? '' : '（' + Capabilities.requirementWord(m) + '）',
+                };
             }),
             mode.key,
             paramCall(nodeId, 'collect', 'this.value') + reopenCall(nodeId)
@@ -2205,11 +2271,17 @@ function selectOptionTags(items, stored, defVal) {
     });
     var html = items
         .map(function (item) {
+            /* ``disabled`` is the one thing a select cannot do with styling: an option the machine
+               cannot honour is still a value the element can be asked for (keyboard, a stale draft,
+               an autofill). A node restored onto a Linux server keeps its stored mode and shows it
+               here as a selected-but-disabled row — the panel says what the canvas already knows,
+               and ``sourceNodeErrors`` refuses the run rather than starting it. */
             return (
                 '<option value="' +
                 escapeHtml(String(item.value)) +
                 '"' +
                 (known && String(item.value) === value ? ' selected' : '') +
+                (item.disabled ? ' disabled' : '') +
                 '>' +
                 item.label +
                 '</option>'
@@ -2239,7 +2311,13 @@ function sourceSelectHtml(nodeId, labelKey, options, value, onChange) {
         options.map(function (o) {
             // A real catalogue key is translated; an empty one (a user-typed account name)
             // shows the value as typed — a name they chose is not the program's word to look up.
-            return { value: o.value, label: o.labelKey ? I18n.t(o.labelKey) : o.value };
+            // ``labelSuffix`` is for a reason the option needs to carry itself (a machine
+            // requirement this host does not meet), already in the canvas's language.
+            return {
+                value: o.value,
+                label: (o.labelKey ? I18n.t(o.labelKey) : o.value) + (o.labelSuffix || ''),
+                disabled: !!o.disabled,
+            };
         }),
         value,
         ''

@@ -5,7 +5,6 @@ import logging
 import math
 import os
 import re
-import subprocess
 import sys
 import threading
 import time
@@ -137,6 +136,7 @@ from services.run_store import (
 from services.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.workflow_manager import WorkflowManager
 from settings_store import get_setting
+from utils import machine_deps, procs
 from utils.helpers import (
     as_bool,
     comment_platforms,
@@ -353,6 +353,27 @@ _log_handler = LogBufferHandler()
 _log_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(_log_handler)
 logging.getLogger().setLevel(logging.INFO)
+
+
+def pin_console_streams() -> list[str]:
+    """Give the console a chance to carry Chinese before anything writes to it; return what changed.
+
+    Called at import, not per request: a stream's encoding is decided when Python opens it, so the answer
+    belongs to the process. A container started with no ``LANG`` has an ASCII stdout, and the first Chinese
+    log line there raises inside the logging handler — which swallows it, so the line vanishes and the run
+    console looks quiet instead of broken.
+    """
+    changed = []
+    for name in ('stdout', 'stderr'):
+        stream = getattr(sys, f'__{name}__', None) or getattr(sys, name, None)
+        previous = machine_deps.pin_console(stream, name)
+        if previous:
+            changed.append(f'{name}:{previous}')
+            print(t('misc.consoleUtf8', streams=' '.join(changed)))
+    return changed
+
+
+pin_console_streams()
 
 
 class _LogTee:
@@ -6214,20 +6235,21 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
     waiter.start()
     waiter.join(quit_timeout)
     if waiter.is_alive() and pid:
-        with contextlib.suppress(Exception):
-            subprocess.run(
-                ['taskkill', '/F', '/T', '/PID', str(pid)],
-                capture_output=True,
-                timeout=8,
-                check=False,
-            )
-            # Replacing the session is what makes 停止 mean now, and it is the only reliable way to
-            # do it: the reap frees the command the worker is *inside* (a dead driver resets the
-            # socket, measured 1.7 s) but the worker's NEXT command opens a fresh connection to a
-            # port nobody holds, and selenium's pool re-sends a failed connect four times —
-            # measured 16.3 s each, which is how a mid-walk stop took 29.6 s to settle. See
-            # ``crawlers.base.DeadDriver`` for why the refusal is a ``BaseException``.
-            crawler.driver = DeadDriver()
+        # The reap is asked of THIS operating system, and its outcome is printed either way. The command
+        # used to be ``taskkill`` under a ``suppress`` that also swallowed the line assigning
+        # ``DeadDriver``: on a Linux server nothing was killed, the worker was not freed, and the console
+        # said the browser had been stopped.
+        stopped, reason = procs.reap_process(pid)
+        if not stopped:
+            logger.warning(t('run.browserReapFailed', pid=pid, err=reason))
+        # Replacing the session is what makes 停止 mean now, and it is the only reliable way to
+        # do it: the reap frees the command the worker is *inside* (a dead driver resets the
+        # socket, measured 1.7 s) but the worker's NEXT command opens a fresh connection to a
+        # port nobody holds, and selenium's pool re-sends a failed connect four times —
+        # measured 16.3 s each, which is how a mid-walk stop took 29.6 s to settle. See
+        # ``crawlers.base.DeadDriver`` for why the refusal is a ``BaseException``. This happens
+        # whether or not the process is gone: the promise is about the session the worker holds.
+        crawler.driver = DeadDriver()
     elif waiter.is_alive():
         # No process number to aim a kill at, and no promise this thread ever returns.
         # The harm is specific and has to be said: ``crawler.close()`` is what releases the
@@ -6461,6 +6483,12 @@ def _verify_lines(platform: str, facts: dict) -> list:
         lines.append(t('cookie.verify.ok', platform=platform))
     else:
         lines.append(t('cookie.verify.unclear', platform=platform))
+    if Config.CLOUD_MODE:
+        # The worker above asks for a visible window because a site's risk control treats the two
+        # differently — and on a server there is no display to honour that ask (``get_crawler`` clamps
+        # every cloud crawl to headless). Saying nothing would let a captcha page be read as a dead
+        # cookie, which is the diagnosis this project refuses to guess at.
+        lines.append(t('cookie.verify.cloudHeadless'))
     return lines
 
 
@@ -7001,6 +7029,12 @@ def runs_log_download(run_id: str):
 
 def _open_browser(url: str):
     """Open the UI in the default browser once the server is up."""
+    if Config.CLOUD_MODE:
+        # A server has no browser to hand an address to, and `webbrowser.open` on a headless host either
+        # does nothing or hunts for an X display that will never exist. The address is printed instead —
+        # that is the only thing a remote operator can act on.
+        logger.info(t('misc.cloudNoBrowser', url=url))
+        return
     try:
         import webbrowser
 

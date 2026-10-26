@@ -13,10 +13,43 @@ the matching section before rewriting, doubting, or "simplifying away" any rule 
 instagram cookie-capture only) via Selenium, cleans and analyzes the text with local Ollama LLMs and scikit-learn, and
 renders a drag-and-drop workflow canvas.
 
+## Cross-platform (MANDATORY on every change)
+
+**Three platforms are in scope: Windows (development), Linux (cloud deployment), macOS.** Nothing in `backend/`,
+`tools/`, `ml_train/`, `tests/` or the docs may hardcode a Windows assumption — a drive letter, `\` path joining, an
+`.exe` suffix, `%APPDATA%`/`PROGRAMFILES` lookups, `taskkill`, a cp936 console, or a Windows-only font name. Every
+change is judged on all three, not on the machine it was typed on. Why/evidence:
+`docs/agent_practices.md` → "Cross-platform / Win・Linux・macOS 三套系统".
+
+- **A capability that truly cannot exist off Windows refuses BY NAME and its UI entry disappears.** Refusing at
+  run time is not enough (the user pays a node start for an answer known at load); the front-end must not offer it.
+  Ask the server once — `Config.CLOUD_MODE` / `sys.platform` folded into a capability verdict — never keep a second
+  opinion in JS. Existing answers: 红果短剧 harvest (mitmdump + UIA + crypt32), the login-cookie window, local
+  Ollama under cloud mode.
+- **`desktop/` is the ONE deliberate Windows-only tree** (PyInstaller/UPX/Inno). Its Windows facts stay there and
+  must not leak into `backend/`; the packaged EXE is judged on Windows alone.
+- **Machine-level lookups are per-OS in one place.** Chrome / xelatex candidates are tables keyed by the
+  running OS in `utils/machine_deps.py` and `services/latex_compile.py`, and they are joined with the
+  TARGET's separator (`ntpath`/`posixpath`) so a Windows test can ask what a Linux box would find. The
+  CJK font stack and the ctex font set carry each OS's own names in `services/visualizer.py` and
+  `services/latex_charts.py`. `CHROME_BIN`/`CHROME_PATH` remain the explicit override. Never inline a
+  `Program Files` path, a `.exe` name or a `taskkill` anywhere else.
+- **Platform-independent tests are the proof.** No test may pass only because it ran on Windows: no drive letters
+  as data, no `.exe` filename pinning a refusal, no `sys.platform='win32'` monkeypatch that fakes a gate the
+  product reads (patch both sides or assert the refusal), no timezone literal for the "server local" zone.
+- **Byte limits are byte limits:** a Linux filename cap is UTF-8 **bytes** (ext4 NAME_MAX 255), a Windows path cap
+  is characters — measure the one you are actually protecting.
+- **Real Linux/macOS startup is not verifiable on this box** (no docker, no WSL, by the user's decision). Such
+  changes are landed as code + platform-independent tests, and the Linux side is listed as an explicitly unverified
+  surface to be run on the server; the docs state the Linux system packages (Chrome/Chromium + driver,
+  `fonts-noto-cjk`, optional `texlive-xetex`/`texlive-lang-chinese`).
+
 ## Commands
 
 **venv `.venv/` (Python 3.11) is mandatory — never system Python.** Call `.venv/Scripts/python.exe`/`ruff.exe`/
-`pylint.exe`/`pip.exe` directly (or `source .venv/Scripts/activate`).
+`pylint.exe`/`pip.exe` directly (or `source .venv/Scripts/activate`). Those spellings are this box (Windows);
+on Linux/macOS the same tools are `.venv/bin/python` / `.venv/bin/ruff` — the commands, not the separators, are
+the contract.
 
 - Run: `cd backend && python app.py` → localhost:5000 (port via `PORT`). **Run from `backend/`** (the `sys.path` root,
   so imports are top-level like `from config import Config`); never add a `backend.` prefix.
@@ -48,7 +81,9 @@ renders a drag-and-drop workflow canvas.
     `CIXI_LIVE_USE_USER_PROFILE=1` (his consent) crawls as he does; weibo asked once per pass; split `live_cn`/`live_os`
     — **ask which network he is on**, then run the other.
   - **An unavailable browser/daemon SKIPS, so a tier can look green without running** — when green must be evidence, set
-    `CRAWLER_REQUIRE_BROWSER=1`/`CRAWLER_REQUIRE_OLLAMA=1` to FAIL instead of skip.
+    `CRAWLER_REQUIRE_BROWSER=1`/`CRAWLER_REQUIRE_OLLAMA=1` to FAIL instead of skip. `CRAWLER_REQUIRE_NODE=1` does the
+    same for the ~43 frontend JS cases that `skipif(node is None)`: it aborts the session in `pytest_configure`,
+    because "43 skipped" is indistinguishable from a tier that never existed.
   - **To run one device/live case, override the marker filter too** (naming the file alone reports `N deselected`).
   - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked Chrome/Ollama).
     OpenRouter is **never** really called — patch `analyzers.llm_client.requests.post/get`. Frontend JS needs `node`.

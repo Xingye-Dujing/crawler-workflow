@@ -289,6 +289,7 @@ class TestKeyReachability:
         'source.',  # services/biblio_sources.py: t(f'source.{fmt}.purpose') for each readable format
         'comment.status.',  # app.py: t(f'comment.status.{status}')
         'crawl.stopReason.',  # i18n.py: stop_reason_label maps a walk token through STOP_REASONS
+        'deps.',  # utils/machine_deps.py: remedy(f'{prefix}.{platform}') — one per-OS sentence per family
     )
 
     @staticmethod
@@ -343,6 +344,12 @@ class TestKeyReachability:
         assert "f'source." in sources, (
             'the export guide assembles source.<format>.* at runtime; if that stops, its keys '
             'must be checked literally like every other key instead of hiding in the allowlist'
+        )
+        # The per-OS remedy sentences: utils/machine_deps.py builds ``deps.<family>.<platform>``.
+        assert 'f"{prefix}.' in sources or "f'{prefix}." in sources, (
+            'the remedy keys are assembled per operating system; if that stops they must be checked '
+            'literally — and every (family × platform) pair still has to exist in both languages, which '
+            'tests/unit/test_platform_rules.py walks from the value universe'
         )
 
     #: A hand-written ``t('key')`` whose key the catalogue does not hold.

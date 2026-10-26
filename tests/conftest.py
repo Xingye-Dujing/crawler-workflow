@@ -38,6 +38,7 @@ from pathlib import Path
 import pytest
 from isolation_guard import enforce
 from isolation_guard import fingerprint as _fingerprint_protected
+from node_runner import check_node_or_abort
 from run_wait import describe_state, wait_until_quiet
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -126,6 +127,18 @@ def _prune_isolated_roots() -> None:
     children = sorted((p for p in ISOLATED_PARENT.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)
     for stale in children[:-KEEP_ISOLATED_RUNS]:
         shutil.rmtree(stale, ignore_errors=True)
+
+
+def pytest_configure(config) -> None:
+    """Stop a run that would silently skip the whole frontend tier.
+
+    ~43 modules carry ``skipif(node is None)``, so a machine without ``node`` prints
+    "N passed, 43 skipped" over a suite in which **no JS behaviour was executed** — the same
+    "green that means nothing" shape the browser and daemon tiers already refuse. The decision lives in
+    :mod:`node_runner` because four conftest files exist in this tree, so ``import conftest`` from a test
+    reaches whichever was collected last: a test can still answer for the rule itself.
+    """
+    check_node_or_abort()
 
 
 def pytest_sessionfinish(session) -> None:
@@ -305,7 +318,13 @@ def machine_has_a_browser(monkeypatch):
     """
     from utils import machine_deps
 
-    monkeypatch.setattr(machine_deps, 'find_chrome', lambda explicit='', env=None: explicit or 'C:/fake/chrome.exe')
+    # The signature is forwarded whole, including ``system``: a stub that drops a parameter is a stub that
+    # breaks the moment the product asks about another operating system (the wrapper rule).
+    monkeypatch.setattr(
+        machine_deps,
+        'find_chrome',
+        lambda explicit='', env=None, system=None: explicit or 'C:/fake/chrome.exe',
+    )
 
 
 @pytest.fixture(autouse=True)

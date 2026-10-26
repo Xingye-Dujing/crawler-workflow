@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from utils.helpers import (
+    MAX_FILENAME_BYTES,
     MAX_FILENAME_LENGTH,
     as_bool,
     df_to_csv_string,
@@ -143,12 +144,19 @@ class TestSanitizeFilename:
         assert '/' not in clean and '\\' not in clean
 
     def test_the_length_is_capped(self):
-        assert len(sanitize_filename('长' * 300)) == MAX_FILENAME_LENGTH
+        # Two caps, one per operating system: 100 CHARACTERS is the Windows component rule, and Linux/
+        # macOS count UTF-8 BYTES (ext4 and APFS both stop at 255). A Chinese name at the character cap is
+        # ~300 bytes, which the server refuses to open — so the byte cap binds first for Han names.
+        clean = sanitize_filename('长' * 300)
+        assert len(clean) <= MAX_FILENAME_LENGTH
+        assert len(clean.encode('utf-8')) <= MAX_FILENAME_BYTES
+        assert clean, 'a cap that empties the name is not a cap'
 
     def test_a_long_name_keeps_its_extension(self):
         name = sanitize_filename('数据' * 80 + '.csv')
-        assert len(name) == MAX_FILENAME_LENGTH
         assert name.endswith('.csv')
+        assert len(name) <= MAX_FILENAME_LENGTH
+        assert len(name.encode('utf-8')) <= MAX_FILENAME_BYTES
 
     def test_a_short_name_is_untouched(self):
         assert sanitize_filename('export.csv') == 'export.csv'

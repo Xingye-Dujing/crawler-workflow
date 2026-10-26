@@ -28,7 +28,59 @@ derive columns from real crawls instead.
 import re
 from dataclasses import dataclass, replace
 
+from utils import machine_deps
 from utils.helpers import as_bool, split_urls
+
+#: A machine requirement a crawl mode can carry, by name. The token is deliberately not a sentence:
+#: it goes to the browser, which says it in whichever language the canvas is reading
+#: (``cap.requires.<token>``), and the server answers whether THIS machine meets it.
+#:
+#: ``windows_desktop`` is the one that exists because the app was written on Windows and deployed on a
+#: Linux server: 红果评论 drives the desktop player through a proxy whose CA we install into the Windows
+#: certificate store, so it needs a window, that store, and a machine nobody else is sharing.
+REQUIREMENTS = ('windows_desktop',)
+
+#: The words for each requirement, spelled out as literal catalogue keys (a computed ``f'cap.requires.{t}'``
+# is how a refusal ends up printing its own key — the reachability scan can only ask about names it sees).
+#: Public because the contract test walks it against :data:`REQUIREMENTS` and against the JS copy.
+REQUIREMENT_LABELS = {'windows_desktop': 'cap.requiresWindowsDesktop'}
+
+
+def requirement_met(token: str, system: str | None = None, cloud: bool | None = None) -> bool:
+    """Whether this machine can run a mode that asks for ``token``.
+
+    An unknown token answers YES: refusing a mode because a name was mis-typed would hide a working
+    feature, and the mode's own executor still refuses by name when its real dependency is missing.
+    """
+    if token == 'windows_desktop':
+        return machine_deps.is_windows(system) and not (cloud_is() if cloud is None else cloud)
+    return True
+
+
+def cloud_is() -> bool:
+    """The cloud switch, read late so an import of this matrix never drags ``config`` in."""
+    from config import Config
+
+    return bool(Config.CLOUD_MODE)
+
+
+def machine_requirements(system: str | None = None, cloud: bool | None = None) -> dict:
+    """Every requirement, answered for the machine running this server.
+
+    One payload, one answer: the panel greys a mode out of it and the pre-run gate refuses from the same
+    numbers, so the two cannot disagree about whether the user's click has any chance.
+    """
+    return {token: requirement_met(token, system, cloud) for token in REQUIREMENTS}
+
+
+def requirement_label_key(token: str) -> str:
+    """The catalogue key naming a requirement — a literal per token, never a computed one.
+
+    Computed keys are how a refusal prints ``cap.requires.windows``: the reachability scan only asks
+    about keys it can see spelled out, so the spelling lives here and the test walks
+    :data:`REQUIREMENTS` against it.
+    """
+    return REQUIREMENT_LABELS.get(token, '')
 
 
 def _int(raw, default, minimum=None, maximum=None) -> int:
@@ -161,6 +213,13 @@ class Mode:
     #: cookie) is refused by a gate that was never about it. Default True: nearly every
     #: crawl here is a session crawl, and the exceptions are named by measurement.
     needs_session: bool = True
+    #: A machine requirement, by name, from :data:`REQUIREMENTS` — '' when any machine that runs the
+    #: server can run this mode. This is not a warning: 红果评论 drives a desktop player through a proxy
+    #: we install as a system certificate authority, so on a Linux server, on a Mac, and in cloud mode
+    #: there is nothing to drive. ``GET /api/capabilities`` answers whether THIS machine satisfies it,
+    #: and the panel refuses to offer a mode it knows cannot run — a user should not pay a node start
+    #: for an answer the server already had at page load.
+    requires: str = ''
 
 
 @dataclass(frozen=True)
@@ -600,6 +659,10 @@ def _hongguo_comment_mode() -> Mode:
         note_key='settings.hgCommentNote',
         collects='external_app',
         needs_session=False,
+        # The one mode in the matrix that is not a browser crawl: it drives a desktop player behind our
+        # own proxy, so a Linux server and a Mac have nothing to drive (``_ensure_stack`` refuses it by
+        # name at run time, and this is what keeps the panel from offering it at all).
+        requires='windows_desktop',
     )
 
 
@@ -979,6 +1042,21 @@ def mode_of_node(node: dict) -> Mode | None:
     return mode_for(platform, requested_mode_key(node))
 
 
+def mode_blocker(mode: Mode | None, system: str | None = None, cloud: bool | None = None) -> str:
+    """Why this machine cannot run ``mode`` ('' when it can), as a catalogue key.
+
+    Asked at validation and not only inside the node: the answer is known when the page loads, and a
+    user should not pay for a run start — a browser, the single run slot, whatever LLM steps sit
+    downstream — to learn it. The node's own executor still refuses; this only moves the refusal
+    earlier, where it costs a line instead of a run.
+    """
+    if mode is None or not mode.requires:
+        return ''
+    if requirement_met(mode.requires, system, cloud):
+        return ''
+    return requirement_label_key(mode.requires)
+
+
 def fields_for(platform: str, mode_key: str, with_files: bool = True) -> tuple[Field, ...]:
     mode = mode_for(platform, mode_key)
     if mode is None:
@@ -1166,6 +1244,9 @@ def _mode_as_dict(mode: Mode) -> dict:
         'actionJs': mode.action_js,
         'collects': mode.collects,
         'needsSession': bool(mode.needs_session),
+        # The machine requirement travels as its token; whether THIS host meets it is the payload's
+        # ``machine`` map. The browser needs both to grey the option out and to say why in its own language.
+        'requires': mode.requires,
         'fields': [_field_as_dict(f) for f in mode.fields],
     }
 

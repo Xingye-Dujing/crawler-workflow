@@ -796,9 +796,10 @@ class TestABrowserWithNoProcessId:
         killed = []
         said = []
         monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: said.append(str(msg)))
-        monkeypatch.setattr(
-            app_module.subprocess, 'run', lambda cmd, **kw: killed.append(cmd) or types.SimpleNamespace(returncode=0)
-        )
+        # The seam is the reap helper, not ``subprocess``: which command stops a process is a
+        # per-operating-system answer now, and a test that patched the Windows binary by name would
+        # assert against a call site that no longer exists on a server.
+        monkeypatch.setattr(app_module.procs, 'reap_process', lambda pid, *a, **kw: killed.append(pid) or (True, ''))
         try:
             app_module._close_login_browser(crawler, quit_timeout=0.4)
         finally:

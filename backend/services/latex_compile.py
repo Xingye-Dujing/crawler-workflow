@@ -1,10 +1,11 @@
-"""Compile a LaTeX source to PDF with the user's MiKTeX ``xelatex``.
+"""Compile a LaTeX source to PDF with the machine's ``xelatex``.
 
 The ``visualize`` node emits a compilable ``standalone`` document (services/latex_charts); this turns that
 source into the PDF a paper actually includes — one document, one ``xelatex`` pass. It shells out the same
 best-effort way the report PDF does: no ``xelatex``, or a run that will not produce a PDF, is a named
 refusal surfaced as ``{'error': …}``, never a crash and never a half-written file left in the export tree.
-``ctex`` needs ``xelatex`` (not ``pdflatex``), so that is the binary sought.
+``ctex`` needs ``xelatex`` (not ``pdflatex``), so that is the binary sought — MiKTeX's on Windows, TeX
+Live's (or MacTeX's) elsewhere, which is why the search and the refusal both ask the running OS.
 """
 
 import contextlib
@@ -17,6 +18,7 @@ import tempfile
 from i18n import t
 from services.latex_charts import LatexChartService
 from settings_store import get_setting
+from utils import machine_deps
 
 
 def compose_tex(docs) -> str:
@@ -24,11 +26,24 @@ def compose_tex(docs) -> str:
     return LatexChartService.compose_from_standalone(list(docs))
 
 
+#: Where a TeX distribution puts ``xelatex`` when it is installed but the PATH of a service process does
+#: not know it. Windows: MiKTeX's own tree. Linux: the alternatives symlink. macOS: MacTeX's texbin,
+#: which a GUI-launched process never inherits in ``PATH``.
+XELATEX_PATHS = {
+    'win32': (
+        r'C:\Program Files\MiKTeX\miktex\bin\x64\xelatex.exe',
+        r'C:\Program Files (x86)\MiKTeX\miktex\bin\x64\xelatex.exe',
+    ),
+    'linux': ('/usr/bin/xelatex', '/usr/local/bin/xelatex'),
+    'darwin': ('/Library/TeX/texbin/xelatex', '/usr/texbin/xelatex', '/usr/local/bin/xelatex'),
+}
+
+
 def find_xelatex() -> str:
-    """The MiKTeX ``xelatex`` binary: an explicit ``latex_binary`` the user set first, then PATH,
-    then the common install locations. Empty → the compile is refused with a reason, never a stack
-    trace. Public because the desktop launcher's startup self-check asks the same question, and two
-    scans for the compiler is how a machine says "xelatex not found" next to a compile that works."""
+    """The ``xelatex`` binary: an explicit ``latex_binary`` the user set first, then PATH, then this OS's
+    install locations. Empty → the compile is refused with a reason, never a stack trace. Public because
+    the desktop launcher's startup self-check asks the same question, and two scans for the compiler is
+    how a machine says "xelatex not found" next to a compile that works."""
     explicit = str(get_setting('latex_binary') or '').strip()
     if explicit and os.path.isfile(explicit):
         return explicit
@@ -38,8 +53,7 @@ def find_xelatex() -> str:
     local = os.environ.get('LOCALAPPDATA', '')
     candidates = [
         os.path.join(local, 'Programs', 'MiKTeX', 'miktex', 'bin', 'x64', 'xelatex.exe') if local else '',
-        r'C:\Program Files\MiKTeX\miktex\bin\x64\xelatex.exe',
-        r'C:\Program Files (x86)\MiKTeX\miktex\bin\x64\xelatex.exe',
+        *XELATEX_PATHS.get(machine_deps.platform_name(), ()),
     ]
     for path in candidates:
         if path and os.path.isfile(path):
@@ -76,16 +90,21 @@ def _error_line(log_text: str) -> str:
 def explain_failure(log_text: str, stderr: bytes) -> str:
     """One actionable sentence for a failed compile: the missing package, the missing font, or the log.
 
-    A missing ``.sty`` and a missing Chinese font are the two ways this fails on a machine that has
-    MiKTeX installed, and both name themselves in the log — saying only "compilation failed" sends
-    the user to search a log file they have no reason to open.
+    A missing ``.sty`` and a missing Chinese font are the two ways this fails on a machine that has a TeX
+    distribution installed, and both name themselves in the log — saying only "compilation failed" sends
+    the user to search a log file they have no reason to open. Which command installs either one is an
+    operating-system fact, so the remedy half of the sentence comes from :mod:`utils.machine_deps`.
     """
     package = _STY_MISSING.search(log_text)
     if package:
-        return t('api.compilePdfNoPackage', package=package.group(1))
+        return t(
+            'api.compilePdfNoPackage',
+            package=package.group(1),
+            remedy=machine_deps.remedy('deps.texPackage'),
+        )
     font = _FONT_MISSING.search(log_text)
     if font:
-        return t('api.compilePdfNoFont', font=font.group(1))
+        return t('api.compilePdfNoFont', font=font.group(1), remedy=machine_deps.remedy('deps.texFont'))
     detail = _error_line(log_text) or (stderr or b'').decode('utf-8', 'replace')[-300:]
     return t('api.compilePdfFailed', err=detail)
 
@@ -100,7 +119,7 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
     """
     xelatex = find_xelatex()
     if not xelatex:
-        return {'error': t('api.compilePdfNoXelatex')}, ''
+        return {'error': machine_deps.remedy('deps.xelatex')}, ''
     work = tempfile.mkdtemp(prefix='cixi-tex-')
     tex_path = os.path.join(work, 'main.tex')
     try:

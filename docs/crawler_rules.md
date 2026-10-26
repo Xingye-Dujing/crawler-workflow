@@ -340,3 +340,15 @@
   different windows both fail the node saying which, rather than naming a file after a stretch
   this table does not describe — a CSV labelled with the wrong month reads as evidence.
   The resolved name is still never written back into `node['params']` (the fingerprint rule).
+
+## 平台边界 / Which machine a mode is allowed to run on
+
+- **一个采集模式能不能跑，问 `crawl_capabilities.requirement_met(token)` 这一个问题，问四次。** 红果短剧的评论
+  收割要驱动本机播放器进程 + 把 mitmproxy 的 CA 装进 Windows 系统证书库，所以它标了
+  `requires='windows_desktop'`：① `/api/capabilities` 的 `machine` 字段给出**这台服务器**的判定；② 面板据此把
+  那一栏采集内容**列着但置灰**并在括号里写明原因（节点存的正是那个模式，不列出会让面板画成「第一个模式」，
+  那是面板在谎报这次运行会做什么）；③ `engine/workflow.py::validate` 在**运行之前**按名拒绝（`run.browserReapFailed`
+  那类「跑一半才知道不行」要花掉一个运行槽与上游的 LLM 额度）；④ 节点执行器 `_ensure_stack` 仍自己拒一次——
+  隐藏一个按钮从来不是权限。判定**缺失**时一律照常可见可用：因为一个字节没到就藏掉能用的功能是另一种 bug。
+- **窗口类要求在 cloud 模式下同样不满足**，哪怕操作系统是 Windows：没有可驱动的桌面不等于有桌面。
+  这条与「强制无头」「拒绝浏览器生成 Cookie」「拒绝本地 Ollama」是同一个 `CLOUD_MODE` 答案的不同面。

@@ -19,6 +19,17 @@
 | `CRAWLER_CLOUD` | 云端部署形状（`1`/`true`/`yes`/`on`）：隐藏 Ollama 与「无头」设置、所有抓取强制无头、拒绝「浏览器生成」。**命令行 `python app.py cloud` 是同一件事的写法**，它在 import 之前把这个变量抬起来（类属性只在 import 时读一次，晚了就来不及了） | 关闭 |
 | `FLASK_DEBUG` | 调试模式（`1`/`true`/`yes` 开启；含热重载与自动打开浏览器，调试器可执行任意代码，勿在他人可达的机器上开启） | 关闭 |
 | `MAX_UPLOAD_MB` | 单个请求体上限（上传/粘贴数据过大时返回 413 JSON，而非把整机内存吃光） | `64` |
+| `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。**按系统查的第二条路**：Windows 查 `PROGRAMFILES`/`LOCALAPPDATA` 下的安装根，Linux 查 `/usr/bin/google-chrome`、`/usr/bin/chromium`、`/snap/bin/chromium` 与 `PATH`，macOS 查 `/Applications/Google Chrome.app/…` 与用户目录下的同名 bundle。容器里通常就是 `CHROME_BIN=/usr/bin/chromium`（`Dockerfile` 就是这么写的）。设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上**（复制出来的登录态对站点风控就是第二台设备） | 空 |
+| `CIXI_DRIVER_PATH` | chromedriver 路径的部署侧写法（等价于设置面板的「驱动路径」，空=让 Selenium Manager 取匹配版本）。`Dockerfile` 用的是这个名字——以前镜像里导出的是 `CHROMEDRIVER_PATH`，代码里没有读它的地方，于是那行只是个装饰 | 空 |
+| `PYTHONUTF8` / `LANG` | 控制台编码。程序启动时会检查 `stdout/stderr` 能不能写汉字：不能（比如 `LANG` 未设置的 slim 镜像，编码是纯 ASCII）就改到 UTF-8 并打印一行说明；能写（比如中文 Windows 的 cp936）就只把 `errors` 设成 `replace`，**不改编码**——把能显示汉字的控制台强扭成 UTF-8 反而会把原本正常的窗口弄成乱码 | — |
+
+> **三套系统都在范围内**：Windows 是开发机，Linux 是云端部署目标，macOS 也要求可用。
+> 只有 `desktop/`（PyInstaller + UPX + Inno Setup）与「红果短剧评论收割」是 Windows 专属：后者在非 Windows 与
+> cloud 模式下由 `crawl_capabilities.requirement_met('windows_desktop')` 这**一个**答案决定——面板把该采集内容
+> 置灰并写明原因、四个只有桌面才需要的设置行从面板上消失、`validate` 在运行前按名拒绝、节点自己也会拒绝。
+> 云端 Linux 还需要：Chromium + 驱动（镜像已装）、`fonts-noto-cjk`（Matplotlib 出的中文图）、
+> 可选 `texlive-xetex texlive-lang-chinese`（纸质图与论文成稿；非 Windows 的中文由 ctex 的 fandol 字体集提供，
+> 程序不再指名仿宋，因为那是一套 Windows 字体）。
 
 ### 运行时设置（UI 设置面板 → `data/settings.json`）
 
@@ -122,6 +133,52 @@ python app.py cloud          # 等价写法：python app.py --cloud，或 CRAWLE
 不会把它发给浏览器）。
 
 同一份代码在本机跑时，上面这些一个都不变：不设旗标就是原来的形状。
+
+## 三个系统：Windows / Linux / macOS
+
+> 开发机是 Windows，**云端部署目标是 Linux**，macOS 也在支持范围内。规则本体在 `AGENTS.md`
+> 的「Cross-platform」一节，逐条实测证据在 `docs/agent_practices.md` 的「Cross-platform」一节。
+> `desktop/` 是唯一故意只服务 Windows 的目录（PyInstaller/UPX/Inno 只能产 exe）。
+
+**按当前系统查的东西**（都在一处，`utils/machine_deps.py` 与两个 services）：
+
+| 要查的东西 | Windows | Linux | macOS |
+|---|---|---|---|
+| Chrome/Chromium | `PROGRAMFILES`/`PROGRAMFILES(X86)`/`LOCALAPPDATA` 下的 `Google\Chrome\Application\chrome.exe` | `/usr/bin/google-chrome[-stable]`、`/usr/bin/chromium[-browser]`、`/opt/google/chrome/chrome`、`/usr/lib/chromium/chromium`、`/snap/bin/chromium`，再扫 `PATH` | `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`（含 Beta 与 Chromium、`~/Applications` 那份），再扫 `PATH` |
+| xelatex | MiKTeX 的两处安装根 + `%LOCALAPPDATA%\Programs\MiKTeX\…` | `/usr/bin/xelatex`、`/usr/local/bin/xelatex` | `/Library/TeX/texbin/xelatex`（MacTeX；GUI 起的进程 `PATH` 里没有它）、`/usr/texbin/xelatex` |
+| 纸质图的中文（ctex） | 显式 `\setCJKmainfont{FangSong}`（仿宋） | `\usepackage[fontset=fandol]{ctex}`，**不指名任何字体** | `\usepackage[fontset=macnew]{ctex}` |
+| Matplotlib 中文 | SimHei / Microsoft YaHei 在前 | Noto Sans CJK SC / Source Han Sans SC / WenQuanYi Zen Hei | PingFang SC / Hiragino Sans GB |
+
+仿宋（FangSong）是一套 **Windows 字体**：TeX Live 与 macOS 都没有它，以前每个纸质图都写死要它，
+于是在服务器上「论文图」整条功能直接死在 `The font "FangSong" cannot be found`。现在非 Windows 改用
+ctex 自带的字体集，并把"这台机器的中文来自哪个字族"写进生成的 `.tex` 注释里——差别照实说，不用一份
+编译不过的文档去隐瞒。缺字体/缺宏包的拒绝语也按系统分支（Linux 说 `apt-get install …`，macOS 说
+MacTeX/`tlmgr`，Windows 说 MiKTeX 控制台）。
+
+**云端 Linux 要装的系统包**（`Dockerfile` 里已经装了前两项）：
+
+```bash
+apt-get install -y chromium chromium-driver          # 采集：浏览器 + 匹配版本的驱动
+apt-get install -y fonts-noto-cjk                   # Matplotlib 出的 PNG 里的汉字
+apt-get install -y texlive-xetex texlive-lang-chinese   # 可选：论文图与「论文成稿」的 xelatex
+```
+
+**只有 Windows 桌面做得到的能力**：红果短剧评论收割（驱动本机播放器进程 + 把 mitmproxy 的 CA 装进
+系统证书库）。它在 Linux、macOS 与 cloud 模式下被**按名拒绝**——四处同一个答案，见
+`docs/crawler_rules.md` 的「平台边界」一节。**单机实例互斥、双击启动、系统弹窗、`%APPDATA%` 数据根**
+都是 `desktop/` 那棵树的事：Linux 与 macOS 上源码版照常以 `python app.py` 跑，没有互斥量那种"一次只能开一个"
+的保证，也不会有任何桌面通知。
+
+**Linux 文件名算字节，Windows 文件名算字符**：ext4/APFS 的 `NAME_MAX` 是 255 **UTF-8 字节**，
+100 个汉字是 300 字节——Windows 上写得出去、服务器上 `open()` 直接 `ENAMETOOLONG`。
+`utils/helpers.py::sanitize_filename` 两个上限都卡（`MAX_FILENAME_LENGTH=100` 字符、
+`MAX_FILENAME_BYTES=200` 字节，留出余量给 `.part001.csv` 这类追加的后缀），切的时候不会把一个多字节字符劈成两半。
+
+**控制台编码**：程序的日志与节点名是汉字，而流的编码由机器决定。`LANG` 未设置的容器给出的是纯 ASCII，
+第一行中文会在 logging 的 handler 里抛 `UnicodeEncodeError`——handler 自己吞掉它，于是那行**静默消失**，
+看起来像程序安静而不是坏了。`app.py` 在 import 时检查 `stdout/stderr`：写不出汉字就改到 UTF-8 并打印一行
+说明；写得出的（中文 Windows 的 cp936）**不改编码**，只把 `errors` 设成 `replace`——把本来正常的控制台强扭
+成 UTF-8 反而会把那个窗口变成乱码。镜像另设 `PYTHONUTF8=1`/`LANG=C.UTF-8` 作为容器自己的答案。
 
 **首次进入会说明一次数据放在哪里**（只有云端弹）：哪些存在服务器磁盘上（粘贴的 Cookie、上传与
 采集到的表、工作流文件、运行记录），哪些只留在你这个浏览器里（OpenRouter API Key、画布草稿、

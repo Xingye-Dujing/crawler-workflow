@@ -467,6 +467,10 @@ class TestPayloadShape:
             'actionJs',
             'collects',
             'needsSession',
+            # The machine requirement, by token ('' when any host can run the mode). The verdict for this
+            # host rides next to it as the payload's ``machine`` map, so the panel can grey a mode out and
+            # the pre-run gate can refuse from one answer rather than two.
+            'requires',
             'fields',
         }
         # `serialOnly` marks the platform the site walls on concurrent paging (weibo):

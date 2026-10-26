@@ -43,3 +43,10 @@ xlrd
 # generated rather than renamed. Already present transitively through matplotlib, declared here
 # because the tool imports PIL directly.
 Pillow
+# The IANA zone database, which ``zoneinfo.ZoneInfo`` needs a PROVIDER for. Windows has no system
+# zoneinfo directory at all, and a slim Linux container image usually does not either, so without this
+# line a scheduled task saved with a Chinese zone name dies with ZoneInfoNotFoundError on the server --
+# and the scheduler tests name zones, so the fast suite would fail there for a reason that has nothing
+# to do with the code. macOS ships the directory; declaring the provider everywhere is cheaper than
+# detecting whether this machine has one.
+tzdata

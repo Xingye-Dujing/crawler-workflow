@@ -22,8 +22,41 @@ import shutil
 import subprocess
 import tempfile
 
+import pytest
+
 #: None on a machine without node; callers skip when it is missing.
 NODE = shutil.which('node')
+
+#: The same switch the browser and the Ollama daemon have. The frontend tier is ~43 modules that all
+#: ``skipif(node is None)`` — a runner (or a container image) without node therefore prints
+#: "7900 passed, 43 skipped" over a suite in which **no JS behaviour was tested at all**, which is the
+#: exact shape AGENTS refuses: green that means nothing. A run that MEANS to exercise the tier sets this.
+REQUIRE_NODE_ENV = 'CRAWLER_REQUIRE_NODE'
+
+
+def node_required(env: dict | None = None) -> bool:
+    """Whether the operator asked for the frontend tier to be evidence rather than a skip."""
+    env = os.environ if env is None else env
+    return str(env.get(REQUIRE_NODE_ENV) or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def check_node_or_abort(env: dict | None = None) -> None:
+    """Raise a usage error when node is missing AND the tier was demanded; otherwise say nothing.
+
+    Called from ``tests/conftest.py``'s ``pytest_configure`` — before collection — so the session stops
+    rather than running 7 900 cases and then reporting that the 43 that matter were skipped. The message
+    names the flag, because the person who set it has to know which knob was the cause.
+
+    The lookup is the module-level :data:`NODE` rather than a parameter: a ``None`` argument could mean
+    either "ask the machine" or "the machine has nothing", and the one case that must abort is exactly
+    the one a caller would have to spell ambiguously. A test changes ``NODE`` instead.
+    """
+    if NODE is not None or not node_required(env):
+        return
+    raise pytest.UsageError(
+        f'{REQUIRE_NODE_ENV} is set, but `node` is not on PATH — the frontend JS harnesses would all '
+        'skip and the run would look green without testing any of them'
+    )
 
 
 def run_node(script: str, *args: str, timeout: int = 90, tz: str | None = None) -> subprocess.CompletedProcess:

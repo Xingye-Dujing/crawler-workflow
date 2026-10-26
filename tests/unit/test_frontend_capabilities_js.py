@@ -591,3 +591,99 @@ def test_a_typed_account_name_is_shown_but_never_looked_up_in_i18n(tmp_path):
     assert 'suqi' not in asked, f'a user-typed account name must not reach i18n: {asked}'
     assert 'cookies.accountDefault' in asked, 'a generated name still travels as its catalogue key'
     assert 'suqi' in run['acct']['html'], 'the typed name is still shown to the user, from its value'
+
+
+class TestAModeThisMachineCannotRun:
+    """The server says which modes its machine can honour; the page has to act on that.
+
+    红果评论 drives a desktop player behind a proxy, so a Linux server and a Mac cannot run it and a
+    cloud host cannot either. The node's own executor refuses, but a user should not pay a run start
+    for an answer the page already had — hence a greyed option that stays in the list (the node STORES
+    that mode, and dropping the option would paint the platform's first mode instead), a pre-run
+    refusal, and the desktop-only settings rows taken out by the flag on ``<html>``.
+    """
+
+    @pytest.fixture(scope='module')
+    def verdicts(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp('machine')
+        matrix = _matrix()
+        harvest = next(
+            mode
+            for cap in matrix['platforms']
+            if cap['platform'] == 'hongguo'
+            for mode in cap['modes']
+            if mode['key'] == 'comments'
+        )
+        assert harvest['requires'] == 'windows_desktop', 'the payload must carry the token to judge'
+        urls = 'https://hongguoduanju.com/detail?series_id=1'
+        return _run(
+            tmp,
+            [
+                {
+                    'id': 'server',
+                    'payload': {**matrix, 'machine': {'windows_desktop': False}},
+                    'params': {'platform': 'hongguo', 'collect': 'comments', 'urls': urls},
+                },
+                {
+                    'id': 'desktop',
+                    'payload': {**matrix, 'machine': {'windows_desktop': True}},
+                    'params': {'platform': 'hongguo', 'collect': 'comments', 'urls': urls},
+                },
+                # A payload with no verdict at all: an older server, a partial answer. The mode stays
+                # offered, because hiding a working feature on a missing byte is its own bug.
+                {
+                    'id': 'noanswer',
+                    'payload': matrix,
+                    'params': {'platform': 'hongguo', 'collect': 'comments', 'urls': urls},
+                },
+                # The same host, a mode with no requirement: the boards are ordinary browser crawls.
+                {
+                    'id': 'board',
+                    'payload': {**matrix, 'machine': {'windows_desktop': False}},
+                    'params': {'platform': 'hongguo', 'collect': 'hot'},
+                },
+            ],
+        )
+
+    @staticmethod
+    def _harvest_option(html: str) -> str:
+        match = re.search(r'<option value="comments"[^>]*>', html)
+        assert match, html[:400]
+        return match.group(0)
+
+    def test_the_unreachable_mode_is_still_listed_and_disabled(self, verdicts):
+        assert 'disabled' in self._harvest_option(verdicts['server']['html'])
+        assert 'disabled' not in self._harvest_option(verdicts['desktop']['html'])
+        assert 'disabled' not in self._harvest_option(verdicts['noanswer']['html'])
+
+    def test_the_disabled_option_says_why_in_a_catalogue_word(self, verdicts):
+        # The harness's I18n stub returns the KEY it was asked for, so this reads which word shows AND
+        # that it came from the catalogue rather than being written into workflow.js.
+        assert 'cap.requiresWindowsDesktop' in verdicts['server']['asked']
+        assert 'cap.requiresWindowsDesktop' not in verdicts['desktop']['asked']
+
+    def test_the_run_is_refused_before_it_is_paid_for(self, verdicts):
+        assert 'validate.modeNeedsMachine' in verdicts['server']['errors']
+        assert 'validate.modeNeedsMachine' not in verdicts['desktop']['errors']
+        assert 'validate.modeNeedsMachine' not in verdicts['noanswer']['errors']
+
+    def test_a_mode_without_a_requirement_is_never_collateral_damage(self, verdicts):
+        # The harvest option stays greyed here (the node is on the board mode, but the machine still
+        # cannot run comments); what must be untouched is the mode the node actually holds.
+        assert verdicts['board']['errors'] == []
+        board = re.search(r'<option value="hot"[^>]*>', verdicts['board']['html'])
+        assert board and 'disabled' not in board.group(0), board
+
+    def test_the_document_records_the_verdict_for_css_to_hide_the_desktop_rows(self, verdicts):
+        assert verdicts['server']['winDesktop'] == '0'
+        assert verdicts['desktop']['winDesktop'] == '1'
+        assert verdicts['noanswer']['winDesktop'] == '1'
+
+    def test_the_markup_that_css_hides_is_the_rows_that_need_a_desktop(self):
+        # A class nobody put on anything would make the rule above pass while the panel still showed a
+        # Windows-only path setting on a server.
+        page = (REPO / 'backend' / 'static' / 'index.html').read_text(encoding='utf-8')
+        rows = re.findall(r'<div class="dd-item-row windows-only">\s*<span data-i18n="([^"]+)"', page)
+        assert rows == ['set.hgPlayer', 'set.mitmdump', 'set.harvestPort', 'set.harvestCA'], rows
+        sheet = (REPO / 'backend' / 'static' / 'css' / 'style.css').read_text(encoding='utf-8')
+        assert 'html[data-win-desktop="0"] .windows-only' in sheet

@@ -45,7 +45,12 @@ function world() {
     fixWindow(vm, sandbox);
     sandbox.window.explainWechatLimits = () => {};
     vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
-    vm.runInContext(fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__workflow = workflow; globalThis.__platformAdviceMessage = platformAdviceMessage;', sandbox);
+    vm.runInContext(
+        fs.readFileSync(wfPath, 'utf8') +
+            '\n;globalThis.__workflow = workflow; globalThis.__platformAdviceMessage = platformAdviceMessage;' +
+            'globalThis.__sourceNodeErrors = sourceNodeErrors; globalThis.__Machine = Machine;',
+        sandbox,
+    );
     return sandbox;
 }
 
@@ -82,6 +87,11 @@ for (const sc of scenarios) {
         summary: canvas.getNodeSummary(sc.type || 'source', sc.params || {}),
         ready: sandbox.Capabilities.ready(),
         modes: sandbox.Capabilities.modes((sc.params || {}).platform || 'zhihu').map((m) => m.key),
+        /* A machine verdict is a payload fact like any other: what the page DOES with
+           it (dataset flag, greyed option, pre-run refusal) is JS and Python cannot
+           see it, so it is read out here rather than asserted against a string. */
+        winDesktop: sandbox.document.documentElement.dataset.winDesktop || '',
+        errors: sandbox.__sourceNodeErrors(canvas.nodes[id], 't', !!sc.hasDataInput).map(String),
     };
     if (sc.refresh) {
         /* The matrix arrives after a restored draft has drawn its nodes, so the

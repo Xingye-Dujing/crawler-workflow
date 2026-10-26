@@ -968,4 +968,95 @@ message.
   order was still right; the comment was reworded rather than the test weakened.
 - **The hook deletes an import added before its use — again.** `import re` (latex_compile) and `import sys`
   (machine_deps) were both auto-removed by the PostToolUse `ruff check --fix` because nothing used them yet at
-  that instant. Write the use first, the import second.
+  that instant. Write the use first, the import second. The same trap fired a third time in this round
+  (`from utils import console` in app.py): the symptom was **2209 test errors** — every case that touches the
+  `client` fixture fails at import — so an unused-looking import is worth one grep before it is trusted.
+
+## Cross-platform / Win・Linux・macOS 三套系统（measured 2026-10-26）
+
+The project is developed on Windows and deployed on a **Linux cloud server** (`CRAWLER_CLOUD=1`), and macOS is
+in scope too. Three read-only audits (backend / cloud mode / tests+deps+CI) produced this list; every entry was
+a real defect on at least one of the three, not a style preference. The rules are in `AGENTS.md`
+(「Cross-platform」); the evidence is here.
+
+- **Chrome discovery was a Windows-only table.** `chrome_candidates` built `%PROGRAMFILES%…chrome.exe` and
+  nothing else, so a server with `/usr/bin/chromium` answered 「本机没有可用的 Chrome」. The Docker image worked
+  **only** because it exports `CHROME_BIN` — the one path that bypassed the broken table. The tables are now
+  per OS (`CHROME_PATHS` / `CHROME_PATH_NAMES` / `XELATEX_PATHS` / `CTEX_FONTSET`), and a test asserts each is
+  indexed by **exactly** the three platforms: a table missing one OS is a feature that silently works on two.
+- **Ask the target OS for its separators, not the host.** `Path('/Users/x') / 'Applications'` renders with
+  backslashes when a Windows test asks about macOS, and `os.pathsep` splits a Linux `PATH` on the wrong
+  character. The candidate list is built with `ntpath`/`posixpath` chosen by the *requested* system — which is
+  also what makes a Linux answer verifiable from this box at all.
+- **Matplotlib's CJK stack named only Windows fonts.** It resolved to `DejaVu Sans`, which draws every Han
+  character as a box, and the warning told the user to install SimHei. The image installs `fonts-noto-cjk`
+  (**Noto Sans CJK SC**) and `fonts-wqy-zenhei` (**WenQuanYi Zen Hei** — not the "Micro Hei" that was in the
+  list): neither name was being asked for. Windows names stay first in the stack so a desktop's answer does
+  not move.
+- **A remedy sentence is a different sentence per OS.** Telling a Linux user to open the MiKTeX console is
+  advice nobody can follow, and both languages saying the same Windows thing is invisible to the parity
+  check. Hence `deps.<family>.<platform>` keys chosen by `machine_deps.remedy` — a **computed** key, so the
+  contract walks the value universe (`REMEDY_PREFIXES × REMEDY_PLATFORMS × both languages`), the third time
+  this project has been bitten by an unaudited computed key.
+- **仿宋 (FangSong) is a Windows font.** Every paper figure asked `\setCJKmainfont{FangSong}`, so on TeX Live
+  the whole figure/PDF feature died with 「The font "FangSong" cannot be found」. Off Windows the ctex line
+  carries that OS's own font set (`fontset=fandol` / `fontset=macnew`) and no `\setCJK` line at all; the
+  emitted comment names the family the document actually used, because a paper author pasting the source is
+  on this machine. Windows keeps the three lines byte-for-byte — 26/26 compiles is the evidence for that.
+- **`taskkill` under `contextlib.suppress(Exception)` also swallowed the line that marked the session dead.**
+  The blocked call was inside the same `with`, so on Linux: nothing was killed, `DeadDriver()` was never
+  assigned, and the console still read as though the browser had been stopped — the next crawl of that
+  platform then waited `PROFILE_LOCK_TIMEOUT` (900 s) for a profile a live Chrome held. Off Windows the reap is
+  `os.kill(SIGKILL)` with the driver's **direct children taken first** (field 4 of `/proc/<pid>/stat`), and the
+  outcome is reported either way. Two facts learned here: Windows' `signal` module has **no `SIGKILL`** at all,
+  and `os.killpg` is unusable — chromedriver shares the server's process group, so a group kill takes the
+  server down with it.
+- **A filename limit limits what the OS counts.** Windows counts characters in a component; ext4 and APFS count
+  **UTF-8 bytes** (NAME_MAX 255). 100 Chinese characters are ~300 bytes: writable here, `ENAMETOOLONG` on the
+  server. `sanitize_filename` cuts by both, and the byte budget is 200 rather than 255 because the writer
+  appends a suffix (`.part001.csv`, `-20261016-120000.html`) after the cap.
+- **A container with no `LANG` has an ASCII stdout, and a Chinese log line dies inside the logging handler** —
+  which swallows the exception, so the line vanishes and the console looks quiet. The answer is not "always
+  force UTF-8": a Chinese Windows console (cp936) writes Han fine and would be garbled by the switch. So: if
+  the stream cannot encode a Han probe, reconfigure it and print that it did; otherwise only set
+  `errors='replace'`, so one unmappable glyph in scraped text costs that glyph and not the line. The image
+  sets `PYTHONUTF8=1` / `LANG=C.UTF-8` as its own answer.
+- **A Windows-only capability needs four answers, not one.** 红果评论 drives a desktop player through a proxy
+  whose CA is installed into the Windows certificate store. Refusing inside the node makes the user pay a run
+  start (a browser, the single run slot, any upstream LLM rows) for an answer known at page load. So the
+  matrix carries `requires='windows_desktop'`; `/api/capabilities` answers whether THIS machine meets it;
+  `validate` refuses the node before the run; the panel lists the option **disabled with the reason named**
+  (a node restored from a Windows canvas stores that mode — dropping the option would paint the platform's
+  first mode instead, which is a panel lying about what the run would do) and hides the four desktop-only
+  settings rows through `html[data-win-desktop]`. A missing verdict leaves everything visible: hiding a
+  working feature because a byte never arrived is its own bug. `requirement_met` is the one predicate.
+- **`pip install -r requirements-optional.txt` was a Windows-only command.** `uiautomation` is a
+  comtypes-based Windows sdist, so the optional stack could not be installed on a server at all — over one
+  node that could never run there. Both harvest packages now carry `sys_platform == "win32"`. The other
+  declaration gap was `tzdata`: Windows has no system zoneinfo directory and a slim image usually has none
+  either, so a scheduled task with a Chinese zone name died with `ZoneInfoNotFoundError`.
+- **A deploy knob nobody reads is worse than none.** The Dockerfile exported `CHROMEDRIVER_PATH`; `config.py`
+  reads `CIXI_DRIVER_PATH`. The image looked configured and was not.
+- **Two tests were pinning a Windows spelling rather than an answer.** `test_lint_gate.py` required the
+  literal `Get-ChildItem` in `ci.yml` (an ubuntu runner would fail the *gate*, not the code) and
+  `test_browser_startup_refusals.py` named its fake driver `chromedriver.exe`. Both now state the rule.
+  `test_hongguo_harvest.py` faked `sys.platform='win32'` to reach the Windows branch and never asked what the
+  other branch does; it now refuses `linux`, `darwin` and a cloud Windows host explicitly.
+- **Two `replace('\\', '/')` calls were kept, on purpose** (`api/studio.py::save-pdf` folds both separators
+  before `basename` so a Windows-style path is refused on Linux exactly as a POSIX one is refused on Windows;
+  `analyzers/sentiment.py::resolve_bert_model` folds them so a registry path typed on Windows still resolves
+  after the project moves, and it tries the literal path first). An audit called these mangling; reading what
+  each route is for says otherwise, so the reason now lives next to each line.
+- **The scan that keeps the rule has to be able to fire without crying.** A `[A-Za-z]:\` pattern matches the
+  `\s` of every regex in `analyzers/` (source text is letter-colon-backslash for both `C:\Program` and
+  `KEEP:\s`), so it flagged 20 unrelated lines and would have been switched off inside a week. It now looks
+  for the artifacts that actually break Linux — install roots, `taskkill`, `ctypes.windll`/`winreg`/`msvcrt`,
+  quoted `.exe` — skips docstrings and trailing comments (prose *about* taskkill is not a call to it), and
+  re-asserts that every exempted file still contains an artifact. An allowlist entry that exempts nothing is
+  a lie waiting to be read.
+- **What this box cannot prove.** No Linux runtime exists here (no docker, no WSL — the user's decision), so
+  these changes are landed as code plus platform-independent tests. **Starting the app on Linux/macOS is an
+  unverified surface**: a crawl on a real container, a `fandol` compile of a paper figure, and the snap /
+  app-bundle Chrome lookups are reasoned and tested by substitution, not executed. The Linux system packages
+  are in `README.md` / `docs/config.md`; run them once on the server and report what differs.
+

@@ -383,6 +383,12 @@ class WorkflowEngine:
             # asked for, not by the field the substituted mode happens to require.
             return [t('engine.source_unknown_mode', nid=label, platform=platform)]
         errors = []
+        blocked = capabilities.mode_blocker(mode)
+        if blocked:
+            # This machine can never run the mode, and that is known NOW — the node's own executor refuses
+            # too, but a refusal after the run has claimed the slot, opened a browser and paid any LLM
+            # steps upstream is a refusal that cost the user the run.
+            return [t('engine.source_needs_machine', nid=label, reason=t(blocked))]
         feed = capabilities.feed_of(mode)
         fed = capabilities.fed_keys(mode, has_data_input)
         if has_data_input and not feed:

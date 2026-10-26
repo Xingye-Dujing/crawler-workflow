@@ -436,6 +436,11 @@ def studio_save_pdf():
     if data is None:
         return _bad_body()
     raw = str(data.get('name') or '')
+    # Both separators are folded to one before ``basename``, on purpose, on every operating system: this
+    # route takes a name the BROWSER typed and looks that file up in the ledger, so a Windows-style path
+    # must be refused on Linux exactly as a POSIX one is refused on Windows. A Linux filename may legally
+    # contain a backslash — this route has never written one, and the check below (the name must equal what
+    # ``basename`` returned) is what says so out loud instead of opening something else.
     name = os.path.basename(raw.replace('\\', '/'))
     if not name or name != raw.strip():
         return jsonify({'ok': False, 'error': t('api.pdfNeedsName')}), 400

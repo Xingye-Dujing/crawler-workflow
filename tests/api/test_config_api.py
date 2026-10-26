@@ -18,6 +18,7 @@ Two read/write surfaces live here and neither one should surprise the frontend:
 """
 
 import os
+import sys
 
 import browser_profiles
 import pytest
@@ -86,7 +87,14 @@ class TestCapabilitiesEndpoint:
         import crawl_capabilities
 
         body = client.get('/api/capabilities').get_json()
-        assert body == crawl_capabilities.as_dict()
+        # The matrix is not copied here, and the one addition is the machine verdict: whether THIS
+        # server's operating system can honour each requirement. It is per request (the process knows
+        # its own platform), so it cannot live in ``as_dict()``, which a unit test compares byte-for-byte.
+        static = {key: value for key, value in body.items() if key != 'machine'}
+        assert static == crawl_capabilities.as_dict()
+        assert body['machine'] == crawl_capabilities.machine_requirements()
+        assert set(body['machine']) == set(crawl_capabilities.REQUIREMENTS)
+        assert body['machine']['windows_desktop'] is (sys.platform.startswith('win')), body['machine']
 
     def test_the_payload_names_the_platforms_the_crawlers_can_crawl(self, client):
         from crawlers import CRAWLERS, is_crawlable

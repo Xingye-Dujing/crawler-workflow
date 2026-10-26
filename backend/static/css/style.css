@@ -4159,6 +4159,17 @@ html[data-cloud="1"] #btn-headless,
 html[data-cloud="1"] .ai-only-ollama {
   display: none !important;
 }
+/* ─── Windows-only machine capabilities ─────────────────────────────────────
+   ``html[data-win-desktop]`` comes from the server's own answer (/api/capabilities →
+   machine.windows_desktop), the same one the 采集内容 select greys options out of. These four rows
+   configure the 红果 comment harvest — a desktop player, a local proxy, a system certificate
+   authority — and on a Linux server or a Mac there is no player to point at.
+
+   Hiding is presentation only: the node still refuses by name at validation and inside its own
+   executor, because a setting row that disappeared is not a permission. */
+html[data-win-desktop="0"] .windows-only {
+  display: none !important;
+}
 /* The account candidates are CustomSelect's own popup shape (``.cand-menu`` / ``.cand-option``
    in custom-select.js), not a rule here: a list permanently under the box made this panel
    taller for a choice made once per login, and a popup that lives inside a scrolling dialog

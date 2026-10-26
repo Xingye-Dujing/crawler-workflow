@@ -43,12 +43,15 @@ from services.visualizer import (
     _histogram_bins,
     _localize_label,
 )
+from utils import machine_deps
 
 # ── paper preamble ──────────────────────────────────────────────────────
-# Exactly the packages a figure copied into a paper needs; harmless if the document already loads them.
-# fontspec under ctex/xelatex makes the 仿宋 \setCJKmainfont below available; ctex would load it anyway.
-_PACKAGES = (
-    '\\usepackage{ctex}\n'
+#: Exactly the packages a figure copied into a paper needs; harmless if the document already loads them.
+#: fontspec under ctex/xelatex makes the CJK \setCJKmainfont below available; ctex would load it anyway.
+#:
+#: The ctex line is built per operating system (see :func:`ctex_options`), so this tuple is the part that
+#: is the same everywhere.
+_PACKAGES_TAIL = (
     '\\usepackage{fontspec}\n'
     '\\usepackage{pgfplots}\n'
     '\\pgfplotsset{compat=1.18}\n'
@@ -57,6 +60,33 @@ _PACKAGES = (
     '\\usepackage{xcolor}\n'
     '\\usetikzlibrary{arrows.meta,calc,positioning,backgrounds}\n'
 )
+
+#: ctex's own CJK font set per OS, as the package option that selects it. Empty means "ctex's default",
+# which on Windows is the system Chinese fonts — and the explicit 仿宋 lines below override it there.
+#:
+#: 仿宋 (FangSong) is what the reference paper this look is copied from is set in, and it is a Windows
+#: font: TeX Live ships no FangSong and macOS does not either, so asking for it by name on those machines
+#: is a compile that dies with 「The font "FangSong" cannot be found」. Off Windows the ask becomes a
+#: Chinese text that EXISTS on that system (fandol comes with ``texlive-lang-chinese``, macnew uses the
+#: system Songti/Heiti). The family differs — that difference is said here and in the emitted comment,
+#: not hidden by a document that will not compile.
+CTEX_FONTSET = {'win32': '', 'linux': 'fontset=fandol', 'darwin': 'fontset=macnew'}
+
+#: The CJK main family the figures actually get, per OS — used by the refusal text and the source comment.
+CJK_FAMILY = {'win32': 'FangSong', 'linux': 'FandolSong', 'darwin': 'Songti SC'}
+
+
+def ctex_options(system: str | None = None) -> str:
+    """The ctex package option that picks a font set this operating system owns."""
+    return CTEX_FONTSET.get(machine_deps.platform_name(system), '')
+
+
+def _packages(system: str | None = None) -> str:
+    """``\\usepackage[fontset=…]{ctex}`` plus the packages that are the same on every OS."""
+    options = ctex_options(system)
+    ctex = f'\\usepackage[{options}]{{ctex}}\n' if options else '\\usepackage{ctex}\n'
+    return ctex + _PACKAGES_TAIL
+
 
 _CYCLE_NAMES = ['cA', 'cB', 'cC', 'cD', 'cE', 'cF', 'cG', 'cH', 'cI', 'cJ']
 
@@ -87,18 +117,28 @@ GRAPH_LINE_CM = 0.6
 
 
 def _preamble_extras() -> str:
-    """仿宋 CJK text + the paper palette + the shared ``cixi`` axis style and two reusable tikz styles.
+    """仿宋 CJK text (Windows) or the OS's own ctex font set + the paper palette + the shared ``cixi``
+    axis style and two reusable tikz styles.
 
     One style block instead of repeating the paper rules per ``axis``: a figure that quietly kept
     gridlines in one branch and dropped them in another is the kind of inconsistency a reader spots. The
     merged ``compile`` document embeds this preamble once, so ``lblbox``/``leadline`` are in scope for every
     boxed label regardless of how many charts are stitched together.
     """
-    lines = [
-        r'\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}',
-        r'\setCJKsansfont[AutoFakeBold=2.0]{FangSong}',
-        r'\setCJKmonofont[AutoFakeBold=2.0]{FangSong}',
-    ]
+    os_name = machine_deps.platform_name()
+    if os_name == 'win32':
+        lines = [
+            r'\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}',
+            r'\setCJKsansfont[AutoFakeBold=2.0]{FangSong}',
+            r'\setCJKmonofont[AutoFakeBold=2.0]{FangSong}',
+        ]
+    else:
+        # Naming a font this system does not have is the failure; ctex's fontset (chosen on the ctex line)
+        # already set main/sans/mono. The comment is for the person who opens the .tex to paste it.
+        lines = [
+            rf'% 中文由 ctex 的 {CTEX_FONTSET[os_name].split("=")[1]} 字体集提供（主字体 {CJK_FAMILY[os_name]}）：'
+            rf'% 本机没有仿宋（FangSong 是 Windows 字体），所以这里不指名任何字体。'
+        ]
     lines += [rf'\definecolor{{{n}}}{{HTML}}{{{h}}}' for n, h in zip(_CYCLE_NAMES, _PAPER_PALETTE, strict=False)]
     # The sentiment overlay's neutral band, exactly the grey the screen uses (chart_contracts.POLARITY_COLORS).
     lines.append(r'\definecolor{cNeutral}{HTML}{9AA0A6}')
@@ -203,7 +243,7 @@ def paper_preamble() -> str:
     same definitions, or the first ``\\draw[cA,...]`` dies with ``Undefined color`` — which is why
     the paper report asks for this instead of writing its own package list.
     """
-    return _PACKAGES + _preamble_extras()
+    return _packages() + _preamble_extras()
 
 
 class LatexChartService:
@@ -286,17 +326,29 @@ class LatexChartService:
     def _standalone_head(kind: str, chart_type: str, title: str, caption: str) -> str:
         """The comment block a paper author pastes around, then the documentclass + shared preamble up to
         (and including) ``\\begin{document}``. The figure and the table share this one preamble."""
+        distribution = 'MiKTeX（Windows）或 TeX Live / MacTeX'
+        os_name = machine_deps.platform_name()
+        if os_name == 'win32':
+            cjk_hint = '% 并 \\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}（仿宋），\n'
+        else:
+            # A paper author copying this into their own document is on this machine, so the line has to
+            # name the font set THIS document was compiled with — copying a FangSong instruction onto a
+            # Linux box is how the paste stops compiling.
+            cjk_hint = (
+                f'% 并把 ctex 换成 \\usepackage[{ctex_options()}]{{ctex}}'
+                f'（本机中文由 {CJK_FAMILY[os_name]} 提供，非 Windows 没有仿宋）。\n'
+            )
         return (
             f'% 采析绘 LaTeX {kind}（chart_type={chart_type}）\n'
-            '% 用 MiKTeX 的 xelatex 编译（含中文，依赖 ctex）。\n'
+            f'% 用 {distribution} 的 xelatex 编译（含中文，依赖 ctex）。\n'
             '% 复制进论文：导言区加载 ctex、fontspec、pgfplots(1.18)、tikz(+下列库)、booktabs、xcolor，\n'
-            '% 并 \\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}（仿宋），\n'
-            '% 然后包成：\\begin{figure}[htbp]\\centering  <下面这段>  \\caption{'
+            + cjk_hint
+            + '% 然后包成：\\begin{figure}[htbp]\\centering  <下面这段>  \\caption{'
             + caption
             + '}\\label{fig:'
             + _label_key(chart_type, title)
             + '}\\end{figure}\n'
-            '\\documentclass[border=6pt]{standalone}\n' + _PACKAGES + _preamble_extras() + '\n\\begin{document}\n'
+            '\\documentclass[border=6pt]{standalone}\n' + _packages() + _preamble_extras() + '\n\\begin{document}\n'
         )
 
     @classmethod

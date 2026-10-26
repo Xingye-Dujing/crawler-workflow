@@ -26,7 +26,7 @@ from services.export_browser import (
     resolve_report_path,
 )
 from services.part_writer import PartWriter, safe_stem
-from utils.helpers import MAX_FILENAME_LENGTH
+from utils.helpers import MAX_FILENAME_BYTES, MAX_FILENAME_LENGTH
 
 pytestmark = pytest.mark.unit
 
@@ -318,12 +318,29 @@ class TestNamesLongerThanTheWriteCapStillResolve:
         """The two sides end-to-end: PartWriter names the shards, export_browser reads them back.
         If either changes its mind about the cap, this is where the 404 would reappear."""
         directory = tmp_path / 'exports'
-        long_label = '一份很长的中文工作流名称' * 12  # comfortably over the cap once composed
+        long_label = 'a-very-long-workflow-name-segment-' * 8  # comfortably over the cap once composed
         stem = safe_stem(f'{long_label}-src-2')
         writer = PartWriter(str(directory), stem, fmt='csv', batch_size=1, keep_parts=True)
         writer.add([{'标题': '三亚'}])
         shard = next(row['name'] for row in list_exports(str(directory)))
         assert len(shard) > MAX_FILENAME_LENGTH, 'the composed shard name must exceed the cap to test it'
+        assert os.path.basename(resolve_export_file(str(directory), shard)) == shard
+
+    def test_a_chinese_name_stays_writable_and_still_resolves(self, tmp_path):
+        """The other cap, which is a byte cap: the writer must not name a shard a Linux or macOS server
+        refuses to open, and the reader must still find the file it wrote.
+
+        ``MAX_FILENAME_LENGTH`` alone cannot express this — 100 Chinese characters are ~300 UTF-8 bytes,
+        and ext4/APFS count bytes (NAME_MAX 255). The suffix is what makes the check honest: a stem at
+        the byte cap plus ``.part001.csv`` is over it again, so the byte budget has to leave headroom.
+        """
+        directory = tmp_path / 'exports'
+        stem = safe_stem('一份很长的中文工作流名称' * 12)
+        writer = PartWriter(str(directory), stem, fmt='csv', batch_size=1, keep_parts=True)
+        writer.add([{'标题': '三亚'}])
+        shard = next(row['name'] for row in list_exports(str(directory)))
+        assert len(shard.encode('utf-8')) <= MAX_FILENAME_BYTES + len(b'.part001.csv')
+        assert os.path.isfile(os.path.join(str(directory), shard)), 'the file the writer named is not on disk'
         assert os.path.basename(resolve_export_file(str(directory), shard)) == shard
 
     def test_the_cap_release_did_not_loosen_traversal_defence(self, tmp_path):

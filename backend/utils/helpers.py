@@ -6,9 +6,16 @@ from datetime import datetime
 
 import pandas as pd
 
-# Longest name we hand to the OS: Windows caps a path component at 255 chars
-# and a full path at ~260, and exports live under an already-deep data/ path.
+#: Longest name we hand to the OS, in CHARACTERS: Windows caps a path component at 255 chars and a full
+# path at ~260, and exports live under an already-deep data/ path.
 MAX_FILENAME_LENGTH = 100
+
+#: … and in BYTES, which is the limit that binds everywhere else. ext4/APFS name a file by up to 255
+# UTF-8 BYTES, so 100 Chinese characters (300 bytes) is a name Windows accepts and Linux answers
+# ``ENAMETOOLONG`` to — a failed export that reads as a bug in the writer. The headroom under 255 is
+# deliberate: a name is written by capping the STEM and then appending a suffix
+# (``-20261016-120000.csv``, ``.part001.csv``, ``.live.html``), and those bytes have to fit too.
+MAX_FILENAME_BYTES = 200
 
 
 # The comment router's domain table. Lives here — browser-free and framework-free —
@@ -155,12 +162,27 @@ def split_columns(value) -> list:
     return split_names(value)
 
 
+def _cut_bytes(text: str, limit: int) -> str:
+    """``text`` shortened to at most ``limit`` UTF-8 bytes, never mid-character."""
+    if limit <= 0:
+        return ''
+    encoded = text.encode('utf-8')
+    if len(encoded) <= limit:
+        return text
+    return encoded[:limit].decode('utf-8', 'ignore')
+
+
 def sanitize_filename(name: str, *, truncate: bool = True) -> str:
     """Make *name* safe to use as a single path component.
 
     Strips directory separators (so a caller-supplied name can never escape the
     target directory), control characters, leading/trailing dots and spaces, and
     caps the length so the write itself cannot fail with a path-too-long error.
+
+    The cap is BOTH a character count and a byte count, because the two limits belong to different
+    operating systems (:data:`MAX_FILENAME_LENGTH`, :data:`MAX_FILENAME_BYTES`): Windows counts UTF-16
+    units in a component, Linux and macOS count UTF-8 BYTES (255). A Chinese title at the character cap
+    is 300 bytes — writable here, refused by ``open()`` on the server.
 
     ``truncate=False`` skips ONLY the length cap and keeps every other guard. The read
     side needs it: a name is written by capping the *stem* to ``MAX_FILENAME_LENGTH`` and
@@ -174,11 +196,11 @@ def sanitize_filename(name: str, *, truncate: bool = True) -> str:
     """
     clean = re.sub(r'[\x00-\x1f\\/*?:"<>|]', '_', str(name or ''))
     clean = clean.strip().strip('.')
-    # Keep the extension visible when truncating a long name.
-    if truncate and len(clean) > MAX_FILENAME_LENGTH:
+    if truncate and (len(clean) > MAX_FILENAME_LENGTH or len(clean.encode('utf-8')) > MAX_FILENAME_BYTES):
         root, ext = os.path.splitext(clean)
-        keep = max(1, MAX_FILENAME_LENGTH - len(ext))
-        clean = root[:keep] + ext
+        budget = MAX_FILENAME_LENGTH - len(ext)
+        root = _cut_bytes(root[: max(1, budget)], MAX_FILENAME_BYTES - len(ext.encode('utf-8')))
+        clean = (root or _cut_bytes(clean, max(1, MAX_FILENAME_BYTES - len(ext.encode('utf-8'))))) + ext
     return clean
 
 

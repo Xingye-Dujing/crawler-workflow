@@ -918,6 +918,33 @@ class TestTheDeviceTierCanFailLoudly:
         assert 'unavailable(' in body
         assert 'pytest.skip(' not in body
 
+    def test_the_frontend_tier_has_the_same_switch_and_it_does_something(self, monkeypatch):
+        """~43 modules ``skipif(node is None)``: a runner without node reports a passing suite in which
+        no JS behaviour ran at all. The number "43 skipped" is indistinguishable from a tier that never
+        existed, so the flag has to ABORT the session rather than be one more skip."""
+        import node_runner
+        from node_runner import REQUIRE_NODE_ENV, check_node_or_abort, node_required
+
+        assert node_required({REQUIRE_NODE_ENV: '1'}) is True
+        assert node_required({REQUIRE_NODE_ENV: 'off'}) is False
+        assert node_required({}) is False
+        # The quiet paths must stay quiet, or every developer without node is blocked.
+        check_node_or_abort({})
+        monkeypatch.setattr(node_runner, 'NODE', None)
+        check_node_or_abort({})  # no node and nobody demanded the tier: skip as before
+        with pytest.raises(Exception) as caught:
+            check_node_or_abort({REQUIRE_NODE_ENV: '1'})
+        assert REQUIRE_NODE_ENV in str(caught.value), str(caught.value)
+        assert 'node' in str(caught.value).lower(), 'the message must name what is missing'
+
+    def test_the_root_conftest_actually_asks_for_that_abort(self):
+        """A gate nobody calls is a flag that does nothing — the shape pinned above for the devices."""
+        source = (TESTS_DIR / 'conftest.py').read_text(encoding='utf-8')
+        start = source.index('def pytest_configure')
+        body = source[start : source.index('def pytest_sessionfinish')]
+        assert 'check_node_or_abort()' in body
+        assert 'from node_runner import check_node_or_abort' in source
+
 
 class TestLiveTierSkipsAreEnumerated:
     """``pytest.skip`` inside the live tier is a coverage decision, so it is pinned by name.
