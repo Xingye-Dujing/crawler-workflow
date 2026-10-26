@@ -79,8 +79,8 @@ for the "nothing skipped" closure gate.
    — now safe because they read/write through `state.py`, not module globals.
 4. **Move the node executors** (`_execute_*_node`) out of `app.py` into `backend/nodes/executors/`
    behind the `nodes.registry` table. This is the highest-value step: it stops `app.py` growing on every
-   feature. Phase 1a (8 built-in executors) and Phase 1b's `output`/`visualize`/`analysis` have landed;
-   the rest of Phase 1b moves `process`/`comment`/`source` — see `docs/refactor_plan.md`.
+   feature. Phase 1a (8 built-in executors) and Phase 1b's `output`/`visualize`/`analysis`/`process` have
+   landed; the rest of Phase 1b moves `comment`/`source` — see `docs/refactor_plan.md`.
 
 ### B. Frontend — modularize `workflow.js`
 Split it by responsibility into a few `<script>` files in load order (no bundler needed to start):
@@ -117,9 +117,10 @@ with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe
 `name`/`compile`/`tokenize`/`resume`/`accumulate`/`upload`/`biblio`/`fuse` executors into
 `backend/nodes/executors/` (each with `NODE_TYPE` + `run(node, call)`, registered in `nodes/registry.py`),
 and Phase 1b has since moved `output` (with `merge_upstream_tables` and the PDF path), `visualize`
-(with the chart/LaTeX add-ons) and `analysis` (with `services/analysis_params.py` and
-`services/llm_run_context.py`, which also removed `node_schema`'s reverse import of `app`);
-the executors that still reach a raw `app` global (`process`/`comment`/`source`)
+(with the chart/LaTeX add-ons), `analysis` (with `services/analysis_params.py` and
+`services/llm_run_context.py`, which also removed `node_schema`'s reverse import of `app`) and
+`process` (with `services/process_params.py`, the select-parameter matrix the schedule gate also reads);
+the executors that still reach a raw `app` global (`comment`/`source`)
 stay in `app.py` until their web is service-level, and Phase 1b moves them one at a time.
 **The finding that reshaped the plan** still holds: `app.py` module globals are used as *monkeypatch seams* by
 the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app.MAX_IMAGE_BYTES`,

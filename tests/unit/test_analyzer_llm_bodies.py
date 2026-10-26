@@ -747,7 +747,7 @@ class TestAggressionDispatch:
     """``enum_param`` refuses a mode name the node does not serve, by name."""
 
     def test_an_unknown_aggression_mode_is_refused_before_any_row_is_read(self):
-        from app import check_process_params
+        from services.process_params import check_process_params
 
         frame = pd.DataFrame({'正文': ['甲']})
         with pytest.raises(ValueError, match='bertish'):

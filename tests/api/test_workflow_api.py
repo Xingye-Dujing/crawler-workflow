@@ -85,6 +85,13 @@ def _wait_for_worker(app_module, timeout: float = 30.0) -> bool:
     return run_finished(app_module, timeout)
 
 
+def _llm_run_ctx(node, op, ctx=None):
+    """The one builder the process/analysis executors and the API share."""
+    from services.llm_run_context import build_llm_run_ctx
+
+    return build_llm_run_ctx(node, op, ctx)
+
+
 class TestWorkflowCrud:
     def test_save_list_load_delete_round_trip(self, client, data_root):
         workflow = _workflow([_node('node-1', 'upload', params={'dataset_id': 'x'})], [])
@@ -1071,7 +1078,7 @@ class TestProgressiveOutput:
 
     def test_llm_live_snapshot_is_rewritten_on_every_publish(self, client, app_module, data_root):
         node = _node('p1', 'process', operation='clean', params={'text_column': '正文', 'live_export': True})
-        run_ctx = app_module._llm_run_ctx(node, 'clean', None)
+        run_ctx = _llm_run_ctx(node, 'clean', None)
         assert callable(run_ctx['publish'])
 
         df = pd.DataFrame([{'正文': '甲'}, {'正文': '乙'}])
@@ -1096,7 +1103,7 @@ class TestProgressiveOutput:
 
     def test_llm_live_export_off_by_default(self, client, app_module, data_root):
         node = _node('p2', 'process', operation='clean', params={'text_column': '正文'})
-        run_ctx = app_module._llm_run_ctx(node, 'clean', None)
+        run_ctx = _llm_run_ctx(node, 'clean', None)
         df = pd.DataFrame([{'正文': '甲'}])
         run_ctx['publish'](df)
         # No {this node}.live file: the export directory is session-scoped, so
@@ -1116,13 +1123,13 @@ class TestProgressiveOutput:
             app_module.execution_state['llm'] = {'provider': 'ollama', 'model': 'global:tag'}
 
             override = _node('p-ov', 'process', operation='clean', params={'text_column': '正文', 'model': 'node:tag'})
-            assert app_module._llm_run_ctx(override, 'clean', None)['client'].model == 'node:tag'
+            assert _llm_run_ctx(override, 'clean', None)['client'].model == 'node:tag'
 
             blank = _node('p-bl', 'process', operation='clean', params={'text_column': '正文', 'model': '   '})
-            assert app_module._llm_run_ctx(blank, 'clean', None)['client'].model == 'global:tag'
+            assert _llm_run_ctx(blank, 'clean', None)['client'].model == 'global:tag'
 
             absent = _node('p-ab', 'process', operation='clean', params={'text_column': '正文'})
-            assert app_module._llm_run_ctx(absent, 'clean', None)['client'].model == 'global:tag'
+            assert _llm_run_ctx(absent, 'clean', None)['client'].model == 'global:tag'
 
             app_module.execution_state['llm'] = {'provider': 'openrouter', 'api_key': 'k', 'model': 'or/model'}
             cloud = _node(
@@ -1131,7 +1138,7 @@ class TestProgressiveOutput:
                 operation='emotion',
                 params={'text_column': '正文', 'mode': 'llm', 'model': 'node:tag'},
             )
-            assert app_module._llm_run_ctx(cloud, 'emotion', None)['client'].model == 'or/model'
+            assert _llm_run_ctx(cloud, 'emotion', None)['client'].model == 'or/model'
         finally:
             if prev is None:
                 app_module.execution_state.pop('llm', None)

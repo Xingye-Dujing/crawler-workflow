@@ -170,12 +170,14 @@ class TestDeclaredMode:
 
     @pytest.fixture
     def exec_(self):
-        import app
+        from nodes.executors import process
 
-        return app
+        return process
 
     def test_the_two_modes_are_what_the_matrix_declares(self, exec_):
-        default, allowed = exec_.PROCESS_ENUMS['clean']['mode']
+        from services.process_params import PROCESS_ENUMS
+
+        default, allowed = PROCESS_ENUMS['clean']['mode']
         assert allowed == ('regex', 'llm')
         # A workflow saved before this selector existed was doing llm work; a blank must
         # not silently change what a stored canvas produces.
@@ -188,6 +190,8 @@ class TestDeclaredMode:
     def test_the_regex_mode_is_what_asks_for_no_model(self, exec_):
         """The whole point of the mode: a regex clean node must not block a run behind an
         API key, and a blank one must still behave as it always did."""
-        assert exec_._op_needs_llm('clean', {'mode': 'regex'}) is False
-        assert exec_._op_needs_llm('clean', {'mode': 'llm'}) is True
-        assert exec_._op_needs_llm('clean', {}) is True
+        from app import _op_needs_llm
+
+        assert _op_needs_llm('clean', {'mode': 'regex'}) is False
+        assert _op_needs_llm('clean', {'mode': 'llm'}) is True
+        assert _op_needs_llm('clean', {}) is True

@@ -258,7 +258,7 @@ class TestLlmGateParity:
 
     def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
         """``PROCESS_OPS`` in workflow.js is what the 算法处理 node's dropdown offers; the
-        branches inside ``_execute_process_node`` are what actually run. Read from the
+        branches inside ``execute_process_node`` are what actually run. Read from the
         source of both, because either half drifting is silent in the other direction:
 
         a name only in the browser is an option that validates, runs, and then fails on
@@ -271,11 +271,11 @@ class TestLlmGateParity:
         listed = js[js.index('var PROCESS_OPS = [') :]
         offered = re.findall(r"""'([a-z_]+)'""", listed[: listed.index('];')])
 
-        source = (STATIC_DIR.parent / 'app.py').read_text(encoding='utf-8')
+        source = (STATIC_DIR.parent / 'nodes' / 'executors' / 'process.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         served = []
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.FunctionDef) and node.name == '_execute_process_node'):
+            if not (isinstance(node, ast.FunctionDef) and node.name == 'execute_process_node'):
                 continue
             for test in ast.walk(node):
                 # Only the top-level dispatch tests count: `if op == 'clean'` routes the

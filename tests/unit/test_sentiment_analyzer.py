@@ -27,16 +27,16 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def exec_():
-    """The application module, imported inside the test and never at module scope.
+    """The process-node plugin, imported inside the test and never at module scope.
 
-    ``tests/unit/test_test_tiers.py`` refuses a module-level ``import app``: collection
-    imports every file before any fixture runs, so the app would be built while
-    ``Config.DATA_DIR`` still pointed at the repository, and its singleton services would
-    go on writing into the user's real ``data/`` for the rest of the session.
+    ``tests/unit/test_test_tiers.py`` refuses a module-level heavy import: collection
+    imports every file before any fixture runs, so ``Config.DATA_DIR`` would still point
+    at the repository and the app's singleton services would write into the user's real
+    ``data/`` for the rest of the session.
     """
-    import app
+    from nodes.executors import process
 
-    return app
+    return process
 
 
 TEXTS = ['今天玩得非常开心', '这服务太差了令人失望', '会议将于周三举行', '']
@@ -56,7 +56,9 @@ class TestDeclaredModes:
     """The select-shaped parameter of the node, refused by name like every other one."""
 
     def test_the_four_modes_are_what_the_matrix_declares(self, exec_):
-        default, allowed = exec_.PROCESS_ENUMS['sentiment']['mode']
+        from services.process_params import PROCESS_ENUMS
+
+        default, allowed = PROCESS_ENUMS['sentiment']['mode']
         assert allowed == ('llm', 'ml', 'snownlp', 'bert')
         # bert is the declared default now (the recommended main model); an untouched node that
         # cannot run bert is degraded to SnowNLP by the executor with a printed line, so it still answers.
@@ -424,8 +426,10 @@ class TestOperationContract:
         """Every place the executor decides something about an op knows it from one of
         these tables; a sentiment node missing from one of them is a node that silently
         does the wrong thing rather than one that fails loudly."""
-        assert 'sentiment' in exec_.PROCESS_ENUMS
-        assert 'sentiment' in exec_._TEXT_COLUMN_OPS
+        from services.process_params import _TEXT_COLUMN_OPS, PROCESS_ENUMS
+
+        assert 'sentiment' in PROCESS_ENUMS
+        assert 'sentiment' in _TEXT_COLUMN_OPS
 
     def test_the_column_names_are_the_ones_the_frontend_and_charts_read(self, fake_snownlp):
         out = SentimentAnalyzer(mode='snownlp').analyze_dataframe(frame(), '正文')

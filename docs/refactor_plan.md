@@ -142,12 +142,13 @@ backend/
 验收：fast **8071 passed, 3 skipped**；设备档 **192 passed**（重构前一轮；本轮执行体迁移未改采集路径）；
 ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
 
-**1b（进行中）**：按从依赖少到多的顺序迁剩余 6 个：`output`、`visualize`、`analysis`（**均已完成**）→
-`process` → `comment` → `source`。`source`（浏览器/队列/CatBus）与 `comment`（评论引擎）最后，避免重构期同时改采集行为。
+**1b（进行中）**：按从依赖少到多的顺序迁剩余 6 个：`output`、`visualize`、`analysis`、`process`（**均已完成**）→
+`comment` → `source`。`source`（浏览器/队列/CatBus）与 `comment`（评论引擎）最后，避免重构期同时改采集行为。
 
 已落地的共享件：`services/run_files.py`（运行→文件台账的尽力登记）、
 `services/run_windows.py`（`note_window` / `window_for_save`：爬取时间窗随运行传到文件命名处）、
 `services/analysis_params.py`（面板扁平字段 → 各分析步骤 kwargs 的唯一翻译层，`node_schema` 不再反向 import app）、
+`services/process_params.py`（算法节点的 select 参数矩阵，同时回答定时/云端门的「会不会调模型」）、
 `services/llm_run_context.py`（模型客户端的唯一构造点：进程/分析/API 共用）、
 `nodes/labels.py`（`node_label` 从 `engine.workflow` 搬到轻模块，执行器无需拉入 DAG/capability 依赖）。
 
