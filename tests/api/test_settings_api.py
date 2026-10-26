@@ -262,6 +262,65 @@ class TestSettingsWrite:
         assert 'Selenium' in empty['warnings'][0], 'the warning must say who fetches the driver instead'
 
 
+class TestTheSecondBackendPaths:
+    """The two CatBus boxes, which exist so nobody has to edit ``PATH`` for this app.
+
+    A warning, never a refusal: the same rule the driver path follows, because the user may be
+    configuring a machine where the file will exist — and a backend discovery cannot find already
+    says so by name at run time. What is pinned here is the shapes the field accepts (a ``cli.js``
+    file *or* a CatBus checkout directory), the one shape it must not accept silently (a folder in
+    the Node box), and the cache that would otherwise keep the option greyed out after the save.
+    """
+
+    def test_a_file_and_a_directory_are_both_an_answer_for_the_adapter(self, client, tmp_path):
+        entry = tmp_path / 'cli.js'
+        entry.write_text('// catbus\n', encoding='utf-8')
+        checkout = tmp_path / 'catbus-src'
+        checkout.mkdir()
+
+        for path in (entry, checkout):
+            body = client.post('/api/settings', json={'catbus_cli': str(path)}).get_json()
+            assert body['warnings'] == [], body['warnings']
+            assert body['settings']['catbus_cli'] == str(path)
+            assert settings_store.get_setting('catbus_cli') == str(path), 'the bridge reads it back'
+
+    def test_a_path_that_is_not_there_keeps_the_value_and_names_itself(self, client, tmp_path):
+        ghost = str(tmp_path / 'nowhere' / 'cli.js')
+        body = client.post('/api/settings', json={'catbus_cli': ghost}).get_json()
+        assert body['settings']['catbus_cli'] == ghost, 'a warning is not a revert: the box keeps what was typed'
+        assert len(body['warnings']) == 1
+        assert ghost in body['warnings'][0]
+        assert 'catbus_cli' in body['warnings'][0], 'two boxes share a panel; the warning says which'
+
+    def test_a_folder_in_the_node_box_is_refused_in_words(self, client, tmp_path):
+        """``catbus_node`` is a program, and a directory would fail as 「no Node」 — the wrong sentence."""
+        folder = tmp_path / 'v24'
+        folder.mkdir()
+        body = client.post('/api/settings', json={'catbus_node': str(folder)}).get_json()
+        assert len(body['warnings']) == 1
+        assert 'executable' in body['warnings'][0].lower()
+        assert 'catbus_node' in body['warnings'][0]
+
+    @pytest.mark.parametrize('key', ['catbus_cli', 'catbus_node'])
+    def test_saving_a_path_asks_the_machine_again(self, client, monkeypatch, key):
+        """A cached 「本机没有 CatBus」 would otherwise grey out the option the user just fixed."""
+        from services import catbus_bridge
+
+        asked = []
+        monkeypatch.setattr(catbus_bridge, 'reset_probe_cache', lambda: asked.append(key))
+        client.post('/api/settings', json={key: ''})
+        assert asked == [key]
+
+    def test_an_unrelated_save_leaves_the_verdict_alone(self, client, monkeypatch):
+        """The probe costs a Node process; a window-size edit must not pay it."""
+        from services import catbus_bridge
+
+        asked = []
+        monkeypatch.setattr(catbus_bridge, 'reset_probe_cache', lambda: asked.append(1))
+        client.post('/api/settings', json={'window_size': '800x600'})
+        assert asked == []
+
+
 class TestLlmPanelEndpoints:
     """Every LLM route runs against a stubbed transport in ``llm_client``."""
 

@@ -2011,6 +2011,38 @@
           />
         </span>
       </div>
+      <!-- The second crawl backend's two machine-level paths, spelled here instead of editing PATH:
+           the same shape as the driver row above. Both are optional — empty means the server looks
+           them up per operating system. -->
+      <div class="dd-item-row">
+        <span data-i18n="set.catbusCli">CatBus 适配器路径</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-catbus-cli"
+            class="settings-input"
+            placeholder=".../crawler-workflow/cli.js（留空=自动）"
+            oninput="onSettingInput('catbus_cli', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.catbusNode">CatBus 的 Node 程序</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-catbus-node"
+            class="settings-input"
+            placeholder="node.exe（留空=自动）"
+            oninput="onSettingInput('catbus_node', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-block">
+        <span class="dd-block-note" data-i18n="set.catbusNote">
+          两栏都可留空：留空时按本机系统查找。这里填的路径优先于环境变量，PATH 只是最后的兜底；适配器那一栏既能填 cli.js 文件，也能填 CatBus 目录。
+        </span>
+      </div>
       <div class="dd-item-row">
         <span data-i18n="set.window">窗口大小</span>
         <span class="dd-ctrl">

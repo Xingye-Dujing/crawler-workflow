@@ -542,12 +542,16 @@
 
 1. 装 Node（CatBus 的 `engines`：`^22.22.2 || ^24.15.0 || >=26.0.0`）；
 2. 装 CatBus（`npm i -g catbus-cli`，或用一份源码检出）；
-3. 告诉本项目适配器在哪（三选一，都可用环境变量，不用改代码）：
+3. 告诉本项目适配器在哪。**首选项是「设置」面板里的两栏**（与 chromedriver 同一形状：填路径就行，不用改 `PATH`）：
+   「CatBus 适配器路径」可以填 `…/crawler-workflow/cli.js`，也可以直接填一份 CatBus 目录（自动补上那个入口）；
+   「CatBus 的 Node 程序」只接受程序本身（`node.exe` / `/usr/bin/node`），填成目录会被点名说明。两栏都留空 = 按本机系统查找。
+   环境变量同样可用，优先级是**面板 > 环境变量 > 系统候选表 > `PATH`**：
    - `CATBUS_HOME=/path/to/catbus`：源码检出根，适配器取其中的 `dist/integrations/crawler-workflow/cli.js`；
    - `CIXI_CATBUS_CLI=/path/to/cli.js`（或 `CATBUS_CLI`）：直接指名适配器文件；
    - 什么都不设：按本机的 npm 全局前缀与 `PATH` 找（Windows 走 `%APPDATA%\npm`，Linux/macOS 走
      `/usr/local/lib/node_modules`、`$HOME/.npm-global`、`PATH` 里 `bin` 的上一级 `lib/node_modules`）。
    Node 同理：`CIXI_NODE_BIN` / `NODE_BIN`，留空则按各系统常见位置与 `PATH` 找。
+   存盘后立刻重新探测一次本机能力——缓存里那句「本机没有」不该把刚修好的选项继续压灰。
 4. 在 CatBus 侧登录它自己的账号：`catbus bilibili auth login`（**不是**本项目的「打开浏览器登录」）。
 
 找不到 Node／找不到适配器／Node 过旧，面板里「采集方式」这一项会**列着但置灰**并在括号里写明原因；

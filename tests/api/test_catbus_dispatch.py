@@ -154,6 +154,10 @@ class TestTheSourceNodeChoosesItsBackend:
         class _Browser:
             def __init__(self, *_args, **kwargs):
                 asked.append(kwargs)
+                # Declared here so the stub keeps the real session's shape: the row sink is installed
+                # right after construction, and an executor that stopped installing it would still
+                # "work" against a stub whose attribute appears only on demand.
+                self._sink = None
 
             def set_sink(self, sink):
                 self._sink = sink

@@ -259,6 +259,24 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         os.chmod(real, 0o600)
         assert machine_deps.node_candidates({'NODE_BIN': str(real), 'PATH': ''}, 'linux') == []
 
+    def test_a_script_entry_is_read_not_run(self, tmp_path):
+        """npm and git both install ``cli.js`` as mode 644, and demanding ``+x`` made the second
+        backend disappear on every POSIX box — silently, because 「no CatBus」 is a verdict, not an
+        error. A file Node *reads* only has to be readable; the rule is about what the file is."""
+        script = tmp_path / 'cli.js'
+        script.write_text('// catbus\n', encoding='utf-8')
+        os.chmod(script, 0o644)
+        assert machine_deps.catbus_entry_usable(str(script))
+        assert machine_deps.catbus_candidates({'CIXI_CATBUS_CLI': str(script), 'PATH': ''}, 'linux') == [str(script)]
+
+    @pytest.mark.skipif(os.name == 'nt', reason='the executable bit is a POSIX fact')
+    def test_a_wrapper_entry_still_has_to_be_runnable(self, tmp_path):
+        """No script suffix means the bridge spawns it directly, so its mode really is the answer."""
+        wrapper = tmp_path / 'catbus'
+        wrapper.write_bytes(b'#!/bin/sh\n')
+        os.chmod(wrapper, 0o644)
+        assert machine_deps.find_catbus_cli(str(wrapper), {'PATH': ''}, 'linux') == ''
+
     def test_the_version_floors_are_catbus_engines_translated(self):
         assert machine_deps.node_version_supported('v24.21.0')
         assert machine_deps.node_version_supported('v26.0.0')

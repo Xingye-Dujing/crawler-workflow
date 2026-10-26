@@ -234,8 +234,8 @@ class CatbusCrawler(Crawler):
         child's exit code.
         """
         site = platform or self.platform
-        state, why = bridge.mode_state(site, mode)
-        if state not in bridge._RUNNABLE_STATES:
+        runnable, why = bridge.crawlability(site, mode)
+        if not runnable:
             raise ValueError(t('catbus.refused', platform=site, mode=mode, detail=why))
 
     def _identity_column(self, mode: str) -> str:

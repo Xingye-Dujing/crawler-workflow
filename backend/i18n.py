@@ -1716,6 +1716,10 @@ _ZH = {
     'set.browserMissing': '浏览器程序不存在：{path}',
     'set.latexMissing': 'LaTeX 编译程序（xelatex）不存在：{path}',
     'set.harvestMissing': '红果收割组件（{tool}）不是已存在的文件：{path}',
+    # The two CatBus paths are accepted as either a file or a CatBus checkout directory, so the
+    # warning says which of the two complaints it is, and names the setting the box belongs to.
+    'set.catbusMissing': 'CatBus 组件（{tool}）在该位置不存在：{path}',
+    'set.catbusNeedFile': '{tool} 要填可执行程序本身，不是它所在的目录：{path}',
     'set.badWindow': '窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {default}',
     'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
     'set.outOfRange': '{setting} 超出范围 {lo}-{hi}，已恢复默认 {value}',
@@ -3992,6 +3996,8 @@ _EN = {
     'set.browserMissing': 'Browser executable does not exist: {path}',
     'set.latexMissing': 'LaTeX compiler (xelatex) does not exist: {path}',
     'set.harvestMissing': 'Hongguo harvest component ({tool}) is not an existing file: {path}',
+    'set.catbusMissing': 'The CatBus component ({tool}) does not exist at that location: {path}',
+    'set.catbusNeedFile': '{tool} wants the executable itself, not the folder holding it: {path}',
     'set.badWindow': 'Window size must look like WIDTHxHEIGHT (e.g. 1920x1080) — restored the default {default}',
     'set.badNumber': '{setting} is not a number — restored the default {value}',
     'set.outOfRange': '{setting} is outside {lo}-{hi} — restored the default {value}',

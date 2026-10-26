@@ -33,8 +33,10 @@ from utils import machine_deps, procs
 BACKEND_NAME = 'catbus'
 
 #: Suffixes that mean "this entry is a script, so Node runs it". Anything else is the program
-# itself, which is how a user pointing ``CATBUS_CLI`` at a wrapper stays honoured.
-_SCRIPT_SUFFIXES = ('.js', '.mjs', '.cjs')
+# itself, which is how a user pointing ``CATBUS_CLI`` at a wrapper stays honoured. The same tuple
+# decides how :mod:`utils.machine_deps` tests the file on disk, so a non-executable ``cli.js`` is not
+# reported as missing on a POSIX box that has it.
+_SCRIPT_SUFFIXES = machine_deps.CATBUS_SCRIPT_SUFFIXES
 
 #: One process gets this long before it is taken down. Finite on purpose: one run slot cannot
 # survive a "wait forever", and 停止 stays the user's exit at any point inside the window.
@@ -104,13 +106,32 @@ class Probe:
         return (entry.get('modes') or {}).get(str(mode or '').strip().lower()) or {}
 
 
+def explicit_paths() -> tuple[str, str]:
+    """The two hand-written paths, settings panel first and environment second.
+
+    The panel wins because that is where the user just typed it, and the setting is what survives a
+    restart of a service whose environment nobody controls (a systemd unit, a container). An empty
+    setting means "look it up on this machine", not "nothing is configured" — the candidate tables in
+    :mod:`utils.machine_deps` answer that, and ``PATH`` is only the last fallback there, never a thing
+    the user is asked to edit.
+    """
+    # Imported here rather than at module scope: ``settings_store`` reads ``Config``, and this module
+    # is read by the capabilities endpoint at import time on a cold start.
+    from settings_store import get_setting
+
+    node = str(get_setting('catbus_node') or '').strip() or str(Config.CATBUS_NODE or '').strip()
+    cli = str(get_setting('catbus_cli') or '').strip() or str(Config.CATBUS_CLI or '').strip()
+    return node, cli
+
+
 def _probe_now() -> Probe:
     """Ask the machine, then ask the adapter. Every negative answer names itself.
 
     The order is cost-ordered: a missing Node is answered without spawning anything, and a missing
     adapter entry the same way, because a cloud box that installed neither is the common case.
     """
-    node = machine_deps.find_node(Config.CATBUS_NODE)
+    node_setting, cli_setting = explicit_paths()
+    node = machine_deps.find_node(node_setting)
     if not node:
         return Probe(available=False, reason_key='catbus.noNode')
     # The runtime answers for itself: ``node --version`` is what the version gate is about, and
@@ -125,7 +146,7 @@ def _probe_now() -> Probe:
             node=node,
             node_version=node_version,
         )
-    entry = machine_deps.find_catbus_cli(Config.CATBUS_CLI)
+    entry = machine_deps.find_catbus_cli(cli_setting)
     if not entry:
         return Probe(available=False, reason_key='catbus.noCli', node=node, node_version=node_version)
     call = _call(argv_for(node, entry, ['capabilities']), capture=True)
@@ -201,10 +222,20 @@ def mode_state(platform: str, mode: str) -> tuple[str, str]:
     return (str(entry.get('status') or ''), str(entry.get('reason') or ''))
 
 
+def crawlability(platform: str, mode: str) -> tuple[bool, str]:
+    """Whether this cell may be crawled, and the manifest's own reason when it may not.
+
+    The verdict and its sentence are one answer on purpose: a caller that tests the status and then
+    rebuilds the message asks the manifest twice, and the two asks can be served by different states
+    (a re-probe mid-refusal) — the reason printed would then not belong to the state refused on.
+    """
+    state, why = mode_state(platform, mode)
+    return state in _RUNNABLE_STATES, why
+
+
 def supports(platform: str, mode: str) -> bool:
     """Whether CatBus may crawl this combination — the only gate the dispatcher asks."""
-    status, _reason = mode_state(platform, mode)
-    return status in _RUNNABLE_STATES
+    return crawlability(platform, mode)[0]
 
 
 #: Why the backend is missing, in words the PANEL can print. The console keys above carry the machine

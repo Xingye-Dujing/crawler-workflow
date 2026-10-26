@@ -118,7 +118,8 @@ Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上�
   跨运行水位因此只界定「哪些行入库」而不省请求），以及它用**自己的账号文件**（`catbus <平台> auth login`），
   与本项目存的 Cookie 互不相干——运行前的登录门按后端分别发问，键也分开（`bilibili@work#catbus`），
   一侧的死登录不会拦下另一侧的运行。可用性由本机决定：找不到 Node、找不到适配器、Node 版本过旧都各自有名有姓，
-  此时面板不再给出这一项。启用方式见下节「让它真的能跑」。→ [`docs/collection.md`](docs/collection.md)
+  此时面板不再给出这一项。两个本机路径（适配器入口与 Node）在「设置」面板里填，**不必改 `PATH`**，
+  留空就按本机系统自动查找。启用方式见 [`docs/collection.md` 的「让它真的能跑」](docs/collection.md#让它真的能跑)。→ [`docs/collection.md`](docs/collection.md)
 - **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调；
   BERT 有**两个运行时**——装了 torch/transformers 就用它（开发机可上 GPU），否则用 onnxruntime + tokenizers 跑导出的 ONNX 图，**打包版就是这一条**，日志会说明是哪个运行时、什么精度答的）、
   情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)

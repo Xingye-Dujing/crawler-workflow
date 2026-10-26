@@ -13,6 +13,8 @@ import textwrap
 
 import pytest
 
+import settings_store
+from config import Config
 from i18n import get_lang, set_lang, t
 from services import catbus_bridge as bridge
 
@@ -73,7 +75,7 @@ def answer(version='v24.21.0', capabilities=None, code=0, record=None):
 @pytest.fixture(autouse=True)
 def _no_subprocess(monkeypatch):
     """Discovery and every command are stubbed: no fast case may spawn Node."""
-    monkeypatch.setattr(bridge, '_probe_now', lambda: a_probe())
+    monkeypatch.setattr(bridge, '_probe_now', a_probe)
     monkeypatch.setattr(bridge, '_call', lambda argv, **kw: bridge._Call(code=0, stdout='', stderr=''))
     bridge.reset_probe_cache()
     yield
@@ -114,6 +116,12 @@ class TestTheCommandShape:
     def test_a_script_suffix_is_matched_without_case(self):
         assert bridge.argv_for('node', 'CLI.MJS', []) == ['node', 'CLI.MJS']
         assert bridge.argv_for('node', 'wrapper', []) == ['wrapper']
+
+    def test_the_suffix_that_chooses_node_is_the_suffix_that_chooses_the_disk_test(self):
+        """One list, read by both sides: the argv builder and the finder must not disagree about
+        whether an entry is a script, or a readable-but-not-executable ``cli.js`` would be found by
+        one and refused by the other."""
+        assert bridge._SCRIPT_SUFFIXES == bridge.machine_deps.CATBUS_SCRIPT_SUFFIXES
 
     def test_the_nodes_account_never_reaches_the_adapter(self):
         """The node's 账号 selects a Selenium session; CatBus has its own account files."""
@@ -164,6 +172,52 @@ class TestTheDiscoveryVerdict:
         assert calls[-1] == ['/usr/bin/node', '/opt/catbus/cli.js', 'capabilities']
         assert info.platforms == ('bilibili', 'weibo')
 
+    def test_the_paths_the_panel_saved_are_the_paths_discovery_asks_about(self, monkeypatch):
+        """The last mile of the settings field: a path typed into 设置 has to reach the finder.
+
+        ``Config.CATBUS_*`` (the environment) is the fallback, never the answer — and the two are
+        indistinguishable from a unit test that only stubs the finder, so the finders are asked what
+        string they were handed.
+        """
+        asked = []
+        monkeypatch.setattr(
+            settings_store,
+            'get_setting',
+            lambda key: {'catbus_node': '/opt/nvm/v24/bin/node', 'catbus_cli': '/srv/catbus'}.get(key, ''),
+        )
+        monkeypatch.setattr(Config, 'CATBUS_NODE', '/should/not/be/read')
+        monkeypatch.setattr(Config, 'CATBUS_CLI', '/should/not/be/read')
+        monkeypatch.setattr(
+            bridge.machine_deps,
+            'find_node',
+            lambda explicit='': asked.append(('node', explicit)) or '/opt/nvm/v24/bin/node',
+        )
+        monkeypatch.setattr(
+            bridge.machine_deps,
+            'find_catbus_cli',
+            lambda explicit='': asked.append(('cli', explicit)) or '/opt/catbus/cli.js',
+        )
+        monkeypatch.setattr(bridge, '_call', answer())
+        info = bridge.probe(force=True)
+        assert asked == [('node', '/opt/nvm/v24/bin/node'), ('cli', '/srv/catbus')]
+        assert info.entry == '/opt/catbus/cli.js'
+
+    def test_an_empty_field_hands_the_environment_to_discovery(self, monkeypatch):
+        """「留空=自动」 means the env default and then the per-OS tables, not 「nothing configured」."""
+        asked = []
+        monkeypatch.setattr(settings_store, 'get_setting', lambda key: '')
+        monkeypatch.setattr(Config, 'CATBUS_NODE', '')
+        monkeypatch.setattr(Config, 'CATBUS_CLI', '/env/only/cli.js')
+        monkeypatch.setattr(bridge.machine_deps, 'find_node', lambda explicit='': '/usr/bin/node')
+        monkeypatch.setattr(
+            bridge.machine_deps,
+            'find_catbus_cli',
+            lambda explicit='': asked.append(explicit) or '/env/only/cli.js',
+        )
+        monkeypatch.setattr(bridge, '_call', answer())
+        assert bridge.probe(force=True).available
+        assert asked == ['/env/only/cli.js']
+
     def test_a_failing_probe_is_a_named_reason(self, monkeypatch):
         monkeypatch.setattr(bridge, '_call', answer(capabilities='', code=1))
         assert bridge.probe(force=True).reason_key == 'catbus.probeFailed'
@@ -208,6 +262,17 @@ class TestTheManifestIsTheOnlyOpinion:
 
     def test_a_planned_cell_is_not_runnable(self):
         assert not bridge.supports('weibo', 'comments')
+
+    def test_the_verdict_and_its_reason_arrive_together(self):
+        """A refusal prints the reason belonging to the state it refused on.
+
+        The crawler's gate used to ask ``mode_state`` for the status and again for the sentence, so a
+        re-probe between the two could print a reason for a cell that is not the one being refused.
+        """
+        runnable, why = bridge.crawlability('weibo', 'hot')
+        assert runnable is False
+        assert why == 'CatBus 没有注册微博热搜'
+        assert bridge.crawlability('bilibili', 'posts')[0] is True
 
     def test_a_cell_the_manifest_does_not_list_is_reported_as_absent(self):
         status, reason = bridge.mode_state('zhihu', 'posts')

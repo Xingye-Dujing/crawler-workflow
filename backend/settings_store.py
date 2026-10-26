@@ -31,6 +31,15 @@ DEFAULTS = {
     # MiKTeX ``xelatex`` executable used by the 编译 (compile) node to turn LaTeX into a PDF.
     # Empty = auto-detect (PATH, then the common MiKTeX install locations).
     'latex_binary': '',
+    #: The second crawl backend's two machine-level paths, spelled here rather than by editing
+    # ``PATH`` — exactly how chromedriver is configured. ``catbus_cli`` is the adapter entry
+    # (``…/catbus-cli/dist/integrations/crawler-workflow/cli.js``, or the root of a CatBus source
+    # checkout); ``catbus_node`` is the Node that runs it. Both empty = look them up per operating
+    # system (:mod:`utils.machine_deps`: npm global roots, then ``PATH``), which is why a server that
+    # installed both normally needs nothing here — and why an nvm-managed Node, which is not on a
+    # service ``PATH``, is a name you can type instead of an environment you have to edit.
+    'catbus_cli': Config.CATBUS_CLI,
+    'catbus_node': Config.CATBUS_NODE,
     # "--window-size=WxH" passed to every crawler browser.
     'window_size': '1920x1080',
     # driver.set_page_load_timeout — how long a page may take to load.
@@ -191,6 +200,21 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 if v and not os.path.isfile(v):
                     warnings.append(t('set.harvestMissing', tool=key, path=v))
                 vals[key] = v
+            elif key in ('catbus_cli', 'catbus_node'):
+                # Two shapes are legitimate for ``catbus_cli`` and only one for ``catbus_node``: the
+                # adapter entry is a file, but pointing at a CatBus *checkout* is the normal thing a
+                # developer does, so a directory is accepted and read as that root. A missing path is
+                # a warning, never a refusal — same reason the driver gets: the user may be configuring
+                # a machine where the thing will exist, and a backend that cannot be found at run time
+                # already says so by name.
+                v = str(raw or '').strip().strip('"')
+                if v and not (os.path.isfile(v) or os.path.isdir(v)):
+                    warnings.append(t('set.catbusMissing', tool=key, path=v))
+                if v and key == 'catbus_node' and os.path.isdir(v):
+                    # A folder is not a runtime; naming ``…\nvm\v24\bin`` would otherwise be accepted
+                    # and then fail as "no Node", which is a message about the wrong thing.
+                    warnings.append(t('set.catbusNeedFile', tool=key, path=v))
+                vals[key] = v
             elif key == 'window_size':
                 v = str(raw or '').strip()
                 if re.fullmatch(r'\d{2,5}x\d{2,5}', v):
@@ -263,4 +287,11 @@ def save_settings(patch: dict) -> tuple[dict, list]:
             os.replace(tmp, _PATH)
         except OSError as e:
             warnings.append(t('set.saveFailed', err=e))
+        if {'catbus_cli', 'catbus_node'} & set(patch or {}):
+            # The second backend caches what this machine can do (a capability probe costs one Node
+            # process), and a cached 「本机没有 CatBus」 would otherwise keep greyed out the option the
+            # user has just pointed at a path — for minutes, with no way to see why.
+            from services import catbus_bridge
+
+            catbus_bridge.reset_probe_cache()
         return dict(vals), warnings

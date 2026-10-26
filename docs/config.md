@@ -43,6 +43,7 @@
 |------|------|
 | `driver_path` | chromedriver 路径（覆盖 config.py 默认值） |
 | `browser_binary` | Chrome 二进制路径 |
+| `catbus_cli` / `catbus_node` | **第二采集后端（CatBus）的两个本机路径**，与「驱动路径」同一形状：填在这里就不用去改 `PATH`。`catbus_cli` 既能填适配器文件（`…/crawler-workflow/cli.js`）也能填一份 CatBus 目录（自动补上那个入口）；`catbus_node` 只接受程序本身，填成目录会被点名说明。两栏都可留空 = 按本机系统查找；优先级是**设置面板 > 环境变量（`CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME`、`CIXI_NODE_BIN` / `NODE_BIN`）> 系统候选表 > `PATH`**。路径不存在只警告不拒绝（你可能在为一台将来才装好的机器配置），保存后面板立刻重新探测一次本机能力——否则缓存里那句「本机没有」会把刚修好的选项继续压灰 |
 | `window_size` | 浏览器窗口尺寸 |
 | `page_load_timeout` / `element_timeout` | 页面/元素超时（秒） |
 | `ollama_host` | Ollama 地址（覆盖环境变量） |

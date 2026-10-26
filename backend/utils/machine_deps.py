@@ -307,6 +307,11 @@ NODE_OPEN_FLOOR = (26, 0, 0)
 # shim on the other two, and one executable shape across three systems is the whole point.
 CATBUS_ENTRY = ('dist', 'integrations', 'crawler-workflow', 'cli.js')
 
+#: Suffixes that mean "Node reads this file" rather than "the machine runs this file". One list,
+# shared with the bridge's argv builder, so the disk test below and the spawn there cannot disagree
+# about what kind of entry the user pointed at.
+CATBUS_SCRIPT_SUFFIXES = ('.js', '.mjs', '.cjs')
+
 #: The npm package that ships the adapter (its ``bin`` name is ``catbus``).
 CATBUS_PACKAGE = 'catbus-cli'
 
@@ -399,7 +404,9 @@ def catbus_candidate_paths(system: str | None = None, env: dict | None = None) -
     os_name = platform_name(system)
     join, sep = _path_shape(os_name)
     norm = ntpath.normpath if os_name == 'win32' else posixpath.normpath
-    paths = [str(env.get(name) or '').strip() for name in CATBUS_ENV_VARS]
+    # A hand-written path may name the adapter file *or* the CatBus directory, and the two env
+    # variables and the settings field all accept either spelling (see :func:`catbus_entry_at`).
+    paths = [catbus_entry_at(env.get(name), os_name) for name in CATBUS_ENV_VARS]
     home = str(env.get(CATBUS_HOME_ENV) or '').strip()
     if home:
         paths.append(join(home, *CATBUS_ENTRY))
@@ -425,9 +432,42 @@ def catbus_candidate_paths(system: str | None = None, env: dict | None = None) -
     return [path for path in paths if path]
 
 
+def catbus_entry_usable(path: str) -> bool:
+    """Whether this path can be the adapter: a script must be readable, a program must be runnable.
+
+    :func:`_is_executable` is the wrong test for ``cli.js``. An npm-installed or git-checked-out JS
+    file is mode 644 — Node *reads* it, the kernel never executes it — so demanding the executable bit
+    reported "no CatBus" on every Linux and macOS box and silently removed the whole second backend
+    from the panel. A path without a script suffix is a wrapper the bridge spawns directly, so it
+    keeps the executable rule; there the mode is what decides whether the call works.
+    """
+    if not os.path.isfile(path):
+        return False
+    if path.lower().endswith(CATBUS_SCRIPT_SUFFIXES):
+        return os.access(path, os.R_OK)
+    return os.name == 'nt' or os.access(path, os.X_OK)
+
+
 def catbus_candidates(env: dict | None = None, system: str | None = None) -> list[str]:
     """CatBus adapter entries that actually exist on this OS's disk, most-explicit first."""
-    return [path for path in dict.fromkeys(catbus_candidate_paths(system, env)) if _is_executable(path)]
+    return [path for path in dict.fromkeys(catbus_candidate_paths(system, env)) if catbus_entry_usable(path)]
+
+
+def catbus_entry_at(path: str, system: str | None = None) -> str:
+    """The adapter entry a hand-written path points at: a file as given, a checkout root resolved.
+
+    Both spellings are natural and both come from the settings panel: 「指到那个 cli.js」 and
+    「指到 CatBus 的目录」. A directory is the second one, so it gains the one suffix that makes it
+    the entry — which is also what ``CATBUS_HOME`` has always meant here. Joined with the TARGET's
+    separator, so a Linux answer asked from this box still reads as a Linux path.
+    """
+    path = str(path or '').strip()
+    if not path:
+        return ''
+    if os.path.isdir(path):
+        join, _sep = _path_shape(platform_name(system))
+        return join(path, *CATBUS_ENTRY)
+    return path
 
 
 def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | None = None) -> str:
@@ -436,8 +476,8 @@ def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | N
     '' is a reason, not a failure: the CatBus backend then simply is not offered, and it is offered
     nowhere in the UI either (see ``services/catbus_bridge.py``).
     """
-    explicit = str(explicit or '').strip()
+    explicit = catbus_entry_at(explicit, system)
     if explicit:
-        return explicit if _is_executable(explicit) else ''
+        return explicit if catbus_entry_usable(explicit) else ''
     found = catbus_candidates(env, system)
     return found[0] if found else ''
