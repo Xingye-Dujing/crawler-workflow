@@ -294,11 +294,13 @@ NODE_PATH_NAMES = {
     'win32': ('node.exe',),
 }
 
-#: The Node releases CatBus's ``engines`` field accepts, as floors: ``^22.22.2 || ^24.15.0 ||
-# >=26.0.0``. Checked against these rather than against the range string because the range is only
-# readable as three numbers, and a too-old Node fails inside CatBus with a syntax error that names
-# nothing — which is how an unsupported runtime gets blamed on the platform being crawled.
-NODE_FLOORS = ((22, 22, 2), (24, 15, 0), (26, 0, 0))
+#: The Node releases CatBus' ``engines`` field accepts, split the way a semver range actually reads:
+# ``^22.22.2 || ^24.15.0`` are two *major-bound* floors (a 23.x or 25.x runtime is in neither, even
+# though it is numerically larger than 22.22.2), and ``>=26.0.0`` is the one open-ended floor. Written
+# as a single ``any(v >= floor)`` the gate would wave an unsupported major through, and the failure it
+# prevents — a syntax error inside CatBus that names nothing — is exactly what the check exists for.
+NODE_CARET_FLOORS = {22: (22, 22, 2), 24: (24, 15, 0)}
+NODE_OPEN_FLOOR = (26, 0, 0)
 
 #: The adapter entry inside a CatBus install or checkout. It is deliberately the ``.js`` and not the
 # ``catbus-crawler-workflow`` bin: a global npm install drops a ``.cmd`` shim on Windows and a shell
@@ -374,7 +376,9 @@ def node_version_supported(text: str) -> bool:
     """Whether ``node -v`` output is a release CatBus declares it runs on.
 
     ``v24.21.0`` and a bare ``22.22.2`` both parse; anything unparseable is NOT supported, because an
-    answer this side cannot read is not evidence that the runtime is new enough.
+    answer this side cannot read is not evidence that the runtime is new enough. The two caret ranges
+    are checked by major, so an even-numbered release between them (23.x, 25.x) is refused the way the
+    ``engines`` field refuses it — being newer than 22.22.2 is not the same as being in range.
     """
     digits = str(text or '').strip().lstrip('vV').split('-', 1)[0].split('.')
     try:
@@ -383,7 +387,10 @@ def node_version_supported(text: str) -> bool:
         return False
     if len(version) < 3:
         return False
-    return any(version >= floor for floor in NODE_FLOORS)
+    floor = NODE_CARET_FLOORS.get(version[0])
+    if floor is not None:
+        return version >= floor
+    return version >= NODE_OPEN_FLOOR
 
 
 def catbus_candidate_paths(system: str | None = None, env: dict | None = None) -> list[str]:

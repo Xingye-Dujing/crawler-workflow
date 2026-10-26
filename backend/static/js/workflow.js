@@ -713,13 +713,13 @@ const workflow = {
             var node = canvas.nodes[id];
             var p = node.params || {};
             if (node.type === 'source') {
-                if (p.platform && Capabilities.needsSession(p.platform, p.collect || p.mode)) {
+                if (p.platform && sessionAsked(p, p.platform, p.collect || p.mode)) {
                     found.push(sessionEntry(p));
                 }
             } else if (node.type === 'comment') {
                 String(p.urls || '').split(/[\s,;、]+/).forEach(function (line) {
                     var plat = urlPlatform(line);
-                    if (plat) found.push(sessionEntry(p, plat));
+                    if (plat && sessionAsked(p, plat, 'comments')) found.push(sessionEntry(p, plat));
                 });
             }
         });
@@ -911,20 +911,30 @@ const workflow = {
                「已失效」 meant on the page the probe actually looked at. */
             return '· ' + (verdict.text || key);
         });
+        /* The remedy depends on which tool holds the dead login. A Selenium verdict points at the
+           cookie panel; a CatBus one must NOT — its login lives in CatBus' own account files, and the
+           server already put 「catbus <平台> auth login」 in the text. Opening a cookie dialog for it
+           would send the user to re-save a session this crawl never reads, so the button is only
+           offered when every refused entry belongs to the browser. */
+        var browserOnly = blocked.every(function (key) {
+            return !unpackEntryKey(key).backend || unpackEntryKey(key).backend === 'selenium';
+        });
         var choice = await showDialog({
             message: I18n.t('dialog.cookieExpired')
                 .replace('{n}', blocked.length)
                 .replace('{platforms}', entryLabels(blocked.map(unpackEntryKey))) +
-                '\n' + lines.join('\n') + '\n' + I18n.t('dialog.cookieExpiredHint'),
-            buttons: [
-                { label: I18n.t('dialog.cookieGoUpdate'), value: 'update', primary: true },
-                { label: I18n.t('dialog.cancel'), value: null },
-            ],
+                '\n' + lines.join('\n') + (browserOnly ? '\n' + I18n.t('dialog.cookieExpiredHint') : ''),
+            buttons: browserOnly
+                ? [
+                      { label: I18n.t('dialog.cookieGoUpdate'), value: 'update', primary: true },
+                      { label: I18n.t('dialog.cancel'), value: null },
+                  ]
+                : [{ label: I18n.t('dialog.close'), value: null, primary: true }],
         });
-        /* Both answers stop the run — that is the hard block. Only 「去更新 Cookie」
-           opens the panel: closing the dialog with 取消 and finding a panel the user
-           did not ask for is the difference between refusing and nagging. */
-        if (choice === 'update') {
+        /* Both answers stop the run — that is the hard block. Only 「去更新 Cookie」 opens the panel:
+           closing the dialog with 取消 and finding a panel the user did not ask for is the difference
+           between refusing and nagging. */
+        if (browserOnly && choice === 'update') {
             /* Land them on the login that is broken rather than on a selector still showing
                whoever was last picked — which, on a platform with several accounts, is a
                different file than the one the run was refused for. */
@@ -1678,10 +1688,24 @@ const Capabilities = {
         var catbus = (this.data.backends || {}).catbus;
         if (!catbus) return { runnable: true, wordKey: '' };
         if (!catbus.available) return { runnable: false, wordKey: catbus.panelKey || 'settings.backendProbeFailed' };
-        var cells = catbus.cells || {};
-        var state = cells[String(id || '') + '.' + String(modeKey || '')];
-        if (state === 'available' || state === 'partial') return { runnable: true, wordKey: '' };
+        var cell = (catbus.cells || {})[String(id || '') + '.' + String(modeKey || '')] || {};
+        /* ``runnable`` is the server's derived answer, not a token list re-read here: which manifest
+           states may be crawled is the adapter's fact, and a copy in JS is how the two drift apart. */
+        if (cell.runnable) return { runnable: true, wordKey: '' };
         return { runnable: false, wordKey: 'settings.backendNoCell' };
+    },
+
+    backendAuth(id, modeKey) {
+        /* Whether a CatBus crawl of this cell wants a login, per the adapter's own declaration.
+
+           The Selenium matrix answers the same question for the browser (weibo's 热搜 is anonymous,
+           微信 has no session to want), and the two answers are genuinely different facts about two
+           different tools — so the gate asks the one belonging to the backend this node will use,
+           rather than letting the browser's answer stand in for a crawl that reads no cookie. */
+        if (!this.ready()) return true;
+        var catbus = (this.data.backends || {}).catbus || {};
+        var cell = (catbus.cells || {})[String(id || '') + '.' + String(modeKey || '')] || {};
+        return String(cell.auth || 'required') === 'required';
     },
 
     defaults(id) {
@@ -2076,6 +2100,23 @@ function sessionEntry(p, platform) {
         account: backend === 'catbus' ? String(p.catbus_account || '') : String(p.account || ''),
         backend: backend,
     };
+}
+
+/* Whether the run gate has a login to ask about for this node.
+
+   Two backends, two answers, and neither may stand in for the other: the Selenium matrix knows which
+   of its own crawls are served to a logged-in session (weibo's 热搜 answers anyone, 微信 wants no
+   session at all), and the CatBus manifest knows which of ITS cells need an account of their own.
+   Asking the wrong one is not harmless — an anonymous browser crawl refused for a missing cookie, or
+   a CatBus crawl that never needed a login blocked by 「Cookie 已失效」 for a cookie it never reads. */
+function sessionAsked(p, platform, modeKey) {
+    if (String(p.backend || '') === 'catbus') {
+        /* A cell the backend cannot crawl at all is refused by name when the walk starts, so there is
+           no login worth asking about and no browser worth buying to test one. */
+        if (!Capabilities.backendState(platform, modeKey, 'catbus').runnable) return false;
+        return Capabilities.backendAuth(platform, modeKey);
+    }
+    return Capabilities.needsSession(platform, modeKey);
 }
 
 function preflightEntryKey(entry) {

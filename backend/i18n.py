@@ -2037,6 +2037,7 @@ _ZH = {
     'catbus.finished': 'CatBus 采集结束：本次新增 {n} 条（目标 {want}）',
     'catbus.warning': 'CatBus 报告：{text}',
     'catbus.refused': '{platform} / {mode} 通过 CatBus 采集失败：{detail}',
+    'catbus.noIdentity': '{platform} / {mode} 的 CatBus 适配没有声明身份列，跨运行水位无法界定边界，因此拒绝',
     'catbus.pre.login': '{platform} 在 CatBus 里没有登录态',
 }
 
@@ -4369,6 +4370,10 @@ _EN = {
     'catbus.finished': 'CatBus finished: {n} new rows (target {want})',
     'catbus.warning': 'CatBus reported: {text}',
     'catbus.refused': '{platform} / {mode} could not be crawled through CatBus: {detail}',
+    'catbus.noIdentity': (
+        '{platform} / {mode} declares no identity column to CatBus, so the cross-run watermark has '
+        'nothing to bound — refused'
+    ),
     'catbus.pre.login': '{platform} has no logged-in CatBus account',
 }
 

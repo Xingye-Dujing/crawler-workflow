@@ -262,9 +262,15 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
     def test_the_version_floors_are_catbus_engines_translated(self):
         assert machine_deps.node_version_supported('v24.21.0')
         assert machine_deps.node_version_supported('v26.0.0')
+        assert machine_deps.node_version_supported('v31.0.0'), '>=26 is open-ended'
         assert machine_deps.node_version_supported('22.22.2')
         assert not machine_deps.node_version_supported('v22.22.1'), 'the floor is a patch level, not a major'
         assert not machine_deps.node_version_supported('v18.20.4'), 'Node 18 is outside the range'
+        # ``^22.22.2 || ^24.15.0`` are major-bound: an even release between them is newer than the
+        # first floor and supported by neither, and ``any(v >= floor)`` would wave it through.
+        assert not machine_deps.node_version_supported('v23.11.0'), '23.x is in no caret range'
+        assert not machine_deps.node_version_supported('v25.1.0'), '25.x is in no caret range'
+        assert not machine_deps.node_version_supported('v24.14.9'), 'the 24 range starts at 24.15.0'
         assert not machine_deps.node_version_supported(''), 'an unreadable answer is not evidence of a new runtime'
         assert not machine_deps.node_version_supported('v24')
 

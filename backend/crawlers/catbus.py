@@ -118,7 +118,7 @@ class CatbusCrawler(Crawler):
         raise ValueError(t('catbus.noDetail', url=url))
 
     def _collect(self, mode: str, extra: dict, target_count: int) -> list:
-        """One adapter run for a whole list, streamed row by row into the node's ledger.
+        """One adapter run for a whole list, filed into the node's ledger row by row.
 
         ``target_count`` is passed through as the *list* size, never as "how many rows this node still
         needs": a resumed run already holds rows, and a shorter list would drop candidates the ledger
@@ -130,33 +130,49 @@ class CatbusCrawler(Crawler):
             return self.results()
         self._log(t('catbus.start', mode=mode, n=target_count))
         identity = self._identity_column(mode)
+        if self.watermark and not identity:
+            # A boundary compared against a column nobody declared would bound nothing while the
+            # panel still shows a saved one, so the walk says the cell cannot carry the feature
+            # instead of running it wrong.
+            raise ValueError(t('catbus.noIdentity', platform=self.platform, mode=mode))
         if self.watermark:
             # Said out loud because the difference is money: under Selenium the boundary saves the
-            # request; here it only bounds which rows are filed.
+            # request; here it only bounds which rows are filed. A degradation this quiet must be
+            # printed, never left for the user to infer from a slower-than-expected run.
             self._log(t('catbus.watermarkNote'))
-        produced: list[dict] = []
-        outcome = self._run(mode, {**extra, 'target_count': target_count}, on_row=produced.append)
-        self._refuse(outcome, mode)
-        kept = refused = 0
-        for row in produced:
+        counts = {'scanned': 0, 'kept': 0, 'refused': 0, 'halted': False}
+
+        def _file(row: dict) -> None:
+            counts['scanned'] += 1
+            if counts['halted']:
+                return
             key = str(row.get(identity) or '') if identity else ''
             if key and self.watermark_boundary(key):
                 self._log(t('catbus.watermarkHit', i=key))
-                break
+                counts['halted'] = True
+                return
             if self.emit(row):
-                kept += 1
+                counts['kept'] += 1
                 if key:
                     self.note_watermark(key)
             else:
-                refused += 1
+                counts['refused'] += 1
+
+        outcome = self._run(mode, {**extra, 'target_count': target_count}, on_row=_file)
+        # The refusal comes AFTER the rows were filed. A run stopped, walled or column-drifted at row
+        # 30 of 50 has 30 rows the site already gave, and the streaming this backend exists for is
+        # worth nothing if they are dropped on the way to the message about them.
         self._warn(outcome)
+        self._refuse(outcome, mode)
+        kept = counts['kept']
+        refused = counts['refused'] + len(outcome.warnings)
         self.target_total = target_count
-        refused += len(outcome.warnings)
         if self.collected() < target_count:
             # Convicted, not excused: an adapter list that stopped growing is not proof the site ran
             # out — a soft throttle looks exactly the same — so a short table says 「采得不足」 with the
-            # funnel instead of settling clean.
-            self.note_end(UNDER_TARGET, scanned=len(produced), kept=kept, refused=refused)
+            # funnel instead of settling clean. The warnings are counted as refused because that is
+            # what they are: cards the adapter asked for and did not bring back.
+            self.note_end(UNDER_TARGET, scanned=counts['scanned'], kept=kept, refused=refused)
         self._log(t('catbus.finished', n=kept, want=target_count))
         return self.results()
 
@@ -212,13 +228,14 @@ class CatbusCrawler(Crawler):
     def _guard(self, mode: str, platform: str = '') -> None:
         """Refuse a cell this machine cannot crawl BEFORE anything is bought for it.
 
-        The adapter owns the answer (and refuses too), but the walk asks first so two things hold: no
-        child process is started for a combination that cannot work, and the line the user reads is
-        the manifest's own reason for that cell rather than a machine-level fact about Node.
+        The adapter owns the answer and refuses with it too, but the walk asks first so two things
+        hold: no child process starts for a combination that cannot work, and the line the user reads
+        is the manifest's own reason for that cell rather than a machine-level fact about Node or a
+        child's exit code.
         """
         site = platform or self.platform
-        _state, why = bridge.mode_state(site, mode)
-        if not bridge.supports(site, mode):
+        state, why = bridge.mode_state(site, mode)
+        if state not in bridge._RUNNABLE_STATES:
             raise ValueError(t('catbus.refused', platform=site, mode=mode, detail=why))
 
     def _identity_column(self, mode: str) -> str:
@@ -235,15 +252,22 @@ class CatbusCrawler(Crawler):
         return ''
 
     def _run(self, mode: str, extra: dict, on_row, platform: str = '') -> bridge.Outcome:
-        """One ``catbus-crawler-workflow run`` with this node's parameters.
+        """One ``catbus-crawler-workflow run``, carrying the node's form plus this walk's arguments.
 
-        ``catbus_account`` is the only account read; the Selenium ``account`` is dropped by the
-        bridge, because one name in two systems means two different logins.
+        Nothing is filtered out on the way. The manifest's ``params`` list says what a cell *takes as
+        an argument*, not what the user asked for, and dropping a stored condition over that difference
+        would produce a table that looks like the condition ran — the exact shape of bug this project
+        refuses elsewhere. The adapter documents that unknown keys are kept and not consumed, so the
+        cost of forwarding is noise; the cost of filtering is a silent wrong answer.
+
+        ``catbus_account`` is the only account the adapter may see: the node's ``account`` names a
+        Selenium session this crawl never opens, and the bridge drops it (:func:`_params_payload`).
         """
-        params = {key: value for key, value in self.params.items() if value not in (None, '')}
+        site = platform or self.platform
+        params = dict(self.params)
         params.update(extra)
         return bridge.run(
-            platform or self.platform,
+            site,
             mode,
             params,
             on_row=on_row,

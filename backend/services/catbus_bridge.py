@@ -223,26 +223,49 @@ _PANEL_KEYS = {
 def status_payload() -> dict:
     """What this machine can crawl through CatBus, as language-free data.
 
-    This is the payload half of ``GET /api/capabilities``: ``reasonKey`` and ``panelKey`` are
-    catalogue keys and the cell values are the adapter's own status tokens, because the capabilities
-    payload carries no language — the canvas translates a token, and an unknown one shows as itself.
-    The adapter's per-cell reasons are prose written by CatBus (in its own language), so they stay out
-    of the payload and are quoted by the console at run time instead, in the language that run uses.
+    This is the payload half of ``GET /api/capabilities``. ``reasonKey`` and ``panelKey`` are catalogue
+    keys, and each cell carries the adapter's status token plus two answers derived HERE rather than in
+    the browser: ``runnable`` (so the panel never keeps its own copy of which states crawl) and
+    ``auth`` (so the run gate asks the login question of the backend the node is about to use, instead
+    of assuming the Selenium matrix's answer for a crawl that reads no cookie of ours).
 
-    The map is the adapter's, never a list kept here: a cell CatBus stops supporting disappears from
-    the panel on the next probe rather than needing a change on this side.
+    Nothing travels as a sentence: the canvas translates a key, and an unknown one shows as itself. The
+    adapter's per-cell reasons are prose written by CatBus in its own language, so they stay out of the
+    payload and the console quotes them at run time, in the language that run uses.
+
+    The map is the adapter's, never a list kept here: a cell CatBus stops supporting disappears from the
+    panel on the next probe rather than needing a change on this side.
     """
     info = probe()
-    cells: dict[str, str] = {}
+    cells: dict[str, dict] = {}
     for platform, entry in (info.manifest.get('platforms') or {}).items():
         for mode, mode_entry in (entry.get('modes') or {}).items():
-            cells[f'{platform}.{mode}'] = str((mode_entry or {}).get('status') or '')
+            state = str((mode_entry or {}).get('status') or '')
+            cells[f'{platform}.{mode}'] = {
+                'status': state,
+                'runnable': state in _RUNNABLE_STATES,
+                'auth': str((mode_entry or {}).get('auth') or 'required'),
+            }
     return {
         'available': info.available,
         'reasonKey': info.reason_key,
         'panelKey': _PANEL_KEYS.get(info.reason_key, 'settings.backendProbeFailed') if not info.available else '',
         'cells': cells,
     }
+
+
+def cell(platform: str, mode: str) -> dict:
+    """One cell's manifest entry, or ``{}`` when the adapter does not list it at all."""
+    return dict(probe().mode(platform, mode) or {})
+
+
+def needs_session(platform: str, mode: str) -> bool:
+    """Whether a CatBus crawl of this cell wants a login, per the adapter's own declaration.
+
+    The Selenium matrix answers a different question about a different tool (weibo's 热搜 is anonymous,
+    微信 has no session to want), so neither list may stand in for the other — the gate asks each.
+    """
+    return str(cell(platform, mode).get('auth') or 'required') == 'required'
 
 
 def columns_for(platform: str, mode: str) -> tuple[str, ...]:
@@ -410,12 +433,14 @@ def _drive(
             proc.stdin.close()
         if on_line is not None and proc.stdout:
             for raw in proc.stdout:
-                if abort is not None and abort():
-                    _kill('stopped')
-                    break
+                # Delivered first, then asked. The line has already been bought from the site, so a
+                # stop that dropped it would throw away a row to be punctual about the interrupt.
                 line = raw.decode('utf-8', errors='replace').strip()
                 if line:
                     on_line(line)
+                if abort is not None and abort():
+                    _kill('stopped')
+                    break
         elif capture and proc.stdout:
             out.stdout = proc.stdout.read().decode('utf-8', errors='replace')
         out.code = proc.wait()

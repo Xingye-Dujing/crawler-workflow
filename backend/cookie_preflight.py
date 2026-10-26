@@ -382,9 +382,10 @@ def _probe_catbus(platform: str, account: str = '') -> dict:
     fixed by logging in from a terminal.
     """
     answer = catbus_bridge.preflight(platform, account)
-    if not answer.get('available'):
+    if not answer.get('available') or str(answer.get('verdict') or '') == 'unverifiable':
         # 「问不到」 is not 「没登录」: an unreachable question must not block the run (the same rule
-        # the timeout and captcha branches of the browser probe follow).
+        # the timeout and captcha branches of the browser probe follow). An adapter that answered with
+        # something unreadable is the same case, and the bridge says so with this verdict word.
         return _verdict(platform, UNKNOWN, detail=str(answer.get('message') or ''), account=account)
     if answer.get('logged_in'):
         return _verdict(platform, VALID, probed=True, account=account)

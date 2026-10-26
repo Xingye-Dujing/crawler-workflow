@@ -689,6 +689,16 @@ class TestAModeThisMachineCannotRun:
         assert 'html[data-win-desktop="0"] .windows-only' in sheet
 
 
+def _cell(status='available', runnable=True, auth='required'):
+    """One cell of ``payload.backends.catbus.cells``, in the shape the bridge sends.
+
+    ``runnable`` and ``auth`` are the bridge's derived answers. The panel reads them instead of
+    re-deriving either — which is the reason this test drives the real renderer rather than a rule it
+    could have written twice.
+    """
+    return {'status': status, 'runnable': runnable, 'auth': auth}
+
+
 class TestTheCrawlBackendOption:
     """采集方式: the matrix declares the select, the server's ``backends`` map decides the option.
 
@@ -707,7 +717,7 @@ class TestTheCrawlBackendOption:
                 'available': available,
                 'reasonKey': 'catbus.noNode' if not available else '',
                 'panelKey': panel_key,
-                'cells': {'bilibili.posts': 'available'} if cells is None else cells,
+                'cells': {'bilibili.posts': _cell()} if cells is None else cells,
             }
         }
         return matrix
@@ -734,7 +744,7 @@ class TestTheCrawlBackendOption:
             },
             {
                 'id': 'nocell',
-                'payload': cls._payload(cells={'bilibili.comments': 'planned'}),
+                'payload': cls._payload(cells={'bilibili.comments': _cell('planned', False)}),
                 'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'catbus'},
             },
             {

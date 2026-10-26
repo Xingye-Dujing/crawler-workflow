@@ -157,6 +157,22 @@ def _pairs(body):
     return [(e['platform'], e['account']) for e in body['platforms']]
 
 
+def _cell(status='available', runnable=True, auth='required'):
+    """One cell of the second backend's answer, in the shape ``status_payload`` sends."""
+    return {'status': status, 'runnable': runnable, 'auth': auth}
+
+
+def _matrix_with_catbus(cells, available=True):
+    """The live matrix plus this machine's answer about the second crawl backend.
+
+    Copy-on-write, so a scenario that grows a ``backends`` map cannot change the one every other
+    scenario reads.
+    """
+    made = json.loads(json.dumps(MATRIX))
+    made['backends'] = {'catbus': {'available': available, 'reasonKey': '', 'panelKey': '', 'cells': cells}}
+    return made
+
+
 def _matrix_without_region(platform):
     """The live matrix with one platform's region blanked.
 
@@ -464,6 +480,65 @@ SCENARIOS = [
         **_canvas(_chain(1, 'zhihu', account='work')),
         'status': {'ok': True, 'cookies': {'zhihu': False}},
     },
+    # ─── the second backend at the same gate ───────────────────────────────────────────────
+    {
+        # A CatBus crawl has a login too — its own. The entry must travel with the backend and
+        # with the CatBus account, or the server would probe the Selenium session this node never
+        # reads and answer 「没有 Cookie」 about a crawl that never opens one.
+        'id': 'catbus-asks-its-own-session',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb', account='selenium-login')),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell()}),
+        'preflight': {
+            'ok': True,
+            'results': {
+                'bilibili@cb#catbus': _verdict('bilibili', 'valid', blocking=False, text='CatBus is logged in')
+            },
+            'blocked': [],
+            'unclear': [],
+            'probed': True,
+        },
+    },
+    {
+        # A cell whose adapter wants no account is not a login question, so nothing is asked —
+        # and the matrix's own ``needs_session`` (a fact about the browser) must not answer for it.
+        'id': 'catbus-cell-wants-no-session',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb')),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell(runnable=True, auth='optional')}),
+        'preflight': CLEAN,
+    },
+    {
+        # A cell this machine cannot crawl at all is refused by name when the walk starts; asking
+        # the gate first would only invent a second refusal for the same fact.
+        'id': 'catbus-cell-not-runnable-asks-nothing',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb')),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell('planned', runnable=False)}),
+        'preflight': CLEAN,
+    },
+    {
+        # The remedy for a dead CatBus login is not the cookie panel. The refusal stays hard; only
+        # the button that would send the user to re-save an unused cookie goes away.
+        'id': 'catbus-wall-offers-no-cookie-panel',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb')),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell()}),
+        'preflight': {
+            'ok': True,
+            'results': {
+                'bilibili@cb#catbus': _verdict(
+                    'bilibili',
+                    'expired',
+                    blocking=True,
+                    text='CatBus 没有 B站的登录态 — catbus bilibili auth login',
+                )
+            },
+            'blocked': ['bilibili@cb#catbus'],
+            'unclear': [],
+            'probed': True,
+        },
+    },
 ]
 
 #: Every scenario needs the crawl matrix: the canvas validates required fields
@@ -767,3 +842,39 @@ class TestOverseasNetworkAsk:
         assert case['dialogs'] == []
         assert case['asked'] is True, 'turning the warning off must not turn the cookie check off too'
         assert case['ran'] is True
+
+
+class TestTheSecondBackendAtTheGate:
+    """The gate asks each backend about its own login, and offers each its own remedy.
+
+    Two rules, both about not blaming the wrong session: the entry that leaves the page carries the
+    backend and the account that backend reads, and the question is asked of the cell's own ``auth``
+    declaration rather than of the browser matrix's ``needs_session``.
+    """
+
+    def test_a_catbus_entry_carries_its_backend_and_its_own_account(self, gate):
+        body = gate['catbus-asks-its-own-session']['askedBody']
+        assert len(body['platforms']) == 1, body
+        entry = body['platforms'][0]
+        assert entry['backend'] == 'catbus', entry
+        assert entry['account'] == 'cb', 'the CatBus account, not the Selenium login on the same node'
+        assert gate['catbus-asks-its-own-session']['ran'] is True
+
+    def test_a_cell_that_wants_no_login_is_not_asked_about_one(self, gate):
+        case = gate['catbus-cell-wants-no-session']
+        assert case['asked'] is False, 'the browser matrix says this platform needs a session; the adapter says no'
+        assert case['ran'] is True
+
+    def test_a_cell_this_machine_cannot_crawl_asks_nothing(self, gate):
+        case = gate['catbus-cell-not-runnable-asks-nothing']
+        assert case['asked'] is False
+        assert case['ran'] is True, 'the walk itself refuses, by name, with the manifest reason'
+
+    def test_a_dead_catbus_login_still_refuses_but_offers_no_cookie_panel(self, gate):
+        """Hard block, different remedy: 「去更新 Cookie」 would send the user to a session the run never reads."""
+        case = gate['catbus-wall-offers-no-cookie-panel']
+        assert case['ran'] is False, 'the refusal is as hard as the browser one'
+        dialog = case['dialogs'][-1]
+        assert 'update' not in dialog['values'], dialog['values']
+        assert case['cookiePanelOpen'] is False
+        assert 'catbus bilibili auth login' in dialog['message'], 'the remedy that IS offered is the adapter command'

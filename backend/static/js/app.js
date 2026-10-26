@@ -324,6 +324,7 @@ const I18n = {
             'dialog.nodeJsonImport': 'Paste a node JSON to add:',
             'dialog.selectWorkflow': 'Enter workflow name to load:',
             'dialog.cancel': 'Cancel',
+            'dialog.close': 'Close',
             'dialog.confirm': 'Confirm',
             'dialog.renameNode': 'Rename this node — the console will say its name instead of node-N:',
             /* Fan-in / fan-out wire consequences. One message per outcome the executor
@@ -2091,6 +2092,7 @@ const I18n = {
             'dialog.nodeJsonImport': '粘贴一个节点 JSON 以添加：',
             'dialog.selectWorkflow': '输入要加载的工作流名称:',
             'dialog.cancel': '取消',
+            'dialog.close': '关闭',
             'dialog.confirm': '确认',
             'dialog.renameNode': '重命名此节点——控制台将显示它的名字而不是 node-N（留空恢复类型默认名）：',
             'conn.fanin.name': '「{node}」是工作流命名节点——运行会拒绝任何连入它的线,命名节点不能有上游。',

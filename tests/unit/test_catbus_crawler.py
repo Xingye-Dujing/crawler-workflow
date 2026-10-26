@@ -193,6 +193,35 @@ class TestRefusalsNameTheBackend:
         with pytest.raises(CrawlerStopped):
             session.search(keyword='k', target_count=5)
 
+    def test_the_rows_a_refused_run_already_bought_are_already_filed(self, session, monkeypatch):
+        """The whole reason the adapter streams, asserted where the rows could still be lost.
+
+        CatBus writes each row as it is produced and the bridge hands it over immediately, but the
+        session is the one that files it — and a refusal raised before the filing loop would throw
+        away every row of a run stopped at 30 of 50. The bridge's own docstring promises those rows
+        stand; this is where that promise is either kept or quietly broken.
+        """
+
+        def fake_run(platform, mode, params, **kw):
+            for item in (row('BV1'), row('BV2')):
+                kw['on_row'](item)
+            return outcome(status='stopped', rows=2)
+
+        monkeypatch.setattr(bridge, 'run', fake_run)
+        with pytest.raises(CrawlerStopped):
+            session.search(keyword='k', target_count=50)
+        assert [item['BV号'] for item in session.ledger.kept] == ['BV1', 'BV2']
+
+    def test_a_walled_run_keeps_the_rows_that_came_before_the_wall(self, session, monkeypatch):
+        def fake_run(platform, mode, params, **kw):
+            kw['on_row'](row('BV1'))
+            return outcome(status='blocked', rows=1, message='未登录', hint='catbus bilibili auth login')
+
+        monkeypatch.setattr(bridge, 'run', fake_run)
+        with pytest.raises(ValueError):
+            session.search(keyword='k', target_count=50)
+        assert len(session.ledger.kept) == 1
+
     def test_a_missing_backend_refuses_by_reason_not_by_number(self, session, monkeypatch):
         monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='unavailable', message='没有 Node 运行时'))
         with pytest.raises(ValueError) as raised:
@@ -202,6 +231,19 @@ class TestRefusalsNameTheBackend:
     def test_this_backend_does_not_fetch_a_detail_on_its_own(self, session):
         with pytest.raises(ValueError):
             session.get_detail('https://www.bilibili.com/video/BV1/')
+
+    def test_a_watermark_with_no_declared_identity_refuses_instead_of_bounding_nothing(self, session, monkeypatch):
+        """The store keeps a column name next to the boundary, so an undeclared one must not be guessed.
+
+        A boundary compared against a column the rows do not carry never hits, so the run would report
+        a saved watermark while collecting everything again — the appearance of the feature without the
+        feature.
+        """
+        monkeypatch.setattr(bridge, 'identity_for', lambda platform, mode: ())
+        session.set_watermark('BV9')
+        with pytest.raises(ValueError) as raised:
+            session.author(author='2', target_count=5)
+        assert '身份列' in str(raised.value) or 'identity' in str(raised.value)
 
 
 class TestCommentsWalkOneLinkAtATime:
