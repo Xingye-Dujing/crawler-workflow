@@ -23,7 +23,28 @@ JS = ROOT / 'backend' / 'static' / 'js'
 
 
 def test_every_declared_type_has_an_executor_and_every_executor_a_declaration(app_module):
-    assert set(app_module._NODE_EXECUTORS) == set(catalog.NODE_TYPES)
+    from nodes import registry
+
+    assert registry.registered_types() == catalog.NODE_TYPES
+
+
+def test_registering_one_type_twice_with_a_different_executor_is_refused():
+    from nodes import registry
+
+    with pytest.raises(ValueError):
+        registry.register('name', lambda _node, _call: [])
+
+
+def test_no_plugin_imports_the_http_layer():
+    """The seam that makes the plugins movable: an executor may use services/state, never ``app``.
+
+    ``import app`` from a plugin would create a cycle (app imports the registry) and would drag the
+    whole Flask module into any future CLI that only wants to run a node. The check is static because
+    a runtime import would already have failed through the cycle; this names the offending file first.
+    """
+    for path in (ROOT / 'backend' / 'nodes').rglob('*.py'):
+        text = path.read_text(encoding='utf-8')
+        assert not re.search(r'^\s*(?:import app|from app import)', text, re.MULTILINE), path
 
 
 def test_the_row_shapes_partition_the_types():

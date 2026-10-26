@@ -1,7 +1,13 @@
-"""Node plugins: one declaration per node type, and (Phase 2) one executor module each.
+"""Node plugins: one declaration per node type, one executor module for the built-in ones.
 
-``catalog`` is the catalogue the engine and the executor table are pinned against. See
-``docs/refactor_plan.md`` for the full target and the migration phases.
+Two layers, deliberately separate:
+
+- ``nodes.catalog`` — the catalogue the engine and the executor table are pinned against (type, row
+  shape, category, console quietness, label key). Light enough for ``engine.workflow`` to import.
+- ``nodes.registry`` — type → ``run(node, call)``; built-in plugins self-register from
+  ``nodes.executors``, and ``app`` registers the executors that still live there.
+
+See ``docs/refactor_plan.md`` for the full target and the migration phases.
 """
 
 from nodes.catalog import (
@@ -14,6 +20,7 @@ from nodes.catalog import (
     plugin_for,
     types_in,
 )
+from nodes.context import NodeCall, NodeExecutor
 
 __all__ = [
     'NODE_TYPES',
@@ -21,6 +28,8 @@ __all__ = [
     'PLUGINS',
     'QUIET_NODE_TYPES',
     'TABLE_NODE_TYPES',
+    'NodeCall',
+    'NodeExecutor',
     'NodePlugin',
     'plugin_for',
     'types_in',

@@ -2,11 +2,11 @@
 
 import pandas as pd
 import pytest
+from nodes.executors.accumulate import execute_accumulate_node
 
 from config import Config
 from engine.workflow import WorkflowEngine
 from services.dataset_store import DatasetStore
-from services.nodes import execute_accumulate_node
 
 
 @pytest.fixture()
@@ -105,8 +105,8 @@ class TestAppendLineage:
 class TestAccumulateNode:
     def test_the_node_appends_and_returns_the_full_table(self, store, monkeypatch):
         logs = []
-        monkeypatch.setattr('services.nodes.get_dataset_store', lambda: store)
-        monkeypatch.setattr('services.nodes.add_log', logs.append)
+        monkeypatch.setattr('nodes.executors.accumulate.get_dataset_store', lambda: store)
+        monkeypatch.setattr('nodes.executors.accumulate.add_log', logs.append)
         node = {
             'id': 'node-7',
             'type': 'accumulate',
@@ -120,8 +120,8 @@ class TestAccumulateNode:
         assert store.lineage_history('微博累积')[0]['run_id'] == 'r2'
 
     def test_the_node_uses_named_key_columns(self, store, monkeypatch):
-        monkeypatch.setattr('services.nodes.get_dataset_store', lambda: store)
-        monkeypatch.setattr('services.nodes.add_log', lambda _line: None)
+        monkeypatch.setattr('nodes.executors.accumulate.get_dataset_store', lambda: store)
+        monkeypatch.setattr('nodes.executors.accumulate.add_log', lambda _line: None)
         node = {
             'id': 'node-7',
             'type': 'accumulate',

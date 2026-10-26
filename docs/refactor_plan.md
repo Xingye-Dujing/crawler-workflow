@@ -1,7 +1,8 @@
 # 可扩展性重构方案 / Extensibility refactor plan
 
 > 目标：把「新增一个节点类型 / 平台 / 采集引擎」从**改四处、漏一处就半截功能**，变成**登记一次、契约测试兜底**。
-> 本文件是分阶段方案与验收口径；Phase 0 已随本轮提交落地，后续阶段按顺序做，每一阶段都必须全量测试通过、单独提交。
+> 本文件是分阶段方案与验收口径；**Phase 0 与 Phase 1a 已落地**（8 个内置执行器 + 统一注册表），
+> 后续阶段按顺序做，每一阶段都必须全量测试通过、单独提交。
 
 ## 1. 现状盘点（为什么要改）
 
@@ -9,10 +10,11 @@
 
 | 位置 | 内容 | 现状 |
 |---|---|---|
-| `backend/nodes/catalog.py` | 类型、行形态（table/pdf/none）、是否安静、面板词 key、分组 | **本轮新增**，唯一声明 |
-| `backend/app.py` `_NODE_EXECUTORS` | 类型 → 执行函数 | **本轮改为注册表**（原来是一条 14 分支的 if 链） |
-| `backend/app.py` `_execute_*_node` | 执行体本身（约 2,600 行） | Phase 1 迁到 `nodes/executors/` |
-| `backend/engine/workflow.py` | `NODE_TYPES` / `TABLE_NODE_TYPES` / `PDF_SOURCE_NODE_TYPES` | **本轮改为从目录派生** |
+| `backend/nodes/catalog.py` | 类型、行形态（table/pdf/none）、是否安静、面板词 key、分组 | **唯一声明**（Phase 0） |
+| `backend/nodes/registry.py` | 类型 → `run(node, call)`，重复注册按名拒绝 | **统一注册表**（Phase 1a） |
+| `backend/app.py` `_run_*` | 仍留在 app 的 6 个执行体（source/comment/process/analysis/visualize/output） | Phase 1b 迁到 `nodes/executors/` |
+| `backend/nodes/executors/*.py` | 8 个内置执行器（name/upload/resume/tokenize/accumulate/compile/biblio/fuse） | **Phase 1a 已迁** |
+| `backend/engine/workflow.py` | `NODE_TYPES` / `TABLE_NODE_TYPES` / `PDF_SOURCE_NODE_TYPES` | 从目录派生（Phase 0） |
 | `backend/services/node_schema.py` | 输出了哪些列 / 读了哪些列 | Phase 3 拆进每个插件 |
 | `backend/static/js/canvas.js` | `_VALID_NODE_TYPES`、`getDefaultParams`、labels、摘要 | Phase 2 改为服务端下发 |
 | `backend/static/js/app.js` | `nodeType.*` / `node.*` 词条 | 保留（词条仍在前端，服务端只发 key） |
@@ -43,14 +45,14 @@ browser_profiles.py crawl_capabilities.py crawl_gate.py scheduler.py profiles.py
 ```
 backend/nodes/
   __init__.py          # 只做显式导出，不做 barrel 魔法
-  catalog.py           # Phase 0：类型、行形态、分组、quiet、label key（已落地）
-  base.py              # Phase 1：NodePlugin 协议 + NodeCall
-  registry.py          # Phase 1：REGISTRY = {type: plugin}，唯一查找入口
+  catalog.py           # 类型、行形态、分组、quiet、label key（Phase 0）
+  context.py           # NodeCall：每个执行器收到的唯一调用形状（Phase 1a）
+  registry.py          # EXECUTORS = {type: run}，唯一查找入口；重复注册按名拒绝（Phase 1a）
   schema.py            # Phase 3：聚合并发列/读取列（由各插件的 emits/reads 组成）
   executors/
-    source.py          # Phase 1：run(node, call)
-    upload.py
-    ...
+    __init__.py        # 导入 8 个内置插件并注册；由 registry.load_builtin_executors() 触发
+    name.py upload.py resume.py tokenize.py accumulate.py compile.py biblio.py fuse.py   # 已迁
+    source.py comment.py process.py analysis.py visualize.py output.py                   # Phase 1b
 ```
 
 `NodePlugin` 的最终形态（Phase 1 先只加 `execute`，其余字段在 Phase 3 补齐）：
@@ -122,10 +124,10 @@ backend/
 
 ## 3. 分阶段执行与验收
 
-### Phase 0 — 节点目录 + 执行器注册表（本轮完成）
+### Phase 0 — 节点目录 + 执行器注册表（已完成）
 
 - 新增 `backend/nodes/catalog.py` 与 `backend/nodes/__init__.py`；`engine/workflow.py` 的三套集合改为派生；
-  `app.py` 的 if 链改为 `_NODE_EXECUTORS` 注册表；`_QUIET_NODE_TYPES` 从目录读。
+  `app.py` 的 if 链改为注册表（Phase 1a 后统一进 `nodes/registry.py`）；`_QUIET_NODE_TYPES` 从目录读。
 - 新契约 `tests/unit/test_node_plugins.py`：目录 == 执行器表；行形态三分；引擎集合同源；前端粘贴白名单同集；
   每个插件的 `label_key` 在中英两份词条里各存在一次；未知类型没有插件；分类分组。
 - 验收：上述 7 例、`tests/api/test_node_matrix.py`、`test_nodes_execution.py`、`test_workflow_engine.py`、
@@ -133,14 +135,20 @@ backend/
 
 ### Phase 1 — 执行体逐个搬进插件
 
-顺序（从依赖最少、行为最独立的开始）：`name` → `upload` → `resume` → `tokenize` → `accumulate` →
-`compile` → `output` → `fuse` → `visualize` → `biblio` → `analysis` → `process` → `comment` → `source`。
+**1a（已完成）**：8 个内置执行器已迁到 `backend/nodes/executors/`，每个模块暴露 `NODE_TYPE` 与
+`run(node, call)`；`services/nodes.py` 已删除；`nodes/context.py` 提供 `NodeCall`；`nodes/registry.py`
+统一注册（内置 8 个自注册，app 注册剩余 6 个）；`test_node_plugins` 新增「插件不得 import app」的静态断言。
+验收：fast **8071 passed, 3 skipped**；设备档 **192 passed**（重构前一轮；本轮执行体迁移未改采集路径）；
+ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
+
+**1b（待做）**：按从依赖少到多的顺序迁剩余 6 个：`output` → `visualize` → `analysis` → `process` →
+`comment` → `source`。`source`（浏览器/队列/CatBus）与 `comment`（评论引擎）最后，避免重构期同时改采集行为。
 
 每一步：
 
 1. 在 `nodes/executors/<type>.py` 写 `run(node, call)`，把 `app.py` 的函数体原样搬过去；
-   `NodeCall` 增加它需要的显式依赖（例如 `add_log` 由 `services/console` 或 `state` 提供，绝不 `import app`）。
-2. `app.py` 的 `_run_<type>` 改为调用插件（Phase 1 期间允许保留薄适配，Phase 1 结束删除）；
+   `NodeCall` 增加它需要的显式依赖（例如 `add_log` 由 `state` 提供，绝不 `import app`）。
+2. `app.py` 的 `_run_<type>` 改为调用插件（迁移期间允许保留薄适配，结束删除）；
 3. 跑该类型的用例 + `tests/unit/test_node_plugins.py`；全绿后单独提交；
 4. 全部迁完后，`app.py` 只剩 `_execute_node` 的注册表查找与 `NodeCall` 组装。
 

@@ -81,7 +81,11 @@ crawler_workflow/
 │   │   ├── anomaly.py            # 异常检测（Isolation Forest）
 │   │   └── correlation.py        # 相关性分析（Pearson / Spearman / Kendall）
 │   ├── nodes/                    # 节点插件目录：catalog 是类型/行形态/分组/quiet 的唯一声明
-│   │   └── catalog.py            # 执行器表与前端粘贴白名单由 test_node_plugins 与它互相钉住
+│   │   ├── catalog.py            # 类型目录；执行器表与前端粘贴白名单由 test_node_plugins 与它互相钉住
+│   │   ├── context.py            # NodeCall：每个执行器收到的唯一调用形状
+│   │   ├── registry.py           # type → run(node, call)；重复注册按名拒绝
+│   │   └── executors/            # 内置执行器：name/upload/resume/tokenize/accumulate/compile/biblio/fuse
+│   │       └── __init__.py       # 导入并注册 8 个插件（由 registry.load_builtin_executors 触发）
 │   ├── engine/                   # 工作流引擎
 │   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹
 │   │   ├── executor.py           # 线程池执行器

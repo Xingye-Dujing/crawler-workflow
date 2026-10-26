@@ -10,7 +10,6 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import browser_profiles
@@ -53,7 +52,9 @@ from api.visualize import bp as visualize_bp
 from api.workflow_history import bp as workflow_history_bp
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
+from nodes import registry as node_registry
 from nodes.catalog import QUIET_NODE_TYPES as _QUIET_NODE_TYPES
+from nodes.context import NodeCall
 from profiles import ensure_profile_template
 from state import (
     _RUN_QUEUE,
@@ -113,14 +114,6 @@ from services.cookie_manager import CookieManager
 from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.latex_outputs import build_latex_outputs as _latex_outputs
-from services.nodes import execute_accumulate_node as _execute_accumulate_node
-from services.nodes import execute_biblio_node as _execute_biblio_node
-from services.nodes import execute_compile_node as _execute_compile_node
-from services.nodes import execute_fuse_node as _execute_fuse_node
-from services.nodes import execute_name_node as _execute_name_node
-from services.nodes import execute_resume_node as _execute_resume_node
-from services.nodes import execute_tokenize_node as _execute_tokenize_node
-from services.nodes import execute_upload_node as _execute_upload_node
 from services.reusable_expand import expand_reusable_workflow
 from services.run_store import (
     NODE_DONE,
@@ -3104,8 +3097,8 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     return rows
 
 
-# `_execute_upload_node` now lives in backend/services/nodes.py (execute_upload_node, imported
-# back under this name near the top); dispatch and every call site read the app-level alias.
+# `_execute_upload_node` is a built-in plugin: backend/nodes/executors/upload.py. It registers itself
+# with ``nodes.registry``; dispatch reads that registry, not a module-level alias.
 
 
 #: The select-shaped parameter of each analysis-algorithm node, and the spellings that
@@ -4950,8 +4943,8 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     return rows_out
 
 
-# `_execute_resume_node` now lives in backend/services/nodes.py (execute_resume_node, imported
-# back under this name near the top); it reads its ledger through ctx['store'], not a global.
+# `_execute_resume_node` is a built-in plugin: backend/nodes/executors/resume.py. It reads its ledger
+# through ctx['store'], not a global; the direct-call fallback lives in that module's ``run`` wrapper.
 
 
 # Node types that never read the ROWS their inputs carry. Their data comes
@@ -5194,28 +5187,6 @@ def _run_node_durable(
     return result, NODE_DONE
 
 
-@dataclass(frozen=True)
-class _NodeCall:
-    """Everything a node executor needs besides its own node dict.
-
-    One uniform call shape is what turns the executor table into a registry instead of an if-chain:
-    Phase 2 of ``docs/refactor_plan.md`` moves each ``_run_*`` body into
-    ``backend/nodes/executors/<type>.py`` with this same signature, and this table does not change.
-    """
-
-    headless: bool
-    current_input: list
-    run_ctx: dict
-    upstream: list
-    ctx: dict
-    platform_of: dict | None
-    label_of: object
-
-
-def _run_name(node, _call):
-    return _execute_name_node(node)
-
-
 def _run_comment(node, call):
     return _execute_comment_node(node, headless=call.headless, ctx=call.ctx)
 
@@ -5245,18 +5216,6 @@ def _run_source(node, call):
         return _execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
 
 
-def _run_accumulate(node, call):
-    return _execute_accumulate_node(node, call.current_input, ctx=call.ctx)
-
-
-def _run_upload(node, _call):
-    return _execute_upload_node(node)
-
-
-def _run_resume(node, call):
-    return _execute_resume_node(node, call.ctx or {'store': get_run_store(), 'run_id': ''})
-
-
 def _run_process(node, call):
     op = node.get('operation') or node.get('params', {}).get('operation', '')
     return _execute_process_node(node, call.current_input, run_ctx=call.run_ctx or _llm_run_ctx(node, op, call.ctx))
@@ -5266,28 +5225,8 @@ def _run_analysis(node, call):
     return _execute_analysis_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
 
 
-def _run_biblio(node, call):
-    return _execute_biblio_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
-
-
-def _run_fuse(node, call):
-    # The parents' own tables, not the merged fan-in: a fused row has to know its source.
-    return _execute_fuse_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
-
-
 def _run_visualize(node, call):
     return _execute_visualize_node(node, call.current_input, ctx=call.ctx)
-
-
-def _run_tokenize(node, call):
-    return _execute_tokenize_node(node, call.current_input)
-
-
-def _run_compile(node, call):
-    # ``upstream`` is the whole point: a compile node reads the LaTeX a visualize parent produced
-    # from the (parent_id, result-dict) pairs, NOT from ``current_input`` (a dict upstream arrives
-    # as []).
-    return _execute_compile_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
 
 
 def _run_output(node, call):
@@ -5307,27 +5246,20 @@ def _run_output(node, call):
     )
 
 
-#: The executor registry. The catalogue (``nodes/catalog.py``) is the list of types; this table is
-#: pinned against it by ``tests/unit/test_node_plugins.py``, so a type cannot have a declaration
-#: without an executor, or an executor without a declaration. A new type is: one catalogue entry,
-#: one ``_run_<type>`` adapter here (Phase 2 moves the body to ``nodes/executors/``), and its
-#: frontend panel.
-_NODE_EXECUTORS = {
-    'name': _run_name,
-    'comment': _run_comment,
-    'source': _run_source,
-    'accumulate': _run_accumulate,
-    'upload': _run_upload,
-    'resume': _run_resume,
-    'process': _run_process,
-    'analysis': _run_analysis,
-    'biblio': _run_biblio,
-    'fuse': _run_fuse,
-    'visualize': _run_visualize,
-    'tokenize': _run_tokenize,
-    'compile': _run_compile,
-    'output': _run_output,
-}
+#: The executors that still live in this module, registered into the same table as the built-ins.
+#: Phase 1b of ``docs/refactor_plan.md`` moves them into ``nodes/executors/`` one at a time —
+#: ``source`` and ``comment`` last, because they own the browser and comment-engine paths.
+node_registry.load_builtin_executors()
+node_registry.register_many(
+    {
+        'comment': _run_comment,
+        'source': _run_source,
+        'process': _run_process,
+        'analysis': _run_analysis,
+        'visualize': _run_visualize,
+        'output': _run_output,
+    }
+)
 
 
 def _execute_node(
@@ -5342,13 +5274,18 @@ def _execute_node(
 ):
     """Run one node. ``upstream`` is [(parent_id, result), …] in connection
     order — only the analysis node needs more than the first entry (a join uses
-    the second one as its right-hand table)."""
+    the second one as its right-hand table).
+
+    The executor comes from ``nodes.registry``: the eight built-in plugins registered themselves, and
+    this module registered the six that still live here. The catalogue and the registry are pinned
+    against each other by ``tests/unit/test_node_plugins.py``.
+    """
     ntype = node.get('type')
-    executor = _NODE_EXECUTORS.get(ntype)
+    executor = node_registry.executor_for(ntype)
     if executor is not None:
         return executor(
             node,
-            _NodeCall(
+            NodeCall(
                 headless=headless,
                 current_input=current_input,
                 run_ctx=run_ctx,

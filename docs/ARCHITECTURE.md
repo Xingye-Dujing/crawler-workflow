@@ -77,8 +77,10 @@ for the "nothing skipped" closure gate.
    GET, `models`, `capabilities`, `analysis`. Paths unchanged, so the `client` tests don't move.
 3. **Then the stateful clusters**: `workflow`, `runs`, `cookies`, `exports`, `report`, `studio`, `llm`
    — now safe because they read/write through `state.py`, not module globals.
-4. **Move the node executors** (`_execute_*_node`) out of `app.py` into `engine/` or a
-   `services/nodes.py`. This is the highest-value step: it stops `app.py` growing on every feature.
+4. **Move the node executors** (`_execute_*_node`) out of `app.py` into `backend/nodes/executors/`
+   behind the `nodes.registry` table. This is the highest-value step: it stops `app.py` growing on every
+   feature. Phase 1a (8 built-in executors) has landed; Phase 1b moves the remaining six
+   (`output`/`visualize`/`analysis`/`process`/`comment`/`source`) — see `docs/refactor_plan.md`.
 
 ### B. Frontend — modularize `workflow.js`
 Split it by responsibility into a few `<script>` files in load order (no bundler needed to start):
@@ -111,10 +113,12 @@ cluster). Seventeen Blueprints live in `backend/api/`: `history`, `stats`, `sett
 `diagnostics`, `lexicon`, `schedules` (+ `backend/scheduler.py`),
 with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe`/`_resolve_payload_dataframe`/
 `NoRunDataError`) shared. `app.py` shrank 8043 → **5,794 lines** in that work and has since grown back to
-**6,457** as later features landed. A-4 is partly landed: `services/nodes.py` holds the
-`name`/`compile`/`tokenize`/`resume`/`upload` executors (imported back as `_execute_*_node`); the executors that
-still reach a raw `app` global (`analysis`/`output`/`process`/`visualize`/`comment`/`source`) stay in `app.py`
-until their web is service-level — the visualize node's TikZ/`chart_engine` web is already in `services/`.
+**6,457** as later features landed. A-4 is partly landed: Phase 1a moved the
+`name`/`compile`/`tokenize`/`resume`/`accumulate`/`upload`/`biblio`/`fuse` executors into
+`backend/nodes/executors/` (each with `NODE_TYPE` + `run(node, call)`, registered in `nodes/registry.py`);
+the executors that still reach a raw `app` global (`analysis`/`output`/`process`/`visualize`/`comment`/`source`)
+stay in `app.py` until their web is service-level — the visualize node's TikZ/`chart_engine` web is already in
+`services/` — and Phase 1b moves them one at a time.
 **The finding that reshaped the plan** still holds: `app.py` module globals are used as *monkeypatch seams* by
 the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app.MAX_IMAGE_BYTES`,
 `app._ML_MODEL_TYPES`, …), so each extraction that moves such a function/name re-points the tests that patch it
@@ -174,7 +178,12 @@ Test access splits sharply between reads and writes:
 
 #### Alternative — A-4 first, keystone second
 
-Extract the **node executors** (`_execute_*_node` in `app.py`, 11 of them) into `services/nodes.py` first, passing `get_run_store`/`get_dataset_store`/`get_housekeeper` as **arguments** (dependency injection). This removes ~1 800 lines from `app.py`, is entirely test-transparent (executors are called from the worker, not from the seam), and **shrinks the surface that the keystone then has to cover** — after which the store-registry step in Swing 1 becomes mechanical instead of entangled. Recommended ordering: **A-4 → E**.
+Extract the **node executors** (`_execute_*_node` in `app.py`) into `backend/nodes/executors/` first,
+passing the run context as the explicit `NodeCall` (dependency injection). Phase 1a has landed the eight
+built-ins; Phase 1b moves the remaining six (`output`/`visualize`/`analysis`/`process`/`comment`/`source`) in
+that order, with `source`/`comment` last. This removes code from `app.py`, is entirely test-transparent
+(executors are called from the worker, not from the seam), and shrinks the surface the keystone has to cover.
+Recommended ordering: **A-4/Phase 1 → E**.
 
 #### Rollback + risk
 
