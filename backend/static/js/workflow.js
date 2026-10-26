@@ -11049,11 +11049,13 @@ var datasetManager = {
         var body = document.getElementById('dataset-mgr-body');
         if (!body) return;
         this._compare = this._compare || [];
+        this._merge = this._merge || [];
         var rows = this._last || [];
-        // A deleted or re-hashed file can no longer be a compare source; drop stale picks.
+        // A deleted or re-hashed file can no longer be a compare/merge source; drop stale picks.
         var alive = {};
         rows.forEach(function (r) { alive[String(r.dataset_id || '')] = true; });
         this._compare = this._compare.filter(function (id) { return alive[id]; });
+        this._merge = this._merge.filter(function (id) { return alive[id]; });
         if (!rows.length) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('datasetMgr.empty') + '</div>';
             return;
@@ -11065,8 +11067,11 @@ var datasetManager = {
                the reference list is shown and the button refuses server-side too. */
             var refs = row.workflows || [];
             var picked = self._compare.indexOf(id) >= 0;
+            var mergePicked = self._merge.indexOf(id) >= 0;
             var ops = '<button class="runs-mgr-btn" onclick="datasetManager.toggleCompare(\'' + self._quote(id) +
                 '\')">' + I18n.t(picked ? 'datasetMgr.compareOn' : 'datasetMgr.compare') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="datasetManager.toggleMerge(\'' + self._quote(id) +
+                '\')">' + I18n.t(mergePicked ? 'datasetMgr.mergeOn' : 'datasetMgr.merge') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="datasetManager.rename(\'' + self._quote(id) + '\', \'' +
                 self._quote(row.name || '') + '\')">' + I18n.t('datasetMgr.rename') + '</button>';
             ops += '<button class="runs-mgr-btn del" onclick="datasetManager.remove(\'' + self._quote(id) +
@@ -11087,6 +11092,10 @@ var datasetManager = {
             I18n.t('datasetMgr.compareRun') + ' (' + this._compare.length + '/2)</button>' +
             (this._compare.length ? '<button class="runs-mgr-btn" onclick="datasetManager.clearCompare()">' +
                 I18n.t('datasetMgr.compareClear') + '</button>' : '') +
+            '<button class="runs-mgr-btn" onclick="datasetManager.mergeSelected()">' +
+            I18n.t('datasetMgr.mergeSelected') + ' (' + this._merge.length + ')</button>' +
+            (this._merge.length ? '<button class="runs-mgr-btn" onclick="datasetManager.clearMerge()">' +
+                I18n.t('datasetMgr.mergeClear') + '</button>' : '') +
             '</div>';
         body.innerHTML = bar +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
@@ -11145,6 +11154,60 @@ var datasetManager = {
         });
     },
 
+    toggleMerge(id) {
+        var i = this._merge.indexOf(id);
+        if (i >= 0) this._merge.splice(i, 1);
+        else if (this._merge.length < 20) this._merge.push(id);
+        else {
+            showToast(I18n.t('datasetMgr.mergeMax'));
+            return;
+        }
+        this.render();
+    },
+
+    clearMerge() {
+        this._merge = [];
+        this.render();
+    },
+
+    async mergeSelected() {
+        if (!this._merge || this._merge.length < 2) {
+            showToast(I18n.t('datasetMgr.mergeNeedTwo'));
+            return;
+        }
+        var answer = await showDialog({
+            message: I18n.t('datasetMgr.mergePrompt'),
+            input: { value: I18n.t('datasetMgr.mergeDefaultName'), placeholder: I18n.t('datasetMgr.mergePlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('datasetMgr.merge'), primary: true },
+            ],
+        });
+        if (answer === null) return;
+        var name = String(answer || '').trim();
+        if (!name) {
+            showToast(I18n.t('datasetMgr.mergeNameRequired'));
+            return;
+        }
+        var result = await fetchJSON('/api/data/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ dataset_ids: this._merge.slice(), name: name }),
+        }).catch(function () { return null; });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('datasetMgr.mergeFailed'));
+            return;
+        }
+        showToast(
+            I18n.t('datasetMgr.mergeDone', {
+                n: result.rows || 0,
+                name: (result.dataset && result.dataset.name) || name,
+            })
+        );
+        this._merge = [];
+        await this.refresh();
+    },
+
     _sourceLabel(source) {
         /* The stored value is a code, not display text. Map each known code to its label;
            an unknown code shows as itself rather than a fabricated translation. */
@@ -11153,6 +11216,7 @@ var datasetManager = {
             paste: 'datasetMgr.sourcePaste',
             analysis: 'datasetMgr.sourceAnalysis',
             import: 'datasetMgr.sourceImport',
+            merge: 'datasetMgr.sourceMerge',
         };
         var key = keys[source];
         return key ? I18n.t(key) : (source || '');

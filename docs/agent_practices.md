@@ -893,3 +893,14 @@ message.
   half-imported project; the service validates all readable pieces first, then writes.
 - **Never package runtime state by accident.** Cookies, API keys, logs, run records, model weights and the
   datasets database file are deliberately absent. The archive is plain JSON so a person can inspect it.
+
+## Dataset merge / 数据集合并 (measured 2026-10-26)
+
+- **A union is not an outer join.** Datasets with different column sets are refused with the extra and
+  missing names; `pd.concat` would happily fill the missing columns with NaN and produce a table that
+  looks complete until a chart reads the holes. The reference order is the first selected dataset's.
+- **Provenance is additive and never overwritten.** When no `来源` column exists, the merge inserts one
+  carrying each source dataset's name. If the table already has `来源`, its per-row values are the user's
+  own provenance and win over the filename. The source files themselves are untouched.
+- **The result is an ordinary dataset.** It goes through `DatasetStore.put`, so content identity,
+  dedupe, row caps and the dataset panel's list/preview all apply without a second storage path.

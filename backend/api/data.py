@@ -23,6 +23,7 @@ from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.biblio_import import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
 from services.data_analysis import DataAnalysisService
+from services.dataset_merge import merge_datasets
 from services.dataset_store import SOURCE_PASTE, SOURCE_UPLOAD
 from utils.helpers import as_bool
 from utils.helpers import json_safe_records as _json_safe_records
@@ -301,6 +302,24 @@ def diff_datasets():
         pair['a'] = _json_safe_records(pd.DataFrame([pair['a']]))[0]
         pair['b'] = _json_safe_records(pd.DataFrame([pair['b']]))[0]
     return jsonify({'ok': True, 'diff': report})
+
+
+@bp.route('/api/data/merge', methods=['POST'])
+def merge_dataset_rows():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    dataset_ids = data.get('dataset_ids')
+    if not isinstance(dataset_ids, list) or not all(isinstance(item, str) for item in dataset_ids):
+        return _bad_param('dataset_ids')
+    name = data.get('name', '')
+    if not isinstance(name, str):
+        return _bad_param('name')
+    try:
+        result = merge_datasets(get_dataset_store(), dataset_ids, name)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True, **result})
 
 
 @bp.route('/api/data/preview', methods=['POST'])

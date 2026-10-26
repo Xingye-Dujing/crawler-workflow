@@ -50,6 +50,7 @@ SOURCE_UPLOAD = 'upload'
 SOURCE_PASTE = 'paste'
 SOURCE_ANALYSIS = 'analysis'
 SOURCE_IMPORT = 'import'
+SOURCE_MERGE = 'merge'
 
 
 def safe_records(df: pd.DataFrame) -> list:

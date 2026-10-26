@@ -165,6 +165,8 @@ function fresh() {
     pa.runsManager._shown = [];
     pa.exportsManager._last = [];
     pa.datasetManager._last = [];
+    pa.datasetManager._compare = [];
+    pa.datasetManager._merge = [];
     pa.wfFiles._last = [];
     pa.workflow.currentFile = null;
     Object.keys(pa.canvas.nodes).forEach((key) => delete pa.canvas.nodes[key]);
@@ -531,6 +533,56 @@ answers.dialog = false;
 requests.length = 0;
 await pa.datasetManager.remove('ds1', 'old.csv', false);
 out.dataset_remove_declined = { requested: requests.length };
+
+/* Dataset merge: the bar offers a multi-selection, the request names every chosen
+   id, and the server's column refusal is shown verbatim. */
+fresh();
+pa.datasetManager._last = [
+    { dataset_id: 'd1', name: 'A.csv', source: 'upload', row_count: 2, byte_size: 10, workflows: [] },
+    { dataset_id: 'd2', name: 'B.csv', source: 'upload', row_count: 3, byte_size: 12, workflows: [] },
+];
+pa.datasetManager._merge = ['d1', 'd2'];
+pa.datasetManager.render();
+out.dataset_merge_bar = { html: id('dataset-mgr-body').innerHTML };
+answers.dialog = '合并结果';
+route('/api/data/merge', {
+    ok: true,
+    rows: 5,
+    dataset: { dataset_id: 'm1', name: '合并结果' },
+    columns: ['来源', '标题'],
+    sources: [],
+});
+requests.length = 0;
+await pa.datasetManager.mergeSelected();
+out.dataset_merge = {
+    url: requests[0] ? requests[0].url : '',
+    method: requests[0] ? requests[0].method : '',
+    body: requests[0] ? JSON.parse(requests[0].body) : null,
+    toasts: toasts.slice(),
+    specs: dialogSpecs.slice(),
+    merge_after: pa.datasetManager._merge.slice(),
+};
+
+fresh();
+pa.datasetManager._merge = ['d1'];
+requests.length = 0;
+await pa.datasetManager.mergeSelected();
+out.dataset_merge_need_two = { requested: requests.length, toasts: toasts.slice() };
+
+fresh();
+pa.datasetManager._merge = ['d1', 'd2'];
+answers.dialog = null;
+requests.length = 0;
+await pa.datasetManager.mergeSelected();
+out.dataset_merge_cancelled = { requested: requests.length };
+
+fresh();
+pa.datasetManager._merge = ['d1', 'd2'];
+answers.dialog = 'x';
+route('/api/data/merge', { ok: false, error: 'COLUMNS-DIFFER' });
+requests.length = 0;
+await pa.datasetManager.mergeSelected();
+out.dataset_merge_refused = { toasts: toasts.slice() };
 
 /* ── Upload node: attach a saved dataset ─────────────────────────────
    The run executor only needs a valid dataset_id, so selecting a stored file must
@@ -1246,6 +1298,8 @@ out.dataset_source_labels = {
     upload: pa.datasetManager._sourceLabel('upload'),
     paste: pa.datasetManager._sourceLabel('paste'),
     analysis: pa.datasetManager._sourceLabel('analysis'),
+    import: pa.datasetManager._sourceLabel('import'),
+    merge: pa.datasetManager._sourceLabel('merge'),
     unknown: pa.datasetManager._sourceLabel('mystery'),
     empty: pa.datasetManager._sourceLabel(''),
 };

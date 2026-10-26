@@ -4692,3 +4692,243 @@ def test_a_template_dragged_from_the_manager_lands_where_it_was_dropped(driver, 
     assert facts['hint'] is True, 'the manager must say that a template can be dragged'
     assert facts['duringClass'] is True and facts['duringCursor'] == 'grabbing', facts
     assert facts['afterClass'] is False and facts['handleCursor'] == 'grab', facts
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_dataset_merge_door_collects_files_and_posts_their_ids(driver, app_url, lang):
+    """The dataset panel's merge selection is a real multi-select and one request.
+
+    Only DOM can show that two row buttons update the bar, that the merge button is
+    enabled by that state, and that the name dialog's answer is what the request
+    carries. The server write is stubbed: this module performs no writes.
+    """
+    driver.get(app_url + '/')
+    facts = driver.execute_async_script(
+        """
+        const lang = arguments[0];
+        const done = arguments[arguments.length - 1];
+        document.body.dataset.lang = lang;
+        I18n.apply();
+        const realFetch = window.fetch;
+        const realDialog = window.showDialog;
+        const requests = [];
+        window.fetch = function (url, opts) {
+            const target = String(url);
+            if (target.indexOf('/api/data/merge') >= 0) {
+                requests.push({ url: target, body: opts && opts.body });
+                const payload = { ok: true, rows: 5, dataset: { dataset_id: 'm1', name: 'MERGED' } };
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(payload),
+                    text: () => Promise.resolve(JSON.stringify(payload)),
+                });
+            }
+            if (target.indexOf('/api/data/datasets') >= 0) {
+                const payload = { ok: true, datasets: [] };
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(payload),
+                    text: () => Promise.resolve(JSON.stringify(payload)),
+                });
+            }
+            return realFetch.apply(window, arguments);
+        };
+        window.showDialog = async function (spec) {
+            if (spec && spec.input) return lang === 'zh' ? '合并结果' : 'Merged';
+            return spec && spec.list ? spec.list[0] : true;
+        };
+        (async () => {
+            try {
+                document.getElementById('dataset-panel').classList.add('open');
+                datasetManager._compare = [];
+                datasetManager._merge = [];
+                datasetManager._last = [
+                    { dataset_id: 'd1', name: 'A.csv', source: 'upload', row_count: 2, byte_size: 10, workflows: [] },
+                    { dataset_id: 'd2', name: 'B.csv', source: 'upload', row_count: 3, byte_size: 12, workflows: [] },
+                ];
+                datasetManager.render();
+                const body = document.getElementById('dataset-mgr-body');
+                const toggles = Array.from(body.querySelectorAll('button')).filter(
+                    (b) => (b.getAttribute('onclick') || '').indexOf('toggleMerge') >= 0
+                );
+                toggles[0].click();
+                toggles[1].click();
+                const barAfter = body.textContent;
+                const merge = Array.from(body.querySelectorAll('button')).find(
+                    (b) => (b.getAttribute('onclick') || '').indexOf('mergeSelected') >= 0
+                );
+                merge.click();
+                for (let i = 0; i < 30 && !requests.length; i += 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                const result = {
+                    ok: true,
+                    toggles: toggles.length,
+                    bar_has_two: barAfter.indexOf('(2)') >= 0,
+                    requests: requests.length,
+                    body: requests.length ? JSON.parse(requests[0].body) : null,
+                    toast: document.getElementById('toast').textContent,
+                    selected_after: datasetManager._merge.length,
+                };
+                window.fetch = realFetch;
+                window.showDialog = realDialog;
+                done(result);
+            } catch (e) {
+                window.fetch = realFetch;
+                window.showDialog = realDialog;
+                done({ ok: false, error: String(e), stack: e && e.stack });
+            }
+        })();
+        """,
+        lang,
+    )
+    assert facts.get('ok') is True, facts
+    assert facts['toggles'] == 2, facts
+    assert facts['bar_has_two'] is True, facts
+    assert facts['requests'] == 1, facts
+    assert facts['body']['dataset_ids'] == ['d1', 'd2'], facts
+    assert facts['body']['name'] in ('合并结果', 'Merged'), facts
+    assert facts['selected_after'] == 0, facts
+    assert facts['toast'], 'the merge says what it produced'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_run_comparison_row_is_drawn_from_the_server_diff(driver, app_url, lang):
+    """A comparison is one request and one row beside the run, with the server's diff.
+
+    The panel must not compute the diff itself. This drives the real compare button,
+    the real dialog choice and the real row insertion with a stubbed answer, so the
+    browser proves the wiring and the text; the server's computation is covered by
+    the API tests.
+    """
+    driver.get(app_url + '/')
+    facts = driver.execute_async_script(
+        """
+        const lang = arguments[0];
+        const done = arguments[arguments.length - 1];
+        document.body.dataset.lang = lang;
+        I18n.apply();
+        const realFetch = window.fetch;
+        const realDialog = window.showDialog;
+        const requests = [];
+        const diff = {
+            a: { run_id: 'r1', workflow_name: 'wf', status: 'completed' },
+            b: { run_id: 'r2', workflow_name: 'wf', status: 'completed' },
+            same_workflow: true,
+            same_shape: true,
+            nodes: [
+                {
+                    node_id: 'node-0',
+                    title: 'Output',
+                    status_a: 'done',
+                    status_b: 'done',
+                    rows_a: 1,
+                    rows_b: 2,
+                    row_delta: 1,
+                },
+            ],
+            node: { node_id: 'node-0', title: 'Output', rows_a: 1, rows_b: 2, row_delta: 1 },
+            diff: {
+                added_count: 1,
+                removed_count: 1,
+                changed_count: 0,
+                columns_common: ['title'],
+                columns_added: [],
+                columns_removed: [],
+                added: [{ title: 'NEW-ROW' }],
+                removed: [{ title: 'OLD-ROW' }],
+            },
+        };
+        window.fetch = function (url, opts) {
+            if (String(url).indexOf('/api/runs/compare') >= 0) {
+                requests.push(String(url));
+                const payload = { ok: true, diff };
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(payload),
+                    text: () => Promise.resolve(JSON.stringify(payload)),
+                });
+            }
+            return realFetch.apply(window, arguments);
+        };
+        window.showDialog = async function (spec) {
+            return spec && spec.list ? spec.list[0] : true;
+        };
+        (async () => {
+            try {
+                runsManager._tab = 'workflow';
+                runsManager._queue = [];
+                runsManager._detail = null;
+                runsManager._compare = null;
+                const rows = [
+                    {
+                        run_id: 'r1',
+                        workflow_name: 'wf',
+                        status: 'completed',
+                        node_done: 1,
+                        node_total: 1,
+                        rows_kept: 1,
+                        started_at: '2026-10-26 10:00',
+                        duration_seconds: 2,
+                        wf_count: 1,
+                        mode: 'serial',
+                        headless: true,
+                        resumable: false,
+                    },
+                    {
+                        run_id: 'r2',
+                        workflow_name: 'wf',
+                        status: 'completed',
+                        node_done: 1,
+                        node_total: 1,
+                        rows_kept: 2,
+                        started_at: '2026-10-26 10:05',
+                        duration_seconds: 2,
+                        wf_count: 1,
+                        mode: 'serial',
+                        headless: true,
+                        resumable: false,
+                    },
+                ];
+                runsManager.render(rows);
+                const compareButton = Array.from(document.querySelectorAll('#runs-mgr-body button')).find(
+                    (b) => (b.getAttribute('onclick') || '').indexOf("runsManager.compare('r1')") >= 0
+                );
+                compareButton.click();
+                for (let i = 0; i < 30 && !requests.length; i += 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                const row = document.getElementById('runs-mgr-compare');
+                const html = row ? row.innerHTML : '';
+                const close = row ? row.querySelector('button') : null;
+                if (close) close.click();
+                await new Promise((resolve) => setTimeout(resolve, 30));
+                const result = {
+                    ok: true,
+                    requests,
+                    row: !!row,
+                    html,
+                    added: html.indexOf(I18n.t('runsMgr.compareAdded')) >= 0,
+                    old: html.indexOf('OLD-ROW') >= 0,
+                    new_row: html.indexOf('NEW-ROW') >= 0,
+                    closed: !document.getElementById('runs-mgr-compare'),
+                };
+                window.fetch = realFetch;
+                window.showDialog = realDialog;
+                done(result);
+            } catch (e) {
+                window.fetch = realFetch;
+                window.showDialog = realDialog;
+                done({ ok: false, error: String(e), stack: e && e.stack });
+            }
+        })();
+        """,
+        lang,
+    )
+    assert facts.get('ok') is True, facts
+    assert facts['requests'] == ['/api/runs/compare?a=r1&b=r2'], facts
+    assert facts['row'] is True and facts['added'] is True, facts
+    assert facts['old'] is True and facts['new_row'] is True, facts
+    assert facts['closed'] is True, 'closing the comparison removes its row'

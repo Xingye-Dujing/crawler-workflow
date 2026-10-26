@@ -48,6 +48,7 @@ BODY_ROUTES = [
     '/api/data/diff',
     '/api/data/datasets/<dataset_id>/rename',
     '/api/data/inspect',
+    '/api/data/merge',
     '/api/data/paste',
     '/api/data/preview',
     '/api/export/save',

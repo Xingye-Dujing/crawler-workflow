@@ -236,6 +236,30 @@ class TestDatasetActions:
     def test_a_declined_deletion_sends_nothing(self, pa):
         assert pa['dataset_remove_declined']['requested'] == 0
 
+    def test_merge_selection_posts_every_chosen_id_and_a_name(self, pa):
+        bar = pa['dataset_merge_bar']['html']
+        assert 'datasetManager.mergeSelected()' in bar
+        assert 'datasetManager.toggleMerge(' in bar
+        merged = pa['dataset_merge']
+        assert merged['url'] == '/api/data/merge'
+        assert merged['method'] == 'POST'
+        assert merged['body'] == {'dataset_ids': ['d1', 'd2'], 'name': '合并结果'}
+        assert merged['merge_after'] == []
+        assert merged['toasts'] and '合并结果' in merged['toasts'][0]
+        assert merged['specs'][-1]['hasInput'] is True
+        confirm = [b for b in merged['specs'][-1]['buttons'] if b['primary']]
+        assert [b['value'] for b in confirm] == ['<absent>']
+
+    def test_merge_needs_two_files_and_sends_nothing_before_that(self, pa):
+        assert pa['dataset_merge_need_two']['requested'] == 0
+        assert pa['dataset_merge_need_two']['toasts']
+
+    def test_a_cancelled_merge_sends_nothing(self, pa):
+        assert pa['dataset_merge_cancelled']['requested'] == 0
+
+    def test_a_column_refusal_is_the_message_the_user_sees(self, pa):
+        assert pa['dataset_merge_refused']['toasts'] == ['COLUMNS-DIFFER']
+
 
 class TestUploadDatasetPicker:
     """A saved file can be attached to an Upload node without re-uploading it.
@@ -746,6 +770,8 @@ class TestDatasetSourceLabels:
         assert labels['upload'] == '上传文件'
         assert labels['paste'] == '粘贴文本'
         assert labels['analysis'] == '清洗结果'
+        assert labels['import'] == '从项目包导入'
+        assert labels['merge'] == '合并结果'
 
     def test_an_unknown_or_blank_code_shows_itself_not_a_fabrication(self, pa):
         labels = pa['dataset_source_labels']
