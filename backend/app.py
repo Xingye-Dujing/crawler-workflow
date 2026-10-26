@@ -99,11 +99,12 @@ from analyzers.sentiment import bert_backend, resolve_bert_model
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
 from crawlers.base import UNDER_TARGET, CrawlerStopped, DeadDriver, PageNotArrivedError
+from crawlers.catbus import CatbusCrawler
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow, node_label
 from i18n import audit, get_lang, normalize, set_lang, t
-from services import StatsService, latex_compile, lock_store
+from services import StatsService, catbus_bridge, latex_compile, lock_store
 from services import net_probe as network_probe
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
@@ -2846,17 +2847,24 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
         watermark_scope = 'wm:' + fingerprint
         watermark_found = ctx['store'].get_watermark(watermark_scope)
 
-    crawler = get_crawler(
-        platform,
-        headless=headless,
-        cookie_dir=Config.COOKIE_DIR,
-        use_profile=(ctx or {}).get('use_profile'),
-        # `stop_requested`, not "no run is in flight": this predicate is what makes the
-        # crawl end at its next row, and an idle server (a test calling the executor
-        # directly) is not a user who pressed 停止.
-        abort=stop_requested,
-        account=account,
-    )
+    if capabilities.is_catbus(params):
+        # Chosen here rather than inside ``get_crawler``, whose arguments are all about a device —
+        # a profile directory, a cookie file, a headless window — and none of which means anything
+        # to a backend that runs as a child process with its own account files. An unsupported
+        # 平台 × 模式 is refused by that backend, with the manifest's own reason.
+        crawler = CatbusCrawler(platform=platform, params=params, account=account, abort=stop_requested)
+    else:
+        crawler = get_crawler(
+            platform,
+            headless=headless,
+            cookie_dir=Config.COOKIE_DIR,
+            use_profile=(ctx or {}).get('use_profile'),
+            # `stop_requested`, not "no run is in flight": this predicate is what makes the
+            # crawl end at its next row, and an idle server (a test calling the executor
+            # directly) is not a user who pressed 停止.
+            abort=stop_requested,
+            account=account,
+        )
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a
     # locked runs.db, a cursor that will not parse — and a Chrome that Stop does
@@ -3080,7 +3088,12 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     if watermark_scope:
         candidate = str(getattr(crawler, '_watermark_candidate', '') or '')
         if candidate:
-            ctx['store'].save_watermark(watermark_scope, platform, 'BV号', candidate, ctx['run_id'])
+            # The column the boundary belongs to is the crawl's own answer: 哔哩哔哩's browser walk
+            # keys on BV号, while the second backend keys on whichever column its manifest declares
+            # as that cell's identity. Stored as data next to the value, so a boundary is never
+            # compared against a column that holds something else.
+            column = str(getattr(crawler, 'watermark_column', '') or '') or 'BV号'
+            ctx['store'].save_watermark(watermark_scope, platform, column, candidate, ctx['run_id'])
             add_log(t('run.watermarkSaved', boundary=candidate, n=max(0, int(crawler.collected()) - seed_count)))
         elif getattr(crawler, 'watermark', ''):
             add_log(t('run.watermarkNoNew', boundary=crawler.watermark))
@@ -4693,57 +4706,76 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # ``comment.noAdapter`` below, which is the whole reason the router exists.
             kind = platform_for(url) or (want if accepts_names else '')
             if kind not in sessions:
-                harness_factory = getattr(crawler_class(kind), 'browserless_comment_harness', None)
-                if harness_factory is not None:
-                    # A platform whose comment crawl drives an external desktop app instead
-                    # of a browser (红果短剧; the measurement that forced this shape is in
-                    # docs/crawler_notes.md): the harness plays BOTH cached roles, owns its
-                    # own processes, and dies in this node's ``finally`` and on 停止 through
-                    # the same reaper — its ``driver`` is None, which the reaper already
-                    # reads as "no pid to kill", and its own close() aims the kills.
-                    harness = harness_factory(
+                if capabilities.is_catbus(params):
+                    # The second backend plays BOTH cached roles, exactly as 红果's harness does: the
+                    # session whose ``crawl_<kind>`` returns ``(rows, status)`` per link, and the
+                    # owner whose ``skipped_targets`` / ``end_reason`` the settlement reads by
+                    # attribute. Asked before the browser branch, so a CatBus node never builds a
+                    # Chrome, never plants a cookie and never takes a profile lock.
+                    _state, why = catbus_bridge.mode_state(kind, 'comments')
+                    if not catbus_bridge.supports(kind, 'comments'):
+                        raise ValueError(t('catbus.refused', platform=kind, mode='comments', detail=why))
+                    catbus_session = CatbusCrawler(
+                        platform=kind,
                         params=params,
-                        log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
-                        abort=stop_requested,
-                    )
-                    sessions[kind] = (harness, harness)
-                    execution_state['active_crawlers'].add(harness)
-                else:
-                    # The run's 无头/窗口 choice is honoured verbatim (#148). A headless Chrome now
-                    # carries a desktop fingerprint, and a *scrolled* comment panel was measured
-                    # serving the same rows in both shapes (zhihu comments 5/5 headless, real profile,
-                    # 2026-09-26), so the old rule that forced a window onto scroll-only panels inside a
-                    # headless run is gone: no comment panel overrides what the user asked for.
-                    crawler = get_crawler(
-                        kind,
-                        headless=headless,
-                        cookie_dir=Config.COOKIE_DIR,
-                        use_profile=(ctx or {}).get('use_profile'),
-                        abort=stop_requested,
-                        # The node's chosen login walks its comments too: the comment rate
-                        # limit is an ACCOUNT limit, which is the whole reason multi-account
-                        # exists. Blank = the historical default session.
                         account=account,
+                        abort=stop_requested,
+                        log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
                     )
-                    # Registered for the same reason the source node registers its own:
-                    # a browser 停止 does not know about is a window the user watches keep
-                    # working — and this loop only asks "may I stop?" between URLs, so one
-                    # article's page walk could run the whole node out after the Stop.
-                    sessions[kind] = (
-                        crawler,
-                        # The comment engine reports per-URL facts; prefix them so a
-                        # line in the shared console says which node it came from.
-                        CommentSession(
-                            crawler.driver,
+                    sessions[kind] = (catbus_session, catbus_session)
+                    execution_state['active_crawlers'].add(catbus_session)
+                else:
+                    harness_factory = getattr(crawler_class(kind), 'browserless_comment_harness', None)
+                    if harness_factory is not None:
+                        # A platform whose comment crawl drives an external desktop app instead
+                        # of a browser (红果短剧; the measurement that forced this shape is in
+                        # docs/crawler_notes.md): the harness plays BOTH cached roles, owns its
+                        # own processes, and dies in this node's ``finally`` and on 停止 through
+                        # the same reaper — its ``driver`` is None, which the reaper already
+                        # reads as "no pid to kill", and its own close() aims the kills.
+                        harness = harness_factory(
+                            params=params,
                             log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
                             abort=stop_requested,
-                            # The live attribute, not just its value: see CommentSession.driver.
-                            owner=crawler,
-                        ),
-                    )
-                    # Last, so a refusal while building the session cannot leave a
-                    # registered browser that nothing here would ever close.
-                    execution_state['active_crawlers'].add(crawler)
+                        )
+                        sessions[kind] = (harness, harness)
+                        execution_state['active_crawlers'].add(harness)
+                    else:
+                        # The run's 无头/窗口 choice is honoured verbatim (#148). A headless Chrome now
+                        # carries a desktop fingerprint, and a *scrolled* comment panel was measured
+                        # serving the same rows in both shapes (zhihu comments 5/5 headless, real profile,
+                        # 2026-09-26), so the old rule that forced a window onto scroll-only panels inside a
+                        # headless run is gone: no comment panel overrides what the user asked for.
+                        crawler = get_crawler(
+                            kind,
+                            headless=headless,
+                            cookie_dir=Config.COOKIE_DIR,
+                            use_profile=(ctx or {}).get('use_profile'),
+                            abort=stop_requested,
+                            # The node's chosen login walks its comments too: the comment rate
+                            # limit is an ACCOUNT limit, which is the whole reason multi-account
+                            # exists. Blank = the historical default session.
+                            account=account,
+                        )
+                        # Registered for the same reason the source node registers its own:
+                        # a browser 停止 does not know about is a window the user watches keep
+                        # working — and this loop only asks "may I stop?" between URLs, so one
+                        # article's page walk could run the whole node out after the Stop.
+                        sessions[kind] = (
+                            crawler,
+                            # The comment engine reports per-URL facts; prefix them so a
+                            # line in the shared console says which node it came from.
+                            CommentSession(
+                                crawler.driver,
+                                log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
+                                abort=stop_requested,
+                                # The live attribute, not just its value: see CommentSession.driver.
+                                owner=crawler,
+                            ),
+                        )
+                        # Last, so a refusal while building the session cannot leave a
+                        # registered browser that nothing here would ever close.
+                        execution_state['active_crawlers'].add(crawler)
             _crawler, session = sessions[kind]
             # The adapter is named after the platform the router picked, so adding
             # a platform to ``utils.helpers._COMMENT_DOMAINS`` without writing its
@@ -5799,11 +5831,19 @@ def preflight_cookies():
     if not isinstance(raw, list):
         return jsonify({'ok': False, 'error': t('api.platformsRequired')}), 400
     # Each entry is a platform string (the shape before accounts existed, still
-    # accepted) or a {platform, account} pair. Only the PLATFORM is knowledge-checked —
+    # accepted) or a {platform, account[, backend]} pair. Only the PLATFORM is knowledge-checked —
     # an account is a filename segment the store validates, and a name nobody saved is
     # answered 「no cookie」 by the probe, not refused at the door. ``check`` normalizes
-    # the same way, so the door and the probe never disagree about what an entry is.
-    refused = [plat for plat, _acct in (cookie_preflight.entry_of(p) for p in raw) if not cookie_preflight.knows(plat)]
+    # the same way, so the door and the probe never agree to disagree about what an entry is.
+    #
+    # The knowledge door is a COOKIE-STORE question, so it is not asked of an entry that will not
+    # read the cookie store: a CatBus node's platform is judged by the adapter's manifest inside
+    # ``probe``, and refusing a name the cookie list lacks would block a crawl that needs no cookie.
+    refused = [
+        plat
+        for plat, _acct, backend in (cookie_preflight.entry_of(p) for p in raw)
+        if backend != capabilities.BACKEND_CATBUS and not cookie_preflight.knows(plat)
+    ]
     if refused:
         # The names arrive from the browser and each one would buy a Chrome, so an
         # unrecognised name is refused whole instead of being filtered out quietly — a

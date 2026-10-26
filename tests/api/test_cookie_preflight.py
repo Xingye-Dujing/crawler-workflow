@@ -25,6 +25,7 @@ import pytest
 
 import i18n
 from config import Config
+from services import catbus_bridge
 from services.cookie_manager import CookieManager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
@@ -633,3 +634,155 @@ class TestProbeBuysTheRightBrowser:
 
         monkeypatch.setattr(CookieManager, 'save', forbid)
         assert cookie_preflight.probe('zhihu')['state'] == cookie_preflight.VALID
+
+
+class TestTheSecondBackendIsAskedItsOwnQuestion:
+    """A node that crawls through CatBus is asked about CatBus, and about nothing else.
+
+    The gate exists to stop a run that would hit a wall, and the wall for this backend is an adapter
+    with no account of its own. A Selenium cookie is not that wall: reading one, or blaming one,
+    would send the user to re-save a session the crawl never opens.
+    """
+
+    def test_the_answer_key_folds_the_browser_and_separates_the_other_backend(self):
+        assert cookie_preflight.entry_key('bilibili') == 'bilibili'
+        assert cookie_preflight.entry_key('bilibili', 'default') == 'bilibili', 'one account, one spelling'
+        assert cookie_preflight.entry_key('bilibili', 'work') == 'bilibili@work'
+        assert cookie_preflight.entry_key('bilibili', 'work', 'selenium') == 'bilibili@work'
+        assert cookie_preflight.entry_key('bilibili', 'work', 'catbus') == 'bilibili@work#catbus'
+        assert cookie_preflight.entry_key('bilibili', '', 'catbus') == 'bilibili#catbus'
+
+    def test_an_entry_names_its_backend_and_defaults_to_the_browser(self):
+        assert cookie_preflight.entry_of({'platform': 'bilibili', 'account': 'work', 'backend': 'CatBus'}) == (
+            'bilibili',
+            'work',
+            'catbus',
+        )
+        assert cookie_preflight.entry_of('bilibili') == ('bilibili', '', '')
+
+    def test_a_logged_in_adapter_is_valid_and_buys_no_browser(self, monkeypatch):
+        asked = []
+        monkeypatch.setattr(
+            catbus_bridge,
+            'preflight',
+            lambda platform, account='': (
+                asked.append((platform, account))
+                or {
+                    'available': True,
+                    'logged_in': True,
+                    'verdict': 'valid',
+                    'message': '',
+                    'hint': '',
+                    'account': account,
+                }
+            ),
+        )
+
+        def no_browser(*_args, **_kwargs):
+            raise AssertionError('a CatBus check may not open a Chrome')
+
+        monkeypatch.setattr(cookie_preflight, '_probe_live', no_browser)
+        verdict = cookie_preflight.probe('bilibili', account='work', backend='catbus')
+        assert verdict['state'] == cookie_preflight.VALID
+        assert verdict['blocking'] is False
+        assert verdict['probed'] is True
+        assert asked == [('bilibili', 'work')], "the CatBus account, not the node's Selenium one"
+
+    def test_a_missing_adapter_login_blocks_and_carries_its_own_remedy(self, monkeypatch):
+        def fake_preflight(platform, account=''):
+            return {
+                'available': True,
+                'logged_in': False,
+                'message': 'CatBus 未登录 B站 (web)',
+                'hint': 'catbus bilibili auth login',
+                'account': account,
+            }
+
+        monkeypatch.setattr(catbus_bridge, 'preflight', fake_preflight)
+        verdict = cookie_preflight.probe('bilibili', backend='catbus')
+        assert verdict['state'] == cookie_preflight.EXPIRED
+        assert verdict['blocking'] is True
+        assert verdict['why_key'] == 'catbus.pre.login'
+        assert 'catbus bilibili auth login' in verdict['detail']
+        text = cookie_preflight.describe(verdict)
+        assert 'Cookie' not in text, 'the advice names the login the crawl actually reads'
+
+    def test_a_backend_this_machine_cannot_ask_never_blocks_a_run(self, monkeypatch):
+        """「问不到」 is not 「没登录」, the same rule the timeout and captcha branches follow."""
+        monkeypatch.setattr(
+            catbus_bridge,
+            'preflight',
+            lambda platform, account='': {
+                'available': False,
+                'logged_in': False,
+                'message': '这台机器上没有 Node 运行时',
+                'hint': '',
+                'account': None,
+            },
+        )
+        verdict = cookie_preflight.probe('bilibili', backend='catbus')
+        assert verdict['state'] == cookie_preflight.UNKNOWN
+        assert verdict['blocking'] is False
+
+    def test_a_catbus_answer_is_not_cached_as_a_cookie_answer(self, monkeypatch, probes, with_cookie):
+        """Two backends, one platform, one account name — and no shared verdict.
+
+        The browser path caches because a probe costs a Chrome; the adapter path does not cache
+        because a five-minute-old 「没登录」 would block a run the user just fixed in a terminal. What
+        must not happen either way is one system's answer clearing the other's gate.
+        """
+        with_cookie('zhihu')
+        monkeypatch.setattr(
+            catbus_bridge,
+            'preflight',
+            lambda platform, account='': {
+                'available': True,
+                'logged_in': False,
+                'message': '未登录',
+                'hint': 'catbus zhihu auth login',
+                'account': account,
+            },
+        )
+        cookie = cookie_preflight.probe('zhihu')
+        adapter = cookie_preflight.probe('zhihu', backend='catbus')
+        assert cookie['state'] == cookie_preflight.EXPIRED or cookie['state'] == cookie_preflight.VALID
+        assert adapter['state'] == cookie_preflight.EXPIRED
+        # The cached browser verdict is still the browser's alone: asking again must not find the
+        # adapter's answer under the same platform.
+        monkeypatch.setattr(
+            catbus_bridge,
+            'preflight',
+            lambda platform, account='': {
+                'available': True,
+                'logged_in': True,
+                'message': '',
+                'hint': '',
+                'account': account,
+            },
+        )
+        assert cookie_preflight.probe('zhihu', backend='catbus')['state'] == cookie_preflight.VALID
+
+    def test_one_request_answers_both_backends_apart(self, client, monkeypatch, probes, with_cookie):
+        """A mixed canvas asks two questions in one press and gets two keys back."""
+        with_cookie('zhihu')
+        monkeypatch.setattr(
+            catbus_bridge,
+            'preflight',
+            lambda platform, account='': {
+                'available': True,
+                'logged_in': True,
+                'message': '',
+                'hint': '',
+                'account': account,
+            },
+        )
+        body = client.post(
+            '/api/cookies/preflight',
+            json={
+                'platforms': [{'platform': 'zhihu'}, {'platform': 'bilibili', 'account': 'work', 'backend': 'catbus'}]
+            },
+        ).get_json()
+        assert body['ok'] is True
+        assert set(body['results']) == {'zhihu', 'bilibili@work#catbus'}
+        assert body['blocked'] == []
+        assert probes.platforms == ['zhihu'], 'the CatBus entry bought no browser'

@@ -156,7 +156,15 @@ def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
 
     ``platforms`` is every platform the node will visit, because a comment node crawls
     several feeds with the single account on its form.
+
+    A node that crawls through CatBus is not asked this question at all. Its ``account`` field names a
+    Selenium session the crawl will never read, and refusing it for having no cookie file would block
+    a run whose login lives in CatBus' own account directory — which this app neither reads nor
+    writes. The gate that does answer for it is the preflight's ``backend`` branch
+    (:func:`cookie_preflight._probe_catbus`), asked of the adapter that can actually reply.
     """
+    if capabilities.is_catbus(params):
+        return []
     account = str(params.get('account') or '').strip()
     manager = CookieManager(Config.COOKIE_DIR)
     out = []

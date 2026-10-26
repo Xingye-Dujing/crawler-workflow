@@ -531,3 +531,40 @@
   真掉线时照常明确报错，已采数据不受影响
 - **运行时浏览器设置**：chromedriver 路径、浏览器二进制、窗口尺寸、超时等可在设置面板修改，
   写入 `data/settings.json`，下次运行即生效，无需改代码重启
+
+## 第二采集方式：CatBus
+
+本项目默认用 Selenium（本机浏览器）采集。数据源节点与评论节点各多一个「采集方式」选项：
+选 **CatBus** 时，采集由外部 CLI `catbus-crawler-workflow` 以子进程完成，行仍走同一条落库、续跑、
+去重与水位链路，只是**换了一套登录态、一套限流桶、一套去重账本**。
+
+### 让它真的能跑
+
+1. 装 Node（CatBus 的 `engines`：`^22.22.2 || ^24.15.0 || >=26.0.0`）；
+2. 装 CatBus（`npm i -g catbus-cli`，或用一份源码检出）；
+3. 告诉本项目适配器在哪（三选一，都可用环境变量，不用改代码）：
+   - `CATBUS_HOME=/path/to/catbus`：源码检出根，适配器取其中的 `dist/integrations/crawler-workflow/cli.js`；
+   - `CIXI_CATBUS_CLI=/path/to/cli.js`（或 `CATBUS_CLI`）：直接指名适配器文件；
+   - 什么都不设：按本机的 npm 全局前缀与 `PATH` 找（Windows 走 `%APPDATA%\npm`，Linux/macOS 走
+     `/usr/local/lib/node_modules`、`$HOME/.npm-global`、`PATH` 里 `bin` 的上一级 `lib/node_modules`）。
+   Node 同理：`CIXI_NODE_BIN` / `NODE_BIN`，留空则按各系统常见位置与 `PATH` 找。
+4. 在 CatBus 侧登录它自己的账号：`catbus bilibili auth login`（**不是**本项目的「打开浏览器登录」）。
+
+找不到 Node／找不到适配器／Node 过旧，面板里「采集方式」这一项会**列着但置灰**并在括号里写明原因；
+运行时的拒绝也点名缺的是哪一样。桌面安装包默认不打包 CatBus（要带 Node 运行时与百 MB 级模型），
+所以打包版里这一项就是灰的——装好后依然可用，只是得自己装。
+
+### 与浏览器后端的真实差异（都会打印，不静默）
+
+| | Selenium | CatBus |
+|---|---|---|
+| 登录态 | `data/cookies/<平台>@<账号>.json` + Chrome Profile | CatBus 自己的 `~/.catbus/`（`catbus <平台> auth login`） |
+| 续跑 | 页码/链接游标，只补没走到的 | 没有偏移量：重放同一张清单，由去重账本挡掉重复行 |
+| 跨运行水位 | 边界在**请求之前**判定，旧条目不再请求 | 只界定「哪些行入库」，旧条目仍被请求一次（控制台会说明） |
+| 账号字段 | 节点上的「登录账号」 | 「CatBus 账号」（留空 = CatBus 当前选中的那个） |
+| 停止 | 结束浏览器进程树 | 结束适配器进程树（Windows/Linux 连子进程一起，macOS 无 `/proc` 只结束直接子进程） |
+| 行 | 一行一个事务，边采边入库 | 同上：适配器产出一行就交一行，中途失败已入库的行保留 |
+
+已适配范围由 **CatBus 自己的能力清单**决定（`catbus-crawler-workflow capabilities`），本项目不另立名单；
+新增平台或模式只改 CatBus，这边下一轮探测自动出现该项。运行前的登录门按后端分别发问：
+`bilibili@work` 与 `bilibili@work#catbus` 是两个判定，一套登录失效不会拦下另一套的运行。

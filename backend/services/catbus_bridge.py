@@ -207,9 +207,59 @@ def supports(platform: str, mode: str) -> bool:
     return status in _RUNNABLE_STATES
 
 
+#: Why the backend is missing, in words the PANEL can print. The console keys above carry the machine
+# facts (which Node, which path, what the child said) and are rendered with those parameters; a select
+# option has no room for a path, so the server names a second, parameter-free key for it. The browser
+# translates the key it is handed — it never decides which word fits which absence.
+_PANEL_KEYS = {
+    'catbus.noNode': 'settings.backendNoNode',
+    'catbus.noCli': 'settings.backendNoCli',
+    'catbus.oldNode': 'settings.backendOldNode',
+    'catbus.probeFailed': 'settings.backendProbeFailed',
+    'catbus.probeUnreadable': 'settings.backendProbeFailed',
+}
+
+
+def status_payload() -> dict:
+    """What this machine can crawl through CatBus, as language-free data.
+
+    This is the payload half of ``GET /api/capabilities``: ``reasonKey`` and ``panelKey`` are
+    catalogue keys and the cell values are the adapter's own status tokens, because the capabilities
+    payload carries no language — the canvas translates a token, and an unknown one shows as itself.
+    The adapter's per-cell reasons are prose written by CatBus (in its own language), so they stay out
+    of the payload and are quoted by the console at run time instead, in the language that run uses.
+
+    The map is the adapter's, never a list kept here: a cell CatBus stops supporting disappears from
+    the panel on the next probe rather than needing a change on this side.
+    """
+    info = probe()
+    cells: dict[str, str] = {}
+    for platform, entry in (info.manifest.get('platforms') or {}).items():
+        for mode, mode_entry in (entry.get('modes') or {}).items():
+            cells[f'{platform}.{mode}'] = str((mode_entry or {}).get('status') or '')
+    return {
+        'available': info.available,
+        'reasonKey': info.reason_key,
+        'panelKey': _PANEL_KEYS.get(info.reason_key, 'settings.backendProbeFailed') if not info.available else '',
+        'cells': cells,
+    }
+
+
 def columns_for(platform: str, mode: str) -> tuple[str, ...]:
     """The declared output columns, which are the row contract this backend must satisfy."""
     return tuple(probe().mode(platform, mode).get('columns') or ())
+
+
+def identity_for(platform: str, mode: str) -> tuple[str, ...]:
+    """The columns the adapter says make a row *this* site's identity, in its own order.
+
+    Read out of the manifest rather than guessed from the row: a comment's identity is (平台, 评论ID)
+    and a video's is its link, and the two answer different questions — the ledger keys a row by the
+    first pair, the cross-run watermark needs the second. A backend that declares no identity leaves
+    both callers with an empty tuple, which they report rather than fill in with a column nobody
+    promised: this is the shape a new platform lights up without any change on this side.
+    """
+    return tuple(probe().mode(platform, mode).get('identity') or ())
 
 
 # ─── Command shape ────────────────────────────────────────────────────────────────────────────

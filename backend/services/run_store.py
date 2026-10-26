@@ -261,6 +261,12 @@ def stable_params(params) -> dict:
         out.pop('account', None)
     if str(out.get('model') or '').strip() == '':
         out.pop('model', None)
+    # The same fold, one rung further: ``selenium`` IS the crawl every existing canvas already
+    # describes, spelled either by name or by the absence of the key. Kept in the hash unchanged,
+    # adding the switch would move every saved node's fingerprint, 继续 would not find its own paid
+    # rows, and the whole database would re-crawl to discover it.
+    if str(out.get('backend') or '').strip().lower() in ('', 'selenium'):
+        out.pop('backend', None)
     return out
 
 

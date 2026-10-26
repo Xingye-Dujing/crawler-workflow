@@ -87,14 +87,49 @@ class TestCapabilitiesEndpoint:
         import crawl_capabilities
 
         body = client.get('/api/capabilities').get_json()
-        # The matrix is not copied here, and the one addition is the machine verdict: whether THIS
-        # server's operating system can honour each requirement. It is per request (the process knows
-        # its own platform), so it cannot live in ``as_dict()``, which a unit test compares byte-for-byte.
-        static = {key: value for key, value in body.items() if key != 'machine'}
+        # The matrix is not copied here, and the two additions are per-machine answers about the
+        # request being served: ``machine`` (whether this server's OS can honour each requirement)
+        # and ``backends`` (what the second crawl backend reports about itself, read out of the
+        # adapter rather than restated here). Both are per request, so neither can live in
+        # ``as_dict()``, which a unit test compares byte-for-byte.
+        static = {key: value for key, value in body.items() if key not in ('machine', 'backends')}
         assert static == crawl_capabilities.as_dict()
         assert body['machine'] == crawl_capabilities.machine_requirements()
         assert set(body['machine']) == set(crawl_capabilities.REQUIREMENTS)
         assert body['machine']['windows_desktop'] is (sys.platform.startswith('win')), body['machine']
+        # The backend answer is the bridge's own dict, and it travels as status tokens plus a
+        # catalogue key — a payload with no language must not ship a sentence.
+        from services import catbus_bridge
+
+        assert body['backends'] == {'catbus': catbus_bridge.status_payload()}
+        for value in body['backends']['catbus'].values():
+            if isinstance(value, str):
+                assert value == '' or '.' in value or value.isidentifier(), value
+
+    def test_the_second_backend_travels_as_tokens_not_prose(self, client, monkeypatch):
+        """A cell the adapter does not offer is a token the panel can grey out, never a dropped mode.
+
+        The matrix declares 采集方式 on every shared form so a stored value can be held to its option
+        list; what this machine can run is this map's answer. A panel that received a sentence here
+        would show the same form one language in and another language out.
+        """
+        from services import catbus_bridge
+
+        monkeypatch.setattr(
+            catbus_bridge,
+            'status_payload',
+            lambda: {'available': True, 'reasonKey': '', 'cells': {'bilibili.comments': 'available'}},
+        )
+        body = client.get('/api/capabilities').get_json()
+        assert body['backends']['catbus']['cells'] == {'bilibili.comments': 'available'}
+        # The field is still declared for every mode (the matrix was not rewritten for this answer)…
+        bilibili = next(cap for cap in body['platforms'] if cap['platform'] == 'bilibili')
+        posts = next(mode for mode in bilibili['modes'] if mode['key'] == 'posts')
+        assert any(field['key'] == 'backend' for field in posts['fields'])
+        # …and the option list it carries is the declared one, so a value off that list is refused
+        # by ``unoffered_selections`` rather than silently read as the browser.
+        options = [option['value'] for option in next(f for f in posts['fields'] if f['key'] == 'backend')['options']]
+        assert options == ['selenium', 'catbus']
 
     def test_the_payload_names_the_platforms_the_crawlers_can_crawl(self, client):
         from crawlers import CRAWLERS, is_crawlable

@@ -263,6 +263,15 @@ class Capability:
 # Every mode produces a table and every table can be streamed to numbered part
 # files while the run is still going. Declared once so the block is not copied
 # into each mode's form, where one copy always falls behind.
+#: What tool crawls a source node. ``selenium`` is this app's own browser; ``catbus`` is an
+# external adapter whose rows arrive through a subprocess. The two pay for different logins, key
+# different ledger rows and resume differently, so the choice is part of a node's identity — and it
+# is answered here once, because a second opinion in ``app.py`` or in JS is how a node crawls as one
+# thing while its rows are filed as another.
+BACKEND_SELENIUM = 'selenium'
+BACKEND_CATBUS = 'catbus'
+BACKENDS = (BACKEND_SELENIUM, BACKEND_CATBUS)
+
 FILE_FIELDS = (
     Field(
         key='part_size',
@@ -340,6 +349,39 @@ _ACCOUNT = Field(
     # ``CookieManager.key``, so a workflow saved before the name still runs unchanged.
     default='default',
     options=(('default', 'cookies.accountDefault'),),
+)
+#: Which tool crawls this node, and which CatBus account it crawls as. Declared on the shared mode
+#: builders like every other field, and **filtered by** ``GET /api/capabilities`` against what this
+#: machine can actually run: a box without Node, or a 平台 × 模式 the adapter's own manifest does not
+#: offer, gets the field back out of its payload — the entry disappears rather than refusing after
+#: the user paid for a node start. Executor-only (see ``_NOT_ARGS``): this selects the session, never
+#: an argument of the crawl.
+#:
+#: ``catbus_account`` is a *text* field, not a select, because the candidate list lives in CatBus'
+#: own account directory (``~/.catbus/``) and this app neither reads nor writes it. Blank means
+#: "whatever account CatBus currently has selected", which is the honest default rather than a guess
+#: at a name.
+_BACKEND_FIELDS = (
+    Field(
+        key='backend',
+        control='select',
+        label_key='field.backend',
+        name_key='field.backend',
+        default=BACKEND_SELENIUM,
+        hint_key='settings.backendHint',
+        # ``settings.*`` rather than a new namespace: the payload-shape test holds every select to
+        # labels the browser's own catalogue can answer, and a prefix it has never seen is a word the
+        # panel would print as its own key.
+        options=((BACKEND_SELENIUM, 'settings.backendSelenium'), (BACKEND_CATBUS, 'settings.backendCatbus')),
+    ),
+    Field(
+        key='catbus_account',
+        control='text',
+        label_key='field.catbusAccount',
+        name_key='field.catbusAccount',
+        default='',
+        hint_key='settings.catbusAccountHint',
+    ),
 )
 #: The name of the upstream table's column to read row by row as a link list mode's
 #: link field (see ``Field.fed_by``). Free text for the same reason the process and
@@ -543,6 +585,7 @@ def _hot_mode(
             # choice it cannot honour. The parameter is ``session_required``, not
             # ``needs_session``: the module-level ``needs_session()`` is the question the
             # cookie gate asks, and shadowing it in here made this builder unable to call it.
+            *_BACKEND_FIELDS,
             *((_ACCOUNT,) if session_required else ()),
             _RECOLLECT,
         ),
@@ -598,6 +641,7 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
             # Comments are read as a logged-in reader on every platform that offers
             # this form, so the account selector belongs here as well as on the source
             # walks: the wall a comment crawl hits is the *account's* rate limit.
+            *_BACKEND_FIELDS,
             _ACCOUNT,
             _RECOLLECT,
         ),
@@ -676,7 +720,7 @@ def _posts_mode(
     return Mode(
         key='posts',
         label_key=label_key,
-        fields=(_KEYWORD, replace(_TARGET, default=target), *extra, _ACCOUNT, _RECOLLECT),
+        fields=(_KEYWORD, replace(_TARGET, default=target), *extra, *_BACKEND_FIELDS, _ACCOUNT, _RECOLLECT),
         note_key=note_key,
         collects=collects,
     )
@@ -703,7 +747,7 @@ def _author_mode(
         key='author',
         label_key='settings.collectAuthor',
         handler='author',
-        fields=(author, replace(_TARGET, default=target), *extra, _ACCOUNT, _RECOLLECT),
+        fields=(author, replace(_TARGET, default=target), *extra, *_BACKEND_FIELDS, _ACCOUNT, _RECOLLECT),
         note_key=note_key,
         collects=collects,
     )
@@ -918,6 +962,21 @@ _BY_PLATFORM = {c.platform: c for c in CAPABILITIES}
 MODE_KEY = 'collect'
 
 
+def backend_of(params) -> str:
+    """The backend a node asks for, defaulted to the one that has always been there.
+
+    A blank means Selenium — canvases written before this switch existed carry no key at all, and
+    the executor reads a node that never opened its panel. An unknown spelling is not silently
+    treated as Selenium: ``unoffered_selections`` refuses it by name at validation time.
+    """
+    return str((params or {}).get('backend') or BACKEND_SELENIUM).strip().lower()
+
+
+def is_catbus(params) -> bool:
+    """Whether *params* asks to crawl through CatBus rather than through a browser."""
+    return backend_of(params) == BACKEND_CATBUS
+
+
 def platform_ids() -> tuple[str, ...]:
     """Every platform the matrix describes, in panel order."""
     return tuple(_BY_PLATFORM)
@@ -1075,7 +1134,7 @@ def crawler_fields(mode: Mode) -> tuple[Field, ...]:
     return tuple(f for f in mode.fields if f.key not in _NOT_ARGS)
 
 
-_NOT_ARGS = frozenset({'recrawl', 'account', 'input_column'})
+_NOT_ARGS = frozenset({'recrawl', 'account', 'input_column', 'backend', 'catbus_account'})
 
 
 def crawl_kwargs(mode: Mode, params: dict) -> dict:

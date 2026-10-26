@@ -1060,3 +1060,64 @@ a real defect on at least one of the three, not a style preference. The rules ar
   app-bundle Chrome lookups are reasoned and tested by substitution, not executed. The Linux system packages
   are in `README.md` / `docs/config.md`; run them once on the server and report what differs.
 
+## The second crawl backend (CatBus) — why the boundary is where it is (measured 2026-10-26)
+
+- **Why a subprocess and not a port.** CatBus is a Node program that already speaks this app's row shape:
+  one JSONL row per record on stdout, one summary envelope as the last stderr line, exit codes that
+  classify the failure (1 unclassified / 2 usage-unsupported / 3 login / 4 not-implemented / 5 risk control /
+  6 network / 7 upstream), and a `capabilities` command that answers 平台 × 模式 in machine-readable form.
+  Porting those eleven platform clients into Python would be a second implementation to keep in step with
+  a project that is moving; the boundary is one file (`services/catbus_bridge.py`) and the contract is
+  documented in the CatBus repository's own `docs/crawler-workflow.md`.
+- **Why the manifest is read and never copied.** A local table of "what CatBus supports" would be the
+  second opinion the frontend rule exists to stop: the day the adapter drops a cell, a copied table keeps
+  offering it and the refusal arrives as an empty crawl instead of a named one. `probe()` therefore runs
+  `capabilities` (cached, `PROBE_TTL`), and `columns_for` / `identity_for` / `mode_state` all answer out of
+  that document. Adding a platform is a CatBus change; nothing on this side has a name to add.
+  Verified against the built adapter: `node dist/integrations/crawler-workflow/cli.js capabilities` answers
+  the manifest, and `preflight --platform bilibili` answers `AUTH_REQUIRED` + `catbus bilibili auth login`
+  with exit 3 on an unauthenticated box — which is the shape `_probe_catbus` maps to `EXPIRED`.
+- **The streaming was an upstream change, paid for first.** The adapter originally printed every row after
+  the run finished, while this app stores one row per transaction: 停止 mid-crawl would have thrown away
+  everything it had already bought. `catbus` now writes each row as it is produced (`RowSink` threaded from
+  `runMode` into the bilibili adapter; pinned by tests that assert the first row is handed over *before* the
+  second detail request goes out), and a failure summary reports the rows actually written instead of 0.
+  CatBus commit `4528af3`.
+- **`windowsHide` is not a `Popen` keyword.** Written as `windowsHide=True` it raised
+  `TypeError: Popen.__init__() got an unexpected keyword argument 'windowsHide'` — caught only because a
+  test drove a real child process rather than a fake one. The Windows answer is
+  `creationflags=CREATE_NO_WINDOW`, and that constant does not exist in POSIX' `subprocess`, so it lives in
+  `utils/procs.popen_kwargs()` (Windows: the flag; Linux/macOS: `{}`) — one place, tested per OS by asking
+  each table for its answer, exactly like `reap_command`. A comment crawl starts one child per link, so the
+  missing flag is not a crash but a black window flashing once per article.
+- **A piped Python child writes the ANSI code page.** The real-child test's child printed `{"标题": …}` and
+  the parent read mojibake back, then `UnicodeEncodeError: surrogates not allowed`: on Windows a *piped*
+  `sys.stdout`/`sys.stdin` is cp936 unless the child reconfigures it. Two facts fall out of that. The bridge
+  writes and reads **bytes** and decodes UTF-8 itself (never a locale), which is why parameters travel as one
+  UTF-8 stdin document instead of argv (a code page rewrites a Chinese keyword; a long link list reaches a
+  command-line length limit); and any child this app spawns must declare its own encoding — Node does
+  unconditionally, which is why the adapter boundary is safe even though a Python stand-in is not.
+- **Two backends, two logins, two answer keys.** The pre-run gate keys a verdict by `platform[@account]`.
+  A CatBus `default` and a cookie file called `default` are two accounts on two systems, so one key would
+  let a dead browser cookie block a crawl that never reads it — or a live CatBus login clear a gate a dead
+  cookie should stop. Hence `entry_of` reads a third element (`backend`), `entry_key` gains a `#catbus`
+  suffix **only** for a non-browser backend (every key this app ever produced still spells the same), and
+  the adapter's verdict is deliberately not cached: a five-minute-old 「没登录」 would block a run the user
+  just fixed in a terminal, and the question costs one short-lived process.
+- **Why `login_wall` stays False.** The executor's reading of that flag is `execution_state['cookie_expired']`
+  + 「重新保存 Cookie」, and its risk sibling prints 风控 itself. Both would be advice about a session this
+  crawl does not have, and the second would be the same sentence twice. The CatBus session raises its own
+  refusal carrying the adapter's own hint; a test pins that both flags stay False and that no
+  `cookie_expired` is implied.
+- **The watermark's promise is narrower here, and says so.** Under Selenium `watermark_boundary()` is asked
+  *before* the fetch, so older items are never requested — that is the whole network saving. CatBus returns a
+  whole list, so the boundary can only stop older rows from being filed. That is a degradation, and the rule
+  is "a sanctioned degradation PRINTS what actually ran" (as `topic method=auto`, as bert→snownlp do), hence
+  `catbus.watermarkNote` on every watermarked CatBus crawl. The identity column it compares is the manifest's
+  (`identity_for`), not a hardcoded `BV号`, and `app.py` now stores the crawler's own `watermark_column`.
+- **Not yet verified.** No CatBus account is configured on this box, so nothing here has crawled a real site
+  through the adapter: the row mapping, `--raw` field shapes and the blocked/partial accounting are tested
+  against the adapter's documented contract and a stand-in process, not against bilibili. The live tier case
+  is the next thing to run once `catbus bilibili auth login` exists — and it spends the user's account, so it
+  is asked for, never assumed.
+

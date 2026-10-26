@@ -28,12 +28,18 @@ change is judged on all three, not on the machine it was typed on. Why/evidence:
   Ollama under cloud mode.
 - **`desktop/` is the ONE deliberate Windows-only tree** (PyInstaller/UPX/Inno). Its Windows facts stay there and
   must not leak into `backend/`; the packaged EXE is judged on Windows alone.
-- **Machine-level lookups are per-OS in one place.** Chrome / xelatex candidates are tables keyed by the
-  running OS in `utils/machine_deps.py` and `services/latex_compile.py`, and they are joined with the
-  TARGET's separator (`ntpath`/`posixpath`) so a Windows test can ask what a Linux box would find. The
-  CJK font stack and the ctex font set carry each OS's own names in `services/visualizer.py` and
-  `services/latex_charts.py`. `CHROME_BIN`/`CHROME_PATH` remain the explicit override. Never inline a
-  `Program Files` path, a `.exe` name or a `taskkill` anywhere else.
+- **Machine-level lookups are per-OS in one place.** Chrome / xelatex / **Node + the CatBus adapter**
+  candidates are tables keyed by the running OS in `utils/machine_deps.py` and `services/latex_compile.py`,
+  and they are joined with the TARGET's separator (`ntpath`/`posixpath`) so a Windows test can ask what a
+  Linux box would find. The CJK font stack and the ctex font set carry each OS's own names in
+  `services/visualizer.py` and `services/latex_charts.py`. `CHROME_BIN`/`CHROME_PATH` remain the explicit
+  override (`CIXI_NODE_BIN`/`NODE_BIN`, `CIXI_CATBUS_CLI`/`CATBUS_CLI`/`CATBUS_HOME` the adapter's). Never
+  inline a `Program Files` path, a `.exe` name or a `taskkill` anywhere else.
+- **A `Popen` keyword that only exists on one OS belongs in `utils/procs`.** `windowsHide` is not a
+  `Popen` keyword at all (measured: `TypeError`); the answer is `creationflags=CREATE_NO_WINDOW`, which
+  POSIX' `subprocess` does not define — so it is `procs.popen_kwargs()` and tests ask all three systems.
+  Likewise a piped **child** writes the ANSI code page unless it reconfigures itself: cross the boundary in
+  bytes and decode UTF-8 by hand, and pass parameters on stdin, never argv.
 - **Platform-independent tests are the proof.** No test may pass only because it ran on Windows: no drive letters
   as data, no `.exe` filename pinning a refusal, no `sys.platform='win32'` monkeypatch that fakes a gate the
   product reads (patch both sides or assert the refusal), no timezone literal for the "server local" zone.
@@ -159,6 +165,16 @@ the contract.
   re-crawls/re-pays; keep `runs.db` state compatible. Three pinned rules: the row sink writes **one transaction per
   row**; the next slot is `MAX(seq)+1`, **never `COUNT(*)`**; a **cursor records position, not content** (`Crawler.seed`
   supplies ids; never re-feed an id list into `mark_position`).
+- **The crawl backend is part of a node's identity.** `backend` (`selenium` / `catbus`) is keyed into the node
+  fingerprint with `selenium`/blank **folded out** (the `account`/`model` precedent — unfolded, adding the switch
+  would move every saved canvas's fingerprint and 继续 would re-crawl the whole library), so the two backends never
+  share a dedupe ledger, a cursor or a watermark scope. CatBus is a subprocess (`services/catbus_bridge.py`,
+  `crawlers/catbus.py`): which cells exist, which columns a row has and which column is its identity are read out of
+  the adapter's own `capabilities` manifest — **never copied into a Python table**; and every failure names the
+  missing part (no Node / no adapter / Node too old / unreadable manifest / no such cell / no CatBus login) rather
+  than answering with an empty table, which a node would settle DONE on. Its login gate is keyed apart
+  (`bilibili@work#catbus`) and never cached as a cookie verdict. Why/evidence: `docs/crawler_rules.md` →
+  「第二采集后端」, `docs/agent_practices.md` → "The second crawl backend (CatBus)".
 - **A cursor records what the node PROVED, never what it attempted.** The comment engine writes its `url_index` *after*
   an input's rows land and stops advancing at the first hole — writing it *before* left it at `len(urls)-1` after a
   full pass, so a tail refusal (skipped drama, under-target) was laundered by 继续: the replay re-walked the LAST link

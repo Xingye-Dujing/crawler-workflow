@@ -687,3 +687,101 @@ class TestAModeThisMachineCannotRun:
         assert rows == ['set.hgPlayer', 'set.mitmdump', 'set.harvestPort', 'set.harvestCA'], rows
         sheet = (REPO / 'backend' / 'static' / 'css' / 'style.css').read_text(encoding='utf-8')
         assert 'html[data-win-desktop="0"] .windows-only' in sheet
+
+
+class TestTheCrawlBackendOption:
+    """采集方式: the matrix declares the select, the server's ``backends`` map decides the option.
+
+    A cell CatBus does not offer — or a machine with no Node under it — is greyed and named. It is
+    never removed: a canvas that STORES 「catbus」 would otherwise be shown 「selenium」 while the
+    button started the other crawl, which is the one thing a generated panel may not do. Which
+    account field the form asks is the same answer seen from the other side: a CatBus node has no
+    Selenium login to pick.
+    """
+
+    @staticmethod
+    def _payload(cells=None, available=True, panel_key=''):
+        matrix = _matrix()
+        matrix['backends'] = {
+            'catbus': {
+                'available': available,
+                'reasonKey': 'catbus.noNode' if not available else '',
+                'panelKey': panel_key,
+                'cells': {'bilibili.posts': 'available'} if cells is None else cells,
+            }
+        }
+        return matrix
+
+    @classmethod
+    @pytest.fixture(scope='class')
+    def options(cls, tmp_path_factory):
+        """The five answers a panel can get about the second backend, in one node run.
+
+        One world per scenario: ``Capabilities`` caches what it fetched, so a shared one would answer
+        every case with the first payload it ever saw.
+        """
+        tmp = tmp_path_factory.mktemp('backend-option')
+        scenarios = [
+            {
+                'id': 'chosen',
+                'payload': cls._payload(),
+                'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'catbus', 'account': 'default'},
+            },
+            {
+                'id': 'browser',
+                'payload': cls._payload(),
+                'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'selenium'},
+            },
+            {
+                'id': 'nocell',
+                'payload': cls._payload(cells={'bilibili.comments': 'planned'}),
+                'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'catbus'},
+            },
+            {
+                'id': 'nonode',
+                'payload': cls._payload(cells={}, available=False, panel_key='settings.backendNoNode'),
+                'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'catbus'},
+            },
+            {
+                # An older server, a partial response: nothing was judged, so nothing is blocked.
+                'id': 'noanswer',
+                'payload': _matrix(),
+                'params': {'platform': 'bilibili', 'collect': 'posts', 'backend': 'catbus'},
+            },
+        ]
+        return _run(tmp, scenarios)
+
+    @staticmethod
+    def _catbus_option(html):
+        found = re.search(r'<option value="catbus"[^>]*>', html)
+        assert found, html
+        return found.group(0)
+
+    def test_an_offered_cell_keeps_the_option_alive_and_asks_its_own_account(self, options):
+        made = options['chosen']
+        assert 'disabled' not in self._catbus_option(made['html'])
+        assert 'field.catbusAccount' in made['html'], 'the login the adapter reads is the one asked for'
+        assert 'field.account' not in made['html'], 'and the Selenium login it will never open stays hidden'
+
+    def test_the_browser_choice_asks_the_cookie_account_and_not_the_other(self, options):
+        made = options['browser']
+        assert 'field.account' in made['html']
+        assert 'field.catbusAccount' not in made['html']
+
+    def test_a_cell_the_adapter_does_not_offer_is_greyed_and_named(self, options):
+        made = options['nocell']
+        option = self._catbus_option(made['html'])
+        assert 'disabled' in option, option
+        assert 'settings.backendNoCell' in made['asked'], made['asked']
+        assert 'settings.backendNoCell' in made['html'], 'the reason is on screen, not only in a tooltip'
+
+    def test_a_machine_with_nothing_to_run_is_greyed_with_the_servers_own_words(self, options):
+        made = options['nonode']
+        assert 'disabled' in self._catbus_option(made['html'])
+        assert 'settings.backendNoNode' in made['asked'], "the key is the server's, never one invented here"
+
+    def test_an_unjudged_question_greys_nothing(self, options):
+        made = options['noanswer']
+        assert 'disabled' not in self._catbus_option(made['html']), (
+            'a payload that never answered is not evidence the crawl will fail; the run refuses by name'
+        )

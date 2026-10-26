@@ -37,9 +37,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 import browser_profiles
 
+import crawl_capabilities as capabilities
 from config import Config
 from crawlers import crawler_class, is_crawlable
 from i18n import t
+from services import catbus_bridge
 from services.cookie_manager import CookieManager
 
 logger = logging.getLogger(__name__)
@@ -313,16 +315,24 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
             logger.debug('cookie probe browser did not close cleanly: %s', e)
 
 
-def probe(platform: str, *, use_profile: bool = None, fresh: bool = False, account: str = '') -> dict:
-    """The verdict for one (platform, account), from cache when a recent one exists.
+def probe(
+    platform: str, *, use_profile: bool = None, fresh: bool = False, account: str = '', backend: str = ''
+) -> dict:
+    """The verdict for one (platform, account) of one backend, from cache when a recent one exists.
 
     The account is part of the question, not decoration: a second login that has
     never been used answers 「no saved session」 while the first one is valid, and
     merging the two verdicts under the platform alone would refuse runs over a
     session the node is not even using.
+
+    ``backend`` routes the question, and it is the whole reason the gate can be honest about the
+    second crawl backend: a node that crawls through CatBus has no Selenium cookie to die, and
+    「Cookie 已失效」 for it is advice about a session it will never read.
     """
     platform = str(platform or '')
     account = str(account or '').strip()
+    if str(backend or '').strip().lower() == capabilities.BACKEND_CATBUS:
+        return _probe_catbus(platform, account)
     if not fresh:
         hit = cached(platform, account)
         if hit:
@@ -359,7 +369,37 @@ def probe(platform: str, *, use_profile: bool = None, fresh: bool = False, accou
     return verdict
 
 
-def entry_key(platform: str, account: str = '') -> str:
+def _probe_catbus(platform: str, account: str = '') -> dict:
+    """The same gate question, asked of CatBus: may *that* backend crawl this platform?
+
+    Nothing here reads, writes or mentions a Selenium cookie: the two backends keep separate logins,
+    and the remedy for this one is the adapter's own command (``catbus <平台> auth login``), which
+    travels in ``detail`` because it is data the other program produced, not a sentence this file may
+    reword.
+
+    Not cached, unlike a browser verdict: the answer costs one short-lived Node process, and a
+    five-minute-old 「没登录」 is exactly the stale verdict that would block a run the user just
+    fixed by logging in from a terminal.
+    """
+    answer = catbus_bridge.preflight(platform, account)
+    if not answer.get('available'):
+        # 「问不到」 is not 「没登录」: an unreachable question must not block the run (the same rule
+        # the timeout and captcha branches of the browser probe follow).
+        return _verdict(platform, UNKNOWN, detail=str(answer.get('message') or ''), account=account)
+    if answer.get('logged_in'):
+        return _verdict(platform, VALID, probed=True, account=account)
+    hint = str(answer.get('hint') or '')
+    message = str(answer.get('message') or '')
+    return _verdict(
+        platform,
+        EXPIRED,
+        detail=f'{message} — {hint}' if hint else message,
+        why_key='catbus.pre.login',
+        account=account,
+    )
+
+
+def entry_key(platform: str, account: str = '', backend: str = '') -> str:
     """The one answer-key for a request entry.
 
     A blank account keeps the bare platform string — every caller, cached payload and
@@ -370,26 +410,37 @@ def entry_key(platform: str, account: str = '') -> str:
     ``default`` is that same first account's NAME, so it keys identically: two spellings of
     one login landing in two cache slots is how a probe runs a browser twice and answers
     「没有登录」 from the slot nobody filled.
+
+    The Selenium spelling is unchanged in every case, including with an account: the two backends
+    keep separate logins under one name (a CatBus ``default`` and a cookie file ``default`` are two
+    accounts on two systems), so only a non-browser backend gains a suffix. Without it, one dead
+    cookie could block a node that never reads it — or, worse, a live CatBus login could clear a
+    gate that a dead cookie should have stopped.
     """
     platform = str(platform or '').strip()
     segment = CookieManager.path_segment(account)
-    return f'{platform}@{segment}' if segment else platform
+    key = f'{platform}@{segment}' if segment else platform
+    if str(backend or '').strip().lower() not in ('', capabilities.BACKEND_SELENIUM):
+        return f'{key}#{str(backend).strip().lower()}'
+    return key
 
 
 def entry_of(value) -> tuple:
-    """One requested entry, however it arrived, as ``(platform, account)``.
+    """One requested entry, however it arrived, as ``(platform, account, backend)``.
 
     A bare string is the old shape and still legal: this endpoint is also what a
     hand-made request hits, and refusing a platform-only question because the account
     dimension is new would punish exactly the callers the feature did not change. The
-    account comes back folded, so every later reader of this pair sees one spelling.
+    account comes back folded, so every later reader of this pair sees one spelling, and
+    a missing backend means the one this app has always used (a browser).
     """
     if isinstance(value, dict):
         return (
             str(value.get('platform') or '').strip(),
             CookieManager.path_segment(value.get('account') or ''),
+            str(value.get('backend') or '').strip().lower(),
         )
-    return str(value or '').strip(), ''
+    return str(value or '').strip(), '', ''
 
 
 def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
@@ -417,8 +468,12 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
     pool = ThreadPoolExecutor(max_workers=workers)
     try:
         futures = {
-            pool.submit(probe, platform, use_profile=use_profile, fresh=fresh, account=account): (platform, account)
-            for platform, account in pairs
+            pool.submit(probe, platform, use_profile=use_profile, fresh=fresh, account=account, backend=backend): (
+                platform,
+                account,
+                backend,
+            )
+            for platform, account, backend in pairs
         }
         # Each probe gets its OWN budget, measured from the moment we start waiting on it.
         # One shared deadline plus a capped pool starved every wave after the first: with more
@@ -428,8 +483,8 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
         # past the gate silently on exactly those platforms. Waiting the full timeout per future
         # still bounds the whole loop (a queued probe is awaited, so its wait includes its queue).
         budget = float(Config.COOKIE_PREFLIGHT_TIMEOUT)
-        for future, (platform, account) in futures.items():
-            key = entry_key(platform, account)
+        for future, (platform, account, backend) in futures.items():
+            key = entry_key(platform, account, backend)
             try:
                 answers[key] = future.result(timeout=budget)
             except Exception:

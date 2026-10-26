@@ -714,12 +714,12 @@ const workflow = {
             var p = node.params || {};
             if (node.type === 'source') {
                 if (p.platform && Capabilities.needsSession(p.platform, p.collect || p.mode)) {
-                    found.push({ platform: p.platform, account: String(p.account || '') });
+                    found.push(sessionEntry(p));
                 }
             } else if (node.type === 'comment') {
                 String(p.urls || '').split(/[\s,;、]+/).forEach(function (line) {
                     var plat = urlPlatform(line);
-                    if (plat) found.push({ platform: plat, account: String(p.account || '') });
+                    if (plat) found.push(sessionEntry(p, plat));
                 });
             }
         });
@@ -1661,6 +1661,29 @@ const Capabilities = {
         return I18n.t(CAPABILITY_REQUIREMENT_WORDS[mode.requires] || '');
     },
 
+    backendState(id, modeKey, value) {
+        /* Whether THIS machine can crawl one cell with the named backend, from the server's own map.
+
+           Three answers, deliberately the same shape as ``runnable``: the browser backend is always
+           runnable (it is this app); a payload that never judged the question — an older server, a
+           partial response — is runnable rather than greyed, because an option this side cannot read
+           is not evidence that the crawl will fail, and the run refuses by name if it does; and a
+           cell the adapter does not offer, or a machine it cannot start on, is greyed with the
+           server's own reason key.
+
+           Greyed-and-named rather than removed: a canvas that STORES this value has to show what it
+           holds, or the panel would display option #0 while the button starts the other crawl. */
+        if (String(value || '') !== 'catbus') return { runnable: true, wordKey: '' };
+        if (!this.ready()) return { runnable: true, wordKey: '' };
+        var catbus = (this.data.backends || {}).catbus;
+        if (!catbus) return { runnable: true, wordKey: '' };
+        if (!catbus.available) return { runnable: false, wordKey: catbus.panelKey || 'settings.backendProbeFailed' };
+        var cells = catbus.cells || {};
+        var state = cells[String(id || '') + '.' + String(modeKey || '')];
+        if (state === 'available' || state === 'partial') return { runnable: true, wordKey: '' };
+        return { runnable: false, wordKey: 'settings.backendNoCell' };
+    },
+
     defaults(id) {
         var out = {};
         if (!this.data) return out;
@@ -2039,10 +2062,33 @@ function platformLabels(list) {
    ``cookie_preflight.entry_key``. A blank account keeps the bare platform name (every
    old payload and test stays true); a named account gets its own slot, so a second
    login that was never used cannot be called dead on the first one's verdict. */
+/* One pre-run gate entry: which login, of which system, for which platform.
+
+   ``backend`` travels with it because the server routes the question by that field
+   (``cookie_preflight.entry_of``), and a CatBus 「default」 and a cookie file named 「default」 are two
+   accounts on two systems. The account that names the session differs by backend, and the node's own
+   form holds both, so this picks the one the run will actually read instead of asking both systems
+   about one name. */
+function sessionEntry(p, platform) {
+    var backend = String(p.backend || '');
+    return {
+        platform: String(platform || p.platform || ''),
+        account: backend === 'catbus' ? String(p.catbus_account || '') : String(p.account || ''),
+        backend: backend,
+    };
+}
+
 function preflightEntryKey(entry) {
     var plat = typeof entry === 'string' ? entry : String((entry && entry.platform) || '');
     var acct = typeof entry === 'string' ? '' : String((entry && entry.account) || '');
-    return acct ? plat + '@' + acct : plat;
+    /* The backend belongs in the identity of the question: one key for both systems is how a dead
+       cookie blocks a node that never reads it — or a live CatBus login clears a gate a dead cookie
+       should have stopped. ``CookieManager.path_segment`` folds the default account onto '' exactly
+       as this folds a blank backend onto the browser, and only a non-browser backend gains a suffix,
+       so every key this app ever produced still spells the same. */
+    var be = typeof entry === 'string' ? '' : String((entry && entry.backend) || '');
+    var base = acct ? plat + '@' + acct : plat;
+    return be && be !== 'selenium' ? base + '#' + be : base;
 }
 
 /* The reverse: an answer key back into an entry, for display and for opening the
@@ -2050,11 +2096,22 @@ function preflightEntryKey(entry) {
    the blocked/unclear lists arrive as keys, the toast paths may hold either. */
 function unpackEntryKey(key) {
     if (key && typeof key === 'object') {
-        return { platform: String(key.platform || ''), account: String(key.account || '') };
+        return {
+            platform: String(key.platform || ''),
+            account: String(key.account || ''),
+            backend: String(key.backend || ''),
+        };
     }
     var s = String(key || '');
+    var hash = s.indexOf('#');
+    var backend = hash < 0 ? '' : s.slice(hash + 1);
+    if (hash >= 0) s = s.slice(0, hash);
     var at = s.indexOf('@');
-    return at < 0 ? { platform: s, account: '' } : { platform: s.slice(0, at), account: s.slice(at + 1) };
+    return {
+        platform: at < 0 ? s : s.slice(0, at),
+        account: at < 0 ? '' : s.slice(at + 1),
+        backend: backend,
+    };
 }
 
 function entryLabels(entries) {
@@ -2153,6 +2210,22 @@ function reopenCall(nodeId) {
     return ID_SHAPE.test(String(nodeId)) ? ";openSettings('" + nodeId + "')" : '';
 }
 
+/* The fields that name *which login* a crawl asks, shown one at a time.
+
+   A node declares a Selenium 账号 and a CatBus 账号; only the one its 采集方式 will read can be filled
+   in honestly, and a panel showing both would have the user pick a session for a crawl that never
+   looks at it. 采集方式 itself always stays: an unreachable backend is greyed and named on its option
+   (``Capabilities.backendState``), because a canvas that STORED the value must show what it holds —
+   removing the field would make the panel read as Selenium while the run starts the other one. */
+function visibleSourceFields(fields, p) {
+    var catbus = String(p.backend || '') === 'catbus';
+    return fields.filter(function (f) {
+        if (f.key === 'catbus_account') return catbus;
+        if (f.key === 'account') return !catbus;
+        return true;
+    });
+}
+
 function sourcePanelHtml(nodeId, p) {
     if (!Capabilities.ready()) {
         return (
@@ -2211,7 +2284,7 @@ function sourcePanelHtml(nodeId, p) {
             paramCall(nodeId, 'collect', 'this.value') + reopenCall(nodeId)
         );
     }
-    var fields = Capabilities.fields(platform, mode.key);
+    var fields = visibleSourceFields(Capabilities.fields(platform, mode.key), p);
     for (var i = 0; i < fields.length; i++) {
         html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key], p);
     }
@@ -2375,14 +2448,23 @@ function sourceFieldHtml(nodeId, f, value, allParams) {
             numberCall(nodeId, f.key, f.default) +
             '">';
     } else if (f.control === 'select') {
+        var isBackend = f.key === 'backend';
         var html = sourceSelectHtml(
             nodeId,
             f.labelKey,
             f.options.map(function (o) {
-                return { value: o.value, labelKey: o.labelKey };
+                if (!isBackend) return { value: o.value, labelKey: o.labelKey };
+                /* Which tool this cell can actually run is the server's answer, not a rule here. */
+                var ok = Capabilities.backendState(allParams.platform, allParams.collect || allParams.mode, o.value);
+                return {
+                    value: o.value,
+                    labelKey: o.labelKey,
+                    disabled: !ok.runnable,
+                    labelSuffix: ok.runnable ? '' : '（' + I18n.t(ok.wordKey) + '）',
+                };
             }),
             String(v),
-            paramCall(nodeId, f.key, 'this.value')
+            paramCall(nodeId, f.key, 'this.value') + (isBackend ? reopenCall(nodeId) : '')
         );
         return hint ? html + '<div class="settings-group">' + tail + '</div>' : html;
     } else {

@@ -184,7 +184,23 @@ class TestSelectsAreHeldToTheirOptions:
             for f in mode.fields
             if f.control == 'select' and f.key != 'account'
         }
-        assert declared == {('bilibili', 'hot', 'board'), ('hongguo', 'hot', 'board')}, declared
+        boards = {cell for cell in declared if cell[2] == 'board'}
+        assert boards == {('bilibili', 'hot', 'board'), ('hongguo', 'hot', 'board')}, declared
+        assert {key for _platform, _mode, key in declared} == {'board', 'backend'}, declared
+        # 采集方式 is declared on every form the four shared builders produce, and on nothing else:
+        # 红果短剧 (a desktop player) and 微信 (its own list walk) have no CatBus 交集, so a node
+        # there declares no choice the executor could refuse. Declared — not declared-per-machine:
+        # a declared field is what holds a stored value to its option list, and
+        # ``GET /api/capabilities`` takes the field out on a machine that cannot run the backend.
+        backends = {cell for cell in declared if cell[2] == 'backend'}
+        # 红果's board form is built by the shared builder, so it declares the select like every other
+        # board; its comment form builds its own field list (a desktop player asks for no browser
+        # session and no external adapter) and declares nothing. Declaring the field even where this
+        # machine cannot run it is the point: a declared field is what holds a stored value to its
+        # option list, and the panel marks the unreachable choice disabled and named — the same shape
+        # the mode select uses for a 红果 board on a Linux server, so a canvas restored from another
+        # machine shows what it holds instead of falling back to option #0.
+        assert ('hongguo', 'hot', 'backend') in backends
         # The shared file tail is the other one, and it is on every mode.
         assert [f.key for f in FILE_FIELDS if f.control == 'select'] == ['format']
 

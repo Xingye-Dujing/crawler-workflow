@@ -21,6 +21,8 @@
 | `MAX_UPLOAD_MB` | 单个请求体上限（上传/粘贴数据过大时返回 413 JSON，而非把整机内存吃光） | `64` |
 | `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。**按系统查的第二条路**：Windows 查 `PROGRAMFILES`/`LOCALAPPDATA` 下的安装根，Linux 查 `/usr/bin/google-chrome`、`/usr/bin/chromium`、`/snap/bin/chromium` 与 `PATH`，macOS 查 `/Applications/Google Chrome.app/…` 与用户目录下的同名 bundle。容器里通常就是 `CHROME_BIN=/usr/bin/chromium`（`Dockerfile` 就是这么写的）。设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上**（复制出来的登录态对站点风控就是第二台设备） | 空 |
 | `CIXI_DRIVER_PATH` | chromedriver 路径的部署侧写法（等价于设置面板的「驱动路径」，空=让 Selenium Manager 取匹配版本）。`Dockerfile` 用的是这个名字——以前镜像里导出的是 `CHROMEDRIVER_PATH`，代码里没有读它的地方，于是那行只是个装饰 | 空 |
+| `CIXI_NODE_BIN` / `NODE_BIN` | **第二采集后端（CatBus）** 用的 Node 运行时。与 Chrome 一样按系统查表：Windows 查 `PROGRAMFILES`/`LOCALAPPDATA` 下的 `nodejs\node.exe`，Linux 查 `/usr/bin/node`、`/usr/local/bin/node`、`/snap/bin/node` 与 `PATH`，macOS 查 `/usr/local/bin/node`、`/opt/homebrew/bin/node`。版本按 CatBus 的 `engines`（`22.22.2`／`24.15.0`／`26.0.0` 三段下限）核对，太旧**按名拒绝**而不是让它跑到一半报语法错误 | 空 |
+| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个直接指名文件（`dist/integrations/crawler-workflow/cli.js`）或一个可执行包装；`CATBUS_HOME` 指源码检出根。都没设就按 npm 全局前缀找（Windows `%APPDATA%\npm\node_modules`，Linux/macOS `/usr/local/lib`、`/usr/lib`、`/opt/homebrew/lib`、`$HOME/.npm-global`，以及 `PATH` 里某个 `bin` 的上一级 `lib/node_modules`）。**找不到就是不提供这个后端**：面板里那一位置灰并写明缺的是哪一样，而不是运行起来才拒绝 | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码。程序启动时会检查 `stdout/stderr` 能不能写汉字：不能（比如 `LANG` 未设置的 slim 镜像，编码是纯 ASCII）就改到 UTF-8 并打印一行说明；能写（比如中文 Windows 的 cp936）就只把 `errors` 设成 `replace`，**不改编码**——把能显示汉字的控制台强扭成 UTF-8 反而会把原本正常的窗口弄成乱码 | — |
 
 > **三套系统都在范围内**：Windows 是开发机，Linux 是云端部署目标，macOS 也要求可用。
@@ -30,6 +32,10 @@
 > 云端 Linux 还需要：Chromium + 驱动（镜像已装）、`fonts-noto-cjk`（Matplotlib 出的中文图）、
 > 可选 `texlive-xetex texlive-lang-chinese`（纸质图与论文成稿；非 Windows 的中文由 ctex 的 fandol 字体集提供，
 > 程序不再指名仿宋，因为那是一套 Windows 字体）。
+> **第二采集方式是可选依赖**：镜像不装 Node 与 CatBus 也一切照常，只是面板里「采集方式」的另一项会置灰并写明
+> 「本机没有」。要在服务器上用它：装 Node（CatBus 的 `engines` 范围）+ `npm i -g catbus-cli`，或
+> `CATBUS_HOME=/srv/catbus` 指一份源码检出（`npm run build` 之后），然后 `catbus <平台> auth login` 存它自己的账号。
+> CatBus 的 OCR / 验证码模型（`@cv-cat/catbus-assets-*`，约 100 MB 级）是它自己的事，本项目不打包、也不代为下载。
 
 ### 运行时设置（UI 设置面板 → `data/settings.json`）
 
@@ -145,6 +151,8 @@ python app.py cloud          # 等价写法：python app.py --cloud，或 CRAWLE
 | 要查的东西 | Windows | Linux | macOS |
 |---|---|---|---|
 | Chrome/Chromium | `PROGRAMFILES`/`PROGRAMFILES(X86)`/`LOCALAPPDATA` 下的 `Google\Chrome\Application\chrome.exe` | `/usr/bin/google-chrome[-stable]`、`/usr/bin/chromium[-browser]`、`/opt/google/chrome/chrome`、`/usr/lib/chromium/chromium`、`/snap/bin/chromium`，再扫 `PATH` | `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`（含 Beta 与 Chromium、`~/Applications` 那份），再扫 `PATH` |
+| Node 运行时（第二采集后端 CatBus 用；`CIXI_NODE_BIN`/`NODE_BIN` 可指名） | `PROGRAMFILES`/`LOCALAPPDATA` 下的 `nodejs\node.exe`，再扫 `PATH` 里的 `node.exe` | `/usr/bin/node`、`/usr/local/bin/node`、`/snap/bin/node`，再扫 `PATH` | `/usr/local/bin/node`、`/opt/homebrew/bin/node`，再扫 `PATH` |
+| CatBus 采析绘适配器（`CIXI_CATBUS_CLI`/`CATBUS_CLI` 指名文件，`CATBUS_HOME` 指名源码检出根） | `%APPDATA%\npm\node_modules\catbus-cli\dist\integrations\crawler-workflow\cli.js` | `/usr/local/lib/node_modules`、`/usr/lib/node_modules`、`$HOME/.npm-global/lib/node_modules` 下的同名入口，外加 `PATH` 里某个 `bin` 的上一级 `lib/node_modules` | `/usr/local/lib/node_modules`、`/opt/homebrew/lib/node_modules`、`$HOME/.npm-global/lib/node_modules` |
 | xelatex | MiKTeX 的两处安装根 + `%LOCALAPPDATA%\Programs\MiKTeX\…` | `/usr/bin/xelatex`、`/usr/local/bin/xelatex` | `/Library/TeX/texbin/xelatex`（MacTeX；GUI 起的进程 `PATH` 里没有它）、`/usr/texbin/xelatex` |
 | 纸质图的中文（ctex） | 显式 `\setCJKmainfont{FangSong}`（仿宋） | `\usepackage[fontset=fandol]{ctex}`，**不指名任何字体** | `\usepackage[fontset=macnew]{ctex}` |
 | Matplotlib 中文 | SimHei / Microsoft YaHei 在前 | Noto Sans CJK SC / Source Han Sans SC / WenQuanYi Zen Hei | PingFang SC / Hiragino Sans GB |

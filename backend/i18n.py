@@ -1524,6 +1524,8 @@ _ZH = {
     'field.author': '作者',
     'field.board': '榜单',
     'field.account': '登录账号',
+    'field.backend': '采集方式',
+    'field.catbusAccount': 'CatBus 账号',
     'field.format': '格式',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
@@ -2027,6 +2029,15 @@ _ZH = {
     'catbus.timeout': 'CatBus 超过 {seconds} 秒没有返回，进程已被终止',
     'catbus.stopped': '{platform} / {mode} 已通过 CatBus 停止，已经落库的行保留',
     'catbus.columnDrift': 'CatBus 返回的列与能力清单不一致：缺少 {missing}，多出 {extra}',
+    'catbus.noDetail': 'CatBus 后端不单独取详情（详情由适配器逐条补齐）：{url}',
+    'catbus.targetReached': '目标 {n} 条已经在表里，CatBus 不再请求',
+    'catbus.start': 'CatBus 开始采集：{mode}，目标 {n} 条',
+    'catbus.watermarkNote': 'CatBus 没有偏移量：水位线只界定哪些行入库，更旧的条目仍会被请求一次',
+    'catbus.watermarkHit': 'CatBus 采到水位线 {i}，更旧的条目不再入库',
+    'catbus.finished': 'CatBus 采集结束：本次新增 {n} 条（目标 {want}）',
+    'catbus.warning': 'CatBus 报告：{text}',
+    'catbus.refused': '{platform} / {mode} 通过 CatBus 采集失败：{detail}',
+    'catbus.pre.login': '{platform} 在 CatBus 里没有登录态',
 }
 
 _EN = {
@@ -3742,6 +3753,8 @@ _EN = {
     'field.author': 'creator',
     'field.board': 'board',
     'field.account': 'account',
+    'field.backend': 'backend',
+    'field.catbusAccount': 'CatBus account',
     'field.format': 'format',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
     'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
@@ -4346,6 +4359,17 @@ _EN = {
     'catbus.timeout': 'CatBus did not return within {seconds} seconds; the process was terminated',
     'catbus.stopped': '{platform} / {mode} was stopped through CatBus; the rows already stored are kept',
     'catbus.columnDrift': 'the columns CatBus returned do not match the manifest: missing {missing}, extra {extra}',
+    'catbus.noDetail': 'this backend does not fetch a detail on its own (the adapter resolves each card): {url}',
+    'catbus.targetReached': 'the target of {n} rows is already in the table, so CatBus asks for nothing',
+    'catbus.start': 'CatBus starts crawling: {mode}, target {n} rows',
+    'catbus.watermarkNote': (
+        'CatBus has no offset: the watermark bounds which rows are filed, while older items are still asked for'
+    ),
+    'catbus.watermarkHit': 'CatBus reached the watermark {i}; the older rows are not filed',
+    'catbus.finished': 'CatBus finished: {n} new rows (target {want})',
+    'catbus.warning': 'CatBus reported: {text}',
+    'catbus.refused': '{platform} / {mode} could not be crawled through CatBus: {detail}',
+    'catbus.pre.login': '{platform} has no logged-in CatBus account',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}

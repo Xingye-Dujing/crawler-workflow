@@ -352,3 +352,35 @@
   隐藏一个按钮从来不是权限。判定**缺失**时一律照常可见可用：因为一个字节没到就藏掉能用的功能是另一种 bug。
 - **窗口类要求在 cloud 模式下同样不满足**，哪怕操作系统是 Windows：没有可驱动的桌面不等于有桌面。
   这条与「强制无头」「拒绝浏览器生成 Cookie」「拒绝本地 Ollama」是同一个 `CLOUD_MODE` 答案的不同面。
+
+## 第二采集后端 / The second crawl backend (CatBus)
+
+- **能力清单只有一个来源：适配器自己。** `backend/services/catbus_bridge.py` 读 `catbus-crawler-workflow capabilities`
+  并按 `PROBE_TTL` 缓存，`平台 × 模式` 的可用性、输出列、身份列全部来自那份 JSON；Python 侧**不抄表**。
+  抄一份就是本文件上面那条"矩阵是唯一口径"要防的那种东西：CatBus 升级改了组合，这边还在宣称能采。
+  因此新增一个平台/模式**只改 CatBus**，这边面板下一轮探测自动出现该项；这边要改的是列映射的搬运规则，不是名单。
+- **拒绝按名，绝不静默降级。** 缺 Node／缺适配器／Node 版本过旧／清单读不出来／组合未适配／登录缺失／风控，
+  每一条都 `raise` 一句点名原因（`catbus.*` 目录项 + 适配器自己的 hint），没有一条允许返回空表——
+  节点会在空表上结算 DONE。后端切换也**不回退**：选了 CatBus 就不会"顺手"改用浏览器。
+- **后端是节点身份的一部分。** `services/run_store.py::stable_params` 把 `backend` 计入指纹，同时把
+  `selenium`／缺省折叠掉（与 `account`、`model` 同一条先例）：折叠前所有既有画布的指纹会集体改变，
+  「继续」找不到自己付过钱的行，于是整库重采。CatBus 的行与 Selenium 的行因此永远分属两套去重账本、
+  两个水位作用域。
+- **两个后端的登录态是两套东西，问题就分开发问。** CatBus 只认 `params.catbus_account` 与自己
+  `~/.catbus/` 里的账号文件，本项目的 `data/cookies/*.json` 既不读也不写（`CookieManager` 导出的 `expiry`
+  字段它还不认，直接把 Cookie 文件喂给它会得到一个半截会话）。运行前门按 `backend` 路由：
+  `cookie_preflight.entry_of` 读出三元组 `(platform, account, backend)`，`entry_key` 只给非浏览器后端加
+  `#catbus` 后缀（浏览器侧拼写逐字节不变），所以同名 `work` 的两套登录各得各的判定——
+  一边失效不会拦下另一边的运行，也不会把自己的 verdict 缓存成对方的答案。
+  数据源节点的 `account`（Selenium）在 catbus 后端下**不参与任何判定**：`engine/workflow.py::_account_session_errors`
+  对它直接不作要求，否则用户会被送去重存一个本次根本不会读的 Cookie。
+- **不假装做不到的事。** CatBus 没有偏移量／游标：源节点续跑是重放同一张清单、由账本挡掉重复行，
+  跨运行水位只能界定"哪些行入库"、省不下请求，这一条**必须打印**（`catbus.watermarkNote`）而不是留给读者猜；
+  评论按链接逐条起进程，`url_index` 仍只记"已证明的连续前缀"，partial 的链接进 `skipped_targets`。
+  `login_wall` / `risk_blocked` 是"我们的浏览器会话死了／被风控了"的浏览器事实，catbus 后端**永不置位**
+  （置了会翻 `execution_state['cookie_expired']`，把用户引向重存 Selenium Cookie 这条错建议），
+  改为抛出自己那一句带 `catbus <平台> auth login` 的拒绝。
+- **进程边界写死 UTF-8 与进程树。** 参数经 stdin（`--params -`）而不是 argv：中文关键词走命令行会被 Windows
+  控制台代码页改写，长链接列表还会撞命令行长度上限；stdout/stderr 按字节读回再显式 decode；
+  子进程按 token 登记，停止与超时都走 `utils/procs`（Windows 的 `CREATE_NO_WINDOW` 只在 Windows 存在，
+  POSIX 返回空 kwargs——评论每个链接起一次进程，不能每次闪一个黑窗）。
