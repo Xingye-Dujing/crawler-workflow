@@ -28,10 +28,10 @@
  * Prints one JSON object to stdout.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const [jsDir, panelMarkupPath] = process.argv.slice(2);
 const panelMarkup = fs.readFileSync(panelMarkupPath, 'utf8');
@@ -141,11 +141,9 @@ function world(render) {
         if (el.id) sandbox.document.registry.set(el.id, el);
     });
 
-    const sources = ['canvas.js', 'workflow.js', 'app.js']
-        .map((name) => fs.readFileSync(path.join(jsDir, name), 'utf8'))
-        .join('\n;\n');
+    loadPageScripts(sandbox, { jsDir });
     vm.runInContext(
-        `${sources}\n;globalThis.__x = { canvas, dataNodes, dashboard, I18n,` +
+        'globalThis.__x = { canvas, dataNodes, dashboard, I18n,' +
             ' savePreviewImage, saveDashboardImage, saveChartPicture,' +
             ' savePreviewVector, saveChartVector, chartSvgMarkup,' +
             ' saveChartPdf, getLatexFile: () => _lastLatexFile,' +

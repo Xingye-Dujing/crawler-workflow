@@ -1,4 +1,4 @@
-/* The bibliometric label solver, driven against the REAL workflow.js under node.
+/* The bibliometric label solver, driven against the REAL page scripts under node.
 
    `workflow.js` places a graph label where ECharts put it, then shifts it until it touches no
    other label. Two things the canvas itself decided and no Python test can see:
@@ -14,23 +14,21 @@
    through `applyEchartsOption` so the wiring (the solver receives the instance it must measure)
    is covered, not just the maths.
 
-   Usage: node harness_label_layout.mjs <workflow.js>
+   Usage: node harness_label_layout.mjs <jsDir>
    Prints one JSON object to stdout.
 */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
-const [wfPath] = process.argv.slice(2);
+const [jsDir] = process.argv.slice(2);
 
 const sandbox = { ...baseSandbox() };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(
-    fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__x = {_graphLabelLayout, applyEchartsOption};',
-    sandbox
-);
+loadPageScripts(sandbox, { jsDir });
+vm.runInContext('globalThis.__x = {_graphLabelLayout, applyEchartsOption};', sandbox);
 const api = sandbox.__x;
 
 const BANDS = { left: 24, top: 70, right: 170, bottom: 30 };

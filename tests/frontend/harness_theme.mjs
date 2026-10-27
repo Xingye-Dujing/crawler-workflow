@@ -2,24 +2,20 @@
    persistence) and the chart recolour (workflow.js chartPalette/patchOptionForTheme).
 
    Theme is pure DOM + a single resolved flag on <html data-theme>; neither is reachable from
-   Python. Like harness_app this loads custom-select.js + workflow.js + app.js in index.html's
-   order, then: picks a theme and reads the resolved flag, the persisted choice, and which
-   control is marked active; and patches a sample ECharts option under each theme to prove the
-   chart colours flip with the theme (a dark ground with light-only charts was the whole risk). */
-import fs from 'node:fs';
-import path from 'node:path';
+   Python. The whole page is loaded in index.html's own order (page_scripts.mjs), then: picks a
+   theme and reads the resolved flag, the persisted choice, and which control is marked active;
+   and patches a sample ECharts option under each theme to prove the chart colours flip with the
+   theme (a dark ground with light-only charts was the whole risk). */
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const sandbox = baseSandbox();
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-const FILES = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
-for (const f of FILES) {
-    vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
-}
+loadPageScripts(sandbox, { jsDir });
 
 const doc = sandbox.document;
 function mkBtn(choice) {

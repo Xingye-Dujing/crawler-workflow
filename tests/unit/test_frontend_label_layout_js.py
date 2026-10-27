@@ -26,7 +26,7 @@ HARNESS = REPO / 'tests' / 'frontend' / 'harness_label_layout.mjs'
 
 @pytest.fixture(scope='module')
 def placed() -> dict:
-    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'))
+    proc = run_node(str(HARNESS), str(JS_DIR))
     assert proc.returncode == 0, f'harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 
