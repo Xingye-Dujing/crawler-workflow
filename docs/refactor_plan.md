@@ -1,226 +1,254 @@
-# 可扩展性重构方案 / Extensibility refactor plan
+# 采析绘 全项目架构审计与重构总纲 / Whole-project architecture audit & plan
 
-> 目标：把「新增一个节点类型 / 平台 / 采集引擎」从**改四处、漏一处就半截功能**，变成**登记一次、契约测试兜底**。
-> 本文件是分阶段方案与验收口径；**Phase 0 与 Phase 1a 已落地**（8 个内置执行器 + 统一注册表），
-> 后续阶段按顺序做，每一阶段都必须全量测试通过、单独提交。
+> 口径：本项目要成为「规范且可直接投产的模范项目」。判定标准写在 §4，任何一条不满足就是未完成。
+> 本文件覆盖**全项目每一个目录**，是唯一的重构总纲；`docs/frontend_modules.md` 是 Stage 8 的明细展开。
+> 所有数字都是本仓库实测（2026-10-27），不是估计；每条缺陷都带 `file:line` 证据。
+> 已完成部分（节点插件化）在 §5，它同时是后续每一段的**样板**：契约先行、逐项提交、行为逐字节不变。
 
-## 1. 现状盘点（为什么要改）
+## 1. 总量
 
-一个节点类型现在同时存在于这些地方：
+| 树 | 文件 | 行数 | 最大单体 |
+|---|---|---|---|
+| `backend/` 根（13 模块 + `app.py`） | 14 | 15,140 | `i18n.py` 4,604 · `app.py` 4,412 · `crawl_capabilities.py` 1,805 |
+| `backend/services/`（含 `biblio_formats/` 14） | 66 | 27,626 | `data_analysis.py` 3,899 · `latex_charts.py` 2,428 · `bibliometrics.py` 1,996 |
+| `backend/crawlers/`（含 `engine/` 10） | 36 | 13,075 | `hongguo_harvest.py` 1,822 · `base.py` 1,490 · `comments.py` 1,184 |
+| `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
+| `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
+| `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
+| `backend/static/js/` | 11 | 25,924 | `workflow.js` **13,015** · `app.js` 5,071 · `canvas.js` 3,893 |
+| `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
+| `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
-| 位置 | 内容 | 现状 |
+`tests/` = unit 150 / api 55 / integration 20 / live_site 27 / frontend 44 个 `.mjs`；共 252 个测试文件、约 6,163 个用例。
+>900 行的产品模块 **15** 个；<40 行的 py 文件 **18** 个。**两端都失控了**——这正是下面 D1 与 D4 的两面。
+
+## 2. 缺陷分类（每类都有证据）
+
+**D1 巨型多职责文件**
+`app.py` 4,412 行 = **39 条 `@app.route`**（workflow 15 / cookies+profiles 11 / runs 10）+ 整个运行编排
+（`_begin_run` 1461–2356 约 895 行、`_run_node_durable`、`_execute_node`）+ 控制台缓冲 + 队列。
+`services/data_analysis.py` 3,899 行 = 34 个 op 的参数表（`STEP_PARAMS:201`）+ 38 个自由函数 +
+`DataAnalysisService` 单类 2,791 行（占文件 72%，无实例状态，全是 staticmethod）。
+`services/visualizer.py` 1,890 行 = 中文字体栈 + 图型分类 + JSON 安全 + 调色板 + 词云样式目录 + 屏显/印刷改写 + matplotlib 渲染（`VisualizationService` 1,294 行）。
+`crawlers/base.py` 1,490 行 = Crawler 主体 68 个成员 + 驱动/profile 装配（`_create_driver` 107 行）+ 导航到场判定 +
+游标/水位/行发射 + 收尾判定 + 登录墙诊断 + 首屏等待 + Cookie 植入 + 节流 + DOM 小工具。
+`i18n.py` 4,604 行 = 两份词典（`_ZH` 40–2062、`_EN` 2063–4416，2,922 键×双语）+ 行为。
+`workflow.js` 13,015 行 = **206 个顶层函数 + 34 个命名对象 + 82 个顶层 var**，33 段 banner；段落与内容已经漂移
+（cookie 管理器群 7550–8500 挂在「Outline sidebar」与「Export guide」两段 banner 之下；`wfFiles` 在「Lexicon manager」banner 下）。
+`static/css/style.css` 5,017 行、`zenviz.html` 16,852 行同属单体。
+
+**D2 用文件名前缀假装分包**
+`services/` 52 个顶层文件里：`biblio_*` 11（+`bibliometrics.py`，共 6,636 行）、`latex_*` 4（3,091）、`run_*` 4（1,808）、
+`*_store` 7（4,014）、`dataset_*` 2、`cookie_*` 2、`export_*` 2、`lexicon_*` 2、`reusable_*` 2、`workflow_*` 2、`*_params` 2。
+`crawlers/` 里 `comments_*` 8 个。**层级只写在名字上，不在目录上**；找「所有 LaTeX 相关」只能 grep。
+
+**D3 一个实体散在多个文件**（最贵的一类：加一个成员要改 N 处，漏一处就是半截功能）
+
+| 实体 | 现在要在几处登记 | 证据 |
 |---|---|---|
-| `backend/nodes/catalog.py` | 类型、行形态（table/pdf/none）、是否安静、面板词 key、分组 | **唯一声明**（Phase 0） |
-| `backend/nodes/registry.py` | 类型 → `run(node, call)`，重复注册按名拒绝 | **统一注册表**（Phase 1a） |
-| `backend/app.py` `_run_*` | 仍留在 app 的 6 个执行体（source/comment/process/analysis/visualize/output） | Phase 1b 迁到 `nodes/executors/` |
-| `backend/nodes/executors/*.py` | 8 个内置执行器（name/upload/resume/tokenize/accumulate/compile/biblio/fuse） | **Phase 1a 已迁** |
-| `backend/engine/workflow.py` | `NODE_TYPES` / `TABLE_NODE_TYPES` / `PDF_SOURCE_NODE_TYPES` | 从目录派生（Phase 0） |
-| `backend/nodes/schema.py` | 输出了哪些列 / 读了哪些列（**Phase 3 已完成**：各 op 的表归各自的 params/插件模块，这里只聚合） | — |
-| `backend/static/js/canvas.js` | `_VALID_NODE_TYPES`、`getDefaultParams`、labels、摘要 | Phase 2 改为服务端下发 |
-| `backend/static/js/app.js` | `nodeType.*` / `node.*` 词条 | 保留（词条仍在前端，服务端只发 key） |
+| 一种图型（共 **30** 种） | **6 处**：`chart_contracts.py:8`、`visualizer.py:132/502/537`、`biblio_charts.py:1531`、`latex_charts.py` 三条分派链、`workflow.js:4078/4079/4096/4105`、`app.js` 双语气 | 同一 30 名词表上有 **4 种分派结构**（1 个 dict + 3 条 if/elif 链，表分支 `_biblio_table_data` 独占 301 行） |
+| 一个平台 | **3+ 处**：`crawlers/<p>.py` + `crawlers/comments_<p>.py` + **`comments.py` 内部该类的一个方法与若干页内 JS 常量** + `crawl_capabilities.py` 的 Capability | 知乎：`zhihu.py` / `comments_zhihu.py` / `comments.py:324 crawl_zhihu` + `:367 _ZHIHU_PANEL_JS` + `:419 _ZHIHU_PUMP_JS`；抖音同理（`:983` + 6 个 `_DY_*` 块） |
+| 一个采集后端 | `crawl_capabilities.py` 内 8 个函数各问一次 | `modes_for/mode_for/crawl_kwargs/needs_session/…` |
+| 一个分析 op（34）/进程 op（12） | 参数表、校验、列契约、执行体、前端字段、双语气各一处 | `data_analysis.py:3828 _operations()` 是 34 行的字面量 dict |
 
-同样的「多份清单」问题也出现在平台/引擎层，本轮已经处理完（`crawl_capabilities` 只从 Selenium 矩阵 +
-CatBus 清单派生；见 `docs/crawler_rules.md`「第二采集后端」）。节点层现在处于同样的起点：
-`tests/unit/test_node_plugins.py` 已把**目录 ↔ 执行器 ↔ 前端粘贴白名单 ↔ 双语气泡词**四处互相钉住，
-所以下一阶段拆执行体时，漏一处会红，而不是变成一次「面板接受了、运行才拒绝」。
+**D4 为躲循环拆出的孤儿模块 + 只导出 3 个的 barrel**
+`transport.py` 25 行 / 1 函数、`profiles.py` 34 行 / 1 函数、`services/stats.py` 23 行。
+`services/__init__.py` 从 52 个模块里 re-export 3 个 ⇒ 同一模块两种导入拼法。
+`crawl_capabilities.py` 用 **5 处函数级** `from services import catbus_bridge`（:1132/1138/1307/1371/1442）绕开顶层环。
 
-文件结构上，`backend/` 已经是多包结构（`api/ engine/ services/ crawlers/ analyzers/ utils/ nodes/`），
-根目录只剩组合根与少量跨包模块（`app.py config.py i18n.py state.py settings_store.py cookie_preflight.py
-browser_profiles.py crawl_capabilities.py crawl_gate.py scheduler.py profiles.py`）。Phase 4 把这些
-跨包模块收进 `core/` 与 `capabilities/`；那是最后一步，因为它会动所有 import，收益不如前三个阶段。
+**D5 后端根目录没有层**：地基（config/state/stores/settings_store）、机器事实、能力声明、登录态
+（`browser_profiles` 776 + `cookie_preflight` 500 + `profiles` 34）、调度、采集门、词条——13 个模块平铺，
+依赖方向只靠 `utils/helpers.py:23` 的一句注释在口头维持启动预算。
 
-### 一次性文件与缓存（本轮清理）
+**D6 命名漂移与同名冲突**
+`services/exporter.py` / `export_browser.py` / `api/exports.py`；`report_service.py` / `latex_report.py` / `api/report.py`；
+`profiles.py` / `browser_profiles.py` / `api/browser_profiles.py`；`services/stats.py` / `api/stats.py` / `static/js/stats.js`。
+**`api/` 与 `services/` 有 8 对同名模块**（browser_profiles、config、lexicon、stats、run_compare、schedules/schedule_store、
+reusable/reusable_store、workflow_history）；运行根是 `backend/`，只能靠包前缀区分——
+`api/browser_profiles.py` 同时写 `import browser_profiles` 与 `from profiles import …`。
 
-- 已删：`build/`（构建日志、lint 清单、一次性验收脚本）、`scratchpad/`（探针、截图、隔离数据根）、
-  `.pytest_cache/`、`.ruff_cache/`、源码树内全部 `__pycache__/`。
-- 保留：`data/`（运行结果/登录/数据集，用户数据）、`logs/`（运行日志）、`dist/`（交付物）、
-  `.venv/`、`ml_train/models/`（模型权重）、`.qoder/`（编辑器配置）。
-- 规则：以后一次性脚本放忽略目录（`build/` / `scratchpad/`），不进 git、不进 CI；被跟踪的探针只在
-  明确需要长期回归时升级成 `tests/` 下的用例，否则用完即删。
+**D7 依赖方向倒置与模块环**
+服务层的 `services/analysis_params.py:9` 与 `services/process_params.py:9` **反向 import `api/http.py`** 的数值收敛助手
+（coercion 是地基，不是 HTTP 的东西）。`services/biblio_formats/common.py` ⇄ `services/biblio_import.py` 互为顶层依赖。
 
-## 2. 目标架构
+**D8 契约靠 `getattr` 默认值维持，平台事实散在"通用"层**
+- 执行器用 `getattr` 读 `skipped_targets / target_total / shortfall / watermark_column`，而这些**只在
+  `catbus.py:92-97` 与 `hongguo_harvest.py:787-795` 上存在**；`nodes/executors/source.py:546` 的兜底是字面量 **`'BV号'`**
+  ——bilibili 的列名硬写在了 `crawlers/` 之外的执行器里。
+- `supports_crawl` 只有 7 处显式声明，其余 6 个平台文件依赖 `__init__.py:40` 的 `getattr(..., True)`。
+- `_polite_pause` 的基线默认值散在 13 处平台声明里，`hongguo.py:262`、`wechat.py:132`、`douyin.py:394` 直接绕过属性传参。
+- 号称站点无关的 `crawlers/engine/` 里写着平台事实：`innertube.py:52 API_HOST='https://www.youtube.com'`、
+  `popup.py` 三个具名平台 Prompt、`wall.py:42-43` 的 `passport.weibo.com`/`passport.zhihu.com` 与 :94 的知乎 40362。
+- `crawlers/engine/__init__.py:5` 的文档字符串写着「platform module under **`crawlers.platforms`**」——
+  **那个包今天不存在**：目标布局早就写在注释里，但从未执行。
 
-### 2.1 后端：一个节点 = 一个插件模块
+**D9 已确认的代码级缺陷（重构顺带处理；改行为的单独判定，不混进搬迁）**
+| 缺陷 | 证据 | 处置 |
+|---|---|---|
+| 屏显调色板是死码：`CATEGORY_COLORS` 被绑定两次，屏显路径实际用印刷色 | `visualizer.py:258` vs `:279`；消费者 :757/1007/1078/1826；而 `latex_charts.py:12` 还注释着"比屏显的 `CATEGORY_COLORS` 深一点" | 删死码 + 修注释（无行为变化） |
+| `graph3d` 的 LaTeX 分支永不可达 | `latex_charts.py:1951` 已把 graph3d 与 knowledge_graph/circular 同组，:1966 的 `elif` 不再可能命中 | 删该分支（无行为变化） |
+| `toggleDatasetPanel` 在同一文件里定义两次（函数体逐字相同） | `workflow.js:12839` 与 `:13006` | 删一处（无行为变化） |
+| 两个已写好的首启对话框处理器**从未被任何爬虫挂上** | `engine/popup.py:105 INSTAGRAM_NOTIFICATIONS`、`:115 YOUTUBE_CONSENT`；全仓库只有 `douyin.py:48` 声明 `prompts`，`base.py:29` 默认 `()` | **这会让 YouTube 真机行为改变**，属功能修复：需真机验证，单独提交，不塞进重构 |
 
-```
-backend/nodes/
-  __init__.py          # 只做显式导出，不做 barrel 魔法
-  catalog.py           # 类型、行形态、分组、quiet、label key（Phase 0）
-  context.py           # NodeCall：每个执行器收到的唯一调用形状（Phase 1a）
-  registry.py          # EXECUTORS = {type: run}，唯一查找入口；重复注册按名拒绝（Phase 1a）
-  schema.py            # Phase 3：聚合并发列/读取列（由各插件的 emits/reads 组成）
-  executors/
-    __init__.py        # 导入 9 个内置插件并注册；由 registry.load_builtin_executors() 触发
-    name.py upload.py resume.py tokenize.py accumulate.py compile.py biblio.py fuse.py output.py  # 已迁
-    source.py comment.py process.py analysis.py visualize.py                                     # Phase 1b 剩余
-  labels.py            # node_label：控制台命名，不拉入 engine/pandas（executors 可安全引用）
-```
+**D10 测试树与产品树不同构**
+`tests/unit` 150 个文件平铺，归属靠猜（`test_crawler_zhihu_author.py` 与 `test_zhihu_author.py`、
+`test_crawler_engine.py` 与 `test_engine_*.py` 并存）；驱动↔harness 命名有 10 个不对齐的例外
+（如 `test_frontend_contract.py` 驱动两个 harness、`test_frontend_schedules.py` 缺 `_js` 后缀）。
+JS 加载面有三种并存机制：**12 个 harness 自带硬编码文件清单**、约 26 个由 Python 驱动通过 argv 传清单、
+只有 4 个用 `page_scripts.mjs`（`2e71646` 刚立的唯一顺序）。
 
-`NodePlugin` 的最终形态（Phase 1 先只加 `execute`，其余字段在 Phase 3 补齐）：
+**D11 搬迁的代价没有被任何守卫接住**
+① `desktop/caixihui.spec:69-83` 的 `hiddenimports` 是**写死的包名清单**（`api,crawlers,services,analyzers,utils` + 7 个根模块）；
+目录一改，打包版就静默缺模块，而**没有任何测试钉它**。
+② `docs/` 里 ≥60 处 `crawlers/xxx.py` / `file:line` 形式的证据引用（`crawler_notes.md` 2,450 行、`crawler_rules.md`、
+`live_test_plan.md`、`ARCHITECTURE.md`、`agent_practices.md`），搬文件即失效。
+③ 存储键：节点 id、`node_rows`、游标、水位作用域、`workflow_fingerprint` 的输入参数——**重构不得触碰**。
 
-```python
-@dataclass(frozen=True)
-class NodePlugin:
-    type: str
-    label_key: str
-    category: str
-    rows: Literal['table', 'pdf', 'none']
-    quiet: bool
-    execute: Callable[[dict, NodeCall], object]
-    defaults: Callable[[], dict] | Mapping[str, object]      # Phase 2
-    validate: Callable[[dict, ValidationContext], list[str]] # Phase 1 可先复用现有 validate
-    emits: Callable[[dict, list[Schema] | None], tuple[str, ...] | None]  # Phase 3
-    reads: Callable[[dict, dict], tuple[str, ...]]                       # Phase 3
-```
-
-约束（不是建议）：
-
-- **执行器只依赖 `NodeCall`**（`headless / current_input / run_ctx / upstream / ctx / platform_of / label_of`），
-  不直接读 `app` 的模块全局。现在 `app.py` 里的执行体大量使用 `execution_state`、`add_log`、`_llm_run_ctx` 等；
-  Phase 1 的每个迁移都把这些依赖**作为 `NodeCall` 的显式字段**或通过 `services/` 访问，禁止 `import app`（会成环）。
-- **执行体的行为逐字节不变**：迁移只改位置与签名，不改日志、状态码、返回形状。每一类型单独提交，
-  跑该类型的矩阵用例（`test_node_matrix` / `test_nodes_execution` / `test_workflow_engine` / 对应 API 用例）。
-- **注册是显式的**：`registry.py` 里一行一个插件；不做 import-time 自动扫描（扫描会让顺序、循环依赖和
-  “文件放错目录”都变成隐式行为）。`tests/unit/test_node_plugins.py` 继续钉 `REGISTRY` 与 `catalog` 相等。
-- **节点 id / DOM id / 指纹不参与重构**：这些是存储键，任何“顺手重命名”都会让历史运行与继续失效。
-
-### 2.2 前端：目录由服务端下发
-
-新增 `GET /api/node-types`（只读，无写操作）：
-
-```json
-{
-  "types": [
-    {"type": "source", "labelKey": "nodeType.source", "category": "data",
-     "rows": "table", "quiet": false, "defaults": {"platform": "zhihu", ...}}
-  ]
-}
-```
-
-- `canvas.js` 的 `_VALID_NODE_TYPES`、`getDefaultParams`、新增节点菜单都从这份 payload 读；
-  `nodeType.*` / `node.*` 词条仍留在 `app.js`（payload 只发 key，不发语言）。
-- 引导顺序：payload 与 `/api/capabilities` 一样走 `boot('node-types', …)`，失败时给重试，不画空菜单。
-- 值类型（checkboxes/selects/textarea）仍由各类型的设置面板决定；Phase 2 只搬“有哪些类型、默认值、分类”，
-  不搬每个节点的复杂表单（那是 Phase 1 执行体与各面板自己的事）。
-- 契约测试：`/api/node-types` 的类型集合 == `nodes.catalog.NODE_TYPES`；前端 harness 用真实 payload 渲染
-  节点菜单与粘贴导入，断言集合一致。
-
-### 2.3 目录分层（Phase 4，最后做）
+## 3. 目标架构
 
 ```
 backend/
-  app.py                  # 组合根：创建 Flask、注册蓝图、启动后台服务；不放业务
-  core/                   # config.py i18n.py state.py settings_store.py profiles.py machine deps
-  capabilities/           # crawl_capabilities.py + node catalogue 的服务端聚合
-  api/ engine/ nodes/ services/ crawlers/ analyzers/ utils/   # 保持不变
+  app.py                  # 组合根：建 app、注册蓝图、请求钩子、启动后台服务、__main__（目标 <300 行）
+
+  core/                   # 地基：谁都能依赖它，它不依赖业务
+    config.py             # ← config.py
+    state.py              # ← state.py（运行期内存态 + 控制台缓冲 + 停止判定）
+    settings.py           # ← settings_store.py
+    stores.py             # ← stores.py（进程级 store 单例，测试接缝）
+    coerce.py             # ← api/http.py 里的数值/枚举收敛助手（解掉 D7 的反向依赖）
+    machine.py            # ← utils/machine_deps.py
+    procs.py              # ← utils/procs.py
+    refs.py               # ← utils/helpers.py
+    text/                 # ← i18n.py 拆：__init__ 只放行为，词条按域分文件
+      zh/{common,api,crawl,run,node,chart,biblio,settings,dialog,toast,report,deps}.py
+      en/…                #   与 zh 同名一一对应
+
+  capabilities/           # 声明层：零重依赖（不 import selenium/pandas/app），启动即可问
+    model.py              # Field / Mode / Capability 数据类
+    requirements.py       # 机器要求判定（windows_desktop / cloud）
+    platforms/<id>.py     # 一个平台一个声明：模式、字段、身份列、示例、地区、串行、节流基线、
+                          #   prompts、到场判据词表（今天写在 engine/wall.py、engine/popup.py 里的那些平台事实）
+    catbus.py             # 从适配器清单物化的那一半能力（顶层导入，不再是 5 处函数级）
+    registry.py           # 聚合查询：modes_for / mode_of_node / crawl_kwargs / needs_session / as_dict
+    nodes.py              # 节点目录的服务端视图（配合 /api/node-types）
+
+  crawlers/               # 采集实现层（可以 import selenium；capabilities/ 不行）
+    registry.py           # ← crawlers/__init__.py 的 CRAWLERS + get_crawler/cookie_hosts/is_crawlable
+    gate.py               # ← crawl_gate.py
+    core/
+      crawler.py          # ← base.py 拆 1：Crawler 主体（seed/emit/游标/水位/收尾判定）
+      faults.py           # ← base.py 拆 2：CrawlerStopped/DeadDriver/PageNotArrived/ProfileUnavailable + 分类
+      browser.py          # ← base.py 拆 3：驱动与 profile 装配、隐身/桌面度量、导航与到场、Cookie 植入、节流
+      video.py            # ← video_base.py
+    engine/               # 站点无关机制，保持（pager/feed/wall 判定/counters/times/jsonpath/pagefetch/innertube/popup）
+                          #   —— 其中的平台事实迁去 capabilities/platforms/，engine 只留判据机器
+    commenting/
+      session.py          # ← comments.py 的会话骨架（停止/页内 fetch/滚动/状态语义）
+      protocol.py         # ← comments_base.py
+      registry.py         # ← comment.py:322 的 `getattr(session,'crawl_'+kind)` 名字典化：一个平台一行
+    backends/
+      catbus.py           # ← catbus.py（与平台无关的第二后端）
+    platforms/
+      weibo/              # ← weibo.py + comments_weibo.py + comments.py 里属于微博的方法与 JS 常量 合成一个目录
+        crawler.py        #   926 行按 walk 拆开，单文件 <400
+        comments.py       #   解析 + 页内 JS 构造同源
+        __init__.py       #   只声明 id + 导出（注册表按名收集）
+      zhihu/ douyin/ xiaohongshu/ bilibili/ youtube/ twitter/ wechat/
+      hongguo/ crawler.py  comments.py  harvest.py  addon.py       # hongguo_harvest 1822 行归位并拆
+      instagram/ __init__.py crawler.py                            # 仅登录采集，拒绝语照旧
+
+  nodes/                  # 已插件化（样板）：catalog/context/registry/defaults/labels/schema + executors/*
+  engine/                 # 运行编排（从 app.py 搬出）
+    dag.py                # ← workflow.py（effective_workflow / validate / 拓扑）
+    runner.py             # ← app._begin_run / _run_node_durable / _execute_node / _close_run
+    queue.py              # ← app 的队列与镜像恢复
+    settle.py             # ← 停止、孤儿结算、节点判词
+    console.py            # ← app 的 LogBufferHandler/_RunLogWriter/_LogTee/pin_console
+    history.py            # ← app._record_execution_history
+    pool.py               # ← engine/executor.py（并/串行线程池）
+
+  sessions/               # 登录态域：cookies.py(←services/cookie_manager) flow.py profiles.py(←browser_profiles+profiles)
+                          #   preflight.py(←cookie_preflight) routes.py(←app 的 11 条 cookies/profiles 路由)
+  scheduling/             # ← scheduler.py + services/schedule_store.py + services/cron.py
+  analysis/               # ← data_analysis.py 拆：pipeline.py + params.py + ops/<族>.py + diff.py + topics/
+  charts/                 # 图型注册表（Stage 5）：registry.py + contract.py + console/<族>.py + biblio/<视图>.py
+                          #   + latex/{figures,tables,formulas}.py（一个图型一处声明：option/TikZ/三线表/读取列/词 key）
+  rendering/latex/        # compile.py document.py outputs.py report.py（←latex_compile/latex_outputs/latex_report）
+  runs/                   # ledger.py(run_store 1609 拆) files.py windows.py writer.py compare.py history.py retention.py
+  datasets/               # store.py merge.py lineages.py dedupe.py
+  llm/                    # client.py transports.py prompts.py cache.py checkpoints.py refusal.py（←llm_client+transport.py）
+  workflows/              # manager.py history.py reusable.py expand.py bundle.py
+  files/                  # exporter.py browser.py locks.py housekeeping.py
+  net/                    # probe.py
+  bibliometrics/          # ← 11 个 biblio_* + bibliometrics.py(1996) 拆（graph/metrics/clustering/monitor/fuse/geo/
+                          #   schema/sources/refs/store）+ formats/（注册表原地搬进，解 D7 的双向依赖）
+  api/                    # 只做 HTTP：解析请求 → 调一个服务 → 序列化
+    http.py               # 只留请求体/上传/语言相关（数值收敛下沉 core/coerce.py）
+    workflow/ runs/ sessions/ data/ biblio/ analysis/ settings/       # 25 蓝图 + app 的 39 条路由按域入目录
 ```
 
-迁移规则：
+**分层规则（可机械检查，不是口号）**
+1. `core ← capabilities ← 域包 ← api ← app`，单向。任何模块不得 `import app`（节点插件已有此契约，扩到全树）。
+2. **能力声明与采集实现为什么分两处**：设计期校验必须在不加载 selenium/pandas 的前提下回答"这个模式要什么"——
+   这是启动预算 9.2 s → 2.07 s 的同一原因（`test_boot_import_budget.py`）。两棵树的**平台 id 集合相等**由契约测试钉住，
+   因此不构成第二份清单。
+3. 目录 = 域名词，文件 = 该域里的一个名词；**包名不得再出现在文件名里**（`bibliometrics/graph.py`，不是 `biblio_graph.py`）。
+4. 一个成员 = 一个文件 + 一行注册 + 一个枚举集合的契约测试。禁止 import 时自动扫描（顺序与"文件放错目录"会变成隐式行为）。
+5. 体量预算：>900 行的产品模块视为多职责文件必须拆；>400 行须在文件头写明"这些职责为什么在一起"；
+   <40 行且只有一个概念的文件一律合并回所属域。**为躲循环新建孤儿模块＝掩盖分层错误**，D4 三例是反面教材。
+6. 爬虫契约属性（`watermark_column/target_total/shortfall/skipped_targets/prompts/POLITE_*`）由 `Crawler` 显式声明默认值，
+   执行器**不再 `getattr(..., 兜底字面量)`**；`'BV号'` 这类平台列名不得出现在 `crawlers/` 之外。
+7. `__init__.py` 只写两件事：一段说明本包契约的注释 + 显式注册/导出；不做部分 re-export 的 barrel。
+8. 存储键不许动：节点 id、`node_rows`/游标/水位作用域、参数名、`workflow_fingerprint` 输入。
+   重构只搬位置与签名，**行为逐字节不变**；改行为另开功能提交。
+9. 前端：`index.html` 的 `<script src="/js/…">` 是**唯一**加载顺序；`onclick=` 里那 66 个全局函数名与 20 个命名空间
+   接收者**不得改名**（它们是可调用面，不是实现细节）。
 
-- **不做 re-export 兼容层**（AGENTS：不要 backwards-compatibility shim）。一次提交内改完 import、测试与文档；
-  用 `grep -rn "from config import\|import config"` 这类全树清点，而不是等测试逐个报。
-- 根目录 `sys.path` 只有 `backend/`，所以包内一律绝对导入（`from core.config import Config`），
-  不出现 `backend.` 前缀。
-- 一次性搬一个包（先 `core/`，再 `capabilities/`），每步全量 fast + 三档 pylint + `node --check`。
+## 4. 「模范项目」判定标准（完成定义）
 
-## 3. 分阶段执行与验收
+1. 无 >900 行的产品模块；JS 无 >1,200 行文件；每个文件一个主题、每个目录一个域。
+2. 加**一个节点类型 / 一个平台 / 一种图型 / 一个 op / 一个导入格式 / 一个面板**：只改 1 个新文件 + 1 行注册，
+   其余由契约测试兜底。现状：节点已 1 处；平台 3+、图型 6、op 5、格式 2、面板 4。
+3. 命名唯一：一个概念一个名字，`api/` 与 `services/` 之间不再出现同名模块。
+4. 依赖方向可测且单向；零 `import app`（组合根除外）；服务层不再 import `api/`。
+5. 存储兼容：历史运行仍可续跑、指纹不变、`runs.db/datasets.db` 状态兼容（AGENTS 红线）。
+6. 门禁全绿：fast 全量、设备档带三个 `CRAWLER_REQUIRE_*`、ruff check+format、两档 pylint 绝对路径清单 exit=0、
+   `node --check`、打包契约 + **真实重建 exe 并冒烟**（每阶段一次，不只源码）。
+7. 文档与代码同构：README 结构图、`docs/ARCHITECTURE.md`、`docs/development.md` 文件树、
+   `docs/crawler_rules.md` 的 file:line 证据全部指向新位置；不留旧路径。
+8. D9 四条缺陷清零（其中 popup prompts 那条作为功能修复，需真机证据）。
 
-### Phase 0 — 节点目录 + 执行器注册表（已完成）
+## 5. 分阶段执行（顺序即依赖；每阶段单独提交并跑全部门禁）
 
-- 新增 `backend/nodes/catalog.py` 与 `backend/nodes/__init__.py`；`engine/workflow.py` 的三套集合改为派生；
-  `app.py` 的 if 链改为注册表（Phase 1a 后统一进 `nodes/registry.py`）；`_QUIET_NODE_TYPES` 从目录读。
-- 新契约 `tests/unit/test_node_plugins.py`：目录 == 执行器表；行形态三分；引擎集合同源；前端粘贴白名单同集；
-  每个插件的 `label_key` 在中英两份词条里各存在一次；未知类型没有插件；分类分组。
-- 验收：上述 7 例、`tests/api/test_node_matrix.py`、`test_nodes_execution.py`、`test_workflow_engine.py`、
-  `test_workflow_api.py` 全绿；全量 fast 通过；ruff + 三档 pylint。
+| Stage | 做什么 | 代价 | 特有验收 |
+|---|---|---|---|
+| **0 先加护栏** | ①新契约：`spec` 的 hiddenimports 清单 == `backend/` 实际顶层包；②`docs/` 里的 `path.py` 引用必须存在；③`Crawler` 契约属性表与执行器 `getattr` 兜底的对账；④修 D9 前三条无行为变化的死码 | 纯新增 + 三处删除 | 每条新契约都能红一次（故意改错路径就红） |
+| **1 crawlers 插件化** | `crawlers/` → `core/engine/commenting/backends/platforms/<id>/`；`comments.py` 的每平台方法与页内 JS 归回各平台目录；`base.py` 拆 3；`engine/` 里的平台事实迁 `capabilities/platforms/`；评论改注册表分派（杀掉 `getattr(session,'crawl_'+kind)`） | ~94 处测试导入 + docs 引用 | 平台 id 三处集合相等；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
+| **2 sessions + scheduling** | 登录态四模块 + 34 行孤儿合成 `sessions/`；`/api/cookies/*` 与 `/api/profiles/*`（app 内约 950 行）进 `sessions/routes.py`；调度合成 `scheduling/` | 打桩路径搬迁 | 预检/profile/账号折叠用例全绿；cloud 判定不变 |
+| **3 core + capabilities** | 根模块下沉 `core/`；`crawl_capabilities.py` 1,805 行拆 `model/requirements/platforms/<id>/catbus/registry`；`coerce.py` 下沉解掉 D7 | 全树 import 一次改完（无 shim） | `test_boot_import_budget` 仍绿且启动不退化；三档 pylint；打包契约 |
+| **4 services 归域** | `bibliometrics/ charts/ rendering/ runs/ datasets/ analysis/ llm/ workflows/ files/ net/ sessions/ scheduling/`；D6 的 8 对同名与三四个拼法逐项统一 | `services/` 消失＝最大面积 | 每域一条"集合相等"契约；`test_biblio_*`/`test_latex_*`/`test_run_store` 全绿 |
+| **5 图表注册表** | 一个图型一个描述子；消灭 6 处登记与 4 种分派结构 | 30 个图型全量回归 | 注册表集合 == 各处旧清单集合 == JS 列表；14 个文献图 xelatex 全出 PDF |
+| **6 app.py 归零** | 编排进 `engine/`，39 条路由进蓝图；`app.py` <300 行 | `_begin_run` 是最高风险单体 | 逐族搬、逐族跑 `test_workflow_api`/`test_runs_api`/`test_stop_path`/`test_console_buffer`；"app.py 无业务"静态断言 |
+| **7 i18n 拆分** | `core/text/{zh,en}/<域>.py`；JS 词典同法 | 2,922×2 键的三类扫描改向 | 可达性/双语/带参占位符契约全绿；语言切换真浏览器复测 |
+| **8 前端模块化** | 按 `docs/frontend_modules.md`：chart-preview → capabilities → panels/* → settings；`canvas.js`/`app.js`/`style.css` 同法；**其余 38 个 harness 全部改用 `page_scripts.mjs`** | 66 个 onclick 名不可改 | `node --check`；相关 integration；banner 与内容不再漂移（新契约：每段 banner 下的函数属于该段主题） |
+| **9 op 注册表** | 34 分析 + 12 进程 op 各一处描述子；`data_analysis.py` 只剩 pipeline | 列契约与诊断联动 | `test_node_schema` 的"契约 op 集合 == 执行 op 集合"仍绿 |
+| **10 测试树与外围** | `tests/{unit,api,frontend}` 按被测域分目录、驱动↔harness 命名对齐；`tools/ desktop/ deploy/ samples/ docs/` 归类（deploy 现在只有 6 行 Caddyfile，与根目录 Dockerfile/docker-compose 分裂） | 308 个测试文件路径 | `pytest.ini` marker 与收集数不变；CI 与本地同形制 |
 
-### Phase 1 — 执行体逐个搬进插件
+Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对应平台小节——那里的规则都是真机付过钱的。
 
-**1a（已完成）**：8 个内置执行器已迁到 `backend/nodes/executors/`，每个模块暴露 `NODE_TYPE` 与
-`run(node, call)`；`services/nodes.py` 已删除；`nodes/context.py` 提供 `NodeCall`；`nodes/registry.py`
-统一注册（内置 8 个自注册，app 注册剩余 6 个）；`test_node_plugins` 新增「插件不得 import app」的静态断言。
-验收：fast **8071 passed, 3 skipped**；设备档 **192 passed**（重构前一轮；本轮执行体迁移未改采集路径）；
-ruff 431 files；pylint 产品档 196 文件 / tests 档 260 文件 exit=0。
+## 6. 已完成（样板，勿重做）
 
-**1b（已完成）**：`output` → `visualize` → `analysis` → `process` → `comment` → `source` 全部迁完；
-`app.py` 从 7,182 行降到 4,410 行，只剩组合根、运行编排（`_run_node_durable`）与 HTTP 处理器，
-`_execute_node` 只查 ``nodes.registry``。每个类型单独提交（`115649b`/`a54ba97`/`b21b4a2`/`6bf8490`/`9f0de55` + 本轮 source）。
+- **节点插件化**：`nodes/{catalog,context,registry,defaults,labels,schema}.py` + `nodes/executors/<type>.py` ×14，
+  重复注册按名拒绝、插件禁止 `import app`；`app.py` 7,182 → 4,412 行（`4b68f3f`→`ac733bc`）。
+- **目录服务化**：`GET /api/node-types` + `static/js/node-types.js`，冷页兜底与 `nodes/defaults.py` 双向钉住（`70da03e`）。
+- **列契约归所有权**：各 op 的列表回到自己的模块，`nodes/schema.py` 只聚合（`61f1738`）。
+- **测试加载顺序收口**：`tests/frontend/page_scripts.mjs` 从 index.html 读唯一顺序并双向清点页面↔磁盘（`2e71646`）。
 
-已落地的共享件：`services/run_files.py`（运行→文件台账的尽力登记）、
-`services/run_windows.py`（`note_window` / `window_for_save`：爬取时间窗随运行传到文件命名处）、
-`services/analysis_params.py`（面板扁平字段 → 各分析步骤 kwargs 的唯一翻译层，`node_schema` 不再反向 import app）、
-`services/process_params.py`（算法节点的 select 参数矩阵，同时回答定时/云端门的「会不会调模型」）、
-`services/llm_run_context.py`（模型客户端的唯一构造点：进程/分析/API 共用）、
-`services/crawl_runtime.py`（逐行落库 sink、item 指纹作用域、文件名组件：source 与 comment 共用）、
-`services/crawler_lifecycle.py`（有界 close + 按 PID 回收 + 卡死位置报告）、
-`nodes/labels.py`（`node_label` 从 `engine.workflow` 搬到轻模块，执行器无需拉入 DAG/capability 依赖）。
+## 7. 明确不做
 
-每一步：
-
-1. 在 `nodes/executors/<type>.py` 写 `run(node, call)`，把 `app.py` 的函数体原样搬过去；
-   `NodeCall` 增加它需要的显式依赖（例如 `add_log` 由 `state` 提供，绝不 `import app`）。
-2. `app.py` 的 `_run_<type>` 改为调用插件（迁移期间允许保留薄适配，结束删除）；
-3. 跑该类型的用例 + `tests/unit/test_node_plugins.py`；全绿后单独提交；
-4. 全部迁完后，`app.py` 只剩 `_execute_node` 的注册表查找与 `NodeCall` 组装。
-
-验收：`app.py` 行数明显下降（目标 < 4,500）；所有节点矩阵用例不变；fast 与设备档全绿。
-风险最高的 `source`（浏览器/队列/CatBus 分支）与 `comment`（评论引擎）放最后，避免在重构期同时改采集行为。
-
-### Phase 2 — 前端目录服务化（已完成）
-
-- 新 `GET /api/node-types`（`api/node_types.py`）：类型、`labelKey`、分类、行形态、quiet、**新节点种子**
-  （`nodes/defaults.py`；`biblio` 直接取 `biblio_schema.DEFAULTS`，不再在画布抄第二份）。`source` 的种子
-  随采集矩阵生成，payload 用 `defaultsFrom: 'capabilities'` 标注而不是冻一个形状。
-- 新 `static/js/node-types.js`（`NodeTypes`）：`load/ready/types/defaults/labelKey/category/failure`；
-  `defaults()` 深拷贝，失败时**点名**（toast + `failure()`），绝不用空目录冒充"没有节点类型"。
-- `canvas.js`：`getDefaultParams` 先读 payload（缺省/动态类型才落到本地分支）；新增 `validNodeTypes()`，
-  粘贴/恢复校验读服务端列表；本地清单保留为**冷页兜底**，由 `test_node_plugins` 与
-  `test_frontend_node_types_js` 双向钉住（兜底种子逐项等于 `nodes/defaults.py`）。
-- 启动顺序：`boot('nodeTypes')` 在 `boot('canvas')` 之前；失败不阻断画布（兜底生效）。
-- 测试：`tests/api/test_node_types_api.py`（10 例：顺序/形状/biblio 契约/JSON 安全/只读）、
-  `tests/unit/test_frontend_node_types_js.py` + `harness_node_types.mjs`（4 例：深拷贝、失败点名、
-  兜底==Python、列表切换）、`test_node_plugins` 新增种子全集与页面加载契约。
-
-### Phase 3 — 节点 schema 插件化（已完成）
-
-- 列契约归各自的拥有者：进程 op 的 `OUTPUT_ADD_COLUMNS` / `OUTPUT_REPLACE_COLUMNS` / `READ_PARAMS` 与
-  `PROCESS_OPS` 进 `services/process_params.py`；分析步骤的 `STEP_REPLACE` / `STEP_ADD_*` /
-  `STEP_PASSTHROUGH` / `STEP_UNKNOWN` / `STEP_DYNAMIC_REPLACE` 与 `replaced_columns()` 进
-  `services/analysis_params.py`；tokenize 的三种输出形态与 visualize 的读取列表留在各自插件模块。
-- `services/node_schema.py` 已删除，计算逻辑搬到 `nodes/schema.py`（只聚合；tokenize/visualize 的常量在
-  用时惰性导入，避免把分析器拉进启动路径）。`api/diagnostics.py` 改读新模块。
-- 契约：`test_node_schema.py::TestTheTablesLiveWithTheirOwners` 4 例钉住「契约 op 集合 == 执行器 op 集合」
-  （进程 12 个、分析步骤全集、三种分词形态），并断言旧模块已不存在（第二个家会静默赢下先改的 importer）。
-
-### Phase 4 — 目录分层
-
-- 建 `core/`、`capabilities/`，按 §2.3 搬；一次性改完全树 import 与测试；不做兼容层。
-- 验收：`grep` 确认无旧路径；fast、设备档、打包契约、`desktop/` 构建脚本的路径全绿；README/docs 文件树同步。
-
-### Phase 5 — 清理与文档
-
-- 删除一次性文件与缓存（§1）；`docs/` 文件树、README 结构图、`AGENTS.md` 的规则引用同步；
-- 用 `tools/` 里明确登记的工具替代散落脚本；被保留的探针一律进忽略目录。
-
-## 4. 测试与门禁（每一阶段都适用）
-
-- **契约测试先于迁移**：先写“新位置与旧位置必须相等”的测试，再搬代码；搬完测试仍绿才算完成。
-- **行为不变以用例为证**：节点矩阵（`test_node_matrix.py` 用 importlib 走每个 op→类）、执行器用例、
-  前端 harness、真浏览器 `test_ui_layout` 是四个不同层面，缺一层就会留下“只在某种调用方式下坏”的空间。
-- **门禁**：`pytest -q` 全量；`ruff check` + `ruff format --check`（全树）；pylint 产品档 / tests 档
-  （绝对路径清单 + `tr -d '\r'`，见 `docs/agent_practices.md`「Lint 标准」）；`node --check` 四个 JS；
-  动了 UI/引擎/LLM 时加 `-m "integration or live_ollama"` 带两个 `CRAWLER_REQUIRE_*`。
-- 每个阶段单独提交（中文类型前缀）；任何一次“改完没重跑”都不算完成。
-
-## 5. 风险与取舍
-
-| 风险 | 处理 |
-|---|---|
-| 搬 `source`/`comment` 时改变采集行为 | 放最后；只搬位置与签名；每步跑对应矩阵与设备档；出现行为差异先修代码，不改测试 |
-| `import app` 造成循环 | 执行器只依赖 `NodeCall` 与 `services/`；契约测试禁止插件 import app（静态扫描） |
-| 前端 payload 加载失败导致菜单空 | 走 `boot()` + 失败重试；harness 覆盖“没回答/坏回答”；绝不画一个看似正常的空菜单 |
-| 文件移动破坏 `sys.path` / 打包 | Phase 4 最后做；全树 grep + 打包契约 + 真实构建；不保留 shim |
-| 插件注册顺序影响行为 | 注册表显式一行一个；不自动扫描；顺序只在展示层使用，执行按类型查表 |
-
-**明确不做**：一次性的“大爆炸”重写；为兼容而保留两套路径；把执行体拆成过细的基类；引入依赖注入框架。
-本项目的扩展点是**节点/平台/引擎**三类，插件协议只服务这三类；其他抽象按实际重复再提取。
+- 不引入打包器/框架/ES modules/依赖注入容器；**也不为拆而拆**（D4 的反面同样算失败：一堆互相传话的小文件）。
+- 不做 re-export 兼容层、不保留旧路径别名；一次搬迁一次改完。
+- 不借重构改行为：日志措辞、判据、列名、调色板一律另开功能提交。
+- 不触碰存储键与指纹输入（节点 id、参数名、游标语义、`item_key`）。
+- 不无人值守跑 `live_quick`/`live_site`；真站验证需用户在场并先问清在哪张网络。
+- `desktop/` 保持 Windows 专用树（AGENTS 唯一例外），`zenviz.html` 的 6 个 CDN 库是否入库仍等用户决定（A44）。

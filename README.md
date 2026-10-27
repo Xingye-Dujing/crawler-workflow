@@ -238,7 +238,7 @@ Excel 一次只导入**一张表**：
 | 文件 | 里面是什么 |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、两个大文件的耦合约束、以及分步（每步过测试）的重构路线 |
-| [`docs/refactor_plan.md`](docs/refactor_plan.md) | 节点插件架构（Phase 0–3 已落地）与各阶段验收口径 |
+| [`docs/refactor_plan.md`](docs/refactor_plan.md) | **全项目结构审计与重构总纲**（实测缺陷分类、目标目录树、分层规则、10 个阶段与完成定义；节点插件化已落地，是后续阶段的样板） |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | `workflow.js` 的**逐模块拆分方案**：边界、加载顺序、要改的 harness、每步验收 |
 | [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限（面向使用者） |
 | [`docs/analysis.md`](docs/analysis.md) | AI 分析 · 数据处理 · 可视化 的完整细节 |
