@@ -1989,7 +1989,7 @@ _ZH = {
     'crawl.stopReason.wall': '登录墙拦住了后面的窗口',
     'crawl.stopReason.risk': '站点风控拦住了后面的窗口（不是 Cookie 失效）',
     'crawl.stopReason.unreachable': '浏览器根本没取到页面（网络或域名不可达，站点从未见到这个会话）',
-    # ── 定时任务（scheduler.py / services/schedule_store.py / services/cron.py）──────
+    # ── 定时任务（scheduling/clock.py / scheduling/store.py / scheduling/cron.py）──────
     # A scheduled run has no browser request behind it, so its refusals are read in the task's own
     # history and in the form — never in a console nobody is watching at 03:00.
     'sched.notWired': '调度器没有接线（这是服务端启动顺序的问题，不是这条任务的问题）',

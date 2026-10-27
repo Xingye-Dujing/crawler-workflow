@@ -72,7 +72,7 @@ hiddenimports = []
 # happens to follow that literal, but a package that is only ever reached by name is one refactor away
 # from shipping an exe whose node types simply are not there. ``tests/unit/test_desktop_packaging.py``
 # fails if a package appears under backend/ without being added here (and if one is named here and gone).
-for package in ('api', 'crawlers', 'services', 'analyzers', 'utils', 'engine', 'nodes', 'sessions'):
+for package in ('api', 'crawlers', 'services', 'analyzers', 'utils', 'engine', 'nodes', 'sessions', 'scheduling'):
     hiddenimports += collect_submodules(package)
 hiddenimports += [
     'config',
@@ -80,7 +80,7 @@ hiddenimports += [
     'state',
     'stores',
     'settings_store',
-    'scheduler',
+    'scheduling.clock',
     'sessions.profiles',
     # Imported inside ``main()`` (the launcher keeps its boot path import-light), so state it
     # rather than trusting the analysis to reach a function-level import in the entry script.

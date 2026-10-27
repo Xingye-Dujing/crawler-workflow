@@ -240,7 +240,7 @@ the contract.
 ## 定时任务 (scheduler)
 
 - **The clock is one thread inside the server process, started only from `__main__`** (and, under the reloader, only in
-  the real serving child), and **a fire takes the same start path as a manual Run** — `scheduler` never starts a run
+  the real serving child), and **a fire takes the same start path as a manual Run** — `scheduling.clock` never starts a run
   itself, it calls the seam `app._start_scheduled_run` → `_begin_run`, so a busy server **queues** the fire like any
   other request. Two clocks would double-fire; a second start path would bypass `_begin_run`'s single-run ownership.
 - **A scheduled canvas may not need a model, and the rule is one rule asked twice** (`app._scheduled_canvas`, shared by

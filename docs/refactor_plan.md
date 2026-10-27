@@ -441,42 +441,44 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      import bp` 里的 `browser_profiles` 是一个**词**，被同一条规则改成 `api.profiles`，而那个路由文件仍叫
      `api/browser_profiles.py`（Blueprint 名 `'browser_profiles'` 也照原样，与其余 20 个蓝图同一口径）。
      剩余（Stage 2 第二刀）：`/api/cookies/*` 与 `/api/browser/profiles/*` 进 `sessions/routes.py`（app 内约
-     950 行），以及 `scheduling/` = `scheduler.py` + `services/{schedule_store,cron}.py`。
+     950 行）。`scheduling/` 已在 2026-10-28 归域完成（见下）。
   6. 之后是 §5 的 Stage 3…10（任务 #30…#37）。#24 已并入 Stage 3。
   7. 两条一直欠着的证据项：**桌面 EXE 未重建**（`core/browser.py`、`douyin/*`、`hongguo/*`、`sessions/*` 等新模块要下一次
      `desktop/build_windows.ps1` 才进包）；三维"平台→引擎→功能"选择器仍没有**专门的真浏览器布局用例**。
      live_quick / live_site 按用户决定不跑（要跑须在场并先问清在哪张网络）。
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
-- **压缩后的接续点（2026-10-28，工作树干净，只有用户自己改的 `data/workflows/红果短剧-四个热播榜.json` 未 stage）**
-  - **HEAD = `f625560`**（登录态五模块 → `backend/sessions/`；外加 CI 那条浏览器用例的容错臂修复），
-    已推 `crawler-github` 与 `gitee`。它前面的顺序：`4ffc00f`（hongguo `player_ui.py` + `naming.py`）
-    ← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0` ← `ae0a569`。
-    **`f625560` 的 CI 两个 job 结果尚未读**（fast + browser；browser 是关键：它要证明
-    `test_a_run_detail_splits_its_workflows_without_growing_a_bar` 的修复真的生效）。恢复后第一件事就是
-    `gh run list --limit 2`（`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）。
-    本地证据已有：fast **8,156 passed / 3 skipped** exit=0；两档 pylint **exit=0、10.00/10**（237 + 268 文件）；
-    ruff check + format 480 files；那条浏览器用例本地 zh+en **2 passed**。
-  - **下一刀 = Stage 2 第三刀 `backend/scheduling/`**（第二刀 `sessions/routes.py` 排在它后面也行）。
-    **不要重新调查，量过的数字如下**：三件 `backend/scheduler.py`(246) → `scheduling/clock.py`、
-    `services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) → `scheduling/cron.py`；
-    产品侧只有 `app.py`（`import scheduler` + `scheduler.start()/set_run_starter()/set_canvas_source()` 三处）、
-    `api/schedules.py`（`from scheduler import fire_now, load_canvas`、`... status as scheduler_status`、
-    `from services import schedule_store as store`）；测试侧 `test_scheduler.py`(61 提及)、
-    `test_schedule_store.py`、`test_cron.py`、`test_schedules_api.py`。**`store`/`cron` 两个本地名本来就带 alias，
-    搬完调用点零改动**；只有 `scheduler.` → `clock.`。
-    **两处必须人改的运行时字符串**：`tests/unit/test_scheduler.py:121,227` 的 `caplog.at_level(..., logger='scheduler')`
-    —— 搬家后 `getLogger(__name__)` 的名字变成 `scheduling.clock`（打桩/logger 名是接缝，脚本代不动）；
-    `store.py` 里 `logging.getLogger('schedule_store')` 改成 `getLogger(__name__)` 与之同源。
-    **改写脚本已经写好、但一次都没执行**：`build/repoint_scheduling.py`（三条规则：import 行按缩进全形匹配、
-    模块属性调用点、散文里的路径；词边界保证 `scheduler_module`（夹具局部名）与 `scheduler_status`（别名）不会被误伤）。
-    配套的还须改：`desktop/caixihui.spec` 的 `collect_submodules` 清单加 `'scheduling'`、显式列表里 `'scheduler'` →
-    `'scheduling.clock'`；`tests/unit/test_doc_paths.py` 的 `_PROJECT_DIRS` 加 `'scheduling'`
-    （**新加的那条契约会自动逼我加**：backend/ 下每个含 .py 的包必须在扫描集合里）；
-    `docs/development.md` 与 `docs/ARCHITECTURE.md` 的行、`AGENTS.md` 定时任务一节、`config.py:98` 注释里的
-    `backend/scheduler.py` 路径。顺序照 sessions 那刀：先 `git mv`（保留 rename 历史）→ 跑脚本 → 人改字符串 →
-    `cd backend && python -c "import app"` 验无环 → ruff → fast → 两档 pylint → commit → push 交给 CI 出设备档。
-  - **Stage 2 第二刀（欠着）**：`/api/cookies/*` + `/api/browser/profiles/*`（app 内约 950 行）进
+- **压缩后的接续点（2026-10-28，工作树干净）**
+  - **HEAD = 本次提交**（`scheduling/` 归域；本次之前的顺序：`20c2ac7` 用户画布布局 ← `85646bf` 压缩锚点
+    ← `f625560` 登录态五模块 → `backend/sessions/` ← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）
+    ← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0` ← `ae0a569`），已推 `crawler-github` 与 `gitee`。
+    **`f625560` 与 `85646bf` 的 CI 结果在写这段时仍未出**（两个 run 都跑了 19–22 分钟还在 in_progress，
+    比平时约 10 分钟慢得多）。恢复后第一件事就是 `gh run list --limit 4`
+    （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）；**browser job 是关键**：它要证明
+    `test_a_run_detail_splits_its_workflows_without_growing_a_bar` 的修复真的生效，也是设备档的证据来源。
+    本地证据：fast **8,156 passed / 3 skipped** exit=0；两档 pylint **exit=0、10.00/10**（238 + 268 文件）；
+    ruff check + format 489 files；那条浏览器用例本地 zh+en **2 passed**。
+  - **Stage 2 第三刀 `backend/scheduling/` 已完成（本次提交）**：`backend/scheduler.py`(246) →
+    `scheduling/clock.py`、`services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) →
+    `scheduling/cron.py`，新增 `scheduling/__init__.py` 域说明（不 import 子模块，故无环）。
+    三条规则脚本 `build/repoint_scheduling.py` 实跑改写 10 个 .py；`store`/`cron` 本地名零改动，只有
+    `scheduler.` → `clock.`。**脚本之外必须人改的五处（都是脚本代不动的接缝）**：
+    ① 两个 logger 名改 `getLogger(__name__)`（运行时名字成为 `scheduling.clock`/`scheduling.store`），
+    `test_scheduler.py:121,227` 的 `caplog.at_level(..., logger='scheduling.clock')` 跟着改；
+    ② `test_scheduler.py` 的 `app_module.scheduler.start` 是**属性形态**（`scheduler` 后面没有点），三条规则全都
+    看不见它 —— 全量时它会让 18 条 `test_schedules_api` 用例级联红（单独跑 API 文件却是绿的，顺序 `tests/api`
+    在 `tests/unit` 前所以真实全量不暴露）；改 `app_module.clock.start`；
+    ③ 脚本的散文规则只扫 `*.py`（docs 只收 `README.md`/`AGENTS.md` 两个单文件），所以 `docs/workflow.md` 的
+    `services/cron.py`、`docs/ARCHITECTURE.md` 的两行、`docs/development.md` 的目录树要手改；
+    ④ 属性规则先于散文规则跑，会把**注释里的** `scheduler.py` 折成 `clock.py`（app.py 两处、`config.py:98`、
+    `i18n.py:1992` 注释均已手改回完整路径）；
+    ⑤ `test_cron.py` 文档串 ``services/cron``、`docs/agent_practices.md` 的 `schedule_store.describe_time` 手改。
+    配套：spec 清单加 `'scheduling'` + 显式 `'scheduling.clock'`、`_PROJECT_DIRS` 加 `'scheduling'`、
+    AGENTS 定时任务一节、README/development.md 目录树。
+    **门禁（本次字节）**：fast **8,156 passed / 3 skipped / 353 deselected** exit=0（与迁移前逐项一致）；
+    两档 pylint **exit=0、10.00/10**（238 + 268 文件；产品档多出的 1 是 `scheduling/__init__.py`）；
+    ruff check + format 489 files 全绿；`cd backend && python -c "import app; import scheduling.*"` 无环。
+  - **Stage 2 第二刀（下一刀）**：`/api/cookies/*` + `/api/browser/profiles/*`（app 内约 950 行）进
     `sessions/routes.py`；那会同时消掉 `api/browser_profiles.py` 这个名字与 `app.py` 的 `def cookie_flow()`。
     登记点：`tests/api/test_api_hardening.py::BODY_ROUTES`（新 POST 路由必须登记，否则那条契约红）。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单

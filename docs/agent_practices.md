@@ -98,7 +98,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `describe_time(moment.isoformat(), '') == '2026-10-16 08:00 (服务器本地)'` was a +08:00 literal wearing a test's
   clothes: the same `00:00Z` instant renders `08:00` here and `00:00` on CI — which is exactly how it failed there
   (`1 failed, 6498 passed`), while the full fast suite was green locally. The expectation belongs to the machine
-  (`astimezone()` with no argument — the same definition `schedule_store.describe_time` uses for a blank zone), while
+  (`astimezone()` with no argument — the same definition `scheduling.store.describe_time` uses for a blank zone), while
   a NAMED zone stays a literal (`'Asia/Shanghai'` → `08:00`), because that one is machine-independent. Reproduce the
   other machine instead of waiting for CI: **Python on Windows honours `TZ`** — measured, `$env:TZ='UTC'` turned
   `astimezone()` into `+00:00` and reproduced CI's single failure, and removing the variable restored `+08:00` — so

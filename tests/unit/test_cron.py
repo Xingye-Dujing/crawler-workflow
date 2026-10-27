@@ -1,4 +1,4 @@
-"""``services/cron`` — the five-field clock the scheduler reads, and no second opinion about it.
+"""``scheduling/cron`` — the five-field clock the scheduler reads, and no second opinion about it.
 
 The scheduler asks an expression exactly three questions: does it mean anything, when does it fire
 next, and does it ever fire again. Every one of them is time arithmetic on a cloud box nobody can
@@ -16,9 +16,9 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from scheduling import cron
 
 from i18n import t
-from services import cron
 
 pytestmark = pytest.mark.unit
 

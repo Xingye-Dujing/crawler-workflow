@@ -39,6 +39,7 @@ _PROJECT_DIRS = (
     'ml_train',
     'nodes',
     'samples',
+    'scheduling',
     'sessions',
     'services',
     'static',

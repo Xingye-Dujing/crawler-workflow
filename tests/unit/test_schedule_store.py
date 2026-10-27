@@ -1,4 +1,4 @@
-"""``services/schedule_store`` — what a scheduled task is, when it fires, and what it recorded.
+"""``scheduling/store`` — what a scheduled task is, when it fires, and what it recorded.
 
 The panel writes through four endpoints and the clock reads the same file, so this store carries
 both halves of the feature. What is pinned here is its own contract, not the HTTP surface:
@@ -22,11 +22,10 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from scheduling import cron, store
 
 from config import Config
 from i18n import t
-from services import cron
-from services import schedule_store as store
 
 pytestmark = pytest.mark.unit
 

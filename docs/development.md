@@ -13,7 +13,10 @@ crawler_workflow/
 │   ├── config.py                 # 配置与数据路径
 │   ├── i18n.py                   # zh/en 消息目录（X-Lang 请求头切换）
 │   ├── settings_store.py         # 运行时可改设置（data/settings.json）
-│   ├── scheduler.py              # 定时任务时钟：进程内 daemon 按 SECONDS tick，到点走 app 的唯一启动路径
+│   ├── scheduling/               # 定时任务域
+│   │   ├── clock.py              # 进程内 daemon 按 SECONDS tick，到点走 app 的唯一启动路径
+│   │   ├── store.py              # 定时任务台账（data/schedules.json）：时间归一、下次运行、触发记账与「已错过」
+│   │   └── cron.py               # cron 五段解析/校验/next_after 与 IANA 时区（只用 stdlib zoneinfo）
 │   ├── crawl_capabilities.py     # 采集矩阵：平台 × 模式 × 字段 × handler（校验、执行、前端面板的唯一口径）
 │   ├── state.py                  # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
 │   ├── stores.py                 # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
@@ -124,8 +127,6 @@ crawler_workflow/
 │   │   ├── nodes.py              # 从 app 抽出的节点执行器（name/compile/tokenize/resume/upload，别名回接 _execute_*_node）
 │   │   ├── text_dedupe.py        # 爬取文本的归一化与近重复检测（SimHash「近重复去重」步骤）
 │   │   ├── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（抗批量清空与单删）
-│   │   ├── schedule_store.py     # 定时任务台账（data/schedules.json）：时间语法归一、下次运行、触发记账与「已错过」
-│   │   ├── cron.py               # cron 五段解析/校验/next_after 与 IANA 时区（只用 stdlib zoneinfo，零依赖）
 │   │   ├── net_probe.py          # 分网探测：把「够不到站点」与「站点只是慢」分开，别误判成抓取失败
 │   │   └── execution_history.py  # 执行历史记录（history.db）
 │   ├── utils/

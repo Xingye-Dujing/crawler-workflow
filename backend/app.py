@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
 import pandas as pd
-import scheduler
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
 from api.browser_profiles import bp as browser_profiles_bp
@@ -49,6 +48,7 @@ from nodes import registry as node_registry
 from nodes.catalog import QUIET_NODE_TYPES as _QUIET_NODE_TYPES
 from nodes.context import NodeCall
 from nodes.labels import node_label
+from scheduling import clock
 from sessions import preflight, profiles
 from sessions.cookies import CookieManager
 from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
@@ -1251,9 +1251,9 @@ def _start_next_queued() -> None:
     _mirror_queue()
 
 
-# ─── Scheduled tasks (the clock lives in scheduler.py) ───
+# ─── Scheduled tasks (the clock lives in scheduling/clock.py) ───
 #
-# The clock, the store and the history are in ``scheduler.py`` / ``services/schedule_store.py``,
+# The clock, the store and the history are in ``scheduling/clock.py`` / ``scheduling/store.py``,
 # which import without Flask. These two functions are the only parts it cannot own: reading the
 # canvas a task names, and starting the run its own way. A scheduled fire goes through
 # ``_begin_run`` — resolved at CALL time, since the run-start path is defined further down this
@@ -1313,8 +1313,8 @@ def _start_scheduled_run(task: dict, manual: bool) -> dict:
     return {'ok': True, 'queued': queued, 'run_id': str(body.get('run_id') or ''), 'error': ''}
 
 
-scheduler.set_run_starter(_start_scheduled_run)
-scheduler.set_canvas_source(_scheduled_canvas)
+clock.set_run_starter(_start_scheduled_run)
+clock.set_canvas_source(_scheduled_canvas)
 
 
 @app.route('/api/workflow/execute', methods=['POST'])
@@ -4379,7 +4379,7 @@ def start_background_services() -> None:
     restored = _load_pending_queue()
     if restored:
         logger.info(t('run.queue_restored', n=restored))
-    scheduler.start()
+    clock.start()
 
 
 if __name__ == '__main__':

@@ -1,19 +1,19 @@
 """Scheduled tasks Blueprint — ``/api/schedules*``.
 
 The panel's whole surface for the timer: read the tasks, create/update one, delete one, switch one
-on or off, and run one now. Time arithmetic and the record live in ``services/schedule_store``;
-the clock lives in ``scheduler``; this module only moves JSON and turns a refusal into a status
+on or off, and run one now. Time arithmetic and the record live in ``scheduling/store``;
+the clock lives in ``scheduling.clock``; this module only moves JSON and turns a refusal into a status
 code. Depends on ``api.http`` (body parsing), the store, and the scheduler's two seams — never on
-``app`` (a cycle), which is why the canvas verdict is asked for through ``scheduler.load_canvas``.
+``app`` (a cycle), which is why the canvas verdict is asked for through ``scheduling.clock.load_canvas``.
 """
 
 from flask import Blueprint, jsonify
-from scheduler import fire_now, load_canvas
-from scheduler import status as scheduler_status
+from scheduling import store
+from scheduling.clock import fire_now, load_canvas
+from scheduling.clock import status as scheduler_status
 
 from api.http import _bad_body, _json_body
 from i18n import t
-from services import schedule_store as store
 from services.workflow_manager import WorkflowManager
 
 bp = Blueprint('schedules', __name__)

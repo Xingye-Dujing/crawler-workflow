@@ -20,10 +20,10 @@ import contextlib
 import os
 
 import pytest
+from scheduling import store
 
 from config import Config
 from i18n import set_lang, t
-from services import schedule_store as store
 
 pytestmark = pytest.mark.api
 

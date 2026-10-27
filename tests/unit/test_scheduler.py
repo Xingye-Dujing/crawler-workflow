@@ -1,4 +1,4 @@
-"""``scheduler`` — the clock, its two seams, and the one start path it is allowed to use.
+"""``scheduling.clock`` — the clock, its two seams, and the one start path it is allowed to use.
 
 The clock owns no way to start a run: ``app.py`` injects a starter, so a scheduled fire goes
 through the same ``_begin_run`` a manual 执行 does. What is pinned here is therefore the
@@ -17,12 +17,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
-import scheduler as scheduler_module
+from scheduling import clock as scheduler_module
+from scheduling import cron, store
 
 from config import Config
 from i18n import get_lang, set_lang, t
-from services import cron
-from services import schedule_store as store
 
 pytestmark = pytest.mark.unit
 
@@ -118,7 +117,7 @@ class TestTick:
 
         task_id = task['id']
         scheduler_module.set_run_starter(exploding)
-        with caplog.at_level(logging.ERROR, logger='scheduler'):
+        with caplog.at_level(logging.ERROR, logger='scheduling.clock'):
             results = scheduler_module.tick(NOW + timedelta(minutes=2))
 
         by_id = {row['id']: row for row in results}
@@ -224,7 +223,7 @@ class TestLoadCanvas:
             raise OSError('the file went away')
 
         scheduler_module.set_canvas_source(broken)
-        with caplog.at_level(logging.ERROR, logger='scheduler'):
+        with caplog.at_level(logging.ERROR, logger='scheduling.clock'):
             answer = scheduler_module.load_canvas('红果短剧')
 
         assert answer['workflow'] is None and 'the file went away' in answer['error']
@@ -303,6 +302,6 @@ def test_the_shared_starter_is_retention_queue_then_clock(monkeypatch):
     calls = []
     monkeypatch.setattr(app_module, '_housekeep', lambda *args, **kwargs: calls.append('housekeep'))
     monkeypatch.setattr(app_module, '_load_pending_queue', lambda: 0)
-    monkeypatch.setattr(app_module.scheduler, 'start', lambda: calls.append('clock') or True)
+    monkeypatch.setattr(app_module.clock, 'start', lambda: calls.append('clock') or True)
     app_module.start_background_services()
     assert calls == ['housekeep', 'clock']
