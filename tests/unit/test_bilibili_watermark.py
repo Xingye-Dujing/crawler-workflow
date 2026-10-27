@@ -2,7 +2,7 @@
 
 import pytest
 
-from crawlers.bilibili import BilibiliCrawler
+from crawlers.platforms.bilibili.crawler import BilibiliCrawler
 from engine.workflow import WorkflowEngine
 from i18n import get_lang, set_lang
 

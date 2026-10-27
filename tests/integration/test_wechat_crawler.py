@@ -10,7 +10,7 @@ works on this machine. Selected only with ``-m integration``.
 
 import pytest
 
-from crawlers.wechat import WechatCrawler
+from crawlers.platforms.wechat.crawler import WechatCrawler
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 

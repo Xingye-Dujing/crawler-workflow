@@ -24,7 +24,7 @@ import pytest
 
 from crawl_capabilities import CAPABILITIES, crawl_kwargs, mode_for, required_missing
 from crawlers.commenting.session import parse_twitter_replies
-from crawlers.twitter import (
+from crawlers.platforms.twitter.crawler import (
     TwitterCrawler,
     handle_of,
     iso_stamp,
@@ -326,7 +326,7 @@ class TestMatrixEntry:
         ``/status/<id>/analytics`` link becomes the row's 推文ID and the user gets
         a page that does not open.
         """
-        from crawlers.twitter import EXTRACT_CARD_JS, WINDOW_LINKS_JS
+        from crawlers.platforms.twitter.crawler import EXTRACT_CARD_JS, WINDOW_LINKS_JS
 
         status = js_pattern(EXTRACT_CARD_JS, 'h.match(')
         assert status.fullmatch('/OpenAI/status/2102460975790137662')

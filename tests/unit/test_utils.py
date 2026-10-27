@@ -198,12 +198,12 @@ class TestWindowTag:
         assert window_tag(start, end) == ''
 
     def test_an_unpadded_date_is_read_because_the_crawler_reads_it(self):
-        # ``crawlers/weibo.py:_parse_date`` accepts this through the same strptime, so a
+        # ``crawlers/platforms/weibo/crawler.py:_parse_date`` accepts this through the same strptime, so a
         # filename that refused it would disagree with the crawl that really ran.
         assert window_tag('2026-1-1', '2026-3-5') == '_20260101_to_20260305'
 
     def test_a_one_sided_window_is_not_half_a_name(self):
-        # ``crawlers/weibo.py:_build_urls`` raises on exactly this input; a filename is
+        # ``crawlers/platforms/weibo/crawler.py:_build_urls`` raises on exactly this input; a filename is
         # not where that answer belongs, and printing one date would read as a range.
         assert window_tag('2026-01-01', None) == ''
 

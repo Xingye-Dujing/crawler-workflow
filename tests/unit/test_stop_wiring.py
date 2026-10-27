@@ -95,7 +95,13 @@ class TestWalkWiring:
         # (bilibili.py was inside video.py until the #178 split; the walk moved file, it
         # did not go away — this list tracks files, so it tracked the rename.)
         assert len(calls) >= 6, f'only {len(calls)} walk call sites found: {sorted({c[0] for c in calls})}'
-        assert {'zhihu.py', 'twitter.py', 'bilibili.py', 'weibo.py', 'commenting/session.py'} <= {c[0] for c in calls}
+        assert {
+            'platforms/zhihu/crawler.py',
+            'platforms/twitter/crawler.py',
+            'platforms/bilibili/crawler.py',
+            'platforms/weibo/crawler.py',
+            'commenting/session.py',
+        } <= {c[0] for c in calls}
 
     def test_every_walk_asks_the_crawler_whether_it_may_stop(self):
         missing = []

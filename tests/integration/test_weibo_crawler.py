@@ -15,9 +15,9 @@ import pytest
 from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.core.crawler as base_module
-import crawlers.weibo as weibo_module
+import crawlers.platforms.weibo.crawler as weibo_module
 from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped
-from crawlers.weibo import WeiboCrawler
+from crawlers.platforms.weibo.crawler import WeiboCrawler
 
 pytestmark = pytest.mark.unit
 
@@ -667,7 +667,7 @@ class TestWeiboUid:
         ],
     )
     def test_addresses_that_name_one_author_and_the_junk_that_does_not(self, value, want):
-        from crawlers.weibo import weibo_uid
+        from crawlers.platforms.weibo.crawler import weibo_uid
 
         assert weibo_uid(value) == want, value
 

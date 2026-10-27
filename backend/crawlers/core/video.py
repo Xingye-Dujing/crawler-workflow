@@ -1,6 +1,6 @@
 """Shared base for the video platforms (was the core of ``crawlers/video.py``).
 
-Bilibili (``crawlers.bilibili``) and Douyin (``crawlers.douyin``) both extend
+Bilibili (``crawlers.platforms.bilibili``) and Douyin (``crawlers.platforms.douyin``) both extend
 :class:`VideoCrawler` and use the two generic row helpers below; keeping them here
 means neither platform module re-declares them.
 """

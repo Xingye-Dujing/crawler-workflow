@@ -9,10 +9,9 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
+from crawlers.engine import feed, pagefetch, times
+from crawlers.engine.counters import parse_count
 from i18n import stop_reason_label, t
-
-from .engine import feed, pagefetch, times
-from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 

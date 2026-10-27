@@ -1,6 +1,7 @@
 """Real Chrome, local page: which ``/user/`` anchor is allowed to become a row's 作者?
 
-:meth:`crawlers.douyin.DouyinCrawler._driver_facts` reads the creator out of the DOM with a small script,
+:meth:`crawlers.platforms.douyin.crawler.DouyinCrawler._driver_facts` reads the creator
+out of the DOM with a small script,
 and the first version of that reader took the **first** bare ``/user/<sec_uid>`` anchor on the document.
 On the live site that is not the creator: measured 2026-09-28 (``backend/test_dy_dead_video.py``, payload
 ``scratchpad/dy_dead_video.json``), the video's own name sits on an anchor inside

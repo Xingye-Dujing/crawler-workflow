@@ -9,7 +9,7 @@ once per harvested card, every stored row re-serialised ~1 MB of JSON into ``run
 """
 
 from crawlers.core.crawler import UNDER_TARGET
-from crawlers.weibo import WeiboCrawler
+from crawlers.platforms.weibo.crawler import WeiboCrawler
 
 
 def _bare(monkeypatch):

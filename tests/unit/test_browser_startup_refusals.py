@@ -13,7 +13,7 @@ import pytest
 from selenium.common.exceptions import WebDriverException
 
 import crawlers.core.crawler as base_module
-from crawlers.zhihu import ZhihuCrawler
+from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
 

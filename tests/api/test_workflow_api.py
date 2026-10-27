@@ -1739,7 +1739,7 @@ class TestConsoleSemantics:
 
         logs = app_module.execution_state['logs']
         before = len(logs)
-        crawler_log = logging.getLogger('crawlers.wechat')
+        crawler_log = logging.getLogger('crawlers.platforms.wechat.crawler')
         crawler_log.info('=' * 70)  # standalone-script banner
         crawler_log.info('')  # blank separator
         crawler_log.info('   ')  # whitespace-only

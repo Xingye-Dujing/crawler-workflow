@@ -24,7 +24,7 @@ import pytest
 import crawlers.core.crawler as base_module
 from crawlers.commenting.session import OK, CommentSession
 from crawlers.core.crawler import Crawler
-from crawlers.youtube import YouTubeCrawler
+from crawlers.platforms.youtube.crawler import YouTubeCrawler
 from i18n import t
 
 pytestmark = pytest.mark.unit

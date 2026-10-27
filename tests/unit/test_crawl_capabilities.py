@@ -167,7 +167,7 @@ class TestSelectsAreHeldToTheirOptions:
     is not a variant of an answer — it is no answer, and every reader here treats
     "anything except the one value I special-case" as the default.
 
-    The measurement that makes this real is ``board``: ``crawlers/video.py`` asks
+    The measurement that makes this real is ``board``: ``crawlers/core/video.py`` asks
     ``== 'ranking'`` and crawls 热门 for everything else, so ``'Popular'`` (a label, not
     a value), ``'rank'``, ``'ranking2'`` or a retired option in an old file all crawled
     the *other* board — with the run recorded as the one the node asked for. ``format``

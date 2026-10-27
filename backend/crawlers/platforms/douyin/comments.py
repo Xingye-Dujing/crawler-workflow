@@ -7,7 +7,7 @@ becoming comment text.
 
 import re
 
-from .engine import times
+from crawlers.engine import times
 
 # ``1周前·江苏`` / ``刚刚`` / ``2026-08-04`` — douyin puts the relative time and
 # the IP 地区 in one line, and it is the only line of the block that is neither a

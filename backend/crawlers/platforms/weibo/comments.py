@@ -3,8 +3,7 @@
 import re
 
 from crawlers.commenting.protocol import _strip_tags
-
-from .engine import times
+from crawlers.engine import times
 
 
 def _user_home(user: dict) -> str:

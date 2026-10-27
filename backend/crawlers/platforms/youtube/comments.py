@@ -6,10 +6,9 @@ it lives in :class:`crawlers.commenting.session.CommentSession`.
 """
 
 from crawlers.commenting.protocol import _query_value
-
-from .engine import times
-from .engine.counters import parse_count, to_int
-from .engine.jsonpath import collect, get_in, runs_text
+from crawlers.engine import times
+from crawlers.engine.counters import parse_count, to_int
+from crawlers.engine.jsonpath import collect, get_in, runs_text
 
 
 def parse_youtube_comments(payload: dict, article_url: str) -> list:

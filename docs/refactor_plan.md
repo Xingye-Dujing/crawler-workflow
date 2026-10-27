@@ -248,6 +248,19 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   不留旧名 re-export。`tests/unit/test_stop_wiring.py` 顺手改成**按 `Crawler.__module__` 找基类文件**而不是硬编码文件名——
   它正是被这次搬迁证明会因移动而误报的那类针。门禁：fast **8,116 passed, 3 skipped**；设备档带三个
   `CRAWLER_REQUIRE_*`/`CIXI_REQUIRE_CATBUS` **192 passed, 0 跳过**；ruff（454 files）与两档 pylint 均 exit=0。
+- **Stage 1 第三步已落地**：`comments.py` → `commenting/session.py`、`comments_base.py` → `commenting/protocol.py`；
+  十个平台各自成目录 `crawlers/platforms/<id>/{crawler.py,comments.py}`（红果另有 `harvest.py`/`addon.py`），
+  `crawlers/__init__.py` 只剩注册表与工厂。新契约 `tests/unit/test_crawler_platform_plugins.py` 钉住
+  「注册表集合 == 目录集合」「类住在自己的包里」「平台模块不得 import 另一个平台」。
+  它当场抓到一个真缺陷：`is_crawlable()` 问的是 `getattr(cls, 'supports_crawl', True)`，而
+  zhihu/weibo/xiaohongshu/wechat/hongguo **从没声明过**这个属性——那个默认值替五个平台答了"我能爬"，
+  Instagram 是唯一真的回答"不能"的。修法：`Crawler` 显式声明并写下理由，工厂去掉默认值
+  （不继承 `Crawler` 的类应当抛错而不是被判成可爬），再加一枚"只有 Instagram 拒绝"的针。
+- **待修（本轮实测发现，独立于重构）**：设备档里 10+ 个用例各自 `except` 驱动启动失败后
+  `pytest.skip('Chrome/chromedriver unavailable')`，而 `CRAWLER_REQUIRE_BROWSER=1` 只硬失败 `conftest`
+  那一次会话级探测——于是一次设备跑可以印着「192 passed」而其中一条浏览器用例根本没跑
+  （本轮就观察到一次 `1 skipped`，重跑为 0 跳过）。要把「旗标已设就失败」收进一个共享助手，
+  并让 `test_test_tiers.py` 钉住「设备档不得有自己的 skip」。
 
 ## 7. 明确不做
 

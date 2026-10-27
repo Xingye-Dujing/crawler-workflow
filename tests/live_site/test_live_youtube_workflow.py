@@ -49,7 +49,7 @@ import live_run_driver as driver
 import live_run_harness as harness
 import pytest
 
-from crawlers.youtube import video_id_of
+from crawlers.platforms.youtube.crawler import video_id_of
 from utils.helpers import sanitize_filename
 
 pytestmark = [

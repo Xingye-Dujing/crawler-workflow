@@ -19,7 +19,7 @@ the *shape* the payload promises:
 
 import pytest
 
-from crawlers import hongguo
+from crawlers.platforms.hongguo import crawler as hongguo
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

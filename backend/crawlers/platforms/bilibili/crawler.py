@@ -12,9 +12,8 @@ from urllib.parse import quote
 
 from crawlers.core.crawler import Crawler, as_index
 from crawlers.core.video import VideoCrawler, _as_int, _stamp
+from crawlers.engine import feed
 from i18n import stop_reason_label, t
-
-from .engine import feed
 
 logger = logging.getLogger(__name__)
 

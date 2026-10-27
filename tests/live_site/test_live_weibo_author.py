@@ -27,7 +27,7 @@ jar weibo already recognises — the mode was never broken, the session it was a
 
 import pytest
 
-from crawlers.weibo import weibo_uid
+from crawlers.platforms.weibo.crawler import weibo_uid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

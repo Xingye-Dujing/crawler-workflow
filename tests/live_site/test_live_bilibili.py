@@ -19,8 +19,8 @@ import time
 import pytest
 
 from config import Config
-from crawlers.bilibili import bilibili_bvid
 from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
+from crawlers.platforms.bilibili.crawler import bilibili_bvid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

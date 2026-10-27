@@ -931,7 +931,7 @@ loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以�
 `红果短剧.exe`）的完整请求原样重放、换新鲜 `_rticket`/`x-khronos` 重放、换目标剧集重放，
 三种组合全部 `Code 110001 未知异常`——签名覆盖请求体且绑时间戳，不是能抄的模板。
 
-于是本平台的评论采集**不说话，只旁听**（`crawlers/hongguo_harvest.py`）：
+于是本平台的评论采集**不说话，只旁听**（`crawlers/platforms/hongguo/harvest.py`）：
 第三方播放器已把整套协议逆向完（二进制里能读出 `hg-go/pkg/hgapi` 的端点常量、
 `hg-go/pkg/sign` 的 XGorgon/Medusa 实现、伪造的小米14 设备注册池），让它当签名预言机，
 我们只收割它合法拿到的明文 JSON。三条实测支撑这条通道成立：
@@ -1902,7 +1902,7 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 
 | 位置 | 比较 | 未知值的下场 | 用户看到什么 |
 |---|---|---|---|
-| `crawlers/bilibili.py`（B 站热榜） | `== 'ranking'` | 走热门榜 | 选了排行榜、拿回热门榜，记录里写着用户"选"的那个 |
+| `crawlers/platforms/bilibili/crawler.py`（B 站热榜） | `== 'ranking'` | 走热门榜 | 选了排行榜、拿回热门榜，记录里写着用户"选"的那个 |
 | `app.py` 三处 + `part_writer.py` | `== 'json'` | 写 CSV（扩展名也 CSV） | 要 JSON 拿到 CSV |
 | `analyzers/keyword.py:45` | `== 'tfidf'` else textrank | 跑 TextRank，并把 `method` 列写成用户请求的名字 | 表里声称 TF-IDF，实际是共现图 |
 | `analyzers/emotion.py:130` / `tendency.py:148` | `== 'ml'` else LLM | **走 LLM 逐行** | 拼错 `ML` 就白付一整轮模型调用 |
@@ -2423,7 +2423,7 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 
 - **微博的分时间窗只有帖子 mode 声明**：`start_time`/`end_time` 挂在 `_TIMES`
   （`crawl_capabilities.py`），只接进 weibo 的 `posts` mode，`tests/unit/test_crawl_capabilities.py`
-  钉住"没有第二个平台拿到它"。真正的校验在爬虫里（`crawlers/weibo.py:_build_urls`：要么都给、
+  钉住"没有第二个平台拿到它"。真正的校验在爬虫里（`crawlers/platforms/weibo/crawler.py:_build_urls`：要么都给、
   要么都不给，`end <= start` 直接拒），设计期不看，所以一个坏日期是在运行时点名失败的。
 - **文件名里的窗口是"用户声明的那一段"，不是"走到的那一段"**：stem 在爬虫跑之前就定了
   （`app.py` 的 `_execute_source_node`）。走到哪只有游标与 `end_reason` 知道，而窗口本身不会

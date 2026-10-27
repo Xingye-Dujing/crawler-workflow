@@ -104,7 +104,7 @@ def app_url(tmp_path_factory):
 def driver():
     """A headless Chrome borrowed from the crawler stack (its driver factory
     already honours the configured chromedriver/binary/window settings)."""
-    from crawlers.wechat import WechatCrawler
+    from crawlers.platforms.wechat.crawler import WechatCrawler
 
     try:
         crawler = WechatCrawler(headless=True)

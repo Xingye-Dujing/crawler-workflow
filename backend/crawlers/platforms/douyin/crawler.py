@@ -12,10 +12,9 @@ from urllib.parse import quote
 
 from crawlers.core.crawler import UNDER_TARGET, PageNotArrivedError
 from crawlers.core.video import VideoCrawler, _stamp
+from crawlers.engine import feed, popup, times
+from crawlers.engine.counters import parse_count
 from i18n import t
-
-from .engine import feed, popup, times
-from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 

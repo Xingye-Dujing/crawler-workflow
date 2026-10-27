@@ -1,6 +1,6 @@
 """xiaohongshu comments: the DOM-walker tuple adapter."""
 
-from .engine import times
+from crawlers.engine import times
 
 
 def parse_xhs_comments(items) -> list:

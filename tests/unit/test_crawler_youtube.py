@@ -1,6 +1,6 @@
 """YouTube row readers — the shapes the live site answers, without a browser.
 
-``crawlers/youtube.py`` reads innertube JSON rather than a rendered page, so its
+``crawlers/platforms/youtube/crawler.py`` reads innertube JSON rather than a rendered page, so its
 whole risk is *interpreting* that JSON wrongly, and the mistakes are the quiet
 kind: a rounded "1.2M views" written into a column that claims to be exact, a
 duration label read as 3 seconds, a metadata row classified as a date because it
@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from crawlers.commenting.session import parse_youtube_comments
-from crawlers.youtube import (
+from crawlers.platforms.youtube.crawler import (
     apply_player,
     channel_items,
     clock,

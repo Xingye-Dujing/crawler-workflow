@@ -385,6 +385,6 @@ class TestTransportNoiseFilter:
 
     def test_a_real_crawler_failure_still_reaches_the_console(self, console):
         app, state = console
-        self._emit(app, 'crawlers.douyin', '节点 3 执行失败：连接被拒')
+        self._emit(app, 'crawlers.platforms.douyin.crawler', '节点 3 执行失败：连接被拒')
         assert len(state['logs']) == 1
         assert '执行失败' in state['logs'][0]

@@ -10,10 +10,9 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
+from crawlers.engine import feed, times
+from crawlers.engine.counters import parse_count
 from i18n import t
-
-from .engine import feed, times
-from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 

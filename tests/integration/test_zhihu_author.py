@@ -21,7 +21,7 @@ from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.core.crawler as base_module
 from crawlers.core.crawler import UNDER_TARGET, Crawler
-from crawlers.zhihu import ZhihuCrawler
+from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
 

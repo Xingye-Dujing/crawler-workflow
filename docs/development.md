@@ -40,31 +40,28 @@ crawler_workflow/
 │   │   ├── stats.py              # /api/stats/*（情感/倾向性统计）
 │   │   ├── studio.py             # /api/studio/*（Chart Studio 数据源与存图）
 │   │   └── visualize.py          # /api/visualize/render（独立出图，与 Visualize 节点共用 services 网）
-│   ├── crawlers/                 # 爬虫模块
-│   │   ├── core/                 # 所有爬虫共用的机械（Stage 1 归位中）
+│   ├── crawlers/                 # 采集实现层
+│   │   ├── __init__.py           # 平台注册表 + get_crawler/cookie_hosts/crawler_class/is_crawlable
+│   │   │                         #   （工厂在这里：Cookie 文件与 Profile 目录按账号拼，播种只此一处）
+│   │   ├── core/                 # 所有爬虫共用的机械（不含任何站点事实）
 │   │   │   ├── crawler.py        # 爬虫基类（登录墙判定、Cookie 播种、流式落盘、游标/水位、收尾判定）
 │   │   │   └── video.py          # 视频平台共用基类（VideoCrawler + 通用行工具 _stamp/_as_int）
 │   │   ├── backends/
 │   │   │   └── catbus.py         # 第二采集后端（列、身份列、可采格都读适配器自己的清单）
-│   │   ├── zhihu.py              # 知乎爬虫
-│   │   ├── weibo.py              # 微博爬虫
-│   │   ├── xiaohongshu.py        # 小红书爬虫
-│   │   ├── wechat.py             # 微信公众号爬虫
-│   │   ├── bilibili.py           # 哔哩哔哩：分页搜索 + 详情 API + 热榜（搜索、某作者、详情、评论）
-│   │   ├── douyin.py             # 抖音：搜索栏驱动 + 逐视频详情 + 热榜（搜索、某作者、详情、评论）
-│   │   ├── youtube.py            # YouTube：页内 innertube JSON（搜索 / 某作者 / 评论）
-│   │   ├── twitter.py            # X（推特）：可见窗口读虚拟时间线（搜索 / 某作者 / 回复）
-│   │   ├── commenting/            # 评论引擎（与 CommentSession 同域）
-│   │   │   ├── session.py         # 评论采集：状态机 CommentSession（七个平台的链接可混粘贴；解析器已按平台拆出并在此再导出）
-│   │   │   └── protocol.py        # 评论共用基件：状态常量 OK/BLOCKED/DEAD + 纯文本工具（_json_or_none/_strip_tags/_stamp/_query_value）
-│   │   ├── comments_weibo.py     # 微博评论：buildComments JSON→行 + id/端点助手
-│   │   ├── comments_zhihu.py     # 知乎评论：逐面板元组→行
-│   │   ├── comments_xhs.py       # 小红书评论：DOM 走查元组→行
-│   │   ├── comments_bilibili.py  # 哔哩哔哩评论：reply/main→行（含子回复展平）+ 端点助手
-│   │   ├── comments_douyin.py    # 抖音视频评论：渲染块按形状切字段 + 元组→行
-│   │   ├── comments_youtube.py   # YouTube 评论：innertube commentEntityPayload→行
-│   │   ├── comments_twitter.py   # X 评论：复用时间线卡片抽取器→回复行
-│   │   ├── instagram.py          # Instagram：只做 Cookie 捕获，尚无抓取
+│   │   ├── commenting/           # 评论引擎（一个会话读多条链接）
+│   │   │   ├── session.py        # CommentSession 状态机（七个平台的链接可混粘贴；再导出各平台解析器）
+│   │   │   └── protocol.py       # 无浏览器共用基件：OK/BLOCKED/DEAD + _json_or_none/_strip_tags/_stamp/_query_value
+│   │   ├── platforms/            # 一个平台一个目录：目录名就是全站使用的平台 id
+│   │   │   ├── zhihu/            # crawler.py + comments.py
+│   │   │   ├── weibo/            # crawler.py + comments.py
+│   │   │   ├── xiaohongshu/      # crawler.py + comments.py
+│   │   │   ├── bilibili/         # crawler.py + comments.py（分页搜索 + 详情 API + 热榜）
+│   │   │   ├── douyin/           # crawler.py + comments.py（搜索栏驱动 + 逐视频详情）
+│   │   │   ├── youtube/          # crawler.py + comments.py（页内 innertube JSON）
+│   │   │   ├── twitter/          # crawler.py + comments.py（可见窗口读虚拟时间线）
+│   │   │   ├── wechat/           # crawler.py（按链接读正文，无登录态可要）
+│   │   │   ├── hongguo/          # crawler.py + comments.py + harvest.py + addon.py（唯一 Windows 桌面能力）
+│   │   │   └── instagram/        # crawler.py（只捕 Cookie，supports_crawl=False ⇒ 具名拒绝）
 │   │   └── engine/               # 与任何站点无关的机械层——新抓取一律先走这里，不在平台模块里复制循环
 │   │       ├── counters.py       # 一个解析器读遍 万/千/亿 与 K/M/B（「97 views」「1,027,710次观看」）
 │   │       ├── wall.py           # 登录墙 / 风控页 / 弹回首页三种拦截的判定

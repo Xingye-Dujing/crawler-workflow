@@ -1,6 +1,6 @@
 """Live X crawl — real Chrome, real x.com, and the visible window.
 
-This tier is where the four design claims of ``crawlers/twitter.py`` meet the
+This tier is where the four design claims of ``crawlers/platforms/twitter/crawler.py`` meet the
 site they were read off:
 
 * **A headless run delivers, or refuses by name — never a quiet zero.** X used to

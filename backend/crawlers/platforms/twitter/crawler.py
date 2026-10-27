@@ -58,10 +58,9 @@ from selenium.common.exceptions import JavascriptException, StaleElementReferenc
 from selenium.webdriver.common.by import By
 
 from crawlers.core.crawler import Crawler
+from crawlers.engine import feed
+from crawlers.engine.counters import parse_count
 from i18n import stop_reason_label, t
-
-from .engine import feed
-from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 

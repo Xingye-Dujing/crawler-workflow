@@ -443,7 +443,7 @@ def _make_waiting_crawler(profile_dir: str):
     or the methods written after it become its body and stop running (three of them did,
     which is how the cross-thread release rule below went unnoticed for a month).
     """
-    from crawlers.weibo import WeiboCrawler
+    from crawlers.platforms.weibo.crawler import WeiboCrawler
 
     return WeiboCrawler(headless=True, profile_dir=profile_dir, abort=lambda: True)
 

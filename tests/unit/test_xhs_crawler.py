@@ -21,7 +21,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 import crawlers.core.crawler as base_module
 from crawlers.core.crawler import UNDER_TARGET, Crawler
-from crawlers.xiaohongshu import XiaohongshuCrawler as Xhs
+from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler as Xhs
 from i18n import t
 
 pytestmark = pytest.mark.unit
@@ -455,7 +455,7 @@ class TestVirtualisedFeed:
     """
 
     def _crawler(self, make_crawler, monkeypatch, notes, page=8):
-        monkeypatch.setattr('crawlers.xiaohongshu.time.sleep', lambda s: None)
+        monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.time.sleep', lambda s: None)
         crawler, driver = make_crawler(driver_cls=RecyclingGridDriver, notes=notes, page=page)
         # ``scroll_down`` drives the fake's window; the detail read and the politeness beat
         # are not this seam — the grid recycle + ``seen`` dedupe is the unit under test.
@@ -494,7 +494,7 @@ class TestUnderTargetWiring:
     """
 
     def _short_feed(self, make_crawler, monkeypatch, notes, page=8):
-        monkeypatch.setattr('crawlers.xiaohongshu.time.sleep', lambda s: None)
+        monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.time.sleep', lambda s: None)
         crawler, driver = make_crawler(driver_cls=RecyclingGridDriver, notes=notes, page=page)
         crawler.scroll_down = lambda **k: driver.advance()
         crawler._polite_pause = lambda *a, **k: None
@@ -545,7 +545,7 @@ class TestNoteNavigation:
             def until(self, _condition):
                 raise TimeoutException(RENDERER_TIMEOUT)
 
-        monkeypatch.setattr('crawlers.xiaohongshu.WebDriverWait', _Expired)
+        monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.WebDriverWait', _Expired)
         assert crawler._scrape_note(NOTE) is None
         assert crawler.requests == [NOTE], 'the detail visit is one of the crawl requests'
 

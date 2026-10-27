@@ -13,7 +13,7 @@ So the player is the signer and this module only:
 2. starts the player WITH the proxy env (refusing by name if an un-proxied player
    is already running — that window belongs to the user and is never killed),
 3. drives the player through UI Automation (search the drama, switch episodes),
-4. parses what the JSONL delivers through :mod:`crawlers.comments_hongguo`.
+4. parses what the JSONL delivers through :mod:`crawlers.platforms.hongguo.comments`.
 
 The engine caches one harness per (node run, platform), so the stack stays up
 across the drama links of one comment node and is reaped in its ``finally``.
@@ -41,12 +41,11 @@ import crawl_capabilities as capabilities
 from config import Config
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
+from crawlers.platforms.hongguo.comments import hg_comment_rows, hg_page_title, hg_series_id
 from i18n import t
 from settings_store import get_setting
 from utils import machine_deps
 from utils.helpers import as_bool
-
-from .comments_hongguo import hg_comment_rows, hg_page_title, hg_series_id
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ _ADDON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'harvest_addon
 #: The window class the Wails player registers (measured; also the UIA root's ClassName).
 _PLAYER_CLASS = 'wailsWindow'
 #: The web detail page, rebuilt from a bare ``series_id`` so the title can be read from it
-#: (``crawlers.hongguo.BASE`` is the same host; the harvest does not import that crawler).
+#: (``crawlers.platforms.hongguo.crawler.BASE`` is the same host; the harvest does not import that crawler).
 _DETAIL_BASE = 'https://hongguoduanju.com/detail'
 #: The action-rail comment button: ``💬`` plus the site's own count (``410``, ``5.1万``)
 #: — the sidebar's feedback button is ``💬 反馈`` and must not be clicked for comments.

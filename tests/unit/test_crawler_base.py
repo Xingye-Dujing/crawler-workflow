@@ -550,8 +550,8 @@ BARE_NAVIGATIONS = {
     # account for. Cookie planting moved onto the shared re-drive, so it left this table.
     'backend/crawlers/core/crawler.py': 2,
     'backend/crawlers/commenting/session.py': 7,
-    'backend/crawlers/wechat.py': 1,
-    'backend/crawlers/zhihu.py': 2,
+    'backend/crawlers/platforms/wechat/crawler.py': 1,
+    'backend/crawlers/platforms/zhihu/crawler.py': 2,
 }
 # weibo left this table on 2026-09-28: its search walk navigated through the bare
 # ``driver.get`` the redirect-facade docstring excuses ("wait for the bounce"), which also threw

@@ -12,7 +12,7 @@ pinned without a browser.
 import pytest
 
 from crawl_capabilities import crawl_kwargs, mode_for, required_missing
-from crawlers.zhihu import ZhihuCrawler, zhihu_item_link, zhihu_item_meta, zhihu_profile_token
+from crawlers.platforms.zhihu.crawler import ZhihuCrawler, zhihu_item_link, zhihu_item_meta, zhihu_profile_token
 
 pytestmark = pytest.mark.unit
 

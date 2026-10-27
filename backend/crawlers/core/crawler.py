@@ -252,6 +252,12 @@ class Crawler(ABC):
     # search lives on s.weibo.com, the cookies on .weibo.com).
     cookie_domains: tuple[str, ...] = ()
 
+    #: Whether a node may use this class as a data source. Declared ONCE here rather than defaulted
+    #: at the call site: ``crawlers.is_crawlable`` used to ask ``getattr(cls, ..., True)``, so a
+    #: platform that had never considered the question answered "yes, I crawl" — and Instagram, which
+    #: answers no, was the only class carrying the fact. A subclass that cannot crawl says ``False``.
+    supports_crawl = True
+
     # First-run dialogs this site shows. Empty for most platforms; a platform
     # that has one names it, so the wait for its auto-dismiss is never paid.
     prompts: tuple = ()

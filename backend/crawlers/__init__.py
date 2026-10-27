@@ -1,16 +1,16 @@
 import browser_profiles
 
 from config import Config
-from crawlers.bilibili import BilibiliCrawler
-from crawlers.douyin import DouyinCrawler
-from crawlers.hongguo import HongguoCrawler
-from crawlers.instagram import InstagramCrawler
-from crawlers.twitter import TwitterCrawler
-from crawlers.wechat import WechatCrawler
-from crawlers.weibo import WeiboCrawler
-from crawlers.xiaohongshu import XiaohongshuCrawler
-from crawlers.youtube import YouTubeCrawler
-from crawlers.zhihu import ZhihuCrawler
+from crawlers.platforms.bilibili.crawler import BilibiliCrawler
+from crawlers.platforms.douyin.crawler import DouyinCrawler
+from crawlers.platforms.hongguo.crawler import HongguoCrawler
+from crawlers.platforms.instagram.crawler import InstagramCrawler
+from crawlers.platforms.twitter.crawler import TwitterCrawler
+from crawlers.platforms.wechat.crawler import WechatCrawler
+from crawlers.platforms.weibo.crawler import WeiboCrawler
+from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler
+from crawlers.platforms.youtube.crawler import YouTubeCrawler
+from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 from services.cookie_manager import CookieManager
 
 # The registry, not just the factory: the cookie panel needs each platform's
@@ -28,7 +28,7 @@ CRAWLERS = {
     'twitter': TwitterCrawler,
     # Cookie capture only: the panel can save a login session for this one while
     # its crawl is not built yet, so the canvas and the execute endpoint refuse
-    # it (see crawlers/instagram.py) — and it stays out of the crawl matrix, which
+    # it (see crawlers/platforms/instagram/crawler.py) — and it stays out of the crawl matrix, which
     # is what the refusal is read from.
     'instagram': InstagramCrawler,
 }
@@ -37,7 +37,9 @@ CRAWLERS = {
 def is_crawlable(platform: str) -> bool:
     """Whether *platform* can be used as a data source (not just logged into)."""
     cls = crawler_class(platform)
-    return bool(cls) and bool(getattr(cls, 'supports_crawl', True))
+    # No default here on purpose: ``Crawler`` declares the attribute, so a class that does not
+    # inherit it is a bug to be raised, not a platform to be called crawlable.
+    return bool(cls) and cls.supports_crawl
 
 
 def crawler_class(platform: str):

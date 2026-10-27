@@ -35,11 +35,10 @@ import re
 from urllib.parse import quote
 
 from crawlers.core.crawler import Crawler
+from crawlers.engine import innertube, times
+from crawlers.engine.counters import parse_count
+from crawlers.engine.jsonpath import collect, get_in, runs_text
 from i18n import t
-
-from .engine import innertube, times
-from .engine.counters import parse_count
-from .engine.jsonpath import collect, get_in, runs_text
 
 logger = logging.getLogger(__name__)
 

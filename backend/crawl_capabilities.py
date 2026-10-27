@@ -621,7 +621,7 @@ CATBUS_ONLY_REGIONS = {
 #: 红果短剧's four boards. Same shape as bilibili's choice (one board, one row shape), so it
 #: is the same field key and the same refusal path; the stored values are identifiers because
 #: they are what a node holds, and the order here is the order the panel offers them (pinned
-#: against ``crawlers.hongguo.BOARDS`` by ``tests/unit/test_hongguo_crawler.py``).
+#: against ``crawlers.platforms.hongguo.crawler.BOARDS`` by ``tests/unit/test_hongguo_crawler.py``).
 _HONGGUO_BOARD = Field(
     key='board',
     control='select',

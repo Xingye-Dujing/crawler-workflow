@@ -9,9 +9,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from config import Config
 from crawlers.core.crawler import Crawler, as_index
+from crawlers.engine import times
 from i18n import t
-
-from .engine import times
 
 logger = logging.getLogger(__name__)
 

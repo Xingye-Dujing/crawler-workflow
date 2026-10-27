@@ -7,7 +7,7 @@ pins at the first failed link: later links are still collected this pass, and th
 de-dupes a re-walk, so the resume costs requests, never duplicate rows.
 """
 
-from crawlers.wechat import WechatCrawler
+from crawlers.platforms.wechat.crawler import WechatCrawler
 
 AAA = 'https://mp.weixin.qq.com/s/AAA'
 BAD = 'https://mp.weixin.qq.com/s/BBB'

@@ -13,7 +13,7 @@ import pytest
 
 import crawlers.core.crawler as base_module
 from crawlers.core.crawler import GENTLE_PAUSE_FACTOR, Crawler, throttled_sleep
-from crawlers.douyin import DouyinCrawler
+from crawlers.platforms.douyin.crawler import DouyinCrawler
 
 pytestmark = pytest.mark.unit
 

@@ -22,7 +22,7 @@ import pytest
 import crawlers.core.crawler as base_module
 from crawlers.commenting.session import OK, CommentSession, parse_twitter_replies
 from crawlers.core.crawler import Crawler
-from crawlers.twitter import TwitterCrawler
+from crawlers.platforms.twitter.crawler import TwitterCrawler
 from i18n import t
 
 pytestmark = pytest.mark.unit

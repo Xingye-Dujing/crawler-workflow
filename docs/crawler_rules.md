@@ -160,7 +160,7 @@
   `mp_logged_in`/`login_url`/`diagnose`/`MULTI_PURPOSE`, no client impersonation or session replay. The `live_site`
   file visits article URLs only; panel harnesses sample bilibili/zhihu, never wechat.
 - **hongguo (红果短剧)**: four boards are **one mode + one board select** whose values are storage identifiers
-  (`crawlers/hongguo.py::BOARDS` is the single name list, order-pinned against the matrix); the board is read from the
+  (`crawlers/platforms/hongguo/crawler.py::BOARDS` is the single name list, order-pinned against the matrix); the board is read from the
   document's own loader payload (`window._ROUTER_DATA` → `rank_<slug>/page.content._data`), **never from the rendered
   columns** — and it is **deferred** (~2 s after `get`), so wait through `wait_for_first_content`, never a fixed sleep.
   集数 is the length of the payload's `episodeVids`, not the DOM's 25-link player window. Paging follows the site's own
@@ -172,7 +172,7 @@
   **Its comments exist only in the app protocol, and this tool never speaks it — it listens.** The signature is
   body-covering (byte-identical replay answers 110001, measured 2026-10-19), so the 评论 mode drives the third-party
   desktop player behind our own mitmproxy and parses what the player legitimately fetched
-  (`crawlers/hongguo_harvest.py`; full chain in `docs/crawler_notes.md` 红果短剧). Rules that keep it honest: a player
+  (`crawlers/platforms/hongguo/harvest.py`; full chain in `docs/crawler_notes.md` 红果短剧). Rules that keep it honest: a player
   window the USER opened is refused by name, never killed — only Popen-children of this node get reaped;
   navigation is the leaderboard page's per-card ``▶ 播放`` (the 找剧 page has NO search box — measured), and
   the comment trigger is the action-rail ``💬 <count>`` click that opens the drawer (the feed's silent prefetch

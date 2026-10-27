@@ -24,11 +24,11 @@ import pytest
 import requests
 
 import settings_store
-from crawlers import hongguo
 from crawlers.commenting.protocol import OK
-from crawlers.comments_hongguo import hg_page_title, hg_series_id
 from crawlers.core.crawler import UNDER_TARGET
-from crawlers.hongguo_harvest import HongguoCommentHarness, find_mitmdump, find_player
+from crawlers.platforms.hongguo import crawler as hongguo
+from crawlers.platforms.hongguo.comments import hg_page_title, hg_series_id
+from crawlers.platforms.hongguo.harvest import HongguoCommentHarness, find_mitmdump, find_player
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

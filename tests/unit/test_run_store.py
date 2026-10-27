@@ -147,7 +147,7 @@ class TestItemKey:
         """The resume invariant a comment table cannot get from the whole-row hash.
 
         A comment row deliberately keeps out of ``_URL_FIELDS`` / ``_AUTHOR_FIELDS`` /
-        ``_BODY_FIELDS`` (``crawlers/comments.py`` says why: every comment of one article
+        ``_BODY_FIELDS`` (``crawlers/commenting/session.py`` says why: every comment of one article
         would otherwise hash alike and all but the first would be dropped), so it used to
         fall through to a hash of the WHOLE row — and that row carries 楼层, which a fresh
         harness numbers from 1 again. 继续 over a re-walked article therefore re-stored every

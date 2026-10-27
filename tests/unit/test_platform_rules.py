@@ -38,7 +38,7 @@ WINDOWS_TABLES = {
     Path('utils/machine_deps.py'),
     Path('utils/procs.py'),
     Path('services/latex_compile.py'),
-    Path('crawlers/hongguo_harvest.py'),
+    Path('crawlers/platforms/hongguo/harvest.py'),
     Path('i18n.py'),
     Path('services/export_browser.py'),
 }

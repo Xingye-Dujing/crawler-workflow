@@ -14,7 +14,7 @@ second page would replay it).
 
 import pytest
 
-from crawlers.bilibili import bilibili_bvid
+from crawlers.platforms.bilibili.crawler import bilibili_bvid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

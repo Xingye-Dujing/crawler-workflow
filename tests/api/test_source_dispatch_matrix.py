@@ -369,7 +369,7 @@ def test_a_harness_that_walked_short_names_the_gap(app_module, recorder, monkeyp
     the site attesting an end must fail the node — keeping its rows and offering
     继续 — never settle clean DONE over a thin table.
     """
-    import crawlers.hongguo as hongguo_module
+    import crawlers.platforms.hongguo.crawler as hongguo_module
 
     class _ShortHarness:
         driver = None
@@ -411,7 +411,7 @@ def test_a_drama_the_client_would_not_open_is_named_at_the_end(app_module, recor
     the node settled DONE on a table with a hole in it. Reading ``skipped_targets`` BY
     ATTRIBUTE keeps this gate dormant for every platform whose adapter has no such list.
     """
-    import crawlers.hongguo as hongguo_module
+    import crawlers.platforms.hongguo.crawler as hongguo_module
 
     class _SkippingHarness:
         driver = None
@@ -455,7 +455,7 @@ def test_a_row_total_that_masks_a_short_episode_is_still_refused(app_module, rec
     came home with 20 of its 698. That is the difference between a short table and a node
     that settles DONE, and a false license here is the bug this repo already refused twice.
     """
-    import crawlers.hongguo as hongguo_module
+    import crawlers.platforms.hongguo.crawler as hongguo_module
 
     class _MaskingHarness:
         driver = None
@@ -523,7 +523,7 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
     a table permanently missing that drama — while the console had promised it would be collected.
     A real store sits under this because the thing under test is the hand-off between attempts.
     """
-    import crawlers.hongguo as hongguo_module
+    import crawlers.platforms.hongguo.crawler as hongguo_module
     from services.run_store import RunStore
 
     urls = [f'https://hongguoduanju.com/detail?series_id={7696063528179878930 + i}' for i in range(3)]
@@ -1038,7 +1038,7 @@ def _patch_harness(monkeypatch, seen, fail_url=None):
     executor builds ``crawler_class(kind).browserless_comment_harness(...)`` instead of
     a session. The fake records through the SAME ``seen`` list so every comments test
     below asserts both doors identically."""
-    import crawlers.hongguo as hongguo_module
+    import crawlers.platforms.hongguo.crawler as hongguo_module
 
     class _Harness:
         driver = None

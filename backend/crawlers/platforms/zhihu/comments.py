@@ -15,7 +15,7 @@ Two columns are here because a measurement said what the panel does and does not
   reads as "nobody liked this" about a column this crawler never asked the site for.
 """
 
-from .engine import times
+from crawlers.engine import times
 
 
 def parse_zhihu_comments(url: str, items) -> list:

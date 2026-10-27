@@ -9,7 +9,7 @@ the device tier.
 
 import pytest
 
-from crawlers.comments_hongguo import hg_comment_rows, hg_page_title, hg_series_id
+from crawlers.platforms.hongguo.comments import hg_comment_rows, hg_page_title, hg_series_id
 
 pytestmark = pytest.mark.unit
 

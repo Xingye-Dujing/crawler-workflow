@@ -62,7 +62,7 @@ def the_device_the_tier_asked_for_really_starts():
     into an ERROR while the flag was off. Measured, not guessed.
     """
     if _flag(REQUIRE_BROWSER_ENV):
-        from crawlers.wechat import WechatCrawler
+        from crawlers.platforms.wechat.crawler import WechatCrawler
 
         try:
             crawler = WechatCrawler(headless=True)

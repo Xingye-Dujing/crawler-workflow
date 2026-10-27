@@ -28,14 +28,14 @@ from selenium.common.exceptions import TimeoutException
 import crawlers.core.crawler as base_module
 from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_threads
 from crawlers.core.crawler import UNDER_TARGET, Crawler
-from crawlers.douyin import (
+from crawlers.engine.counters import parse_count
+from crawlers.platforms.douyin.crawler import (
     DouyinCrawler,
     _author_from_related,
     _clean_publish,
     douyin_id,
     douyin_sec_uid,
 )
-from crawlers.engine.counters import parse_count
 from i18n import stop_reason_label, t
 from utils.helpers import platform_for
 

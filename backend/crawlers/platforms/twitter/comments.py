@@ -9,7 +9,7 @@ def parse_twitter_replies(cards: list, article_url: str, root_id: str = '') -> l
     permalink, and storing it would hand the user a row saying "this post replied
     to itself" while inflating its own counts.
     """
-    from .twitter import row_from_card
+    from crawlers.platforms.twitter.crawler import row_from_card
 
     rows = []
     for index, card in enumerate(cards):

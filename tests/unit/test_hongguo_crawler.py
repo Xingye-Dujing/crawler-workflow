@@ -21,8 +21,8 @@ import pytest
 import crawl_capabilities as capabilities
 import crawlers.core.crawler as base_module
 import i18n
-from crawlers import hongguo
 from crawlers.core.crawler import UNDER_TARGET, Crawler, PageNotArrivedError
+from crawlers.platforms.hongguo import crawler as hongguo
 
 pytestmark = pytest.mark.unit
 

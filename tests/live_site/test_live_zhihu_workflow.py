@@ -503,7 +503,7 @@ def test_a4_headless_search_is_full_or_names_the_refusal(client, app_module, mon
 
     The rule is graded by the *verdict*, not by a three-word vocabulary: this mode's own
     honest endings include the walk saying 「没有更多了」 (zhihu answers a throttled session by
-    falling through to a scroll loop that finds nothing, ``crawlers/zhihu.py``). Refusing
+    falling through to a scroll loop that finds nothing, ``crawlers/platforms/zhihu/crawler.py``). Refusing
     everything but three named walls would red a documented outcome — and ``crawl.riskBlocked``
     on a login-wall retry is an ``add_log``, not a raised refusal, so the old shape red-flagged
     a crawl whose console had explained itself in full.
@@ -837,7 +837,7 @@ def _assert_comment_rows(rows, *, minimum: int, console: str = '') -> None:
 
     Two of this cell's assertions used to rest on a wrong reading of the site: 评论时间 was called
     a structural blank and 点赞数 a structural zero, when in fact the product never looked
-    (``crawlers/comments_zhihu.py`` wrote both constants) and the panel does carry a time —
+    (``crawlers/platforms/zhihu/comments.py`` wrote both constants) and the panel does carry a time —
     「14 小时前」 on a recent comment, 「2019-08-15」 on an old one. So a table where NOT ONE row
     names a moment is now read as the dead column it is, not as a site answer.
 
@@ -1504,7 +1504,7 @@ def test_e6_a_session_that_dies_mid_crawl_resumes_the_table_it_left(client, app_
     pass without the product ever being in a position to speak.
     """
     harness.real_jar(monkeypatch, app_module)
-    from crawlers.zhihu import ZhihuCrawler
+    from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 
     canvas = posts_canvas(E6_TARGET, KEYWORDS['E6'], full_body=False, recrawl=True)
     injected = harness.session_dies_after(monkeypatch, ZhihuCrawler, 'search', rows=E6_DEATH_ROWS)

@@ -19,8 +19,8 @@ from types import SimpleNamespace
 import pytest
 
 from config import Config
-from crawlers.wechat import WechatCrawler
-from crawlers.xiaohongshu import XiaohongshuCrawler as Xhs
+from crawlers.platforms.wechat.crawler import WechatCrawler
+from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler as Xhs
 
 pytestmark = pytest.mark.unit
 
@@ -87,7 +87,9 @@ class TestXhsCommentPreview:
         waited = []
         crawler = Xhs.__new__(Xhs)  # no browser: only the extractor's guard is under test
         crawler.driver = object()  # never touched on this path; the guard must return first
-        monkeypatch.setattr('crawlers.xiaohongshu.WebDriverWait', lambda *a, **k: waited.append('waited') or [])
+        monkeypatch.setattr(
+            'crawlers.platforms.xiaohongshu.crawler.WebDriverWait', lambda *a, **k: waited.append('waited') or []
+        )
         assert crawler.extract_comments(max_comments=0) == []
         assert waited == [], 'a zero preview may not wait on the comment panel'
 
@@ -102,7 +104,7 @@ class TestXhsCommentPreview:
             waited.append('waited')
             return SimpleNamespace(until=lambda _cond: (_ for _ in ()).throw(TimeoutException()))
 
-        monkeypatch.setattr('crawlers.xiaohongshu.WebDriverWait', _fake_wait)
+        monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.WebDriverWait', _fake_wait)
         assert crawler.extract_comments(max_comments=5) == []
         assert waited == ['waited'], 'a real preview must still try the panel once'
 

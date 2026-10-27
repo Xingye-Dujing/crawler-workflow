@@ -17,7 +17,7 @@ the counters that name themselves in the DOM. Note the deliberate absence: a dou
 import pytest
 
 from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
-from crawlers.douyin import DouyinCrawler, douyin_id
+from crawlers.platforms.douyin.crawler import DouyinCrawler, douyin_id
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

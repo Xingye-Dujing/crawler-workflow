@@ -30,9 +30,8 @@ import logging
 import re
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, PageNotArrivedError, as_index
+from crawlers.engine.counters import first_int, has_count, parse_count
 from i18n import t
-
-from .engine.counters import first_int, has_count, parse_count
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +158,7 @@ class HongguoCrawler(Crawler):
         declarative attribute, so the executor grows no ``if platform ==`` branch
         and the matrix stays the only answer to what a platform can collect.
         """
-        from .hongguo_harvest import HongguoCommentHarness
+        from crawlers.platforms.hongguo.harvest import HongguoCommentHarness
 
         return HongguoCommentHarness(**kwargs)
 

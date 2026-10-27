@@ -17,7 +17,7 @@ import pytest
 import i18n
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
-from crawlers.hongguo_harvest import (
+from crawlers.platforms.hongguo.harvest import (
     HongguoCommentHarness,
     PlayerUI,
     TreeColdError,
@@ -355,7 +355,7 @@ class TestRefusals:
         assert any(i18n.t('crawl.hg.cmt.titleMissing', url='https://example.com/nothing') in line for line in said)
 
     def test_a_missing_player_is_refused_by_name(self, tmp_path, monkeypatch):
-        import crawlers.hongguo_harvest as harvest_module
+        import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(harvest_module, 'find_player', lambda: '')
         monkeypatch.setattr(harvest_module, 'find_mitmdump', lambda: 'C:/fake/mitmdump.exe')
@@ -373,7 +373,7 @@ class TestRefusals:
         """
         import sys
 
-        import crawlers.hongguo_harvest as harvest_module
+        import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(sys, 'platform', 'win32')  # the gate is a Windows-desktop question
         monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
@@ -394,7 +394,7 @@ class TestRefusals:
         # is not, which is exactly how a platform gap survives a test run.
         import sys
 
-        import crawlers.hongguo_harvest as harvest_module
+        import crawlers.platforms.hongguo.harvest as harvest_module
 
         for other in ('linux', 'darwin'):
             monkeypatch.setattr(sys, 'platform', other)
@@ -411,7 +411,7 @@ class TestRefusals:
         # Same box, different job: a server has no desktop to drive even when its OS is Windows.
         import sys
 
-        import crawlers.hongguo_harvest as harvest_module
+        import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(sys, 'platform', 'win32')
         monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', True)
@@ -424,7 +424,7 @@ class TestRefusals:
     def test_the_source_build_names_the_missing_package(self, tmp_path, monkeypatch):
         import sys
 
-        import crawlers.hongguo_harvest as harvest_module
+        import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(sys, 'platform', 'win32')
         monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
@@ -1186,7 +1186,7 @@ class TestWaitsCompressed:
     def test_a_tree_that_goes_cold_mid_board_walk_bails_instead_of_grinding(self, monkeypatch):
         # Measured cost of NOT doing this: the board walk slept through every board × every
         # scroll against a tree that had re-frozen to 0 controls (~110 s of dead waiting).
-        from crawlers import hongguo_harvest as hh
+        from crawlers.platforms.hongguo import harvest as hh
 
         monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
         ui = PlayerUI(log=lambda _m: None, abort=lambda: False)
@@ -1390,7 +1390,7 @@ class TestBoardScanProgress:
     the silent board grind as a hang on 2026-10-20)."""
 
     def test_every_board_scanned_is_announced_then_the_miss_is_reported(self, monkeypatch):
-        from crawlers import hongguo_harvest as hh
+        from crawlers.platforms.hongguo import harvest as hh
 
         monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
         said = []
@@ -1435,7 +1435,7 @@ class TestInputFocus:
         assert 'activate' in called, 'the {Down} was sent without foregrounding the player'
 
     def test_open_drama_foregrounds_before_the_first_click(self, monkeypatch):
-        from crawlers import hongguo_harvest as hh
+        from crawlers.platforms.hongguo import harvest as hh
 
         monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
         called = []

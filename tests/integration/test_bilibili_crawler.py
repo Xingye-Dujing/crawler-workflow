@@ -23,8 +23,8 @@ import re
 import pytest
 
 import crawlers.core.crawler as base_module
-from crawlers.bilibili import BilibiliCrawler, bilibili_bvid, bilibili_mid, bilibili_search_url
 from crawlers.core.crawler import Crawler
+from crawlers.platforms.bilibili.crawler import BilibiliCrawler, bilibili_bvid, bilibili_mid, bilibili_search_url
 
 pytestmark = pytest.mark.unit
 
@@ -360,7 +360,7 @@ class TestSearch:
         """-404 is a real fact about THIS row; it must be said, not vanish between the
         page line and the summary (the search used to drop it with no word at all)."""
         crawler, _driver = make_crawler([[_card(GONE), _card(A)]], [_view(GONE, code=-404), _view(A)])
-        with caplog.at_level(logging.INFO, logger='crawlers.bilibili'):
+        with caplog.at_level(logging.INFO, logger='crawlers.platforms.bilibili.crawler'):
             rows = crawler.search('ai', target_count=5)
         assert [r['BV号'] for r in rows] == [A]
         assert GONE in caplog.text, 'a skipped video must name itself'
@@ -371,7 +371,7 @@ class TestSearch:
         word, so the table and the summary agreed on a short count with nothing to explain
         it. It now names the card it dropped."""
         crawler, _driver = make_crawler([[_card(GONE), _card(A)]], [{}, _view(A)])
-        with caplog.at_level(logging.WARNING, logger='crawlers.bilibili'):
+        with caplog.at_level(logging.WARNING, logger='crawlers.platforms.bilibili.crawler'):
             rows = crawler.search('ai', target_count=5)
         assert [r['BV号'] for r in rows] == [A]
         assert GONE in caplog.text, 'the unreadable card must be named, not silently dropped'
@@ -470,7 +470,7 @@ class TestHot:
         BY NAME (like 知乎's hotCapped), not with a bare 共 {n} 条 that reads as a shortfall we
         failed to fill rather than a board the site simply has only that big."""
         crawler, _driver = make_crawler([[]], [self._board(A, B)])
-        with caplog.at_level(logging.INFO, logger='crawlers.bilibili'):
+        with caplog.at_level(logging.INFO, logger='crawlers.platforms.bilibili.crawler'):
             rows = crawler.hot('ranking', target_count=50)
         assert [row['BV号'] for row in rows] == [A, B]
         assert '本次只有 2 条' in caplog.text, 'the board size is the site number and must be printed'
