@@ -483,6 +483,34 @@ out.reconnectTwice = {
     lines: lines(),
 };
 
+/* ── 11b. two OVERLAPPING reconnects are one replay ────────────────────────
+   The sequential case above is caught by the timer, which exists by then. Before it does,
+   the page boot and a 「立即执行」 fire both reach the read of the tail: each fetched, each
+   opened the panel and each announced 「已重新连接控制台」 for the same run. */
+wf._stopPoll();
+freshPage();
+let openGate;
+const gated = new Promise((resolve) => { openGate = resolve; });
+const realFetch = sandbox.fetch;
+let asks = 0;
+sandbox.fetch = () => {
+    asks += 1;
+    return gated;
+};
+const overlapFirst = wf.reconnectConsole();
+const overlapSecond = wf.reconnectConsole();
+openGate({ json: () => Promise.resolve(status(['once only'], 1)) });
+await overlapFirst;
+await overlapSecond;
+sandbox.fetch = realFetch;
+out.reconnectOverlapped = {
+    asked: asks,
+    shared: overlapFirst === overlapSecond,
+    painted: lines().length,
+    lines: lines(),
+    reconnectedToasts: toasts.filter((m) => m === 'RECONNECTED').length,
+};
+
 /* ── 12. a full view trims EVERY line, and a trim is not a scroll ─────────
    Past CONSOLE_VIEW_CAP (500) lines, `feedConsoleView` reports `trimmed` on every later
    line, so the trim branch is the normal state of a long crawl — not a rare event. It

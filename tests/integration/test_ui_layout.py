@@ -219,6 +219,32 @@ def _read_url_json(url: str):
         return None
 
 
+def _settle_console_replay(driver):
+    """Wait out the page's OWN console replay before a test empties the box.
+
+    The boot sequence asks ``/api/workflow/status?tail=`` for the lines a reload lost, and
+    that read is still in flight when the next script runs. A test that clears
+    ``#console-output`` and then reads it back therefore gets the SERVER's history painted
+    over the lines it fed itself — on the CI runner, where a previous test had left a long
+    run log behind, the assertion printed several hundred retention lines instead of the
+    three it had stubbed. ``workflow.reconnectConsole`` keeps the in-flight promise exactly
+    so a caller can wait for a replay it did not start; this is that caller.
+
+    Returns whether a replay was actually waited for, so a caller can say what it measured.
+    """
+    return bool(
+        driver.execute_async_script(
+            """
+            const done = arguments[arguments.length - 1];
+            if (!workflow._reconnect) { done(false); return; }
+            // A replay that fails still finishes writing the box; both endings are settled.
+            workflow._reconnect.then(() => done(true), () => done(true));
+            """,
+            [],
+        )
+    )
+
+
 def _kill_animations(driver):
     """Slide-in panels are laid out at their open position only after a transition;
     a rect measured mid-slide reports them as off-screen."""
@@ -1449,6 +1475,9 @@ def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
     driver.set_window_size(1366, 768)
     driver.get(app_url + '/')
     _kill_animations(driver)
+    # The page's own replay must have landed before the box is emptied, or the server's
+    # history arrives after the clear and is read back as if this test had fed it.
+    waited = _settle_console_replay(driver)
     driver.execute_script(
         """
         const lines = ['第一行', '第二行', '第三行'];
@@ -1499,7 +1528,7 @@ def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
         """,
         [],
     )
-    assert seen['before'] == ['第一行', '第二行', '第三行'], seen['before']
+    assert seen['before'] == ['第一行', '第二行', '第三行'], f'{seen["before"]} (waited for the boot replay: {waited})'
     assert seen['tabA'] == ['甲的第一行', '甲的第二行'], f'the 甲 tab opened blank: {seen}'
     assert seen['tabB'] == ['乙的第一行'], f'the 乙 tab did not show only its own lines: {seen}'
     assert seen['backToAll'] == seen['before'], f'coming back to 全部 lost or duplicated lines: {seen}'
@@ -1518,6 +1547,10 @@ def test_a_page_that_reloaded_takes_the_console_back_up_in_a_real_browser(app_ur
     driver.set_window_size(1366, 768)
     driver.get(app_url + '/')
     _kill_animations(driver)
+    # The boot replay shares one in-flight promise with this test's own call, so a replay
+    # the page started for itself has to be over before asking for another: otherwise the
+    # await below is handed the SERVER's history and the stubbed tail is never read.
+    _settle_console_replay(driver)
     driver.execute_script(
         """
         document.getElementById('console-output').innerHTML = '';

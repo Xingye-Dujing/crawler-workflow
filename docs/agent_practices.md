@@ -288,6 +288,26 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   the same text print the sentence twice. Keep the logger call for the file's traceback; let `wf.node_failed` be the
   single attributed console line; a helper line may add a fact that line cannot carry (how many rows survived), never
   repeat the reason.
+- **A line printed by a side effect that runs per PAGE LOAD is noise by construction** (measured on the CI runner,
+  2026-10-27). The app boot fires `POST /api/data/clear` to sweep orphaned files (`app.js`), and that route logged
+  「清理孤立文件 0 个，保留 0 个…」 unconditionally — so every tab the user (or a browser test) opened added another
+  identical row to the run console. After ~80 page loads the console test's own three stubbed lines were buried under
+  eighty of them and the device tier failed on CI while passing here, where fewer page loads happened between the two
+  tests. The rule is the one `services/housekeeping.py` already states for the automatic sweep — **silence is the
+  normal case, say something only when something went** — and the manual 清理 keeps its answer through its own toast
+  built from the response, so nothing loses feedback by the line being conditional. A test that opens a page is not a
+  cheap read: it is a writer of the console, so anything printed at page-load time is multiplied by the suite's page
+  loads and eventually lands on a different test's assertion.
+- **A job a page starts by itself must be awaitable, or it races everything after it.** `workflow.reconnectConsole()`
+  reads `/api/workflow/status?tail=` during boot; a browser test that empties `#console-output` and then reads it back
+  was reading the *server's* history, painted after the clear by the read still in flight. Two fixes, one product and
+  one test: the method now keeps its in-flight promise (`_reconnect`, shared, released in `finally`) so a caller can
+  wait for work it did not start — which also stops the boot and a 「立即执行」 fire from each fetching the tail, each
+  opening the panel and each shouting 「已重新连接控制台」 for the same run (`harness_console.mjs` measures `asked: 1`,
+  `reconnectedToasts: 1`, and the same scenario against a non-sharing gate reports `2`/`2`); and the tier gained
+  `_settle_console_replay(driver)`, called **before** any test clears the box. Sharing that promise is exactly what
+  makes the second console test correct too: once the boot's replay is in flight, a test that calls
+  `reconnectConsole()` again is handed *that* promise, so its stubbed tail would never be read.
 - **Anything that chooses data, cost or a name is refused BY NAME, never guessed** (a mode, a `select`, a step's select
   or missing column via `data_analysis.validate_step`, an analyzer's `method`/`mode` via `app.enum_param`), and refusals
   `raise` rather than returning `[]` — else the node settles DONE over an empty table. **Read a switch, never compare

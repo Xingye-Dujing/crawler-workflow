@@ -1137,7 +1137,22 @@ const workflow = {
         }
     },
 
-    async reconnectConsole() {
+    reconnectConsole() {
+        /* One replay at a time, and shareable by whoever asks. Two doors call this: the page
+           boot, and a 「立即执行」 fire that really started. Each of them used to run its own
+           read of the tail, because the guard against a second reader (``_pollTimer``) is only
+           installed at the END of the first one — so both fetched, both opened the panel, and
+           both shouted 「已重新连接控制台」 for the same run. Keeping the promise is also the
+           only way a caller can wait for a replay it did not start: a test (or a panel) that is
+           about to clear the console box has no other way to learn the server's history is
+           still on its way in. */
+        if (!this._reconnect) {
+            this._reconnect = this._replayConsole().finally(() => { this._reconnect = null; });
+        }
+        return this._reconnect;
+    },
+
+    async _replayConsole() {
         /* A refresh used to cost the console: nothing in the boot sequence started the
            poll, so the box sat empty for the rest of a run that was still writing and the
            user read a dead UI for a live crawl. The lines are in the server's buffer (it

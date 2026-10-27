@@ -877,14 +877,17 @@ class TestChromeOfThePageItself:
         assert "boot('consoleReconnect'" in boot_body[: boot_body.index("boot('locks'")], (
             'the reconnect step must run with the other post-boot steps'
         )
-        assert 'reconnectConsole: async function' in wf or 'async reconnectConsole()' in wf, (
-            'the method the boot step calls must exist'
-        )
+        assert 'reconnectConsole() {' in wf, 'the method the boot step calls must exist'
 
     def test_the_console_poller_has_exactly_one_owner(self):
         """Two intervals reading one console append the same line twice, and the delta
         cursor cannot tell them apart because both answers are valid. The reconnect path is
         the second caller that exists now, so the timer needs an owner rather than a local.
+
+        The replay needs the same treatment for the same reason: the page boot and a
+        「立即执行」 fire can both ask before either has installed a timer, and the guard above
+        only becomes true at the END of the first one. Two overlapping replays fetch the tail
+        twice, open the panel twice and announce 「已重新连接控制台」 twice for one run.
         """
         wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
         body = wf[wf.index('pollStatus: function') :]
@@ -898,6 +901,13 @@ class TestChromeOfThePageItself:
         assert body.count('self._stopPoll();') >= 3, (
             f'every exit that ends the run must release the owner, saw {body.count("self._stopPoll();")}'
         )
+        gate = wf[wf.index('reconnectConsole() {') :]
+        gate = gate[: gate.index('_replayConsole() {')]
+        assert 'if (!this._reconnect)' in gate, 'a second caller starts a second replay again'
+        assert '.finally(() => { this._reconnect = null; })' in gate, (
+            'a replay that never releases its handle is a console that can never replay again'
+        )
+        assert wf.count('this._reconnect =') == 2, 'the handle is written somewhere the gate does not see'
 
     def test_the_tab_bar_is_built_in_one_place_for_the_poller_and_the_replay(self):
         """A reconnecting page has not started the poller, so it must be able to rebuild the

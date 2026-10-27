@@ -393,6 +393,35 @@ class TestClear:
         assert response.status_code == 200
         assert response.get_json()['ok'] is True
 
+    def test_an_orphan_sweep_that_took_nothing_prints_nothing(self, client, caplog):
+        """One line per PAGE LOAD, not per event: the app boot fires this sweep every time a
+        tab opens (app.js), so an unconditional sentence here is console noise by construction.
+        Measured on the CI runner, where it put eighty 「清理孤立文件 0 个」 rows into the run
+        console and buried the console test's own three lines under them. The automatic sweep
+        (`services/housekeeping.py`) already keeps to silence when nothing went."""
+        from i18n import t
+
+        with caplog.at_level('INFO'):
+            assert client.post('/api/data/clear', json={}).get_json() == {'ok': True, 'removed': 0, 'kept': 0}
+        empty = t('ds.purge_result', n=0, kept=0)
+        printed = [rec.getMessage() for rec in caplog.records if empty in rec.getMessage()]
+        assert not printed, f'a sweep that deleted nothing still printed {len(printed)} console lines'
+
+    def test_an_orphan_sweep_that_took_something_still_names_the_count(self, client, app_module, paste, caplog):
+        """Silence is for the empty case only — a sweep that deleted files must say how many,
+        or the one line that matters is the one that got optimised away."""
+        from i18n import t
+
+        paste([{'a': 1}], name='orphan.csv')
+        app_module._DATASET_STORE._execute("UPDATE datasets SET last_used_at = '2000-01-01T00:00:00'")
+        with caplog.at_level('INFO'):
+            body = client.post('/api/data/clear', json={}).get_json()
+        assert body['removed'] == 1, body
+        expected = t('ds.purge_result', n=1, kept=0)
+        assert any(expected in rec.getMessage() for rec in caplog.records), (
+            f'the sweep that deleted one file said nothing: {[r.getMessage() for r in caplog.records]}'
+        )
+
 
 class TestDatasetRename:
     """The name is the only thing in a dataset list a user can recognise — the

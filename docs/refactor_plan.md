@@ -364,6 +364,25 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   （已排除同名模块遮蔽、conftest 打桩、autouse 夹具泄漏），于是不再猜——改为带着 returncode 与 stderr 的
   断言，下次真发生时会自己说清。⑤ 红果播放器那条删了 stack 接缝，等于默认 mitmproxy/uiautomation 已装；
   现在用例自己说"栈在"，另加一条钉住 CI 真撞到的**栈缺失拒绝**（点名两包且不得怪播放器）。
+- **browser job 又红过一次（`84775e0`），红的是一条真缺陷，不是抖动**：
+  `test_switching_console_tabs_keeps_the_lines_already_shown` 在 runner 上拿到 81 行
+  `[12:4x:xx] 清理孤立文件 0 个，保留 0 个仍在使用的文件`，而不是自己喂进去的 3 行。两条独立成因，都已修：
+  ① **页面自己会写控制台**——`app.js` 每次 boot 都 `POST /api/data/clear` 扫孤儿文件，而那条路由无条件
+     `logger.info`，于是"开一次页 = 一行"，累计到某一条用例的断言上。改为**只有真删了才说**
+     （与 `services/housekeeping.py` 同一句话），手工「清理」的反馈本来就走响应体自己造的 toast，没有丢东西；
+     两条新用例分别钉"空扫描不得留行"与"删了 1 个必须点名 1 个"（`tests/api/test_data_api.py::TestClear`）。
+  ② **测试清空的盒子页面还在往里写**——boot 的 `reconnectConsole()` 读 `?tail=` 还没落地，测试已经把
+     `#console-output` 清了，于是服务器历史盖在它自己的桩行上面。产品侧把"一次只有一个在飞的 replay"落成
+     `workflow._reconnect`（`finally` 交还），顺带修掉真缺陷：boot 与「立即执行」两处调用原先各自 fetch、
+     各自开面板、各自弹一次「已重新连接控制台」；测试侧新增 `_settle_console_replay(driver)`，
+     **清空之前先等页面那一次落地**。harness `reconnectOverlapped` 量到 `asked: 1 / toasts: 1`，
+     把共享那一行改成不共享立刻变 `2 / 2`（正向对照做过，不是推断）。
+     另一处连带：`reconnectConsole` 不再带 `async`，`test_frontend_contract.py` 那三条"方法必须存在"的
+     拼写跟着改，并新增"一次只有一个 replay + finally 必须交还 + `this._reconnect =` 恰好两处"。
+- **一次文档核对的结论：不改**（记在这里免得下轮再查一遍）。`docs/crawler_notes.md` 里 114 处按文件名引用
+  `backend/test_*.py` 探针（A26 已删除那 141 个文件）——那些是**"measured <日期>，用什么量出来的"历史记录**，
+  不是"这文件现在还在"的声明；`docs/ARCHITECTURE.md:85` 已经写明它们已删除，AGENTS 的探针条目说的是规矩。
+  README 的目录树与 `docs/development.md` 都不逐个列探针文件名，所以本轮没有过期事实要修。
 - **下一条待做（顺序，别插队）**：
   1. ~~#38 让 CI 的 fast 档在 runner 上全绿~~ **已闭环**（`2d688ae`/`799826e`/`a4a6a32`/`768d082` 全绿，
      browser job 的异步接缝也已按 DOM 修好）。

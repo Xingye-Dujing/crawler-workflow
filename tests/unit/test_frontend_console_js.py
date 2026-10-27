@@ -249,6 +249,19 @@ class TestConsoleReconnect:
         assert twice['painted'] == twice['afterFirst'] == 1, twice
         assert twice['lines'] == ['once'], f'the second reconnect duplicated the console: {twice["lines"]}'
 
+    def test_two_overlapping_reconnects_are_one_replay(self, console):
+        """The sequential case is refused by the timer the first reconnect installed; two
+        calls that overlap have no such guard yet, and each of them used to read the tail,
+        open the panel and shout 「已重新连接控制台」 for the same run — the boot step and a
+        「立即执行」 fire are the two callers that exist."""
+        overlapped = console['reconnectOverlapped']
+        assert overlapped['asked'] == 1, f'the tail was fetched {overlapped["asked"]} times for one replay'
+        assert overlapped['shared'] is True, 'the second caller was handed its own promise, not the running one'
+        assert overlapped['lines'] == ['once only'], overlapped
+        assert overlapped['reconnectedToasts'] == 1, (
+            f'one run announced its console {overlapped["reconnectedToasts"]} times: {overlapped}'
+        )
+
 
 class TestConsoleStickToBottom:
     def test_a_full_view_trims_every_line_and_a_trim_is_not_a_scroll(self, console):

@@ -419,5 +419,12 @@ def clear_datasets():
     _dataset_cache.clear()
     removed = store.purge_unreferenced()
     kept = store.stats()
-    logger.info(t('ds.purge_result', n=removed, kept=kept['datasets']))
+    # Silence is the normal case, and this route is not only a button: the page boot sweeps
+    # orphans on EVERY tab that opens (app.js), so an unconditional line here added one more
+    # identical sentence to the run console per page load — measured on the CI runner, where
+    # eighty of them buried the console test's own three lines. `services/housekeeping.py`
+    # already keeps to this rule for the automatic sweep; a manual 清理 still reports through
+    # its own toast from this response, so nothing loses its answer by being silent here.
+    if removed:
+        logger.info(t('ds.purge_result', n=removed, kept=kept['datasets']))
     return jsonify({'ok': True, 'removed': removed, 'kept': kept['datasets']})
