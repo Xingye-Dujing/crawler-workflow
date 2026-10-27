@@ -26,17 +26,18 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from core import machine, procs
+
 from config import Config
 from i18n import t
-from utils import machine_deps, procs
 
 BACKEND_NAME = 'catbus'
 
 #: Suffixes that mean "this entry is a script, so Node runs it". Anything else is the program
 # itself, which is how a user pointing ``CATBUS_CLI`` at a wrapper stays honoured. The same tuple
-# decides how :mod:`utils.machine_deps` tests the file on disk, so a non-executable ``cli.js`` is not
+# decides how :mod:`core.machine` tests the file on disk, so a non-executable ``cli.js`` is not
 # reported as missing on a POSIX box that has it.
-_SCRIPT_SUFFIXES = machine_deps.CATBUS_SCRIPT_SUFFIXES
+_SCRIPT_SUFFIXES = machine.CATBUS_SCRIPT_SUFFIXES
 
 #: One process gets this long before it is taken down. Finite on purpose: one run slot cannot
 # survive a "wait forever", and 停止 stays the user's exit at any point inside the window.
@@ -112,7 +113,7 @@ def explicit_paths() -> tuple[str, str]:
     The panel wins because that is where the user just typed it, and the setting is what survives a
     restart of a service whose environment nobody controls (a systemd unit, a container). An empty
     setting means "look it up on this machine", not "nothing is configured" — the candidate tables in
-    :mod:`utils.machine_deps` answer that, and ``PATH`` is only the last fallback there, never a thing
+    :mod:`core.machine` answer that, and ``PATH`` is only the last fallback there, never a thing
     the user is asked to edit.
     """
     # Imported here rather than at module scope: ``settings_store`` reads ``Config``, and this module
@@ -131,14 +132,14 @@ def _probe_now() -> Probe:
     adapter entry the same way, because a cloud box that installed neither is the common case.
     """
     node_setting, cli_setting = explicit_paths()
-    node = machine_deps.find_node(node_setting)
+    node = machine.find_node(node_setting)
     if not node:
         return Probe(available=False, reason_key='catbus.noNode')
     # The runtime answers for itself: ``node --version`` is what the version gate is about, and
     # asking the adapter would confuse "no CatBus" with "the Node under it is too old".
     check = _call([node, '--version'], capture=True, timeout=30)
     node_version = check.stdout.strip()
-    if check.spawn_error or not machine_deps.node_version_supported(node_version):
+    if check.spawn_error or not machine.node_version_supported(node_version):
         return Probe(
             available=False,
             reason_key='catbus.oldNode',
@@ -146,7 +147,7 @@ def _probe_now() -> Probe:
             node=node,
             node_version=node_version,
         )
-    entry = machine_deps.find_catbus_cli(cli_setting)
+    entry = machine.find_catbus_cli(cli_setting)
     if not entry:
         return Probe(available=False, reason_key='catbus.noCli', node=node, node_version=node_version)
     call = _call(argv_for(node, entry, ['capabilities']), capture=True)

@@ -28,10 +28,10 @@ from functools import lru_cache
 import jieba
 import numpy as np
 import pandas as pd
+from core import machine
 
 from i18n import t
 from services.chart_contracts import BIBLIO_CHART_TYPES
-from utils import machine_deps
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def _pyplot():
             t(
                 'chart.noCjkFont',
                 checked='、'.join(_CJK_CANDIDATES),
-                remedy=machine_deps.remedy('deps.systemFont'),
+                remedy=machine.remedy('deps.systemFont'),
             )
         )
     return plt

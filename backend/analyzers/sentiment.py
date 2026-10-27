@@ -7,11 +7,11 @@ from importlib.util import find_spec
 
 import numpy as np
 import pandas as pd
+from core import machine
 
 from analyzers.llm_client import run_llm_dataframe
 from config import BASE_DIR
 from i18n import t
-from utils import machine_deps
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ class BertClassifier:
             # unpacks beside the exe, a checkout exports one from its trained checkpoints. Naming
             # both would make half the sentence noise, so the answer follows the build that is
             # actually running — and the path in the message is the one the registry holds.
-            remedy = t('sentiment.packRemedyFrozen') if machine_deps.is_frozen() else t('sentiment.packRemedySource')
+            remedy = t('sentiment.packRemedyFrozen') if machine.is_frozen() else t('sentiment.packRemedySource')
             raise ValueError(t('sentiment.bert_no_model_dir', path=self.model_path, remedy=remedy))
         graph = os.path.join(folder, 'model.onnx')
         if not os.path.isfile(graph):

@@ -14,7 +14,7 @@ import os
 import signal
 import subprocess
 
-from utils import machine_deps
+from core import machine
 
 #: How POSIX says 「kill it now」. Windows' signal module has no ``SIGKILL`` at all (measured: an
 # ``AttributeError`` from the very line that was supposed to clean up a browser), which is exactly why
@@ -28,7 +28,7 @@ _WINDOWS_REAP = ('taskkill', '/F', '/T', '/PID')
 
 def reap_command(pid: int, system: str | None = None) -> list[str]:
     """The command that stops ``pid`` and its children on this OS — POSIX returns none, see below."""
-    if machine_deps.is_windows(system):
+    if machine.is_windows(system):
         return [*_WINDOWS_REAP, str(pid)]
     return []
 
@@ -43,7 +43,7 @@ def popen_kwargs(system: str | None = None) -> dict:
     — and the name is read through ``getattr`` so this module imports on a Linux box too.
     """
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
-    return {'creationflags': flags} if machine_deps.is_windows(system) and flags else {}
+    return {'creationflags': flags} if machine.is_windows(system) and flags else {}
 
 
 def child_pids(proc_root: str, parent: int) -> list[int]:
@@ -83,7 +83,7 @@ def reap_process(pid: int, system: str | None = None, proc_root: str = '/proc') 
     """
     if pid <= 0:
         return False, f'not a process id: {pid}'
-    system = machine_deps.platform_name(system)
+    system = machine.platform_name(system)
     if system == 'win32':
         try:
             result = subprocess.run(

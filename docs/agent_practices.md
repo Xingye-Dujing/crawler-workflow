@@ -160,6 +160,15 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   'services'` in two and a half minutes. Rule: after a `git mv`, every moved path is a **new path** that must be
   added explicitly; read `git diff --cached --stat` (or `git status --short` for a leading `RM`/` M`) before
   committing. Local green says nothing about the index — the runner tests the index.
+- **A word-level rename must not run before the path rules, and it cannot see modules held through another module.**
+  Moving `utils/` into `core/` (2026-10-28) ended with two avoidable wounds. ① The rule `\bmachine_deps\b` → `machine`
+  was applied to whole files to fix bare-module call sites, and it also rewrote the *string literal*
+  `'utils/machine_deps.py'` into `'utils/machine.py'` inside `WINDOWS_TABLES` and the Dockerfile-env scan — a path
+  that still existed in prose but nowhere on disk. Path rules must run first, and a word rule must skip quoted spans
+  (or the diff must be read for string changes before committing). ② Tests reached the moved module through the
+  *production module's attribute* (`bridge.machine_deps`, `harvest_module.machine_deps`), which no import/attribute
+  rule for the moved file can see; only the full suite named them (5 failed + 10 errors). A move that renames a
+  module should grep for `\.<old name>\b` across tests, not just for imports of the old path.
 - **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
   appeared" while the gate before it said everything was fine — because its bounded poll returned
@@ -360,7 +369,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
 - **Anything that chooses data, cost or a name is refused BY NAME, never guessed** (a mode, a `select`, a step's select
   or missing column via `data_analysis.validate_step`, an analyzer's `method`/`mode` via `app.enum_param`), and refusals
   `raise` rather than returning `[]` — else the node settles DONE over an empty table. **Read a switch, never compare
-  it** (`utils.helpers.as_bool`; blank = the declared default); a form shows a stored value off the list
+  it** (`core.refs.as_bool`; blank = the declared default); a form shows a stored value off the list
   (`selectOptionTags`), never option #0.
 - **`_push_log` stores one entry per physical line** — the total advances by lines, not `add_log` calls: a multi-line
   driver `Message:` block rendered as several rows and the browser's cursor skipped or repeated content.
@@ -1130,7 +1139,7 @@ message.
 - **Two answers to one machine-level question is the defect.** The launcher kept its own Chrome candidate
   list, its own MiKTeX scan, and a hardcoded `127.0.0.1:11434` — so a user who set 「设置 → Ollama 地址」 to
   another machine read "Ollama 未检测到" one line before the app answered from that daemon. Both now call
-  `utils/machine_deps.py` / `services/latex_compile.find_xelatex()`.
+  `core/machine.py` / `services/latex_compile.find_xelatex()`.
 - **A default that points at a file which does not exist is a wrong default.** `Config.DRIVER_PATH` was
   `C:\Program Files\Google\Chrome\Application\chromedriver.exe`; almost nothing installs a driver there, and
   Selenium then dies with `The path is not a valid file`, naming a path the user never typed. Blank means

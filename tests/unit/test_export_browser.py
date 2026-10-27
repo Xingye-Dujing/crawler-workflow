@@ -13,6 +13,7 @@ import sys
 import time
 
 import pytest
+from core.refs import MAX_FILENAME_BYTES, MAX_FILENAME_LENGTH
 
 from services.export_browser import (
     MAX_ENTRIES,
@@ -26,7 +27,6 @@ from services.export_browser import (
     resolve_report_path,
 )
 from services.part_writer import PartWriter, safe_stem
-from utils.helpers import MAX_FILENAME_BYTES, MAX_FILENAME_LENGTH
 
 pytestmark = pytest.mark.unit
 

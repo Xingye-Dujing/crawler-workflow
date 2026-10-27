@@ -318,12 +318,13 @@ def machine_has_a_browser(monkeypatch):
     A test that is *about* that refusal overrides this with its own ``monkeypatch``, which is set up
     after an autouse fixture of the same scope.
     """
-    from utils import machine_deps
+
+    from core import machine
 
     # The signature is forwarded whole, including ``system``: a stub that drops a parameter is a stub that
     # breaks the moment the product asks about another operating system (the wrapper rule).
     monkeypatch.setattr(
-        machine_deps,
+        machine,
         'find_chrome',
         lambda explicit='', env=None, system=None: explicit or 'C:/fake/chrome.exe',
     )

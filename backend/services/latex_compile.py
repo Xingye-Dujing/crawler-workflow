@@ -15,10 +15,11 @@ import shutil
 import subprocess
 import tempfile
 
+from core import machine
+
 from i18n import t
 from services.latex_charts import LatexChartService
 from settings_store import get_setting
-from utils import machine_deps
 
 
 def compose_tex(docs) -> str:
@@ -53,7 +54,7 @@ def find_xelatex() -> str:
     local = os.environ.get('LOCALAPPDATA', '')
     candidates = [
         os.path.join(local, 'Programs', 'MiKTeX', 'miktex', 'bin', 'x64', 'xelatex.exe') if local else '',
-        *XELATEX_PATHS.get(machine_deps.platform_name(), ()),
+        *XELATEX_PATHS.get(machine.platform_name(), ()),
     ]
     for path in candidates:
         if path and os.path.isfile(path):
@@ -93,18 +94,18 @@ def explain_failure(log_text: str, stderr: bytes) -> str:
     A missing ``.sty`` and a missing Chinese font are the two ways this fails on a machine that has a TeX
     distribution installed, and both name themselves in the log — saying only "compilation failed" sends
     the user to search a log file they have no reason to open. Which command installs either one is an
-    operating-system fact, so the remedy half of the sentence comes from :mod:`utils.machine_deps`.
+    operating-system fact, so the remedy half of the sentence comes from :mod:`core.machine`.
     """
     package = _STY_MISSING.search(log_text)
     if package:
         return t(
             'api.compilePdfNoPackage',
             package=package.group(1),
-            remedy=machine_deps.remedy('deps.texPackage'),
+            remedy=machine.remedy('deps.texPackage'),
         )
     font = _FONT_MISSING.search(log_text)
     if font:
-        return t('api.compilePdfNoFont', font=font.group(1), remedy=machine_deps.remedy('deps.texFont'))
+        return t('api.compilePdfNoFont', font=font.group(1), remedy=machine.remedy('deps.texFont'))
     detail = _error_line(log_text) or (stderr or b'').decode('utf-8', 'replace')[-300:]
     return t('api.compilePdfFailed', err=detail)
 
@@ -119,7 +120,7 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
     """
     xelatex = find_xelatex()
     if not xelatex:
-        return {'error': machine_deps.remedy('deps.xelatex')}, ''
+        return {'error': machine.remedy('deps.xelatex')}, ''
     work = tempfile.mkdtemp(prefix='cixi-tex-')
     tex_path = os.path.join(work, 'main.tex')
     try:

@@ -159,7 +159,7 @@ class TestTranslation:
         When that arrived pre-joined with '/', the localizer (which only splits on ','
         and '、') treated it as one unknown token and printed raw English keys into a
         Chinese console. A sequence is the contract; the English joiner must be ', '."""
-        from utils.helpers import comment_platforms
+        from core.refs import comment_platforms
 
         set_lang('zh')
         zh = t('comment.no_urls', platforms=comment_platforms())
@@ -289,7 +289,7 @@ class TestKeyReachability:
         'source.',  # services/biblio_sources.py: t(f'source.{fmt}.purpose') for each readable format
         'comment.status.',  # app.py: t(f'comment.status.{status}')
         'crawl.stopReason.',  # i18n.py: stop_reason_label maps a walk token through STOP_REASONS
-        'deps.',  # utils/machine_deps.py: remedy(f'{prefix}.{platform}') — one per-OS sentence per family
+        'deps.',  # core/machine.py: remedy(f'{prefix}.{platform}') — one per-OS sentence per family
     )
 
     @staticmethod
@@ -345,7 +345,7 @@ class TestKeyReachability:
             'the export guide assembles source.<format>.* at runtime; if that stops, its keys '
             'must be checked literally like every other key instead of hiding in the allowlist'
         )
-        # The per-OS remedy sentences: utils/machine_deps.py builds ``deps.<family>.<platform>``.
+        # The per-OS remedy sentences: core/machine.py builds ``deps.<family>.<platform>``.
         assert 'f"{prefix}.' in sources or "f'{prefix}." in sources, (
             'the remedy keys are assembled per operating system; if that stops they must be checked '
             'literally — and every (family × platform) pair still has to exist in both languages, which '

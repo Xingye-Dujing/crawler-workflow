@@ -7,9 +7,8 @@ a step consumes, so a new field is declared once instead of in two shapes.
 """
 
 from api.http import _float_with_default, _optional_float, _optional_int
-
-from utils.helpers import as_bool
-from utils.helpers import split_columns as _split_columns
+from core.refs import as_bool
+from core.refs import split_columns as _split_columns
 
 
 def apply_topic_method(result: dict, params: dict) -> dict:

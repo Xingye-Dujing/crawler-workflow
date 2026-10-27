@@ -25,6 +25,7 @@ import math
 import re
 
 import pandas as pd
+from core import machine
 
 from i18n import t
 from services.biblio_geo import aggregate as geo_aggregate
@@ -45,7 +46,6 @@ from services.visualizer import (
     _histogram_bins,
     _localize_label,
 )
-from utils import machine_deps
 
 # ── paper preamble ──────────────────────────────────────────────────────
 #: Exactly the packages a figure copied into a paper needs; harmless if the document already loads them.
@@ -80,7 +80,7 @@ CJK_FAMILY = {'win32': 'FangSong', 'linux': 'FandolSong', 'darwin': 'Songti SC'}
 
 def ctex_options(system: str | None = None) -> str:
     """The ctex package option that picks a font set this operating system owns."""
-    return CTEX_FONTSET.get(machine_deps.platform_name(system), '')
+    return CTEX_FONTSET.get(machine.platform_name(system), '')
 
 
 def _packages(system: str | None = None) -> str:
@@ -129,7 +129,7 @@ def _preamble_extras() -> str:
     merged ``compile`` document embeds this preamble once, so ``lblbox``/``leadline`` are in scope for every
     boxed label regardless of how many charts are stitched together.
     """
-    os_name = machine_deps.platform_name()
+    os_name = machine.platform_name()
     if os_name == 'win32':
         lines = [
             r'\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}',
@@ -331,7 +331,7 @@ class LatexChartService:
         """The comment block a paper author pastes around, then the documentclass + shared preamble up to
         (and including) ``\\begin{document}``. The figure and the table share this one preamble."""
         distribution = 'MiKTeX（Windows）或 TeX Live / MacTeX'
-        os_name = machine_deps.platform_name()
+        os_name = machine.platform_name()
         if os_name == 'win32':
             cjk_hint = '% 并 \\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}（仿宋），\n'
         else:

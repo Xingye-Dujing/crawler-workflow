@@ -272,7 +272,7 @@ _ZH = {
     'biblio.export_failed': '文献计量导出失败：{err}',
     # ── 「缺什么、在这台机器上怎么补」的按系统分支 ──────────────────────────
     # 一条补救说明在三套系统上说的是三件事：Windows 补字体功能、Linux 装发行包、macOS 用系统自带。
-    # 键名由 utils.machine_deps.remedy_key 拼出，所以全清单（前缀 × 平台）由
+    # 键名由 core.machine.remedy_key 拼出，所以全清单（前缀 × 平台）由
     # tests/unit/test_missing_dependency_messages.py 从取值那头逐个查在不在。
     'deps.systemFont.win32': '请安装仿宋/黑体等中文字体（英文版 Windows 要在「可选功能」里补中文简体字体）后重启程序',
     'deps.systemFont.linux': '请安装中文字体（Debian/Ubuntu：apt-get install fonts-noto-cjk）后重启程序',

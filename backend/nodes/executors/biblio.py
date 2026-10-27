@@ -8,6 +8,8 @@ node, registered in the run→files ledger when a run context is present.
 import contextlib
 
 import pandas as pd
+from core.refs import as_bool
+from core.refs import json_safe_records as _json_safe_records
 from state import add_log
 from stores import _load_dataset
 
@@ -15,8 +17,6 @@ from config import Config
 from i18n import t
 from nodes.context import NodeCall
 from services import bibliometrics
-from utils.helpers import as_bool
-from utils.helpers import json_safe_records as _json_safe_records
 
 NODE_TYPE = 'biblio'
 

@@ -35,7 +35,7 @@ DEFAULTS = {
     # ``PATH`` — exactly how chromedriver is configured. ``catbus_cli`` is the adapter entry
     # (``…/catbus-cli/dist/integrations/crawler-workflow/cli.js``, or the root of a CatBus source
     # checkout); ``catbus_node`` is the Node that runs it. Both empty = look them up per operating
-    # system (:mod:`utils.machine_deps`: npm global roots, then ``PATH``), which is why a server that
+    # system (:mod:`core.machine`: npm global roots, then ``PATH``), which is why a server that
     # installed both normally needs nothing here — and why an nvm-managed Node, which is not on a
     # service ``PATH``, is a name you can type instead of an environment you have to edit.
     'catbus_cli': Config.CATBUS_CLI,

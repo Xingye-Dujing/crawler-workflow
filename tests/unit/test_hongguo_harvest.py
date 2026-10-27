@@ -362,7 +362,7 @@ class TestRefusals:
         import importlib.util
 
         monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: object())
-        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
         monkeypatch.setattr(harvest_module.capabilities, 'requirement_met', lambda _need: True)
 
     def test_a_missing_player_is_refused_by_name(self, tmp_path, monkeypatch):
@@ -389,7 +389,7 @@ class TestRefusals:
         import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: None)
-        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
         monkeypatch.setattr(harvest_module.capabilities, 'requirement_met', lambda _need: True)
         monkeypatch.setattr(harvest_module, 'find_player', lambda: str(tmp_path / 'player.exe'))
         harness, _said = _harness(tmp_path, capture_lines=[])
@@ -414,7 +414,7 @@ class TestRefusals:
 
         monkeypatch.setattr(sys, 'platform', 'win32')  # the gate is a Windows-desktop question
         monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
-        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: True)
+        monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: True)
         monkeypatch.setattr(harvest_module.importlib.util, 'find_spec', lambda name: None)
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack  # drop the seam: run the real stack gate
@@ -465,7 +465,7 @@ class TestRefusals:
 
         monkeypatch.setattr(sys, 'platform', 'win32')
         monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
-        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
         monkeypatch.setattr(
             harvest_module.importlib.util, 'find_spec', lambda name: None if name == 'mitmproxy' else object()
         )

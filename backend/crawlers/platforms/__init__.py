@@ -6,7 +6,7 @@ selectors, endpoints, the column names a row is written with, the JS run inside 
 shared mechanics live in `crawlers/engine/` and `crawlers/core/`.
 
 The directory name is the platform id the rest of the program uses (`crawl_capabilities`, the cookie
-file, `utils.helpers.platform_for`), so a reader can go from a canvas node to its code in one step.
+file, `core.refs.platform_for`), so a reader can go from a canvas node to its code in one step.
 `crawlers/__init__.py` enumerates the crawler classes explicitly; there is no import-time scanning,
 because a plugin that registers itself by being in a folder makes a misfiled directory a silent bug.
 """

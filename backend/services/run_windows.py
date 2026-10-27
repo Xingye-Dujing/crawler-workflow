@@ -5,10 +5,10 @@ A save node receives only a table and cannot see the crawl it sits downstream of
 the crawl states it; ``window_for_save`` reads it back where the output names its file.
 """
 
+from core.refs import window_tag
 from state import execution_state
 
 from i18n import t
-from utils.helpers import window_tag
 
 
 def note_window(wf_idx, start, end) -> None:

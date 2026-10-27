@@ -22,7 +22,7 @@ pytestmark = [pytest.mark.integration]
 @pytest.fixture(scope='module')
 def adapter():
     """A machine that can answer its own capability question, or a skip with the real reason."""
-    if shutil.which('node') is None and not bridge.machine_deps.find_node():
+    if shutil.which('node') is None and not bridge.machine.find_node():
         # Node is the adapter's runtime, so "no Node" is the same fact as "no adapter" here:
         # skipping it under the flag would let the tier claim a manifest it never read.
         unavailable('no Node runtime on this machine', REQUIRE_CATBUS_ENV)

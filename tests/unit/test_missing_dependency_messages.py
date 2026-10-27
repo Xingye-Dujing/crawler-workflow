@@ -11,54 +11,54 @@ import sys
 from pathlib import Path
 
 import pytest
+from core import machine
 
 import services.latex_compile as latex_compile
 import services.visualizer as visualizer
 from analyzers.sentiment import BertClassifier
-from utils import machine_deps
 
 pytestmark = pytest.mark.unit
 
 #: Captured at import, before the suite-wide ``machine_has_a_browser`` pin replaces the attribute.
 #: These tests are about the probe itself, so they answer for it.
-REAL_FIND_CHROME = machine_deps.find_chrome
+REAL_FIND_CHROME = machine.find_chrome
 
 
 class TestTheMachineProbes:
     @pytest.fixture(autouse=True)
     def _real_probe(self, monkeypatch):
-        monkeypatch.setattr(machine_deps, 'find_chrome', REAL_FIND_CHROME)
+        monkeypatch.setattr(machine, 'find_chrome', REAL_FIND_CHROME)
 
     def test_an_explicit_browser_path_is_the_answer_or_nothing(self, tmp_path):
         real = tmp_path / 'chrome.exe'
         real.write_bytes(b'MZ')
-        assert machine_deps.find_chrome(str(real)) == str(real)
+        assert machine.find_chrome(str(real)) == str(real)
         # A typo must not be papered over by a Chrome the user never chose: a copied profile is a
         # second device to a site's risk control, so which browser ran is the user's decision.
-        assert machine_deps.find_chrome(str(tmp_path / 'typo.exe')) == ''
+        assert machine.find_chrome(str(tmp_path / 'typo.exe')) == ''
 
     def test_candidates_are_read_from_the_environment_and_must_exist(self, tmp_path):
         chrome = tmp_path / 'chrome.exe'
         env = {'PROGRAMFILES': str(tmp_path), 'CHROME_PATH': str(chrome), 'CHROME_BIN': ''}
-        assert machine_deps.chrome_candidates(env) == [], 'no candidate exists on disk yet'
+        assert machine.chrome_candidates(env) == [], 'no candidate exists on disk yet'
         chrome.write_bytes(b'MZ')
-        found = machine_deps.chrome_candidates(env)
+        found = machine.chrome_candidates(env)
         assert found == [str(chrome)], 'the env override answers, the install root does not exist here'
 
     def test_a_configured_ollama_address_decides_the_port(self):
         # The launcher used to probe 127.0.0.1:11434 whatever the user had set, so a daemon on
         # another machine was reported as missing one line before the app answered from it.
-        assert machine_deps.ollama_endpoint('http://192.168.1.9:11435') == ('192.168.1.9', 11435)
-        assert machine_deps.ollama_endpoint('localhost') == ('localhost', 11434)
-        assert machine_deps.ollama_endpoint('https://gpu.example') == ('gpu.example', 443)
-        assert machine_deps.ollama_endpoint('') == ('localhost', 11434)
+        assert machine.ollama_endpoint('http://192.168.1.9:11435') == ('192.168.1.9', 11435)
+        assert machine.ollama_endpoint('localhost') == ('localhost', 11434)
+        assert machine.ollama_endpoint('https://gpu.example') == ('gpu.example', 443)
+        assert machine.ollama_endpoint('') == ('localhost', 11434)
 
     def test_the_reachability_probe_answers_false_instead_of_raising(self, monkeypatch):
         def explode(_address, timeout=None):
             raise OSError('refused')
 
-        monkeypatch.setattr(machine_deps.socket, 'create_connection', explode)
-        assert machine_deps.ollama_reachable('http://127.0.0.1:1') is False
+        monkeypatch.setattr(machine.socket, 'create_connection', explode)
+        assert machine.ollama_reachable('http://127.0.0.1:1') is False
 
     def test_the_reachability_probe_answers_true_for_an_open_port(self, monkeypatch):
         class _Connection:
@@ -70,14 +70,14 @@ class TestTheMachineProbes:
             def __exit__(self, *_):
                 return False
 
-        monkeypatch.setattr(machine_deps.socket, 'create_connection', lambda _address, timeout=None: _Connection())
-        assert machine_deps.ollama_reachable('http://127.0.0.1:11434') is True
+        monkeypatch.setattr(machine.socket, 'create_connection', lambda _address, timeout=None: _Connection())
+        assert machine.ollama_reachable('http://127.0.0.1:11434') is True
 
     def test_frozen_is_read_from_the_running_bundle_flag(self, monkeypatch):
         monkeypatch.delattr(sys, 'frozen', raising=False)
-        assert machine_deps.is_frozen() is False
+        assert machine.is_frozen() is False
         monkeypatch.setattr(sys, 'frozen', True, raising=False)
-        assert machine_deps.is_frozen() is True
+        assert machine.is_frozen() is True
 
 
 class TestTheChineseFontAnswer:
@@ -167,7 +167,7 @@ class TestTheModelPackAnswer:
     """The desktop build's BERT models live in a separate archive the user unpacks."""
 
     def _refuse(self, monkeypatch, frozen: bool, tmp_path) -> str:
-        monkeypatch.setattr(machine_deps, 'is_frozen', lambda: frozen)
+        monkeypatch.setattr(machine, 'is_frozen', lambda: frozen)
         # Two levels deep, like the real layout: the registry holds ``bert_models/<name>``, and the
         # case this refusal is about is that ``bert_models`` itself was never unpacked.
         missing = tmp_path / 'bert_models' / 'bert_absent_onnx_fp16'
@@ -188,7 +188,7 @@ class TestTheModelPackAnswer:
 
     def test_a_folder_that_exists_but_holds_no_graph_still_says_so(self, monkeypatch, tmp_path):
         """A half-copied pack is a different fact from a missing one, and gets its own sentence."""
-        monkeypatch.setattr(machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(machine, 'is_frozen', lambda: False)
         folder = tmp_path / 'bert_partial_onnx_fp16'
         folder.mkdir()
         with pytest.raises(ValueError) as caught:

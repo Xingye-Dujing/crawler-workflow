@@ -23,6 +23,7 @@ import json
 import re
 
 import pytest
+from core.refs import platform_for
 from selenium.common.exceptions import TimeoutException
 
 import crawlers.core.crawler as base_module
@@ -40,7 +41,6 @@ from crawlers.platforms.douyin.rows import (
     video_id,
 )
 from i18n import stop_reason_label, t
-from utils.helpers import platform_for
 
 pytestmark = pytest.mark.unit
 

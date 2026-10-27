@@ -121,7 +121,7 @@ class TestTheCommandShape:
         """One list, read by both sides: the argv builder and the finder must not disagree about
         whether an entry is a script, or a readable-but-not-executable ``cli.js`` would be found by
         one and refused by the other."""
-        assert bridge._SCRIPT_SUFFIXES == bridge.machine_deps.CATBUS_SCRIPT_SUFFIXES
+        assert bridge._SCRIPT_SUFFIXES == bridge.machine.CATBUS_SCRIPT_SUFFIXES
 
     def test_the_nodes_account_never_reaches_the_adapter(self):
         """The node's 账号 selects a Selenium session; CatBus has its own account files."""
@@ -141,17 +141,17 @@ class TestTheDiscoveryVerdict:
     @pytest.fixture(autouse=True)
     def _real_logic(self, monkeypatch):
         monkeypatch.setattr(bridge, '_probe_now', _REAL_PROBE_NOW)
-        monkeypatch.setattr(bridge.machine_deps, 'find_node', lambda explicit='': '/usr/bin/node')
-        monkeypatch.setattr(bridge.machine_deps, 'find_catbus_cli', lambda explicit='': '/opt/catbus/cli.js')
+        monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '/usr/bin/node')
+        monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '/opt/catbus/cli.js')
 
     def test_no_node_is_named_as_no_node(self, monkeypatch):
-        monkeypatch.setattr(bridge.machine_deps, 'find_node', lambda explicit='': '')
+        monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '')
         info = bridge.probe(force=True)
         assert not info.available
         assert info.reason_key == 'catbus.noNode'
 
     def test_a_machine_with_node_but_no_adapter_says_so(self, monkeypatch):
-        monkeypatch.setattr(bridge.machine_deps, 'find_catbus_cli', lambda explicit='': '')
+        monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '')
         monkeypatch.setattr(bridge, '_call', answer())
         info = bridge.probe(force=True)
         assert info.reason_key == 'catbus.noCli', '「装了 Node」 and 「装了 CatBus」 are two separate facts'
@@ -188,12 +188,12 @@ class TestTheDiscoveryVerdict:
         monkeypatch.setattr(Config, 'CATBUS_NODE', '/should/not/be/read')
         monkeypatch.setattr(Config, 'CATBUS_CLI', '/should/not/be/read')
         monkeypatch.setattr(
-            bridge.machine_deps,
+            bridge.machine,
             'find_node',
             lambda explicit='': asked.append(('node', explicit)) or '/opt/nvm/v24/bin/node',
         )
         monkeypatch.setattr(
-            bridge.machine_deps,
+            bridge.machine,
             'find_catbus_cli',
             lambda explicit='': asked.append(('cli', explicit)) or '/opt/catbus/cli.js',
         )
@@ -208,9 +208,9 @@ class TestTheDiscoveryVerdict:
         monkeypatch.setattr(settings_store, 'get_setting', lambda key: '')
         monkeypatch.setattr(Config, 'CATBUS_NODE', '')
         monkeypatch.setattr(Config, 'CATBUS_CLI', '/env/only/cli.js')
-        monkeypatch.setattr(bridge.machine_deps, 'find_node', lambda explicit='': '/usr/bin/node')
+        monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '/usr/bin/node')
         monkeypatch.setattr(
-            bridge.machine_deps,
+            bridge.machine,
             'find_catbus_cli',
             lambda explicit='': asked.append(explicit) or '/env/only/cli.js',
         )
@@ -241,7 +241,7 @@ class TestTheDiscoveryVerdict:
         assert len(asked) == 2
 
     def test_the_reason_renders_in_the_language_that_asks(self, monkeypatch, restore_lang):
-        monkeypatch.setattr(bridge.machine_deps, 'find_node', lambda explicit='': '')
+        monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '')
         key = bridge.probe(force=True).reason_key
         set_lang('zh')
         assert t(key) != key, 'a refusal that prints its own key is a printed bug'

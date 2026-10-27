@@ -4,7 +4,7 @@ The studio runs in a same-origin iframe and authors charts from a workflow datas
 endpoints close the loop: hand it real rows, and take the finished chart back as a file next
 to the other workflow exports. The whole cluster and its private helpers/constants move
 together — none is referenced by any other route — and every dependency is reachable without
-importing ``app`` (``state``/``stores``/``api.resolution``/``api.http``/``utils.helpers``).
+importing ``app`` (``state``/``stores``/``api.resolution``/``api.http``/``core.refs``).
 Paths and behaviour are unchanged; no monkeypatch seam on these handlers.
 """
 
@@ -15,6 +15,8 @@ import re
 import uuid
 
 import pandas as pd
+from core.refs import json_safe_records as _json_safe_records
+from core.refs import sanitize_filename
 from flask import Blueprint, jsonify
 from state import _results_snapshot, execution_state
 from stores import _load_dataset, get_run_store
@@ -24,8 +26,6 @@ from api.resolution import _durable_node_rows, _resolve_dataframe
 from config import Config
 from i18n import t
 from services import latex_compile
-from utils.helpers import json_safe_records as _json_safe_records
-from utils.helpers import sanitize_filename
 
 
 def _read_text(path: str) -> str:

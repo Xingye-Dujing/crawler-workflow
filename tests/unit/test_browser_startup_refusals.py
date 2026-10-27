@@ -10,12 +10,12 @@ half-claimed browser profile left behind.
 """
 
 import pytest
+from core import machine
 from selenium.common.exceptions import WebDriverException
 
 import crawlers.core.browser as browser_module
 import crawlers.core.crawler as base_module
 from crawlers.platforms.zhihu.crawler import ZhihuCrawler
-from utils import machine_deps
 
 pytestmark = pytest.mark.unit
 
@@ -56,7 +56,7 @@ def launches(monkeypatch, tmp_path):
             return explicit if explicit == box['chrome'] else ''
         return box['chrome']
 
-    monkeypatch.setattr(browser_module.machine_deps, 'find_chrome', fake_find_chrome)
+    monkeypatch.setattr(browser_module.machine, 'find_chrome', fake_find_chrome)
     return box
 
 
@@ -74,7 +74,7 @@ def test_no_chrome_refuses_and_names_the_setting(launches):
     # The executable name is the running system's own, read off the same table the probe uses — a
     # Linux refusal that says ``chrome.exe`` is a remedy nobody can act on, and the parity check
     # between the two languages cannot see it because both said the same Windows thing.
-    assert machine_deps.chrome_executable_name() in message
+    assert machine.chrome_executable_name() in message
     assert 'constructed' not in launches, 'a browser was constructed after the refusal'
 
 

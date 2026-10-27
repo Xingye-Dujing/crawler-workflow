@@ -3,7 +3,7 @@
 > **这一整棵树是本项目唯一故意只服务 Windows 的地方**（PyInstaller + UPX + Inno Setup 只能产 exe）。
 > 里面的 Windows 事实——`%APPDATA%` 数据根、命名互斥量、`MessageBoxW`、`chrome.exe` 安装根、cp936 控制台、
 > PowerShell 脚本——**都不属于 `backend/`**：源码版要在 Linux 云服与 macOS 上跑，`backend/` 里出现任何
-> Windows 专属路径或命令都要按当前系统分支（`utils/machine_deps.py` 的那些表），并按 AGENTS 的
+> Windows 专属路径或命令都要按当前系统分支（`core/machine.py` 的那些表），并按 AGENTS 的
 > 「Cross-platform」一节办。打包版只按 Windows 验收。
 
 这不是单文件 exe，而是一个可压缩分发的**文件夹**：`dist/CaiXiHui/CaiXiHui.exe` 是入口，
@@ -193,7 +193,7 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 五行文字逐字不变，但改成**一次写出**（Flask 的启动行会从另一个线程落在同一个控制台，分五次写会被劈开）。
 探测本身抛异常时打印一条"依赖自检未能完成：…"，不会让四行文字静默消失——那看起来跟"检查过且都 healthy"
 一模一样。喂给 `config.DRIVER_PATH` 的驱动查找仍然同步，因为服务需要那个答案。
-四项探测现在**只有实现的一份**：Chrome 与 Ollama 走 `backend/utils/machine_deps.py`，xelatex 走
+四项探测现在**只有实现的一份**：Chrome 与 Ollama 走 `backend/core/machine.py`，xelatex 走
 `services/latex_compile.find_xelatex()`。启动器原来自己抄了一份 Chrome 候选目录、一份 MiKTeX 扫描和
 一个写死的 11434——两份意见的坏处不是多几行代码，是同一台机器上"自检说没有"与"节点说能跑"同时出现。
 

@@ -17,6 +17,7 @@ import time
 
 import crawl_gate
 from api.http import _safe_int
+from core.refs import as_bool, comment_platforms, split_urls
 from state import _wf_local, add_log, execution_state, stop_requested
 
 import crawl_capabilities as capabilities
@@ -34,7 +35,6 @@ from services.crawl_runtime import item_scope, name_parts, source_stream
 from services.crawler_lifecycle import close_login_browser
 from services.run_files import record_file
 from services.run_windows import note_window
-from utils.helpers import as_bool, comment_platforms, split_urls
 
 NODE_TYPE = 'source'
 

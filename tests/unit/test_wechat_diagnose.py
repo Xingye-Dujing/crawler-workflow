@@ -124,10 +124,10 @@ class TestNoCommentApparatus:
 
 class TestNoSearchLeftovers:
     def test_wechat_is_not_a_comment_platform_for_the_router(self):
-        """utils.helpers routes article links to adapters; WeChat has none, so a
+        """core.refs routes article links to adapters; WeChat has none, so a
         pasted 微信 link in comments mode must be refused rather than silently
         producing zero rows."""
-        from utils.helpers import platform_for
+        from core.refs import platform_for
 
         assert platform_for('https://mp.weixin.qq.com/s/abc') == ''
         assert platform_for('https://www.zhihu.com/question/1') == 'zhihu'

@@ -19,6 +19,7 @@ import os
 import re
 import time
 
+from core import machine
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -29,7 +30,6 @@ from config import Config
 from crawlers.core.faults import ProfileUnavailableError
 from i18n import t
 from settings_store import get_setting
-from utils import machine_deps
 
 logger = logging.getLogger(__name__)
 
@@ -181,11 +181,11 @@ def resolve_browser(opts: Options) -> None:
     Refuse before chromedriver is tried, and name the thing to fix. Three situations look
     identical from here (no Chrome at all, a 设置 path that points at nothing, a driver that
     cannot speak to the installed browser), and Selenium's own answer to the first two is an
-    exception from a child process. The probe is :mod:`utils.machine_deps`, shared with the
+    exception from a child process. The probe is :mod:`core.machine`, shared with the
     desktop launcher's self-check, so the two can never disagree about this machine.
     """
     browser_binary = str(get_setting('browser_binary') or '').strip()
-    resolved = machine_deps.find_chrome(browser_binary)
+    resolved = machine.find_chrome(browser_binary)
     if browser_binary and not resolved:
         # An explicit path is the answer or nothing: falling back to a different Chrome than the one
         # the user pointed at would start a browser he did not ask for and blame the wrong machine.
@@ -193,7 +193,7 @@ def resolve_browser(opts: Options) -> None:
     if not resolved:
         # The executable name is this system's own, read off the table the probe uses: a Linux
         # sentence telling the user to point 设置 at ``chrome.exe`` is a refusal nobody can act on.
-        raise ValueError(t('crawl.chromeMissing', browser=machine_deps.chrome_executable_name()))
+        raise ValueError(t('crawl.chromeMissing', browser=machine.chrome_executable_name()))
     if browser_binary:
         opts.binary_location = browser_binary
 
@@ -258,7 +258,7 @@ def disguise_headless(driver) -> None:
             # The platform token is this system's own (``Win32`` on Windows is what a real 64-bit
             # Chrome reports there, not a typo): pairing a Linux UA with a Windows platform is the
             # invented mismatch #148 measured as a tell in the other direction.
-            {'userAgent': desktop_ua, 'platform': machine_deps.navigator_platform()},
+            {'userAgent': desktop_ua, 'platform': machine.navigator_platform()},
         )
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': script})
     except Exception as e:  # a partial disguise beats none; it only costs this browser the mask

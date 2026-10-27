@@ -13,6 +13,7 @@ Paths and behaviour are unchanged.
 
 import os
 
+from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from state import _results_snapshot, add_log, execution_state
 from stores import get_run_store
@@ -22,7 +23,6 @@ from analyzers.llm_client import LLMClient
 from api.http import _bad_body, _bad_param, _json_body
 from config import Config
 from i18n import normalize, t
-from utils.helpers import as_bool
 
 bp = Blueprint('report', __name__)
 

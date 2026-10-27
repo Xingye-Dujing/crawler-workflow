@@ -28,9 +28,10 @@ derive columns from real crawls instead.
 import re
 from dataclasses import dataclass, replace
 
+from core import machine
+from core.refs import as_bool, split_urls
+
 from i18n import t
-from utils import machine_deps
-from utils.helpers import as_bool, split_urls
 
 #: A machine requirement a crawl mode can carry, by name. The token is deliberately not a sentence:
 #: it goes to the browser, which says it in whichever language the canvas is reading
@@ -54,7 +55,7 @@ def requirement_met(token: str, system: str | None = None, cloud: bool | None = 
     feature, and the mode's own executor still refuses by name when its real dependency is missing.
     """
     if token == 'windows_desktop':
-        return machine_deps.is_windows(system) and not (cloud_is() if cloud is None else cloud)
+        return machine.is_windows(system) and not (cloud_is() if cloud is None else cloud)
     return True
 
 

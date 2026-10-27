@@ -3,6 +3,7 @@
 import logging
 from collections import defaultdict, deque
 
+from core.refs import as_bool, platform_for, split_urls
 from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
 from nodes.labels import node_label
 from sessions import preflight
@@ -14,7 +15,6 @@ from i18n import t
 from services.biblio_fuse import collect_errors as fuse_param_errors
 from services.biblio_schema import collect_errors as biblio_param_errors
 from services.chart_contracts import NO_X_TYPES
-from utils.helpers import as_bool, platform_for, split_urls
 
 logger = logging.getLogger(__name__)
 

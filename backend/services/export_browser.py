@@ -22,8 +22,9 @@ import logging
 import os
 import re
 
+from core.refs import sanitize_filename
+
 from i18n import t
-from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 

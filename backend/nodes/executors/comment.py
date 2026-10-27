@@ -15,6 +15,7 @@ import contextlib
 
 import pandas as pd
 from api.http import _safe_int
+from core.refs import as_bool, comment_platforms, platform_for, split_urls
 from state import add_log, execution_state, stop_requested
 
 import crawl_capabilities as capabilities
@@ -30,7 +31,6 @@ from services import catbus_bridge
 from services.crawl_runtime import item_scope, name_parts, source_stream
 from services.crawler_lifecycle import close_login_browser
 from services.run_files import record_file
-from utils.helpers import as_bool, comment_platforms, platform_for, split_urls
 
 NODE_TYPE = 'comment'
 
@@ -322,7 +322,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # (``getattr(session, f'crawl_{kind}')``) and check for ``None`` here, which pushed the
             # "does this backend speak this site?" question into an attribute lookup and made the
             # CatBus class synthesise methods to stay reachable. Adding a platform to
-            # ``utils.helpers._COMMENT_DOMAINS`` without writing its walk is still a refusal, just one
+            # ``core.refs._COMMENT_DOMAINS`` without writing its walk is still a refusal, just one
             # the walker states itself.
             skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
             rows, status = session.walk(kind, url, limit)

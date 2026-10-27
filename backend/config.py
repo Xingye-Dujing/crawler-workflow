@@ -120,7 +120,7 @@ class Config:
     #: Second crawl backend, part two. ``CATBUS_CLI`` is the adapter entry (the
     # ``dist/integrations/crawler-workflow/cli.js`` of an npm install or of a source checkout) and
     # ``CATBUS_NODE`` the Node runtime that runs it. Blank means "ask this machine"
-    # (:mod:`utils.machine_deps`), and **nothing found means the backend is not offered anywhere**
+    # (:mod:`core.machine`), and **nothing found means the backend is not offered anywhere**
     # rather than offered and refused after a node start. ``CATBUS_HOME`` (read by machine_deps)
     # names a checkout instead of a single file, which is how a development copy is pointed at.
     CATBUS_CLI = os.environ.get('CIXI_CATBUS_CLI') or os.environ.get('CATBUS_CLI') or ''

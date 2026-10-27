@@ -221,7 +221,7 @@ class SnapshotWriter:
 def safe_stem(name: str) -> str:
     """Filesystem-safe stem for a workflow/node pair (delegates the charset
     rules to the same sanitizer every export path uses)."""
-    from utils.helpers import sanitize_filename
+    from core.refs import sanitize_filename
 
     stem = sanitize_filename(name) or 'export'
     # Remove a trailing export extension the user typed (「data.csv」 → 「data」), but ONLY that:

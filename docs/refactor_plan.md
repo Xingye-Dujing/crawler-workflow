@@ -449,17 +449,17 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = 本次提交**（`sessions/routes.py` 归域）。顺序：`e221d9b`（补 scheduling 未 stage 的内容，修 CI E0611）
-    ← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）← `20c2ac7`（用户画布布局）← `85646bf`（压缩锚点）
-    ← `f625560`（登录态五模块 → `backend/sessions/`）← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）
-    ← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0` ← `ae0a569`。已推 `crawler-github` 与 `gitee`。
-    **CI 已读**：`f625560` 与 `85646bf` 均 **success**（browser job 绿，证明 detail-row 的修复与 sessions 迁移都成立）；
-    `097675b` **failure**（2m37s，pylint `E0611 No name 'cron' in module 'services'`，因 clock/store 的内容没进提交）；
-    `e221d9b` 的 CI 在写这段时刚开始跑。恢复后第一件事：`gh run list --limit 4`
-    （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`），确认 `e221d9b` 与本次提交的 browser job。
-  - **本地证据（本次字节）**：fast **8,156 passed / 3 skipped / 353 deselected** exit=0；
+  - **HEAD = 本次提交**（`core/` 地基，Stage 3a）。顺序：`29fc100`（sessions/routes 归域）← `e221d9b`
+    （补 scheduling 未 stage 的内容，修 CI E0611）← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）
+    ← `20c2ac7`（用户画布布局）← `85646bf`（压缩锚点）← `f625560`（登录态五模块 → `backend/sessions/`）
+    ← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0`
+    ← `ae0a569`。已推 `crawler-github` 与 `gitee`。
+    **CI 已读**：`f625560`/`85646bf`/`e221d9b`/`29fc100` 均 **success**（`29fc100` 的 fast 与 browser 两个 job 都绿）；
+    `097675b` 是唯一红过的一条，已由 `e221d9b` 修正。恢复后第一件事：`gh run list --limit 4`
+    （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）。
+  - **本地证据（本次字节）**：fast **8,159 passed / 3 skipped / 353 deselected** exit=0；
     设备档（真 Chrome + 真 Ollama + 真 CatBus，`--timeout=300`）**192 passed / 0 skipped** exit=0；
-    两档 pylint **exit=0、10.00/10**（238 + 268 文件）；ruff check + format 489 files。
+    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 490 files。
   - **Stage 2 第三刀 `backend/scheduling/` 已完成（本次提交）**：`backend/scheduler.py`(246) →
     `scheduling/clock.py`、`services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) →
     `scheduling/cron.py`，新增 `scheduling/__init__.py` 域说明（不 import 子模块，故无环）。
@@ -508,9 +508,28 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （我的 add 清单只写了 `scheduling/__init__.py`），`git commit` 的摘要照样打印 rename + `M`，CI 在
     `scheduling/clock.py` 报 `E0611 No name 'cron' in module 'services'` 才发现。规矩：**`git mv` 之后的内容改动
     必须显式 `git add` 那个新路径**，提交前看 `git diff --cached --stat`。
-  - **Stage 2 已完**。下一刀 = **Stage 3（任务 #30）**：`core/` 与 `capabilities/` 分层 + 合并孤儿模块
-    （`config`/`i18n`/`state`/`stores`/`settings_store`/`transport`/`crawl_capabilities`/`crawl_gate`），
-    含 Stage 1 ④ 的 `engine/` 平台事实（一起做，避免一个平台两处声明）。
+  - **Stage 3 第一刀 `backend/core/` 已完成（本次提交）**：`utils/helpers.py` → `core/refs.py`、
+    `utils/machine_deps.py` → `core/machine.py`、`utils/procs.py` → `core/procs.py`，`backend/utils/` 删除；
+    `core/__init__.py` 写清地基契约。`build/move_utils_to_core.py` 实跑改写 **69 文件**。三处它代不动的：
+    ① 散文形态 `:mod:`utils.machine_deps`` 与不带尾点的 `utils.helpers` 不在第一版规则里，残差扫描点名后补；
+    ② **整文件词替换会咬引号里的路径**：`machine_deps`→`machine` 把 `'utils/machine_deps.py'` 改成了
+    `'utils/machine.py'`（`test_platform_rules` 的 WINDOWS_TABLES 与 Dockerfile env 扫描路径），两处手改成
+    `core/machine.py` —— 以后词级改名必须先处理路径、再复查 `git diff` 里的字符串；
+    ③ **模块属性的再导出**（`bridge.machine_deps`、`harvest_module.machine_deps`：测试通过被测模块取模块对象）
+    三条规则都看不见，全量 **5 failed + 10 errors** 点名后才改成 `.machine`。另有两次 PostToolUse 钩子删掉
+    "暂时未用"的 import（desktop_entry/conftest），按"先用法后 import"补齐。
+    新契约 `tests/unit/test_foundation_layering.py` 3 例：core 恰为三模块、core 不得 import 上层包/Flask/Selenium/
+    ML 栈（**pandas/numpy/requests 允许**——`refs` 的表格助手用 pandas，app 启动本来也载入它；这是本刀如实放宽，
+    不是口号的例外）、旧 `utils/` 不得复生。
+    配套：spec collect 清单 `'utils'`→`'core'`、`_PROJECT_DIRS` 去掉 `'utils'`（`core` 早就在），AGENTS/docs/desktop README
+    的路径全部改写。
+    **门禁**：fast **8,159 passed / 3 skipped / 353 deselected** exit=0；设备档 **192 passed / 0 skipped** exit=0；
+    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 490 files。
+    **过程自记**：为省事对三个测试文件用了 `sed -i` 改 `.machine_deps`→`.machine`，违反本仓"代码只用 tracked Edit"
+    的规矩；改动仅此 15 处且 `git diff` 已逐行核对为预期替换，之后不再用 sed。
+  - **Stage 3 剩余 = 下一刀（3b）**：`config.py`/`state.py`/`settings_store.py`(→`core/settings.py`)/`stores.py`
+    搬进 `core/`（~190 个导入文件；仍是三规则脚本 + 残差 + ruff 网），随后 `crawl_capabilities.py` 拆成
+    `capabilities/`（含 Stage 1 ④ 的 `engine/` 平台事实，避免一个平台两处声明）。`i18n.py` 的拆分排在 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

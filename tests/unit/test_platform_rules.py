@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 
 import pytest
+from core import machine, procs
+from core.refs import MAX_FILENAME_BYTES, sanitize_filename
 
 import crawl_capabilities as capabilities
 from crawl_capabilities import REQUIREMENTS, machine_requirements, mode_blocker, requirement_met
@@ -21,13 +23,11 @@ from engine.workflow import WorkflowEngine
 from i18n import MESSAGES, t
 from services import latex_charts, visualizer
 from services.latex_compile import XELATEX_PATHS
-from utils import machine_deps, procs
-from utils.helpers import MAX_FILENAME_BYTES, sanitize_filename
 
 pytestmark = pytest.mark.unit
 
 #: Captured at import, before the suite-wide ``machine_has_a_browser`` pin replaces the attribute.
-REAL_FIND_CHROME = machine_deps.find_chrome
+REAL_FIND_CHROME = machine.find_chrome
 
 BACKEND = Path(__file__).resolve().parents[2] / 'backend'
 
@@ -35,12 +35,12 @@ BACKEND = Path(__file__).resolve().parents[2] / 'backend'
 # (whose Windows branch IS ``taskkill``), the harvest stack that only exists on a desktop, and the
 # download blocklist that refuses to hand out an executable. ``i18n.py`` used to be in this list
 # because a 「没有 Chrome」 sentence told the user to point 设置 at ``chrome.exe``; the name now comes
-# from :func:`utils.machine_deps.chrome_executable_name`, so the catalogue holds no Windows artifact
+# from :func:`core.machine.chrome_executable_name`, so the catalogue holds no Windows artifact
 # and the exemption would have been a lie — which is what
 # :meth:`TestTheRuleHasTeeth.test_each_exempted_file_actually_holds_a_windows_artifact` exists to catch.
 WINDOWS_TABLES = {
-    Path('utils/machine_deps.py'),
-    Path('utils/procs.py'),
+    Path('core/machine.py'),
+    Path('core/procs.py'),
     Path('services/latex_compile.py'),
     Path('crawlers/platforms/hongguo/harvest.py'),
     Path('crawlers/platforms/hongguo/player_ui.py'),
@@ -139,16 +139,16 @@ class TestTheRuleHasTeeth:
 
 class TestThePlatformTablesAreComplete:
     def test_every_remedy_key_exists_in_both_languages_and_needs_no_arguments(self):
-        for prefix in machine_deps.REMEDY_PREFIXES:
-            for system in machine_deps.REMEDY_PLATFORMS:
-                key = machine_deps.remedy_key(prefix, system)
+        for prefix in machine.REMEDY_PREFIXES:
+            for system in machine.REMEDY_PLATFORMS:
+                key = machine.remedy_key(prefix, system)
                 for lang, table in MESSAGES.items():
                     text = table.get(key)
                     assert text and text != key, f'{lang} has no remedy for {key}'
                     assert '{' not in text, f'{key} in {lang} carries an unfilled slot'
 
     def test_the_three_platforms_are_told_to_install_three_different_things(self):
-        answers = {system: machine_deps.remedy('deps.xelatex', system) for system in machine_deps.REMEDY_PLATFORMS}
+        answers = {system: machine.remedy('deps.xelatex', system) for system in machine.REMEDY_PLATFORMS}
         assert len(set(answers.values())) == 3, answers
         assert 'MiKTeX' in answers['win32']
         assert 'texlive-xetex' in answers['linux']
@@ -156,15 +156,15 @@ class TestThePlatformTablesAreComplete:
 
     def test_every_table_is_indexed_by_exactly_the_three_platforms(self):
         for name, table in (
-            ('CHROME_PATHS', machine_deps.CHROME_PATHS),
-            ('CHROME_PATH_NAMES', machine_deps.CHROME_PATH_NAMES),
-            ('NAVIGATOR_PLATFORMS', machine_deps.NAVIGATOR_PLATFORMS),
+            ('CHROME_PATHS', machine.CHROME_PATHS),
+            ('CHROME_PATH_NAMES', machine.CHROME_PATH_NAMES),
+            ('NAVIGATOR_PLATFORMS', machine.NAVIGATOR_PLATFORMS),
             ('XELATEX_PATHS', XELATEX_PATHS),
             ('CTEX_FONTSET', latex_charts.CTEX_FONTSET),
             ('CJK_FAMILY', latex_charts.CJK_FAMILY),
             ('REQUIREMENT_LABELS', capabilities.REQUIREMENT_LABELS),
         ):
-            assert set(table) == set(machine_deps.REMEDY_PLATFORMS) or name == 'REQUIREMENT_LABELS', name
+            assert set(table) == set(machine.REMEDY_PLATFORMS) or name == 'REQUIREMENT_LABELS', name
         assert set(capabilities.REQUIREMENT_LABELS) == set(REQUIREMENTS)
 
     def test_the_headless_disguise_reports_the_platform_it_is_running_on(self, monkeypatch):
@@ -176,10 +176,10 @@ class TestThePlatformTablesAreComplete:
         *itself* the tell, so this asserts the CDP call the product actually makes — not just the
         table it reads.
         """
-        answers = {system: machine_deps.navigator_platform(system) for system in machine_deps.REMEDY_PLATFORMS}
+        answers = {system: machine.navigator_platform(system) for system in machine.REMEDY_PLATFORMS}
         assert answers == {'win32': 'Win32', 'linux': 'Linux x86_64', 'darwin': 'MacIntel'}, answers
         assert len(set(answers.values())) == 3, 'three systems, one value: the table is decoration'
-        monkeypatch.setattr(machine_deps.sys, 'platform', 'linux')
+        monkeypatch.setattr(machine.sys, 'platform', 'linux')
         recorder = _CdpRecorder(
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/148.0.0.0 Safari/537.36'
         )
@@ -196,17 +196,17 @@ class TestThePlatformTablesAreComplete:
         fourth shape of "a computed key nobody enumerated".
         """
         for system, expected in (('win32', 'chrome.exe'), ('linux', 'google-chrome'), ('darwin', 'google-chrome')):
-            assert machine_deps.chrome_executable_name(system) == expected, system
-        monkeypatch.setattr(machine_deps.sys, 'platform', 'linux')
-        message = t('crawl.chromeMissing', browser=machine_deps.chrome_executable_name())
+            assert machine.chrome_executable_name(system) == expected, system
+        monkeypatch.setattr(machine.sys, 'platform', 'linux')
+        message = t('crawl.chromeMissing', browser=machine.chrome_executable_name())
         assert 'chrome.exe' not in message and 'google-chrome' in message
 
     def test_platform_name_normalizes_the_spellings_python_actually_reports(self):
-        assert machine_deps.platform_name('linux5') == 'linux'
-        assert machine_deps.platform_name('darwin23.4') == 'darwin'
-        assert machine_deps.platform_name('cygwin') == 'win32'
-        assert machine_deps.is_windows('darwin') is False
-        assert machine_deps.is_windows('win32') is True
+        assert machine.platform_name('linux5') == 'linux'
+        assert machine.platform_name('darwin23.4') == 'darwin'
+        assert machine.platform_name('cygwin') == 'win32'
+        assert machine.is_windows('darwin') is False
+        assert machine.is_windows('win32') is True
 
 
 class TestChromeDiscoveryPerPlatform:
@@ -214,48 +214,48 @@ class TestChromeDiscoveryPerPlatform:
     def _real_probe(self, monkeypatch):
         # ``tests/conftest.py`` pins ``find_chrome`` so no crawler case depends on this box's browsers.
         # These cases ARE about that probe, so they put the real one back.
-        monkeypatch.setattr(machine_deps, 'find_chrome', REAL_FIND_CHROME)
+        monkeypatch.setattr(machine, 'find_chrome', REAL_FIND_CHROME)
 
     def test_linux_offers_the_paths_a_server_actually_has(self):
-        found = machine_deps.chrome_candidate_paths('linux', {'PATH': '/usr/bin:/snap/bin'})
+        found = machine.chrome_candidate_paths('linux', {'PATH': '/usr/bin:/snap/bin'})
         assert '/usr/bin/google-chrome' in found
         assert '/snap/bin/chromium' in found, 'a snap install is Ubuntu packaging'
         assert not any('chrome.exe' in path for path in found)
 
     def test_macos_offers_the_app_bundle_in_posix_shape_even_asked_from_windows(self):
-        found = machine_deps.chrome_candidate_paths('darwin', {'PATH': '/usr/bin', 'HOME': '/Users/someone'})
+        found = machine.chrome_candidate_paths('darwin', {'PATH': '/usr/bin', 'HOME': '/Users/someone'})
         assert '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' in found
         assert '/Users/someone/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' in found
         assert all('\\' not in path for path in found), 'a POSIX answer must not borrow the host separators'
 
     def test_windows_still_builds_the_windows_spelling_from_its_roots(self):
-        found = machine_deps.chrome_candidate_paths('win32', {'PROGRAMFILES': 'C:\\Program Files', 'PATH': ''})
+        found = machine.chrome_candidate_paths('win32', {'PROGRAMFILES': 'C:\\Program Files', 'PATH': ''})
         assert 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' in found
 
     def test_an_explicit_variable_is_answered_before_any_root(self):
-        found = machine_deps.chrome_candidate_paths('linux', {'CHROME_BIN': '/opt/chrome', 'PATH': '/usr/bin'})
+        found = machine.chrome_candidate_paths('linux', {'CHROME_BIN': '/opt/chrome', 'PATH': '/usr/bin'})
         assert found[0] == '/opt/chrome', 'the image exports CHROME_BIN for a reason'
 
     def test_only_a_file_that_exists_is_an_answer(self, tmp_path):
         real = tmp_path / 'chromium'
         real.write_bytes(b'MZ')
-        found = machine_deps.chrome_candidates({'CHROME_BIN': str(real), 'PATH': str(tmp_path)}, 'linux')
+        found = machine.chrome_candidates({'CHROME_BIN': str(real), 'PATH': str(tmp_path)}, 'linux')
         assert found[0] == str(real)
-        assert machine_deps.chrome_candidates({'CHROME_BIN': str(tmp_path / 'absent'), 'PATH': ''}, 'linux') == []
+        assert machine.chrome_candidates({'CHROME_BIN': str(tmp_path / 'absent'), 'PATH': ''}, 'linux') == []
 
     @pytest.mark.skipif(os.name == 'nt', reason='the executable bit is a POSIX fact')
     def test_a_file_that_is_not_executable_is_refused_rather_than_launched(self, tmp_path):
         real = tmp_path / 'chromium'
         real.write_bytes(b'MZ')
         os.chmod(real, 0o600)
-        assert machine_deps.chrome_candidates({'CHROME_BIN': str(real), 'PATH': ''}, 'linux') == []
+        assert machine.chrome_candidates({'CHROME_BIN': str(real), 'PATH': ''}, 'linux') == []
 
     def test_a_typo_names_itself_on_every_platform(self, tmp_path):
         real = tmp_path / 'chrome'
         real.write_bytes(b'MZ')
-        assert machine_deps.find_chrome('', {'CHROME_BIN': str(real), 'PATH': ''}, 'linux') == str(real)
-        assert machine_deps.find_chrome(str(tmp_path / 'nope'), {'PATH': ''}, 'linux') == ''
-        assert machine_deps.find_chrome(str(tmp_path / 'nope'), {'PATH': ''}, 'darwin') == ''
+        assert machine.find_chrome('', {'CHROME_BIN': str(real), 'PATH': ''}, 'linux') == str(real)
+        assert machine.find_chrome(str(tmp_path / 'nope'), {'PATH': ''}, 'linux') == ''
+        assert machine.find_chrome(str(tmp_path / 'nope'), {'PATH': ''}, 'darwin') == ''
 
 
 class TestNodeAndCatbusDiscoveryPerPlatform:
@@ -267,28 +267,28 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
     """
 
     def test_linux_offers_the_runtimes_a_server_actually_has(self):
-        found = machine_deps.node_candidate_paths('linux', {'PATH': '/usr/bin:/usr/local/bin'})
+        found = machine.node_candidate_paths('linux', {'PATH': '/usr/bin:/usr/local/bin'})
         assert '/usr/bin/node' in found
         assert '/usr/local/bin/node' in found, 'a nodesource install lands here'
         assert not any('node.exe' in path for path in found), 'a Linux answer has no Windows suffix'
 
     def test_macos_and_linux_answers_stay_in_the_targets_separators(self):
         for system in ('linux', 'darwin'):
-            found = machine_deps.node_candidate_paths(system, {'PATH': '/usr/local/bin'})
+            found = machine.node_candidate_paths(system, {'PATH': '/usr/local/bin'})
             assert all('\\' not in path for path in found), f'{system} must not borrow the host separators'
 
     def test_windows_still_builds_the_windows_spelling_from_its_roots(self):
-        found = machine_deps.node_candidate_paths('win32', {'PROGRAMFILES': 'C:\\Program Files', 'PATH': ''})
+        found = machine.node_candidate_paths('win32', {'PROGRAMFILES': 'C:\\Program Files', 'PATH': ''})
         assert 'C:\\Program Files\\nodejs\\node.exe' in found
 
     def test_an_explicit_node_variable_is_answered_before_any_root(self):
-        found = machine_deps.node_candidate_paths('linux', {'NODE_BIN': '/opt/nvm/v24/bin/node', 'PATH': '/usr/bin'})
+        found = machine.node_candidate_paths('linux', {'NODE_BIN': '/opt/nvm/v24/bin/node', 'PATH': '/usr/bin'})
         assert found[0] == '/opt/nvm/v24/bin/node', 'an nvm install is not findable any other way'
 
     def test_linux_offers_the_npm_roots_a_cloud_box_installs_into(self):
         env = {'PATH': '/opt/node/bin:/usr/bin', 'HOME': '/srv/cixi'}
-        found = machine_deps.catbus_candidate_paths('linux', env)
-        tail = f'{machine_deps.CATBUS_PACKAGE}/' + '/'.join(machine_deps.CATBUS_ENTRY)
+        found = machine.catbus_candidate_paths('linux', env)
+        tail = f'{machine.CATBUS_PACKAGE}/' + '/'.join(machine.CATBUS_ENTRY)
         assert f'/usr/local/lib/node_modules/{tail}' in found, 'the npm default prefix'
         assert f'/srv/cixi/.npm-global/lib/node_modules/{tail}' in found, (
             'a prefix-less npm install is the unprivileged answer'
@@ -297,30 +297,30 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         assert not any('\\' in path for path in found)
 
     def test_a_source_checkout_is_named_by_its_root_not_its_file(self):
-        found = machine_deps.catbus_candidate_paths('linux', {'CATBUS_HOME': '/srv/catbus', 'PATH': ''})
+        found = machine.catbus_candidate_paths('linux', {'CATBUS_HOME': '/srv/catbus', 'PATH': ''})
         assert '/srv/catbus/dist/integrations/crawler-workflow/cli.js' in found
 
     def test_macos_offers_the_homebrew_prefix_and_windows_the_appdata_one(self):
-        mac = machine_deps.catbus_candidate_paths('darwin', {'PATH': '/opt/homebrew/bin'})
+        mac = machine.catbus_candidate_paths('darwin', {'PATH': '/opt/homebrew/bin'})
         assert '/opt/homebrew/lib/node_modules/catbus-cli/dist/integrations/crawler-workflow/cli.js' in mac
         assert all('\\' not in path for path in mac)
-        win = machine_deps.catbus_candidate_paths('win32', {'APPDATA': 'C:\\Users\\l\\AppData\\Roaming', 'PATH': ''})
+        win = machine.catbus_candidate_paths('win32', {'APPDATA': 'C:\\Users\\l\\AppData\\Roaming', 'PATH': ''})
         assert 'C:\\Users\\l\\AppData\\Roaming\\npm\\node_modules\\catbus-cli\\dist' in '\\'.join(win)
 
     def test_only_a_file_that_exists_is_an_answer(self, tmp_path):
         real = tmp_path / 'cli.js'
         real.write_text('// catbus\n', encoding='utf-8')
-        found = machine_deps.catbus_candidates({'CIXI_CATBUS_CLI': str(real), 'PATH': str(tmp_path)}, 'linux')
+        found = machine.catbus_candidates({'CIXI_CATBUS_CLI': str(real), 'PATH': str(tmp_path)}, 'linux')
         assert found[0] == str(real)
-        assert machine_deps.find_node('/nope/node', {'PATH': ''}, 'linux') == '', 'a typo names itself'
-        assert machine_deps.find_catbus_cli('/nope/cli.js', {'PATH': ''}, 'darwin') == ''
+        assert machine.find_node('/nope/node', {'PATH': ''}, 'linux') == '', 'a typo names itself'
+        assert machine.find_catbus_cli('/nope/cli.js', {'PATH': ''}, 'darwin') == ''
 
     @pytest.mark.skipif(os.name == 'nt', reason='the executable bit is a POSIX fact')
     def test_an_entry_without_the_executable_bit_is_refused_rather_than_run(self, tmp_path):
         real = tmp_path / 'node'
         real.write_bytes(b'#!/bin/sh\n')
         os.chmod(real, 0o600)
-        assert machine_deps.node_candidates({'NODE_BIN': str(real), 'PATH': ''}, 'linux') == []
+        assert machine.node_candidates({'NODE_BIN': str(real), 'PATH': ''}, 'linux') == []
 
     def test_a_script_entry_is_read_not_run(self, tmp_path):
         """npm and git both install ``cli.js`` as mode 644, and demanding ``+x`` made the second
@@ -329,8 +329,8 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         script = tmp_path / 'cli.js'
         script.write_text('// catbus\n', encoding='utf-8')
         os.chmod(script, 0o644)
-        assert machine_deps.catbus_entry_usable(str(script))
-        assert machine_deps.catbus_candidates({'CIXI_CATBUS_CLI': str(script), 'PATH': ''}, 'linux') == [str(script)]
+        assert machine.catbus_entry_usable(str(script))
+        assert machine.catbus_candidates({'CIXI_CATBUS_CLI': str(script), 'PATH': ''}, 'linux') == [str(script)]
 
     @pytest.mark.skipif(os.name == 'nt', reason='the executable bit is a POSIX fact')
     def test_a_wrapper_entry_still_has_to_be_runnable(self, tmp_path):
@@ -338,22 +338,22 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         wrapper = tmp_path / 'catbus'
         wrapper.write_bytes(b'#!/bin/sh\n')
         os.chmod(wrapper, 0o644)
-        assert machine_deps.find_catbus_cli(str(wrapper), {'PATH': ''}, 'linux') == ''
+        assert machine.find_catbus_cli(str(wrapper), {'PATH': ''}, 'linux') == ''
 
     def test_the_version_floors_are_catbus_engines_translated(self):
-        assert machine_deps.node_version_supported('v24.21.0')
-        assert machine_deps.node_version_supported('v26.0.0')
-        assert machine_deps.node_version_supported('v31.0.0'), '>=26 is open-ended'
-        assert machine_deps.node_version_supported('22.22.2')
-        assert not machine_deps.node_version_supported('v22.22.1'), 'the floor is a patch level, not a major'
-        assert not machine_deps.node_version_supported('v18.20.4'), 'Node 18 is outside the range'
+        assert machine.node_version_supported('v24.21.0')
+        assert machine.node_version_supported('v26.0.0')
+        assert machine.node_version_supported('v31.0.0'), '>=26 is open-ended'
+        assert machine.node_version_supported('22.22.2')
+        assert not machine.node_version_supported('v22.22.1'), 'the floor is a patch level, not a major'
+        assert not machine.node_version_supported('v18.20.4'), 'Node 18 is outside the range'
         # ``^22.22.2 || ^24.15.0`` are major-bound: an even release between them is newer than the
         # first floor and supported by neither, and ``any(v >= floor)`` would wave it through.
-        assert not machine_deps.node_version_supported('v23.11.0'), '23.x is in no caret range'
-        assert not machine_deps.node_version_supported('v25.1.0'), '25.x is in no caret range'
-        assert not machine_deps.node_version_supported('v24.14.9'), 'the 24 range starts at 24.15.0'
-        assert not machine_deps.node_version_supported(''), 'an unreadable answer is not evidence of a new runtime'
-        assert not machine_deps.node_version_supported('v24')
+        assert not machine.node_version_supported('v23.11.0'), '23.x is in no caret range'
+        assert not machine.node_version_supported('v25.1.0'), '25.x is in no caret range'
+        assert not machine.node_version_supported('v24.14.9'), 'the 24 range starts at 24.15.0'
+        assert not machine.node_version_supported(''), 'an unreadable answer is not evidence of a new runtime'
+        assert not machine.node_version_supported('v24')
 
 
 class TestTheMatplotlibFontStackHoldsEachOsNames:
@@ -378,7 +378,7 @@ class TestTheMatplotlibFontStackHoldsEachOsNames:
                 raise ValueError('absent')
 
         monkeypatch.setattr('matplotlib.font_manager.fontManager', Manager())
-        monkeypatch.setattr(machine_deps, 'platform_name', lambda system=None: 'linux')
+        monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'linux')
         visualizer._pyplot()
         text = ' '.join(record.message for record in caplog.records)
         assert 'fonts-noto-cjk' in text, 'a Linux box must not be told to install a Windows font'
@@ -397,11 +397,11 @@ class TestThePaperFontSetFollowsTheMachine:
     def test_windows_keeps_the_measured_fangsong_lines(self, monkeypatch):
         # 26/26 figures and tables compiled with exactly these three lines on MiKTeX (A19), so the Windows
         # branch is pinned rather than trusted to still say what it said.
-        monkeypatch.setattr(machine_deps, 'platform_name', lambda system=None: 'win32')
+        monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'win32')
         assert r'\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}' in latex_charts.paper_preamble()
 
     def test_a_paper_asked_for_off_windows_names_no_font_that_is_not_there(self, monkeypatch):
-        monkeypatch.setattr(machine_deps, 'platform_name', lambda system=None: 'linux')
+        monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'linux')
         preamble = latex_charts.paper_preamble()
         code = '\n'.join(line for line in preamble.splitlines() if not line.startswith('%'))
         assert '\\setCJKmainfont' not in code, 'FangSong is not installed on a Linux TeX Live'
@@ -409,7 +409,7 @@ class TestThePaperFontSetFollowsTheMachine:
         assert '仿宋' in preamble, 'the source says what it did and why'
 
     def test_the_pasted_hint_says_what_this_machine_used(self, monkeypatch):
-        monkeypatch.setattr(machine_deps, 'platform_name', lambda system=None: 'darwin')
+        monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'darwin')
         head = latex_charts.LatexChartService._standalone_head('图', 'bar', 't', 'c')
         assert 'fontset=macnew' in head
         assert 'Songti SC' in head
@@ -429,7 +429,7 @@ class TestTheDeployFilesSayWhatTheCodeReads:
         declared = set(re.findall(r'^ENV\s+([A-Z_][A-Z0-9_]*)', image, re.MULTILINE))
         sources = '\n'.join(
             path.read_text(encoding='utf-8', errors='replace')
-            for path in [BACKEND / 'config.py', BACKEND / 'app.py', BACKEND / 'utils' / 'machine_deps.py']
+            for path in [BACKEND / 'config.py', BACKEND / 'app.py', BACKEND / 'core' / 'machine.py']
         )
         unread = sorted(name for name in declared if f"'{name}'" not in sources and name not in self.INTERPRETER_VARS)
         assert unread == [], f'the image exports variables no code reads: {unread}'
@@ -588,7 +588,7 @@ class TestAModeThatNeedsWindowsIsRefusedBeforeItCostsARun:
         assert all('requires' in m for m in capabilities.as_dict()['platforms'][0]['modes'])
 
     def test_the_backend_validation_refuses_the_mode_on_a_linux_server(self, monkeypatch):
-        monkeypatch.setattr(machine_deps, 'platform_name', lambda system=None: 'linux')
+        monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'linux')
         canvas = {
             'nodes': [
                 {
@@ -607,7 +607,7 @@ class TestAModeThatNeedsWindowsIsRefusedBeforeItCostsARun:
         assert 'Windows' in about_node[0] or '这台机器' in about_node[0], about_node
 
     def test_the_same_canvas_on_a_windows_box_is_not_refused_for_the_machine(self, monkeypatch):
-        monkeypatch.setattr(machine_deps, 'platform_name', lambda system=None: 'win32')
+        monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'win32')
         canvas = {
             'nodes': [
                 {
@@ -641,23 +641,23 @@ class TestAConsoleThatCannotWriteChineseIsFixedAtStartup:
 
     def test_a_stream_that_holds_han_characters_keeps_its_encoding(self):
         buffer, stream = self._pair('utf-8')
-        assert machine_deps.can_write_chinese(stream) is True
-        assert machine_deps.pin_console(stream) == ''
+        assert machine.can_write_chinese(stream) is True
+        assert machine.pin_console(stream) == ''
         stream.write('汉字 ok\n')
         stream.flush()
         assert '汉字' in buffer.getvalue().decode('utf-8')
 
     def test_an_ascii_console_is_moved_to_utf8_and_says_what_it_was(self):
         buffer, stream = self._pair('ascii')
-        assert machine_deps.can_write_chinese(stream) is False
-        assert machine_deps.pin_console(stream) == 'ascii'
+        assert machine.can_write_chinese(stream) is False
+        assert machine.pin_console(stream) == 'ascii'
         stream.write('汉字\n')
         stream.flush()
         assert buffer.getvalue().decode('utf-8') == '汉字\n'
 
     def test_an_unmappable_character_never_costs_the_whole_line(self):
         buffer, stream = self._pair('cp437')
-        machine_deps.pin_console(stream)
+        machine.pin_console(stream)
         stream.write('问题 \ud800\n')  # a lone surrogate: nothing in the tree can encode it
         stream.flush()
         written = buffer.getvalue().decode('utf-8', 'replace')
@@ -670,7 +670,7 @@ class TestAConsoleThatCannotWriteChineseIsFixedAtStartup:
         class Foreign:
             encoding = 'not-a-codec'
 
-        assert machine_deps.can_write_chinese(Foreign()) is False
+        assert machine.can_write_chinese(Foreign()) is False
 
     def test_a_stream_without_reconfigure_is_left_alone(self):
         class Plain:
@@ -679,10 +679,10 @@ class TestAConsoleThatCannotWriteChineseIsFixedAtStartup:
             def write(self, _text):
                 raise UnicodeEncodeError('ascii', 'x', 0, 1, 'nope')
 
-        assert machine_deps.pin_console(Plain(), 'stdout') == ''
+        assert machine.pin_console(Plain(), 'stdout') == ''
 
     def test_the_pinning_runs_at_import_not_per_request(self):
         source = _backend_source('app.py')
         block = source.split('def pin_console_streams', 1)[1].split('\ndef ', 1)[0]
-        assert 'machine_deps.pin_console(' in block
+        assert 'machine.pin_console(' in block
         assert 'pin_console_streams()' in source.split('def pin_console_streams', 1)[1]

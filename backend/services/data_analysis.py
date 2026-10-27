@@ -4,9 +4,9 @@ import math
 import re
 
 import pandas as pd
+from core.refs import split_names
 
 from i18n import t
-from utils.helpers import split_names
 
 logger = logging.getLogger(__name__)
 

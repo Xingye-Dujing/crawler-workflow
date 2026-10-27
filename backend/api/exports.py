@@ -12,6 +12,7 @@ check in ``state.any_run_live``. Paths and behaviour are unchanged.
 import logging
 import os
 
+from core.refs import sanitize_filename
 from flask import Blueprint, jsonify, request
 from state import any_run_live
 from stores import get_run_store
@@ -22,7 +23,6 @@ from config import Config
 from i18n import t
 from services import lock_store
 from services.exporter import DataExporter, UnsupportedFormatError
-from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 

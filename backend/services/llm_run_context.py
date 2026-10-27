@@ -13,13 +13,13 @@ address, all of which change what an answer means.
 
 import os
 
+from core.refs import as_bool
 from state import _completed_lock, add_log, execution_state
 
 from analyzers.llm_client import LLMClient
 from config import Config
 from i18n import t
 from services.run_files import record_file
-from utils.helpers import as_bool
 
 
 def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:

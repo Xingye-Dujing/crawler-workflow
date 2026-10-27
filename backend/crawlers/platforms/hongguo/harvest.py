@@ -36,6 +36,8 @@ import time
 import uuid
 
 import requests
+from core import machine
+from core.refs import as_bool
 
 import crawl_capabilities as capabilities
 from config import Config
@@ -48,8 +50,6 @@ from crawlers.platforms.hongguo.naming import norm_title, screen_names
 from crawlers.platforms.hongguo.player_ui import PLAYER_CLASS, PlayerUI, TreeColdError
 from i18n import t
 from settings_store import get_setting
-from utils import machine_deps
-from utils.helpers import as_bool
 
 logger = logging.getLogger(__name__)
 
@@ -748,7 +748,7 @@ class HongguoCommentHarness:
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing='Windows desktop (mitmdump + UIA)'))
         missing = [name for name in ('mitmproxy', 'uiautomation') if importlib.util.find_spec(name) is None]
         if missing:
-            if machine_deps.is_frozen():
+            if machine.is_frozen():
                 # The desktop build does not carry this stack (mitmproxy pulls a large tree, and the
                 # harvest drives a real desktop window). 「pip install mitmproxy」 is not a thing
                 # anybody can do inside an exe, so name the build that can run the node instead.

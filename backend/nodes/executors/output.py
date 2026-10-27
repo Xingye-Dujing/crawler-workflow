@@ -11,6 +11,7 @@ import contextlib
 import os
 
 import pandas as pd
+from core.refs import as_bool, sanitize_filename
 from state import _wf_local, add_log
 
 from config import Config
@@ -21,7 +22,6 @@ from services import latex_compile
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.run_files import record_file
 from services.run_windows import window_for_save
-from utils.helpers import as_bool, sanitize_filename
 
 NODE_TYPE = 'output'
 

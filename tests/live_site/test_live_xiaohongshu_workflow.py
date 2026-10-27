@@ -31,8 +31,7 @@ import live_acceptance as accept
 import live_run_driver as driver
 import live_run_harness as harness
 import pytest
-
-from utils.helpers import sanitize_filename
+from core.refs import sanitize_filename
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket, pytest.mark.serial]
 

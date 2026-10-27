@@ -20,6 +20,7 @@ import threading
 import time
 
 from api.http import _bad_body, _json_body, _safe_int
+from core.refs import as_bool, flag_or_none
 from flask import Blueprint, jsonify
 from state import add_log, cookie_manager, execution_state
 
@@ -32,7 +33,6 @@ from sessions import preflight, profiles
 from sessions.cookies import CookieManager
 from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from sessions.template import ensure_profile_template
-from utils.helpers import as_bool, flag_or_none
 
 logger = logging.getLogger(__name__)
 

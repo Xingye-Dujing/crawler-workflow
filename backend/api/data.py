@@ -5,7 +5,7 @@ files. Every dependency is reachable without importing ``app``: the store and it
 read-through cache come from ``stores`` (``get_dataset_store``/``_load_dataset``/
 ``_register_dataset``) and ``state`` (``_dataset_cache``); payload→DataFrame resolution from
 ``api.resolution``; the cleaning report from ``services.data_analysis``; request coercions and
-the 400 helpers from ``api.http``; ``json_safe_records``/``as_bool`` from ``utils.helpers``.
+the 400 helpers from ``api.http``; ``json_safe_records``/``as_bool`` from ``core.refs``.
 Paths and behaviour are unchanged; none of these handlers has a monkeypatch seam.
 """
 
@@ -14,6 +14,8 @@ import json
 import logging
 
 import pandas as pd
+from core.refs import as_bool
+from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify, request
 from state import _dataset_cache, any_run_live
 from stores import _load_dataset, _register_dataset, get_dataset_store
@@ -25,8 +27,6 @@ from services.biblio_import import BiblioDecodeError, decode_text, parse_bytes, 
 from services.data_analysis import DataAnalysisService
 from services.dataset_merge import merge_datasets
 from services.dataset_store import SOURCE_PASTE, SOURCE_UPLOAD
-from utils.helpers import as_bool
-from utils.helpers import json_safe_records as _json_safe_records
 
 logger = logging.getLogger(__name__)
 

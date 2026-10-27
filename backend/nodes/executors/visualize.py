@@ -7,6 +7,7 @@ offers — plus the LaTeX figure/table add-ons both callers share.
 """
 
 import pandas as pd
+from core.refs import as_bool
 from state import add_log
 
 from i18n import t
@@ -14,7 +15,6 @@ from nodes.context import NodeCall
 from services.latex_outputs import build_latex_outputs
 from services.run_files import record_file
 from services.visualizer import ChartConfigError, VisualizationService, chart_engine
-from utils.helpers import as_bool
 
 NODE_TYPE = 'visualize'
 

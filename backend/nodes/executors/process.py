@@ -17,6 +17,8 @@ import os
 import pandas as pd
 from api.config import default_model_path_for
 from api.http import _safe_float, _safe_int
+from core.refs import as_bool
+from core.refs import split_columns as _split_columns
 from state import add_log
 
 from analyzers import (
@@ -41,8 +43,6 @@ from nodes.context import NodeCall
 from services.data_analysis import UnknownOperationError
 from services.llm_run_context import build_llm_run_ctx
 from services.process_params import check_process_params, enum_param, sentiment_thresholds
-from utils.helpers import as_bool
-from utils.helpers import split_columns as _split_columns
 
 NODE_TYPE = 'process'
 

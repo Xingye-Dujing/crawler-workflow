@@ -147,7 +147,7 @@ python app.py cloud          # 等价写法：python app.py --cloud，或 CRAWLE
 > 的「Cross-platform」一节，逐条实测证据在 `docs/agent_practices.md` 的「Cross-platform」一节。
 > `desktop/` 是唯一故意只服务 Windows 的目录（PyInstaller/UPX/Inno 只能产 exe）。
 
-**按当前系统查的东西**（都在一处，`utils/machine_deps.py` 与两个 services）：
+**按当前系统查的东西**（都在一处，`core/machine.py` 与两个 services）：
 
 | 要查的东西 | Windows | Linux | macOS |
 |---|---|---|---|
@@ -180,7 +180,7 @@ apt-get install -y texlive-xetex texlive-lang-chinese   # 可选：论文图与�
 
 **Linux 文件名算字节，Windows 文件名算字符**：ext4/APFS 的 `NAME_MAX` 是 255 **UTF-8 字节**，
 100 个汉字是 300 字节——Windows 上写得出去、服务器上 `open()` 直接 `ENAMETOOLONG`。
-`utils/helpers.py::sanitize_filename` 两个上限都卡（`MAX_FILENAME_LENGTH=100` 字符、
+`core/refs.py::sanitize_filename` 两个上限都卡（`MAX_FILENAME_LENGTH=100` 字符、
 `MAX_FILENAME_BYTES=200` 字节，留出余量给 `.part001.csv` 这类追加的后缀），切的时候不会把一个多字节字符劈成两半。
 
 **控制台编码**：程序的日志与节点名是汉字，而流的编码由机器决定。`LANG` 未设置的容器给出的是纯 ASCII，

@@ -33,7 +33,7 @@ Design notes the code cannot shout later:
 * a walk never reaches through the session into the owning crawler: 风控 is latched with
   :meth:`mark_risk_blocked` and a captcha is asked about with :meth:`is_walled`, because the
   platform module that needs the answer must not have to know that an owner exists at all.
-* ``platform_for`` (the article-link → adapter router) lives in utils.helpers: the engine validator
+* ``platform_for`` (the article-link → adapter router) lives in core.refs: the engine validator
   needs the same table without importing any crawler.
 """
 

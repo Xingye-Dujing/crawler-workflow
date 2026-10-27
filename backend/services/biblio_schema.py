@@ -7,8 +7,9 @@ what a ``biblio`` node emits, shared by the engine, node-schema diagnostics and
 the chart builders.
 """
 
+from core.refs import as_bool
+
 from i18n import t
-from utils.helpers import as_bool
 
 ENTITY_TYPES = (
     'keyword',

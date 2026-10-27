@@ -6,7 +6,7 @@ hand leaves it hanging, keeping the chromedriver process alive forever), and the
 answered such cases with a GLOBAL ``taskkill /IM chromedriver.exe`` that also murdered unrelated
 Selenium sessions on the machine. ``quit()`` now gets a bounded grace on a side thread; if it
 does not return, exactly this session's process tree — chrome children included — is killed by
-the running OS's own reaper (``utils.procs``).
+the running OS's own reaper (``core.procs``).
 """
 
 import contextlib
@@ -15,12 +15,12 @@ import os
 import sys
 import threading
 
+from core import procs
 from state import add_log
 
 from config import Config
 from crawlers.core.faults import DeadDriver
 from i18n import t
-from utils import procs
 
 logger = logging.getLogger(__name__)
 

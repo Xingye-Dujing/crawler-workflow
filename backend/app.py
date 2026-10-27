@@ -41,6 +41,13 @@ from api.stats import bp as stats_bp
 from api.studio import bp as studio_bp
 from api.visualize import bp as visualize_bp
 from api.workflow_history import bp as workflow_history_bp
+from core import machine
+from core.refs import (
+    as_bool,
+    comment_platforms,
+    export_stamp,
+    flag_or_none,
+)
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
@@ -102,13 +109,6 @@ from services.run_store import (
 )
 from services.workflow_manager import WorkflowManager
 from settings_store import get_setting
-from utils import machine_deps
-from utils.helpers import (
-    as_bool,
-    comment_platforms,
-    export_stamp,
-    flag_or_none,
-)
 
 #: The comment router's supported platforms, as raw keys. They go into a
 #: ``{platforms}`` slot that localizes *and joins* them, so they must arrive as a
@@ -326,7 +326,7 @@ def pin_console_streams() -> list[str]:
     changed = []
     for name in ('stdout', 'stderr'):
         stream = getattr(sys, f'__{name}__', None) or getattr(sys, name, None)
-        previous = machine_deps.pin_console(stream, name)
+        previous = machine.pin_console(stream, name)
         if previous:
             changed.append(f'{name}:{previous}')
             print(t('misc.consoleUtf8', streams=' '.join(changed)))
@@ -2328,7 +2328,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
 # api.http now (imported at top); every app call site reads the app-level alias unchanged.
 
 
-# `_split_columns` now lives in utils/helpers.py (split_columns, imported back under this name).
+# `_split_columns` now lives in core/refs.py (split_columns, imported back under this name).
 
 
 # `_execute_resume_node` is a built-in plugin: backend/nodes/executors/resume.py. It reads its ledger

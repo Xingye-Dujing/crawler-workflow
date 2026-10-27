@@ -21,6 +21,7 @@ look like the site rather than like a convenience:
 import re
 
 import pytest
+from core.refs import platform_for
 
 from crawl_capabilities import CAPABILITIES, crawl_kwargs, mode_for, required_missing
 from crawlers.platforms.twitter.comments import parse_twitter_replies
@@ -34,7 +35,6 @@ from crawlers.platforms.twitter.crawler import (
     split_author,
     tweet_id_of,
 )
-from utils.helpers import platform_for
 
 pytestmark = pytest.mark.unit
 

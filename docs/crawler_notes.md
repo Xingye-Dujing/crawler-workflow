@@ -1944,7 +1944,7 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 3. `app.enum_param(op, params, key)` + `PROCESS_ENUMS`（`参数 → (默认值, 允许写法)`）—— 处理节点的
    `mode`/`method`/`cluster_method`/`corr_method`；关键是**被检查的那串字符就是递给分析器的那串**，
    所以测试直接断言分析器收到的值（`test_the_value_the_gate_judges_is_the_value_the_analyzer_is_handed`）。
-4. `utils.helpers.as_bool(value, default)` —— 开关一律"读"，不比较。空白／听不懂的写法回答**默认值**
+4. `core.refs.as_bool(value, default)` —— 开关一律"读"，不比较。空白／听不懂的写法回答**默认值**
    （面板在那一格显示的数字），因为它不是"另一个答案"。`services/data_analysis._to_bool` 是另一件事：
    它读**抓来的单元格**，那里"不是假即真"是对的，用在参数上就会把清空的一格读成"关"。
 

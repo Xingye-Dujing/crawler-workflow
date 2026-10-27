@@ -29,7 +29,7 @@ change is judged on all three, not on the machine it was typed on. Why/evidence:
 - **`desktop/` is the ONE deliberate Windows-only tree** (PyInstaller/UPX/Inno). Its Windows facts stay there and
   must not leak into `backend/`; the packaged EXE is judged on Windows alone.
 - **Machine-level lookups are per-OS in one place.** Chrome / xelatex / **Node + the CatBus adapter**
-  candidates are tables keyed by the running OS in `utils/machine_deps.py` and `services/latex_compile.py`,
+  candidates are tables keyed by the running OS in `core/machine.py` and `services/latex_compile.py`,
   and they are joined with the TARGET's separator (`ntpath`/`posixpath`) so a Windows test can ask what a
   Linux box would find. The CJK font stack and the ctex font set carry each OS's own names in
   `services/visualizer.py` and `services/latex_charts.py`. `CHROME_BIN`/`CHROME_PATH` remain the explicit
@@ -103,7 +103,7 @@ the contract.
   crawl test declares `seeded_logins`; a test *about* the login rule points `Config.COOKIE_DIR` at its own tmp dir.
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js`/`workflow.js`/`app.js`
   into a node `vm` (`harness_dom.mjs`), driven by `tests/unit/test_frontend_*`; any result-affecting JS change must
-  sync a scenario; `urlPlatform` is contract-pinned against `utils.helpers.platform_for`.
+  sync a scenario; `urlPlatform` is contract-pinned against `core.refs.platform_for`.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields the
   selected mode requires; if not loaded, refuse — never guess a shape. A stored value off the option list shows as
   itself (`selectOptionTags`/`boolParam`), never option #0.
@@ -282,7 +282,7 @@ the contract.
   attributed line; a helper adds a fact, never repeats the reason.
 - **Anything that chooses data, cost or a name is refused BY NAME, never guessed** (mode/`select`/missing column via
   `data_analysis.validate_step`, analyzer `method`/`mode` via `app.enum_param`), and refusals `raise` rather than return
-  `[]` (else a node settles DONE over an empty table). **Read a switch, never compare it** (`utils.helpers.as_bool`;
+  `[]` (else a node settles DONE over an empty table). **Read a switch, never compare it** (`core.refs.as_bool`;
   blank = default).
 - **`_push_log` stores one entry per physical line** — the total advances by lines, not `add_log` calls.
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook:** no "Executing/Node …

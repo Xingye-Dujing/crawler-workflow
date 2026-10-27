@@ -45,7 +45,6 @@ _PROJECT_DIRS = (
     'static',
     'tests',
     'tools',
-    'utils',
 )
 
 #: The lookbehind is what makes `snownlp/utils/tnt.py` one third-party path instead of a broken

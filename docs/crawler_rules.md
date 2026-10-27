@@ -325,12 +325,12 @@
   announces the merged file the user is told to open. So any component that changes between
   attempts of the SAME run silently orphanes those parts and restarts the numbering at 001
   beside them — the resume looks green and the merged table is only the tail. That is why the
-  optional 「创建时间」 component (`utils.helpers.export_stamp`) is read from the run RECORD's
+  optional 「创建时间」 component (`core.refs.export_stamp`) is read from the run RECORD's
   `started_at` plus its `run_id`, never from the clock at write time: `run_store.start_run`'s
   继续 conflict update deliberately does NOT refresh `started_at`, and `run_id` is what the
   resume keys on, so both are stable per record and different between records. A date-only
   component is not enough on its own — a parallel canvas opens several records inside one
-  second. The time window a crawl was told to walk (`utils.helpers.window_tag`) is safe to put
+  second. The time window a crawl was told to walk (`core.refs.window_tag`) is safe to put
   in the same stem for the same reason: it is a node parameter, so it cannot drift mid-run.
   Pinned: `tests/unit/test_utils.py::TestExportStamp`, `tests/api/test_nodes_execution.py::
   TestWindowedFilenames::test_the_stamp_a_resume_reuses_is_the_record_and_not_the_clock`.

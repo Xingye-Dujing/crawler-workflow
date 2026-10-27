@@ -9,6 +9,7 @@ write bumps the store version (so the analyzers reload their cached stopword set
 
 import logging
 
+from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from stores import get_lexicon_store
 
@@ -16,7 +17,6 @@ from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import t
 from services.lexicon import reload_userdict
 from services.lexicon_store import KINDS
-from utils.helpers import as_bool
 
 logger = logging.getLogger(__name__)
 

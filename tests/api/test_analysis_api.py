@@ -2359,7 +2359,7 @@ class TestABooleanAndATextMeanTheSameThing:
     used to compare against one of the two (``params.get('ascending', 'true') ==
     'true'``), which read the *other* one as "descending" — the direction the user chose
     inverted, silently, and the run still settled done. Both readings are now
-    ``utils.helpers.as_bool``, which knows the two grammars, both interface languages,
+    ``core.refs.as_bool``, which knows the two grammars, both interface languages,
     case and padding, and answers the declared default for a value that states nothing.
 
     ``_to_bool`` in this package is NOT the same helper: it is the reading of a

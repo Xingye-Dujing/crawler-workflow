@@ -1,4 +1,4 @@
-"""Tests for utils/helpers.py — the small shared helpers.
+"""Tests for core/refs.py — the small shared helpers.
 
 These are the functions the crawler parsers and every download / export path
 reach for, so their edges are the interesting parts: a scraped title becomes a
@@ -11,8 +11,7 @@ import io
 
 import pandas as pd
 import pytest
-
-from utils.helpers import (
+from core.refs import (
     MAX_FILENAME_BYTES,
     MAX_FILENAME_LENGTH,
     as_bool,

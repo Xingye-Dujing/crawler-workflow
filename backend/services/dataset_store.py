@@ -38,10 +38,10 @@ import uuid
 import zlib
 
 import pandas as pd
+from core.refs import sanitize_filename
 
 from config import Config
 from i18n import t
-from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 

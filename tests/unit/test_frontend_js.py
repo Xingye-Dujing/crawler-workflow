@@ -16,10 +16,10 @@ import shutil
 from pathlib import Path
 
 import pytest
+from core.refs import platform_for
 from node_runner import run_node
 
 from services.biblio_schema import DEFAULTS as BIBLIO_DEFAULTS
-from utils.helpers import platform_for
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')]
 

@@ -9,6 +9,7 @@ importing ``app``. Path and behaviour are unchanged.
 
 import logging
 
+from core.refs import as_bool
 from flask import Blueprint, jsonify
 
 from api.http import _bad_body, _json_body
@@ -16,7 +17,6 @@ from api.resolution import NoRunDataError, _resolve_dataframe
 from i18n import t
 from services.latex_outputs import build_latex_outputs
 from services.visualizer import ChartConfigError, VisualizationService, chart_engine
-from utils.helpers import as_bool
 
 logger = logging.getLogger(__name__)
 

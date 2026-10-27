@@ -597,7 +597,7 @@ def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key)
     Two names to look up, because a mode points at one of two places: a non-comment
     handler is a METHOD ON THE CRAWLER CLASS, while 「评论」 is a WALK IN THE REGISTRY
     (``crawlers.commenting.walks``, one entry per platform package). The second half matters
-    more than the first: `utils.helpers.platform_for` routes a link by domain, so a platform
+    more than the first: `core.refs.platform_for` routes a link by domain, so a platform
     added there — or to the matrix — without writing its reader used to hand every
     unlisted link to the Zhihu parser, reporting whatever came back as that site's
     comments. Now the walker raises `comment.noAdapter`; this test raises earlier,

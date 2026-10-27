@@ -16,9 +16,8 @@ import time
 
 import pandas as pd
 import pytest
+from core.refs import flag_or_none
 from run_wait import run_finished
-
-from utils.helpers import flag_or_none
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 

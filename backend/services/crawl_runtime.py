@@ -6,7 +6,7 @@ another workflow asking the same question never re-buys an item), and one filena
 assembly (window + record stamp, read from the record rather than the clock).
 """
 
-from utils.helpers import as_bool, window_tag
+from core.refs import as_bool, window_tag
 
 
 def item_scope(ctx: dict, node: dict) -> str:

@@ -5,9 +5,10 @@ stores the result; ``train`` fits a traditional ML classifier from LLM-labeled r
 module constants (``_ML_MODEL_TYPES`` / ``_ML_LABEL_COLUMNS``) pin the trainable model names and
 their label columns and are read by the frontend-contract test, so they move with the cluster.
 Deps are all cycle-free (``api.resolution``/``stores``/``services.data_analysis``/``analyzers``/
-``api.http``/``utils.helpers``/``i18n``); the handlers themselves have no monkeypatch seam.
+``api.http``/``core.refs``/``i18n``); the handlers themselves have no monkeypatch seam.
 """
 
+from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify
 from stores import _register_dataset
 
@@ -23,7 +24,6 @@ from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.data_analysis import DataAnalysisService
 from services.dataset_store import SOURCE_ANALYSIS
-from utils.helpers import json_safe_records as _json_safe_records
 
 bp = Blueprint('analysis', __name__)
 

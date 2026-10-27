@@ -11,6 +11,7 @@ import json
 import re
 
 import pytest
+from core.refs import platform_for
 
 # Imported as a module, not as ``t``: this file names a text column 文本, and a bare ``t`` would
 # collide with it in exactly the tests that compare console wording.
@@ -23,7 +24,6 @@ from crawlers.platforms.weibo.comments import parse_weibo_comments, weibo_bid
 from crawlers.platforms.xiaohongshu import comments as xhs_comments
 from crawlers.platforms.zhihu import comments as zhihu_comments
 from engine.workflow import WorkflowEngine
-from utils.helpers import platform_for
 
 pytestmark = pytest.mark.unit
 

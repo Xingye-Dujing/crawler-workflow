@@ -444,16 +444,18 @@ def dependency_report(app_dir_path, *, env=None) -> dict:
     runs this on a background thread once the application module has been imported, so asking the
     modules that own the answer costs nothing on the bind path.
     """
+
+    from core import machine
+
     from services.latex_compile import find_xelatex
     from settings_store import get_setting
-    from utils import machine_deps
 
     env = os.environ if env is None else env
     return {
-        'chrome': machine_deps.find_chrome(env=env),
+        'chrome': machine.find_chrome(env=env),
         'driver': find_driver(app_dir_path, env=env),
         'xelatex': find_xelatex(),
-        'ollama': machine_deps.ollama_reachable(str(get_setting('ollama_host') or '')),
+        'ollama': machine.ollama_reachable(str(get_setting('ollama_host') or '')),
     }
 
 
