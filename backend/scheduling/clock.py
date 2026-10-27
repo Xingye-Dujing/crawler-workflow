@@ -25,10 +25,9 @@ from datetime import datetime
 
 from config import Config
 from i18n import set_lang, t
-from services import cron
-from services import schedule_store as store
+from scheduling import cron, store
 
-logger = logging.getLogger('scheduler')
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _thread = None

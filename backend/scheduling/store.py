@@ -24,10 +24,10 @@ from datetime import UTC, datetime, timedelta
 from config import Config
 from i18n import normalize as normalize_lang
 from i18n import t
-from services import cron
+from scheduling import cron
 from utils.helpers import as_bool
 
-logger = logging.getLogger('schedule_store')
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
