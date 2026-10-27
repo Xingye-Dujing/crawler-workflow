@@ -1252,7 +1252,7 @@ class TestEntityNode:
 
 
 class _FakeCommentSession:
-    """Stands in for crawlers.comments.CommentSession: returns canned rows.
+    """Stands in for crawlers.commenting.session.CommentSession: returns canned rows.
 
     The dispatch under test routes a comments-mode Data Source into the shared
     comment engine; this proves the wiring without a browser (the real adapters
@@ -1289,7 +1289,7 @@ class TestSourceCommentsMode:
 
         from nodes.executors import comment as comment_exec
 
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         monkeypatch.setattr(app_module, 'get_crawler', fake_get_crawler)
         monkeypatch.setattr(comment_exec, 'get_crawler', fake_get_crawler)
@@ -1365,7 +1365,7 @@ class TestSourceCommentsMode:
         passed validate() still must not crawl a platform nobody selected)."""
         from nodes.executors import comment as comment_exec
 
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         crawled = []
 
@@ -1887,7 +1887,7 @@ class TestACommentNodeHonoursHeadless:
     def test_a_scrolled_comment_panel_runs_headless_and_records_no_switch(self, monkeypatch, tmp_path):
         import app as app_module
 
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
         from services.run_store import RunStore
 
         seen = {'headless': []}

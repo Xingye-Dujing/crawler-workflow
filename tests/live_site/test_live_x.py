@@ -28,7 +28,7 @@ import re
 
 import pytest
 
-from crawlers.comments import OK, CommentSession
+from crawlers.commenting.session import OK, CommentSession
 
 #: ``live_os``: x.com is unreachable from a Chinese network, so this file runs with a
 #: VPN up while the domestic files run with it off (``live_cn``).

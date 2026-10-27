@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from crawlers.comments import BLOCKED, OK, CommentSession
+from crawlers.commenting.session import BLOCKED, OK, CommentSession
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

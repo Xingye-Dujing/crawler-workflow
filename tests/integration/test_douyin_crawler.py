@@ -26,7 +26,7 @@ import pytest
 from selenium.common.exceptions import TimeoutException
 
 import crawlers.core.crawler as base_module
-from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_threads
+from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_threads
 from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.douyin import (
     DouyinCrawler,
@@ -983,7 +983,7 @@ class TestComments:
         on the opener, which marks the thread expanded so the next panel read returns its reply —
         proving the product reads replies it actually opened, not a declared count.
         """
-        monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
+        monkeypatch.setattr('crawlers.commenting.session.ActionChains', _FakeActionChains)
         parent = El('路人甲\n主评论\n1天前·北京\n2\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
         _crawler, driver = make_crawler(cards=[], comment_items=[parent], comment_count='0')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
@@ -1004,7 +1004,7 @@ class TestComments:
         re-click — the ``data-dy-tried`` mark guarantees a single attempt, and the untried-exit lets the
         walk finish with that one thread left unopened.
         """
-        monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
+        monkeypatch.setattr('crawlers.commenting.session.ActionChains', _FakeActionChains)
         dead = El('甲\n主评论\n1天前·北京\n0\n展开2条回复', replies=['x', 'y'])
         dead._expandable = False
         _crawler, driver = make_crawler(cards=[], comment_items=[dead], comment_count='0')
@@ -1024,7 +1024,7 @@ class TestComments:
         / 重采). The global identity set must collapse that — the same (author, body, time) emitted once, as the
         reply under its parent, never also as a top-level row.
         """
-        monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
+        monkeypatch.setattr('crawlers.commenting.session.ActionChains', _FakeActionChains)
         parent = El('甲\n主评论\n1天前·北京\n0\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
         # The same reply ALSO mounted as its own top-level comment-item (what re-mounting produces).
         reply_as_top = El('路人乙\n子回复\n1天前·上海\n0')

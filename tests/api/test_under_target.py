@@ -22,7 +22,7 @@ Offline throughout: the crawler is a scripted stub, no browser, no network.
 import pytest
 
 import crawl_capabilities as capabilities
-import crawlers.comments as _comments  # the module object, so tests can monkeypatch its crawler factory
+import crawlers.commenting.session as _comments  # the module object, so tests can monkeypatch its crawler factory
 from crawlers.core.crawler import LICENSED_ENDS, UNDER_TARGET, Crawler
 from i18n import t
 

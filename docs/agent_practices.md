@@ -220,7 +220,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   the_hole_it_named` measures with a real `RunStore`.
 - **A row's ledger key is its site identity, not its content.** `run_store.item_key` identifies an item by link, else
   by title+author+the head of the body, else by a hash of the WHOLE row. Comment columns deliberately avoid the first
-  two field lists (`crawlers/comments.py` says why: every comment of one article would then share a key and all but
+  two field lists (`crawlers/commenting/session.py` says why: every comment of one article would then share a key and all but
   the first would be dropped) — which left them on the whole-row hash, and that row carries `楼层`, which a fresh
   harness numbers from 1 again. So any resume that re-walked an article re-stored all of its comments with invented
   floors, and the comment engine's own in-run dedupe already used `评论ID` (`identity=lambda row: row['评论ID']`) —

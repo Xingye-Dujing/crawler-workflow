@@ -2,7 +2,8 @@
 
 import re
 
-from .comments_base import _strip_tags
+from crawlers.commenting.protocol import _strip_tags
+
 from .engine import times
 
 

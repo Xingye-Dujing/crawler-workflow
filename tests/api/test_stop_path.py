@@ -411,7 +411,7 @@ class TestNoFurtherWork:
         from nodes.executors import comment as comment_exec
 
         monkeypatch.setattr(comment_exec, 'get_crawler', factory)
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         gate = {'inside': threading.Event(), 'release': threading.Event()}
 
@@ -468,7 +468,7 @@ class TestNoFurtherWork:
         from nodes.executors import comment as comment_exec
 
         monkeypatch.setattr(comment_exec, 'get_crawler', factory)
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         gate = {'inside': threading.Event(), 'release': threading.Event()}
 
@@ -757,7 +757,7 @@ class TestTheCommentSessionFollowsTheReap:
         crawler = _StreamingCrawler()
         live = _SlowSession(pid=0)
         crawler.driver = live
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         session = comments_module.CommentSession(crawler.driver, owner=crawler, log=lambda m: None)
         assert session.driver is live
@@ -768,7 +768,7 @@ class TestTheCommentSessionFollowsTheReap:
         """The cost this removes, on the crawl that pays it most: 16.3 s per command against
         a port nobody holds, one ladder per page of a walk the user has already ended."""
         child, crawler, release = _wedged_crawler()
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         session = comments_module.CommentSession(crawler.driver, owner=crawler, nap=lambda s: None)
         try:
@@ -785,7 +785,7 @@ class TestTheCommentSessionFollowsTheReap:
     def test_a_session_built_without_an_owner_keeps_its_driver(self):
         """Every crawler-less caller (the live tier builds sessions straight off a browser)
         must keep working: the owner is what makes the handle live, not what makes it valid."""
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         live = _SlowSession(pid=1)
         session = comments_module.CommentSession(live, nap=lambda s: None)

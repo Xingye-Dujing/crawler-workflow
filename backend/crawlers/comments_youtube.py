@@ -2,10 +2,11 @@
 
 The field names come from the live answer, not from a guess (see the docstring
 below). This module owns the pure mapping; the in-page innertube walk that feeds
-it lives in :class:`crawlers.comments.CommentSession`.
+it lives in :class:`crawlers.commenting.session.CommentSession`.
 """
 
-from .comments_base import _query_value
+from crawlers.commenting.protocol import _query_value
+
 from .engine import times
 from .engine.counters import parse_count, to_int
 from .engine.jsonpath import collect, get_in, runs_text

@@ -20,7 +20,7 @@ import pytest
 
 from config import Config
 from crawlers.bilibili import bilibili_bvid
-from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
+from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

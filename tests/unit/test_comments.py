@@ -15,7 +15,7 @@ import pytest
 # Imported as a module, not as ``t``: this file names a text column 文本, and a bare ``t`` would
 # collide with it in exactly the tests that compare console wording.
 import i18n
-from crawlers.comments import (
+from crawlers.commenting.session import (
     BLOCKED,
     DEAD,
     OK,

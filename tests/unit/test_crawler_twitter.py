@@ -23,7 +23,7 @@ import re
 import pytest
 
 from crawl_capabilities import CAPABILITIES, crawl_kwargs, mode_for, required_missing
-from crawlers.comments import parse_twitter_replies
+from crawlers.commenting.session import parse_twitter_replies
 from crawlers.twitter import (
     TwitterCrawler,
     handle_of,

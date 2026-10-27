@@ -47,7 +47,7 @@ below:
   filled it in would write a caption the site never sent.
 
 Comments (a tweet's replies) are read by the same walk on the tweet's own page —
-see ``CommentSession.crawl_twitter`` in ``crawlers/comments.py``.
+see ``CommentSession.crawl_twitter`` in ``crawlers/commenting/session.py``.
 """
 
 import logging

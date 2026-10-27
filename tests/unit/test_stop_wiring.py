@@ -45,7 +45,9 @@ def _walk_calls():
                 continue
             name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, 'id', '')
             if name in PREDICATES:
-                found.append((path.name, name, node))
+                # Located RELATIVE to crawlers/, not by bare filename: two packages may one day
+                # hold a `pager.py`, and a report that says only `session.py:412` cannot be followed.
+                found.append((path.relative_to(CRAWLERS_DIR).as_posix(), name, node))
     return found
 
 
@@ -93,7 +95,7 @@ class TestWalkWiring:
         # (bilibili.py was inside video.py until the #178 split; the walk moved file, it
         # did not go away — this list tracks files, so it tracked the rename.)
         assert len(calls) >= 6, f'only {len(calls)} walk call sites found: {sorted({c[0] for c in calls})}'
-        assert {'zhihu.py', 'twitter.py', 'bilibili.py', 'weibo.py', 'comments.py'} <= {c[0] for c in calls}
+        assert {'zhihu.py', 'twitter.py', 'bilibili.py', 'weibo.py', 'commenting/session.py'} <= {c[0] for c in calls}
 
     def test_every_walk_asks_the_crawler_whether_it_may_stop(self):
         missing = []
@@ -136,7 +138,7 @@ class TestWalkWiring:
     def test_the_comment_engine_carries_its_own_predicate(self):
         """``CommentSession`` is not a ``Crawler``, and it reads hundreds of pages per
         node — so it needs the same answer, given to it by the node handler."""
-        from crawlers.comments import CommentSession
+        from crawlers.commenting.session import CommentSession
 
         assert CommentSession(None).may_stop() is False
         assert CommentSession(None, abort=lambda: True).may_stop() is True
@@ -166,6 +168,6 @@ class TestStopPredicateIsSingleDefinition:
                     isinstance(item, ast.FunctionDef) and item.name == 'may_stop' for item in node.body
                 ):
                     overrides.append(f'{path.name}:{node.name}')
-        assert overrides == ['comments.py:CommentSession'], (
+        assert overrides == ['session.py:CommentSession'], (
             f'the comment engine is the only non-Crawler allowed to own the answer: {overrides}'
         )

@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from crawlers.comments_base import DEAD, OK
+from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped
 from i18n import t
 from services import catbus_bridge as bridge

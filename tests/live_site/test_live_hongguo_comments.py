@@ -25,7 +25,7 @@ import requests
 
 import settings_store
 from crawlers import hongguo
-from crawlers.comments_base import OK
+from crawlers.commenting.protocol import OK
 from crawlers.comments_hongguo import hg_page_title, hg_series_id
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.hongguo_harvest import HongguoCommentHarness, find_mitmdump, find_player

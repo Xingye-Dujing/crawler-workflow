@@ -54,8 +54,9 @@ crawler_workflow/
 │   │   ├── douyin.py             # 抖音：搜索栏驱动 + 逐视频详情 + 热榜（搜索、某作者、详情、评论）
 │   │   ├── youtube.py            # YouTube：页内 innertube JSON（搜索 / 某作者 / 评论）
 │   │   ├── twitter.py            # X（推特）：可见窗口读虚拟时间线（搜索 / 某作者 / 回复）
-│   │   ├── comments.py           # 评论采集：状态机 CommentSession（七个平台的链接可混粘贴；解析器已按平台拆出并在此再导出）
-│   │   ├── comments_base.py      # 评论共用基件：状态常量 OK/BLOCKED/DEAD + 纯文本工具（_json_or_none/_strip_tags/_stamp/_query_value）
+│   │   ├── commenting/            # 评论引擎（与 CommentSession 同域）
+│   │   │   ├── session.py         # 评论采集：状态机 CommentSession（七个平台的链接可混粘贴；解析器已按平台拆出并在此再导出）
+│   │   │   └── protocol.py        # 评论共用基件：状态常量 OK/BLOCKED/DEAD + 纯文本工具（_json_or_none/_strip_tags/_stamp/_query_value）
 │   │   ├── comments_weibo.py     # 微博评论：buildComments JSON→行 + id/端点助手
 │   │   ├── comments_zhihu.py     # 知乎评论：逐面板元组→行
 │   │   ├── comments_xhs.py       # 小红书评论：DOM 走查元组→行

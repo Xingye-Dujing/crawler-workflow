@@ -40,26 +40,25 @@ import time
 from selenium.common.exceptions import JavascriptException, StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
 
+from crawlers.commenting.protocol import BLOCKED, DEAD, OK, _json_or_none
+from crawlers.comments_bilibili import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
+from crawlers.comments_douyin import douyin_comment_fields, parse_douyin_threads
+from crawlers.comments_twitter import parse_twitter_replies
+from crawlers.comments_weibo import parse_weibo_comments, weibo_bid, weibo_comments_js, weibo_show_js
+from crawlers.comments_xhs import parse_xhs_comments
+from crawlers.comments_youtube import parse_youtube_comments
+from crawlers.comments_zhihu import parse_zhihu_comments
 from crawlers.core.crawler import throttled_sleep
+from crawlers.engine import feed, pagefetch, pager
+from crawlers.engine.counters import parse_count
+from crawlers.engine.jsonpath import collect
+from crawlers.engine.wall import looks_blocked
 from i18n import stop_reason_label, t
-
-from .comments_base import BLOCKED, DEAD, OK, _json_or_none
-from .comments_bilibili import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
-from .comments_douyin import douyin_comment_fields, parse_douyin_threads
-from .comments_twitter import parse_twitter_replies
-from .comments_weibo import parse_weibo_comments, weibo_bid, weibo_comments_js, weibo_show_js
-from .comments_xhs import parse_xhs_comments
-from .comments_youtube import parse_youtube_comments
-from .comments_zhihu import parse_zhihu_comments
-from .engine import feed, pagefetch, pager
-from .engine.counters import parse_count
-from .engine.jsonpath import collect
-from .engine.wall import looks_blocked
 
 # The browser-free parsers and the shared text helpers live in their own modules,
 # one per platform (``comments_weibo.py``, ``comments_bilibili.py`` …) plus
-# ``comments_base.py`` for the parts several of them share. They are re-exported
-# above so ``from crawlers.comments import parse_weibo_comments, OK, …`` keeps
+# ``crawlers/commenting/protocol.py`` for the parts several of them share. They are re-exported
+# above so ``from crawlers.commenting.session import parse_weibo_comments, OK, …`` keeps
 # working, and this file holds only the stateful :class:`CommentSession` that
 # drives one browser per platform and calls them. ``platform_for`` (the
 # article-link → adapter router) lives in utils.helpers: the engine validator
@@ -524,7 +523,7 @@ return (function () {
         the walk stops on a page that carries no new ``rpid`` — which is also
         what makes a repeating server-side cursor harmless.
         """
-        from .bilibili import bilibili_bvid
+        from crawlers.bilibili import bilibili_bvid
 
         self.driver.get(url)
         self.nap(3)
@@ -623,7 +622,7 @@ return (function () {
         (measured: 13-21 ``<article>`` nodes on screen while 139 distinct replies
         passed through in eight scrolls).
         """
-        from .twitter import EXTRACT_CARD_JS, WINDOW_LINKS_JS, TwitterCrawler, tweet_id_of
+        from crawlers.twitter import EXTRACT_CARD_JS, WINDOW_LINKS_JS, TwitterCrawler, tweet_id_of
 
         root = tweet_id_of(url)
         if not root:
@@ -720,8 +719,8 @@ return (function () {
         thousand comments yields twenty. So the cursor is taken from the list the
         rows actually came from (``innertube.pager_of``).
         """
-        from .engine import innertube
-        from .youtube import video_id_of
+        from crawlers.engine import innertube
+        from crawlers.youtube import video_id_of
 
         video = video_id_of(url)
         if not video:
@@ -1000,7 +999,7 @@ return (function () {
         douyin virtualises the list: an item scrolled past is unmounted, so a single final read
         would silently lose it.
         """
-        from .douyin import douyin_id
+        from crawlers.douyin import douyin_id
 
         target = f'https://www.douyin.com/video/{douyin_id(url)}' if douyin_id(url) else url
         if not douyin_id(url):

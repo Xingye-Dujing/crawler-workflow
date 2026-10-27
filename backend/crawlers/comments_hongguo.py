@@ -30,7 +30,7 @@ columns every other platform's table already uses.
 
 import re
 
-from .comments_base import _stamp
+from crawlers.commenting.protocol import _stamp
 
 #: One row of a 红果 comment page. ``data_type`` 4 is a comment, anything else is
 #: refused; the danmaku-guide rows are comments too, so they are told apart by the

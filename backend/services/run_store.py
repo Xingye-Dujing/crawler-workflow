@@ -92,7 +92,7 @@ _TITLE_FIELDS = ('标题', 'title')
 _AUTHOR_FIELDS = ('作者', '发布者', '公众号', '博主', 'author')
 _BODY_FIELDS = ('正文', '内容', '摘要', 'body', 'content')
 # A comment's own site id, which every comment crawler in this repo emits (and which
-# ``crawlers.comments`` already uses as the IN-RUN identity — see the ``identity=`` there).
+# ``crawlers.commenting.session`` already uses as the IN-RUN identity — see the ``identity=`` there).
 _COMMENT_ID_FIELDS = ('评论ID',)
 # Carried alongside it so a mixed batch cannot collapse a 知乎 numeric id onto a 微博 one:
 # the two sites draw their ids from separate spaces and neither knows the other's.

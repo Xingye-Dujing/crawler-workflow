@@ -1267,7 +1267,7 @@ class TestCommentNodeFilesAndLimits:
     def _install(self, app_module, monkeypatch, session_class):
         from nodes.executors import comment as comment_exec
 
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         def make(*a, **k):
             return self._FakeCrawler()
@@ -1388,7 +1388,7 @@ class TestCommentNodeRecrawl:
             pass
 
     def _install(self, app_module, monkeypatch):
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         class _Session:
             calls = 0
@@ -1737,7 +1737,7 @@ class TestFeedSourceFromUpload:
 
     @staticmethod
     def _fake_comment_engine(app_module, monkeypatch, seen):
-        import crawlers.comments as comments_module
+        import crawlers.commenting.session as comments_module
 
         class _Session:
             def __init__(self, driver, log=None, **kwargs):

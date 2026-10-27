@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from crawlers.comments import parse_youtube_comments
+from crawlers.commenting.session import parse_youtube_comments
 from crawlers.youtube import (
     apply_player,
     channel_items,

@@ -549,7 +549,7 @@ BARE_NAVIGATIONS = {
     # there is no slow renderer to outwait, no first-run dialog to dismiss, no arrival to
     # account for. Cookie planting moved onto the shared re-drive, so it left this table.
     'backend/crawlers/core/crawler.py': 2,
-    'backend/crawlers/comments.py': 7,
+    'backend/crawlers/commenting/session.py': 7,
     'backend/crawlers/wechat.py': 1,
     'backend/crawlers/zhihu.py': 2,
 }

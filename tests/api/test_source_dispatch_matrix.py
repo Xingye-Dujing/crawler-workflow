@@ -319,7 +319,7 @@ def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkey
     would return rows shaped like posts and still look green here — which is the
     failure this matrix exists to catch.
     """
-    import crawlers.comments as comments_module
+    import crawlers.commenting.session as comments_module
 
     seen = []
 
@@ -608,7 +608,7 @@ def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key)
     while nothing has been crawled.
     """
     from crawlers import CRAWLERS
-    from crawlers.comments import CommentSession
+    from crawlers.commenting.session import CommentSession
 
     mode = capabilities.mode_for(platform, mode_key)
     if mode.handler == 'comments':
@@ -1073,7 +1073,7 @@ def _patch_session(monkeypatch, seen, fail_url=None):
     ``fail_url`` raises once — which is how the resume test below leaves a real
     stored cursor behind instead of pretending one exists.
     """
-    import crawlers.comments as comments_module
+    import crawlers.commenting.session as comments_module
 
     class _Session:
         def __init__(self, driver, log=None, **kwargs):

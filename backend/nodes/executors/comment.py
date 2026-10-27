@@ -103,7 +103,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     rows headless (zhihu comments 5/5, 2026-09-26), so no comment panel forces a
     window or rewrites the record.
     """
-    from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
+    from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
     from services.part_writer import PartWriter, safe_stem
 
     params = node.get('params') or {}

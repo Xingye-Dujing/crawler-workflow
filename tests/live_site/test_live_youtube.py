@@ -22,7 +22,7 @@ answer and must not be reported as a broken crawler — so those read as
 
 import pytest
 
-from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
+from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
 from crawlers.youtube import video_id_of
 
 #: ``live_os`` with X: the overseas half of the live tier, run while the VPN is up.

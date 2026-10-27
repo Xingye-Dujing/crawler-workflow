@@ -1,6 +1,6 @@
 """zhihu comments: the per-panel row builder (author, time, body).
 
-The panel read lives in :mod:`crawlers.comments` (one in-page script per panel); this file turns
+The panel read lives in :mod:`crawlers.commenting.session` (one in-page script per panel); this file turns
 what that script measured into rows, in the columns the export shows.
 
 Two columns are here because a measurement said what the panel does and does not hold

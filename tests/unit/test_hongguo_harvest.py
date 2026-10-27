@@ -15,7 +15,7 @@ import time
 import pytest
 
 import i18n
-from crawlers.comments_base import DEAD, OK
+from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
 from crawlers.hongguo_harvest import (
     HongguoCommentHarness,

@@ -5,7 +5,7 @@ nothing, so the endpoint fetched in page is the only path — this module owns h
 its JSON becomes rows and how that endpoint is addressed.
 """
 
-from .comments_base import _stamp
+from crawlers.commenting.protocol import _stamp
 
 
 def parse_bilibili_comments(items, article_url: str, floor: int = 0) -> list:
