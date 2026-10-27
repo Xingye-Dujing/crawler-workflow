@@ -19,8 +19,8 @@ this file pins — is the profile's own behaviour, all of it measured 2026-09 on
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
-import crawlers.base as base_module
-from crawlers.base import UNDER_TARGET, Crawler
+import crawlers.core.crawler as base_module
+from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.zhihu import ZhihuCrawler
 
 pytestmark = pytest.mark.unit

@@ -20,8 +20,8 @@ from state import add_log, execution_state, stop_requested
 import crawl_capabilities as capabilities
 from config import Config
 from crawlers import crawler_class, get_crawler
-from crawlers.base import UNDER_TARGET, CrawlerStopped
-from crawlers.catbus import CatbusCrawler
+from crawlers.backends.catbus import CatbusCrawler
+from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label
@@ -174,7 +174,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             add_log(t('run.recrawl', n=ctx['store'].forget_items(item_scope(ctx, node))))
         row_sink, cursor_sink = source_stream(ctx, nid, item_scope(ctx, node), node_label(node, nid))
         if ctx.get('resume'):
-            from crawlers.base import as_index
+            from crawlers.core.crawler import as_index
 
             resumed_index = as_index((ctx['store'].get_cursor(ctx['run_id'], nid) or {}).get('url_index'))
 

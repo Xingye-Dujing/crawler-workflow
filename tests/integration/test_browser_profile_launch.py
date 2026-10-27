@@ -130,7 +130,7 @@ def test_a_second_crawler_reuses_the_directory_and_stops_planting(rooted, tmp_pa
     matters is "the saved snapshot was not pushed over a live profile" — a run that
     came back with rows would not show that at all.
     """
-    from crawlers.base import Crawler
+    from crawlers.core.crawler import Crawler
 
     planted = []
 

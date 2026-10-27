@@ -1,6 +1,6 @@
 """The second crawl backend: a node's CatBus session, driven one process per walk.
 
-This class subclasses :class:`~crawlers.base.Crawler` on purpose. The streaming machinery it inherits
+This class subclasses :class:`~crawlers.core.crawler.Crawler` on purpose. The streaming machinery it inherits
 is where the run's correctness lives — :meth:`emit` is where 停止 is felt and where a broken sink
 stays best-effort, :meth:`note_end` is where a licence to be short is refused, and
 :meth:`watermark_boundary` is where a cross-run boundary is honoured. Re-declaring those on a
@@ -34,8 +34,8 @@ from __future__ import annotations
 import logging
 import uuid
 
-from crawlers.base import UNDER_TARGET, Crawler, CrawlerStopped
 from crawlers.comments_base import DEAD, OK
+from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped
 from i18n import t
 from services import catbus_bridge as bridge
 
@@ -101,7 +101,7 @@ class CatbusCrawler(Crawler):
     def _create_driver(self):
         """No Chrome: this session crawls by starting an adapter process per walk.
 
-        :meth:`crawlers.base.Crawler.__init__` builds the driver, so this override is what makes the
+        :meth:`crawlers.core.crawler.Crawler.__init__` builds the driver, so this override is what makes the
         inheritance affordable — every streaming rule comes along for free and the one step that would
         buy a browser answers with nothing. The child belongs to one crawl, not to the session: it is
         created in :meth:`_run` and reaped by :meth:`close`, which is why ``driver`` stays ``None``.

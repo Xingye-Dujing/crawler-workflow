@@ -8,10 +8,9 @@ means neither platform module re-declares them.
 import logging
 from datetime import datetime, timedelta, timezone
 
+from crawlers.core.crawler import Crawler
+from crawlers.engine import pagefetch
 from i18n import t
-
-from .base import Crawler
-from .engine import pagefetch
 
 logger = logging.getLogger(__name__)
 

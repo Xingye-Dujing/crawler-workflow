@@ -11,7 +11,7 @@
 |---|---|---|---|
 | `backend/` 根（13 模块 + `app.py`） | 14 | 15,140 | `i18n.py` 4,604 · `app.py` 4,412 · `crawl_capabilities.py` 1,805 |
 | `backend/services/`（含 `biblio_formats/` 14） | 66 | 27,626 | `data_analysis.py` 3,899 · `latex_charts.py` 2,428 · `bibliometrics.py` 1,996 |
-| `backend/crawlers/`（含 `engine/` 10） | 36 | 13,075 | `hongguo_harvest.py` 1,822 · `base.py` 1,490 · `comments.py` 1,184 |
+| `backend/crawlers/`（含 `engine/` 10、`core/` 2、`backends/` 1） | 38 | 13,095 | `hongguo_harvest.py` 1,822 · `core/crawler.py` 1,490（原 `base.py`）· `comments.py` 1,184 |
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
@@ -30,7 +30,7 @@
 `services/data_analysis.py` 3,899 行 = 34 个 op 的参数表（`STEP_PARAMS:201`）+ 38 个自由函数 +
 `DataAnalysisService` 单类 2,791 行（占文件 72%，无实例状态，全是 staticmethod）。
 `services/visualizer.py` 1,890 行 = 中文字体栈 + 图型分类 + JSON 安全 + 调色板 + 词云样式目录 + 屏显/印刷改写 + matplotlib 渲染（`VisualizationService` 1,294 行）。
-`crawlers/base.py` 1,490 行 = Crawler 主体 68 个成员 + 驱动/profile 装配（`_create_driver` 107 行）+ 导航到场判定 +
+`crawlers/core/crawler.py` 1,490 行 = Crawler 主体 68 个成员 + 驱动/profile 装配（`_create_driver` 107 行）+ 导航到场判定 +
 游标/水位/行发射 + 收尾判定 + 登录墙诊断 + 首屏等待 + Cookie 植入 + 节流 + DOM 小工具。
 `i18n.py` 4,604 行 = 两份词典（`_ZH` 40–2062、`_EN` 2063–4416，2,922 键×双语）+ 行为。
 `workflow.js` 13,015 行 = **206 个顶层函数 + 34 个命名对象 + 82 个顶层 var**，33 段 banner；段落与内容已经漂移
@@ -243,6 +243,11 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **目录服务化**：`GET /api/node-types` + `static/js/node-types.js`，冷页兜底与 `nodes/defaults.py` 双向钉住（`70da03e`）。
 - **列契约归所有权**：各 op 的列表回到自己的模块，`nodes/schema.py` 只聚合（`61f1738`）。
 - **测试加载顺序收口**：`tests/frontend/page_scripts.mjs` 从 index.html 读唯一顺序并双向清点页面↔磁盘（`2e71646`）。
+- **Stage 1 第一步已落地**：`crawlers/base.py` → `crawlers/core/crawler.py`、`video_base.py` → `crawlers/core/video.py`、
+  `catbus.py` → `crawlers/backends/catbus.py`；38 个引用文件（含 35 个测试文件、AGENTS.md 的一条规则引用）同步改路径，
+  不留旧名 re-export。`tests/unit/test_stop_wiring.py` 顺手改成**按 `Crawler.__module__` 找基类文件**而不是硬编码文件名——
+  它正是被这次搬迁证明会因移动而误报的那类针。门禁：fast **8,116 passed, 3 skipped**；设备档带三个
+  `CRAWLER_REQUIRE_*`/`CIXI_REQUIRE_CATBUS` **192 passed, 0 跳过**；ruff（454 files）与两档 pylint 均 exit=0。
 
 ## 7. 明确不做
 

@@ -21,7 +21,7 @@ import time
 
 import pytest
 
-from crawlers.base import Crawler
+from crawlers.core.crawler import Crawler
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 

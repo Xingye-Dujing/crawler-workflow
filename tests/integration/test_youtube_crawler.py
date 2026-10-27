@@ -21,9 +21,9 @@ pattern: a fixture id that is not shaped like a real one hides a reader bug.
 
 import pytest
 
-import crawlers.base as base_module
-from crawlers.base import Crawler
+import crawlers.core.crawler as base_module
 from crawlers.comments import OK, CommentSession
+from crawlers.core.crawler import Crawler
 from crawlers.youtube import YouTubeCrawler
 from i18n import t
 

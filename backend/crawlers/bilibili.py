@@ -1,7 +1,7 @@
 """Bilibili (哔哩哔哩): paged keyword search, rows resolved through the API.
 
 Split out of the former ``crawlers/video.py``; the shared video base and the two
-generic row helpers live in :mod:`crawlers.video_base`. The measurements that shaped
+generic row helpers live in :mod:`crawlers.core.video`. The measurements that shaped
 this crawler are in ``docs/crawler_notes.md``.
 """
 
@@ -10,11 +10,11 @@ import logging
 import re
 from urllib.parse import quote
 
+from crawlers.core.crawler import Crawler, as_index
+from crawlers.core.video import VideoCrawler, _as_int, _stamp
 from i18n import stop_reason_label, t
 
-from .base import Crawler, as_index
 from .engine import feed
-from .video_base import VideoCrawler, _as_int, _stamp
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,7 @@ class BilibiliCrawler(VideoCrawler):
         logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))
         # Deliberately no ``note_end``: ``walk_feed``'s reason is a self-summary, not a
         # site-attested end, and this repo forbids licensing a shortfall on it
-        # (crawlers/base.py:LICENSED_ENDS). Stays ``end_reason=None`` → the gate is silent.
+        # (crawlers/core/crawler.py:LICENSED_ENDS). Stays ``end_reason=None`` → the gate is silent.
         return self.results()
 
     def hot(self, board: str = 'popular', target_count: int = 50, **kwargs):

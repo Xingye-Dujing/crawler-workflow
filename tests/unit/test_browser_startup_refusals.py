@@ -12,7 +12,7 @@ browser profile left behind.
 import pytest
 from selenium.common.exceptions import WebDriverException
 
-import crawlers.base as base_module
+import crawlers.core.crawler as base_module
 from crawlers.zhihu import ZhihuCrawler
 
 pytestmark = pytest.mark.unit

@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-import crawlers.base as base_module
-from crawlers.base import Crawler, as_index
+import crawlers.core.crawler as base_module
+from crawlers.core.crawler import Crawler, as_index
 
 pytestmark = pytest.mark.unit
 
@@ -161,7 +161,7 @@ def write_cookies(tmp_path):
 
 def _initializer_fields():
     """Every ``self.<name> =`` inside ``Crawler.__init__``, read off the source."""
-    source = (REPO_ROOT / 'backend' / 'crawlers' / 'base.py').read_text(encoding='utf-8')
+    source = (REPO_ROOT / 'backend' / 'crawlers' / 'core' / 'crawler.py').read_text(encoding='utf-8')
     tree = ast.parse(source)
     crawler = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Crawler')
     init = next(n for n in crawler.body if isinstance(n, ast.FunctionDef) and n.name == '__init__')
@@ -548,7 +548,7 @@ BARE_NAVIGATIONS = {
     # is the goal, not a failed navigation, so it must never be re-driven off itself, and
     # there is no slow renderer to outwait, no first-run dialog to dismiss, no arrival to
     # account for. Cookie planting moved onto the shared re-drive, so it left this table.
-    'backend/crawlers/base.py': 2,
+    'backend/crawlers/core/crawler.py': 2,
     'backend/crawlers/comments.py': 7,
     'backend/crawlers/wechat.py': 1,
     'backend/crawlers/zhihu.py': 2,

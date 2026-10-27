@@ -22,8 +22,8 @@ from state import _wf_local, add_log, execution_state, stop_requested
 import crawl_capabilities as capabilities
 from config import Config
 from crawlers import get_crawler, is_crawlable
-from crawlers.base import UNDER_TARGET, CrawlerStopped, PageNotArrivedError
-from crawlers.catbus import CatbusCrawler
+from crawlers.backends.catbus import CatbusCrawler
+from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped, PageNotArrivedError
 from i18n import t
 from nodes.context import NodeCall
 from nodes.executors.comment import execute_comment_node

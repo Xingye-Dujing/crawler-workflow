@@ -22,9 +22,9 @@ The second half of the file is the patience itself: it has to end on evidence, e
 import pytest
 from test_crawler_base import bare
 
-import crawlers.base as base_module
+import crawlers.core.crawler as base_module
 from config import Config
-from crawlers.base import Crawler, CrawlerStopped, PageNotArrivedError
+from crawlers.core.crawler import Crawler, CrawlerStopped, PageNotArrivedError
 from crawlers.engine.wall import classify
 
 pytestmark = pytest.mark.unit

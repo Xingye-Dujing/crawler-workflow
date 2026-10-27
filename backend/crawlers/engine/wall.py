@@ -4,7 +4,7 @@ The distinction is the difference between an honest failure and a table of
 nothing that looks like a finished crawl. Every platform parks a dead session
 somewhere else, announces it in a different word, and — in two measured cases —
 says it in the tab *title* rather than in the URL, so one shared classifier
-replaces the per-platform guesses that used to live in :mod:`crawlers.base` and
+replaces the per-platform guesses that used to live in the crawler base and
 :mod:`crawlers.comments`.
 
 Measured shapes this module has to catch, all of them real observations:

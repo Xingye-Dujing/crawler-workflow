@@ -8,7 +8,7 @@ same walk also cached its whole URL list in the cursor, and because ``mark_posit
 once per harvested card, every stored row re-serialised ~1 MB of JSON into ``runs.db``.
 """
 
-from crawlers.base import UNDER_TARGET
+from crawlers.core.crawler import UNDER_TARGET
 from crawlers.weibo import WeiboCrawler
 
 

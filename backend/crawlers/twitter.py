@@ -57,9 +57,9 @@ from urllib.parse import quote
 from selenium.common.exceptions import JavascriptException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
 
+from crawlers.core.crawler import Crawler
 from i18n import stop_reason_label, t
 
-from .base import Crawler
 from .engine import feed
 from .engine.counters import parse_count
 

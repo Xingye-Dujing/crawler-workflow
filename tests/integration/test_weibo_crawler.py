@@ -14,9 +14,9 @@ from urllib.parse import quote
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
-import crawlers.base as base_module
+import crawlers.core.crawler as base_module
 import crawlers.weibo as weibo_module
-from crawlers.base import UNDER_TARGET, Crawler, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped
 from crawlers.weibo import WeiboCrawler
 
 pytestmark = pytest.mark.unit
@@ -142,14 +142,14 @@ def make_crawler(monkeypatch):
     """WeiboCrawler whose _create_driver installs a FakeWeiboDriver and whose
     poll sleeps are instant. Returns (crawler, driver).
 
-    The sleep is patched on :mod:`crawlers.base`, not on the platform module: the wait for a page's
+    The sleep is patched on :mod:`crawlers.core.crawler`, not on the platform module: the wait for a page's
     first content is the *shared* one now (``wait_for_first_content``), and a platform-local patch left
     the real helper ticking once a second through its whole budget — a "unit" test that quietly took
     minutes and proved nothing about the timing.
     """
     # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
     # use the shared helper — see ``WeiboCrawler._await_search_page``) and the shared helpers in
-    # ``crawlers.base``. Patching only one leaves a "unit" test sleeping in real time.
+    # ``crawlers.core.crawler``. Patching only one leaves a "unit" test sleeping in real time.
     monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 
@@ -468,7 +468,7 @@ class TestPagingWalk:
         """The shared breaker, taken on directly because this wait cannot be the shared helper.
 
         Two pages that delivered nothing and this crawler stops spending
-        :attr:`~crawlers.base.Crawler.MAX_PENDING_WAITS` budgets on further windows: a date range is
+        :attr:`~crawlers.core.crawler.Crawler.MAX_PENDING_WAITS` budgets on further windows: a date range is
         thousands of windows wide, and "the network is down" must cost two waits, not two hours.
         """
         crawler, _driver = make_crawler(final_url=FEED, cards=False)
@@ -632,7 +632,7 @@ class FakeMymblogDriver:
 def make_author(monkeypatch):
     # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
     # use the shared helper — see ``WeiboCrawler._await_search_page``) and the shared helpers in
-    # ``crawlers.base``. Patching only one leaves a "unit" test sleeping in real time.
+    # ``crawlers.core.crawler``. Patching only one leaves a "unit" test sleeping in real time.
     monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 
@@ -914,7 +914,7 @@ LANDED = 'https://weibo.com/newlogin?url=https%3A%2F%2Fweibo.com%2F'
 def make_board(monkeypatch):
     # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
     # use the shared helper — see ``WeiboCrawler._await_search_page``) and the shared helpers in
-    # ``crawlers.base``. Patching only one leaves a "unit" test sleeping in real time.
+    # ``crawlers.core.crawler``. Patching only one leaves a "unit" test sleeping in real time.
     monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 

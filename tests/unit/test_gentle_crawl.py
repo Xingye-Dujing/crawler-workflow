@@ -11,8 +11,8 @@ Two contracts, both pure enough to test without a browser:
 
 import pytest
 
-import crawlers.base as base_module
-from crawlers.base import GENTLE_PAUSE_FACTOR, Crawler, throttled_sleep
+import crawlers.core.crawler as base_module
+from crawlers.core.crawler import GENTLE_PAUSE_FACTOR, Crawler, throttled_sleep
 from crawlers.douyin import DouyinCrawler
 
 pytestmark = pytest.mark.unit

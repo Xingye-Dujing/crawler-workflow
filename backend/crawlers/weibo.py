@@ -10,9 +10,9 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from config import Config
+from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped, as_index
 from i18n import stop_reason_label, t
 
-from .base import UNDER_TARGET, Crawler, CrawlerStopped, as_index
 from .engine import pagefetch, pager, times
 from .engine.counters import parse_count
 

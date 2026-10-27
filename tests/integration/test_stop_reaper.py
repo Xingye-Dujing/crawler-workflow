@@ -27,7 +27,7 @@ import time
 import pytest
 
 from crawlers import get_crawler
-from crawlers.base import CrawlerStopped, DeadDriver
+from crawlers.core.crawler import CrawlerStopped, DeadDriver
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 

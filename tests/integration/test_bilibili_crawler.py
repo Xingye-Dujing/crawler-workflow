@@ -22,9 +22,9 @@ import re
 
 import pytest
 
-import crawlers.base as base_module
-from crawlers.base import Crawler
+import crawlers.core.crawler as base_module
 from crawlers.bilibili import BilibiliCrawler, bilibili_bvid, bilibili_mid, bilibili_search_url
+from crawlers.core.crawler import Crawler
 
 pytestmark = pytest.mark.unit
 

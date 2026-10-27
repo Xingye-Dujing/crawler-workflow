@@ -9,9 +9,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from i18n import t
 
-from .base import UNDER_TARGET, Crawler, as_index
 from .engine import feed, times
 from .engine.counters import parse_count
 

@@ -18,7 +18,7 @@ fixture; no browser, no network.
 
 import pytest
 
-from crawlers.base import Crawler, as_index
+from crawlers.core.crawler import Crawler, as_index
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 

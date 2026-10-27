@@ -16,7 +16,7 @@ No browser here: ``Crawler._create_driver`` is swapped for a scripted fake.
 
 import pytest
 
-from crawlers.base import Crawler
+from crawlers.core.crawler import Crawler
 from crawlers.wechat import WechatCrawler
 
 pytestmark = pytest.mark.unit

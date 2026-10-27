@@ -18,7 +18,7 @@ import threading
 from state import add_log
 
 from config import Config
-from crawlers.base import DeadDriver
+from crawlers.core.crawler import DeadDriver
 from i18n import t
 from utils import procs
 
@@ -90,7 +90,7 @@ def close_login_browser(crawler, quit_timeout: float = 5.0):
         # socket, measured 1.7 s) but the worker's NEXT command opens a fresh connection to a
         # port nobody holds, and selenium's pool re-sends a failed connect four times —
         # measured 16.3 s each, which is how a mid-walk stop took 29.6 s to settle. See
-        # ``crawlers.base.DeadDriver`` for why the refusal is a ``BaseException``. This happens
+        # ``crawlers.core.crawler.DeadDriver`` for why the refusal is a ``BaseException``. This happens
         # whether or not the process is gone: the promise is about the session the worker holds.
         crawler.driver = DeadDriver()
     elif waiter.is_alive():

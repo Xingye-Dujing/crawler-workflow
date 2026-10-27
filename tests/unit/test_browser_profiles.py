@@ -615,7 +615,7 @@ class TestCrawlerHoldsItsProfile:
         without anyone noticing, which is exactly what the claim "the claim, not the browser,
         is what is under test" rests on.
         """
-        from crawlers.base import Crawler
+        from crawlers.core.crawler import Crawler
 
         class _Probe(Crawler):
             def search(self, keyword, **_kwargs):

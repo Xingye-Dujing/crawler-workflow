@@ -19,8 +19,8 @@ failed crawl.
 import pytest
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-import crawlers.base as base_module
-from crawlers.base import UNDER_TARGET, Crawler
+import crawlers.core.crawler as base_module
+from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.xiaohongshu import XiaohongshuCrawler as Xhs
 from i18n import t
 

@@ -1,7 +1,7 @@
 """Douyin (抖音): DOM-only reads (signed API is not callable), scroll-and-dedupe comments.
 
 Split out of the former ``crawlers/video.py``; the shared video base and the two
-generic row helpers live in :mod:`crawlers.video_base`. Measurements in ``docs/crawler_notes.md``.
+generic row helpers live in :mod:`crawlers.core.video`. Measurements in ``docs/crawler_notes.md``.
 """
 
 import contextlib
@@ -10,12 +10,12 @@ import re
 import time
 from urllib.parse import quote
 
+from crawlers.core.crawler import UNDER_TARGET, PageNotArrivedError
+from crawlers.core.video import VideoCrawler, _stamp
 from i18n import t
 
-from .base import UNDER_TARGET, PageNotArrivedError
 from .engine import feed, popup, times
 from .engine.counters import parse_count
-from .video_base import VideoCrawler, _stamp
 
 logger = logging.getLogger(__name__)
 

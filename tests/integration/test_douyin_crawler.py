@@ -25,9 +25,9 @@ import re
 import pytest
 from selenium.common.exceptions import TimeoutException
 
-import crawlers.base as base_module
-from crawlers.base import UNDER_TARGET, Crawler
+import crawlers.core.crawler as base_module
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_threads
+from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.douyin import (
     DouyinCrawler,
     _author_from_related,

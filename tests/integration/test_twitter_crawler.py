@@ -19,9 +19,9 @@ The card payloads are the shapes measured on the live page, including the
 
 import pytest
 
-import crawlers.base as base_module
-from crawlers.base import Crawler
+import crawlers.core.crawler as base_module
 from crawlers.comments import OK, CommentSession, parse_twitter_replies
+from crawlers.core.crawler import Crawler
 from crawlers.twitter import TwitterCrawler
 from i18n import t
 

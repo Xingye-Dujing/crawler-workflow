@@ -8,9 +8,9 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from config import Config
+from crawlers.core.crawler import Crawler, as_index
 from i18n import t
 
-from .base import Crawler, as_index
 from .engine import times
 
 logger = logging.getLogger(__name__)

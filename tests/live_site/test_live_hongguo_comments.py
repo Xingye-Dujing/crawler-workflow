@@ -25,9 +25,9 @@ import requests
 
 import settings_store
 from crawlers import hongguo
-from crawlers.base import UNDER_TARGET
 from crawlers.comments_base import OK
 from crawlers.comments_hongguo import hg_page_title, hg_series_id
+from crawlers.core.crawler import UNDER_TARGET
 from crawlers.hongguo_harvest import HongguoCommentHarness, find_mitmdump, find_player
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]

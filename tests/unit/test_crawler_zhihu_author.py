@@ -103,7 +103,7 @@ class TestMatrixEntry:
         assert callable(ZhihuCrawler.author) and callable(ZhihuCrawler.search)
 
     def test_a_blank_author_costs_no_navigation(self, monkeypatch):
-        from crawlers.base import Crawler
+        from crawlers.core.crawler import Crawler
 
         monkeypatch.setattr(Crawler, '_create_driver', lambda self, *a, **k: None)
         with pytest.raises(ValueError):

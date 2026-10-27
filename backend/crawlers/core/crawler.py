@@ -16,12 +16,11 @@ from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
 from selenium.webdriver.support.ui import WebDriverWait
 
 from config import Config
+from crawlers.engine import feed, popup
+from crawlers.engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
 from i18n import t
 from settings_store import get_setting
 from utils import machine_deps
-
-from .engine import feed, popup
-from .engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
 
 logger = logging.getLogger(__name__)
 

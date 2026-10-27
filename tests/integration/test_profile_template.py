@@ -21,7 +21,7 @@ import browser_profiles
 import pytest
 
 from crawlers import get_crawler
-from crawlers.base import warm_profile_dir
+from crawlers.core.crawler import warm_profile_dir
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -61,7 +61,7 @@ def _browser_or_skip(what, action):
 def _warm(path: str) -> None:
     """One blank Chrome in *path*, or a skip when this machine has no browser.
 
-    Called straight from :mod:`crawlers.base` rather than through ``browser_profiles``:
+    Called straight from :mod:`crawlers.core.crawler` rather than through ``browser_profiles``:
     the profile module must not own a browser, and the app passes this same function in as
     its launcher, so the template the tier measures is the one the route makes. Waits for
     the write to settle before returning (see :func:`_settle`), so every caller reads a

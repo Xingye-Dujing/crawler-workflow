@@ -23,9 +23,8 @@ checked against) and the page a login starts from.
 
 import logging
 
+from crawlers.core.crawler import Crawler
 from i18n import t
-
-from .base import Crawler
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ Four measurements shape the loop, each in ``docs/crawler_notes.md`` 红果短剧
 
 * **The payload is deferred.** Right after ``driver.get`` the loader key is already there
   but ``content`` has no ``_data`` yet; it fills about two seconds later. So the page is
-  asked with :meth:`~crawlers.base.Crawler.wait_for_first_content` and the crawler never
+  asked with :meth:`~crawlers.core.crawler.Crawler.wait_for_first_content` and the crawler never
   sleeps a fixed number on faith.
 * **A page that will never fill says so immediately.** ``/rank/hot-drama?page=6`` renders
   the layout alone (no ``rank_<slug>/page`` loader key at all, 0 cards) and the browser
@@ -29,9 +29,9 @@ only to undo the mixing.
 import logging
 import re
 
+from crawlers.core.crawler import UNDER_TARGET, Crawler, PageNotArrivedError, as_index
 from i18n import t
 
-from .base import UNDER_TARGET, Crawler, PageNotArrivedError, as_index
 from .engine.counters import first_int, has_count, parse_count
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ class HongguoCrawler(Crawler):
 
         ``target_count`` and ``board`` are the matrix's arguments, named as the matrix names
         them. The cursor is ``{'board', 'page', 'page_url', 'done'}``: the page actually read,
-        never an id list (:meth:`~crawlers.base.Crawler.seed` supplies the ids on resume).
+        never an id list (:meth:`~crawlers.core.crawler.Crawler.seed` supplies the ids on resume).
         """
         board_key, slug, label_key = hongguo_board(board)
         board_label = t(label_key)

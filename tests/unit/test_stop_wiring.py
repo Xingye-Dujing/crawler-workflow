@@ -20,12 +20,13 @@ Two shapes of proof live here:
 """
 
 import ast
+import inspect
 from pathlib import Path
 
 import pytest
 from test_crawler_base import Probe, bare
 
-from crawlers.base import Crawler, CrawlerStopped
+from crawlers.core.crawler import Crawler, CrawlerStopped
 
 CRAWLERS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'crawlers'
 
@@ -153,8 +154,11 @@ class TestStopPredicateIsSingleDefinition:
         """One question, one answer. A platform that overrode ``may_stop`` could make
         its own crawl un-stoppable, which is the bug this whole file audits."""
         overrides = []
+        # The base is excluded by WHO defines Crawler, not by a filename this suite repeats:
+        # the module moved once already, and a hardcoded name turns a move into a false alarm.
+        base_file = Path(inspect.getfile(Crawler)).name
         for path in sorted(CRAWLERS_DIR.rglob('*.py')):
-            if path.name == 'base.py':
+            if path.name == base_file:
                 continue  # the definition itself
             tree = ast.parse(path.read_text(encoding='utf-8'))
             for node in ast.walk(tree):

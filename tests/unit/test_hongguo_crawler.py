@@ -19,10 +19,10 @@ of which a reading of the site suggests:
 import pytest
 
 import crawl_capabilities as capabilities
-import crawlers.base as base_module
+import crawlers.core.crawler as base_module
 import i18n
 from crawlers import hongguo
-from crawlers.base import UNDER_TARGET, Crawler, PageNotArrivedError
+from crawlers.core.crawler import UNDER_TARGET, Crawler, PageNotArrivedError
 
 pytestmark = pytest.mark.unit
 

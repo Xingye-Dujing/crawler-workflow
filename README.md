@@ -195,7 +195,9 @@ crawler_workflow/
 │   ├── crawl_capabilities.py     # 采集矩阵：平台 × 引擎 × 功能 × 字段 × handler（唯一口径）
 │   ├── nodes/                    # 节点插件目录（catalog + context + registry + executors/；目录与执行器/前端白名单互相钉住）
 │   ├── crawlers/                 # 各平台爬虫 + 无站点依赖的机械层 engine/
-│   │   └── catbus.py             # 第二采集后端的会话（继承 Crawler 的流式/落库/水位契约）
+│   │   ├── core/                 # 爬虫基类与共享机械（crawler.py / video.py）
+│   │   └── backends/
+│   │       └── catbus.py         # 第二采集后端的会话（继承 Crawler 的流式/落库/水位契约）
 │   ├── analyzers/                # 分析模块（LLM + ML + BERT）
 │   ├── engine/                   # 工作流引擎：DAG 解析、执行器、日志
 │   ├── services/                 # 续跑存储 / 数据集 / 导出 / 报告 / 可视化 / LaTeX 等

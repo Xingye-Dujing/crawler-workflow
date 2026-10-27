@@ -703,7 +703,7 @@ class TestLiveCrawlerFixture:
         a grey line in a run the user is told must be all-green. Seen for real when the
         device + live tiers ran back to back and a 热榜 case skipped for that reason.
         """
-        from crawlers.base import ProfileUnavailableError
+        from crawlers.core.crawler import ProfileUnavailableError
 
         factory, _events, _made, finish = self._drive(monkeypatch, raises=ProfileUnavailableError('profile held'))
         with pytest.raises(ProfileUnavailableError):

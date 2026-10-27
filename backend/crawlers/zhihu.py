@@ -8,9 +8,9 @@ from urllib.parse import quote
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
+from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from i18n import stop_reason_label, t
 
-from .base import UNDER_TARGET, Crawler, as_index
 from .engine import feed, pagefetch, times
 from .engine.counters import parse_count
 
@@ -504,7 +504,7 @@ class ZhihuCrawler(Crawler):
         # as a license for a shortfall (docs/crawler_notes.md ZHIHU_LIES: a list that stops
         # growing is not proven to be out of supply). Only a *site-attested* end licenses, and
         # this walk has none — so the crawl stays ``end_reason=None`` (the gate is silent) until
-        # the platform surfaces a real end marker. See crawlers/base.py:LICENSED_ENDS.
+        # the platform surfaces a real end marker. See crawlers/core/crawler.py:LICENSED_ENDS.
 
     def _profile_card(self, card, _index: int = 0) -> dict | None:
         """One profile row → a row, with the body unclamped before it is read.

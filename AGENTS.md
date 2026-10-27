@@ -169,7 +169,7 @@ the contract.
   fingerprint with `selenium`/blank **folded out** (the `account`/`model` precedent — unfolded, adding the switch
   would move every saved canvas's fingerprint and 继续 would re-crawl the whole library), so the two backends never
   share a dedupe ledger, a cursor or a watermark scope. CatBus is a subprocess (`services/catbus_bridge.py`,
-  `crawlers/catbus.py`): which cells exist, which columns a row has and which column is its identity are read out of
+  `crawlers/backends/catbus.py`): which cells exist, which columns a row has and which column is its identity are read out of
   the adapter's own `capabilities` manifest — **never copied into a Python table**; and every failure names the
   missing part (no Node / no adapter / Node too old / unreadable manifest / no such cell / no CatBus login) rather
   than answering with an empty table, which a node would settle DONE on. Its login gate is keyed apart

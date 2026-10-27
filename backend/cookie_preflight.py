@@ -8,7 +8,7 @@ run that will not.
 
 **Three answers stay three, because the user's next action differs and a merged one
 costs a wasted re-login.** That split is the whole reason the crawler keeps
-``login_wall`` apart from ``risk_blocked`` (:func:`crawlers.base.Crawler.check_intercept`),
+``login_wall`` apart from ``risk_blocked`` (:func:`crawlers.core.crawler.Crawler.check_intercept`),
 and this module inherits it rather than inventing a second opinion:
 
 ``expired``     the probe page answered with a login wall — the session is dead, and
@@ -131,7 +131,7 @@ def classify_probe(facts: dict) -> str:
 
     The order is the whole point: a failure to observe outranks a wall, because an
     unverifiable page is not evidence of a dead cookie. Whether the page was a wall or
-    risk control is :meth:`crawlers.base.Crawler.check_intercept`'s judgement, and this
+    risk control is :meth:`crawlers.core.crawler.Crawler.check_intercept`'s judgement, and this
     function inherits it rather than re-reading the page.
 
     ``unreachable`` is checked before even ``login_wall``, and this is the one place its

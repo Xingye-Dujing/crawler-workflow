@@ -35,7 +35,7 @@ Everything is offline: the crawler is a scripted recorder, no browser and no net
 import pytest
 
 import crawl_capabilities as capabilities
-from crawlers.base import UNDER_TARGET, as_index
+from crawlers.core.crawler import UNDER_TARGET, as_index
 
 pytestmark = pytest.mark.api
 

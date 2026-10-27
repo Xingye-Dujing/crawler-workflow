@@ -31,7 +31,7 @@ import crawl_gate
 import pytest
 from run_wait import run_finished
 
-from crawlers.base import Crawler
+from crawlers.core.crawler import Crawler
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 

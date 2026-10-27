@@ -46,7 +46,7 @@ import pytest
 from run_wait import run_finished
 
 from config import Config
-from crawlers.base import Crawler, CrawlerStopped, DeadDriver
+from crawlers.core.crawler import Crawler, CrawlerStopped, DeadDriver
 from i18n import t
 from services.run_store import (
     NODE_PARTIAL,

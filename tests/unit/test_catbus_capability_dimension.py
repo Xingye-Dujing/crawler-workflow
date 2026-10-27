@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 import crawl_capabilities as capabilities
-from crawlers import catbus as catbus_module
+from crawlers.backends import catbus as catbus_module
 from services import catbus_bridge as bridge
 
 pytestmark = pytest.mark.unit

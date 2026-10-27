@@ -34,9 +34,9 @@ import logging
 import re
 from urllib.parse import quote
 
+from crawlers.core.crawler import Crawler
 from i18n import t
 
-from .base import Crawler
 from .engine import innertube, times
 from .engine.counters import parse_count
 from .engine.jsonpath import collect, get_in, runs_text

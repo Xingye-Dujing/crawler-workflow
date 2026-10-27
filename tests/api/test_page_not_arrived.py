@@ -2,7 +2,7 @@
 
 The user's complaint this answers was specific: a slow network was blamed on the site.
 The crawler now waits a patient, interruptible while and then raises
-:class:`~crawlers.base.PageNotArrivedError` with what it observed — and the executor's
+:class:`~crawlers.core.crawler.PageNotArrivedError` with what it observed — and the executor's
 job is to turn that into a sentence that says something *to do*, without touching what
 the run record promises. Three things can go wrong there and each is pinned below:
 
@@ -18,7 +18,7 @@ Everything runs against a stub crawler and a stubbed probe: no browser, no socke
 
 import pytest
 
-from crawlers.base import Crawler, PageNotArrivedError
+from crawlers.core.crawler import Crawler, PageNotArrivedError
 from i18n import t
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]

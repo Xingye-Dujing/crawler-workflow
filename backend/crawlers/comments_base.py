@@ -37,7 +37,7 @@ def _strip_tags(html: str) -> str:
     return re.sub(r'\s+', ' ', text).strip()
 
 
-#: Comment timestamps are Beijing time too (see video_base._stamp); pinning the zone keeps a
+#: Comment timestamps are Beijing time too (see ``crawlers.core.video._stamp``); pinning the zone keeps a
 #: crawler on a UTC server from shifting them back eight hours.
 _CST = timezone(timedelta(hours=8))
 

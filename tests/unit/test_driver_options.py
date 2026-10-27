@@ -10,7 +10,7 @@ pages that are only empty because Chrome decided to nap).
 
 import pytest
 
-import crawlers.base as base_module
+import crawlers.core.crawler as base_module
 from crawlers.zhihu import ZhihuCrawler
 
 pytestmark = pytest.mark.unit

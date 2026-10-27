@@ -161,7 +161,7 @@ def live_crawler(cookie_dir_str):
     import crawl_gate
 
     from crawlers import get_crawler
-    from crawlers.base import ProfileUnavailableError
+    from crawlers.core.crawler import ProfileUnavailableError
 
     made = []
 

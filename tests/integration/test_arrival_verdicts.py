@@ -20,7 +20,7 @@ import pytest
 
 from config import Config
 from crawlers import get_crawler
-from crawlers.base import CrawlerStopped
+from crawlers.core.crawler import CrawlerStopped
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 

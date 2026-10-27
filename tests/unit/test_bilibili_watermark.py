@@ -9,7 +9,7 @@ from i18n import get_lang, set_lang
 
 @pytest.fixture()
 def crawler(monkeypatch):
-    monkeypatch.setattr('crawlers.base.Crawler._create_driver', lambda self: None)
+    monkeypatch.setattr('crawlers.core.crawler.Crawler._create_driver', lambda self: None)
     instance = BilibiliCrawler(headless=True)
     instance.driver = None
     instance.CARD_WAIT = 0

@@ -39,12 +39,12 @@ import requests
 
 import crawl_capabilities as capabilities
 from config import Config
+from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
 from i18n import t
 from settings_store import get_setting
 from utils import machine_deps
 from utils.helpers import as_bool
 
-from .base import UNDER_TARGET, CrawlerStopped
 from .comments_base import DEAD, OK
 from .comments_hongguo import hg_comment_rows, hg_page_title, hg_series_id
 

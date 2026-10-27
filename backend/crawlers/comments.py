@@ -40,9 +40,9 @@ import time
 from selenium.common.exceptions import JavascriptException, StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
 
+from crawlers.core.crawler import throttled_sleep
 from i18n import stop_reason_label, t
 
-from .base import throttled_sleep
 from .comments_base import BLOCKED, DEAD, OK, _json_or_none
 from .comments_bilibili import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
 from .comments_douyin import douyin_comment_fields, parse_douyin_threads
@@ -112,7 +112,7 @@ class CommentSession:
         self._driver = driver
         # The crawler whose browser this is, when there is one. Held rather than flattened
         # into the snapshot above because 停止 may *replace* the session under the crawl:
-        # the reaper installs a :class:`~crawlers.base.DeadDriver` once it has had to kill
+        # the reaper installs a :class:`~crawlers.core.crawler.DeadDriver` once it has had to kill
         # the process by PID, and a session that read its own stored reference would go on
         # asking a dead chromedriver — 16.3 seconds per command, measured, one retry ladder
         # per row of a walk that is already over.

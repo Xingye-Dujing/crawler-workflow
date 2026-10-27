@@ -10,7 +10,7 @@ import threading
 
 import browser_profiles
 
-from crawlers.base import warm_profile_dir
+from crawlers.core.crawler import warm_profile_dir
 
 _TEMPLATE_BUILD_LOCK = threading.Lock()
 

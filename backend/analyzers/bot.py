@@ -77,7 +77,7 @@ class BotLikelihoodAnalyzer:
         # outer row bounds the wait to a single row's inner scan.
         for i in range(len(work)):
             if cancel_event is not None and cancel_event.is_set():
-                from crawlers.base import CrawlerStopped
+                from crawlers.core.crawler import CrawlerStopped
 
                 raise CrawlerStopped(t('crawl.stopped'))
             if hashes[i] is None:
