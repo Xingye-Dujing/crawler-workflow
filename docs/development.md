@@ -227,7 +227,7 @@ E6 Cookie 中途失效续跑 —— 只注入 `login_wall` 这一个事实（行
 | `live_quick`（marker） | **`live_site` 的子集：每个可爬平台恰好一条真采集**（哔哩哔哩搜索、微博时间窗搜索、微信正文、小红书卡片、知乎搜索、抖音可见搜索、X 帖子形状、YouTube 无 facts 快路径、微博评论引擎），9 条、每条只取 3~5 行，是改动前后的日常闸门。`tests/unit/test_test_tiers.py` 钉住它必须是 `live_site` 的子集（否则"全量"会在没人注意时变小）、矩阵里每个平台都必须被某条 quick 用例真触及、总数不超过预算，并禁止整模块打这个标记（那样短层会长回长层）。`TestLiveCrawlerFixture` 另测**真机层脚手架本身**：一条用例向同一平台要第二个浏览器时，fixture 必须先关掉上一个并把这一轮交还——锁不可重入，否则会卡在 `crawl_gate` 里等 900 秒（没有浏览器弹出、没有输出，看起来只像"这条用例很慢"），有这条断言在，那种卡死当场就是红 | Chrome + 已存 Cookie |
 
 ```bash
-# 快速套件（默认，约 70 秒，CI 友好；上面三层未打 marker 的部分）
+# 快速套件（默认，约 7~8 分钟、8.1k 用例；上面三层未打 marker 的部分）
 python -m pytest -q
 
 # 设备套件（真 Chrome + 真 Ollama）
@@ -259,13 +259,25 @@ python -m pytest -q --cov=backend --cov-report=term
 话）这一步会直接失败**（`os error 5`），于是钩子静默什么都没做，而编辑看起来是成功的——格式债就这样
 一点点积累起来。实测过一次：因为 `ruff` 连缓存都写不进去而整体退出，6 处超长行是在提交前才被发现的。
 
-所以格式与 lint 由 `.github/workflows/ci.yml` 兜底（CI 上跑 `ruff check` 与 `ruff format --check`），
-本地提交前请**显式**跑一遍：
+所以格式与 lint 由 `.github/workflows/ci.yml` 兜底。它现在跑：`ruff check`、`ruff format --check`、
+**两档 pylint**（产品档 / tests 档，各一次 `--rcfile`）、**fast 全量**，以及一个用真 Chrome 跑
+`-m integration` 的 `browser` job；本地提交前请**显式**跑一遍：
 
 ```bash
 .venv/Scripts/ruff.exe check backend/ tests/
 .venv/Scripts/ruff.exe format --check backend/ tests/
 ```
+
+**"CI 有没有覆盖某一步"只能查运行历史，不能读本地 yaml**（读文件会把"计划要做"说成"已经在做"——
+本项目真的这样错过一次）。仓库公开，所以不需要 `gh` 也不需要登录：
+
+```bash
+curl -s https://api.github.com/repos/Xingye-Dujing/crawler-workflow/actions/runs | head
+curl -s https://api.github.com/repos/Xingye-Dujing/crawler-workflow/actions/runs/<id>/jobs
+```
+
+第二条给出每个 job 的 `steps[].name`，那就是 CI 实际执行的步骤清单。推送之后要复核新步骤是否真跑，
+用的也是这两条命令。
 
 可选依赖（`bert` 模式需要的 torch/transformers，几个 GB，不装也能正常用其它所有功能）见
 `requirements-optional.txt` 开头的说明。
