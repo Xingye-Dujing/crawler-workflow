@@ -346,6 +346,10 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   关系 ⇒ 子进程把清单写进 `tmp_path` 的文件、父进程读该文件（`assert report.is_file()` 仍然点名机制）。
   本地 9 passed，待 runner 复验。教训写进 `docs/agent_practices.md`：harness 事实只能从 harness 那儿问出来，
   这条花了两次 CI 运行，因为本机任何配置都复现不出来。
+- **runner 给的后续数**：`bb575fa`（douyin rows 拆分）= **1 failed / 8148 passed**，而那唯一一条**正是**
+  `TestBootImportBudget` —— 即 douyin 拆分**没有新增任何失败**（passed 与上一条同为 8148），
+  修它的传输改动在 `2d688ae`。`3c137c6`/`2d688ae`/`799826e`（overlay mixin）仍在跑。
+  **闭 #38 的判据 = runner 上 0 failed**；到了就把上面两条改成"已闭环"，别把本地绿当证据。
 - **#38 五类已全部本地落地**（待 runner 复验）：① 13 条 bert 用例原先只在这台机装了 torch 时才绿——
   `bert_runtime()` 问的是机器，CI 无 torch 而有 onnxruntime/tokenizers，于是答 `'onnx'` 并**正确地**拒绝
   一个不是目录的模型名；改为用例自己声明描述的是哪个运行时，并用一次性件把本机改成 CI 的包集合，
