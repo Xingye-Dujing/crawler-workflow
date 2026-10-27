@@ -13,11 +13,11 @@ No browser is bought here: the class lookup is stubbed and the factory's decisio
 the object it was handed.
 """
 
-import browser_profiles
 import pytest
+from sessions import profiles
+from sessions.cookies import CookieManager
 
 import crawlers
-from services.cookie_manager import CookieManager
 
 pytestmark = [pytest.mark.unit]
 
@@ -37,11 +37,11 @@ class _StubCrawler:
 def stub_factory(monkeypatch):
     """Answer every platform with the stub, and keep the profile questions off the disk."""
     monkeypatch.setattr(crawlers, 'crawler_class', lambda platform: _StubCrawler)
-    monkeypatch.setattr(browser_profiles, 'profile_dir_for', lambda platform, enabled=None, account='': None)
-    monkeypatch.setattr(browser_profiles, 'needs_refresh', lambda platform, path, account='': False)
-    monkeypatch.setattr(browser_profiles, 'is_used', lambda platform, account='': True)
-    monkeypatch.setattr(browser_profiles, 'file_stamp', lambda path: 'stamp' if path else '')
-    monkeypatch.setattr(browser_profiles, 'mark_used', lambda *a, **k: None)
+    monkeypatch.setattr(profiles, 'profile_dir_for', lambda platform, enabled=None, account='': None)
+    monkeypatch.setattr(profiles, 'needs_refresh', lambda platform, path, account='': False)
+    monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': True)
+    monkeypatch.setattr(profiles, 'file_stamp', lambda path: 'stamp' if path else '')
+    monkeypatch.setattr(profiles, 'mark_used', lambda *a, **k: None)
 
 
 @pytest.mark.parametrize('account', ['', '   ', 'default', 'DEFAULT'])

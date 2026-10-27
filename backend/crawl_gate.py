@@ -2,7 +2,7 @@
 
 Two different reasons a pair of same-platform crawls must not start together:
 
-* :mod:`browser_profiles` stops two *browsers* from being created inside one profile
+* :mod:`sessions.profiles` stops two *browsers* from being created inside one profile
   directory at the same instant — a Chrome-level fact, and it only exists while a
   profile is in use;
 * the site itself answers two searches from one account within one second the way
@@ -37,10 +37,11 @@ import random
 import threading
 import time
 
+from sessions.cookies import CookieManager
+
 import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
-from services.cookie_manager import CookieManager
 from settings_store import get_setting
 
 #: One lock per platform, created on first use and never removed: a workflow that

@@ -4,18 +4,18 @@ The file a platform's crawl is planted from is one of two places a session can l
 and this endpoint only ever touches one of them. Every test here exists because the
 plausible reading of 「删除 Cookie」 is "I am logged out now" — which is true of a
 throwaway browser and false of a profile that has already logged in inside itself
-(``browser_profiles`` imports the file once and never plants it again).
+(``sessions.profiles`` imports the file once and never plants it again).
 """
 
 import contextlib
 import os
 import shutil
 
-import browser_profiles
 import pytest
+from sessions import profiles
+from sessions.cookies import CookieManager
 
 import i18n
-from services.cookie_manager import CookieManager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -41,7 +41,7 @@ def clean_jar(app_module):
     for platform in CookieManager.PLATFORMS:
         with contextlib.suppress(FileNotFoundError):
             app_module.cookie_manager.delete(platform)
-        shutil.rmtree(browser_profiles.platform_dir(platform), ignore_errors=True)
+        shutil.rmtree(profiles.platform_dir(platform), ignore_errors=True)
     yield
 
 
@@ -110,7 +110,7 @@ class TestDelete:
         service already logs 「已删除」, so the endpoint's own line is the caveat about
         the profile or nothing."""
         saved('youtube')
-        browser_profiles.mark_used('youtube', imported=False)
+        profiles.mark_used('youtube', imported=False)
         app_module.execution_state['logs'] = []
         assert client.post('/api/cookies/delete', json={'platform': 'youtube'}).status_code == 200
         said = [line for line in app_module.execution_state['logs'] if _names(line, 'youtube')]
@@ -152,7 +152,7 @@ class TestDelete:
 
     def test_a_platform_whose_profile_has_logged_in_keeps_its_session(self, client, app_module, saved):
         saved('youtube')
-        browser_profiles.mark_used('youtube', imported=False)
+        profiles.mark_used('youtube', imported=False)
         body = client.post('/api/cookies/delete', json={'platform': 'youtube'}).get_json()
         assert body['profile_holds'] is True
         assert body['message'].count('\n') == 1, 'the caveat is a second line of the same answer'
@@ -162,18 +162,18 @@ class TestDelete:
         """The scope test, measured on the filesystem rather than on a string: this
         endpoint removes one file, and the browser profile keeps whatever it holds."""
         saved('twitter')
-        browser_profiles.mark_used('twitter', imported=False)
-        marker = browser_profiles.marker_path('twitter')
+        profiles.mark_used('twitter', imported=False)
+        marker = profiles.marker_path('twitter')
         assert client.post('/api/cookies/delete', json={'platform': 'twitter'}).status_code == 200
-        assert browser_profiles.is_used('twitter') is True
+        assert profiles.is_used('twitter') is True
         assert os.path.exists(marker)
 
     def test_the_switches_off_still_reports_honestly(self, client, app_module, saved, monkeypatch):
         """With profiles disabled the file is the whole session, and a warning about a
         profile that is not in use would send the user hunting for one."""
-        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: False)
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
         saved('zhihu')
-        browser_profiles.mark_used('zhihu', imported=False)
+        profiles.mark_used('zhihu', imported=False)
         body = client.post('/api/cookies/delete', json={'platform': 'zhihu'}).get_json()
         assert body['profile_holds'] is False
 
@@ -202,14 +202,14 @@ class TestDeleteProfile:
     def test_the_named_profile_dir_goes_and_the_cookie_file_stays(self, client, app_module):
         """The independence that makes this a separate action: profile deleted, login file intact."""
         self._named_login(app_module)
-        browser_profiles.mark_used('zhihu', imported=False, account='work')
-        path = browser_profiles.platform_dir('zhihu', 'work')
+        profiles.mark_used('zhihu', imported=False, account='work')
+        path = profiles.platform_dir('zhihu', 'work')
         assert os.path.isdir(path)
         response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': 'work'})
         assert response.status_code == 200, response.get_json()
         assert response.get_json()['profile_deleted'] is True
         assert not os.path.isdir(path), 'the device directory must be gone'
-        assert not browser_profiles.is_used('zhihu', account='work')
+        assert not profiles.is_used('zhihu', account='work')
         assert app_module.cookie_manager.load('zhihu', 'work'), 'delete-Profile must not touch the cookie file'
 
     def test_the_default_account_is_refused_because_its_folder_is_the_platform_root(self, client, app_module):
@@ -221,7 +221,7 @@ class TestDeleteProfile:
 
     def test_a_device_that_was_never_created_is_answered_as_absent(self, client, app_module):
         self._named_login(app_module, account='neveropened')
-        path = browser_profiles.platform_dir('zhihu', 'neveropened')
+        path = profiles.platform_dir('zhihu', 'neveropened')
         assert not os.path.isdir(path), 'this test is about a profile that does not exist'
         response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': 'neveropened'})
         assert response.status_code == 404
@@ -229,9 +229,9 @@ class TestDeleteProfile:
 
     def test_a_profile_held_by_a_live_browser_is_not_torn_out(self, client, app_module):
         self._named_login(app_module, account='busy')
-        browser_profiles.mark_used('zhihu', imported=False, account='busy')
-        path = browser_profiles.platform_dir('zhihu', 'busy')
-        held = browser_profiles.lock_for(path)
+        profiles.mark_used('zhihu', imported=False, account='busy')
+        path = profiles.platform_dir('zhihu', 'busy')
+        held = profiles.lock_for(path)
         assert held.acquire(blocking=False)
         try:
             response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': 'busy'})

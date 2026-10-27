@@ -7,10 +7,10 @@ from ``state.cookie_manager``. Paths unchanged; app-level ``before_request`` / C
 """
 
 from flask import Blueprint, jsonify
+from sessions.cookies import CookieManager
 from state import cookie_manager
 
 import crawl_capabilities as capabilities
-from services.cookie_manager import CookieManager
 
 bp = Blueprint('capabilities', __name__)
 

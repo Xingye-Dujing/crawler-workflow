@@ -157,7 +157,7 @@ class TestTheCoreLayering:
 
     #: The selenium names that mean "this module drives a window". ``selenium.common.exceptions`` and
     #: ``selenium.webdriver.support`` stay legal in the base class: reading a timeout is not assembly.
-    _ASSEMBLY_MODULE_ROOTS = ('selenium.webdriver.chrome', 'selenium.webdriver.remote', 'browser_profiles')
+    _ASSEMBLY_MODULE_ROOTS = ('selenium.webdriver.chrome', 'selenium.webdriver.remote', 'sessions.profiles')
     #: Call names that mean "this module is configuring or launching a browser itself".
     _ASSEMBLY_CALLEES = (
         'add_argument',

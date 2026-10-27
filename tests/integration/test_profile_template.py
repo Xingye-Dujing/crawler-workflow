@@ -17,9 +17,9 @@ import contextlib
 import os
 import time
 
-import browser_profiles
 import pytest
 from device_policy import REQUIRE_BROWSER_ENV, unavailable
+from sessions import profiles
 
 from crawlers import get_crawler
 from crawlers.core.crawler import warm_profile_dir
@@ -31,7 +31,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 def rooted(tmp_path, monkeypatch):
     root = str(tmp_path / 'profiles')
     monkeypatch.setattr(
-        browser_profiles,
+        profiles,
         'get_setting',
         lambda key: {'use_browser_profile': True, 'browser_profile_dir': root}[key],
     )
@@ -62,7 +62,7 @@ def _browser_or_skip(what, action):
 def _warm(path: str) -> None:
     """One blank Chrome in *path*, or a skip when this machine has no browser.
 
-    Called straight from :mod:`crawlers.core.crawler` rather than through ``browser_profiles``:
+    Called straight from :mod:`crawlers.core.crawler` rather than through ``sessions.profiles``:
     the profile module must not own a browser, and the app passes this same function in as
     its launcher, so the template the tier measures is the one the route makes. Waits for
     the write to settle before returning (see :func:`_settle`), so every caller reads a
@@ -90,11 +90,11 @@ def _stores_seen(path: str) -> list:
     seen = []
     for walk_root, _dirs, files in os.walk(path):
         for name in files:
-            table = browser_profiles._SESSION_TABLES.get(name)
+            table = profiles._SESSION_TABLES.get(name)
             if table is None:
                 continue
             full = os.path.join(walk_root, name)
-            seen.append((os.path.relpath(full, path), browser_profiles._store_row_count(full, table)))
+            seen.append((os.path.relpath(full, path), profiles._store_row_count(full, table)))
     return sorted(seen)
 
 
@@ -144,31 +144,31 @@ def test_a_blank_chrome_leaves_a_directory_with_no_login_in_it(rooted):
     This is also the measurement that moved the check from names to rows: a blank first
     run writes those names by itself, so the only honest question is how much is in them.
     """
-    source = browser_profiles.template_dir()
+    source = profiles.template_dir()
     os.makedirs(source, exist_ok=True)
     _warm(source)
-    made = [name for name in os.listdir(source) if name != browser_profiles.MARKER]
+    made = [name for name in os.listdir(source) if name != profiles.MARKER]
     assert made, f'Chrome wrote nothing into the directory it was given: {made}'
     seen = _stores_seen(source)
     assert seen, (
         f'no Chrome store was written at all, so the clean verdict measured nothing: {sorted(_all_names(source))}'
     )
-    assert browser_profiles.verify_pristine() == '', (
+    assert profiles.verify_pristine() == '', (
         f'a blank first run left session material behind: {seen} / {sorted(_all_names(source))}'
     )
 
 
 def test_the_generated_template_is_the_one_the_tool_trusts(rooted):
     """The two claims are the same check: what the builder verifies, the seeder obeys."""
-    source = browser_profiles.template_dir()
+    source = profiles.template_dir()
     os.makedirs(source, exist_ok=True)
     _warm(source)
-    assert browser_profiles.template_exists() is True
-    target = browser_profiles.platform_dir('bilibili', 'fresh')
+    assert profiles.template_exists() is True
+    target = profiles.platform_dir('bilibili', 'fresh')
     os.makedirs(target, exist_ok=True)
-    copied = browser_profiles.seed_new_profile(target)
+    copied = profiles.seed_new_profile(target)
     assert copied > 0, 'a clean template refused to seed a new account'
-    assert browser_profiles.MARKER not in os.listdir(target), os.listdir(target)
+    assert profiles.MARKER not in os.listdir(target), os.listdir(target)
 
 
 def test_a_seeded_directory_is_a_profile_a_real_browser_accepts(rooted):
@@ -178,13 +178,13 @@ def test_a_seeded_directory_is_a_profile_a_real_browser_accepts(rooted):
     proof is Chrome doing what it does with a real profile: writing more of its own
     files, and leaving the marker to no one until the tool itself records a use.
     """
-    source = browser_profiles.template_dir()
+    source = profiles.template_dir()
     os.makedirs(source, exist_ok=True)
     _warm(source)
-    target = browser_profiles.platform_dir('bilibili', 'acct1')
+    target = profiles.platform_dir('bilibili', 'acct1')
     os.makedirs(target, exist_ok=True)
     before = sorted(os.listdir(target))
-    assert browser_profiles.seed_new_profile(target) > 0
+    assert profiles.seed_new_profile(target) > 0
     assert sorted(os.listdir(target)) != before, 'nothing was seeded'
     crawler = _browser_or_skip(
         'crawl', lambda: get_crawler('bilibili', headless=True, use_profile=True, account='acct1', cookie_dir=None)
@@ -199,20 +199,20 @@ def test_a_seeded_directory_is_a_profile_a_real_browser_accepts(rooted):
     finally:
         crawler.close()
     # The marker is written by the tool around a real use, never inherited from the copy.
-    assert browser_profiles.is_used('bilibili', 'acct1') is True
+    assert profiles.is_used('bilibili', 'acct1') is True
 
 
 def test_a_directory_that_has_been_used_is_never_reseeded(rooted):
-    source = browser_profiles.template_dir()
+    source = profiles.template_dir()
     os.makedirs(source, exist_ok=True)
     _warm(source)
-    target = browser_profiles.platform_dir('bilibili', 'acct2')
+    target = profiles.platform_dir('bilibili', 'acct2')
     os.makedirs(target, exist_ok=True)
-    assert browser_profiles.seed_new_profile(target) > 0
+    assert profiles.seed_new_profile(target) > 0
     settled = sorted(os.listdir(target))
     with open(os.path.join(target, 'First Run'), 'w', encoding='utf-8') as handle:
         handle.write('this device has its own history now')
-    assert browser_profiles.seed_new_profile(target) == 0
+    assert profiles.seed_new_profile(target) == 0
     assert sorted(os.listdir(target)) == settled, 'a second seed changed a live device'
     with open(os.path.join(target, 'First Run'), encoding='utf-8') as handle:
         assert handle.read() == 'this device has its own history now'

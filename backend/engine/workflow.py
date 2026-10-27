@@ -3,9 +3,10 @@
 import logging
 from collections import defaultdict, deque
 
-import cookie_preflight
 from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
 from nodes.labels import node_label
+from sessions import preflight
+from sessions.cookies import CookieManager
 
 import crawl_capabilities as capabilities
 from config import Config
@@ -13,7 +14,6 @@ from i18n import t
 from services.biblio_fuse import collect_errors as fuse_param_errors
 from services.biblio_schema import collect_errors as biblio_param_errors
 from services.chart_contracts import NO_X_TYPES
-from services.cookie_manager import CookieManager
 from utils.helpers import as_bool, platform_for, split_urls
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     The 账号 field is not a choice from a fixed list, so :func:`
     capabilities.unoffered_selections` cannot judge it: it names a *session*, and the
     question is whether this machine can produce that session right now. Answered by
-    :func:`cookie_preflight.has_session_to_test`, the same question the pre-run probe
+    :func:`preflight.has_session_to_test`, the same question the pre-run probe
     asks, because two definitions of "is a login here" is how a valid session gets
     called missing on one side and a dead one accepted on the other.
 
@@ -115,7 +115,7 @@ def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     Selenium session the crawl will never read, and refusing it for having no cookie file would block
     a run whose login lives in CatBus' own account directory — which this app neither reads nor
     writes. The gate that does answer for it is the preflight's ``backend`` branch
-    (:func:`cookie_preflight._probe_catbus`), asked of the adapter that can actually reply.
+    (:func:`preflight._probe_catbus`), asked of the adapter that can actually reply.
     """
     if capabilities.is_catbus(params):
         return []
@@ -123,7 +123,7 @@ def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     manager = CookieManager(Config.COOKIE_DIR)
     out = []
     for platform in dict.fromkeys(str(p or '').strip() for p in platforms if str(p or '').strip()):
-        if not cookie_preflight.has_session_to_test(platform, account=account):
+        if not preflight.has_session_to_test(platform, account=account):
             out.append(
                 t(
                     'engine.source_no_cookie_account',

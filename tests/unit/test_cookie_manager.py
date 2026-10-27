@@ -1,4 +1,4 @@
-"""Tests for services/cookie_manager.py — persisted browser logins.
+"""Tests for services/cookies.py — persisted browser logins.
 
 A cookie file is a path built from a client-supplied string, so the security
 edge matters more than the happy path: the platform name is whitelisted, and
@@ -10,9 +10,9 @@ import json
 import os
 
 import pytest
+from sessions.cookies import CookieManager
 
 import i18n
-from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
 

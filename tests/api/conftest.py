@@ -1,7 +1,7 @@
 """API-test helpers layered on the shared ``client`` fixture from tests/conftest.py."""
 
-import browser_profiles
 import pytest
+from sessions import profiles
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def profiles_off(monkeypatch):
     The tests ABOUT the plant stub the browser factory instead — see
     ``test_cookie_save_plants_profile.py`` — because for those the launch is the subject.
     """
-    monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: False)
+    monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
 
 
 @pytest.fixture

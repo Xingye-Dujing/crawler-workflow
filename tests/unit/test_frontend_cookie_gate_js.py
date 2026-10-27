@@ -750,7 +750,7 @@ class TestNoSecondCookieGate:
 
     It used to fetch ``/api/cookies/status`` and refuse any source node whose platform was
     not ``true`` there. That map is keyed by platform and answers for the DEFAULT account
-    only (``app.py``: ``cookie_manager.exists(platform)``), and it is built from
+    only (``app.py``: ``cookies.exists(platform)``), and it is built from
     ``CookieManager.PLATFORMS`` — so it refused a node on a saved named account, and
     refused wechat for a key that does not exist at all.
     """

@@ -232,11 +232,12 @@ def seeded_logins(data_root):
     started" — which is exactly how two quiet-console cases failed the first time this
     fixture ran beside them.
     """
+    from sessions.cookies import CookieManager
+
     from config import Config
-    from services.cookie_manager import CookieManager
 
     manager = CookieManager(Config.COOKIE_DIR)
-    saver = logging.getLogger('services.cookie_manager')
+    saver = logging.getLogger('sessions.cookies')
     added = [p for p in CookieManager.PLATFORMS if not manager.exists(p)]
     before = saver.level
     saver.setLevel(logging.WARNING)
@@ -395,7 +396,7 @@ def clean_globals(request):
     # across threads. Left alone, one test's 「expired」 would answer the next test's
     # request without any probe having run in it, which is exactly the kind of
     # passing-without-measuring this suite refuses.
-    gate = sys.modules.get('cookie_preflight')
+    gate = sys.modules.get('sessions.preflight')
     if gate is not None:
         gate.reset()
     # The same leak one layer down: 真排队 arms a per-platform cooldown when a crawl

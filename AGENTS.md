@@ -297,7 +297,7 @@ the contract.
   question asked once: `_account_session_errors` refuses when `has_session_to_test` finds neither that account's cookie
   file *nor* a carrying profile — **blank IS an account (默认账号), not a wildcard.** Every account has one name and one
   spelling: the default is `default` (never a blank in the box), folded at `CookieManager.key`/`path_segment` (`''` ⇄
-  `default`, lowercase always), so `browser_profiles`/preflight/JS box route through that fold; candidate list and a new
+  `default`, lowercase always), so `sessions.profiles`/preflight/JS box route through that fold; candidate list and a new
   node's preselection are both `CookieManager.accounts_in_order`. **A new settings key needs all four:** the bool branch
   in `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 

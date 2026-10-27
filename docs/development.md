@@ -18,10 +18,13 @@ crawler_workflow/
 │   ├── state.py                  # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
 │   ├── stores.py                 # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
 │   ├── transport.py              # Ollama/OpenRouter 传输选择与「本机端口没人听」拒绝
-│   ├── profiles.py               # Chrome profile 模板与登录副本（Cookie 播种）
-│   ├── browser_profiles.py       # 各平台登录 profile 根与「这个抓取有没有登录」判定
-│   ├── cookie_preflight.py       # 运行前 Cookie 预检：哪些模式需要登录态
 │   ├── crawl_gate.py             # 采集前置闸门（登录墙/风控判定入口）
+│   ├── sessions/                 # 登录态域（2026-10-27 从根目录与 services/ 合成）
+│   │   ├── cookies.py            # 具名 Cookie 罐：data/cookies/<平台>@<账号>.json 与账号折叠规则
+│   │   ├── flow.py               # 各平台 Cookie 的用途/获取步骤/入口链接白名单
+│   │   ├── profiles.py           # 各账号一个 Chrome user-data-dir：布局、新鲜度、一把锁挡住两次采集同开一台设备
+│   │   ├── template.py           # 谁可以重建那份 pristine 设备目录（浏览器启动器由外面递进来）
+│   │   └── preflight.py          # 运行前 Cookie 预检：哪些模式需要登录态
 │   ├── api/                      # Flask Blueprint：按域拆出的路由簇（17 个已注册 + 2 个共享工具）
 │   │   ├── http.py               # 共享请求工具（_json_body/_bad_body/_safe_int/_bad_param 等）
 │   │   ├── resolution.py         # 数据帧解析（_resolve_dataframe/_resolve_payload_dataframe/NoRunDataError）
@@ -107,8 +110,6 @@ crawler_workflow/
 │   │   ├── run_store.py          # 断点续跑核心：运行/节点/行/指纹/LLM缓存/运行→文件台账（runs.db）
 │   │   ├── dataset_store.py      # 上传文件持久化与工作流引用（datasets.db）
 │   │   ├── stats.py              # 情感/倾向性统计服务
-│   │   ├── cookie_manager.py     # Cookie 管理
-│   │   ├── cookie_flow.py        # 各平台 Cookie 的用途/获取步骤/入口链接白名单
 │   │   ├── workflow_manager.py   # 工作流持久化
 │   │   ├── exporter.py           # 通用多格式导出服务（Output 节点）
 │   │   ├── export_browser.py     # 导出目录的读取侧：列表/下载/删除与路径安全

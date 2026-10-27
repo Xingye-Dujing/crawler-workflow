@@ -19,11 +19,11 @@ import os
 import re
 import time
 
-import browser_profiles
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
+from sessions import profiles
 
 from config import Config
 from crawlers.core.faults import ProfileUnavailableError
@@ -331,7 +331,7 @@ def claim_profile(profile_dir: str | None, abort):
     if not profile_dir:
         return None
     started = time.monotonic()
-    lock = browser_profiles.acquire_profile(profile_dir, abort=abort)
+    lock = profiles.acquire_profile(profile_dir, abort=abort)
     if lock is None:
         if abort is not None and abort():
             # Not a stuck profile — the user stopped this run while it queued.
@@ -351,4 +351,4 @@ def claim_profile(profile_dir: str | None, abort):
 
 def release_profile(lock) -> None:
     """Give the profile back. Safe to call with ``None`` (a throwaway session never claimed one)."""
-    browser_profiles.release_profile(lock)
+    profiles.release_profile(lock)

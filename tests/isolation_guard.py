@@ -32,7 +32,7 @@ PROTECTED_DIRS = (REPO_ROOT / 'data', REPO_ROOT / 'logs')
 
 #: Inside those, the subtree that is not walked file by file. A Chrome profile holds tens of
 #: thousands of files that only its owning browser ever touches; recording each profile directory
-#: and the files at its top (``browser_profiles`` writes its marker there) catches a crawler that
+#: and the files at its top (``sessions.profiles`` writes its marker there) catches a crawler that
 #: ignored the redirect, and walking the rest would cost more than the check is worth.
 PROTECTED_SHALLOW = 'data/chrome_profile'
 

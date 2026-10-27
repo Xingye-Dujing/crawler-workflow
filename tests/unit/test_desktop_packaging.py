@@ -409,14 +409,19 @@ class TestTheBuildKnowsEveryPackage:
 
     def test_every_stated_module_still_exists(self):
         """Root modules are named one by one (they are imported lazily or from the launcher), so a
-        moved file would leave a name that resolves to nothing and the loss is silent."""
+        moved file would leave a name that resolves to nothing and the loss is silent.
+
+        A dotted name is resolved by path (``sessions.profiles`` → ``backend/sessions/profiles.py``),
+        because the domain packages are stated the same way: the point is that the name the spec ships
+        must be a file that exists, not that it must sit at the top of ``backend/``.
+        """
         spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
         backend = REPO / 'backend'
-        missing = {
-            name
-            for name in self._stated(spec)
-            if not (backend / f'{name}.py').is_file() and not (PACKAGING / f'{name}.py').is_file()
-        }
+        missing = set()
+        for name in self._stated(spec):
+            relative = f'{name.replace(".", "/")}.py'
+            if not (backend / relative).is_file() and not (PACKAGING / relative).is_file():
+                missing.add(name)
         assert missing == set(), f'the spec states hidden imports that no longer exist: {sorted(missing)}'
 
 

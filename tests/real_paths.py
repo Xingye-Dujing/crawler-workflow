@@ -7,7 +7,7 @@ run-level case would then crawl anonymous and read the login wall as a code fail
 real directory is named here, once, by absolute path, and every live file imports it.
 
 The "does it exist" question is answered by the product's own
-:class:`services.cookie_manager.CookieManager` rather than by a re-implementation of the file
+:class:`services.cookies.CookieManager` rather than by a re-implementation of the file
 format: that is what keeps a named-account jar (``zhihu@work_cookies.json``) understood the same
 way in the tier and in the panel. AGENTS states the rule this file exists to honour — a second
 list, or a second opinion about one storage path, is the thing that drifts.
@@ -20,7 +20,7 @@ conftest puts it there at its own import, which is also how :mod:`run_wait` and
 from functools import lru_cache
 from pathlib import Path
 
-from services.cookie_manager import CookieManager
+from sessions.cookies import CookieManager
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

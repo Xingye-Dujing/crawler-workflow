@@ -19,14 +19,13 @@ import shutil
 import threading
 from concurrent.futures import Future
 
-import browser_profiles
-import cookie_preflight
 import pytest
+from sessions import preflight, profiles
+from sessions.cookies import CookieManager
 
 import i18n
 from config import Config
 from services import catbus_bridge
-from services.cookie_manager import CookieManager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -57,8 +56,8 @@ class _Probes:
 @pytest.fixture
 def probes(monkeypatch):
     made = _Probes()
-    monkeypatch.setattr(cookie_preflight, '_probe_live', made)
-    cookie_preflight.reset()
+    monkeypatch.setattr(preflight, '_probe_live', made)
+    preflight.reset()
     return made
 
 
@@ -75,7 +74,7 @@ def clean_jar(app_module):
     for platform in CookieManager.PLATFORMS:
         with contextlib.suppress(FileNotFoundError):
             app_module.cookie_manager.delete(platform)
-        shutil.rmtree(browser_profiles.platform_dir(platform), ignore_errors=True)
+        shutil.rmtree(profiles.platform_dir(platform), ignore_errors=True)
     yield
 
 
@@ -98,14 +97,14 @@ def with_cookie(app_module):
 
 def _use_profile(monkeypatch, enabled):
     """Pin the profile question without touching the user's settings file."""
-    monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: bool(enabled))
+    monkeypatch.setattr(profiles, 'is_enabled', lambda: bool(enabled))
 
 
 class TestVerdicts:
     def test_a_login_page_is_the_only_answer_called_expired(self, probe_zhihu):
         probe_zhihu.answer = {'login_wall': True, 'risk_blocked': False}
-        verdict = cookie_preflight.probe('zhihu')
-        assert verdict['state'] == cookie_preflight.EXPIRED
+        verdict = preflight.probe('zhihu')
+        assert verdict['state'] == preflight.EXPIRED
         assert verdict['blocking'] is True
 
     def test_risk_control_is_never_reported_as_a_dead_cookie(self, probe_zhihu):
@@ -113,29 +112,29 @@ class TestVerdicts:
         behind it may be perfect. The crawler keeps those two facts apart, and this
         module may not merge them back together."""
         probe_zhihu.answer = {'login_wall': False, 'risk_blocked': True}
-        verdict = cookie_preflight.probe('zhihu')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        verdict = preflight.probe('zhihu')
+        assert verdict['state'] == preflight.UNKNOWN
         assert verdict['blocking'] is False
         assert '风控' in verdict['detail'] or 'risk' in verdict['detail'].lower()
 
     def test_a_browser_that_would_not_start_is_no_opinion(self, probes, with_cookie):
         with_cookie('weibo')
         probes.answer = {'error': 'chromedriver.exe not found'}
-        verdict = cookie_preflight.probe('weibo')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        verdict = preflight.probe('weibo')
+        assert verdict['state'] == preflight.UNKNOWN
         assert verdict['blocking'] is False
         assert 'chromedriver' in verdict['detail'], 'the reason the user sees must be the reason it failed'
 
     def test_a_page_that_came_back_as_content_is_valid(self, probes, with_cookie):
         with_cookie('bilibili')
-        assert cookie_preflight.probe('bilibili')['state'] == cookie_preflight.VALID
+        assert preflight.probe('bilibili')['state'] == preflight.VALID
 
     def test_wechat_is_never_blocking_because_it_needs_no_session(self, probes):
         """WeChat is crawled from public article pages. A gate that demanded a
         cookie there would refuse a crawl that has never used one — and it must
         refuse to open a browser to find that out."""
-        verdict = cookie_preflight.probe('wechat')
-        assert verdict['state'] == cookie_preflight.NO_LOGIN
+        verdict = preflight.probe('wechat')
+        assert verdict['state'] == preflight.NO_LOGIN
         assert verdict['blocking'] is False
         assert probes.calls == []
 
@@ -143,14 +142,14 @@ class TestVerdicts:
         """Capture-only platforms are in the cookie registry and not the crawl
         matrix, so the honest answer is 「not crawlable」 — which blocks nothing,
         because validation already refused the node before this ran."""
-        verdict = cookie_preflight.probe('instagram')
-        assert verdict['state'] == cookie_preflight.NOT_CRAWLABLE
+        verdict = preflight.probe('instagram')
+        assert verdict['state'] == preflight.NOT_CRAWLABLE
         assert verdict['blocking'] is False
         assert probes.calls == []
 
     def test_a_name_nothing_knows_is_answered_without_a_browser(self, probes):
-        verdict = cookie_preflight.probe('tumblr')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        verdict = preflight.probe('tumblr')
+        assert verdict['state'] == preflight.UNKNOWN
         assert probes.calls == []
 
     def test_no_file_and_no_profile_leaves_nothing_to_probe(self, probes, monkeypatch, app_module):
@@ -158,8 +157,8 @@ class TestVerdicts:
         absent and no browser has ever held the platform's session."""
         app_module.cookie_manager.delete('xiaohongshu')
         _use_profile(monkeypatch, True)
-        verdict = cookie_preflight.probe('xiaohongshu')
-        assert verdict['state'] == cookie_preflight.NO_COOKIE
+        verdict = preflight.probe('xiaohongshu')
+        assert verdict['state'] == preflight.NO_COOKIE
         assert verdict['blocking'] is True
         assert probes.calls == []
 
@@ -169,8 +168,8 @@ class TestVerdicts:
         「没有 Cookie」 there would refuse a run that was about to work."""
         app_module.cookie_manager.delete('weibo')
         _use_profile(monkeypatch, True)
-        browser_profiles.mark_used('weibo', imported=False)
-        cookie_preflight.probe('weibo')
+        profiles.mark_used('weibo', imported=False)
+        preflight.probe('weibo')
         assert probes.platforms == ['weibo']
 
     def test_a_profile_another_browser_holds_is_left_alone(self, probes, monkeypatch, with_cookie):
@@ -178,19 +177,19 @@ class TestVerdicts:
         profile is better evidence about the session than a second browser trying to
         start inside it."""
         with_cookie('zhihu')
-        monkeypatch.setattr(browser_profiles, 'is_busy', lambda path: True)
-        verdict = cookie_preflight.probe('zhihu')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        monkeypatch.setattr(profiles, 'is_busy', lambda path: True)
+        verdict = preflight.probe('zhihu')
+        assert verdict['state'] == preflight.UNKNOWN
         assert verdict['blocking'] is False
         assert probes.calls == []
 
     def test_classify_probe_answers_in_that_order(self):
         """The pure part, pinned directly: whoever else learns to read a diagnosis
         (the panel's 验证 button does) gets these three answers, not two."""
-        assert cookie_preflight.classify_probe({'error': 'x', 'login_wall': True}) == cookie_preflight.UNKNOWN
-        assert cookie_preflight.classify_probe({'login_wall': True, 'risk_blocked': True}) == cookie_preflight.EXPIRED
-        assert cookie_preflight.classify_probe({'risk_blocked': True}) == cookie_preflight.UNKNOWN
-        assert cookie_preflight.classify_probe({}) == cookie_preflight.VALID
+        assert preflight.classify_probe({'error': 'x', 'login_wall': True}) == preflight.UNKNOWN
+        assert preflight.classify_probe({'login_wall': True, 'risk_blocked': True}) == preflight.EXPIRED
+        assert preflight.classify_probe({'risk_blocked': True}) == preflight.UNKNOWN
+        assert preflight.classify_probe({}) == preflight.VALID
 
     def test_a_page_the_browser_wrote_says_nothing_about_the_cookie(self):
         """The inversion this guards: an error document answers neither wall flag, so the
@@ -198,22 +197,22 @@ class TestVerdicts:
         would keep licensing runs that were never checked. 'unreachable' outranks even a
         login flag, because a session that was not transmitted cannot have been refused.
         """
-        assert cookie_preflight.classify_probe({'unreachable': True}) == cookie_preflight.UNKNOWN
-        assert cookie_preflight.classify_probe({'unreachable': True, 'login_wall': True}) == cookie_preflight.UNKNOWN
-        assert cookie_preflight.classify_probe({'unreachable': False, 'login_wall': True}) == cookie_preflight.EXPIRED
+        assert preflight.classify_probe({'unreachable': True}) == preflight.UNKNOWN
+        assert preflight.classify_probe({'unreachable': True, 'login_wall': True}) == preflight.UNKNOWN
+        assert preflight.classify_probe({'unreachable': False, 'login_wall': True}) == preflight.EXPIRED
 
 
 class TestCache:
     def test_a_recent_verdict_is_reused_instead_of_opening_a_second_browser(self, probe_zhihu):
-        cookie_preflight.probe('zhihu')
-        cookie_preflight.probe('zhihu')
+        preflight.probe('zhihu')
+        preflight.probe('zhihu')
         assert probe_zhihu.platforms == ['zhihu'], 'two presses of one button bought two Chromes'
 
     def test_a_reused_verdict_says_it_was_reused(self, probe_zhihu):
         """The distinction is the whole honesty of the answer: 「3 分钟前验证过」 and
         「刚验证过」 are different claims about the same verdict."""
-        cookie_preflight.probe('zhihu')
-        second = cookie_preflight.probe('zhihu')
+        preflight.probe('zhihu')
+        second = preflight.probe('zhihu')
         assert second['cached'] is True
         assert second['probed'] is False
 
@@ -222,14 +221,14 @@ class TestCache:
         holding it for five minutes would keep answering later runs with a check that
         never happened."""
         probe_zhihu.answer = {'error': 'no browser'}
-        cookie_preflight.probe('zhihu')
+        preflight.probe('zhihu')
         probe_zhihu.answer = {'login_wall': False, 'risk_blocked': False}
-        assert cookie_preflight.probe('zhihu')['state'] == cookie_preflight.VALID
+        assert preflight.probe('zhihu')['state'] == preflight.VALID
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
 
     def test_fresh_forces_a_second_look(self, probe_zhihu):
-        cookie_preflight.probe('zhihu')
-        cookie_preflight.probe('zhihu', fresh=True)
+        preflight.probe('zhihu')
+        preflight.probe('zhihu', fresh=True)
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
 
     def test_the_default_login_shares_its_verdict_across_both_spellings(self, probe_zhihu):
@@ -237,16 +236,16 @@ class TestCache:
         default account its NAME, while an old canvas leaves it blank; the panel's 验证 recorded
         「default」 and the gate at Run read the blank one, so the 「已失效」 the user had just
         measured did not block the run — and the same session bought a second Chrome."""
-        cookie_preflight.record('zhihu', {'login_wall': True})
-        verdict = cookie_preflight.probe('zhihu')
+        preflight.record('zhihu', {'login_wall': True})
+        verdict = preflight.probe('zhihu')
         assert len(probe_zhihu.calls) == 0, 'the blank spelling re-probed a verdict already measured'
-        assert verdict['state'] == cookie_preflight.EXPIRED, verdict
+        assert verdict['state'] == preflight.EXPIRED, verdict
         assert verdict['cached'] is True
 
     def test_a_verdict_stops_being_quotable_after_the_ttl(self, probe_zhihu, monkeypatch):
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TTL', -1)
-        cookie_preflight.probe('zhihu')
-        cookie_preflight.probe('zhihu')
+        preflight.probe('zhihu')
+        preflight.probe('zhihu')
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
 
     def test_saving_a_cookie_drops_the_verdict_it_could_only_invalidate(
@@ -268,7 +267,7 @@ class TestCache:
         app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'x'}])
         assert client.post('/api/cookies/preflight', json={'platforms': ['weibo']}).status_code == 200
         assert client.post('/api/cookies/delete', json={'platform': 'weibo'}).status_code == 200
-        assert cookie_preflight.cached('weibo') is None
+        assert preflight.cached('weibo') is None
 
     def test_a_manual_verification_refreshes_the_gate(self, client, app_module, monkeypatch):
         """验证 Cookie and the pre-run gate ask the same question of the same browser.
@@ -276,8 +275,8 @@ class TestCache:
         second probe to be told the same thing — and a cached 「可用」 must not survive
         the check that contradicted it."""
         app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
-        cookie_preflight.record('zhihu', {'login_wall': False})
-        assert cookie_preflight.cached('zhihu')['state'] == cookie_preflight.VALID
+        preflight.record('zhihu', {'login_wall': False})
+        assert preflight.cached('zhihu')['state'] == preflight.VALID
 
         class _Crawler:
             risk_blocked = False
@@ -295,7 +294,7 @@ class TestCache:
             if client.get('/api/cookies/generate/status').get_json()['phase'] == 'verified':
                 break
             deadline.wait(0.05)
-        assert cookie_preflight.cached('zhihu')['state'] == cookie_preflight.EXPIRED
+        assert preflight.cached('zhihu')['state'] == preflight.EXPIRED
 
     def test_a_verification_of_some_other_page_does_not_vouch_for_the_platform(self, client, app_module, monkeypatch):
         """The gate probes the platform's own address. A manual check that was aimed
@@ -320,7 +319,7 @@ class TestCache:
             if client.get('/api/cookies/generate/status').get_json()['phase'] == 'verified':
                 break
             threading.Event().wait(0.05)
-        assert cookie_preflight.cached('zhihu') is None
+        assert preflight.cached('zhihu') is None
 
 
 class TestParallelAndDeadline:
@@ -340,9 +339,9 @@ class TestParallelAndDeadline:
             except threading.BrokenBarrierError:
                 return {'error': 'serialized'}
 
-        monkeypatch.setattr(cookie_preflight, '_probe_live', fake_probe)
+        monkeypatch.setattr(preflight, '_probe_live', fake_probe)
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 2)
-        answers = cookie_preflight.check(['zhihu', 'weibo'])
+        answers = preflight.check(['zhihu', 'weibo'])
         assert [answers[p]['state'] for p in ('zhihu', 'weibo')] == ['valid', 'valid'], seen
 
     def test_the_cap_is_honoured_when_there_is_more_than_one_platform(self, monkeypatch, with_cookie):
@@ -359,10 +358,10 @@ class TestParallelAndDeadline:
             except threading.BrokenBarrierError:
                 return {'error': 'never overlapped'}
 
-        monkeypatch.setattr(cookie_preflight, '_probe_live', fake_probe)
+        monkeypatch.setattr(preflight, '_probe_live', fake_probe)
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 1)
-        answers = cookie_preflight.check(['zhihu', 'weibo'])
-        assert {answers[p]['state'] for p in ('zhihu', 'weibo')} == {cookie_preflight.UNKNOWN}
+        answers = preflight.check(['zhihu', 'weibo'])
+        assert {answers[p]['state'] for p in ('zhihu', 'weibo')} == {preflight.UNKNOWN}
 
     def test_every_probe_is_awaited_with_the_full_timeout_not_a_shrinking_one(self, monkeypatch, with_cookie):
         """The pool width is a real ceiling, so more platforms than workers means later probes
@@ -377,9 +376,7 @@ class TestParallelAndDeadline:
         with_cookie('zhihu')
         with_cookie('weibo')
         with_cookie('douyin')
-        monkeypatch.setattr(
-            cookie_preflight, '_probe_live', lambda p, **k: {'login_wall': False, 'risk_blocked': False}
-        )
+        monkeypatch.setattr(preflight, '_probe_live', lambda p, **k: {'login_wall': False, 'risk_blocked': False})
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 1)
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TIMEOUT', 5)
         awaited = []
@@ -392,7 +389,7 @@ class TestParallelAndDeadline:
             return real_result(self, timeout=timeout)
 
         monkeypatch.setattr(Future, 'result', spy)
-        answers = cookie_preflight.check(['zhihu', 'weibo', 'douyin'])
+        answers = preflight.check(['zhihu', 'weibo', 'douyin'])
         assert awaited, 'no probe was awaited at all'
         assert all(t == 5 for t in awaited), f'a probe was given a shrinking budget: {awaited}'
         assert {answers[p]['state'] for p in ('zhihu', 'weibo', 'douyin')} == {'valid'}
@@ -407,26 +404,26 @@ class TestParallelAndDeadline:
             hold.wait(10)
             return {'login_wall': True, 'risk_blocked': False}
 
-        monkeypatch.setattr(cookie_preflight, '_probe_live', fake_probe)
+        monkeypatch.setattr(preflight, '_probe_live', fake_probe)
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TIMEOUT', 0.3)
         try:
-            answers = cookie_preflight.check(['zhihu'])
+            answers = preflight.check(['zhihu'])
         finally:
             hold.set()
         verdict = answers['zhihu']
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        assert verdict['state'] == preflight.UNKNOWN
         assert verdict['blocking'] is False
         assert verdict['detail'], 'a probe that ran out of budget has to say so, not answer in silence'
 
     def test_an_empty_canvas_asks_nothing(self, probes):
-        assert cookie_preflight.check([]) == {}
+        assert preflight.check([]) == {}
         assert probes.calls == []
 
     def test_a_platform_listed_twice_is_probed_once(self, probes, with_cookie):
         """Two workflows of one platform on a parallel canvas is the common case; the
         gate is asked per canvas, not per node."""
         with_cookie('zhihu')
-        cookie_preflight.check(['zhihu', 'zhihu'])
+        preflight.check(['zhihu', 'zhihu'])
         assert probes.platforms == ['zhihu']
 
 
@@ -581,18 +578,18 @@ class TestProbeBuysTheRightBrowser:
         would send the user to re-log in a session that is fine. Keeping both probes in
         the same mode is also what stops them disagreeing about one platform."""
         with_cookie('zhihu')
-        cookie_preflight.probe('zhihu')
+        preflight.probe('zhihu')
         assert made[0].kwargs['headless'] is False
         assert made[0].kwargs['for_login'] is True
 
     def test_the_probe_reads_cookies_from_the_configured_store(self, made, with_cookie):
         with_cookie('zhihu')
-        cookie_preflight.probe('zhihu')
+        preflight.probe('zhihu')
         assert made[0].kwargs['cookie_dir'] == Config.COOKIE_DIR
 
     def test_the_per_run_profile_answer_reaches_the_browser(self, made, with_cookie):
         with_cookie('zhihu')
-        cookie_preflight.probe('zhihu', use_profile=False)
+        preflight.probe('zhihu', use_profile=False)
         assert made[0].kwargs['use_profile'] is False
 
     def test_the_browser_is_closed_even_when_the_page_raises(self, made, monkeypatch, with_cookie):
@@ -607,8 +604,8 @@ class TestProbeBuysTheRightBrowser:
             return crawler
 
         monkeypatch.setattr('crawlers.get_crawler', explode)
-        verdict = cookie_preflight.probe('zhihu')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        verdict = preflight.probe('zhihu')
+        assert verdict['state'] == preflight.UNKNOWN
         assert 'page never arrived' in verdict['detail']
         assert made[0].closed is True
 
@@ -619,8 +616,8 @@ class TestProbeBuysTheRightBrowser:
             raise ValueError('chromedriver missing')
 
         monkeypatch.setattr('crawlers.get_crawler', refuse)
-        verdict = cookie_preflight.probe('zhihu')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        verdict = preflight.probe('zhihu')
+        assert verdict['state'] == preflight.UNKNOWN
         assert 'chromedriver missing' in verdict['detail']
 
     def test_a_probe_never_writes_the_browsers_session_back_to_the_cookie_file(self, made, monkeypatch, with_cookie):
@@ -633,7 +630,7 @@ class TestProbeBuysTheRightBrowser:
             raise AssertionError('a cookie probe must not save anything')
 
         monkeypatch.setattr(CookieManager, 'save', forbid)
-        assert cookie_preflight.probe('zhihu')['state'] == cookie_preflight.VALID
+        assert preflight.probe('zhihu')['state'] == preflight.VALID
 
 
 class TestTheSecondBackendIsAskedItsOwnQuestion:
@@ -645,20 +642,20 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
     """
 
     def test_the_answer_key_folds_the_browser_and_separates_the_other_backend(self):
-        assert cookie_preflight.entry_key('bilibili') == 'bilibili'
-        assert cookie_preflight.entry_key('bilibili', 'default') == 'bilibili', 'one account, one spelling'
-        assert cookie_preflight.entry_key('bilibili', 'work') == 'bilibili@work'
-        assert cookie_preflight.entry_key('bilibili', 'work', 'selenium') == 'bilibili@work'
-        assert cookie_preflight.entry_key('bilibili', 'work', 'catbus') == 'bilibili@work#catbus'
-        assert cookie_preflight.entry_key('bilibili', '', 'catbus') == 'bilibili#catbus'
+        assert preflight.entry_key('bilibili') == 'bilibili'
+        assert preflight.entry_key('bilibili', 'default') == 'bilibili', 'one account, one spelling'
+        assert preflight.entry_key('bilibili', 'work') == 'bilibili@work'
+        assert preflight.entry_key('bilibili', 'work', 'selenium') == 'bilibili@work'
+        assert preflight.entry_key('bilibili', 'work', 'catbus') == 'bilibili@work#catbus'
+        assert preflight.entry_key('bilibili', '', 'catbus') == 'bilibili#catbus'
 
     def test_an_entry_names_its_backend_and_defaults_to_the_browser(self):
-        assert cookie_preflight.entry_of({'platform': 'bilibili', 'account': 'work', 'backend': 'CatBus'}) == (
+        assert preflight.entry_of({'platform': 'bilibili', 'account': 'work', 'backend': 'CatBus'}) == (
             'bilibili',
             'work',
             'catbus',
         )
-        assert cookie_preflight.entry_of('bilibili') == ('bilibili', '', '')
+        assert preflight.entry_of('bilibili') == ('bilibili', '', '')
 
     def test_a_logged_in_adapter_is_valid_and_buys_no_browser(self, monkeypatch):
         asked = []
@@ -681,9 +678,9 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
         def no_browser(*_args, **_kwargs):
             raise AssertionError('a CatBus check may not open a Chrome')
 
-        monkeypatch.setattr(cookie_preflight, '_probe_live', no_browser)
-        verdict = cookie_preflight.probe('bilibili', account='work', backend='catbus')
-        assert verdict['state'] == cookie_preflight.VALID
+        monkeypatch.setattr(preflight, '_probe_live', no_browser)
+        verdict = preflight.probe('bilibili', account='work', backend='catbus')
+        assert verdict['state'] == preflight.VALID
         assert verdict['blocking'] is False
         assert verdict['probed'] is True
         assert asked == [('bilibili', 'work')], "the CatBus account, not the node's Selenium one"
@@ -699,12 +696,12 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
             }
 
         monkeypatch.setattr(catbus_bridge, 'preflight', fake_preflight)
-        verdict = cookie_preflight.probe('bilibili', backend='catbus')
-        assert verdict['state'] == cookie_preflight.EXPIRED
+        verdict = preflight.probe('bilibili', backend='catbus')
+        assert verdict['state'] == preflight.EXPIRED
         assert verdict['blocking'] is True
         assert verdict['why_key'] == 'catbus.pre.login'
         assert 'catbus bilibili auth login' in verdict['detail']
-        text = cookie_preflight.describe(verdict)
+        text = preflight.describe(verdict)
         assert 'Cookie' not in text, 'the advice names the login the crawl actually reads'
 
     def test_a_backend_this_machine_cannot_ask_never_blocks_a_run(self, monkeypatch):
@@ -720,8 +717,8 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
                 'account': None,
             },
         )
-        verdict = cookie_preflight.probe('bilibili', backend='catbus')
-        assert verdict['state'] == cookie_preflight.UNKNOWN
+        verdict = preflight.probe('bilibili', backend='catbus')
+        assert verdict['state'] == preflight.UNKNOWN
         assert verdict['blocking'] is False
 
     def test_a_catbus_answer_is_not_cached_as_a_cookie_answer(self, monkeypatch, probes, with_cookie):
@@ -743,10 +740,10 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
                 'account': account,
             },
         )
-        cookie = cookie_preflight.probe('zhihu')
-        adapter = cookie_preflight.probe('zhihu', backend='catbus')
-        assert cookie['state'] == cookie_preflight.EXPIRED or cookie['state'] == cookie_preflight.VALID
-        assert adapter['state'] == cookie_preflight.EXPIRED
+        cookie = preflight.probe('zhihu')
+        adapter = preflight.probe('zhihu', backend='catbus')
+        assert cookie['state'] == preflight.EXPIRED or cookie['state'] == preflight.VALID
+        assert adapter['state'] == preflight.EXPIRED
         # The cached browser verdict is still the browser's alone: asking again must not find the
         # adapter's answer under the same platform.
         monkeypatch.setattr(
@@ -760,7 +757,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
                 'account': account,
             },
         )
-        assert cookie_preflight.probe('zhihu', backend='catbus')['state'] == cookie_preflight.VALID
+        assert preflight.probe('zhihu', backend='catbus')['state'] == preflight.VALID
 
     def test_one_request_answers_both_backends_apart(self, client, monkeypatch, probes, with_cookie):
         """A mixed canvas asks two questions in one press and gets two keys back."""

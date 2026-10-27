@@ -266,8 +266,9 @@ class TestValidate:
         may quietly borrow another account's session either, which is what "blank means
         whatever is here" would have done.
         """
+        from sessions.cookies import CookieManager
+
         import config as config_module
-        from services.cookie_manager import CookieManager
 
         jar = str(tmp_path / 'cookies')
         monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', jar)
@@ -275,9 +276,9 @@ class TestValidate:
         # second, legitimate way to answer "is a login here" — the case below it — so this
         # test switches that half off rather than trusting whatever marker the shared
         # profile root happens to hold.
-        import browser_profiles
+        from sessions import profiles
 
-        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: False)
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
         CookieManager(jar).save('zhihu', [{'name': 'a', 'value': 'v'}], 'work')
 
         def _source_with(account):
@@ -317,13 +318,13 @@ class TestValidate:
         never re-planted, so a node whose snapshot was removed still has a way in — and
         refusing it would be the validator contradicting the crawler.
         """
-        import browser_profiles
+        from sessions import profiles
 
         import config as config_module
 
         monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', str(tmp_path / 'cookies'))
-        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: True)
-        monkeypatch.setattr(browser_profiles, 'is_used', lambda platform, account='': True)
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: True)
+        monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': True)
         wf = _wf([_node('node-1', platform='zhihu', params={'keyword': '三亚', 'account': 'work'})], [])
         assert WorkflowEngine(wf).validate() == []
 
@@ -331,8 +332,9 @@ class TestValidate:
         """Comment links are always logged-in crawls, and one node walks several feeds
         with the single account on its form — so each platform its own links name is
         asked, and a missing login is refused once per platform rather than crawled into."""
+        from sessions.cookies import CookieManager
+
         import config as config_module
-        from services.cookie_manager import CookieManager
 
         jar = str(tmp_path / 'cookies')
         monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', jar)

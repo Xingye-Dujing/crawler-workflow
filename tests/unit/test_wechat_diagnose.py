@@ -117,7 +117,7 @@ class TestNoCommentApparatus:
     def test_the_cookie_panel_has_no_wechat_row(self):
         """``CookieManager.PLATFORMS`` is who the panel can log in; WeChat sits
         out of it, so no flow, status entry or generate job can be built for it."""
-        from services.cookie_manager import CookieManager
+        from sessions.cookies import CookieManager
 
         assert 'wechat' not in CookieManager.PLATFORMS
 

@@ -1,13 +1,13 @@
 """Cookie flow: which link may open the login browser, and what the panel says."""
 
 import pytest
+from sessions.cookies import CookieManager
+from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 
 #: The catalogue itself, for the one assertion that has to read the message table
 #: rather than the rendered flow (a key must be *absent*, not merely unwritten).
 from crawlers import cookie_hosts
 from i18n import _ZH as _ZH_MESSAGES
-from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
-from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
 
@@ -62,7 +62,7 @@ class TestEntryUrl:
 
 class TestFlow:
     def test_steps_arrive_as_ordered_lines(self, monkeypatch):
-        monkeypatch.setattr('services.cookie_flow.t', lambda key, **kw: '第一步\n第二步\n')
+        monkeypatch.setattr('sessions.flow.t', lambda key, **kw: '第一步\n第二步\n')
         flow = flow_for('zhihu', allowed_hosts=HOSTS, login_url='https://www.zhihu.com/')
         assert flow['steps'] == ['第一步', '第二步']
 
@@ -73,21 +73,21 @@ class TestFlow:
             seen.append(key)
             return f'<{key}>'
 
-        monkeypatch.setattr('services.cookie_flow.t', fake_t)
+        monkeypatch.setattr('sessions.flow.t', fake_t)
         flow = flow_for('weibo', allowed_hosts=('weibo.com',))
         assert flow['platform'] == 'weibo'
         assert flow['purpose'] == '<cookie.weibo.purpose>'
         assert seen == ['cookie.weibo.purpose', 'cookie.weibo.steps']
 
     def test_login_url_and_hosts_are_carried_for_the_panel(self, monkeypatch):
-        monkeypatch.setattr('services.cookie_flow.t', lambda key, **kw: 'x')
+        monkeypatch.setattr('sessions.flow.t', lambda key, **kw: 'x')
         flow = flow_for('zhihu', allowed_hosts=('www.zhihu.com',), login_url='https://www.zhihu.com/')
         assert flow['login_url'] == 'https://www.zhihu.com/'
         assert flow['allowed_hosts'] == ['www.zhihu.com']
         assert flow['accepts_custom_url'] is True
 
     def test_a_platform_with_no_hosts_cannot_be_steered_to_a_custom_page(self, monkeypatch):
-        monkeypatch.setattr('services.cookie_flow.t', lambda key, **kw: 'x')
+        monkeypatch.setattr('sessions.flow.t', lambda key, **kw: 'x')
         assert flow_for('zhihu', allowed_hosts=())['accepts_custom_url'] is False
 
 

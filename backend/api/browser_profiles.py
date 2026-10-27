@@ -1,21 +1,21 @@
 """Browser-profiles Blueprint — ``GET /api/browser/profiles`` and the template-build ``POST``.
 
 Reports one row per sign-in-capable platform plus the pristine template's state, and (POST) builds
-that template. Depends only on ``browser_profiles``, the shared ``profiles.ensure_profile_template``,
+that template. Depends only on ``sessions.profiles``, the shared ``template.ensure_profile_template``,
 ``crawl_capabilities``, ``CookieManager``, ``Config`` and ``api.http`` — no run state, no stores.
 Paths unchanged; app-level ``before_request`` / CORS still wrap them.
 """
 
 import os
 
-import browser_profiles
 from flask import Blueprint, jsonify
-from profiles import ensure_profile_template
+from sessions import profiles
+from sessions.cookies import CookieManager
+from sessions.template import ensure_profile_template
 
 import crawl_capabilities as capabilities
 from api.http import _bad_body, _json_body
 from config import Config
-from services.cookie_manager import CookieManager
 from utils.helpers import as_bool
 
 bp = Blueprint('browser_profiles', __name__)
@@ -27,7 +27,7 @@ def build_profile_template():
 
     On a cloud host this is how a device comes into the world at all: the button that
     used to create one by logging in is not offered there. The cookie-save path calls
-    the same function by itself (see :func:`profiles.ensure_profile_template`), so this
+    the same function by itself (see :func:`template.ensure_profile_template`), so this
     route exists for an operator who wants to rebuild it now — and for a machine where
     no cookie has been pasted yet.
     """
@@ -59,14 +59,14 @@ def get_browser_profiles():
       *imported* only after a cookie actually went in. Those two booleans are the whole
       guidance sentence in the panel.
     """
-    rows = {'ok': True, 'enabled': browser_profiles.is_enabled(), 'root': browser_profiles.root_dir()}
+    rows = {'ok': True, 'enabled': profiles.is_enabled(), 'root': profiles.root_dir()}
     # The template's own row, because "no new account can be made without it" is the
     # thing a cloud operator needs to see before they paste a cookie. The walk is over a
     # first-run skeleton (hundreds of files at most), not over a used profile — which is
     # why this may check the contents while the per-account rows below pass ``size=False``.
     rows['template'] = {
-        'exists': browser_profiles.template_exists(),
-        'pristine': not browser_profiles.find_session_material(),
+        'exists': profiles.template_exists(),
+        'pristine': not profiles.find_session_material(),
     }
     rows['profiles'] = []
     for cap in capabilities.CAPABILITIES:
@@ -78,7 +78,7 @@ def get_browser_profiles():
         # account: the panel would say 「no cookie」 about an account whose file it never looked at.
         saved = CookieManager(Config.COOKIE_DIR).path_for(platform, '')
         rows['profiles'].append(
-            browser_profiles.status(
+            profiles.status(
                 platform,
                 recommended=cap.profile_recommended,
                 has_cookie=os.path.isfile(saved),

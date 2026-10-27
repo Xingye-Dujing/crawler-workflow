@@ -84,15 +84,15 @@ def refresh_for_planting(platform: str) -> bool:
     """Does this platform's test profile need the saved file put into it again?
 
     This is the panel's own question, asked with the panel's own answer
-    (:func:`browser_profiles.needs_refresh`): "it was planted, and the file has been saved since".
+    (:func:`sessions.template.needs_refresh`): "it was planted, and the file has been saved since".
     The tier borrows it rather than keeping a rule of its own so that a cookie the user re-took
     reaches the test profile exactly the way the 「把 Cookie 更新进 Profile」 button makes it reach
     theirs — once, from the file that is current now. A profile that has never been used answers
     ``False``: its first crawl imports the file by itself.
     """
-    import browser_profiles
+    from sessions import profiles
 
-    return bool(browser_profiles.needs_refresh(platform, str(COOKIE_DIR / f'{platform}_cookies.json')))
+    return bool(profiles.needs_refresh(platform, str(COOKIE_DIR / f'{platform}_cookies.json')))
 
 
 def resolve_profile_root(in_user_directory: bool) -> Path:
@@ -127,7 +127,7 @@ def live_profile_root():
     """Give the tier a profile directory that survives the run — and name whose it is.
 
     Written as a *setting* rather than passed as an argument, because that is how the product
-    chooses its profile root (:func:`browser_profiles.root_dir`): the tier then goes through the
+    chooses its profile root (:func:`sessions.template.root_dir`): the tier then goes through the
     same resolution a user's crawl does, including "an absolute path wins, empty means the
     app-managed one". A refusal there is the one way this fixture could quietly end back at the
     user's directory, so the warnings come back as a failure rather than as a log line.

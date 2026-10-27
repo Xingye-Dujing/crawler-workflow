@@ -45,10 +45,10 @@ import threading
 import time
 
 import pandas as pd
+from sessions.cookies import CookieManager
 
 from config import Config
 from i18n import t
-from services.cookie_manager import CookieManager
 
 logger = logging.getLogger(__name__)
 

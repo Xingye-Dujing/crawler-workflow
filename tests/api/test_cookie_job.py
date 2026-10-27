@@ -11,8 +11,7 @@ import threading
 import time
 
 import pytest
-
-from services.cookie_manager import CookieManager
+from sessions.cookies import CookieManager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -157,13 +156,13 @@ class TestCookieJob:
         The profile is faked as used (the real one needs a browser); the assertion is about what
         the endpoint reports afterwards.
         """
-        import browser_profiles
+        from sessions import profiles
 
-        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: True)
-        monkeypatch.setattr(browser_profiles, 'is_used', lambda platform, account='': True)
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: True)
+        monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': True)
         stamps = []
         monkeypatch.setattr(
-            browser_profiles,
+            profiles,
             'remember_cookie',
             lambda platform, path, account='': stamps.append((platform, path, account)),
         )
@@ -179,11 +178,11 @@ class TestCookieJob:
     ):
         """The other answer is the one the user chose: 本次不用 Profile, so no live session exists
         to be clobbered and the button really is the way in — recording would hide it."""
-        import browser_profiles
+        from sessions import profiles
 
-        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: False)
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
         called = []
-        monkeypatch.setattr(browser_profiles, 'remember_cookie', lambda platform, path: called.append(platform))
+        monkeypatch.setattr(profiles, 'remember_cookie', lambda platform, path: called.append(platform))
         assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
         _await_phase(client, 'waiting')
         client.post('/api/cookies/generate/confirm')
@@ -400,9 +399,9 @@ class TestCookieVerify:
         article = 'https://www.zhihu.com/question/1/answer/2'
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': article}).status_code == 202
         _await_phase(client, 'verified')
-        import cookie_preflight
+        from sessions import preflight
 
-        assert cookie_preflight.cached('zhihu') is None
+        assert preflight.cached('zhihu') is None
 
     def test_the_login_buttons_do_not_answer_a_verification(self, client, job, app_module):
         """Done/Cancel belong to a login window. Pressing them while a probe

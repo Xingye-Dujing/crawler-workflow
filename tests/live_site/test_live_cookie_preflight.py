@@ -16,9 +16,9 @@ answers on a given afternoon is the site's choice — a cookie can genuinely be 
 here, and the tier's job is to prove the check *works*, not to vouch for the session.
 """
 
-import cookie_preflight
 import pytest
 from real_paths import COOKIE_DIR, has_cookie
+from sessions import preflight
 
 import i18n
 from config import Config
@@ -33,19 +33,19 @@ pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_soc
 #: content, so the interesting thing measured is the browser path, not the wall.
 PLATFORM = 'bilibili'
 DECIDED = {
-    cookie_preflight.VALID,
-    cookie_preflight.EXPIRED,
-    cookie_preflight.UNKNOWN,
-    cookie_preflight.NO_COOKIE,
+    preflight.VALID,
+    preflight.EXPIRED,
+    preflight.UNKNOWN,
+    preflight.NO_COOKIE,
 }
 
 
 @pytest.fixture(autouse=True)
 def _fresh_cache():
     """No verdict inherited from a previous probe."""
-    cookie_preflight.reset()
+    preflight.reset()
     yield
-    cookie_preflight.reset()
+    preflight.reset()
 
 
 @pytest.fixture
@@ -70,29 +70,29 @@ class TestRealProbe:
         the happy path, is a window left on the user's desktop holding their profile
         — which then parks the run that follows on ``PROFILE_LOCK_TIMEOUT``.
         """
-        import browser_profiles
+        from sessions import profiles
 
-        profile = browser_profiles.profile_dir_for(PLATFORM)
-        assert browser_profiles.is_busy(profile) is False, 'a probe may not queue behind a live crawl'
-        verdict = cookie_preflight.probe(PLATFORM)
+        profile = profiles.profile_dir_for(PLATFORM)
+        assert profiles.is_busy(profile) is False, 'a probe may not queue behind a live crawl'
+        verdict = preflight.probe(PLATFORM)
         assert verdict['state'] in DECIDED, verdict
         assert verdict['probed'] is True, f'a saved session was never looked at: {verdict}'
-        assert verdict['blocking'] is (verdict['state'] in cookie_preflight.BLOCKING), verdict
-        assert browser_profiles.is_busy(profile) is False, 'the probe left its browser holding the profile'
+        assert verdict['blocking'] is (verdict['state'] in preflight.BLOCKING), verdict
+        assert profiles.is_busy(profile) is False, 'the probe left its browser holding the profile'
 
     def test_the_second_ask_within_the_ttl_buys_no_second_browser(self, monkeypatch, real_jar):
         """The cache is the whole reason a parallel canvas can afford this check at
         all, so it has to be measured against a real probe rather than a stub."""
-        real = cookie_preflight._probe_live
+        real = preflight._probe_live
         calls = []
 
         def counting(*args, **kwargs):
             calls.append(1)
             return real(*args, **kwargs)
 
-        monkeypatch.setattr(cookie_preflight, '_probe_live', counting)
-        cookie_preflight.probe(PLATFORM)
-        second = cookie_preflight.probe(PLATFORM)
+        monkeypatch.setattr(preflight, '_probe_live', counting)
+        preflight.probe(PLATFORM)
+        second = preflight.probe(PLATFORM)
         assert len(calls) == 1, f'a cached verdict still opened {len(calls)} browsers'
         assert second['cached'] is True and second['probed'] is False
 
@@ -104,7 +104,7 @@ class TestRealProbe:
         slot is answered with a word, not the key), so the assertion asks the catalogue
         what that word is instead of demanding the raw key it replaced.
         """
-        verdict = cookie_preflight.probe(PLATFORM)
-        text = cookie_preflight.describe(verdict)
+        verdict = preflight.probe(PLATFORM)
+        text = preflight.describe(verdict)
         assert text and 'cookie.pre.' not in text, text
         assert i18n.platform_label(PLATFORM) in text or PLATFORM in text, text

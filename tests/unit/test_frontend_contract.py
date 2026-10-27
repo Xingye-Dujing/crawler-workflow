@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 from node_runner import run_node
+from sessions.cookies import CookieManager
 
 import i18n
 from crawlers import CRAWLERS, is_crawlable
@@ -37,7 +38,6 @@ from services.biblio_schema import (
     SELECTION_MODES,
 )
 from services.chart_contracts import BIBLIO_CHART_TYPES
-from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
 

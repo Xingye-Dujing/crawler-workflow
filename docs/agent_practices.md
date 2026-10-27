@@ -137,6 +137,33 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `git checkout --` and re-run), and **the seams move with the code**: three tests patched `harvest.time.sleep` to
   drive a `PlayerUI` walk. `time` is one module object so they still worked — which is exactly the shape that breaks
   quietly the day the old module stops importing it, so they now patch `player_ui.time`.
+- **A rename pass must be written as three rules, not one, because the same word means three things.**
+  Moving five modules into `sessions/` (2026-10-27) was 661 references, and two distinct over-reaches came
+  from treating them as one string substitution: ① `cookie_manager` is BOTH the module and the jar *instance*
+  (`state.cookie_manager`, imported by name into `app.py` and `api/capabilities.py`, reached from tests as
+  `app_module.cookie_manager`), so rewriting `cookie_manager.` → `cookies.` broke 28 instance calls in `app.py`
+  with an AttributeError that looked like a product regression — the first version was reverted for exactly
+  this, and v2 asks per file whether that file also imports the instance; ② `api.browser_profiles` contains
+  `browser_profiles` as a *word*, so a word-boundary rule rewrote `from api.browser_profiles import bp` into
+  `from api.profiles import ...` while that route file never moved — a `ModuleNotFoundError` at import time,
+  which is the loudest possible failure and still only found by running the suite. The rules that survive
+  review: import lines by exact form at any indentation, module-attribute call sites only where the file
+  cannot mean the instance, and instance spellings (`state.X`, `app_module.X`, persisted SETTINGS keys like
+  `cookie_preflight_before_run`, blueprint names, test filenames like `test_browser_profiles.py`) left alone.
+  `ruff check` is a cheap and honest first net: it reported 23 F821 (undefined names) and 2 F401 before a
+  single test ran, which is the fastest possible way to find out that a ruleset over-reached.
+- **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
+  `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
+  appeared" while the gate before it said everything was fine — because its bounded poll returned
+  `"ok | the detail row never rendered"` on timeout and the Python side asserted
+  `outcome.startswith('ok')`. The timeout arm therefore passed the check whose whole job was to notice
+  the timeout, and the reason was printed only after the layout had been measured off a missing element.
+  Fixed by removing the second round trip: the test now expands **and** measures inside one
+  `execute_async_script`, returning `{found, names, cut, tallies, …}` or `{found: false, rows}` /
+  `{found: false, rejected}` — so there is no sentinel to lie and nothing between the row appearing and
+  being read. The other half of the same race: the stub must be installed **before** anything renders,
+  because the page's own boot reads `/api/runs/list` with the real fetch, and a repaint drops the
+  expansion row the test is about to add.
 - **An async browser seam must resolve on the DOM, and its error arm must not be `done()`.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` flaked on CI as "the detail row never appeared".
   The earlier fix had wrapped it in `Promise.resolve(runsManager.detail(...)).then(() => done(), () => done())`, which
@@ -344,13 +371,13 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
     `data/cookies/<platform>@<account>.json` *and* one `chrome_profile/<platform>/<account>` (own device, own rotated
     session, own concurrency lane), so nothing answering "does this crawl have a login" may drop the account.
   - **A node's 账号 is a session question, asked once:** `engine.workflow._account_session_errors` refuses a crawl that
-    `Mode.needs_session` says needs a login when `cookie_preflight.has_session_to_test` finds neither that account's
+    `Mode.needs_session` says needs a login when `sessions.preflight.has_session_to_test` finds neither that account's
     cookie file *nor* a profile still carrying it — blank included, because blank IS an account (默认账号), not a
     wildcard.
   - **Every account has one name and one spelling:** the default login is named `default` (the box shows it, never a
     blank; the blank is only its old filename), folded at the ONE point `CookieManager.key`/`path_segment` (`''` ⇄
     `default`, lowercase always) — `Work` and `work` are the same session, because a case-insensitive filesystem cannot
-    hold two logins under one spelling — so `browser_profiles`, the preflight cache and the JS box all route through
+    hold two logins under one spelling — so `sessions.profiles`, the preflight cache and the JS box all route through
     that fold. `unoffered_selections` must not answer it either (one failure, one line). Letting it through is not a
     harmless crawl — it walks into a login wall, files an empty table and reports 完成. The candidate list and a new
     node's preselection are both `CookieManager.accounts_in_order`, so the first row listed is the account a node starts
@@ -722,7 +749,7 @@ message.
   tokens as untranslated prose, and `t(key) + ': %s'` only trades the finding for `W1201`. The console-level answer
   is the pattern the rest of the codebase already uses: the reason travels as a named catalogue slot
   (`t('misc.cookie_save_failed', err=...)`), in both languages.
-- **Unused arguments find real bugs.** `browser_profiles.status(size=False)` was documented twice as skipping the
+- **Unused arguments find real bugs.** `sessions.profiles.status(size=False)` was documented twice as skipping the
   profile walk and never read the flag: `/api/cookies/status` re-walked every profile (measured 236 MB) once per
   account row. That is what the check is for.
 - **The formatting hook eats an import added before its first use.** `ruff check --fix` deletes the unused import at

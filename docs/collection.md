@@ -389,10 +389,10 @@
   （`_plant_saved_cookie_into_profile`），不再需要用户按第二个按钮——按钮与
   `POST /api/cookies/refresh-profile` 已删除。刚粘贴的这份是当下最新的会话，"旧快照盖活会话"那种伤害
   只可能来自自动导入，不可能来自一次粘贴。唯一当场做不到的情形是那个浏览器正被占用（有抓取在跑），
-  这时保存仍然成功、回复里明确说出"这次没进到 profile"，而 `browser_profiles.needs_refresh`（文件比
+  这时保存仍然成功、回复里明确说出"这次没进到 profile"，而 `sessions.profiles.needs_refresh`（文件比
   profile 里那份新）会让**下一次抓取自动带上它**——所以延后不是丢失。
   「浏览器生成」这条路本来就在该 profile 自己的浏览器里登录再导出，导出后系统记下"文件就是它自己"
-  （`browser_profiles.remember_cookie`），因此不会被重复种一遍。
+  （`sessions.profiles.remember_cookie`），因此不会被重复种一遍。
   粘贴框下面**常驻一句说明**——Profile 是该平台自己的浏览器目录、抓取用的是它里面的登录态，而面板存的
   Cookie 只是它旁边的一个文件（这一句是因为用户直接问
   「什么意思我怎么没看懂」才加的：确认框里的话要先把框打开才看得见，教不了人）。

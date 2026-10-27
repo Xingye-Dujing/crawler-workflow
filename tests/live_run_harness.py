@@ -141,7 +141,7 @@ def real_jar(monkeypatch, module=None) -> str:
 
     Two attributes, because the path is captured twice: ``Config.COOKIE_DIR`` is what a
     crawler built *from now on* resolves (``_execute_source_node`` hands it to
-    ``get_crawler``), while ``app.cookie_manager.cookie_dir`` was frozen from the same
+    ``get_crawler``), while ``app.cookies.cookie_dir`` was frozen from the same
     value at ``app``'s own import and is what the account list, the cookie routes and the
     preflight gate read. Patching only the first would leave the crawl authenticated while
     the code that decides *whether* to run still believed nobody had logged in.

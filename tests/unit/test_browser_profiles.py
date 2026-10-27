@@ -26,8 +26,8 @@ import threading
 import time
 from pathlib import Path
 
-import browser_profiles
 import pytest
+from sessions import profiles
 
 import crawl_capabilities
 import crawlers as crawlers_pkg
@@ -60,7 +60,7 @@ def fake_crawler(monkeypatch):
 
 def _stub_settings(monkeypatch, *, enabled, root):
     values = {'use_browser_profile': enabled, 'browser_profile_dir': root}
-    monkeypatch.setattr(browser_profiles, 'get_setting', lambda key: values[key])
+    monkeypatch.setattr(profiles, 'get_setting', lambda key: values[key])
 
 
 @pytest.fixture
@@ -77,21 +77,21 @@ def profiles_on(tmp_path, monkeypatch):
 
 class TestPaths:
     def test_a_switched_off_setting_buys_no_directory(self, profiles_off):
-        assert browser_profiles.profile_dir_for('weibo') is None
-        assert browser_profiles.is_enabled() is False
+        assert profiles.profile_dir_for('weibo') is None
+        assert profiles.is_enabled() is False
 
     def test_the_platform_gets_its_own_directory_under_the_root(self, profiles_on, tmp_path):
         created = tmp_path / 'profiles' / 'weibo'
-        assert browser_profiles.profile_dir_for('weibo') == str(created)
+        assert profiles.profile_dir_for('weibo') == str(created)
         assert created.is_dir(), 'the panel asks whether it exists, so creating it is the contract'
 
     def test_the_root_follows_the_configured_path(self, tmp_path, monkeypatch):
         configured = str(tmp_path / 'elsewhere')
         _stub_settings(monkeypatch, enabled=True, root=configured)
-        assert browser_profiles.profile_dir_for('zhihu').startswith(configured)
+        assert profiles.profile_dir_for('zhihu').startswith(configured)
 
     def test_a_blank_platform_is_not_turned_into_the_root_itself(self, profiles_on):
-        assert browser_profiles.profile_dir_for('') is None
+        assert profiles.profile_dir_for('') is None
 
 
 class TestDelete:
@@ -104,37 +104,37 @@ class TestDelete:
     """
 
     def test_a_named_account_directory_is_removed_and_no_longer_used(self, profiles_on):
-        browser_profiles.mark_used('weibo', imported=False, account='work')
-        path = browser_profiles.platform_dir('weibo', 'work')
-        assert os.path.isdir(path) and browser_profiles.is_used('weibo', account='work')
-        assert browser_profiles.delete('weibo', 'work') == 'deleted'
+        profiles.mark_used('weibo', imported=False, account='work')
+        path = profiles.platform_dir('weibo', 'work')
+        assert os.path.isdir(path) and profiles.is_used('weibo', account='work')
+        assert profiles.delete('weibo', 'work') == 'deleted'
         assert not os.path.isdir(path), 'the device directory must be gone'
-        assert not browser_profiles.is_used('weibo', account='work'), 'the marker died with the tree'
+        assert not profiles.is_used('weibo', account='work'), 'the marker died with the tree'
 
     def test_deleting_only_touches_that_account(self, profiles_on):
         """Siblings and the platform root are not in this action's blast radius."""
-        browser_profiles.mark_used('weibo', imported=False, account='work')
-        browser_profiles.mark_used('weibo', imported=False, account='other')
-        browser_profiles.delete('weibo', 'work')
-        assert os.path.isdir(browser_profiles.platform_dir('weibo', 'other')), 'a sibling account survives'
-        assert os.path.isdir(browser_profiles.platform_dir('weibo')), 'the platform root survives'
+        profiles.mark_used('weibo', imported=False, account='work')
+        profiles.mark_used('weibo', imported=False, account='other')
+        profiles.delete('weibo', 'work')
+        assert os.path.isdir(profiles.platform_dir('weibo', 'other')), 'a sibling account survives'
+        assert os.path.isdir(profiles.platform_dir('weibo')), 'the platform root survives'
 
     def test_a_missing_directory_is_absent_not_an_error_or_a_fake_success(self, profiles_on):
-        assert browser_profiles.delete('weibo', 'ghost') == 'absent'
+        assert profiles.delete('weibo', 'ghost') == 'absent'
 
     def test_the_default_account_is_refused_because_its_folder_is_the_platform_root(self, profiles_on):
         for spelling in ('', 'default', 'DEFAULT'):
             with pytest.raises(ValueError, match='Default account'):
-                browser_profiles.delete('weibo', spelling)
+                profiles.delete('weibo', spelling)
 
     def test_a_profile_with_a_live_browser_is_not_torn_out_from_under_it(self, profiles_on):
-        browser_profiles.mark_used('weibo', imported=False, account='work')
-        path = browser_profiles.platform_dir('weibo', 'work')
-        held = browser_profiles.lock_for(path)
+        profiles.mark_used('weibo', imported=False, account='work')
+        path = profiles.platform_dir('weibo', 'work')
+        held = profiles.lock_for(path)
         assert held.acquire(blocking=False)
         try:
             with pytest.raises(ValueError, match='in use'):
-                browser_profiles.delete('weibo', 'work')
+                profiles.delete('weibo', 'work')
             assert os.path.isdir(path), 'a refused delete must leave the directory whole'
         finally:
             held.release()
@@ -142,61 +142,61 @@ class TestDelete:
 
 class TestMarker:
     def test_a_fresh_profile_is_marked_as_needing_an_import(self, profiles_on):
-        assert browser_profiles.is_imported('xiaohongshu') is False
-        browser_profiles.mark_used('xiaohongshu', imported=True)
-        assert browser_profiles.is_imported('xiaohongshu') is True
-        assert browser_profiles.is_used('xiaohongshu') is True
+        assert profiles.is_imported('xiaohongshu') is False
+        profiles.mark_used('xiaohongshu', imported=True)
+        assert profiles.is_imported('xiaohongshu') is True
+        assert profiles.is_used('xiaohongshu') is True
 
     def test_used_and_imported_are_two_different_questions(self, profiles_on):
         """Logging in *inside* the profile imports nothing, yet the profile is used —
         and "used" is what stops the next crawl from planting over its session."""
-        browser_profiles.mark_used('douyin', imported=False)
-        assert browser_profiles.is_used('douyin') is True
-        assert browser_profiles.is_imported('douyin') is False
-        status = browser_profiles.status('douyin')
+        profiles.mark_used('douyin', imported=False)
+        assert profiles.is_used('douyin') is True
+        assert profiles.is_imported('douyin') is False
+        status = profiles.status('douyin')
         assert status['used_at'] and status['imported'] is False
 
     def test_a_corrupt_marker_reads_as_new_rather_than_raising(self, profiles_on):
-        path = browser_profiles.profile_dir_for('weibo')
-        with open(browser_profiles.marker_path('weibo'), 'w', encoding='utf-8') as handle:
+        path = profiles.profile_dir_for('weibo')
+        with open(profiles.marker_path('weibo'), 'w', encoding='utf-8') as handle:
             handle.write('not json{')
-        assert browser_profiles.is_imported('weibo') is False
-        assert browser_profiles.is_used('weibo') is False, 'an unreadable history must not freeze the credential'
-        assert json.loads(json.dumps(browser_profiles.status('weibo')))['platform'] == 'weibo'
+        assert profiles.is_imported('weibo') is False
+        assert profiles.is_used('weibo') is False, 'an unreadable history must not freeze the credential'
+        assert json.loads(json.dumps(profiles.status('weibo')))['platform'] == 'weibo'
         assert path
 
     def test_remember_cookie_marks_the_file_without_claiming_a_plant(self, profiles_on, tmp_path):
         """A cookie captured out of the profile IS the profile's session; saying so must not
         rewrite history as "it was imported", because the panel's advice differs between the two
         (imported = planted from a file; remembered = it came from here)."""
-        browser_profiles.mark_used('weibo', imported=False)
-        marker = Path(browser_profiles.marker_path('weibo'))
+        profiles.mark_used('weibo', imported=False)
+        marker = Path(profiles.marker_path('weibo'))
         before = json.loads(marker.read_text(encoding='utf-8'))
         path = tmp_path / 'weibo_cookies.json'
         path.write_text('[]', encoding='utf-8')
-        browser_profiles.remember_cookie('weibo', str(path))
-        after = browser_profiles.status('weibo', cookie_path=str(path))
+        profiles.remember_cookie('weibo', str(path))
+        after = profiles.status('weibo', cookie_path=str(path))
         assert after['needs_refresh'] is False, after
         written = json.loads(marker.read_text(encoding='utf-8'))
-        assert written['cookie_stamp'] == browser_profiles.file_stamp(str(path)), written
+        assert written['cookie_stamp'] == profiles.file_stamp(str(path)), written
         assert written['imported_at'] == before['imported_at'], 'remembering must not claim an import'
 
     def test_a_file_saved_after_a_remember_still_asks_for_the_button(self, profiles_on, tmp_path):
         """The recording is about THAT file, not about the platform forever: a later paste is a
         different session again, and the hint has to come back."""
-        browser_profiles.mark_used('weibo', imported=False)
+        profiles.mark_used('weibo', imported=False)
         path = tmp_path / 'weibo_cookies.json'
         path.write_text('[]', encoding='utf-8')
-        browser_profiles.remember_cookie('weibo', str(path))
+        profiles.remember_cookie('weibo', str(path))
         path.write_text('[{"name": "x"}]', encoding='utf-8')
-        assert browser_profiles.status('weibo', cookie_path=str(path))['needs_refresh'] is True
+        assert profiles.status('weibo', cookie_path=str(path))['needs_refresh'] is True
 
 
 class TestFactoryPolicy:
     def test_the_first_run_imports_the_saved_cookie_file(self, profiles_on, fake_crawler):
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
         assert fake_crawler()['cookie_path'] == '/tmp/cookies/weibo_cookies.json'
-        assert fake_crawler()['profile_dir'] == browser_profiles.profile_dir_for('weibo')
+        assert fake_crawler()['profile_dir'] == profiles.profile_dir_for('weibo')
 
     def test_a_second_run_plants_nothing(self, profiles_on, fake_crawler):
         """The rule the whole feature exists for: once the profile has been used, the
@@ -278,20 +278,20 @@ class TestAccounts:
     """
 
     def test_the_default_account_keeps_the_historical_directory(self, profiles_on, tmp_path):
-        assert browser_profiles.platform_dir('zhihu') == str(tmp_path / 'profiles' / 'zhihu')
+        assert profiles.platform_dir('zhihu') == str(tmp_path / 'profiles' / 'zhihu')
 
     def test_a_named_account_nests_one_level_deeper(self, profiles_on, tmp_path):
-        assert browser_profiles.platform_dir('zhihu', 'work') == str(tmp_path / 'profiles' / 'zhihu' / 'work')
+        assert profiles.platform_dir('zhihu', 'work') == str(tmp_path / 'profiles' / 'zhihu' / 'work')
 
     def test_the_default_name_nests_nothing_either(self, profiles_on, tmp_path):
         """``default`` is the platform's own login BY NAME, so it keeps the same directory the
         blank spelling always had — the file and the device fold together or a renamed-looking
         account would crawl on a device that has never been opened."""
-        assert browser_profiles.platform_dir('zhihu', 'default') == str(tmp_path / 'profiles' / 'zhihu')
-        assert browser_profiles.platform_dir('zhihu', '') == browser_profiles.platform_dir('zhihu', 'DEFAULT')
+        assert profiles.platform_dir('zhihu', 'default') == str(tmp_path / 'profiles' / 'zhihu')
+        assert profiles.platform_dir('zhihu', '') == profiles.platform_dir('zhihu', 'DEFAULT')
 
     def test_a_hyphen_reaches_a_path_like_any_letter(self, profiles_on, tmp_path):
-        assert browser_profiles.platform_dir('zhihu', 'work-2') == str(tmp_path / 'profiles' / 'zhihu' / 'work-2')
+        assert profiles.platform_dir('zhihu', 'work-2') == str(tmp_path / 'profiles' / 'zhihu' / 'work-2')
 
     def test_an_account_that_cannot_be_a_path_segment_never_reaches_a_path(self, profiles_on):
         """The refusal list is about the filesystem, not about case: capitals are folded (one
@@ -299,26 +299,26 @@ class TestAccounts:
         something that would leave the profile root."""
         for bad in ('../escape', 'a/b', 'with space', 'x' * 25, 'q"uote', 'a\\b', '.', 'a.b'):
             with pytest.raises(ValueError):
-                browser_profiles.platform_dir('zhihu', bad)
+                profiles.platform_dir('zhihu', bad)
 
     def test_two_accounts_do_not_share_a_marker(self, profiles_on):
         """The import-once rule is per device: account A being used must not talk
         account B out of importing its own saved cookie file."""
-        browser_profiles.mark_used('weibo', imported=True, cookie_stamp='s1', account='a')
-        assert browser_profiles.is_used('weibo', 'a') is True
-        assert browser_profiles.is_used('weibo', 'b') is False
-        assert browser_profiles.is_used('weibo') is False, 'the default account is its own device too'
+        profiles.mark_used('weibo', imported=True, cookie_stamp='s1', account='a')
+        assert profiles.is_used('weibo', 'a') is True
+        assert profiles.is_used('weibo', 'b') is False
+        assert profiles.is_used('weibo') is False, 'the default account is its own device too'
 
     def test_accounts_get_separate_locks_because_they_are_separate_paths(self, tmp_path):
-        first = browser_profiles.lock_for(browser_profiles.platform_dir('weibo', 'a'))
-        second = browser_profiles.lock_for(browser_profiles.platform_dir('weibo', 'b'))
-        default = browser_profiles.lock_for(browser_profiles.platform_dir('weibo'))
+        first = profiles.lock_for(profiles.platform_dir('weibo', 'a'))
+        second = profiles.lock_for(profiles.platform_dir('weibo', 'b'))
+        default = profiles.lock_for(profiles.platform_dir('weibo'))
         assert first is not second and first is not default
 
     def test_the_factory_routes_the_account_to_its_file_and_device(self, profiles_on, fake_crawler, tmp_path):
         crawlers_pkg.get_crawler('weibo', cookie_dir=str(tmp_path), account='work')
         assert fake_crawler()['cookie_path'] == f'{tmp_path}/weibo@work_cookies.json'
-        assert fake_crawler()['profile_dir'] == browser_profiles.platform_dir('weibo', 'work')
+        assert fake_crawler()['profile_dir'] == profiles.platform_dir('weibo', 'work')
 
     def test_one_accounts_use_does_not_stop_another_importing(self, profiles_on, fake_crawler):
         """Second crawl on account 'b' must still plant: 'a' being used is not 'b'
@@ -330,7 +330,7 @@ class TestAccounts:
         assert fake_crawler()['cookie_path'] is None, 'the same account plants only once'
 
     def test_the_status_row_can_answer_per_account(self, profiles_on, tmp_path):
-        row = browser_profiles.status('weibo', account='work', has_cookie=True)
+        row = profiles.status('weibo', account='work', has_cookie=True)
         assert row['account'] == 'work'
         assert row['path'].endswith(os.path.join('weibo', 'work'))
 
@@ -346,15 +346,15 @@ class TestCookieFileIsNotTheProfileSession:
     def test_a_file_that_never_changed_needs_no_refresh(self, profiles_on, tmp_path):
         saved = tmp_path / 'weibo_cookies.json'
         saved.write_text('[{"name":"a"}]', encoding='utf-8')
-        browser_profiles.mark_used('weibo', imported=True, cookie_stamp=browser_profiles.file_stamp(str(saved)))
-        assert browser_profiles.needs_refresh('weibo', str(saved)) is False
+        profiles.mark_used('weibo', imported=True, cookie_stamp=profiles.file_stamp(str(saved)))
+        assert profiles.needs_refresh('weibo', str(saved)) is False
 
     def test_a_file_saved_over_since_needs_one(self, profiles_on, tmp_path):
         saved = tmp_path / 'weibo_cookies.json'
         saved.write_text('[{"name":"a"}]', encoding='utf-8')
-        browser_profiles.mark_used('weibo', imported=True, cookie_stamp=browser_profiles.file_stamp(str(saved)))
+        profiles.mark_used('weibo', imported=True, cookie_stamp=profiles.file_stamp(str(saved)))
         saved.write_text('[{"name":"a"},{"name":"b"}]', encoding='utf-8')
-        assert browser_profiles.needs_refresh('weibo', str(saved)) is True
+        assert profiles.needs_refresh('weibo', str(saved)) is True
 
     def test_a_profile_used_without_a_file_is_not_nagged(self, profiles_on, tmp_path):
         """Logging in *inside* the profile plants nothing, so there is no "your file is
@@ -362,36 +362,36 @@ class TestCookieFileIsNotTheProfileSession:
         very session they just created by hand."""
         saved = tmp_path / 'douyin_cookies.json'
         saved.write_text('[{"name":"a"}]', encoding='utf-8')
-        browser_profiles.mark_used('douyin', imported=False)
-        assert browser_profiles.needs_refresh('douyin', str(saved)) is False
+        profiles.mark_used('douyin', imported=False)
+        assert profiles.needs_refresh('douyin', str(saved)) is False
 
     def test_a_profile_with_no_history_of_what_went_in_says_nothing(self, profiles_on, tmp_path):
         """Every profile built before this field existed answers "I cannot tell", which is
         deliberately not rendered as a hint. The button still works for them."""
         saved = tmp_path / 'zhihu_cookies.json'
         saved.write_text('[{"name":"a"}]', encoding='utf-8')
-        browser_profiles.mark_used('zhihu', imported=True)
-        assert browser_profiles.needs_refresh('zhihu', str(saved)) is False
+        profiles.mark_used('zhihu', imported=True)
+        assert profiles.needs_refresh('zhihu', str(saved)) is False
 
     def test_an_unused_profile_is_answered_by_the_next_crawl_not_by_a_button(self, profiles_on, tmp_path):
         saved = tmp_path / 'weibo_cookies.json'
         saved.write_text('[]', encoding='utf-8')
-        assert browser_profiles.needs_refresh('weibo', str(saved)) is False
+        assert profiles.needs_refresh('weibo', str(saved)) is False
 
     def test_a_missing_or_unreadable_file_has_no_stamp_rather_than_a_fake_one(self, tmp_path):
-        assert browser_profiles.file_stamp(str(tmp_path / 'nope.json')) == ''
-        assert browser_profiles.file_stamp('') == ''
+        assert profiles.file_stamp(str(tmp_path / 'nope.json')) == ''
+        assert profiles.file_stamp('') == ''
 
     def test_the_status_row_carries_the_answer_for_the_panel(self, profiles_on, tmp_path):
         saved = tmp_path / 'weibo_cookies.json'
         saved.write_text('[{"name":"a"}]', encoding='utf-8')
-        browser_profiles.mark_used('weibo', imported=True, cookie_stamp='111:8')
-        row = browser_profiles.status('weibo', has_cookie=True, cookie_path=str(saved))
+        profiles.mark_used('weibo', imported=True, cookie_stamp='111:8')
+        row = profiles.status('weibo', has_cookie=True, cookie_path=str(saved))
         assert row['needs_refresh'] is True
         assert row['imported'] is True
         # Asked without a path (a caller that cannot know which file), the answer is no —
         # never a guess.
-        assert browser_profiles.status('weibo')['needs_refresh'] is False
+        assert profiles.status('weibo')['needs_refresh'] is False
 
 
 class TestSettingsRoundTrip:
@@ -461,10 +461,10 @@ class TestOneBrowserPerProfile:
 
     def test_the_same_directory_shares_one_lock_and_different_ones_do_not(self, tmp_path):
         a = str(tmp_path / 'bilibili')
-        assert browser_profiles.lock_for(a) is browser_profiles.lock_for(a)
-        assert browser_profiles.lock_for(a) is not browser_profiles.lock_for(str(tmp_path / 'zhihu'))
+        assert profiles.lock_for(a) is profiles.lock_for(a)
+        assert profiles.lock_for(a) is not profiles.lock_for(str(tmp_path / 'zhihu'))
         # Windows paths differ by case and separator while naming one directory.
-        assert browser_profiles.lock_for(a) is browser_profiles.lock_for(a.replace('/', '\\').upper().lower())
+        assert profiles.lock_for(a) is profiles.lock_for(a.replace('/', '\\').upper().lower())
 
     def test_a_second_thread_waits_for_the_first_to_finish(self, tmp_path):
         path = str(tmp_path / 'weibo')
@@ -473,18 +473,18 @@ class TestOneBrowserPerProfile:
         order = []
 
         def holder():
-            lock = browser_profiles.acquire_profile(path, timeout=20)
+            lock = profiles.acquire_profile(path, timeout=20)
             assert lock is not None
             held.set()
             release.wait(20)
             order.append('holder-finished')
-            browser_profiles.release_profile(lock)
+            profiles.release_profile(lock)
 
         def waiter():
             held.wait(20)
-            lock = browser_profiles.acquire_profile(path, timeout=20)
+            lock = profiles.acquire_profile(path, timeout=20)
             order.append('waiter-entered' if lock is not None else 'waiter-refused')
-            browser_profiles.release_profile(lock)
+            profiles.release_profile(lock)
 
         threads = [threading.Thread(target=holder), threading.Thread(target=waiter)]
         for t in threads:
@@ -509,10 +509,10 @@ class TestOneBrowserPerProfile:
         release = threading.Event()
 
         def holder():
-            lock = browser_profiles.acquire_profile(path, timeout=20)
+            lock = profiles.acquire_profile(path, timeout=20)
             held.set()
             release.wait(20)
-            browser_profiles.release_profile(lock)
+            profiles.release_profile(lock)
 
         thread = threading.Thread(target=holder, daemon=True)
         thread.start()
@@ -520,7 +520,7 @@ class TestOneBrowserPerProfile:
         give_up = threading.Event()
         give_up.set()
         started = time.monotonic()
-        lock = browser_profiles.acquire_profile(path, timeout=20, abort=give_up.is_set)
+        lock = profiles.acquire_profile(path, timeout=20, abort=give_up.is_set)
         release.set()
         thread.join(30)
         assert lock is None, 'the aborted wait still took the profile'
@@ -530,15 +530,15 @@ class TestOneBrowserPerProfile:
         """The crawl side of the same promise: the executor's "run is over" check
         reaches the profile wait, and a crawler that gives up the queue says it
         gave up — not blames a browser that was never left open."""
-        monkeypatch.setattr(crawlers_pkg.browser_profiles.Config, 'PROFILE_LOCK_TIMEOUT', 20)
+        monkeypatch.setattr(crawlers_pkg.profiles.Config, 'PROFILE_LOCK_TIMEOUT', 20)
         path = str(tmp_path / 'weibo')
-        held = browser_profiles.acquire_profile(path, timeout=20)
+        held = profiles.acquire_profile(path, timeout=20)
         assert held is not None
         try:
             with pytest.raises(RuntimeError) as caught:
                 _make_waiting_crawler(path)
         finally:
-            browser_profiles.release_profile(held)
+            profiles.release_profile(held)
         text = str(caught.value)
         assert '停止' in text or 'stopped' in text.lower(), f'not the gave-up line: {text}'
         assert '超时' not in text and 'timed out' not in text.lower(), 'a Stop was reported as a stuck profile'
@@ -556,7 +556,7 @@ class TestOneBrowserPerProfile:
         started = threading.Event()
 
         def holder():
-            results['lock'] = browser_profiles.acquire_profile(path, timeout=5)
+            results['lock'] = profiles.acquire_profile(path, timeout=5)
             started.set()
             time.sleep(0.2)
             # Released by whoever the context leaves it to — here, the main thread.
@@ -564,37 +564,37 @@ class TestOneBrowserPerProfile:
         worker = threading.Thread(target=holder)
         worker.start()
         assert started.wait(10)
-        browser_profiles.release_profile(results['lock'])
-        gained = browser_profiles.acquire_profile(path, timeout=1)
+        profiles.release_profile(results['lock'])
+        gained = profiles.acquire_profile(path, timeout=1)
         assert gained is not None, 'a claim made on another thread could not be handed over'
-        browser_profiles.release_profile(gained)
+        profiles.release_profile(gained)
         worker.join(10)
 
     def test_a_directory_still_held_gives_up_rather_than_waiting_forever(self, tmp_path):
         """The ceiling is what keeps a leaked browser from parking a platform: None is
         the caller's signal to fail with a reason instead of queueing forever."""
         path = str(tmp_path / 'douyin')
-        holder = browser_profiles.acquire_profile(path, timeout=5)
+        holder = profiles.acquire_profile(path, timeout=5)
         results = {}
 
         def try_claim():
-            results['lock'] = browser_profiles.acquire_profile(path, timeout=0.2)
+            results['lock'] = profiles.acquire_profile(path, timeout=0.2)
 
         t = threading.Thread(target=try_claim)
         t.start()
         t.join(10)
         assert not t.is_alive(), 'the bounded wait never let go'
         assert results['lock'] is None, 'a busy profile must answer None so the caller can say why'
-        browser_profiles.release_profile(holder)
-        after = browser_profiles.acquire_profile(path, timeout=0.5)
+        profiles.release_profile(holder)
+        after = profiles.acquire_profile(path, timeout=0.5)
         assert after is not None, 'the directory stayed claimed after its holder released it'
-        browser_profiles.release_profile(after)
+        profiles.release_profile(after)
 
     def test_releasing_something_unheld_is_not_an_error(self, tmp_path):
         # `close()` runs in finally-blocks; a release that raises would replace the
         # crawl's real outcome with a lock bookkeeping crash.
-        browser_profiles.release_profile(None)
-        browser_profiles.release_profile(browser_profiles.lock_for(str(tmp_path / 'x')))
+        profiles.release_profile(None)
+        profiles.release_profile(profiles.lock_for(str(tmp_path / 'x')))
 
 
 class TestCrawlerHoldsItsProfile:
@@ -648,10 +648,10 @@ class TestCrawlerHoldsItsProfile:
         held = {'lock': None}
 
         def hold():
-            held['lock'] = browser_profiles.acquire_profile(path, timeout=20)
+            held['lock'] = profiles.acquire_profile(path, timeout=20)
             acquired.set()
             stop.wait(60)
-            browser_profiles.release_profile(held['lock'])
+            profiles.release_profile(held['lock'])
 
         worker = threading.Thread(target=hold, daemon=True)
         worker.start()
@@ -670,16 +670,16 @@ class TestCrawlerHoldsItsProfile:
         results = {}
 
         def probe_free():
-            results['free'] = browser_profiles.acquire_profile(path, timeout=0.3)
+            results['free'] = profiles.acquire_profile(path, timeout=0.3)
 
         watcher = threading.Thread(target=probe_free)
         watcher.start()
         watcher.join(10)
         assert results['free'] is None, 'the running browser did not claim its profile, so two would fight over it'
         crawler.close()
-        gained = browser_profiles.acquire_profile(path, timeout=0.3)
+        gained = profiles.acquire_profile(path, timeout=0.3)
         assert gained is not None, 'closing the browser did not give the profile back'
-        browser_profiles.release_profile(gained)
+        profiles.release_profile(gained)
 
     def test_a_second_close_cannot_release_a_profile_someone_else_now_holds(self, tmp_path):
         """One session releases exactly once, however many times it is closed.
@@ -693,7 +693,7 @@ class TestCrawlerHoldsItsProfile:
         path = str(tmp_path / 'zhihu')
         crawler = self._probe_class('Twice', 'zhihu')(headless=True, profile_dir=path)
         crawler.close()
-        holder = browser_profiles.acquire_profile(path, timeout=0.3)
+        holder = profiles.acquire_profile(path, timeout=0.3)
         assert holder is not None, 'the first close did not give the profile back'
 
         crawler.close()  # the runner's finally, arriving after someone else took the directory
@@ -701,7 +701,7 @@ class TestCrawlerHoldsItsProfile:
         verdict = {}
 
         def probe_free():
-            verdict['free'] = browser_profiles.acquire_profile(path, timeout=0.3)
+            verdict['free'] = profiles.acquire_profile(path, timeout=0.3)
 
         watcher = threading.Thread(target=probe_free)
         watcher.start()
@@ -710,10 +710,10 @@ class TestCrawlerHoldsItsProfile:
             'a second close released a profile this crawler no longer owned — two sessions would '
             'share one user-data-dir'
         )
-        browser_profiles.release_profile(holder)
-        gained = browser_profiles.acquire_profile(path, timeout=0.3)
+        profiles.release_profile(holder)
+        gained = profiles.acquire_profile(path, timeout=0.3)
         assert gained is not None, 'the release path is broken in the other direction'
-        browser_profiles.release_profile(gained)
+        profiles.release_profile(gained)
 
     def test_a_browser_that_never_came_up_leaves_no_claim_behind(self, tmp_path):
         """__init__ claims, then buys the driver. A chromedriver refusal has to walk
@@ -723,9 +723,9 @@ class TestCrawlerHoldsItsProfile:
         broken = self._probe_class('Broken', 'weibo', driver_raises=True)
         with pytest.raises(RuntimeError, match='session not created'):
             broken(headless=True, profile_dir=path)
-        gained = browser_profiles.acquire_profile(path, timeout=0.2)
+        gained = profiles.acquire_profile(path, timeout=0.2)
         assert gained is not None, 'a failed browser locked the profile for the rest of the process'
-        browser_profiles.release_profile(gained)
+        profiles.release_profile(gained)
 
     def test_a_profile_held_by_someone_else_fails_with_a_reason(self, tmp_path, monkeypatch):
         """Not a silent hang and not a chromedriver stack trace: the node has to say
@@ -758,14 +758,14 @@ class TestTheSizeFlagSkipsTheWalk:
     """
 
     def test_the_size_is_reported_only_when_it_was_asked_for(self, profiles_on):
-        root = Path(browser_profiles.profile_dir_for('weibo'))
+        root = Path(profiles.profile_dir_for('weibo'))
         root.mkdir(parents=True, exist_ok=True)
         (root / 'history').write_bytes(b'x' * (2 * 1024 * 1024))  # 2 MB: `size_mb` rounds, a KiB reads as 0
 
-        walked = browser_profiles.status('weibo')
+        walked = profiles.status('weibo')
         assert walked['size_mb'] > 0, 'the tmp profile is not being measured at all'
 
-        skipped = browser_profiles.status('weibo', size=False)
+        skipped = profiles.status('weibo', size=False)
         assert skipped['size_mb'] == 0
         # The flag chooses the walk, nothing else: every other field must say the same thing.
         assert {k: v for k, v in skipped.items() if k != 'size_mb'} == {
@@ -776,5 +776,5 @@ class TestTheSizeFlagSkipsTheWalk:
         def explode(path):
             raise AssertionError('size=False must not walk the profile directory')
 
-        monkeypatch.setattr(browser_profiles, '_dir_size_mb', explode)
-        assert browser_profiles.status('weibo', size=False)['size_mb'] == 0
+        monkeypatch.setattr(profiles, '_dir_size_mb', explode)
+        assert profiles.status('weibo', size=False)['size_mb'] == 0

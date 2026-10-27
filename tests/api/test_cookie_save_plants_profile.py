@@ -57,12 +57,10 @@ def factory(monkeypatch, app_module, tmp_path):
             return crawler
 
         monkeypatch.setattr(app_module, 'get_crawler', build)
-        monkeypatch.setattr(app_module.browser_profiles, 'is_enabled', lambda: enabled)
-        monkeypatch.setattr(app_module.browser_profiles, 'is_used', lambda platform, account='': used)
-        monkeypatch.setattr(app_module.browser_profiles, 'is_busy', lambda path: busy)
-        monkeypatch.setattr(
-            app_module.browser_profiles, 'platform_dir', lambda platform, account='': str(tmp_path / platform)
-        )
+        monkeypatch.setattr(app_module.profiles, 'is_enabled', lambda: enabled)
+        monkeypatch.setattr(app_module.profiles, 'is_used', lambda platform, account='': used)
+        monkeypatch.setattr(app_module.profiles, 'is_busy', lambda path: busy)
+        monkeypatch.setattr(app_module.profiles, 'platform_dir', lambda platform, account='': str(tmp_path / platform))
         return made
 
     return _install
@@ -167,7 +165,7 @@ class TestThePlantItself:
         """The profile now answers differently than the one the last probe looked at."""
         factory()
         seen = []
-        monkeypatch.setattr(app_module.cookie_preflight, 'invalidate', seen.append)
+        monkeypatch.setattr(app_module.preflight, 'invalidate', seen.append)
         _save(client)
         assert 'weibo' in seen
 

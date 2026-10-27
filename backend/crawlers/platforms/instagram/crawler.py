@@ -48,7 +48,7 @@ class LoginOnlyCrawler(Crawler):
 class InstagramCrawler(LoginOnlyCrawler):
     """Instagram: the web app serves both the profile/grid pages and the
     ``/api/v1/`` endpoints from ``www.instagram.com``, so one host is enough —
-    ``cookie_flow`` accepts the bare ``instagram.com`` for a pasted link because
+    ``sessions.flow`` accepts the bare ``instagram.com`` for a pasted link because
     the recorded host carries its ``www.`` prefix."""
 
     domain = 'www.instagram.com'

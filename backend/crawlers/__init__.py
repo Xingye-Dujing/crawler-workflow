@@ -1,4 +1,5 @@
-import browser_profiles
+from sessions import profiles
+from sessions.cookies import CookieManager
 
 from config import Config
 from crawlers.platforms.bilibili.crawler import BilibiliCrawler
@@ -11,7 +12,6 @@ from crawlers.platforms.weibo.crawler import WeiboCrawler
 from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler
 from crawlers.platforms.youtube.crawler import YouTubeCrawler
 from crawlers.platforms.zhihu.crawler import ZhihuCrawler
-from services.cookie_manager import CookieManager
 
 # The registry, not just the factory: the cookie panel needs each platform's
 # host list and login page to explain itself, and reaching those through
@@ -115,7 +115,7 @@ def get_crawler(
     # login browser that this used to force visible is refused by name at its route
     # instead — a person cannot scan a QR code nobody can see.
     headless = True if Config.CLOUD_MODE else headless
-    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
+    profile = profiles.profile_dir_for(platform, enabled=use_profile, account=account)
     # One account, ONE spelling of its file. ``default`` is that login's NAME and ``''`` is its
     # historical spelling, and the file is the unsuffixed one for both — the fold lives in
     # :meth:`CookieManager.path_segment`. Splicing ``f'{platform}@{account}'`` here instead wrote
@@ -133,10 +133,8 @@ def get_crawler(
     # (weibo's SUB/SUBP stay inside the browser that rotated them) while a paste the user just
     # made always reaches the browser that will crawl with it. One cookie, one profile, and the
     # profile holds that cookie.
-    stale = bool(profile) and browser_profiles.needs_refresh(platform, saved, account)
-    planting = bool(saved) and (
-        not profile or not browser_profiles.is_used(platform, account) or refresh_cookies or stale
-    )
+    stale = bool(profile) and profiles.needs_refresh(platform, saved, account)
+    planting = bool(saved) and (not profile or not profiles.is_used(platform, account) or refresh_cookies or stale)
     crawler = cls(
         headless=headless,
         cookie_path=saved if planting else None,
@@ -147,7 +145,5 @@ def get_crawler(
     if profile:
         # The stamp is *which* file went in, so the panel can tell a saved-over cookie
         # from a profile that already holds the current one.
-        browser_profiles.mark_used(
-            platform, imported=planting, cookie_stamp=browser_profiles.file_stamp(saved), account=account
-        )
+        profiles.mark_used(platform, imported=planting, cookie_stamp=profiles.file_stamp(saved), account=account)
     return crawler

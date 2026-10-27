@@ -49,7 +49,7 @@ DEFAULTS = {
     # Local Ollama daemon (was OLLAMA_HOST env-only, with no UI).
     'ollama_host': Config.OLLAMA_HOST,
     #: Check whether each platform's session still works *before* starting a run that
-    # crawls it, and refuse to start when one is walled (:mod:`cookie_preflight`). Off
+    # crawls it, and refuse to start when one is walled (``sessions.preflight``). Off
     # asks nothing and blocks nothing — the old 「执行前确认 Cookie」 fallback is gone.
     # On costs one page load per platform (cached for a few minutes), and is what turns
     # 「一小时后才发现 Cookie 早死了」 into a refusal that names the platform.
@@ -81,7 +81,7 @@ DEFAULTS = {
     'use_browser_profile': True,
     # Empty = the app-managed ``data/chrome_profile``. A custom path is for a profile
     # the user created *for this tool* — never their daily Chrome profile, which Chrome
-    # locks while it runs and encrypts against other processes (see browser_profiles).
+    # locks while it runs and encrypts against other processes (see profiles).
     'browser_profile_dir': '',
     #: How many browsers a single parallel run may hold open at once, split by how the
     #: run browses. It used to be one hardcoded constant for both. A headless run opens

@@ -3,14 +3,13 @@
 Moved out of ``app.py`` so both the ``POST /api/browser/profiles/template`` Blueprint route and
 the cookie-save path (``_plant_saved_cookie_into_profile`` in ``app.py``) call the same function
 without a cycle. A build is process-serialised: two blank Chromes on one ``user-data-dir`` is the
-crash the profile module documents. Tests that need to stub the launcher patch ``profiles.warm_profile_dir``.
+crash the profile module documents. Tests that need to stub the launcher patch ``template.warm_profile_dir``.
 """
 
 import threading
 
-import browser_profiles
-
 from crawlers.core.crawler import warm_profile_dir
+from sessions import profiles
 
 _TEMPLATE_BUILD_LOCK = threading.Lock()
 
@@ -29,6 +28,6 @@ def ensure_profile_template(force: bool = False) -> dict:
     feature exists to avoid.
     """
     with _TEMPLATE_BUILD_LOCK:
-        if browser_profiles.template_exists() and not force and not browser_profiles.verify_pristine():
+        if profiles.template_exists() and not force and not profiles.verify_pristine():
             return {'ok': True, 'built': False, 'existed': True}
-        return browser_profiles.build_template(launch=warm_profile_dir)
+        return profiles.build_template(launch=warm_profile_dir)

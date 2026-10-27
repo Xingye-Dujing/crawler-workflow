@@ -17,8 +17,9 @@ one of these wholesale, mutate it (``clear()``/``update()``/slice-assign) instea
 import threading
 import time
 
+from sessions.cookies import CookieManager
+
 from config import Config
-from services.cookie_manager import CookieManager
 from services.execution_history import ExecutionHistoryService
 
 #: 执行历史 service: one process-wide instance that opens ``data/history.db`` at import (the path

@@ -39,6 +39,7 @@ _PROJECT_DIRS = (
     'ml_train',
     'nodes',
     'samples',
+    'sessions',
     'services',
     'static',
     'tests',
@@ -76,6 +77,11 @@ _PLANS = {'refactor_plan.md'}
 #: about, the same way an exemption in a linter config is.
 _DELETED_MODULES = {
     'engine/menu.py': 'the 抖音 sort-menu helper, deleted with the mode it served (docs/crawler_notes.md 338)',
+    # 2026-10-27: the login-state domain was assembled out of modules that lived elsewhere, and
+    # docs/ARCHITECTURE.md names the old path so a reader who arrives with the old spelling in mind
+    # can see where it went. The file is gone; the citation is the provenance, not a claim.
+    'services/cookie_manager.py': 'moved to sessions/cookies.py (docs/ARCHITECTURE.md sessions row)',
+    'services/cookie_flow.py': 'moved to sessions/flow.py (docs/ARCHITECTURE.md sessions row)',
 }
 
 
@@ -117,10 +123,17 @@ class TestTheDocsPointAtRealFiles:
         assert found > 150, f'only {found} citations parsed — the pattern stopped matching the way docs write paths'
 
     def test_a_moved_file_is_convicted_not_just_missed(self):
-        assert unresolved('see `services/cookie_manager.py` for the fold', 'x.md') == []
-        assert unresolved('see `services/cookie_manager_gone.py` for the fold', 'x.md') == [
-            'services/cookie_manager_gone.py'
-        ]
+        assert unresolved('see `sessions/cookies.py` for the fold', 'x.md') == []
+        assert unresolved('see `sessions/cookie_jar_gone.py` for the fold', 'x.md') == ['sessions/cookie_jar_gone.py']
+
+    def test_every_backend_package_is_inside_the_scanned_set(self):
+        """A directory the docs can cite but the scanner cannot see is a silent hole: the guard would
+        report zero broken paths and look like a green suite. One direction only — the list also names
+        trees a later stage has not created yet.
+        """
+        present = sorted(path.name for path in (REPO / 'backend').iterdir() if path.is_dir() and any(path.glob('*.py')))
+        unscanned = [name for name in present if name not in _PROJECT_DIRS]
+        assert unscanned == [], f'backend packages the doc guard cannot resolve: {unscanned}'
 
     def test_a_deleted_probe_stays_a_legal_citation(self):
         """The probe scripts were archived outside the repo; docs naming them record provenance."""

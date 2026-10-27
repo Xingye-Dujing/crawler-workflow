@@ -35,14 +35,13 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import browser_profiles
-
 import crawl_capabilities as capabilities
 from config import Config
 from crawlers import crawler_class, is_crawlable
 from i18n import t
 from services import catbus_bridge
-from services.cookie_manager import CookieManager
+from sessions import profiles
+from sessions.cookies import CookieManager
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +231,7 @@ def has_session_to_test(platform: str, use_profile: bool = None, account: str = 
 
     The saved file is the obvious source, but a *used profile* is a second one: since
     a profile imports the cookie file once and is never re-planted, a session lives in
-    the directory from then on, and :func:`browser_profiles` ignores the file
+    the directory from then on, and :mod:`sessions.profiles` ignores the file
     completely. Deleting a snapshot (#111) therefore does not log that device out — so
     this must not answer "nothing to test" while the profile is in play.
 
@@ -241,8 +240,8 @@ def has_session_to_test(platform: str, use_profile: bool = None, account: str = 
     """
     if CookieManager(Config.COOKIE_DIR).exists(platform, account):
         return True
-    active = browser_profiles.is_enabled() if use_profile is None else bool(use_profile)
-    return bool(active and browser_profiles.is_used(platform, account))
+    active = profiles.is_enabled() if use_profile is None else bool(use_profile)
+    return bool(active and profiles.is_used(platform, account))
 
 
 def knows(platform: str) -> bool:
@@ -352,8 +351,8 @@ def probe(
         return _verdict(platform, NO_LOGIN, account=account)
     if not has_session_to_test(platform, use_profile, account):
         return _verdict(platform, NO_COOKIE, account=account)
-    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
-    if profile and browser_profiles.is_busy(profile):
+    profile = profiles.profile_dir_for(platform, enabled=use_profile, account=account)
+    if profile and profiles.is_busy(profile):
         # Something already holds that browser — an in-flight run, or the panel's own
         # login window. Waiting here would park the press of Execute behind a wait
         # whose own timeout is longer than any crawl, and the run that owns the
@@ -457,7 +456,7 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
     key being present, and a missing key would read as "no opinion". Its browser
     thread is left to finish and close itself — it may still hold that profile for a
     while, and the run that starts behind it then waits on
-    :func:`browser_profiles.acquire_profile`, which is bounded and reports the
+    :func:`sessions.template.acquire_profile`, which is bounded and reports the
     directory it is stuck on. That is a slower start, never a corrupted session.
     """
     pairs = list(dict.fromkeys(entry_of(e) for e in (entries or [])))

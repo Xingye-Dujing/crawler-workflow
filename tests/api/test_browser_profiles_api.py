@@ -18,8 +18,8 @@ nothing here ever touches the real ``data/chrome_profile``.
 
 import json
 
-import browser_profiles
 import pytest
+from sessions import profiles
 
 import crawl_capabilities
 
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.api
 @pytest.fixture
 def profiles_on(tmp_path, monkeypatch):
     values = {'use_browser_profile': True, 'browser_profile_dir': str(tmp_path / 'profiles')}
-    monkeypatch.setattr(browser_profiles, 'get_setting', lambda key: values[key])
+    monkeypatch.setattr(profiles, 'get_setting', lambda key: values[key])
     return values
 
 
@@ -47,7 +47,7 @@ def _session_platforms() -> list:
     WeChat is the platform that proves the difference: article bodies need no login,
     so a "profile" for it would be an empty directory and a row that reads as advice.
     """
-    from services.cookie_manager import CookieManager
+    from sessions.cookies import CookieManager
 
     return [cap.platform for cap in crawl_capabilities.CAPABILITIES if CookieManager.is_supported(cap.platform)]
 
@@ -93,17 +93,17 @@ class TestProfilesEndpoint:
     def test_creating_the_directory_is_what_turns_exists_on(self, client, profiles_on):
         before = {row['platform']: row for row in _rows(client)['profiles']}['weibo']
         assert (before['exists'], before['imported']) == (False, False)
-        browser_profiles.profile_dir_for('weibo')
+        profiles.profile_dir_for('weibo')
         after = {row['platform']: row for row in _rows(client)['profiles']}['weibo']
         assert (after['exists'], after['imported']) == (True, False)
-        browser_profiles.mark_used('weibo', imported=True)
+        profiles.mark_used('weibo', imported=True)
         third = {row['platform']: row for row in _rows(client)['profiles']}['weibo']
         assert (third['exists'], third['imported']) == (True, True)
         assert third['used_at']
 
     def test_a_switched_off_setting_is_said_rather_than_shown_as_ready(self, client, monkeypatch, tmp_path):
         monkeypatch.setattr(
-            browser_profiles,
+            profiles,
             'get_setting',
             lambda key: {'use_browser_profile': False, 'browser_profile_dir': str(tmp_path / 'p')}[key],
         )
@@ -115,6 +115,6 @@ class TestProfilesEndpoint:
         cookie = tmp_path / 'cookies' / 'zhihu_cookies.json'
         cookie.parent.mkdir(parents=True, exist_ok=True)
         cookie.write_text('[]', encoding='utf-8')
-        monkeypatch.setattr(browser_profiles.Config, 'COOKIE_DIR', str(cookie.parent))
+        monkeypatch.setattr(profiles.Config, 'COOKIE_DIR', str(cookie.parent))
         row = {r['platform']: r for r in _rows(client)['profiles']}['zhihu']
         assert row['has_saved_cookie'] is True

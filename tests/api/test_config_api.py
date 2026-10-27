@@ -20,11 +20,11 @@ Two read/write surfaces live here and neither one should surprise the frontend:
 import os
 import sys
 
-import browser_profiles
 import pytest
+from sessions import profiles
+from sessions.cookies import CookieManager
 
 from config import Config
-from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.api
 
@@ -319,7 +319,7 @@ class TestCookieEndpoints:
         # A stamp from BEFORE this file was written: ``needs_refresh`` compares the two, and
         # a marker that recorded no stamp at all answers False on purpose (it cannot claim
         # to know which file the profile was planted from).
-        browser_profiles.mark_used('douyin', imported=True, cookie_stamp='1:1', account='work')
+        profiles.mark_used('douyin', imported=True, cookie_stamp='1:1', account='work')
         rows = {row['account']: row for row in client.get('/api/cookies/status').get_json()['rows']}
         assert rows['work']['profile_used'] is True and rows['work']['profile_exists'] is True, rows['work']
         # The DEFAULT account's directory exists too — a named device is stored one level
@@ -429,7 +429,7 @@ class TestRenameAccount:
     """
 
     def _point(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(browser_profiles, 'root_dir', lambda: str(tmp_path))
+        monkeypatch.setattr(profiles, 'root_dir', lambda: str(tmp_path))
 
     def _login(self, client, platform, account):
         response = client.post(
@@ -446,7 +446,7 @@ class TestRenameAccount:
     ):
         self._point(monkeypatch, tmp_path)
         self._login(client, 'zhihu', 'work')
-        device = browser_profiles.platform_dir('zhihu', 'work')
+        device = profiles.platform_dir('zhihu', 'work')
         os.makedirs(os.path.join(device, 'Default'))
         with open(os.path.join(device, 'Default', 'state'), 'w', encoding='utf-8') as fh:
             fh.write('session')
@@ -459,7 +459,7 @@ class TestRenameAccount:
         # So did the device, with its contents — an account renamed onto a name with no browser
         # would open a brand-new one and claim 「已登录」 about a session that is not there.
         assert not os.path.isdir(device)
-        assert os.path.isfile(os.path.join(browser_profiles.platform_dir('zhihu', 'office'), 'Default', 'state'))
+        assert os.path.isfile(os.path.join(profiles.platform_dir('zhihu', 'office'), 'Default', 'state'))
         assert 'moved together' in body['message'], body['message']
         accounts = {
             row['account'] for row in client.get('/api/cookies/status').get_json()['rows'] if row['platform'] == 'zhihu'
@@ -572,8 +572,8 @@ class TestRenameAccount:
         directory still called the old one (which the next crawl would open as a stranger)."""
         self._point(monkeypatch, tmp_path)
         self._login(client, 'zhihu', 'work')
-        os.makedirs(browser_profiles.platform_dir('zhihu', 'work'))
-        monkeypatch.setattr(browser_profiles, 'is_busy', lambda path: True)
+        os.makedirs(profiles.platform_dir('zhihu', 'work'))
+        monkeypatch.setattr(profiles, 'is_busy', lambda path: True)
         response = self._rename(client, 'zhihu', 'work', 'office')
         assert response.status_code == 409, response.get_json()
         assert 'in use' in response.get_json()['error']

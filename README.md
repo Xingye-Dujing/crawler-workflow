@@ -201,6 +201,7 @@ crawler_workflow/
 │   ├── analyzers/                # 分析模块（LLM + ML + BERT）
 │   ├── engine/                   # 工作流引擎：DAG 解析、执行器、日志
 │   ├── services/                 # 续跑存储 / 数据集 / 导出 / 报告 / 可视化 / LaTeX 等
+│   ├── sessions/                 # 登录态域：具名 Cookie、各账号的 Chrome profile、模板重建、运行前预检
 │   ├── utils/                    # 工具函数
 │   └── static/                   # 前端：index.html、css、js（canvas/workflow/app…）
 ├── data/                         # 运行时数据（gitignore；仅 workflows/ 进版本库）

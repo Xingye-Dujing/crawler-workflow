@@ -1227,7 +1227,7 @@ _ZH = {
     'cookie.verify.loginWall': '{platform} 仍被挡在登录页：请重新登录并保存',
     'cookie.verify.noCookie': '{platform} 还没有 Cookie：请先登录保存',
     'cookie.verify.checkedUrl': '验证地址：{url}',
-    # 运行前自动验证（cookie_preflight）：三条结论对应三种下一步，合并任何一条都会把
+    # 运行前自动验证（preflight）：三条结论对应三种下一步，合并任何一条都会把
     # 用户支到错误的动作上——重新登录，或者什么也不做地等待。
     'cookie.pre.valid': '{platform} 的 Cookie 可用',
     'cookie.pre.expired': '{platform} 的 Cookie 已失效：页面被弹回登录页',
@@ -3459,7 +3459,7 @@ _EN = {
     'cookie.verify.loginWall': '{platform} still redirects to a login page: log in again and save',
     'cookie.verify.noCookie': 'No {platform} cookie stored yet: log in and save first',
     'cookie.verify.checkedUrl': 'Verified against: {url}',
-    # The pre-run check (cookie_preflight). Three conclusions, three next steps: merging
+    # The pre-run check (preflight). Three conclusions, three next steps: merging
     # any pair would send the user off doing the wrong thing — re-logging in, or waiting.
     'cookie.pre.valid': 'The stored {platform} cookie works',
     'cookie.pre.expired': '{platform} rejected the stored cookie: the page bounced to a login page',

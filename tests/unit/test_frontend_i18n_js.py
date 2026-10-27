@@ -241,7 +241,7 @@ class TestCatalogueShape:
         and a key the browser cannot answer is printed raw. A name the user typed is the
         other half of the rule: it carries NO key and is shown exactly as typed.
         """
-        from services.cookie_manager import CookieManager
+        from sessions.cookies import CookieManager
 
         catalogs = _catalogs()
         for account in ('', 'default2', 'default10', 'work'):

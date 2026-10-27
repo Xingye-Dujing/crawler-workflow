@@ -61,11 +61,10 @@ import json
 import re
 from pathlib import Path
 
-import browser_profiles
-import cookie_preflight
 import live_run_driver as driver
 import live_run_harness as harness
 import pytest
+from sessions import preflight, profiles
 
 import settings_store
 
@@ -1745,7 +1744,7 @@ def test_e7_a_resume_node_adopts_a_stored_table_instead_of_crawling_it_again(cli
 
 # ─── F · the cookie gate's own probe ────────────────────────────────────
 
-DECIDED = {cookie_preflight.VALID, cookie_preflight.EXPIRED, cookie_preflight.UNKNOWN, cookie_preflight.NO_COOKIE}
+DECIDED = {preflight.VALID, preflight.EXPIRED, preflight.UNKNOWN, preflight.NO_COOKIE}
 
 
 def test_f1_the_preflight_probe_answers_for_zhihu_and_says_it_is_not_dead(monkeypatch):
@@ -1763,20 +1762,20 @@ def test_f1_the_preflight_probe_answers_for_zhihu_and_says_it_is_not_dead(monkey
     """
     jar = harness.real_jar(monkeypatch)
     assert harness.has_cookie(PLATFORM), f'{jar} holds no {PLATFORM} session for the probe to read'
-    cookie_preflight.reset()
-    profile = browser_profiles.profile_dir_for(PLATFORM)
-    assert browser_profiles.is_busy(profile) is False, 'a probe may not queue behind a live crawl'
+    preflight.reset()
+    profile = profiles.profile_dir_for(PLATFORM)
+    assert profiles.is_busy(profile) is False, 'a probe may not queue behind a live crawl'
     try:
-        verdict = cookie_preflight.probe(PLATFORM)
+        verdict = preflight.probe(PLATFORM)
     finally:
-        cookie_preflight.reset()
+        preflight.reset()
     assert verdict['state'] in DECIDED, verdict
     assert verdict['probed'] is True, f'a saved session was never looked at: {verdict}'
-    assert verdict['state'] != cookie_preflight.EXPIRED, (
+    assert verdict['state'] != preflight.EXPIRED, (
         f"the gate read the user's own session as dead, so every case in this file would be crawling a "
-        f'wall: {cookie_preflight.describe(verdict)}'
+        f'wall: {preflight.describe(verdict)}'
     )
-    assert browser_profiles.is_busy(profile) is False, 'the probe left its browser holding the profile'
+    assert profiles.is_busy(profile) is False, 'the probe left its browser holding the profile'
     harness.audit_dump(
         'F1',
         {
@@ -1785,11 +1784,11 @@ def test_f1_the_preflight_probe_answers_for_zhihu_and_says_it_is_not_dead(monkey
             'headless': '',
             'use_profile': '',
             'target': 1,
-            'rows': 1 if verdict['state'] == cookie_preflight.VALID else 0,
+            'rows': 1 if verdict['state'] == preflight.VALID else 0,
             'verdict': verdict['state'],
-            'reasons': [cookie_preflight.describe(verdict)],
+            'reasons': [preflight.describe(verdict)],
             'wall_flags': [],
-            'cookie_expired': verdict['state'] == cookie_preflight.EXPIRED,
+            'cookie_expired': verdict['state'] == preflight.EXPIRED,
             'seconds': '',
             'lines': [f'cookie probe {PLATFORM} -> {verdict["state"]} (blocking={verdict["blocking"]})'],
         },
@@ -1958,7 +1957,7 @@ def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_mod
     is free every time one of them arrives, and the profile lock — the thing this case is about
     — never gets asked anything. So the rate-limit queue is turned off exactly as in G1, which
     leaves the *only* serialization left standing between two browsers and one directory:
-    ``browser_profiles.acquire_profile``, chromedriver's
+    ``profiles.acquire_profile``, chromedriver's
     「failed to write prefs file」 answer to a second session in the same place.
 
     What a green therefore has to show is the wait itself: 「已排队 N 秒：这个 profile 同时只能
@@ -1968,7 +1967,7 @@ def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_mod
     """
     harness.real_jar(monkeypatch, app_module)
     canvas = _two_search_components(keywords=KEYWORDS['G3'], target=5, headless=False, use_profile=True)
-    profile = browser_profiles.profile_dir_for(PLATFORM)
+    profile = profiles.profile_dir_for(PLATFORM)
     assert profile, 'the tier runs with browser profiles on, so this case has no directory to wait for'
     # The 错峰 interval has to be disarmed here for the same reason it is measured in S1: at its
     # 12 s default it spaces the two starts wider than a 5-row walk lives, so the second browser

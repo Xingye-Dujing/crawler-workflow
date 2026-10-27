@@ -728,9 +728,9 @@ class TestLiveCrawlerFixture:
         session for every platform on every run, which is the harm the import-once rule exists to
         prevent (and, measured 2026-09-26, the thing that got an account risk-flagged).
         """
-        import browser_profiles
+        from sessions import profiles
 
-        monkeypatch.setattr(browser_profiles, 'needs_refresh', lambda platform, path: platform == 'weibo')
+        monkeypatch.setattr(profiles, 'needs_refresh', lambda platform, path: platform == 'weibo')
         factory, _events, made, finish = self._drive(monkeypatch)
         try:
             factory('weibo')
@@ -787,10 +787,10 @@ class TestLiveTierSessionShape:
 
     def test_the_session_fixture_actually_moves_where_a_crawler_resolves_its_profile(self, monkeypatch, tmp_path):
         """Not "the fixture wrote a setting" but "the product's own resolution now answers the
-        tier's directory" — the seam is :func:`browser_profiles.root_dir`, which every crawl and
+        tier's directory" — the seam is :func:`sessions.template.root_dir`, which every crawl and
         every marker path goes through."""
-        import browser_profiles
         import isolation_guard
+        from sessions import profiles
 
         import settings_store
 
@@ -801,8 +801,8 @@ class TestLiveTierSessionShape:
         monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
         monkeypatch.setattr(settings_store, '_values', None)
         module.live_profile_root.__wrapped__()
-        assert browser_profiles.is_enabled() is True, 'a tier that silently fell back to no profile replants every run'
-        assert browser_profiles.root_dir() == str(target.resolve()), browser_profiles.root_dir()
+        assert profiles.is_enabled() is True, 'a tier that silently fell back to no profile replants every run'
+        assert profiles.root_dir() == str(target.resolve()), profiles.root_dir()
 
     def test_a_profile_root_inside_the_user_directory_is_refused(self, monkeypatch, tmp_path):
         """The one mistake this fixture could make that would do harm rather than lose fidelity."""
@@ -843,7 +843,7 @@ class TestLiveTierSessionShape:
         about the right file: asking about another platform's cookie would plant a stranger's
         session into this browser.
         """
-        import browser_profiles
+        from sessions import profiles
 
         module = _live_conftest()
         asked = []
@@ -852,7 +852,7 @@ class TestLiveTierSessionShape:
             asked.append((platform, path))
             return True
 
-        monkeypatch.setattr(browser_profiles, 'needs_refresh', answer)
+        monkeypatch.setattr(profiles, 'needs_refresh', answer)
         assert module.refresh_for_planting('weibo') is True
         assert asked == [('weibo', str(module.COOKIE_DIR / 'weibo_cookies.json'))], asked
 

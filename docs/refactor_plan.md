@@ -379,6 +379,14 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      把共享那一行改成不共享立刻变 `2 / 2`（正向对照做过，不是推断）。
      另一处连带：`reconnectConsole` 不再带 `async`，`test_frontend_contract.py` 那三条"方法必须存在"的
      拼写跟着改，并新增"一次只有一个 replay + finally 必须交还 + `this._reconnect =` 恰好两处"。
+- **`4ffc00f` 的 browser job 又红了，红的还是那条 `test_a_run_detail_splits_its_workflows_without_growing_a_bar`
+  （1 failed / 179 passed），而且红在我自己那条"等 DOM"的修补上**：有界轮询超时返回的是
+  `"ok | the detail row never rendered"`，而 Python 侧断言 `outcome.startswith('ok')` ——
+  超时支路穿着成功的前缀，于是第一道闸门替它说"没事"，真正的失败留给后面那条在**缺失元素**上量布局的断言。
+  改法不是加等待而是**去掉中间那次往返**：展开与测量放进同一个 `execute_async_script`，
+  返回 `{found, names, cut, tallies…}` 或 `{found: false, rows}` / `{found: false, rejected}`；
+  另一半同源：桩必须**在渲染之前**装上，页面 boot 那次真实的 `/api/runs/list` 会重绘画布并把刚插入的展开行抹掉。
+  本地 zh+en 2 passed（264 s）。教训写进 `docs/agent_practices.md`。
 - **一次文档核对的结论：不改**（记在这里免得下轮再查一遍）。`docs/crawler_notes.md` 里 114 处按文件名引用
   `backend/test_*.py` 探针（A26 已删除那 141 个文件）——那些是**"measured <日期>，用什么量出来的"历史记录**，
   不是"这文件现在还在"的声明；`docs/ARCHITECTURE.md:85` 已经写明它们已删除，AGENTS 的探针条目说的是规矩。
@@ -412,10 +420,30 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      `git checkout --` 回到 HEAD 再跑一次，代价是一次跑，不是一次烂提交）。
      测试接缝跟着搬：三处 `monkeypatch.setattr(hh.time, …)` 改为 `pu.time`（`time` 是同一个模块对象，
      效果一致，但"测 PlayerUI 却从 harvest 借 time"是下一轮删 harvest 导入时会静默失效的那种针）。
-  4. Stage 1 ④（下一刀）：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
-     迁 `capabilities/platforms/`（Stage 3 的落点，先把声明放好）。
-  5. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。
-  6. 两条一直欠着的证据项：**桌面 EXE 未重建**（`core/browser.py`、`douyin/*` 等新模块要下一次
+  4. Stage 1 ④（engine 的平台事实）**与 Stage 3 一起做，不在这里单独动**——这条是更正，不是拖延：
+     `capabilities/platforms/<id>.py` 按计划还要容纳同一平台的模式、字段、身份列与节流基线，而它们今天
+     全在 `crawl_capabilities.py`（1,805 行）里。先把 `popup` 提示词与 `wall` 词表搬进一个新目录，
+     等于让"一个平台的声明"住两处——正是 §4 判定标准第 2 条要消灭的形状。落点不变，次序改成本条第 5 项。
+  5. **Stage 2 已开（2026-10-27 第一刀 = `sessions/`）**：五个模块合成一个域 ——
+     `services/cookie_manager.py` → `sessions/cookies.py`、`services/cookie_flow.py` → `sessions/flow.py`、
+     `browser_profiles.py` → `sessions/profiles.py`、34 行孤儿 `profiles.py` → `sessions/template.py`、
+     `cookie_preflight.py` → `sessions/preflight.py`。**不留 shim、不留 re-export**：53 个文件的 import、
+     调用点与打桩字符串一起改指新路径，`desktop/caixihui.spec` 的包清单加 `sessions`（那条"spec 说的模块必须还在"
+     的契约按点分路径解析，并且新增一条"backend/ 下每个含 .py 的包都必须在文档扫描集合里"——
+     新域若不进 `_PROJECT_DIRS`，文档护栏会对它永久失明）。
+     **`template.py` 为什么不并进 `profiles.py`（计划原话是合并）**：它 `from crawlers.core.crawler import
+     warm_profile_dir`，而 `crawlers.core.browser` 反过来 `import sessions.profiles` ——
+     合并即成环。计划的"合并孤儿模块"意图仍达成（孤儿进了自己的域），只是分成两个文件，
+     环的那一条边由 `template` 单向持有。
+     **两条真踩到的坑（都改了，别照抄旧写法）**：① `cookie_manager` 既是模块名也是 `state.py` 里的
+     **实例**名（`app.py`/`api/capabilities.py` 从 state 导入它），无差别替换把 `app_module.cookie_manager.save`
+     变成 `app_module.cookies.save` —— 第一版就是这么坏在 28 处然后整轮回滚；② `from api.browser_profiles
+     import bp` 里的 `browser_profiles` 是一个**词**，被同一条规则改成 `api.profiles`，而那个路由文件仍叫
+     `api/browser_profiles.py`（Blueprint 名 `'browser_profiles'` 也照原样，与其余 20 个蓝图同一口径）。
+     剩余（Stage 2 第二刀）：`/api/cookies/*` 与 `/api/browser/profiles/*` 进 `sessions/routes.py`（app 内约
+     950 行），以及 `scheduling/` = `scheduler.py` + `services/{schedule_store,cron}.py`。
+  6. 之后是 §5 的 Stage 3…10（任务 #30…#37）。#24 已并入 Stage 3。
+  7. 两条一直欠着的证据项：**桌面 EXE 未重建**（`core/browser.py`、`douyin/*`、`hongguo/*`、`sessions/*` 等新模块要下一次
      `desktop/build_windows.ps1` 才进包）；三维"平台→引擎→功能"选择器仍没有**专门的真浏览器布局用例**。
      live_quick / live_site 按用户决定不跑（要跑须在场并先问清在哪张网络）。
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，

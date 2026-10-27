@@ -164,7 +164,7 @@ class Crawler(ABC):
         self.headless = headless
         self.cookie_path = cookie_path
         # A directory that outlives this browser, so the next run of this platform is
-        # the same device to the site (see ``browser_profiles``). None is the old
+        # the same device to the site (see ``sessions.profiles``). None is the old
         # behaviour: a throwaway profile plus whatever cookie file we plant into it.
         self.profile_dir = str(profile_dir or '') or None
         # Why THIS browser may not carry on: set by the executor to "the user stopped
@@ -799,7 +799,7 @@ class Crawler(ABC):
         # its own error page never showed the site this session at all, so the honest
         # answer about the cookie is "could not check" — and the pre-flight caches
         # verdicts, which is why getting this word wrong outlasts the probe that got it
-        # wrong. See :func:`cookie_preflight.classify_probe`.
+        # wrong. See :func:`preflight.classify_probe`.
         facts['unreachable'] = bool(self.unreachable)
         return facts
 
@@ -1116,7 +1116,7 @@ class ProfileWarmer(Crawler):
     Building the profile with Chrome rather than writing files ourselves is the whole
     design. A ``user-data-dir`` is Chrome's private format (its cookie store is locked
     while it runs and its cookies are app-bound-encrypted — measured on Chrome 148, see
-    ``browser_profiles``), so anything we hand-assemble is a profile that only we believe
+    ``sessions.profiles``), so anything we hand-assemble is a profile that only we believe
     in, and the one directory guaranteed to be a real, un-logged-in device is the one a
     blank Chrome produced.
     """

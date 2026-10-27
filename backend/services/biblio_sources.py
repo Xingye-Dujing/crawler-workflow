@@ -75,7 +75,7 @@ def _split_lines(value: str) -> list[str]:
 def source_for(fmt: str) -> dict[str, object]:
     """One entry of the export guide, translated for the requesting thread's language.
 
-    Mirrors :func:`services.cookie_flow.flow_for`: the server ships sentences, the browser
+    Mirrors :func:`services.flow.flow_for`: the server ships sentences, the browser
     only draws them, so a language switch is one refetch and never a second copy of the text.
     """
     spec = biblio_formats.FORMAT_BY_ID.get(fmt)

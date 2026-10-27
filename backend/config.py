@@ -52,7 +52,7 @@ class Config:
     LLM_CHECKPOINT_DIR = os.path.join(DATA_DIR, 'checkpoints')
     # Where one Chrome profile per platform lives, so the crawl browser is the same
     # device twice in a row instead of a blank one replaying an old cookie snapshot
-    # (see services-free module ``browser_profiles`` for why this exists).
+    # (see services-free module ``sessions.profiles`` for why this exists).
     BROWSER_PROFILE_DIR = os.path.join(DATA_DIR, 'chrome_profile')
     # Scratch root for the 红果 comment harvest: the capture JSONL the mitm addon
     # writes (the CA itself lives in mitmproxy's own default ~/.mitmproxy — it is a
@@ -147,7 +147,7 @@ class Config:
     #: How long a crawl waits for its platform's browser profile to be free. A
     #: parallel canvas starts its workflows together, so two nodes of one platform
     #: reach for the same directory in the same instant — and a profile only carries
-    #: one browser at a time (see ``browser_profiles``). The ceiling is a whole
+    #: one browser at a time (see ``sessions.profiles``). The ceiling is a whole
     #: long crawl, because the honest alternative to waiting is failing a node that
     #: would have succeeded seconds later; it is not infinite so a browser that was
     #: killed without closing cannot park this platform forever.
@@ -176,7 +176,7 @@ class Config:
     #: browser that never closed cannot park the platform for the rest of the process.
     PLATFORM_GATE_TIMEOUT = 900
 
-    #: The outer bound on the pre-run cookie check (``cookie_preflight``) — the wait a
+    #: The outer bound on the pre-run cookie check (``sessions.preflight``) — the wait a
     #: user pays for pressing 执行. Each platform's probe is normally one page load, but
     #: a cold launch that never commits its first navigation re-drives it up to
     #: ``Crawler.NAV_RETRY`` extra times before judging (see ``crawler_rules.md``); the

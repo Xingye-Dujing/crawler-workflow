@@ -3011,15 +3011,18 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
         f"""
         document.body.dataset.lang = {lang!r};
         I18n.apply();
-        const panel = document.getElementById('runs-panel');
-        panel.classList.add('open');
-        panel.classList.remove('hidden');
-        runsManager.render([{{
+        /* The stub goes in BEFORE anything is rendered. The page's own boot reads the run
+           list with the REAL fetch, and that request answers whenever the server likes: it
+           repaints the table, and a repaint drops the expansion row the test is about to
+           add. Stubbing first means every fetch after this point is the stub's, and the
+           measurement below happens in the same script as the expansion, so no WebDriver
+           round trip can slip between the row appearing and being read. */
+        const summary = {{
             run_id: 'grp1', workflow_name: '热门榜 + 周排行榜', status: 'completed',
             resumable: false, node_done: 6, node_total: 6, rows_kept: 40,
             started_at: '2026-09-24 03:00', mode: 'serial', wf_count: 2, headless: 1
-        }}]);
-        window.fetch = () => Promise.resolve({{ json: () => Promise.resolve({{
+        }};
+        const detailPayload = {{
             ok: true,
             run: {{
                 run_id: 'grp1', status: 'completed', started_at: '2026-09-24 03:00', wf_count: 2,
@@ -3035,62 +3038,61 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
                        component: 1, component_name: '周排行榜' }},
                 ],
             }},
-        }}) }});
+        }};
+        window.fetch = (url) => Promise.resolve({{ json: () => Promise.resolve(
+            String(url).indexOf('/api/runs/grp1') === 0
+                ? detailPayload
+                : {{ ok: true, runs: [summary], total: 1, has_more: false }}
+        ) }});
+        const panel = document.getElementById('runs-panel');
+        panel.classList.add('open');
+        panel.classList.remove('hidden');
+        runsManager.render([summary]);
         """,
         [],
     )
-    # ``detail`` is genuinely async, and the first "fix" for that got two things wrong: it resolved on
-    # the clock rather than on the DOM (so it still only passed when the next WebDriver round trip
-    # happened to be slow), and its rejection arm called ``done()`` as though nothing had gone wrong —
-    # which is exactly how CI's failure read: "the detail row never appeared", with the reason thrown
-    # away. So await the promise, KEEP the outcome, and only return once the row is actually in the
-    # document; a rejection or a missing row now reports itself instead of leaving the layout to be
-    # measured off an absent element.
-    outcome = driver.execute_async_script(
-        'const done = arguments[arguments.length - 1];'
-        "const row = document.querySelector('#runs-panel tbody tr');"
-        'const waitRow = (label) => {'
-        '  const began = Date.now();'
-        '  const poll = () => {'
-        "    if (document.getElementById('runs-mgr-detail-grp1')) { done(label); return; }"
-        '    if (Date.now() - began > 8000) { done(label + " | the detail row never rendered"); return; }'
-        '    setTimeout(poll, 50);'
-        '  };'
-        '  poll();'
-        '};'
-        "Promise.resolve(runsManager.detail('grp1', row)).then("
-        '  () => waitRow("ok"),'
-        '  (err) => done("rejected: " + ((err && err.message) || err)));',
-        [],
-    )
-    assert outcome.startswith('ok'), f'opening the run detail did not complete cleanly: {outcome}'
-    facts = driver.execute_script(
+    facts = driver.execute_async_script(
         """
-        const detail = document.getElementById('runs-mgr-detail-grp1');
-        if (!detail) return {found: false};
-        const names = Array.from(detail.querySelectorAll('.rm-group-name'));
-        const tallies = Array.from(detail.querySelectorAll('.rm-group-tally'));
-        const panel = document.getElementById('runs-panel');
-        const width = (el) => Math.round(el.getBoundingClientRect().width);
-        return {
-            found: true,
-            names: names.map((el) => el.textContent.trim()),
-            // A name too long for the heading must be cut WITH the ellipsis saying so:
-            // text that simply disappears is the failure mode this project has now been
-            // bitten by twice, and the tally must not be the thing that gets pushed out.
-            cut: names.map((el) => el.scrollWidth - el.clientWidth > 1),
-            visible: names.map((el) => width(el) > 0),
-            tallies: tallies.map((el) => el.textContent.trim()),
-            tallyInside: tallies.map((el) => {
-                const head = el.closest('.rm-group-head');
-                return el.getBoundingClientRect().right <= head.getBoundingClientRect().right + 1;
-            }),
-            nodes: detail.querySelectorAll('.rm-node').length,
-            panelBar: [panel.scrollWidth, panel.clientWidth],
-            pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
-            windowWidth: window.innerWidth,
-            detailRight: Math.round(detail.getBoundingClientRect().right),
+        const done = arguments[arguments.length - 1];
+        const detail = () => document.getElementById('runs-mgr-detail-grp1');
+        const read = () => {
+            const row = detail();
+            if (!row) return { found: false, rows: document.querySelectorAll('#runs-panel tbody tr').length };
+            const names = Array.from(row.querySelectorAll('.rm-group-name'));
+            const tallies = Array.from(row.querySelectorAll('.rm-group-tally'));
+            const panel = document.getElementById('runs-panel');
+            const width = (el) => Math.round(el.getBoundingClientRect().width);
+            return {
+                found: true,
+                names: names.map((el) => el.textContent.trim()),
+                // A name too long for the heading must be cut WITH the ellipsis saying so:
+                // text that simply disappears is the failure mode this project has now been
+                // bitten by twice, and the tally must not be the thing that gets pushed out.
+                cut: names.map((el) => el.scrollWidth - el.clientWidth > 1),
+                visible: names.map((el) => width(el) > 0),
+                tallies: tallies.map((el) => el.textContent.trim()),
+                tallyInside: tallies.map((el) => {
+                    const head = el.closest('.rm-group-head');
+                    return el.getBoundingClientRect().right <= head.getBoundingClientRect().right + 1;
+                }),
+                nodes: row.querySelectorAll('.rm-node').length,
+                panelBar: [panel.scrollWidth, panel.clientWidth],
+                pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+                windowWidth: window.innerWidth,
+                detailRight: Math.round(row.getBoundingClientRect().right),
+            };
         };
+        /* ``detail`` toggles, so start from a known state: drop anything already there and
+           ask once. Then read in THIS script — the reason CI could report "the detail row
+           never appeared" while the earlier gate said everything was fine is that the
+           timeout sentinel started with 'ok', so a run that rendered nothing still passed
+           the first assert and lost the reason on its way to the second. */
+        const existing = detail();
+        if (existing) existing.remove();
+        Promise.resolve(runsManager.detail('grp1')).then(
+            () => done(read()),
+            (err) => done({ found: false, rejected: String((err && err.message) || err) })
+        );
         """,
         [],
     )
@@ -3098,7 +3100,7 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
     def _short(names):
         return [name[:24] + ('…' if len(name) > 24 else '') for name in names]
 
-    assert facts['found'] is True, 'the detail row never appeared, so nothing about the grouping was measured'
+    assert facts['found'] is True, f'the detail row never appeared, so nothing about the grouping was measured: {facts}'
     assert facts['nodes'] == 4, f'every node must still be listed under its group: {_short(facts["names"])}'
     assert len(set(facts['names'])) == 2, f'both workflows must be named: {_short(facts["names"])}'
     assert '周排行榜' in facts['names'], f'a group lost its own name: {_short(facts["names"])}'

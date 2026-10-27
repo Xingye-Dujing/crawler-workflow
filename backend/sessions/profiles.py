@@ -37,7 +37,7 @@ import threading
 import time
 
 from config import Config
-from services.cookie_manager import ACCOUNT_RE, CookieManager
+from sessions.cookies import ACCOUNT_RE, CookieManager
 from settings_store import get_setting
 
 #: Written inside a platform's directory the first time it is used. Its presence is
@@ -47,7 +47,7 @@ MARKER = '.crawler-profile.json'
 
 #: An account label nests a sub-directory, so it is held to the same shape as the
 #: cookie filename uses: letters, digits, ``_`` and ``-``, up to 24 of them. This is
-#: ``services.cookie_manager.ACCOUNT_RE`` — the SAME compiled object, not a copy — because
+#: ``services.cookies.ACCOUNT_RE`` — the SAME compiled object, not a copy — because
 #: a label the jar accepts and the directory refuses would save a login whose device can
 #: never be opened, and that split is invisible from either side alone.
 #:

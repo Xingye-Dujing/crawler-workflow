@@ -29,10 +29,10 @@ from pathlib import Path
 
 import pytest
 from node_runner import run_node
+from sessions.cookies import CookieManager
 
 import crawl_capabilities
 import i18n
-from services.cookie_manager import CookieManager
 
 pytestmark = [
     pytest.mark.unit,

@@ -11,8 +11,6 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
-import browser_profiles
-import cookie_preflight
 import pandas as pd
 import scheduler
 from api.analysis import bp as analysis_bp
@@ -51,7 +49,10 @@ from nodes import registry as node_registry
 from nodes.catalog import QUIET_NODE_TYPES as _QUIET_NODE_TYPES
 from nodes.context import NodeCall
 from nodes.labels import node_label
-from profiles import ensure_profile_template
+from sessions import preflight, profiles
+from sessions.cookies import CookieManager
+from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
+from sessions.template import ensure_profile_template
 from state import (
     _RUN_QUEUE,
     LOG_KEEP,
@@ -88,8 +89,6 @@ from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow
 from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService, lock_store
-from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
-from services.cookie_manager import CookieManager
 from services.crawler_lifecycle import close_login_browser as _close_login_browser
 from services.data_analysis import UnknownOperationError
 from services.process_params import PROCESS_ENUMS
@@ -3078,13 +3077,13 @@ def cookie_status():
     for platform, names in accounts.items():
         for account in names:
             path = cookie_manager.path_for(platform, account)
-            profile = browser_profiles.status(platform, has_cookie=True, cookie_path=path, account=account, size=False)
+            profile = profiles.status(platform, has_cookie=True, cookie_path=path, account=account, size=False)
             label_key, label_args = cookie_manager.account_label_key(account)
             rows.append(
                 {
                     'platform': platform,
                     'account': account,
-                    'entry_key': cookie_preflight.entry_key(platform, account),
+                    'entry_key': preflight.entry_key(platform, account),
                     'label_key': label_key or '',
                     'label_args': label_args,
                     'entries': cookie_manager.entry_count(platform, account),
@@ -3189,8 +3188,8 @@ def preflight_cookies():
     # ``probe``, and refusing a name the cookie list lacks would block a crawl that needs no cookie.
     refused = [
         plat
-        for plat, _acct, backend in (cookie_preflight.entry_of(p) for p in raw)
-        if backend != capabilities.BACKEND_CATBUS and not cookie_preflight.knows(plat)
+        for plat, _acct, backend in (preflight.entry_of(p) for p in raw)
+        if backend != capabilities.BACKEND_CATBUS and not preflight.knows(plat)
     ]
     if refused:
         # The names arrive from the browser and each one would buy a Chrome, so an
@@ -3201,11 +3200,11 @@ def preflight_cookies():
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=refused[0])}), 400
     use_profile = _flag_or_none(data.get('use_profile'))
     fresh = _flag_or_none(data.get('fresh')) is True
-    results = cookie_preflight.check(raw, use_profile=use_profile, fresh=fresh)
+    results = preflight.check(raw, use_profile=use_profile, fresh=fresh)
     for verdict in results.values():
-        verdict['text'] = cookie_preflight.describe(verdict)
+        verdict['text'] = preflight.describe(verdict)
     blocked = [name for name, verdict in results.items() if verdict['blocking']]
-    unclear = [name for name, verdict in results.items() if verdict['state'] == cookie_preflight.UNKNOWN]
+    unclear = [name for name, verdict in results.items() if verdict['state'] == preflight.UNKNOWN]
     return jsonify(
         {
             'ok': True,
@@ -3250,12 +3249,12 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     server, never again while the template stands — and on a machine with no
     「浏览器生成」 button that browser is how the directory gets made at all.
     """
-    if not browser_profiles.is_enabled():
+    if not profiles.is_enabled():
         return None
     if Config.CLOUD_MODE:
         ensure_profile_template()
-    profile = browser_profiles.platform_dir(platform, account)
-    if browser_profiles.is_busy(profile) or execution_state['running']:
+    profile = profiles.platform_dir(platform, account)
+    if profiles.is_busy(profile) or execution_state['running']:
         # The file is newer than the session in that browser, and `needs_refresh` is what the
         # next crawl reads to decide — so this is a wait, not a lost update.
         return t('cookie.plant.deferred', platform=platform)
@@ -3283,7 +3282,7 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     finally:
         _PROFILE_REFRESH_LOCK.release()
     # The profile now holds a different session than the one the last probe looked at.
-    cookie_preflight.invalidate(platform)
+    preflight.invalidate(platform)
     # Measured on a real Chrome: a cookie without an expiry is not written to the profile store
     # at all, so it dies with the window that was opened to plant it. Saying only 「已更新」 would
     # promise a transfer that partly did not happen.
@@ -3328,7 +3327,7 @@ def save_cookies():
         cookie_manager.save(platform, kept, account)
         # The file this platform would be planted from just changed, so the cached
         # verdict about the previous one has to go with it.
-        cookie_preflight.invalidate(platform)
+        preflight.invalidate(platform)
         # No ``add_log`` beside this: ``CookieManager.save`` logs the same sentence and
         # ``LogBufferHandler`` forwards every logger call into the console, so the
         # narration the panel wanted was already there — twice, for one paste.
@@ -3402,7 +3401,7 @@ def rename_cookie_account():
         # The device first: a profile that will not move (a browser is inside it, or the name
         # is taken) must stop the file too — otherwise the new label is born pointing at a
         # directory that is still called the old one, and the next crawl opens a stranger.
-        profile_moved = browser_profiles.rename_account(platform, account, to)
+        profile_moved = profiles.rename_account(platform, account, to)
         manager.rename(platform, account, to)
     except ValueError as e:
         return jsonify({'ok': False, 'error': _rename_refusal(e)}), 409
@@ -3410,7 +3409,7 @@ def rename_cookie_account():
         return jsonify({'ok': False, 'error': t('api.cookieRenameFailed', err=str(e)[:160])}), 500
     # A rename changes which file answers 「does this account have a login」, so a cached
     # verdict about the old name is now a statement about a file that is not there.
-    cookie_preflight.invalidate(platform)
+    preflight.invalidate(platform)
     return jsonify(
         {
             'ok': True,
@@ -3435,7 +3434,7 @@ def _rename_refusal(error: ValueError) -> str:
 
     Waiting for a crawl, choosing another name and finding the file gone are not one
     「失败」 — and the ValueError text is this module's own (see ``CookieManager.rename`` and
-    ``browser_profiles.rename_account``), so matching it is matching code, not a site.
+    ``profiles.rename_account``), so matching it is matching code, not a site.
     """
     text = str(error)
     if 'in use' in text:
@@ -3455,7 +3454,7 @@ def delete_cookies():
     ``profile_holds``: a file is only what a *throwaway* browser is planted from.
     A platform profile that has logged in keeps its own session in
     ``data/chrome_profile/<platform>``, and deleting the snapshot does not sign that
-    device out (see :mod:`browser_profiles`, where the file is imported once and
+    device out (see :mod:`sessions.profiles`, where the file is imported once and
     never planted again). Saying 「已删除，已退出登录」 would send the user to re-login
     over a session that is still live, and hide the case that genuinely needs a
     profile reset.
@@ -3478,8 +3477,8 @@ def delete_cookies():
     except OSError as e:
         logger.exception(t('cookie.delete.failed', err=str(e)[:120]))
         return jsonify({'ok': False, 'error': str(e)}), 500
-    cookie_preflight.invalidate(platform)
-    holds = bool(browser_profiles.is_enabled() and browser_profiles.is_used(platform, account))
+    preflight.invalidate(platform)
+    holds = bool(profiles.is_enabled() and profiles.is_used(platform, account))
     message = t('cookie.deleted', platform=platform)
     if holds:
         # ``CookieManager.delete`` already logged the deletion, and that line reaches
@@ -3520,7 +3519,7 @@ def delete_profile():
     if account == CookieManager.DEFAULT_ACCOUNT:
         return jsonify({'ok': False, 'error': t('api.profileDeleteDefault', platform=platform)}), 400
     try:
-        result = browser_profiles.delete(platform, account)
+        result = profiles.delete(platform, account)
     except ValueError as e:
         text = str(e)
         if 'in use' in text:
@@ -3535,7 +3534,7 @@ def delete_profile():
         return jsonify({'ok': False, 'error': t('cookie.profileDelete.none', platform=platform, account=account)}), 404
     # The device that held a live session is gone, so a cached "does this account have a login"
     # verdict about that profile is now a statement about a browser that no longer exists.
-    cookie_preflight.invalidate(platform)
+    preflight.invalidate(platform)
     add_log(t('cookie.profileDeleted', platform=platform, account=account))
     return jsonify(
         {
@@ -3652,11 +3651,11 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
         # the file: without this line the panel would go on offering 「把 Cookie 更新进 Profile」,
         # a button that here would overwrite a live session with a copy of itself. Only when a
         # profile really exists — a run that chose 本次不用 Profile has no live session to spare.
-        if browser_profiles.is_enabled() and browser_profiles.is_used(platform, account):
-            browser_profiles.remember_cookie(platform, cookie_manager.path_for(platform, account), account)
+        if profiles.is_enabled() and profiles.is_used(platform, account):
+            profiles.remember_cookie(platform, cookie_manager.path_for(platform, account), account)
         # A capture replaces the session, so any verdict the pre-run gate cached about
         # the old one is now not just stale but wrong in the dangerous direction.
-        cookie_preflight.invalidate(platform)
+        preflight.invalidate(platform)
         job['count'] = len(cookies)
         job['phase'] = 'saved'
         add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
@@ -3768,19 +3767,19 @@ def _verify_lines(platform: str, facts: dict) -> list:
 
     Three answers, not the two this had. ``login_wall`` or 可用 called a risk-control
     page 可用 — the mirror image of the lie the pre-run gate refuses (see
-    :mod:`cookie_preflight`): a page that answered with a captcha says nothing about
+    ``sessions.preflight``): a page that answered with a captcha says nothing about
     the cookie, in either direction.
     """
-    state = cookie_preflight.classify_probe(facts)
+    state = preflight.classify_probe(facts)
     lines = [t('cookie.verify.checkedUrl', url=str(facts.get('url') or ''))]
     if facts.get('unreachable'):
         # Before the three states below, and as its own line: 「无法核对」 is true but
         # useless here, because what could not be checked was not the cookie — the page
         # the browser was asked to open never arrived.
         lines.append(t('cookie.verify.unreachable', platform=platform))
-    elif state == cookie_preflight.EXPIRED:
+    elif state == preflight.EXPIRED:
         lines.append(t('cookie.verify.loginWall', platform=platform))
-    elif state == cookie_preflight.VALID:
+    elif state == preflight.VALID:
         lines.append(t('cookie.verify.ok', platform=platform))
     else:
         lines.append(t('cookie.verify.unclear', platform=platform))
@@ -3812,7 +3811,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
     try:
         # Whatever this probe sees is newer than anything the pre-run gate cached, so
         # the stale verdict goes before the browser opens, not after.
-        cookie_preflight.invalidate(platform)
+        preflight.invalidate(platform)
         # ``for_login`` because this window is shown to a person, and a person can be
         # sent there by an expired cookie: the probe lands on the login page, whose QR
         # code is an ``<img>``. Blocked, the diagnosis 「cookie 已失效，去登录」 pointed at
@@ -3832,7 +3831,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
             # came here from the block dialog should not have to prove the fix twice.
             # With a pasted entry URL it does not — the verdict is about that page, not
             # about the address the gate would visit.
-            cookie_preflight.record(platform, facts, account)
+            preflight.record(platform, facts, account)
         for line in lines:
             add_log(line)
     except Exception as e:
@@ -3947,10 +3946,10 @@ app.register_blueprint(settings_bp)
 
 # ─── Browser profiles API ──────────────────────────────────────
 #
-# The two /api/browser/profiles routes live in api/browser_profiles.py and the shared
+# The two /api/browser/profiles routes live in api/profiles.py and the shared
 # ensure_profile_template lives in profiles.py (both imported at top), so the cookie-save path
 # and the route call one function. Registered here; URLs unchanged, app-level before_request /
-# CORS still wrap them. Tests that stub the launcher now patch profiles.warm_profile_dir.
+# CORS still wrap them. Tests that stub the launcher now patch template.warm_profile_dir.
 app.register_blueprint(browser_profiles_bp)
 
 

@@ -26,10 +26,10 @@ time spans, which is the only thing the user actually feels.
 import threading
 import time
 
-import browser_profiles
 import crawl_gate
 import pytest
 from run_wait import run_finished
+from sessions import profiles
 
 from crawlers.core.crawler import Crawler
 
@@ -96,7 +96,7 @@ class _MatrixCrawler(Crawler):
 def matrix(monkeypatch, app_module, tmp_path):
     """Replace the factory with the profile-claiming fake; record what it was asked."""
     values = {'use_browser_profile': True, 'browser_profile_dir': str(tmp_path / 'profiles')}
-    monkeypatch.setattr(browser_profiles, 'get_setting', lambda key: values[key])
+    monkeypatch.setattr(profiles, 'get_setting', lambda key: values[key])
     # Both gate knobs, in one place a test can flip. The wait is a real one here — its
     # *length* is asserted in tests/unit/test_crawl_gate.py against a fake clock — so
     # this module shrinks it to keep the suite honest but fast.
@@ -106,7 +106,7 @@ def matrix(monkeypatch, app_module, tmp_path):
     asked = []
 
     def _factory(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None, abort=None, account=''):
-        profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
+        profile = profiles.profile_dir_for(platform, enabled=use_profile, account=account)
         asked.append({'platform': platform, 'use_profile': use_profile, 'profile_dir': profile, 'account': account})
         return _MatrixCrawler(platform, profile)
 
@@ -236,7 +236,7 @@ class TestNoAnswerSent:
         assert len(asked) == 1 and asked[0]['use_profile'] is None, asked
         # None means "ask the setting", and the setting here is on — so the factory
         # resolved a real directory and the crawl ran inside it.
-        assert asked[0]['profile_dir'] == browser_profiles.platform_dir('bilibili'), asked
+        assert asked[0]['profile_dir'] == profiles.platform_dir('bilibili'), asked
 
     def test_a_declined_profile_resolves_no_directory(self, client, app_module, matrix):
         """A falsy answer is a choice, not an absence: it must land as False, never

@@ -211,7 +211,7 @@ class TestSelectsAreHeldToTheirOptions:
         (a choice with no effect is the control the matrix rule forbids). WeChat is
         the edge the two sets share: its body-only crawl needs no cookie row at all
         (AGENTS red line), so it declares no account to pick."""
-        from services.cookie_manager import CookieManager
+        from sessions.cookies import CookieManager
 
         with_account = {
             (cap.platform, mode.key)
