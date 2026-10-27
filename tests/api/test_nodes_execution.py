@@ -18,6 +18,8 @@ import pandas as pd
 import pytest
 from run_wait import run_finished
 
+from utils.helpers import flag_or_none
+
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
 
@@ -905,10 +907,10 @@ class TestRunShapeIsReadNotCompared:
         """``bool('false')`` is True. A hand-edited draft saying 「不用 Profile」 would have been
         crawled WITH one — the device the measured login wall is about. Absence still stays
         absence, because a browser that sends nothing must not switch the setting off."""
-        assert app_module._flag_or_none('false') is False
-        assert app_module._flag_or_none('true') is True
-        assert app_module._flag_or_none(None) is None
-        assert app_module._flag_or_none(False) is False
+        assert flag_or_none('false') is False
+        assert flag_or_none('true') is True
+        assert flag_or_none(None) is None
+        assert flag_or_none(False) is False
 
 
 class TestResumeNode:

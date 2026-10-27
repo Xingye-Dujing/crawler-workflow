@@ -122,9 +122,10 @@ def _wf_names(client) -> list:
 
 
 def _route_source_files() -> list:
-    """Every module that declares HTTP routes: ``app.py`` plus the ``backend/api`` Blueprints."""
+    """Every module that declares HTTP routes: ``app.py``, the ``backend/api`` Blueprints,
+    and the one domain Blueprint that lives with its state (``sessions/routes.py``)."""
     root = Path(__file__).resolve().parents[2] / 'backend'
-    return [root / 'app.py', *sorted((root / 'api').glob('*.py'))]
+    return [root / 'app.py', *sorted((root / 'api').glob('*.py')), root / 'sessions' / 'routes.py']
 
 
 def _post_route_policies() -> dict:

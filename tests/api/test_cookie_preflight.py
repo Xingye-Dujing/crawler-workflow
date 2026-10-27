@@ -20,8 +20,9 @@ import threading
 from concurrent.futures import Future
 
 import pytest
-from sessions import preflight, profiles
+from sessions import preflight, profiles, routes
 from sessions.cookies import CookieManager
+from state import cookie_manager
 
 import i18n
 from config import Config
@@ -73,7 +74,7 @@ def clean_jar(app_module):
     """
     for platform in CookieManager.PLATFORMS:
         with contextlib.suppress(FileNotFoundError):
-            app_module.cookie_manager.delete(platform)
+            cookie_manager.delete(platform)
         shutil.rmtree(profiles.platform_dir(platform), ignore_errors=True)
     yield
 
@@ -90,7 +91,7 @@ def with_cookie(app_module):
     """Give a platform a saved cookie file, as the panel would have."""
 
     def _give(platform, count=1, account=''):
-        app_module.cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)], account)
+        cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)], account)
 
     return _give
 
@@ -155,7 +156,7 @@ class TestVerdicts:
     def test_no_file_and_no_profile_leaves_nothing_to_probe(self, probes, monkeypatch, app_module):
         """This is a fact, not a guess about whether a cookie expired: the file is
         absent and no browser has ever held the platform's session."""
-        app_module.cookie_manager.delete('xiaohongshu')
+        cookie_manager.delete('xiaohongshu')
         _use_profile(monkeypatch, True)
         verdict = preflight.probe('xiaohongshu')
         assert verdict['state'] == preflight.NO_COOKIE
@@ -166,7 +167,7 @@ class TestVerdicts:
         """The consequence of deleting a cookie file (#111) and of a profile that
         imports once: a live session can exist with no snapshot beside it. Answering
         「没有 Cookie」 there would refuse a run that was about to work."""
-        app_module.cookie_manager.delete('weibo')
+        cookie_manager.delete('weibo')
         _use_profile(monkeypatch, True)
         profiles.mark_used('weibo', imported=False)
         preflight.probe('weibo')
@@ -264,7 +265,7 @@ class TestCache:
         assert probes.platforms == ['zhihu', 'zhihu'], 'the second answer came from the new probe, not the cache'
 
     def test_deleting_a_cookie_drops_the_verdict_too(self, client, probes, app_module):
-        app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'x'}])
+        cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'x'}])
         assert client.post('/api/cookies/preflight', json={'platforms': ['weibo']}).status_code == 200
         assert client.post('/api/cookies/delete', json={'platform': 'weibo'}).status_code == 200
         assert preflight.cached('weibo') is None
@@ -274,7 +275,7 @@ class TestCache:
         A user who just watched the panel answer 「已失效」 must not then pay for a
         second probe to be told the same thing — and a cached 「可用」 must not survive
         the check that contradicted it."""
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         preflight.record('zhihu', {'login_wall': False})
         assert preflight.cached('zhihu')['state'] == preflight.VALID
 
@@ -287,7 +288,7 @@ class TestCache:
             def close(self):
                 pass
 
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _Crawler())
+        monkeypatch.setattr(routes, 'get_crawler', lambda *a, **k: _Crawler())
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         deadline = threading.Event()
         for _ in range(120):
@@ -300,8 +301,8 @@ class TestCache:
         """The gate probes the platform's own address. A manual check that was aimed
         at a pasted article link measured a different page, so it may not become the
         answer to a question nobody asked about that page."""
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
 
         class _Crawler:
             risk_blocked = False
@@ -312,7 +313,7 @@ class TestCache:
             def close(self):
                 pass
 
-        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _Crawler())
+        monkeypatch.setattr(routes, 'get_crawler', lambda *a, **k: _Crawler())
         article = 'https://www.zhihu.com/question/1/answer/2'
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': article}).status_code == 202
         for _ in range(120):

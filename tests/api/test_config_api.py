@@ -23,6 +23,7 @@ import sys
 import pytest
 from sessions import profiles
 from sessions.cookies import CookieManager
+from state import cookie_manager
 
 from config import Config
 
@@ -252,8 +253,8 @@ class TestCookieEndpoints:
         """The panel shows WHICH accounts a platform holds so the user can pick or
         delete one — that list is read off the filenames, and no cookie value is
         opened for it (the same no-peeking rule the existence flags follow)."""
-        app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'secret'}], 'acct_one')
-        app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'other'}], 'acct_two')
+        cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'secret'}], 'acct_one')
+        cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'other'}], 'acct_two')
         body = client.get('/api/cookies/status').get_json()
         assert set(body['accounts']['weibo']) >= {'acct_one', 'acct_two'}, body['accounts']
         # Every value is a list of NAMES — the shape that cannot carry a session.
@@ -272,8 +273,8 @@ class TestCookieEndpoints:
         assumed.
         """
         marker = 'VALUE-THAT-MUST-NEVER-LEAVE-THE-JAR'
-        app_module.cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker}, {'name': 'zh-s', 'value': 'x'}])
-        app_module.cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker, 'expiry': 9_999_999_999}], 'work')
+        cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker}, {'name': 'zh-s', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker, 'expiry': 9_999_999_999}], 'work')
         body = client.get('/api/cookies/status').get_json()
         rows = {row['account']: row for row in body['rows'] if row['platform'] == 'zhihu'}
         assert set(rows) == {'default', 'work'}, body['rows']
@@ -314,8 +315,8 @@ class TestCookieEndpoints:
         login had a name. Each row now carries its own account's directory.
         """
 
-        app_module.cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}])
-        app_module.cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}], 'work')
+        cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}])
+        cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}], 'work')
         # A stamp from BEFORE this file was written: ``needs_refresh`` compares the two, and
         # a marker that recorded no stamp at all answers False on purpose (it cannot claim
         # to know which file the profile was planted from).
@@ -349,7 +350,7 @@ class TestCookieEndpoints:
 
         saved = data_root / 'data' / 'cookies' / 'weibo_cookies.json'
         assert saved.exists()
-        assert app_module.cookie_manager.load('weibo') == [{'name': 'SUB', 'value': 'x'}]
+        assert cookie_manager.load('weibo') == [{'name': 'SUB', 'value': 'x'}]
         assert client.get('/api/cookies/status').get_json()['cookies']['weibo'] is True
 
     def test_pasted_cookies_from_another_site_never_enter_the_platform_file(self, client, app_module):
@@ -372,20 +373,20 @@ class TestCookieEndpoints:
         body = response.get_json()
         assert response.status_code == 200
         assert body['count'] == 3
-        assert [c['name'] for c in app_module.cookie_manager.load('youtube')] == ['SID', '__Secure-1PSID', 'PREF']
+        assert [c['name'] for c in cookie_manager.load('youtube')] == ['SID', '__Secure-1PSID', 'PREF']
 
     def test_a_paste_of_nobody_s_here_is_refused_instead_of_saved_empty(self, client, app_module):
         """Writing an empty list would leave ``youtube_cookies.json`` behind, and
         the panel's exists-flag would call that "cookie configured"."""
         # The data dir is session-wide (the app has no per-test override), and the
         # test above just saved a YouTube file into it — start from a known blank.
-        app_module.cookie_manager.delete('youtube')
+        cookie_manager.delete('youtube')
         response = client.post(
             '/api/cookies/save', json={'platform': 'youtube', 'cookies': [{'name': 'SID', 'domain': '.google.com'}]}
         )
         assert response.status_code == 400
         assert response.get_json()['ok'] is False
-        assert app_module.cookie_manager.exists('youtube') is False
+        assert cookie_manager.exists('youtube') is False
 
     @pytest.mark.parametrize(
         ('payload', 'expected'),
@@ -454,8 +455,8 @@ class TestRenameAccount:
         assert body['ok'] is True and body['profile_moved'] is True, body
         assert body['account'] == 'office'
         # The jar moved and still holds the SAME login (a rename is a file move, never a rewrite).
-        assert app_module.cookie_manager.exists('zhihu', 'work') is False
-        assert app_module.cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.exists('zhihu', 'work') is False
+        assert cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
         # So did the device, with its contents — an account renamed onto a name with no browser
         # would open a brand-new one and claim 「已登录」 about a session that is not there.
         assert not os.path.isdir(device)
@@ -475,7 +476,7 @@ class TestRenameAccount:
         self._login(client, 'zhihu', 'solo')
         body = self._rename(client, 'zhihu', 'solo', 'solo2').get_json()
         assert body['ok'] is True and body['profile_moved'] is False, body
-        assert app_module.cookie_manager.load('zhihu', 'solo2') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.load('zhihu', 'solo2') == [{'name': 'k', 'value': 'v'}]
         assert 'only the cookie file moved' in body['message'], body['message']
 
     def test_a_target_typed_in_caps_is_folded_to_one_lowercase_name(
@@ -488,7 +489,7 @@ class TestRenameAccount:
         body = self._rename(client, 'zhihu', 'WORK', 'Office').get_json()
         assert body['ok'] is True, body
         assert body['account'] == 'office', 'stored lowercase — one login, one spelling'
-        assert app_module.cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
 
     def test_a_hyphen_is_a_legal_name_for_both_sides(self, client, app_module, profiles_off, tmp_path, monkeypatch):
         """(user, 2026-09-28: 「为什么大写字母和-不被允许，没有理由也要允许」) — the character rule is
@@ -498,7 +499,7 @@ class TestRenameAccount:
         body = self._rename(client, 'zhihu', 'my_login', 'my-login').get_json()
         assert body['ok'] is True, body
         assert body['account'] == 'my-login'
-        assert app_module.cookie_manager.load('zhihu', 'my-login') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.load('zhihu', 'my-login') == [{'name': 'k', 'value': 'v'}]
 
     def test_the_default_login_is_refused_by_name_and_by_the_old_blank(
         self, client, app_module, profiles_off, tmp_path, monkeypatch
@@ -512,8 +513,8 @@ class TestRenameAccount:
             response = self._rename(client, 'zhihu', spelling, 'boss')
             assert response.status_code == 400, spelling
             assert 'default account cannot be renamed' in response.get_json()['error'], spelling
-        assert app_module.cookie_manager.load('zhihu', '') == [{'name': 'k', 'value': 'v'}]
-        assert app_module.cookie_manager.exists('zhihu', 'boss') is False
+        assert cookie_manager.load('zhihu', '') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.exists('zhihu', 'boss') is False
 
     def test_renaming_onto_the_default_name_is_refused(self, client, app_module, profiles_off, tmp_path, monkeypatch):
         """The same topology problem seen from the other side: aiming a named account at the
@@ -523,7 +524,7 @@ class TestRenameAccount:
         self._login(client, 'zhihu', '')
         response = self._rename(client, 'zhihu', 'work', 'default')
         assert response.status_code == 409, response.get_json()
-        assert app_module.cookie_manager.exists('zhihu', 'work') is True, 'the named login must not be half-moved'
+        assert cookie_manager.exists('zhihu', 'work') is True, 'the named login must not be half-moved'
 
     def test_a_login_that_is_not_there_is_refused_as_missing(self, client, profiles_off, tmp_path, monkeypatch):
         self._point(monkeypatch, tmp_path)
@@ -542,8 +543,8 @@ class TestRenameAccount:
         response = self._rename(client, 'zhihu', 'work', 'office')
         assert response.status_code == 409, response.get_json()
         assert 'already uses' in response.get_json()['error']
-        assert app_module.cookie_manager.load('zhihu', 'work') == [{'name': 'k', 'value': 'v'}]
-        assert app_module.cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.load('zhihu', 'work') == [{'name': 'k', 'value': 'v'}]
+        assert cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
 
     def test_an_illegal_or_blank_new_name_is_refused(self, client, app_module, profiles_off, tmp_path, monkeypatch):
         self._point(monkeypatch, tmp_path)
@@ -552,7 +553,7 @@ class TestRenameAccount:
             response = self._rename(client, 'zhihu', 'work', bad)
             assert response.status_code == 400, bad
             assert response.get_json()['ok'] is False, bad
-        assert app_module.cookie_manager.exists('zhihu', 'work') is True
+        assert cookie_manager.exists('zhihu', 'work') is True
 
     def test_renaming_a_login_to_the_name_it_already_has_sends_nothing(
         self, client, app_module, profiles_off, tmp_path, monkeypatch
@@ -564,7 +565,7 @@ class TestRenameAccount:
         response = self._rename(client, 'zhihu', 'work', 'work')
         assert response.status_code == 400, response.get_json()
         assert 'same' in response.get_json()['error']
-        assert app_module.cookie_manager.exists('zhihu', 'work') is True
+        assert cookie_manager.exists('zhihu', 'work') is True
 
     def test_a_device_in_use_stops_the_file_from_moving(self, client, app_module, profiles_off, tmp_path, monkeypatch):
         """The ordering proof: the browser directory is tried FIRST, so a crawl holding it open
@@ -577,8 +578,8 @@ class TestRenameAccount:
         response = self._rename(client, 'zhihu', 'work', 'office')
         assert response.status_code == 409, response.get_json()
         assert 'in use' in response.get_json()['error']
-        assert app_module.cookie_manager.exists('zhihu', 'work') is True
-        assert app_module.cookie_manager.exists('zhihu', 'office') is False
+        assert cookie_manager.exists('zhihu', 'work') is True
+        assert cookie_manager.exists('zhihu', 'office') is False
 
     def test_an_unsupported_platform_is_refused_out_right(self, client, profiles_off, tmp_path, monkeypatch):
         """The platform becomes a path component, so the refusal is a security boundary before

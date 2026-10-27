@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from state import cookie_manager
 
 from crawl_capabilities import CAPABILITIES
 
@@ -317,7 +318,7 @@ class TestIsolationRunsBeforeTheAppIsImported:
         ``cookie_manager.cookie_dir`` that a cookie save actually writes through — and that is the
         value a too-early import would have frozen onto the user's directory.
         """
-        captured = Path(app_module.cookie_manager.cookie_dir).resolve()
+        captured = Path(cookie_manager.cookie_dir).resolve()
         assert captured.is_relative_to(data_root.resolve()), (
             f'the application under test writes cookies to {captured}, outside the throwaway root '
             f'{data_root} — something captured the real path before the harness redirected it'
@@ -378,8 +379,9 @@ class TestUserDirectoryStaysReadOnly:
         if app is not None:
             # Only reachable once some test has taken the app_module fixture — which is the moment
             # the two singletons below freeze their paths, so when it has happened it must have
-            # happened against the throwaway root.
-            found['app.cookie_manager.cookie_dir'] = app.cookie_manager.cookie_dir
+            # happened against the throwaway root. The jar is read from its own module now (the
+            # cookie routes moved to ``sessions/routes.py``); it is the same never-rebound object.
+            found['state.cookie_manager.cookie_dir'] = cookie_manager.cookie_dir
             found['app.history_service.db_path'] = app.history_service.db_path
         return found
 

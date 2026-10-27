@@ -17,6 +17,7 @@ Everything runs against a stub crawler and a stubbed probe: no browser, no socke
 """
 
 import pytest
+from sessions import routes
 
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import PageNotArrivedError
@@ -229,17 +230,17 @@ class TestThePanelSaysTheSameThing:
         """The panel's 验证 Cookie answers from the same facts, and its three old answers
         had no shape for 'never tested' — 「无法核对」 was closest but says the wrong
         thing, because what could not be checked was not the cookie."""
-        lines = app_module._verify_lines('zhihu', {'url': 'https://www.zhihu.com/', 'unreachable': True})
+        lines = routes._verify_lines('zhihu', {'url': 'https://www.zhihu.com/', 'unreachable': True})
         assert t('cookie.verify.unreachable', platform='zhihu') in lines
         assert t('cookie.verify.ok', platform='zhihu') not in lines
 
     def test_a_reachable_page_still_answers_the_three_old_ways(self, app_module):
-        assert t('cookie.verify.ok', platform='zhihu') in app_module._verify_lines(
+        assert t('cookie.verify.ok', platform='zhihu') in routes._verify_lines(
             'zhihu', {'url': 'https://www.zhihu.com/', 'unreachable': False}
         )
-        assert t('cookie.verify.loginWall', platform='zhihu') in app_module._verify_lines(
+        assert t('cookie.verify.loginWall', platform='zhihu') in routes._verify_lines(
             'zhihu', {'url': 'x', 'login_wall': True}
         )
-        assert t('cookie.verify.unclear', platform='zhihu') in app_module._verify_lines(
+        assert t('cookie.verify.unclear', platform='zhihu') in routes._verify_lines(
             'zhihu', {'url': 'x', 'risk_blocked': True}
         )

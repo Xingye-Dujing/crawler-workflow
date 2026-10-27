@@ -11,7 +11,9 @@ import threading
 import time
 
 import pytest
+from sessions import routes
 from sessions.cookies import CookieManager
+from state import cookie_manager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -97,11 +99,11 @@ def job(monkeypatch, app_module):
         made.append(crawler)
         return crawler
 
-    monkeypatch.setattr(app_module, 'get_crawler', fake_get_crawler)
+    monkeypatch.setattr(routes, 'get_crawler', fake_get_crawler)
 
     def reset():
-        with app_module._COOKIE_JOB_LOCK:
-            app_module._COOKIE_JOB.update(
+        with routes._COOKIE_JOB_LOCK:
+            routes._COOKIE_JOB.update(
                 active=False,
                 kind='',
                 platform='',
@@ -113,8 +115,8 @@ def job(monkeypatch, app_module):
                 facts={},
                 lines=[],
             )
-            app_module._COOKIE_JOB['cancel'].clear()
-            app_module._COOKIE_JOB['confirm'].clear()
+            routes._COOKIE_JOB['cancel'].clear()
+            routes._COOKIE_JOB['confirm'].clear()
 
     reset()
     yield {'made': made, 'block': block, 'state': state}
@@ -219,7 +221,7 @@ class TestCookieJob:
         crawler = job['made'][0]
         assert crawler.driver.visited.count(crawler.login_url) == 2, 'opened, then re-opened to capture'
         assert client.get('/api/cookies/generate/status').get_json()['phase'] == 'saved'
-        saved = app_module.cookie_manager.load('youtube')
+        saved = cookie_manager.load('youtube')
         assert [c['name'] for c in saved] == ['SUB'], 'the identity provider stayed out of this platform’s file'
 
     def test_second_generate_is_busy_409(self, client, job):
@@ -271,14 +273,13 @@ class TestCookieFlow:
     def test_the_registry_and_the_panel_never_drift_apart(self, client):
         """A platform added to the crawler registry but not to the cookie panel
         would save a cookie file nobody reads."""
-        import app as app_module
 
         from crawlers import CRAWLERS
 
         # Cookie capture is a subset of crawling: WeChat is crawled from public
         # article pages and needs no session, so it must not appear in the panel.
-        assert set(app_module.COOKIE_PLATFORMS) < set(CRAWLERS)
-        assert 'wechat' not in app_module.COOKIE_PLATFORMS
+        assert set(routes.COOKIE_PLATFORMS) < set(CRAWLERS)
+        assert 'wechat' not in routes.COOKIE_PLATFORMS
 
 
 class TestEntryLink:
@@ -287,7 +288,7 @@ class TestEntryLink:
     site's cookies in this platform's file."""
 
     def test_an_allowed_link_is_what_the_browser_is_sent_to(self, client, job, monkeypatch):
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
         article = 'https://www.zhihu.com/question/1/answer/2'
         assert (
             client.post(
@@ -302,7 +303,7 @@ class TestEntryLink:
         assert _await_idle(client)
 
     def test_a_foreign_link_is_rejected_and_says_so_instead_of_landing_elsewhere(self, client, job, monkeypatch):
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
         r = client.post(
             '/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10, 'url': 'https://evil.test/x'}
         )
@@ -318,7 +319,7 @@ class TestEntryLink:
 
 class TestCookieVerify:
     def test_a_stored_cookie_is_probed_and_the_verdict_comes_back_as_lines(self, client, job, app_module):
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         job['state']['facts'] = {'platform': 'zhihu.com', 'url': 'https://www.zhihu.com/signin', 'login_wall': True}
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         assert _await_phase(client, 'verified')
@@ -333,7 +334,7 @@ class TestCookieVerify:
         The WeChat-specific third line went with the keyword-search feature; a
         leftover would have the panel reporting on a capability no code has.
         """
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         job['state']['facts'] = {'platform': 'www.zhihu.com', 'url': 'https://www.zhihu.com/', 'login_wall': False}
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         body = _await_phase(client, 'verified')
@@ -341,7 +342,7 @@ class TestCookieVerify:
         assert not any('公众号' in line or 'MP admin' in line for line in body['lines'])
 
     def test_verifying_without_a_stored_cookie_is_refused_before_any_browser(self, client, job, app_module):
-        app_module.cookie_manager.delete('weibo')
+        cookie_manager.delete('weibo')
         r = client.post('/api/cookies/verify', json={'platform': 'weibo'})
         assert r.status_code == 400
         assert 'COOKIE' in r.get_json()['error'] or 'cookie' in r.get_json()['error']
@@ -352,7 +353,7 @@ class TestCookieVerify:
         expired cookie sends that window to the login page the user is then told to
         sign in on. Built like a crawl, it showed a page with no QR code to scan.
         """
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         _await_phase(client, 'verified')
         made = job['made'][0]
@@ -360,8 +361,8 @@ class TestCookieVerify:
         assert made.requested['headless'] is False
 
     def test_a_link_outside_the_platform_is_refused(self, client, job, app_module, monkeypatch):
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
-        app_module.cookie_manager.save('zhihu', [{'name': 'x', 'value': 'y'}])
+        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        cookie_manager.save('zhihu', [{'name': 'x', 'value': 'y'}])
         r = client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': 'https://evil.test/'})
         assert r.status_code == 400
         assert job['made'] == []
@@ -372,7 +373,7 @@ class TestCookieVerify:
         ``login_wall`` apart from ``risk_blocked`` for exactly this case, so the panel
         has to inherit three answers rather than inventing a pass.
         """
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         job['state']['facts'] = {
             'platform': 'www.zhihu.com',
             'url': 'https://www.zhihu.com/',
@@ -394,8 +395,8 @@ class TestCookieVerify:
         """The gate probes the platform's own address; a manual check aimed at an
         article link measured that page, so it may not become the answer to a question
         nobody asked about it."""
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         article = 'https://www.zhihu.com/question/1/answer/2'
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': article}).status_code == 202
         _await_phase(client, 'verified')
@@ -406,7 +407,7 @@ class TestCookieVerify:
     def test_the_login_buttons_do_not_answer_a_verification(self, client, job, app_module):
         """Done/Cancel belong to a login window. Pressing them while a probe
         runs would claim to confirm a login that never happened."""
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         hold = threading.Event()
         job['state']['hold'] = hold
         try:
@@ -421,12 +422,12 @@ class TestCookieVerify:
         assert job['made'][0].closed is True
 
     def test_a_crashing_probe_settles_as_error_not_a_hanging_dialog(self, client, job, app_module, monkeypatch):
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
 
         def explode(*_args, **_kwargs):
             raise RuntimeError('chromedriver vanished')
 
-        monkeypatch.setattr(app_module, 'get_crawler', explode)
+        monkeypatch.setattr(routes, 'get_crawler', explode)
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         assert _await_phase(client, 'error')
         assert 'chromedriver' in client.get('/api/cookies/generate/status').get_json()['error']
@@ -450,7 +451,7 @@ class TestCookieVerify:
         def refuse(*_args, **_kwargs):
             raise OSError('disk says no')
 
-        monkeypatch.setattr(app_module.cookie_manager, 'save', refuse)
+        monkeypatch.setattr(cookie_manager, 'save', refuse)
         body = {'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'b'}]}
         assert client.post('/api/cookies/save', json=body).status_code == 500
         lines = app_module.execution_state['logs']
@@ -473,7 +474,7 @@ class TestCookieVerify:
         assert 'Zhihu' in opened[0] and 'http' in opened[0], 'the one line owes both facts'
 
     def test_verification_never_shares_the_window_with_a_login(self, client, job, app_module):
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
         _await_phase(client, 'waiting')
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 409

@@ -30,8 +30,9 @@ history_service = ExecutionHistoryService()
 
 #: Cookie store: one process-wide instance over ``Config.COOKIE_DIR``. Moved out of ``app.py`` so
 #: the ``/api/capabilities`` Blueprint can extend the matrix with the live account list without
-#: importing the whole Flask module. ``app`` imports it back; a store object is only ever used,
-#: never rebound, so ``app.cookie_manager`` stays the very instance the cookies tests call through.
+#: importing the whole Flask module. A store object is only ever used, never rebound (the test
+#: harness redirects its directory before import), so every module that imports this name — the
+#: cookie routes in ``sessions/routes.py``, the tests that drive them — holds one jar.
 cookie_manager = CookieManager(Config.COOKIE_DIR)
 
 #: Mutable per-process run state: one run in flight, its console buffer, its outcome counters

@@ -15,6 +15,7 @@ import json
 
 import pytest
 from flask import jsonify
+from state import cookie_manager
 
 from config import Config
 
@@ -31,14 +32,14 @@ COOKIE_NAME = 'z_c0-SECRETISH-NAME'
 @pytest.fixture
 def marked_jar(app_module):
     """A saved login for one platform and one named account, carrying the marker."""
-    app_module.cookie_manager.delete('zhihu')
-    app_module.cookie_manager.delete('zhihu', 'work')
+    cookie_manager.delete('zhihu')
+    cookie_manager.delete('zhihu', 'work')
     rows = [{'name': COOKIE_NAME, 'value': MARKER, 'domain': '.zhihu.com'}]
-    app_module.cookie_manager.save('zhihu', rows)
-    app_module.cookie_manager.save('zhihu', rows, 'work')
+    cookie_manager.save('zhihu', rows)
+    cookie_manager.save('zhihu', rows, 'work')
     yield MARKER
-    app_module.cookie_manager.delete('zhihu')
-    app_module.cookie_manager.delete('zhihu', 'work')
+    cookie_manager.delete('zhihu')
+    cookie_manager.delete('zhihu', 'work')
 
 
 @pytest.fixture
@@ -135,12 +136,13 @@ class TestTheSweepItself:
         after the app has served a request (Flask refuses, and rightly), so the substitution
         is the view function itself: same URL, same walk, dishonest body.
         """
-        original = app_module.app.view_functions['cookie_status']
+        endpoint = 'sessions.cookie_status'
+        original = app_module.app.view_functions[endpoint]
 
         def leak():
-            return jsonify({'ok': True, 'jar': app_module.cookie_manager.load('zhihu')})
+            return jsonify({'ok': True, 'jar': cookie_manager.load('zhihu')})
 
-        app_module.app.view_functions['cookie_status'] = leak
+        app_module.app.view_functions[endpoint] = leak
         try:
             # The fixture really does put a value on disk that the route can now leak…
             body = client.get('/api/cookies/status').get_data(as_text=True)
@@ -149,7 +151,7 @@ class TestTheSweepItself:
             with pytest.raises(AssertionError, match='cookie VALUE'):
                 _sweep(client, app_module)
         finally:
-            app_module.app.view_functions['cookie_status'] = original
+            app_module.app.view_functions[endpoint] = original
         assert MARKER not in client.get('/api/cookies/status').get_data(as_text=True), (
             'the swap outlived the test that made it'
         )
@@ -203,7 +205,7 @@ class TestTheSweepItself:
         said = '\n'.join(app_module.execution_state['logs']) + json.dumps(response.get_json())
         assert MARKER not in said, said
         assert COOKIE_NAME not in said, said
-        app_module.cookie_manager.delete('weibo')
+        cookie_manager.delete('weibo')
 
 
 class TestSessionsAreNotASecretInTheDefaultBoot:

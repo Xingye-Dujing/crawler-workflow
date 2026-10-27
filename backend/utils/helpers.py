@@ -134,6 +134,26 @@ def as_bool(value, default: bool = False) -> bool:
     return default
 
 
+def flag_or_none(value):
+    """A tri-state flag off a JSON body: True, False, or None for "follow the setting".
+
+    Absence has to stay absence. Coercing a missing key to ``False`` turns one dialog's
+    answer into a silent global override of a setting the user configured, which is the
+    rule ``crawlers.get_crawler`` documents for ``use_profile``. Two callers read this:
+    the preflight route (the request's ``use_profile``) and the run start (the canvas
+    setting of the same name), so the two cannot disagree about what the text ``false``
+    means.
+    """
+    if isinstance(value, bool):
+        return value
+    text = str(value or '').strip().lower()
+    if text == 'true':
+        return True
+    if text == 'false':
+        return False
+    return None
+
+
 def split_names(value) -> list[str]:
     """A list of column names, from whichever shape the caller wrote.
 

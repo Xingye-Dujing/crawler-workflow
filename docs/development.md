@@ -27,12 +27,12 @@ crawler_workflow/
 │   │   ├── flow.py               # 各平台 Cookie 的用途/获取步骤/入口链接白名单
 │   │   ├── profiles.py           # 各账号一个 Chrome user-data-dir：布局、新鲜度、一把锁挡住两次采集同开一台设备
 │   │   ├── template.py           # 谁可以重建那份 pristine 设备目录（浏览器启动器由外面递进来）
-│   │   └── preflight.py          # 运行前 Cookie 预检：哪些模式需要登录态
+│   │   ├── preflight.py          # 运行前 Cookie 预检：哪些模式需要登录态
+│   │   └── routes.py             # /api/cookies/*、/api/profiles/delete、/api/browser/profiles*（Blueprint sessions）
 │   ├── api/                      # Flask Blueprint：按域拆出的路由簇（17 个已注册 + 2 个共享工具）
 │   │   ├── http.py               # 共享请求工具（_json_body/_bad_body/_safe_int/_bad_param 等）
 │   │   ├── resolution.py         # 数据帧解析（_resolve_dataframe/_resolve_payload_dataframe/NoRunDataError）
 │   │   ├── analysis.py           # /api/analysis/{run,train}（含 ML 训练常量）
-│   │   ├── browser_profiles.py   # /api/browser-profiles/*
 │   │   ├── capabilities.py       # /api/capabilities（采集面板的字段口径）
 │   │   ├── config.py             # /api/config/*（设置 + 已注册 BERT 模型表 /api/models）
 │   │   ├── data.py               # /api/data/*（上传/粘贴/预览/删除数据集）

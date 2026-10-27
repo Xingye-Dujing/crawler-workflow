@@ -152,6 +152,14 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `cookie_preflight_before_run`, blueprint names, test filenames like `test_browser_profiles.py`) left alone.
   `ruff check` is a cheap and honest first net: it reported 23 F821 (undefined names) and 2 F401 before a
   single test ran, which is the fastest possible way to find out that a ruleset over-reached.
+- **`git mv` stages the rename, not the edits that follow it.** Moving the scheduling trio (2026-10-28) went
+  `git mv` → rewrite script → hand edits → `git add <the files I remembered>` — and the remembered list named
+  only `scheduling/__init__.py`, so `clock.py`/`store.py` were committed **with their old imports**. The commit
+  summary still printed the renames plus `M` lines (the `M` was the renames' similarity, not the edits), the
+  whole local gate was green because the *worktree* was right, and CI answered `E0611: No name 'cron' in module
+  'services'` in two and a half minutes. Rule: after a `git mv`, every moved path is a **new path** that must be
+  added explicitly; read `git diff --cached --stat` (or `git status --short` for a leading `RM`/` M`) before
+  committing. Local green says nothing about the index — the runner tests the index.
 - **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
   appeared" while the gate before it said everything was fine — because its bounded poll returned

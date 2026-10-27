@@ -542,7 +542,11 @@ class TestAWallMustSurviveBeingJudged:
 #: page is measured doing exactly that. Pinned both ways: a new one is red, and so is a
 #: stale entry once a site has been moved onto ``open``.
 BARE_NAVIGATIONS = {
-    'backend/app.py': 2,
+    # The login window's two navigations moved here from ``app.py`` on 2026-10-28 with the
+    # cookie routes: the entry page it was asked to open, and the pull back to the platform's
+    # own login URL before the jar is captured (a login that ended on the identity provider
+    # would otherwise be read *there*).
+    'backend/sessions/routes.py': 2,
     # ``_navigate`` (the one driver call ``open`` and the cookie planter share) and the
     # template warmer — the last one enters ``about:blank`` ON PURPOSE: that internal page
     # is the goal, not a failed navigation, so it must never be re-driven off itself, and

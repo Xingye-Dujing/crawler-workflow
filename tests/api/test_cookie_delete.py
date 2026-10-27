@@ -14,6 +14,7 @@ import shutil
 import pytest
 from sessions import profiles
 from sessions.cookies import CookieManager
+from state import cookie_manager
 
 import i18n
 
@@ -40,7 +41,7 @@ def clean_jar(app_module):
     """
     for platform in CookieManager.PLATFORMS:
         with contextlib.suppress(FileNotFoundError):
-            app_module.cookie_manager.delete(platform)
+            cookie_manager.delete(platform)
         shutil.rmtree(profiles.platform_dir(platform), ignore_errors=True)
     yield
 
@@ -56,9 +57,9 @@ def saved(app_module):
     """
 
     def _save(platform='zhihu', count=2):
-        for name in ['', *app_module.cookie_manager.account_files(platform)]:
-            app_module.cookie_manager.delete(platform, name)
-        app_module.cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)])
+        for name in ['', *cookie_manager.account_files(platform)]:
+            cookie_manager.delete(platform, name)
+        cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)])
         return platform
 
     return _save
@@ -70,7 +71,7 @@ class TestDelete:
         assert client.get('/api/cookies/status').get_json()['cookies']['weibo'] is True
         assert client.post('/api/cookies/delete', json={'platform': 'weibo'}).status_code == 200
         assert client.get('/api/cookies/status').get_json()['cookies']['weibo'] is False
-        assert app_module.cookie_manager.load('weibo') == []
+        assert cookie_manager.load('weibo') == []
 
     def test_the_other_platforms_keep_their_cookies(self, client, app_module, saved):
         """One row of the panel, one platform: a 「清空」 that the button never claimed
@@ -90,7 +91,7 @@ class TestDelete:
     def test_deleting_nothing_is_answered_as_nothing_rather_than_a_fake_success(self, client, app_module):
         """The panel could show 「已删除」 over a file that was never there, and the
         user would believe a stale snapshot had been replaced."""
-        app_module.cookie_manager.delete('douyin')
+        cookie_manager.delete('douyin')
         response = client.post('/api/cookies/delete', json={'platform': 'douyin'})
         assert response.status_code == 404
         assert (
@@ -133,7 +134,7 @@ class TestDelete:
         def refuse(_platform, _account=''):
             raise OSError('read-only volume')
 
-        monkeypatch.setattr(app_module.cookie_manager, 'delete', refuse)
+        monkeypatch.setattr(cookie_manager, 'delete', refuse)
         app_module.execution_state['logs'] = []
         response = client.post('/api/cookies/delete', json={'platform': 'bilibili'})
         assert response.status_code == 500
@@ -184,7 +185,7 @@ class TestDelete:
         assert client.post('/api/cookies/delete', json={'platform': 'zhihu'}).status_code == 200
         body = {'platform': 'zhihu', 'cookies': [{'name': 'z_c0', 'value': 'fresh'}]}
         assert client.post('/api/cookies/save', json=body).status_code == 200
-        assert [c['name'] for c in app_module.cookie_manager.load('zhihu')] == ['z_c0']
+        assert [c['name'] for c in cookie_manager.load('zhihu')] == ['z_c0']
 
 
 class TestDeleteProfile:
@@ -195,8 +196,8 @@ class TestDeleteProfile:
     """
 
     def _named_login(self, app_module, platform='zhihu', account='work'):
-        app_module.cookie_manager.delete(platform, account)
-        app_module.cookie_manager.save(platform, [{'name': 'z_c0', 'value': 'v'}], account=account)
+        cookie_manager.delete(platform, account)
+        cookie_manager.save(platform, [{'name': 'z_c0', 'value': 'v'}], account=account)
         return account
 
     def test_the_named_profile_dir_goes_and_the_cookie_file_stays(self, client, app_module):
@@ -210,10 +211,10 @@ class TestDeleteProfile:
         assert response.get_json()['profile_deleted'] is True
         assert not os.path.isdir(path), 'the device directory must be gone'
         assert not profiles.is_used('zhihu', account='work')
-        assert app_module.cookie_manager.load('zhihu', 'work'), 'delete-Profile must not touch the cookie file'
+        assert cookie_manager.load('zhihu', 'work'), 'delete-Profile must not touch the cookie file'
 
     def test_the_default_account_is_refused_because_its_folder_is_the_platform_root(self, client, app_module):
-        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'v'}])
+        cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'v'}])
         for blank in ('', 'default'):
             response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': blank})
             assert response.status_code == 400, response.get_json()

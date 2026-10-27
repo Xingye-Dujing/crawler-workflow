@@ -448,16 +448,18 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      live_quick / live_site 按用户决定不跑（要跑须在场并先问清在哪张网络）。
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
-- **压缩后的接续点（2026-10-28，工作树干净）**
-  - **HEAD = 本次提交**（`scheduling/` 归域；本次之前的顺序：`20c2ac7` 用户画布布局 ← `85646bf` 压缩锚点
-    ← `f625560` 登录态五模块 → `backend/sessions/` ← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）
-    ← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0` ← `ae0a569`），已推 `crawler-github` 与 `gitee`。
-    **`f625560` 与 `85646bf` 的 CI 结果在写这段时仍未出**（两个 run 都跑了 19–22 分钟还在 in_progress，
-    比平时约 10 分钟慢得多）。恢复后第一件事就是 `gh run list --limit 4`
-    （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）；**browser job 是关键**：它要证明
-    `test_a_run_detail_splits_its_workflows_without_growing_a_bar` 的修复真的生效，也是设备档的证据来源。
-    本地证据：fast **8,156 passed / 3 skipped** exit=0；两档 pylint **exit=0、10.00/10**（238 + 268 文件）；
-    ruff check + format 489 files；那条浏览器用例本地 zh+en **2 passed**。
+- **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
+  - **HEAD = 本次提交**（`sessions/routes.py` 归域）。顺序：`e221d9b`（补 scheduling 未 stage 的内容，修 CI E0611）
+    ← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）← `20c2ac7`（用户画布布局）← `85646bf`（压缩锚点）
+    ← `f625560`（登录态五模块 → `backend/sessions/`）← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）
+    ← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0` ← `ae0a569`。已推 `crawler-github` 与 `gitee`。
+    **CI 已读**：`f625560` 与 `85646bf` 均 **success**（browser job 绿，证明 detail-row 的修复与 sessions 迁移都成立）；
+    `097675b` **failure**（2m37s，pylint `E0611 No name 'cron' in module 'services'`，因 clock/store 的内容没进提交）；
+    `e221d9b` 的 CI 在写这段时刚开始跑。恢复后第一件事：`gh run list --limit 4`
+    （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`），确认 `e221d9b` 与本次提交的 browser job。
+  - **本地证据（本次字节）**：fast **8,156 passed / 3 skipped / 353 deselected** exit=0；
+    设备档（真 Chrome + 真 Ollama + 真 CatBus，`--timeout=300`）**192 passed / 0 skipped** exit=0；
+    两档 pylint **exit=0、10.00/10**（238 + 268 文件）；ruff check + format 489 files。
   - **Stage 2 第三刀 `backend/scheduling/` 已完成（本次提交）**：`backend/scheduler.py`(246) →
     `scheduling/clock.py`、`services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) →
     `scheduling/cron.py`，新增 `scheduling/__init__.py` 域说明（不 import 子模块，故无环）。
@@ -478,17 +480,46 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     **门禁（本次字节）**：fast **8,156 passed / 3 skipped / 353 deselected** exit=0（与迁移前逐项一致）；
     两档 pylint **exit=0、10.00/10**（238 + 268 文件；产品档多出的 1 是 `scheduling/__init__.py`）；
     ruff check + format 489 files 全绿；`cd backend && python -c "import app; import scheduling.*"` 无环。
-  - **Stage 2 第二刀（下一刀）**：`/api/cookies/*` + `/api/browser/profiles/*`（app 内约 950 行）进
-    `sessions/routes.py`；那会同时消掉 `api/browser_profiles.py` 这个名字与 `app.py` 的 `def cookie_flow()`。
-    登记点：`tests/api/test_api_hardening.py::BODY_ROUTES`（新 POST 路由必须登记，否则那条契约红）。
+  - **Stage 2 第二刀 `sessions/routes.py` 已完成（本次提交）**：`app.py` 的 `/api/cookies/*`（12 条）+ `/api/profiles/delete`
+    与 `api/browser_profiles.py` 的 2 条合并进 `backend/sessions/routes.py`（Blueprint `sessions`，14 条路由，路径/方法
+    逐条不变）；`api/browser_profiles.py` 删除，`app.py` 4,411 → 3,534 行。搬移用 `build/carve_sessions_routes.py`
+    （按节标记整段切割 + `@app.route`→`@bp.route` 计数断言 12、函数数断言 18/2、「app.py 不再含这些路由」断言）；
+    脚本**不写 import 头**，头部由 tracked Edit 写，ruff 的 F821/F401 就是漏项网（实测抓到 `crawler_hosts` 漏 import）。
+    **三件跨模块接缝（这类搬迁每次都要查）**：
+    ① `_flag_or_none` 被两条路径共用（preflight 路由与 `_begin_run` 的 `use_profile`）→ 提成
+    `utils.helpers.flag_or_none`，两边同读一份；`test_nodes_execution` 的断言改指新家；
+    ② `app.get_crawler` 是 ~40 条既有测试的 patch 点（`tests/executor_seams.forward` 的 provider）→ 在 app 的
+    PEP 562 `__getattr__` 里委派到 `crawlers`（与 `_RUN_STORE` 同一先例，注释写明它是接缝不是实现）；
+    ③ 测试从 `app_module.<x>` 改到真实归属：`state.cookie_manager`（同一 never-rebound 实例，80 处）、
+    `sessions.routes`（`_COOKIE_JOB`/`COOKIE_PLATFORMS`/`_PROFILE_REFRESH_LOCK`/`get_crawler`/`cookie_hosts`/
+    `_close_login_browser`/`_verify_lines`）、`sessions.{profiles,preflight}`；**run 路径的 `app.get_crawler` patch
+    保持不动**（走 executor seam，改成 routes 会让 2 条 cloud run 用例红）。
+    契约同步：`test_api_hardening._route_source_files()` 收 `sessions/routes.py`（否则 8 条 POST 变成「matrix 有、app 里没有」）；
+    `privacy_leaks` 的 view-function 名改 `sessions.cookie_status`；`test_crawler_base.BARE_NAVIGATIONS` 的
+    `app.py:2` → `sessions/routes.py:2`；`_DELETED_MODULES` 记 `api/browser_profiles.py`。
+    **又一次钩子陷阱**：先加 import、后加用法的两段编辑会让 PostToolUse 的 ruff --fix 把"暂时没人用"的 import 删掉
+    （9 个测试文件各中一次，F821 全抓出来）——顺序必须**先用法、后 import**。
+    **门禁（本次字节）**：fast **8,156 passed / 3 skipped / 353 deselected** exit=0；设备档（真 Chrome + 真 Ollama +
+    真 CatBus）**192 passed / 0 skipped** exit=0（`--timeout=300`；第一次跑有 3 条 `test_profile_cookie_plant` 失败——
+    Chrome 拒绝写 `127.0.0.1` 的 cookie；该文件单独复跑 4 passed、整档复跑 192 passed ⇒ 环境抖动，与那条
+    「Chrome 创建数据目录失败」的原生弹框同源，不是产品/测试缺陷）；两档 pylint **exit=0、10.00/10**（238 + 268 文件）；
+    ruff check + format 489 files。
+    **提交事故（已修，`097675b` → `e221d9b`）**：`git mv` 只把 rename 放进 index，之后的**内容修改没被 `git add`**
+    （我的 add 清单只写了 `scheduling/__init__.py`），`git commit` 的摘要照样打印 rename + `M`，CI 在
+    `scheduling/clock.py` 报 `E0611 No name 'cron' in module 'services'` 才发现。规矩：**`git mv` 之后的内容改动
+    必须显式 `git add` 那个新路径**，提交前看 `git diff --cached --stat`。
+  - **Stage 2 已完**。下一刀 = **Stage 3（任务 #30）**：`core/` 与 `capabilities/` 分层 + 合并孤儿模块
+    （`config`/`i18n`/`state`/`stores`/`settings_store`/`transport`/`crawl_capabilities`/`crawl_gate`），
+    含 Stage 1 ④ 的 `engine/` 平台事实（一起做，避免一个平台两处声明）。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，
     tests 档同理换 `--rcfile=.pylintrc.tests` 与 `build/lint_tests.txt`。**跑全量期间不改任何文件**；
     全量在本机约 8–9 分钟（43+ 个 Chrome 在跑，比 CI 慢一倍），两档 pylint 各约 4 分钟。
-  - **本机设备档现状（如实）**：单条浏览器用例要几分钟，整档 190 条不可用（跑到第 9 条停 40 分钟，
-    与改动无关；`4ffc00f` 那次 CI 只要 276 s）。所以**设备档证据一律来自 GitHub 的 browser job**，
-    除非用户在场让我盯本地。
+  - **本机设备档现状（2026-10-28 更新）**：**可用**——带三个 REQUIRE 旗标 + `CIXI_CATBUS_CLI`，加 `--timeout=300`
+    （`pytest-timeout` 已装；没有它时一次 Chrome 启动抖动看起来就是 40 分钟静默挂住），整档 **192 passed / 0 skipped，
+    4 分 09 秒**。`test_profile_cookie_plant` 偶发 3 条失败是 Chrome 数据目录的环境抖动，复跑即绿；遇到先单独
+    复跑该文件再判。
 
 
 - **仍然未验证/未跑（不许改口）**：桌面 EXE 未重建（新前端/新模块要下一次

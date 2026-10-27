@@ -83,6 +83,9 @@ _DELETED_MODULES = {
     # can see where it went. The file is gone; the citation is the provenance, not a claim.
     'services/cookie_manager.py': 'moved to sessions/cookies.py (docs/ARCHITECTURE.md sessions row)',
     'services/cookie_flow.py': 'moved to sessions/flow.py (docs/ARCHITECTURE.md sessions row)',
+    # 2026-10-28: the two /api/browser/profiles routes merged into sessions/routes.py with the
+    # rest of the cookie surface; ARCHITECTURE names the old path as provenance.
+    'api/browser_profiles.py': 'merged into sessions/routes.py (docs/ARCHITECTURE.md sessions row)',
 }
 
 

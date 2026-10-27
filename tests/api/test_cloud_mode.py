@@ -10,7 +10,7 @@ repo keeps paying for is a run that quietly does the other thing and reports suc
 import os
 
 import pytest
-from sessions import template
+from sessions import routes, template
 
 from config import Config
 
@@ -145,7 +145,7 @@ class TestNoWindowToLogInto:
         def never(*args, **kwargs):
             raise AssertionError('a cloud boot must not buy a login browser')
 
-        monkeypatch.setattr(app_module, 'get_crawler', never)
+        monkeypatch.setattr(routes, 'get_crawler', never)
         response = client.post('/api/cookies/generate', json={'platform': 'zhihu'})
         assert response.status_code == 400
         assert '窗口' in response.get_json()['error'] or 'window' in response.get_json()['error'].lower()
@@ -157,7 +157,7 @@ class TestNoWindowToLogInto:
             started['platform'] = platform
             raise RuntimeError('no chrome here')
 
-        monkeypatch.setattr(app_module, 'get_crawler', pretend)
+        monkeypatch.setattr(routes, 'get_crawler', pretend)
         response = client.post('/api/cookies/generate', json={'platform': 'zhihu'})
         # 202 = the job was accepted and the worker found no browser; a 400 here would
         # mean the refusal leaked into the machine that still has a display.
@@ -188,6 +188,8 @@ class TestEverythingRunsHeadless:
             def close(self):
                 pass
 
+        # A run goes through the source executor, whose factory the app-level patch is
+        # forwarded to by ``tests/executor_seams.py`` — the route patch does not reach it.
         monkeypatch.setattr(app_module, 'get_crawler', lambda platform, **kwargs: _Quiet())
         workflow = _canvas_with_model()
         workflow['nodes'] = workflow['nodes'][:1]
@@ -308,7 +310,7 @@ class TestThePristineTemplateOnACloudBoot:
             order.append(('crawler', bool(profiles.template_exists())))
             raise RuntimeError('no browser in the fast tier')
 
-        monkeypatch.setattr(app_module, 'get_crawler', spy_factory)
+        monkeypatch.setattr(routes, 'get_crawler', spy_factory)
         payload = {'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'v'}], 'account': 'work'}
         assert client.post('/api/cookies/save', json=payload).status_code == 200
         assert calls == [str(profiles_root / '_template')], calls

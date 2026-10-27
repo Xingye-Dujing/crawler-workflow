@@ -16,6 +16,8 @@ No Chrome is bought by any test here: the factory is stubbed and records the dec
 """
 
 import pytest
+from sessions import preflight, profiles, routes
+from state import cookie_manager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -56,11 +58,11 @@ def factory(monkeypatch, app_module, tmp_path):
             )
             return crawler
 
-        monkeypatch.setattr(app_module, 'get_crawler', build)
-        monkeypatch.setattr(app_module.profiles, 'is_enabled', lambda: enabled)
-        monkeypatch.setattr(app_module.profiles, 'is_used', lambda platform, account='': used)
-        monkeypatch.setattr(app_module.profiles, 'is_busy', lambda path: busy)
-        monkeypatch.setattr(app_module.profiles, 'platform_dir', lambda platform, account='': str(tmp_path / platform))
+        monkeypatch.setattr(routes, 'get_crawler', build)
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: enabled)
+        monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': used)
+        monkeypatch.setattr(profiles, 'is_busy', lambda path: busy)
+        monkeypatch.setattr(profiles, 'platform_dir', lambda platform, account='': str(tmp_path / platform))
         return made
 
     return _install
@@ -88,15 +90,15 @@ class TestTheSecondUnnamedLogin:
         purpose — so the precondition is set here rather than assumed from execution order.
         """
         for name in ('', 'default2', 'default3'):
-            app_module.cookie_manager.delete('weibo', name)
+            cookie_manager.delete('weibo', name)
 
     def test_the_first_blank_save_is_the_default_account(self, client, factory, app_module):
         factory()
         answer = _save(client)
         assert answer.status_code == 200
         assert answer.get_json()['account'] == ''
-        assert app_module.cookie_manager.exists('weibo', '')
-        assert not app_module.cookie_manager.exists('weibo', 'default2')
+        assert cookie_manager.exists('weibo', '')
+        assert not cookie_manager.exists('weibo', 'default2')
 
     def test_a_second_blank_save_becomes_default2_and_keeps_the_first(self, client, factory, app_module):
         factory()
@@ -104,14 +106,14 @@ class TestTheSecondUnnamedLogin:
         second = _save(client, cookies=[{'name': 'SUB', 'value': 'two', 'domain': '.weibo.com'}])
         assert second.status_code == 200, 'the save must not ask, and must not refuse'
         assert second.get_json()['account'] == 'default2'
-        assert app_module.cookie_manager.load('weibo', '')[0]['value'] == 'one', 'the first login was clobbered'
-        assert app_module.cookie_manager.load('weibo', 'default2')[0]['value'] == 'two'
+        assert cookie_manager.load('weibo', '')[0]['value'] == 'one', 'the first login was clobbered'
+        assert cookie_manager.load('weibo', 'default2')[0]['value'] == 'two'
 
     def test_the_third_one_counts_on_rather_than_reusing_default2(self, client, factory, app_module):
         factory()
         for value in ('one', 'two', 'three'):
             _save(client, cookies=[{'name': 'SUB', 'value': value, 'domain': '.weibo.com'}])
-        assert app_module.cookie_manager.load('weibo', 'default3')[0]['value'] == 'three'
+        assert cookie_manager.load('weibo', 'default3')[0]['value'] == 'three'
 
     def test_the_generated_label_is_a_word_not_the_file_segment(self, client, factory, app_module):
         factory()
@@ -125,8 +127,8 @@ class TestTheSecondUnnamedLogin:
         factory()
         _save(client, account='work', cookies=[{'name': 'SUB', 'value': 'one', 'domain': '.weibo.com'}])
         _save(client, account='work', cookies=[{'name': 'SUB', 'value': 'two', 'domain': '.weibo.com'}])
-        assert app_module.cookie_manager.entry_count('weibo', 'work') == 1
-        assert app_module.cookie_manager.load('weibo', 'work')[0]['value'] == 'two'
+        assert cookie_manager.entry_count('weibo', 'work') == 1
+        assert cookie_manager.load('weibo', 'work')[0]['value'] == 'two'
 
 
 class TestThePlantItself:
@@ -155,7 +157,7 @@ class TestThePlantItself:
     def test_the_browser_is_closed_whatever_the_plant_counted(self, client, factory, monkeypatch, app_module):
         made = factory(planted=0)
         closed = []
-        monkeypatch.setattr(app_module, '_close_login_browser', lambda crawler, **kw: closed.append(crawler))
+        monkeypatch.setattr(routes, '_close_login_browser', lambda crawler, **kw: closed.append(crawler))
         answer = _save(client)
         assert answer.status_code == 200
         assert app_module.t('cookie.refresh.done').split('{')[0] in answer.get_json()['message']
@@ -165,7 +167,7 @@ class TestThePlantItself:
         """The profile now answers differently than the one the last probe looked at."""
         factory()
         seen = []
-        monkeypatch.setattr(app_module.preflight, 'invalidate', seen.append)
+        monkeypatch.setattr(preflight, 'invalidate', seen.append)
         _save(client)
         assert 'weibo' in seen
 
@@ -174,14 +176,14 @@ class TestThePlantItself:
         profile store, so it dies with the window opened to plant it. 「已更新」 alone would
         promise a transfer that partly did not happen."""
         factory()
-        monkeypatch.setattr(app_module.cookie_manager, 'session_only_count', lambda platform, account='': 2)
+        monkeypatch.setattr(cookie_manager, 'session_only_count', lambda platform, account='': 2)
         answer = _save(client)
         assert str(2) in answer.get_json()['message'], answer.get_json()
         assert answer.get_json()['profile_note']
 
     def test_a_fully_persistent_plant_adds_no_warning(self, client, factory, monkeypatch, app_module):
         factory()
-        monkeypatch.setattr(app_module.cookie_manager, 'session_only_count', lambda platform, account='': 0)
+        monkeypatch.setattr(cookie_manager, 'session_only_count', lambda platform, account='': 0)
         answer = _save(client)
         warning = app_module.t('cookie.refresh.sessionOnly', n=1)
         assert warning not in answer.get_json()['message'], answer.get_json()
@@ -235,7 +237,7 @@ class TestWhatItNeverDoes:
 
     def test_two_saves_at_once_do_not_share_a_browser(self, client, factory, app_module):
         made = factory()
-        held = app_module._PROFILE_REFRESH_LOCK
+        held = routes._PROFILE_REFRESH_LOCK
         assert held.acquire(blocking=False), 'something else is holding the plant lock'
         try:
             answer = _save(client)
@@ -255,6 +257,5 @@ class TestWhatItNeverDoes:
 
 
 def app_module_cookie_manager():
-    import app as app_module
 
-    return app_module.cookie_manager
+    return cookie_manager
