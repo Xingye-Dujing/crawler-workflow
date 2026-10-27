@@ -212,7 +212,7 @@ backend/
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
-| `crawlers/platforms/douyin/crawler.py` | 913 | Stage 1（第一步：纯规则进 `douyin/rows.py` 141；剩余是 overlay/profile 的驱动耦合机械） |
+| `crawlers/platforms/douyin/crawler.py` | 760 | Stage 1（纯规则 → `rows.py` 141；overlay 协议 → `overlay.py` 200 mixin；剩余是 profile 走路与详情读） |
 | `crawlers/platforms/weibo/crawler.py` | 926 | Stage 1（按 walk 拆） |
 | `crawlers/platforms/hongguo/harvest.py` | 1824 | Stage 1（会话/进程/解析三段） |
 | `services/data_analysis.py` | 3899 | Stage 9 |
@@ -266,14 +266,14 @@ run #20、2026-10-15、push 的正是今天仍是远端头的 `27bed25`、结论
 | **0 先加护栏** | ①新契约：`spec` 的 hiddenimports 清单 == `backend/` 实际顶层包；②`docs/` 里的 `path.py` 引用必须存在；③`Crawler` 契约属性表与执行器 `getattr` 兜底的对账；④修 D9 前三条无行为变化的死码 | 纯新增 + 三处删除 | 每条新契约都能红一次（故意改错路径就红） |
 | **1 crawlers 插件化** | **已落地**：`core/`（crawler/browser/faults/video）、`backends/catbus.py`、`commenting/`（session/walks/protocol）、`platforms/<id>/{crawler,comments}` 十平台、`__init__.py` 只剩注册表+工厂、边界契约 `test_crawler_platform_plugins.py`；**① 七个平台的 `walk` 与页内 JS 已各自进平台目录（`session.py` 1,183 → 140）**、**② 评论分派改成注册表 `commenting/walks.py`（`CommentSession.walk(platform,url,limit)`；CatBus 不再用 `__getattr__` 合成方法名，红果 harness 同名 `walk`）**，契约 `test_comment_walk_plugins.py` 12 例；**③ 第一步** pacing 进 `crawlers/engine/pacing.py`（站点无关的机械本该在 engine，DOM 爬虫与评论走路共用同一开关，1,495 → 1,472）；**③ 第二步已落地**：`core/crawler.py` 1,472 → **1,144**，四类失败词汇进 `core/faults.py`（93，只 import i18n，因此 catbus/分析器/测试都能无环引用），一台 Chrome 的装配进 `core/browser.py`（344：开关、指纹遮罩、桌面度量、profile 认领、按名拒绝），**不留 re-export**——23 个 import 点与四处打桩点全部改指新模块。**剩余**：weibo(926) 与 harvest(1825) 未拆；douyin 已走第一步（1,032 → **913**：`douyin/rows.py` 141 收
 `video_id`/`sec_uid`/`published`/`hot_row`/`clean_publish`/`publish_from_info`/`author_from_related`——
-全是"站点发布的串→值"规则，没有一条碰驱动，因此可无浏览器测）；douyin 的下一步是把 overlay 协议（`_modal_open`/`_open_modal`/`_active_facts`/`_modal_row` 等 ~195 行）
-搬进 `douyin/overlay.py`，**但必须搬成 mixin（`DouyinOverlayMixin`，`class DouyinCrawler(VideoCrawler,
-DouyinOverlayMixin)`），不能搬成自由函数**——这不是风格选择，是本轮量出来的事实：
-`tests/integration/test_douyin_crawler.py` 的假对象替整个 crawler 站着 `_open_modal`/`_close_modal`/
-`_modal_facts`（`_modal_facts` 甚至不是真类里的名字），走路调 `self._open_modal(...)` 时打的就是这层桩。
-改成 `overlay.open_on(self, …)` 会让那些桩一处也不会被命中：真代码将第一次跑在假驱动上，
-`visited`/`container_jumps` 这些"只加载了一次页面"的不变量会静默变形。mixin 搬法保持**方法名与
-打桩点不变**，因此零测试改指即可减 195 行。④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 约 120 处引用改写 + 走路搬家（行为不变，逐条对照原方法体） | 平台 id 三处集合相等（已有）；注册表 == 定义 walk 的目录 + import 清单同源；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
+全是"站点发布的串→值"规则，没有一条碰驱动，因此可无浏览器测）；**douyin 的 overlay 协议已搬成 mixin**
+（`douyin/overlay.py` 200 行，`DouyinCrawler(DouyinOverlayMixin, VideoCrawler)`，crawler.py 913 → 760）。
+选 mixin 的实测理由：`tests/integration/test_douyin_crawler.py` 的 `FakeDriver` 是在**驱动层**建模的——
+点击 → 打开自己的 modal 状态（:366）、ESC → 关闭（:330）、按 active-slide 作用域的 JS 读 → `_modal_facts()`
+（:404），也就是说真 overlay 代码本来就跑在这个假驱动上；mixin 保持方法名与调用点不变，93 条用例
+**零测试改指**全过，证据仍是真走路而不是桩。**（更正：我在这里先写过一条"假对象替整个 crawler 站着这些
+方法、搬成自由函数桩就不会被命中"的理由——那是没验证的断言，量过之后不成立：桩在驱动层，不在方法层。
+按事实改掉；旧解释别再照抄。）** ④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 约 120 处引用改写 + 走路搬家（行为不变，逐条对照原方法体） | 平台 id 三处集合相等（已有）；注册表 == 定义 walk 的目录 + import 清单同源；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
 
 | **2 sessions + scheduling** | 登录态四模块 + 34 行孤儿合成 `sessions/`；`/api/cookies/*` 与 `/api/profiles/*`（app 内约 950 行）进 `sessions/routes.py`；调度合成 `scheduling/` | 打桩路径搬迁 | 预检/profile/账号折叠用例全绿；cloud 判定不变 |
 | **3 core + capabilities** | 根模块下沉 `core/`；`crawl_capabilities.py` 1,805 行拆 `model/requirements/platforms/<id>/catbus/registry`；`coerce.py` 下沉解掉 D7 | 全树 import 一次改完（无 shim） | `test_boot_import_budget` 仍绿且启动不退化；三档 pylint；打包契约 |
@@ -361,8 +361,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   现在用例自己说"栈在"，另加一条钉住 CI 真撞到的**栈缺失拒绝**（点名两包且不得怪播放器）。
 - **下一条待做（顺序，别插队）**：
   1. 推 #38 这批，然后 `gh run view --log-failed` 复验 runner 是否 0 failed；仍有失败就继续按类问机器。
-  2. Stage 1 继续：douyin 第一步已落地（`douyin/rows.py`，crawler.py 1,032 → 913）——下一步拆它的
-     overlay 协议（接缝见 §5 Stage 1 行）；再拆 `platforms/weibo/crawler.py`(926)、
+  2. Stage 1 继续：douyin 已走两步——纯规则进 `douyin/rows.py`（1,032 → 913）、overlay 协议进
+     `douyin/overlay.py` mixin（913 → **760**）。再拆 `platforms/weibo/crawler.py`(926)、
      `platforms/hongguo/harvest.py`(1,825)。
   3. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
      迁 `capabilities/platforms/`（Stage 3 的落点，先把声明放好）。

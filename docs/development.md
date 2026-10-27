@@ -60,6 +60,7 @@ crawler_workflow/
 │   │   │   ├── xiaohongshu/      # crawler.py + comments.py（走路滚 .note-scroller）
 │   │   │   ├── bilibili/         # crawler.py + comments.py（分页搜索 + 详情 API + 热榜；走路含错误码归责）
 │   │   │   ├── douyin/           # crawler.py + comments.py（搜索栏驱动 + 走路滚面板并展开楼中楼）
+│   │   │   │   ├── overlay.py    # 同文档内的弹层读一条视频（mixin：不点击就不换页，省掉逐条导航）
 │   │   │   │   ├── rows.py       # 抖音的串→值规则：id/sec_uid 形状、榜单空与 0 之别、日期只认带年份的
 │   │   │   ├── youtube/          # crawler.py + comments.py（页内 innertube JSON，走路也在这里）
 │   │   │   ├── twitter/          # crawler.py + comments.py（可见窗口读虚拟时间线与回复）
