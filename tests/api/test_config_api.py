@@ -22,6 +22,7 @@ import sys
 
 import capabilities.registry as capabilities
 import pytest
+from capabilities import requirements
 from core.config import Config
 from sessions import profiles
 from sessions.cookies import CookieManager
@@ -94,8 +95,8 @@ class TestCapabilitiesEndpoint:
         # platform × engine cell is built from it.
         static = {key: value for key, value in body.items() if key not in ('machine',)}
         assert static == capabilities.as_dict()
-        assert body['machine'] == capabilities.machine_requirements()
-        assert set(body['machine']) == set(capabilities.REQUIREMENTS)
+        assert body['machine'] == requirements.machine_requirements()
+        assert set(body['machine']) == set(requirements.REQUIREMENTS)
         assert body['machine']['windows_desktop'] is (sys.platform.startswith('win')), body['machine']
         # The backend answer is the bridge's own dict, and it travels as status tokens plus catalogue
         # keys and the adapter's own per-cell prose (``reason``) — never invented here.

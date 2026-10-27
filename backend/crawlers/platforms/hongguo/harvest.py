@@ -35,8 +35,8 @@ import sys
 import time
 import uuid
 
-import capabilities.registry as capabilities
 import requests
+from capabilities import requirements
 from core import machine
 from core.config import Config
 from core.refs import as_bool
@@ -744,7 +744,7 @@ class HongguoCommentHarness:
         # The SAME predicate the panel greys this mode out with and validation refuses a canvas with
         # (:meth:`capabilities.registry.mode_blocker`): a node that reaches here has already been paid for,
         # so this line is the last of three answers and must not be a fourth opinion about the platform.
-        if not capabilities.requirement_met('windows_desktop'):
+        if not requirements.requirement_met('windows_desktop'):
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing='Windows desktop (mitmdump + UIA)'))
         missing = [name for name in ('mitmproxy', 'uiautomation') if importlib.util.find_spec(name) is None]
         if missing:

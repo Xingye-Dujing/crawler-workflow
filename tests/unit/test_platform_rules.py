@@ -14,7 +14,9 @@ from pathlib import Path
 
 import capabilities.registry as capabilities
 import pytest
-from capabilities.registry import REQUIREMENTS, machine_requirements, mode_blocker, requirement_met
+from capabilities import requirements
+from capabilities.registry import mode_blocker
+from capabilities.requirements import REQUIREMENTS, machine_requirements, requirement_met
 from core import machine, procs
 from core.refs import MAX_FILENAME_BYTES, sanitize_filename
 
@@ -162,10 +164,10 @@ class TestThePlatformTablesAreComplete:
             ('XELATEX_PATHS', XELATEX_PATHS),
             ('CTEX_FONTSET', latex_charts.CTEX_FONTSET),
             ('CJK_FAMILY', latex_charts.CJK_FAMILY),
-            ('REQUIREMENT_LABELS', capabilities.REQUIREMENT_LABELS),
+            ('REQUIREMENT_LABELS', requirements.REQUIREMENT_LABELS),
         ):
             assert set(table) == set(machine.REMEDY_PLATFORMS) or name == 'REQUIREMENT_LABELS', name
-        assert set(capabilities.REQUIREMENT_LABELS) == set(REQUIREMENTS)
+        assert set(requirements.REQUIREMENT_LABELS) == set(REQUIREMENTS)
 
     def test_the_headless_disguise_reports_the_platform_it_is_running_on(self, monkeypatch):
         """``Win32`` is what a real Windows Chrome says — and only what a Windows Chrome says.
@@ -542,7 +544,7 @@ class TestReapingABrowserWorksWhereTaskkillDoesNot:
 class TestAModeThatNeedsWindowsIsRefusedBeforeItCostsARun:
     def test_every_requirement_token_has_words_in_both_languages(self):
         for token in REQUIREMENTS:
-            key = capabilities.REQUIREMENT_LABELS[token]
+            key = requirements.REQUIREMENT_LABELS[token]
             for lang, table in MESSAGES.items():
                 assert table.get(key) and table[key] != key, (token, lang)
 
@@ -555,7 +557,7 @@ class TestAModeThatNeedsWindowsIsRefusedBeforeItCostsARun:
         listed = set(re.findall(r"(\w+):\s*'cap\.requires[A-Za-z]+'", table))
         assert listed == set(REQUIREMENTS), listed
         for token in REQUIREMENTS:
-            key = capabilities.REQUIREMENT_LABELS[token]
+            key = requirements.REQUIREMENT_LABELS[token]
             assert app_words.count(f"'{key}'") >= 2, f'{key} needs a word in both catalogues'
 
     def test_the_harvest_mode_carries_the_requirement_and_the_boards_do_not(self):

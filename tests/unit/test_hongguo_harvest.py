@@ -363,7 +363,7 @@ class TestRefusals:
 
         monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: object())
         monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
-        monkeypatch.setattr(harvest_module.capabilities, 'requirement_met', lambda _need: True)
+        monkeypatch.setattr(harvest_module.requirements, 'requirement_met', lambda _need: True)
 
     def test_a_missing_player_is_refused_by_name(self, tmp_path, monkeypatch):
         import crawlers.platforms.hongguo.harvest as harvest_module
@@ -390,7 +390,7 @@ class TestRefusals:
 
         monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: None)
         monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
-        monkeypatch.setattr(harvest_module.capabilities, 'requirement_met', lambda _need: True)
+        monkeypatch.setattr(harvest_module.requirements, 'requirement_met', lambda _need: True)
         monkeypatch.setattr(harvest_module, 'find_player', lambda: str(tmp_path / 'player.exe'))
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack
