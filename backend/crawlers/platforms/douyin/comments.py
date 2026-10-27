@@ -14,9 +14,9 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.walks import register
-from crawlers.core.crawler import throttled_sleep
 from crawlers.engine import feed, times
 from crawlers.engine.counters import parse_count
+from crawlers.engine.pacing import throttled_sleep
 from crawlers.engine.wall import looks_blocked
 from i18n import stop_reason_label, t
 

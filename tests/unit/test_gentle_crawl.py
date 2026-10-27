@@ -11,8 +11,10 @@ Two contracts, both pure enough to test without a browser:
 
 import pytest
 
-import crawlers.core.crawler as base_module
-from crawlers.core.crawler import GENTLE_PAUSE_FACTOR, Crawler, throttled_sleep
+import crawlers.core.crawler as crawler_module  # the jitter is drawn here, by _polite_pause
+import crawlers.engine.pacing as pacing_module  # the pacing decision moved here on 2026-10-27
+from crawlers.core.crawler import Crawler
+from crawlers.engine.pacing import GENTLE_PAUSE_FACTOR, throttled_sleep
 from crawlers.platforms.douyin.crawler import DouyinCrawler
 
 pytestmark = pytest.mark.unit
@@ -20,20 +22,24 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def slept(monkeypatch):
-    """Capture every sleep this module would take, without actually waiting."""
+    """Capture every sleep this module would take, without actually waiting.
+
+    Patched on the module that sleeps: pacing owns ``throttled_sleep`` now, so a patch on the
+    crawler module's ``time`` would leave the real wait in place and the assertion reading nothing.
+    """
     calls: list[float] = []
-    monkeypatch.setattr(base_module.time, 'sleep', calls.append)
+    monkeypatch.setattr(pacing_module.time, 'sleep', calls.append)
     return calls
 
 
 @pytest.fixture
 def no_jitter(monkeypatch):
     """Make :meth:`_polite_pause` deterministic: a zero jitter means the pause is exactly *base*."""
-    monkeypatch.setattr(base_module.random, 'uniform', lambda _a, _b: 0.0)
+    monkeypatch.setattr(crawler_module.random, 'uniform', lambda _a, _b: 0.0)
 
 
 def _set_gentle(monkeypatch, value: bool):
-    monkeypatch.setattr(base_module, 'get_setting', lambda key: value if key == 'gentle_crawl' else None)
+    monkeypatch.setattr(pacing_module, 'get_setting', lambda key: value if key == 'gentle_crawl' else None)
 
 
 def test_throttled_sleep_is_untouched_when_off(monkeypatch, slept):

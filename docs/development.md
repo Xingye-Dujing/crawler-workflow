@@ -69,7 +69,10 @@ crawler_workflow/
 │   │       ├── popup.py          # 首次进入的对话框（平台只声明提示词与按钮）
 │   │       ├── feed.py           # 无限列表的滚动收割（含虚拟列表的「窗口换了没有」信号）
 │   │       ├── pager.py          # 跟着服务端自己给的游标翻页，不自增页码
+│   │       ├── pagefetch.py      # 页内 fetch 的三种形状（取文本 / 取 JSON / 带超时），墙文案要从文本里读
 │   │       ├── jsonpath.py       # 在页面内嵌 JSON 里取值
+│   │       ├── times.py          # 相对说法与绝对时间的一种转换
+│   │       ├── pacing.py         # 慢速采集唯一倍率与 throttled_sleep（DOM 爬虫与评论走路共用同一个开关）
 │   │       └── innertube.py      # YouTube 的页内 JSON 传输与「这条分页属于哪个列表」选择
 │   ├── analyzers/                # 分析模块（LLM + ML 双模式）
 │   │   ├── ml_base.py            # 传统 ML 底座（TF-IDF + 分类器）
