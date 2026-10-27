@@ -9,6 +9,7 @@ no other answer to (imports that must follow a `sys.path` bootstrap), and that e
 below rather than hidden in a config file.
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -206,3 +207,82 @@ class TestTheStandards:
         """CI installs `requirements.txt` only; a gate whose tool is not declared cannot run."""
         declared = (REPO / 'requirements.txt').read_text(encoding='utf-8').lower()
         assert 'pylint' in declared
+
+    #: The roots the PRODUCT tier enumerates — the same list CI lints, so this test sees what CI sees.
+    _PRODUCT_ROOTS = ('backend', 'desktop', 'tools', 'ml_train/scripts')
+
+    def _optional_import_names(self) -> set[str]:
+        """Package names declared in `requirements-optional.txt`, spelled as Python imports them."""
+        names = set()
+        for line in (REPO / 'requirements-optional.txt').read_text(encoding='utf-8').splitlines():
+            text = line.split(';')[0].strip()  # a platform marker is not part of the name
+            if not text or text.startswith('#'):
+                continue
+            names.add(re.split(r'[<>=!~\[]', text)[0].strip().replace('-', '_'))
+        return names
+
+    def _imported_optional_names(self, optional: set[str]) -> set[str]:
+        """Which of those names product code actually imports — i.e. what a runner cannot resolve."""
+        found = set()
+        for root in self._PRODUCT_ROOTS:
+            for path in sorted((REPO / root).rglob('*.py')):
+                if any(part.startswith('.venv') or part == 'site-packages' for part in path.parts):
+                    continue
+                tree = ast.parse(path.read_text(encoding='utf-8'))
+                for node in ast.walk(tree):
+                    for name in (
+                        [alias.name for alias in node.names]
+                        if isinstance(node, ast.Import)
+                        else [node.module or '']
+                        if isinstance(node, ast.ImportFrom) and not node.level
+                        else []
+                    ):
+                        root_name = name.split('.')[0]
+                        if root_name in optional:
+                            found.add(root_name)
+        return found
+
+    def test_the_optional_runtime_exemption_is_scoped_and_complete(self):
+        """`E0401` stays ON in the product tier; only the six optional runtimes are excused, by name.
+
+        Measured on CI run 40457992451 — the first run whose pylint step actually received file
+        names — where the product tier reported 19 `E0401` for `torch`, `transformers`, `onnx`,
+        `sentence_transformers`, `bertopic` and `uiautomation`. Every one of those is declared in
+        `requirements-optional.txt` and imported inside a guard that probes for it, and AGENTS keeps
+        that stack out of CI (torch is a multi-gigabyte wheel), so the finding was the environment
+        answering a question about the code. It read clean locally because every name IS installed
+        here — which is the general lesson: a gate whose machine differs from the runner's proves
+        less than it says.
+
+        Two directions are pinned so the exemption cannot rot:
+
+        * nothing excused that is not an optional dependency — otherwise a package silently leaving
+          `requirements.txt` is hidden instead of reported;
+        * nothing optional that product code imports left out — that is the CI failure coming back.
+
+        A misspelled import (`tranformers`) is still E0401: the list is module names, not the message.
+        """
+        cfg = (REPO / '.pylintrc').read_text(encoding='utf-8')
+        match = re.search(r'^ignored-modules=(.+)$', cfg, re.M)
+        assert match, 'the product tier must excuse the optional stack BY MODULE NAME'
+        ignored = {name.strip() for name in match.group(1).split(',') if name.strip()}
+        assert ignored, 'an empty ignored-modules would be the same as no exemption'
+
+        disabled = re.search(r'^disable=(.+)$', cfg, re.M)
+        assert disabled and 'E0401' not in disabled.group(1), (
+            'import-error may not be switched off wholesale — only the named optional runtimes'
+        )
+
+        optional = self._optional_import_names()
+        unexplained = ignored - optional
+        assert unexplained == set(), (
+            f'exempted but not declared optional: {sorted(unexplained)}; an import that left '
+            f'requirements.txt is a bug to report, not to excuse'
+        )
+        needed = self._imported_optional_names(optional)
+        assert len(needed) >= 4, f'the scan found only {sorted(needed)} — did the optional stack move?'
+        missing = needed - ignored
+        assert missing == set(), (
+            f'product code imports these optional runtimes but pylint still tries to resolve them '
+            f'on a runner that has none: {sorted(missing)}'
+        )

@@ -293,15 +293,11 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   `refactor_plan.md` 的 §4.0 与 Stage 1 行。门禁命令链在后台跑（fast → ruff → 两档 pylint → 设备档），
   **全绿就提交**：`修改：慢速采集倍率移出爬虫基类，站点无关的节律进 engine/pacing.py`，然后推两个远端。
 - **下一条待做（顺序，别插队）**：
-  1. **把 CI 弄绿**（这是用户点名的"每次 push 都要完整 CI"的兑现）。CI 的目标清单修好后开始真报：
-     run 40457992451 的 `Pylint — product` 报 **19 条 `E0401`**，全部是 `requirements-optional.txt` 里的
-     可选运行时（`torch/transformers/onnx/sentence_transformers/bertopic/uiautomation`，出现在
-     `analyzers/sentiment.py`、`services/data_analysis.py`、`hongguo/harvest.py`、`ml_train/scripts/*`）。
-     本机装了它们所以永远看不见。**修法**：`.pylintrc` 加 `ignored-modules=<那六个名字>`（**按模块名**，
-     不是关掉整条 E0401——拼错的 `tranformers` 必须仍然红），并在 `test_lint_gate.py` 里把这份名单与
-     `requirements-optional.txt` 的包名**对账成一条契约**；同时修 `.pylintrc` 头部那句还写着
-     `packaging/` 的过期说明（目录 2026-10-25 已改名 `desktop/`）。改完必须重跑 fast（那条契约测试读配置文件）
-     与两档 pylint，再推送、用 `gh run view --log-failed` 复核。
+  1. ~~把 CI 弄绿~~ **已落地**：`.pylintrc` 加 `ignored-modules=<六个可选运行时>`（按模块名，不关整条
+     `E0401`），`test_lint_gate.py` 双向对账（豁免名单 ⊆ `requirements-optional.txt`；产品代码真 import 的
+     可选运行时 ⊆ 豁免名单，扫描根与 CI 一致），并修掉 `.pylintrc` 头部那句过期的 `packaging/`。
+     机制本身也用一次性件证明过：加名单前 `E0401` 计 1、加后计 0。
+     仍待观察的是 **CI 上的真结果**——推送后用 `gh run view --log-failed` 复核，别只看本地绿。
   2. **Stage 1 ③ 的剩余**：`core/faults.py`（`CrawlerStopped`/`DeadDriver`/`ProfileUnavailableError`/
      `PageNotArrivedError`）+ `core/browser.py`（驱动装配、桌面度量/隐身、导航与到场判定、Cookie 植入、
      profile 认领/释放）**一次提交做完**——两件事都要动同一批约 25 处 import 点与测试打桩点

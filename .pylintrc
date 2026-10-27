@@ -1,5 +1,5 @@
 # Product standard: `backend/` modules (the `backend/test_*.py` measurement scripts get
-# `.pylintrc.probes`), plus `packaging/` and `tools/`.
+# `.pylintrc.probes`), plus `desktop/`, `tools/` and `ml_train/scripts`.
 #
 # The gate is `pylint` exiting clean — not a score. Anything this file does not enable is
 # still checked; the list below is short, deliberate and explained, and an inline
@@ -12,6 +12,23 @@
 # Two plain statements, not a comprehension: pylint execs this hook inside a function, where an
 # `import` binds to that frame's locals and a comprehension cannot see them.
 init-hook="import sys; sys.path.insert(0, 'backend'); sys.path.insert(0, 'tests/unit')"
+
+# The optional runtime stack, by NAME. `E0401` itself stays switched ON: a typo (`import
+# tranformers`) or a package that quietly left `requirements.txt` is still a finding.
+#
+# These six are declared in `requirements-optional.txt` on purpose and are absent from a CI
+# runner — `torch` is a multi-gigabyte wheel and AGENTS keeps it out of CI — while the code
+# imports each one inside a guard that PROBES for it first and then either degrades with a
+# printed line naming the mode that ran, or refuses an explicitly-chosen `bert`/`embedding`/
+# hongguo by name. So "this machine has no torch" is the designed state, not a defect, and on
+# the runner 19 of those answers arrived as `E0401` (measured: CI run 40457992451, the first
+# run whose pylint step actually linted something — locally every one of these IS installed,
+# which is exactly why the tier read clean here and red there).
+#
+# The list is pinned against `requirements-optional.txt` by
+# `tests/unit/test_lint_gate.py`, so adding an optional dependency without arguing this
+# exemption widens silently, and dropping one leaves a stale name visible.
+ignored-modules=sentence_transformers,torch,transformers,uiautomation,bertopic,onnx
 
 [MESSAGES CONTROL]
 # Every entry is a written-down standard choice, not a way to look green:

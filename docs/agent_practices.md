@@ -695,6 +695,18 @@ message.
   `@( Get-ChildItem … ; Get-ChildItem … ) | ForEach-Object { $_.FullName }`. Both CI steps now also print
   `linting NNN files`, because a gate that does not say how much it checked is not auditable after the fact.
   Pinned by `tests/unit/test_lint_gate.py::TestTheStandards::test_ci_runs_the_two_tiers_it_can_and_says_why_not_the_third`.
+- **A gate whose machine differs from the runner's proves less than it says.** The product tier read
+  10.00/10 for weeks on this box and reported **19 × `E0401`** the first time it ran on CI (run
+  40457992451): `torch`, `transformers`, `onnx`, `sentence_transformers`, `bertopic`, `uiautomation` —
+  all declared in `requirements-optional.txt`, all imported inside a guard that probes for them, and
+  all deliberately absent from a hosted runner (AGENTS keeps the multi-gigabyte torch out of CI). The
+  fix is `ignored-modules=` in `.pylintrc` — **by module name, never by switching `E0401` off**, so a
+  misspelled `import tranformers` is still a finding — and `test_lint_gate.py` now pins both
+  directions of that list: nothing exempted that is not a declared optional dependency, and nothing
+  the product code imports that is left out. The scan reads the same four roots CI enumerates, so a
+  new optional runtime imported by product code forces this argument instead of reddening CI by
+  surprise. `mitmproxy`/`pyarrow`/`hdbscan`/`umap-learn` are declared optional but never imported by
+  name (they are probed as executables or reached through pandas), and are therefore NOT exempted.
 - **A wrapper that reports the exit code is part of the gate.** A background command ending in `echo done`, or piping
   the checker through `tail`, reports 0 even when the checker failed — the measured exit status must be the shell's
   last one and the evidence must be the checker's own summary line. The same trap exists one layer up: a redirect to
