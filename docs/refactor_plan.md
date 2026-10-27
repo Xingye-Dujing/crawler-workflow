@@ -449,7 +449,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = 本次提交**（capabilities 内部分拆第一步，Stage 3d）。顺序：`994a2ec`（`capabilities/` 包，Stage 3c）
+  - **HEAD = 本次提交**（文档：#25 收尾：用例 + EXE 重建记录）。顺序：`2c4bfd3`（真浏览器引擎选择器用例）
+    ← `a6b4df5`（capabilities 内部分拆第一步，Stage 3d）← `994a2ec`（`capabilities/` 包，Stage 3c）
     ← `6525f1d`（config→core，Stage 3b）
     ← `33440b5`（utils→core 三件，Stage 3a）← `29fc100`（sessions/routes 归域）← `e221d9b`
     （补 scheduling 未 stage 的内容，修 CI E0611）← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）
@@ -564,13 +565,20 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `.machine_deps`；两次都只做单一名词替换且 `git diff` 已逐行核对，但违反"代码只用 tracked Edit"，之后不再有例外。
     门禁：fast **8,159 passed / 3 skipped**；设备档 **192 passed / 0 skipped**；两档 pylint **10.00/10**；
     ruff check + format **493 files**。
-  - **#25 第一半已完成（本次提交）**：真浏览器用例 `test_the_crawl_panel_offers_platform_then_engine_then_function`
+  - **#25 已完成（两次提交：用例 + 重建）**：真浏览器用例 `test_the_crawl_panel_offers_platform_then_engine_then_function`
     （zh+en）量四件事：引擎下拉 == 服务端 `engines` 列表**按它自己的顺序**、选项文字来自词典（不是 key）、
     灰掉的引擎在括号里带原因、面板自上而下是 平台→引擎→功能；有双引擎时切到第二个可用引擎，断言 stored
     `collect` 落到新引擎的第一个功能且功能列表随之更换。**用例自己抓出两条真实行为并钉住**：① 只有一个功能时
     面板**故意不渲染功能下拉**（"一个模式不是选择"）——顺序断言因此止于引擎；② 每次切换都重绘
     `#settings-content`，切换前抓到的 `<select>` 是脱离文档的旧节点，会让下一个平台读到上一个面板——
     现在每次重查并按「平台值已变 + 引擎下拉存在」等待落定。设备档因此 **194 passed / 0 skipped**。
+    **桌面 EXE 已重建（同一份源码，`-Clean -Installer -RemoveBuildEnv`）**：prune 65.4 MB → 304.9 MB；
+    UPX **268 文件 226.5 → 89.2 MB**（0 跳过 0 失败）；**Folder 167.6 MB / Zip 125.3 MB / Setup 116.5 MB**
+    （ISCC `Successful compile 19.0s`）。打包版隔离根启动（`build/pkg_root`）：`/`、`/api/config`、
+    `/api/capabilities`、`/api/node-types`、`/api/schedules`、`/js/workflow.js`、`/geo/world.json`、
+    `/vendor/echarts.min.js` **全 200**；`/api/capabilities` 里 zhihu/wechat 的 `engines` 为
+    `['selenium','catbus']`、`machine={'windows_desktop': True}`。验收后已杀进程、删 `build/pkg_root`，
+    `dist/CaiXiHui` 只剩 `CaiXiHui.exe` + `_internal`（无 data/logs/instance.json/tmp*）；模型包未动。
   - **下一刀 = capabilities 第二步**：`fields.py`（共享字段与工厂）+ `platforms/<id>.py`（9 个 Capability 块各一文件）
     + `platforms/__init__.py` 按面板顺序装配 `CAPABILITIES` + `catbus.py`；随后 Stage 1 ④：把
     `crawlers/engine/{wall,popup}.py` 里按平台分支的判据词表迁进 `capabilities/platforms/<id>`（**一个平台只声明一处**）。
@@ -586,8 +594,7 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     复跑该文件再判。
 
 
-- **仍然未验证/未跑（不许改口）**：桌面 EXE 未重建（新前端/新模块要下一次
-  `powershell -ExecutionPolicy Bypass -File desktop/build_windows.ps1 -Installer -RemoveBuildEnv` 才进包）；
+- **仍然未验证/未跑（不许改口）**：桌面 EXE **本次已重建并冒烟**（见 #25；模型包未重打）；
   真实站点采集（live_quick / live_site 用户决定不跑，要跑须在场并先问清在哪张网络）；
   Linux/macOS 真实启动；打包版三维面板的真机布局。CI 侧现在还**没跑过** `live_ollama`（无守护进程）与
   CatBus 适配器的 integration 用例（未发布的另一仓库），这两条只由本地设备档覆盖。
