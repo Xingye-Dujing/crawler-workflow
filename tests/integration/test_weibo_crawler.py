@@ -668,7 +668,7 @@ class TestWeiboUid:
         ],
     )
     def test_addresses_that_name_one_author_and_the_junk_that_does_not(self, value, want):
-        from crawlers.platforms.weibo.crawler import weibo_uid
+        from crawlers.platforms.weibo.rows import weibo_uid
 
         assert weibo_uid(value) == want, value
 

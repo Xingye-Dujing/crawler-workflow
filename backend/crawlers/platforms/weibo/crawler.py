@@ -4,7 +4,7 @@ import math
 import re
 import time
 from datetime import datetime, timedelta
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
@@ -14,40 +14,14 @@ from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.core.faults import CrawlerStopped
 from crawlers.engine import pagefetch, pager, times
 from crawlers.engine.counters import parse_count
+from crawlers.platforms.weibo import rows as shaping
 from i18n import stop_reason_label, t
 
+# ``shaping``, not ``rows``: the walks here keep a local ``rows`` (the table being built), so the
+# module imported under its own name is shadowed inside exactly the functions that call it — measured,
+# the first hot-board line raised ``'list' object has no attribute 'hot_row'``.
+
 logger = logging.getLogger(__name__)
-
-
-# The author walk addresses a person by their numeric uid only; the mymblog endpoint
-# honours `uid`, and a screen name addresses nobody (measured).
-_UID_PATTERNS = (
-    re.compile(r'(?:^|\.)weibo\.com/u/(\d{5,})'),
-    re.compile(r'(?:^|//)m?\.?weibo\.(?:com|cn)/u/(\d{5,})'),
-    re.compile(r'weibo\.com/(\d{5,})(?:[/?#]|$)'),
-    re.compile(r'^(\d{5,})$'),
-)
-
-
-def weibo_uid(value: str) -> str:
-    """Digits, a ``weibo.com/u/<uid>`` profile link, a ``weibo.com/<uid>/<post>`` link
-    or the search row's own 用户链接 → the numeric uid.
-
-    Anything without one of those digit shapes is refused with ``''``: opening a
-    guessed profile would report "this person posted nothing" about a page that is
-    not theirs, which is worse than saying the address was not a uid. The ``/u/<id>``
-    form is matched only on a weibo host (a taobao ``/u/123456`` is a different
-    person), and query/fragment junk is stripped first because the real 用户链接
-    carries ``?refer_flag=…``.
-    """
-    raw = str(value or '').strip().split('#')[0].split('?')[0]
-    if not raw:
-        return ''
-    for pattern in _UID_PATTERNS:
-        match = pattern.search(raw)
-        if match:
-            return match.group(1)
-    return ''
 
 
 class WeiboCrawler(Crawler):
@@ -271,7 +245,7 @@ class WeiboCrawler(Crawler):
         for index, item in enumerate(rows, start=1):
             if self.collected() >= target_count:
                 break
-            row = self._hot_row(item, index)
+            row = shaping.hot_row(item, index)
             if not row or row['链接'] in seen:
                 continue
             seen.add(row['链接'])
@@ -316,24 +290,6 @@ class WeiboCrawler(Crawler):
             time.sleep(poll)
         return url
 
-    @staticmethod
-    def _hot_row(item: dict, rank: int) -> dict | None:
-        """One board entry, flattened. ``word`` is the topic; ``word_scheme`` carries
-        the ``#…#`` form the site publishes. ``note`` duplicates ``word`` on the
-        measured rows, so it is not a column of its own."""
-        word = str(item.get('word') or '').strip()
-        if not word:
-            return None
-        scheme = str(item.get('word_scheme') or '').strip() or word
-        heat = item.get('num')
-        return {
-            '排名': as_index(item.get('realpos'), rank),
-            '标题': word,
-            '话题': scheme,
-            '热度': as_index(heat, 0) if str(heat or '').strip() else parse_count(str(item.get('label') or '')),
-            '链接': f'https://s.weibo.com/weibo?q={quote(scheme)}',
-        }
-
     # ─── one author's posts ─────────────────────────────────────────────
 
     def author(self, author: str, target_count: int = 50, **kwargs):
@@ -349,7 +305,7 @@ class WeiboCrawler(Crawler):
         home timeline, not this uid's posts), caught by the one anchor that separates
         them — the first row's ``user.id`` must equal the requested uid.
         """
-        uid = weibo_uid(author)
+        uid = shaping.weibo_uid(author)
         if not uid:
             raise ValueError(t('crawl.weibo.authorEmpty', author=author))
         target = self.DEFAULT_TARGET if not target_count else int(target_count)
@@ -463,15 +419,15 @@ class WeiboCrawler(Crawler):
             return None
         return {
             '发布者': str(user.get('screen_name') or ''),
-            '发布时间': self._normalise_weibo_time(raw.get('created_at')),
+            '发布时间': shaping.normalise_time(raw.get('created_at')),
             '发布来源': str(raw.get('source') or ''),
-            '正文': str(raw.get('text_raw') or '') or self._strip_html(str(raw.get('text') or '')),
+            '正文': str(raw.get('text_raw') or '') or shaping.strip_html(str(raw.get('text') or '')),
             '转发数': self._as_int(raw.get('reposts_count')),
             '评论数': self._as_int(raw.get('comments_count')),
             '点赞数': self._as_int(raw.get('attitudes_count')),
             '图片链接': '',
             '图片数': self._as_int(raw.get('pic_num')),
-            '话题': self._author_topics(raw.get('topic_struct')),
+            '话题': shaping.author_topics(raw.get('topic_struct')),
             '视频数': 0,
             '用户链接': f'https://weibo.com/u/{uid}',
             '链接': f'https://weibo.com/detail/{mid}',
@@ -484,36 +440,6 @@ class WeiboCrawler(Crawler):
             return int(value or 0)
         except (TypeError, ValueError):
             return 0
-
-    @staticmethod
-    def _normalise_weibo_time(value) -> str:
-        # The endpoint stamps 'Wed Sep 24 15:42:51 +0800 2026'; the search page shows the
-        # site's own wording instead — an absolute Chinese date for old posts and a relative
-        # label ("3小时前") for recent ones. Two shapes in one column is the documented defect,
-        # so both are resolved to one readable absolute form here rather than shipping an
-        # English stamp beside a Chinese label beside a relative word. The comment engine
-        # parses the same stamp, so the formats live in engine/times.py — a second copy here
-        # is what the helper exists to prevent.
-        return times.absolute(value)
-
-    @staticmethod
-    def _strip_html(text: str) -> str:
-        return re.sub(r'<[^>]+>', '', text).strip()
-
-    @staticmethod
-    def _author_topics(struct) -> str:
-        # topic_struct carries {topic_url, title} with an EMPTY title; the name lives
-        # url-encoded between %23…%23 (#…#) in topic_url's q= parameter.
-        names = []
-        for item in struct or []:
-            url = str((item or {}).get('topic_url') or '')
-            match = re.search(r'q=([^&]+)', url)
-            if not match:
-                continue
-            label = unquote(match.group(1)).strip('#').strip()
-            if label and label not in names:
-                names.append(label)
-        return ' | '.join(names)
 
     def _build_urls(self, keyword: str, start_time: str, end_time: str) -> list:
         if start_time or end_time:
@@ -586,7 +512,7 @@ class WeiboCrawler(Crawler):
             logger.info(t('crawl.weibo.total_pages', n=total_pages))
             if total_pages <= 1:
                 return scraped
-            page_url = self._page_url(base_url)
+            page_url = shaping.page_url(base_url)
             for page_num in range(2, total_pages + 1):
                 if self.collected() >= target:
                     # Unwinding again: ``_harvest`` is where a target gets crossed and where the console
@@ -689,11 +615,6 @@ class WeiboCrawler(Crawler):
         waited = int(round(time.monotonic() - started))
         logger.warning(t('crawl.weibo.page_timeout', secs=waited, settled=settled))
         return False
-
-    @staticmethod
-    def _page_url(base_url: str) -> str:
-        cleaned = re.sub(r'[?&]page=\d+', '', base_url)
-        return f'{cleaned}{"&" if "?" in cleaned else "?"}page='
 
     # ─── card harvest ─────────────────────────────────────────────────
 

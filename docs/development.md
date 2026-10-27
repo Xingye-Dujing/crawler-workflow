@@ -57,6 +57,7 @@ crawler_workflow/
 │   │   ├── platforms/            # 一个平台一个目录：目录名就是全站使用的平台 id
 │   │   │   ├── zhihu/            # crawler.py + comments.py（走路含面板 JS 与泵 JS）
 │   │   │   ├── weibo/            # crawler.py + comments.py（走路走页内 buildComments）
+│   │   │   │   └── rows.py       # 微博的串→值规则：uid 形状、两种时间格式并一、话题名在 URL 里
 │   │   │   ├── xiaohongshu/      # crawler.py + comments.py（走路滚 .note-scroller）
 │   │   │   ├── bilibili/         # crawler.py + comments.py（分页搜索 + 详情 API + 热榜；走路含错误码归责）
 │   │   │   ├── douyin/           # crawler.py + comments.py（搜索栏驱动 + 走路滚面板并展开楼中楼）

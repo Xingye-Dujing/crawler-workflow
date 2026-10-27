@@ -212,8 +212,6 @@ backend/
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
-| `crawlers/platforms/douyin/crawler.py` | 760 | Stage 1（纯规则 → `rows.py` 141；overlay 协议 → `overlay.py` 200 mixin；剩余是 profile 走路与详情读） |
-| `crawlers/platforms/weibo/crawler.py` | 926 | Stage 1（按 walk 拆） |
 | `crawlers/platforms/hongguo/harvest.py` | 1824 | Stage 1（会话/进程/解析三段） |
 | `services/data_analysis.py` | 3899 | Stage 9 |
 | `services/latex_charts.py` | 2430 | Stage 5 |
@@ -369,11 +367,13 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **下一条待做（顺序，别插队）**：
   1. ~~#38 让 CI 的 fast 档在 runner 上全绿~~ **已闭环**（`2d688ae`/`799826e`/`a4a6a32`/`768d082` 全绿，
      browser job 的异步接缝也已按 DOM 修好）。
-  2. Stage 1 继续（weibo 926 行，已量化）：**死代码已删**——`weibo/crawler.py:909` 那句
-     "compatibility shims (kept for callers outside this module)" 是假的（四个方法在全仓库各只出现 1 次，
-     就是自己的定义；搜到的 `_get_publish_time` 命中是知乎同名方法），910 行。
-     下一步抽 `weibo/rows.py`：`_normalise_weibo_time`/`_strip_html`/`_author_topics`/`_page_url` 外部零引用，
-     先搬这四个；`_as_int`/`_attr` 的"外部引用数"是同名方法撞名（别的方法也叫这个），
+  2. Stage 1 继续：weibo 也已走两步——死方法删掉（926 → 910）、纯规则进 `weibo/rows.py`（→ **831**，
+     与 douyin 760 一起**掉出">900 行"清单**；该表现只剩 `core/crawler.py` 1144 与
+     `hongguo/harvest.py` 1824）。**weibo 的一个真教训**：`rows` 与走路里的局部变量 `rows` 撞名，
+     第一版按 `rows.hot_row(...)` 写就直接 `AttributeError: 'list' object has no attribute 'hot_row'`
+     ——7 条用例当场红。因此 weibo 侧导入别名是 `shaping`，理由就写在 import 块后面；douyin 侧当初是
+     提前发现同一个坑才改成导入函数本身。**下一个平台抽 `rows.py` 前先问：这个包里有没有局部变量 `rows`。**
+     剩下：`_as_int`/`_attr` 的"外部引用数"是同名方法撞名（别的方法也叫这个），
      **必须做带包名的核对**才能动——不要用那个模糊数字下手。
   3. Stage 1 继续：`platforms/hongguo/harvest.py`(1,825) 三段（会话/进程/解析）。
   4. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）

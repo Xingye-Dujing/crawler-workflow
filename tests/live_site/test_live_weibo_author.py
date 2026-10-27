@@ -27,7 +27,7 @@ jar weibo already recognises — the mode was never broken, the session it was a
 
 import pytest
 
-from crawlers.platforms.weibo.crawler import weibo_uid
+from crawlers.platforms.weibo.rows import weibo_uid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
@@ -35,7 +35,7 @@ pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_soc
 def _discover_uid(weibo_windowed):
     """The numeric uid of an author the tier's one shared keyword search already named.
 
-    Reuses the crawler's own ``weibo_uid`` (the search row is ``weibo.com/<uid>?refer_flag=…``,
+    Reuses weibo's own ``weibo_uid`` (the search row is ``weibo.com/<uid>?refer_flag=…``,
     which that parser exists to read) rather than a second, narrower regex here.
 
     Read from :func:`weibo_windowed` instead of paying a discovery search of its own, because the
