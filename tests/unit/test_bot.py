@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from analyzers.bot import BotLikelihoodAnalyzer
-from crawlers.core.crawler import CrawlerStopped
+from crawlers.core.faults import CrawlerStopped
 
 pytestmark = pytest.mark.unit
 

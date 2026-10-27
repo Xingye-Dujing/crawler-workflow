@@ -73,6 +73,36 @@ CHROME_PATH_NAMES = {
 #: Ollama's own default port, used when a configured address carries none.
 OLLAMA_DEFAULT_PORT = 11434
 
+#: What ``navigator.platform`` reads as on a real desktop Chrome of each system, keyed by the same
+#: three values as every other table here.
+#:
+#: This exists because the headless disguise overrides the platform alongside the user agent, and a
+#: hardcoded ``'Win32'`` is a *manufactured mismatch* on the two other systems this project ships to:
+#: the UA is read back from this very Chrome (so a Linux box keeps ``X1; Linux x86_64`` in it) while
+#: the override would answer ``Win32`` — and #148's measurement is that an invented value is itself
+#: the tell. Windows reports ``Win32`` even on 64-bit builds; that is not a typo to "fix".
+NAVIGATOR_PLATFORMS = {
+    'win32': 'Win32',
+    'linux': 'Linux x86_64',
+    'darwin': 'MacIntel',
+}
+
+
+def navigator_platform(system: str | None = None) -> str:
+    """The ``navigator.platform`` value a real Chrome reports on THIS operating system."""
+    return NAVIGATOR_PLATFORMS[platform_name(system)]
+
+
+def chrome_executable_name(system: str | None = None) -> str:
+    """The browser executable a user on this system has to point 设置 at when nothing is found.
+
+    Read off :data:`CHROME_PATH_NAMES` — the table the probe itself uses — so a refusal can never
+    name a file this machine would not have found anyway (a Linux sentence saying ``chrome.exe`` is
+    a remedy nobody can act on, and the bilingual parity check cannot see it).
+    """
+    names = CHROME_PATH_NAMES.get(platform_name(system)) or ()
+    return names[0] if names else 'Chrome'
+
 
 def platform_name(system: str | None = None) -> str:
     """The OS key this module's tables are indexed by, normalized onto three values."""

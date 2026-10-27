@@ -1,27 +1,22 @@
 import contextlib
 import json
 import logging
-import os
 import random
-import re
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
-import browser_profiles
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
 from config import Config
+from crawlers.core import browser
+from crawlers.core.faults import CrawlerStopped
 from crawlers.engine import feed, popup
 from crawlers.engine.pacing import throttled_sleep
 from crawlers.engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
 from i18n import t
 from settings_store import get_setting
-from utils import machine_deps
 
 logger = logging.getLogger(__name__)
 
@@ -70,137 +65,10 @@ UNDER_TARGET = ''
 LICENSED_ENDS = frozenset({'site_end', 'capped', 'empty'})
 
 
-class CrawlerStopped(BaseException):
-    """The user pressed 停止 and this crawl must end, keeping what it already paid for.
-
-    Not an ``Exception`` subclass for one structural reason: this codebase reads a
-    dead session, a missing card and a refused page as "keep going without it" in
-    about sixty places, nearly all of them ``except Exception`` or
-    ``contextlib.suppress(Exception)`` — a stop raised as an ordinary error would be
-    swallowed into a silently short table, which is the opposite of what a stop is
-    for. As a ``BaseException`` it walks out of every crawl loop unharmed and is
-    caught once, by the node runner, which reports 被停止.
-
-    It is also the difference between an honest short table and a dishonest one:
-    measured, a killed driver makes an in-page ``fetch`` answer ``ERR …``, and
-    ``engine/pagefetch.py`` folds that into "the site sent no more rows".
-    """
-
-
-class DeadDriver:
-    """The session left in place of a browser that had to be killed by PID.
-
-    Measured, and the two halves come apart. The command a worker is *inside* when the kill lands is
-    freed by it in about 1.7 s: a dead chromedriver resets the socket, and a request already written is
-    never re-sent. Every command after that is a fresh connect to a port nobody holds, and it costs
-    16.3 s — four attempts at ~4.07 s, because selenium builds the pool with urllib3's default
-    ``Retry(total=3)`` and a connect failure is always allowed to retry. A crawl sends several commands
-    per row, so the worker 停止 was meant to release kept walking off a browser that no longer existed,
-    ~29.6 s in the middle of one feed (``docs/crawler_notes.md``).
-
-    Answering at once is the whole point, and answering *by name* is the rest of it:
-    ``CrawlerStopped`` is a ``BaseException``, so it gets out of the about sixty ``except Exception``
-    tolerances a walk has for a missing card or a refused page — the ones that would otherwise fold a
-    dead session into "the site had no more rows" and report a stopped run as a short, successful crawl.
-
-    ``quit`` and ``close`` stay silent rather than refusing, because this object is installed while
-    another thread may still be inside ``Crawler.close()``: raising from a teardown would replace the
-    crawl's own result with a stack trace, and ``contextlib.suppress(Exception)`` would not catch it.
-    """
-
-    def __getattr__(self, _name: str):
-        raise CrawlerStopped(t('crawl.driverDead'))
-
-    def quit(self) -> None:
-        return None
-
-    def close(self) -> None:
-        return None
-
-
-class ProfileUnavailableError(RuntimeError):
-    """The browser was never built because the platform's profile could not be taken.
-
-    Its own type because "a Chrome is not installed" and "Chrome is installed but
-    somebody still holds this profile" arrive through the same `Exception` — and the
-    live tier answers the first by skipping (nothing to test here) while the second
-    MUST stay red: it is this machine failing to serialize its own crawls, and a skip is
-    how that becomes invisible.
-    """
-
-
-class PageNotArrivedError(RuntimeError):
-    """One page of a crawl stayed empty for the whole patience budget.
-
-    Its own type because the user's next step differs from every other failure, and the
-    sentence worth reading carries numbers: how long this waited, which page, and what a
-    probe of this machine's own network says about it. Raised as an ordinary ``Exception``
-    on purpose — the node runner already settles a refused source node the right way for
-    this outcome (rows already streamed stay on disk, the node is ``partial`` where there
-    are rows and ``failed`` where there are none, and a failed run is what makes 继续
-    appear), so all this adds is a reason that can be told apart from a typo in a
-    parameter.
-    """
-
-    def __init__(self, message: str, waited: float = 0.0, verdict: str = '', gave_up: int = 0):
-        super().__init__(message)
-        self.waited = float(waited)
-        self.verdict = str(verdict or '')
-        self.gave_up = int(gave_up)
-
-
-#: Rewrites the screen/window geometry a headless Chrome reports before any site script runs.
-#: A bare ``--headless=new`` sits on an 800×600 virtual display, which — together with the
-#: ``HeadlessChrome`` token in its UA — is the whole fingerprint that gives a headless crawler away
-#: against a REAL desktop window (measured 2026-09-26 in the #148 probes; navigator.webdriver and the
-#: WebGL renderer already match a real window on this Chrome). ``__METRICS__`` is replaced with the
-#: crawler's configured desktop size, so the window only ever reports those numbers.
-#: It deliberately does NOT touch navigator.webdriver or navigator.languages: the blink flag
-#: already makes webdriver a real ``false``, and a languages override leaked ``;q=0.9`` into
-#: ``navigator.languages`` (measured) — both would *add* a mismatch instead of removing one.
-#: The chromedriver ``cdc_`` globals were a SEPARATE leak (present on a driven VISIBLE window too,
-#: so #148's headless-vs-desktop axis did not see them); they are stripped by ``_AUTOMATION_STEALTH_JS``
-#: below, which runs on every browser.
-_DESKTOP_GEOMETRY_JS = r"""
-(function () {
-    var M = __METRICS__;
-    function rd(o, k, v) {
-        try { Object.defineProperty(o, k, {get: function () { return v; }, configurable: true}); } catch (e) {}
-    }
-    var sw = M.sw, sh = M.sh;
-    rd(window.screen, 'width', sw); rd(window.screen, 'height', sh);
-    rd(window.screen, 'availWidth', sw); rd(window.screen, 'availHeight', sh);
-    rd(window, 'outerWidth', sw); rd(window, 'outerHeight', sh);
-    rd(window, 'innerWidth', sw); rd(window, 'innerHeight', sh);
-})();
-"""
-
-#: The chromedriver-injected automation globals a modern bot-detector can read off ``window``,
-#: masked on EVERY browser before its first page. It deletes ONLY those (this build injects bare
-#: ``cdc_…`` properties a ``for…in`` scan sees; deleting them degrades Selenium's own wrappers to
-#: their documented fallback). It deliberately does NOT: redefine ``navigator.webdriver`` (the blink
-#: launch flag already yields a real ``false``); touch ``navigator.languages`` (``--lang`` already
-#: yields a genuine list, and a JS override was measured to leak ``;q=0.9``); or fabricate
-#: ``window.chrome.runtime`` — a normal page's ``chrome.runtime`` is **undefined** (it exists only in
-#: extension contexts), so inventing it is a NEW mismatch and could trip a page gating an extension
-#: bridge on ``chrome.runtime``. The measured headless-vs-visible fingerprints confirm ``chrome``/
-#: ``runtime`` already match a real window; only ``cdc_`` was ever a leak. **Scope: the tab this
-#: driver launched — not a popup a site opens later** (``addScriptToEvaluateOnNewDocument`` is
-#: per-target), so this is anti-bot hygiene for the main page, not a promise that a Google/Apple SSO
-#: popup will pass.
-_AUTOMATION_STEALTH_JS = r"""
-(function () {
-    var named = ['__driver_unwrapped', '__selenium_unwrapped', '__fxdriver_unwrapped', '_Selenium_IDE_Recorder'];
-    function leaky(key) { return key.indexOf('cdc_') >= 0 || named.indexOf(key) >= 0; }
-    var found = [];
-    for (var k in window) {
-        try { if (leaky(k)) found.push(k); } catch (e) {}
-    }
-    for (var i = 0; i < found.length; i++) {
-        try { delete window[found[i]]; } catch (e) {}
-    }
-})();
-"""
+# What is NOT this class's business is stated once, where it lives: the outcomes that are not about
+# a site (a stop, a killed driver, an unclaimable profile, a page that never arrived) are
+# :mod:`crawlers.core.faults`, and the Chrome that has to be built to observe any of them is
+# assembled by :mod:`crawlers.core.browser`.
 
 
 class Crawler(ABC):
@@ -312,7 +180,7 @@ class Crawler(ABC):
             # scanning to log in — impossible. Reported by a user re-saving a weibo
             # cookie, who got a page with no code to scan. The profile can already
             # hold a blocker a previous crawl left behind, so this must be an answer
-            # and not an omission (see ``_content_prefs``).
+            # and not an omission (see :func:`crawlers.core.browser.content_prefs`).
             self.needs_images = True
         self.driver = None
         self._sink = None
@@ -379,7 +247,7 @@ class Crawler(ABC):
         #: it is about what *this* machine just did, not about what the site said.
         self.pending_waits = 0
         self.cookies_loaded = 0
-        self._profile_lock = self._claim_profile()
+        self._profile_lock = browser.claim_profile(self.profile_dir, self._abort)
         try:
             self._create_driver()
         except Exception:
@@ -389,43 +257,15 @@ class Crawler(ABC):
             self._release_profile()
             raise
 
-    def _claim_profile(self):
-        """Take exclusive use of this platform's profile directory, if there is one.
-
-        chromedriver pre-writes the profile's ``Default/Preferences`` before Chrome
-        starts, so two sessions created in one directory at the same moment cannot
-        both come up — measured, and it surfaces as ``session not created: failed to
-        write prefs file`` on whichever node loses. One profile is one device, so the
-        answer is to wait for the other crawl rather than to hand out a second
-        directory and throw the device identity away.
-        """
-        if not self.profile_dir:
-            return None
-        started = time.monotonic()
-        lock = browser_profiles.acquire_profile(self.profile_dir, abort=self._abort)
-        if lock is None:
-            if self._abort is not None and self._abort():
-                # Not a stuck profile — the user stopped this run while it queued.
-                # Saying so matters: the other message blames a window that never
-                # closed and sends the user hunting a browser that is not there.
-                raise ProfileUnavailableError(t('crawl.profile_gave_up', dir=self.profile_dir))
-            raise ProfileUnavailableError(
-                t(
-                    'crawl.profile_stuck',
-                    dir=self.profile_dir,
-                    seconds=round(Config.PROFILE_LOCK_TIMEOUT),
-                )
-            )
-        waited = time.monotonic() - started
-        if waited >= 0.2:
-            # Said once, before the wait it describes. No heartbeat: a crawl behind
-            # this line is already running and the console is not a progress bar.
-            logger.info(t('crawl.profile_wait', seconds=round(waited), dir=self.profile_dir))
-        return lock
-
     def _release_profile(self):
+        """Give this session's profile back exactly once, even if a teardown is called twice.
+
+        The handle is cleared *before* the release is handed the lock: a second ``close()`` (the
+        runner's ``finally`` after a reaper already closed the browser) must not release a directory
+        another crawl has claimed in the meantime.
+        """
         lock, self._profile_lock = self._profile_lock, None
-        browser_profiles.release_profile(lock)
+        browser.release_profile(lock)
 
     def may_stop(self) -> bool:
         """Whether the user asked this crawl to end, as of right now.
@@ -594,194 +434,26 @@ class Crawler(ABC):
         cursor = (kwargs or {}).get('resume')
         return cursor if isinstance(cursor, dict) else {}
 
-    def _content_prefs(self) -> dict:
-        """Chrome content preferences for this session — always an explicit answer.
-
-        Both branches *write* a value, and that is the whole point. A crawl's blocker
-        is persisted into the profile directory it ran on (measured: after one weibo
-        crawl, ``data/chrome_profile/weibo/Default/Preferences`` carried
-        ``managed_default_content_settings.images = 2``), so a later human-facing
-        window that merely *omits* the preference inherits the block from the device
-        it shares with that crawl — and the login page it shows has no QR code to
-        scan, because a QR code is an ``<img>``. Saying 允许 explicitly is what makes
-        「打开浏览器登录」 completable on a profile that has already crawled; the
-        block itself stays the crawl default, since it is the largest per-navigation
-        saving a text-and-attribute crawler has (see ``needs_images``).
-        """
-        return {'profile.managed_default_content_settings': {'images': 1 if self.needs_images else 2}}
-
     def _create_driver(self):
-        opts = Options()
-        if self.headless:
-            opts.add_argument('--headless=new')
-        opts.add_argument('--no-sandbox')
-        opts.add_argument('--disable-dev-shm-usage')
-        opts.add_argument('--disable-gpu')
-        # A background or occluded window must behave exactly like a visible
-        # one. Chrome's default backgrounding throttles timers and freezes
-        # rendering of occluded windows, which makes virtualised/lazy pages
-        # stop loading — the crawl then reads an empty page that is only empty
-        # because the browser decided to nap. (Headless is unaffected either
-        # way; this covers the login browser and headless=False crawls.)
-        opts.add_argument('--disable-backgrounding-occluded-windows')
-        opts.add_argument('--disable-background-timer-throttling')
-        opts.add_argument('--disable-renderer-backgrounding')
-        if self.profile_dir:
-            # Chrome creates the user-data-dir itself, so a missing directory is the
-            # normal first run and not an error to handle here.
-            opts.add_argument(f'--user-data-dir={self.profile_dir}')
-        # Machine-local choices (driver / browser / window) come from the
-        # settings store, editable in the frontend 设置 panel.
-        opts.add_argument(f'--window-size={get_setting("window_size")}')
-        opts.add_argument('--lang=zh-CN')
-        # Sites' risk control treats navigator.webdriver as proof of a bot and
-        # hard-blocks content pages (search keeps working, which is why the block
-        # looked selective). Hide the automation flag on both surfaces.
-        opts.add_argument('--disable-blink-features=AutomationControlled')
-        # These are names of switches CHROMEDRIVER adds to every Chrome it starts, and
-        # a name it never adds buys nothing: this list said 'automation' since it was
-        # written, so `--enable-automation` stayed in the command line and every
-        # visible crawl window carried the 「受自动测试软件的控制」 banner the option
-        # was supposed to remove (the user asked about it on 2026-09-25).
-        opts.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
-        # ``eager`` returns as soon as the DOM is parseable instead of waiting
-        # for every image, font and analytics beacon. A crawler reads text and
-        # attributes, so the wait buys nothing — and on douyin the full ``load``
-        # event was measured to never arrive at all (a 40 s TimeoutException on
-        # the very first navigation), which no amount of timeout tuning fixes.
-        opts.page_load_strategy = 'eager'
-        prefs = self._content_prefs()
-        if prefs:
-            opts.add_experimental_option('prefs', prefs)
-        browser_binary = str(get_setting('browser_binary') or '').strip()
-        # Refuse before chromedriver is tried, and name the thing to fix. Three situations look
-        # identical from here (no Chrome at all, a 设置 path that points at nothing, a driver that
-        # cannot speak to the installed browser), and Selenium's own answer to the first two is an
-        # exception from a child process. The probe is :mod:`utils.machine_deps`, shared with the
-        # desktop launcher's self-check, so the two can never disagree about this machine.
-        resolved = machine_deps.find_chrome(browser_binary)
-        if browser_binary and not resolved:
-            raise ValueError(t('crawl.browserBinaryMissing', path=browser_binary))
-        if not resolved:
-            raise ValueError(t('crawl.chromeMissing'))
-        if browser_binary:
-            opts.binary_location = browser_binary
-        driver_path = str(get_setting('driver_path') or '').strip()
-        if driver_path and not os.path.isfile(driver_path):
-            # Blank means "let Selenium Manager resolve a matching driver", which is the normal
-            # answer on a fresh machine; a filled-in path that is not a file is a stale setting,
-            # and Selenium Manager would be skipped because a path WAS given.
-            raise ValueError(t('crawl.driverMissing', path=driver_path))
-        service = Service(executable_path=driver_path)
-        try:
-            # The class itself, not ``webdriver.Chrome``: that name is a re-export the package
-            # builds at import time, which no type checker can see as callable, so annotating with
-            # it read as an error and needed a suppression. Importing the real class states what is
-            # constructed and keeps the declared type honest.
-            self.driver: ChromeWebDriver = ChromeWebDriver(options=opts, service=service)
-        except WebDriverException as exc:
-            # Kept as a refusal with the driver's own words inside it: that sentence names the
-            # versions it tried to pair, which is what the user has to act on. No single cause is
-            # claimed, because a version mismatch, a first-run download with no network and a
-            # profile Chrome refuses to share all arrive here.
-            raise ValueError(
-                t('crawl.browserStartFailed', err=str(exc).strip().splitlines()[0] if str(exc).strip() else repr(exc))
-            ) from exc
-        # A headless browser must not announce itself as headless. Measured 2026-09-26 (#148): a
-        # bare --headless=new reveals only two things a desktop does not — a UA containing
-        # "HeadlessChrome", and an 800×600 virtual display. Zhihu's 某作者的作品 page hands the
-        # bare headless a silent 0-row plate but renders 20→40 cards once BOTH are removed, so the
-        # platform was being served by forcing a VISIBLE window; we now fix the fingerprint and let
-        # headless stay headless instead. See _disguise_headless_as_desktop.
-        if self.headless:
-            self._disguise_headless_as_desktop()
-        # Hide the page-visible automation tells on EVERY browser (the visible login window
-        # included), before any navigation — the cookie plant at the end of this method is the
-        # first one, and the hook must already be installed when it runs.
-        self._apply_automation_stealth()
-        # Apply the configured 窗口大小 to the *live* window, not just the launch hint.
-        # ``--window-size`` is only a startup argument: a persistent profile restores its
-        # own saved window bounds and overrides it, and a visible Chrome may open at a
-        # default size — so the value the user set in 设置 never resized a real crawl
-        # window until set_window_size is called on the session itself.
-        try:
-            self.driver.set_window_size(*self._desktop_metrics())
-        except Exception as e:
-            # A driver that rejects the resize (a mid-teardown session) keeps the launch
-            # size; a crawl must not die over window geometry.
-            logger.debug('set_window_size failed, keeping the launch size: %s', e)
-        # A timeout the driver rejects (bad value, dead session) must not kill
-        # the session — the crawl can still run on the default timeout.
-        with contextlib.suppress(Exception):
-            self.driver.set_page_load_timeout(int(get_setting('page_load_timeout')))
+        """Build this session's browser through :mod:`crawlers.core.browser`, then seed its cookies.
+
+        The whole of the machine's answer (which Chrome, which driver, which flags, which
+        fingerprint masks) is in that module; what is *this session's* is three declared facts —
+        whether to be headless, which profile directory to hold, whether images are needed — plus
+        the platform word the mask step is logged against, and the saved cookie file.
+
+        The cookie plant runs after the masks are installed and never before: the plant is this
+        session's first navigation, and a hook that must be in place "before any site script runs"
+        is worthless if the first page load has already happened.
+        """
+        self.driver = browser.launch(
+            headless=self.headless,
+            profile_dir=self.profile_dir,
+            needs_images=self.needs_images,
+            domain=self.domain,
+        )
         if self.cookie_path:
             self._load_cookies()
-
-    def _desktop_metrics(self) -> tuple:
-        """The display size to report, from the configured ``window_size`` (default 1920×1080).
-
-        Parsed rather than hardcoded so the reported desktop tracks what the user actually set —
-        an invented 1707×1000 was measured to be *itself* a mismatch against a real window, which
-        is the opposite of a disguise.
-        """
-        raw = str(get_setting('window_size') or '1920x1080')
-        parts = re.split(r'[x*,\s]+', raw.strip()) if raw.strip() else []
-
-        def positive(value, fallback: int) -> int:
-            try:
-                return max(800, int(value))
-            except (TypeError, ValueError):
-                return fallback
-
-        width = positive(parts[0] if parts else '', 1920)
-        height = positive(parts[1] if len(parts) > 1 else '', 1080)
-        return width, height
-
-    def _apply_automation_stealth(self) -> None:
-        """Hide the page-visible automation tells on EVERY browser, before its first page.
-
-        The launch already makes ``navigator.webdriver`` false (blink flag) and a real
-        ``navigator.languages`` (``--lang``); what a modern bot-detector can still read from the page
-        is the bare ``cdc_…`` chromedriver globals this build injects onto ``window``. This registers a
-        new-document script that deletes them. It runs for the VISIBLE login window too — the browser
-        that has to face a site's risk control — which is the reason this exists (``docs/crawler_notes.md``).
-
-        It is deliberately NOT redefining webdriver or languages, and NOT fabricating
-        ``window.chrome.runtime`` (a normal page's is undefined; inventing one is a new mismatch) —
-        each of those was measured or argued to ADD a tell, not remove one. Scope: the tab this driver
-        launched; a popup a site opens on click (Google/Apple SSO) is a different CDP target the mask
-        does not reach, so this is not a promise that third-party login passes. A CDP failure (an old
-        driver, a session mid-teardown) degrades to "still the blink-flag browser" and only logs — a
-        fingerprint helper must never tear down a browser that came up correctly.
-        """
-        try:
-            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': _AUTOMATION_STEALTH_JS})
-        except Exception as e:
-            logger.debug('automation stealth not applied for %s: %s', self.domain, e)
-
-    def _disguise_headless_as_desktop(self) -> None:
-        """Remove the two headless tells (UA, virtual-display metrics) on the live session.
-
-        The UA is read back from this very Chrome and de-Headlessed, so its version can never rot
-        against the installed build and the HTTP UA, ``navigator.userAgent`` and the Client-Hints
-        platform all stay consistent — a hand-written UA string would drift out of the match. The
-        geometry is registered to run before any page script. A CDP command that fails (an old
-        driver, a session already mid-teardown) degrades to "still a plain headless browser" and
-        only logs, rather than tearing down a browser that came up correctly.
-        """
-        try:
-            real_ua = str(self.driver.execute_script('return navigator.userAgent;') or '')
-        except Exception as e:  # an unreadable session: leave the browser as a plain headless one
-            logger.debug('headless disguise skipped (UA unreadable): %s', e)
-            return
-        desktop_ua = real_ua.replace('HeadlessChrome', 'Chrome')
-        width, height = self._desktop_metrics()
-        script = _DESKTOP_GEOMETRY_JS.replace('__METRICS__', json.dumps({'sw': width, 'sh': height}))
-        try:
-            self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {'userAgent': desktop_ua, 'platform': 'Win32'})
-            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': script})
-        except Exception as e:  # a partial disguise beats none; it only costs this browser the mask
-            logger.debug('headless disguise partially applied: %s', e)
 
     # ─── navigation ─────────────────────────────────────────────
 

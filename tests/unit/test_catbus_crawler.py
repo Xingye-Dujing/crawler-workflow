@@ -9,7 +9,8 @@ boundary is ``test_catbus_bridge.py``'s business; a real crawl is ``live_quick``
 import pytest
 
 from crawlers.backends import catbus as catbus_module
-from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET
+from crawlers.core.faults import CrawlerStopped
 from i18n import platform_label
 from services import catbus_bridge as bridge
 

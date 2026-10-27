@@ -16,7 +16,8 @@ from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.core.crawler as base_module
 import crawlers.platforms.weibo.crawler as weibo_module
-from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET, Crawler
+from crawlers.core.faults import CrawlerStopped
 from crawlers.platforms.weibo.crawler import WeiboCrawler
 
 pytestmark = pytest.mark.unit

@@ -3,7 +3,7 @@
 The user asked why every window the driver opens shows 「Chrome 正受到自动测试软件的控制」.
 That banner is drawn because **chromedriver itself** adds ``--enable-automation`` to the
 Chrome command line, and ``excludeSwitches`` is how a session asks for it to be left out
-— by the switch's real name. The option in ``crawlers/core/crawler.py`` said ``'automation'``,
+— by the switch's real name. The option in ``crawlers/core/browser.py`` said ``'automation'``,
 which chromedriver never adds, so the exclusion matched nothing while looking set.
 
 Only the browser can answer whether a command-line switch arrived, and the page that
@@ -128,9 +128,9 @@ def test_the_mask_is_what_removes_the_globals_not_an_empty_page(monkeypatch):
     thing and the "[]" above is a masking result. If this build left none to begin with, this reds
     and the masked test would have been worth nothing.
     """
-    from crawlers.core.crawler import Crawler
+    from crawlers.core import browser
 
-    monkeypatch.setattr(Crawler, '_apply_automation_stealth', lambda self: None)
+    monkeypatch.setattr(browser, 'apply_stealth', lambda driver, domain: None)
     crawler = _launch()
     try:
         surface = _read_surface(crawler)

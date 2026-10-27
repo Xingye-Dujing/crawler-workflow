@@ -681,6 +681,40 @@ class TestCrawlerHoldsItsProfile:
         assert gained is not None, 'closing the browser did not give the profile back'
         browser_profiles.release_profile(gained)
 
+    def test_a_second_close_cannot_release_a_profile_someone_else_now_holds(self, tmp_path):
+        """One session releases exactly once, however many times it is closed.
+
+        The runner closes in a ``finally`` and the reaper may already have closed the same crawler,
+        so ``close()`` is routinely called twice. If the handle were left set, the second release
+        would hand back a directory that a *different* crawl claimed in between — two browsers in one
+        ``user-data-dir``, which is the ``failed to write prefs file`` refusal this whole lock exists
+        to prevent, arriving in whichever run looked healthy.
+        """
+        path = str(tmp_path / 'zhihu')
+        crawler = self._probe_class('Twice', 'zhihu')(headless=True, profile_dir=path)
+        crawler.close()
+        holder = browser_profiles.acquire_profile(path, timeout=0.3)
+        assert holder is not None, 'the first close did not give the profile back'
+
+        crawler.close()  # the runner's finally, arriving after someone else took the directory
+
+        verdict = {}
+
+        def probe_free():
+            verdict['free'] = browser_profiles.acquire_profile(path, timeout=0.3)
+
+        watcher = threading.Thread(target=probe_free)
+        watcher.start()
+        watcher.join(10)
+        assert verdict['free'] is None, (
+            'a second close released a profile this crawler no longer owned — two sessions would '
+            'share one user-data-dir'
+        )
+        browser_profiles.release_profile(holder)
+        gained = browser_profiles.acquire_profile(path, timeout=0.3)
+        assert gained is not None, 'the release path is broken in the other direction'
+        browser_profiles.release_profile(gained)
+
     def test_a_browser_that_never_came_up_leaves_no_claim_behind(self, tmp_path):
         """__init__ claims, then buys the driver. A chromedriver refusal has to walk
         the claim back, or every later run of that platform waits out its timeout on a

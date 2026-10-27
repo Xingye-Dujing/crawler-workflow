@@ -16,7 +16,8 @@ import pytest
 
 import i18n
 from crawlers.commenting.protocol import DEAD, OK
-from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET
+from crawlers.core.faults import CrawlerStopped
 from crawlers.platforms.hongguo.harvest import (
     HongguoCommentHarness,
     PlayerUI,

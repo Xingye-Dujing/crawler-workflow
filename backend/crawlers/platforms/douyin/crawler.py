@@ -10,7 +10,8 @@ import re
 import time
 from urllib.parse import quote
 
-from crawlers.core.crawler import UNDER_TARGET, PageNotArrivedError
+from crawlers.core.crawler import UNDER_TARGET
+from crawlers.core.faults import PageNotArrivedError
 from crawlers.core.video import VideoCrawler, _stamp
 from crawlers.engine import feed, popup, times
 from crawlers.engine.counters import parse_count

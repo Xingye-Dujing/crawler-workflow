@@ -10,7 +10,7 @@ pages that are only empty because Chrome decided to nap).
 
 import pytest
 
-import crawlers.core.crawler as base_module
+import crawlers.core.browser as browser
 from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
@@ -24,7 +24,7 @@ OCCLUSION_FLAGS = (
 
 @pytest.fixture
 def captured_options(monkeypatch):
-    box = {'cdp': []}
+    box = {'cdp': [], 'journal': []}
 
     class FakeChrome:
         # A headless Chrome reports this UA; the disguise reads it back and strips the token, so
@@ -37,22 +37,44 @@ def captured_options(monkeypatch):
         def __init__(self, options=None, service=None):
             box['options'] = options
             box['service'] = service
+            box['journal'].append('construct')
 
         def set_page_load_timeout(self, seconds):
             box['timeout'] = seconds
+            box['journal'].append('set_page_load_timeout')
+
+        def set_window_size(self, width, height):
+            box['journal'].append(f'window_size {width}x{height}')
+
+        def get(self, url):
+            box['journal'].append(f'get {url}')
+
+        def add_cookie(self, payload):
+            box['journal'].append(f'add_cookie {payload.get("name")}')
+            # A cookie whose domain does not match this document raises, exactly as on a real browser.
+            return None
+
+        @property
+        def current_url(self):
+            # A real driver exposes this as a property and the plant reads it as one, so an
+            # attribute holding a method would have the parked-page check answer about the wrong
+            # thing — and a navigation that looks parked is silently re-driven forever.
+            return 'https://www.douyin.com'
 
         def execute_script(self, script, *args):
             box.setdefault('scripts', []).append(script)
+            box['journal'].append('read_ua' if 'userAgent' in script else 'script')
             return self.SCRIPTED_UA
 
         def execute_cdp_cmd(self, name, params=None):
             box['cdp'].append((name, params or {}))
+            box['journal'].append(f'cdp {name}')
 
-    # Patched on the module that constructs it: base imports the Chrome WebDriver class by name
-    # (selenium re-exports it lazily through ``__getattr__``, which no checker can see as callable),
-    # so the seam is the class, not an attribute of the ``selenium.webdriver`` package.
-    monkeypatch.setattr(base_module, 'ChromeWebDriver', FakeChrome)
-    monkeypatch.setattr(base_module, 'Service', lambda executable_path=None: ('service', executable_path))
+    # Patched on the module that constructs it: browser.py imports the Chrome WebDriver class by
+    # name (selenium re-exports it lazily through ``__getattr__``, which no checker can see as
+    # callable), so the seam is the class, not an attribute of the ``selenium.webdriver`` package.
+    monkeypatch.setattr(browser, 'ChromeWebDriver', FakeChrome)
+    monkeypatch.setattr(browser, 'Service', lambda executable_path=None: ('service', executable_path))
     return box
 
 
@@ -126,11 +148,9 @@ def test_a_login_window_overrides_a_profile_that_blocked_images():
     """
 
     def session(**attrs):
-        crawler = ZhihuCrawler.__new__(ZhihuCrawler)
-        crawler.needs_images = False
-        for key, value in attrs.items():
-            setattr(crawler, key, value)
-        return crawler._content_prefs()
+        # ``content_prefs`` takes the one declared fact it acts on, and a session that never
+        # considered the question declares it False — exactly what ``Crawler`` defaults on the class.
+        return browser.content_prefs(bool(attrs.get('needs_images', False)))
 
     assert session()['profile.managed_default_content_settings']['images'] == 2
     allowed = session(needs_images=True)
@@ -226,3 +246,34 @@ def test_the_automation_mask_runs_on_every_browser_and_cannot_self_defeat(captur
     assert 'navigator.languages' not in sources, 'the mask must not redefine languages (the --lang leak)'
     assert ';q' not in sources, 'a languages q-value must never reappear in the mask'
     assert 'chrome.runtime' not in sources, 'the mask must not fabricate window.chrome.runtime'
+
+
+def test_the_mask_is_installed_before_the_session_ever_loads_a_page(captured_options, tmp_path):
+    """The one ordering rule the split moved out of a single function body.
+
+    ``Page.addScriptToEvaluateOnNewDocument`` only reaches documents that load *after* it is
+    registered, and the cookie plant is the session's very first navigation — the launch seeds a
+    cookie by loading ``https://<domain>``, and a page that painted before the mask exists is a page
+    where chromedriver's ``cdc_`` globals were readable. When the assembly and the plant were one
+    method body this was structural (the plant was the last statement); after the split it is a
+    convention across two modules, so it is asserted on the journal of one real launch.
+    """
+    cookie_file = tmp_path / 'zhihu@default.json'
+    cookie_file.write_text(
+        '[{"name": "sid", "value": "secret", "domain": ".zhihu.com", "path": "/"}]', encoding='utf-8'
+    )
+    crawler = ZhihuCrawler(headless=True, cookie_path=str(cookie_file))
+    journal = captured_options['journal']
+    try:
+        masks = [i for i, step in enumerate(journal) if step == 'cdp Page.addScriptToEvaluateOnNewDocument']
+        first_load = next((i for i, step in enumerate(journal) if step.startswith('get ')), None)
+        assert masks, f'no new-document hook was ever registered: {journal}'
+        assert first_load is not None, f'the session never loaded a page: {journal}'
+        assert min(masks) < first_load, f'the mask was installed after the first page load: {journal}'
+        assert any(step.startswith('add_cookie sid') for step in journal[first_load:]), (
+            f'the cookie was never offered to the page that loaded: {journal}'
+        )
+        assert journal[0] == 'construct', f'something was asked of a driver that does not exist yet: {journal}'
+    finally:
+        crawler.driver = None
+        crawler.close()

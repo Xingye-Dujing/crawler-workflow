@@ -82,7 +82,7 @@ import crawl_capabilities as capabilities
 from analyzers.llm_client import ABORT_MARK, LLMClient
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler
-from crawlers.core.crawler import CrawlerStopped
+from crawlers.core.faults import CrawlerStopped
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow

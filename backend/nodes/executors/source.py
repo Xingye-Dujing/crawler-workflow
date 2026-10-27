@@ -23,7 +23,8 @@ import crawl_capabilities as capabilities
 from config import Config
 from crawlers import get_crawler, is_crawlable
 from crawlers.backends.catbus import CatbusCrawler
-from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped, PageNotArrivedError
+from crawlers.core.crawler import UNDER_TARGET
+from crawlers.core.faults import CrawlerStopped, PageNotArrivedError
 from i18n import t
 from nodes.context import NodeCall
 from nodes.executors.comment import execute_comment_node

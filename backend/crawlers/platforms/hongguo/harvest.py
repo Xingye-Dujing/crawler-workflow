@@ -40,7 +40,8 @@ import requests
 import crawl_capabilities as capabilities
 from config import Config
 from crawlers.commenting.protocol import DEAD, OK
-from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET
+from crawlers.core.faults import CrawlerStopped
 from crawlers.platforms.hongguo.comments import hg_comment_rows, hg_page_title, hg_series_id
 from i18n import t
 from settings_store import get_setting

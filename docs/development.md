@@ -45,6 +45,8 @@ crawler_workflow/
 │   │   │                         #   （工厂在这里：Cookie 文件与 Profile 目录按账号拼，播种只此一处）
 │   │   ├── core/                 # 所有爬虫共用的机械（不含任何站点事实）
 │   │   │   ├── crawler.py        # 爬虫基类（登录墙判定、Cookie 播种、流式落盘、游标/水位、收尾判定）
+│   │   │   ├── browser.py        # 一台 Chrome 的装配：开关、指纹遮罩、profile 认领、具名拒绝
+│   │   │   ├── faults.py         # 四类失败词汇（停止/死驱动/profile 被占/页面没到）——不含浏览器
 │   │   │   └── video.py          # 视频平台共用基类（VideoCrawler + 通用行工具 _stamp/_as_int）
 │   │   ├── backends/
 │   │   │   └── catbus.py         # 第二采集后端（列、身份列、可采格都读适配器自己的清单）

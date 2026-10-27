@@ -211,9 +211,9 @@ backend/
 
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
-| `crawlers/core/crawler.py` | 1472 | Stage 1（拆 faults / browser；pacing 已于 2026-10-27 进 `engine/pacing.py`） |
-| `crawlers/platforms/douyin/crawler.py` | 1031 | Stage 1（按 walk 拆） |
-| `crawlers/platforms/weibo/crawler.py` | 925 | Stage 1（按 walk 拆） |
+| `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
+| `crawlers/platforms/douyin/crawler.py` | 1032 | Stage 1（按 walk 拆） |
+| `crawlers/platforms/weibo/crawler.py` | 926 | Stage 1（按 walk 拆） |
 | `crawlers/platforms/hongguo/harvest.py` | 1824 | Stage 1（会话/进程/解析三段） |
 | `services/data_analysis.py` | 3899 | Stage 9 |
 | `services/latex_charts.py` | 2430 | Stage 5 |
@@ -264,7 +264,7 @@ run #20、2026-10-15、push 的正是今天仍是远端头的 `27bed25`、结论
 | Stage | 做什么 | 代价 | 特有验收 |
 |---|---|---|---|
 | **0 先加护栏** | ①新契约：`spec` 的 hiddenimports 清单 == `backend/` 实际顶层包；②`docs/` 里的 `path.py` 引用必须存在；③`Crawler` 契约属性表与执行器 `getattr` 兜底的对账；④修 D9 前三条无行为变化的死码 | 纯新增 + 三处删除 | 每条新契约都能红一次（故意改错路径就红） |
-| **1 crawlers 插件化** | **已落地**：`core/`（crawler/video）、`backends/catbus.py`、`commenting/`（session/walks/protocol）、`platforms/<id>/{crawler,comments}` 十平台、`__init__.py` 只剩注册表+工厂、边界契约 `test_crawler_platform_plugins.py`；**① 七个平台的 `walk` 与页内 JS 已各自进平台目录（`session.py` 1,183 → 140）**、**② 评论分派改成注册表 `commenting/walks.py`（`CommentSession.walk(platform,url,limit)`；CatBus 不再用 `__getattr__` 合成方法名，红果 harness 同名 `walk`）**，契约 `test_comment_walk_plugins.py` 12 例。**剩余**：③ 的第一步已落地：慢速采集倍率与 `throttled_sleep` 从 `core/crawler.py` 进 `crawlers/engine/pacing.py`（站点无关的机械本该在 engine；DOM 爬虫与评论走路从此共用同一个开关，1,495 → 1,472）；下一步拆 `core/crawler.py` 为 crawler/faults/browser（四类异常 + 驱动装配/到场判定/Cookie 植入，一次改完全部 import 点，不留 re-export），拆 douyin(1031)/weibo(925)/harvest(1824)；④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 约 120 处引用改写 + 走路搬家（行为不变，逐条对照原方法体） | 平台 id 三处集合相等（已有）；注册表 == 定义 walk 的目录 + import 清单同源；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
+| **1 crawlers 插件化** | **已落地**：`core/`（crawler/browser/faults/video）、`backends/catbus.py`、`commenting/`（session/walks/protocol）、`platforms/<id>/{crawler,comments}` 十平台、`__init__.py` 只剩注册表+工厂、边界契约 `test_crawler_platform_plugins.py`；**① 七个平台的 `walk` 与页内 JS 已各自进平台目录（`session.py` 1,183 → 140）**、**② 评论分派改成注册表 `commenting/walks.py`（`CommentSession.walk(platform,url,limit)`；CatBus 不再用 `__getattr__` 合成方法名，红果 harness 同名 `walk`）**，契约 `test_comment_walk_plugins.py` 12 例；**③ 第一步** pacing 进 `crawlers/engine/pacing.py`（站点无关的机械本该在 engine，DOM 爬虫与评论走路共用同一开关，1,495 → 1,472）；**③ 第二步已落地**：`core/crawler.py` 1,472 → **1,144**，四类失败词汇进 `core/faults.py`（93，只 import i18n，因此 catbus/分析器/测试都能无环引用），一台 Chrome 的装配进 `core/browser.py`（344：开关、指纹遮罩、桌面度量、profile 认领、按名拒绝），**不留 re-export**——23 个 import 点与四处打桩点全部改指新模块。**剩余**：拆 douyin(1032)/weibo(926)/harvest(1825)；④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 约 120 处引用改写 + 走路搬家（行为不变，逐条对照原方法体） | 平台 id 三处集合相等（已有）；注册表 == 定义 walk 的目录 + import 清单同源；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
 
 | **2 sessions + scheduling** | 登录态四模块 + 34 行孤儿合成 `sessions/`；`/api/cookies/*` 与 `/api/profiles/*`（app 内约 950 行）进 `sessions/routes.py`；调度合成 `scheduling/` | 打桩路径搬迁 | 预检/profile/账号折叠用例全绿；cloud 判定不变 |
 | **3 core + capabilities** | 根模块下沉 `core/`；`crawl_capabilities.py` 1,805 行拆 `model/requirements/platforms/<id>/catbus/registry`；`coerce.py` 下沉解掉 D7 | 全树 import 一次改完（无 shim） | `test_boot_import_budget` 仍绿且启动不退化；三档 pylint；打包契约 |
@@ -282,33 +282,66 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 
 ### 6.0 当前状态（2026-10-27，上下文压缩后的唯一恢复锚点；先读这一节再读 §5）
 
-- **HEAD = `4005791`**（`修改：评论走路按平台插件化并改为注册表分派，CI 的 pylint 目标清单修好摊平`），
-  **两个远端都已推到这一条**：`crawler-github`（有 CI）与 `gitee`（无 CI，用户明确说不用考虑）。
+- **HEAD**：`4005791`（评论走路插件化 + CI 目标清单摊平）→ `329e23d`（pacing 进 `engine/pacing.py`）→
+  `d065fee`（pylint 按模块名豁免可选运行时）→ **本轮 `core/faults.py` + `core/browser.py`**。
+  前两条已推 `crawler-github`（有 CI）与 `gitee`（无 CI，用户明确说不用考虑）。
   工作区里有**用户自己改的** `data/workflows/红果短剧-四个热播榜.json`——不 stage、不提交。
-- **在飞的改动（已改完，正在过门禁）**：慢速采集倍率从 `core/crawler.py` 抽到新的
-  `backend/crawlers/engine/pacing.py`（`GENTLE_PAUSE_FACTOR` / `gentle_crawl_on` / `throttled_sleep`），
-  `core/crawler.py` 1,495 → **1,472**；`platforms/douyin/comments.py` 与 `crawler.py` 改 import；
-  `tests/unit/test_gentle_crawl.py` 的打桩点搬到 `pacing_module`（sleep/倍率）与 `crawler_module`（jitter）。
-  文档同步：`ARCHITECTURE.md`（engine 11 个模块）、`development.md`（engine 树补齐 pagefetch/times/pacing）、
-  `refactor_plan.md` 的 §4.0 与 Stage 1 行。门禁命令链在后台跑（fast → ruff → 两档 pylint → 设备档），
-  **全绿就提交**：`修改：慢速采集倍率移出爬虫基类，站点无关的节律进 engine/pacing.py`，然后推两个远端。
+- **CI 的真状态（这是本轮最重要的新事实，别再拿本地绿当 CI 绿）**：`d065fee` 之后
+  **两档 pylint 在 runner 上第一次真跑起来并通过**（产品档与 tests 档都 ✓）。于是 fast 档
+  **第一次被执行**，报 **27 failed / 8111 passed / 5 skipped**——这 27 条**不是本轮重构造成的**，
+  而是"CI 这台机器与开发机不同"的账，五类：① `TestBertMode` ×13（`analyzers/sentiment.py` 的 ONNX
+  加载器在 CI 上没有 onnxruntime/tokenizers，测试桩仍按 torch pipeline 打桩）；② `TestThePinnedBytes…`
+  ×2（`static/vendor/echarts.min.js` 字节 pin——checkout 的行尾改写）；③ `TestTheUpxPass…` ×1
+  （runner 没有 upx 在 PATH，`main()` 按名拒绝返回 1，用例却断言 0）；④ `TestBootImportBudget` ×1
+  （子进程 `stdout` 为 None）；⑤ `TestRefusals.test_a_missing_player_is_refused_by_name` ×1。
+  **这是下一条任务（#38），不是重构的欠账**：判据是"这些用例在这台机上全绿、且失败原因写的是
+  runner 缺的东西"。修法是让用例问机器，而不是把断言放宽。
+- **本轮落地（Stage 1 ③ 第二步）**：`core/crawler.py` 1,472 → **1,144**。
+  新 `core/faults.py`（93）= `CrawlerStopped`/`DeadDriver`/`ProfileUnavailableError`/`PageNotArrivedError`，
+  只 import `i18n`，所以 catbus 后端、分析器与测试都能无环引用它；
+  新 `core/browser.py`（344）= 一段 Chrome 的装配（`build_options`/`resolve_browser`/`make_service`/`launch`、
+  两个指纹遮罩 JS 与 `apply_stealth`/`disguise_headless`/`desktop_metrics`/`content_prefs`、
+  `claim_profile`/`release_profile`）。**不留 re-export**：23 处 import 点改指新模块，
+  四处打桩点（`ChromeWebDriver`/`Service`/`get_setting`/`machine_deps`/`claim_profile`/`apply_stealth`）
+  跟着搬到 `crawlers.core.browser` 这个模块对象上——搬错了就是"测一份没人用的旧绑定"，
+  这正是本轮把 `test_browser_startup_refusals.py` 与 `test_driver_options.py` 逐条改指新模块的理由。
+  `Crawler._create_driver` 仍在（20 个测试文件把它当整体接缝打桩），但函数体只剩"交出自认的三个事实 +
+  装完驱动再植 Cookie"；`_release_profile` 也留在会话侧，因为它持有"句柄先清再交还"这条不重复释放的规则。
+- **只读审计（code-auditor）在这一轮抓到 4 条主问题 + 8 条小问题，已修的：**
+  ① **新契约自己会漏**：`TestTheCoreLayering` 的 import 扫描只认绝对名、只看顶层——`from .crawler import`
+     （包内最自然的写法）与函数内的延迟导入它都说"干净"；`Options()`/`add_argument(` 那种**子串**针
+     也会被 `opts.add_arguments([...])`（真的 selenium API）与 `webdriver.Chrome` 绕过。改为**按 AST**：
+     相对导入按所在包解析、`ast.walk` 连延迟导入一起问、调用名与赋值属性（`page_load_strategy`/
+     `binary_location`）都算装配证据。正向对照当场抓出我自己的解析器 bug（它把 `from .crawler import X`
+     解析成了 `core.UNDER_TARGET`——模块名才是依赖，不是从它取出的名字）。
+  ② **`browser.py` 自称"本机事实"却装着两个 Windows 事实**：`'platform': 'Win32'` 与
+     i18n 那句"指向它的 chrome.exe"。二者都早于本轮，但本轮把它们放进了一个声称按系统回答的模块。
+     现在 `machine_deps.NAVIGATOR_PLATFORMS`（win32/linux/darwin = Win32 / Linux x86_64 / MacIntel）
+     与 `chrome_executable_name()`（读自己那张 `CHROME_PATH_NAMES`）是唯一答案；真机 Linux 上
+     "UA 留着 X1; Linux x86_64、platform 却答 Win32"正是 #148 量过的**人造不匹配**。
+     连带：i18n 里那条 Windows 字样消失后，`WINDOWS_TABLES` 对 `i18n.py` 的豁免就成了谎——
+     由那条"豁免必须真有 Windows 制品"的测试要求，已摘掉。
+  ③ **伪装失败只写 `logger.debug`，而根 logger 是 INFO**：这是唯一有行数后果的失败（裸无头的知乎
+     作者页答 0 行），却谁也看不见。改为 `logger.warning(t('crawl.disguiseUnreadable'/'disguisePartial'))`
+     双语两条新词——AGENTS 那条"允许的降级必须打印实际方法"到这里才真的成立。
+  ④ **README/docs 的结构与行数过期**（README 198 行仍写 core 两文件；ARCHITECTURE 引 1,031/1,824）。
+  ⑤ 两条"说了但没测"的规矩补上针：**遮罩必须先于第一次导航**（拆成两个模块后这从结构变成了约定，
+     `test_driver_options.py` 现按一次真 launch 的 journal 断言 cdp 索引 < 第一个 get），
+     **第二次 close 不得交还别人已认领的目录**（`lock_for` 按路径共用同一个 Lock 对象，所以句柄不先清
+     真的会替另一个采集释放——这条测试有牙齿）。
+  ⑥ 四处指向旧位置的注释/文档（`test_driver_surface.py`、`crawler_notes.md`、`agent_practices.md`、
+     `tests/conftest.py`）与 `crawlers/core/__init__.py` 那句"两个模块"都改了；
+     `test_browser_startup_refusals.py` 的盘符与 `.exe` 数据换成 `tmp_path`，断言改问本机可执行名。
+  **审计确认无误的**：搬移逐条对照过（15 条 opts 语句同集同序、两段 JS 字节相同、`launch` 内顺序不变、
+  cookie 植入仍在遮罩之后）；`if prefs:` 变成无条件添加不是行为变化（两条分支都返回非空 dict）；
+  46 处 `from crawlers.core.crawler import …` 全部可解析，没有漏网的再导出。
 - **下一条待做（顺序，别插队）**：
-  1. ~~把 CI 弄绿~~ **已落地**：`.pylintrc` 加 `ignored-modules=<六个可选运行时>`（按模块名，不关整条
-     `E0401`），`test_lint_gate.py` 双向对账（豁免名单 ⊆ `requirements-optional.txt`；产品代码真 import 的
-     可选运行时 ⊆ 豁免名单，扫描根与 CI 一致），并修掉 `.pylintrc` 头部那句过期的 `packaging/`。
-     机制本身也用一次性件证明过：加名单前 `E0401` 计 1、加后计 0。
-     仍待观察的是 **CI 上的真结果**——推送后用 `gh run view --log-failed` 复核，别只看本地绿。
-  2. **Stage 1 ③ 的剩余**：`core/faults.py`（`CrawlerStopped`/`DeadDriver`/`ProfileUnavailableError`/
-     `PageNotArrivedError`）+ `core/browser.py`（驱动装配、桌面度量/隐身、导航与到场判定、Cookie 植入、
-     profile 认领/释放）**一次提交做完**——两件事都要动同一批约 25 处 import 点与测试打桩点
-     （测试按 `crawlers.core.crawler` 这个模块对象打桩 `machine_deps`/`get_setting`/`time`/`random`，
-     搬到 browser 混入类后打桩目标必须跟着搬，否则测的是没人用的旧绑定）。不留 re-export。
-     `engine/pacing.py` 这次已验证"先写用法、后加 import"的钩子陷阱仍然会咬人。
-  3. Stage 1 继续：拆 `platforms/douyin/crawler.py`(1,031)、`platforms/weibo/crawler.py`(925)、
-     `platforms/hongguo/harvest.py`(1,824)。
-  4. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
+  1. **#38 让 CI 的 fast 档在 runner 上全绿**（上面那 27 条，五类，逐类问机器）。
+  2. Stage 1 继续：拆 `platforms/douyin/crawler.py`(1,032)、`platforms/weibo/crawler.py`(926)、
+     `platforms/hongguo/harvest.py`(1,825)。
+  3. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
      迁 `capabilities/platforms/`（Stage 3 的落点，先把声明放好）。
-  5. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。
+  4. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **仍然未验证/未跑（不许改口）**：桌面 EXE 未重建（新前端/新模块要下一次

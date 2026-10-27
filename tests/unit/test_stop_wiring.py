@@ -26,7 +26,8 @@ from pathlib import Path
 import pytest
 from test_crawler_base import Probe, bare
 
-from crawlers.core.crawler import Crawler, CrawlerStopped
+from crawlers.core.crawler import Crawler
+from crawlers.core.faults import CrawlerStopped
 
 CRAWLERS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'crawlers'
 

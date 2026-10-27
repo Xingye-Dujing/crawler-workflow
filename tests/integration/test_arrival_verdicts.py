@@ -21,7 +21,7 @@ from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from config import Config
 from crawlers import get_crawler
-from crawlers.core.crawler import CrawlerStopped
+from crawlers.core.faults import CrawlerStopped
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 

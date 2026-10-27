@@ -35,7 +35,7 @@
   engine's window decision both read it). Two measured traps: a sticky header can cover douyin's 筛选 opener's
   centre, so `menu.hover` also fires enter events on the node (`ActionChains` alone misses it); and a *stored*
   profile preference outlives the crawl, so 取/验证 Cookie and the pre-run probe write 允许 explicitly
-  (`_content_prefs`) or a window shows a QR-less login.
+  (`crawlers/core/browser.py::content_prefs`) or a window shows a QR-less login.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`, `engine.wall`
   (the four page verdicts), `engine.popup.Prompt` + a platform's `prompts`, `engine.feed.walk_feed` / `wait_for` /
   `jump_to_bottom` (finds what actually moves), `engine.pager.walk_pages` and `engine.jsonpath` know nothing about

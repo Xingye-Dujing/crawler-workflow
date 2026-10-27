@@ -310,9 +310,10 @@ def quiet_jar(data_root):
 def machine_has_a_browser(monkeypatch):
     """Pin the one machine-level question a crawler now asks before it opens anything.
 
-    ``Crawler._create_driver`` refuses by name when this machine has no Chrome: correct for a user,
-    wrong for a suite — every crawler case would otherwise pass or fail on the browser set installed
-    on whichever machine runs it (today's CI runner happens to have Chrome, and nothing pins that).
+    ``crawlers.core.browser.resolve_browser`` refuses by name when this machine has no Chrome: correct
+    for a user, wrong for a suite — every crawler case would otherwise pass or fail on the browser set
+    installed on whichever machine runs it (today's CI runner happens to have Chrome, and nothing pins
+    that).
     A test that is *about* that refusal overrides this with its own ``monkeypatch``, which is set up
     after an autouse fixture of the same scope.
     """

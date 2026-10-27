@@ -1230,14 +1230,16 @@ Sign in with Google and Sign in with Apple, while the user's everyday Chrome pas
 (Google BotGuard) reads more than webdriver: the chromedriver-injected bare `window.cdc_…` globals — present
 on a *driven visible* window too, which is why #148's headless-vs-desktop comparison never caught them. The
 repo had *enumerated* them in the throwaway probe `backend/test_automation_surface.py` but never *masked*
-them or tested them. `_create_driver` now registers a new-document script (`_AUTOMATION_STEALTH_JS`) that
+them or tested them. `crawlers/core/browser.py::apply_stealth` now registers a new-document script
+(`_AUTOMATION_STEALTH_JS`) that
 **deletes those globals only**, on every browser. It deliberately does NOT redefine webdriver or languages,
 and does NOT fabricate `window.chrome.runtime`: measured (`scratchpad/automation_surface.json`,
 `headless_fingerprint.json`) a normal driven page's `chrome.runtime` is already `undefined` (it exists only
 in extension contexts), so inventing `{}` is a NEW mismatch and could make a page that gates an extension
 bridge on `chrome.runtime` enter that branch and throw. The device test
 `test_the_page_visible_automation_surface_is_masked` reads the surface on real Chrome (webdriver false, no
-`cdc_` globals, languages clean, no `;q`) with a **positive control** (`_apply_automation_stealth` disabled →
+`cdc_` globals, languages clean, no `;q`) with a **positive control**
+(`crawlers/core/browser.py::apply_stealth` disabled →
 the globals are visible, so the empty list is the mask's doing, not a vacuous page) and a blink-flag control
 (webdriver reads `true`) — measured, not assumed.
 
@@ -1265,7 +1267,7 @@ machine carried it. That is what made 登录窗口 unusable: the Cookie panel's 
 *same* profile a crawl used (`use_profile` follows the setting), and the fix that shipped first only
 *omitted* the blocker for that window — omission is not an answer when the device already remembers a
 "no", so the page opened with no QR code to scan and the user could not refresh a dead cookie. Two
-consequences to keep: `_content_prefs` writes 1 (允许) or 2 (封锁) for **every** session, never nothing;
+consequences to keep: `crawlers/core/browser.py::content_prefs` writes 1 (允许) or 2 (封锁) for **every** session, never nothing;
 and any window a human is asked to read is a human-facing window — 取 Cookie and 验证 Cookie both, since
 an expired cookie sends the probe to the login page and the panel then tells the user to sign in there.
 `tests/integration/test_browser_profile_launch.py` measures the whole round trip, including the claim
@@ -2355,7 +2357,7 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 ### 落地（measured 2026-09-26，#148 收尾）：伪装进了产品，三平台的窗口强制全删
 
 把上面那套最小伪装（去 Headless 的 UA + 用 `window_size` 回填 screen/outer/inner，**不**碰
-`navigator.webdriver`）做进了 `base.py::Crawler._disguise_headless_as_desktop`——**只要选无头就常开**，
+`navigator.webdriver`）做进了 `crawlers/core/browser.py::disguise_headless`——**只要选无头就常开**，
 不加设置项、不给 `get_crawler` 加参数。真机复测两遍（用户授权、真实 profile）：
 
 - 知乎作者页（`test_headless_disguise_domcount.py`）：**伪装无头渲染 20→40 张卡，与可见窗口一致；裸无头 0 张**。

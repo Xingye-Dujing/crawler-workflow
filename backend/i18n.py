@@ -1748,9 +1748,17 @@ _ZH = {
     'run.nodeStopped': '节点 {nid} 已按「停止」结束：本次保留 {n} 行',
     'run.finished.stopped': '，{n} 个被停止',
     'crawl.chromeMissing': (
-        '本机没有可用的 Chrome，采集打不开浏览器。安装 Chrome，或在「设置 → 浏览器路径」里指向它的 chrome.exe'
+        '本机没有可用的 Chrome，采集打不开浏览器。安装 Chrome，'
+        '或在「设置 → 浏览器路径」里指向它（本系统的可执行名：{browser}）'
     ),
     'crawl.browserBinaryMissing': '设置里的浏览器路径不存在：{path}。改正它，或清空让程序自己找 Chrome',
+    'crawl.disguiseUnreadable': (
+        '无头浏览器的伪装没有生效：读不到自己的 User-Agent（{err}）。'
+        '这次将以「裸无头」继续，部分站点会给出一张没有内容的空页'
+    ),
+    'crawl.disguisePartial': (
+        '无头浏览器的伪装只应用了一部分（{err}）。这次可能仍以无头指纹被站点识别，行数偏少时先按这条排查'
+    ),
     'crawl.driverMissing': (
         '设置里的 chromedriver 路径不存在：{path}。'
         '它多半是与当前 Chrome 版本不匹配而失效了：换成匹配的驱动，'
@@ -4046,10 +4054,18 @@ _EN = {
     'run.finished.stopped': ', {n} stopped',
     'crawl.chromeMissing': (
         'No Chrome on this machine, so a crawl has no browser to open. Install Chrome, or point '
-        'Settings → browser path at its chrome.exe'
+        'Settings → browser path at it (the executable name on this system is {browser})'
     ),
     'crawl.browserBinaryMissing': (
         'The configured browser path does not exist: {path}. Correct it, or clear it and let the app find Chrome'
+    ),
+    'crawl.disguiseUnreadable': (
+        'The headless disguise did not take: this browser could not read back its own User-Agent ({err}). '
+        'This run continues as a bare headless Chrome, and some sites answer that with a page of nothing'
+    ),
+    'crawl.disguisePartial': (
+        'The headless disguise was only partly applied ({err}). '
+        'This run may still be recognised as headless — check here first when a crawl comes back short'
     ),
     'crawl.driverMissing': (
         'The configured chromedriver path does not exist: {path}. It usually went stale against a Chrome update — '

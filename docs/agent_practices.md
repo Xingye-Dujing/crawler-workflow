@@ -707,6 +707,16 @@ message.
   new optional runtime imported by product code forces this argument instead of reddening CI by
   surprise. `mitmproxy`/`pyarrow`/`hdbscan`/`umap-learn` are declared optional but never imported by
   name (they are probed as executables or reached through pandas), and are therefore NOT exempted.
+- **Fixing one step of a pipeline does not prove the next step ever ran.** Once both pylint tiers
+  passed on the runner, CI reached the **fast tier for the first time in this repository's history**
+  and reported **27 failures** (run 40461763819) that were all green on the box that wrote them. The
+  five shapes found: a stub that patches the torch pipeline while the product now loads ONNX
+  (13 × `TestBertMode`); a byte-SHA pin on a vendored `.js` that checkout re-writes line endings for;
+  a `main()` that correctly refuses when `upx` is not on `PATH` while its test asserts exit 0; a
+  subprocess whose `stdout` came back `None`; and one refusal test that reads a machine-local path.
+  The rule is the same one twice: **a green step nobody has ever seen run is a claim, not a gate** —
+  so each of those is fixed by making the *test ask the machine* (probe the runtime, pass the tool
+  path, normalize what is compared), never by widening the assertion.
 - **A wrapper that reports the exit code is part of the gate.** A background command ending in `echo done`, or piping
   the checker through `tail`, reports 0 even when the checker failed — the measured exit status must be the shell's
   last one and the evidence must be the checker's own summary line. The same trap exists one layer up: a redirect to
@@ -1011,7 +1021,8 @@ message.
   drawn anyway: ECharts paints an empty frame and the user exports it as a result. `applyEchartsOption` now
   draws the refusal sentence *through the live instance* (`drawChartRefusal`), so the panel keeps an instance to
   resize and dispose and the saved PNG/SVG contains the reason.
-- **Tests may not inherit the machine's browser set.** `_create_driver` now refuses when Chrome is missing,
+- **Tests may not inherit the machine's browser set.** `crawlers/core/browser.py::resolve_browser` now
+  refuses when Chrome is missing,
   which would make every crawler case depend on what the runner has installed; `tests/conftest.py` pins one
   answer (`machine_has_a_browser`) and the tests *about* that refusal override it. Do not "fix" this by patching
   `os.path.isfile` — that is process-wide, and the cookie/profile fixtures read the same function. Existence
@@ -1112,6 +1123,18 @@ a real defect on at least one of the three, not a style preference. The rules ar
   quoted `.exe` — skips docstrings and trailing comments (prose *about* taskkill is not a call to it), and
   re-asserts that every exempted file still contains an artifact. An allowlist entry that exempts nothing is
   a lie waiting to be read.
+- **A refusal sentence that names a Windows file is itself a Windows fact.** `crawl.chromeMissing` told every
+  system to point 设置 at 「它的 chrome.exe」, and `disguise_headless` sent `'platform': 'Win32'` to
+  `Network.setUserAgentOverride` — both survived for months because the zh/en parity check compares the two
+  languages to *each other*, so a sentence that is wrong on Linux is wrong twice and reads consistent. The
+  executable name now comes from `machine_deps.chrome_executable_name()` (read off the same
+  `CHROME_PATH_NAMES` table the probe uses, so a refusal can never name a file this machine would not have
+  found), and the platform token from `NAVIGATOR_PLATFORMS` — 'Win32' on Windows is what a real 64-bit
+  Chrome there reports, so the fix is *per-OS*, not a removal. On Linux the old pair was actively producing
+  the mismatch the disguise exists to eliminate: the UA is read back off this very Chrome and keeps
+  `X1; Linux x86_64`, while the override answered `Win32`. Deleting `i18n.py` from `WINDOWS_TABLES` in the
+  same change is what makes that stick: the exemption's stated reason had become false, and
+  `test_each_exempted_file_actually_holds_a_windows_artifact` is the test that says so.
 - **What this box cannot prove.** No Linux runtime exists here (no docker, no WSL — the user's decision), so
   these changes are landed as code plus platform-independent tests. **Starting the app on Linux/macOS is an
   unverified surface**: a crawl on a real container, a `fandol` compile of a paper figure, and the snap /

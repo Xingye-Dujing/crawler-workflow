@@ -21,7 +21,8 @@ import crawl_capabilities as capabilities
 from config import Config
 from crawlers import crawler_class, get_crawler
 from crawlers.backends.catbus import CatbusCrawler
-from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET
+from crawlers.core.faults import CrawlerStopped
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label

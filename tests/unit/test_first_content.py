@@ -24,7 +24,8 @@ from test_crawler_base import bare
 
 import crawlers.core.crawler as base_module
 from config import Config
-from crawlers.core.crawler import Crawler, CrawlerStopped, PageNotArrivedError
+from crawlers.core.crawler import Crawler
+from crawlers.core.faults import CrawlerStopped, PageNotArrivedError
 from crawlers.engine.wall import classify
 
 pytestmark = pytest.mark.unit

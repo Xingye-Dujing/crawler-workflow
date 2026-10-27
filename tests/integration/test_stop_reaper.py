@@ -28,7 +28,7 @@ import pytest
 from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
-from crawlers.core.crawler import CrawlerStopped, DeadDriver
+from crawlers.core.faults import CrawlerStopped, DeadDriver
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 

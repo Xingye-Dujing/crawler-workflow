@@ -29,7 +29,8 @@ only to undo the mixing.
 import logging
 import re
 
-from crawlers.core.crawler import UNDER_TARGET, Crawler, PageNotArrivedError, as_index
+from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
+from crawlers.core.faults import PageNotArrivedError
 from crawlers.engine.counters import first_int, has_count, parse_count
 from i18n import t
 

@@ -16,8 +16,9 @@ import pytest
 
 import crawl_capabilities as capabilities
 from crawl_capabilities import REQUIREMENTS, machine_requirements, mode_blocker, requirement_met
+from crawlers.core import browser
 from engine.workflow import WorkflowEngine
-from i18n import MESSAGES
+from i18n import MESSAGES, t
 from services import latex_charts, visualizer
 from services.latex_compile import XELATEX_PATHS
 from utils import machine_deps, procs
@@ -31,15 +32,17 @@ REAL_FIND_CHROME = machine_deps.find_chrome
 BACKEND = Path(__file__).resolve().parents[2] / 'backend'
 
 #: Where a Windows spelling is a legitimate fact about Windows: the per-OS tables, the process reaper
-# (whose Windows branch IS ``taskkill``), the harvest stack that only exists on a desktop, ``i18n`` (a
-# refusal that tells the user to point at ``chrome.exe`` is naming a file they must see, not building a
-# path), and the download blocklist that refuses to hand out an executable.
+# (whose Windows branch IS ``taskkill``), the harvest stack that only exists on a desktop, and the
+# download blocklist that refuses to hand out an executable. ``i18n.py`` used to be in this list
+# because a 「没有 Chrome」 sentence told the user to point 设置 at ``chrome.exe``; the name now comes
+# from :func:`utils.machine_deps.chrome_executable_name`, so the catalogue holds no Windows artifact
+# and the exemption would have been a lie — which is what
+# :meth:`TestTheRuleHasTeeth.test_each_exempted_file_actually_holds_a_windows_artifact` exists to catch.
 WINDOWS_TABLES = {
     Path('utils/machine_deps.py'),
     Path('utils/procs.py'),
     Path('services/latex_compile.py'),
     Path('crawlers/platforms/hongguo/harvest.py'),
-    Path('i18n.py'),
     Path('services/export_browser.py'),
 }
 
@@ -51,6 +54,29 @@ _WINDOWS_ARTIFACT = re.compile(
 )
 
 _DOC_TRIPLE = re.compile('"""')
+
+
+class _CdpRecorder:
+    """A driver that remembers what it was told, so a CDP claim is read back rather than trusted.
+
+    The disguise's whole product is two ``execute_cdp_cmd`` calls; asserting on their arguments is the
+    only way to know which platform token and which user agent a session on THIS system would report.
+    """
+
+    def __init__(self, user_agent: str):
+        self.user_agent = user_agent
+        self.calls: list[tuple[str, dict]] = []
+
+    def execute_script(self, _script: str) -> str:
+        return self.user_agent
+
+    def execute_cdp_cmd(self, name: str, params: dict) -> None:
+        self.calls.append((name, params))
+
+    def param_for(self, name: str) -> dict:
+        matches = [params for called, params in self.calls if called == name]
+        assert matches, f'the disguise never sent {name}: {[called for called, _ in self.calls]}'
+        return matches[0]
 
 
 def _code_lines(text: str) -> list[str]:
@@ -130,6 +156,7 @@ class TestThePlatformTablesAreComplete:
         for name, table in (
             ('CHROME_PATHS', machine_deps.CHROME_PATHS),
             ('CHROME_PATH_NAMES', machine_deps.CHROME_PATH_NAMES),
+            ('NAVIGATOR_PLATFORMS', machine_deps.NAVIGATOR_PLATFORMS),
             ('XELATEX_PATHS', XELATEX_PATHS),
             ('CTEX_FONTSET', latex_charts.CTEX_FONTSET),
             ('CJK_FAMILY', latex_charts.CJK_FAMILY),
@@ -137,6 +164,40 @@ class TestThePlatformTablesAreComplete:
         ):
             assert set(table) == set(machine_deps.REMEDY_PLATFORMS) or name == 'REQUIREMENT_LABELS', name
         assert set(capabilities.REQUIREMENT_LABELS) == set(REQUIREMENTS)
+
+    def test_the_headless_disguise_reports_the_platform_it_is_running_on(self, monkeypatch):
+        """``Win32`` is what a real Windows Chrome says — and only what a Windows Chrome says.
+
+        The disguise reads the UA back off this very browser and strips the ``HeadlessChrome`` token,
+        so on a Linux server the UA keeps ``X1; Linux x86_64`` while a hardcoded ``Win32`` override
+        would answer the platform half differently. #148's measurement is that an invented value is
+        *itself* the tell, so this asserts the CDP call the product actually makes — not just the
+        table it reads.
+        """
+        answers = {system: machine_deps.navigator_platform(system) for system in machine_deps.REMEDY_PLATFORMS}
+        assert answers == {'win32': 'Win32', 'linux': 'Linux x86_64', 'darwin': 'MacIntel'}, answers
+        assert len(set(answers.values())) == 3, 'three systems, one value: the table is decoration'
+        monkeypatch.setattr(machine_deps.sys, 'platform', 'linux')
+        recorder = _CdpRecorder(
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/148.0.0.0 Safari/537.36'
+        )
+        browser.disguise_headless(recorder)
+        override = recorder.param_for('Network.setUserAgentOverride')
+        assert override['platform'] == 'Linux x86_64', recorder.calls
+        assert 'HeadlessChrome' not in override['userAgent'], 'the UA half is the reason this exists'
+
+    def test_a_missing_chrome_is_named_by_the_executable_this_system_has(self, monkeypatch):
+        """The remedy inside a 「没有 Chrome」 sentence is the running OS's own file name.
+
+        Telling a Linux user to point 设置 at ``chrome.exe`` is a refusal nobody can act on, and the
+        zh/en parity check cannot see it because both languages said the same Windows thing — the
+        fourth shape of "a computed key nobody enumerated".
+        """
+        for system, expected in (('win32', 'chrome.exe'), ('linux', 'google-chrome'), ('darwin', 'google-chrome')):
+            assert machine_deps.chrome_executable_name(system) == expected, system
+        monkeypatch.setattr(machine_deps.sys, 'platform', 'linux')
+        message = t('crawl.chromeMissing', browser=machine_deps.chrome_executable_name())
+        assert 'chrome.exe' not in message and 'google-chrome' in message
 
     def test_platform_name_normalizes_the_spellings_python_actually_reports(self):
         assert machine_deps.platform_name('linux5') == 'linux'

@@ -35,7 +35,8 @@ import logging
 import uuid
 
 from crawlers.commenting.protocol import DEAD, OK
-from crawlers.core.crawler import UNDER_TARGET, Crawler, CrawlerStopped
+from crawlers.core.crawler import UNDER_TARGET, Crawler
+from crawlers.core.faults import CrawlerStopped
 from i18n import t
 from services import catbus_bridge as bridge
 
