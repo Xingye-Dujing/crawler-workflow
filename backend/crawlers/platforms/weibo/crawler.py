@@ -906,21 +906,5 @@ class WeiboCrawler(Crawler):
             logger.info(t('crawl.weibo.max_page', n=max_page))
         return max_page
 
-    # ─── compatibility shims (kept for callers outside this module) ───
-
-    def _extract_text(self, el, sel, default=''):
-        return self._text_of(el, sel, default) or default
-
-    def _extract_number(self, text):
-        return parse_count(text)
-
-    def _get_publish_time(self, card):
-        return self._text_of(card, '.from a')
-
-    def _scrape_page(self):
-        """Scrape every card of the page that is loaded right now."""
-        rows, _cards = self._harvest(self.DEFAULT_TARGET)
-        return rows
-
     def get_detail(self, url: str) -> dict | None:
         return None

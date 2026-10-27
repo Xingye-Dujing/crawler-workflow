@@ -367,13 +367,21 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   断言，下次真发生时会自己说清。⑤ 红果播放器那条删了 stack 接缝，等于默认 mitmproxy/uiautomation 已装；
   现在用例自己说"栈在"，另加一条钉住 CI 真撞到的**栈缺失拒绝**（点名两包且不得怪播放器）。
 - **下一条待做（顺序，别插队）**：
-  1. 推 #38 这批，然后 `gh run view --log-failed` 复验 runner 是否 0 failed；仍有失败就继续按类问机器。
-  2. Stage 1 继续：douyin 已走两步——纯规则进 `douyin/rows.py`（1,032 → 913）、overlay 协议进
-     `douyin/overlay.py` mixin（913 → **760**）。再拆 `platforms/weibo/crawler.py`(926)、
-     `platforms/hongguo/harvest.py`(1,825)。
-  3. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
+  1. ~~#38 让 CI 的 fast 档在 runner 上全绿~~ **已闭环**（`2d688ae`/`799826e`/`a4a6a32`/`768d082` 全绿，
+     browser job 的异步接缝也已按 DOM 修好）。
+  2. Stage 1 继续（weibo 926 行，已量化）：**死代码已删**——`weibo/crawler.py:909` 那句
+     "compatibility shims (kept for callers outside this module)" 是假的（四个方法在全仓库各只出现 1 次，
+     就是自己的定义；搜到的 `_get_publish_time` 命中是知乎同名方法），910 行。
+     下一步抽 `weibo/rows.py`：`_normalise_weibo_time`/`_strip_html`/`_author_topics`/`_page_url` 外部零引用，
+     先搬这四个；`_as_int`/`_attr` 的"外部引用数"是同名方法撞名（别的方法也叫这个），
+     **必须做带包名的核对**才能动——不要用那个模糊数字下手。
+  3. Stage 1 继续：`platforms/hongguo/harvest.py`(1,825) 三段（会话/进程/解析）。
+  4. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
      迁 `capabilities/platforms/`（Stage 3 的落点，先把声明放好）。
-  4. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。
+  5. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。
+  6. 两条一直欠着的证据项：**桌面 EXE 未重建**（`core/browser.py`、`douyin/*` 等新模块要下一次
+     `desktop/build_windows.ps1` 才进包）；三维"平台→引擎→功能"选择器仍没有**专门的真浏览器布局用例**。
+     live_quick / live_site 按用户决定不跑（要跑须在场并先问清在哪张网络）。
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **仍然未验证/未跑（不许改口）**：桌面 EXE 未重建（新前端/新模块要下一次
