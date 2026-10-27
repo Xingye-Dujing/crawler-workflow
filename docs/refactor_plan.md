@@ -245,10 +245,16 @@ backend/
    （Ollama daemon、CatBus 适配器私有 checkout、冻结 exe 的双击验收、花真实账号的 live 两档）在
    `.github/workflows/ci.yml` 头部写死，不允许用 `continue-on-error` 或跳过把它们伪装成绿。
 
-**CI 现状（2026-10-27 实测，别看本地文件就下结论）**：远端 `crawler-github/main` 停在 `27bed25`（10-16），
-落后本地 116 个提交；**推上去那份 ci.yml 只有 ruff + fast，没有 pylint、没有设备档**。本地这份已加
-`browser` job（`-m integration` + `CRAWLER_REQUIRE_BROWSER=1`）与作业级 `CRAWLER_REQUIRE_NODE=1`，
-但**没有被任何一次真实运行证明过**（本机无 `gh`，看不到历史运行结果）。所以"CI 涵盖了"在推动之前只是一句关于文件的断言。
+**CI 现状（2026-10-27 用 GitHub API 实测，不是读本地文件猜）**：仓库是公开的，运行历史**未认证即可读**
+（`curl https://api.github.com/repos/<owner>/<repo>/actions/runs`）。可见记录只有 **1 条**：
+run #20、2026-10-15、push 的正是今天仍是远端头的 `27bed25`、结论 **success**，job 只有一步链
+`fast`：Set up → checkout → setup-python → venv → 装依赖 → **Lint → Format → Fast tier**。
+也就是说 **两档 pylint 从未在 CI 上跑过一步**（它们是 `96f79dd` 才加进本地文件的，而那次连同之后
+116 个提交都没推），设备档更不用提。`run_number` 是 20 而可见只有 1 条 ⇒ 更早 19 次的记录已不在
+（历史被清理），不能拿"曾经绿过"当证据。
+本地这份 ci.yml 已加 `browser` job（`-m integration` + `CRAWLER_REQUIRE_BROWSER=1`）与作业级
+`CRAWLER_REQUIRE_NODE=1`，但**没有被任何一次运行证明过**。所以"CI 涵盖了"在推动之前只是一句关于文件的断言。
+
 
 7. 文档与代码同构：README 结构图、`docs/ARCHITECTURE.md`、`docs/development.md` 文件树、
    `docs/crawler_rules.md` 的 file:line 证据全部指向新位置；不留旧路径。
@@ -311,7 +317,10 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 1. **浏览器交接窗口要不要在产品侧重试**：真实使用形状是「停止一次采集 → 立刻对同一平台再点运行」，
    可能吃到 `crawl.browserStartFailed`。测试侧已有界重试；改 `_create_driver` 属行为变更，需真机验证。
 2. **是否推送让 CI 真跑**：远端停在 10-16、落后 116 个提交，那份 ci.yml 只有 ruff + fast（见 §4 末）。
-   需要指明推哪个远端，并预期第一次可能红（新 browser job 与两档 pylint 都是首次真跑）。
+   读历史不需要登录（仓库公开，已用 API 核实）；**推送与看私有 job 日志需要登录**
+   （`gh` 已装 v2.103.3，尚未 `gh auth login`）。推送是共享状态动作，需要你指明推哪个远端
+   （`crawler-github` / `gitee` / 两个），并预期第一次可能红（新 browser job 与两档 pylint 都是首次真跑）。
+
 
 - 不引入打包器/框架/ES modules/依赖注入容器；**也不为拆而拆**（D4 的反面同样算失败：一堆互相传话的小文件）。
 - 不做 re-export 兼容层、不保留旧路径别名；一次搬迁一次改完。
