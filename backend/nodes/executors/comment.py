@@ -103,7 +103,8 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     rows headless (zhihu comments 5/5, 2026-09-26), so no comment panel forces a
     window or rewrites the record.
     """
-    from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
+    from crawlers.commenting.protocol import BLOCKED, DEAD, OK
+    from crawlers.commenting.session import CommentSession
     from services.part_writer import PartWriter, safe_stem
 
     params = node.get('params') or {}
@@ -314,16 +315,16 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         # registered browser that nothing here would ever close.
                         execution_state['active_crawlers'].add(crawler)
             _crawler, session = sessions[kind]
-            # The adapter is named after the platform the router picked, so adding
-            # a platform to ``utils.helpers._COMMENT_DOMAINS`` without writing its
-            # ``crawl_<platform>`` is a refusal here rather than the old silent
-            # fallback — which handed every unlisted link to the Zhihu reader and
-            # reported whatever that came back with as the site's comments.
-            adapter = getattr(session, f'crawl_{kind}', None)
-            if adapter is None:
-                raise ValueError(t('comment.noAdapter', platform=kind, url=url))
+            # One dispatch, one surface: every walker — the browser session, the CatBus backend, the
+            # 红果 harness — answers ``walk(platform, url, limit)``, and each refuses a platform it has
+            # no adapter for BY NAME. The engine used to build the method name out of the routing key
+            # (``getattr(session, f'crawl_{kind}')``) and check for ``None`` here, which pushed the
+            # "does this backend speak this site?" question into an attribute lookup and made the
+            # CatBus class synthesise methods to stay reachable. Adding a platform to
+            # ``utils.helpers._COMMENT_DOMAINS`` without writing its walk is still a refusal, just one
+            # the walker states itself.
             skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
-            rows, status = adapter(url, limit)
+            rows, status = session.walk(kind, url, limit)
             counts[status] = counts.get(status, 0) + 1
             if (
                 status != OK

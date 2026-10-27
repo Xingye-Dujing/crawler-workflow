@@ -549,7 +549,18 @@ BARE_NAVIGATIONS = {
     # there is no slow renderer to outwait, no first-run dialog to dismiss, no arrival to
     # account for. Cookie planting moved onto the shared re-drive, so it left this table.
     'backend/crawlers/core/crawler.py': 2,
-    'backend/crawlers/commenting/session.py': 7,
+    # One per platform, and it is the walk's own first page: the comment walks enter a link
+    # (or weibo.com, to be same-origin for its JSON) before reading. They moved here from
+    # ``commenting/session.py`` on 2026-10-27 when each platform's walk went to its own
+    # package — the count is the same seven, now spelled out per site instead of hidden in
+    # one engine file.
+    'backend/crawlers/platforms/bilibili/comments.py': 1,
+    'backend/crawlers/platforms/douyin/comments.py': 1,
+    'backend/crawlers/platforms/twitter/comments.py': 1,
+    'backend/crawlers/platforms/weibo/comments.py': 1,
+    'backend/crawlers/platforms/xiaohongshu/comments.py': 1,
+    'backend/crawlers/platforms/youtube/comments.py': 1,
+    'backend/crawlers/platforms/zhihu/comments.py': 1,
     'backend/crawlers/platforms/wechat/crawler.py': 1,
     'backend/crawlers/platforms/zhihu/crawler.py': 2,
 }

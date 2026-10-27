@@ -16,7 +16,8 @@ the counters that name themselves in the DOM. Note the deliberate absence: a dou
 
 import pytest
 
-from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
+from crawlers.commenting.protocol import BLOCKED, DEAD, OK
+from crawlers.commenting.session import CommentSession
 from crawlers.platforms.douyin.crawler import DouyinCrawler, douyin_id
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
@@ -97,7 +98,7 @@ def test_comments_scroll_past_the_first_screen(live_crawler):
             'either the profile stopped returning live videos or 评论数 is no longer being read'
         )
         session = CommentSession(crawler.driver, log=print, nap=lambda s: None)
-        comments, status = session.crawl_douyin(link, limit=40)
+        comments, status = session.walk('douyin', link, limit=40)
     finally:
         crawler.close()
     assert status in (OK, BLOCKED), f'douyin comment crawl ended as {status} on {link}'
@@ -154,7 +155,7 @@ def test_a_link_that_is_not_a_video_is_dead(live_crawler):
     crawler = live_crawler('douyin', headless=False)
     try:
         session = CommentSession(crawler.driver, log=print, nap=lambda s: None)
-        rows, status = session.crawl_douyin('https://www.douyin.com/jingxuan', 5)
+        rows, status = session.walk('douyin', 'https://www.douyin.com/jingxuan', 5)
     finally:
         crawler.close()
     assert rows == [] and status == DEAD

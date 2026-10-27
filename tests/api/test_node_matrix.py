@@ -1296,7 +1296,7 @@ class TestCommentNodeFilesAndLimits:
                 # reading pages behind a run the user had already ended.
                 assert callable(abort), 'the comment engine was never given a stop check'
 
-            def crawl_zhihu(self, url, limit):
+            def walk(self, platform, url, limit):
                 type(self).seen.append((url, limit))
                 return [{'文章URL': url, '评论内容': f'{url}-1'}, {'文章URL': url, '评论内容': f'{url}-2'}], 'ok'
 
@@ -1396,7 +1396,7 @@ class TestCommentNodeRecrawl:
             def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 pass
 
-            def crawl_zhihu(self, url, limit):
+            def walk(self, platform, url, limit):
                 type(self).calls += 1
                 return [{'文章URL': url, '评论内容': f'{url}-甲'}, {'文章URL': url, '评论内容': f'{url}-乙'}], 'ok'
 
@@ -1743,15 +1743,9 @@ class TestFeedSourceFromUpload:
             def __init__(self, driver, log=None, **kwargs):
                 pass
 
-            def __getattr__(self, name):
-                if not name.startswith('crawl_'):
-                    raise AttributeError(name)
-
-                def crawl(url, limit):
-                    seen.append(url)
-                    return [{'评论ID': url, '评论内容': '好'}], 'ok'
-
-                return crawl
+            def walk(self, platform, url, limit):
+                seen.append(url)
+                return [{'评论ID': url, '评论内容': '好'}], 'ok'
 
         monkeypatch.setattr(comments_module, 'CommentSession', _Session)
 
@@ -1761,7 +1755,6 @@ class TestFeedSourceFromUpload:
             def close(self):
                 pass
 
-        monkeypatch.setattr(comments_module, 'CommentSession', _Session)
         from nodes.executors import comment as comment_exec
 
         def make(*a, **k):

@@ -11,8 +11,8 @@ half costs it nothing: no profile is claimed, ``driver`` stays ``None``, and no 
 cell returns and which of those columns identify a row are all read out of the adapter's own manifest
 (:mod:`services.catbus_bridge`), so the day CatBus maps another site's search, comments or board, the
 panel offers it, the node crawls it and the watermark keys it by that site's own identity column —
-with no branch added in this file. The only per-platform fact here is the *method name* the comment
-engine looks up, and even that is synthesised from the manifest.
+with no branch added in this file. Nothing in this class names a platform: the comment walk asks the
+manifest the same cell question the panel does.
 
 Three things it does NOT pretend:
 
@@ -40,10 +40,6 @@ from i18n import t
 from services import catbus_bridge as bridge
 
 logger = logging.getLogger(__name__)
-
-#: The comment engine reaches an adapter by ``getattr(session, f'crawl_{platform}')``. That prefix is
-# the one protocol fact this class knows about its caller.
-_COMMENT_PREFIX = 'crawl_'
 
 #: Fields that CHANGE WHAT IS COLLECTED. CatBus keeps unknown parameters on purpose (the adapter is
 #: shared with other callers), so a stored condition it does not consume would run as if it had: a
@@ -216,20 +212,19 @@ class CatbusCrawler(Crawler):
 
     # ─── the comment engine's adapter ─────────────────────────────────────────────────────────
 
-    def __getattr__(self, name: str):
-        """Synthesise ``crawl_<platform>``, the name the comment engine looks an adapter up by.
+    def walk(self, platform: str, url: str, limit: int = 0) -> tuple:
+        """One article's comments, answered from the manifest — the surface :class:`CommentSession` has.
 
-        Declaring one method per platform would put a list of sites in this file — a second opinion
-        about what the backend supports, and the kind that falls behind. So the name is answered from
-        the manifest: a platform CatBus has mapped for comments walks through here, and one it has not
-        raises ``AttributeError`` exactly as a missing method would, which lands on the engine's named
-        ``comment.noAdapter`` refusal rather than a silent fallback.
+        The engine used to look this up as ``getattr(session, f'crawl_{platform}')``, which forced a
+        synthesised method name onto a class that must not hold a list of platforms. Asking the
+        manifest directly keeps that rule (which cells exist is CatBus's answer, never a Python table)
+        and drops the string-built attribute: a platform the adapter has not mapped for comments
+        refuses by name here, exactly as the panel refused it before this session was ever built.
         """
-        if name.startswith(_COMMENT_PREFIX):
-            platform = name[len(_COMMENT_PREFIX) :]
-            if platform and bridge.supports(platform, 'comments'):
-                return lambda url, limit=0: self.crawl_comments(platform, url, limit)
-        raise AttributeError(f'{type(self).__name__} object has no attribute {name!r}')
+        if not bridge.supports(platform, 'comments'):
+            _state, why = bridge.mode_state(platform, 'comments')
+            raise ValueError(t('catbus.refused', platform=platform, mode='comments', detail=why))
+        return self.crawl_comments(platform, url, limit)
 
     def crawl_comments(self, platform: str, url: str, limit: int = 0) -> tuple[list, str]:
         """One article's comments, in its own process.

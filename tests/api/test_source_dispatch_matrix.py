@@ -16,7 +16,7 @@ What is asserted is the routing and the arguments, per pair:
 
 Two of those legs are not the same code path, and the file follows that: a ``comments`` mode is not
 a crawler method at all — the executor routes it to ``_execute_comment_node``, which drives
-``CommentSession.crawl_<platform>`` over the node's pasted links — so those pairs assert they reach
+``CommentSession.walk(platform, …)`` over the node's pasted links — so those pairs assert they reach
 *that* engine with their own links and never touch the crawler. The third test then checks, for every
 pair, that the name the matrix points at exists where the executor will look for it.
 
@@ -324,24 +324,20 @@ def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkey
     seen = []
 
     class _Session:
-        """The engine's contract: one `crawl_<platform>(url, limit)` per platform.
+        """The engine's contract: the session answers ``walk(platform, url, limit)``.
 
-        `_execute_comment_node` looks that adapter up by name and refuses when it is
-        missing, so recording WHICH adapter answered is part of the assertion.
+        One method for every platform, exactly like the real ``CommentSession``: recording WHICH
+        platform it was asked about is the assertion, because the dispatch used to be a
+        string-built attribute name (``crawl_<platform>``) and a double with a ``__getattr__``
+        could not tell a routing mistake from a working adapter.
         """
 
         def __init__(self, driver, log=None, **kwargs):
             self._log = log
 
-        def __getattr__(self, name):
-            if not name.startswith('crawl_'):
-                raise AttributeError(name)
-
-            def crawl(url, limit):
-                seen.append((name, url, limit))
-                return [{'评论ID': 'c1', '评论内容': '很好', '文章URL': url}], 'ok'
-
-            return crawl
+        def walk(self, platform, url, limit):
+            seen.append((platform, url, limit))
+            return [{'评论ID': 'c1', '评论内容': '很好', '文章URL': url}], 'ok'
 
     monkeypatch.setattr(comments_module, 'CommentSession', _Session)
     _patch_harness(monkeypatch, seen)
@@ -354,8 +350,8 @@ def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkey
     assert rows, f'{platform}/{mode_key} returned no comment rows'
     assert recorder == [], f'{platform}/{mode_key} also ran a crawler method: {recorder}'
     assert seen, f'{platform}/{mode_key} never reached the comment engine'
-    adapter, url, _limit = seen[0]
-    assert adapter == f'crawl_{platform}', f'{platform} comments answered with {adapter}'
+    dispatched, url, _limit = seen[0]
+    assert dispatched == platform, f'{platform} comments answered with {dispatched}'
     assert url and url.strip() and platform in url.replace('x.com', 'twitter'), (
         f'{platform}/{mode_key} sent a link that is not its own: {url}'
     )
@@ -382,7 +378,7 @@ def test_a_harness_that_walked_short_names_the_gap(app_module, recorder, monkeyp
         def __init__(self, params=None, log=None, abort=None):
             pass
 
-        def crawl_hongguo(self, url, limit):
+        def walk(self, platform, url, limit):
             return [{'评论ID': 'c1', '评论内容': '很好', '文章URL': url}], 'ok'
 
         def close(self):
@@ -425,7 +421,7 @@ def test_a_drama_the_client_would_not_open_is_named_at_the_end(app_module, recor
         def __init__(self, params=None, log=None, abort=None):
             pass
 
-        def crawl_hongguo(self, url, limit):
+        def walk(self, platform, url, limit):
             return [{'评论ID': 'c1', '评论内容': '很好', '文章URL': url}], 'ok'
 
         def close(self):
@@ -470,7 +466,7 @@ def test_a_row_total_that_masks_a_short_episode_is_still_refused(app_module, rec
         def __init__(self, params=None, log=None, abort=None):
             pass
 
-        def crawl_hongguo(self, url, limit):
+        def walk(self, platform, url, limit):
             return [{'评论ID': f'c{i}', '评论内容': f'评{i}', '文章URL': url} for i in range(20)], 'ok'
 
         def close(self):
@@ -543,7 +539,7 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
         def __init__(self, params=None, log=None, abort=None):
             self.skipped_targets = []
 
-        def crawl_hongguo(self, url, limit):
+        def walk(self, platform, url, limit):
             seen.append(url)
             if url == urls[1] and state['skip_second']:
                 state['skip_second'] = False
@@ -599,21 +595,21 @@ def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key)
     """A handler the runtime cannot reach is a refusal at crawl time, not a fallback.
 
     Two names to look up, because a mode points at one of two places: a non-comment
-    handler is a METHOD ON THE CRAWLER CLASS, while 「评论」 is an ADAPTER ON THE COMMENT
-    ENGINE (`crawl_<platform>` on CommentSession). The second half matters more than
-    the first: `utils.helpers.platform_for` routes a link by domain, so a platform
+    handler is a METHOD ON THE CRAWLER CLASS, while 「评论」 is a WALK IN THE REGISTRY
+    (``crawlers.commenting.walks``, one entry per platform package). The second half matters
+    more than the first: `utils.helpers.platform_for` routes a link by domain, so a platform
     added there — or to the matrix — without writing its reader used to hand every
     unlisted link to the Zhihu parser, reporting whatever came back as that site's
-    comments. Now the executor raises `comment.noAdapter`; this test raises earlier,
+    comments. Now the walker raises `comment.noAdapter`; this test raises earlier,
     while nothing has been crawled.
     """
     from crawlers import CRAWLERS
-    from crawlers.commenting.session import CommentSession
+    from crawlers.commenting import walks
 
     mode = capabilities.mode_for(platform, mode_key)
     if mode.handler == 'comments':
-        target = getattr(CommentSession, f'crawl_{platform}', None)
-        named = f'CommentSession.crawl_{platform}()'
+        target = walks.walk_for(platform)
+        named = f'walks.walk_for({platform!r})'
         if target is None:
             # The second door a comments mode may legitimately point at: a platform
             # whose comment crawl runs no browser declares a harness factory on its
@@ -1051,8 +1047,8 @@ def _patch_harness(monkeypatch, seen, fail_url=None):
         def __init__(self, params=None, log=None, abort=None):
             self.params = params or {}
 
-        def crawl_hongguo(self, url, limit):
-            seen.append(('crawl_hongguo', url, limit))
+        def walk(self, platform, url, limit):
+            seen.append((platform, url, limit))
             if fail_url == url:
                 raise RuntimeError('wall at the fed article')
             return [{'评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
@@ -1068,7 +1064,7 @@ def _patch_harness(monkeypatch, seen, fail_url=None):
 
 
 def _patch_session(monkeypatch, seen, fail_url=None):
-    """The comment engine's adapter seam: record (adapter, url, limit) per link.
+    """The comment engine's adapter seam: record (platform, url, limit) per link.
 
     ``fail_url`` raises once — which is how the resume test below leaves a real
     stored cursor behind instead of pretending one exists.
@@ -1079,17 +1075,11 @@ def _patch_session(monkeypatch, seen, fail_url=None):
         def __init__(self, driver, log=None, **kwargs):
             self._log = log
 
-        def __getattr__(self, name):
-            if not name.startswith('crawl_'):
-                raise AttributeError(name)
-
-            def crawl(url, limit):
-                seen.append((name, url, limit))
-                if fail_url == url:
-                    raise RuntimeError('wall at the fed article')
-                return [{'评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
-
-            return crawl
+        def walk(self, platform, url, limit):
+            seen.append((platform, url, limit))
+            if fail_url == url:
+                raise RuntimeError('wall at the fed article')
+            return [{'评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
 
     monkeypatch.setattr(comments_module, 'CommentSession', _Session)
     _patch_harness(monkeypatch, seen, fail_url=fail_url)

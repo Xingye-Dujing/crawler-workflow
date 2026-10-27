@@ -15,18 +15,13 @@ import pytest
 # Imported as a module, not as ``t``: this file names a text column 文本, and a bare ``t`` would
 # collide with it in exactly the tests that compare console wording.
 import i18n
-from crawlers.commenting.session import (
-    BLOCKED,
-    DEAD,
-    OK,
-    CommentSession,
-    bilibili_reply_js,
-    bilibili_view_js,
-    parse_bilibili_comments,
-    parse_weibo_comments,
-    weibo_bid,
-)
+from crawlers.commenting.protocol import BLOCKED, DEAD, OK
+from crawlers.commenting.session import CommentSession
 from crawlers.engine.wall import looks_blocked, looks_like_login_page
+from crawlers.platforms.bilibili.comments import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
+from crawlers.platforms.weibo.comments import parse_weibo_comments, weibo_bid
+from crawlers.platforms.xiaohongshu import comments as xhs_comments
+from crawlers.platforms.zhihu import comments as zhihu_comments
 from engine.workflow import WorkflowEngine
 from utils.helpers import platform_for
 
@@ -283,29 +278,29 @@ class TestWeiboAdapter:
         page1 = json.dumps({'data': [{'user': {'screen_name': 'a'}, 'text': 't1'}], 'max_id': 99})
         page2 = json.dumps({'data': [{'user': {'screen_name': 'b'}, 'text': 't2'}], 'max_id': 0})
         session, driver = self._session([json.dumps({'id': '555'}), page1, page2])
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=0)
         assert status == OK and [r['评论内容'] for r in rows] == ['t1', 't2']
         assert any('max_id=99' in url for url in driver.fetched), 'must paginate with returned max_id'
 
     def test_limit_caps_rows(self):
         big = json.dumps({'data': [{'user': {}, 'text': f'c{i}'} for i in range(30)], 'max_id': 0})
         session, _ = self._session([json.dumps({'id': '555'}), big])
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=4)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=4)
         assert status == OK and len(rows) == 4
 
     def test_unreadable_post_is_dead(self):
         session, _ = self._session(['ERR network', 'never'])
-        rows, status = session.crawl_weibo('https://weibo.com/1/Deleted01', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/Deleted01', limit=0)
         assert rows == [] and status == DEAD
 
     def test_zero_comment_post_is_ok_not_dead(self):
         session, _ = self._session([json.dumps({'id': '555'}), json.dumps({'data': [], 'max_id': 0})])
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=0)
         assert rows == [] and status == OK, 'an article without comments is success with nothing, not an error'
 
     def test_bidless_url_is_dead(self):
         session, _ = self._session([])
-        rows, status = session.crawl_weibo('https://weibo.com/', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/', limit=0)
         assert rows == [] and status == DEAD
 
     def test_the_pages_own_number_names_a_shortfall(self):
@@ -323,7 +318,7 @@ class TestWeiboAdapter:
             fetch_queue=[json.dumps({'id': '555', 'comments_count': 30}), page1, page2], start_url='https://weibo.com/'
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=0)
         assert status == OK and len(rows) == 22, rows
         assert i18n.t('comment.weiboShort', declared=30, rows=22, gap=8) in said, said
 
@@ -343,7 +338,7 @@ class TestWeiboAdapter:
             start_url='https://weibo.com/',
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=0)
         assert status == OK and len(rows) == 1, rows
         assert i18n.t('comment.weiboReplay', page=3, rows=1) in said, said
         # The shortfall line is about the SITE, so it stays quiet when our own exit ended the walk.
@@ -365,7 +360,7 @@ class TestWeiboAdapter:
             fetch_queue=[json.dumps({'id': '555', 'comments_count': 3}), page], start_url='https://weibo.com/'
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=2)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=2)
         assert status == OK and len(rows) == 2, rows
         assert said == [], f'the ask was 2 and the site sent all 3 it has: {said}'
 
@@ -385,7 +380,7 @@ class TestWeiboAdapter:
             fetch_queue=[json.dumps({'id': '555', 'comments_count': 60}), page1], start_url='https://weibo.com/'
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        rows, status = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=0)
         assert status == OK and len(rows) == 20, rows
         assert i18n.t('comment.weiboFetchDied', page=1, rows=20, declared=60, gap=40) in said, said
         # One line, not two: the cursor never ran out, so the site-blaming sentence must not also print.
@@ -404,7 +399,7 @@ class TestWeiboAdapter:
             fetch_queue=[json.dumps({'id': '555', 'comments_count': 749}), big], start_url='https://weibo.com/'
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, _ = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=8)
+        rows, _ = session.walk('weibo', 'https://weibo.com/1/RhYNar0R1', limit=8)
         assert len(rows) == 8, rows
         assert said == [], f'the user set the number; nothing about the thread is missing: {said}'
 
@@ -453,7 +448,7 @@ class TestXhsAdapter:
         cards = [_xhs_card('甲', '很全的攻略'), _xhs_card('乙', '图一在哪')]
         driver = FakeDriver(pages={'.comment-item': cards})
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
         assert status == OK and len(rows) == 2
         assert rows[0]['评论者'] == '甲' and rows[1]['评论内容'] == '图一在哪'
         assert 'scrollBy' in ''.join(driver.scripts), 'must scroll to load more comments'
@@ -462,13 +457,13 @@ class TestXhsAdapter:
     def test_login_wall_page_is_blocked(self):
         driver = FakeDriver(body='登录后查看更多内容 扫码登录', pages={'.comment-item': []})
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
         assert rows == [] and status == BLOCKED
 
     def test_no_comments_is_ok(self):
         driver = FakeDriver(body='正常笔记', pages={})
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
         assert rows == [] and status == OK
 
     def test_a_budget_that_cuts_a_still_growing_panel_is_named(self):
@@ -477,12 +472,12 @@ class TestXhsAdapter:
         said = []
         driver = _GrowingXhsDriver(per_round=2, total=50)  # far more than 3 rounds can reach
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        previous = CommentSession.XHS_SCROLL_ROUNDS
+        previous = xhs_comments.SCROLL_ROUNDS
         try:
-            CommentSession.XHS_SCROLL_ROUNDS = 3
-            rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+            xhs_comments.SCROLL_ROUNDS = 3
+            rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
         finally:
-            CommentSession.XHS_SCROLL_ROUNDS = previous
+            xhs_comments.SCROLL_ROUNDS = previous
         assert status == OK
         assert len(rows) == 6, 'three rounds of two new comments each'
         assert i18n.t('comment.xhsPanelCapped', url='https://www.xiaohongshu.com/explore/x', rows=6, rounds=3) in said
@@ -493,12 +488,12 @@ class TestXhsAdapter:
         said = []
         driver = _GrowingXhsDriver(per_round=2, total=4)  # 2 rounds exhausts it, budget is 3
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        previous = CommentSession.XHS_SCROLL_ROUNDS
+        previous = xhs_comments.SCROLL_ROUNDS
         try:
-            CommentSession.XHS_SCROLL_ROUNDS = 3
-            rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+            xhs_comments.SCROLL_ROUNDS = 3
+            rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
         finally:
-            CommentSession.XHS_SCROLL_ROUNDS = previous
+            xhs_comments.SCROLL_ROUNDS = previous
         assert status == OK and len(rows) == 4, 'the panel emptied on its own before the third round'
         assert not any('xhsPanelCapped' in line or '滚满' in line for line in said), f'said: {said}'
 
@@ -507,7 +502,7 @@ class TestXhsAdapter:
         said = []
         driver = _GrowingXhsDriver(per_round=2, total=50)
         session = CommentSession(driver, log=said.append, nap=lambda s: None, abort=lambda: True)
-        rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
         assert status == OK
         assert len(rows) == 2, 'one round collected, then 停止'
         assert not any('滚满' in line for line in said), f'a user stop is not a budget cut: {said}'
@@ -539,7 +534,7 @@ class TestZhihuAdapter:
             panel_pages=[[_zh_row('陈博涵', '三亚最南所以火'), _zh_row('路人', '秦皇岛外打鱼船')]],
         )
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, status = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert status == OK and len(rows) == 2
         assert getattr(btn, 'clicked', False), 'comment panel must be opened'
         assert rows[0]['评论者'] == '陈博涵' and rows[0]['评论者主页'].endswith('/people/x')
@@ -557,7 +552,7 @@ class TestZhihuAdapter:
             panel_pages=[[_zh_row('甲', 'a', when='2019-08-15')]],
         )
         session = CommentSession(driver, nap=lambda s: None)
-        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert rows[0]['评论时间'] == '2019-08-15', 'the page names the moment; the row must carry it'
         assert rows[0]['点赞数'] == '', 'a column this crawler never reads may not publish a zero'
 
@@ -571,7 +566,7 @@ class TestZhihuAdapter:
             panel_pages=[[_zh_row('', '匿名的一条'), _zh_row('乙', '两条')]],
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert len(rows) == 2, 'an anonymous comment is still a comment the user asked for'
         assert rows[0]['评论者'] == ''
         assert i18n.t('comment.zhihuNoAuthor', n=1, total=2) in said
@@ -591,7 +586,7 @@ class TestZhihuAdapter:
             panel_pages=pages,
         )
         session = CommentSession(driver, nap=lambda s: None)
-        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert len(rows) == 12, f'the walk stopped while the panel was still filling: {len(rows)}'
         assert any('scrollTop' in script for script in driver.scripts), 'the container must be scrolled'
 
@@ -613,7 +608,7 @@ class TestZhihuAdapter:
             panel_pages=pages,
         )
         session = CommentSession(driver, nap=lambda s: None)
-        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert getattr(opener, 'clicked', False), 'the reply thread was never opened'
         assert [row['父楼层'] for row in rows] == ['', 1], rows
 
@@ -627,7 +622,7 @@ class TestZhihuAdapter:
             panel_pages=[[_zh_row('甲', '唯一一条')]],
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert len(rows) == 1
         assert i18n.t('comment.zhihuPanelShort', declared=261, rows=1) in said
 
@@ -641,25 +636,25 @@ class TestZhihuAdapter:
             panel_pages=endless,
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        previous = CommentSession.ZHIHU_PANEL_ROUNDS
+        previous = zhihu_comments.PANEL_ROUNDS
         try:
-            CommentSession.ZHIHU_PANEL_ROUNDS = 4
-            rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+            zhihu_comments.PANEL_ROUNDS = 4
+            rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         finally:
-            CommentSession.ZHIHU_PANEL_ROUNDS = previous
+            zhihu_comments.PANEL_ROUNDS = previous
         assert len(rows) == 4
         assert i18n.t('comment.zhihuPanelCapped', n=4, rows=4) in said
 
     def test_blocked_page_reports_blocked(self):
         driver = FakeDriver(body='您当前请求存在异常，暂时限制本次访问。40362', pages={})
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, status = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert rows == [] and status == BLOCKED
 
     def test_answers_without_comment_buttons_are_ok_empty(self):
         driver = FakeDriver(body='正常', pages={'button': [El('关注')]})
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
-        rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        rows, status = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert rows == [] and status == OK
 
     def test_limit_stops_panel_iteration(self):
@@ -670,7 +665,7 @@ class TestZhihuAdapter:
             panel_pages=[[_zh_row('甲', 'a'), _zh_row('乙', 'b')]],
         )
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 1)
+        rows, status = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 1)
         assert status == OK and len(rows) == 1
 
 
@@ -748,7 +743,7 @@ class TestBilibiliAdapter:
                 _bili_page([_bili_reply('300', '丙', '第三条')], is_end=True),
             ]
         )
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert status == OK and [r['评论内容'] for r in rows] == ['第一条', '第二条', '第三条']
         comment_calls = [u for u in driver.fetched if 'reply/main' in u]
         assert [u.split('next=')[1].split('&')[0] for u in comment_calls] == ['0', '2', '3']
@@ -764,14 +759,14 @@ class TestBilibiliAdapter:
                 _bili_page([row], next_cursor=4),
             ]
         )
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert status == OK and len(rows) == 1
         assert len([u for u in driver.fetched if 'reply/main' in u]) == 2, 'must stop once nothing is new'
 
     def test_sub_replies_land_under_their_parent_with_continued_floors(self):
         thread = _bili_reply('100', '甲', '主题', rcount=11, subs=[('101', '乙', ' +1'), ('102', '丙', '同问')])
         session, _driver = self._session([_bili_view(), _bili_page([thread], is_end=True)])
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert status == OK
         assert [r['评论者'] for r in rows] == ['甲', '乙', '丙']
         assert [r['楼层'] for r in rows] == [1, 2, 3]
@@ -781,7 +776,7 @@ class TestBilibiliAdapter:
 
     def test_closed_comment_section_is_an_answer_not_a_failure(self):
         session, driver = self._session([_bili_view(reply_total=0)])
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert rows == [] and status == OK
         assert not [u for u in driver.fetched if 'reply/main' in u], 'nothing to page once reply=0'
 
@@ -799,7 +794,7 @@ class TestBilibiliAdapter:
         seven = [_bili_reply(str(i)) for i in range(7)]
         driver = FakeDriver(fetch_queue=[_bili_view(reply_total=2194), _bili_page(seven, is_end=True)])
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, status = session.crawl_bilibili(url, limit=50)
+        rows, status = session.walk('bilibili', url, limit=50)
         assert status == OK and len(rows) == 7, (rows, status)
         assert i18n.t('comment.biliShort', url=url, rows=7, declared=2194) in said, (
             f'a 7-of-2194 clean end must name the gap, not complete silently: {said!r}'
@@ -816,7 +811,7 @@ class TestBilibiliAdapter:
         seven = [_bili_reply(str(i)) for i in range(7)]
         driver = FakeDriver(fetch_queue=[_bili_view(reply_total=7), _bili_page(seven, is_end=True)])
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        rows, status = session.crawl_bilibili(url, limit=50)
+        rows, status = session.walk('bilibili', url, limit=50)
         assert status == OK and len(rows) == 7
         assert i18n.t('comment.biliShort', url=url, rows=7, declared=7) not in said, (
             f'a 7-comment thread that returned all 7 must not be called short: {said!r}'
@@ -844,7 +839,7 @@ class TestBilibiliAdapter:
             (-799, BLOCKED),
         ):
             session, _driver = self._session([_bili_view(code=code)])
-            assert session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], expected), (
+            assert session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], expected), (
                 f'view code {code} must be {expected}'
             )
 
@@ -859,7 +854,7 @@ class TestBilibiliAdapter:
         """
         row = _bili_reply('100', '甲', '留着')
         session, _driver = self._session([_bili_view(), _bili_page([row], next_cursor=2), _bili_page([], code=-352)])
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert status == BLOCKED, 'a risk page mid-thread must back off, not report a finished crawl'
         assert [r['评论内容'] for r in rows] == ['留着'], 'what was collected before the wall is kept'
 
@@ -871,18 +866,18 @@ class TestBilibiliAdapter:
         be per-link DEAD (which never convicts the session), not OK.
         """
         session, _driver = self._session([_bili_view(reply_total=40), 'not json at all'])
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert rows == [] and status == DEAD, 'an unreadable first page is a dead link, not a closed section'
 
     def test_a_risk_control_page_never_reaches_the_api(self):
         driver = FakeDriver(body='当前请求存在异常，暂时限制访问', fetch_queue=[])
         session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert rows == [] and status == BLOCKED and driver.fetched == []
 
     def test_a_link_without_a_bv_id_is_dead(self):
         session, driver = self._session([_bili_view()])
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/', 0)
         assert rows == [] and status == DEAD and driver.fetched == []
 
     def test_limit_caps_the_table_not_the_pages(self):
@@ -890,19 +885,19 @@ class TestBilibiliAdapter:
         session, _driver = self._session(
             [_bili_view(), _bili_page(page1, next_cursor=2), _bili_page(page1[:19], next_cursor=3, is_end=True)]
         )
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 5)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 5)
         assert status == OK and len(rows) == 5
 
     def test_first_page_refusal_is_blocked_and_keeps_nothing(self):
         session, _driver = self._session([_bili_view(), json.dumps({'code': -509, 'data': None})])
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert rows == [] and status == BLOCKED
 
     def test_later_page_failure_keeps_the_earlier_rows(self):
         session, _driver = self._session(
             [_bili_view(), _bili_page([_bili_reply('100', '甲', '留着')], next_cursor=2), 'not json at all']
         )
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
         assert status == OK and len(rows) == 1
 
 

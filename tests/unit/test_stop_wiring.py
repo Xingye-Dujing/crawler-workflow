@@ -35,6 +35,15 @@ CRAWLERS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'crawlers'
 PREDICATES = {'walk_feed': 'stopped', 'walk_pages': 'alive'}
 
 
+def _base_name(base) -> str:
+    """A class's base as written: ``Protocol`` or ``typing.Protocol`` both name one thing."""
+    if isinstance(base, ast.Name):
+        return base.id
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    return ''
+
+
 def _walk_calls():
     """Every ``feed.walk_feed(…)`` / ``pager.walk_pages(…)`` call under crawlers/."""
     found = []
@@ -89,18 +98,21 @@ class TestWalkWiring:
 
     def test_the_audit_actually_found_the_walks_it_claims_to_check(self):
         calls = _walk_calls()
-        # Measured over the platform modules: zhihu/x/bilibili comment walks by feed,
-        # weibo and the comment pager by walk_pages. A lower count means the scan
-        # broke, and a broken scan is what makes a green "all wired" assertion empty.
-        # (bilibili.py was inside video.py until the #178 split; the walk moved file, it
-        # did not go away — this list tracks files, so it tracked the rename.)
+        # Measured over the platform modules: the timeline/author/board walks use feed, the
+        # comment pagers use walk_pages. A lower count means the scan broke, and a broken scan is
+        # what makes a green "all wired" assertion empty.
+        # (bilibili.py was inside video.py until the #178 split; the walks moved file, they did
+        # not go away — this list tracks files, so it tracked that rename too. On 2026-10-27 the
+        # X and YouTube COMMENT walks left ``commenting/session.py`` for their own platform
+        # packages, which is why those two names appear here instead of the engine's.)
         assert len(calls) >= 6, f'only {len(calls)} walk call sites found: {sorted({c[0] for c in calls})}'
         assert {
             'platforms/zhihu/crawler.py',
             'platforms/twitter/crawler.py',
             'platforms/bilibili/crawler.py',
             'platforms/weibo/crawler.py',
-            'commenting/session.py',
+            'platforms/twitter/comments.py',
+            'platforms/youtube/comments.py',
         } <= {c[0] for c in calls}
 
     def test_every_walk_asks_the_crawler_whether_it_may_stop(self):
@@ -170,9 +182,15 @@ class TestStopPredicateIsSingleDefinition:
                 continue  # the definition itself
             tree = ast.parse(path.read_text(encoding='utf-8'))
             for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef) and any(
-                    isinstance(item, ast.FunctionDef) and item.name == 'may_stop' for item in node.body
-                ):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                # A ``Protocol`` declares a boundary; it cannot answer anything. ``walks.WalkContext``
+                # spells out ``may_stop`` so a platform walk is caught in review when it reaches for a
+                # helper the session does not have — excluding that declaration by name (rather than
+                # by file) keeps the rule about the one thing it convicts: an IMPLEMENTATION.
+                if any(_base_name(base) in ('Protocol', 'RuntimeProtocol') for base in node.bases):
+                    continue
+                if any(isinstance(item, ast.FunctionDef) and item.name == 'may_stop' for item in node.body):
                     overrides.append(f'{path.name}:{node.name}')
         assert overrides == ['session.py:CommentSession'], (
             f'the comment engine is the only non-Crawler allowed to own the answer: {overrides}'

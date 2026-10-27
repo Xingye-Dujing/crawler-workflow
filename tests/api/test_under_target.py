@@ -22,6 +22,7 @@ Offline throughout: the crawler is a scripted stub, no browser, no network.
 import pytest
 
 import crawl_capabilities as capabilities
+import crawlers.commenting.protocol as _protocol  # the verdict constants live with the protocol
 import crawlers.commenting.session as _comments  # the module object, so tests can monkeypatch its crawler factory
 from crawlers.core.crawler import LICENSED_ENDS, UNDER_TARGET, Crawler
 from i18n import t
@@ -400,8 +401,8 @@ class _BlockingSession:
     def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
         self._owner = owner
 
-    def crawl_douyin(self, url, limit):
-        return [], _comments.BLOCKED
+    def walk(self, platform, url, limit):
+        return [], _protocol.BLOCKED
 
 
 def _comment_node():

@@ -20,8 +20,10 @@ The card payloads are the shapes measured on the live page, including the
 import pytest
 
 import crawlers.core.crawler as base_module
-from crawlers.commenting.session import OK, CommentSession, parse_twitter_replies
+from crawlers.commenting.protocol import OK
+from crawlers.commenting.session import CommentSession
 from crawlers.core.crawler import Crawler
+from crawlers.platforms.twitter.comments import parse_twitter_replies
 from crawlers.platforms.twitter.crawler import TwitterCrawler
 from i18n import t
 
@@ -252,7 +254,7 @@ class TestTimelineWalk:
 
 
 class TestReplies:
-    """``CommentSession.crawl_twitter`` — replies are the same walk, minus the root."""
+    """``platforms/twitter/comments.py::walk`` — replies are the same walk, minus the root."""
 
     @pytest.fixture
     def session_maker(self, monkeypatch):
@@ -278,7 +280,7 @@ class TestReplies:
         root = card_data(TWEET_A, text='the post itself')
         driver = FakeDriver([[Card(root), Card(card_data(TWEET_B, text='first reply'))]])
         session = session_maker(driver)
-        rows, status = session.crawl_twitter(f'https://x.com/devtrotter_fr/status/{TWEET_A}', limit=0)
+        rows, status = session.walk('twitter', f'https://x.com/devtrotter_fr/status/{TWEET_A}', limit=0)
         assert status == OK
         assert [row['评论ID'] for row in rows] == [TWEET_B]
         assert rows[0]['平台'] == 'twitter' and rows[0]['评论内容'] == 'first reply'
@@ -291,18 +293,18 @@ class TestReplies:
             ]
         )
         session = session_maker(driver)
-        rows, status = session.crawl_twitter(f'https://x.com/devtrotter_fr/status/{TWEET_A}', limit=0)
+        rows, status = session.walk('twitter', f'https://x.com/devtrotter_fr/status/{TWEET_A}', limit=0)
         assert status == OK and [row['评论ID'] for row in rows] == [TWEET_B, TWEET_C]
 
     def test_a_link_with_no_status_id_is_dead_not_empty(self, session_maker):
         session = session_maker(FakeDriver([[]]))
-        rows, status = session.crawl_twitter('https://x.com/OpenAI', limit=0)
+        rows, status = session.walk('twitter', 'https://x.com/OpenAI', limit=0)
         assert rows == [] and status == 'dead'
 
     def test_a_refused_reply_page_reports_blocked(self, session_maker):
         driver = FakeDriver([[]], body='Access to x.com was denied HTTP ERROR 403')
         session = session_maker(driver)
-        rows, status = session.crawl_twitter(f'https://x.com/a/status/{TWEET_A}', limit=0)
+        rows, status = session.walk('twitter', f'https://x.com/a/status/{TWEET_A}', limit=0)
         assert rows == [] and status == 'blocked'
 
     def test_a_post_that_renders_no_card_at_all_is_dead(self, session_maker):
@@ -311,7 +313,7 @@ class TestReplies:
         driver = FakeDriver([[]])
         session = session_maker(driver)
         url = f'https://x.com/devtrotter_fr/status/{TWEET_A}'
-        rows, status = session.crawl_twitter(url, limit=0)
+        rows, status = session.walk('twitter', url, limit=0)
         assert rows == [] and status == 'dead'
         assert t('comment.xNoList', url=url) in session.logs
 
@@ -322,7 +324,7 @@ class TestReplies:
         driver = FakeDriver([[Card(card_data(TWEET_A, text='the post itself'))]])
         session = session_maker(driver)
         url = f'https://x.com/devtrotter_fr/status/{TWEET_A}'
-        rows, status = session.crawl_twitter(url, limit=0)
+        rows, status = session.walk('twitter', url, limit=0)
         assert rows == [] and status == OK
         assert t('comment.commentsClosed', url=url) in session.logs
 

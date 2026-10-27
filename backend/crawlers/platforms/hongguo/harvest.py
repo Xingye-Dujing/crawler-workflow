@@ -754,10 +754,11 @@ class PlayerUI:
 
 
 class HongguoCommentHarness:
-    """The browserless comment adapter the engine dispatches as ``crawl_hongguo``.
+    """The browserless comment adapter, dispatched as ``walk('hongguo', url, limit)``.
 
     Duck-types the two roles ``_execute_comment_node`` caches per platform: the
-    *session* (``crawl_hongguo(url, limit) -> (rows, status)``) and the *crawler*
+    *session* (``walk(platform, url, limit) -> (rows, status)``, the same surface
+    :class:`~crawlers.commenting.session.CommentSession` offers) and the *crawler*
     (``close()``, and the wall attributes the blocked verdict reads — this stack
     has no cookie of ours to die, so both stay False forever).
     """
@@ -821,7 +822,7 @@ class HongguoCommentHarness:
         #: the link's ``series_id`` when there was one, else the first book its pages named.
         self._current_series = ''
         self._current_book = ''
-        #: The threads the CURRENT drama opened (reset per link; see `crawl_hongguo`).
+        #: The threads the CURRENT drama opened (reset per link; see `walk`).
         self._drama_groups: set[str] = set()
         self._floors_by_cid = {}
         self._next_floor = 1
@@ -829,18 +830,20 @@ class HongguoCommentHarness:
 
     # ─── the adapter contract ───
 
-    def crawl_hongguo(self, url, limit):
+    def walk(self, platform: str, url, limit):
         """One drama — a web detail link, a bare ``series_id`` or a plain 剧名 — walked episode by episode.
 
-        ``limit`` is the node's 评论上限 across this drama (0 = every comment).
-        ``(rows, DEAD)`` answers a target this machine cannot serve (no id, no name, no
-        such drama, no traffic at all); a missing player/proxy/cert RAISES by name —
-        nobody's empty table may hide an unprepared machine. A target the CLIENT will not
-        open is skipped by name and counted in ``skipped_targets`` instead of failing the
+        ``platform`` is the routing key the engine asked about; this harness is 红果短剧 and says so
+        rather than walking somebody else's link. ``(rows, DEAD)`` answers a target this machine
+        cannot serve (no id, no name, no such drama, no traffic at all); a missing player/proxy/cert
+        RAISES by name — nobody's empty table may hide an unprepared machine. A target the CLIENT
+        will not open is skipped by name and counted in ``skipped_targets`` instead of failing the
         node: the web 热榜 and the player's 排行榜 are two different ranking families
         (measured 2026-10-19), so one drama the client does not list must not cost the
         other nine their comments — and the node still refuses by name at the end.
         """
+        if platform and platform != 'hongguo':
+            raise ValueError(t('comment.noAdapter', platform=platform, url=str(url or '')))
         target = str(url or '').strip()
         if not target:
             return [], DEAD

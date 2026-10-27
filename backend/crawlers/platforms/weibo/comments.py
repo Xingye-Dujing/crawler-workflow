@@ -1,9 +1,12 @@
-"""weibo comments: the ``buildComments`` JSON adapter and the id/endpoint helpers."""
+"""weibo comments: the ``buildComments`` JSON endpoint, its rows and its walk."""
 
+import json
 import re
 
-from crawlers.commenting.protocol import _strip_tags
+from crawlers.commenting.protocol import DEAD, OK, _strip_tags, as_count
+from crawlers.commenting.walks import register
 from crawlers.engine import times
+from i18n import t
 
 
 def _user_home(user: dict) -> str:
@@ -150,3 +153,114 @@ def weibo_comments_js(mid: str, max_id: int = 0, count: int = 20) -> str:
         'https://weibo.com/ajax/statuses/buildComments?is_reload=1&id='
         f'{mid}&is_show_bulletin=2&is_mix=0&count={count}&flow=0&fetch_level=0&max_id={max_id}'
     )
+
+
+#: How many consecutive pages may add nothing new before the walk calls it finished.
+#: This is NOT a page budget — the repo has none any more (README, and the 2026-09-25 entry in
+#: ``docs/crawler_notes.md`` that deleted every backend round/page ceiling). It answers one specific
+#: cursor failure measured here: this API hands back a live ``max_id`` whose rows are already in the
+#: table, and a walk that noticed that only through a constant would keep paying round trips.
+EMPTY_ROUNDS = 2
+
+
+@register('weibo')
+def walk(session, url: str, limit: int) -> tuple:
+    """One weibo post's comments, paged through its own JSON endpoint fetched *in page*."""
+    bid = weibo_bid(url)
+    if not bid:
+        return [], DEAD
+    try:
+        # The in-page fetch is same-origin only: a search flow leaves the
+        # browser on s.weibo.com, where fetching weibo.com/ajax is a CORS
+        # rejection that reads as a dead link. Park on the right host first.
+        current = session.driver.current_url or ''
+        if not current.startswith('https://weibo.com'):
+            session.driver.get('https://weibo.com/')
+            session.nap(2)
+    except Exception:
+        pass
+    try:
+        raw = session.fetch_in_page(weibo_show_js(bid))
+        show = json.loads(raw)
+    except Exception:
+        session.log(t('comment.weiboShowFailed', url=url))
+        return [], DEAD
+    mid = str(show.get('id') or show.get('mid') or '')
+    if not mid:
+        return [], DEAD
+    # The site's own denominator for this thread. Measured 2026-09-28 the three places that print it
+    # agree (the search card 「30」, ``statuses/show.comments_count``, the page's ``total_number``), so
+    # a table that comes back shorter is knowable *while crawling* — which is the whole reason to read
+    # it. ``trendsText`` also says 「已加载全部评论」 on a 22-of-30 walk, so that sentence is not a
+    # verdict and is never consulted.
+    declared = as_count(show.get('comments_count'))
+    rows, seen, max_id, page, empty_rounds = [], set(), 0, 0, 0
+    # Which exit ended the walk decides what may be SAID about its length. Three of these endings are
+    # this code's own doing or the user's ask, and none of them is a statement about the thread: the
+    # shortfall may only be attributed to the site when the cursor itself ran out.
+    ended = 'cursor'
+    while True:
+        try:
+            batch = json.loads(session.fetch_in_page(weibo_comments_js(mid, max_id)))
+        except Exception:
+            ended = 'fetch'
+            break
+        items = batch.get('data') or []
+        before = len(rows)
+        for row in parse_weibo_comments({'data': items}, url):
+            key = str(row.get('评论ID') or '')
+            if key and key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+        page += 1
+        declared = declared or as_count(batch.get('total_number'))
+        max_id = batch.get('max_id') or 0
+        if not items or not max_id:
+            break
+        if len(rows) == before:
+            # The cursor moved and the page refilled rows already in the table. Named, because the
+            # alternative is a table that quietly stopped growing while the console said nothing —
+            # and this API really does hand back a live ``max_id`` over replayed rows.
+            empty_rounds += 1
+            if empty_rounds >= EMPTY_ROUNDS:
+                ended = 'replay'
+                session.log(t('comment.weiboReplay', page=page, rows=len(rows)))
+                break
+        else:
+            empty_rounds = 0
+        if limit and len(rows) >= limit:
+            # The user's own number, not the site's. Reporting the gap against ``total_number`` here
+            # would blame the thread for the ask: 评论上限 20 on a 749-comment post is not a
+            # shortfall, and the table is exactly as long as the node was told to make it.
+            ended = 'limit'
+            break
+        session.nap(0.8)  # polite page interval on the comment API
+    table = rows[:limit] if limit else rows
+    # **The gap is measured against what the walk received, never against the truncated table** (U41,
+    # caught by the live D5 cell). A thread that reports 3 comments, hands all 3 to the walker, and is
+    # then cut to 评论上限 2 used to print 「站点写着 3 条，本表只有 2 条 —— 差额是楼中楼」: the cursor
+    # died on the same page that crossed the limit, so ``ended`` stayed ``'cursor'`` and the sentence
+    # blamed the site for the user's own number — the exact thing the branch above exists to prevent,
+    # arriving by a path that branch does not see. ``len(rows)`` is the only number that answers
+    # "did the site give less than it said"; when the user's limit then shortens the table, that is
+    # not a gap and nothing is said about it.
+    if ended == 'cursor' and declared and len(rows) < declared:
+        session.log(t('comment.weiboShort', declared=declared, rows=len(rows), gap=declared - len(rows)))
+    if ended == 'fetch':
+        # The one exit of this walk that used to say nothing at all. Every other ending is either the
+        # site's answer (the cursor ran out, and ``comment.weiboShort`` names the gap against its own
+        # number) or the user's ask (``limit``); a request that died mid-thread is neither, and the
+        # table it leaves behind is shorter than the thread with no line anywhere to point at. Naming
+        # it is also the difference between 「继续」 and a re-crawl: the cursor already holds the page
+        # this walk reached.
+        session.log(
+            t(
+                'comment.weiboFetchDied',
+                page=page,
+                rows=len(rows),
+                declared=declared or '?',
+                gap=(declared - len(rows)) if declared and len(rows) < declared else 0,
+            )
+        )
+    return table, OK

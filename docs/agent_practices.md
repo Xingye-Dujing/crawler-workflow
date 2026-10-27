@@ -683,11 +683,22 @@ message.
   `tests/` helpers report a dozen false `E0401` (they import each other by a path the relative run does not have);
   backslashes written from Git Bash are eaten into `backendapp.py`; and Python's `write_text` on Windows writes CRLF,
   so every argument ends in `\r` and all 184 files report `F0001` before any code is read. Generate the list as
-  absolute paths with `/` and invoke through `tr -d '\r'` (the CI does the same via
-  `Get-ChildItem … | ForEach-Object FullName`). The reproduction lives in `build/make_lint_lists.py` (ignored).
+  absolute paths with `/` and invoke through `tr -d '\r'` (CI enumerates them itself, see the next bullet).
+  The reproduction lives in `build/make_lint_lists.py` (ignored).
+- **PowerShell: `@( (Get-ChildItem a), (Get-ChildItem b) ) | ForEach-Object FullName` lints NOTHING.** Measured on
+  the runner on the first CI run that carried the pylint steps (run 40450524569, `Pylint — product`, 0.7 s): the
+  comma builds an array of **two arrays**, and `ForEach-Object -MemberName` does not member-enumerate an array handed
+  to it — `$t.Count` was 2, `$t[0]` was empty, and pylint received two blank arguments and printed
+  `No files to lint: exiting.`. The guard `if (-not $targets)` did **not** fire, because a non-empty array of
+  empties is truthy: the only thing that saved this from being a silent green was pylint's own refusal. The shape
+  that works is statements inside `@()` (they flatten) plus a per-object projection:
+  `@( Get-ChildItem … ; Get-ChildItem … ) | ForEach-Object { $_.FullName }`. Both CI steps now also print
+  `linting NNN files`, because a gate that does not say how much it checked is not auditable after the fact.
+  Pinned by `tests/unit/test_lint_gate.py::TestTheStandards::test_ci_runs_the_two_tiers_it_can_and_says_why_not_the_third`.
 - **A wrapper that reports the exit code is part of the gate.** A background command ending in `echo done`, or piping
   the checker through `tail`, reports 0 even when the checker failed — the measured exit status must be the shell's
-  last one and the evidence must be the checker's own summary line.
+  last one and the evidence must be the checker's own summary line. The same trap exists one layer up: a redirect to
+  a directory that does not exist (`build/fast.log` before `mkdir build`) never runs the suite at all.
 
 ## 三维能力模型 / Platform × engine × function
 

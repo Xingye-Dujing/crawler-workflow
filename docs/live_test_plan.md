@@ -5,6 +5,9 @@
 > 本文放**要测什么、怎么判、怎么跑、修谁**。下次要继续验收，从本文 §10 的口令直接开跑。
 >
 > 建立：2026-09-27。所有 file:line 以当日工作树为准；行号会漂移，**按符号名找，不要按行号改**。
+> 2026-10-27 起，七个平台的评论走路从 `crawlers/commenting/session.py::crawl_<平台>` 迁到
+> `crawlers/platforms/<平台>/comments.py::walk`（分派改为 `crawlers/commenting/walks.py` 注册表）。
+> 下文 U 条目里写的旧符号名是**测量当时的位置**，不是要求今天还能找到那个方法。
 
 ---
 

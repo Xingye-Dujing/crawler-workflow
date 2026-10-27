@@ -1265,7 +1265,7 @@ class _FakeCommentSession:
         self.log = log
         self.abort = abort
 
-    def crawl_zhihu(self, url, limit):
+    def walk(self, platform, url, limit):
         return list(self.rows), 'ok'
 
 
@@ -1376,19 +1376,16 @@ class TestSourceCommentsMode:
                 pass
 
         class _RecordingSession:
+            # One ``walk`` for every platform: that is the surface the engine dispatches through now
+            # (``CommentSession.walk(platform, url, limit)``), so a double that still answers
+            # ``crawl_zhihu`` would silently prove nothing about the routing it claims to record.
             def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 pass
 
-            def crawl_zhihu(self, url, limit):
+            def walk(self, platform, url, limit):
                 crawled.append(url)
-                return [{'评论内容': 'kept'}], 'ok'
-
-            def crawl_weibo(self, url, limit):
-                crawled.append(url)
-                return [], 'ok'
-
-            def crawl_xiaohongshu(self, url, limit):
-                crawled.append(url)
+                if platform == 'zhihu':
+                    return [{'评论内容': 'kept'}], 'ok'
                 return [], 'ok'
 
         monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _FakeCrawler())
@@ -1902,7 +1899,7 @@ class TestACommentNodeHonoursHeadless:
             def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 pass
 
-            def crawl_zhihu(self, url, limit):
+            def walk(self, platform, url, limit):
                 return [{'评论内容': 'kept'}], 'ok'
 
         def _make(platform, headless=True, **kwargs):

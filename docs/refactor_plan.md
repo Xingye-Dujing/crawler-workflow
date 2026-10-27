@@ -144,9 +144,9 @@ backend/
     engine/               # 站点无关机制，保持（pager/feed/wall 判定/counters/times/jsonpath/pagefetch/innertube/popup）
                           #   —— 其中的平台事实迁去 capabilities/platforms/，engine 只留判据机器
     commenting/
-      session.py          # ← comments.py 的会话骨架（停止/页内 fetch/滚动/状态语义）
-      protocol.py         # ← comments_base.py
-      registry.py         # ← comment.py:322 的 `getattr(session,'crawl_'+kind)` 名字典化：一个平台一行
+      session.py          # ← comments.py 的会话骨架（活驱动 + 共享元素读取 + 一处 walk 分派）；1,183 → 140 行
+      protocol.py         # ← comments_base.py（OK/BLOCKED/DEAD + as_count + 四个纯文本助手段）
+      walks.py            # ← comment.py:322 的 `getattr(session,'crawl_'+kind)` 名字典化：一个平台一行注册
     backends/
       catbus.py           # ← catbus.py（与平台无关的第二后端）
     platforms/
@@ -211,17 +211,16 @@ backend/
 
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
-| `crawlers/commenting/session.py` | 1183 | Stage 1（每平台方法与页内 JS 移进平台目录） |
 | `crawlers/core/crawler.py` | 1495 | Stage 1（拆 faults / browser） |
 | `crawlers/platforms/douyin/crawler.py` | 1031 | Stage 1（按 walk 拆） |
 | `crawlers/platforms/weibo/crawler.py` | 925 | Stage 1（按 walk 拆） |
-| `crawlers/platforms/hongguo/harvest.py` | 1821 | Stage 1（会话/进程/解析三段） |
+| `crawlers/platforms/hongguo/harvest.py` | 1824 | Stage 1（会话/进程/解析三段） |
 | `services/data_analysis.py` | 3899 | Stage 9 |
 | `services/latex_charts.py` | 2430 | Stage 5 |
 | `services/bibliometrics.py` | 1996 | Stage 4 |
 | `services/visualizer.py` | 1874 | Stage 5 |
 | `services/biblio_charts.py` | 1553 | Stage 5 |
-| `services/run_store.py` | 1609 | Stage 4 |
+| `services/run_store.py` | 1610 | Stage 4 |
 | `crawl_capabilities.py` | 1805 | Stage 3 |
 | `analyzers/llm_client.py` | 934 | Stage 4（`llm/`） |
 | `app.py` | 4412 | Stage 6 |
@@ -265,7 +264,7 @@ run #20、2026-10-15、push 的正是今天仍是远端头的 `27bed25`、结论
 | Stage | 做什么 | 代价 | 特有验收 |
 |---|---|---|---|
 | **0 先加护栏** | ①新契约：`spec` 的 hiddenimports 清单 == `backend/` 实际顶层包；②`docs/` 里的 `path.py` 引用必须存在；③`Crawler` 契约属性表与执行器 `getattr` 兜底的对账；④修 D9 前三条无行为变化的死码 | 纯新增 + 三处删除 | 每条新契约都能红一次（故意改错路径就红） |
-| **1 crawlers 插件化** | **已落地**：`core/`（crawler/video）、`backends/catbus.py`、`commenting/`（session/protocol）、`platforms/<id>/{crawler,comments}` 十平台、`__init__.py` 只剩注册表+工厂、边界契约 `test_crawler_platform_plugins.py`。**剩余**：① 把 `commenting/session.py` 里每个平台的方法与页内 JS 移进对应平台目录（1,183 行的主因）；② 评论分派从 `getattr(session,'crawl_'+kind)` 改成注册表；③ 拆 `core/crawler.py`(1495) 为 crawler/faults/browser，拆 douyin/weibo/harvest；④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 已完成约 120 处引用改写；剩余每平台一处方法搬家 | 平台 id 三处集合相等（已有）；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
+| **1 crawlers 插件化** | **已落地**：`core/`（crawler/video）、`backends/catbus.py`、`commenting/`（session/walks/protocol）、`platforms/<id>/{crawler,comments}` 十平台、`__init__.py` 只剩注册表+工厂、边界契约 `test_crawler_platform_plugins.py`；**① 七个平台的 `walk` 与页内 JS 已各自进平台目录（`session.py` 1,183 → 140）**、**② 评论分派改成注册表 `commenting/walks.py`（`CommentSession.walk(platform,url,limit)`；CatBus 不再用 `__getattr__` 合成方法名，红果 harness 同名 `walk`）**，契约 `test_comment_walk_plugins.py` 12 例。**剩余**：③ 拆 `core/crawler.py`(1495) 为 crawler/faults/browser，拆 douyin(1031)/weibo(925)/harvest(1824)；④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 约 120 处引用改写 + 走路搬家（行为不变，逐条对照原方法体） | 平台 id 三处集合相等（已有）；注册表 == 定义 walk 的目录 + import 清单同源；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
 
 | **2 sessions + scheduling** | 登录态四模块 + 34 行孤儿合成 `sessions/`；`/api/cookies/*` 与 `/api/profiles/*`（app 内约 950 行）进 `sessions/routes.py`；调度合成 `scheduling/` | 打桩路径搬迁 | 预检/profile/账号折叠用例全绿；cloud 判定不变 |
 | **3 core + capabilities** | 根模块下沉 `core/`；`crawl_capabilities.py` 1,805 行拆 `model/requirements/platforms/<id>/catbus/registry`；`coerce.py` 下沉解掉 D7 | 全树 import 一次改完（无 shim） | `test_boot_import_budget` 仍绿且启动不退化；三档 pylint；打包契约 |
@@ -299,6 +298,27 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   zhihu/weibo/xiaohongshu/wechat/hongguo **从没声明过**这个属性——那个默认值替五个平台答了"我能爬"，
   Instagram 是唯一真的回答"不能"的。修法：`Crawler` 显式声明并写下理由，工厂去掉默认值
   （不继承 `Crawler` 的类应当抛错而不是被判成可爬），再加一枚"只有 Instagram 拒绝"的针。
+- **Stage 1 ①② 已落地（评论走路插件化 + 注册表分派）**：`commenting/session.py` 里七个平台的 `crawl_<平台>`
+  方法与页内 JS 常量（知乎 `PANEL_JS`/`PUMP_JS`、抖音五段 `_DY_*`）、私有助手与错误码归责（B 站
+  `bili_code_verdict`）逐段移进 `crawlers/platforms/<id>/comments.py`，`session.py` 1,183 → **140 行**，
+  只留活驱动、停止谓词、共享元素读取与一次分派。分派从 `getattr(session, 'crawl_' + kind)` 改为
+  `commenting/walks.py` 注册表：平台模块用 `@register('<id>')` 自注册，`CommentSession.walk(platform,url,limit)`
+  查表，**查不到就具名拒绝**（旧的 None 检查在调用方，红果 harness 与 CatBus 因此各演一份同一问题）。
+  连带删掉 `CatbusCrawler.__getattr__`（它存在的唯一理由就是让字符串拼出来的方法名能找到适配器），
+  改为直接问清单的 `walk()`；harness 的 `crawl_hongguo` 改名 `walk(platform,…)`，被问到别的平台就点名拒绝。
+  会话助手由 `_body_head/_in_page_fetch/_safe_text/...` 改为公开名（走路跨模块调用私有成员本身就是白盒），
+  并新增 `mark_risk_blocked()/is_walled()`，**平台模块不再穿 `session._owner`**。
+  新契约 `tests/unit/test_comment_walk_plugins.py` 12 例：注册表集合 == 定义 `walk` 的目录集合、
+  import 清单与它同源、目录名即平台 id、重复注册拒绝、未注册平台具名拒绝、`CommentSession` 不再有
+  `crawl_*` 方法（防两条分派路径并存）、`WalkContext` 声明的每一项会话真答得出、平台模块里
+  `_owner`/`risk_blocked =` 一次都不许出现。
+- **CI 的第一次真跑抓出自己的门禁缺陷（已修）**：推送后 run 40450524569 的 `Pylint — product` 0.7 秒 exit 1，
+  日志只有 `No files to lint: exiting.`——`@( (Get-ChildItem backend…), (Get-ChildItem desktop…) ) | ForEach-Object FullName`
+  是"两个数组的数组"，而 `ForEach-Object -MemberName` 不对它做成员枚举，于是 `$targets.Count` 是 2、每一项都是空串，
+  pylint 收到两个空参数。**`if (-not $targets)` 那道守卫没报错**（空项组成的数组仍为真）——唯一让它变响的是
+  pylint 自己。改为 `@( 语句; 语句 ) | ForEach-Object { $_.FullName }`（语句形式会摊平），两步各自打印
+  `linting NNN files`；`test_lint_gate.py` 加三枚针（不得再出现 `ForEach-Object FullName`、两档都用
+  `{ $_.FullName }`、两步都要报数）。教训进 `docs/agent_practices.md`「A lint gate is only a gate if it linted everything」。
 - **已修（本轮实测发现，独立于重构）**：设备档里 12 个用例各自 `except` 驱动启动失败后
   `pytest.skip('Chrome/chromedriver unavailable')`，而 `CRAWLER_REQUIRE_BROWSER=1` 只硬失败 `conftest`
   那一次会话级探测——于是一次设备跑可以印着「192 passed」而其中一条浏览器用例根本没跑

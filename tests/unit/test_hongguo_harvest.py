@@ -169,7 +169,7 @@ class TestWalk:
     def test_one_page_one_episode_is_the_site_attested_end(self, tmp_path):
         lines = [_record(entries=[_entry('7001', '第一', 1792313924), _entry('7002', '第二', 1792313925)], total=2)]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK
         assert [r['评论ID'] for r in rows] == ['7001', '7002']
         assert harness.end_reason == 'site_end'
@@ -183,7 +183,7 @@ class TestWalk:
             )
         ]
         harness, said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and [r['评论ID'] for r in rows] == ['7003']
         assert any(i18n.t('crawl.hg.cmt.danmakuSkipped', n=1) in line for line in said)
         assert harness.end_reason == 'site_end'
@@ -193,7 +193,7 @@ class TestWalk:
         ui = _FakeUI(second_page_lines=page2)
         lines = [_record(entries=[_entry('7001', '第一集', 1792313924)])]
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=lines, params={'episode_count': 2})
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK
         assert [r['评论ID'] for r in rows] == ['7001', '8001']
         assert [r['楼层'] for r in rows] == [1, 2], 'the second episode continues the numbering'
@@ -216,7 +216,7 @@ class TestWalk:
             capture_lines=[first, stranger],
             params={'harvest_timeout': 5, 'episode_count': 2, 'include_replies': False},
         )
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK, 'the rows that do answer to the drama are still handed over'
         assert [r['评论ID'] for r in rows] == ['7001'], 'a stranger drama’s page is not this table'
         named = i18n.t('crawl.hg.cmt.groupMismatch', got='9999999999999999999', want=BOOK)
@@ -227,7 +227,7 @@ class TestWalk:
     def test_the_node_limit_caps_the_walk_and_licenses_the_end(self, tmp_path):
         lines = [_record(entries=[_entry('7001', '甲', 1792313924), _entry('7002', '乙', 1792313925)], total=2)]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 1)
+        rows, status = harness.walk('hongguo', ARTICLE, 1)
         assert status == OK and len(rows) == 1
         # The user stopped it, the site did not run out — and that is 'capped', a
         # licensed end, NOT the convicted short: 采满所求 is a finished node.
@@ -244,7 +244,7 @@ class TestWalk:
             ),
         ]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK
         kid = next(r for r in rows if r['评论ID'] == '9001')
         assert kid['父楼层'] == 1, 'the reply hangs under the floor its parent was given'
@@ -261,7 +261,7 @@ class TestWalk:
             )
         ]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 20
         assert harness.end_reason == UNDER_TARGET
         assert harness.target_total == 800
@@ -276,7 +276,7 @@ class TestWalk:
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=lines)
         # scroll answers True so the kept<total loop runs against the second page
         ui.scroll_drawer = lambda attempt=0: True
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK
         ids = [r['评论ID'] for r in rows]
         assert ids.count('7001') == 1, 'the same comment from two pages merges to one row'
@@ -296,7 +296,7 @@ class TestWalk:
         ui = harness.ui
         answers = iter([page1, None, None, page2])
         harness._await_page = lambda *args, **kwargs: next(answers)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 22
         assert harness.end_reason == 'site_end', 'kept reached what the site counted'
         assert ui.scroll_attempts == [0, 1, 2], 'each silence is answered with a louder attempt'
@@ -306,7 +306,7 @@ class TestWalk:
         harness, said = _harness(tmp_path, capture_lines=[])
         answers = iter([page1, None, None, None])
         harness._await_page = lambda *args, **kwargs: next(answers)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 20, 'the partial data is kept, never thrown away'
         assert harness.end_reason == UNDER_TARGET and harness.target_total == 698
         # The missing count is its own number because the ROW total is not a fair
@@ -328,19 +328,19 @@ class TestWalk:
 
         harness._await_page = aborting_after_one
         with pytest.raises(CrawlerStopped):
-            harness.crawl_hongguo(ARTICLE, 0)
+            harness.walk('hongguo', ARTICLE, 0)
 
 
 class TestRefusals:
     def test_silence_within_the_budget_is_dead_and_named(self, tmp_path):
         harness, said = _harness(tmp_path, capture_lines=[], params={'harvest_timeout': 5})
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert (rows, status) == ([], DEAD)
         assert any(i18n.t('crawl.hg.cmt.noTraffic', seconds=5, title='测试剧') in line for line in said)
 
     def test_a_drama_the_player_cannot_open_is_dead_not_empty(self, tmp_path):
         harness, said = _harness(tmp_path, ui=_FakeUI(opened=False), capture_lines=[_record()])
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert (rows, status) == ([], DEAD)
         assert any(i18n.t('crawl.hg.cmt.dramaNotFound', title='测试剧') in line for line in said)
         # Counted, not just logged: a feed of ten dramas that opened nine is a partial
@@ -350,7 +350,7 @@ class TestRefusals:
 
     def test_a_link_without_a_series_id_dies_before_any_process(self, tmp_path):
         harness, said = _harness(tmp_path, capture_lines=[])
-        rows, status = harness.crawl_hongguo('https://example.com/nothing', 0)
+        rows, status = harness.walk('hongguo', 'https://example.com/nothing', 0)
         assert (rows, status) == ([], DEAD)
         assert any(i18n.t('crawl.hg.cmt.titleMissing', url='https://example.com/nothing') in line for line in said)
 
@@ -362,7 +362,7 @@ class TestRefusals:
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack  # drop the seam: run the real stack gate
         with pytest.raises(ValueError) as caught:
-            harness.crawl_hongguo(ARTICLE, 0)
+            harness.walk('hongguo', ARTICLE, 0)
         assert i18n.t('crawl.hg.cmt.noPlayer', path='') in str(caught.value)
 
     def test_the_desktop_build_names_the_build_that_can_run_this_node(self, tmp_path, monkeypatch):
@@ -382,7 +382,7 @@ class TestRefusals:
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack  # drop the seam: run the real stack gate
         with pytest.raises(ValueError) as caught:
-            harness.crawl_hongguo(ARTICLE, 0)
+            harness.walk('hongguo', ARTICLE, 0)
         message = str(caught.value)
         assert message == i18n.t('crawl.hg.cmt.needsExtrasFrozen', names='mitmproxy / uiautomation')
         assert 'pip' not in message, 'a packaged app has no pip to point at'
@@ -404,7 +404,7 @@ class TestRefusals:
             harness, _said = _harness(tmp_path, capture_lines=[])
             del harness._ensure_stack
             with pytest.raises(ValueError) as caught:
-                harness.crawl_hongguo(ARTICLE, 0)
+                harness.walk('hongguo', ARTICLE, 0)
             assert 'Windows' in str(caught.value), (other, str(caught.value))
 
     def test_a_cloud_windows_host_is_refused_too(self, tmp_path, monkeypatch):
@@ -418,7 +418,7 @@ class TestRefusals:
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack
         with pytest.raises(ValueError) as caught:
-            harness.crawl_hongguo(ARTICLE, 0)
+            harness.walk('hongguo', ARTICLE, 0)
         assert 'Windows' in str(caught.value)
 
     def test_the_source_build_names_the_missing_package(self, tmp_path, monkeypatch):
@@ -435,7 +435,7 @@ class TestRefusals:
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack
         with pytest.raises(ValueError) as caught:
-            harness.crawl_hongguo(ARTICLE, 0)
+            harness.walk('hongguo', ARTICLE, 0)
         assert str(caught.value) == i18n.t('crawl.hg.cmt.needsExtras', missing='mitmproxy')
         assert 'requirements-optional.txt' in str(caught.value)
 
@@ -464,7 +464,7 @@ class TestFeedingByName:
     def test_a_fed_name_harvests_without_any_web_page(self, tmp_path):
         lines = [_record(entries=[_entry('7001', '第一', 1792313924)])]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(NAME_FED, 0)
+        rows, status = harness.walk('hongguo', NAME_FED, 0)
         assert status == OK
         assert rows[0]['剧名'] == NAME_FED
         assert rows[0]['文章URL'] == '', 'no web page was opened, so no link is invented'
@@ -503,7 +503,7 @@ class TestTreeColdError:
     def test_a_tree_that_stays_cold_steps_aside_by_name(self, tmp_path):
         ui = _FakeUI(cold_times=5, wakes=False)
         harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()])
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert (rows, status) == ([], DEAD)
         assert harness.skipped_targets == ['测试剧']
         assert harness.end_reason == UNDER_TARGET
@@ -513,7 +513,7 @@ class TestTreeColdError:
         ui = _FakeUI(cold_times=1)
         lines = [_record(entries=[_entry('7001', '第一', 1792313924)])]
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 1
         assert harness.skipped_targets == [] and harness.end_reason == 'site_end'
 
@@ -526,7 +526,7 @@ class TestTreeColdError:
         """
         ui = _FakeUI(cold_times=5, wakes=True)
         harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()])
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert (rows, status) == ([], DEAD)
         assert any(i18n.t('crawl.hg.cmt.dramaSkipped', title='测试剧') in line for line in said), said
         assert not any(i18n.t('crawl.hg.cmt.dramaNotFound', title='测试剧') in line for line in said), said
@@ -544,7 +544,7 @@ class TestReplyDedupe:
         )
         lines = [_record(entries=[_entry('7001', '主评论', 1792313924, replies=1)]), child, child, child]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK
         kids = [r for r in rows if r['评论ID'] == '9001']
         assert len(kids) == 1, 'a repeated reply page merges to one row'
@@ -615,7 +615,7 @@ class TestReplyDenominator:
             self._child(total=5, cids=('9001', '9002')),
         ]
         harness, said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 3, 'the rows that DID arrive stay in the table'
         assert harness.shortfall == 3, f'the owed children are counted as a gap: {harness.shortfall}'
         assert harness.end_reason == UNDER_TARGET, 'a thread short of its own total is not the site end'
@@ -628,7 +628,7 @@ class TestReplyDenominator:
             self._child(total=2, cids=('9001', '9002')),
         ]
         harness, _said = _harness(tmp_path, capture_lines=lines)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 3
         assert harness.shortfall == 0 and harness.end_reason == 'site_end'
 
@@ -646,7 +646,7 @@ class TestCountedEndings:
     def test_a_target_that_prints_no_title_is_counted(self, tmp_path):
         harness, _said = _harness(tmp_path, capture_lines=[_record()])
         harness._title_for = lambda _url: ''
-        rows, status = harness.crawl_hongguo('https://hongguoduanju.com/detail?series_id=123', 0)
+        rows, status = harness.walk('hongguo', 'https://hongguoduanju.com/detail?series_id=123', 0)
         assert (rows, status) == ([], DEAD)
         assert harness.skipped_targets == ['https://hongguoduanju.com/detail?series_id=123']
         assert harness.end_reason == UNDER_TARGET
@@ -663,14 +663,14 @@ class TestCountedEndings:
             return '测试剧'
 
         harness._title_for = fake_title
-        rows, status = harness.crawl_hongguo(BOOK, 0)
+        rows, status = harness.walk('hongguo', BOOK, 0)
         assert asked == [f'https://hongguoduanju.com/detail?series_id={BOOK}']
         assert status == OK and len(rows) == 1
         assert rows[0]['文章URL'] == f'https://hongguoduanju.com/detail?series_id={BOOK}'
 
     def test_a_drama_that_answers_no_traffic_at_all_is_counted(self, tmp_path):
         harness, _said = _harness(tmp_path, capture_lines=[], params={'harvest_timeout': 5})
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert (rows, status) == ([], DEAD)
         assert harness.skipped_targets == ['测试剧'], 'a popup-blocked drama is a named hole, not silence'
         assert harness.end_reason == UNDER_TARGET
@@ -687,7 +687,7 @@ class TestOneLinePerGap:
         harness, said = _harness(tmp_path, capture_lines=[], params={'include_replies': False})
         answers = iter([page1, None, None, None])
         harness._await_page = lambda *args, **kwargs: next(answers)
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 1
         short_lines = [line for line in said if '不完整' in line]
         assert len(short_lines) == 1, f'one gap printed {len(short_lines)} lines: {short_lines}'
@@ -739,7 +739,7 @@ class TestSwitchesAreRead:
         ui = _FakeUI()
         lines = [_record(entries=[_entry('7001', '主评论', 1792313924, replies=3)])]
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=lines, params={'include_replies': 'false'})
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 1
         assert ui.expands == 0, "「包含子回复」 says off; bool('false') is True and clicked every thread open"
 
@@ -747,7 +747,7 @@ class TestSwitchesAreRead:
         """评论上限 is a request, not a failure — and it is not a shortfall either."""
         lines = [_record(entries=[_entry('7001', '第一', 1792313924), _entry('7002', '第二', 1792313925)], total=2)]
         harness, _said = _harness(tmp_path, capture_lines=lines, params={'include_replies': False})
-        rows, status = harness.crawl_hongguo(ARTICLE, 1)
+        rows, status = harness.walk('hongguo', ARTICLE, 1)
         assert status == OK and len(rows) == 1, 'the limit truncates the table, it does not fail it'
         assert harness.end_reason == 'capped', harness.end_reason
         assert harness.shortfall == 0, 'the gap the user asked for is not a hole in the table'
@@ -780,7 +780,7 @@ class TestStopInterruptsTheWaiting:
         harness, _said = _harness(tmp_path, capture_lines=[_record()])
         harness._abort = lambda: True
         with pytest.raises(CrawlerStopped):
-            harness.crawl_hongguo(ARTICLE, 0)
+            harness.walk('hongguo', ARTICLE, 0)
         assert harness.skipped_targets == [], 'the user stopped; nobody searched for a drama and failed'
 
 
@@ -958,7 +958,7 @@ class TestIdentityFromTheRequest:
             capture_lines=[our_page],
             params={'episode_count': 3, 'include_replies': False, 'harvest_timeout': 5},
         )
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK, 'the rows it legitimately kept are still handed over'
         assert len(rows) == 1, f'the drifted feed contributed rows to this table: {len(rows)}'
         assert {r['分集ID'] for r in rows} == {GROUP}, 'only our own episode is in the table'
@@ -1046,7 +1046,7 @@ class TestScreenFacts:
         ui.collect = lambda max_depth=20: []
         assert ui.screen_drama_title() == ''
         harness, said = _harness(tmp_path, ui=_FakeUI(), capture_lines=[_record()])
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 1
         mismatch = i18n.t('crawl.hg.cmt.screenMismatch', want='测试剧', have='')
         assert not any(mismatch in line for line in said), said
@@ -1065,7 +1065,7 @@ class TestScreenFacts:
         ui = _FakeUI()
         ui.screen_drama_title = stale_then_ours
         harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()], params={'harvest_timeout': 5})
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 1, f'a stale repaint read threw away the drama: {said}'
         assert not harness.skipped_targets
         assert reads['n'] >= 2, 'the suspicious read was re-asked, not concluded on'
@@ -1076,7 +1076,7 @@ class TestScreenFacts:
         # request carries the season (赘婿归来). A wrong 'drifted' here loses a whole drama.
         ui = _FakeUI(screen_title='赘婿')
         harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()], params={'harvest_timeout': 5})
-        rows, status = harness.crawl_hongguo('赘婿归来', 0)
+        rows, status = harness.walk('hongguo', '赘婿归来', 0)
         assert status == OK and len(rows) == 1, f'the short base name on screen read as another drama: {said}'
         assert rows[0]['剧名'] == '赘婿归来'
 
@@ -1092,7 +1092,7 @@ class TestScreenFacts:
             capture_lines=[_record()],
             params={'episode_count': 3, 'harvest_timeout': 5, 'include_replies': False},
         )
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and [r['评论ID'] for r in rows] == ['7001'], 'episode 1 was ours and stays'
         assert harness.skipped_targets == ['测试剧'], 'a key that stopped landing is a named hole'
         assert harness.end_reason == UNDER_TARGET
@@ -1103,14 +1103,14 @@ class TestScreenFacts:
         # that opened correctly, which is the opposite of why this check exists.
         long_ui = _FakeUI(screen_title='聚宝仙盆之杂灵根才是真BOSS')
         harness, said = _harness(tmp_path, ui=long_ui, capture_lines=[_record()])
-        rows, status = harness.crawl_hongguo('聚宝仙盆之杂灵根才是真BOSS第十四季', 0)
+        rows, status = harness.walk('hongguo', '聚宝仙盆之杂灵根才是真BOSS第十四季', 0)
         assert status == OK and len(rows) == 1, f'the base name on screen read as another drama: {said}'
         assert rows[0]['剧名'] == '聚宝仙盆之杂灵根才是真BOSS第十四季', 'the row keeps the name it was fed'
 
     def test_a_card_that_lands_on_another_drama_harvests_nothing(self, tmp_path):
         ui = _FakeUI(screen_title='别的剧')
         harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()], params={'harvest_timeout': 5})
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert (rows, status) == ([], DEAD), 'the wrong show is caught before its rows are read'
         assert harness.skipped_targets == ['测试剧'] and harness.end_reason == UNDER_TARGET
         assert any(i18n.t('crawl.hg.cmt.screenMismatch', want='测试剧', have='别的剧') in line for line in said), said
@@ -1133,7 +1133,7 @@ class TestScreenFacts:
             capture_lines=[_record()],
             params={'episode_count': 3, 'harvest_timeout': 5, 'include_replies': False},
         )
-        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and [r['评论ID'] for r in rows] == ['7001'], 'episode 1 was ours and stays'
         assert state['switched'] and ui.switches == 1, 'the switch was asked before the screen was'
         assert harness.skipped_targets == ['测试剧'], 'a drama left at 1 of 3 is not a finished crawl'
@@ -1145,7 +1145,7 @@ class TestScreenFacts:
         # refusal prints this list with a count, so a duplicate would report one hole as two.
         ui = _FakeUI(cold_times=99, wakes=True)
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=[_record()])
-        harness.crawl_hongguo(ARTICLE, 0)
+        harness.walk('hongguo', ARTICLE, 0)
         harness._count_unfinished('测试剧')
         harness._count_unfinished('测试剧')
         assert harness.skipped_targets == ['测试剧'], harness.skipped_targets
@@ -1282,7 +1282,7 @@ class TestDrawerClose:
             capture_lines=[_record()],
             params={'episode_count': 2, 'harvest_timeout': 5, 'include_replies': False},
         )
-        harness.crawl_hongguo(ARTICLE, 0)
+        harness.walk('hongguo', ARTICLE, 0)
         assert ui.switches == 1 and ui.closes == 1, 'one drawer close, handed back before the one ↓'
 
 

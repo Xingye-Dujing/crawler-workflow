@@ -117,7 +117,7 @@ def test_one_drama_two_episodes_harvest_real_comments():
         # A bounded ask (40 rows): the arithmetic licenses (kept vs the site's
         # total, merge dedupe, UNDER_TARGET) are pinned in the unit tier; this
         # case proves the CHAIN — proxy, player, navigation, drawer, capture.
-        rows, status = harness.crawl_hongguo(link, 40)
+        rows, status = harness.walk('hongguo', link, 40)
     finally:
         harness.close()
     assert status == OK, f'the harvest refused: {said[-3:]}'
@@ -173,7 +173,7 @@ def test_a_drama_title_walks_the_players_own_board():
     try:
         # One episode, 20 rows: the point is the ENTRY (name → client card → drawer), not
         # the depth, and every second of this spends the user's desktop.
-        rows, status = harness.crawl_hongguo(title, 20)
+        rows, status = harness.walk('hongguo', title, 20)
     finally:
         harness.close()
     assert status == OK, f'the name-fed walk refused: {said[-3:]}'

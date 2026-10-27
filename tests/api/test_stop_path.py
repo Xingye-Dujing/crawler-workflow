@@ -424,7 +424,7 @@ class TestNoFurtherWork:
                 self.abort = abort
                 self.owner = owner
 
-            def crawl_zhihu(self, url, limit):
+            def walk(self, platform, url, limit):
                 gate['inside'].set()
                 assert gate['release'].wait(10), 'the article walk was never released'
                 return [{'文章URL': url, '评论内容': 'c'}], 'ok'
@@ -476,7 +476,7 @@ class TestNoFurtherWork:
             def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 self.read = 0
 
-            def crawl_zhihu(self, url, limit):
+            def walk(self, platform, url, limit):
                 self.read += 1
                 if self.read == 1:
                     gate['inside'].set()

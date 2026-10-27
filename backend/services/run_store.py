@@ -91,8 +91,9 @@ _URL_FIELDS = ('链接', '笔记链接', '文章链接', '链接地址', '原文
 _TITLE_FIELDS = ('标题', 'title')
 _AUTHOR_FIELDS = ('作者', '发布者', '公众号', '博主', 'author')
 _BODY_FIELDS = ('正文', '内容', '摘要', 'body', 'content')
-# A comment's own site id, which every comment crawler in this repo emits (and which
-# ``crawlers.commenting.session`` already uses as the IN-RUN identity — see the ``identity=`` there).
+# A comment's own site id, which every comment crawler in this repo emits (and which the YouTube
+# comment walk already uses as the IN-RUN identity — see the ``identity=`` in
+# ``crawlers/platforms/youtube/comments.py``).
 _COMMENT_ID_FIELDS = ('评论ID',)
 # Carried alongside it so a mixed batch cannot collapse a 知乎 numeric id onto a 微博 one:
 # the two sites draw their ids from separate spaces and neither knows the other's.

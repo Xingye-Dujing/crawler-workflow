@@ -22,7 +22,8 @@ answer and must not be reported as a broken crawler — so those read as
 
 import pytest
 
-from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
+from crawlers.commenting.protocol import BLOCKED, DEAD, OK
+from crawlers.commenting.session import CommentSession
 from crawlers.platforms.youtube.crawler import video_id_of
 
 #: ``live_os`` with X: the overseas half of the live tier, run while the VPN is up.
@@ -139,7 +140,7 @@ def test_comments_page_past_the_first_screen(live_crawler):
         session = CommentSession(holder.driver, log=print, nap=lambda s: None)
         for row in ranked:
             link = row['链接']
-            comments, status = session.crawl_youtube(link, limit=45)
+            comments, status = session.walk('youtube', link, limit=45)
             if status == DEAD:
                 pytest.fail(f'the link the crawler built itself is not readable: {link}')
             if status == BLOCKED:
@@ -169,7 +170,7 @@ def test_one_videos_comments_are_unique_and_numbered(live_crawler):
     holder = live_crawler('youtube')
     try:
         session = CommentSession(holder.driver, log=print, nap=lambda s: None)
-        comments, status = session.crawl_youtube(link, limit=8)
+        comments, status = session.walk('youtube', link, limit=8)
     finally:
         holder.close()
     assert status == OK and comments, f'{link} ended as {status} with {len(comments)} rows'

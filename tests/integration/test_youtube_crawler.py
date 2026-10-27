@@ -513,7 +513,7 @@ class TestDetailAndComments:
 
 
 class TestCommentWalk:
-    """``CommentSession.crawl_youtube`` — the shared comment engine's adapter."""
+    """``platforms/youtube/comments.py::walk`` — the shared comment engine's adapter."""
 
     @pytest.fixture
     def session_maker(self, monkeypatch):
@@ -541,7 +541,7 @@ class TestCommentWalk:
             }
         )
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://www.youtube.com/watch?v={VIDEO_A}', limit=0)
+        rows, status = session.walk('youtube', f'https://www.youtube.com/watch?v={VIDEO_A}', limit=0)
         assert status == OK
         assert [row['评论ID'] for row in rows] == ['cid1', 'cid2', 'cid3', 'cid4', 'cid5']
         assert rows[0]['平台'] == 'youtube' and rows[0]['点赞数'] == 1
@@ -554,7 +554,7 @@ class TestCommentWalk:
             }
         )
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://youtu.be/{VIDEO_A}', limit=5)
+        rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=5)
         assert status == OK and len(rows) == 5
 
     def test_a_sort_menu_token_is_never_paged_with(self, session_maker):
@@ -579,20 +579,20 @@ class TestCommentWalk:
             }
         )
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://youtu.be/{VIDEO_A}', limit=0)
+        rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
         assert status == OK and len(rows) == 40
         assert not [token for token in asked if token.startswith(('SORT', 'NEWEST'))], asked
 
     def test_a_video_whose_comments_are_off_is_an_empty_answer_not_a_failure(self, session_maker):
         driver = FakeDriver({f'next:{VIDEO_A}': [watch_answer(['C1'])], 'next:C1': [{}]})
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://youtu.be/{VIDEO_A}', limit=0)
+        rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
         assert status == OK and rows == []
 
     def test_a_refusal_before_any_comment_is_blocked(self, session_maker):
         driver = FakeDriver({f'next:{VIDEO_A}': [watch_answer(['C1'])], 'next:C1': [{'_refuse': 'captcha page'}]})
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://youtu.be/{VIDEO_A}', limit=0)
+        rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
         assert rows == [] and status == 'blocked'
 
     def test_a_refusal_after_some_comments_keeps_what_was_read(self, session_maker):
@@ -604,16 +604,16 @@ class TestCommentWalk:
             }
         )
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://youtu.be/{VIDEO_A}', limit=0)
+        rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
         assert status == OK and [row['评论ID'] for row in rows] == ['cid1', 'cid2']
 
     def test_a_link_that_names_no_video_is_dead_rather_than_empty(self, session_maker):
         session = session_maker(FakeDriver({}))
-        rows, status = session.crawl_youtube('https://www.youtube.com/@NASA', limit=0)
+        rows, status = session.walk('youtube', 'https://www.youtube.com/@NASA', limit=0)
         assert rows == [] and status == 'dead'
 
     def test_a_page_that_never_became_a_watch_page_is_dead(self, session_maker):
         driver = FakeDriver({}, config={'key': '', 'context': None})
         session = session_maker(driver)
-        rows, status = session.crawl_youtube(f'https://youtu.be/{VIDEO_A}', limit=0)
+        rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
         assert rows == [] and status == 'dead'

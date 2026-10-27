@@ -19,10 +19,10 @@ MAX_FILENAME_BYTES = 200
 
 
 # The comment router's domain table. Lives here — browser-free and framework-free —
-# because THREE callers must agree on it verbatim: crawlers.commenting.session (routing),
-# engine.workflow (design-time validation, which must never import crawlers) and
-# static/js/workflow.js:urlPlatform (pre-run validation). The frontend contract
-# test pins the JS copy against this one.
+# because THREE callers must agree on it verbatim: crawlers.commenting.session (which hands the
+# platform it routed to ``crawlers.commenting.walks``), engine.workflow (design-time validation,
+# which must never import crawlers) and static/js/workflow.js:urlPlatform (pre-run validation).
+# The frontend contract test pins the JS copy against this one.
 _COMMENT_DOMAINS = (
     ('zhihu', ('zhihu.com',)),
     ('xiaohongshu', ('xiaohongshu.com', 'xhslink.com')),

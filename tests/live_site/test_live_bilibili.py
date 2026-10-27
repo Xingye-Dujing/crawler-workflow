@@ -19,7 +19,8 @@ import time
 import pytest
 
 from config import Config
-from crawlers.commenting.session import BLOCKED, DEAD, OK, CommentSession
+from crawlers.commenting.protocol import BLOCKED, DEAD, OK
+from crawlers.commenting.session import CommentSession
 from crawlers.platforms.bilibili.crawler import bilibili_bvid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
@@ -111,7 +112,7 @@ def test_comments_page_past_one_screen(live_crawler, headless):
     crawler = live_crawler('bilibili', headless=headless)
     try:
         session = CommentSession(crawler.driver, log=print, nap=lambda s: None)
-        rows, status = session.crawl_bilibili(PROBE_URL, limit=40)
+        rows, status = session.walk('bilibili', PROBE_URL, limit=40)
     finally:
         crawler.close()
     assert status == OK, f'bilibili comment crawl ended as {status} on {PROBE_URL}'
@@ -130,7 +131,7 @@ def test_a_link_that_is_not_a_video_is_dead_not_empty(live_crawler):
     crawler = live_crawler('bilibili')
     try:
         session = CommentSession(crawler.driver, log=print, nap=lambda s: None)
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/bangumi/play/ss12345/', 5)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/bangumi/play/ss12345/', 5)
     finally:
         crawler.close()
     assert rows == [] and status in (DEAD, BLOCKED), f'a non-video link must be refused, not tabled: {status}'

@@ -152,6 +152,22 @@ class TestTheStandards:
         # and that bug is identical on Windows and on Linux, so the rule is not "use PowerShell".
         enumerated = 'Get-ChildItem' in ci or 'find ' in ci
         assert enumerated, 'targets must be enumerated as files, not as bare directory names'
+        # …and the enumeration must FLATTEN. Measured on the runner: the product step was written
+        # ``@( (Get-ChildItem backend…), (Get-ChildItem desktop…) ) | ForEach-Object FullName``, which
+        # builds an array of TWO arrays — and ``ForEach-Object -MemberName`` does not member-enumerate
+        # an array it is handed. pylint received two empty arguments and answered
+        # ``No files to lint: exiting.`` with exit 1. It failed LOUDLY, which is the only reason
+        # anyone noticed: the same shape on a day the lists happen to work would have been a green
+        # step checking nobody's code. The pin is the projection: per-object ``{ $_.FullName }`` over a
+        # flattened ``@()``, and each step says out loud how many files it read.
+        # The pin is the projection, asked of the CODE and not of the prose: the workflow's own comment
+        # quotes the broken spelling to explain it, and a substring check over comments would convict
+        # the explanation of the fix.
+        ci_code = '\n'.join(line for line in ci.splitlines() if not line.lstrip().startswith('#'))
+        assert 'ForEach-Object FullName' not in ci_code, 'project per object: { $_.FullName }'
+        assert ci_code.count('ForEach-Object { $_.FullName }') == 2, 'both tiers must enumerate this way'
+        counting = re.findall(r'Write-Output "linting \$\(\$targets\.Count\)', ci_code)
+        assert len(counting) == 2, 'a gate must report how much it linted, in the log'
         failing = ci.count('throw') + ci.count('-z "$') + ci.count('-z ${')
         assert failing >= 2, 'a tier that finds no sources must fail, not pass silently'
         # The gate checks FATAL/ERROR/WARNING, and it does so on the command line: a `--disable=C,R`

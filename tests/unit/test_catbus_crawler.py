@@ -10,6 +10,7 @@ import pytest
 
 from crawlers.backends import catbus as catbus_module
 from crawlers.core.crawler import UNDER_TARGET, CrawlerStopped
+from i18n import platform_label
 from services import catbus_bridge as bridge
 
 
@@ -264,7 +265,7 @@ class TestCommentsWalkOneLinkAtATime:
             return outcome(status='ok', rows=2)
 
         monkeypatch.setattr(bridge, 'run', fake_run)
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1/', 50)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1/', 50)
         assert status == catbus_module.OK
         assert len(rows) == 2
         assert sent['urls'] == ['https://www.bilibili.com/video/BV1/'], 'one link, one process'
@@ -285,7 +286,7 @@ class TestCommentsWalkOneLinkAtATime:
             return outcome(status='partial', rows=3, warnings=('page 2 timeout',))
 
         monkeypatch.setattr(bridge, 'run', fake_run)
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BV1/', 0)
         assert status == catbus_module.OK
         assert len(rows) == 3
         assert session.skipped_targets == ['https://www.bilibili.com/video/BV1/']
@@ -293,7 +294,7 @@ class TestCommentsWalkOneLinkAtATime:
 
     def test_a_dead_link_reports_dead_and_names_it(self, session, monkeypatch):
         monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='dead'))
-        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BVgone/', 0)
+        rows, status = session.walk('bilibili', 'https://www.bilibili.com/video/BVgone/', 0)
         assert status == catbus_module.DEAD
         assert rows == []
         assert session.skipped_targets == ['https://www.bilibili.com/video/BVgone/']
@@ -310,7 +311,7 @@ class TestCommentsWalkOneLinkAtATime:
             lambda *a, **kw: outcome(status='blocked', message='未登录', hint='catbus bilibili auth login'),
         )
         with pytest.raises(ValueError) as raised:
-            session.crawl_bilibili('https://www.bilibili.com/video/BV1/', 0)
+            session.walk('bilibili', 'https://www.bilibili.com/video/BV1/', 0)
         assert 'catbus bilibili auth login' in str(raised.value)
         assert session.skipped_targets == [], 'a refusal is not a walked link, proven or otherwise'
 
@@ -392,14 +393,40 @@ class TestItIsNotBilibiliSpecific:
         made.set_sink(made.ledger)
         return made
 
-    def test_a_platform_the_adapter_newly_supports_already_has_its_comment_adapter(self, monkeypatch):
-        made = self._weibo(monkeypatch)
-        assert callable(made.crawl_weibo), 'the engine looks the adapter up by name; no list is kept here'
+    def test_a_platform_the_adapter_newly_supports_needs_no_python_at_all(self, monkeypatch):
+        """One ``walk`` method, and the manifest answers the cell question.
 
-    def test_a_platform_it_does_not_offer_raises_like_a_missing_method_would(self, monkeypatch):
-        """The named refusal stays the engine's ``comment.noAdapter``, not a silent fallback."""
+        The engine used to reach this backend through a name it built from the routing key
+        (``getattr(session, 'crawl_weibo')``), which forced this class to synthesise methods.
+        Now the same fact — "the adapter mapped weibo for comments" — is enough: nothing in this
+        file names a platform, and a mapping added upstream is crawlable the moment it appears.
+        """
         made = self._weibo(monkeypatch)
-        assert not hasattr(made, 'crawl_zhihu'), 'an unsupported platform looks like no adapter at all'
+        link = 'https://weibo.com/1/AbCdEf'
+
+        def fake_run(platform, mode, params, **kw):
+            kw['on_row']({'平台': platform, '评论ID': 'w1', '评论内容': '好', '文章URL': params['urls'][0]})
+            return outcome(status='ok', rows=1)
+
+        monkeypatch.setattr(bridge, 'run', fake_run)
+        rows, status = made.walk('weibo', link, 2)
+        assert status == catbus_module.OK, status
+        assert [row['评论ID'] for row in rows] == ['w1']
+        assert rows[0]['平台'] == 'weibo', 'the manifest, not the class, decided which site this was'
+
+    def test_a_platform_the_manifest_has_not_mapped_refuses_by_name(self, monkeypatch):
+        """Not an ``AttributeError``, not an empty table: the refusal says which cell is missing.
+
+        The platform is matched through ``platform_label``, because ``t()`` answers a
+        ``{platform}`` slot with the site's WORD (知乎 / Zhihu) rather than the routing key — the
+        same rule every other console line follows, and a test that pinned 'zhihu' would be a test
+        that only passes in one language.
+        """
+        made = self._weibo(monkeypatch)
+        word = platform_label('zhihu')
+        with pytest.raises(ValueError, match=word) as caught:
+            made.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 2)
+        assert 'comments' in str(caught.value), str(caught.value)
 
     def test_the_watermark_keys_on_the_column_the_manifest_named(self, monkeypatch):
         made = self._weibo(monkeypatch, identity=('文章URL',))

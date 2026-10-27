@@ -1,15 +1,17 @@
-"""Browser-free helpers shared by every platform's comment parser.
+"""Browser-free helpers shared by every platform's comment walk.
 
-These are the small, dependency-light functions more than one adapter needs:
-the three status verdicts a comment crawl can answer with, and four pure text
-helpers. The per-platform parsers live in their own ``comments_<platform>.py``
-module and import what they need from here; ``comments.py`` re-exports the whole
-public surface so the rest of the program can keep importing from one place.
+These are the small, dependency-light functions more than one adapter needs: the three status
+verdicts a comment crawl can answer with, a count reader that never invents a number, and four pure
+text helpers. Each platform's own parser and walk live in ``crawlers/platforms/<id>/comments.py``,
+which imports what it needs from here; nothing re-exports this surface, so a helper has one name and
+one home.
 """
 
 import json
 import re
 from datetime import datetime, timedelta, timezone
+
+from crawlers.engine.counters import parse_count
 
 #: One article can fail for different reasons and they must not blur:
 #: ``ok`` (rows, maybe zero — zero means 无评论), ``blocked`` (risk-control or
@@ -17,6 +19,18 @@ from datetime import datetime, timedelta, timezone
 OK = 'ok'
 BLOCKED = 'blocked'
 DEAD = 'dead'
+
+
+def as_count(value) -> int:
+    """A count the site may send as a number, as digits, or as 「1.2万」 text.
+
+    ``parse_count`` is the engine's one answer for the last shape, so a denominator read from a payload
+    goes through it rather than through a second ``int(...)`` that would raise on 「赞」 and be caught,
+    hiding the fact that the page never gave a number.
+    """
+    if isinstance(value, (int, float)):
+        return int(value)
+    return parse_count(str(value or ''))
 
 
 def _json_or_none(raw):

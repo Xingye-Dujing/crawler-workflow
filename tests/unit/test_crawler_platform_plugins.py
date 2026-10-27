@@ -18,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from crawlers import CRAWLERS
-from crawlers.commenting import session as comment_session
 
 pytestmark = pytest.mark.unit
 
@@ -58,41 +57,67 @@ class TestPlatformsDoNotReachIntoEachOther:
     #: Modules a platform may depend on: its own package, and the shared layers.
     _ALLOWED_PREFIXES = ('crawlers.engine', 'crawlers.core', 'crawlers.commenting')
 
-    def _foreign(self) -> list[str]:
+    def _foreign_in(self, own: str, source: str, filename: str) -> list[str]:
+        """One module's cross-platform imports, as findings. Split out so a positive control can feed
+        it source that no file in the tree contains — a scan nobody has seen convict anything is a scan
+        that might be reading nothing."""
         foreign = []
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            targets = []
+            if isinstance(node, ast.Import):
+                targets = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                targets = [node.module]
+            for target in targets:
+                if not target.startswith('crawlers.platforms.'):
+                    continue
+                other = target.split('.')[2]
+                if other != own:
+                    foreign.append(f'{own}/{filename}:{node.lineno} imports {other}')
+        return foreign
+
+    def _foreign(self) -> list[str]:
+        findings = []
         for own in sorted(_platform_dirs()):
             for module in sorted((PLATFORMS_DIR / own).glob('*.py')):
-                tree = ast.parse(module.read_text(encoding='utf-8'))
-                for node in ast.walk(tree):
-                    targets = []
-                    if isinstance(node, ast.Import):
-                        targets = [alias.name for alias in node.names]
-                    elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                        targets = [node.module]
-                    for target in targets:
-                        if not target.startswith('crawlers.platforms.'):
-                            continue
-                        other = target.split('.')[2]
-                        if other != own:
-                            foreign.append(f'{own}/{module.name}:{node.lineno} imports {other}')
-        return foreign
+                findings += self._foreign_in(own, module.read_text(encoding='utf-8'), module.name)
+        return findings
 
     def test_no_platform_module_imports_another_platform(self):
         assert self._foreign() == [], 'a platform reaching into another is how site facts leak: ' + '; '.join(
             self._foreign()
         )
 
-    def test_the_scan_asks_the_imports_it_claims(self):
-        """A guard that parses nothing is green forever: the shared comment session DOES import
-        several platform packages, so it must be outside this rule and still have imports found."""
-        tree = ast.parse(Path(comment_session.__file__).read_text(encoding='utf-8'))
-        platform_imports = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Import, ast.ImportFrom)) and 'crawlers.platforms.' in ast.unparse(node)
-        ]
-        assert len(platform_imports) >= 4, (
-            'the comment session no longer imports platform modules — did the shape change?'
+    def test_the_scan_convicts_a_cross_platform_import_it_is_given(self):
+        """Positive control: the rule above is only as good as this — the parser does see the shape."""
+        found = self._foreign_in(
+            'zhihu',
+            'from crawlers.platforms.weibo.comments import parse_weibo_comments\n',
+            'crawler.py',
+        )
+        assert found == ['zhihu/crawler.py:1 imports weibo'], found
+        # And its mirror: the same import inside its OWN package is not a finding.
+        assert self._foreign_in('weibo', 'from crawlers.platforms.weibo.comments import x\n', 'crawler.py') == []
+
+    def test_the_scan_reads_the_platform_tree_it_claims(self):
+        """A guard over zero files is green forever, so the real scan must report how much it read."""
+        read = sum(1 for own in _platform_dirs() for _ in (PLATFORMS_DIR / own).glob('*.py'))
+        assert read >= 20, f'the scan saw {read} platform modules — did the layout move again?'
+        same_package_imports = 0
+        for own in sorted(_platform_dirs()):
+            for module in sorted((PLATFORMS_DIR / own).glob('*.py')):
+                tree = ast.parse(module.read_text(encoding='utf-8'))
+                same_package_imports += sum(
+                    1
+                    for node in ast.walk(tree)
+                    if isinstance(node, (ast.Import, ast.ImportFrom))
+                    and f'crawlers.platforms.{own}' in ast.unparse(node)
+                )
+        assert same_package_imports >= 5, (
+            f'only {same_package_imports} platform imports found — the parser is not seeing what the '
+            f'rule is about (measured 2026-10-27: 7 — each comment walk reaching its own crawler for '
+            f'the id parser, plus the hongguo harness pair)'
         )
 
 

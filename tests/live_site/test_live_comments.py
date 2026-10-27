@@ -11,7 +11,8 @@ import re
 
 import pytest
 
-from crawlers.commenting.session import BLOCKED, OK, CommentSession
+from crawlers.commenting.protocol import BLOCKED, OK
+from crawlers.commenting.session import CommentSession
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
@@ -39,7 +40,7 @@ def test_weibo_comments_live(live_crawler, weibo_windowed, headless):
     crawler = live_crawler('weibo', headless=headless)
     try:
         session = CommentSession(crawler.driver, log=print)
-        rows, status = session.crawl_weibo(link, limit=5)
+        rows, status = session.walk('weibo', link, limit=5)
     finally:
         crawler.close()
     assert status == OK, f'ajax comments failed with {status}'
@@ -57,7 +58,7 @@ def test_xhs_note_comments_live(live_crawler):
         note = next((c.get('笔记链接') or c.get('链接') or '') for c in cards if (c.get('笔记链接') or c.get('链接')))
         assert note, 'xhs search produced no clickable note'
         session = CommentSession(crawler.driver, log=print)
-        rows, status = session.crawl_xiaohongshu(note, limit=5)
+        rows, status = session.walk('xiaohongshu', note, limit=5)
     finally:
         crawler.close()
     assert status in (OK, BLOCKED), f'unexpected adapter failure: {status}'
@@ -104,7 +105,7 @@ def test_zhihu_answer_comments_live(live_crawler, headless):
         )
         link = str(candidates[reported.index(max(reported))]['链接'])
         session = CommentSession(crawler.driver, log=print)
-        rows, status = session.crawl_zhihu(link, limit=5)
+        rows, status = session.walk('zhihu', link, limit=5)
     finally:
         crawler.close()
     if status == BLOCKED:

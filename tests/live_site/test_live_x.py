@@ -28,7 +28,8 @@ import re
 
 import pytest
 
-from crawlers.commenting.session import OK, CommentSession
+from crawlers.commenting.protocol import OK
+from crawlers.commenting.session import CommentSession
 
 #: ``live_os``: x.com is unreachable from a Chinese network, so this file runs with a
 #: VPN up while the domestic files run with it off (``live_cn``).
@@ -173,7 +174,7 @@ def test_replies_are_walked_on_the_posts_own_page(live_crawler):
                 break
         assert link, f'none of {len(posts)} posts from {ACCOUNT} reported replies — nothing to read honestly'
         session = CommentSession(crawler.driver, log=print)
-        rows, status = session.crawl_twitter(link, limit=8)
+        rows, status = session.walk('twitter', link, limit=8)
     finally:
         crawler.close()
     assert status == OK, f'the reply walk reported {status} on a post that shows replies'

@@ -70,22 +70,32 @@ jobs:
       # `--disable=C,R --fail-on=W,E,F` is the standard the user set: FATAL, ERROR and WARNING must
       # be zero. It is scoped on the COMMAND LINE, never in the tier configs, so nothing is hidden
       # from a local run. pylint's exit code is a bitmap of the categories it saw, and CONVENTION
-      # and REFACTOR advice is present by design (624 `import-outside-toplevel` are deliberate lazy
-      # imports that break real cycles), so without the scoping the gate would be red forever and
-      # everyone would learn to ignore it. Run the same command without the flag to see the full 900+.
+      # and REFACTOR advice is present by design — the lazy imports that break real cycles are
+      # `import-outside-toplevel`, and they are deliberate — so without the scoping the gate would be
+      # red forever and everyone would learn to ignore it. Run the same command without the flags to
+      # see what is being waived.
+      # Targets are enumerated as FILES, never as bare directory names: a folder called `packaging`
+      # would resolve to the PyPA distribution in site-packages instead of this repository (the folder
+      # is `desktop/` now, and the rule stays). The `@(...)` block uses STATEMENTS, not a comma list:
+      # `@( (Get-ChildItem a), (Get-ChildItem b) ) | ForEach-Object FullName` builds an array of TWO
+      # arrays, and `FullName` asked of an array is not a member — measured on the runner, that shape
+      # passed pylint two empty arguments and pylint answered "No files to lint: exiting." with exit 1.
+      # Loud, which is the point: a gate that reports success over an empty list is worse than none.
       - name: Pylint — product
         run: |
           $targets = @(
-            (Get-ChildItem backend -Recurse -Filter *.py -File | Where-Object Name -notlike 'test_*'),
-            (Get-ChildItem desktop, tools, 'ml_train/scripts' -Filter *.py -File)
-          ) | ForEach-Object FullName
+            Get-ChildItem backend -Recurse -Filter *.py -File | Where-Object Name -notlike 'test_*'
+            Get-ChildItem desktop, tools, 'ml_train/scripts' -Filter *.py -File
+          ) | ForEach-Object { $_.FullName }
           if (-not $targets) { throw 'no product sources found to lint' }
+          Write-Output "linting $($targets.Count) product files"
           .venv/Scripts/pylint.exe --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $targets
 
       - name: Pylint — tests
         run: |
-          $targets = Get-ChildItem tests -Recurse -Filter *.py -File | ForEach-Object FullName
+          $targets = @(Get-ChildItem tests -Recurse -Filter *.py -File | ForEach-Object { $_.FullName })
           if (-not $targets) { throw 'no test sources found to lint' }
+          Write-Output "linting $($targets.Count) test files"
           .venv/Scripts/pylint.exe --persistent=n --rcfile=.pylintrc.tests --disable=C,R --fail-on=W,E,F --jobs=2 $targets
 
       # NO third CI step on purpose. The measurement scripts (`backend/test_*.py`) are gitignored on

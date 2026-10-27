@@ -25,9 +25,9 @@ and the measurements are what decided this design:
   ``lockupViewModel`` (the 2025+ view-model shape), so both readers exist and
   neither guesses about the other.
 
-Comments live in ``crawlers/commenting/session.py`` (``CommentSession.crawl_youtube``):
-that engine is shared with the standalone Comment node, and a video's 评论数 is
-read there rather than guessed here — the player answer does not carry it.
+Comments live in ``crawlers/platforms/youtube/comments.py`` (its ``walk``): that engine is shared
+with the standalone Comment node, and a video's 评论数 is read there rather than guessed here — the
+player answer does not carry it.
 """
 
 import logging

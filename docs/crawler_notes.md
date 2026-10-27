@@ -6,6 +6,13 @@ to touch.** Every claim below was observed against the live site; the date it wa
 the text. When a measurement is overturned, replace the old paragraph rather than appending a
 second opinion beside it.
 
+**Names in the record are the names of the day it was written.** The comment walks were methods on
+`CommentSession` (`crawlers/commenting/session.py::crawl_weibo` and friends) until 2026-10-27, when
+each one moved to its own platform package (`crawlers/platforms/<id>/comments.py::walk`) and the
+dispatch became a registry (`crawlers/commenting/walks.py`). A paragraph that names `crawl_douyin`
+is describing the measurement, not asking you to find that method — the code it refers to is the
+`walk` in `platforms/douyin/comments.py`.
+
 ## Contents
 
 - [Weibo](#weibo) · [Zhihu](#zhihu) · [Douyin](#douyin) · [Bilibili](#bilibili)
