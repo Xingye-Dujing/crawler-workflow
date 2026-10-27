@@ -45,9 +45,9 @@ import threading
 import time
 
 import pandas as pd
+from core.config import Config
 from sessions.cookies import CookieManager
 
-from config import Config
 from i18n import t
 
 logger = logging.getLogger(__name__)

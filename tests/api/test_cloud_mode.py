@@ -10,9 +10,8 @@ repo keeps paying for is a run that quietly does the other thing and reports suc
 import os
 
 import pytest
+from core.config import Config
 from sessions import routes, template
-
-from config import Config
 
 pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 

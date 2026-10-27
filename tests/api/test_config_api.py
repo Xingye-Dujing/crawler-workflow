@@ -21,11 +21,10 @@ import os
 import sys
 
 import pytest
+from core.config import Config
 from sessions import profiles
 from sessions.cookies import CookieManager
 from state import cookie_manager
-
-from config import Config
 
 pytestmark = pytest.mark.api
 

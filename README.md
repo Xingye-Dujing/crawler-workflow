@@ -188,7 +188,11 @@ Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上�
 crawler_workflow/
 ├── backend/
 │   ├── app.py                    # Flask 主入口（组合根 + 节点执行表）
-│   ├── config.py                 # 配置与数据路径
+│   ├── core/                     # 地基包：只依赖 stdlib 与自身，谁都可以 import
+│   │   ├── config.py             # 配置与数据路径
+│   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）
+│   │   ├── machine.py            # 按操作系统分支的机器事实（Chrome/驱动/xelatex/Node 的位置）
+│   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
 │   ├── i18n.py                   # zh/en 消息目录
 │   ├── settings_store.py         # 运行时可改设置（data/settings.json）
 │   ├── scheduling/               # 定时任务域（时钟 / 台账 / cron 语法）
@@ -205,7 +209,6 @@ crawler_workflow/
 │   ├── engine/                   # 工作流引擎：DAG 解析、执行器、日志
 │   ├── services/                 # 续跑存储 / 数据集 / 导出 / 报告 / 可视化 / LaTeX 等
 │   ├── sessions/                 # 登录态域：具名 Cookie、各账号的 Chrome profile、模板重建、运行前预检
-│   ├── utils/                    # 工具函数
 │   └── static/                   # 前端：index.html、css、js（canvas/workflow/app…）
 ├── data/                         # 运行时数据（gitignore；仅 workflows/ 进版本库）
 ├── docs/                         # 文档：采集/分析/工作流/API/配置/开发 + 实测记录 + 重构方案

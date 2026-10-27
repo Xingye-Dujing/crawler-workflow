@@ -266,9 +266,8 @@ class TestValidate:
         may quietly borrow another account's session either, which is what "blank means
         whatever is here" would have done.
         """
+        from core import config as config_module
         from sessions.cookies import CookieManager
-
-        import config as config_module
 
         jar = str(tmp_path / 'cookies')
         monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', jar)
@@ -318,9 +317,8 @@ class TestValidate:
         never re-planted, so a node whose snapshot was removed still has a way in — and
         refusing it would be the validator contradicting the crawler.
         """
+        from core import config as config_module
         from sessions import profiles
-
-        import config as config_module
 
         monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', str(tmp_path / 'cookies'))
         monkeypatch.setattr(profiles, 'is_enabled', lambda: True)
@@ -332,9 +330,8 @@ class TestValidate:
         """Comment links are always logged-in crawls, and one node walks several feeds
         with the single account on its form — so each platform its own links name is
         asked, and a missing login is refused once per platform rather than crawled into."""
+        from core import config as config_module
         from sessions.cookies import CookieManager
-
-        import config as config_module
 
         jar = str(tmp_path / 'cookies')
         monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', jar)

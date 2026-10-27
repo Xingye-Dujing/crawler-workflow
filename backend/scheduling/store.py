@@ -21,9 +21,9 @@ import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from core.config import Config
 from core.refs import as_bool
 
-from config import Config
 from i18n import normalize as normalize_lang
 from i18n import t
 from scheduling import cron

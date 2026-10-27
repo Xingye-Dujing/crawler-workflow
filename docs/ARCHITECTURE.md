@@ -16,7 +16,7 @@ file is about *shape*. The numbers below are measured, not estimated.
 | area | contents |
 |---|---|
 | `app.py` | **4,411 LOC: the composition root, the run orchestration (`_begin_run`, the queue, `_run_node_durable`) and 39 remaining `@app.route` handlers.** The other 89 route decorators are 23 Blueprints in `backend/api/`; the live URL map holds 129 rules over 123 unique paths (re-measure: `len(app.url_map.iter_rules())` — extraction moves handlers, never a path). Stage 6 of `docs/refactor_plan.md` takes the routes and the orchestration out of this file. |
-| `config.py` | paths, env, constants (retention/queue/preflight/scheduler tick). |
+| `core/config.py` | paths, env, constants (retention/queue/preflight/scheduler tick). |
 | `i18n.py` | the zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
 | `crawl_capabilities.py` | the single crawl matrix: platform × mode × field × handler. |
 | `scheduling/` | The 定时任务 domain (2026-10-28 from `scheduler.py` + `services/{schedule_store,cron}.py`): `clock.py` is an in-process daemon thread ticking `Config.SCHEDULER_TICK_SECONDS`, firing through the seam `app._start_scheduled_run` → `_begin_run` (never a second start path); `store.py` is `data/schedules.json`; `cron.py` parses/validates the time expressions. |

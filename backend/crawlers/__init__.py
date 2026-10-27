@@ -1,7 +1,7 @@
+from core.config import Config
 from sessions import profiles
 from sessions.cookies import CookieManager
 
-from config import Config
 from crawlers.platforms.bilibili.crawler import BilibiliCrawler
 from crawlers.platforms.douyin.crawler import DouyinCrawler
 from crawlers.platforms.hongguo.crawler import HongguoCrawler

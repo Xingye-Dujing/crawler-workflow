@@ -25,7 +25,7 @@ import sqlite3
 import threading
 import time
 
-from config import Config
+from core.config import Config
 
 #: Columns that describe a node's neighbourhood rather than the node. The edges are captured
 #: separately, so storing `连接` inside every node row would double the payload and let the two

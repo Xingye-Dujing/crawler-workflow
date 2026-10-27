@@ -27,8 +27,8 @@ import time
 from dataclasses import dataclass, field
 
 from core import machine, procs
+from core.config import Config
 
-from config import Config
 from i18n import t
 
 BACKEND_NAME = 'catbus'

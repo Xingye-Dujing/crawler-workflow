@@ -626,8 +626,9 @@ def _llm_block() -> dict:
     for the test's own staleness. Nothing here edits his file to drop the node — that would be the
     acceptance run quietly not accepting what he saved.
     """
+    from core.config import Config
+
     from analyzers.llm_client import list_ollama_models
-    from config import Config
 
     models = list_ollama_models(Config.OLLAMA_HOST)
     assert models, f'the local daemon at {Config.OLLAMA_HOST} lists no chat model, so the AI leg cannot run'

@@ -13,11 +13,11 @@ address, all of which change what an answer means.
 
 import os
 
+from core.config import Config
 from core.refs import as_bool
 from state import _completed_lock, add_log, execution_state
 
 from analyzers.llm_client import LLMClient
-from config import Config
 from i18n import t
 from services.run_files import record_file
 

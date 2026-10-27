@@ -358,9 +358,10 @@ class TestUserDirectoryStaysReadOnly:
 
     def _every_captured_path(self) -> dict:
         """Each place a module-level singleton wrote down a path, as it stands right now."""
+        from core.config import Config
+
         import settings_store
         from analyzers import ml_base
-        from config import Config
 
         found = {
             'Config.DATA_DIR': Config.DATA_DIR,
@@ -541,7 +542,7 @@ class TestUserDirectoryStaysReadOnly:
                     'import json, sys',
                     paths,
                     'import conftest',
-                    'from config import Config',
+                    'from core.config import Config',
                     'print(json.dumps({"cookies": Config.COOKIE_DIR, "root": str(conftest.ISOLATED_ROOT)}))',
                 )
             )
@@ -551,7 +552,7 @@ class TestUserDirectoryStaysReadOnly:
                 (
                     'import json, sys',
                     paths,
-                    'from config import Config',
+                    'from core.config import Config',
                     'print(json.dumps({"cookies": Config.COOKIE_DIR}))',
                 )
             )

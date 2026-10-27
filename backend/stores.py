@@ -20,9 +20,9 @@ global in ``app`` and detach the two — which is why every store-object write s
 import threading
 
 import pandas as pd
+from core.config import Config
 from state import _dataset_cache
 
-from config import Config
 from services.biblio_store import BiblioStore
 from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping

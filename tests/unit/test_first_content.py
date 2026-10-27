@@ -20,10 +20,10 @@ The second half of the file is the patience itself: it has to end on evidence, e
 """
 
 import pytest
+from core.config import Config
 from test_crawler_base import bare
 
 import crawlers.core.crawler as base_module
-from config import Config
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import CrawlerStopped, PageNotArrivedError
 from crawlers.engine.wall import classify

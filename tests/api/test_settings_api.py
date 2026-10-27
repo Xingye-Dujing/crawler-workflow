@@ -1,7 +1,7 @@
 """Tests for the runtime settings panel and the AI endpoints behind it.
 
 ``settings_store`` is the machine-local half of the app: the values that used
-to be hardcoded in ``config.py`` and now get edited from the browser. The
+to be hardcoded in ``core/config.py`` and now get edited from the browser. The
 contract worth pinning is that a bad edit degrades *loudly and locally* — the
 handler answers 200 with a warning and falls back to the default, because a
 rejected save would leave the panel showing something the server is not using.
@@ -15,9 +15,9 @@ stubbed; nothing here can reach Ollama or OpenRouter.
 import json
 
 import pytest
+from core.config import Config
 
 import settings_store
-from config import Config
 
 pytestmark = pytest.mark.api
 

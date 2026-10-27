@@ -92,8 +92,7 @@ def ollama_host() -> str:
     by setting ``CRAWLER_REQUIRE_OLLAMA``, which is the same switch the browser has.
     """
     import requests
-
-    from config import Config
+    from core.config import Config
 
     host = (Config.OLLAMA_HOST or 'http://localhost:11434').rstrip('/')
     try:
@@ -110,8 +109,7 @@ def ollama_host() -> str:
 def ollama_chat_model(ollama_host) -> str:
     """A pulled, chat-capable model tag (embedding models cannot chat)."""
     import requests
-
-    from config import Config
+    from core.config import Config
 
     models = requests.get(ollama_host + '/api/tags', timeout=5).json().get('models', [])
     tags = [

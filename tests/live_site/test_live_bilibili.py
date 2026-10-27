@@ -17,8 +17,8 @@ The assertions are the ones the probes earned:
 import time
 
 import pytest
+from core.config import Config
 
-from config import Config
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.session import CommentSession
 from crawlers.platforms.bilibili.crawler import bilibili_bvid

@@ -10,9 +10,8 @@ extends the crawl matrix with ``sessions.cookies``'s live account list. Paths un
 import json
 import os
 
+from core.config import Config
 from flask import Blueprint, jsonify
-
-from config import Config
 
 bp = Blueprint('config', __name__)
 

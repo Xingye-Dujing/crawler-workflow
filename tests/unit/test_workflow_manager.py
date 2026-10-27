@@ -136,7 +136,7 @@ class TestListingAndDeleting:
         assert manager.list_workflows() == ['keep']
 
     def test_the_directory_is_created_for_the_app_default(self, monkeypatch, tmp_path):
-        from config import Config
+        from core.config import Config
 
         target = tmp_path / 'default-workflows'
         monkeypatch.setattr(Config, 'WORKFLOW_DIR', str(target))

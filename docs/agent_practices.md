@@ -1245,7 +1245,7 @@ a real defect on at least one of the three, not a style preference. The rules ar
   node that could never run there. Both harvest packages now carry `sys_platform == "win32"`. The other
   declaration gap was `tzdata`: Windows has no system zoneinfo directory and a slim image usually has none
   either, so a scheduled task with a Chinese zone name died with `ZoneInfoNotFoundError`.
-- **A deploy knob nobody reads is worse than none.** The Dockerfile exported `CHROMEDRIVER_PATH`; `config.py`
+- **A deploy knob nobody reads is worse than none.** The Dockerfile exported `CHROMEDRIVER_PATH`; `core/config.py`
   reads `CIXI_DRIVER_PATH`. The image looked configured and was not.
 - **Two tests were pinning a Windows spelling rather than an answer.** `test_lint_gate.py` required the
   literal `Get-ChildItem` in `ci.yml` (an ubuntu runner would fail the *gate*, not the code) and

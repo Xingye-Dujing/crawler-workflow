@@ -12,12 +12,12 @@ import logging
 import time
 
 import requests
+from core.config import Config
 from flask import Blueprint, jsonify
 from transport import _local_transport_refusal
 
 from analyzers.llm_client import LLMClient, LLMError, list_free_models, list_ollama_models
 from api.http import _bad_body, _json_body
-from config import Config
 from i18n import t
 from settings_store import get_setting
 

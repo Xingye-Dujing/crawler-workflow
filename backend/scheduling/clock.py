@@ -23,7 +23,8 @@ import os
 import threading
 from datetime import datetime
 
-from config import Config
+from core.config import Config
+
 from i18n import set_lang, t
 from scheduling import cron, store
 

@@ -449,7 +449,7 @@ class TestPagingWalk:
         half), and a wait that ignores 停止 is the longest thing in the program — the user's only exit
         would have to wait for it.
         """
-        from config import Config
+        from core.config import Config
 
         crawler, _driver = make_crawler(final_url=FEED, cards=False)
         ticks = []

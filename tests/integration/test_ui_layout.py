@@ -49,7 +49,7 @@ VIEWPORTS = [(1920, 1080), (1366, 768), (1024, 700)]
 def app_url(tmp_path_factory):
     """Boot the real server on a private port, in a state root of its own.
 
-    ``CRAWLER_DATA_ROOT`` (see ``backend/config.py``) is what makes that possible: without it, this
+    ``CRAWLER_DATA_ROOT`` (see ``backend/core/config.py``) is what makes that possible: without it, this
     instance shares the user's ``data/`` — and a second process reading that directory still writes
     ``app.log`` and the databases' ``-wal``/``-shm`` sidecars, while a startup ``promote_stale_runs``
     would settle whatever run their own instance is in the middle of. Measured, that is exactly what

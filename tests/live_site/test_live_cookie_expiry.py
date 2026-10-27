@@ -17,8 +17,7 @@ import time
 from datetime import date, timedelta
 
 import pytest
-
-from config import Config
+from core.config import Config
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

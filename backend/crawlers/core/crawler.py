@@ -6,10 +6,10 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
+from core.config import Config
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
-from config import Config
 from crawlers.core import browser
 from crawlers.core.faults import CrawlerStopped
 from crawlers.engine import feed, popup

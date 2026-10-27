@@ -17,9 +17,9 @@ Local navigation only — no site is contacted and nothing is written to the ser
 import time
 
 import pytest
+from core.config import Config
 from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
-from config import Config
 from crawlers import get_crawler
 from crawlers.core.faults import CrawlerStopped
 

@@ -35,8 +35,9 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from core.config import Config
+
 import crawl_capabilities as capabilities
-from config import Config
 from crawlers import crawler_class, is_crawlable
 from i18n import t
 from services import catbus_bridge

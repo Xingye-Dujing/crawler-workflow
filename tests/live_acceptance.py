@@ -336,7 +336,7 @@ def summary_row(run, *, case_id: str, found: list, answers: list, kept: int, ask
 
 def new_exports(before: set) -> list:
     """Files :data:`Config.EXPORT_DIR` gained while a run was going, newest first."""
-    from config import Config
+    from core.config import Config
 
     return sorted(
         (path for path in Path(Config.EXPORT_DIR).glob('*') if path.name not in before),
@@ -374,8 +374,7 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
     label-vs-filename drift was caught on douyin's (its output files are 抖音评论爬取…, not the 测试：… labels).
     """
     import live_run_harness as harness
-
-    from config import Config
+    from core.config import Config
 
     assert fresh, f'the canvas wires an output node to every component and {Config.EXPORT_DIR} gained no file'
     for part in found:
@@ -410,7 +409,7 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
 
 def export_dir_entries() -> set:
     """The export directory's current names — the baseline a 三一致 check reads before a run starts."""
-    from config import Config
+    from core.config import Config
 
     with contextlib.suppress(OSError):
         return {path.name for path in Path(Config.EXPORT_DIR).glob('*')}

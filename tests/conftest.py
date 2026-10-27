@@ -3,7 +3,7 @@
 Three facts about this codebase drive everything here:
 
 1. ``backend/`` is the application's sys.path root — every module imports the
-   next by top-level name (``from config import Config``). So backend/ goes on
+   next by top-level name (``from core.config import Config``). So backend/ goes on
    sys.path at *conftest import time*.
 2. Paths are captured **at import time, into module-level singletons**:
    ``app.cookie_manager = CookieManager(Config.COOKIE_DIR)``, ``app.history_service``
@@ -99,7 +99,7 @@ def _isolate_paths() -> Path:
     # explicit assignment below is what moves an already-imported ``config`` module.
     os.environ['CRAWLER_DATA_ROOT'] = str(root)
 
-    from config import Config
+    from core.config import Config
 
     for attr, rel in ISOLATED_PATHS:
         setattr(Config, attr, str(root / rel))
@@ -232,9 +232,8 @@ def seeded_logins(data_root):
     started" — which is exactly how two quiet-console cases failed the first time this
     fixture ran beside them.
     """
+    from core.config import Config
     from sessions.cookies import CookieManager
-
-    from config import Config
 
     manager = CookieManager(Config.COOKIE_DIR)
     saver = logging.getLogger('sessions.cookies')
@@ -300,7 +299,7 @@ def quiet_jar(data_root):
     is how a whole class of engine cases looked green between two cookie tests. Whatever
     a test added is deleted afterwards and whatever it removed is written back.
     """
-    from config import Config
+    from core.config import Config
 
     snapshot = _cookie_snapshot(Config.COOKIE_DIR)
     yield

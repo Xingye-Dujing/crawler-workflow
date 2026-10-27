@@ -36,7 +36,8 @@ import re
 import threading
 import time
 
-from config import Config
+from core.config import Config
+
 from sessions.cookies import ACCOUNT_RE, CookieManager
 from settings_store import get_setting
 

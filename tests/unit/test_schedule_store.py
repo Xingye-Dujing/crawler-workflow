@@ -22,9 +22,9 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from core.config import Config
 from scheduling import cron, store
 
-from config import Config
 from i18n import t
 
 pytestmark = pytest.mark.unit

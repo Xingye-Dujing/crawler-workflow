@@ -2,9 +2,9 @@ import json
 import logging
 import os
 
+from core.config import Config
 from core.refs import sanitize_filename
 
-from config import Config
 from i18n import t
 
 logger = logging.getLogger(__name__)

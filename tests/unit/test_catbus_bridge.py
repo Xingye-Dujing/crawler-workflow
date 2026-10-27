@@ -12,9 +12,9 @@ import sys
 import textwrap
 
 import pytest
+from core.config import Config
 
 import settings_store
-from config import Config
 from i18n import get_lang, set_lang, t
 from services import catbus_bridge as bridge
 

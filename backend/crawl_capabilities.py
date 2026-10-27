@@ -61,7 +61,7 @@ def requirement_met(token: str, system: str | None = None, cloud: bool | None = 
 
 def cloud_is() -> bool:
     """The cloud switch, read late so an import of this matrix never drags ``config`` in."""
-    from config import Config
+    from core.config import Config
 
     return bool(Config.CLOUD_MODE)
 

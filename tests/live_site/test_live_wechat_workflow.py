@@ -153,7 +153,7 @@ def test_a2_a_long_body_is_clipped_with_a_marker_not_silently(client, app_module
     the limit is set to 200 here (not the shipped 5000) so the test does not depend on finding a 5000+
     character article — the claim is "a body longer than the limit is cut and says so", arithmetic and all.
     """
-    from config import Config
+    from core.config import Config
 
     monkeypatch.setattr(Config, 'WECHAT_BODY_MAX_CHARS', 200, raising=False)
     with LiveRun(client, app_module, posts_canvas([URLS[0]]), case_id='A2', mode='posts', target=1) as run:

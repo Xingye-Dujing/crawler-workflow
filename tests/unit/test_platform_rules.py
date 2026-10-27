@@ -429,7 +429,7 @@ class TestTheDeployFilesSayWhatTheCodeReads:
         declared = set(re.findall(r'^ENV\s+([A-Z_][A-Z0-9_]*)', image, re.MULTILINE))
         sources = '\n'.join(
             path.read_text(encoding='utf-8', errors='replace')
-            for path in [BACKEND / 'config.py', BACKEND / 'app.py', BACKEND / 'core' / 'machine.py']
+            for path in [BACKEND / 'core' / 'config.py', BACKEND / 'app.py', BACKEND / 'core' / 'machine.py']
         )
         unread = sorted(name for name in declared if f"'{name}'" not in sources and name not in self.INTERPRETER_VARS)
         assert unread == [], f'the image exports variables no code reads: {unread}'

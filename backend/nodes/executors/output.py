@@ -11,10 +11,10 @@ import contextlib
 import os
 
 import pandas as pd
+from core.config import Config
 from core.refs import as_bool, sanitize_filename
 from state import _wf_local, add_log
 
-from config import Config
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label

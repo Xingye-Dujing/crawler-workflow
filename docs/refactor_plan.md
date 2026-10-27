@@ -449,7 +449,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = 本次提交**（`core/` 地基，Stage 3a）。顺序：`29fc100`（sessions/routes 归域）← `e221d9b`
+  - **HEAD = 本次提交**（`core/config.py`，Stage 3b）。顺序：`33440b5`（utils→core 三件，Stage 3a）
+    ← `29fc100`（sessions/routes 归域）← `e221d9b`
     （补 scheduling 未 stage 的内容，修 CI E0611）← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）
     ← `20c2ac7`（用户画布布局）← `85646bf`（压缩锚点）← `f625560`（登录态五模块 → `backend/sessions/`）
     ← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0`
@@ -527,9 +528,22 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 490 files。
     **过程自记**：为省事对三个测试文件用了 `sed -i` 改 `.machine_deps`→`.machine`，违反本仓"代码只用 tracked Edit"
     的规矩；改动仅此 15 处且 `git diff` 已逐行核对为预期替换，之后不再用 sed。
-  - **Stage 3 剩余 = 下一刀（3b）**：`config.py`/`state.py`/`settings_store.py`(→`core/settings.py`)/`stores.py`
-    搬进 `core/`（~190 个导入文件；仍是三规则脚本 + 残差 + ruff 网），随后 `crawl_capabilities.py` 拆成
-    `capabilities/`（含 Stage 1 ④ 的 `engine/` 平台事实，避免一个平台两处声明）。`i18n.py` 的拆分排在 Stage 7。
+  - **Stage 3b `core/config.py` 已完成（本次提交）**：`backend/config.py` → `backend/core/config.py`；
+    `build/move_config_to_core.py` 改写 **104 文件**（105 条 `from config import`；3 处函数内的
+    `import config as config_module` 用 `from core import config as …` 保住本地名）。
+    **真实依赖核对否掉了计划里的四分之三**：`settings_store` 依赖 `i18n`（i18n 到 Stage 7 才进 core/text）；
+    `state` 依赖 `sessions.cookies` 与 `services.execution_history`；`stores` 依赖 6 个 services + pandas
+    ⇒ **state/stores 不是地基**，目标树要修正（它们属于 services 之上的运行态层）；settings 排到 i18n 之后。
+    规则之外的四处：① `test_test_tiers` 里**被 subprocess 执行的源码片段** `'from config import Config'`（两条）
+    与 `conftest.py` 文档串；② `BACKEND / 'config.py'` 字面路径 → `'core' / 'config.py'`；③ spec 显式清单
+    `'config'` → `'core.config'`；④ README/development 目录树新增 `core/` 块、删根 `config.py` 与 `utils/` 行。
+    契约同步：`test_foundation_layering` 的三模块 → **四模块**（config/refs/machine/procs）。
+    **门禁**：fast **8,159 passed / 3 skipped / 353 deselected** exit=0；设备档 **192 passed / 0 skipped** exit=0；
+    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 490 files。
+  - **Stage 3 剩余 = 下一刀（3c）**：`crawl_capabilities.py`(1805) 拆成 `capabilities/`（model/requirements/
+    platforms/catbus/registry），并**同时**把 `engine/` 里的平台事实（wall/popup 判据词表等）迁进去（Stage 1 ④：
+    一个平台只声明一处）；`state`/`stores` 的归处按上面的依赖结论另议（不放进 core）；`settings_store` 等 i18n 拆分后
+    再进 core。`i18n.py` 的拆分仍是 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

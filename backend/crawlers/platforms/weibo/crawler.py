@@ -6,10 +6,10 @@ import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
+from core.config import Config
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
-from config import Config
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.core.faults import CrawlerStopped
 from crawlers.engine import pagefetch, pager, times

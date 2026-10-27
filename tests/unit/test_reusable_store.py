@@ -3,8 +3,8 @@
 import json
 
 import pytest
+from core.config import Config
 
-from config import Config
 from services import reusable_store
 from services.reusable_store import (
     TemplateCorruptError,

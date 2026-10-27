@@ -752,8 +752,9 @@ def _llm_block() -> dict:
     harness states it — read from the daemon rather than pasted, so a reworded model tag does not turn the
     acceptance run red for the test's own staleness.
     """
+    from core.config import Config
+
     from analyzers.llm_client import list_ollama_models
-    from config import Config
 
     models = list_ollama_models(Config.OLLAMA_HOST)
     assert models, f'the local daemon at {Config.OLLAMA_HOST} lists no chat model, so the AI leg cannot run'

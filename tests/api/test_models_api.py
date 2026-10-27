@@ -17,8 +17,7 @@ file is never another's precondition.
 import json
 
 import pytest
-
-from config import Config
+from core.config import Config
 
 pytestmark = pytest.mark.api
 

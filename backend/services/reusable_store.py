@@ -24,7 +24,8 @@ import threading
 import time
 import uuid
 
-from config import Config
+from core.config import Config
+
 from i18n import t
 
 #: A fragment is a user's authored work, not a crawl, so the caps are about keeping the

@@ -41,7 +41,7 @@
 
 | 键 | 说明 |
 |------|------|
-| `driver_path` | chromedriver 路径（覆盖 config.py 默认值） |
+| `driver_path` | chromedriver 路径（覆盖 core/config.py 默认值） |
 | `browser_binary` | Chrome 二进制路径 |
 | `catbus_cli` / `catbus_node` | **第二采集后端（CatBus）的两个本机路径**，与「驱动路径」同一形状：填在这里就不用去改 `PATH`。`catbus_cli` 既能填适配器文件（`…/crawler-workflow/cli.js`）也能填一份 CatBus 目录（自动补上那个入口）；`catbus_node` 只接受程序本身，填成目录会被点名说明。两栏都可留空 = 按本机系统查找；优先级是**设置面板 > 环境变量（`CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME`、`CIXI_NODE_BIN` / `NODE_BIN`）> 系统候选表 > `PATH`**。路径不存在只警告不拒绝（你可能在为一台将来才装好的机器配置），保存后面板立刻重新探测一次本机能力——否则缓存里那句「本机没有」会把刚修好的选项继续压灰 |
 | `window_size` | 浏览器窗口尺寸 |
@@ -55,7 +55,7 @@
 | `browser_profile_dir` | Profile 根目录，留空 = 内置 `data/chrome_profile/<平台>`；填绝对路径可指向你自己为该工具建的目录 |
 | `PROFILE_LOCK_TIMEOUT` | 一个平台的 profile 被另一次采集占用时，最多排队多久（默认 900 秒；超时即以可读的原因判该节点失败，不再抛驱动栈） |
 
-### 保留策略常量（`backend/config.py`）
+### 保留策略常量（`backend/core/config.py`）
 
 | 常量 | 说明 | 默认值 |
 |------|------|--------|
@@ -86,7 +86,7 @@ OOM 在三个节点之后发生而没有任何线索。
 那是一次动到执行器核心契约的改动，涉及 `_execute_node` 的返回值、`run_store` 的行写入、`upstream`
 的传递形式与 HTTP 边界四处，值得单独一次改，而不是顺手带上。
 
-### 排队、错峰与预检常量（`backend/config.py`）
+### 排队、错峰与预检常量（`backend/core/config.py`）
 
 站点把"同一账号一秒内的两次搜索"当成异常（微博弹登录页、知乎回 40362），profile 又只允许一个浏览器，
 所以这几条不是性能参数而是正确性参数：

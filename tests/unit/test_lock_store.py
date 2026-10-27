@@ -8,8 +8,8 @@ the throwaway root and never touches the user's ``data/``.
 """
 
 import pytest
+from core.config import Config
 
-from config import Config
 from services import lock_store
 
 pytestmark = pytest.mark.unit

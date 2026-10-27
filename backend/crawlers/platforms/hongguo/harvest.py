@@ -37,10 +37,10 @@ import uuid
 
 import requests
 from core import machine
+from core.config import Config
 from core.refs import as_bool
 
 import crawl_capabilities as capabilities
-from config import Config
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped

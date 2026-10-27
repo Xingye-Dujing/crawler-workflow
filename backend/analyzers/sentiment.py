@@ -8,9 +8,9 @@ from importlib.util import find_spec
 import numpy as np
 import pandas as pd
 from core import machine
+from core.config import BASE_DIR
 
 from analyzers.llm_client import run_llm_dataframe
-from config import BASE_DIR
 from i18n import t
 
 logger = logging.getLogger(__name__)

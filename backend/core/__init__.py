@@ -1,7 +1,8 @@
 """The foundation layer: every package may import it, and it imports no package.
 
-Three modules, each a different kind of "everybody needs this":
+Four modules, each a different kind of "everybody needs this":
 
+``config``   paths, environment knobs and the constants retention/queue/preflight read;
 ``refs``     small pure helpers (switch reading, name parsing, filenames, platform routing);
 ``machine``  the per-OS facts — where Chrome/chromedriver/xelatex/Node live, what the console can
              write — as tables keyed by the running system, joined with the TARGET's separator;

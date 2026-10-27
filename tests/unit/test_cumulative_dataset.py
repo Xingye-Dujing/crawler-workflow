@@ -2,9 +2,9 @@
 
 import pandas as pd
 import pytest
+from core.config import Config
 from nodes.executors.accumulate import execute_accumulate_node
 
-from config import Config
 from engine.workflow import WorkflowEngine
 from services.dataset_store import DatasetStore
 

@@ -13,8 +13,8 @@ is changed.
 """
 
 import pandas as pd
+from core.config import Config
 
-from config import Config
 from i18n import t
 from services.dataset_store import SOURCE_MERGE
 

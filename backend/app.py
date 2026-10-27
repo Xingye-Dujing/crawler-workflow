@@ -42,6 +42,7 @@ from api.studio import bp as studio_bp
 from api.visualize import bp as visualize_bp
 from api.workflow_history import bp as workflow_history_bp
 from core import machine
+from core.config import Config
 from core.refs import (
     as_bool,
     comment_platforms,
@@ -82,7 +83,6 @@ from stores import (
 from transport import _local_transport_refusal
 
 from analyzers.llm_client import ABORT_MARK, LLMClient
-from config import Config
 from crawlers.core.faults import CrawlerStopped
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger

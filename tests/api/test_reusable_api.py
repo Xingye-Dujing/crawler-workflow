@@ -1,8 +1,7 @@
 """HTTP contract for reusable-node templates: list, read, save, delete."""
 
 import pytest
-
-from config import Config
+from core.config import Config
 
 pytestmark = pytest.mark.api
 

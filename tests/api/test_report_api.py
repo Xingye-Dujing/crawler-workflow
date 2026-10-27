@@ -210,7 +210,7 @@ class TestView:
         [
             'notes.html',
             'report-x.txt',
-            '../../backend/config.py',
+            '../../backend/core/config.py',
             'report-',
             '',
             'data/results.csv',
@@ -265,7 +265,7 @@ class TestStudioImages:
         report_name = client.post('/api/report/generate', json={}).get_json()['name']
         import os
 
-        from config import Config
+        from core.config import Config
 
         os.makedirs(Config.EXPORT_DIR, exist_ok=True)
         with open(os.path.join(Config.EXPORT_DIR, 'scatter-abc.png'), 'wb') as handle:
@@ -279,7 +279,7 @@ class TestStudioImages:
         app_module.execution_state['results'] = {'node-1': ROWS}
         import os
 
-        from config import Config
+        from core.config import Config
 
         os.makedirs(Config.EXPORT_DIR, exist_ok=True)
         with open(os.path.join(Config.EXPORT_DIR, 'bar-xyz.png'), 'wb') as handle:

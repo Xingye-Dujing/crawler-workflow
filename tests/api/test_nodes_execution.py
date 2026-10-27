@@ -374,7 +374,7 @@ class TestRowCapWarning:
     def test_the_console_names_the_node_by_its_title(self, client, app_module, paste, monkeypatch, caplog):
         """The cap lives in the storage layer, which only knows ids; the label
         has to ride along or the console blames a box nobody called that."""
-        from config import Config
+        from core.config import Config
 
         monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 2)
         ds = paste(RECORDS, name='cap.csv')

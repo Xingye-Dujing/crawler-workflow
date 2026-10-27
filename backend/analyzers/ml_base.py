@@ -4,10 +4,10 @@ import os
 import jieba
 import numpy as np
 import pandas as pd
+from core.config import Config
 from core.refs import sanitize_filename
 
 from analyzers.stopwords import STOPWORDS
-from config import Config
 from i18n import t
 
 logger = logging.getLogger(__name__)

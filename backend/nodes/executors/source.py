@@ -17,11 +17,11 @@ import time
 
 import crawl_gate
 from api.http import _safe_int
+from core.config import Config
 from core.refs import as_bool, comment_platforms, split_urls
 from state import _wf_local, add_log, execution_state, stop_requested
 
 import crawl_capabilities as capabilities
-from config import Config
 from crawlers import get_crawler, is_crawlable
 from crawlers.backends.catbus import CatbusCrawler
 from crawlers.core.crawler import UNDER_TARGET

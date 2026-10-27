@@ -10,8 +10,8 @@ The store's two load-bearing ideas get the most attention:
 """
 
 import pytest
+from core.config import Config
 
-from config import Config
 from services.dataset_store import (
     SOURCE_ANALYSIS,
     SOURCE_PASTE,

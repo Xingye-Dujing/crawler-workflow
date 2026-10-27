@@ -12,6 +12,7 @@ check in ``state.any_run_live``. Paths and behaviour are unchanged.
 import logging
 import os
 
+from core.config import Config
 from core.refs import sanitize_filename
 from flask import Blueprint, jsonify, request
 from state import any_run_live
@@ -19,7 +20,6 @@ from stores import get_run_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
-from config import Config
 from i18n import t
 from services import lock_store
 from services.exporter import DataExporter, UnsupportedFormatError

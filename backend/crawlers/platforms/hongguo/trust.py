@@ -24,7 +24,7 @@ import os
 import subprocess
 import sys
 
-from config import Config
+from core.config import Config
 
 logger = logging.getLogger(__name__)
 

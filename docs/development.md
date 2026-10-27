@@ -10,7 +10,11 @@
 crawler_workflow/
 ├── backend/
 │   ├── app.py                    # 引导（Flask 初始化 + 注册各 blueprint）+ 剩余 35 条路由 + 工作流节点执行编排
-│   ├── config.py                 # 配置与数据路径
+│   ├── core/                     # 地基包（只依赖 stdlib 与自身）
+│   │   ├── config.py             # 配置与数据路径
+│   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）
+│   │   ├── machine.py            # 按 OS 分支的机器事实（Chrome/驱动/xelatex/Node 位置）
+│   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
 │   ├── i18n.py                   # zh/en 消息目录（X-Lang 请求头切换）
 │   ├── settings_store.py         # 运行时可改设置（data/settings.json）
 │   ├── scheduling/               # 定时任务域

@@ -730,7 +730,7 @@ class TestCrawlerHoldsItsProfile:
     def test_a_profile_held_by_someone_else_fails_with_a_reason(self, tmp_path, monkeypatch):
         """Not a silent hang and not a chromedriver stack trace: the node has to say
         which directory it is waiting for and that a browser is holding it."""
-        from config import Config
+        from core.config import Config
 
         path = str(tmp_path / 'douyin')
         self._held_elsewhere(path)

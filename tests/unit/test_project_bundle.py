@@ -6,8 +6,8 @@ import zipfile
 
 import pandas as pd
 import pytest
+from core.config import Config
 
-from config import Config
 from services import reusable_store
 from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.project_bundle import build_bundle, import_bundle

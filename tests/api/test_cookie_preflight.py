@@ -20,12 +20,12 @@ import threading
 from concurrent.futures import Future
 
 import pytest
+from core.config import Config
 from sessions import preflight, profiles, routes
 from sessions.cookies import CookieManager
 from state import cookie_manager
 
 import i18n
-from config import Config
 from services import catbus_bridge
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]

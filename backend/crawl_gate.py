@@ -37,10 +37,10 @@ import random
 import threading
 import time
 
+from core.config import Config
 from sessions.cookies import CookieManager
 
 import crawl_capabilities as capabilities
-from config import Config
 from i18n import t
 from settings_store import get_setting
 

@@ -13,8 +13,8 @@ import logging
 import os
 
 import jieba
+from core.config import Config
 
-from config import Config
 from i18n import t
 
 logger = logging.getLogger(__name__)

@@ -285,7 +285,7 @@ def live_search(live_crawler):
     crawl's whole life, so the tier orders one platform's crawls the way the program does
     rather than running its own policy beside it.
     """
-    from config import Config
+    from core.config import Config
 
     def _search(platform, *, headless, keyword=None, count=3, urls=None, attempts=None, **kwargs):
         if attempts is None:

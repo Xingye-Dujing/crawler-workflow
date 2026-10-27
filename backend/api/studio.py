@@ -15,6 +15,7 @@ import re
 import uuid
 
 import pandas as pd
+from core.config import Config
 from core.refs import json_safe_records as _json_safe_records
 from core.refs import sanitize_filename
 from flask import Blueprint, jsonify
@@ -23,7 +24,6 @@ from stores import _load_dataset, get_run_store
 
 from api.http import _bad_body, _json_body, _safe_int
 from api.resolution import _durable_node_rows, _resolve_dataframe
-from config import Config
 from i18n import t
 from services import latex_compile
 

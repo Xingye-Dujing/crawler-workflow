@@ -15,8 +15,8 @@ properties the resume feature silently depends on:
 import threading
 
 import pytest
+from core.config import Config
 
-from config import Config
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,

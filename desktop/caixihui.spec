@@ -75,7 +75,7 @@ hiddenimports = []
 for package in ('api', 'crawlers', 'services', 'analyzers', 'core', 'engine', 'nodes', 'sessions', 'scheduling'):
     hiddenimports += collect_submodules(package)
 hiddenimports += [
-    'config',
+    'core.config',
     'i18n',
     'state',
     'stores',

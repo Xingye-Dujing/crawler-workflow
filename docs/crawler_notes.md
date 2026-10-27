@@ -2026,7 +2026,7 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 * `tests/conftest.py::_isolate_paths()` 现在在 **conftest 被导入的那一刻**执行，先于 collection
   导入任何测试文件；`data_root` 只负责把那个根目录报给用例，不再负责搬路径——于是"隔离根"与
   单例冻结的路径**不可能不一致**，无论谁在什么时候 import 什么；
-* 它同时写下环境变量 `CRAWLER_DATA_ROOT`（`backend/config.py`），所以**子进程**里自启的那台服务
+* 它同时写下环境变量 `CRAWLER_DATA_ROOT`（`backend/core/config.py`），所以**子进程**里自启的那台服务
   也用自己的状态目录。这一条不是猜想：新加的看门狗第一次跑设备层就抓到 `logs/app.log`、
   `logs/_ui_layout_server.log` 与 `data/{runs,datasets}.db-wal/-shm` 在动——UI 层自己拉起的服务
   用的正是真 `data/`，而它一旦启动还会把用户正在跑的那次运行判为已中断；

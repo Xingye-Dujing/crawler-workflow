@@ -17,9 +17,9 @@ import jieba
 import jieba.posseg
 import pandas as pd
 import pytest
+from core.config import Config
 
 from analyzers.keyword import KeywordExtractor
-from config import Config
 
 pytestmark = pytest.mark.unit
 

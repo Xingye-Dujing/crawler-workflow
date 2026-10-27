@@ -15,7 +15,7 @@ import json
 import os
 import threading
 
-from config import Config
+from core.config import Config
 
 _lock = threading.Lock()
 

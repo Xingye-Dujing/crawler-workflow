@@ -17,11 +17,11 @@ here, and the tier's job is to prove the check *works*, not to vouch for the ses
 """
 
 import pytest
+from core.config import Config
 from real_paths import COOKIE_DIR, has_cookie
 from sessions import preflight
 
 import i18n
-from config import Config
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

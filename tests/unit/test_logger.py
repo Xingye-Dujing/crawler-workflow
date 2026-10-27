@@ -113,8 +113,7 @@ class TestProductionWiring:
         """The rotation is only real if app.py asks for Config's numbers —
         otherwise these are library defaults nobody installed."""
         import app as app_module
-
-        from config import Config
+        from core.config import Config
 
         assert app_module.logger is logging.getLogger('app')
         handlers = _rotating_handlers(app_module.logger)

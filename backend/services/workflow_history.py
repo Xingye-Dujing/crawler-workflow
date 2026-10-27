@@ -24,7 +24,8 @@ import threading
 import time
 import uuid
 
-from config import Config
+from core.config import Config
+
 from i18n import t
 
 #: A manual history is a curated list, not an unbounded log. When it is full the save is

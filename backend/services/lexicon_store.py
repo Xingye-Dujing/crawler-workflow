@@ -16,7 +16,7 @@ import sqlite3
 import threading
 import time
 
-from config import Config
+from core.config import Config
 
 #: The two word-list kinds the manager exposes.
 KINDS = ('stopword', 'userdict')

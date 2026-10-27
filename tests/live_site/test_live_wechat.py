@@ -46,7 +46,8 @@ def test_three_real_articles_parse_into_full_rows(live_crawler, headless):
 def test_reread_of_same_url_is_deduped_by_the_ledger(live_crawler):
     """The streaming contract on the real store path: a second sighting of an
     already-collected item is refused by the sink, not duplicated."""
-    from config import Config
+    from core.config import Config
+
     from services.run_store import RunStore
 
     store = RunStore(str(Config.RUNS_DB))

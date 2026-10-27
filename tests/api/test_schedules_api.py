@@ -20,9 +20,9 @@ import contextlib
 import os
 
 import pytest
+from core.config import Config
 from scheduling import store
 
-from config import Config
 from i18n import set_lang, t
 
 pytestmark = pytest.mark.api

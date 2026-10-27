@@ -48,11 +48,11 @@ import time
 from pathlib import Path
 
 import real_paths
+from core.config import Config
 from run_wait import describe_state, run_finished
 
 import crawl_capabilities
 import i18n
-from config import Config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

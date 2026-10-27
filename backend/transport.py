@@ -5,7 +5,8 @@ executor (``app.py``) and the ``/api/llm/*`` Blueprint can call. Depends only on
 ``i18n`` — no run state — so it splits out cleanly with no test seam to move.
 """
 
-from config import Config
+from core.config import Config
+
 from i18n import t
 
 

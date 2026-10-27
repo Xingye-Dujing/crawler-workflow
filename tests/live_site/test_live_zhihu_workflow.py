@@ -2260,7 +2260,7 @@ def _summary_row(run, *, case_id: str, parts: list, answers: list, kept: int, as
 
 def _new_exports(before: set) -> list:
     """Files :data:`Config.EXPORT_DIR` gained while a run was going, newest first."""
-    from config import Config
+    from core.config import Config
 
     return sorted(
         (path for path in Path(Config.EXPORT_DIR).glob('*') if path.name not in before),
@@ -2291,7 +2291,7 @@ def test_h1_the_shipped_canvas_runs_exactly_as_saved(client, app_module, monkeyp
     console "never printed".
     """
     harness.real_jar(monkeypatch, app_module)
-    from config import Config
+    from core.config import Config
 
     workflow = _acceptance_workflow()
     on, off, parts = _acceptance_parts(workflow)

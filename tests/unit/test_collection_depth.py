@@ -17,8 +17,8 @@ The XHS parser is pinned on its edge cases because the panel sends a string and
 from types import SimpleNamespace
 
 import pytest
+from core.config import Config
 
-from config import Config
 from crawlers.platforms.wechat.crawler import WechatCrawler
 from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler as Xhs
 

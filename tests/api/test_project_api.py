@@ -6,9 +6,9 @@ import zipfile
 
 import pandas as pd
 import pytest
+from core.config import Config
 from stores import get_dataset_store
 
-from config import Config
 from services import reusable_store
 from services.workflow_manager import WorkflowManager
 

@@ -31,7 +31,6 @@ ABOVE_CORE = {
     'nodes',
     'sessions',
     'scheduling',
-    'config',
     'i18n',
     'state',
     'stores',
@@ -56,9 +55,9 @@ def _roots(path: Path) -> set[str]:
 
 
 class TestTheFoundationImportsNoLayerAboveIt:
-    def test_core_exists_and_holds_the_three_foundation_modules(self):
+    def test_core_exists_and_holds_the_four_foundation_modules(self):
         modules = {path.stem for path in CORE.glob('*.py')} - {'__init__'}
-        assert modules == {'refs', 'machine', 'procs'}, (
+        assert modules == {'config', 'refs', 'machine', 'procs'}, (
             f'core/ holds {sorted(modules)}; a new module belongs here only if every layer may import it — '
             'say so in the package docstring and extend this contract deliberately'
         )

@@ -611,7 +611,7 @@ def main(argv=None) -> int:
     # optional models are looked up beside the exe, and a chromedriver that does not
     # exist must be left blank so Selenium Manager can resolve it.
     try:
-        import config
+        from core import config
 
         config.BASE_DIR = str(base)
         config.DRIVER_PATH = find_driver(base)

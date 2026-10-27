@@ -43,9 +43,9 @@ import time
 import types
 
 import pytest
+from core.config import Config
 from run_wait import run_finished
 
-from config import Config
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import CrawlerStopped, DeadDriver
 from i18n import t

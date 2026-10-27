@@ -98,7 +98,7 @@ class TestTheAdapterAnswers:
         answer that came from a Selenium cookie would arrive as 「没有 Cookie」 instead of the
         adapter's own 「未登录」.
         """
-        from config import Config
+        from core.config import Config
 
         monkeypatch.setattr(Config, 'COOKIE_DIR', str(tmp_path))
         verdict = bridge.preflight(next(iter(adapter.manifest['platforms'])))

@@ -3,6 +3,7 @@
 import logging
 from collections import defaultdict, deque
 
+from core.config import Config
 from core.refs import as_bool, platform_for, split_urls
 from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
 from nodes.labels import node_label
@@ -10,7 +11,6 @@ from sessions import preflight
 from sessions.cookies import CookieManager
 
 import crawl_capabilities as capabilities
-from config import Config
 from i18n import t
 from services.biblio_fuse import collect_errors as fuse_param_errors
 from services.biblio_schema import collect_errors as biblio_param_errors

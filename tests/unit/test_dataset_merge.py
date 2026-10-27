@@ -2,8 +2,8 @@
 
 import pandas as pd
 import pytest
+from core.config import Config
 
-from config import Config
 from services.dataset_merge import SOURCE_COLUMN, merge_datasets
 from services.dataset_store import SOURCE_MERGE, DatasetStore
 

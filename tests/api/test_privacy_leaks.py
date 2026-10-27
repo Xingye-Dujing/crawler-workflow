@@ -14,10 +14,9 @@ fails here without anyone having to remember to check.
 import json
 
 import pytest
+from core.config import Config
 from flask import jsonify
 from state import cookie_manager
-
-from config import Config
 
 pytestmark = pytest.mark.api
 

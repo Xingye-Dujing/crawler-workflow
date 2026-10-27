@@ -1,7 +1,7 @@
 """Runtime-editable app settings, persisted to ``data/settings.json``.
 
 Everything in here used to be a hardcoded constant (the chromedriver path was
-baked into ``config.py``), which meant "move the driver" required editing
+baked into ``core/config.py``), which meant "move the driver" required editing
 source. The frontend settings panel reads these via ``GET /api/settings`` and
 writes them via ``POST /api/settings``; each crawler / LLM call then pulls the
 current value through :func:`get_setting`, so a save takes effect on the next
@@ -17,7 +17,8 @@ import os
 import re
 import threading
 
-from config import Config
+from core.config import Config
+
 from i18n import t
 
 _PATH = os.path.join(Config.DATA_DIR, 'settings.json')

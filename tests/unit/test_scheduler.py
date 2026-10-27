@@ -17,10 +17,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from core.config import Config
 from scheduling import clock as scheduler_module
 from scheduling import cron, store
 
-from config import Config
 from i18n import get_lang, set_lang, t
 
 pytestmark = pytest.mark.unit
