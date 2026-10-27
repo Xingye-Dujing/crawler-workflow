@@ -117,6 +117,42 @@ def driver():
         crawler.close()
 
 
+def _load_app(driver, app_url):
+    """Open the page and refuse to drive bindings it never installed.
+
+    A bare ``driver.get`` is not enough evidence that the canvas is there: the crawl
+    driver runs ``page_load_strategy='eager'``, which returns at DOM parse time, and one
+    CI run then ran a script against a document whose ``canvas.js`` had not executed —
+    every later line failed with ``canvas is not defined`` while ``I18n`` (a LATER
+    script) was fine, so the log named a symptom and no cause. Wait for the three
+    bindings every test drives, and on timeout fail with the page's own evidence
+    (which scripts the document lists, which ones transferred bytes) rather than a
+    bare JavaScript exception.
+    """
+    driver.get(app_url + '/')
+    deadline = time.monotonic() + 15
+    while True:
+        state = driver.execute_script(
+            'return { ready: document.readyState, canvas: typeof canvas, i18n: typeof I18n };'
+        )
+        if state['ready'] == 'complete' and state['canvas'] == 'object' and state['i18n'] == 'object':
+            return
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
+    evidence = driver.execute_script(
+        """
+        return {
+            scripts: Array.from(document.scripts).map((s) => s.src || 'inline'),
+            fetched: performance.getEntriesByType('resource')
+                .filter((e) => e.initiatorType === 'script')
+                .map((e) => `${e.name} transfer=${e.transferSize} duration=${Math.round(e.duration)}`),
+        };
+        """
+    )
+    pytest.fail(f'the page never finished booting: {state}; {evidence}')
+
+
 # ─── the overflow rule, stated once as JavaScript ───────────────────────
 
 
@@ -408,7 +444,7 @@ def _seed(driver, panel_id):
 @pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_the_page_itself_never_grows_a_horizontal_bar(app_url, driver, lang):
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(f"document.body.dataset.lang = '{lang}'; I18n.apply();")
     result = driver.execute_script(_audit_js('workspace'), [])
@@ -431,7 +467,7 @@ def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, la
     """The English labels are the long ones, so a panel that fits in Chinese can
     still break in English — which is why the language is a parameter."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     opened = driver.execute_script(
         f"""
@@ -469,7 +505,7 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
     Python tier. Both languages, because the English label is the longer one.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         f"""
@@ -541,7 +577,7 @@ def test_a_stopping_record_says_stopping_and_offers_nothing(app_url, driver, lan
     the longer label pushing the table or the page into a horizontal bar.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -604,7 +640,7 @@ def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, l
     page-level bar.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -669,7 +705,7 @@ def test_loading_a_run_paints_node_verdicts_and_marks_the_record(driver, app_url
     tier performs no server writes and starts no run.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_async_script(
         """
@@ -845,7 +881,7 @@ def test_the_help_overlay_opens_over_the_page_without_breaking_layout(driver, ap
     (long English labels) it would grow a horizontal bar over the whole page. Opened in a
     real engine, in both languages, it must stay inside its own box."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     opened = driver.execute_script(
         f"""
@@ -867,7 +903,7 @@ def test_align_is_one_undo_step_and_a_cycle_is_refused_in_a_real_browser(driver,
     pushes one history entry (not one per node), and a wire that would close a loop being
     rejected at the single commit seam WITHOUT painting a path. Driven with `process` nodes
     only — a `source` node would fire a capability fetch against the live server."""
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_script(
         """
         document.body.dataset.lang = arguments[0];
@@ -923,7 +959,7 @@ def test_opening_the_settings_panel_lands_focus_in_and_closing_returns_it(driver
     activeElement): freshly opening a node's settings must move focus INTO the form (a keyboard
     user who reached a node lands in its fields, not behind the canvas), and closing must hand
     focus back to whatever opened it — not dump the user at the top of the page."""
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_script(
         """
         document.body.dataset.lang = arguments[0];
@@ -970,7 +1006,7 @@ def test_the_bibliometrics_panel_names_its_columns_and_keeps_the_caret(app_url, 
     Nothing is written: the panel is painted from a stubbed ``/api/biblio/*`` answer.
     """
     driver.set_window_size(1650, 1080)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -1103,7 +1139,7 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
     connected nodes are drawn (floor: 2 boxes, 1 wire measured).
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
         """
@@ -1204,7 +1240,7 @@ def test_a_hostile_workflow_name_stays_text_and_inside_its_attribute(app_url, dr
     """
     hostile = 'q"uote \'quote \\slash <img src=x onerror=alert(1)> 以及一段很长的中文工作流名称用来把它撑开'
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         f"""
@@ -1286,7 +1322,7 @@ def test_a_dialog_never_asks_the_browser_to_overflow_it(app_url, driver, lang):
     that means anything here is a rect.
     """
     driver.set_window_size(1000, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(f"document.body.dataset.lang = '{lang}'; I18n.apply();")
     report = driver.execute_script(
@@ -1339,7 +1375,7 @@ def test_the_dialog_dismisses_by_x_backdrop_and_esc(app_url, driver):
     backdrop-target check and the keydown handler fire, and that dismissing a dialog
     removes its close button so it cannot leak across dialogs."""
     driver.set_window_size(1000, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
 
     # Default dialog: NO corner X (opt-in policy), yet the backdrop dismisses it.
@@ -1436,7 +1472,7 @@ def test_the_resume_banner_gets_out_of_the_pinned_menu_s_way(app_url, driver):
     compares pinned with pinned and passes on a rule that does nothing.
     """
     driver.set_window_size(1280, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     moved = driver.execute_script(
         """
@@ -1473,7 +1509,7 @@ def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
     ``fetch`` is stubbed, so no run is started and nothing is written.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     # The page's own replay must have landed before the box is emptied, or the server's
     # history arrives after the clear and is read back as if this test had fed it.
@@ -1545,7 +1581,7 @@ def test_a_page_that_reloaded_takes_the_console_back_up_in_a_real_browser(app_ur
     tail plus the total that was ever produced.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     # The boot replay shares one in-flight promise with this test's own call, so a replay
     # the page started for itself has to be over before asking for another: otherwise the
@@ -1632,7 +1668,7 @@ def test_a_fresh_page_reconnects_its_console_without_being_asked(app_url, driver
     does not get to take over the screen on every refresh).
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     # The boot step is one fetch deep, so wait for the lines rather than for a tick.
     shown = driver.execute_script(
@@ -1689,7 +1725,7 @@ def test_deleting_one_history_row_reaches_the_server_with_that_run_only(app_url,
     ``/api/history/delete`` would erase a record of the user's own runs.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -1783,7 +1819,7 @@ def test_a_narrow_window_moves_the_floating_popups_inside_it(app_url, driver, wi
     this test has existed, which is how it kept passing while checking zero elements.
     """
     driver.set_window_size(width, 700)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     shown, offenders = driver.execute_script(
         """
@@ -1847,7 +1883,7 @@ def _quiet_canvas(driver, app_url):
     the click script dying inside the page (measured once in five runs, and a test
     that fails one time in five is a test that tells you nothing when it passes).
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -2327,7 +2363,7 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
     candidates are a dropdown that exists only while the box is in use.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     seeded = driver.execute_script(
         """
@@ -2527,7 +2563,7 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
     half of this rule is pinned in the node harness, which can count them exactly.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     measured = driver.execute_script(
         """
@@ -2656,7 +2692,7 @@ def test_the_report_rows_field_wears_the_same_skin_as_the_text_field(app_url, dr
     creeping back. (measured: 2 inputs × 4 computed properties)
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     got = driver.execute_script(
         """
@@ -2744,7 +2780,7 @@ def test_a_wire_ends_on_its_port_after_a_bare_refresh(app_url, driver):
     headless harness cannot see this because its stub never re-lays out.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _wait_for_id(driver, 'workspace')
     driver.execute_script(REFRESH_ALIGN_DRAFT, [])
     driver.refresh()
@@ -2821,7 +2857,7 @@ def test_a_stored_id_survives_a_reload_and_a_later_drag_cannot_collide(app_url, 
     """Node ids are storage keys (run rows, resume cursors, the fingerprint), so a
     reload must not renumber them — and a node dragged in afterwards must not be
     minted onto one that was adopted."""
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     kept = driver.execute_script(
         """
         const draft = {nodes: {
@@ -2843,7 +2879,7 @@ def test_a_stored_id_survives_a_reload_and_a_later_drag_cannot_collide(app_url, 
 def test_undo_and_redo_keep_the_ids_and_the_titles(app_url, driver):
     """A restored canvas renumbers and the resume banner stops matching the run
     that is still stored under the old ids."""
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     result = driver.execute_script(
         """
         canvas.nodes = {}; canvas.connections = [];
@@ -2884,7 +2920,7 @@ def test_console_lines_are_stamped_as_text_never_as_markup(app_url, driver):
     untouched function by tests/frontend/harness_console.mjs. Duplicating the
     ticker here would add a two-second wait and no new guarantee.
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     outcome = driver.execute_script(
         """
         const quote = String.fromCharCode(39);
@@ -2912,7 +2948,7 @@ def test_console_lines_are_stamped_as_text_never_as_markup(app_url, driver):
 def test_the_llm_panel_keeps_the_two_transports_apart(app_url, driver):
     """A local run used to inherit whatever OpenRouter id was left in the box, so
     the daemon refused it; the panels now have separate fields and separate rows."""
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     outcome = driver.execute_script(
         """
         localStorage.removeItem('crawler_llm');
@@ -2942,7 +2978,7 @@ def test_language_switch_around_a_visible_run_state(app_url, driver):
     """Switching language mid-page is the one thing that re-renders every JS-built
     surface; a node named by the user must keep its name while the unnamed ones
     follow the language."""
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     result = driver.execute_script(
         """
         canvas.nodes = {}; canvas.connections = [];
@@ -2974,7 +3010,7 @@ def test_the_palette_items_render_in_both_languages(app_url, driver):
     """The node library is the first thing a new user reads; a missing key there
     shows a raw `palette.source` on screen."""
     for lang in ('zh', 'en'):
-        driver.get(app_url + '/')
+        _load_app(driver, app_url)
         driver.execute_script(f"document.body.dataset.lang = '{lang}'; I18n.apply();")
         labels = driver.execute_script(
             "return Array.from(document.querySelectorAll('#node-palette *, .palette-item'))"
@@ -3005,7 +3041,7 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
     shaped exactly like the endpoint's, so what is measured is the row the product draws.
     """
     driver.set_window_size(1100, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         f"""
@@ -3142,7 +3178,7 @@ def test_the_menu_bar_never_hides_a_button_past_its_left_edge(app_url, driver, l
     is the ink-free proof that one exists), and no page-level bar either way.
     """
     driver.set_window_size(width, 700)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
         f"""
@@ -3195,7 +3231,7 @@ def test_a_tall_panel_scrolls_itself_instead_of_hanging_off_the_screen(app_url, 
     document grew neither bar.
     """
     driver.set_window_size(1366, 700)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
         f"""
@@ -3271,7 +3307,7 @@ def test_an_option_longer_than_its_menu_is_cut_visibly(app_url, driver, lang):
     the user can read it (``title``).
     """
     driver.set_window_size(1024, 700)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
         f"""
@@ -3357,7 +3393,7 @@ def test_the_camera_and_a_zero_coordinate_survive_a_real_reload(app_url, driver)
     re-booted canvas. Measured floor: 1 node and the three camera numbers.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -3445,7 +3481,7 @@ def test_autosave_writes_the_open_file_over_a_real_debounce_timer(app_url, drive
     file (never invents a new one), and clears the dirty flag on success. It must also stay
     SILENT (no toast), because a save that announces itself every few seconds is noise."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
     driver.execute_script(
@@ -3501,7 +3537,7 @@ def test_the_minimap_uses_real_box_geometry_and_a_click_is_a_view_only_change(ap
     leaving getState() and the undo history untouched, because the camera is deliberately outside
     the model."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
     facts = driver.execute_script(
@@ -3546,7 +3582,7 @@ def test_the_clipboard_drawer_renders_a_copy_and_pastes_it_as_one_undo_step(app_
     the board lives in its OWN key, so a copy never dirties the workflow draft's clipboard.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
     facts = driver.execute_script(
@@ -3629,7 +3665,7 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     right-most column the user can actually see.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
         """
@@ -3715,7 +3751,7 @@ def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_do
     delete must physically remove those boxes from #nodes-container. The stub records a fake
     class list and layout — only here can we watch the boxes actually light and vanish."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
     facts = driver.execute_script(
@@ -3761,7 +3797,7 @@ def test_batch_paste_and_apply_to_all_reach_the_real_dom(app_url, driver):
     panel field to EVERY selected node's real params — the DOM/`getState` view of the apply-to-all
     path the node harness checks only at the object level."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
     facts = driver.execute_script(
@@ -3808,7 +3844,7 @@ def test_saving_a_chart_as_svg_hands_over_a_real_vector_document(app_url, driver
     stray `<div>` on the page leaks on every click.
     """
     driver.set_window_size(1650, 1080)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
         r"""
@@ -3876,7 +3912,7 @@ def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, dr
     ``services/biblio_charts`` ships it (every node carrying its own ``yearSeries``).
     """
     driver.set_window_size(1650, 1080)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -3996,7 +4032,7 @@ def test_the_world_map_loads_its_shipped_basemap_and_prints_no_colliding_labels(
     assert served is not None, 'the basemap is not served — static_url_path is "", so the app path is /geo/...'
     features = served.get('features') or []
     assert len(features) > 150, f'the served basemap carries only {len(features)} regions'
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
 
     driver.execute_script(
@@ -4174,7 +4210,7 @@ def test_the_concentric_rings_draw_inside_the_preview_panel(app_url, driver, lan
     is which year" is not guessable from the picture alone.
     """
     driver.set_window_size(1650, 1080)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -4259,7 +4295,7 @@ def test_the_overlay_views_print_every_label_inside_the_preview_panel(app_url, d
     why the sentiment grid starts at a fixed 112 px rather than a percentage.
     """
     driver.set_window_size(1650, 1080)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
         """
@@ -4340,7 +4376,7 @@ def test_the_export_guide_lists_a_link_the_user_can_copy(app_url, driver, lang):
     element, which only a real click can prove is not fired by a click inside the sheet.
     """
     driver.set_window_size(1400, 900)
-    driver.get(app_url)
+    _load_app(driver, app_url)
     driver.execute_script(
         """
         const original = window.fetch;
@@ -4443,7 +4479,7 @@ def test_a_reusable_node_expands_inside_its_own_border_and_aggregates_statuses(d
     over done). The template save is stubbed in the page: this module performs no
     server writes.
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_async_script(
         """
         const lang = arguments[0];
@@ -4621,7 +4657,7 @@ def test_a_template_dragged_from_the_manager_lands_where_it_was_dropped(driver, 
     reusable node whose screen box starts at the drop point. The template read is
     stubbed: this module performs no server writes.
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_async_script(
         """
         const lang = arguments[0];
@@ -4762,7 +4798,7 @@ def test_the_dataset_merge_door_collects_files_and_posts_their_ids(driver, app_u
     enabled by that state, and that the name dialog's answer is what the request
     carries. The server write is stubbed: this module performs no writes.
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_async_script(
         """
         const lang = arguments[0];
@@ -4862,7 +4898,7 @@ def test_a_run_comparison_row_is_drawn_from_the_server_diff(driver, app_url, lan
     browser proves the wiring and the text; the server's computation is covered by
     the API tests.
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_async_script(
         """
         const lang = arguments[0];
@@ -5008,7 +5044,7 @@ def test_the_shipped_page_draws_its_figures_without_asking_anything_off_this_mac
     page that loaded nothing would pass for the wrong reason.
     """
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     facts = driver.execute_async_script(
         """
         const done = arguments[arguments.length - 1];
@@ -5057,7 +5093,7 @@ def test_a_server_without_a_desktop_hides_the_windows_only_controls_and_greys_th
     the 采集内容 option LISTED but disabled: the node stores that mode, and an absent option would paint
     the platform's first mode instead, which is a panel lying about what the run would do.
     """
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     # The matrix arrives asynchronously, and the panel is BUILT from it: asking for the mode select
     # before the answer lands measures nothing (and used to throw on ``undefined.length``). Bounded, and
     # named if it never arrives — a test that silently skips a load race proves nothing about the race.
@@ -5129,7 +5165,7 @@ def test_the_crawl_panel_offers_platform_then_engine_then_function(app_url, driv
     the first one that offers two available engines — zero such platforms is stated, not hidden.
     """
     driver.set_window_size(1650, 1080)
-    driver.get(app_url + '/')
+    _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_async_script(
         """
