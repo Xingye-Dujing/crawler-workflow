@@ -93,10 +93,18 @@ class TestBootImportBudget:
         completed = subprocess.run(
             [sys.executable, '-c', script],
             capture_output=True,
-            check=True,
             env=environment,
             text=True,
             timeout=180,
+            check=False,  # asserted below, with the child's own returncode and stderr attached
         )
+        # Asserted instead of ``check=True``: on the CI runner this call once came back with
+        # ``stdout is None``, and an ``AttributeError`` inside the test told nothing about the child
+        # that had just run. Every fact the pipe can carry is now in the sentence — a refusal that
+        # names what it measured is the rule in this repo, including about its own test harness.
+        assert completed.returncode == 0, (
+            f'`import app` failed on this machine: rc={completed.returncode} stderr={(completed.stderr or "")[-1500:]}'
+        )
+        assert completed.stdout is not None, 'the child ran but no pipe was captured'
         leaked = [name for name in completed.stdout.strip().split('|') if name]
         assert not leaked, f'`import app` loaded {leaked}; the boot path is supposed to stay out of them'

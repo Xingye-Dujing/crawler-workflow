@@ -707,6 +707,34 @@ message.
   new optional runtime imported by product code forces this argument instead of reddening CI by
   surprise. `mitmproxy`/`pyarrow`/`hdbscan`/`umap-learn` are declared optional but never imported by
   name (they are probed as executables or reached through pandas), and are therefore NOT exempted.
+- **A byte pin and `* text=auto` cannot coexist.** `vendor/echarts.min.js` is pinned by SHA-256 because
+  a third party must not be able to change what our users' screens execute without a diff here. The
+  repository's blanket `* text=auto eol=lf` rule converted its 45 CRLF pairs at commit — and upstream
+  really ships those CRLFs (measured: the CDN bytes hash to the recorded pin). So the blob in git was a
+  **different file** than the one reviewed, and the divergence chose its own witness: CI checks out the
+  blob and failed the pin, while this box read the copy it had written and passed. Fixed by
+  `backend/static/vendor/** -text` + `git add --renormalize`, and guarded by
+  `test_vendored_assets.TestThePinnedBytesAreTheStoredBytes`, which asks `git check-attr text` and hashes
+  `git show :<path>`. The general shape: **a check that reads the working copy proves nothing about what
+  is stored** — when the contract is about bytes, assert on the bytes the store holds.
+- **A stub that fakes one backend silently assumes the machine picks that backend.** The three bert
+  analyzer suites installed a fake `transformers.pipeline`, and were green for weeks because this box has
+  torch. CI installs `requirements.txt` (which now carries `onnxruntime` + `tokenizers`) and never torch,
+  so `bert_runtime()` answered `'onnx'`, and the product refused a model name that is not a directory —
+  correctly, and 13 cases reddened with a sentence about a loader nobody had asked for. The fix is not a
+  skip: the case states which runtime it is describing (`monkeypatch … bert_runtime → 'torch'`). A probe
+  on this box reproduced the runner's package set (torch hidden, ONNX present) and showed both halves:
+  unpinned → the CI refusal, pinned → answers through the stub. Same lesson, second instance: 红果's
+  "missing player is refused by name" dropped the stack seam and so only tested the player on a machine
+  where mitmproxy/uiautomation are installed — on CI it read the stack refusal instead. Now the case says
+  the stack is present, and a second case pins the stack refusal itself (naming the two packages and NOT
+  blaming the player).
+- **`subprocess.run` without `check=` is a finding worth taking literally.** `pylint` W1510 sent two of
+  the cases above to exit 4 on the tests tier. `check=False` is the honest spelling when the test asserts
+  on `returncode` itself — and in `test_boot_import_budget` it turned an `AttributeError: 'NoneType'
+  object has no attribute 'strip'` (seen once on the runner, unreproducible here) into an assertion that
+  carries the child's return code and stderr. When a failure cannot be reproduced, the fix is to make it
+  name itself.
 - **Fixing one step of a pipeline does not prove the next step ever ran.** Once both pylint tiers
   passed on the runner, CI reached the **fast tier for the first time in this repository's history**
   and reported **27 failures** (run 40461763819) that were all green on the box that wrote them. The

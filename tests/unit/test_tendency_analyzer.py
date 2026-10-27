@@ -65,6 +65,10 @@ def _install_bert_stub(monkeypatch, answer_for, batches=None):
     stub.pipeline = fake_pipeline
     monkeypatch.setitem(sys.modules, 'transformers', stub)
     monkeypatch.setattr(tendency_module, 'bert_backend', lambda: '')
+    # The stub is the *torch* pipeline; say so, because ``bert_runtime()`` asks the machine and a
+    # runner without torch answers ``'onnx'`` and refuses a model name that is not a directory — the
+    # product was right, and this case was only green on the box that happened to have torch.
+    monkeypatch.setattr('analyzers.sentiment.bert_runtime', lambda: 'torch')
     return calls
 
 

@@ -14,6 +14,7 @@ import hashlib
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -129,3 +130,58 @@ class TestTheChinaBasemapIsStillTheMapItClaims:
         ]
         problem = TOOL.check_china_geojson(json.dumps({'features': kept}).encode('utf-8'))
         assert '100000_JD' in problem
+
+
+class TestThePinnedBytesAreTheStoredBytes:
+    """Git must not rewrite an artifact whose whole contract is a hash of its bytes.
+
+    Measured: ``vendor/echarts.min.js`` upstream contains 45 CRLF pairs, and the repository's
+    ``* text=auto eol=lf`` rule converted them at commit. The pin was computed from the reviewed
+    (upstream) bytes, so the blob in git was a *different file* than the one recorded — and the
+    mismatch showed up only where it matters: CI checks out the blob and failed the pin, while this
+    box, reading the copy it had written itself, passed. A checkout must not be able to invalidate
+    a provenance claim.
+    """
+
+    @staticmethod
+    def _git(*arguments: str) -> str:
+        completed = subprocess.run(
+            ['git', *arguments],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            check=False,  # the return code below decides whether git answered or the tree has no git
+        )
+        if completed.returncode != 0:
+            pytest.skip(f'git answered nothing ({completed.stderr.strip()[:120]}); the pin is still disk-checked')
+        return completed.stdout
+
+    def _relative(self, asset) -> str:
+        return f'backend/static/{asset.rel}'
+
+    def test_no_pinned_asset_is_text_converted(self):
+        for asset in TOOL.ASSETS:
+            report = self._git('check-attr', 'text', '--', self._relative(asset))
+            # ``text: unset`` (or ``-text``) is the answer that stores bytes verbatim; anything
+            # holding ``set`` means git normalizes and the pin below can drift without a red test.
+            assert 'text: unset' in report or 'text: off' in report, report
+
+    def test_the_blob_git_holds_is_the_reviewed_bytes(self):
+        for asset in TOOL.ASSETS:
+            stored = subprocess.run(
+                ['git', 'show', f':{self._relative(asset)}'],
+                cwd=REPO,
+                capture_output=True,
+                check=False,
+            )
+            if stored.returncode != 0:
+                # Nothing staged/committed for this path yet (a fresh worktree mid-edit): the disk
+                # case above already covers what the app ships, and this case is about the store.
+                continue
+            digest = hashlib.sha256(stored.stdout).hexdigest()
+            assert digest == asset.sha256, (
+                f'{asset.rel}: git stores {digest[:12]}… but the pin records {asset.sha256[:12]}… — '
+                'the repository holds bytes nobody reviewed'
+            )

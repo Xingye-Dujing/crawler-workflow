@@ -78,6 +78,12 @@ def _install_bert_stub(monkeypatch, answer_for, batches=None, runs=None):
     stub.pipeline = fake_pipeline
     monkeypatch.setitem(sys.modules, 'transformers', stub)
     monkeypatch.setattr(emotion_module, 'bert_backend', lambda: '')
+    # This stub is the *torch* pipeline, so the case has to say which runtime it is describing.
+    # ``bert_runtime()`` asks the machine, and a runner that keeps torch out of the venv (AGENTS: a
+    # multi-gigabyte wheel, never CI) answers ``'onnx'`` — which then refuses a model name that is
+    # not a directory, correctly, and every column-shaping case below reads a sentence about a
+    # loader it never asked for. Green here was the machine's package set, not the product.
+    monkeypatch.setattr('analyzers.sentiment.bert_runtime', lambda: 'torch')
     return calls
 
 

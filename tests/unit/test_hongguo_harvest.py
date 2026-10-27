@@ -355,16 +355,57 @@ class TestRefusals:
         assert (rows, status) == ([], DEAD)
         assert any(i18n.t('crawl.hg.cmt.titleMissing', url='https://example.com/nothing') in line for line in said)
 
+    def _present(self, monkeypatch, harvest_module):
+        """Say that the harvest stack IS installed, so a case can ask about something else.
+
+        ``_ensure_stack`` refuses a missing mitmproxy/uiautomation by name before it looks for the
+        player, and both packages are Windows-only optional dependencies — so on a CI runner (and on
+        Linux/macOS) the sentence a player-refusal test reads is about mitmproxy, not the player. The
+        case was passing only on the box that had them: AGENTS' 「no test may pass just because of the
+        machine it ran on」.
+        """
+        import importlib.util
+
+        monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: object())
+        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(harvest_module.capabilities, 'requirement_met', lambda _need: True)
+
     def test_a_missing_player_is_refused_by_name(self, tmp_path, monkeypatch):
         import crawlers.platforms.hongguo.harvest as harvest_module
 
+        self._present(monkeypatch, harvest_module)
         monkeypatch.setattr(harvest_module, 'find_player', lambda: '')
-        monkeypatch.setattr(harvest_module, 'find_mitmdump', lambda: 'C:/fake/mitmdump.exe')
+        monkeypatch.setattr(harvest_module, 'find_mitmdump', lambda: str(tmp_path / 'mitmdump'))
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack  # drop the seam: run the real stack gate
         with pytest.raises(ValueError) as caught:
             harness.walk('hongguo', ARTICLE, 0)
         assert i18n.t('crawl.hg.cmt.noPlayer', path='') in str(caught.value)
+
+    def test_a_machine_without_the_stack_is_refused_for_the_stack_and_not_the_player(self, tmp_path, monkeypatch):
+        """The refusal CI actually hit: the reason has to name what is really missing, in order.
+
+        Both sentences are true refusals, and a node that reported 「找不到播放器」 on a Linux server
+        would send the user hunting a desktop app the mode can never run there. This is the case that
+        makes the machine-dependent failure above a *pinned* behaviour rather than an accident.
+        """
+        import importlib.util
+
+        import crawlers.platforms.hongguo.harvest as harvest_module
+
+        monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: None)
+        monkeypatch.setattr(harvest_module.machine_deps, 'is_frozen', lambda: False)
+        monkeypatch.setattr(harvest_module.capabilities, 'requirement_met', lambda _need: True)
+        monkeypatch.setattr(harvest_module, 'find_player', lambda: str(tmp_path / 'player.exe'))
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        del harness._ensure_stack
+        with pytest.raises(ValueError) as caught:
+            harness.walk('hongguo', ARTICLE, 0)
+        message = str(caught.value)
+        assert 'mitmproxy' in message and 'uiautomation' in message, message
+        assert i18n.t('crawl.hg.cmt.noPlayer', path='') not in message, (
+            'the player is not what this machine lacks; naming it would send the user off track'
+        )
 
     def test_the_desktop_build_names_the_build_that_can_run_this_node(self, tmp_path, monkeypatch):
         """「pip install mitmproxy」 is not a thing anybody can do inside an exe.

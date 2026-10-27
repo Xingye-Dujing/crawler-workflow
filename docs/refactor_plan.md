@@ -283,19 +283,9 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 ### 6.0 当前状态（2026-10-27，上下文压缩后的唯一恢复锚点；先读这一节再读 §5）
 
 - **HEAD**：`4005791`（评论走路插件化 + CI 目标清单摊平）→ `329e23d`（pacing 进 `engine/pacing.py`）→
-  `d065fee`（pylint 按模块名豁免可选运行时）→ **本轮 `core/faults.py` + `core/browser.py`**。
-  前两条已推 `crawler-github`（有 CI）与 `gitee`（无 CI，用户明确说不用考虑）。
+  `d065fee`（pylint 按模块名豁免可选运行时）→ `aec9e1c`（`core/faults.py` + `core/browser.py` 拆出，
+  已推两个远端）→ **在飞的 #38：让 CI 的 fast 档在 runner 上全绿**（详见下面两条）。
   工作区里有**用户自己改的** `data/workflows/红果短剧-四个热播榜.json`——不 stage、不提交。
-- **CI 的真状态（这是本轮最重要的新事实，别再拿本地绿当 CI 绿）**：`d065fee` 之后
-  **两档 pylint 在 runner 上第一次真跑起来并通过**（产品档与 tests 档都 ✓）。于是 fast 档
-  **第一次被执行**，报 **27 failed / 8111 passed / 5 skipped**——这 27 条**不是本轮重构造成的**，
-  而是"CI 这台机器与开发机不同"的账，五类：① `TestBertMode` ×13（`analyzers/sentiment.py` 的 ONNX
-  加载器在 CI 上没有 onnxruntime/tokenizers，测试桩仍按 torch pipeline 打桩）；② `TestThePinnedBytes…`
-  ×2（`static/vendor/echarts.min.js` 字节 pin——checkout 的行尾改写）；③ `TestTheUpxPass…` ×1
-  （runner 没有 upx 在 PATH，`main()` 按名拒绝返回 1，用例却断言 0）；④ `TestBootImportBudget` ×1
-  （子进程 `stdout` 为 None）；⑤ `TestRefusals.test_a_missing_player_is_refused_by_name` ×1。
-  **这是下一条任务（#38），不是重构的欠账**：判据是"这些用例在这台机上全绿、且失败原因写的是
-  runner 缺的东西"。修法是让用例问机器，而不是把断言放宽。
 - **本轮落地（Stage 1 ③ 第二步）**：`core/crawler.py` 1,472 → **1,144**。
   新 `core/faults.py`（93）= `CrawlerStopped`/`DeadDriver`/`ProfileUnavailableError`/`PageNotArrivedError`，
   只 import `i18n`，所以 catbus 后端、分析器与测试都能无环引用它；
@@ -335,8 +325,25 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   **审计确认无误的**：搬移逐条对照过（15 条 opts 语句同集同序、两段 JS 字节相同、`launch` 内顺序不变、
   cookie 植入仍在遮罩之后）；`if prefs:` 变成无条件添加不是行为变化（两条分支都返回非空 dict）；
   46 处 `from crawlers.core.crawler import …` 全部可解析，没有漏网的再导出。
+- **CI 的真状态（别再拿本地绿当 CI 绿）**：`d065fee` 之后两档 pylint 在 runner 上**第一次真跑并通过**；
+  于是 fast 档第一次被执行，报 **27 failed / 8111 passed**（全是"CI 这台机与开发机不同"，五类，逐类见
+  任务 #38）。**`aec9e1c`（本轮重构）在 runner 上给出 27 failed / 8119 passed**——同一批 27，passed 恰好多
+  出我新增的 8 条 ⇒ 重构**没有引入任何新的 CI 失败**，这是这条改动的直接证据。
+- **#38 五类已全部本地落地**（待 runner 复验）：① 13 条 bert 用例原先只在这台机装了 torch 时才绿——
+  `bert_runtime()` 问的是机器，CI 无 torch 而有 onnxruntime/tokenizers，于是答 `'onnx'` 并**正确地**拒绝
+  一个不是目录的模型名；改为用例自己声明描述的是哪个运行时，并用一次性件把本机改成 CI 的包集合，
+  未钉住→复现 CI 原话、钉住→走桩出列。② **测试这次是对的，仓库是错的**：`* text=auto eol=lf` 在提交时
+  改写了 `vendor/echarts.min.js`（上游确实带 45 个 CRLF，CDN 字节哈希等于 pin），于是 git 里那份 blob 与
+  被评审那份**不是同一个文件**；CI 检出的 blob 过不了 pin，本机读自己写的副本反而过。加
+  `-text` + `git add --renormalize`，并由 `TestThePinnedBytesAreTheStoredBytes` 问
+  `git check-attr text` 与 `git show :<path>` 的字节。③ UPX 那条：`main()` 在 PATH 没有 upx 时按名拒绝是
+  对的，用例却在测"拒绝的文件不该让构建变红"时撞上了"根本没有 upx"；改为用例自己说 upx 在，并在
+  `shutil.which('upx') is None` 的条件下重跑 10 条全绿。④ 启动预算那条 `stdout is None` 本机无法复现
+  （已排除同名模块遮蔽、conftest 打桩、autouse 夹具泄漏），于是不再猜——改为带着 returncode 与 stderr 的
+  断言，下次真发生时会自己说清。⑤ 红果播放器那条删了 stack 接缝，等于默认 mitmproxy/uiautomation 已装；
+  现在用例自己说"栈在"，另加一条钉住 CI 真撞到的**栈缺失拒绝**（点名两包且不得怪播放器）。
 - **下一条待做（顺序，别插队）**：
-  1. **#38 让 CI 的 fast 档在 runner 上全绿**（上面那 27 条，五类，逐类问机器）。
+  1. 推 #38 这批，然后 `gh run view --log-failed` 复验 runner 是否 0 failed；仍有失败就继续按类问机器。
   2. Stage 1 继续：拆 `platforms/douyin/crawler.py`(1,032)、`platforms/weibo/crawler.py`(926)、
      `platforms/hongguo/harvest.py`(1,825)。
   3. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）

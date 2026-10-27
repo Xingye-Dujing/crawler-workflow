@@ -29,3 +29,14 @@
 *.zip    binary
 *.gz     binary
 *.whl    binary
+
+# Third-party artifacts are pinned by SHA-256, so the repository must store the bytes upstream served.
+#
+# `* text=auto eol=lf` above silently rewrote `vendor/echarts.min.js` at commit: that file genuinely
+# carries 45 CRLF pairs (measured against the CDN bytes, which hash to the recorded pin), so the blob
+# in git was a *different file* than the one that was reviewed — and CI, checking out the LF blob,
+# failed the pin while this box, reading its own stale working copy, passed it. A pin that a checkout
+# can invalidate is not a provenance record. The geo basemap is in the same boat: its test asserts
+# provincial content, which is only meaningful about exact bytes.
+backend/static/vendor/** -text
+backend/static/geo/**    -text

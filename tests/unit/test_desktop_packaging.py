@@ -729,6 +729,11 @@ class TestTheUpxPassReportsWhatItActuallyDid:
         internal.mkdir(parents=True)
         forwarder = internal / 'some_forwarder.dll'
         forwarder.write_bytes(b'MZ' + b'x' * 500)
+        # The question here is what a DECLINE does to the verdict, so the case has to state that UPX
+        # exists: `main` resolves it through ``shutil.which``, and on a machine without it (a CI
+        # runner) the refusal that follows is 「not on PATH」 — a different named failure that also
+        # returns 1, so the assertion below was passing only on boxes that happened to have upx.
+        monkeypatch.setattr(compressor.shutil, 'which', lambda name: str(tmp_path / 'upx') if name == 'upx' else None)
         monkeypatch.setattr(compressor, '_run', refuse)
         ledger = compressor.compress(tmp_path, upx_path='upx')
         assert ledger['failed'] == []

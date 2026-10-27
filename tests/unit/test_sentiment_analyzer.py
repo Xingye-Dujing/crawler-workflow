@@ -313,6 +313,11 @@ def _install_bert_stub(monkeypatch, answer_for, batches=None):
     # The probe is what decides whether the mode refuses, and this machine genuinely has
     # neither package; without this the stub above would never be reached.
     monkeypatch.setattr(sentiment_module, 'bert_backend', lambda: '')
+    # And the case has to say WHICH runtime the stub is: ``bert_runtime()`` asks the machine, and a
+    # runner that keeps torch out of the venv answers ``'onnx'``, which then refuses a model name
+    # that is not a directory — correctly, but every column-shaping assertion below would then be
+    # reading a sentence about a loader it never asked for. Green here was the package set.
+    monkeypatch.setattr(sentiment_module, 'bert_runtime', lambda: 'torch')
     return calls
 
 
