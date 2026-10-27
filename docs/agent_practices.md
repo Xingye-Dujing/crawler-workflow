@@ -123,6 +123,20 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   comment had been true once, maybe, and outlived the callers by months while staying authoritative-looking.
   The check that costs nothing: count occurrences repo-wide before believing a "kept for callers" note, and
   when you move a helper out of a class, count what still names it.
+- **A whole-class move is only safe if the copy is proved, not promised.** `PlayerUI` (559 lines, 29 methods,
+  every one of them carrying a measured sentence about the real player window) went from
+  `hongguo/harvest.py` to `hongguo/player_ui.py` in one pass, and the pass was scripted *with* a check that can
+  fail: the moved text must appear in the new file **as one contiguous run**, differing from the source range only
+  by the renames the script is allowed to make (the four names that now cross a module boundary lost their leading
+  underscore — an underscore name imported by another module is an invitation to copy it rather than reference it).
+  Retyping 559 lines of evidence loses evidence silently; a hand-typed 83-line `naming.py` was checked the same way,
+  line against source range, precisely because the hand-typed one is the risky one.
+  Two ordering rules came out of the first run, both of which cost a cycle: **check before you write** (the first
+  version wrote `harvest.py` and only then asserted no stale name survived, so a missing cut range left a second
+  `class PlayerUI:` plus an `import PlayerUI` in the same file — recoverable only because the file was committed,
+  `git checkout --` and re-run), and **the seams move with the code**: three tests patched `harvest.time.sleep` to
+  drive a `PlayerUI` walk. `time` is one module object so they still worked — which is exactly the shape that breaks
+  quietly the day the old module stops importing it, so they now patch `player_ui.time`.
 - **An async browser seam must resolve on the DOM, and its error arm must not be `done()`.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` flaked on CI as "the detail row never appeared".
   The earlier fix had wrapped it in `Promise.resolve(runsManager.detail(...)).then(() => done(), () => done())`, which

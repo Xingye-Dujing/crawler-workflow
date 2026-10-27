@@ -938,7 +938,8 @@ loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以�
 `红果短剧.exe`）的完整请求原样重放、换新鲜 `_rticket`/`x-khronos` 重放、换目标剧集重放，
 三种组合全部 `Code 110001 未知异常`——签名覆盖请求体且绑时间戳，不是能抄的模板。
 
-于是本平台的评论采集**不说话，只旁听**（`crawlers/platforms/hongguo/harvest.py`）：
+于是本平台的评论采集**不说话，只旁听**（采集与走路在 `crawlers/platforms/hongguo/harvest.py`，
+驱动窗口的那一半在 `player_ui.py`，"这个名字算不算这部剧"的纯规则在 `naming.py`）：
 第三方播放器已把整套协议逆向完（二进制里能读出 `hg-go/pkg/hgapi` 的端点常量、
 `hg-go/pkg/sign` 的 XGorgon/Medusa 实现、伪造的小米14 设备注册池），让它当签名预言机，
 我们只收割它合法拿到的明文 JSON。三条实测支撑这条通道成立：

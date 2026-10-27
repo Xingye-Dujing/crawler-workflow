@@ -172,7 +172,8 @@
   **Its comments exist only in the app protocol, and this tool never speaks it — it listens.** The signature is
   body-covering (byte-identical replay answers 110001, measured 2026-10-19), so the 评论 mode drives the third-party
   desktop player behind our own mitmproxy and parses what the player legitimately fetched
-  (`crawlers/platforms/hongguo/harvest.py`; full chain in `docs/crawler_notes.md` 红果短剧). Rules that keep it honest: a player
+  (the capture harness in `crawlers/platforms/hongguo/harvest.py`, the UIA driver in that package's
+  `player_ui.py`, its pure name rules in `naming.py`; full chain in `docs/crawler_notes.md` 红果短剧). Rules that keep it honest: a player
   window the USER opened is refused by name, never killed — only Popen-children of this node get reaped;
   navigation is the leaderboard page's per-card ``▶ 播放`` (the 找剧 page has NO search box — measured), and
   the comment trigger is the action-rail ``💬 <count>`` click that opens the drawer (the feed's silent prefetch

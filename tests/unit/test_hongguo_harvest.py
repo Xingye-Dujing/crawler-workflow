@@ -18,14 +18,9 @@ import i18n
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped
-from crawlers.platforms.hongguo.harvest import (
-    HongguoCommentHarness,
-    PlayerUI,
-    TreeColdError,
-    _norm_title,
-    _same_drama,
-    is_expand_control,
-)
+from crawlers.platforms.hongguo.harvest import HongguoCommentHarness
+from crawlers.platforms.hongguo.naming import is_expand_control, norm_title, same_drama
+from crawlers.platforms.hongguo.player_ui import PlayerUI, TreeColdError
 
 pytestmark = pytest.mark.unit
 
@@ -625,7 +620,7 @@ class TestMatchRules:
         ],
     )
     def test_a_card_names_the_drama_only_when_it_really_is_it(self, want, card, same):
-        assert _same_drama(_norm_title(want), card) is same, 'containment put another drama in this table'
+        assert same_drama(norm_title(want), card) is same, 'containment put another drama in this table'
 
 
 class _AnyRect:
@@ -1113,7 +1108,7 @@ class TestScreenFacts:
         assert reads['n'] >= 2, 'the suspicious read was re-asked, not concluded on'
 
     def test_a_short_base_name_on_screen_does_not_false_refuse_a_longer_request(self, tmp_path):
-        # _same_drama floors its prefix at 4 to keep 斗罗大陆 off 斗罗大陆 第二季; the screen gate
+        # same_drama floors its prefix at 4 to keep 斗罗大陆 off 斗罗大陆 第二季; the screen gate
         # cannot use that floor, because the header is often the short BASE name (赘婿) while the
         # request carries the season (赘婿归来). A wrong 'drifted' here loses a whole drama.
         ui = _FakeUI(screen_title='赘婿')
@@ -1228,9 +1223,9 @@ class TestWaitsCompressed:
     def test_a_tree_that_goes_cold_mid_board_walk_bails_instead_of_grinding(self, monkeypatch):
         # Measured cost of NOT doing this: the board walk slept through every board × every
         # scroll against a tree that had re-frozen to 0 controls (~110 s of dead waiting).
-        from crawlers.platforms.hongguo import harvest as hh
+        from crawlers.platforms.hongguo import player_ui as pu
 
-        monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
+        monkeypatch.setattr(pu.time, 'sleep', lambda *_a, **_k: None)
         ui = PlayerUI(log=lambda _m: None, abort=lambda: False)
         ui.wait_content = lambda seconds=60.0: object()
         ui._find_until = lambda *a, **k: object()
@@ -1432,9 +1427,9 @@ class TestBoardScanProgress:
     the silent board grind as a hang on 2026-10-20)."""
 
     def test_every_board_scanned_is_announced_then_the_miss_is_reported(self, monkeypatch):
-        from crawlers.platforms.hongguo import harvest as hh
+        from crawlers.platforms.hongguo import player_ui as pu
 
-        monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
+        monkeypatch.setattr(pu.time, 'sleep', lambda *_a, **_k: None)
         said = []
         ui = PlayerUI(log=said.append, abort=lambda: False)
         ui.wait_content = lambda seconds=60.0: object()
@@ -1477,9 +1472,9 @@ class TestInputFocus:
         assert 'activate' in called, 'the {Down} was sent without foregrounding the player'
 
     def test_open_drama_foregrounds_before_the_first_click(self, monkeypatch):
-        from crawlers.platforms.hongguo import harvest as hh
+        from crawlers.platforms.hongguo import player_ui as pu
 
-        monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
+        monkeypatch.setattr(pu.time, 'sleep', lambda *_a, **_k: None)
         called = []
         ui = PlayerUI(log=lambda _m: None, abort=lambda: False)
         ui._activate = lambda: called.append('activate')

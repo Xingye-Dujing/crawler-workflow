@@ -212,7 +212,7 @@ backend/
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
-| `crawlers/platforms/hongguo/harvest.py` | 1646 | Stage 1（CA 信任已进 `trust.py` 213；剩 PlayerUI(561) 与 harness 两段） |
+| `crawlers/platforms/hongguo/harvest.py` | 994 | Stage 1 已拆完（CA 信任 → `trust.py` 213；UIA 驱动 → `player_ui.py` 616；名称规则 → `naming.py` 83；剩下的就是"采集夹具 + 走路"这一件事） |
 | `services/data_analysis.py` | 3899 | Stage 9 |
 | `services/latex_charts.py` | 2430 | Stage 5 |
 | `services/bibliometrics.py` | 1996 | Stage 4 |
@@ -222,9 +222,9 @@ backend/
 | `crawl_capabilities.py` | 1805 | Stage 3 |
 | `analyzers/llm_client.py` | 934 | Stage 4（`llm/`） |
 | `app.py` | 4412 | Stage 6 |
-| `i18n.py` | 4604 | Stage 7 |
+| `i18n.py` | 4620 | Stage 7 |
 
-前端另计：`workflow.js` 13,011 / `app.js` 5,071 / `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
+前端另计：`workflow.js` 13,026 / `app.js` 5,071 / `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
 
 1. 无 >900 行的产品模块；JS 无 >1,200 行文件；每个文件一个主题、每个目录一个域。
 
@@ -394,18 +394,25 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      提前发现同一个坑才改成导入函数本身。**下一个平台抽 `rows.py` 前先问：这个包里有没有局部变量 `rows`。**
      剩下：`_as_int`/`_attr` 的"外部引用数"是同名方法撞名（别的方法也叫这个），
      **必须做带包名的核对**才能动——不要用那个模糊数字下手。
-  3. Stage 1 继续：harvest **第一步已落地**——CA 信任那 178 行进 `hongguo/trust.py`（1,825 → **1,646**），
-     它同时是"Windows 制品集中到一个文件"的一步：`trust.py` 带 3 处 `ctypes.windll` 已登记进
-     `WINDOWS_TABLES`，harvest.py 仍留 7 处（PlayerUI 的 user32、mitmdump.exe、taskkill），所以那条
-     "豁免必须真有制品"的测试两边都不会变成谎。
-     **下一刀 = 整类搬 `PlayerUI`（harvest.py:195–756，561 行）→ `hongguo/player_ui.py`。**
-     已经量好的落点，别重新调查：产品侧只有 **1 处构造**（`harvest.py:775` `self.ui = ui or PlayerUI(...)`）
-     与 **1 处 docstring 引用**（`harvest.py:141`）；测试侧只有 **1 个 import 块**要改指
-     （`tests/unit/test_hongguo_harvest.py:23`，其余 10 处都是 `PlayerUI(log=…, abort=…)` 的直接构造，
-     不改名就照旧通过）。搬完 `harvest.py` ≈ 1,080 行。**注意事项**：这是整类原样移动，
-     中途截断会静默改掉 UIA 自动化行为——所以要么一次一口气搬完并逐行对照，要么不做；
-     本会话因剩余预算判断"不做"，没有留下半成品。
-  4. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
+  3. Stage 1 的 harvest **两刀都落地了**：CA 信任 178 行进 `hongguo/trust.py`（1,825 → 1,646），
+     然后 **UIA 驱动整类搬 `PlayerUI`（195–753，559 行）→ `hongguo/player_ui.py`（616）**，
+     纯名称规则 4 个函数 + 4 个常量 → `hongguo/naming.py`（83）。`harvest.py` 1,646 → **994**，
+     crawlers/ 现在 60 个模块，最大的是 `core/crawler.py` 1,144。
+     **跨界的三个名字改了名**（`_norm_title`→`norm_title`、`_same_drama`→`same_drama`、
+     `_screen_names`→`screen_names`，另 `_PLAYER_CLASS`→`PLAYER_CLASS` 因为 harness 也读它）：
+     带下画线的名字被别的模块 import，就是邀请下一个人复制一份而不是引用它。
+     Windows 制品跟着搬家：`WINDOWS_TABLES` 新增 `player_ui.py`（`ctypes.windll` 3 处 + `uiautomation`），
+     `harvest.py` 仍留 1 处 `ctypes.windll`（启动前"播放器已被用户打开"的判定），
+     所以"豁免必须真有制品"那条测试两边都不是谎。`naming.py` 没有任何 Windows 制品，**故意不登记**。
+     搬的方法与证据（下一次整类搬移照做）：`build/carve_player_ui.py` 抄完后**要求那段在新文件里
+     连续出现**（`contiguous_proof`：一行不差，除它被允许的四条改名），并且把手写的 `naming.py`
+     逐行对着源区间比——手写那 83 行没有脚本兜底，靠这条核对才敢说"不是转述"。
+     搬完先按 stale 检查再写盘（第一版把检查放在写盘之后，`PlayerUI` 类区间漏在 `cut` 之外，
+     于是 harvest 里留下第二个 `class PlayerUI:` + 一条 `from … import PlayerUI`；
+     `git checkout --` 回到 HEAD 再跑一次，代价是一次跑，不是一次烂提交）。
+     测试接缝跟着搬：三处 `monkeypatch.setattr(hh.time, …)` 改为 `pu.time`（`time` 是同一个模块对象，
+     效果一致，但"测 PlayerUI 却从 harvest 借 time"是下一轮删 harvest 导入时会静默失效的那种针）。
+  4. Stage 1 ④（下一刀）：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
      迁 `capabilities/platforms/`（Stage 3 的落点，先把声明放好）。
   5. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。
   6. 两条一直欠着的证据项：**桌面 EXE 未重建**（`core/browser.py`、`douyin/*` 等新模块要下一次

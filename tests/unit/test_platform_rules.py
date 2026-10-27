@@ -43,6 +43,7 @@ WINDOWS_TABLES = {
     Path('utils/procs.py'),
     Path('services/latex_compile.py'),
     Path('crawlers/platforms/hongguo/harvest.py'),
+    Path('crawlers/platforms/hongguo/player_ui.py'),
     Path('crawlers/platforms/hongguo/trust.py'),
     Path('services/export_browser.py'),
 }
