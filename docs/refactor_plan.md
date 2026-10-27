@@ -346,10 +346,13 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   关系 ⇒ 子进程把清单写进 `tmp_path` 的文件、父进程读该文件（`assert report.is_file()` 仍然点名机制）。
   本地 9 passed，待 runner 复验。教训写进 `docs/agent_practices.md`：harness 事实只能从 harness 那儿问出来，
   这条花了两次 CI 运行，因为本机任何配置都复现不出来。
-- **runner 给的后续数**：`bb575fa`（douyin rows 拆分）= **1 failed / 8148 passed**，而那唯一一条**正是**
-  `TestBootImportBudget` —— 即 douyin 拆分**没有新增任何失败**（passed 与上一条同为 8148），
-  修它的传输改动在 `2d688ae`。`3c137c6`/`2d688ae`/`799826e`（overlay mixin）仍在跑。
-  **闭 #38 的判据 = runner 上 0 failed**；到了就把上面两条改成"已闭环"，别把本地绿当证据。
+- **#38 已闭环（runner 自己说的，不是本地）**：`2d688ae`、`799826e`、`a4a6a32` 三条在 GitHub 上
+  **success**（fast 档 0 failed，两档 pylint ✓）。`3c137c6` 红过一次，红的**不是 fast 档而是 browser job**：
+  `test_a_run_detail_splits_its_workflows_without_growing_a_bar[en]` 报"detail 行根本没出现"。量出来是
+  我自己那条"等 promise"的写法错了两次——`detail` 在 promise **之后**的那个 task 才渲染，所以旧写法仍然靠
+  下一次 WebDriver 往返的速度侥幸通过；而 `.then(ok, () => done())` 把 rejection 吞掉，正好抹掉了唯一能
+  说明原因的证据。改为：等 promise、**保留结果**、再轮询 DOM 直到那一行真的存在（有界，真回归就指名失败而不是
+  挂住）。本地该文件 148 passed（zh+en 全量），教训写进 `docs/agent_practices.md`。
 - **#38 五类已全部本地落地**（待 runner 复验）：① 13 条 bert 用例原先只在这台机装了 torch 时才绿——
   `bert_runtime()` 问的是机器，CI 无 torch 而有 onnxruntime/tokenizers，于是答 `'onnx'` 并**正确地**拒绝
   一个不是目录的模型名；改为用例自己声明描述的是哪个运行时，并用一次性件把本机改成 CI 的包集合，

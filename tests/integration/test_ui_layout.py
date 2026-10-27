@@ -3006,15 +3006,31 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
         """,
         [],
     )
-    # ``detail`` fetches and renders asynchronously. The old synchronous call returned before the
-    # microtask ran and only passed because the next WebDriver round trip happened to be slow enough —
-    # measured as a flake in the full tier, passing alone. Await the real promise instead of the clock.
-    driver.execute_async_script(
+    # ``detail`` is genuinely async, and the first "fix" for that got two things wrong: it resolved on
+    # the clock rather than on the DOM (so it still only passed when the next WebDriver round trip
+    # happened to be slow), and its rejection arm called ``done()`` as though nothing had gone wrong —
+    # which is exactly how CI's failure read: "the detail row never appeared", with the reason thrown
+    # away. So await the promise, KEEP the outcome, and only return once the row is actually in the
+    # document; a rejection or a missing row now reports itself instead of leaving the layout to be
+    # measured off an absent element.
+    outcome = driver.execute_async_script(
         'const done = arguments[arguments.length - 1];'
-        "Promise.resolve(runsManager.detail('grp1', document.querySelector('#runs-panel tbody tr')))"
-        '.then(() => done(), () => done());',
+        "const row = document.querySelector('#runs-panel tbody tr');"
+        'const waitRow = (label) => {'
+        '  const began = Date.now();'
+        '  const poll = () => {'
+        "    if (document.getElementById('runs-mgr-detail-grp1')) { done(label); return; }"
+        '    if (Date.now() - began > 8000) { done(label + " | the detail row never rendered"); return; }'
+        '    setTimeout(poll, 50);'
+        '  };'
+        '  poll();'
+        '};'
+        "Promise.resolve(runsManager.detail('grp1', row)).then("
+        '  () => waitRow("ok"),'
+        '  (err) => done("rejected: " + ((err && err.message) || err)));',
         [],
     )
+    assert outcome.startswith('ok'), f'opening the run detail did not complete cleanly: {outcome}'
     facts = driver.execute_script(
         """
         const detail = document.getElementById('runs-mgr-detail-grp1');

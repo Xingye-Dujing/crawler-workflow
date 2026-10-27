@@ -105,6 +105,16 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `$env:TZ='UTC'; pytest -q` is a cheap CI-equivalent gate that reads 6501 passed.
 - **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run or upload lands in the
   user's real `data/`/`logs/`. Stub `fetch`.
+- **An async browser seam must resolve on the DOM, and its error arm must not be `done()`.**
+  `test_a_run_detail_splits_its_workflows_without_growing_a_bar` flaked on CI as "the detail row never appeared".
+  The earlier fix had wrapped it in `Promise.resolve(runsManager.detail(...)).then(() => done(), () => done())`, which
+  was wrong twice: `detail` renders in a task *after* its promise settles, so the test still measured whatever the
+  next WebDriver round trip had happened to paint — and the rejection arm answered `done()` as if nothing failed, so
+  the one thing that could have named the cause was thrown away. The correct shape is: await the promise, **keep the
+  outcome**, then poll the document for the element and return only when it exists (bounded, so a real regression
+  fails with a sentence rather than hanging). Local runs of that file never rejected, which is the point — the test
+  can now only pass by having actually rendered. Lesson generalizes: a tolerance arm in a test helper is the same bug
+  class as a tolerance arm in a crawler, which is what AGENTS' "a warning is a test that noticed something" is about.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall` (risk control can
   answer a valid session a login redirect once). An empty that NAMES its refusal (wall or risk) is the site's answer —
   assert the naming; an unnamed empty is real "found nothing" and stays red.
