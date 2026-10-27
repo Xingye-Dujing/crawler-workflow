@@ -965,6 +965,33 @@ class TestEveryServedScriptParses:
         assert not broken, '\n'.join(broken)
 
 
+class TestOneDefinitionOfEachGlobalFunction:
+    """A second top-level ``function`` of the same name does not error: it silently replaces the first.
+
+    Measured in ``workflow.js``: ``toggleDatasetPanel`` was declared twice (identical bodies, 167 lines
+    apart), which is harmless only by luck — the next edit to one of them changes the button while the
+    other stays as the reader's second opinion. The same shape across two files is equally a shadow, so
+    both are checked over the whole served directory rather than per file.
+    """
+
+    _TOP_LEVEL_FUNCTION = re.compile(r'^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(', re.MULTILINE)
+
+    def _declarations(self) -> dict[str, list[str]]:
+        seen: dict[str, list[str]] = {}
+        for script in sorted(JS_DIR.glob('*.js')):
+            for name in self._TOP_LEVEL_FUNCTION.findall(script.read_text(encoding='utf-8')):
+                seen.setdefault(name, []).append(script.name)
+        return seen
+
+    def test_no_name_is_declared_twice(self):
+        where = {name: files for name, files in self._declarations().items() if len(files) > 1}
+        assert where == {}, f'a redefinition silently wins over the first: {where}'
+
+    def test_the_scan_sees_the_functions_it_claims(self):
+        """A guard reading nothing is a guard; the real page declares hundreds of globals."""
+        assert len(self._declarations()) > 200, 'the top-level scan stopped matching the shipped files'
+
+
 class TestOverlayLayering:
     """The full-screen chart window is opened FROM the dashboard board (and from the
     preview panels), so it must be layered above them. All are position:fixed in one

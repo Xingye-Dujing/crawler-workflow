@@ -13,6 +13,7 @@ answered by something before its browser hand-off can be measured.
 import contextlib
 import importlib.util
 import json
+import re
 import socket
 import struct
 import sys
@@ -356,6 +357,67 @@ class TestPortSelection:
             probe.bind(('127.0.0.1', 0))
             free = probe.getsockname()[1]
         assert desktop.pick_port(free, attempts=2) == free
+
+
+class TestTheBuildKnowsEveryPackage:
+    """``collect_submodules`` is called on a HARD-CODED tuple, so a new top-level package is
+    invisible to the build until someone remembers to add it — and the packaged app then fails
+    on the user's machine, not in this suite. The whole restructure (docs/refactor_plan.md) is
+    exactly a sequence of new top-level packages, so this is the gate that makes moving files
+    safe: the spec has to name every package that exists, and no package that does not.
+    """
+
+    @staticmethod
+    def _collected(spec_text: str) -> set[str]:
+        """The package names the spec walks with ``collect_submodules``."""
+        block = re.search(
+            r'for package in \(([^)]*)\):\s*\n\s*hiddenimports \+= collect_submodules\(package\)', spec_text
+        )
+        assert block, 'the spec no longer collects submodules from a package tuple — the build list moved'
+        return {name for name in re.findall(r"'([^']+)'", block.group(1))}
+
+    @staticmethod
+    def _stated(spec_text: str) -> set[str]:
+        """The single-module names the spec states explicitly (the list after the loop)."""
+        block = re.search(r'hiddenimports \+= \[(.*?)\]', spec_text, re.S)
+        assert block, 'the spec no longer states its explicit hidden-import modules'
+        return {name for name in re.findall(r"'([^']+)'", block.group(1))}
+
+    def _backend_packages(self) -> set[str]:
+        return {path.name for path in (REPO / 'backend').iterdir() if (path / '__init__.py').is_file()}
+
+    def test_every_backend_package_is_collected_by_the_spec(self):
+        spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
+        missing = self._backend_packages() - self._collected(spec)
+        assert missing == set(), (
+            f'these backend packages would be missing from the exe: {sorted(missing)} — '
+            "add them to the spec's collect_submodules tuple"
+        )
+
+    def test_the_spec_names_no_package_that_stopped_existing(self):
+        """A stale name is how a rename hides itself: the build stays green, the app loses a layer."""
+        spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
+        stale = self._collected(spec) - self._backend_packages()
+        assert stale == set(), f'the spec still collects packages that are not under backend/: {sorted(stale)}'
+
+    def test_a_renamed_package_is_convicted_not_just_reported(self):
+        """The assertion above has to be able to fail: a build list nobody can break is a comment."""
+        spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
+        shrunk = self._collected(spec) - {'crawlers'}
+        assert 'crawlers' in self._backend_packages() and shrunk, 'this fixture needs the real list to differ from one'
+        assert shrunk != self._backend_packages(), 'dropping a package from the spec changed nothing'
+
+    def test_every_stated_module_still_exists(self):
+        """Root modules are named one by one (they are imported lazily or from the launcher), so a
+        moved file would leave a name that resolves to nothing and the loss is silent."""
+        spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
+        backend = REPO / 'backend'
+        missing = {
+            name
+            for name in self._stated(spec)
+            if not (backend / f'{name}.py').is_file() and not (PACKAGING / f'{name}.py').is_file()
+        }
+        assert missing == set(), f'the spec states hidden imports that no longer exist: {sorted(missing)}'
 
 
 class TestPackagingContract:

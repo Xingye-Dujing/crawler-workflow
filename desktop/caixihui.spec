@@ -67,7 +67,12 @@ except Exception:
     pass
 
 hiddenimports = []
-for package in ('api', 'crawlers', 'services', 'analyzers', 'utils'):
+# Every top-level backend package is named here, not left to static analysis: ``nodes/registry.py``
+# loads its plugins with ``importlib.import_module('nodes.executors')`` — a string. Today PyInstaller
+# happens to follow that literal, but a package that is only ever reached by name is one refactor away
+# from shipping an exe whose node types simply are not there. ``tests/unit/test_desktop_packaging.py``
+# fails if a package appears under backend/ without being added here (and if one is named here and gone).
+for package in ('api', 'crawlers', 'services', 'analyzers', 'utils', 'engine', 'nodes'):
     hiddenimports += collect_submodules(package)
 hiddenimports += [
     'config',

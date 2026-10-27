@@ -588,8 +588,8 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   switching `-NoUpx`.
 - **Dead payload is only dead when you can name the reader.** Measured and dropped by `prune_dist.py`:
   `jieba/lac_small` (13 MB — reachable only through `cut(..., use_paddle=True)` with paddle installed, which no
-  analyzer asks for); snownlp's Python-2 marshals `seg.marshal`/`tag.marshal`/`sentiment.marshal` (`utils/tnt.py` and
-  `classification/bayes.py` both append `.3` on Python 3, so on 3.11 the extension-less copies are read by nothing
+  analyzer asks for); snownlp's Python-2 marshals `seg.marshal`/`tag.marshal`/`sentiment.marshal` (`snownlp/utils/tnt.py` and
+  `snownlp/classification/bayes.py` both append `.3` on Python 3, so on 3.11 the extension-less copies are read by nothing
   while the `.3` files are the models — a suffix three characters long decides whether the sentiment fallback boots);
   and the training corpora `seg/data.txt`, `tag/199801.txt`, `sentiment/neg.txt|pos.txt` (only `train()` opens them).
   What is **not** droppable, measured: `scipy/spatial` and `scipy/interpolate` (reached through `scipy.stats` and

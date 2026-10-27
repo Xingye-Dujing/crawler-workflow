@@ -12,25 +12,29 @@ file is about *shape*. The numbers below are measured, not estimated.
   exception. `CRAWLER_DATA_ROOT` gives a process its own `data/`+`logs/` — this is how a second
   server is meant to coexist (see *Run/resume state* and `AGENTS.md`).
 
-## Backend layout (~65k Python LOC)
+## Backend layout (~93k Python LOC across 201 files, measured)
 | area | contents |
 |---|---|
-| `app.py` | **6,457 LOC — the remaining HTTP handlers (38 `@app.route` decorators) + the workflow node executors.** 17 Blueprints in `backend/api/` carry the other 57 route decorators; the URL map holds 96 rules over 91 unique paths (re-measure: `len(app.url_map.iter_rules())` — the extraction moved handlers without changing a path). |
+| `app.py` | **4,412 LOC: the composition root, the run orchestration (`_begin_run`, the queue, `_run_node_durable`) and 39 remaining `@app.route` handlers.** The other 89 route decorators are 23 Blueprints in `backend/api/`; the live URL map holds 129 rules over 123 unique paths (re-measure: `len(app.url_map.iter_rules())` — extraction moves handlers, never a path). Stage 6 of `docs/refactor_plan.md` takes the routes and the orchestration out of this file. |
 | `config.py` | paths, env, constants (retention/queue/preflight/scheduler tick). |
 | `i18n.py` | the zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
 | `crawl_capabilities.py` | the single crawl matrix: platform × mode × field × handler. |
 | `scheduler.py` | 定时任务 clock: an in-process daemon thread ticking `Config.SCHEDULER_TICK_SECONDS`, firing through the seam `app._start_scheduled_run` → `_begin_run` (never a second start path); `services/cron.py` parses/validates the time expressions. |
 | `engine/` | `workflow.py` (DAG resolve, `effective_workflow`, `node_label`), `executor.py`, `logger.py`. |
-| `services/` | `run_store`, `data_analysis`, `visualizer` (owns `chart_engine`+`ChartConfigError`+`ECHARTS_ONLY_TYPES`), `latex_charts`/`latex_compile`/**`latex_outputs`** (the TikZ figure+table add-ons the render route and the visualize node share), **`nodes`** (extracted `_execute_*_node` executors), `dataset_store`, `execution_history`, `cookie_manager`/`cookie_flow`, `cookie_preflight.py` (top-level), `exporter`/`export_browser`, `report_service`, `housekeeping`, `lock_store`, `schedule_store` + `cron` (定时任务台账与时间语法), `browser_profiles`, `net_probe`, `stats`, `workflow_manager`, `text_dedupe`, `part_writer`. |
+| `services/` | 52 flat modules (+ `biblio_formats/` 14): `run_store`, `data_analysis`, `visualizer` (owns `chart_engine`+`ChartConfigError`+`ECHARTS_ONLY_TYPES`), `latex_charts`/`latex_compile`/**`latex_outputs`** (the TikZ figure+table add-ons the render route and the visualize node share), `dataset_store`, `execution_history`, `cookie_manager`/`cookie_flow`, `exporter`/`export_browser`, `report_service`, `housekeeping`, `lock_store`, `schedule_store` + `cron` (定时任务台账与时间语法), `net_probe`, `stats`, `workflow_manager`/`workflow_history`, `reusable_store`/`reusable_expand`, `text_dedupe`, `part_writer`, `catbus_bridge`, `project_bundle`, `run_files`/`run_windows`, `analysis_params`/`process_params`/`llm_run_context`, `crawl_runtime`/`crawler_lifecycle`, the 11 `biblio_*` + `bibliometrics`. **The executor module that used to sit in this directory is deleted** — the executors live in
+`nodes/executors/` (Phase 1a), and keeping a copy in both places would have let whichever one was
+edited first silently win. Stage 4 of the plan replaces this name-prefix grouping with directories. |
 | `analyzers/` | `llm_client` (Ollama/OpenRouter), sklearn + BERT analyzers, `keyword`, `ner`, `stopwords`. |
-| `crawlers/` | `base.py` + per-platform (`weibo`/`zhihu`/`douyin`/`xiaohongshu`/`bilibili`/`twitter`/`youtube`/`wechat`/`instagram`) + `comments_*` + a site-independent `engine/`. **Well separated.** |
+| `crawlers/` | 26 flat modules + `engine/` (10). `base.py` (1,490) + one module per platform + **`comments_<platform>.py` for the same platform** + the shared `comments.py` `CommentSession`, which holds seven platforms' in-page read loops in one class and dispatches by `getattr(session, 'crawl_' + kind)`. Not "well separated": one platform's code lives in three places, which is what Stage 1 of `docs/refactor_plan.md` fixes (one directory per platform). `engine/` is genuinely site-independent, except for the platform facts that leaked into it (`innertube.API_HOST`, `popup`'s three named prompts, `wall`'s per-site markers). |
 | `utils/` | helpers (`as_bool`, `platform_for`, `sanitize_filename`). |
 
-### Why `app.py` is big — and the coupling that constrains how to split it
-`app.py` mixes two different jobs: (a) the ~95 route decorators, and (b) the **node executors**
-(`_execute_visualize_node`, `_execute_process_node`, …) plus a large set of module-level helpers
-(`_json_body`, `_results_snapshot`, `_safe_int`, `all_settings`, `execution_state`, …). Every new
-analyzer/chart forces an edit here, which is how it grew.
+### Why `app.py` is still big — and the coupling that constrains how to split it
+`app.py` mixes three jobs: (a) 39 route decorators, (b) the **run orchestration** (`_begin_run` alone is
+~895 lines: claiming the run, the queue, the checkpoint/reuse decisions, the stop path, the settlement),
+and (c) the module-level helpers that both of those reach (`execution_state` reads, `add_log`, the store
+getters, the LLM gate). The node executors are **no longer** part of it — all 14 live in
+`nodes/executors/`; what keeps `app.py` growing is that a new route or a new run-state rule has no other
+home yet.
 
 **The key constraint for any refactor:** the test harness treats `app.py` as a module of shared
 singletons. `tests/conftest.py` does `import app` and reaches directly into
@@ -41,15 +45,21 @@ byte-clean — `AGENTS.md` calls it out explicitly. So **`create_app()` is not a
 module into a factory would orphan every one of those references and silently break isolation. Any
 split must move that shared state to a place both `app.py` and `conftest.py` can import from, *first*.
 
-## Frontend layout (~19k JS LOC, no build step)
+## Frontend layout (~26k JS LOC across 11 files, no build step)
 | file | role |
 |---|---|
-| `workflow.js` | **9,276 LOC — 146 top-level `function`s, 63 col-0 `var/let/const`.** Run console, panels/settings, execution, resume, Chart Studio glue. |
-| `app.js` | 3,845 LOC — i18n catalogs (en+zh) + `AppSettings`/`BrowserProfiles`/`CloudMode`/`RunState`/… namespaces, boot, cookie dialog, every dock's resize wiring. |
-| `canvas.js` | 3,379 LOC — node graph, camera (`pan/zoom`, kept out of `getState`), pointer/touch gestures. |
-| `schedules.js` | 462 LOC — the 定时任务 dock: it renders the server's payload (`/api/schedules*`) and nothing else. Deliberately **no** time arithmetic and **no** status vocabulary of its own (a token the catalogue does not know shows as itself) — see the 定时任务 rules in `AGENTS.md`. |
+| `workflow.js` | **13,015 LOC — 206 top-level functions, 34 named objects, 82 top-level `var`.** Run console, every docked panel, node settings, execution, resume, chart preview/export. 33 section banners mark its topics, and they have drifted: the cookie-manager cluster sits under the *Outline sidebar* and *Export guide* banners, `wfFiles` under *Lexicon manager*. Stage 8 of the plan splits it (`docs/frontend_modules.md` is the per-module order). |
+| `app.js` | 5,071 LOC — the zh/en catalogues (~3,700 of it) + `Settings`/`AppSettings`/`RunState`/`BrowserProfiles`/`CloudMode`, boot, the cookie dialog, every dock's resize wiring. |
+| `canvas.js` | 3,893 LOC — node graph, camera (`pan/zoom`, kept out of `getState`), pointer/touch gestures, auto-layout, clipboard. |
+| `reusable.js` | 1,021 LOC — reusable node templates: fold/expand, in-card preview, unwrap. |
+| `schedules.js` | 475 LOC — the 定时任务 dock: it renders the server's payload (`/api/schedules*`) and nothing else. Deliberately **no** time arithmetic and **no** status vocabulary of its own (a token the catalogue does not know shows as itself) — see the 定时任务 rules in `AGENTS.md`. |
 | `node-types.js` | The served node catalogue (`/api/node-types`): types, word keys, groups and seed parameters. The canvas reads it as soon as it answers; its own literal table is the cold-page fallback, pinned to the server by tests. |
-| `custom-select.js`, `menu.js`, `stats.js`, `zenviz*.js` | widget + Chart-Studio host/bridge. |
+| `custom-select.js`, `menu.js`, `stats.js`, `zenviz*.js` | widget + Chart-Studio host/bridge. `zenviz.html` itself is 16,852 lines and loads `zenviz-bridge.js`, which the workbench page does **not**. |
+
+**The callable surface is markup, not code.** `index.html` (2,336 lines) carries 123 `onclick`,
+23 `oninput`, 18 `onchange` attributes naming **66 bare global functions** and **20 namespace
+receivers**. Renaming any of them is a user-visible break, which is why the split moves code between
+files and never renames a global. `css/style.css` is 5,017 lines over 44 panel banners.
 
 The codebase already uses a lightweight namespace convention (`const Foo = { … }`), but everything
 loads as flat `<script>` tags in a fixed order — which is why `AGENTS.md` warns that a top-level
@@ -60,81 +70,70 @@ files into a node `vm`, driven by `tests/unit/test_frontend_*`.
 ## Test tiers
 `pytest.ini` runs **only the fast tier by default** and adds `--disable-socket`. Tiers: `unit`,
 `api` (tmp-isolated `test_client`), `integration` (real Chrome/Ollama), `live_ollama`, `live_quick`,
-`live_site`. Scale: 170 test files, **4,399 test functions**; the fast tier is ~6.0k cases / ~3.5 min
+`live_site`. Scale, measured: **252 test files** (unit 150 / api 55 / integration 20 / live_site 27) with
+**~6,163 test functions**, 44 `.mjs` frontend harnesses, 120,914 test LOC — more test code than product
+code, which is the asset the restructure must not lose. The fast tier is 8,104 cases / ~8 min
 (the exact case count is parametrized, so treat `pytest -q` as the source of truth).
-Frontend needs `node` on `PATH` (those cases otherwise *skip*, which can look green). See `AGENTS.md`
-for the "nothing skipped" closure gate.
+Frontend needs `node` on `PATH` (those cases otherwise *skip*, which can look green — hence
+`CRAWLER_REQUIRE_NODE=1`, which aborts the session instead). See `AGENTS.md` for the
+"nothing skipped" closure gate.
 
-## Refactor roadmap (do each behind a green fast-suite swing; update tests in the same change)
+## Where the plan lives
 
-### A. Backend — Blueprints, safely
-1. **Extract shared state first.** Move `execution_state`, the singleton services
-   (`cookie_manager`/`history_service`/…), and the generic request helpers (`_json_body`,
-   `_safe_int`, `_results_snapshot`, `all_settings`) into a new `backend/state.py` (or `context.py`).
-   In `app.py` keep thin aliases (`execution_state = state.execution_state`, …) as a temporary
-   compatibility shim, and **update `tests/conftest.py` to reference the new module** in this one,
-   well-tested commit. Fast suite must stay green *and* the data/logs byte-clean check must still pass.
-2. **Move the pure readers to Blueprints** (least shared mutation): `stats`, `history`, `settings`
-   GET, `models`, `capabilities`, `analysis`. Paths unchanged, so the `client` tests don't move.
-3. **Then the stateful clusters**: `workflow`, `runs`, `cookies`, `exports`, `report`, `studio`, `llm`
-   — now safe because they read/write through `state.py`, not module globals.
-4. **Move the node executors** (`_execute_*_node`) out of `app.py` into `backend/nodes/executors/`
-   behind the `nodes.registry` table. This is the highest-value step: it stops `app.py` growing on every
-   feature. A-4 is complete: all 14 node executors live in `backend/nodes/executors/` behind
-   `nodes.registry` (Phase 1a + Phase 1b), and `app.py` is down to 4,410 lines of composition
-   root, run orchestration and HTTP handlers — see `docs/refactor_plan.md`.
+The roadmap used to be written here (a section called "Refactor roadmap A–D" plus a "Progress" log),
+and it drifted from the code: it still described moving the executors out of `app.py` as a future step
+while they had all landed, and it cited 124 `backend/test_*.py` probes that have since been deleted.
+**One fact, one home**: [`refactor_plan.md`](refactor_plan.md) is now the only roadmap — the audit,
+the target tree, the layering rules, the stage order and the definition of done. This file describes
+**what is there today**, and §E below keeps the one durable engineering finding from the old plan
+because it is a constraint, not a step.
 
-### B. Frontend — modularize `workflow.js`
-Split it by responsibility into a few `<script>` files in load order (no bundler needed to start):
-run-console, panels/settings renderers, Chart Studio, cookie-gate, i18n/bridge, state/history. Keep
-the `const Foo = {}` namespace style so the existing harness keeps loading real files. Goal is fewer
-implicit globals and a smaller blast radius per edit — **not** a framework rewrite.
-Phase 2 of the backend plan is done: the node catalogue and its seeds are served by `/api/node-types`
-and read by `node-types.js`; `canvas.js` keeps a pinned fallback for the cold page. The staged
-frontend split (module boundaries, order, harness loader, verification per step) is written down in
-[`frontend_modules.md`](frontend_modules.md); `workflow.js` is ~13k lines and is the remaining target.
+## Refactor constraint that shapes every move (finding E)
 
-### C. Docs / rules
-Keep `AGENTS.md` as terse rules and push evidence here/`docs/`. Several rules already have a pinning
-test (i18n parity, `_VOLATILE_PARAMS`, refusal-by-name); where they don't, prefer adding the test
-over trusting prose. `AGENTS.md` is near its byte budget — trim it as evidence moves out.
+`app.py`'s module globals are used as **monkeypatch seams** by the tests — `app.warm_profile_dir`,
+`app._RUN_STORE`, `app.MAX_IMAGE_BYTES`, `app._ML_MODEL_TYPES`, … So any extraction that moves such a
+name re-points the tests that patch it, or the test passes while measuring a binding nobody calls.
+The two rules that resolved this for the store registry, and that still govern the rest:
 
-### D. Hygiene (small, optional)
-- The 124 `backend/test_*.py` manual probes (gitignored) could move to `scripts/probes/` so the
-  one-off measurement scripts stop visually colliding with the pytest suite.
-- `pytest-cov` is installed and used **ad-hoc** — the `--cov` command is documented in
-  `docs/development.md`; it is deliberately not a CI floor (`pytest.ini`/CI run bare `pytest -q`) given the test count.
-- Multi-user / real job queue **only if** cloud multi-user becomes a goal; otherwise document
-  single-user as an explicit non-goal (it currently is) and leave the one-server design intact.
+- **R1 (app keeps the alias)** — `app.get_run_store is stores.get_run_store`. A function patch on
+  `app_module.get_run_store` still redirects app-internal calls (they resolve by name at call time) but
+  reaches no Blueprint that imported from `stores`. Patch targets then split by caller, which is a trap.
+- **R2 (single seam, chosen)** — every writer binds to the new owner and `app` never re-exports the
+  name as an alias; all callers do `from stores import get_run_store`. Function patches target
+  `stores.get_run_store` uniformly. `backend/stores.py` owns the registry under this rule;
+  `app.py` keeps a PEP-562 `__getattr__` only for the three store globals, which is what the test
+  harness rebinds.
 
-## Progress (as of the Blueprint extraction work)
+The census that forced the choice (measured 2026-10-09 against the tests of that day, so the line
+numbers have moved): **~118 read sites** vs **exactly 9 write/patch sites**. Reads survived the move
+through the alias; the 9 writes had to move **in the same commit** — leaving one behind is what made
+the first attempt fail with 43 errors. Same lesson, same size ratio, for the executor seams:
+`tests/executor_seams.py::forward` exists because a plugin resolves its own `get_crawler`, not app's.
 
-Step A-1 is done and went further than planned: `backend/state.py` owns the in-place run state
-(`execution_state`, `_RUN_QUEUE`, `_dataset_cache`, the console-buffer helpers), the eager
-`history_service`/`cookie_manager`, and `_completed_lock` + `_results_snapshot`; `backend/stores.py`
-owns the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER` + getters, the dataset cache
-cluster). Seventeen Blueprints live in `backend/api/`: `history`, `stats`, `settings`, `config`+`models`,
-`capabilities`, `browser_profiles` (+ `backend/profiles.py`), `llm` (+ `backend/transport.py`), `locks`,
-`exports` (write `/api/export/save` + the read side), `data`, `studio`, `analysis`, `visualize`, `report`,
-`diagnostics`, `lexicon`, `schedules` (+ `backend/scheduler.py`),
-with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe`/`_resolve_payload_dataframe`/
-`NoRunDataError`) shared. `app.py` shrank 8043 → **5,794 lines** in that work and has since grown back to
-**6,457** as later features landed. A-4 is now complete: Phase 1a moved the eight built-ins and Phase 1b
-moved `output`, `visualize`, `analysis`, `process`, `comment` and `source`, each behind a module with
-`NODE_TYPE` + `run(node, call)` registered in `nodes/registry.py` (shared legs live in
-`services/crawl_runtime.py`, `services/crawler_lifecycle.py`, `services/analysis_params.py`,
-`services/process_params.py`, `services/llm_run_context.py`). `app.py` now measures 4,410 lines and
-holds no executor body at all.
-**The finding that reshaped the plan** still holds: `app.py` module globals are used as *monkeypatch seams* by
-the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app.MAX_IMAGE_BYTES`,
-`app._ML_MODEL_TYPES`, …), so each extraction that moves such a function/name re-points the tests that patch it
-(browser_profiles, studio `MAX_IMAGE_BYTES`, analysis `_ML_*`, run-races/conftest store writes). Every step was
-landed as its own full-suite-green, lint-clean commit. (The report module's `_find_chrome` seam is gone with the
-Chrome-printed report PDF: paper output is the LaTeX route only.)
+## What owns what today
 
-### E. Store-registry keystone — design (EXECUTED: `backend/stores.py` now owns the registry; kept here as the design record)
+- `backend/state.py` — the in-place run state (`execution_state`, `_RUN_QUEUE`, `_dataset_cache`,
+  console-buffer helpers), the eager `history_service`/`cookie_manager`, `_completed_lock`.
+- `backend/stores.py` — the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER` + the lazy
+  getters). This is the seam the test harness rebinds; writes to `app._RUN_STORE` would shadow it.
+- `backend/api/` — 23 blueprint modules + `http.py` (request coercions) + `resolution.py`
+  (`_resolve_dataframe`, `NoRunDataError`). Blueprints are registered in `app.py`.
+- `backend/nodes/executors/` — all 14 node types, each `NODE_TYPE` + `run(node, call)`, self-registered
+  in `nodes/registry.py`; the shared legs are `services/crawl_runtime.py`, `services/crawler_lifecycle.py`,
+  `services/analysis_params.py`, `services/process_params.py`, `services/llm_run_context.py`,
+  `services/run_files.py`, `services/run_windows.py`.
+- `app.py` — composition root, **run orchestration** (`_begin_run`, the queue, `_run_node_durable`) and
+  **39 routes still inline** (`/api/workflow/*` 15, `/api/cookies/*` + `/api/profiles/*` 11, `/api/runs/*` 10).
+  Those two blocks are Stage 6 of the plan; line counts are deliberately not quoted here, because the
+  number changes with every feature and a doc that recites it is stale by construction.
 
-#### Seam census (measured against the current tests, 2026-10-09)
+One durable rule from the keystone work, kept because it is a constraint and not a step: **never leave a
+reader hitting the old global.** An `app` alias plus `__getattr__` is a safety net only while it is the
+*only* name app-internal code uses — a single `global _RUN_STORE` inside a moved function defeats the
+whole design, which is why the executors take their state through `NodeCall` instead.
+
+
+## Seam census behind that rule (measured 2026-10-09 against the tests of that day, so the line numbers have moved)
 
 The store seam has **3 module globals** in `app.py` and **3 lazy getters** around them:
 
@@ -161,42 +160,15 @@ Test access splits sharply between reads and writes:
   | `tests/api/test_run_races.py:598` | `monkeypatch.setattr(app_module,'get_run_store', refuse)` | **function patch** |
   | `tests/api/test_run_races.py:614` | `monkeypatch.setattr(app_module,'get_run_store', lambda: app_module._RUN_STORE)` | **function patch** |
 
-#### The two function patches are the sharp edge
+The sharp edge is the two **function** patches at the bottom of that table: `app.py`'s own code calls
+`get_run_store()` as a module-level name, so patching `app_module.get_run_store` redirects the calls
+inside `app.py` (they resolve by name at call time) but reaches no caller that imported from `stores`.
+That asymmetry is why R2 above was chosen over R1.
 
-`app.py`'s own internal code calls `get_run_store()` as a **module-level name**. If that name is re-bound to `stores.get_run_store`, monkeypatching `app_module.get_run_store` still redirects the calls inside `app.py` (because they resolve by name at call time), but it would **not** affect a Blueprint that imported the name from `stores` directly. So the design must pick one rule and keep it consistent:
+The swings that followed this design (extract route clusters one blueprint at a time) were **not
+executed from this document**: they are Stage 6 of [`refactor_plan.md`](refactor_plan.md), which owns
+the order, the per-stage gate and the risk note that `_begin_run` is the highest-value, highest-risk
+single body left in `app.py`. What is kept above is the census, because it is the reason the seam
+rules are what they are: a move that leaves one writer on the old binding is not a refactor, it is a
+split-brain that only the user's next resume will discover.
 
-- **Rule R1 (app keeps the shim):** `app.get_run_store` is `stores.get_run_store` (same function object). Any patch of `app_module.get_run_store` shadows the app-module name; app's internal calls (which look up `get_run_store` by name) pick up the patched one; a Blueprint importing from `stores` bypasses the app-module name. → function-patch tests stay on `app_module`, Blueprints that need the *patched* store must ALSO go through `app_module.get_run_store`. Not recommended (leaks semantics).
-- **Rule R2 (single seam):** migrate every one of the 9 write sites to `stores`, and never bind `app.get_run_store` as an alias — every caller (app-internal and Blueprints) does `from stores import get_run_store` and calls it by that name. Function patches then target `stores.get_run_store` uniformly. Recommended.
-
-#### Design — R2 (single seam), one branch, four green swings
-
-**Swing 1 — introduce `backend/stores.py`** (no route moves yet):
-1. Move the 3 globals + 3 locks + 3 getters from `app.py` to `stores.py`.
-2. In `app.py`: `from stores import get_run_store, get_dataset_store, get_housekeeper`; add `import stores`; add a PEP-562 `def __getattr__(name)` that resolves `_RUN_STORE` / `_DATASET_STORE` / `_HOUSEKEEPER` to the `stores` module's live values and otherwise raises `AttributeError`. Replace the raw `_RUN_STORE` read in `_execute_analysis_node` (line 3845) with `get_run_store()`.
-3. Re-point the **9 write sites** above to `stores` (5 in `conftest.client`, 1 direct, 2 `_RUN_STORE` patches, 2 `get_run_store` function patches). Every other test file is untouched (118 reads keep working via the alias + `__getattr__`).
-4. Guards: fast suite green; the isolation byte-clean check still fires; the leaked-flag/queue tripwires still fire; `test_run_races::test_a_resume_node_with_nothing_to_adopt_produces_no_rows_no_crash` and the forged-store `test_nodes_execution:745` still pass (they were the ones that caught the slice-1 under-migration).
-
-**Swing 2 — extract one thin store-backed cluster** to prove the pattern: `api/runs.py` for `/api/runs/*` (9 routes). Each route is small; only import change is `from stores import get_run_store`. URLs unchanged. Fast suite green.
-
-**Swing 3 — extract the medium clusters** one per commit: `exports`, `report`, `studio`. Each has the same `from stores import get_run_store` shape and its own green swing. If a cluster's handler reaches `execution_state` or a store getter via a `global` name still bound to `app`, the migration keeps the alias in `app` (so those lookups keep working) — do **not** rewrite handlers in the same commit.
-
-**Swing 4 — the heavy clusters**: `workflow` (13), `runs`-of-the-cookies (cookie-write cluster is the deepest — it holds `_COOKIE_JOB`, `_plant_saved_cookie_into_profile`, and calls `get_dataset_store()`). Extract last, one endpoint at a time, keeping the executor wiring intact until A-4 moves the executors themselves.
-
-#### Alternative — A-4 first, keystone second
-
-Extract the **node executors** (`_execute_*_node` in `app.py`) into `backend/nodes/executors/` first,
-passing the run context as the explicit `NodeCall` (dependency injection). Phase 1a has landed the eight
-built-ins; Phase 1b moves the remaining six (`output`/`visualize`/`analysis`/`process`/`comment`/`source`) in
-that order, with `source`/`comment` last. This removes code from `app.py`, is entirely test-transparent
-(executors are called from the worker, not from the seam), and shrinks the surface the keystone has to cover.
-Recommended ordering: **A-4/Phase 1 → E**.
-
-#### Rollback + risk
-
-- Each Swing-1..4 commit is revertable in isolation; only Swing 1 (the alias) has cross-file impact — keep the branch off `main` until two consecutive full-suite-green runs on the same commit.
-- Never leave a *reader* still hitting the old global: an app module alias + `__getattr__` is the safety net, but it must be the **only** name app-internal code uses; if a function ever does `global _RUN_STORE`, that call site defeats the whole design. The grep above shows only 3 `global` sites, all inside the getters being moved — so this constraint is naturally satisfied after the move.
-
-Guards: every step keeps the fast suite green **and** the `data/`/`logs/` byte-clean session-finish
-check **and** the leaked-flag/queue/store tripwires — those are exactly what catch a broken seam.
-Ordering matters: create `stores.py`, re-point conftest + tests, *then* move clusters; never leave a
-module whose lazy getter and its injection target differ.
