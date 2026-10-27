@@ -41,8 +41,6 @@ def get_capabilities():
         # Creation order, not alphabetical: the list the node picks from is "which logins does this
         # machine have", and a user who added work-then-home expects home to still be second.
         accounts = cookie_manager.accounts_in_order(cap.get('platform') or '')
-        # Creation order, not alphabetical: the list the node picks from is "which logins does this
-        # machine have", and a user who added work-then-home expects home to still be second.
         # Every entry is a NAME now — the default account included — and the words for the ones
         # this program named (default, default2) come from the catalogue while a typed name is
         # shown as typed, which is the same rule the cookie rows travel by. A name with no
