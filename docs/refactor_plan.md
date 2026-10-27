@@ -460,8 +460,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `097675b` 是唯一红过的一条，已由 `e221d9b` 修正。恢复后第一件事：`gh run list --limit 4`
     （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）。
   - **本地证据（本次字节）**：fast **8,159 passed / 3 skipped / 353 deselected** exit=0；
-    设备档（真 Chrome + 真 Ollama + 真 CatBus，`--timeout=300`）**192 passed / 0 skipped** exit=0；
-    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 490 files。
+    设备档（真 Chrome + 真 Ollama + 真 CatBus，`--timeout=300`）**194 passed / 0 skipped** exit=0；
+    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 493 files。
   - **Stage 2 第三刀 `backend/scheduling/` 已完成（本次提交）**：`backend/scheduler.py`(246) →
     `scheduling/clock.py`、`services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) →
     `scheduling/cron.py`，新增 `scheduling/__init__.py` 域说明（不 import 子模块，故无环）。
@@ -564,6 +564,13 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `.machine_deps`；两次都只做单一名词替换且 `git diff` 已逐行核对，但违反"代码只用 tracked Edit"，之后不再有例外。
     门禁：fast **8,159 passed / 3 skipped**；设备档 **192 passed / 0 skipped**；两档 pylint **10.00/10**；
     ruff check + format **493 files**。
+  - **#25 第一半已完成（本次提交）**：真浏览器用例 `test_the_crawl_panel_offers_platform_then_engine_then_function`
+    （zh+en）量四件事：引擎下拉 == 服务端 `engines` 列表**按它自己的顺序**、选项文字来自词典（不是 key）、
+    灰掉的引擎在括号里带原因、面板自上而下是 平台→引擎→功能；有双引擎时切到第二个可用引擎，断言 stored
+    `collect` 落到新引擎的第一个功能且功能列表随之更换。**用例自己抓出两条真实行为并钉住**：① 只有一个功能时
+    面板**故意不渲染功能下拉**（"一个模式不是选择"）——顺序断言因此止于引擎；② 每次切换都重绘
+    `#settings-content`，切换前抓到的 `<select>` 是脱离文档的旧节点，会让下一个平台读到上一个面板——
+    现在每次重查并按「平台值已变 + 引擎下拉存在」等待落定。设备档因此 **194 passed / 0 skipped**。
   - **下一刀 = capabilities 第二步**：`fields.py`（共享字段与工厂）+ `platforms/<id>.py`（9 个 Capability 块各一文件）
     + `platforms/__init__.py` 按面板顺序装配 `CAPABILITIES` + `catbus.py`；随后 Stage 1 ④：把
     `crawlers/engine/{wall,popup}.py` 里按平台分支的判据词表迁进 `capabilities/platforms/<id>`（**一个平台只声明一处**）。

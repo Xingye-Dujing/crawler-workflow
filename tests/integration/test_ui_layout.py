@@ -5112,3 +5112,159 @@ def test_a_server_without_a_desktop_hides_the_windows_only_controls_and_greys_th
     assert reason in harvest['text'], f'the greyed option says nothing about why: {harvest["text"]}'
     board = next((o for o in facts['options'] if o['value'] == 'hot'), None)
     assert board and board['disabled'] is False, 'a browser crawl must not be collateral damage'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_crawl_panel_offers_platform_then_engine_then_function(app_url, driver, lang):
+    """The engine dimension, measured where the selects are actually laid out.
+
+    ``harness_capabilities.mjs`` drives the same handlers in node, but ordering, option text and a
+    greyed engine's reason are DOM facts: the panel must read 平台 → 引擎 → 功能 top to bottom, the
+    engine list must be the server's ``engines`` list in ITS order (not a list typed here), and a
+    stored engine the adapter no longer offers must stay on screen, disabled and named — replacing
+    it behind the user's back is the silent fallback this dimension exists to prevent.
+
+    The server this tier boots has whatever adapter the machine has (none on CI), so the test
+    measures every platform the payload gives at least one engine to, and exercises the switch on
+    the first one that offers two available engines — zero such platforms is stated, not hidden.
+    """
+    driver.set_window_size(1650, 1080)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const lang = arguments[0];
+        (async () => {
+            document.body.dataset.lang = lang;
+            I18n.apply();
+            for (let i = 0; i < 200 && !Capabilities.ready(); i++) await new Promise((r) => setTimeout(r, 50));
+            if (!Capabilities.ready()) return done({ error: 'capabilities never loaded' });
+            localStorage.removeItem('crawler_canvas');
+            canvas.nodes = {};
+            canvas.connections = [];
+            document.getElementById('nodes-container').innerHTML = '';
+            const id = canvas.addNode('source', 200, 120);
+            const waitFor = async (fn) => {
+                for (let i = 0; i < 200; i++) {
+                    const value = fn();
+                    if (value) return value;
+                    await new Promise((r) => setTimeout(r, 25));
+                }
+                return null;
+            };
+            openSettings(id);
+            if (!(await waitFor(() => document.querySelector('select[onchange^="setSourceBackend"]')))) {
+                return done({ error: 'the engine select never rendered' });
+            }
+            const read = (select) =>
+                Array.from(select.options).map((o) => ({
+                    value: o.value,
+                    text: o.textContent.trim(),
+                    disabled: o.disabled,
+                }));
+            const measured = [];
+            let switched = null;
+            for (const entry of Capabilities.platforms()) {
+                const platform = entry.platform;
+                const engines = Capabilities.engines(platform);
+                if (!engines.length) continue;
+                /* Each switch repaints #settings-content, so every element is re-queried: a select
+                   captured before the repaint is detached and answers by value, which made the next
+                   platform read the previous panel. The settle condition names the platform. */
+                const pick = document
+                    .getElementById('settings-content')
+                    .querySelector('select[onchange^="selectSourcePlatform"]');
+                if (!pick) return done({ error: 'the platform select never rendered' });
+                pick.value = platform;
+                pick.dispatchEvent(new Event('change'));
+                const engineSel = await waitFor(() => {
+                    const panel = document.getElementById('settings-content');
+                    const fresh = panel.querySelector('select[onchange^="selectSourcePlatform"]');
+                    const engine = panel.querySelector('select[onchange^="setSourceBackend"]');
+                    return fresh && fresh.value === platform && engine ? engine : null;
+                });
+                if (!engineSel) return done({ error: 'the panel never settled on ' + platform });
+                const platformSel = document
+                    .getElementById('settings-content')
+                    .querySelector('select[onchange^="selectSourcePlatform"]');
+                const options = read(engineSel);
+                const platformBox = platformSel.getBoundingClientRect();
+                const engineBox = engineSel.getBoundingClientRect();
+                const backend = String(canvas.nodes[id].params.backend || '') || Capabilities.defaultBackend(platform);
+                const offered = Capabilities.modes(platform, backend);
+                const modeSel = document.querySelector("select[onchange*=\\"'collect'\\"]");
+                const modeBox = modeSel ? modeSel.getBoundingClientRect() : null;
+                measured.push({
+                    platform,
+                    offered: offered.length,
+                    modeSelect: !!modeSel,
+                    options,
+                    expected: engines.map((e) => ({
+                        value: e.key,
+                        text: I18n.t(e.labelKey) +
+                            (e.available === false
+                                ? '（' + I18n.t(e.reasonKey || 'settings.backendProbeFailed') + '）'
+                                : ''),
+                        disabled: e.available === false,
+                    })),
+                    /* One mode is not a choice, so the panel renders no function select for it
+                       («WeChat offers a single form»); the order claim then stops at the engine. */
+                    order: modeBox
+                        ? platformBox.top < engineBox.top && engineBox.top < modeBox.top
+                        : platformBox.top < engineBox.top,
+                });
+                const available = engines.filter((e) => e.available !== false);
+                if (!switched && engines.length > 1 && available.length > 1) {
+                    const next = available[available.length - 1].key;
+                    engineSel.value = next;
+                    engineSel.dispatchEvent(new Event('change'));
+                    const wantModes = Capabilities.modes(platform, next).map((m) => m.key);
+                    const fresh = await waitFor(() => {
+                        const panel = document.getElementById('settings-content');
+                        const settled = panel.querySelector('select[onchange^="selectSourcePlatform"]');
+                        const mode = panel.querySelector("select[onchange*=\\"'collect'\\"]");
+                        if (!settled || settled.value !== platform) return null;
+                        return wantModes.length > 1 ? mode : panel;
+                    });
+                    switched = {
+                        platform,
+                        engine: next,
+                        stored: canvas.nodes[id].params.collect,
+                        expectedStored: wantModes[0] || '',
+                        modeKeys: wantModes.length > 1 && fresh ? read(fresh).map((o) => o.value) : [],
+                        expectedModes: wantModes,
+                        modeSelect: wantModes.length > 1 ? !!fresh : false,
+                    };
+                }
+            }
+            return done({ measured, switched });
+        })();
+        """,
+        lang,
+    )
+    assert 'error' not in facts, facts.get('error')
+    assert facts['measured'], 'no platform was offered an engine, so nothing about the dimension was measured'
+    for row in facts['measured']:
+        got = [(o['value'], o['text'], o['disabled']) for o in row['options']]
+        want = [(e['value'], e['text'], e['disabled']) for e in row['expected']]
+        assert got == want, f'{row["platform"]}: the engine select is not the server list: {got} vs {want}'
+        for option in row['options']:
+            assert option['text'] and not option['text'].startswith('engine.'), (
+                f'{row["platform"]}: an engine option printed its catalogue key: {option}'
+            )
+        assert row['modeSelect'] == (row['offered'] > 1), (
+            f'{row["platform"]}: a function select exists iff there is a choice '
+            f'(offered={row["offered"]}, select={row["modeSelect"]})'
+        )
+        assert row['order'] is True, f'{row["platform"]}: the panel is not 平台 → 引擎 → 功能 top to bottom'
+    if facts['switched']:
+        row = facts['switched']
+        assert row['stored'] == row['expectedStored'], (
+            f'{row["platform"]}: switching to {row["engine"]} left the stored mode off that engine: {row}'
+        )
+        if row['expectedModes'] and len(row['expectedModes']) > 1:
+            assert row['modeSelect'] is True, f'{row["platform"]}: the new engine has a choice but no select: {row}'
+            assert row['modeKeys'] == row['expectedModes'], (
+                f"{row['platform']}: the function list is not the new engine's list: {row}"
+            )
