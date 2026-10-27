@@ -78,17 +78,27 @@ class TestBootImportBudget:
         ``CRAWLER_DATA_ROOT`` points the child at its own data and log directories, the same
         isolation the rest of the suite uses — importing the app must not touch the developer's
         ``data/`` or ``logs/``, which the suite fails over byte-for-byte.
+
+        The answer travels through a FILE the child writes, not through a captured pipe. Measured on
+        the CI runner: ``subprocess.run(capture_output=True)`` came back ``returncode=0, stderr=''``
+        with ``stdout=None`` — the child had run and exited cleanly, so a pipe-based assertion would
+        be failing on a transport the harness swallowed rather than on the boot. What this test
+        claims is which modules ``import app`` loads; that claim should not depend on how the number
+        is carried.
         """
+        report = tmp_path / 'boot_modules.txt'
         script = (
-            'import sys, app\n'
+            'import os, sys, app\n'
             f'roots = {list(HEAVY_ROOTS)!r}\n'
             "leaked = sorted({name.split('.')[0] for name in sys.modules if name.split('.')[0] in roots})\n"
-            "print('|'.join(leaked))\n"
+            "with open(os.environ['CIXI_BOOT_REPORT'], 'w', encoding='utf-8') as handle:\n"
+            '    handle.write("|".join(leaked))\n'
         )
         environment = {
             **os.environ,
             'PYTHONPATH': str(BACKEND),
             'CRAWLER_DATA_ROOT': str(tmp_path),
+            'CIXI_BOOT_REPORT': str(report),
         }
         completed = subprocess.run(
             [sys.executable, '-c', script],
@@ -98,13 +108,9 @@ class TestBootImportBudget:
             timeout=180,
             check=False,  # asserted below, with the child's own returncode and stderr attached
         )
-        # Asserted instead of ``check=True``: on the CI runner this call once came back with
-        # ``stdout is None``, and an ``AttributeError`` inside the test told nothing about the child
-        # that had just run. Every fact the pipe can carry is now in the sentence — a refusal that
-        # names what it measured is the rule in this repo, including about its own test harness.
         assert completed.returncode == 0, (
             f'`import app` failed on this machine: rc={completed.returncode} stderr={(completed.stderr or "")[-1500:]}'
         )
-        assert completed.stdout is not None, 'the child ran but no pipe was captured'
-        leaked = [name for name in completed.stdout.strip().split('|') if name]
+        assert report.is_file(), f'the child exited 0 without writing its report to {report}'
+        leaked = [name for name in report.read_text(encoding='utf-8').strip().split('|') if name]
         assert not leaked, f'`import app` loaded {leaked}; the boot path is supposed to stay out of them'

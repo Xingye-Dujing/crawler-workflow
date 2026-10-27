@@ -734,7 +734,14 @@ message.
   on `returncode` itself — and in `test_boot_import_budget` it turned an `AttributeError: 'NoneType'
   object has no attribute 'strip'` (seen once on the runner, unreproducible here) into an assertion that
   carries the child's return code and stderr. When a failure cannot be reproduced, the fix is to make it
-  name itself.
+  name itself. That produced the decisive measurement on the next run: `CompletedProcess(returncode=0,
+  stderr='', stdout=None)` — the child had run and exited cleanly, so the pipe, not the boot, was what
+  differed on the runner. **A test should read its answer through the transport the claim depends on**,
+  and "which modules did `import app` load" does not depend on a captured stdout: the child now writes
+  its report to a `tmp_path` file and the parent reads that, so the assertion is about the import graph
+  and nothing else. Two smaller lessons in the same shape: the `assert x is not None` step was worth
+  keeping as `assert report.is_file()` (it names the mechanism it protects), and a harness fact is only
+  knowable from the harness — this one took two CI runs because no local configuration reproduced it.
 - **Fixing one step of a pipeline does not prove the next step ever ran.** Once both pylint tiers
   passed on the runner, CI reached the **fast tier for the first time in this repository's history**
   and reported **27 failures** (run 40461763819) that were all green on the box that wrote them. The

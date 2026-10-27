@@ -334,6 +334,14 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   于是 fast 档第一次被执行，报 **27 failed / 8111 passed**（全是"CI 这台机与开发机不同"，五类，逐类见
   任务 #38）。**`aec9e1c`（本轮重构）在 runner 上给出 27 failed / 8119 passed**——同一批 27，passed 恰好多
   出我新增的 8 条 ⇒ 重构**没有引入任何新的 CI 失败**，这是这条改动的直接证据。
+  **`7c841ff`（#38 前四类）在 runner 上把 27 打到 1**，两档 pylint 全 ✓——四条是 runner 亲口确认修好的
+  （不是只看本地）：13 条 bert 运行时、2 条字节 pin、1 条 UPX、1 条红果播放器。
+- **最后那 1 条已被它自己说出病因**：`subprocess.run(capture_output=True)` 在 runner 上返回
+  `returncode=0, stderr='', stdout=None`——子进程确实跑了并正常退出，被吞的是管道，不是启动。于是修法不是
+  再猜，而是**让断言走"论断真正依赖的那条传输"**："import app 加载了哪些模块"与 stdout 有没有被捕获毫无
+  关系 ⇒ 子进程把清单写进 `tmp_path` 的文件、父进程读该文件（`assert report.is_file()` 仍然点名机制）。
+  本地 9 passed，待 runner 复验。教训写进 `docs/agent_practices.md`：harness 事实只能从 harness 那儿问出来，
+  这条花了两次 CI 运行，因为本机任何配置都复现不出来。
 - **#38 五类已全部本地落地**（待 runner 复验）：① 13 条 bert 用例原先只在这台机装了 torch 时才绿——
   `bert_runtime()` 问的是机器，CI 无 torch 而有 onnxruntime/tokenizers，于是答 `'onnx'` 并**正确地**拒绝
   一个不是目录的模型名；改为用例自己声明描述的是哪个运行时，并用一次性件把本机改成 CI 的包集合，
