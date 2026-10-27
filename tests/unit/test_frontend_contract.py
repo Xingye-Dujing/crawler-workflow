@@ -18,6 +18,7 @@ import re
 import shutil
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
 from sessions.cookies import CookieManager
@@ -552,9 +553,8 @@ class TestCookiePanelParity:
         is the guard against the old shape coming back — a list typed into
         workflow.js, which is exactly how the two drifted apart before.
         """
-        import crawl_capabilities
 
-        assert set(crawl_capabilities.platform_ids()) == {p for p in CRAWLERS if is_crawlable(p)}, (
+        assert set(capabilities.platform_ids()) == {p for p in CRAWLERS if is_crawlable(p)}, (
             'the crawl matrix and the crawler registry disagree about which platforms exist'
         )
         workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
@@ -633,14 +633,13 @@ class TestCrawlMatrixParity:
 
     @staticmethod
     def _keys():
-        import crawl_capabilities
 
         labels, hints, names = set(), set(), set()
-        for cap in crawl_capabilities.CAPABILITIES:
+        for cap in capabilities.CAPABILITIES:
             for mode in cap.modes:
                 labels.add(mode.label_key)
                 labels.add('settings.platform')
-                for field in mode.fields + crawl_capabilities.FILE_FIELDS:
+                for field in mode.fields + capabilities.FILE_FIELDS:
                     labels.add(field.label_key)
                     # A select's *option* labels are panel words too: the renderer prints them
                     # as the choices, and until this loop existed only the field's own label
@@ -689,9 +688,8 @@ class TestCrawlMatrixParity:
 
     def test_the_matrix_sends_the_browser_only_to_functions_that_exist(self):
         source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
-        import crawl_capabilities
 
-        for cap in crawl_capabilities.CAPABILITIES:
+        for cap in capabilities.CAPABILITIES:
             for mode in cap.modes:
                 if mode.action_js:
                     assert f'function {mode.action_js}(' in source, (

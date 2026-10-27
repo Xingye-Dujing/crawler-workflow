@@ -652,7 +652,7 @@ class TestValidateUsesLabels:
         # link — while a line that IS a link still has to belong to the chosen platform.
         # The corpus is the SAME four lines the browser's validator is driven with in
         # test_frontend_js.py, so the panel, this validation and the executor's router are
-        # asked one question with one spelling of it (crawl_capabilities.is_url_cell).
+        # asked one question with one spelling of it (capabilities.registry.is_url_cell).
         names = {
             'id': 'node-1',
             'type': 'source',

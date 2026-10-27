@@ -20,6 +20,7 @@ import re
 import shutil
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
 
@@ -824,11 +825,10 @@ class TestNewSourceNodeCarriesTheMatrix:
     both halves of the product are loaded together and the endpoint answers."""
 
     def test_the_seeded_params_are_the_declared_defaults(self, life):
-        import crawl_capabilities
 
         node = life['matrix_defaults']['nodes'][0]
         assert node['type'] == 'source'
-        expected = crawl_capabilities.declared_defaults('zhihu')
+        expected = capabilities.declared_defaults('zhihu')
         expected['platform'] = 'zhihu'
         expected['collect'] = 'posts'
         expected['watermark'] = False

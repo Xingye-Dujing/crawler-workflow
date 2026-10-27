@@ -169,6 +169,14 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   *production module's attribute* (`bridge.machine_deps`, `harvest_module.machine_deps`), which no import/attribute
   rule for the moved file can see; only the full suite named them (5 failed + 10 errors). A move that renames a
   module should grep for `\.<old name>\b` across tests, not just for imports of the old path.
+- **A dotted-prose rule is a code rewrite when it runs over ``.py`` files.** Moving ``crawl_capabilities`` into
+  ``capabilities/registry.py`` (2026-10-28) applied ``\bcrawl_capabilities\.`` → ``capabilities.registry.`` to every
+  file, so code such as ``capabilities.CAPABILITIES`` (the local alias for the module) became
+  ``capabilities.registry.CAPABILITIES`` — an attribute of a module that has no ``registry`` member. ruff named 22
+  F821 in 9 test files; three more files still had an alias bound, where the same bug is an ``AttributeError`` at
+  run time and **no** linter can see it. Rule: dotted/prose rewrites belong to ``.md`` (and docstrings you edit by
+  hand); ``.py`` code is changed by import rules and module-attribute rules only, and the diff must be read for
+  ``.registry.``-style artefacts before the suite is trusted.
 - **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
   appeared" while the gate before it said everything was fine — because its bounded poll returned

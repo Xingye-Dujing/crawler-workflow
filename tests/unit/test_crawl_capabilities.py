@@ -20,8 +20,7 @@ import inspect
 from pathlib import Path
 
 import pytest
-
-from crawl_capabilities import (
+from capabilities.registry import (
     CAPABILITIES,
     COLLECT_KINDS,
     FILE_FIELDS,
@@ -750,7 +749,7 @@ class TestRegions:
     """
 
     def test_every_platform_names_exactly_one_of_the_two(self):
-        from crawl_capabilities import REGIONS, region_of
+        from capabilities.registry import REGIONS, region_of
 
         assert REGIONS == ('cn', 'overseas')
         for cap in CAPABILITIES:
@@ -768,19 +767,19 @@ class TestRegions:
         """Instagram holds a cookie and cannot be crawled, so it is absent from the
         matrix — and a canvas can never contain it, which is why the mixed-run warning
         does not need a word to say."""
-        from crawl_capabilities import region_of
+        from capabilities.registry import region_of
 
         assert region_of('instagram') == ''
         assert region_of('tumblr') == ''
 
     def test_the_split_keeps_canvas_order_dedupes_and_drops_strangers(self):
-        from crawl_capabilities import split_regions
+        from capabilities.registry import split_regions
 
         split = split_regions(['douyin', 'twitter', 'douyin', 'tumblr', 'youtube'])
         assert split == {'cn': ['douyin'], 'overseas': ['twitter', 'youtube']}
 
     def test_a_single_network_canvas_is_not_mixed(self):
-        from crawl_capabilities import split_regions
+        from capabilities.registry import split_regions
 
         domestic = split_regions(['zhihu', 'weibo', 'bilibili', 'wechat', 'xiaohongshu', 'douyin'])
         assert domestic['overseas'] == []

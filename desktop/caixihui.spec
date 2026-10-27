@@ -72,7 +72,7 @@ hiddenimports = []
 # happens to follow that literal, but a package that is only ever reached by name is one refactor away
 # from shipping an exe whose node types simply are not there. ``tests/unit/test_desktop_packaging.py``
 # fails if a package appears under backend/ without being added here (and if one is named here and gone).
-for package in ('api', 'crawlers', 'services', 'analyzers', 'core', 'engine', 'nodes', 'sessions', 'scheduling'):
+for package in ('api', 'crawlers', 'services', 'analyzers', 'core', 'capabilities', 'engine', 'nodes', 'sessions', 'scheduling'):
     hiddenimports += collect_submodules(package)
 hiddenimports += [
     'core.config',

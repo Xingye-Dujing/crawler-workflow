@@ -47,11 +47,11 @@ import threading
 import time
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import real_paths
 from core.config import Config
 from run_wait import describe_state, run_finished
 
-import crawl_capabilities
 import i18n
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -77,7 +77,7 @@ PASS_ID = time.strftime('%Y%m%d-%H%M%S')
 #: The param that chooses a mode, and the column a link feed is taken from. Both come from
 #: the crawl matrix rather than from a copy here: the matrix is the only answer to what a
 #: platform's node means, and a second opinion in a test helper is how the two drift apart.
-MODE_KEY = crawl_capabilities.MODE_KEY
+MODE_KEY = capabilities.MODE_KEY
 LINK_COLUMN = '链接'
 
 #: How many console lines one status poll carries.
@@ -364,12 +364,12 @@ def run_settings(mode: str = 'serial', headless: bool = False, use_profile=None,
 def params_for(platform: str, mode_key: str, **overrides) -> dict:
     """A complete, matrix-legal ``params`` block for one mode.
 
-    Seeded from :func:`crawl_capabilities.declared_defaults` — the same table the canvas
+    Seeded from :func:`capabilities.registry.declared_defaults` — the same table the canvas
     seeds a new node from — with the mode named explicitly. Naming it is not decoration:
     ``mode_for`` answers an unknown or missing key with the platform's FIRST mode, which on
     a four-mode platform would quietly turn an author node into a keyword search.
     """
-    params = dict(crawl_capabilities.declared_defaults(platform))
+    params = dict(capabilities.declared_defaults(platform))
     params[MODE_KEY] = mode_key
     params.update(overrides)
     return params

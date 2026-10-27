@@ -13,13 +13,13 @@ rows headless, so no comment panel forces a window.
 
 import contextlib
 
+import capabilities.registry as capabilities
 import pandas as pd
 from api.http import _safe_int
 from core.config import Config
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
 from state import add_log, execution_state, stop_requested
 
-import crawl_capabilities as capabilities
 from crawlers import crawler_class, get_crawler
 from crawlers.backends.catbus import CatbusCrawler
 from crawlers.core.crawler import UNDER_TARGET

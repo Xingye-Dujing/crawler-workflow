@@ -27,11 +27,11 @@ import re
 import shutil
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
 from sessions.cookies import CookieManager
 
-import crawl_capabilities
 import i18n
 
 pytestmark = [
@@ -44,7 +44,7 @@ JS_DIR = ROOT / 'backend' / 'static' / 'js'
 HARNESS = ROOT / 'tests' / 'frontend' / 'harness_profiles.mjs'
 INDEX = ROOT / 'backend' / 'static' / 'index.html'
 
-MATRIX = crawl_capabilities.as_dict()
+MATRIX = capabilities.as_dict()
 
 #: The platforms the endpoint can answer for: the matrix, minus the one with no login
 #: at all. The scenario payload below is built from this, so the panel's contract is

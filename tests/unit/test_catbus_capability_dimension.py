@@ -13,9 +13,9 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import capabilities.registry as capabilities
 import pytest
 
-import crawl_capabilities as capabilities
 from crawlers.backends import catbus as catbus_module
 from services import catbus_bridge as bridge
 

@@ -535,7 +535,7 @@ class TestValidateGate:
         # Same rule as the backend's validate, asked of the same matrix payload: the
         # browser and the engine must not disagree about what one input line IS. The
         # 「我在八零年代？第=集」 line is the one that used to disagree: both sides now spell
-        # the query test with an ASCII word class (crawl_capabilities.is_url_cell).
+        # the query test with an ASCII word class (capabilities.registry.is_url_cell).
         parsed = [_parse(m) for m in results['validate']['comments_names']]
         assert len(parsed) == 1
         key, fields = parsed[0]

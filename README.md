@@ -199,7 +199,7 @@ crawler_workflow/
 │   │   ├── clock.py              # 进程内 daemon 时钟；到点走与手动 Run 同一条启动路径
 │   │   ├── store.py              # 台账 data/schedules.json：时间归一、下次运行、触发记账与「已错过」
 │   │   └── cron.py               # 五段表达式解析/校验/next_after（只用 stdlib zoneinfo）
-│   ├── crawl_capabilities.py     # 采集矩阵：平台 × 引擎 × 功能 × 字段 × handler（唯一口径）
+│   ├── capabilities/registry.py     # 采集矩阵：平台 × 引擎 × 功能 × 字段 × handler（唯一口径）
 │   ├── nodes/                    # 节点插件目录（catalog + context + registry + executors/；目录与执行器/前端白名单互相钉住）
 │   ├── crawlers/                 # 各平台爬虫 + 无站点依赖的机械层 engine/
 │   │   ├── core/                 # 爬虫基类与共享机械（crawler.py / browser.py / faults.py / video.py）

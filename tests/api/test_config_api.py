@@ -20,6 +20,7 @@ Two read/write surfaces live here and neither one should surprise the frontend:
 import os
 import sys
 
+import capabilities.registry as capabilities
 import pytest
 from core.config import Config
 from sessions import profiles
@@ -84,7 +85,6 @@ class TestCapabilitiesEndpoint:
     language — the canvas translates it)."""
 
     def test_the_endpoint_hands_out_the_matrix_itself(self, client):
-        import crawl_capabilities
 
         body = client.get('/api/capabilities').get_json()
         # The matrix is not copied here, and the one addition is a per-machine answer about the
@@ -93,9 +93,9 @@ class TestCapabilitiesEndpoint:
         # byte-for-byte; the CatBus status map itself is part of ``as_dict()`` because every
         # platform × engine cell is built from it.
         static = {key: value for key, value in body.items() if key not in ('machine',)}
-        assert static == crawl_capabilities.as_dict()
-        assert body['machine'] == crawl_capabilities.machine_requirements()
-        assert set(body['machine']) == set(crawl_capabilities.REQUIREMENTS)
+        assert static == capabilities.as_dict()
+        assert body['machine'] == capabilities.machine_requirements()
+        assert set(body['machine']) == set(capabilities.REQUIREMENTS)
         assert body['machine']['windows_desktop'] is (sys.platform.startswith('win')), body['machine']
         # The backend answer is the bridge's own dict, and it travels as status tokens plus catalogue
         # keys and the adapter's own per-cell prose (``reason``) — never invented here.

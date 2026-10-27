@@ -77,7 +77,7 @@ class TestTheAdapterAnswers:
         matrix that silently dropped the mode would paint another function as the one stored. Both
         halves are read off the adapter's own answer, not a fixture.
         """
-        import crawl_capabilities as capabilities
+        import capabilities.registry as capabilities
 
         for platform, entry in adapter.manifest['platforms'].items():
             for mode in entry.get('modes') or {}:

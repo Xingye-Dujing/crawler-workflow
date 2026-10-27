@@ -294,7 +294,7 @@ class CatbusCrawler(Crawler):
         ``params`` list is the adapter's own answer to what it consumes; anything else that departs
         from its declared default is refused here, before a child process is bought.
         """
-        import crawl_capabilities as capabilities
+        import capabilities.registry as capabilities
 
         accepted = set(bridge.declared_params(self.platform, mode))
         defaults = capabilities.declared_defaults(self.platform)

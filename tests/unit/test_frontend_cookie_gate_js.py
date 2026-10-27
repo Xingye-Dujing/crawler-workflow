@@ -28,10 +28,9 @@ import json
 import shutil
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
-
-import crawl_capabilities as capabilities
 
 pytestmark = [
     pytest.mark.unit,

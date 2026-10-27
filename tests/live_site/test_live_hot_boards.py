@@ -151,7 +151,7 @@ def test_every_board_mode_is_offered_by_the_matrix_with_no_required_field():
     """The panel builds a source node from the matrix, so a board mode that demanded a
     keyword would be an unusable node — and a platform with one board must not offer a
     choice of boards."""
-    import crawl_capabilities as caps
+    import capabilities.registry as caps
 
     for platform in ('weibo', 'zhihu', 'douyin'):
         mode = caps.mode_for(platform, 'hot')

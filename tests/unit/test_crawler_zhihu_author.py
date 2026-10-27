@@ -10,8 +10,8 @@ pinned without a browser.
 """
 
 import pytest
+from capabilities.registry import crawl_kwargs, mode_for, required_missing
 
-from crawl_capabilities import crawl_kwargs, mode_for, required_missing
 from crawlers.platforms.zhihu.crawler import ZhihuCrawler, zhihu_item_link, zhihu_item_meta, zhihu_profile_token
 
 pytestmark = pytest.mark.unit
@@ -74,7 +74,7 @@ class TestItemMeta:
 
 class TestMatrixEntry:
     def test_zhihu_offers_the_author_mode_between_posts_and_comments(self):
-        from crawl_capabilities import mode_keys_for
+        from capabilities.registry import mode_keys_for
 
         # The *order* is the claim (the panel lists modes in this sequence), so the
         # test states the relationship instead of pinning the whole tuple: adding a

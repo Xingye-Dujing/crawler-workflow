@@ -8,7 +8,7 @@ has not arrived — is *not* evidence of "no data", and must not be reported as 
 
 This module answers that leftover case by asking the one question the crawl itself cannot:
 **is this machine able to reach that side of the internet at all right now?** It compares
-the platform's declared region (`crawl_capabilities.Capability.region`) with two control
+the platform's declared region (`capabilities.registry.Capability.region`) with two control
 hosts, one per side, and measures a throughput figure so the message can say something the
 user can act on ("switch network and re-test") instead of a bare timeout.
 

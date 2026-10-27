@@ -12,12 +12,12 @@ import os
 import re
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
+from capabilities.registry import REQUIREMENTS, machine_requirements, mode_blocker, requirement_met
 from core import machine, procs
 from core.refs import MAX_FILENAME_BYTES, sanitize_filename
 
-import crawl_capabilities as capabilities
-from crawl_capabilities import REQUIREMENTS, machine_requirements, mode_blocker, requirement_met
 from crawlers.core import browser
 from engine.workflow import WorkflowEngine
 from i18n import MESSAGES, t

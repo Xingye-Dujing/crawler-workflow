@@ -449,8 +449,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = 本次提交**（`core/config.py`，Stage 3b）。顺序：`33440b5`（utils→core 三件，Stage 3a）
-    ← `29fc100`（sessions/routes 归域）← `e221d9b`
+  - **HEAD = 本次提交**（`capabilities/` 包，Stage 3c）。顺序：`6525f1d`（config→core，Stage 3b）
+    ← `33440b5`（utils→core 三件，Stage 3a）← `29fc100`（sessions/routes 归域）← `e221d9b`
     （补 scheduling 未 stage 的内容，修 CI E0611）← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）
     ← `20c2ac7`（用户画布布局）← `85646bf`（压缩锚点）← `f625560`（登录态五模块 → `backend/sessions/`）
     ← `4ffc00f`（hongguo `player_ui.py` + `naming.py`）← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0`
@@ -540,10 +540,21 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     契约同步：`test_foundation_layering` 的三模块 → **四模块**（config/refs/machine/procs）。
     **门禁**：fast **8,159 passed / 3 skipped / 353 deselected** exit=0；设备档 **192 passed / 0 skipped** exit=0；
     两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 490 files。
-  - **Stage 3 剩余 = 下一刀（3c）**：`crawl_capabilities.py`(1805) 拆成 `capabilities/`（model/requirements/
-    platforms/catbus/registry），并**同时**把 `engine/` 里的平台事实（wall/popup 判据词表等）迁进去（Stage 1 ④：
-    一个平台只声明一处）；`state`/`stores` 的归处按上面的依赖结论另议（不放进 core）；`settings_store` 等 i18n 拆分后
-    再进 core。`i18n.py` 的拆分仍是 Stage 7。
+  - **Stage 3c `backend/capabilities/` 包已落地（本次提交）**：`crawl_capabilities.py`(1805) →
+    `capabilities/registry.py`；`capabilities/__init__.py` 只写契约（不 import 子模块、不做 barrel）。
+    30 处导入改写（18×`import … as capabilities`、1×`as caps`、13×`from … import`、9 处裸 import 补别名）。
+    **本刀的规则事故**：散文规则 `\bcrawl_capabilities\.` → `capabilities.registry.` 也命中了 **.py 里的代码**
+    （`capabilities.CAPABILITIES` 被改成 `capabilities.registry.CAPABILITIES`，而别名正指向 registry 本身）；
+    ruff 只抓到 9 个文件 22 处 F821，另有 3 个文件别名已存在、属性访问会 AttributeError（ruff 看不见）。
+    修正：`.py` 内代码统一 `capabilities.`，散文保留完整路径；**规则必须按文件类型分组**——点号散文替换只对
+    `.md`/显式文档串做。前两刀没暴露，是因为它们的散文规则都没有"模块名 + 点"前缀。
+    契约：spec collect 清单加 `'capabilities'`；README/development 目录树随脚本改写；`_PROJECT_DIRS` 早已含它。
+    **门禁**：fast **8,159 passed / 3 skipped / 353 deselected**；设备档 **192 passed / 0 skipped**；
+    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff 491 files。
+  - **下一刀 = capabilities 内部拆分 + Stage 1 ④**：`registry.py` 按 `model` / `requirements` /
+    `platforms/<id>` / `catbus` / `registry` 拆开，并把 `crawlers/engine/{wall,popup}.py` 里按平台分支的判据词表
+    迁进 `capabilities/platforms/<id>`（**一个平台只声明一处**）；`state`/`stores` 按依赖结论另议（不进 core）；
+    `settings_store` 等 i18n 拆分后进 core。`i18n.py` 的拆分仍是 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

@@ -14,7 +14,7 @@
   summary, store and preview all concur on a table the page never offered (zhihu's comment panel: no 「更多」
   control, lazy-fills by scrolling its own overlay, nested replies behind an expander nothing clicked — measured in
   `docs/crawler_notes.md`). **Ask the page for a denominator (its own printed count) and grade against that.**
-- **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this platform collect".** It
+- **The crawl matrix (`backend/capabilities/registry.py`) is the only answer to "what can this platform collect".** It
   declares each platform's modes, the fields each mode needs (widget, default, floor, ceiling, required-ness, and
   `fed_by` = the link field a wired upstream column may replace), which crawler method runs, and `region`
   (`cn` / `overseas`) — the overseas-VPN question and the `live_cn`/`live_os` markers read it rather than holding
@@ -344,7 +344,7 @@
 
 ## 平台边界 / Which machine a mode is allowed to run on
 
-- **一个采集模式能不能跑，问 `crawl_capabilities.requirement_met(token)` 这一个问题，问四次。** 红果短剧的评论
+- **一个采集模式能不能跑，问 `capabilities.registry.requirement_met(token)` 这一个问题，问四次。** 红果短剧的评论
   收割要驱动本机播放器进程 + 把 mitmproxy 的 CA 装进 Windows 系统证书库，所以它标了
   `requires='windows_desktop'`：① `/api/capabilities` 的 `machine` 字段给出**这台服务器**的判定；② 面板据此把
   那一栏采集内容**列着但置灰**并在括号里写明原因（节点存的正是那个模式，不列出会让面板画成「第一个模式」，

@@ -21,9 +21,9 @@ look like the site rather than like a convenience:
 import re
 
 import pytest
+from capabilities.registry import CAPABILITIES, crawl_kwargs, mode_for, required_missing
 from core.refs import platform_for
 
-from crawl_capabilities import CAPABILITIES, crawl_kwargs, mode_for, required_missing
 from crawlers.platforms.twitter.comments import parse_twitter_replies
 from crawlers.platforms.twitter.crawler import (
     TwitterCrawler,
@@ -340,7 +340,7 @@ class TestMatrixEntry:
         assert not window.match('/OpenAI/with_replies')
 
     def test_the_three_modes_are_offered_in_the_panel_order(self):
-        from crawl_capabilities import mode_keys_for
+        from capabilities.registry import mode_keys_for
 
         assert mode_keys_for('twitter') == ('posts', 'author', 'comments')
 

@@ -1203,7 +1203,7 @@ by node label (`run.notCrawlable`) and validation refuses it earlier still
 (`engine.source_unknown_platform`, because it is not in the matrix at all) — never let a not-yet-built
 platform fall through to an empty table, which reads as "this keyword found nothing". A capture-only
 platform must still carry `domain` + `login_url` (the panel needs both), stay OUT of
-`crawl_capabilities.CAPABILITIES` (that tuple *is* the Data Source's platform list now — the browser
+`capabilities.registry.CAPABILITIES` (that tuple *is* the Data Source's platform list now — the browser
 renders the select from `/api/capabilities`, so there is no JS list to keep in step), and clear the
 parity guards in `test_frontend_contract.py::TestCookiePanelParity` plus
 `test_crawl_capabilities.py::TestPlatformOrder`.
@@ -1440,7 +1440,7 @@ and gives one window per workflow (verified by the user).
   `Capability.region` 的注释改成它真正的含义：**标的是内容与账号属于哪一边，不是哪条路能不能通**。
 
 留在代码里的两件事没变：
-* 分区仍是**数据**：`crawl_capabilities.Capability.region`（`cn` / `overseas`）由矩阵一处声明，随
+* 分区仍是**数据**：`capabilities.registry.Capability.region`（`cn` / `overseas`）由矩阵一处声明，随
   `/api/capabilities` 发给浏览器；真机层的 `live_cn` / `live_os` 分组读它，
   `tests/unit/test_test_tiers.py` 拿矩阵里的 region 核对每条 live 用例的 marker（矩阵没说的平台按
   "不知道"处理：既不提醒也不拦）。
@@ -2432,7 +2432,7 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 ## 时间窗进文件名，与 SnowNLP 的偏置（measured 2026-10-02）
 
 - **微博的分时间窗只有帖子 mode 声明**：`start_time`/`end_time` 挂在 `_TIMES`
-  （`crawl_capabilities.py`），只接进 weibo 的 `posts` mode，`tests/unit/test_crawl_capabilities.py`
+  （`capabilities/registry.py`），只接进 weibo 的 `posts` mode，`tests/unit/test_crawl_capabilities.py`
   钉住"没有第二个平台拿到它"。真正的校验在爬虫里（`crawlers/platforms/weibo/crawler.py:_build_urls`：要么都给、
   要么都不给，`end <= start` 直接拒），设计期不看，所以一个坏日期是在运行时点名失败的。
 - **文件名里的窗口是"用户声明的那一段"，不是"走到的那一段"**：stem 在爬虫跑之前就定了

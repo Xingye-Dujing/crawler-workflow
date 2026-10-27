@@ -18,9 +18,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from capabilities.registry import CAPABILITIES
 from state import cookie_manager
-
-from crawl_capabilities import CAPABILITIES
 
 pytestmark = pytest.mark.unit
 
@@ -224,7 +223,7 @@ class TestRegionSplit:
         helper whose literals live elsewhere) is left to the test above rather than
         guessed at here.
         """
-        from crawl_capabilities import region_of
+        from capabilities.registry import region_of
 
         #: The marker is a pytest name, the region is a matrix value; one mapping here is
         #: the only place the two spellings meet.
@@ -253,7 +252,7 @@ class TestRegionSplit:
     def test_the_matrix_names_no_network_but_the_two(self):
         """A typo in a ``region=`` reads as "no opinion" everywhere, and the pre-run
         dialog would stay silent about an overseas platform forever."""
-        from crawl_capabilities import REGIONS
+        from capabilities.registry import REGIONS
 
         assert REGIONS == ('cn', 'overseas')
         assert {capability.region for capability in CAPABILITIES} <= set(REGIONS)

@@ -14,9 +14,9 @@ structural tests police that, because importing it boots the Flask app before co
 ``data/`` and ``logs/`` into a temp root.
 """
 
+import capabilities.registry as capabilities
 import pytest
 
-import crawl_capabilities as capabilities
 from services import catbus_bridge as bridge
 from services.run_store import RunStore
 

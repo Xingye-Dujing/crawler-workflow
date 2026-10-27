@@ -1,6 +1,6 @@
 """Every (platform, mode) pair of the crawl matrix, driven to its crawler method.
 
-`crawl_capabilities.CAPABILITIES` is the only answer to "what can this platform collect", and 24
+`capabilities.registry.CAPABILITIES` is the only answer to "what can this platform collect", and 24
 pairs ride on it. Until now every fake crawler in the suite defined ``search`` and nothing else, so
 the six 「某作者的作品」 modes and the 热榜 mode had never been *dispatched* anywhere: a node that
 called ``search()`` with the author dropped, or lost ``board=``, or sent the creator's handle under
@@ -32,9 +32,9 @@ cookie.
 Everything is offline: the crawler is a scripted recorder, no browser and no network.
 """
 
+import capabilities.registry as capabilities
 import pytest
 
-import crawl_capabilities as capabilities
 from crawlers.core.crawler import UNDER_TARGET, as_index
 
 pytestmark = pytest.mark.api

@@ -178,7 +178,7 @@ _warm_http_stack()
 def capabilities_matrix(tmp_path_factory):
     """The crawl matrix as a JSON file, for the JS harnesses that render a panel.
 
-    Dumped from ``crawl_capabilities.as_dict()`` at run time instead of checked
+    Dumped from ``capabilities.registry.as_dict()`` at run time instead of checked
     in: the Data Source panel is *generated* from this payload, so a harness has
     to see what the server would actually send. A committed copy is precisely how
     the panel and the executor drift back apart — it would keep passing while the
@@ -186,10 +186,10 @@ def capabilities_matrix(tmp_path_factory):
     """
     import json
 
-    import crawl_capabilities
+    import capabilities.registry as capabilities
 
     path = tmp_path_factory.mktemp('capabilities') / 'capabilities.json'
-    path.write_text(json.dumps(crawl_capabilities.as_dict(), ensure_ascii=False), encoding='utf-8')
+    path.write_text(json.dumps(capabilities.as_dict(), ensure_ascii=False), encoding='utf-8')
     return path
 
 

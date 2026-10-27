@@ -26,10 +26,10 @@ import threading
 import time
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
 from sessions import profiles
 
-import crawl_capabilities
 import crawlers as crawlers_pkg
 from settings_store import DEFAULTS, save_settings
 
@@ -420,16 +420,14 @@ class TestMatrixFlag:
     def test_the_recommended_set_is_the_measured_one(self):
         """Pinned as a set: adding a platform here is a claim about a measurement,
         so it has to arrive deliberately and fail loudly if it drifts."""
-        flagged = {cap.platform for cap in crawl_capabilities.CAPABILITIES if cap.profile_recommended}
+        flagged = {cap.platform for cap in capabilities.CAPABILITIES if cap.profile_recommended}
         assert flagged == {'weibo', 'xiaohongshu', 'douyin'}
 
     def test_the_payload_carries_it_per_platform(self):
-        payload = crawl_capabilities.as_dict()
+        payload = capabilities.as_dict()
         by_platform = {cap['platform']: cap['profileRecommended'] for cap in payload['platforms']}
         assert by_platform['weibo'] is True and by_platform['zhihu'] is False
-        expected = {cap.platform for cap in crawl_capabilities.CAPABILITIES} | set(
-            crawl_capabilities.CATBUS_ONLY_PLATFORMS
-        )
+        expected = {cap.platform for cap in capabilities.CAPABILITIES} | set(capabilities.CATBUS_ONLY_PLATFORMS)
         assert set(by_platform) == expected
 
 

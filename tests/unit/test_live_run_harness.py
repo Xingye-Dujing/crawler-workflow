@@ -17,10 +17,10 @@ grow an index of cases that never ran.
 import logging
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import live_run_harness as harness
 import pytest
 
-import crawl_capabilities as capabilities
 import i18n
 
 pytestmark = pytest.mark.unit

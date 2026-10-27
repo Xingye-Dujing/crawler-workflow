@@ -19,13 +19,13 @@ import os
 import threading
 import time
 
+import capabilities.registry as capabilities
 from api.http import _bad_body, _json_body, _safe_int
 from core.config import Config
 from core.refs import as_bool, flag_or_none
 from flask import Blueprint, jsonify
 from state import add_log, cookie_manager, execution_state
 
-import crawl_capabilities as capabilities
 from crawlers import cookie_hosts, crawler_class, get_crawler
 from i18n import get_lang, set_lang, t
 from services.crawler_lifecycle import close_login_browser as _close_login_browser

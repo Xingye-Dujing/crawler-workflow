@@ -16,9 +16,9 @@ of which a reading of the site suggests:
   left ``UNDER_TARGET`` — our loop stopping is not the site running out.
 """
 
+import capabilities.registry as capabilities
 import pytest
 
-import crawl_capabilities as capabilities
 import crawlers.core.crawler as base_module
 import i18n
 from crawlers.core.crawler import UNDER_TARGET, Crawler

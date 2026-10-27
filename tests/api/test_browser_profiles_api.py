@@ -18,10 +18,9 @@ nothing here ever touches the real ``data/chrome_profile``.
 
 import json
 
+import capabilities.registry as capabilities
 import pytest
 from sessions import profiles
-
-import crawl_capabilities
 
 pytestmark = pytest.mark.api
 
@@ -49,7 +48,7 @@ def _session_platforms() -> list:
     """
     from sessions.cookies import CookieManager
 
-    return [cap.platform for cap in crawl_capabilities.CAPABILITIES if CookieManager.is_supported(cap.platform)]
+    return [cap.platform for cap in capabilities.CAPABILITIES if CookieManager.is_supported(cap.platform)]
 
 
 class TestProfilesEndpoint:
@@ -85,7 +84,7 @@ class TestProfilesEndpoint:
         assert json.dumps(first)  # the payload must survive JSON, sizes and all
 
     def test_the_suggestion_comes_from_the_matrix(self, client, profiles_on):
-        declared = {cap.platform: cap.profile_recommended for cap in crawl_capabilities.CAPABILITIES}
+        declared = {cap.platform: cap.profile_recommended for cap in capabilities.CAPABILITIES}
         for row in _rows(client)['profiles']:
             reason = f'{row["platform"]} suggests a profile for a reason the matrix does not have'
             assert row['recommended'] == declared[row['platform']], reason

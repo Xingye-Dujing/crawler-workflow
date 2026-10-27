@@ -19,9 +19,9 @@ refuses it at the boundary (a crawler bug becomes a loud failure, not a false us
 Offline throughout: the crawler is a scripted stub, no browser, no network.
 """
 
+import capabilities.registry as capabilities
 import pytest
 
-import crawl_capabilities as capabilities
 import crawlers.commenting.protocol as _protocol  # the verdict constants live with the protocol
 import crawlers.commenting.session as _comments  # the module object, so tests can monkeypatch its crawler factory
 from crawlers.core.crawler import LICENSED_ENDS, UNDER_TARGET, Crawler

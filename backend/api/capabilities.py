@@ -6,11 +6,10 @@ is which cookie files are on disk *now*, so the field's option list is extended 
 from ``state.cookie_manager``. Paths unchanged; app-level ``before_request`` / CORS still wrap.
 """
 
+import capabilities.registry as capabilities
 from flask import Blueprint, jsonify
 from sessions.cookies import CookieManager
 from state import cookie_manager
-
-import crawl_capabilities as capabilities
 
 bp = Blueprint('capabilities', __name__)
 

@@ -27,7 +27,7 @@
 
 > **三套系统都在范围内**：Windows 是开发机，Linux 是云端部署目标，macOS 也要求可用。
 > 只有 `desktop/`（PyInstaller + UPX + Inno Setup）与「红果短剧评论收割」是 Windows 专属：后者在非 Windows 与
-> cloud 模式下由 `crawl_capabilities.requirement_met('windows_desktop')` 这**一个**答案决定——面板把该采集内容
+> cloud 模式下由 `capabilities.registry.requirement_met('windows_desktop')` 这**一个**答案决定——面板把该采集内容
 > 置灰并写明原因、四个只有桌面才需要的设置行从面板上消失、`validate` 在运行前按名拒绝、节点自己也会拒绝。
 > 云端 Linux 还需要：Chromium + 驱动（镜像已装）、`fonts-noto-cjk`（Matplotlib 出的中文图）、
 > 可选 `texlive-xetex texlive-lang-chinese`（纸质图与论文成稿；非 Windows 的中文由 ctex 的 fandol 字体集提供，

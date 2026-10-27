@@ -13,10 +13,9 @@ import re
 import shutil
 from pathlib import Path
 
+import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
-
-import crawl_capabilities
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -49,7 +48,7 @@ def _run(tmp_path: Path, scenarios: list) -> dict:
 
 
 def _matrix() -> dict:
-    return crawl_capabilities.as_dict()
+    return capabilities.as_dict()
 
 
 @pytest.fixture(scope='module')
@@ -267,7 +266,7 @@ class TestLoadedPanel:
 
     def test_the_platform_select_offers_every_declared_platform(self, panel):
         html = panel['loaded']['html']
-        for platform in crawl_capabilities.platform_ids():
+        for platform in capabilities.platform_ids():
             assert f'value="{platform}"' in html, f'{platform} never reached the select'
 
     def test_the_mode_select_is_a_choice_and_not_a_caption(self, panel):
@@ -276,12 +275,12 @@ class TestLoadedPanel:
 
     def test_a_fresh_node_is_seeded_from_the_matrix(self, panel):
         defaults = panel['loaded']['defaults']
-        expected = crawl_capabilities.declared_defaults('zhihu')
+        expected = capabilities.declared_defaults('zhihu')
         expected.update({'platform': 'zhihu', 'collect': 'posts', 'watermark': False})
         assert defaults == expected
 
     def test_the_modes_it_lists_are_the_modes_the_server_has(self, panel):
-        assert panel['loaded']['modes'] == list(crawl_capabilities.mode_keys_for('zhihu'))
+        assert panel['loaded']['modes'] == list(capabilities.mode_keys_for('zhihu'))
 
 
 class TestUnanswerablePanel:

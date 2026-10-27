@@ -35,12 +35,12 @@ import sys
 import time
 import uuid
 
+import capabilities.registry as capabilities
 import requests
 from core import machine
 from core.config import Config
 from core.refs import as_bool
 
-import crawl_capabilities as capabilities
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped
@@ -742,7 +742,7 @@ class HongguoCommentHarness:
         if self._stack_up:
             return
         # The SAME predicate the panel greys this mode out with and validation refuses a canvas with
-        # (:meth:`crawl_capabilities.mode_blocker`): a node that reaches here has already been paid for,
+        # (:meth:`capabilities.registry.mode_blocker`): a node that reaches here has already been paid for,
         # so this line is the last of three answers and must not be a fourth opinion about the platform.
         if not capabilities.requirement_met('windows_desktop'):
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing='Windows desktop (mitmdump + UIA)'))

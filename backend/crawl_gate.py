@@ -37,10 +37,10 @@ import random
 import threading
 import time
 
+import capabilities.registry as capabilities
 from core.config import Config
 from sessions.cookies import CookieManager
 
-import crawl_capabilities as capabilities
 from i18n import t
 from settings_store import get_setting
 
@@ -99,7 +99,7 @@ def _lane(platform: str, account: str = '') -> str:
 def strict(platform: str = '') -> bool:
     """真排队 — a platform's turn is held until that crawl has finished.
 
-    The matrix can force it per platform (:func:`crawl_capabilities.serial_only_of`):
+    The matrix can force it per platform (:func:`capabilities.registry.serial_only_of`):
     weibo answers one account's concurrent paging with the login wall, so 错峰
     cannot make that parallelism work whatever it is spaced by. A switch chooses a
     policy; it cannot outvote a measured wall.

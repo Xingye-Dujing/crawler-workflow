@@ -5,7 +5,7 @@ YouTube have since grown their own files (``crawlers/twitter.py``,
 ``crawlers/youtube.py``), so what is left is Instagram alone. It is registered here
 so the Cookie panel can log a session in and store it *before* a crawl exists for it —
 the shape Bilibili, Douyin, YouTube and X had before theirs landed. ``supports_crawl``
-stays False **and** it is absent from ``crawl_capabilities.CAPABILITIES``, so the
+stays False **and** it is absent from ``capabilities.registry.CAPABILITIES``, so the
 canvas never offers it, validation refuses it by node label
 (``engine.source_unknown_platform``) and the executor again by name (``run.notCrawlable``)
 — instead of handing back an empty table that would read as "this keyword found nothing".
