@@ -212,7 +212,7 @@ backend/
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
-| `crawlers/platforms/hongguo/harvest.py` | 1824 | Stage 1（会话/进程/解析三段） |
+| `crawlers/platforms/hongguo/harvest.py` | 1647 | Stage 1（CA 信任已进 `trust.py` 208；剩 PlayerUI(561) 与 harness 两段） |
 | `services/data_analysis.py` | 3899 | Stage 9 |
 | `services/latex_charts.py` | 2430 | Stage 5 |
 | `services/bibliometrics.py` | 1996 | Stage 4 |
@@ -375,7 +375,11 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      提前发现同一个坑才改成导入函数本身。**下一个平台抽 `rows.py` 前先问：这个包里有没有局部变量 `rows`。**
      剩下：`_as_int`/`_attr` 的"外部引用数"是同名方法撞名（别的方法也叫这个），
      **必须做带包名的核对**才能动——不要用那个模糊数字下手。
-  3. Stage 1 继续：`platforms/hongguo/harvest.py`(1,825) 三段（会话/进程/解析）。
+  3. Stage 1 继续：harvest **第一步已落地**——CA 信任那 178 行进 `hongguo/trust.py`（1,825 → **1,647**），
+     它同时是"Windows 制品集中到一个文件"的一步：`trust.py` 带 3 处 `ctypes.windll` 已登记进
+     `WINDOWS_TABLES`，harvest.py 仍留 7 处（PlayerUI 的 user32、mitmdump.exe、taskkill），所以那条
+     "豁免必须真有制品"的测试两边都不会变成谎。剩下两刀：`PlayerUI`(196–756, 561 行 UIA)、
+     harness 自身的四段（适配器契约 / 抓到的页 / 栈 / 记账）。
   4. Stage 1 ④：`engine/` 里的平台事实（`innertube.API_HOST`、`popup` 三条提示词、`wall` 的站点标记）
      迁 `capabilities/platforms/`（Stage 3 的落点，先把声明放好）。
   5. 之后是 §5 的 Stage 2…10（任务 #29…#37）。#24 已并入 Stage 3。

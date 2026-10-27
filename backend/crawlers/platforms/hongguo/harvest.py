@@ -19,10 +19,8 @@ The engine caches one harness per (node run, platform), so the stack stays up
 across the drama links of one comment node and is reaped in its ``finally``.
 """
 
-import base64
 import contextlib
 import ctypes
-import hashlib
 import importlib.util
 import json
 import logging
@@ -42,6 +40,7 @@ from config import Config
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped
+from crawlers.platforms.hongguo import trust
 from crawlers.platforms.hongguo.comments import hg_comment_rows, hg_page_title, hg_series_id
 from i18n import t
 from settings_store import get_setting
@@ -1488,16 +1487,16 @@ class HongguoCommentHarness:
         then fails against the fresh one.
         """
         cer = self._cert_path()
-        der = _read_der(cer)
+        der = trust.read_der(cer)
         if der is None:
-            raise ValueError(t('crawl.hg.cmt.caNotTrusted', command=_manual_command(cer)))
-        if _cert_trusted(der):
+            raise ValueError(t('crawl.hg.cmt.caNotTrusted', command=trust.manual_command(cer)))
+        if trust.is_trusted(der):
             return
-        command = _manual_command(cer)
+        command = trust.manual_command(cer)
         if not _bool_setting('harvest_auto_install_ca', True):
             raise ValueError(t('crawl.hg.cmt.caNotTrusted', command=command))
-        _cert_install(der)
-        if not _cert_trusted(der):
+        trust.install(der)
+        if not trust.is_trusted(der):
             raise ValueError(t('crawl.hg.cmt.caNotTrusted', command=command))
         self._log(t('crawl.hg.cmt.caInstalled'))
 
@@ -1645,181 +1644,3 @@ def _int_setting(key, default) -> int:
 def _bool_setting(key, default) -> bool:
     raw = get_setting(key)
     return default if raw is None or str(raw).strip() == '' else as_bool(raw, default)
-
-
-def _read_der(cer: str) -> bytes | None:
-    """The CA file's DER bytes, or ``None``.
-
-    mitmproxy's ``.cer`` is PEM-armored (measured — ``-----BEGIN CERTIFICATE-----``),
-    and crypt32's X509_ASN_ENCODING reader refuses the armor
-    (``CertAddEncodedCertificateToStore`` fails on it), so the base64 body is
-    unwrapped here once, at the boundary.
-    """
-    try:
-        with open(cer, 'rb') as handle:
-            raw = handle.read()
-    except OSError:
-        return None
-    if raw.lstrip().startswith(b'-----BEGIN'):
-        try:
-            body = raw.split(b'-----BEGIN CERTIFICATE-----', 1)[1].split(b'-----END CERTIFICATE-----', 1)[0]
-            return base64.b64decode(body)
-        except (ValueError, IndexError):
-            return None
-    return raw
-
-
-def _manual_command(cer: str) -> str:
-    return f'Import-Certificate -FilePath "{cer}" -CertStoreLocation Cert:\\CurrentUser\\Root'
-
-
-class _Crypt32:
-    """Reading the CURRENT USER's ROOT store through crypt32 — silent, instant.
-
-    Every restype/argtype is pinned because the default ``c_int`` would truncate a
-    64-bit ``HCERTSTORE``/``PCCERT_CONTEXT`` pointer (the measured classic: it
-    "works" until the handle's high half is non-zero). Writing the store lives in
-    :func:`_cert_install` instead — the write hangs this machine in-process.
-    """
-
-    def __init__(self):
-        from ctypes import wintypes
-
-        self._ctypes = ctypes
-        self._wintypes = wintypes
-
-        class _CertContext(ctypes.Structure):
-            _fields_ = [
-                ('dwCertEncodingType', wintypes.DWORD),
-                ('pbCertEncoded', ctypes.POINTER(ctypes.c_char)),
-                ('cbCertEncoded', wintypes.DWORD),
-                ('pCertInfo', ctypes.c_void_p),
-                ('hCertStore', ctypes.c_void_p),
-            ]
-
-        self._CERT_CONTEXT = _CertContext
-        crypt32 = ctypes.windll.crypt32
-        crypt32.CertOpenSystemStoreW.restype = ctypes.c_void_p
-        crypt32.CertOpenSystemStoreW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
-        crypt32.CertCloseStore.restype = wintypes.BOOL
-        crypt32.CertCloseStore.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-        crypt32.CertEnumCertificatesInStore.restype = ctypes.c_void_p
-        crypt32.CertEnumCertificatesInStore.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        crypt32.CertAddEncodedCertificateToStore.restype = wintypes.BOOL
-        crypt32.CertAddEncodedCertificateToStore.argtypes = [
-            ctypes.c_void_p,
-            wintypes.DWORD,
-            ctypes.c_char_p,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            ctypes.POINTER(ctypes.c_void_p),
-        ]
-
-    def _root(self):
-        return self._ctypes.windll.crypt32.CertOpenSystemStoreW(None, 'ROOT')
-
-    def thumbprints(self) -> set:
-        """SHA-1 of the DER of every certificate in the user ROOT store.
-
-        The DER is read off the CERT_CONTEXT itself: the ``CERT_HASH_PROP_ID``
-        property is only cached for certificates the provider has already hashed
-        (measured — one hit out of 79, and a probe that sees one cert calls every
-        CA untrusted).
-        """
-        # The module this instance was built with, read back from ``self``: ``_CERT_CONTEXT``
-        # declared its fields through it, so casting into ``POINTER(that structure)`` has to come
-        # from the same module or ctypes refuses the type.
-        ct = self._ctypes
-        crypt32 = ct.windll.crypt32
-        store = self._root()
-        if not store:
-            return set()
-        found = set()
-        try:
-            ctx = crypt32.CertEnumCertificatesInStore(store, None)
-            while ctx:
-                cc = ct.cast(ctx, ct.POINTER(self._CERT_CONTEXT)).contents
-                der = ct.string_at(cc.pbCertEncoded, cc.cbCertEncoded)
-                found.add(hashlib.sha1(der).digest())
-                ctx = crypt32.CertEnumCertificatesInStore(store, ctx)
-        finally:
-            crypt32.CertCloseStore(store, 0)
-        return found
-
-
-_crypt32 = None
-
-
-#: The child-process installer: DER on stdin, exit 0 on success. Kept as source
-#: bytes so the parent never executes it in-process (see :func:`_cert_install`).
-_INSTALL_SNIPPET = b"""
-import ctypes, sys
-from ctypes import wintypes
-der = sys.stdin.buffer.read()
-c = ctypes.windll.crypt32
-c.CertOpenSystemStoreW.restype = ctypes.c_void_p
-c.CertOpenSystemStoreW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
-c.CertAddEncodedCertificateToStore.restype = wintypes.BOOL
-c.CertAddEncodedCertificateToStore.argtypes = [
-    ctypes.c_void_p, wintypes.DWORD, ctypes.c_char_p, wintypes.DWORD, wintypes.DWORD,
-    ctypes.POINTER(ctypes.c_void_p),
-]
-c.CertCloseStore.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-store = c.CertOpenSystemStoreW(None, "ROOT")
-if not store:
-    sys.exit(2)
-ok = c.CertAddEncodedCertificateToStore(store, 0x00000001, der, len(der), 2, None)
-c.CertCloseStore(store, 0)
-sys.exit(0 if ok else 1)
-"""
-
-
-def _crypt():
-    global _crypt32
-    if _crypt32 is None:
-        _crypt32 = _Crypt32()
-    return _crypt32
-
-
-def _cert_trusted(der: bytes) -> bool:
-    if sys.platform != 'win32':
-        return False
-    try:
-        return hashlib.sha1(der).digest() in _crypt().thumbprints()
-    except Exception as exc:
-        logger.debug('hongguo harvest: trust probe failed: %s', exc)
-        return False
-
-
-def _cert_install(der: bytes, timeout: float = 20.0) -> bool:
-    """Add the CA to the user ROOT store — in a CHILD PROCESS with a hard timeout.
-
-    Reading the store is instant; WRITING it was measured to hang this machine
-    forever (2026-10-19, both ``Import-Certificate`` and the raw crypt32 call, no
-    window anywhere — an antivirus or the store provider itself blocking). An
-    in-process call would therefore freeze the whole server on one harvest, and a
-    daemon thread that never returns keeps the store lock for the process life.
-    A child is killable: on timeout it is terminated, its handle dies with it, and
-    the caller refuses by name with the manual command.
-    """
-    if sys.platform != 'win32':
-        return False
-    script = os.path.join(Config.HARVEST_DIR, 'hg_ca_install_tmp.py')
-    try:
-        os.makedirs(Config.HARVEST_DIR, exist_ok=True)
-        with open(script, 'wb') as handle:
-            handle.write(_INSTALL_SNIPPET)
-            handle.write(b'\n')
-        done = subprocess.run(
-            [sys.executable, script],
-            input=der,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-        )
-        return done.returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return False
-    finally:
-        with contextlib.suppress(OSError):
-            os.remove(script)

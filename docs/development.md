@@ -67,6 +67,7 @@ crawler_workflow/
 │   │   │   ├── twitter/          # crawler.py + comments.py（可见窗口读虚拟时间线与回复）
 │   │   │   ├── wechat/           # crawler.py（按链接读正文，无登录态可要）
 │   │   │   ├── hongguo/          # crawler.py + comments.py + harvest.py（走路即 harness.walk）+ addon.py（唯一 Windows 桌面能力）
+│   │   │   │   └── trust.py      # mitmproxy CA：PEM→DER、crypt32 读库、写库放子进程（写会挂死本机）
 │   │   │   └── instagram/        # crawler.py（只捕 Cookie，supports_crawl=False ⇒ 具名拒绝）
 │   │   └── engine/               # 与任何站点无关的机械层——新抓取一律先走这里，不在平台模块里复制循环
 │   │       ├── counters.py       # 一个解析器读遍 万/千/亿 与 K/M/B（「97 views」「1,027,710次观看」）
