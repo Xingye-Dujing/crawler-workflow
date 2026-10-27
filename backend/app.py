@@ -2592,9 +2592,9 @@ def _execute_node(
     order — only the analysis node needs more than the first entry (a join uses
     the second one as its right-hand table).
 
-    The executor comes from ``nodes.registry``: the eight built-in plugins registered themselves, and
-    this module registered the six that still live here. The catalogue and the registry are pinned
-    against each other by ``tests/unit/test_node_plugins.py``.
+    The executor comes from ``nodes.registry``, where every node type registered itself when the
+    plugin package was imported; the catalogue and the registry are pinned against each other by
+    ``tests/unit/test_node_plugins.py``.
     """
     ntype = node.get('type')
     executor = node_registry.executor_for(ntype)

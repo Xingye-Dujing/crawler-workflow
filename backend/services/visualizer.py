@@ -254,28 +254,12 @@ def _annotation_lines(markers, labels, field) -> dict:
     }
 
 
-# ── Professional colour palette (Nature/Science journal inspired) ──
-CATEGORY_COLORS = [
-    '#3B82F9',
-    '#EF4444',
-    '#10B981',
-    '#F59E0B',
-    '#8B5CF6',
-    '#EC4899',
-    '#06B6D4',
-    '#F97316',
-    '#6366F1',
-    '#14B8A6',
-    '#E11D48',
-    '#0EA5E9',
-    '#84CC16',
-    '#D946EF',
-    '#0284C7',
-]
+# ── Category palette (Nature/Science journal inspired) ──
 # A figure in a humanities paper is read in print, often in grayscale, and cited for its numbers —
-# so the palette is restrained and separated by lightness as much as by hue. The previous set was a
-# UI accent palette (neon blue first, gradient area fills), which is why every chart looked like a
-# dashboard rather than a 图.
+# so the palette is restrained and separated by lightness as much as by hue. The set this replaced was
+# a UI accent palette (neon blue first, gradient area fills), which is why every chart looked like a
+# dashboard rather than a 图; it is not kept as a second name, because on-screen charts draw through
+# this one binding too and a second list would be a second answer nobody asks for.
 CATEGORY_COLORS = [
     '#2C4E6B',
     '#A85442',

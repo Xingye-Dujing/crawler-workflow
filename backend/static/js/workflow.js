@@ -12836,10 +12836,6 @@ var wfFiles = {
     },
 };
 
-function toggleDatasetPanel() {
-    datasetManager.toggle();
-}
-
 /* ── Auto-layout strategy (Style menu) ──────────────────────────
    The Layout button has two answers: the topological algorithm, or the positions
    from a canvas snapshot the user designated as this workflow's baseline. The

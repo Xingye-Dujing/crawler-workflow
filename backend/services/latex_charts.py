@@ -7,9 +7,11 @@ labels on bars, and boxed leader-line labels on the topic/network/sankey figures
 a paper, not a dashboard. Every figure and table shares ONE ``cixi`` axis style and a pair of tikz styles
 (``lblbox``/``leadline``) defined once in the preamble, so a merged ``compile`` document restyles all charts at once.
 
-The numbers come from the SAME helpers ``VisualizationService`` uses to draw the chart, so the LaTeX and the
-on-screen figure are two projections of one value and cannot disagree (the palette is the paper's own, which is
-deliberately a touch deeper than the on-screen ``CATEGORY_COLORS``).
+The numbers come from the SAME helpers ``VisualizationService`` uses to draw the chart, so the LaTeX and
+the on-screen figure are two projections of one value and cannot disagree. Colour is the exception and
+says so: ``_PAPER_PALETTE`` below is the paper's own list, matched color-for-color to the reference
+figures this build imitates, and it is NOT ``visualizer.CATEGORY_COLORS`` — the two agree on the data,
+not on the ink, and claiming otherwise would make a screen recolour silently rewrite a submitted figure.
 
 Two types have no faithful TikZ equivalent in this build (no province geometry, no word-cloud/sankey layout
 engine — see ``visualizer.py:397``): ``map`` is drawn as a province-centroid **bubble map** and ``wordcloud``
@@ -90,8 +92,10 @@ def _packages(system: str | None = None) -> str:
 
 _CYCLE_NAMES = ['cA', 'cB', 'cC', 'cD', 'cE', 'cF', 'cG', 'cH', 'cI', 'cJ']
 
-#: The paper's own palette, taken color-for-color from the reference figures it is made to match. Deeper and
-#: more restrained than the on-screen ``CATEGORY_COLORS``: these print in grayscale and carry a caption.
+#: The paper's own palette, taken color-for-color from the reference figures it is made to match. It is a
+#: separate list from ``visualizer.CATEGORY_COLORS`` on purpose: these print in grayscale and carry a caption,
+#: so the screen colours are not the ones a reviewer reads in the journal version. Hex without ``#`` because
+#: TikZ's ``definecolor`` takes the raw digits.
 _PAPER_PALETTE = [
     '22557A',
     'B5563C',
@@ -1963,8 +1967,6 @@ class LatexChartService:
             pic = cls._biblio_burst(df)
         elif chart_type == 'timezone':
             pic = cls._biblio_timezone(df)
-        elif chart_type == 'graph3d':
-            pic = cls._biblio_graph3d(df)
         elif chart_type == 'dual_map':
             pic = cls._biblio_dual_map(df)
         elif chart_type == 'variation':

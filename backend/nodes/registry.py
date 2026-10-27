@@ -4,15 +4,10 @@ The catalogue (``nodes/catalog.py``) says which types exist; this table says how
 pinned against each other by ``tests/unit/test_node_plugins.py``, so a type cannot be declared with
 no executor, and an executor cannot be registered for a type nobody declared.
 
-Two kinds of registration, on purpose:
-
-- **Built-in plugins** (name/upload/resume/tokenize/accumulate/compile/biblio/fuse) live in
-  ``nodes/executors/<type>.py`` and register themselves when ``nodes.executors`` is imported. They
-  depend only on their arguments and the shared service modules — no ``app`` import, no cycle.
-- **App-side executors** (source/comment/process/analysis/visualize/output) still live in ``app.py``
-  and are registered by ``app`` once at import. Phase 1b of ``docs/refactor_plan.md`` moves them
-  here one at a time, before ``source``/``comment`` (the browser and comment-engine paths) are moved
-  last.
+Every node type is a plugin here: ``nodes/executors/<type>.py`` declares ``NODE_TYPE`` and
+``run(node, call)``, and importing that package registers all of them. A plugin depends only on its
+arguments and the shared service modules — never on ``app``, which would import Flask into the
+worker and cycle back to this table (``tests/unit/test_node_plugins.py`` scans for that import).
 
 ``load_builtin_executors`` is explicit rather than automatic because importing ``nodes`` from the
 engine (``engine/workflow``) would otherwise drag pandas, the analyzers and the biblio services into
