@@ -105,6 +105,24 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `$env:TZ='UTC'; pytest -q` is a cheap CI-equivalent gate that reads 6501 passed.
 - **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run or upload lands in the
   user's real `data/`/`logs/`. Stub `fetch`.
+- **A fail-loudly flag must fire for the run that asked for the guarantee, not for the directory it
+  happened to import.** With `CRAWLER_REQUIRE_BROWSER=1`, the session probe in
+  `tests/integration/conftest.py` started Chrome for *any* file in that directory — including
+  `test_weibo_crawler.py`, whose 66 cases drive a fake driver in 0.9 s and are marked `unit`. The result
+  was 66 ERRORs reading `Chrome/chromedriver cannot start: SocketBlockedError`: a confident claim that the
+  device tier is broken, from a session that never requested a device. Worse, AGENTS *instructs* the reader
+  to override the marker filter to run one device case, so the documented entry point was the broken one.
+  Fixed by having `pytest_collection_modifyitems` record whether any selected item carries `integration`/
+  `live_ollama` and gating the probe on it — verified on both halves: the browser-free file passes 66 with
+  the flag set, and a real device file still starts Chrome (5 passed, 21 s). `tests/unit/test_test_tiers.py`
+  now drives the hook with both selection shapes instead of trusting the flag is consulted.
+- **A comment naming its callers is a claim, and callers can be deleted around it.**
+  `weibo/crawler.py` carried a block headed *"compatibility shims (kept for callers outside this module)"*
+  with four methods; measured, each appeared **exactly once in the repository — at its own definition**, and
+  the only external-looking hit (`_get_publish_time`) was zhihu's unrelated method of the same name. The
+  comment had been true once, maybe, and outlived the callers by months while staying authoritative-looking.
+  The check that costs nothing: count occurrences repo-wide before believing a "kept for callers" note, and
+  when you move a helper out of a class, count what still names it.
 - **An async browser seam must resolve on the DOM, and its error arm must not be `done()`.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` flaked on CI as "the detail row never appeared".
   The earlier fix had wrapped it in `Promise.resolve(runsManager.detail(...)).then(() => done(), () => done())`, which

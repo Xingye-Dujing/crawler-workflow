@@ -23,13 +23,37 @@ FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures'
 #: is how a "shared" rule ends up private. The names above are this file's own uses of that one policy.
 
 
+#: Did THIS session select a case that needs a device? See :func:`pytest_collection_modifyitems`.
+#: A dict rather than a global because the tests tier has no business re-binding module state
+#: to answer one question about collection.
+_selection = {'device_requested': False}
+
+
+def pytest_collection_modifyitems(items):
+    """Notice whether the selected run contains a device case at all.
+
+    Without this, the probe below fires for *any* file in this directory once
+    ``CRAWLER_REQUIRE_BROWSER`` is set — including the several here that are marked ``unit`` and drive
+    a fake driver in under a second (``test_weibo_crawler.py``: 66 cases, 0.93 s). Measured: such a
+    run answered ``Chrome/chromedriver cannot start: SocketBlockedError`` — a false claim that the
+    device tier is broken, raised by a session that never asked for a device. And AGENTS tells the
+    reader to override the marker filter to run one device case, so the documented way in was the way
+    that broke.
+    """
+    _selection['device_requested'] = any(
+        item.get_closest_marker('integration') or item.get_closest_marker('live_ollama') for item in items
+    )
+
+
 @pytest.fixture(scope='session', autouse=True)
 def the_device_the_tier_asked_for_really_starts():
     """Prove the browser can start, once, when the operator asked for that guarantee.
 
     Autouse and session-scoped so it runs before the first device case and only when a flag
     is set: without one, the per-file skips behave exactly as they did and a developer
-    without Chrome is not slowed down by a probe they did not ask for.
+    without Chrome is not slowed down by a probe they did not ask for. It also stays quiet
+    when the selected items contain no device case, which is what
+    :func:`pytest_collection_modifyitems` exists to notice.
 
     The probe has to START a driver rather than check that a binary exists — the failure
     this exists for is a chromedriver that launches and then crashes, which a path check
@@ -40,7 +64,7 @@ def the_device_the_tier_asked_for_really_starts():
     that pytest reports as "did not yield a value" — which turned every case in the tier
     into an ERROR while the flag was off. Measured, not guessed.
     """
-    if _flag(REQUIRE_BROWSER_ENV):
+    if _selection['device_requested'] and _flag(REQUIRE_BROWSER_ENV):
         from crawlers.platforms.wechat.crawler import WechatCrawler
 
         try:

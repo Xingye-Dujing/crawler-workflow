@@ -751,6 +751,20 @@ def _live_conftest():
     return module
 
 
+def _integration_conftest():
+    """The device tier's own conftest, loaded as a module so its collection hook is testable.
+
+    Same reason as :func:`_live_conftest`: ``import conftest`` would bind to whichever of this repo's
+    four conftest files loaded first, so a policy that lives in one of them can only be reached by path.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('integration_conftest_policy', INTEGRATION_DIR / 'conftest.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class TestLiveTierSessionShape:
     """The live tier has to crawl the way the USER does, and must not spend his account.
 
@@ -896,6 +910,38 @@ class TestTheDeviceTierCanFailLoudly:
         source = self._source()
         assert 'from device_policy import' in source
         assert 'def unavailable(' not in source, 'the policy has two homes again — the copies will drift'
+
+    def test_the_probe_asks_for_a_device_only_when_the_run_selected_one(self):
+        """A flag set by someone who selected no device case must not report Chrome as broken.
+
+        Measured on this box: ``CRAWLER_REQUIRE_BROWSER=1 pytest tests/integration/test_weibo_crawler.py
+        -m "unit or integration"`` — a 66-case file that drives a fake driver in under a second — came back
+        with ``Chrome/chromedriver cannot start: SocketBlockedError`` for all 66. The session probe fires
+        on the *flag*, not on what was selected, and AGENTS instructs overriding the marker filter to run
+        one device case, so the documented path was the broken one. So drive the collection hook itself
+        with both shapes of selection and read the answer, rather than trusting that it is consulted.
+        """
+        conftest = _integration_conftest()
+
+        class _Item:
+            def __init__(self, marker):
+                self._marker = marker
+
+            def get_closest_marker(self, name):
+                return object() if self._marker == name else None
+
+        conftest.pytest_collection_modifyitems([_Item(None), _Item(None)])
+        assert conftest._selection['device_requested'] is False, 'a browser-free run must not probe Chrome'
+        conftest.pytest_collection_modifyitems([_Item(None), _Item('integration')])
+        assert conftest._selection['device_requested'] is True, 'a device case selected ⇒ the probe must run'
+        conftest.pytest_collection_modifyitems([_Item('live_ollama')])
+        assert conftest._selection['device_requested'] is True, 'the daemon tier counts too'
+
+        # The two halves cannot drift: the fixture's guard reads exactly that flag.
+        source = (INTEGRATION_DIR / 'conftest.py').read_text(encoding='utf-8')
+        assert "_selection['device_requested'] and _flag(REQUIRE_BROWSER_ENV)" in source, (
+            'the probe stopped consulting the selection — the flag alone would fire again'
+        )
 
     def test_the_switch_actually_fails_instead_of_merely_being_named(self):
         source = self._policy()
