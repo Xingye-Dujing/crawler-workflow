@@ -1,20 +1,31 @@
 name: ci
 
-# The fast tier and nothing else.
+# Two jobs, run on every push, every pull request and by hand.
 #
-# No browser, no daemon and no account: AGENTS.md's fast tier is defined as "no
-# browser/daemon", which is exactly what a hosted runner can be trusted with. The device,
-# live_quick and live_site tiers stay local — they spend a real session and a real daemon,
-# and a green check on a shared runner would be a claim this project cannot make.
+# `fast` — ruff, both pylint standards and the fast tier: no browser, no daemon, no account.
+# `browser` — the device tier's Chrome half: real Chrome driven by the real UI tests, with
+#             CRAWLER_REQUIRE_BROWSER so a driver that cannot start FAILS instead of skipping,
+#             and CRAWLER_REQUIRE_NODE so the ~43 frontend JS cases cannot hide as skips.
 #
-# windows-latest rather than ubuntu-latest on purpose: every verification this project has
-# ever had was on Windows, and changing platform and adding a first CI run in the same step
-# turns one unknown into two. Widening to Linux is its own change, with the failures read.
+# What stays a LOCAL obligation, stated rather than pretended: the Ollama-marked cases (they want a
+# daemon with models pulled on the box), the CatBus adapter cases (the adapter is a separate,
+# unpublished checkout — a runner has nothing to install), the desktop rebuild (a frozen exe has to
+# be double-clicked on a real Windows desktop), and live_quick / live_site (they spend the user's
+# accounts, so AGENTS.md forbids running them unattended anywhere, including CI). A green check here
+# is therefore evidence about the browser and the code, never "all tiers passed".
+#
+# windows-latest rather than ubuntu-latest on purpose: every verification this project has ever had
+# was on Windows, and changing platform and adding a first CI run in the same step turns one unknown
+# into two. Widening to Linux is its own change, with the failures read.
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+
+env:
+  # Node is on the runner image; requiring it turns "the JS tier silently skipped" into a red run.
+  CRAWLER_REQUIRE_NODE: '1'
 
 jobs:
   fast:
@@ -85,5 +96,43 @@ jobs:
       #     .venv/Scripts/pylint.exe --rcfile=.pylintrc.probes (Get-ChildItem backend -Filter test_*.py)
 
       # `node` is on the runner image, so the frontend harness cases run rather than skip.
+      # `-rs` prints every skip with its reason: a tier that "passed" while cases skipped is the
+      # failure shape this repo has been bitten by twice, and the summary line alone hides it.
       - name: Fast tier
-        run: .venv/Scripts/python.exe -m pytest -q
+        run: .venv/Scripts/python.exe -m pytest -q -rs
+
+  # The device tier's Chrome half. This is the only part of the local "全部门禁" chain a hosted
+  # runner can honestly run: the cases drive a real browser over file:// fixtures, so they need no
+  # account, no daemon and no network beyond Selenium Manager fetching a matching driver.
+  #
+  # CRAWLER_REQUIRE_BROWSER=1 is the point of the job. Without it a machine whose chromedriver
+  # starts-and-crashes skips every browser case and the job still reports success — measured locally
+  # as a run printing "191 passed" beside one silent skip. With it, an unavailable browser is an
+  # error, and `tests/device_policy.py` routes every per-case driver failure through that rule.
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    needs: fast
+
+    env:
+      CRAWLER_REQUIRE_BROWSER: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create the venv the project mandates
+        run: python -m venv .venv
+
+      - name: Install declared dependencies
+        run: .venv/Scripts/python.exe -m pip install --upgrade pip -r requirements.txt
+
+      # `-m integration` selects the browser cases; the Ollama-marked half of the device tier is
+      # left out because the runner has no daemon, and the CatBus adapter cases will report themselves
+      # as skipped for the same reason (the adapter is a separate, unpublished checkout).
+      - name: Device tier — real Chrome
+        run: .venv/Scripts/python.exe -m pytest -q -m integration -rs
+

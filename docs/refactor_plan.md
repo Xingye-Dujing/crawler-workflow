@@ -5,7 +5,8 @@
 > 所有数字都是本仓库实测（2026-10-27），不是估计；每条缺陷都带 `file:line` 证据。
 > 已完成部分（节点插件化）在 §5，它同时是后续每一段的**样板**：契约先行、逐项提交、行为逐字节不变。
 
-## 1. 总量
+## 1. 总量（**2026-10-27 搬迁前基线**；每完成一个阶段在 §6 记录变化，不回头改这张表）
+
 
 | 树 | 文件 | 行数 | 最大单体 |
 |---|---|---|---|
@@ -206,7 +207,30 @@ backend/
 
 ## 4. 「模范项目」判定标准（完成定义）
 
+**4.0 仍 >900 行的产品模块（2026-10-27 实测，就是 §4-1 的待办清单，一个不许漏）**
+
+| 文件 | 行 | 归属阶段 |
+|---|---|---|
+| `crawlers/commenting/session.py` | 1183 | Stage 1（每平台方法与页内 JS 移进平台目录） |
+| `crawlers/core/crawler.py` | 1495 | Stage 1（拆 faults / browser） |
+| `crawlers/platforms/douyin/crawler.py` | 1031 | Stage 1（按 walk 拆） |
+| `crawlers/platforms/weibo/crawler.py` | 925 | Stage 1（按 walk 拆） |
+| `crawlers/platforms/hongguo/harvest.py` | 1821 | Stage 1（会话/进程/解析三段） |
+| `services/data_analysis.py` | 3899 | Stage 9 |
+| `services/latex_charts.py` | 2430 | Stage 5 |
+| `services/bibliometrics.py` | 1996 | Stage 4 |
+| `services/visualizer.py` | 1874 | Stage 5 |
+| `services/biblio_charts.py` | 1553 | Stage 5 |
+| `services/run_store.py` | 1609 | Stage 4 |
+| `crawl_capabilities.py` | 1805 | Stage 3 |
+| `analyzers/llm_client.py` | 934 | Stage 4（`llm/`） |
+| `app.py` | 4412 | Stage 6 |
+| `i18n.py` | 4604 | Stage 7 |
+
+前端另计：`workflow.js` 13,011 / `app.js` 5,071 / `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
+
 1. 无 >900 行的产品模块；JS 无 >1,200 行文件；每个文件一个主题、每个目录一个域。
+
 2. 加**一个节点类型 / 一个平台 / 一种图型 / 一个 op / 一个导入格式 / 一个面板**：只改 1 个新文件 + 1 行注册，
    其余由契约测试兜底。现状：节点已 1 处；平台 3+、图型 6、op 5、格式 2、面板 4。
 3. 命名唯一：一个概念一个名字，`api/` 与 `services/` 之间不再出现同名模块。
@@ -214,6 +238,18 @@ backend/
 5. 存储兼容：历史运行仍可续跑、指纹不变、`runs.db/datasets.db` 状态兼容（AGENTS 红线）。
 6. 门禁全绿：fast 全量、设备档带三个 `CRAWLER_REQUIRE_*`、ruff check+format、两档 pylint 绝对路径清单 exit=0、
    `node --check`、打包契约 + **真实重建 exe 并冒烟**（每阶段一次，不只源码）。
+   两条本轮实测的程序性教训：**搬过文件必须先重生成 `build/lint_*.txt`** 再跑 pylint——清单里留着旧路径时
+   pylint 报 `0.00/10` 且**一条 finding 都没有**，看起来像代码炸了其实是清单过期（本轮踩两次，各白跑一节链）；
+   **每步门禁命令必须自己打印退出码**（`echo "STEP exit=$?"`），否则后台通知会把失败的步骤报成"completed"。
+9. CI 与本地同源：每次 push 都跑 ruff + 两档 pylint + fast + 真 Chrome 设备档；CI 不能诚实覆盖的部分
+   （Ollama daemon、CatBus 适配器私有 checkout、冻结 exe 的双击验收、花真实账号的 live 两档）在
+   `.github/workflows/ci.yml` 头部写死，不允许用 `continue-on-error` 或跳过把它们伪装成绿。
+
+**CI 现状（2026-10-27 实测，别看本地文件就下结论）**：远端 `crawler-github/main` 停在 `27bed25`（10-16），
+落后本地 116 个提交；**推上去那份 ci.yml 只有 ruff + fast，没有 pylint、没有设备档**。本地这份已加
+`browser` job（`-m integration` + `CRAWLER_REQUIRE_BROWSER=1`）与作业级 `CRAWLER_REQUIRE_NODE=1`，
+但**没有被任何一次真实运行证明过**（本机无 `gh`，看不到历史运行结果）。所以"CI 涵盖了"在推动之前只是一句关于文件的断言。
+
 7. 文档与代码同构：README 结构图、`docs/ARCHITECTURE.md`、`docs/development.md` 文件树、
    `docs/crawler_rules.md` 的 file:line 证据全部指向新位置；不留旧路径。
 8. D9 四条缺陷清零（其中 popup prompts 那条作为功能修复，需真机证据）。
@@ -223,7 +259,8 @@ backend/
 | Stage | 做什么 | 代价 | 特有验收 |
 |---|---|---|---|
 | **0 先加护栏** | ①新契约：`spec` 的 hiddenimports 清单 == `backend/` 实际顶层包；②`docs/` 里的 `path.py` 引用必须存在；③`Crawler` 契约属性表与执行器 `getattr` 兜底的对账；④修 D9 前三条无行为变化的死码 | 纯新增 + 三处删除 | 每条新契约都能红一次（故意改错路径就红） |
-| **1 crawlers 插件化** | `crawlers/` → `core/engine/commenting/backends/platforms/<id>/`；`comments.py` 的每平台方法与页内 JS 归回各平台目录；`base.py` 拆 3；`engine/` 里的平台事实迁 `capabilities/platforms/`；评论改注册表分派（杀掉 `getattr(session,'crawl_'+kind)`） | ~94 处测试导入 + docs 引用 | 平台 id 三处集合相等；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
+| **1 crawlers 插件化** | **已落地**：`core/`（crawler/video）、`backends/catbus.py`、`commenting/`（session/protocol）、`platforms/<id>/{crawler,comments}` 十平台、`__init__.py` 只剩注册表+工厂、边界契约 `test_crawler_platform_plugins.py`。**剩余**：① 把 `commenting/session.py` 里每个平台的方法与页内 JS 移进对应平台目录（1,183 行的主因）；② 评论分派从 `getattr(session,'crawl_'+kind)` 改成注册表；③ 拆 `core/crawler.py`(1495) 为 crawler/faults/browser，拆 douyin/weibo/harvest；④ `engine/` 里的平台事实迁 `capabilities/platforms/` | 已完成约 120 处引用改写；剩余每平台一处方法搬家 | 平台 id 三处集合相等（已有）；`test_crawler_*`/`test_comments*`/dispatch 矩阵全绿；**打包版真启动 + 一条真机采集用例** |
+
 | **2 sessions + scheduling** | 登录态四模块 + 34 行孤儿合成 `sessions/`；`/api/cookies/*` 与 `/api/profiles/*`（app 内约 950 行）进 `sessions/routes.py`；调度合成 `scheduling/` | 打桩路径搬迁 | 预检/profile/账号折叠用例全绿；cloud 判定不变 |
 | **3 core + capabilities** | 根模块下沉 `core/`；`crawl_capabilities.py` 1,805 行拆 `model/requirements/platforms/<id>/catbus/registry`；`coerce.py` 下沉解掉 D7 | 全树 import 一次改完（无 shim） | `test_boot_import_budget` 仍绿且启动不退化；三档 pylint；打包契约 |
 | **4 services 归域** | `bibliometrics/ charts/ rendering/ runs/ datasets/ analysis/ llm/ workflows/ files/ net/ sessions/ scheduling/`；D6 的 8 对同名与三四个拼法逐项统一 | `services/` 消失＝最大面积 | 每域一条"集合相等"契约；`test_biblio_*`/`test_latex_*`/`test_run_store` 全绿 |
@@ -256,13 +293,25 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   zhihu/weibo/xiaohongshu/wechat/hongguo **从没声明过**这个属性——那个默认值替五个平台答了"我能爬"，
   Instagram 是唯一真的回答"不能"的。修法：`Crawler` 显式声明并写下理由，工厂去掉默认值
   （不继承 `Crawler` 的类应当抛错而不是被判成可爬），再加一枚"只有 Instagram 拒绝"的针。
-- **待修（本轮实测发现，独立于重构）**：设备档里 10+ 个用例各自 `except` 驱动启动失败后
+- **已修（本轮实测发现，独立于重构）**：设备档里 12 个用例各自 `except` 驱动启动失败后
   `pytest.skip('Chrome/chromedriver unavailable')`，而 `CRAWLER_REQUIRE_BROWSER=1` 只硬失败 `conftest`
   那一次会话级探测——于是一次设备跑可以印着「192 passed」而其中一条浏览器用例根本没跑
-  （本轮就观察到一次 `1 skipped`，重跑为 0 跳过）。要把「旗标已设就失败」收进一个共享助手，
-  并让 `test_test_tiers.py` 钉住「设备档不得有自己的 skip」。
+  （本轮先观察到 `1 skipped`，改完策略后同一形状变成 `1 failed`，证明它一直在被吞）。
+  修法：策略从 conftest 提成 `tests/device_policy.py`（四个 conftest 同名互相遮蔽，用例 import 不到它），
+  12 处全部走 `unavailable()`，`CIXI_REQUIRE_CATBUS` 并入同一开关族，`test_test_tiers.py` 用 AST 扫全部
+  设备用例并**报出扫到多少文件**，防止一条空扫描永远绿。
+  顺带暴露：`test_profile_cookie_plant` 把"这台机器没有 Chrome"和"Chrome 这一次启动被拒"
+  （关掉上一个浏览器后立刻在同目录再开，撞 Chrome 释放磁盘 singleton 那一瞬）混成同一处理——
+  测试侧改为有界重试（4×0.75 s），耗尽才交给策略；**产品侧是否也重试见 §7 待你定**。
 
 ## 7. 明确不做
+
+**两件等用户定的事（不是重构的一部分，不擅自做）**
+
+1. **浏览器交接窗口要不要在产品侧重试**：真实使用形状是「停止一次采集 → 立刻对同一平台再点运行」，
+   可能吃到 `crawl.browserStartFailed`。测试侧已有界重试；改 `_create_driver` 属行为变更，需真机验证。
+2. **是否推送让 CI 真跑**：远端停在 10-16、落后 116 个提交，那份 ci.yml 只有 ruff + fast（见 §4 末）。
+   需要指明推哪个远端，并预期第一次可能红（新 browser job 与两档 pylint 都是首次真跑）。
 
 - 不引入打包器/框架/ES modules/依赖注入容器；**也不为拆而拆**（D4 的反面同样算失败：一堆互相传话的小文件）。
 - 不做 re-export 兼容层、不保留旧路径别名；一次搬迁一次改完。
