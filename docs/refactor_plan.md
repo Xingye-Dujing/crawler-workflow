@@ -448,6 +448,47 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
      live_quick / live_site 按用户决定不跑（要跑须在场并先问清在哪张网络）。
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
+- **压缩后的接续点（2026-10-28，工作树干净，只有用户自己改的 `data/workflows/红果短剧-四个热播榜.json` 未 stage）**
+  - **HEAD = `f625560`**（登录态五模块 → `backend/sessions/`；外加 CI 那条浏览器用例的容错臂修复），
+    已推 `crawler-github` 与 `gitee`。它前面的顺序：`4ffc00f`（hongguo `player_ui.py` + `naming.py`）
+    ← `421e749`（控制台竞态）← `c2d0a03` ← `84775e0` ← `ae0a569`。
+    **`f625560` 的 CI 两个 job 结果尚未读**（fast + browser；browser 是关键：它要证明
+    `test_a_run_detail_splits_its_workflows_without_growing_a_bar` 的修复真的生效）。恢复后第一件事就是
+    `gh run list --limit 2`（`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）。
+    本地证据已有：fast **8,156 passed / 3 skipped** exit=0；两档 pylint **exit=0、10.00/10**（237 + 268 文件）；
+    ruff check + format 480 files；那条浏览器用例本地 zh+en **2 passed**。
+  - **下一刀 = Stage 2 第三刀 `backend/scheduling/`**（第二刀 `sessions/routes.py` 排在它后面也行）。
+    **不要重新调查，量过的数字如下**：三件 `backend/scheduler.py`(246) → `scheduling/clock.py`、
+    `services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) → `scheduling/cron.py`；
+    产品侧只有 `app.py`（`import scheduler` + `scheduler.start()/set_run_starter()/set_canvas_source()` 三处）、
+    `api/schedules.py`（`from scheduler import fire_now, load_canvas`、`... status as scheduler_status`、
+    `from services import schedule_store as store`）；测试侧 `test_scheduler.py`(61 提及)、
+    `test_schedule_store.py`、`test_cron.py`、`test_schedules_api.py`。**`store`/`cron` 两个本地名本来就带 alias，
+    搬完调用点零改动**；只有 `scheduler.` → `clock.`。
+    **两处必须人改的运行时字符串**：`tests/unit/test_scheduler.py:121,227` 的 `caplog.at_level(..., logger='scheduler')`
+    —— 搬家后 `getLogger(__name__)` 的名字变成 `scheduling.clock`（打桩/logger 名是接缝，脚本代不动）；
+    `store.py` 里 `logging.getLogger('schedule_store')` 改成 `getLogger(__name__)` 与之同源。
+    **改写脚本已经写好、但一次都没执行**：`build/repoint_scheduling.py`（三条规则：import 行按缩进全形匹配、
+    模块属性调用点、散文里的路径；词边界保证 `scheduler_module`（夹具局部名）与 `scheduler_status`（别名）不会被误伤）。
+    配套的还须改：`desktop/caixihui.spec` 的 `collect_submodules` 清单加 `'scheduling'`、显式列表里 `'scheduler'` →
+    `'scheduling.clock'`；`tests/unit/test_doc_paths.py` 的 `_PROJECT_DIRS` 加 `'scheduling'`
+    （**新加的那条契约会自动逼我加**：backend/ 下每个含 .py 的包必须在扫描集合里）；
+    `docs/development.md` 与 `docs/ARCHITECTURE.md` 的行、`AGENTS.md` 定时任务一节、`config.py:98` 注释里的
+    `backend/scheduler.py` 路径。顺序照 sessions 那刀：先 `git mv`（保留 rename 历史）→ 跑脚本 → 人改字符串 →
+    `cd backend && python -c "import app"` 验无环 → ruff → fast → 两档 pylint → commit → push 交给 CI 出设备档。
+  - **Stage 2 第二刀（欠着）**：`/api/cookies/*` + `/api/browser/profiles/*`（app 内约 950 行）进
+    `sessions/routes.py`；那会同时消掉 `api/browser_profiles.py` 这个名字与 `app.py` 的 `def cookie_flow()`。
+    登记点：`tests/api/test_api_hardening.py::BODY_ROUTES`（新 POST 路由必须登记，否则那条契约红）。
+  - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
+    （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
+    然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，
+    tests 档同理换 `--rcfile=.pylintrc.tests` 与 `build/lint_tests.txt`。**跑全量期间不改任何文件**；
+    全量在本机约 8–9 分钟（43+ 个 Chrome 在跑，比 CI 慢一倍），两档 pylint 各约 4 分钟。
+  - **本机设备档现状（如实）**：单条浏览器用例要几分钟，整档 190 条不可用（跑到第 9 条停 40 分钟，
+    与改动无关；`4ffc00f` 那次 CI 只要 276 s）。所以**设备档证据一律来自 GitHub 的 browser job**，
+    除非用户在场让我盯本地。
+
+
 - **仍然未验证/未跑（不许改口）**：桌面 EXE 未重建（新前端/新模块要下一次
   `powershell -ExecutionPolicy Bypass -File desktop/build_windows.ps1 -Installer -RemoveBuildEnv` 才进包）；
   真实站点采集（live_quick / live_site 用户决定不跑，要跑须在场并先问清在哪张网络）；
