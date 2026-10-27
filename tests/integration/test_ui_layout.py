@@ -37,6 +37,7 @@ import time
 from pathlib import Path
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -109,7 +110,7 @@ def driver():
     try:
         crawler = WechatCrawler(headless=True)
     except Exception as e:
-        pytest.skip(f'Chrome/chromedriver unavailable: {e}')
+        unavailable(f'Chrome/chromedriver unavailable: {e}', REQUIRE_BROWSER_ENV)
     try:
         yield crawler.driver
     finally:

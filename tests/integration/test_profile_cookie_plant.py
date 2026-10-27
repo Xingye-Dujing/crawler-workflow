@@ -20,6 +20,7 @@ import threading
 import time
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers.core.crawler import Crawler
 
@@ -78,12 +79,39 @@ def _cookie(value: str, hours: int | None = 24) -> dict:
     return cookie
 
 
+#: Retries for the SECOND browser on one profile directory. Chrome releases its on-disk
+#: singleton a moment after the driver is gone, and `Crawler.close()` cannot wait for a process it
+#: did not start — so a case that closes one browser and opens another on the same directory can
+#: lose that race. Measured: one run of this file failed exactly there while the same launch passed
+#: in every other run.
+_LAUNCH_TRIES = 4
+_LAUNCH_WAIT = 0.75
+
+
 def _open(profile_dir=None):
-    """A crawler on *profile_dir*, parked on the local page, or a skip if Chrome is missing."""
-    try:
-        crawler = Probe(headless=True, profile_dir=profile_dir)
-    except Exception as exc:  # Chrome/chromedriver absent, or the binary refused to start
-        pytest.skip(f'Chrome/chromedriver unavailable: {exc}')
+    """A crawler on *profile_dir*, parked on the local page.
+
+    "Chrome is not on this machine" and "Chrome refused this one launch" are different facts and
+    must not share a handler: the first is a skip (or a failure under the flag), the second is a
+    handoff race this file creates by reopening the same directory. So the launch is retried, and
+    only an exhaustion reaches the policy — which keeps the flag's promise (a machine with no Chrome
+    still fails loudly) without turning a 0.75 s window into a red run.
+    """
+    crawler = None
+    last = None
+    for attempt in range(_LAUNCH_TRIES):
+        try:
+            crawler = Probe(headless=True, profile_dir=profile_dir)
+            break
+        except Exception as exc:  # absent binary, or a refused start
+            last = exc
+            if attempt + 1 < _LAUNCH_TRIES:
+                time.sleep(_LAUNCH_WAIT)
+    if crawler is None:
+        unavailable(
+            f'Chrome/chromedriver unavailable after {_LAUNCH_TRIES} tries: {last}',
+            REQUIRE_BROWSER_ENV,
+        )
     crawler.driver.get(_LOCAL_URL)
     return crawler
 

@@ -884,18 +884,63 @@ class TestTheDeviceTierCanFailLoudly:
     def _source() -> str:
         return (INTEGRATION_DIR / 'conftest.py').read_text(encoding='utf-8')
 
+    @staticmethod
+    def _policy() -> str:
+        return (Path(__file__).resolve().parents[1] / 'device_policy.py').read_text(encoding='utf-8')
+
     def test_both_devices_have_a_fail_loudly_switch(self):
+        policy = self._policy()
+        assert REQUIRE_BROWSER_ENV in policy
+        assert REQUIRE_OLLAMA_ENV in policy
+        # The conftest must USE that one policy, not hold a second copy of the decision.
         source = self._source()
-        assert REQUIRE_BROWSER_ENV in source
-        assert REQUIRE_OLLAMA_ENV in source
+        assert 'from device_policy import' in source
+        assert 'def unavailable(' not in source, 'the policy has two homes again — the copies will drift'
 
     def test_the_switch_actually_fails_instead_of_merely_being_named(self):
-        source = self._source()
+        source = self._policy()
         assert 'pytest.fail(' in source, 'a flag whose only branch skips is not a guarantee'
         # ``unavailable`` is the one place the decision is made; a second copy is how the
         # browser and the daemon would drift apart.
         assert source.count('def unavailable(') == 1
         assert source.count('pytest.skip(') == 1, 'the skip belongs inside `unavailable` only'
+
+    def test_no_device_case_skips_on_a_driver_failure_by_itself(self):
+        """A case that catches a driver failure and calls ``pytest.skip`` is the hole the session
+        probe cannot cover: the probe proves Chrome started ONCE, and a launch that fails later (a
+        profile the previous case still holds, a busy machine) skipped quietly while
+        ``CRAWLER_REQUIRE_BROWSER`` was set — measured as ``1 skipped`` in a run that also printed
+        ``191 passed``. Under the flag that is an error, so every such site must route through
+        ``device_policy.unavailable``. Observed count is reported, so an empty scan cannot pass."""
+        files = sorted(p for p in INTEGRATION_DIR.glob('*.py') if p.name != 'conftest.py')
+        assert len(files) >= 15, f'expected the device tier files, found {len(files)}'
+        quiet = [
+            f'{path.name}:{node.lineno}'
+            for path in files
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'skip'
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == 'pytest'
+        ]
+        assert quiet == [], f'device cases that can skip themselves: {quiet}'
+
+    def test_the_policy_fails_when_asked_and_skips_otherwise(self, monkeypatch):
+        """The behaviour, not just the words: a flag with no failing branch is documentation.
+
+        The switch is set EXPLICITLY. Reading the ambient environment would make this case answer the
+        machine, and a `Skipped` escaping a `raises` block that expected a failure is reported as a
+        *skipped test* — the exact lie this file exists to prevent (measured on the first draft).
+        """
+        from device_policy import unavailable
+
+        monkeypatch.setenv(REQUIRE_BROWSER_ENV, '1')
+        with pytest.raises(pytest.fail.Exception):
+            unavailable('no Chrome', REQUIRE_BROWSER_ENV)
+        monkeypatch.delenv(REQUIRE_BROWSER_ENV, raising=False)
+        with pytest.raises(pytest.skip.Exception):
+            unavailable('no Chrome', REQUIRE_BROWSER_ENV)
 
     def test_the_probe_runs_before_any_device_case_and_only_on_request(self):
         """Autouse + session scope is what makes it a guarantee: a fixture somebody has to

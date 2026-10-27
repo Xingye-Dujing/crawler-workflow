@@ -9,6 +9,7 @@ works on this machine. Selected only with ``-m integration``.
 """
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers.platforms.wechat.crawler import WechatCrawler
 
@@ -19,7 +20,7 @@ def _new_crawler() -> WechatCrawler:
     try:
         return WechatCrawler(headless=True)
     except Exception as e:  # any failure to start Chrome = environment gap, not code bug
-        pytest.skip(f'Chrome/chromedriver unavailable: {e}')
+        unavailable(f'Chrome/chromedriver unavailable: {e}', REQUIRE_BROWSER_ENV)
 
 
 @pytest.fixture

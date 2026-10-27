@@ -17,6 +17,7 @@ half forever), and with ours it must be gone. Local pages only; no site is conta
 """
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
 
@@ -38,7 +39,7 @@ def _launch():
     try:
         return get_crawler('bilibili', headless=True, use_profile=False)
     except Exception as e:
-        pytest.skip(f'Chrome/chromedriver unavailable: {e}')
+        unavailable(f'Chrome/chromedriver unavailable: {e}', REQUIRE_BROWSER_ENV)
 
 
 def test_the_automation_switch_is_kept_out_of_the_command_line():

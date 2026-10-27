@@ -19,6 +19,7 @@ import time
 
 import browser_profiles
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
 from crawlers.core.crawler import warm_profile_dir
@@ -55,7 +56,7 @@ def _browser_or_skip(what, action):
         try:
             return action()
         except Exception as second:
-            pytest.skip(f'Chrome/chromedriver unavailable ({what}): {first} / retry: {second}')
+            unavailable(f'Chrome/chromedriver unavailable ({what}): {first} / retry: {second}', REQUIRE_BROWSER_ENV)
 
 
 def _warm(path: str) -> None:

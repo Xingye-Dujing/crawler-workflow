@@ -17,6 +17,7 @@ column for exactly this reason), so the rule is now scoping, and only Chrome can
 """
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
 
@@ -55,7 +56,7 @@ def _crawler():
         # to answer, and the closure run reports it as green-ish.
         if not any(word in str(exc).lower() for word in ('chrome', 'driver', 'devtools')):
             raise
-        pytest.skip(f'Chrome/chromedriver unavailable: {exc}')
+        unavailable(f'Chrome/chromedriver unavailable: {exc}', REQUIRE_BROWSER_ENV)
 
 
 @pytest.fixture

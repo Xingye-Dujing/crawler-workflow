@@ -25,6 +25,7 @@ import threading
 import time
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
 from crawlers.core.crawler import CrawlerStopped, DeadDriver
@@ -48,7 +49,7 @@ def _launch():
     try:
         return get_crawler('bilibili', headless=True, use_profile=False)
     except Exception as e:
-        pytest.skip(f'Chrome/chromedriver unavailable: {e}')
+        unavailable(f'Chrome/chromedriver unavailable: {e}', REQUIRE_BROWSER_ENV)
 
 
 def _hang_one_command(driver, box):

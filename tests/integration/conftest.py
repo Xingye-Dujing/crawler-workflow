@@ -10,38 +10,17 @@ dangerous in exactly one situation — the run that MEANT to exercise this tier.
 """
 
 import contextlib
-import os
 from pathlib import Path
 
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, REQUIRE_OLLAMA_ENV, unavailable
+from device_policy import flag_set as _flag
 
 FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures'
 
-#: Set this to make an unavailable BROWSER fail this tier instead of skipping it.
-#:
-#: Skipping is the right default — a laptop without Chrome should still run everything else.
-#: But it is also the most dangerous shape in this suite, because `-m integration` against a
-#: machine whose chromedriver cannot start prints "99 skipped" and the run still reads green.
-#: The closure rule ("nothing deselected and nothing skipped") then cannot be checked by
-#: eye: the same number also means "this tier never ran". Measured — the whole UI-layout
-#: file skipped on this machine, and only a hand-run with wider access showed all 99
-#: passing. So a run that MEANS to exercise the tier sets this, and the session probe far
-#: below fails before any test can pass for the wrong reason.
-REQUIRE_BROWSER_ENV = 'CRAWLER_REQUIRE_BROWSER'
-#: The same switch for the daemon: :func:`ollama_host` skips when nothing answers the port.
-REQUIRE_OLLAMA_ENV = 'CRAWLER_REQUIRE_OLLAMA'
-
-
-def _flag(name: str) -> bool:
-    """``as_bool`` for the environment: blank is off, and so is every spelling of no."""
-    return str(os.environ.get(name) or '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
-def unavailable(reason: str, flag: str) -> None:
-    """Skip a device precondition, or FAIL when the tier was explicitly requested."""
-    if _flag(flag):
-        pytest.fail(f'{reason} — {flag} is set, so an unavailable device is an error, never a silent skip')
-    pytest.skip(reason)
+#: The skip-or-fail policy lives in ``tests/device_policy.py`` so a device case can import it too —
+#: ``import conftest`` would bind to whichever of this repo's four conftest files loaded first, which
+#: is how a "shared" rule ends up private. The names above are this file's own uses of that one policy.
 
 
 @pytest.fixture(scope='session', autouse=True)

@@ -9,10 +9,10 @@ Like every other real dependency, an absent adapter SKIPS — and a skip can loo
 so `CIXI_REQUIRE_CATBUS=1` turns absence into a failure when green is meant as evidence.
 """
 
-import os
 import shutil
 
 import pytest
+from device_policy import REQUIRE_CATBUS_ENV, unavailable
 
 from services import catbus_bridge as bridge
 
@@ -23,13 +23,13 @@ pytestmark = [pytest.mark.integration]
 def adapter():
     """A machine that can answer its own capability question, or a skip with the real reason."""
     if shutil.which('node') is None and not bridge.machine_deps.find_node():
-        pytest.skip('no Node runtime on this machine')
+        # Node is the adapter's runtime, so "no Node" is the same fact as "no adapter" here:
+        # skipping it under the flag would let the tier claim a manifest it never read.
+        unavailable('no Node runtime on this machine', REQUIRE_CATBUS_ENV)
     info = bridge.probe(force=True)
     if not info.available:
         reason = bridge.t(info.reason_key, **info.reason_params)
-        if os.environ.get('CIXI_REQUIRE_CATBUS') == '1':
-            pytest.fail(f'CIXI_REQUIRE_CATBUS=1 and the adapter did not answer: {reason}')
-        pytest.skip(f'no usable CatBus adapter on this machine: {reason}')
+        unavailable(f'no usable CatBus adapter on this machine: {reason}', REQUIRE_CATBUS_ENV)
     return info
 
 

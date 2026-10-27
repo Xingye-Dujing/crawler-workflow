@@ -21,6 +21,7 @@ import time
 
 import browser_profiles
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
 
@@ -39,7 +40,7 @@ def _launch(cookie_dir=None):
     try:
         return get_crawler('bilibili', headless=True, cookie_dir=cookie_dir)
     except Exception as e:
-        pytest.skip(f'Chrome/chromedriver unavailable: {e}')
+        unavailable(f'Chrome/chromedriver unavailable: {e}', REQUIRE_BROWSER_ENV)
 
 
 def _booted(driver):
