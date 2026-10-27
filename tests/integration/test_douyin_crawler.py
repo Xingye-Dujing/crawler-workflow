@@ -31,12 +31,13 @@ from crawlers.commenting.session import CommentSession
 from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.engine.counters import parse_count
 from crawlers.platforms.douyin.comments import douyin_comment_fields, parse_douyin_threads
-from crawlers.platforms.douyin.crawler import (
-    DouyinCrawler,
-    _author_from_related,
-    _clean_publish,
-    douyin_id,
-    douyin_sec_uid,
+from crawlers.platforms.douyin.crawler import DouyinCrawler
+from crawlers.platforms.douyin.rows import (
+    author_from_related,
+    clean_publish,
+    publish_from_info,
+    sec_uid,
+    video_id,
 )
 from i18n import stop_reason_label, t
 from utils.helpers import platform_for
@@ -434,7 +435,7 @@ class FakeDriver:
                     self.grid = self.grid + self.grid_batches.pop(0)
             return 'container'
         if 'video-player-digg' in script:
-            asked = douyin_id(self.current_url)
+            asked = video_id(self.current_url)
             return dict(self.facts_by_id.get(asked, self.facts))
         return None
 
@@ -490,18 +491,18 @@ def make_crawler(monkeypatch):
 
 class TestPureHelpers:
     def test_id_from_every_link_shape(self):
-        assert douyin_id(f'https://www.douyin.com/video/{ID}') == ID
-        assert douyin_id(f'https://www.douyin.com/root/video/{ID}?modal_id={ID}') == ID
-        assert douyin_id(f'https://v.douyin.com/x/?modal_id={ID}') == ID
-        assert douyin_id(ID) == ID
-        assert douyin_id('https://www.douyin.com/jingxuan') == ''
-        assert douyin_id('') == ''
+        assert video_id(f'https://www.douyin.com/video/{ID}') == ID
+        assert video_id(f'https://www.douyin.com/root/video/{ID}?modal_id={ID}') == ID
+        assert video_id(f'https://v.douyin.com/x/?modal_id={ID}') == ID
+        assert video_id(ID) == ID
+        assert video_id('https://www.douyin.com/jingxuan') == ''
+        assert video_id('') == ''
 
     def test_the_overlay_publish_date_accepts_only_a_full_calendar_date(self):
         """The overlay has no dedicated publish node — its date hides inside ``video-info``. Only a
         year-bearing date is trusted; a hashtag, a relative word, or a year-less fragment stays blank
         rather than landing a value that sorts as a timestamp but is not one (the 播放数 rule again)."""
-        pub = DouyinCrawler._publish_from_info
+        pub = publish_from_info
         assert pub('@白水 · 2025年11月12日 #镇平五朵山') == '2025年11月12日'
         assert pub('@白水 · 2026-08-04 #tag') == '2026-08-04'
         assert pub('@白水 · #2025年高考 #倒计时100天') == '', 'a hashtag whose digits look like a year'
@@ -518,13 +519,13 @@ class TestPureHelpers:
         assert parse_count('分享') == 0 and parse_count('') == 0 and parse_count(None) == 0 and parse_count(12) == 12
 
     def test_publish_label_is_stripped(self):
-        assert _clean_publish('发布时间：2026-08-04 16:32') == '2026-08-04 16:32'
-        assert _clean_publish('2026-08-04') == '2026-08-04'
+        assert clean_publish('发布时间：2026-08-04 16:32') == '2026-08-04 16:32'
+        assert clean_publish('2026-08-04') == '2026-08-04'
 
     def test_author_block_is_split_on_its_labels_not_positions(self):
-        author, followers, liked = _author_from_related(RELATED_TEXT)
+        author, followers, liked = author_from_related(RELATED_TEXT)
         assert author == '泫九' and followers == 1670000 and liked == 11575000
-        assert _author_from_related('没有这个结构') == ('', 0, 0)
+        assert author_from_related('没有这个结构') == ('', 0, 0)
 
     def test_comment_fields_are_read_by_shape(self):
         author, content, when, region, likes, subs = douyin_comment_fields(COMMENT_BLOCK)
@@ -569,16 +570,16 @@ class TestPureHelpers:
 
     def test_an_author_is_addressed_by_profile_link_or_token_only(self):
         sec = 'MS4wLjABAAAAehSj560Se_lTjmmy0imDx_2qKW_Lj8zS45rbZriU62h5ADwatvOxdaZ8lu_SjOGD'
-        assert douyin_sec_uid(f'https://www.douyin.com/user/{sec}') == sec
-        assert douyin_sec_uid(f'https://www.douyin.com/user/{sec}?from_tab_name=main') == sec
-        assert douyin_sec_uid(f'www.douyin.com/user/{sec}/') == sec
-        assert douyin_sec_uid(sec) == sec
+        assert sec_uid(f'https://www.douyin.com/user/{sec}') == sec
+        assert sec_uid(f'https://www.douyin.com/user/{sec}?from_tab_name=main') == sec
+        assert sec_uid(f'www.douyin.com/user/{sec}/') == sec
+        assert sec_uid(sec) == sec
         # A display name is what people type first and it addresses nobody; opening
         # a guessed profile would report "this author posted nothing" about a page
         # that belongs to someone else.
-        assert douyin_sec_uid('泫九') == ''
-        assert douyin_sec_uid('https://www.douyin.com/jingxuan') == ''
-        assert douyin_sec_uid('') == ''
+        assert sec_uid('泫九') == ''
+        assert sec_uid('https://www.douyin.com/jingxuan') == ''
+        assert sec_uid('') == ''
 
 
 class TestVideoDetail:

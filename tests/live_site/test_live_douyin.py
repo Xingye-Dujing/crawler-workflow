@@ -18,7 +18,8 @@ import pytest
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.session import CommentSession
-from crawlers.platforms.douyin.crawler import DouyinCrawler, douyin_id
+from crawlers.platforms.douyin.crawler import DouyinCrawler
+from crawlers.platforms.douyin.rows import video_id
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
@@ -29,7 +30,7 @@ AUTHOR_URL = 'https://www.douyin.com/user/MS4wLjABAAAA6xlnmUuddUZ7zQhYvd4TlOiLlE
 def _assert_real_rows(rows, minimum=1):
     assert len(rows) >= minimum, f'expected at least {minimum} rows, got {len(rows)}'
     for row in rows:
-        assert douyin_id(row['链接']), f'row link carries no video id: {row}'
+        assert video_id(row['链接']), f'row link carries no video id: {row}'
         assert (row['标题'] or '').strip(), f'row without a title: {row}'
         assert '播放数' not in row, 'douyin must not publish a play count it cannot see'
         assert row['点赞数'] >= 0 and row['评论数'] >= 0
@@ -112,7 +113,7 @@ def test_comments_scroll_past_the_first_screen(live_crawler):
         return
     assert comments, 'a video reporting 评论数>0 must yield comment rows'
     for row in comments:
-        assert row['平台'] == 'douyin' and row['文章URL'].endswith(douyin_id(link))
+        assert row['平台'] == 'douyin' and row['文章URL'].endswith(video_id(link))
         assert (row['评论内容'] or '').strip(), f'comment row without text: {row}'
     # The crawler's own identity is (评论者, 评论内容, 评论时间), so a scroll that
     # replayed the list cannot survive into these rows — and keying the check on
@@ -145,7 +146,7 @@ def test_detail_read_of_one_live_video(live_crawler):
         row = crawler.get_detail(rows[0]['链接'])
     finally:
         crawler.close()
-    assert row and row['视频ID'] == douyin_id(rows[0]['链接'])
+    assert row and row['视频ID'] == video_id(rows[0]['链接'])
     assert row['链接'].startswith('https://www.douyin.com/video/')
     assert not getattr(DouyinCrawler, 'never_headless', False), 'douyin no longer forces a window (#148)'
     assert DouyinCrawler.supports_crawl is True

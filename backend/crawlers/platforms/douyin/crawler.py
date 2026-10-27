@@ -8,13 +8,13 @@ import contextlib
 import logging
 import re
 import time
-from urllib.parse import quote
 
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import PageNotArrivedError
-from crawlers.core.video import VideoCrawler, _stamp
-from crawlers.engine import feed, popup, times
+from crawlers.core.video import VideoCrawler
+from crawlers.engine import feed, popup
 from crawlers.engine.counters import parse_count
+from crawlers.platforms.douyin import rows
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class DouyinCrawler(VideoCrawler):
         mark and one bare figure, and that figure measures equal to the **like** count —
         so every counter but the like comes from opening the video, not from the card.
         """
-        sec = douyin_sec_uid(author)
+        sec = rows.sec_uid(author)
         if not sec:
             raise ValueError(t('crawl.dy.authorEmpty', author=author))
         if self.collected() >= target_count:
@@ -290,7 +290,7 @@ class DouyinCrawler(VideoCrawler):
         for index, item in enumerate(words, start=1):
             if self.collected() >= target_count:
                 break
-            row = self._hot_row(item, index)
+            row = rows.hot_row(item, index)
             if not row or row['链接'] in seen:
                 continue
             seen.add(row['链接'])
@@ -303,43 +303,6 @@ class DouyinCrawler(VideoCrawler):
             logger.info(t('crawl.dy.hotCapped', board=len(words)))
             self.note_end('capped')
         return self.results()
-
-    @staticmethod
-    def _published(value):
-        """The site's own figure, or blank when it published none.
-
-        ``as_index`` would answer 0 for a missing value, and on this board 0 is a claim:
-        the pinned top entry really is published as ``0`` at one hour and ``null`` at
-        another (measured twice the same day), so only a blank says "the site gave no
-        number here" without also saying it counted one.
-        """
-        return value if isinstance(value, int) and not isinstance(value, bool) else ''
-
-    @classmethod
-    def _hot_row(cls, item: dict, rank: int) -> dict | None:
-        """One board entry, flattened by what the answer actually publishes.
-
-        ``word`` is both the title and the topic on this site — weibo publishes a separate
-        ``#…#`` form and douyin does not, so 话题 is not invented as a second column of the
-        same text. ``position`` is the site's own rank and it is **absent** on the pinned
-        entry, which is why the caller's index is only a fallback. The link is the address
-        the board's own anchors use: ``/hot/<sentence_id>/<word>``, verified today against
-        four DOM hrefs and the ids in the same answer.
-        """
-        word = str(item.get('word') or '').strip()
-        sentence = str(item.get('sentence_id') or '').strip()
-        if not word or not sentence:
-            return None
-        return {
-            '排名': cls._published(item.get('position')) or rank,
-            '标题': word,
-            '热度': cls._published(item.get('hot_value')),
-            '观看数': cls._published(item.get('view_count')),
-            '视频数': cls._published(item.get('video_count')),
-            '讨论视频数': cls._published(item.get('discuss_video_count')),
-            '发布时间': _stamp(item.get('event_time')),
-            '链接': f'https://www.douyin.com/hot/{sentence}/{quote(word)}',
-        }
 
     # ─── spending the list ─────────────────────────────────────────────
 
@@ -755,32 +718,6 @@ class DouyinCrawler(VideoCrawler):
 
         return _num(self.PROFILE_FANS), _num(self.PROFILE_LIKED)
 
-    #: A full calendar date with a four-digit year: 2025年11月12日, 2026-08-04, 2026/8/4, 2026.8.4.
-    #: Anchored at the start of a segment so trailing tags/prose are not captured.
-    _DATE_RE = re.compile(r'^(\d{4}\s*[年./-]\s*\d{1,2}\s*[月./-]\s*\d{1,2}\s*日?)')
-    # Relative stamps (「刚刚」/「3天前」) rot the moment they are stored, and a no-year 「2月25日」 is
-    # not comparable against the year-bearing rows beside it — both are worse in a 发布时间 column
-    # than a blank, which is the same rule that keeps a wrong number out of 播放数.
-
-    @classmethod
-    def _publish_from_info(cls, info: str) -> str:
-        """The publish date out of ``video-info`` (``@作者 · 2025年11月12日 #标签…``) — or blank.
-
-        The overlay has no dedicated publish-time node and its date is coarser than the standalone
-        page. This accepts ONLY a year-bearing calendar date at the start of a segment; a hashtag
-        (``#2025年高考``), a relative word (``刚刚``/``3天前``) or a year-less fragment (``2月25日``)
-        is left out rather than filed as a timestamp — a half-token that sorts as a date is exactly
-        the "right column name, wrong value" the repo refuses elsewhere.
-        """
-        for part in str(info or '').split('·'):
-            token = part.strip()
-            if token.startswith('#'):
-                continue
-            match = cls._DATE_RE.match(token)
-            if match:
-                return re.sub(r'\s+', '', match.group(1))[:40]
-        return ''
-
     #: Returned by :meth:`_modal_row` when the overlay simply would not open on this card — the id is
     #: left unpaid so a later scroll round may re-surface it, instead of paying a navigation to chase it.
     DEFER = object()
@@ -804,7 +741,7 @@ class DouyinCrawler(VideoCrawler):
                 logger.warning(t('crawl.dy.detailSwapped', i=aweme_id, shown=shown))
                 return self.DEFER
             text = facts.get('desc') or ''
-            publish = self._publish_from_info(facts.get('info') or '')
+            publish = rows.publish_from_info(facts.get('info') or '')
             nickname = (facts.get('nickname') or '').lstrip('@').strip()
             followers, liked = self._profile_totals
             if not text and not publish:
@@ -836,7 +773,7 @@ class DouyinCrawler(VideoCrawler):
     # ─── one video ────────────────────────────────────────────────────
 
     def get_detail(self, url: str) -> dict | None:
-        aweme_id = douyin_id(url)
+        aweme_id = rows.video_id(url)
         if not aweme_id:
             return None
         return self._detail_row(aweme_id)
@@ -876,7 +813,7 @@ class DouyinCrawler(VideoCrawler):
                 t('crawl.dy.detailSlow', i=aweme_id) if not settled else t('crawl.dy.detailEmpty', i=aweme_id)
             )
             return None
-        shown = douyin_id(self.driver.current_url or '')
+        shown = rows.video_id(self.driver.current_url or '')
         if shown and shown != str(aweme_id):
             # The address the browser ended on is not the video this row was asked for. Measured 2026-09-28
             # on ``7664182466315794939`` (a 图文 id): the walk landed on ``/video/7029265830722489634`` — a
@@ -892,8 +829,8 @@ class DouyinCrawler(VideoCrawler):
         facts = self._driver_facts()
         info_lines = [line.strip() for line in str(facts.get('info') or '').split('\n') if line.strip()]
         text = info_lines[0] if info_lines else ''
-        publish = _clean_publish(facts.get('publish'))
-        related = _author_from_related(str(facts.get('related') or ''))
+        publish = rows.clean_publish(facts.get('publish'))
+        related = rows.author_from_related(str(facts.get('related') or ''))
         # Measured twice on 2026-09-28, and the second reading corrected the first: the creator's name is
         # the text of ``[data-e2e="user-info"] a[href*="/user/<sec_uid>"]``, and the ``related-video`` block
         # *begins* with that same block (``白水鉴心 |  | 粉丝4399获赞341.9万 |  | 关注``), so it is the fallback
@@ -920,7 +857,8 @@ class DouyinCrawler(VideoCrawler):
             # words 粉丝/获赞 also appear as bare nav labels with no figure beside them, so a 0 read from
             # one of those would be a count saying 「这个账号没人关注」 — a wrong number under a plausible
             # column name, which is the same reason 播放数 was never added. Blank is therefore the answer
-            # for "the page did not publish it", and :func:`_author_from_related` fills both when it did.
+            # for "the page did not publish it", and :func:`crawlers.platforms.douyin.rows.author_from_related`
+            # fills both when it did.
             '粉丝数': followers or '',
             '获赞数': liked or '',
             '发布时间': publish,
@@ -973,60 +911,3 @@ class DouyinCrawler(VideoCrawler):
             if isinstance(found, dict):
                 return found
         return {}
-
-
-def douyin_sec_uid(value: str) -> str:
-    """The ``sec_uid`` a profile link (or a pasted token) identifies.
-
-    Douyin addresses a creator by this opaque token only — ``/user/<numeric uid>``
-    is not a route on the web app — and the token is handed out on every video page
-    as ``a[href*="/user/"]``, so a pasted profile link is the thing a user can
-    actually bring here. A bare token is accepted on its shape (long, no spaces):
-    a display name is what people try first and it addresses nobody, and opening a
-    guessed profile would report "this account posted nothing" about a page that
-    belongs to someone else.
-    """
-    text = str(value or '').strip()
-    if not text:
-        return ''
-    from_link = re.search(r'/user/([A-Za-z0-9_.-]{10,})', text)
-    if from_link:
-        return from_link.group(1)
-    return text if re.fullmatch(r'[A-Za-z0-9_.-]{30,}', text) else ''
-
-
-def _clean_publish(value) -> str:
-    """「发布时间：2026-08-04 16:32」 → 「2026-08-04 16:32」, and a relative word resolved.
-
-    This cell is labelled 发布时间 by the page itself, so its content IS a time — including
-    the relative wording it uses for a very recent video, which ``times.absolute`` turns into
-    a date. Not to be confused with :meth:`DouyinCrawler._publish_from_info`, whose
-    ``·``-split segment is not a dedicated time node and therefore keeps refusing relative
-    words: there we cannot be sure the token is a time at all.
-    """
-    text = str(value or '')
-    stripped = text.split('：')[-1].strip() if '：' in text else text.strip()
-    return times.absolute(stripped)
-
-
-def _author_from_related(related: str) -> tuple:
-    """Pull the author block out of the related-videos panel.
-
-    It is the only place the web player names the author with its follower
-    count, and the line is unpunctuated (``泫九粉丝167.0万获赞1157.5万关注``), so
-    the split is on the two labels rather than on positions that shift with the
-    episode list.
-    """
-    match = re.search(r'^(.*?)粉丝([\d.]+[万千]?)获赞([\d.]+[万千]?)', related.strip())
-    if not match:
-        return '', 0, 0
-    return match.group(1).strip(), parse_count(match.group(2)), parse_count(match.group(3))
-
-
-def douyin_id(url: str) -> str:
-    """The aweme id from a video URL, a share link or a bare id."""
-    text = str(url or '').strip()
-    if re.fullmatch(r'\d{15,20}', text):
-        return text
-    match = re.search(r'/video/(\d{15,20})', text) or re.search(r'[?&]modal_id=(\d{15,20})', text)
-    return match.group(1) if match else ''

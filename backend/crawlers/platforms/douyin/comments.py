@@ -18,6 +18,7 @@ from crawlers.engine import feed, times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.pacing import throttled_sleep
 from crawlers.engine.wall import looks_blocked
+from crawlers.platforms.douyin.rows import video_id
 from i18n import stop_reason_label, t
 
 # ``1周前·江苏`` / ``刚刚`` / ``2026-08-04`` — douyin puts the relative time and
@@ -224,10 +225,8 @@ def walk(session, url: str, limit: int) -> tuple:
     douyin virtualises the list: an item scrolled past is unmounted, so a single final read
     would silently lose it.
     """
-    from crawlers.platforms.douyin.crawler import douyin_id
-
-    target = f'https://www.douyin.com/video/{douyin_id(url)}' if douyin_id(url) else url
-    if not douyin_id(url):
+    target = f'https://www.douyin.com/video/{video_id(url)}' if video_id(url) else url
+    if not video_id(url):
         session.log(t('comment.dyNoId', url=url))
         return [], DEAD
     session.driver.get(target)
@@ -245,8 +244,8 @@ def walk(session, url: str, limit: int) -> tuple:
     # and file every one of its comments under the link the user pasted. Same accident the detail
     # reader already refuses (``crawl.dy.detailSwapped``), same rule: a row nobody asked for is worse
     # than a missing one.
-    shown = douyin_id(session.driver.current_url or '')
-    if shown and shown != douyin_id(target):
+    shown = video_id(session.driver.current_url or '')
+    if shown and shown != video_id(target):
         # The site served **another video**. Measured 2026-09-28, three visits to an id that cannot
         # exist: the address left ``/video/7000000000000000001`` for ``/jingxuan?modal_id=<other id>``
         # — a different substitute on every visit, and once the page printed 「你要观看的视频不存在」
@@ -324,8 +323,8 @@ def walk(session, url: str, limit: int) -> tuple:
     # floor across the panel and a reply's 父楼层 points back at that number — so it is assigned after
     # the walk, never per screen (AGENTS: a list is a document).
     rows, nested = parse_douyin_threads(threads, target)
-    moved = douyin_id(session.driver.current_url or '')
-    if rows and moved and moved != douyin_id(target):
+    moved = video_id(session.driver.current_url or '')
+    if rows and moved and moved != video_id(target):
         # The address moved while the panel was being walked, so every row above belongs to a video
         # nobody pasted. Discarded rather than filed: this is the same rule the hoisted check before
         # the walk applies, at the moment the walk is over and the cost already paid.
