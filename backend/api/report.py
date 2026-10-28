@@ -166,7 +166,7 @@ def report_view():
     """
     from flask import send_file
 
-    from services.export_browser import resolve_report_path
+    from services.exports.browser import resolve_report_path
 
     name = request.args.get('name', '')
     path = resolve_report_path(Config.EXPORT_DIR, name)
@@ -233,7 +233,7 @@ def report_studio_images():
     a report never asks to inline a file it cannot read: a spreadsheet that
     happens to live in the same folder is not a chart whatever the user clicked.
     """
-    from services.export_browser import list_exports
+    from services.exports.browser import list_exports
     from services.report_service import INLINE_IMAGE_EXT
 
     rows = [

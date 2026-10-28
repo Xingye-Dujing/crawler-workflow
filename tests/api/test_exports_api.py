@@ -178,7 +178,7 @@ class TestClearAll:
         panel that still holds files — reporting a clear that did not happen. So the clear
         repeats until a pass removes nothing, and this proves it against the real cap.
         """
-        from services.export_browser import MAX_ENTRIES
+        from services.exports.browser import MAX_ENTRIES
 
         for index in range(MAX_ENTRIES + 3):
             with open(os.path.join(export_dir, f'bulk-{index}.csv'), 'w', encoding='utf-8') as handle:

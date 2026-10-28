@@ -38,7 +38,7 @@ from core.config import Config
 from stores import get_dataset_store
 
 from i18n import t
-from services.dataset_store import SOURCE_IMPORT, safe_records
+from services.datasets.store import SOURCE_IMPORT, safe_records
 from services.workflows import reusable
 from services.workflows.manager import WorkflowManager
 

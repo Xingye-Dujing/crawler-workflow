@@ -1,4 +1,4 @@
-"""Tests for services/exporter.py — the "Save" node's writer.
+"""Tests for services/exports/writer.py — the "Save" node's writer.
 
 Exports are the only artefact most users keep from a run, so the pinned
 contracts are about the file that lands on disk:
@@ -19,9 +19,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import services.exporter as exporter_module
-from services.exporter import DataExporter as E
-from services.exporter import UnsupportedFormatError
+import services.exports.writer as exporter_module
+from services.exports.writer import DataExporter as E
+from services.exports.writer import UnsupportedFormatError
 
 pytestmark = pytest.mark.unit
 

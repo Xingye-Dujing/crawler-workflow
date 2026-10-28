@@ -32,8 +32,8 @@ import pandas as pd
 
 from analyzers.llm_client import ABORT_MARK
 from i18n import t
-from services.export_browser import resolve_export_file
-from services.exporter import DataExporter
+from services.exports.browser import resolve_export_file
+from services.exports.writer import DataExporter
 from services.visualizer import VisualizationService, _localize_label
 
 logger = logging.getLogger(__name__)
@@ -437,12 +437,12 @@ class ReportService:
 
         The name always starts with the report prefix and always ends ``.html``:
         the export panel offers downloads by extension, ``.html`` is refused
-        there on purpose, and :func:`services.export_browser.resolve_report_path`
+        there on purpose, and :func:`services.exports.browser.resolve_report_path`
         only admits files this writer signed with that prefix. A title that
         survives cleaning as nothing falls back rather than landing as
         ``report-.html``.
         """
-        from services.export_browser import REPORT_PREFIX
+        from services.exports.browser import REPORT_PREFIX
 
         os.makedirs(self.export_dir, exist_ok=True)
         stem = safe_stem(name, fallback='run')

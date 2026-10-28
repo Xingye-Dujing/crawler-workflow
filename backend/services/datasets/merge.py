@@ -16,7 +16,7 @@ import pandas as pd
 from core.config import Config
 
 from i18n import t
-from services.dataset_store import SOURCE_MERGE
+from services.datasets.store import SOURCE_MERGE
 
 SOURCE_COLUMN = '来源'
 MAX_NAME = 120

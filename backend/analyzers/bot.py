@@ -26,7 +26,7 @@ import logging
 import pandas as pd
 
 from i18n import t
-from services.text_dedupe import hamming, normalize_text, simhash64
+from services.datasets.dedupe import hamming, normalize_text, simhash64
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from core.config import Config
 
-from services.dataset_store import SOURCE_UPLOAD, DatasetStore
+from services.datasets.store import SOURCE_UPLOAD, DatasetStore
 from services.workflows import reusable
 from services.workflows.bundle import build_bundle, import_bundle
 from services.workflows.manager import WorkflowManager

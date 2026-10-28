@@ -1,4 +1,4 @@
-"""Tests for services/text_dedupe.py — identity and near-duplicate text rules.
+"""Tests for services/datasets/dedupe.py — identity and near-duplicate text rules.
 
 Two properties carry the whole module. First, ``normalize_text`` reduces a
 comment to the residue that identifies it, so every rule below is pinned with a
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from services.text_dedupe import (
+from services.datasets.dedupe import (
     group_near_duplicates,
     hamming,
     normalize_text,
@@ -44,7 +44,7 @@ def _simhash_in_subprocess(hash_seed: str) -> int:
     move with it.
     """
     script = (
-        'from services.text_dedupe import simhash64; '
+        'from services.datasets.dedupe import simhash64; '
         "print(hex(simhash64('\u4e09\u4e9a\u7684\u6d77\u975e\u5e38\u84dd\uff0c\u9002\u5408\u51ac\u5929\u5ea6\u5047\u6f5c\u6c34')))"
     )
     environment = {**os.environ, 'PYTHONPATH': str(_BACKEND_DIR), 'PYTHONHASHSEED': hash_seed}
@@ -279,7 +279,7 @@ class TestSimHash:
         # Guards the other direction: someone "fixing" the fingerprint by
         # swapping in a faster non-cryptographic hash. Two tokens that agree
         # today must keep agreeing tomorrow.
-        from services.text_dedupe import _token_hash
+        from services.datasets.dedupe import _token_hash
 
         assert _token_hash('三亚') == int.from_bytes(hashlib.sha1('三亚'.encode()).digest()[:8], 'big')
         assert _token_hash('aa') != _token_hash('ab')
@@ -364,13 +364,13 @@ class TestGroupNearDuplicates:
         # read from the module rather than pasted: it is a property of how many
         # bands the search can afford, and it moved once already (4 → 16 bands,
         # because a 3-bit search found nothing on real Weibo comments).
-        from services.text_dedupe import MAX_BANDED_DISTANCE
+        from services.datasets.dedupe import MAX_BANDED_DISTANCE
 
         with pytest.raises(ValueError, match='max_distance'):
             group_near_duplicates([('a', 0), ('b', 1)], max_distance=MAX_BANDED_DISTANCE + 1)
 
     def test_the_widest_provable_distance_is_still_served(self):
-        from services.text_dedupe import MAX_BANDED_DISTANCE
+        from services.datasets.dedupe import MAX_BANDED_DISTANCE
 
         # A pair three bits apart is found at every distance that claims to cover it,
         # including the widest one — the band count follows the request.

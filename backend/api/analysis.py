@@ -23,7 +23,7 @@ from api.http import _bad_body, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.data_analysis import DataAnalysisService
-from services.dataset_store import SOURCE_ANALYSIS
+from services.datasets.store import SOURCE_ANALYSIS
 
 bp = Blueprint('analysis', __name__)
 

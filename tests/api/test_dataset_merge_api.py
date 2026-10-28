@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from stores import get_dataset_store
 
-from services.dataset_merge import SOURCE_COLUMN
+from services.datasets.merge import SOURCE_COLUMN
 
 pytestmark = pytest.mark.api
 

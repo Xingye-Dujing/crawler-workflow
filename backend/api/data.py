@@ -25,8 +25,8 @@ from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.biblio.importer import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
 from services.data_analysis import DataAnalysisService
-from services.dataset_merge import merge_datasets
-from services.dataset_store import SOURCE_PASTE, SOURCE_UPLOAD
+from services.datasets.merge import merge_datasets
+from services.datasets.store import SOURCE_PASTE, SOURCE_UPLOAD
 
 logger = logging.getLogger(__name__)
 

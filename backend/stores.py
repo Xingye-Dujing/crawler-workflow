@@ -24,7 +24,7 @@ from core.config import Config
 from state import _dataset_cache
 
 from services.biblio.store import BiblioStore
-from services.dataset_store import SOURCE_UPLOAD, DatasetStore
+from services.datasets.store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping
 from services.lexicon_store import LexiconStore
 from services.run_store import RunStore

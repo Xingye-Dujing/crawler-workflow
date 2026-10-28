@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from services.export_browser import REPORT_PREFIX, resolve_report_path
+from services.exports.browser import REPORT_PREFIX, resolve_report_path
 from services.report_service import (
     MAX_CHARTS,
     MAX_TABLE_ROWS,

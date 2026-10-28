@@ -47,7 +47,7 @@ WINDOWS_TABLES = {
     Path('crawlers/platforms/hongguo/harvest.py'),
     Path('crawlers/platforms/hongguo/player_ui.py'),
     Path('crawlers/platforms/hongguo/trust.py'),
-    Path('services/export_browser.py'),
+    Path('services/exports/browser.py'),
 }
 
 #: Only the artifacts that actually break a Linux or macOS install. A bare drive letter is not in here:

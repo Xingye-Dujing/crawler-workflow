@@ -1055,7 +1055,7 @@ class TestDedupeSimilar:
         assert len(D.dedupe_similar(frame, column='正文')) == 3
 
     def test_a_distance_the_banded_index_cannot_prove_is_refused_by_name(self):
-        from services.text_dedupe import MAX_BANDED_DISTANCE
+        from services.datasets.dedupe import MAX_BANDED_DISTANCE
 
         too_far = MAX_BANDED_DISTANCE + 1
         with pytest.raises(UnknownOperationError) as err:
@@ -1063,7 +1063,7 @@ class TestDedupeSimilar:
         assert str(too_far) in str(err.value), str(err.value)
 
     def test_the_widest_distance_the_index_can_prove_is_accepted(self):
-        from services.text_dedupe import MAX_BANDED_DISTANCE
+        from services.datasets.dedupe import MAX_BANDED_DISTANCE
 
         out = D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=MAX_BANDED_DISTANCE)
         assert len(out) == 2

@@ -17,7 +17,7 @@ offline: OpenRouter and Ollama are never contacted.
 import pytest
 from run_wait import run_finished
 
-from services.exporter import DataExporter
+from services.exports.writer import DataExporter
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 

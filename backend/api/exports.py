@@ -3,9 +3,9 @@
 The export folder's writer and browser: ``/api/export/save`` writes a table out in any
 format, and ``/api/exports/{list,download,delete,clear}`` read and manage what is there.
 Every helper it needs is already reachable without importing ``app`` — the file operations
-live in ``services.export_browser`` (imported lazily, as before), the request coercions in
+live in ``services.exports.browser`` (imported lazily, as before), the request coercions in
 ``api.http``, the dataframe resolution in ``api.resolution``, the lock ledger in
-``services.lock_store``, the format writers in ``services.exporter`` and the run-in-flight
+``services.lock_store``, the format writers in ``services.exports.writer`` and the run-in-flight
 check in ``state.any_run_live``. Paths and behaviour are unchanged.
 """
 
@@ -22,7 +22,7 @@ from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services import lock_store
-from services.exporter import DataExporter, UnsupportedFormatError
+from services.exports.writer import DataExporter, UnsupportedFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def _delete_export_names(names) -> dict:
     what is already gone. Deletion always goes through the export browser's resolver (refuses
     traversal / outside-``EXPORT_DIR``), so a ledger row can never become a path oracle.
     """
-    from services.export_browser import delete_export_file
+    from services.exports.browser import delete_export_file
 
     store = get_run_store()
     counts = {'removed': 0, 'skipped_locked': 0, 'missing': 0}
@@ -102,7 +102,7 @@ def export_dataset():
 @bp.route('/api/exports/list', methods=['GET'])
 def exports_list():
     """Every export file, newest first, with the totals for the panel header."""
-    from services.export_browser import export_usage, list_exports
+    from services.exports.browser import export_usage, list_exports
 
     limit = _safe_int(request.args.get('limit'), 200, minimum=1, maximum=500)
     rows = list_exports(Config.EXPORT_DIR, limit=limit)
@@ -120,7 +120,7 @@ def exports_download():
     """
     from flask import send_file
 
-    from services.export_browser import resolve_download_path
+    from services.exports.browser import resolve_download_path
 
     path = resolve_download_path(Config.EXPORT_DIR, request.args.get('name', ''))
     if not path:
@@ -131,7 +131,7 @@ def exports_download():
 @bp.route('/api/exports/delete', methods=['POST'])
 def exports_delete():
     """Delete exactly one export file. No prefixes, no recursion."""
-    from services.export_browser import delete_export_file
+    from services.exports.browser import delete_export_file
 
     data = _json_body()
     if data is None:
@@ -160,7 +160,7 @@ def exports_clear():
     Refused outright while a run is live — a streaming node is writing part files into this
     very directory, and the panel cannot tell a finished artefact from one still being appended.
     """
-    from services.export_browser import delete_export_file, list_exports
+    from services.exports.browser import delete_export_file, list_exports
 
     data = _json_body()
     if data is None:
@@ -279,7 +279,7 @@ def exports_clear_name():
     (no second bulk path that could drift), and it is refused while any run is live and without an
     explicit confirm — the same guards as the other bulk clears. A name that is not a shard is
     refused by name, never answered as a silent no-op."""
-    from services.export_browser import part_batch_names
+    from services.exports.browser import part_batch_names
 
     data = _json_body()
     refusal = _smart_clear_guards(data)

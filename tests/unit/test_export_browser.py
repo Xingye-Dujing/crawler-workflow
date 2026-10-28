@@ -1,4 +1,4 @@
-"""Tests for services/export_browser.py — the read side of ``data/exports``.
+"""Tests for services/exports/browser.py — the read side of ``data/exports``.
 
 The interesting failures here are all path-shaped, so the fixtures are named
 like an attacker's input form rather than a user's: every one of them must
@@ -15,7 +15,7 @@ import time
 import pytest
 from core.refs import MAX_FILENAME_BYTES, MAX_FILENAME_LENGTH
 
-from services.export_browser import (
+from services.exports.browser import (
     MAX_ENTRIES,
     delete_export_file,
     export_usage,

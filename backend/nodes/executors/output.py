@@ -19,7 +19,7 @@ from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label
 from services import latex_compile
-from services.exporter import DataExporter, UnsupportedFormatError
+from services.exports.writer import DataExporter, UnsupportedFormatError
 from services.run_files import record_file
 from services.run_windows import window_for_save
 

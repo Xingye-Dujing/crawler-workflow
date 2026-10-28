@@ -6,7 +6,7 @@ from core.config import Config
 from nodes.executors.accumulate import execute_accumulate_node
 
 from engine.workflow import WorkflowEngine
-from services.dataset_store import DatasetStore
+from services.datasets.store import DatasetStore
 
 
 @pytest.fixture()

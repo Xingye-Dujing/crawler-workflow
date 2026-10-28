@@ -106,7 +106,7 @@ DROP_HOW = ('any', 'all')
 FILL_METHODS = ('ffill', 'pad', 'bfill', 'backfill')
 #: How ``drop_duplicates`` decides two rows are the same row. ``exact`` is pandas'
 #: equality over the selected columns; ``normalized`` compares the identity form
-#: that :mod:`services.text_dedupe` computes, so a comment farm's extra emoji code, a
+#: that :mod:`services.datasets.dedupe` computes, so a comment farm's extra emoji code, a
 #: fresh tracking link or a re-pasted forward chain no longer makes a row unique.
 DEDUPE_MODES = ('exact', 'normalized')
 #: Which calendar part :meth:`DataAnalysisService.extract_time` can derive. ``date`` is the
@@ -1284,7 +1284,7 @@ class DataAnalysisService:
         """Drop repeated rows, by exact equality or by their normalised identity.
 
         ``exact`` is plain pandas equality. ``normalized`` compares the identity form
-        from :mod:`services.text_dedupe`: a comment farm reposts the same sentence with a
+        from :mod:`services.datasets.dedupe`: a comment farm reposts the same sentence with a
         different tracking link, one more emoji code, or a re-pasted forward chain, and
         every one of those is a new string but the same comment. The original text is what
         survives — the key is a temporary column and never reaches the output.
@@ -1303,7 +1303,7 @@ class DataAnalysisService:
                     allowed=', '.join(DEDUPE_MODES),
                 )
             )
-        from services.text_dedupe import normalized_key
+        from services.datasets.dedupe import normalized_key
 
         cols = subset or [str(col) for col in work.columns]
         # Joined with a byte that cannot appear in a cell, so ('ab', 'c') and ('a', 'bc')
@@ -1325,7 +1325,7 @@ class DataAnalysisService:
         collapses into the group it belongs to.
 
         The first row of each group is kept, matching ``keep='first'`` above, and the
-        search is sub-quadratic by banding (see :mod:`services.text_dedupe`) — an
+        search is sub-quadratic by banding (see :mod:`services.datasets.dedupe`) — an
         all-pairs scan over a hundred-thousand-row comment table is not a thing this can
         afford, so a distance the banded index cannot prove is refused by name rather than
         answered with a slow scan or a quietly incomplete group.
@@ -1342,7 +1342,7 @@ class DataAnalysisService:
             return work
         # Imported here, not at module scope: this module is what the app loads on a plain
         # crawl, and the dedupe helpers pull in jieba for tokenising.
-        from services.text_dedupe import MAX_BANDED_DISTANCE, group_near_duplicates, normalize_text, simhash64
+        from services.datasets.dedupe import MAX_BANDED_DISTANCE, group_near_duplicates, normalize_text, simhash64
 
         distance = 8 if max_distance is None else int(max_distance)
         if not 0 <= distance <= MAX_BANDED_DISTANCE:

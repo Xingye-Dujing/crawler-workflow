@@ -119,11 +119,10 @@ crawler_workflow/
 │   │   └── logger.py             # 日志管理
 │   ├── services/                 # 服务模块
 │   │   ├── run_store.py          # 断点续跑核心：运行/节点/行/指纹/LLM缓存/运行→文件台账（runs.db）
-│   │   ├── dataset_store.py      # 上传文件持久化与工作流引用（datasets.db）
+│   │   ├── datasets/             # 数据集域：store（datasets.db）/ merge（多源合并）/ dedupe（归一化与 SimHash 近重复）
+│   │   ├── exports/              # 导出目录：writer（多格式写）/ browser（列表·下载·删除的读取侧）
 │   │   ├── stats.py              # 情感/倾向性统计服务
 │   │   ├── workflows/            # 工作流域：manager（工作流文件）/ history（画布快照）/ reusable（模板）/ expand（展开）/ bundle（项目包）
-│   │   ├── exporter.py           # 通用多格式导出服务（Output 节点）
-│   │   ├── export_browser.py     # 导出目录的读取侧：列表/下载/删除与路径安全
 │   │   ├── report_service.py     # 一键自包含 HTML 运行报告（内容可定制；PDF 只走 LaTeX 成稿）
 │   │   ├── part_writer.py        # 分批落盘与实时快照（断点安全写）
 │   │   ├── housekeeping.py       # 运行记录/孤立文件/缓存的自动清理
@@ -132,13 +131,9 @@ crawler_workflow/
 │   │   ├── latex_charts.py       # 图表 → 可编译 LaTeX 图 / booktabs 三线表源码
 │   │   ├── latex_compile.py      # 用本机 MiKTeX xelatex 把 LaTeX 合成为一份并编译成 PDF（编译节点 / 输出 PDF）
 │   │   ├── latex_outputs.py      # Visualize 节点与 /api/visualize/render 共用的 TikZ 图 / 三线表产出网
-│   │   ├── nodes.py              # 从 app 抽出的节点执行器（name/compile/tokenize/resume/upload，别名回接 _execute_*_node）
-│   │   ├── text_dedupe.py        # 爬取文本的归一化与近重复检测（SimHash「近重复去重」步骤）
 │   │   ├── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（抗批量清空与单删）
 │   │   ├── net_probe.py          # 分网探测：把「够不到站点」与「站点只是慢」分开，别误判成抓取失败
 │   │   └── execution_history.py  # 执行历史记录（history.db）
-│   ├── utils/
-│   │   └── helpers.py            # 工具函数
 │   └── static/                   # 前端静态文件
 │       ├── index.html
 │       ├── css/style.css
