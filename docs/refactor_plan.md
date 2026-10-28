@@ -213,7 +213,7 @@ backend/
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
 | `crawlers/platforms/hongguo/harvest.py` | 994 | Stage 1 已拆完（CA 信任 → `trust.py` 213；UIA 驱动 → `player_ui.py` 616；名称规则 → `naming.py` 83；剩下的就是"采集夹具 + 走路"这一件事） |
-| `services/analysis/pipeline.py` | 3899 | Stage 9（op 注册表：一个 op 一个文件 + 一行注册） |
+| `services/analysis/pipeline.py` | 3300 | Stage 9 进行中：17 个表格类 op 已各成一文件（`ops/`，3,899 → 3,300），余 17 个分析 op 仍在类里 |
 | `services/charts/tikz.py` | 2430 | Stage 5b（图/表/公式三本职责，拆 `charts/latex_{figures,tables,formulas}.py`；注册表已在 `charts/registry.py` 落好） |
 | `services/biblio/metrics.py` | 1996 | Stage 5b 同批：按「建图 / 指标 / 剪枝 / 输出」拆 |
 | `services/charts/visualizer.py` | 1805 | Stage 5b（调色板与字体栈已在文件头自证；拆「控制台图型」与「biblio 图型」两条 builder 路） |
@@ -1067,6 +1067,21 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   - **CI 的两条警告已真修（2026-10-29）**：`api/data.py` 的 `ExcelFile.parse`（pandas 3 弃用）改用
     `pd.read_excel(book, sheet_name=…)`；`test_boot_import_budget` 的子进程不再用 `text=True`
     （CI 的 cp1252 读线程在 UTF-8 输出上抛 `UnicodeDecodeError`），改为按字节取回、由断言处 UTF-8 解码。
+  - **Stage 9 第一片（17 个表格类 op 各成一文件）已完成（2026-10-29）**：`services/analysis/pipeline.py`
+    **3,899 → 3,300 行**；新 `services/analysis/ops/` 17 个单 op 模块（`drop_null` … `bin_time`）+
+    `ops/__init__.py` 的 `OPS` 一行一注册。共享守卫（`UnknownOperationError`、`_blank`、`_to_datetime`、
+    `_stable_seed`、`_to_bool`、`_checked_pattern` 与 select 选项元组）搬进 `kernels.py`，pipeline 反向导入，
+    所以 `from services.analysis.pipeline import …` 的旧入口（`comment.py` 的 `_to_datetime`、
+    `test_analysis_api` 的 `_stable_seed` 等）全部照旧。`DataAnalysisService` 在类外以
+    `setattr(…, staticmethod(func))` 挂回同名方法；`_operations()` 变成 `{**OPS, 其余类方法}`——
+    **pylint 的 E1101 逼出了这条真正的写法**（`cls.drop_null` 是动态属性，静态分析看不见）。
+    `test_data_analysis` 的 `_compared_literals` 改为在 `services/analysis/` 全目录里按名字找函数
+    （`filter_rows`/`convert_type` 已不在 pipeline）。
+    - **门禁**：`test_data_analysis` + `test_analysis_api` + `test_node_schema` + `test_stopwords`
+      **1,107 passed / 1 warning（jieba 第三方）**；ruff check + format；产品档 pylint 10.00/10。
+  - **Stage 9 剩余**：`suggest_stages`/`topic_*`/`cluster_*`/`cooccur`/`reply_graph`/`compare_platform`/
+    `sentiment_evolution`/`forecast`/`alert` 共 17 个 op（约 1,900 行，相互共享 `_fit_topic_model`/
+    `_stage_order`/`_review_*` 等 kernel），按同样方式分批搬。
   - **再后**：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
     #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
     `static/js/panels/settings.js` 1,985、`static/js/workflow.js` 4,458、`static/js/canvas.js` 3,893 在名单上；

@@ -80,6 +80,18 @@ OPERATIONS = [
 # the assertions below compare names without becoming a fourth copy of them.
 
 DATA_ANALYSIS_PY = Path(m.__file__)
+ANALYSIS_DIR = DATA_ANALYSIS_PY.parent
+
+
+def _function_definition(function_name: str) -> ast.FunctionDef:
+    """The named function wherever the Stage 9 split put it (``ops/<op>.py`` or the service)."""
+    for path in sorted(ANALYSIS_DIR.rglob('*.py')):
+        for node in _source_walk(ast.parse(path.read_text(encoding='utf-8'))):
+            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                return node
+    raise AssertionError(f'{function_name} is declared nowhere under {ANALYSIS_DIR}')
+
+
 SETTINGS_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
 
 
@@ -98,12 +110,7 @@ def _compared_literals(function_name: str, subject: str) -> list:
     without hand-listing them again: the ``if/elif`` chain in the service *is* the
     registry the browser has to agree with.
     """
-    tree = ast.parse(DATA_ANALYSIS_PY.read_text(encoding='utf-8'))
-    function = next(
-        (node for node in _source_walk(tree) if isinstance(node, ast.FunctionDef) and node.name == function_name),
-        None,
-    )
-    assert function is not None, f'{function_name} is gone from data_analysis.py'
+    function = _function_definition(function_name)
     names = []
     for node in _source_walk(function):
         if not isinstance(node, ast.Compare) or not isinstance(node.left, ast.Name):
