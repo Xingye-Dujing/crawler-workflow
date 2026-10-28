@@ -387,7 +387,8 @@ def clean_globals(request):
     # The sentence-transformer weight cache is process-global for the same reason as the shared
     # classifiers: a fake encoder installed by one case must not answer the next case's embedding
     # call, or that case measures a model it never set up (a green that never built its own fake).
-    da = sys.modules.get('services.analysis.pipeline')
+    # It lives in ``topic_kernels`` since the Stage 9 split (the op modules own the model code).
+    da = sys.modules.get('services.analysis.topic_kernels')
     if da is not None:
         da._EMBED_MODEL_CACHE.clear()
     ss = sys.modules.get('settings_store')

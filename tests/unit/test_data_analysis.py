@@ -27,6 +27,7 @@ import pytest
 # One alias for the live module: the encoder tests patch its module state, and the source
 # guards below read its ``__file__`` — both need the module object, not a copy of a name.
 import services.analysis.pipeline as m
+import services.analysis.topic_kernels as tk
 from services.analysis.pipeline import DataAnalysisService as D
 from services.analysis.pipeline import UnknownOperationError, _stage_order
 
@@ -1404,9 +1405,14 @@ class TestSuggestStages:
             D.suggest_stages(self._frame(self.CURVE), '评论时间', peak_ratio=0.5)
 
     def test_more_peaks_than_the_ceiling_are_folded_and_said_so(self, caplog):
-        # Three humps (9, 11, 12 rows/day) and a ceiling of 2: the shortest phase is folded
-        # into its neighbour, and the console says so — a proposal that quietly lost a peak
-        # is a proposal the user cannot audit.
+        # Four runs clear the floor (the 9-row hump is split from the 6-3 tail by the
+        # smoothing) and the ceiling is 2: two peaks are folded into their neighbours, and the
+        # console says so with the numbers it used — a proposal that quietly lost a peak is a
+        # proposal the user cannot audit. The assertion is the whole sentence, filled with the
+        # counts this curve produces: matching bare digits also matched the log line number,
+        # which moved the day the module did.
+        from i18n import t
+
         curve = dict(
             zip(
                 pd.date_range('2024-05-01', periods=21).strftime('%Y-%m-%d'),
@@ -1417,7 +1423,8 @@ class TestSuggestStages:
         with caplog.at_level('WARNING'):
             out = D.suggest_stages(self._frame(curve), '评论时间', max_windows=2)
         assert len(out) == 2
-        assert '2' in caplog.text and '1' in caplog.text, 'the folded peak is reported, not hidden'
+        said = t('analysis.stages_folded', kept=2, dropped=2)
+        assert said in caplog.text, f'the folded peaks are not reported: {caplog.text}'
         assert out.at[0, '起点'] == '2024-05-01', 'the 9-row hump stayed inside the first window'
 
     def test_adjacent_tall_days_do_not_cancel_the_next_burst(self):
@@ -2153,7 +2160,7 @@ class TestTopicModelEmbedding:
         )
 
     def test_a_missing_encoder_is_refused_by_name_not_fallen_back(self, monkeypatch):
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: 'sentence-transformers')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
             m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, method='embedding')
 
@@ -2173,7 +2180,7 @@ class TestTopicModelEmbedding:
         fake = types.ModuleType('sentence_transformers')
         fake.SentenceTransformer = _FakeST
         monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: '')
         out = m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, topn=2, method='embedding')
         assert list(out.columns) == ['topic', 'rank', 'keyword', 'weight']
         assert set(out['topic']) == {'Topic-1', 'Topic-2'}, 'the two texts groups become two topics'
@@ -2201,8 +2208,8 @@ class TestTopicModelEmbedding:
         fake = types.ModuleType('sentence_transformers')
         fake.SentenceTransformer = _FakeST
         monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
-        monkeypatch.setattr(m, '_EMBED_MODEL_CACHE', {})
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: '')
+        monkeypatch.setattr(tk, '_EMBED_MODEL_CACHE', {})
         frame = self._frame()
         m.DataAnalysisService.topic_model(frame, '正文', n_topics=2, topn=2, method='embedding')
         m.DataAnalysisService.topic_map(frame, '正文', n_topics=2, method='embedding')
@@ -2260,10 +2267,10 @@ class TestTopicViewsEmbedding:
         fake = types.ModuleType('sentence_transformers')
         fake.SentenceTransformer = _FakeST
         monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: '')
 
     def test_a_missing_encoder_is_refused_by_name_for_all_three_views(self, monkeypatch):
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: 'sentence-transformers')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
             m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
@@ -2346,7 +2353,7 @@ class TestTopicMethodAuto:
         fake = types.ModuleType('sentence_transformers')
         fake.SentenceTransformer = _FakeST
         monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: '')
 
     def test_auto_uses_the_encoder_and_gives_the_embedding_table(self, monkeypatch):
         self._install_encoder(monkeypatch)
@@ -2354,7 +2361,7 @@ class TestTopicMethodAuto:
         assert list(out.columns) == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
 
     def test_auto_falls_back_to_lda_without_raising_when_the_encoder_is_absent(self, monkeypatch):
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: 'sentence-transformers')
         # No encoder available and none installed on this path: auto must answer with a real LDA
         # table for BOTH figure steps, not refuse the untouched default.
         mp = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='auto')
@@ -2362,7 +2369,7 @@ class TestTopicMethodAuto:
         assert not mp.empty and not sl.empty, 'auto fell through but produced nothing'
 
     def test_auto_falls_back_for_the_staged_step_too(self, monkeypatch):
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: 'sentence-transformers')
         out = m.DataAnalysisService.topic_by_stage(
             self._frame(), '正文', stage_col='阶段', topics=[2, 2], method='auto'
         )
@@ -2373,14 +2380,14 @@ class TestTopicMethodAuto:
         machine with no torch/sentence-transformers that default must return a real LDA table —
         the optional encoder can never block the generic path. Only an EXPLICIT embedding choice
         refuses (see the next test), because a model the user named is not silently swapped."""
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers, torch')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: 'sentence-transformers, torch')
         out = m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, topn=5, method='auto')
         assert list(out.columns) == ['topic', 'rank', 'keyword', 'weight'], 'same shape whether LDA or embedding ran'
         assert not out.empty, 'the default topic step produced nothing on a torch-less machine'
         assert out['topic'].str.startswith('Topic-').all(), 'auto fell through but emitted no topic rows'
 
     def test_explicit_embedding_still_refuses_by_name_when_absent(self, monkeypatch):
-        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        monkeypatch.setattr(tk, '_embed_missing_packages', lambda: 'sentence-transformers')
         with pytest.raises(UnknownOperationError, match='sentence-transformers'):
             m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
 
