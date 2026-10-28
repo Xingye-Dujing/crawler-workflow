@@ -36,6 +36,7 @@ def _default_paths(attribute: str) -> Path:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,  # the returncode is asserted below, with the child's stderr in the message
     )
     assert answer.returncode == 0, answer.stderr[-600:]
     return Path(answer.stdout.strip())
