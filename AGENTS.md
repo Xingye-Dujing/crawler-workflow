@@ -316,6 +316,24 @@ Chinese messages with a type prefix matching history: `功能更新：`, `问题
 
 ## Change workflow (MANDATORY on every change)
 
+**How much to run per change is decided by what the change can break, not by ritual** (measured 2026-10-28:
+full fast 8.5 min / 8,180 cases, device tier 5.4 min / 194, both pylint tiers ~4 min / 272+272 files, ruff seconds —
+so the whole set is ~18 min and cannot be the per-commit price when a session lands several knives).
+
+- **Lane A — docs, comments, the anchor.** `tests/unit/test_doc_paths.py` only (it is the test that can actually be
+  broken by a doc edit), plus `ruff check` if a `.py` was touched. ~1 min.
+- **Lane B — a move, or test-seam retargeting where behavior is unchanged.** The moved module's own cases + the
+  contract tests that name it + `ruff check`/`format --check` on the touched files. ~2 min. The **full fast suite and
+  both pylint tiers run once at the end of a batch of ~4 such knives** — a per-knife proof was never the point of the
+  full suite; catching what a move silently broke is, and the batch run catches it before the next push.
+- **Lane C — real behavior changes: run orchestration, resume/checkpoint, `runs.db`, UI, crawling, the LLM boundary.**
+  Full fast always; the device tier when UI/engine/LLM/crawling is touched; pylint at batch end. These are the lanes
+  where being wrong costs the user a spent account, a corrupted run record, or a figure that lies in a paper.
+- **GitHub Actions on every push is the backstop** (fast + ruff + three pylint tiers; gitee has no CI), so a local
+  batch run is not the only copy of the evidence — it is the copy that decides whether to push.
+- **The closure gate is NOT a lane**: any "it is done" claim still means one full run of every tier, nothing
+  deselected, nothing skipped, no file needing a change in that run.
+
 1. **Edit** — the PostToolUse hook auto-runs `ruff format` + `ruff check --fix` on touched `.py` files.
 2. **Tests are part of the change.** Any code file touched (backend *or* frontend JS) means syncing the suite in the
    same change: new feature → test it; changed behavior → update the affected assertions; deleted feature → remove its
