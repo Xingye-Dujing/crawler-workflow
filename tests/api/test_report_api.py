@@ -10,6 +10,8 @@ and that a report never fails because a paragraph of AI prose failed.
 
 import pytest
 
+from analyzers.llm_client import LLMClient
+
 pytestmark = pytest.mark.api
 
 ROWS = [
@@ -130,7 +132,7 @@ class TestConclusion:
             asked['prompt'] = prompt
             return '数据以正面情绪为主。\n\n机构名未出现。'
 
-        monkeypatch.setattr(app_module.LLMClient, 'chat', fake_chat)
+        monkeypatch.setattr(LLMClient, 'chat', fake_chat)
         body = client.post(
             '/api/report/generate',
             json={'include_conclusion': True, 'llm': {'provider': 'ollama', 'model': 'm'}},
@@ -155,7 +157,7 @@ class TestConclusion:
         def boom(self, prompt, max_retries=2):
             raise RuntimeError('daemon down')
 
-        monkeypatch.setattr(app_module.LLMClient, 'chat', boom)
+        monkeypatch.setattr(LLMClient, 'chat', boom)
         response = client.post('/api/report/generate', json={'include_conclusion': True})
         assert response.status_code == 200
         body = response.get_json()
@@ -169,7 +171,7 @@ class TestConclusion:
         def never(self, prompt, max_retries=2):
             raise AssertionError('the report asked a model it was not told to ask')
 
-        monkeypatch.setattr(app_module.LLMClient, 'chat', never)
+        monkeypatch.setattr(LLMClient, 'chat', never)
         assert client.post('/api/report/generate', json={}).status_code == 200
 
 

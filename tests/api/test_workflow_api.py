@@ -24,6 +24,8 @@ import pandas as pd
 import pytest
 from run_wait import run_finished
 
+from analyzers.llm_client import LLMClient
+
 pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 
 
@@ -1219,7 +1221,7 @@ class TestEntityNode:
             asked['provider'] = self.provider
             return '张伟|PERSON'
 
-        monkeypatch.setattr(app_module.LLMClient, 'chat', fake_chat)
+        monkeypatch.setattr(LLMClient, 'chat', fake_chat)
         dataset_id = paste(self.RECORDS, name='ner-llm.csv')
         workflow = self._flow(
             dataset_id, 'ner-llm.csv', {'text_column': '正文', 'mode': 'llm', 'entity_types': 'person'}

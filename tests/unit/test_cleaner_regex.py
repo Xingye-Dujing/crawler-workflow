@@ -190,8 +190,8 @@ class TestDeclaredMode:
     def test_the_regex_mode_is_what_asks_for_no_model(self, exec_):
         """The whole point of the mode: a regex clean node must not block a run behind an
         API key, and a blank one must still behave as it always did."""
-        from app import _op_needs_llm
+        from engine.plan import op_needs_llm
 
-        assert _op_needs_llm('clean', {'mode': 'regex'}) is False
-        assert _op_needs_llm('clean', {'mode': 'llm'}) is True
-        assert _op_needs_llm('clean', {}) is True
+        assert op_needs_llm('clean', {'mode': 'regex'}) is False
+        assert op_needs_llm('clean', {'mode': 'llm'}) is True
+        assert op_needs_llm('clean', {}) is True

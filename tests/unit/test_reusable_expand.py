@@ -175,7 +175,10 @@ class TestCallSites:
     def test_the_scheduled_canvas_gate_sees_an_llm_step_inside_a_group(self):
         """The file keeps the group; the schedule gate must expand before asking for a model,
         or a timer would start a clean step that needs credentials it can never have."""
-        from app import _scheduled_canvas, workflow_manager
+        from app import _scheduled_canvas
+        from stores import get_workflow_manager
+
+        manager = get_workflow_manager()
 
         name = 'reusable-sched-gate'
         draft = {
@@ -197,12 +200,12 @@ class TestCallSites:
             'connections': [],
         }
         try:
-            workflow_manager.save(name, draft)
+            manager.save(name, draft)
             loaded = _scheduled_canvas(name)
             assert loaded['workflow'] is None
             assert name in loaded['error']
         finally:
-            workflow_manager.delete(name)
+            manager.delete(name)
 
     def test_both_run_start_and_the_scheduled_canvas_expand_before_using_the_workflow(self):
         from pathlib import Path
@@ -215,6 +218,6 @@ class TestCallSites:
         assert 'expand_reusable_workflow(' in begin
         scheduled = source[source.index('def _scheduled_canvas(') : source.index('def _start_scheduled_run(')]
         assert 'expand_reusable_workflow(' in scheduled
-        assert scheduled.index('expand_reusable_workflow(') < scheduled.index('_workflow_needs_llm('), (
+        assert scheduled.index('expand_reusable_workflow(') < scheduled.index('workflow_needs_llm('), (
             'the LLM gate must see the expanded children, not the group'
         )

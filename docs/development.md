@@ -115,6 +115,7 @@ crawler_workflow/
 │   │       └── __init__.py       # 导入并注册全部插件（由 registry.load_builtin_executors 触发）
 │   ├── engine/                   # 工作流引擎
 │   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹
+│   │   ├── plan.py               # 这次运行「是什么」：并行/串行、传输方式、要不要模型、重跑一个节点会作废哪些
 │   │   ├── executor.py           # 线程池执行器
 │   │   └── logger.py             # 日志管理
 │   ├── services/                 # 服务模块

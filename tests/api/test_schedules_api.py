@@ -307,7 +307,7 @@ class TestTheGlueAppInstalled:
 
     def test_a_switched_off_model_node_does_not_hold_the_schedule(self, client, canvas, app_module, monkeypatch):
         """A disabled node is not on the canvas — the engine's own rule, which validate, naming,
-        fingerprint and execution all obey. ``_workflow_needs_llm`` walked the DRAWN nodes, so a
+        fingerprint and execution all obey. ``workflow_needs_llm`` walked the DRAWN nodes, so a
         canvas whose only model-shaped box was switched off was refused 「需要模型」 at save time
         AND again at every fire, forever: the user had turned the cost off and the timer kept
         charging it to the rule."""

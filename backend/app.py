@@ -82,15 +82,21 @@ from stores import (
 )
 from transport import _local_transport_refusal
 
-from analyzers.llm_client import ABORT_MARK, LLMClient
+from analyzers.llm_client import ABORT_MARK
 from crawlers.core.faults import CrawlerStopped
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
+from engine.plan import (
+    component_name,
+    downstream_closure,
+    llm_provider,
+    run_mode,
+    workflow_needs_llm,
+)
 from engine.workflow import WorkflowEngine, effective_workflow
 from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService, lock_store
 from services.analysis.pipeline import UnknownOperationError
-from services.analysis.process import PROCESS_ENUMS
 from services.ingest.lifecycle import close_login_browser as _close_login_browser
 from services.runs.payload import resume_refusal, workflow_shape_error
 from services.runs.queue import (
@@ -617,77 +623,6 @@ def _close_run(ctx: dict, outcome: str):
         records[:] = []
 
 
-def _op_needs_llm(op: str, params: dict) -> bool:
-    """Whether this node's own choice will call a language model.
-
-    Read through the declared default the panel shows (``PROCESS_ENUMS``), because a blank
-    field means "not stated", not "not the model": an ``emotion`` node left empty IS an LLM
-    run, while an empty ``sentiment`` node is SnowNLP and costs nothing. The test this
-    replaces was ``mode != 'ml'``, which charged a row-by-row model pass to every node whose
-    mode said something else — and a cloud host then refused the whole run for a missing API
-    key that no node in it had asked for.
-
-    ``clean`` used to be listed here as an operation that always calls a model. It has a
-    mode of its own now, and its regex mode washes a Weibo comment without asking anyone —
-    so the answer comes from that same table instead of from a hard-coded membership, and
-    the two can no longer disagree.
-    """
-    spec = PROCESS_ENUMS.get(op) or {}
-    if 'mode' not in spec:
-        return False
-    # Only the declared DEFAULT is read here; the option list beside it is the panel's
-    # business (and an unlisted spelling is refused by name when the node runs).
-    default, _ = spec['mode']
-    raw = str(params.get('mode') or '').strip()
-    value = raw if raw else default
-    # Only the mode that NAMES the model needs one. An unrecognised mode is not treated as
-    # a model call either: it is refused BY NAME when the node runs, and answering "a key
-    # is required" here would send the user to configure credentials for a definition
-    # whose actual problem is a spelling.
-    return value == 'llm'
-
-
-def _workflow_needs_llm(workflow: dict) -> bool:
-    """True when any process node in the payload will actually call a model.
-
-    Cleaner always does; the three classifiers and entity recognition only when the node
-    picked the model. A crawl-and-save workflow must not be blocked by a missing API key or
-    an unpicked Ollama tag — the frontend makes the same distinction (``nodeNeedsLlm``)
-    before it opens the console, and both read one table of which mode means which model.
-
-    Read off the EFFECTIVE graph, not the drawn one. A switched-off node is not on the canvas
-    (the engine's own rule, which validate/naming/fingerprint/execution all obey), and this is
-    a COST question: walking the raw nodes refused 「请选择模型」 for a run that would call no
-    model at all, and refused a scheduled canvas — forever, at save time and again at every
-    fire — over a node the user had deliberately turned off.
-    """
-    for node in effective_workflow(workflow).get('nodes') or []:
-        if not isinstance(node, dict) or node.get('type') != 'process':
-            continue
-        params = node.get('params') or {}
-        op = str(params.get('operation') or node.get('operation') or '')
-        if _op_needs_llm(op, params):
-            return True
-    return False
-
-
-def _component_name(sub_engine) -> str:
-    """This connected component's own workflow name, from its name node.
-
-    The canvas may hold several workflows in one run, each headed by its own
-    name node — recording them all under the *first* name on the canvas
-    swallowed every other workflow's label (they all filed as the first
-    one's name, or as "untitled" when the label sat in another component).
-    """
-    for node in sub_engine.nodes.values():
-        if node.get('type') != 'name':
-            continue
-        label = str((node.get('params') or {}).get('workflow_name') or '').strip()
-        if label:
-            return label
-    return ''
-
-
 def _record_execution_history(
     workflow: dict, engine: WorkflowEngine, results: dict, workflow_name: str = '', log_label: str = ''
 ):
@@ -978,58 +913,6 @@ def delete_workflow():
 # there: handing the slot to the next request means starting a run, which is this file's work.
 
 
-#: The two run shapes the canvas settings can name. Kept next to the reader that refuses
-#: anything else, so a second spelling of this list cannot drift away from the first.
-RUN_MODES = ('parallel', 'serial')
-
-
-def _run_mode(settings: dict) -> str:
-    """The run's shape, READ — and an unrecognised name is refused, never guessed.
-
-    ``mode == 'serial'`` was the old test, so every other token ran PARALLEL while the browser
-    asked the same question the safe way round (`workflow.js`: ``mode !== 'parallel'`` means
-    serial). A draft whose settings said anything else therefore started two same-platform
-    crawls at once while the panel believed it was running one, and the 「本次不用 Profile」
-    question — which is what keeps two crawls off one browser profile — never fired. That is
-    the measured login-wall collision, decided by a string comparison nobody validated.
-    """
-    raw = (settings or {}).get('mode')
-    value = str(raw or '').strip().lower()
-    if not value:
-        return RUN_MODES[0]
-    if value not in RUN_MODES:
-        raise UnknownOperationError(
-            t('api.runSettingOption', setting='mode', value=str(raw), allowed=', '.join(RUN_MODES))
-        )
-    return value
-
-
-#: The AI transports this app can actually speak. Kept next to the reader that refuses anything
-#: else so a second spelling cannot drift — the single source is ``LLMClient.PROVIDERS``.
-LLM_PROVIDERS = LLMClient.PROVIDERS
-
-
-def _llm_provider(llm_cfg: dict) -> str:
-    """The transport name, READ — an unrecognised one is refused BY NAME, never folded.
-
-    The request's ``provider`` reaches ``LLMClient``, which used to write
-    ``provider if provider in (...) else 'ollama'``: a hand-typed or stale-tab
-    ``"OpenRouter"`` (wrong case) became a silent local-daemon call looking for a tag that does
-    not exist, the whole node failed, yet the durable run record still claimed the transport was
-    OpenRouter — a record naming a transport that never ran. ``transport.py`` already refuses
-    this shape for the cloud host; a local host must refuse it too rather than guess.
-    """
-    raw = (llm_cfg or {}).get('provider')
-    value = str(raw or '').strip().lower()
-    if not value:
-        return LLM_PROVIDERS[0]
-    if value not in LLM_PROVIDERS:
-        raise UnknownOperationError(
-            t('api.runSettingOption', setting='provider', value=str(raw), allowed=', '.join(LLM_PROVIDERS))
-        )
-    return value
-
-
 def _start_next_queued() -> None:
     """Hand the slot to the oldest waiting request, at the end of a run.
 
@@ -1075,7 +958,7 @@ def _scheduled_canvas(name: str) -> dict:
     workflow, reusable_error = expand_reusable_workflow(workflow)
     if reusable_error:
         return {'workflow': None, 'error': reusable_error}
-    if _workflow_needs_llm(workflow):
+    if workflow_needs_llm(workflow):
         return {'workflow': None, 'error': t('sched.canvasNeedsModel', name=name)}
     return {'workflow': workflow, 'error': ''}
 
@@ -1144,27 +1027,6 @@ def workflow_queue_clear():
     return jsonify({'ok': True, 'cleared': clear_queue()})
 
 
-def _downstream_closure(effective: dict, node_id: str) -> list:
-    """``node_id`` plus every node reachable by following wires forward.
-
-    A rerun of one node invalidates that node AND everything downstream of it, because a
-    child's input IS its parent's output — keeping a child's stale rows would let it feed
-    on a result that no longer exists. Walked over the effective (already-disabled-dropped)
-    graph so a disabled node is never resurrected by a rerun of its neighbour."""
-    adjacency: dict = {}
-    for conn in effective.get('connections') or []:
-        adjacency.setdefault(conn.get('from'), []).append(conn.get('to'))
-    seen = {node_id}
-    stack = [node_id]
-    while stack:
-        current = stack.pop()
-        for child in adjacency.get(current, []):
-            if child not in seen:
-                seen.add(child)
-                stack.append(child)
-    return list(seen)
-
-
 @app.route('/api/workflow/rerun-node', methods=['POST'])
 def workflow_rerun_node():
     """Re-run ONE node and everything downstream of it, reusing the kept upstream rows.
@@ -1226,7 +1088,7 @@ def workflow_rerun_node():
     if execution_state.get('running') or (live_thread is not None and live_thread.is_alive()):
         return jsonify({'ok': False, 'error': t('api.rerunBusy')}), 409
 
-    invalidated = _downstream_closure(effective, node_id)
+    invalidated = downstream_closure(effective, node_id)
     store.invalidate_nodes(run_id, invalidated)
 
     # Replay through the ordinary start path as a resume of the very run we just pruned.
@@ -1281,8 +1143,8 @@ def _begin_run(data: dict, lang_header: str) -> dict:
     # transport is asked by the same door — an unknown provider must not fold to a local daemon
     # the record then falsely claims ran.
     try:
-        _run_mode(((data.get('workflow') or {}).get('settings')) or {})
-        _llm_provider(data.get('llm') or {})
+        run_mode(((data.get('workflow') or {}).get('settings')) or {})
+        llm_provider(data.get('llm') or {})
     except UnknownOperationError as e:
         return {'status': 400, 'body': {'ok': False, 'error': str(e)}}
     resume_error = resume_refusal(data)
@@ -1312,7 +1174,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         try:
             workflow = data.get('workflow', {})
             settings = workflow.get('settings', {})
-            mode = _run_mode(settings)
+            mode = run_mode(settings)
             # A cloud host has no display, so headless is not a preference here — the
             # browser would never come up. The panel hides the switch (it is told the
             # server's shape by /api/config), but the run record is written from THIS
@@ -1400,7 +1262,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
 
             llm_cfg = data.get('llm') or {}
             llm = {
-                'provider': _llm_provider(llm_cfg),
+                'provider': llm_provider(llm_cfg),
                 'model': (llm_cfg.get('model') or '').strip(),
                 'api_key': (llm_cfg.get('api_key') or '').strip(),
                 'ollama_host': str(get_setting('ollama_host') or ''),
@@ -1412,7 +1274,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # Per-provider requirements: the key belongs to OpenRouter, the pulled tag
             # to the local daemon — and neither is demanded by a run that never calls
             # a model.
-            if _workflow_needs_llm(workflow):
+            if workflow_needs_llm(workflow):
                 # Refused BEFORE the requirements below: on a cloud host a missing key is
                 # not the problem worth reporting, the transport is. Asking the user for an
                 # OpenRouter key while running their local-daemon request against a port
@@ -1475,7 +1337,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         carried identical labels. The index is appended only in that case, and
         only while the name is still the fallback.
         """
-        named = _component_name(wf_engine)
+        named = component_name(wf_engine)
         if named:
             return named
         fallback = str(execution_state.get('workflow_name') or '').strip() or t('wf.unnamed', i=wf_idx + 1)
@@ -2017,7 +1879,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         None,
                         se,
                         sub_results,
-                        _component_name(se) or workflow_name,
+                        component_name(se) or workflow_name,
                         log_label=_wf_display_name(se, wf_idx),
                     )
             # 'completed' must mean every node really finished. A node that failed

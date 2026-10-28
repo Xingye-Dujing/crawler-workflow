@@ -130,7 +130,7 @@ class TestCanvasSerialization:
 
 
 class TestLlmGateParity:
-    """``nodeNeedsLlm`` (workflow.js) and ``_workflow_needs_llm`` (app.py) agree.
+    """``nodeNeedsLlm`` (workflow.js) and ``workflow_needs_llm`` (engine/plan.py) agree.
 
     The browser refuses to open the console without a model when a node will
     need one; the server refuses the same way before the worker starts. When the
@@ -192,17 +192,17 @@ class TestLlmGateParity:
 
     @pytest.mark.parametrize('name, params, operation', CASES, ids=[case[0] for case in CASES])
     def test_the_browser_and_the_server_ask_for_a_model_on_the_same_nodes(self, js_answers, name, params, operation):
-        from app import _workflow_needs_llm
+        from engine.plan import workflow_needs_llm
 
         node = {'type': 'process', 'params': params}
         if operation:
             node['operation'] = operation
-        assert js_answers[name] == _workflow_needs_llm({'nodes': [node]}), name
+        assert js_answers[name] == workflow_needs_llm({'nodes': [node]}), name
 
     def test_the_execute_gate_asks_the_effective_graph_not_the_drawn_one(self):
         """The gate refuses a run before it starts, so it may not hold up a canvas whose only
         model-shaped node the user switched off — a disabled node is not on the canvas, which is
-        the rule validate/naming/fingerprint/execution and ``_workflow_needs_llm`` all obey.
+        the rule validate/naming/fingerprint/execution and ``workflow_needs_llm`` all obey.
 
         Read from the source, because the equivalence cannot be walked per case here: the browser
         owns its own mirror of the effective graph (``canvas.effectiveIds()``, which the parity
@@ -304,7 +304,7 @@ class TestLlmGateParity:
         ``method='TF-IDF'`` run TextRank and stamp the table with the name that had not
         run. Ops with no such field (clean, anomaly) are legitimately absent, so the two
         lists are compared against what the panels actually render."""
-        from app import PROCESS_ENUMS
+        from services.analysis.process import PROCESS_ENUMS
 
         js = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
         panelled = {

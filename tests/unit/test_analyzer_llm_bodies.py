@@ -754,7 +754,7 @@ class TestAggressionDispatch:
             check_process_params('aggression', {'mode': 'bertish', 'text_column': '正文'}, frame)
 
     def test_a_blank_mode_is_the_lexicon_the_panel_shows(self):
-        from app import _op_needs_llm
+        from engine.plan import op_needs_llm
 
-        assert _op_needs_llm('aggression', {'mode': ''}) is False
-        assert _op_needs_llm('aggression', {'mode': 'llm'}) is True
+        assert op_needs_llm('aggression', {'mode': ''}) is False
+        assert op_needs_llm('aggression', {'mode': 'llm'}) is True

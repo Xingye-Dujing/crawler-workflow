@@ -19,6 +19,9 @@ import pytest
 from core.refs import flag_or_none
 from run_wait import run_finished
 
+from analyzers.llm_client import LLMClient
+from engine import plan
+
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
 
@@ -752,9 +755,9 @@ class TestSentimentNode:
         is exactly the trap ``mode != 'ml'`` set for every other spelling."""
         for mode in ('snownlp', 'ml', 'bert'):
             node = _node('n', 'process', {'operation': 'sentiment', 'mode': mode}, 'sentiment')
-            assert app_module._workflow_needs_llm({'nodes': [node]}) is False, mode
+            assert plan.workflow_needs_llm({'nodes': [node]}) is False, mode
         llm = _node('n', 'process', {'operation': 'sentiment', 'mode': 'llm'}, 'sentiment')
-        assert app_module._workflow_needs_llm({'nodes': [llm]}) is True
+        assert plan.workflow_needs_llm({'nodes': [llm]}) is True
 
     def test_a_mode_the_operation_does_not_know_fails_the_node_by_name(self, client, app_module, paste):
         ds = paste(self.ROWS, name='senti-bogus.csv')
@@ -822,7 +825,7 @@ class TestSentimentNode:
         A disabled box still sat in the DRAWN node list, so it could hold a run (and a whole
         scheduled canvas) hostage for a key the run would never have used."""
         off = _node('n', 'process', {'operation': 'sentiment', 'mode': 'llm', 'enabled': False}, 'sentiment')
-        assert app_module._workflow_needs_llm({'nodes': [off]}) is False
+        assert plan.workflow_needs_llm({'nodes': [off]}) is False
         # Starvation counts too: a model node whose only feeder is off runs nothing.
         feeder = _node('f', 'source', {'platform': 'weibo', 'keyword': 'k'})
         starved = _node('n', 'process', {'operation': 'sentiment', 'mode': 'llm'}, 'sentiment')
@@ -831,9 +834,9 @@ class TestSentimentNode:
             'connections': [{'from': 'f', 'to': 'n'}],
             'settings': {'disabledTypes': ['source']},
         }
-        assert app_module._workflow_needs_llm(graph) is False
+        assert plan.workflow_needs_llm(graph) is False
         # …and the same canvas with the type back on is still refused-for-a-model, by name.
-        assert app_module._workflow_needs_llm({'nodes': [feeder, starved], 'connections': graph['connections']}) is True
+        assert plan.workflow_needs_llm({'nodes': [feeder, starved], 'connections': graph['connections']}) is True
 
 
 class TestRunShapeIsReadNotCompared:
@@ -842,35 +845,35 @@ class TestRunShapeIsReadNotCompared:
     READ — and an unknown name is refused, because a guessed shape is a guess about cost."""
 
     def test_the_two_named_shapes_are_read_and_anything_else_is_refused_by_name(self, app_module):
-        assert app_module._run_mode({'mode': 'serial'}) == 'serial'
-        assert app_module._run_mode({'mode': 'parallel'}) == 'parallel'
+        assert plan.run_mode({'mode': 'serial'}) == 'serial'
+        assert plan.run_mode({'mode': 'parallel'}) == 'parallel'
         # The spelling is not the meaning: a UI that wrote 「Serial」 meant serial, and the old
         # equality test ran it parallel while the panel believed the opposite.
-        assert app_module._run_mode({'mode': ' Serial '}) == 'serial'
+        assert plan.run_mode({'mode': ' Serial '}) == 'serial'
         # A blank states nothing, which is the declared default — not a refusal.
-        assert app_module._run_mode({}) == 'parallel'
-        assert app_module._run_mode({'mode': '   '}) == 'parallel'
+        assert plan.run_mode({}) == 'parallel'
+        assert plan.run_mode({'mode': '   '}) == 'parallel'
         with pytest.raises(app_module.UnknownOperationError) as bad:
-            app_module._run_mode({'mode': 'concurrent'})
+            plan.run_mode({'mode': 'concurrent'})
         assert 'concurrent' in str(bad.value) and 'parallel' in str(bad.value)
 
     def test_the_transport_is_read_and_anything_else_is_refused_by_name(self, app_module):
         """The provider decides which transport really runs; the client used to fold an unknown
         name to 'ollama', so a bogus transport hit the local daemon while the record claimed
         otherwise. The door normalizes spelling and refuses a NON-transport by name instead."""
-        assert app_module._llm_provider({'provider': 'openrouter'}) == 'openrouter'
+        assert plan.llm_provider({'provider': 'openrouter'}) == 'openrouter'
         # Spelling is not meaning: a casing/whitespace difference is still that transport.
-        assert app_module._llm_provider({'provider': ' Ollama '}) == 'ollama'
-        assert app_module._llm_provider({'provider': 'OpenRouter'}) == 'openrouter'
+        assert plan.llm_provider({'provider': ' Ollama '}) == 'ollama'
+        assert plan.llm_provider({'provider': 'OpenRouter'}) == 'openrouter'
         # A blank states nothing → the declared default, not a refusal.
-        assert app_module._llm_provider({}) == 'ollama'
+        assert plan.llm_provider({}) == 'ollama'
         with pytest.raises(app_module.UnknownOperationError) as bad:
-            app_module._llm_provider({'provider': 'nonsense'})
+            plan.llm_provider({'provider': 'nonsense'})
         assert 'nonsense' in str(bad.value) and 'openrouter' in str(bad.value)
         # The client itself never folds an un-normalized name — a caller that bypasses the door
         # cannot smuggle one either.
         with pytest.raises(ValueError, match='unknown LLM provider'):
-            app_module.LLMClient(provider='OpenRouter')
+            LLMClient(provider='OpenRouter')
 
     def test_an_unknown_transport_is_refused_before_the_slot_is_claimed(self, client, app_module):
         data = {

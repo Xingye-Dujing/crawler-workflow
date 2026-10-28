@@ -710,13 +710,37 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `Response`/`live_run_ids`/`reject_live_run`/`settle_orphaned_records` 四个 import 随调用点消失而删除
     （钩子会把它们**加回来**：先删调用点后删 import 的顺序在本片里被验证 —— 反序就是 F821/F401 交替）。
     **定向门禁**：`tests/api/` + `test_test_tiers` **2,294 passed**；ruff check + format 干净。
-  - **下一刀 = Stage 6 第四片，但顺序先做编排**：`/api/workflow/*` 的路由里
-    `execute`/`rerun-node`/`status`/`stop`/`processes` 都直接吃 `_begin_run` 与 worker 状态，
-    先把「运行编排」搬进 `engine/run.py`（`_begin_run`、worker、`_run_node_durable`、`_execute_node`、
-    `_close_run`、`_housekeep`、`_start_next_queued`、`_record_execution_history`、`_scheduled_canvas`
-    的启动侧），路由随后就是薄壳 —— 反过来先搬路由会造一个只为删除而存在的注入接缝。
-    搬完后 `api/workflow.py`（save/load/list/rename/delete + queue×3 + stop/status/processes/kill）
-    与 app 只剩 `/`、`execute`、`rerun-node`。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
+  - **Stage 6 第四、五片已完成（本次记录）**：① `workflow_manager` 不再是 app 全局，它与
+    `WorkflowHistoryStore` 同款住进 `stores.get_workflow_manager()`（Blueprint 与引擎模块都不能
+    import app 才能读画布）。② 「这次运行是什么」的六个读者搬进新 `engine/plan.py` ——
+    `RUN_MODES`/`run_mode`、`LLM_PROVIDERS`/`llm_provider`、`op_needs_llm`/`workflow_needs_llm`、
+    `component_name`、`downstream_closure`（公开名，app 里那份删掉），`app.py` 2,923 → **2,779 行**。
+    搬前先用 `build/plan_equivalence.py` **量过等价**（同一批用例上返回值与抛出的报错文本逐条相同，
+    `DIFFERENCES: 0`），并给探针加了反空转断言 —— `workflow_needs_llm` 的 14 个用例里必须有 True，
+    否则探针自己报错（第一版全部 False，那等于什么都没测）。
+    **三条跟着搬走的接缝**：① `tests/api/test_nodes_execution.py` 的 16 处 `app_module._run_mode/
+    _llm_provider/_workflow_needs_llm` → `plan.*`，末处 `app_module.LLMClient(...)` 改为
+    `from analyzers.llm_client import LLMClient`（app 从来不是那个客户端的家，只是顺手 re-export 过）；
+    ② `from app import PROCESS_ENUMS` 与 `from app import ..., workflow_manager` 两处**函数内 import**
+    红到本片才暴露 —— 文件顶部的 grep 抓不到它们，这是上一刀欠的账，现已各自改读自己的家
+    （`services.analysis.process` / `stores.get_workflow_manager`）；③ `test_reusable_expand.py`
+    的源码顺序断言 `_workflow_needs_llm(` → `workflow_needs_llm(`（它读 `_scheduled_canvas` 的源码文本）。
+    **定向门禁**：`test_nodes_execution` + `test_reusable_expand` + `test_frontend_contract`
+    + `test_schedules_api` **183 passed**；ruff check 干净。**全量 `tests/api/` 又抓到同一类的第五条**：
+    5 处 `monkeypatch.setattr(app_module.LLMClient, 'chat', …)`（`test_cloud_mode` / `test_report_api` ×3
+    / `test_workflow_api`）—— 它们打的不是 app 的名字而是**穿过 app 的 re-export 去摸类属性**，
+    app 一旦不再 import 它就 `AttributeError: module 'app' has no attribute 'LLMClient'`；
+    改为 `from analyzers.llm_client import LLMClient` 打在客户端自己身上（同一个类对象，桩照样生效）。
+    教训：**清点一个模块的消费者要按「谁 bind 过它」而不是「谁写了那个路径」，而函数内的 `from app import X`
+    与 `app_module.X` 两种形状都要查** —— 只 grep 文件顶部就漏了 3 个文件。修后 `tests/api/`
+    **2,246 passed**。
+  - **下一刀 = Stage 6 第六片：运行编排**。`app.py` 剩下的主体是 `_begin_run` + worker +
+    `_run_node_durable` + `_execute_node` + `_close_run` + `_housekeep` + `_record_execution_history`
+    + `_start_next_queued` + `_scheduled_canvas`/`_start_scheduled_run`，目标是 `engine/run.py`。
+    它是本重构最大的一刀，**先切小的可验证片**：`_record_execution_history`（读 `history_service` +
+    `StatsService` + `pd`）与 `_close_run`/`_housekeep`（读 stores/settlement）先搬，`_begin_run` 最后。
+    编排落位后 `/api/workflow/*` 的 14 条路由才是薄壳，搬进 `api/workflow.py`，app 只剩 `/`、
+    `execute`、`rerun-node` —— 反过来先搬路由会造一个只为删除而存在的注入接缝。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
     Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；
     `settings_store` 等 i18n 拆分后进 core。**前置小刀已完成**：`workflow_manager` 不再是 app 全局，
     它与 `WorkflowHistoryStore` 同款住进 `stores.get_workflow_manager()`（Blueprint 与引擎模块都不能

@@ -13,6 +13,8 @@ import pytest
 from core.config import Config
 from sessions import routes, template
 
+from analyzers.llm_client import LLMClient
+
 pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 
 
@@ -124,7 +126,7 @@ class TestNoLocalModelOnASharedServer:
         def never(self, prompt, max_retries=2):
             raise AssertionError('a cloud boot must not dial a local daemon for a paragraph')
 
-        monkeypatch.setattr(app_module.LLMClient, 'chat', never)
+        monkeypatch.setattr(LLMClient, 'chat', never)
         response = client.post('/api/report/generate', json={'include_conclusion': True, 'llm': {'provider': 'ollama'}})
         assert response.status_code == 200, response.get_json()
         assert response.get_json()['ok'] is True
