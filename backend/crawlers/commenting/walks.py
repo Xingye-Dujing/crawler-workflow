@@ -7,7 +7,7 @@ instead of building the method name out of a string — ``getattr(session, 'craw
 to be answered by *whatever object happened to carry that name*, which is why the CatBus backend
 needed a :meth:`__getattr__` that synthesised a method to keep the dispatch working.
 
-Two tables must agree and are pinned against each other by ``tests/unit/test_comments.py``: the
+Two tables must agree and are pinned against each other by ``tests/unit/crawlers/test_comments.py``: the
 directories under ``crawlers/platforms/`` that define a ``walk``, and the keys registered here. A
 platform can therefore not gain a walker nobody can reach, nor a reachability nobody wrote.
 

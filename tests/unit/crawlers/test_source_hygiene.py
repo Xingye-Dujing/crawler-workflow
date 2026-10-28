@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND_DIR = Path(__file__).resolve().parents[2] / 'backend'
+BACKEND_DIR = Path(__file__).resolve().parents[3] / 'backend'
 
 TERMINATORS = (ast.Return, ast.Raise, ast.Break, ast.Continue)
 

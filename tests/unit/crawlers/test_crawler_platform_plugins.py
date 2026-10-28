@@ -21,7 +21,7 @@ from crawlers import CRAWLERS
 
 pytestmark = pytest.mark.unit
 
-CRAWLERS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'crawlers'
+CRAWLERS_DIR = Path(__file__).resolve().parents[3] / 'backend' / 'crawlers'
 PLATFORMS_DIR = CRAWLERS_DIR / 'platforms'
 
 

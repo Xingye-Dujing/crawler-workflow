@@ -1528,7 +1528,7 @@ pager 自报页底，排队交棒无恙。红条分三类：
   面板 chip 于是能读真话：请求无头却开过窗口 → 「无头→窗口」，不再顶着「无头」骗人。
 * 面板文案按 `collects` 分流：fetch 评论模式用新键 `settings.commentFetchHint`（不再声称开窗口），
   滚动/验证码平台仍用 `settings.commentHint`；fetch 源模式（B 站热榜、YouTube 搜索/作者）用
-  `settings.fetchQuietNote`。`tests/unit/test_crawl_capabilities.py` 钉住「note 只说它真会做的事」。
+  `settings.fetchQuietNote`。`tests/unit/crawlers/test_crawl_capabilities.py` 钉住「note 只说它真会做的事」。
 
 ## 那条「受自动测试软件的控制」横幅：excludeSwitches 认的是开关名（measured 2026-09-25，#129）
 
@@ -2432,7 +2432,7 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 ## 时间窗进文件名，与 SnowNLP 的偏置（measured 2026-10-02）
 
 - **微博的分时间窗只有帖子 mode 声明**：`start_time`/`end_time` 挂在 `_TIMES`
-  （`capabilities/registry.py`），只接进 weibo 的 `posts` mode，`tests/unit/test_crawl_capabilities.py`
+  （`capabilities/registry.py`），只接进 weibo 的 `posts` mode，`tests/unit/crawlers/test_crawl_capabilities.py`
   钉住"没有第二个平台拿到它"。真正的校验在爬虫里（`crawlers/platforms/weibo/crawler.py:_build_urls`：要么都给、
   要么都不给，`end <= start` 直接拒），设计期不看，所以一个坏日期是在运行时点名失败的。
 - **文件名里的窗口是"用户声明的那一段"，不是"走到的那一段"**：stem 在爬虫跑之前就定了

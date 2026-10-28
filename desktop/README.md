@@ -101,7 +101,7 @@ Inno 直接拒绝编译）。拆开算：UPX 压 **268** 个二进制，`226.5 �
 > **这一节只按 Windows 验收。** `desktop/` 是本项目唯一故意只服务 Windows 的树；三平台分支本身
 > （Chrome/xelatex 按系统查、中文字体栈与 ctex 字体集、进程清理、文件名字节上限、控制台编码、
 > 桌面专属能力按名拒绝）在 `backend/` 里由**平台无关测试**覆盖，见 `docs/agent_practices.md`
-> 「Cross-platform」一节与 `tests/unit/test_platform_rules.py`。**Linux/macOS 上的真实启动没跑过**
+> 「Cross-platform」一节与 `tests/unit/crawlers/test_platform_rules.py`。**Linux/macOS 上的真实启动没跑过**
 > （本机无 Linux 运行时），那是要在服务器上补的一次实测，不是已通过。
 
 **启动实测**（隔离数据根，`CIXI_NO_BROWSER=1` + exe 从终端跑，量到 `/api/config` 返回 200）：

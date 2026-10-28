@@ -5,7 +5,7 @@ harness that pairs the mitmproxy capture with the walk. This module owns the DRI
 the foreground, the tree walk, the clicks — and it is one of the few places in the backend that is
 Windows by nature rather than by accident: ``ctypes.windll.user32.FindWindowW`` is how the player is
 found and ``uiautomation`` is how it is read. It is therefore listed in
-``tests/unit/test_platform_rules.py``'s ``WINDOWS_TABLES``, which is what keeps that exemption a fact
+``tests/unit/crawlers/test_platform_rules.py``'s ``WINDOWS_TABLES``, which is what keeps that exemption a fact
 instead of a shrug, and the rest of the backend stays free of both.
 
 Two measured facts shape every read here: a cold WebView2 tree holds ZERO controls (so silence is

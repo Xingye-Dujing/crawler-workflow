@@ -32,7 +32,7 @@ pytestmark = pytest.mark.unit
 #: Captured at import, before the suite-wide ``machine_has_a_browser`` pin replaces the attribute.
 REAL_FIND_CHROME = machine.find_chrome
 
-BACKEND = Path(__file__).resolve().parents[2] / 'backend'
+BACKEND = Path(__file__).resolve().parents[3] / 'backend'
 
 #: Where a Windows spelling is a legitimate fact about Windows: the per-OS tables, the process reaper
 # (whose Windows branch IS ``taskkill``), the harvest stack that only exists on a desktop, and the

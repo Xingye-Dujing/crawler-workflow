@@ -20,7 +20,7 @@ from crawlers.core.crawler import Crawler, as_index
 
 pytestmark = pytest.mark.unit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # A cookie for the parent domain (accepted anywhere below it), one pinned to a
 # sibling host (only that host will take it), and one the sanitizer drops.

@@ -1117,7 +1117,9 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `parents[2]`→`parents[3]`、harness 路径 `parents[1]`→`parents[2]` 同步，前端档 **1,409 passed**。
     **第二片**：9 个分析单测进 `tests/unit/analysis/`（其中 4 个 `parents[2]`→`parents[3]`，
     `test_data_analysis` 的「第四份拷贝」期望路径同步），7 处产品 docstring 与 README 里引用的旧测试路径一并改真；
-    分析档 **854 passed**。**收尾门禁**：全量 fast **8,194 passed / 3 skipped / 355 deselected**（唯一 warning 仍是
+    分析档 **854 passed**。**第三片**：16 个爬虫/平台单测进 `tests/unit/crawlers/`（4 个 `parents[2]`→`parents[3]`），
+    五处产品 docstring/文档（`commenting/walks.py`、`hongguo/player_ui.py`、`desktop/README.md`、`crawler_notes.md`、
+    `live_test_plan.md`）里引用的旧测试路径一并改真；爬虫档 **617 passed / 3 skipped**，tests 档 pylint 10.00/10。**收尾门禁**：全量 fast **8,194 passed / 3 skipped / 355 deselected**（唯一 warning 仍是
     jieba 第三方），ruff 全绿；本片只动测试与文档，两档 pylint 在上一轮全量后仅新增了一个测试函数（已在局部 10.00/10 验过）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
