@@ -93,7 +93,8 @@ def walk(session, url: str, limit: int) -> tuple:
     thousand comments yields twenty. So the cursor is taken from the list the
     rows actually came from (``innertube.pager_of``).
     """
-    from crawlers.engine import innertube, pager
+    from crawlers.engine import pager
+    from crawlers.platforms.youtube import innertube
     from crawlers.platforms.youtube.crawler import video_id_of
 
     video = video_id_of(url)

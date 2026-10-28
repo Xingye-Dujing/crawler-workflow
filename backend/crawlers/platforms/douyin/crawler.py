@@ -12,9 +12,9 @@ import time
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import PageNotArrivedError
 from crawlers.core.video import VideoCrawler
-from crawlers.engine import feed, popup
+from crawlers.engine import feed
 from crawlers.engine.counters import parse_count
-from crawlers.platforms.douyin import rows
+from crawlers.platforms.douyin import dialogs, rows
 from crawlers.platforms.douyin.overlay import DouyinOverlayMixin
 from i18n import t
 
@@ -46,7 +46,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
     #: click is intercepted by ``.trust-login-dialog-mask``). Only 取消 is ever
     #: pressed: the user reports that 保存 leads to a phone-verification step, so
     #: declining is both the safe answer and the one that keeps the session alone.
-    prompts = (popup.DOUYIN_TRUST_LOGIN,)
+    prompts = (dialogs.TRUST_LOGIN,)
 
     #: Outcomes of the "reach the page" step — kept as names because the caller has to
     #: treat them differently (see :meth:`_page_outcome`, which ``hot`` branches on).

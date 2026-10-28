@@ -35,15 +35,16 @@ import re
 from urllib.parse import quote
 
 from crawlers.core.crawler import Crawler
-from crawlers.engine import innertube, times
+from crawlers.engine import times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.jsonpath import collect, get_in, runs_text
+from crawlers.platforms.youtube import innertube
 from i18n import t
 
 logger = logging.getLogger(__name__)
 
 # The transport itself — reading the page's own API key, POSTing a round trip and
-# telling a refusal from an empty list — is in ``engine/innertube.py``, shared
+# telling a refusal from an empty list — is in ``youtube/innertube.py``, shared
 # with the comment engine, which asks the same endpoints the same way.
 
 

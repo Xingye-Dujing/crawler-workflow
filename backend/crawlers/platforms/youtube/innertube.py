@@ -19,7 +19,7 @@ what the answer looked like so the caller can tell an empty list from a refusal.
 
 import time
 
-from .jsonpath import collect
+from crawlers.engine.jsonpath import collect
 
 #: Read the API key and request context the page ships with. Returns
 #: ``{'key': …, 'context': …}`` with empty values when the page is not one of

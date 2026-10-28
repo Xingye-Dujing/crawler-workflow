@@ -717,7 +717,7 @@ Reaching for the search loop's one-request-per-row here would produce the same t
 **JSON-first, headless-safe, and its pagers are chosen by their list.** Measured 2026-09: the crawler
 opens **one page** to read `ytcfg` (`INNERTUBE_API_KEY` + `INNERTUBE_CONTEXT`, never hardcoded — they
 rotate) and then POSTs `youtubei/v1/{search,browse,next,player}` **from inside the page**
-(`crawlers/engine/innertube.py`), which is same-origin, unsigned and cookie-carrying: search 0.68 s /
+(`crawlers/platforms/youtube/innertube.py`), which is same-origin, unsigned and cookie-carrying: search 0.68 s /
 10 rows, player 0.31 s / 11 KB, comments 0.32 s / 20 rows. Headless and visible returned identical
 rows and facts, so the class sets **no** `never_headless`, and `page_load_strategy='eager'` + blocked
 images stay on (nothing is read from pixels). Two rules that only measurement could establish, both in

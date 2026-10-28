@@ -19,6 +19,9 @@ from crawlers.engine.feed import wait_for, walk_feed
 from crawlers.engine.jsonpath import collect, first_key, get_in, runs_text
 from crawlers.engine.pager import walk_pages
 from crawlers.engine.wall import looks_like_login_page
+from crawlers.platforms.douyin import dialogs as douyin_dialogs
+from crawlers.platforms.instagram import dialogs as instagram_dialogs
+from crawlers.platforms.youtube import dialogs as youtube_dialogs
 
 pytestmark = pytest.mark.unit
 
@@ -138,7 +141,7 @@ def test_continuation_tokens_are_read_in_document_order_where_the_api_needs_it()
     of them and the caller decides — the comment walk by trying, the list pager by
     the markup that marks it.
     """
-    from crawlers.engine.innertube import grid_token, pager_tokens
+    from crawlers.platforms.youtube.innertube import grid_token, pager_tokens
 
     tree = {
         'a': {'continuationCommand': {'token': 'S' * 78}},
@@ -163,7 +166,7 @@ def test_a_pager_is_chosen_by_the_list_it_pages():
     grows the crawl, so the pager is picked by the list it belongs to and by being
     an element of it — not by length, not by "the first token in the answer".
     """
-    from crawlers.engine.innertube import grid_token, pager_of
+    from crawlers.platforms.youtube.innertube import grid_token, pager_of
 
     def thread(index, reply_pager=''):
         nested = {'continuationItemRenderer': {'continuationEndpoint': {'continuationCommand': {'token': reply_pager}}}}
@@ -698,21 +701,21 @@ class DialogDriver:
 
 def test_a_matching_button_is_clicked_and_the_outcome_names_it():
     driver = DialogDriver([json.dumps({'clicked': '是', 'matched': '是否将信息保存到设备', 'seen': ['是', '否']})])
-    out = popup.dismiss(driver, (popup.DOUYIN_TRUST_LOGIN,))
+    out = popup.dismiss(driver, (douyin_dialogs.TRUST_LOGIN,))
     assert out == [{'key': 'douyin_trust_login', 'clicked': '是', 'matched': '是否将信息保存到设备', 'seen': []}]
 
 
 def test_a_dialog_we_cannot_answer_is_reported_with_what_the_page_offers():
     """A re-skin must say what it now offers, or the fix is a guess."""
     driver = DialogDriver([json.dumps({'clicked': None, 'matched': '打开通知', 'seen': ['开启', '稍后再说']})])
-    out = popup.dismiss(driver, (popup.INSTAGRAM_NOTIFICATIONS,))
+    out = popup.dismiss(driver, (instagram_dialogs.NOTIFICATIONS,))
     assert out[0]['clicked'] == ''
     assert out[0]['seen'] == ['开启', '稍后再说']
 
 
 def test_a_page_with_no_dialog_costs_two_looks_and_no_click():
     driver = DialogDriver([])
-    assert popup.dismiss(driver, (popup.DOUYIN_TRUST_LOGIN,), tries=3, tick=0.001) == []
+    assert popup.dismiss(driver, (douyin_dialogs.TRUST_LOGIN,), tries=3, tick=0.001) == []
     assert len(driver.scripts) == 2
 
 
@@ -724,7 +727,7 @@ def test_a_platform_that_declares_nothing_never_runs_the_script():
 
 def test_the_prompt_spec_reaches_the_page_as_data():
     driver = DialogDriver([json.dumps({'clicked': '以后再说', 'matched': '打开通知'})])
-    popup.dismiss(driver, (popup.INSTAGRAM_NOTIFICATIONS,))
+    popup.dismiss(driver, (instagram_dialogs.NOTIFICATIONS,))
     spec = driver.payloads[0][0]
     assert spec['markers'] and '以后再说' in spec['choose']
     assert '打开' in spec['forbid'], '「打开」 opens a native permission prompt no DOM click can close'
@@ -732,8 +735,8 @@ def test_the_prompt_spec_reaches_the_page_as_data():
 
 def test_the_instagram_answer_is_the_no_and_not_the_yes():
     """Both labels exist on that dialog; only one of them is the user's answer."""
-    assert '以后再说' in popup.INSTAGRAM_NOTIFICATIONS.choose
-    assert '打开' in popup.INSTAGRAM_NOTIFICATIONS.forbid
+    assert '以后再说' in instagram_dialogs.NOTIFICATIONS.choose
+    assert '打开' in instagram_dialogs.NOTIFICATIONS.forbid
 
 
 def test_the_douyin_dialog_is_declined_never_accepted():
@@ -743,10 +746,10 @@ def test_the_douyin_dialog_is_declined_never_accepted():
     phone-verification step, so the crawler declines instead of taking the
     site's offer.
     """
-    assert popup.DOUYIN_TRUST_LOGIN.choose == ('取消',)
-    assert '保存' in popup.DOUYIN_TRUST_LOGIN.forbid
-    assert '是' in popup.DOUYIN_TRUST_LOGIN.forbid
-    assert any('保存登录信息' in marker for marker in popup.DOUYIN_TRUST_LOGIN.markers)
+    assert douyin_dialogs.TRUST_LOGIN.choose == ('取消',)
+    assert '保存' in douyin_dialogs.TRUST_LOGIN.forbid
+    assert '是' in douyin_dialogs.TRUST_LOGIN.forbid
+    assert any('保存登录信息' in marker for marker in douyin_dialogs.TRUST_LOGIN.markers)
 
 
 def test_the_click_candidates_include_the_elements_douyin_builds_its_buttons_from():
@@ -759,10 +762,12 @@ def test_a_driver_that_raises_is_not_a_crawl_failure():
         def execute_async_script(self, script, *args):
             raise RuntimeError('renderer died')
 
-    assert popup.dismiss(Broken([]), (popup.DOUYIN_TRUST_LOGIN,), tries=1, tick=0.001) == []
+    assert popup.dismiss(Broken([]), (douyin_dialogs.TRUST_LOGIN,), tries=1, tick=0.001) == []
 
 
-@pytest.mark.parametrize('prompt', [popup.DOUYIN_TRUST_LOGIN, popup.INSTAGRAM_NOTIFICATIONS, popup.YOUTUBE_CONSENT])
+@pytest.mark.parametrize(
+    'prompt', [douyin_dialogs.TRUST_LOGIN, instagram_dialogs.NOTIFICATIONS, youtube_dialogs.CONSENT]
+)
 def test_every_declared_prompt_is_sendable_and_has_an_answer(prompt):
     payload = prompt.as_js()
     assert set(payload) == {'selector', 'markers', 'choose', 'forbid'}

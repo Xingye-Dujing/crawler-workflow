@@ -84,42 +84,6 @@ class Prompt:
         }
 
 
-#: Douyin's "keep this login" prompt, read off the live DOM: the title is
-#: 「是否保存登录信息超过5天」 and the two leaves are 「保存」 and 「取消」.
-#: Only 取消 is ever pressed — the user reports that 保存 leads on to a
-#: phone-verification step, so declining is both the safer answer and the one that
-#: leaves the session alone. The mask is not cosmetic: measured, it intercepts
-#: the search button's click (``ElementClickInterceptedException``), and it mounts
-#: several seconds *after* the page, which is why the crawler also dismisses on a
-#: blocked click rather than only on arrival.
-DOUYIN_TRUST_LOGIN = Prompt(
-    key='douyin_trust_login',
-    selector='.trust-login-dialog-mask',
-    markers=('是否保存登录信息', '保存登录信息', '保存到设备', '将信息保存'),
-    choose=('取消',),
-    forbid=('保存', '是', '同意', '确定'),
-)
-
-#: Instagram's notification ask: 「以后再说」 is the "no". 「打开」 is refused
-#: because it opens a *browser-level* permission dialog no DOM click can close.
-INSTAGRAM_NOTIFICATIONS = Prompt(
-    key='instagram_notifications',
-    selector='',
-    markers=('打开通知', '接收通知', 'Enable notifications', 'Get notifications'),
-    choose=('以后再说', '稍后', 'Not Now', 'Not now', 'Later'),
-    forbid=('打开', 'Allow', 'Not yet'),
-)
-
-#: YouTube's EU consent sheet, seen when the session has no consent cookie. It is
-#: harmless to accept and it blocks everything behind it.
-YOUTUBE_CONSENT = Prompt(
-    key='youtube_consent',
-    selector='',
-    markers=('Before you continue', '在我们继续之前', '管理设置'),
-    choose=('接受全部', '全部接受', 'Accept all'),
-    forbid=('拒绝', 'Reject all'),
-)
-
 #: How long to look for a dialog before giving up. The first-run prompt mounts
 #: with the page, so a crawler that polls for a moment and moves on is strictly
 #: better than one that sleeps five seconds on every navigation.
