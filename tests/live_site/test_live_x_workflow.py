@@ -114,7 +114,7 @@ def _output_stems(workflow: dict) -> dict:
 
 def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, app_module, monkeypatch):
     """H1 — 测试：X.json at his parameters, three legs (posts / author / comments), each accounting for itself."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     opened = accept.workflow_file(ACCEPTANCE_FILE)
     workflow = accept.all_enabled(opened)
     _on, off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)

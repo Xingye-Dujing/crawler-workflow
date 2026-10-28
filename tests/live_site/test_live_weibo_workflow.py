@@ -539,7 +539,7 @@ def test_a1_windowed_serial_search_delivers_ten_rows_with_bodies(client, app_mod
     with no summary at all, so a run that filed the right table while narrating only per-window lines
     still fails here.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, posts_canvas(10, KEYWORDS['A1']), case_id='A1', mode='posts', target=10) as run:
         run.wait()
         answer = run.verdict()
@@ -588,7 +588,7 @@ def test_a2_headless_search_is_full_or_names_the_refusal(client, app_module, mon
     or risk page is the site's answer and lands as NAMED_SHORT/WARN. An empty with no reason is the silent
     one and stays red — that is the shape the user reads as 「又没采满」.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -625,7 +625,7 @@ def test_a3_recent_range_stops_when_full_and_pays_for_no_further_window(client, 
     "stopped early because it was full" apart from "walked everything and found almost nothing" — the two
     look identical in a short table, and only one of them is the code's fault.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -661,7 +661,7 @@ def test_a4_an_empty_window_stores_nothing_not_five_foreign_posts(client, app_mo
     The ask is deliberately the whole one-day range (24 windows): the point is that *no* window of a
     keyword that does not exist may contribute a row.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -697,7 +697,7 @@ def test_a5_an_hourly_window_is_paged_beyond_its_first_screen(client, app_module
     the assumption was that an hour is narrow, so everything it holds is already rendered. It is not, and
     the refusal cost ~40% of every window in a date-range crawl.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -749,7 +749,7 @@ def test_a6_the_ask_is_a_ceiling_and_the_walk_lands_on_it_exactly(client, app_mo
     reason and carry the ask in its own ``{target}`` slot: 「已到列表末尾」 on a crawl the user cut short at
     25 is the same lie this round removed from the timeout line, one level up.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 25
     with LiveRun(
         client,
@@ -799,7 +799,7 @@ def test_b1_author_mode_files_this_uid_or_refuses_by_name(client, app_module, mo
     One failure, one line: ``wf.node_failed`` is the attributed console line, so a refusal that printed
     itself three times is a finding, not a style point.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client, app_module, author_canvas(8), case_id='B1', mode='author', target=8, timeout=DEEP_TIMEOUT
     ) as run:
@@ -833,7 +833,7 @@ def test_b2_an_author_ask_past_its_first_page_pages_and_never_repeats(client, ap
     A session the edge refuses is B1's named path: this cell grades the refusal it got and spends no
     further ask on it, because retrying a throttled endpoint is how one refusal grows into six.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -886,7 +886,7 @@ def test_b3_an_author_that_is_not_an_author_is_refused_by_name(client, app_modul
     which also makes this the one author cell that costs a browser start and no crawling, and the reason
     it can run on the short budget.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -912,7 +912,7 @@ def test_b3_an_author_that_is_not_an_author_is_refused_by_name(client, app_modul
 
 def test_c1_the_board_delivers_its_topics_and_five_columns(client, app_module, monkeypatch):
     """C1 — the board is one JSON fetch inside a loaded page: 40 topics, 5 columns, exact heat."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, hot_canvas(40), case_id='C1', mode='hot', target=40) as run:
         run.wait()
         answer = run.verdict()
@@ -932,7 +932,7 @@ def test_c2_asking_past_the_board_is_answered_out_loud(client, app_module, monke
     60 asked against the measured 51: a crawl that returned 51 with no line reads exactly like one that
     lost ten topics on the way, and the difference is the only thing this tier exists to keep visible.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, hot_canvas(60), case_id='C2', mode='hot', target=60) as run:
         run.wait()
         answer = run.verdict()
@@ -955,7 +955,7 @@ def test_c3_the_board_is_answered_without_a_session(client, app_module, monkeypa
     because a shared profile owns its own session whatever the directory holds — so the console must also
     carry ``run.profileOff``, the line that says the throwaway shape was taken rather than assumed.
     """
-    harness.no_jar(monkeypatch, app_module, tmp_path)
+    harness.no_jar(monkeypatch, tmp_path)
     with LiveRun(
         client,
         app_module,
@@ -988,7 +988,7 @@ def test_d1_two_posts_carry_comments_the_columns_actually_read(client, app_modul
     limit. Either way the number being asserted is arithmetic the test invented rather than a promise the
     product made (§11 step 3: 评论格按真实 ask 判满).
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 5
     pairs = _commented_links(weibo_windowed, need=2, min_comments=PROBE_MIN_COMMENTS)
     links = [link for link, _count in pairs]
@@ -1029,7 +1029,7 @@ def test_d2_a_wired_comments_node_crawls_the_links_its_parent_found(client, app_
     and calls it done — so every commented parent must appear in the comment table, and a parent missing
     from it must be named by one of the comment refusals carrying that URL.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 3
     canvas = harness.posts_then_comments_canvas(
         PLATFORM,
@@ -1098,7 +1098,7 @@ def test_d3_headless_comments_match_the_windowed_shape(client, app_module, monke
     Data Source panel shows the user. The ask is ``min(limit, 评论数)`` of the richest thread this pass
     found, so the claim is exercisable on a two-comment thread and on a seven-hundred-comment one alike.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 8
     link, reported = _richest_link(weibo_windowed)
     ask = min(limit, reported)
@@ -1142,7 +1142,7 @@ def test_d4_no_limit_names_the_gap_the_site_printed(client, app_module, monkeypa
     green on a quiet day — and quietly red on one too, which is how the fixed ``>= 12`` selection gate in
     this file's first draft behaved.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     link, reported = _richest_link(weibo_windowed)
     with LiveRun(
         client,
@@ -1180,7 +1180,7 @@ def test_d5_an_ask_of_five_is_not_reported_as_a_shortfall(client, app_module, mo
     「站点写着 749 条…差额是楼中楼」 there is the same class of lie this round was fixing, and the live
     tier drives exactly this shape (a small per-article limit). So the cell requires *silence*.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     link, reported = _richest_link(weibo_windowed)
     # The ask is one **below what the thread reports**, by construction: at ``limit == 评论数`` there is no
     # gap for the bug to misattribute and the cell proves nothing. Two comments is the smallest thread this
@@ -1220,7 +1220,7 @@ def test_e1_stop_inside_a_window_then_continue_re_enters_it(client, app_module, 
     would also satisfy. It is that 继续 opens **the same hourly URL** 停止 was inside: the last window the
     first attempt navigated to is the first window the resume navigates to.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = range_canvas(50, KEYWORDS['E1'], days=2)
     with LiveRun(client, app_module, canvas, case_id='E1', mode='posts', target=50, timeout=DEEP_TIMEOUT) as run:
         # The trigger is the FIRST stored row, not the fifth: waiting for five can spend the case's whole
@@ -1349,7 +1349,7 @@ def test_g1_a_parallel_weibo_canvas_is_forced_into_the_queue(client, app_module,
     ``weibo@<account>`` cookie file, so that shape is **declared absent here rather than skipped
     silently** — §7's row records it, and this paragraph is its audit trail.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     first, second = KEYWORDS['G']
     canvas = harness.component_canvas(
         [
@@ -1399,7 +1399,7 @@ def test_g2_the_stagger_switch_does_not_unlock_a_serial_only_platform(client, ap
     loud. So this cell is G1's mirror: same red line, the other switch moved, and the pair of lines is what
     distinguishes them.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     first, second = KEYWORDS['G2']
     canvas = harness.component_canvas(
         [
@@ -1493,7 +1493,7 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
     the ceiling. 「剩余窗口零付费」 is what makes a narrow table and an early stop distinguishable in the
     console, which is the whole complaint this round started from.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     end = date.today() - timedelta(days=1)
     start = end - timedelta(days=1)
     workflow = _acceptance_copy(start_time=f'{start}', end_time=f'{end}')
@@ -1575,7 +1575,7 @@ def test_h2_the_shipped_canvas_completes_in_series(client, app_module, monkeypat
     with its own rows and its own console slice? A merged or mis-named record is a reporting bug the user
     reads as 「跑丢了」, and it is the shape 串行 ×N chips exist to describe.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     end = date.today() - timedelta(days=1)
     start = end - timedelta(days=1)
     workflow = accept.all_enabled(_acceptance_copy(start_time=f'{start}', end_time=f'{end}'))

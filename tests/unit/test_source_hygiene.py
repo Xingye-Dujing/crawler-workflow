@@ -62,11 +62,22 @@ class TestLoadWorkflowWritesStateOnce:
     @pytest.fixture(scope='class')
     @classmethod
     def load_fn(cls):
-        tree = ast.parse((BACKEND_DIR / 'app.py').read_text(encoding='utf-8'))
-        for fn in ast.walk(tree):
-            if isinstance(fn, ast.FunctionDef) and fn.name == 'load_workflow':
-                return fn
-        pytest.fail('load_workflow is gone from app.py')
+        """The one ``load_workflow`` in the backend, found by name rather than by file.
+
+        Asking ``app.py`` for it was true only while the route lived there; the handler is in
+        ``api/workflow.py`` now. The rule is about *this* handler owning one write per key, so
+        it must survive the file it is written in — and a duplicate definition, which is the
+        bug being pinned, is caught by the count rather than by a filename.
+        """
+        found = [
+            fn
+            for path in sorted(BACKEND_DIR.rglob('*.py'))
+            for fn in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
+            if isinstance(fn, ast.FunctionDef) and fn.name == 'load_workflow'
+        ]
+        if len(found) != 1:
+            pytest.fail(f'expected exactly one load_workflow in backend/, found {len(found)}')
+        return found[0]
 
     def _state_keys_written(self, load_fn):
         keys = []

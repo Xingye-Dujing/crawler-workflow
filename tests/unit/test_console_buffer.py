@@ -299,10 +299,14 @@ class TestConsoleReset:
 
     def test_the_shared_buffer_keeps_the_tail_but_counts_every_line(self, console):
         app, state = console
-        produced = app.LOG_KEEP + 50
+        # ``LOG_KEEP`` is the buffer's own bound and lives in ``state`` with the writers; asking
+        # ``app`` for it would make the test depend on which module happens to re-export it.
+        from state import LOG_KEEP
+
+        produced = LOG_KEEP + 50
         for i in range(produced):
             app.add_log(f'第 {i} 行')
-        assert len(state['logs']) == app.LOG_KEEP, 'the buffer is bounded, or a long crawl grows it forever'
+        assert len(state['logs']) == LOG_KEEP, 'the buffer is bounded, or a long crawl grows it forever'
         # The total, not the list length, is what the browser's cursor advances by:
         # counting retained lines here would make it re-read the same tail forever.
         assert state['_log_total'] == produced
@@ -310,10 +314,12 @@ class TestConsoleReset:
 
     def test_a_workflow_buffer_is_trimmed_and_counted_the_same_way(self, console):
         app, state = console
-        produced = app.LOG_KEEP + 10
+        from state import LOG_KEEP
+
+        produced = LOG_KEEP + 10
         for i in range(produced):
             app.add_log(f'甲 {i}', wf_idx=0)
-        assert len(state['_wf_logs'][0]) == app.LOG_KEEP
+        assert len(state['_wf_logs'][0]) == LOG_KEEP
         assert state['_wf_log_total'][0] == produced
         # The same line belongs to 「全部」 too, and losing that pairing is how a tab
         # ends up showing rows the shared view has already forgotten.

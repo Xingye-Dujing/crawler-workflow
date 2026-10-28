@@ -174,6 +174,18 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   *production module's attribute* (`bridge.machine_deps`, `harvest_module.machine_deps`), which no import/attribute
   rule for the moved file can see; only the full suite named them (5 failed + 10 errors). A move that renames a
   module should grep for `\.<old name>\b` across tests, not just for imports of the old path.
+- **`getattr(x, name, None)` is the seam shape that never reports.** The same family, found by the batched full
+  gate (2026-10-28): `tests/live_run_harness.py::real_jar/no_jar` located the cookie jar through
+  `getattr(module, 'cookie_manager', None)` with `module` = the imported `app`. The instance had long since moved to
+  `state.cookie_manager` (`backend/state.py:36`), so the lookup answered `None`, the `if manager is not None:` guard
+  politely skipped the patch, and **88 live cases redirected only `Config.COOKIE_DIR`** — the jar that decides whether
+  to run kept reading the throwaway directory. A live case could therefore crawl with the user's real session while
+  claiming it had proved the anonymous path, which is the one thing those two helpers exist to prevent. Nothing failed:
+  no AttributeError, no skip, no warning — the fast suite does not run live cases, so this survived several moves in a
+  row. Census rules after this: ① search `getattr(<module-ish>, '` in every tier's helpers, not just for
+  `app_module.X`; ② a helper that *optionally* patches something must assert the thing it is patching exists
+  (these two now import `state` and patch `cookie_manager.cookie_dir` unconditionally, and the 88 call sites lost
+  the vestigial argument). An optional seam is an untestable seam.
 - **A dotted-prose rule is a code rewrite when it runs over ``.py`` files.** Moving ``crawl_capabilities`` into
   ``capabilities/registry.py`` (2026-10-28) applied ``\bcrawl_capabilities\.`` → ``capabilities.registry.`` to every
   file, so code such as ``capabilities.CAPABILITIES`` (the local alias for the module) became

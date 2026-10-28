@@ -299,7 +299,7 @@ def test_a1_a_search_delivers_rows_and_no_card_drops_in_silence(client, app_modu
     cards. Now each drop names itself, and if the walk still comes up short the table and the console can
     no longer quietly agree on a smaller number than the pager offered.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, posts_canvas(10, KEYWORDS['A1']), case_id='A1', mode='posts', target=10) as run:
         run.wait()
         answer = run.verdict()
@@ -325,7 +325,7 @@ def test_a2_a_headless_search_is_full_or_named(client, app_module, monkeypatch):
     The claim is not "headless works" (measured once, can rot) but "if it does not, the run names why": a
     0-row headless search that blamed the keyword would be the same lie the visible path refuses.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -353,7 +353,7 @@ def test_a3_the_target_is_a_ceiling_the_walk_lands_on_exactly(client, app_module
     The pager advances only when a page is not yet exhausted, so the other half of 「完全符合要求」 here is
     that a 5-row ask does not walk a second page: ``crawl.bili.url`` is printed once (page 1), never twice.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 5
     with LiveRun(
         client, app_module, posts_canvas(asked, KEYWORDS['A3']), case_id='A3', mode='posts', target=asked
@@ -378,7 +378,7 @@ def test_a5_a_second_run_of_a_stable_board_is_refused_by_name_not_by_silence(cli
     ranking is one fixed 100-item board, so the same ask twice is the same items — the shape the ledger is
     being asked about. (A first run that the board refused with a risk code is not a dedupe case at all.)
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 10
     canvas = hot_canvas(asked, 'ranking')
     with LiveRun(client, app_module, canvas, case_id='A5', mode='hot', target=asked) as run:
@@ -417,7 +417,7 @@ def test_b1_the_next_button_pager_walks_past_one_screen(client, app_module, monk
     the walk actually pressed the pager. If this cell goes red with the fix in place, the UP shrank — the
     console's ``crawl.bili.authorDone`` reason says which.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 50
     with LiveRun(
         client, app_module, author_canvas(asked), case_id='B1', mode='author', target=asked, timeout=DEEP_TIMEOUT
@@ -446,7 +446,7 @@ def test_b2_a_display_name_is_refused_because_it_addresses_nobody(client, app_mo
     *somebody's* space and report their uploads as the ones the user asked for. Refused before the browser
     is pointed anywhere, so nothing is paid for.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, author_canvas(5, '漫士沉思录'), case_id='B2', mode='author', target=5) as run:
         run.wait()
         assert harness.names_key(run.rec.text, 'crawl.bili.authorEmpty'), (
@@ -468,7 +468,7 @@ def test_c1_the_popular_board_pages_without_a_per_row_request(client, app_module
     This is the mode the notes measured as carrying ``owner``/``stat`` inline: the cost axis is pages, not
     rows, so 40 rows arrive across two board reads and never 40 detail calls.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 40
     with LiveRun(client, app_module, hot_canvas(asked, 'popular'), case_id='C1', mode='hot', target=asked) as run:
         run.wait()
@@ -488,7 +488,7 @@ def test_c2_asking_past_the_ranking_names_the_board_size(client, app_module, mon
     ``crawl.bili.rankingCapped`` carries the site's own figure, and the table matches it. 150 is a floor,
     not an expectation: the day the board grows past it, this cell goes green on a full table.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 150
     with LiveRun(client, app_module, hot_canvas(asked, 'ranking'), case_id='C2', mode='hot', target=asked) as run:
         run.wait()
@@ -534,7 +534,7 @@ def test_d1_the_reply_cursor_walks_the_thread_and_every_row_is_real(client, app_
     stays red — that is exactly the silent under-collect this tier exists to catch, so the relaxation is one
     direction only.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 40
     with LiveRun(
         client,
@@ -560,7 +560,7 @@ def test_d1_the_reply_cursor_walks_the_thread_and_every_row_is_real(client, app_
 
 def test_d2_a_link_that_refused_is_named_per_link(client, app_module, monkeypatch):
     """D2 — two links where one is garbage: the dead one is named, the good one still crawls."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     dead = 'https://www.bilibili.com/video/BV00000000000/'
     with LiveRun(
         client,
@@ -604,7 +604,7 @@ def test_e1_stop_then_continue_resumes_on_the_page_it_died_on(client, app_module
     only — no id or link list smuggled in (AGENTS: a cursor records position, not content; that fix was paid
     for on xiaohongshu as §6 U5).
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 30
     canvas = posts_canvas(asked, KEYWORDS['E1'])
     with LiveRun(client, app_module, canvas, case_id='E1', mode='posts', target=asked, timeout=DEEP_TIMEOUT) as run:
@@ -661,7 +661,7 @@ def test_g1_two_bilibili_searches_in_parallel_both_arrive(client, app_module, mo
     settings — ``crawl_gate`` never reads the canvas block). Left at the defaults, the queue would hold the
     lane for the whole crawl and 乙 would arrive strictly after 甲 — real, but not the overlap this cell names.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     first, second = KEYWORDS['G1']
     canvas = harness.component_canvas(
         [
@@ -770,7 +770,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     The only thing the copy changes is which nodes are switched on (plan decision D5); no ask, keyword or
     link is touched.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     opened = accept.workflow_file(ACCEPTANCE_FILE)
     workflow = accept.all_enabled(opened)
     _on, off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)

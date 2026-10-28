@@ -22,20 +22,6 @@ from i18n import set_lang
 
 pytestmark = pytest.mark.unit
 
-
-@pytest.fixture
-def exec_():
-    """The application module, imported inside the test and never at module scope.
-
-    ``tests/unit/test_test_tiers.py`` refuses a module-level ``import app``: collection
-    imports every file before any fixture runs, so the app would be built while
-    ``Config.DATA_DIR`` still pointed at the repository.
-    """
-    import app
-
-    return app
-
-
 TEXTS = ['今天玩得非常开心', '这人真的太可恶了', '会议将于周三举行', '']
 
 
@@ -94,8 +80,10 @@ class TestLabelSet:
         assert EmotionAnalyzer().valid_labels == ['Anger', 'Joy', 'Sadness', 'Fear', 'Surprise', 'Neutral']
         assert 'Surprise' in EmotionAnalyzer().valid_labels
 
-    def test_the_emotion_modes_are_what_the_matrix_declares(self, exec_):
-        default, allowed = exec_.PROCESS_ENUMS['emotion']['mode']
+    def test_the_emotion_modes_are_what_the_matrix_declares(self):
+        from services.analysis.process import PROCESS_ENUMS
+
+        default, allowed = PROCESS_ENUMS['emotion']['mode']
         # bert is the declared default now (the recommended main model); an untouched node that
         # cannot run bert is degraded to ml by the executor with a printed line, so it still answers.
         assert default == 'bert'

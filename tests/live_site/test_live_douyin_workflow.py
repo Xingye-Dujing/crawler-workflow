@@ -314,7 +314,7 @@ def test_b1_one_creator_s_list_is_walked_and_ties_his_own_count(client, app_modu
     rather than a whitelisted sentence: rows must equal the ask, and the ask must be reachable
     against the number the page itself published.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 12
     with LiveRun(
         client, app_module, author_canvas(asked), case_id='B1', mode='author', target=asked, timeout=DEEP_TIMEOUT
@@ -352,7 +352,7 @@ def test_b2_a_display_name_is_refused_because_it_addresses_nobody(client, app_mo
     guessing would open *somebody's* profile and report their posts as the ones the user asked for —
     the douyin shape of 「不替用户挑一个看起来像的」. Refused before the browser is pointed anywhere.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -384,7 +384,7 @@ def test_c1_the_board_arrives_with_the_numbers_it_publishes(client, app_module, 
     load-bearing: measured, stripping the URL down to six public parameters returns 48 rows whose
     ``view_count`` is null on every one — a *plausible* board with dead numbers.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, hot_canvas(40), case_id='C1', mode='hot', target=40) as run:
         run.wait()
         answer = run.verdict()
@@ -411,7 +411,7 @@ def test_c2_asking_past_the_board_names_the_board_size(client, app_module, monke
     being graded is that a shortfall is *quantified by the site* — the cap line carries the length it
     measured and the table matches it — which is why no number here is asserted before the run says one.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 60
     with LiveRun(client, app_module, hot_canvas(asked), case_id='C2', mode='hot', target=asked) as run:
         run.wait()
@@ -447,7 +447,7 @@ def test_d1_the_comment_panel_is_scrolled_and_every_row_is_a_real_comment(client
     that stops on the user's own 评论条数 must **not** complain about a gap, which is the other half of
     what this cell asserts.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 40
     with LiveRun(
         client,
@@ -481,7 +481,7 @@ def test_d2_a_panel_that_refused_is_named_per_link(client, app_module, monkeypat
     garbage address is deliberately well-formed enough to reach the panel (a bad id, not a typo), so
     what is under test is the *reporting*, not the URL parser.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     dead = 'https://www.douyin.com/video/7000000000000000001'
     with LiveRun(
         client,
@@ -543,7 +543,7 @@ def test_g1_two_douyin_walks_in_parallel_both_arrive(client, app_module, monkeyp
     queue would hold the lane for the whole crawl and 乙 would arrive strictly *after* 甲, which is a
     real behaviour worth a row in the ledger but not the overlap this cell claims to measure.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     leg = {'author': AUTHOR_URL, 'target_count': 5}
     canvas = harness.component_canvas(
         [
@@ -654,7 +654,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     cell runs **his** settings rather than quietly switching. That is a NAMED_SHORT with ``hotWall``, not a
     silent zero — which is exactly the distinction the whole tier exists to keep.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     opened = accept.workflow_file(ACCEPTANCE_FILE)
     # Measured on the first attempt at this cell (2026-09-28): **as saved, some chains sit out.** A
     # workflow whose name node is off is not an effective component (``execution_state['skipped_workflow_labels']``

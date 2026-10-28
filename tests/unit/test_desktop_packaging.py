@@ -684,7 +684,8 @@ class TestTheUpxPassReportsWhatItActuallyDid:
     """
 
     @pytest.fixture(scope='module')
-    def compressor(self):
+    @classmethod
+    def compressor(cls):
         return _load('compress_dist', PACKAGING / 'compress_dist.py')
 
     def test_the_flags_are_the_ones_the_installed_upx_accepts(self, compressor):
@@ -857,7 +858,8 @@ class TestTheModelPackBecomesARegistryEntry:
     seeder must not rewrite anything the user owns (the three rules in ``bert_pack.py``)."""
 
     @pytest.fixture(scope='module')
-    def pack_module(self):
+    @classmethod
+    def pack_module(cls):
         return _load('bert_pack', PACKAGING / 'bert_pack.py')
 
     def _folder(self, root: Path, name: str, *, complete=True, sidecar=None):
@@ -936,7 +938,8 @@ class TestTheModelPackArchive:
     """The archive's layout is the contract the launcher reads, so it is asserted — not eyeballed."""
 
     @pytest.fixture(scope='module')
-    def packer(self):
+    @classmethod
+    def packer(cls):
         return _load('build_model_pack', PACKAGING / 'build_model_pack.py')
 
     def _source(self, root: Path, name: str, precision: str) -> Path:

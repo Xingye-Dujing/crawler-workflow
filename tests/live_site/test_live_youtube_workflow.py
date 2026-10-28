@@ -323,7 +323,7 @@ def test_a1_a_search_delivers_rows_and_the_summary_ties_the_table(client, app_mo
     non-JSON and was skipped without a word) cannot quietly agree on the smaller figure — that is
     YouTube's face of §6 U9. 点赞数 > 0 on some row proves the player calls were genuinely paid for.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, posts_canvas(10, KEYWORDS['A1']), case_id='A1', mode='posts', target=10) as run:
         run.wait()
         answer = run.verdict()
@@ -349,7 +349,7 @@ def test_a2_the_fast_path_arrives_full_and_pays_for_nothing_extra(client, app_mo
     like here means the fork is not honoured and the crawl paid the per-row round trip it was told to skip;
     a 0-row fast crawl would be the same 采不满 the facts path refuses. Both directions are asserted.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -375,7 +375,7 @@ def test_a3_the_target_is_a_ceiling_the_walk_lands_on_exactly(client, app_module
     Over-collecting each costs an unnecessary ``player`` call on the facts path — the other half of
     "完全符合要求" is that the walk stops exactly where it was told to.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 5
     with LiveRun(
         client, app_module, posts_canvas(asked, KEYWORDS['A3']), case_id='A3', mode='posts', target=asked
@@ -399,7 +399,7 @@ def test_a4_a_headless_search_is_full_or_named(client, app_module, monkeypatch):
     the silent under-report the whole tier exists to catch. 点赞数 is checked only when rows arrive, so a
     genuine throttle that named itself never trips on a missing like.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -435,7 +435,7 @@ def test_b1_an_author_walk_pages_past_the_loaded_document(client, app_module, mo
     and every row must carry the *same* UC… channel id (an author crawl mixing in a recommended stranger
     would read as a wide, working table).
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 60
     with LiveRun(
         client, app_module, author_canvas(asked), case_id='B1', mode='author', target=asked, timeout=DEEP_TIMEOUT
@@ -465,7 +465,7 @@ def test_b2_an_author_that_addresses_nothing_is_refused_by_name(client, app_modu
     report their uploads as the ones the user asked for; refused-by-name is the rule (AGENTS: anything that
     chooses data is refused by name, never guessed).
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client, app_module, author_canvas(5, 'https://www.youtube.com/'), case_id='B2', mode='author', target=5
     ) as run:
@@ -496,7 +496,7 @@ def test_c1_a_second_run_of_one_thread_is_refused_by_name_not_by_silence(client,
     can land in the top window between the two runs — a couple of genuinely-fresh rows is the site's
     answer, while re-filing the whole thread is the bug this catches.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 10
     canvas = comments_canvas(COMMENT_URL, limit=limit)
     with LiveRun(
@@ -538,7 +538,7 @@ def test_d1_the_comment_cursor_pages_past_the_first_screen(client, app_module, m
     a permanently-open, un-geo-blockable thread (see :data:`COMMENT_URL`), so a short answer here is the
     cursor, not the day or the region.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 40
     with LiveRun(
         client,
@@ -566,7 +566,7 @@ def test_d2_a_link_with_no_video_is_named_per_link(client, app_module, monkeypat
     input age, not code). So the good video's comments still file, the run reports the dead link by name,
     and ``run.cookieExpired`` never fires — the exact confusion the douyin comment path documents.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     limit = 8
     with LiveRun(
         client,
@@ -608,7 +608,7 @@ def test_e1_stop_then_continue_resumes_on_the_cursor_it_died_on(client, app_modu
     call for survive into 继续, nothing repeats, and the cursor holds **no list** — a smuggled id array is
     §6 U5's permanent silent-skip, paid for on xiaohongshu and asserted absent here.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     asked = 30
     canvas = posts_canvas(asked, KEYWORDS['E1'])
     with LiveRun(client, app_module, canvas, case_id='E1', mode='posts', target=asked, timeout=DEEP_TIMEOUT) as run:
@@ -710,7 +710,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     ask, keyword, channel or link is touched. No LLM node lives on this canvas, so no transport block is
     owed — the chains end in an 输出 node.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     opened = accept.workflow_file(ACCEPTANCE_FILE)
     workflow = accept.all_enabled(opened)
     _on, off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)

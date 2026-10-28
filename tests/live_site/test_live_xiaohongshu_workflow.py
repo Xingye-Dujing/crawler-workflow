@@ -165,7 +165,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     a session that walls in minutes) must carry a named verdict and write no export; a leg that stored
     rows owes the file that ties store to preview.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     opened = accept.workflow_file(ACCEPTANCE_FILE)
     workflow = accept.all_enabled(opened)
     _on, off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)

@@ -781,17 +781,43 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （分片跑 `test_workflow_api` 时它们各自绿过）。清点必须按「谁 bind 过这个名字」，
     且要同时查 `app_module.X`、`from app import X` 与文档句子里的第三种形状。
     **定向门禁**：`tests/api/` **2,246 passed**；ruff check + format 干净（519 files）。
-  - **下一刀 = Stage 6 第七片：运行编排本体**。`app.py` 剩下的主体是 `_begin_run`（约 890 行）+ worker
+  - **Stage 6 第七片的批量全门禁（本次记录，pytest 9.2.0 与 CI 同版本）抓到 3 类定向门禁看不见的东西**：
+    ① `tests/unit/test_console_buffer.py` 的 4 处 `app.LOG_KEEP` 与 `test_emotion_analyzer` /
+    `test_tendency_analyzer` 各自的 `exec_.PROCESS_ENUMS` —— 后两者的 `exec_` 桩**指向 app 模块**，
+    而 sentiment/cleaner 的同名桩指向 process 插件，所以「同一个 fixture 名在不同文件里问的不是同一个东西」，
+    grep 桩名找不到这类接缝；两处都改为读自己的家（`from state import LOG_KEEP`、
+    `from services.analysis.process import PROCESS_ENUMS`），随之不再被请求的 `exec_` 桩整个删除。
+    ② `tests/unit/test_source_hygiene.py` 的 `load_workflow` 用例**在 app.py 的 AST 里找那个函数**，
+    路由搬走后它报「load_workflow is gone from app.py」——它守的规则（这个处理器对每个键只写一次）与
+    文件名无关，所以改为在 `backend/` 全树里找**恰好一个** `def load_workflow`，0 个或多于 1 个都按名失败：
+    既不再随搬迁失效，也仍然抓着它当初要抓的「同一函数被粘了两遍」。
+    ③ **一条真缺陷，只在 live 档现形**：`tests/live_run_harness.py::real_jar/no_jar` 用
+    `getattr(module, 'cookie_manager', None)` 取 Cookie 台账实例，而 `cookie_manager` 早已住在
+    `state`（`state.py:36`）—— 于是这个 `getattr` 静默返回 `None`，88 条 live 用例只改了
+    `Config.COOKIE_DIR` 而没改 preflight 门实际读的那个 `cookie_dir`。后果正是这两个助手存在的理由被推翻：
+    采集带着用户真会话跑，而用例宣称「证明了这个模式不需要登录」。改为直接从 `state` 取实例再打桩，
+    并把 7 个 live 文件的 88 处调用点签名同步（`real_jar(monkeypatch)` / `no_jar(monkeypatch, tmp_path)`）。
+    **教训：`getattr(x, name, None)` 是接缝的静默失败形态** ——它把「名字搬家了」变成「什么都没做」，
+    而桩点清点要把它当成一类去找，不是只在 AttributeError 出现之后才找。
+  - **顺带清掉 pytest 10 的三个自我废除警告**：`tests/unit/test_desktop_packaging.py` 里
+    `compressor`/`pack_module`/`packer` 三个 `scope='module'` 的**实例方法** fixture —— 警告说得很直白：
+    「fixture 里设的实例属性不会出现在测试方法上，因为每个测试拿到新实例而 fixture 每类只跑一次」。
+    这三个恰好只 `return` 不写 `self.x`，所以今天没咬人，但 pytest 10 会直接坏掉；按 pytest 自己的写法
+    补 `@classmethod`（`@pytest.fixture` 之下）并把 `self` 改 `cls`，本仓库 `test_source_hygiene.py`
+    已是同一形状。**剩下的第 4 条警告是 anyio 的**（`_pytest.python.CallSpec2` 改名），是第三方插件的事，
+    不写 `filterwarnings` 去捂它。
+  - **下一刀 = Stage 6 第八片：运行编排本体**。`app.py` 剩下的主体是 `_begin_run`（约 890 行）+ worker
     + `_run_node_durable` + `_execute_node` + `_settle_node_as_stopped` + `_note_heavy_result`
     + `_start_next_queued` + `_scheduled_canvas`/`_start_scheduled_run`，目标是 `engine/run.py`。
-    搬前必须做一次**桩点清点**（`grep "setattr(app_module, '"` 与 `app_module.<名>` 两种形状）：
+    搬前必须做一次**桩点清点**，且**三种形状都要查**（`setattr(app_module, 'X'`、`app_module.X`、
+    函数内 `from app import X`），外加 `getattr(app, 'X', None)` 这一静默形状：
     `add_log`/`get_run_store`/`get_crawler`/`stop_requested`/`load_pending_queue` 都曾被打在 app 上，
     编排一走这些桩就落空 —— 已有 `tests/executor_seams.py::forward` 这一先例可复用。
-  - **再下一刀**：编排落位后 `/api/workflow/*` 的 14 条路由才是薄壳，搬进 `api/workflow.py`
-    （save/load/list/rename/delete + queue×3 + stop/status/processes/kill），app 只剩 `/`、`execute`、
-    `rerun-node` —— 反过来先搬路由会造一个只为删除而存在的注入接缝。之后：Stage 7 i18n；Stage 8 前端；
-    Stage 9 op 注册表；Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core
-    （运行层）；`settings_store` 等 i18n 拆分后进 core。
+  - **编排落位之后**：app 只剩 `/`、`execute`、`rerun-node` 三条路由，`execute`/`rerun-node` 才有意义变成
+    读 `engine/run.py` 的薄壳（第七片已把另外 12 条搬进 `api/workflow.py`，旧记录里「14 条路由才是薄壳」
+    一句已按现状更正）。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；Stage 10 结构；
+    #40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n
+    拆分后进 core。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

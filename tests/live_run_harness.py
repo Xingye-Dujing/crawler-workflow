@@ -136,42 +136,45 @@ def has_cookie(platform: str, account: str = '') -> bool:
     return real_paths.has_cookie(platform, account)
 
 
-def real_jar(monkeypatch, module=None) -> str:
+def real_jar(monkeypatch) -> str:
     """Point the application at the sessions the user actually saved.
 
     Two attributes, because the path is captured twice: ``Config.COOKIE_DIR`` is what a
-    crawler built *from now on* resolves (``_execute_source_node`` hands it to
-    ``get_crawler``), while ``app.cookies.cookie_dir`` was frozen from the same
-    value at ``app``'s own import and is what the account list, the cookie routes and the
-    preflight gate read. Patching only the first would leave the crawl authenticated while
-    the code that decides *whether* to run still believed nobody had logged in.
+    crawler built *from now on* resolves (the source executor hands it to ``get_crawler``),
+    while ``state.cookie_manager.cookie_dir`` was frozen from the same value when ``state``
+    was first imported and is what the account list, the cookie routes and the preflight
+    gate read. Patching only the first would leave the crawl authenticated while the code
+    that decides *whether* to run still believed nobody had logged in.
 
-    Pass the imported ``app`` module as *module* when the case drives HTTP; leaving it out
-    is correct for a case that only crawls.
+    The manager is read from ``state`` — its one owner — and never handed in as an attribute
+    of ``app``. It used to be an app global, so ``getattr(app, 'cookie_manager', None)``
+    quietly answered ``None`` after the routes moved out: the crawler took the real jar while
+    the gate kept reading the throwaway one, which is exactly the "claimed anonymous,
+    crawled logged in" hole this helper exists to close.
     """
+    from state import cookie_manager
+
     monkeypatch.setattr(Config, 'COOKIE_DIR', str(COOKIE_DIR))
-    manager = getattr(module, 'cookie_manager', None) if module is not None else None
-    if manager is not None:
-        monkeypatch.setattr(manager, 'cookie_dir', str(COOKIE_DIR))
+    monkeypatch.setattr(cookie_manager, 'cookie_dir', str(COOKIE_DIR))
     return str(COOKIE_DIR)
 
 
-def no_jar(monkeypatch, module, root) -> str:
+def no_jar(monkeypatch, root) -> str:
     """Point the application at an **empty** cookie directory: the anonymous-session experiment.
 
     :func:`real_jar`'s mirror, needing the same two patches for the same reason — the crawler resolves
     ``Config.COOKIE_DIR`` when it is built, while the code that decides *whether* to run reads the
-    directory frozen into ``app.cookie_manager`` at import. Withholding both is what lets a case claim
+    directory frozen into ``state.cookie_manager`` at import. Withholding both is what lets a case claim
     「this mode asked for no login and still produced rows」 instead of claiming it while a saved session
     rides along in the browser. Pair it with an explicit ``use_profile=False``, because a *profile* keeps
     its own session no matter what the cookie directory holds.
     """
+    from state import cookie_manager
+
     empty = Path(root) / 'no_cookies'
     empty.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(Config, 'COOKIE_DIR', str(empty))
-    manager = getattr(module, 'cookie_manager', None) if module is not None else None
-    if manager is not None:
-        monkeypatch.setattr(manager, 'cookie_dir', str(empty))
+    monkeypatch.setattr(cookie_manager, 'cookie_dir', str(empty))
     return str(empty)
 
 

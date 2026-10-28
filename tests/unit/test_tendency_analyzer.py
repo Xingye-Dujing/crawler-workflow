@@ -21,15 +21,6 @@ from i18n import set_lang
 
 pytestmark = pytest.mark.unit
 
-
-@pytest.fixture
-def exec_():
-    """The application module, imported inside the test and never at module scope."""
-    import app
-
-    return app
-
-
 TEXTS = ['这项新政策真的很好，支持！', '这种敷衍了事的作风该批评', '会议定于下周三举行', '']
 
 
@@ -78,8 +69,10 @@ class TestLabelSet:
         assert len(labels) == 6
         assert 'Objective Statement' in labels and 'Satire/Mockery' in labels
 
-    def test_the_tendency_modes_are_what_the_matrix_declares(self, exec_):
-        default, allowed = exec_.PROCESS_ENUMS['tendency']['mode']
+    def test_the_tendency_modes_are_what_the_matrix_declares(self):
+        from services.analysis.process import PROCESS_ENUMS
+
+        default, allowed = PROCESS_ENUMS['tendency']['mode']
         # bert is the declared default now (the recommended main model); a node that cannot run it
         # is degraded to ml by the executor with a printed line, so an untouched node still answers.
         assert default == 'bert'

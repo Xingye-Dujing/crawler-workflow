@@ -435,7 +435,7 @@ def test_a1_windowed_serial_search_delivers_ten_rows_with_bodies(client, app_mod
     only exists once an output node runs. The third leg (export == rows == preview) is walked
     by H1, whose saved canvas has one per component.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, posts_canvas(10, KEYWORDS['A1']), case_id='A1', mode='posts', target=10) as run:
         run.wait()
         answer = run.verdict()
@@ -451,7 +451,7 @@ def test_a1_windowed_serial_search_delivers_ten_rows_with_bodies(client, app_mod
 def test_a2_twenty_rows_cost_more_screens_but_still_arrive(client, app_module, monkeypatch):
     """A2 — double the ask, same promise. One target cannot tell a thin day apart from a
     scroll loop that stops early; two of them can."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -472,7 +472,7 @@ def test_a2_twenty_rows_cost_more_screens_but_still_arrive(client, app_module, m
 def test_a3_forty_rows_prove_the_scroll_loop_and_nothing_else(client, app_module, monkeypatch):
     """A3 — the multi-screen proof. Past one screen of ~20 cards, and the console must show a
     walk that kept growing: 「未加载新内容」 as the ending here means the scroll stopped working."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(
         client,
         app_module,
@@ -507,7 +507,7 @@ def test_a4_headless_search_is_full_or_names_the_refusal(client, app_module, mon
     on a login-wall retry is an ``add_log``, not a raised refusal, so the old shape red-flagged
     a crawl whose console had explained itself in full.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = posts_canvas(10, KEYWORDS['A4'], headless=True)
     with LiveRun(client, app_module, canvas, case_id='A4', mode='posts', target=10) as run:
         run.wait()
@@ -533,7 +533,7 @@ def test_a5_excerpt_mode_never_clicks_and_says_so(client, app_module, monkeypatc
     has no crawler to hand, and taking the tier's ``live_crawler`` fixture would import its
     skips into a file that promises none.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = posts_canvas(10, KEYWORDS['A5'], full_body=False)
     with LiveRun(client, app_module, canvas, case_id='A5', mode='posts', target=10) as run:
         run.wait()
@@ -563,7 +563,7 @@ def test_a6_a_thin_keyword_must_end_by_saying_it_is_thin(client, app_module, mon
     ``NAMED_SHORT`` already carries the strict half: a verdict of that name is only reachable
     through an honest exit, because §5 keeps the liar lines out of every whitelist.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, posts_canvas(200, THIN_KEYWORD), case_id='A6', mode='posts', target=200) as run:
         run.wait()
         answer = run.verdict()
@@ -589,7 +589,7 @@ def test_a7_collecting_the_same_thing_twice_is_refused_by_name(client, app_modul
     that holds its 30 questions for minutes (C1/C2 measure exactly that), so a repeat visit is
     genuinely the same item set the ledger has to refuse.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, hot_canvas(30, recrawl=False), case_id='A7a', mode='hot', target=30) as run:
         run.wait()
         answer = run.verdict()
@@ -647,7 +647,7 @@ def test_b1_an_authors_own_list_is_collected_or_named_short(client, app_module, 
     fixture skips when the jar is empty and this file promises no skips: an author case that
     cannot start without the saved session says so as a failure of its own.
     """
-    jar = harness.real_jar(monkeypatch, app_module)
+    jar = harness.real_jar(monkeypatch)
     assert harness.has_cookie(PLATFORM), f'B1 needs the saved {PLATFORM} session in {jar}'
     token = _discover_people_token(request.getfixturevalue('live_crawler'), KEYWORDS['B1'])
     with LiveRun(
@@ -674,7 +674,7 @@ def test_b2_headless_author_works_after_the_disguise(client, app_module, monkeyp
     where a bare headless window rendered 0). Rows, or a refusal that names itself: the
     silent empty is exactly what the disguise was built to remove. Lazy fixture and cookie
     precondition for the same reason as B1."""
-    jar = harness.real_jar(monkeypatch, app_module)
+    jar = harness.real_jar(monkeypatch)
     assert harness.has_cookie(PLATFORM), f'B2 needs the saved {PLATFORM} session in {jar}'
     token = _discover_people_token(request.getfixturevalue('live_crawler'), KEYWORDS['B2'])
     canvas = author_canvas(token, 5, headless=True)
@@ -712,7 +712,7 @@ def _assert_hot_rows(rows, *, minimum: int) -> None:
 
 def test_c1_the_hot_board_delivers_its_thirty_rows_and_seven_columns(client, app_module, monkeypatch):
     """C1 — one in-page fetch, the whole board, no request per row."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, hot_canvas(30), case_id='C1', mode='hot', target=30) as run:
         run.wait()
         answer = run.verdict()
@@ -725,7 +725,7 @@ def test_c1_the_hot_board_delivers_its_thirty_rows_and_seven_columns(client, app
 def test_c2_asking_the_board_for_more_than_it_holds_is_answered_out_loud(client, app_module, monkeypatch):
     """C2 — the target is the user's number and the board's size is the site's, so the
     shortfall has to be a sentence (``crawl.zhihu.hotCapped``) rather than a quiet table."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     with LiveRun(client, app_module, hot_canvas(40), case_id='C2', mode='hot', target=40) as run:
         run.wait()
         assert run.rows() == 30, f'the board is 30 rows; anything else means the cap moved: {run.rows()}'
@@ -753,7 +753,7 @@ def test_c3_headless_board_in_english_is_a_plain_fetch(client, app_module, monke
     have broken, and the worker's thread-local ``set_lang`` has to have actually worked for the
     booking line to be findable at all.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = harness.canvas_for(PLATFORM, 'hot', settings=harness.run_settings('serial', True), target_count=30)
     with LiveRun(client, app_module, canvas, case_id='C3', mode='hot', target=30, lang='en') as run:
         run.wait()
@@ -872,7 +872,7 @@ def test_d1_two_live_answers_carry_their_comment_panels(client, app_module, monk
     """D1 — comments picked from a live probe in the same session, by the probe's own reported
     评论数. Two 评论：… lines (one per article) and a summary whose number is the number the
     store holds — and the verdict is graded against the ask (20 per link), never against 1."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     pairs = _probe_answers(client, app_module, case_id='D1', keyword=KEYWORDS['D'])
     commented = _commented_pairs(pairs, need=2, keyword=KEYWORDS['D'])
 
@@ -900,7 +900,7 @@ def test_d1_two_live_answers_carry_their_comment_panels(client, app_module, monk
 def test_d2_a_wired_comments_node_crawls_the_links_its_parent_found(client, app_module, monkeypatch):
     """D2 — the ``fed_by`` path end to end: the upstream 链接 column replaces the textarea,
     and every comment is attributed to a link this canvas actually crawled."""
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = harness.posts_then_comments_canvas(
         PLATFORM,
         posts={'keyword': KEYWORDS['D'], 'target_count': 3, 'full_body': False},
@@ -945,7 +945,7 @@ def test_d3_headless_comments_match_the_windowed_shape(client, app_module, monke
     them is windowed, because a headless *search* is throttled day-by-day and a comment case
     must not inherit that mode's refusal.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     pairs = _probe_answers(client, app_module, case_id='D3', keyword=KEYWORDS['D'])
     best = _commented_pairs(pairs, need=1, keyword=KEYWORDS['D'])
     canvas = comments_canvas(best, limit=10, headless=True)
@@ -979,7 +979,7 @@ def test_d4_no_limit_means_the_whole_panel_and_the_sum_still_ties(client, app_mo
     reports a shortfall by name (``comment.zhihuPanelShort``) and this cell refuses to be green
     while that line is in its console.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     pairs = _probe_answers(client, app_module, case_id='D4', keyword=KEYWORDS['D'])
     canvas = comments_canvas(pairs[0][0], limit=0)
     with LiveRun(client, app_module, canvas, case_id='D4', mode='comments', target=1, timeout=COMMENT_TIMEOUT) as run:
@@ -1009,7 +1009,7 @@ def test_e1_stop_then_e2_continue_finishes_the_same_table(client, app_module, mo
     the same keyword — and this pair is what the banner sells: rows already paid for are
     never paid for twice.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = posts_canvas(DEEP_TARGET, KEYWORDS['E'])
 
     with LiveRun(
@@ -1146,7 +1146,7 @@ def test_e3_a_parallel_run_cut_short_convicts_one_walk_and_hands_the_lane_back(c
     to release answers it with 「等待采集时段」, with ``run.platformGateTimeout``, or with a stall.
     Overlap itself is G1's claim on this same canvas shape; E3's is what a stop leaves behind.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = _two_search_components(
         keywords=KEYWORDS['E3'], target=E3_TARGET, headless=False, use_profile=None, extra={'full_body': False}
     )
@@ -1277,7 +1277,7 @@ def test_e4_a_stop_between_articles_keeps_the_panels_that_reported(client, app_m
     reported, 「between articles」 is honestly measured as the last panel never having reported —
     asserted below — not as a chosen index.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     pairs = _probe_answers(client, app_module, case_id='E4', keyword=KEYWORDS['D'])
     links = _commented_pairs(pairs, need=3, keyword=KEYWORDS['D'])
     canvas = comments_canvas(links, limit=E4_LIMIT)
@@ -1405,7 +1405,7 @@ def test_e5_continuing_with_a_moved_keyword_drops_the_stale_cursor(client, app_m
     Overlap is the site's to offer, so the discriminator is the seeding lines, the walk's own
     harvest index and the exact row count, not a set difference of links.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = posts_canvas(E5_TARGET, KEYWORDS['E5'], full_body=False)
     with LiveRun(client, app_module, canvas, case_id='E5', mode='posts', target=E5_TARGET) as run:
         run.wait()
@@ -1502,7 +1502,7 @@ def test_e6_a_session_that_dies_mid_crawl_resumes_the_table_it_left(client, app_
     on 继续 the ledger *is* the resume machinery. A canvas that never asked would let the leg
     pass without the product ever being in a position to speak.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 
     canvas = posts_canvas(E6_TARGET, KEYWORDS['E6'], full_body=False, recrawl=True)
@@ -1612,7 +1612,7 @@ def test_e7_a_resume_node_adopts_a_stored_table_instead_of_crawling_it_again(cli
     result with zero rows is never reused」 lives — restoring the nothing would report a node that
     produced no table as one that had already been computed.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     donor_canvas = harness.canvas_for(
         PLATFORM,
         'posts',
@@ -1864,7 +1864,7 @@ def test_g1_parallel_with_the_queue_off_really_overlaps(client, app_module, monk
     the console would say 「等待采集时段」 and the run would be a serial one wearing a parallel
     label.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     # Measured, and it decides this cell's shape: a 10-row 正文 walk is alive ~10 s, while the
     # 错峰 default spaces same-platform starts by 12 s — so with the queue simply switched off,
     # the first crawl FINISHES before its sibling is allowed to begin and nothing overlaps. That
@@ -1923,7 +1923,7 @@ def test_g1b_parallel_with_the_queue_on_waits_and_says_so(client, app_module, mo
     The negative half of G1's promise, in the same currency: 真排队 holds the lane until its
     crawl *finishes*, so the second walk may not begin before the first one ended.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = _two_search_components(keywords=KEYWORDS['G1B'], target=10, headless=False, use_profile=False)
     before = settings_store.get_setting('same_platform_queue')
     _saved, warnings = settings_store.save_settings({'same_platform_queue': True})
@@ -1965,7 +1965,7 @@ def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_mod
     A ``ProfileUnavailableError`` here is a serialization bug in this file rather than weather,
     so the timeout stays generous instead of excusing the wait.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = _two_search_components(keywords=KEYWORDS['G3'], target=5, headless=False, use_profile=True)
     profile = profiles.profile_dir_for(PLATFORM)
     assert profile, 'the tier runs with browser profiles on, so this case has no directory to wait for'
@@ -2290,7 +2290,7 @@ def test_h1_the_shipped_canvas_runs_exactly_as_saved(client, app_module, monkeyp
     author moves the expectation with it instead of turning the flagship red over a line the
     console "never printed".
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     from core.config import Config
 
     workflow = _acceptance_workflow()
@@ -2356,7 +2356,7 @@ def test_h2_the_whole_shipped_canvas_completes_in_series(client, app_module, mon
     unconditional is the part that is never weather: a component that came up short and said
     nothing (or said one of the lines §6 measures as a lie).
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     workflow = _all_enabled(_acceptance_workflow())
     _on, _off, parts = _acceptance_parts(workflow)
     assert workflow['settings']['mode'] == 'serial'
@@ -2406,7 +2406,7 @@ def test_h3_the_whole_shipped_canvas_in_parallel_headless(client, app_module, mo
     line quoted into its row and the row flagged WARN — but never silently, and never on the
     strength of a reason a sibling named.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     workflow = _all_enabled(_acceptance_workflow())
     _on, _off, parts = _acceptance_parts(workflow)
     workflow['settings'] = dict(workflow['settings'], mode='parallel', headless=True, max_workers=2)
@@ -2491,7 +2491,7 @@ def test_s1_stagger_spaces_the_two_starts_and_never_queues_them(client, app_modu
     profile), plus the one spacing wait. The two settings are restored in ``finally``
     exactly as G1/G1b/G3 restore theirs.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = _two_search_components(keywords=KEYWORDS['S1'], target=S1_TARGET, headless=False, use_profile=False)
     before_queue = settings_store.get_setting('same_platform_queue')
     before_stagger = settings_store.get_setting('same_platform_stagger')
@@ -2607,7 +2607,7 @@ def test_s2_the_browser_ceiling_narrows_the_parallel_pool_to_one_walk(client, ap
     unlike S1, whose first walk has to stay alive across the spacing gap and therefore keeps
     the full-body default.
     """
-    harness.real_jar(monkeypatch, app_module)
+    harness.real_jar(monkeypatch)
     canvas = _two_search_components(
         keywords=KEYWORDS['S2'], target=5, headless=False, use_profile=False, extra={'full_body': False}
     )
