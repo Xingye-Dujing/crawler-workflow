@@ -14,7 +14,7 @@
   summary, store and preview all concur on a table the page never offered (zhihu's comment panel: no 「更多」
   control, lazy-fills by scrolling its own overlay, nested replies behind an expander nothing clicked — measured in
   `docs/crawler_notes.md`). **Ask the page for a denominator (its own printed count) and grade against that.**
-- **The crawl matrix (`backend/capabilities/registry.py`) is the only answer to "what can this platform collect".** It
+- **The crawl matrix (`backend/capabilities/` — `platforms/<id>.py` for the declarations, `registry.py` for the queries) is the only answer to "what can this platform collect".** It
   declares each platform's modes, the fields each mode needs (widget, default, floor, ceiling, required-ness, and
   `fed_by` = the link field a wired upstream column may replace), which crawler method runs, and `region`
   (`cn` / `overseas`) — the overseas-VPN question and the `live_cn`/`live_os` markers read it rather than holding
