@@ -21,10 +21,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 /* Two files, not one: the run's last poll refreshes the stats panel through the
    real `stats` object, which lives in stats.js. */
-const src = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = sourceOf(...process.argv.slice(2));
 
 const KEYS = {
     'status.running': 'running',

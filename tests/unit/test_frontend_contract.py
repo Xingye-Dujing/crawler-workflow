@@ -887,7 +887,11 @@ class TestChromeOfThePageItself:
         """A reconnecting page has not started the poller, so it must be able to rebuild the
         workflow tabs from a status read. A second copy of that markup is a bar that drifts
         from the one the user runs."""
-        wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        # The builder moved to panels/runs.js with the console (Stage 8); its callers (the poller and
+        # the replay) stayed in workflow.js, so both files are read as one scope.
+        wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8') + (JS_DIR / 'panels' / 'runs.js').read_text(
+            encoding='utf-8'
+        )
         assert wf.count('function consoleTabsHtml(') == 1
         assert wf.count('consoleTabsHtml(') >= 3, 'the builder is declared but no caller uses it'
         assert wf.count('class="console-tab\'') == 2, (

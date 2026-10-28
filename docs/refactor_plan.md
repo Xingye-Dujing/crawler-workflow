@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 27 | 26,389 | `workflow.js` **9,270** · `canvas.js` 3,893 · `app.js` 1,450 · `chart-preview.js` 973 · `panels/cookies.js` 970 · `panels/biblio.js` 651 · `panels/exports.js` 491 · `capabilities.js` 336 · `panels/runlog.js` 226 · `panels/source-help.js` 175 · `i18n/` 9 份共 4,009 |
+| `backend/static/js/` | 28 | 26,394 | `workflow.js` **7,991** · `canvas.js` 3,893 · `panels/runs.js` 1,284 · `app.js` 1,450 · `chart-preview.js` 973 · `panels/cookies.js` 970 · `panels/biblio.js` 651 · `panels/exports.js` 491 · `capabilities.js` 336 · `panels/runlog.js` 226 · `panels/source-help.js` 175 · `i18n/` 9 份共 4,009 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -1023,11 +1023,17 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
   - **Stage 8 第八刀（`panels/exports.js`）已完成（2026-10-29）**：`workflow.js` **9,754 → 9,270 行**，
     新 `panels/exports.js` **491 行**（导出产物面板：列表/下载/删除，名字原样回传、浏览器从不拼路径）。
     有了伴生表，这一刀**第一次运行就全绿**（前端家族 1,465、fast 8,190、设备档 194）。
-  - **下一步**：`panels/runs`（**多段**切片：控制台视图助手在文件头、console 开关在 5,7xx 附近、
-    `runsManager` 在 6,6xx 附近）→ 其余面板 → `settings.js`，见 `docs/frontend_modules.md` §3。
-    **切之前按顶层声明清点这一片**（两刀的教训），再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
-    #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js` 9,270、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
+  - **Stage 8 第九刀（`panels/runs.js`）已完成（2026-10-29）**：`workflow.js` **9,271 → 7,991 行**，
+    新 `panels/runs.js` **1,284 行**（控制台的视图状态与游标、`takeLines`、标签条构建、开关/清空/重置，
+    以及运行记录管理器）。**四段**切片，每段先按顶层声明清点过；`_wfActiveTab`/`switchWfTab` 留在
+    `workflow.js`（标签页由轮询器画）。`harness_console` 改用 `sourceOf`；两处静态扫描改读两文件合体。
+    - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档 **194 passed / 0 跳过**；
+      ruff check + format（532 文件）全绿；`node --check` 全过。
+  - **下一步**：`panels/files` / `panels/datasets` / `panels/lexicon` / `panels/diagnostics`，
+    最后 `settings.js`（依赖最多），见 `docs/frontend_modules.md` §3。再后：Stage 9 op 注册表（#36）、
+    Stage 10 结构（#37）、#40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、
+    `i18n_catalog/crawl.py` 907、`static/js/workflow.js` 7,991、`static/js/canvas.js` 3,893 在名单上；
+    `app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

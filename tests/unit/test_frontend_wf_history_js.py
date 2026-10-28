@@ -250,7 +250,10 @@ class TestRunCompareUi:
         assert compared['closed'] is True
 
     def test_the_compare_door_is_only_on_the_workflow_tab(self):
-        source = WORKFLOW_JS.read_text(encoding='utf-8')
+        # The records manager moved to panels/runs.js with the console (Stage 8).
+        source = WORKFLOW_JS.read_text(encoding='utf-8') + (WORKFLOW_JS.parent / 'panels' / 'runs.js').read_text(
+            encoding='utf-8'
+        )
         assert "runsManager._tab === 'workflow' && runs.length > 1" in source
         assert 'runsManager.compare(' in source
 
