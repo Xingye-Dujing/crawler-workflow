@@ -955,9 +955,11 @@ class TestOneDefinitionOfEachGlobalFunction:
 
     def _declarations(self) -> dict[str, list[str]]:
         seen: dict[str, list[str]] = {}
-        for script in sorted(JS_DIR.glob('*.js')):
+        # The whole served tree, subdirectories included: the panels live in ``js/panels/`` since the
+        # Stage 8 split, and a scan that stopped at the top level would stop seeing them.
+        for script in sorted(JS_DIR.rglob('*.js')):
             for name in self._TOP_LEVEL_FUNCTION.findall(script.read_text(encoding='utf-8')):
-                seen.setdefault(name, []).append(script.name)
+                seen.setdefault(name, []).append(script.relative_to(JS_DIR).as_posix())
         return seen
 
     def test_no_name_is_declared_twice(self):

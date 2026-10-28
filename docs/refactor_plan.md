@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 25 | 26,373 | `workflow.js` **9,971** · `canvas.js` 3,893 · `app.js` 1,450 · `panels/cookies.js` 970 · `chart-preview.js` 973 · `panels/biblio.js` 651 · `capabilities.js` 336 · `panels/source-help.js` 175 · `i18n/` 9 份共 4,009 |
+| `backend/static/js/` | 26 | 26,381 | `workflow.js` **9,753** · `canvas.js` 3,893 · `app.js` 1,450 · `chart-preview.js` 973 · `panels/cookies.js` 970 · `panels/biblio.js` 651 · `capabilities.js` 336 · `panels/runlog.js` 226 · `panels/source-help.js` 175 · `i18n/` 9 份共 4,009 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -1010,11 +1010,21 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `test_frontend_biblio_workspace_js` 的两处扫描改指新文件（其中一处顺带断言页面真的加载了它）。
     - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档 **194 passed / 0 跳过**；
       ruff check + format（532 文件）全绿；`node --check` 全过。
-  - **Stage 8 剩余**：`panels/runs`（**多段**切片：控制台视图助手在文件头、`runLogViewer` 在中段、
-    `runsManager` 在后段）→ 各面板 → `settings.js`，见 `docs/frontend_modules.md` §3。
-    再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、#40 = 仍 >900 行模块的按职责拆分
-    （`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js` 9,971、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
+  - **Stage 8 第七刀（`panels/runlog.js`）已完成（2026-10-28）**：`workflow.js` **9,972 → 9,753 行**，
+    新 `panels/runlog.js` **226 行**（只读持久化 `run_log` 表的运行日志查看器）。
+    - **连续切片第二次咬人，而且咬了三次**：这一片里还夹着 `dataPreview` 与整个 `dashboard`（→ 300 行被退回），
+      以及**全页工具** `escapeHtml`/`attrJsArg`（workflow.js 里 158 处、schedules.js 9 处调用 → 两个工具放回
+      `workflow.js`）。抓出来的是 `harness_async_panels` 的 `dashboard is not defined` 与
+      `harness_schedules` 的 `escapeHtml is not defined`，不是任何一个产品路径。
+    - **一条测试口径随之改对**：`test_frontend_contract` 的「同名全局函数只许一处」原来扫 `js/*.js`，
+      搬进 `js/panels/` 的函数从此不在视野里（函数计数掉到 200 以下被下限抓到）→ 改 `rglob`。
+    - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档 **194 passed / 0 跳过**；
+      ruff check + format（532 文件）全绿；`node --check` 全过。
+  - **下一步**：`panels/runs`（**多段**切片：控制台视图助手在文件头、console 开关在 5,7xx 附近、
+    `runsManager` 在 6,6xx 附近）→ 各面板 → `settings.js`，见 `docs/frontend_modules.md` §3。
+    **切之前按顶层声明清点这一片**（两刀的教训），再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
+    #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
+    `static/js/workflow.js` 9,753、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。
