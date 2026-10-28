@@ -21,6 +21,7 @@ const SPLIT_OF = {
         'panels/runs.js',
         'panels/lexicon.js',
         'panels/datasets.js',
+        'panels/files.js',
     ],
 };
 
