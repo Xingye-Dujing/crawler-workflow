@@ -449,7 +449,7 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = `8d0bbd7`**（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
+  - **HEAD = `40c3c3c`**（Stage 4 第一组：`services/biblio/`）→ `69ce0ba`（文档）→ `8d0bbd7`（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
     → `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
     （UI 层开页等待，修一条 CI 抖动）→ `480a811`（文档：#25 收尾）
     ← `2c4bfd3`（真浏览器引擎选择器用例）← `a6b4df5`（capabilities 内部分拆第一步，Stage 3d）← `994a2ec`（`capabilities/` 包，Stage 3c）
@@ -622,10 +622,35 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     而更晚定义的 `I18n` 正常 ⇒ 页面已 boot、`canvas.js` 没执行（同一字节在上一轮 CI 与本地全绿）。爬虫栈的
     `page_load_strategy='eager'` 让 `driver.get` 在 DOM 可解析时就返回；`test_ui_layout.py` 的 54 处裸导航改为
     `_load_app(canvas/I18n/readyState 三重等待)`，超时则打印页面的脚本清单与每个脚本的传输字节。
-  - **下一刀 = Stage 4（任务 #31）**：`services/` 50 个扁平的名称前缀模块改目录分组
-    （`run_store`/`workflow_*`/`dataset_*`/`biblio_*`/`crawl_*`/`latex_*`/`report_*`…），逐组一个 commit；
-    先把 `services` 的 import 面按前缀清点（`grep` 结果当清单，不靠记忆），每组的搬迁照本节的切分证明法。
-    `state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core；`i18n.py` 仍是 Stage 7。
+  - **Stage 4 第一组 `services/biblio/` 已完成（`40c3c3c`，本次记录）**：11 个扁平模块 + `biblio_formats/`(14) →
+    `services/biblio/{importer,schema,metrics,cluster,refs,fuse,geo,charts,store,monitor,sources}.py` +
+    `services/biblio/formats/`（`biblio_import` 改叫 `importer`：`import` 是关键字，不能做 import 路径段；
+    `bibliometrics` 改叫 `metrics`）。`build/move_biblio.py` 三类规则（`from services import X`、
+    `from services.X`、散文/`:mod:`/斜杠路径）+ **别名调用点**（`from services import bibliometrics` 绑的是
+    模块名，调用点写 `bibliometrics.build` → `metrics.build`，只在确实 import 了新名的文件里做，且用
+    `(?<![/.\w])` 挡住散文路径与句末句点）；残差扫描先拒绝了一次，补齐散文规则后才放行。
+    **三条自伤（教训进 `agent_practices`）**：① `ruff --fix` 把"已被改名规则绑定、但调用点还没改"的 import
+    当 F401 删掉，随后别名改名让调用点变成 F821 —— 顺序必须是先调用点、后 import（本轮命中 3 处）；
+    ② `from services import biblio_formats, biblio_sources` 这种**多名字导入**只被第一条规则改了一半，
+    留下 `from services.biblio import biblio_sources, formats`（ImportError 在收集期就点名）；
+    ③ 模块**上移一层**后 `Path(__file__).parents[1]` 指向 `backend/services/`，`geo.BASEMAP_PATH` 因此指向
+    不存在的 `services/static/geo/world.json`（34 条 geo 用例红）——搬文件必须先 grep `__file__`。
+    另：`metrics.py` 里存在同名**局部变量** `cluster`，模块别名被改成 `cluster` 后触发 F823（同一函数里
+    `cluster.cluster_graph(...)` 早于 `cluster = ...`）→ 导入改成 `cluster as clustering`。
+    文档引用（`docs/agent_practices.md` 四处）由 `test_doc_paths` 点名后改到新路径。
+    **门禁（本次字节）**：fast **8,171 passed / 3 skipped / 355 deselected**（用 pytest **9.2.0** 跑）；
+    ruff check + format（511 files）；两档 pylint **exit=0、10.00/10**（产品 257 / tests 271，清单已重生成）；
+    设备档 **194 passed / 0 skipped**，4 分 09 秒。
+  - **下一刀 = Stage 4 其余组**（按依赖从少到多）：`services/workflows/`（manager/history/reusable_*/project_bundle）→
+    `services/datasets/`（dataset_store/dataset_merge/exporter/export_browser/text_dedupe）→ `services/runs/`
+    （run_store/run_files/run_windows/run_compare/execution_history/housekeeping/lock_store）→ `services/analysis/`
+    （data_analysis/analysis_params/process_params/llm_run_context/lexicon*/stats/report_service）→
+    `services/crawl/`（catbus_bridge/crawl_runtime/crawler_lifecycle/part_writer/net_probe）→
+    `services/charts/`（与 Stage 5 合并做：chart_contracts/visualizer/latex_*）。每组一套：`build/move_<组>.py`
+    （三类规则 + 别名 + 残差拒绝）→ ruff → 目标组用例 → 全量 fast（9.2.0）→ ruff/两档 pylint（**重生成清单**）→
+    设备档（动了爬虫/图表/UI 时）→ commit（**`git add` 要覆盖所有改过的树**，本轮就漏了 `backend/api` 等 9 个文件，
+    靠 `git commit --amend` 在未推送前补齐）。`state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n
+    拆分后进 core；`i18n.py` 仍是 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

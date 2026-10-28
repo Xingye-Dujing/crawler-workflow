@@ -202,6 +202,23 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   === 'complete'`` plus ``typeof canvas === 'object'``) and, on timeout, fail with the page's own evidence — the
   document's script list and each script's transfer size — instead of letting a bare ``canvas is not defined`` be the
   whole report. All 54 navigations in ``test_ui_layout.py`` now go through ``_load_app``.
+- **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
+  ``services/biblio_*`` modules into ``services/biblio/`` (2026-10-28) went 122 references clean on the first pass and
+  still failed five ways: ① **``ruff --fix`` deletes the import a pending rename is about to use** — after
+  ``from services import bibliometrics`` became ``from services.biblio import metrics``, the call sites still said
+  ``bibliometrics.build``, so the hook removed ``metrics`` as unused and the next pass reported F821; edit **call
+  sites before import lines**, every time. ② **A multi-name from-import is two names in one line**:
+  ``from services import biblio_formats, biblio_sources`` matched the first rule and produced
+  ``from services.biblio import biblio_sources, formats`` — collection failed with a named ImportError; the rule set
+  needs one rule per *name in the list*, not per statement. ③ **A module that moves one directory deeper changes every
+  ``Path(__file__).parents[N]``**: ``biblio_geo``'s basemap pointed at ``backend/services/static/geo/world.json`` and
+  34 geo tests went red; grep ``__file__`` in the moved set before running anything. ④ **A module alias can collide
+  with a local variable in a consumer**: ``metrics.py`` assigns ``cluster = …`` inside a function, so the new
+  ``cluster.cluster_graph(…)`` was a use-before-assignment (F823) — import it ``as clustering``. ⑤ **``git mv`` stages
+  the moves; it does not stage the sibling importers**: the commit omitted ``backend/api``, ``engine``, ``i18n``,
+  ``nodes`` and ``stores`` until ``git status`` was read, and was amended before it left the machine. The proof the
+  move is complete is a **residual scan that refuses to finish** (``services[./]biblio_*`` anywhere), not a green
+  suite — the suite had already run green locally before the missing files were noticed.
 - **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
   appeared" while the gate before it said everything was fine — because its bounded poll returned
