@@ -301,7 +301,7 @@ def test_the_shared_starter_is_retention_queue_then_clock(monkeypatch):
 
     calls = []
     monkeypatch.setattr(app_module, '_housekeep', lambda *args, **kwargs: calls.append('housekeep'))
-    monkeypatch.setattr(app_module, '_load_pending_queue', lambda: 0)
+    monkeypatch.setattr(app_module, 'load_pending_queue', lambda: 0)
     monkeypatch.setattr(app_module.clock, 'start', lambda: calls.append('clock') or True)
     app_module.start_background_services()
     assert calls == ['housekeep', 'clock']

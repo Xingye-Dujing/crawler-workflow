@@ -21,6 +21,9 @@ import re
 from pathlib import Path
 
 import pytest
+from state import _RUN_QUEUE
+
+from services.runs.payload import workflow_shape_error
 
 pytestmark = pytest.mark.api
 
@@ -423,7 +426,7 @@ class TestResumeOfPurgedRun:
         between parking the 继续 and draining it. The entry must be discarded with
         its reason in the console — pushing it back would refuse it after every
         single run, forever."""
-        app_module._RUN_QUEUE.append(
+        _RUN_QUEUE.append(
             {
                 'id': 'q1',
                 'workflow_name': '继续旧运行',
@@ -494,7 +497,7 @@ class TestRunPayloadShape:
             return {'status': 200, 'body': {'ok': True, 'run_id': 'r-' + name}}
 
         monkeypatch.setattr(app_module, '_begin_run', pretend_to_begin)
-        app_module._RUN_QUEUE.extend(
+        _RUN_QUEUE.extend(
             [
                 {'id': 'a', 'workflow_name': 'broken', 'data': {'workflow_name': 'broken'}, 'lang': 'zh'},
                 {'id': 'b', 'workflow_name': 'next', 'data': {'workflow_name': 'next'}, 'lang': 'zh'},
@@ -529,13 +532,13 @@ class TestWorkflowNodeIdGuard:
 
     def test_a_node_without_an_id_is_refused_by_name(self, app_module):
         data = {'workflow': {'nodes': [{'type': 'source', 'params': {}}], 'connections': []}}
-        message = app_module._workflow_shape_error(data)
+        message = workflow_shape_error(data)
         assert message and 'id' in message.lower(), f'expected an id-naming refusal, got {message!r}'
 
     def test_a_blank_id_is_refused_too(self, app_module):
         data = {'workflow': {'nodes': [{'id': '   ', 'type': 'source'}], 'connections': []}}
-        assert app_module._workflow_shape_error(data), 'a whitespace id is not an id'
+        assert workflow_shape_error(data), 'a whitespace id is not an id'
 
     def test_a_well_formed_node_still_passes_the_guard(self, app_module):
         data = {'workflow': {'nodes': [{'id': 'n1', 'type': 'source', 'params': {}}], 'connections': []}}
-        assert app_module._workflow_shape_error(data) == ''
+        assert workflow_shape_error(data) == ''

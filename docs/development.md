@@ -118,7 +118,7 @@ crawler_workflow/
 │   │   ├── executor.py           # 线程池执行器
 │   │   └── logger.py             # 日志管理
 │   ├── services/                 # 服务模块
-│   │   ├── runs/                 # 运行域：store（断点续跑核心，runs.db）/ files（产物台账）/ windows / compare / history（history.db）/ housekeeping
+│   │   ├── runs/                 # 运行域：store（断点续跑核心，runs.db）/ files（产物台账）/ windows / compare / history（history.db）/ housekeeping / queue（排队与镜像）/ payload（开跑前的两道拒绝）/ settlement（停止与孤儿记录结算）
 │   │   ├── datasets/             # 数据集域：store（datasets.db）/ merge（多源合并）/ dedupe（归一化与 SimHash 近重复）
 │   │   ├── exports/              # 导出目录：writer（多格式写）/ browser（列表·下载·删除的读取侧）
 │   │   ├── analysis/             # 分析域：pipeline（操作执行器）/ params（分析参数）/ process（处理节点矩阵）/ llm（模型上下文）/ lexicon（词表）/ lexicon_store / stats

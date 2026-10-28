@@ -58,14 +58,13 @@ from nodes.labels import node_label
 from scheduling import clock
 from sessions.routes import bp as sessions_bp
 from state import (
-    _RUN_QUEUE,
     LOG_KEEP,
-    QueueEntry,
     _completed_lock,
     _push_log,
     _results_snapshot,
     _wf_local,
     add_log,
+    execute_lock,
     execution_state,
     history_service,
     live_run_ids,
@@ -92,6 +91,23 @@ from services import StatsService, lock_store
 from services.analysis.pipeline import UnknownOperationError
 from services.analysis.process import PROCESS_ENUMS
 from services.ingest.lifecycle import close_login_browser as _close_login_browser
+from services.runs.payload import resume_refusal, workflow_shape_error
+from services.runs.queue import (
+    QUEUE_MAX,
+    cancel_queued,
+    clear_queue,
+    drain_queue,
+    enqueue_run,
+    load_pending_queue,
+    queue_snapshot,
+)
+from services.runs.settlement import (
+    STOP_QUIT_GRACE,
+    close_active_crawlers,
+    mark_records_stopping,
+    reject_live_run,
+    settle_orphaned_records,
+)
 from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
@@ -476,7 +492,6 @@ def _apply_request_lang():
 # the test harness share ONE object; it is mutated in place and never rebound. `state`
 # carries the field-by-field comments; see docs/ARCHITECTURE.md (Refactor step A).
 # _completed_lock lives in state.py (imported above) so the snapshot readers share one lock.
-_execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
 
 
 def _record_export_stamp(store, run_id: str) -> str:
@@ -971,17 +986,9 @@ def delete_workflow():
 
 
 # ─── Run queue ────────────────────────────────────────────────
-# One run at a time is a property of this product, not an accident: the console,
-# the crawl browsers, the checkpoint store and the resume cursor all assume a
-# single writer. What was missing is somewhere to put the next request while one
-# is busy — it used to be refused outright, and the user had to press Run again
-# at the right moment.
-
-#: Queued requests live in memory only (see state._RUN_QUEUE). A restart drops them, which is
-#: the honest behaviour for a list of intentions nobody is here to confirm.
-QUEUE_MAX = 8
-
-_queue_lock = threading.Lock()
+# The queue itself — its list (``state._RUN_QUEUE``), its lock, its db mirror and the refusal at
+# the door — is :mod:`services.runs.queue`. What stays here is the one thing that cannot live
+# there: handing the slot to the next request means starting a run, which is this file's work.
 
 
 #: The two run shapes the canvas settings can name. Kept next to the reader that refuses
@@ -1036,222 +1043,18 @@ def _llm_provider(llm_cfg: dict) -> str:
     return value
 
 
-def _workflow_shape_error(data: dict) -> str:
-    """Why this payload cannot become a run, or '' when it can.
-
-    Checked before the slot is claimed, in both the live and the queued path:
-    ``WorkflowEngine`` walks ``nodes`` expecting dicts, so a list of strings or a
-    ``settings`` that is a number raises AttributeError deep inside the worker —
-    which the browser then reads as an HTML error page, and a queued one would
-    fail minutes later in a thread nobody is watching.
-    """
-    workflow = data.get('workflow')
-    if workflow is None or workflow == {}:
-        return ''  # an empty payload is refused by validate(), with a real message
-    if not isinstance(workflow, dict):
-        return t('api.workflowShapeInvalid')
-    nodes = workflow.get('nodes')
-    if nodes is not None and (not isinstance(nodes, list) or any(not isinstance(node, dict) for node in nodes)):
-        return t('api.workflowShapeInvalid')
-    # A node's ``params`` is walked by ``.get`` all through the engine and the executor; a
-    # truthy non-dict (``params: 'x'``) raised AttributeError inside ``_begin_run`` before the
-    # slot, and the queued path had no handler for it — an HTML 500, exactly what this guard
-    # exists to prevent. Same for ``connections``: ``all_connections`` does not filter, so a
-    # list of STRINGS reached ``dangling_connections``' ``c.get`` and threw mid-run.
-    for node in nodes if isinstance(nodes, list) else []:
-        # A node's ``id`` is a storage key — the engine keys ``WorkflowEngine.nodes`` on ``n['id']``,
-        # so a node without one crashed the run thread with a raw KeyError before any record existed
-        # (and minutes later in an unwatched queued thread). Refuse it BY NAME here, at the payload
-        # boundary, so the user is told a canvas node has no id rather than watching an HTML 500.
-        if not isinstance(node.get('id'), str) or not node.get('id').strip():
-            return t('api.workflowNodeNoId')
-        params = node.get('params')
-        if params is not None and not isinstance(params, dict):
-            return t('api.workflowShapeInvalid')
-    connections = workflow.get('connections')
-    if connections is not None and (
-        not isinstance(connections, list) or any(not isinstance(conn, dict) for conn in connections)
-    ):
-        return t('api.workflowShapeInvalid')
-    settings = workflow.get('settings')
-    if settings is not None and not isinstance(settings, dict):
-        return t('api.workflowShapeInvalid')
-    return ''
-
-
-def _resume_refusal(data: dict) -> str:
-    """Why a 继续 request cannot continue, or '' when it can.
-
-    The run id a resume asks for is the whole point of the feature: it names the
-    rows and cursors already paid for. When retention (or the records panel) has
-    deleted that run in the meantime, reusing its id starts an *empty* run under
-    the same name — which looks exactly like a continue that found nothing, while
-    quietly re-crawling and re-paying for every item. So the request is refused
-    with the id in the message, and the banner can say so.
-    """
-    resume_run_id = str(data.get('resume_run_id') or '').strip()
-    if not resume_run_id:
-        return ''
-    try:
-        if get_run_store().get_run(resume_run_id):
-            return ''
-    except Exception:
-        # A store that cannot answer is not evidence that the run is gone; the
-        # run itself reports the real failure the moment it opens the database.
-        return ''
-    return t('api.resumeMissing', rid=resume_run_id)
-
-
-def _enqueue_run(data: dict, lang_header: str) -> dict:
-    """Park a request until the running one finishes.
-
-    The payload is checked here, at the moment the user pressed the button, and
-    not at drain time: a request that cannot become a run must be refused to the
-    browser that sent it, where someone can fix it. Discovered minutes later, in
-    another thread, it would only be a missing run.
-    """
-    if _workflow_shape_error(data):
-        return {'status': 400, 'body': {'ok': False, 'error': _workflow_shape_error(data)}}
-    workflow = data.get('workflow') or {}
-    name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
-    with _queue_lock:
-        if len(_RUN_QUEUE) >= QUEUE_MAX:
-            return {'status': 409, 'body': {'ok': False, 'error': t('api.queueFull', n=QUEUE_MAX)}}
-        entry = {
-            'id': uuid.uuid4().hex[:12],
-            'workflow_name': name,
-            'nodes': len(workflow.get('nodes') or []),
-            'data': data,
-            'lang': lang_header or '',
-            'queued_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
-        }
-        _RUN_QUEUE.append(entry)
-        position = len(_RUN_QUEUE)
-    # ``wf.unnamed`` renders 「未命名工作流{i}」 with the WORKFLOW's index on the canvas;
-    # this is a queue POSITION, and feeding one into the other printed 「已排队（第 2
-    # 位）：未命名工作流2」 where the 2 happened to be the depth of the queue.
-    add_log(t('run.queued', name=name or t('run.queuedUnnamed'), at=position))
-    _mirror_queue()
-    return {
-        'status': 200,
-        'body': {
-            'ok': True,
-            'queued': True,
-            'queue_id': entry['id'],
-            'position': position,
-            'message': t('api.queued', at=position),
-        },
-    }
-
-
-def queue_snapshot() -> list:
-    """The waiting requests, oldest first — without their payloads."""
-    with _queue_lock:
-        return [{key: entry[key] for key in ('id', 'workflow_name', 'nodes', 'queued_at')} for entry in _RUN_QUEUE]
-
-
-def cancel_queued(queue_id: str) -> bool:
-    """Drop one waiting request by its queue id. True when it is gone."""
-    with _queue_lock:
-        for position, entry in enumerate(_RUN_QUEUE):
-            if entry['id'] == queue_id:
-                del _RUN_QUEUE[position]
-                break
-        else:
-            return False
-    _mirror_queue()
-    return True
-
-
-def clear_queue() -> int:
-    with _queue_lock:
-        count = len(_RUN_QUEUE)
-        del _RUN_QUEUE[:]
-    _mirror_queue()
-    return count
-
-
-def _mirror_queue() -> None:
-    """Write the current in-memory queue to ``runs.db`` so a restart does not lose it.
-
-    The in-memory list stays the runtime source of truth (ordering, drain, the liveness
-    check all read it); the DB row is only the recovery mirror, so a failure here must
-    never break the request that triggered it.
-
-    The snapshot AND the write are one critical section. Read-then-write outside the lock let
-    two concurrent mirrors land in either order: the older, shorter snapshot could arrive last
-    and leave the disk mirror one entry short, so a request the user was told 「已排队（第 2
-    位）」 silently vanished on the next restart — the exact thing this mirror exists to prevent.
-    """
-    try:
-        with _queue_lock:
-            get_run_store().save_queue(list(_RUN_QUEUE))
-    except Exception:
-        logger.exception(t('run.queueMirrorFailed'))
-
-
-def _load_pending_queue() -> int:
-    """Re-populate ``_RUN_QUEUE`` from the mirror after a restart (called at boot).
-
-    Only fills an empty queue: a process that already has live in-memory entries (a test
-    harness, or a re-entrant boot) must not have them clobbered by an older disk snapshot.
-    Returns how many requests came back."""
-    with _queue_lock:
-        if _RUN_QUEUE:
-            return 0
-        try:
-            restored_requests = get_run_store().load_queue()
-        except Exception:
-            logger.exception(t('run.queueLoadFailed'))
-            return 0
-        _RUN_QUEUE.extend(restored_requests)
-    return len(restored_requests)
-
-
 def _start_next_queued() -> None:
     """Hand the slot to the oldest waiting request, at the end of a run.
 
-    Called from the finishing thread *after* it released the slot and cleared its
-    own handle: the claim also checks thread liveness, so a thread still alive
-    while it unwinds would make this call queue the next request behind itself —
-    and nothing would ever start it again.
+    The queue's own work (pop, mirror, put-back, the recursion past a request that can never
+    start) is :func:`services.runs.queue.drain_queue`; what stays here is only the injection of
+    ``_begin_run`` — the queue cannot import the app, and starting a run is the app's work.
+
+    Called from the finishing thread *after* it released the slot and cleared its own handle:
+    the claim also checks thread liveness, so a thread still alive while it unwinds would make
+    this call queue the next request behind itself — and nothing would ever start it again.
     """
-    # Declared with its type instead of `_RUN_QUEUE.pop(0) if _RUN_QUEUE else None`: the ternary
-    # makes pylint widen the entry to the list itself, and every subscript below then reads as an
-    # error. The shape is also the plainer one to read at the guard.
-    entry: QueueEntry | None = None
-    with _queue_lock:
-        if _RUN_QUEUE:
-            entry = _RUN_QUEUE.pop(0)
-    # The pop removed an entry from the queue; mirror BEFORE branching so a run that
-    # starts (and is never put back) leaves the disk mirror without it too.
-    _mirror_queue()
-    if entry is None:
-        return
-    try:
-        answer = _begin_run(entry['data'], entry['lang'])
-    except Exception as e:  # a broken request must not strand the ones behind it
-        logger.exception(t('run.queueStartFailed'))
-        add_log(t('run.queue_broken', name=entry['workflow_name'] or entry['id'], err=e))
-        _start_next_queued()
-        return
-    body = answer.get('body') or {}
-    if answer.get('drop'):
-        # Refused at the moment of starting in a way a retry can never fix — the
-        # record a 继续 pointed at has been purged while it waited. Without this
-        # the entry would be pushed back and refused again after every run.
-        add_log(t('run.queue_broken', name=entry['workflow_name'] or entry['id'], err=body.get('error', '')))
-        _start_next_queued()
-        return
-    if answer.get('status') == 200 and body.get('ok') and not body.get('queued'):
-        add_log(t('run.queue_started', name=entry['workflow_name'] or entry['id'], rid=body.get('run_id', '')))
-        return
-    # Someone else took the slot in between (a manual Run press): put the
-    # request back at the front rather than drop what the user already asked for.
-    with _queue_lock:
-        _RUN_QUEUE.insert(0, entry)
-        add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
-    _mirror_queue()
+    drain_queue(_begin_run)
 
 
 # ─── Scheduled tasks (the clock lives in scheduling/clock.py) ───
@@ -1471,7 +1274,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
     Answers ``{'status': int, 'body': dict}`` instead of a Flask response,
     because the caller is not always a request.
     """
-    shape_error = _workflow_shape_error(data)
+    shape_error = workflow_shape_error(data)
     if shape_error:
         # Refused before the slot is claimed: a payload the engine cannot walk
         # must not become a failed run record, let alone a queued one that dies
@@ -1495,7 +1298,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         _llm_provider(data.get('llm') or {})
     except UnknownOperationError as e:
         return {'status': 400, 'body': {'ok': False, 'error': str(e)}}
-    resume_error = _resume_refusal(data)
+    resume_error = resume_refusal(data)
     if resume_error:
         # 'drop' tells the queue this entry can never start, so it is discarded
         # rather than pushed back to wait for a run that no longer exists.
@@ -1503,7 +1306,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
     # Guard and claim are one critical section. They used to be ~70 lines
     # apart: two concurrent POSTs both passed the check, both started a run
     # thread, and interleaved writes into one console, one store, one crawl.
-    with _execute_lock:
+    with execute_lock:
         running_thread = execution_state['thread']
         # The previous run's thread may still be unwinding after a Stop (it clears
         # `running` first), so check liveness too — otherwise a quick Stop → Run
@@ -1513,7 +1316,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # The explicit "refuse instead of wait" door, kept because the
                 # banner's 继续 wants to fail fast, not silently reorder runs.
                 return {'status': 400, 'body': {'ok': False, 'error': t('api.alreadyRunning')}}
-            return _enqueue_run(data, lang_header)
+            return enqueue_run(data, lang_header)
 
         # Claim under the same lock that reads it — no second request can slip
         # through while this one is still validating.
@@ -2300,7 +2103,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         execution_state['thread'].start()
     except Exception as e:
         # A thread that never started never runs its finally, so the claim would stay
-        # held: ``running`` stuck True, ``_settle_orphaned_records`` (which skips a
+        # held: ``running`` stuck True, ``settle_orphaned_records`` (which skips a
         # running slot) never helps, and every later 运行 parks forever. Give the slot
         # back and let the queue drain instead.
         # Disarm first: this run opened no record, so its start failure belongs to the
@@ -2644,95 +2447,7 @@ def _note_heavy_result(rows, label: str) -> None:
     add_log(t('run.heavy_result', nid=label, n=len(rows)))
 
 
-def _close_active_crawlers(quit_timeout: float = 3.0):
-    """Close the login/crawl browsers of live sessions, one at a time.
-
-    Used to run `taskkill /F /IM chromedriver.exe` — which killed every
-    chromedriver on the machine, taking down unrelated Selenium apps and test
-    runs. Each registered crawler is now quit with a bounded grace, and only a
-    driver that ignores it is force-killed — by PID, tree included, so the
-    chrome children of *this* session die with it.
-    """
-    for crawler in list(execution_state['active_crawlers']):
-        _close_login_browser(crawler, quit_timeout=quit_timeout)
-
-
 # ─── Stop / Status API ─────────────────────────────────────────
-
-
-#: How long a browser gets to close itself before 停止 kills its driver process.
-#: Measured, the graceful answer is the fast one when it can be given at all: an idle
-#: session quits in well under a second. What it can NEVER do is interrupt a command
-#: already running — ``driver.quit()`` is an in-band request that chromedriver queues
-#: *behind* the worker's own, so a Stop that waited on it watched the worker finish its
-#: 40.0 s page load (or its 30.0 s in-page fetch) first. The kill is what ends a crawl;
-#: this is only the grace given to a browser that is already done.
-STOP_QUIT_GRACE = 0.8
-
-
-def _mark_records_stopping() -> None:
-    """Flip the records this run owns from 运行中 to 正在停止, on this thread.
-
-    The worker still owes each of them a verdict, and measured, that debt can take
-    tens of seconds to pay. A row that reads 运行中 for that long after the button said
-    正在停止 is read as "停止 did nothing" — which is the complaint this answers, and
-    the reason it is written here rather than left to the unwinding thread.
-    ``finish_run`` overwrites it with the real verdict when that thread arrives.
-    """
-    opened = list(execution_state['open_records'])
-    if not opened:
-        return
-    try:
-        store = get_run_store()
-    except Exception as e:
-        add_log(t('run.recordWriteFailed', rid=' + '.join(opened), err=e))
-        return
-    for rid in opened:
-        try:
-            store.mark_stopping(rid)
-        except Exception as e:
-            add_log(t('run.recordWriteFailed', rid=rid, err=e))
-
-
-def _settle_orphaned_records() -> int:
-    """Settle a record this process opened and then abandoned without a verdict.
-
-    ``promote_stale_runs`` only ever ran at startup, so a row whose write failed (a
-    locked runs.db at exactly the wrong moment) or whose daemon thread died with the
-    window stayed on 运行中 until the service was restarted. Measured: that restart was
-    faster than 停止, which is how this gap was found.
-
-    Two things keep it safe to ask the question of a live server. It is asked under
-    ``_execute_lock`` — the same lock that claims a run — so it cannot settle a row a
-    run an instant older has just opened; and it is limited to ``owned_records``, the
-    ids THIS process wrote, so a second instance's live run is none of its business.
-    """
-    thread = execution_state.get('thread')
-    if execution_state['running'] or (thread is not None and thread.is_alive()):
-        return 0
-    owned = set(execution_state.get('owned_records') or set())
-    if not owned:
-        return 0
-    with _execute_lock:
-        # Re-read inside the lock: a claim that started while we were deciding has
-        # now either finished or cannot proceed.
-        thread = execution_state.get('thread')
-        if execution_state['running'] or (thread is not None and thread.is_alive()):
-            return 0
-        try:
-            promoted = get_run_store().promote_stale_runs(
-                only=owned,
-                note=t('run.interrupted_by_dead_worker'),
-            )
-        except Exception:
-            # A store we cannot open is a store we cannot settle; the panel says so
-            # through its own error, and 运行中 is not a lie worse than no answer.
-            return 0
-    if promoted:
-        # Said out loud because it otherwise looks like the panel decided to lie: a
-        # row flips to 已中断 with no run having ended in front of the user.
-        add_log(t('run.reconciled', n=len(promoted)))
-    return len(promoted)
 
 
 @app.route('/api/workflow/stop', methods=['POST'])
@@ -2742,7 +2457,7 @@ def stop_workflow():
     # then have ``running=False``/``stopping=True`` land on that brand-new run — the
     # interleaving that made a stop aimed at run A silently kill run B. The idle check
     # and every state write below are therefore one atomic decision.
-    with _execute_lock:
+    with execute_lock:
         thread = execution_state.get('thread')
         if not execution_state['running'] and not (thread is not None and thread.is_alive()):
             # Nothing is running and nothing is unwinding. Answering as if a stop had been
@@ -2761,7 +2476,7 @@ def stop_workflow():
         # not an outcome the run has not written yet.
         execution_state['stopping'] = True
         execution_state['running'] = False
-        _mark_records_stopping()
+        mark_records_stopping()
         crawlers = list(execution_state['active_crawlers'])
         execution_state['active_crawlers'].clear()
         # A daemon thread starts with a fresh (default) language; capture the request's
@@ -2786,7 +2501,7 @@ def stop_workflow():
         # A browser the worker registered *after* the snapshot above is still in the
         # registry, and nothing else on this path would ever reach it: the node that
         # bought it is standing in a page load, not in its finally.
-        _close_active_crawlers(quit_timeout=STOP_QUIT_GRACE)
+        close_active_crawlers(quit_timeout=STOP_QUIT_GRACE)
 
     # Closing a browser is quick but not instantaneous, and a visible Chrome with a
     # pending dialog can take its bounded grace to die. Doing it inline made the Stop
@@ -3155,7 +2870,7 @@ def runs_resumable():
     limit = _safe_int(data.get('limit'), 10, minimum=1, maximum=100)
     # Same repair as the panel's: a record its worker abandoned must become
     # continuable on a page load, not only once somebody opens 运行记录.
-    _settle_orphaned_records()
+    settle_orphaned_records()
     if data.get('all'):
         found = get_run_store().list_resumable(None, limit=limit, include_finished=True)
     else:
@@ -3187,13 +2902,13 @@ def runs_for_workflow():
     empty = {'ok': True, 'runs': [], 'latest_run_id': '', 'workflow_fingerprint': '', 'queue': queue_snapshot()}
     if not isinstance(workflow, dict) or not workflow.get('nodes'):
         return jsonify(empty)
-    shape_error = _workflow_shape_error({'workflow': workflow})
+    shape_error = workflow_shape_error({'workflow': workflow})
     if shape_error:
         return jsonify({'ok': False, 'error': shape_error}), 400
     limit = _safe_int(data.get('limit'), 50, minimum=1, maximum=200)
     # Opening this tab is also a moment to repair a record whose worker died in a
     # previous process — same as the resumable list, so both doors agree.
-    _settle_orphaned_records()
+    settle_orphaned_records()
     fingerprint = workflow_fingerprint(effective_workflow(workflow))
     runs = get_run_store().list_resumable(fingerprint, limit=limit, include_finished=True)
     return jsonify(
@@ -3219,7 +2934,7 @@ def runs_list():
     store = get_run_store()
     # Asking the store is the moment to repair it: this is the read that happens when
     # somebody opens the panel because a record looks wrong.
-    _settle_orphaned_records()
+    settle_orphaned_records()
     runs = store.list_resumable(limit=limit, include_finished=True)
     # The waiting list rides along: the panel that shows finished runs is where
     # someone looks to see what has not started yet.
@@ -3245,37 +2960,13 @@ def runs_stats():
     return jsonify({'ok': True, 'stats': get_run_store().stats()})
 
 
-def _live_run_ids() -> list:
-    """Every run id a live thread may still be writing. The one definition moved to
-    ``state.live_run_ids`` so the export Blueprint holds the same line without importing
-    this module (a cycle); this alias keeps the run-record routes' call sites unchanged."""
-    return live_run_ids()
-
-
-def _reject_live_run(run_id: str):
-    """True when run_id names a run a live thread is still writing.
-
-    Discarding or deleting it mid-flight would pull the rows and cursor out
-    from under the writer — the UI's 丢弃/删除 must go through Stop first.
-
-    "Go through Stop" is not the same as "Stop has been honoured": after 停止 the
-    worker is still settling, still holding its browsers, and still writing rows, so
-    the answer must be yes until its thread is actually gone. Reading only
-    ``running`` refused the live run before the Stop and allowed it during the one
-    window where deleting it is most destructive.
-    """
-    if not run_id:
-        return False
-    return str(run_id) in _live_run_ids()
-
-
 @app.route('/api/runs/purge', methods=['POST'])
 def runs_purge():
     """Housekeeping. Interrupted runs are the last to go — they are the ones
     somebody may still want to continue. The live run, if any, is exempt, and so
     is every 置顶 record (a manual purge must not silently undo a pin either)."""
     keep: list[str] = []
-    keep += _live_run_ids()
+    keep += live_run_ids()
     keep += sorted(_locked_run_ids())
     removed = get_run_store().purge(exclude_run_id=keep)
     _prune_orphan_run_locks()
@@ -3299,7 +2990,7 @@ def runs_discard():
     store = get_run_store()
     if store.get_run(run_id) is None:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
-    if _reject_live_run(run_id):
+    if reject_live_run(run_id):
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     if lock_store.is_locked('runs', run_id):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
@@ -3319,7 +3010,7 @@ def runs_delete():
     run_id = str(data.get('run_id') or '').strip()
     if not run_id:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
-    if _reject_live_run(run_id):
+    if reject_live_run(run_id):
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     if lock_store.is_locked('runs', run_id):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
@@ -3346,7 +3037,7 @@ def runs_clear():
         return _bad_body()
     if data.get('confirm') is not True:
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
-    live = _live_run_ids()
+    live = live_run_ids()
     # 清空 spares every run a live thread is still writing AND every locked one — the user
     # pinned those on purpose. A serial pass closes one record per workflow, so this is a set
     # rather than the single id the request thread happens to hold.
@@ -3502,7 +3193,7 @@ def start_background_services() -> None:
     # click: startup is the other moment nothing is writing.
     _housekeep(force=True)
     # A restart must not silently drop the requests the user already parked.
-    restored = _load_pending_queue()
+    restored = load_pending_queue()
     if restored:
         logger.info(t('run.queue_restored', n=restored))
     clock.start()

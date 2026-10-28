@@ -113,9 +113,15 @@ QueueEntry = dict
 
 #: Queued requests live in memory only. A restart drops them, which is the honest
 #: behaviour for a list of intentions nobody is here to confirm. The queue is guarded by
-#: app's `_queue_lock`; the list itself is only ever appended to / slice-cleared, never
-#: rebound.
+#: ``services.runs.queue.queue_lock``; the list itself is only ever appended to / slice-cleared,
+#: never rebound.
 _RUN_QUEUE: list[QueueEntry] = []
+
+#: Serializes the guard-and-claim of a new run. It lives here rather than in ``app`` because the
+#: run-record reconciler (``services.runs.settlement``) must ask "is any thread still writing?"
+#: and settle under **the same lock** the claim takes — otherwise a settle can land on a row a
+#: run an instant older has just opened. Acquired, never rebound.
+execute_lock = threading.Lock()
 
 #: Read-through cache of loaded datasets. The store is the source of truth, so anything
 #: registered days ago still resolves even after this empties; entries are inserted, popped

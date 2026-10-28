@@ -26,8 +26,10 @@ import threading
 
 import pytest
 from run_wait import run_finished
+from state import _RUN_QUEUE
 
 from i18n import t
+from services.runs import queue as run_queue
 from services.runs.store import NODE_FAILED, RunStore
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
@@ -87,8 +89,8 @@ class TestQueueHandOff:
     """
 
     def _seed(self, app_module, entries):
-        with app_module._queue_lock:
-            app_module._RUN_QUEUE[:] = entries
+        with run_queue.queue_lock:
+            _RUN_QUEUE[:] = entries
 
     @pytest.fixture(autouse=True)
     def _drain_after(self, app_module):
@@ -96,8 +98,8 @@ class TestQueueHandOff:
         queue has to be empty again before the next test looks for a quiet
         server — otherwise the scaffolding leaks as a 30s wait elsewhere."""
         yield
-        with app_module._queue_lock:
-            app_module._RUN_QUEUE[:] = []
+        with run_queue.queue_lock:
+            _RUN_QUEUE[:] = []
 
     def test_a_request_that_lost_the_slot_waits_at_the_front_again(self, client, app_module, monkeypatch):
         entry = {'id': 'q1', 'workflow_name': 'loser', 'nodes': 1, 'queued_at': 0.0, 'data': {}, 'lang': 'en'}
@@ -142,7 +144,7 @@ class TestQueueHandOff:
             return {'status': 200, 'body': {'ok': True, 'run_id': 'r-next'}}
 
         monkeypatch.setattr(app_module, '_begin_run', flaky)
-        app_module._RUN_QUEUE[0]['data'] = {'boom': True}
+        _RUN_QUEUE[0]['data'] = {'boom': True}
         app_module._start_next_queued()
         assert app_module.queue_snapshot() == [], 'both entries were consumed'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])

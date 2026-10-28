@@ -499,12 +499,17 @@ def client(app_module, data_root, request):
         _wait_for_quiet_server(app_module)
 
     module = app_module
+    # Imported here, not at the top: ``backend/`` only joins sys.path below, and the
+    # queue's owner is ``state`` now — ``app`` no longer binds the list. The queue's
+    # operations live in ``services/runs/queue.py``, which mutates this same object.
+    from state import _RUN_QUEUE
+
     state_backup = _snapshot_state(module.execution_state)
     # The run queue is module state, not execution_state: a request one test
     # parked would otherwise be started by the next test's finishing run and
     # write results into a state that test never asked for.
-    queue_backup = list(module._RUN_QUEUE)
-    module._RUN_QUEUE.clear()
+    queue_backup = list(_RUN_QUEUE)
+    _RUN_QUEUE.clear()
     # A monotonic counter, NOT an id()-derived number: Request objects are freed
     # and their addresses reused, so two tests could land on the same .db file and
     # read each other's rows (a purge that removed one file too many, a registry
@@ -542,7 +547,7 @@ def client(app_module, data_root, request):
     finally:
         sys.stdout = stdout_backup
         _restore_state(module.execution_state, state_backup)
-        module._RUN_QUEUE[:] = queue_backup
+        _RUN_QUEUE[:] = queue_backup
         module._dataset_cache.clear()
         for store in (run_store, dataset_store, lexicon_store, biblio_store, history_store):
             with contextlib.suppress(Exception):
