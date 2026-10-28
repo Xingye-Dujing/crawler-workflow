@@ -3,7 +3,6 @@
 import pandas as pd
 
 
-@staticmethod
 def drop_null(df: pd.DataFrame, columns: list = None, how: str = 'any') -> pd.DataFrame:
     subset = [c for c in (columns or []) if c in df.columns] or None
     work = df.copy()

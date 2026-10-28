@@ -6,7 +6,6 @@ from i18n import t
 from services.analysis.kernels import UnknownOperationError
 
 
-@staticmethod
 def join_tables(
     df: pd.DataFrame, other_df: pd.DataFrame, how: str = 'left', left_on: str = '', right_on: str = ''
 ) -> pd.DataFrame:

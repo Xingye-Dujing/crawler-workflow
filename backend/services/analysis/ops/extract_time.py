@@ -10,7 +10,6 @@ from services.analysis.kernels import TIME_PARTS, UnknownOperationError, _to_dat
 logger = logging.getLogger(__name__)
 
 
-@staticmethod
 def extract_time(df: pd.DataFrame, column: str, new_col: str = '日期', part: str = 'date') -> pd.DataFrame:
     """Derive one calendar part of a timestamp column.
 

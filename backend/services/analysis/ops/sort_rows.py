@@ -3,7 +3,6 @@
 import pandas as pd
 
 
-@staticmethod
 def sort_rows(df: pd.DataFrame, column: str, ascending: bool = True) -> pd.DataFrame:
     if column not in df.columns:
         return df

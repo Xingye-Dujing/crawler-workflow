@@ -5,7 +5,6 @@ import pandas as pd
 from services.analysis.kernels import _stable_seed
 
 
-@staticmethod
 def sample_rows(df: pd.DataFrame, n: int = None, frac: float = None, seed: int = None) -> pd.DataFrame:
     # Neither bound configured: pandas' own default is n=1, which silently
     # threw away every other row. Ask for nothing, change nothing.

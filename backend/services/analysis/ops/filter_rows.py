@@ -5,7 +5,6 @@ import pandas as pd
 from services.analysis.kernels import UnknownOperationError, _checked_pattern
 
 
-@staticmethod
 def filter_rows(df: pd.DataFrame, column: str, op: str, value) -> pd.DataFrame:
     if column not in df.columns:
         return df

@@ -10,7 +10,6 @@ from services.analysis.kernels import _to_bool, _to_datetime
 logger = logging.getLogger(__name__)
 
 
-@staticmethod
 def convert_type(df: pd.DataFrame, column: str, dtype: str) -> pd.DataFrame:
     if column not in df.columns:
         return df

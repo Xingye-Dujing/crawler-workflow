@@ -3,7 +3,6 @@
 import pandas as pd
 
 
-@staticmethod
 def fill_null(df: pd.DataFrame, columns: list = None, value=None, method: str = None) -> pd.DataFrame:
     work = df.copy()
     cols = [c for c in (columns or []) if c in work.columns] or list(work.columns)

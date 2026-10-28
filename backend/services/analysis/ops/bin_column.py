@@ -6,7 +6,6 @@ from i18n import t
 from services.analysis.kernels import UnknownOperationError
 
 
-@staticmethod
 def bin_column(
     df: pd.DataFrame, column: str, bins: list = None, labels: list = None, new_col: str = ''
 ) -> pd.DataFrame:

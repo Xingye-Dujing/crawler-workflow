@@ -6,7 +6,6 @@ from i18n import t
 from services.analysis.kernels import DEDUPE_MODES, UnknownOperationError
 
 
-@staticmethod
 def drop_duplicates(df: pd.DataFrame, columns: list = None, keep: str = 'first', mode: str = 'exact') -> pd.DataFrame:
     """Drop repeated rows, by exact equality or by their normalised identity.
 

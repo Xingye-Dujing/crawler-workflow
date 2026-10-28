@@ -10,7 +10,6 @@ from services.analysis.kernels import UnknownOperationError
 logger = logging.getLogger(__name__)
 
 
-@staticmethod
 def dedupe_similar(df: pd.DataFrame, column: str, max_distance: int = 8) -> pd.DataFrame:
     """Drop near-duplicate rows — SimHash distance within ``max_distance`` bits.
 

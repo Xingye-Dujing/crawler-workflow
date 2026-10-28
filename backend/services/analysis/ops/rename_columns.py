@@ -3,6 +3,5 @@
 import pandas as pd
 
 
-@staticmethod
 def rename_columns(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
     return df.rename(columns=mapping)

@@ -10,7 +10,6 @@ from services.analysis.kernels import UnknownOperationError, _blank, _to_datetim
 logger = logging.getLogger(__name__)
 
 
-@staticmethod
 def bin_time(
     df: pd.DataFrame,
     column: str,

@@ -6,7 +6,6 @@ from i18n import t
 from services.analysis.kernels import UnknownOperationError
 
 
-@staticmethod
 def column_calc(df: pd.DataFrame, new_col: str, expr: str) -> pd.DataFrame:
     """Add a computed column, or refuse with the expression that could not run.
 

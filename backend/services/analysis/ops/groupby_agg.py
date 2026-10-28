@@ -6,7 +6,6 @@ from i18n import t
 from services.analysis.kernels import UnknownOperationError
 
 
-@staticmethod
 def groupby_agg(
     df: pd.DataFrame,
     group_col: str,

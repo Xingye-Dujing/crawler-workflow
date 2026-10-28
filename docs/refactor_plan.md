@@ -213,7 +213,7 @@ backend/
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
 | `crawlers/platforms/hongguo/harvest.py` | 994 | Stage 1 已拆完（CA 信任 → `trust.py` 213；UIA 驱动 → `player_ui.py` 616；名称规则 → `naming.py` 83；剩下的就是"采集夹具 + 走路"这一件事） |
-| `services/analysis/pipeline.py` | 2386 | Stage 9 进行中：17 个表格类 op 已各成一文件（`ops/`），kernel 与参数契约已分到 `kernels.py`/`contracts.py`/`topic_kernels.py`；余 17 个分析 op 仍在类里 |
+| `services/analysis/pipeline.py` | 272 | **Stage 9 分析侧完成（2026-10-29）**：34 个分析 op 全部在 `ops/`，一行一注册；`pipeline.py` 只剩 `inspect`/`diff`/`_operations()`/`run_pipeline` |
 | `services/charts/tikz.py` | 2430 | Stage 5b（图/表/公式三本职责，拆 `charts/latex_{figures,tables,formulas}.py`；注册表已在 `charts/registry.py` 落好） |
 | `services/biblio/metrics.py` | 1996 | Stage 5b 同批：按「建图 / 指标 / 剪枝 / 输出」拆 |
 | `services/charts/visualizer.py` | 1805 | Stage 5b（调色板与字体栈已在文件头自证；拆「控制台图型」与「biblio 图型」两条 builder 路） |
@@ -1090,8 +1090,15 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `drop_null = staticmethod(OPS['drop_null'])` 的显式绑定。
     - **门禁**：`test_data_analysis`+`test_analysis_api`+`test_node_schema`+`test_stopwords`
       **1,116 / 1,107 passed**；ruff check + format；产品档与 tests 档 pylint 均 10.00/10。
-  - **Stage 9 剩余**：`suggest_stages`/`topic_*`/`cluster_*`/`cooccur`/`reply_graph`/`compare_platform`/
-    `sentiment_evolution`/`forecast`/`alert` 共 17 个 op（约 1,900 行）搬进 `ops/`，pipeline 只剩 runner。
+  - **Stage 9 第三片（余下 17 个分析 op 搬完）已完成（2026-10-29）**：`pipeline.py` **2,386 → 272 行**，
+    `ops/` 现有 **34 个单 op 文件**；`_operations()` 变成 `dict(OPS)`，服务类上 34 个 op 全部以
+    `name = staticmethod(OPS['name'])` 显式绑定。**切片脚本生成的模块带了一行多余的 `@staticmethod`**
+    （函数在模块级，装饰器只让静态分析看着像方法）——34 个文件统一删掉后 `ruff`/`pylint` 全绿；
+    教训：切片脚本产出后要 `node --check`/`python -m compileall` 之外的**形状**检查（一行装饰器没人报错）。
+    - **门禁**：`test_data_analysis`+`test_analysis_api`+`test_node_schema` **1,107 / 1,045 passed**；
+      ruff check + format；产品档 pylint 10.00/10。
+  - **Stage 9 剩余**：12 个进程 op（`nodes/executors/process.py`，`execute_process_node` 的分派链）
+    仍是一处描述子，按同一模式搬到 `services/analysis/process_ops/` 或等价注册表。
   - **再后**：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
     #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
     `static/js/panels/settings.js` 1,985、`static/js/workflow.js` 4,458、`static/js/canvas.js` 3,893 在名单上；

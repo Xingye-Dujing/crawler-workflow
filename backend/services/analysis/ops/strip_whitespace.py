@@ -3,7 +3,6 @@
 import pandas as pd
 
 
-@staticmethod
 def strip_whitespace(df: pd.DataFrame, columns: list = None) -> pd.DataFrame:
     work = df.copy()
     # is_string_dtype() instead of select_dtypes('object'): pandas 3 stores
