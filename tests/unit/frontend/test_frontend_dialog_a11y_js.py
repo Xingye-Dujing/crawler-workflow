@@ -18,8 +18,8 @@ pytestmark = [
     pytest.mark.skipif(shutil.which('node') is None, reason='node not installed'),
 ]
 
-JS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_dialog_a11y.mjs'
+JS_DIR = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_dialog_a11y.mjs'
 
 
 @pytest.fixture(scope='module')

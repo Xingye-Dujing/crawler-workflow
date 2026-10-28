@@ -485,7 +485,7 @@
   （可达性审计只看**已定义**的键，双语一致性只看两种语言彼此），中文界面里 `map` 这类 ASCII 列名就一直以标识符示人。
   现在每个表头取本语言的词，并把**磁盘上的列名**留在 `title` 里——导出成 CSV/GraphML 后仍对得上；
   这个构建没有词的列（新版本或手工加的）照实显示它自己的名字，绝不印出 `biblio.col.xxx`，也绝不编一个标题。
-  `tests/unit/test_frontend_i18n_js.py` 用 `biblio_schema` 的十组列常量当全集，钉住"服务端能吐的每一列都有词"。
+  `tests/unit/frontend/test_frontend_i18n_js.py` 用 `biblio_schema` 的十组列常量当全集，钉住"服务端能吐的每一列都有词"。
   **面板自己的输入框与下拉**：它们是 JS 直接写的裸 `<input>`/`<select>`，没有 `.settings-input` 类，
   于是不跟随主题——深色面板上一个 UA 白底黑字框；三个下拉也要在重绘后交给 `CustomSelect`，否则仍是系统绘制的白色弹层。
   还有：面板每敲一个字都整体重绘，光标所在元素被销毁，第二个字符就得再点一次（真机测得 focus 丢失）——

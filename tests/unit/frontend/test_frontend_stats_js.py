@@ -22,7 +22,7 @@ pytestmark = [
     pytest.mark.skipif(shutil.which('node') is None, reason='node not installed'),
 ]
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
 HARNESS = REPO / 'tests' / 'frontend' / 'harness_stats.mjs'
 

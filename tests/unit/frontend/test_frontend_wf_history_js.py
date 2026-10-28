@@ -16,9 +16,9 @@ import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_wf_history.mjs'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_wf_history.mjs'
 STATIC = REPO / 'backend' / 'static'
 WORKFLOW_JS = STATIC / 'js' / 'workflow.js'
 CANVAS_JS = STATIC / 'js' / 'canvas.js'

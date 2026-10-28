@@ -42,7 +42,7 @@ from node_runner import run_node
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
 CSS = REPO / 'backend' / 'static' / 'css' / 'style.css'
 HARNESS = REPO / 'tests' / 'frontend' / 'harness_custom_select.mjs'

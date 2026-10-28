@@ -67,7 +67,7 @@ The codebase already uses a lightweight namespace convention (`const Foo = { …
 loads as flat `<script>` tags in a fixed order — which is why `AGENTS.md` warns that a top-level
 `const` is not a `window` property and that "a wrapper installed in another file is not the function
 your harness loads". Frontend JS *is* under test: `tests/frontend/harness_*.mjs` load the **real**
-files into a node `vm`, driven by `tests/unit/test_frontend_*`.
+files into a node `vm`, driven by `tests/unit/frontend/test_frontend_*`.
 
 ## Test tiers
 `pytest.ini` runs **only the fast tier by default** and adds `--disable-socket`. Tiers: `unit`,

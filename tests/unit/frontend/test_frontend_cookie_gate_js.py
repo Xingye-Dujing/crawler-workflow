@@ -37,7 +37,7 @@ pytestmark = [
     pytest.mark.skipif(shutil.which('node') is None, reason='node not installed'),
 ]
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 JS_DIR = ROOT / 'backend' / 'static' / 'js'
 HARNESS = ROOT / 'tests' / 'frontend' / 'harness_cookie_gate.mjs'
 

@@ -25,10 +25,10 @@ import pytest
 from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
 STATIC_DIR = REPO / 'backend' / 'static'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_schedules.mjs'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_schedules.mjs'
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -263,7 +263,7 @@ def test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel():
     panel added to ``DOCKED_PANELS`` without being added there is a panel nobody checks."""
     docked = re.search(r'var DOCKED_PANELS = \[([^\]]*)\]', _js('workflow.js'))
     ids = re.findall(r"'([\w-]+)'", docked.group(1))
-    harness = (Path(__file__).resolve().parents[1] / 'frontend' / 'harness_panels.mjs').read_text(encoding='utf-8')
+    harness = (Path(__file__).resolve().parents[2] / 'frontend' / 'harness_panels.mjs').read_text(encoding='utf-8')
     listed = re.search(r'const ids = \[([^\]]*)\]', harness)
     assert listed is not None
     for panel_id in ids:

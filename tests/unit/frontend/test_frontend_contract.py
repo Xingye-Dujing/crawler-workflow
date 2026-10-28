@@ -46,10 +46,10 @@ from services.charts.contracts import BIBLIO_CHART_TYPES
 
 pytestmark = pytest.mark.unit
 
-STATIC_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'static'
+STATIC_DIR = Path(__file__).resolve().parents[3] / 'backend' / 'static'
 JS_DIR = STATIC_DIR / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_canvas.mjs'
-VALIDATE_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_validate.mjs'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_canvas.mjs'
+VALIDATE_HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_validate.mjs'
 CANVAS_JS = JS_DIR / 'canvas.js'
 # The node settings panel (openSettings and every field renderer) lives in its own module.
 SETTINGS_JS = JS_DIR / 'panels' / 'settings.js'

@@ -24,8 +24,8 @@ from node_runner import run_node
 
 pytestmark = pytest.mark.unit
 
-JS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_cookie.mjs'
+JS_DIR = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_cookie.mjs'
 
 
 @pytest.fixture(scope='module')

@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 from node_runner import run_node
 
-REPO = Path(__file__).resolve().parents[2]
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_wfmgr.mjs'
+REPO = Path(__file__).resolve().parents[3]
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_wfmgr.mjs'
 STATIC = REPO / 'backend' / 'static'
 WORKFLOW_JS = STATIC / 'js' / 'workflow.js'
 INDEX_HTML = STATIC / 'index.html'

@@ -25,8 +25,8 @@ from pathlib import Path
 import pytest
 from node_runner import run_node
 
-REPO = Path(__file__).resolve().parents[2]
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_exports.mjs'
+REPO = Path(__file__).resolve().parents[3]
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_exports.mjs'
 WORKFLOW_JS = REPO / 'backend' / 'static' / 'js' / 'workflow.js'
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]

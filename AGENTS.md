@@ -98,7 +98,7 @@ change is judged on all three, not on the machine it was typed on.
 - **A stateful rule needs a stateless suite.** One shared cookie dir → `quiet_jar` snapshots/restores it per test; a
   crawl test declares `seeded_logins`; a test *about* the login rule points `Config.COOKIE_DIR` at its own tmp dir.
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js`/`workflow.js`/`app.js`
-  into a node `vm` (`harness_dom.mjs`), driven by `tests/unit/test_frontend_*`; any result-affecting JS change must
+  into a node `vm` (`harness_dom.mjs`), driven by `tests/unit/frontend/test_frontend_*`; any result-affecting JS change must
   sync a scenario; `urlPlatform` is contract-pinned against `core.refs.platform_for`.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields
   the selected mode requires; if not loaded, refuse — never guess a shape. A stored value off the option list shows
@@ -254,7 +254,7 @@ change is judged on all three, not on the machine it was typed on.
 - **The panel holds no second opinion about time or state:** `next_run_local`/`last_run_local` (rendered in the
   *task's* zone), the trigger sentence, `runnable`/`why_not` and the clock status all come from the server, and a
   status token becomes a catalogue word — an unknown token shows as itself. Never format a moment in the browser
-  and never invent a neighbouring word; `tests/unit/test_frontend_schedules.py` drives the real `schedules.js`.
+  and never invent a neighbouring word; `tests/unit/frontend/test_frontend_schedules.py` drives the real `schedules.js`.
   **A new dock belongs in `DOCKED_PANELS` *and* in the dock matrix** (`tests/frontend/harness_panels.mjs`,
   enforced by `TestTheDock`/`test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel`).
 

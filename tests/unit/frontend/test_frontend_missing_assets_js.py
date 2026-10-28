@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 from node_runner import run_node
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
 INDEX = REPO / 'backend' / 'static' / 'index.html'
 HARNESS = REPO / 'tests' / 'frontend' / 'harness_missing_assets.mjs'

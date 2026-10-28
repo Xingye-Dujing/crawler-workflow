@@ -1107,10 +1107,14 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     唯一 warning 是 jieba 的第三方 `pkg_resources` 弃用；`ruff check`+`format --check` **571 文件**全绿；
     pylint 产品档 **322 文件**、tests 档 **274 文件**均 **10.00/10**。全量 fast 抓到的第七处扫描残留
     （`test_visualization` 的图表清单/`center_node`）已单独提交 `55ed3dd`。
-  - **再后**：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
+  - **再后**：Stage 10 结构（#37）余下（`tests/unit` 其余按域分目录、`tools/ desktop/ samples/ docs/` 归类）、
     #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
     `static/js/panels/settings.js` 1,985、`static/js/workflow.js` 4,458、`static/js/canvas.js` 3,893 在名单上；
     `app.js` 已降到 1,450）。
+  - **Stage 10 第一片（部署三件 + 前端测试归域）已完成（2026-10-29）**：`Dockerfile`/`docker-entrypoint.sh`
+    移入 `deploy/`（compose 仍在根、`dockerfile: deploy/Dockerfile`），`test_platform_rules` 的镜像扫描改读新路径，
+    并新增「compose 指向的 Dockerfile 必须存在」；42 个 `test_frontend_*.py` 收进 `tests/unit/frontend/`，
+    `parents[2]`→`parents[3]`、harness 路径 `parents[1]`→`parents[2]` 同步，前端档 **1,409 passed**。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

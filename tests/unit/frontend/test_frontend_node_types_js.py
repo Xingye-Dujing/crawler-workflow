@@ -22,7 +22,7 @@ from nodes.defaults import NODE_DEFAULTS
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
 HARNESS = REPO / 'tests' / 'frontend' / 'harness_node_types.mjs'
 

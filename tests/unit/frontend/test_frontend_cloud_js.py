@@ -23,7 +23,7 @@ from node_runner import run_node
 
 pytestmark = pytest.mark.unit
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 JS_DIR = ROOT / 'backend' / 'static' / 'js'
 HARNESS = ROOT / 'tests' / 'frontend' / 'harness_cloud.mjs'
 

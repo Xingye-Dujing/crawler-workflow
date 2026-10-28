@@ -23,9 +23,9 @@ from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')]
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_validate.mjs'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_validate.mjs'
 
 
 def _parse(msg: str) -> tuple:
@@ -954,7 +954,7 @@ class TestPlatformSwitch:
         assert results['platformSwitch']['wechat_to_zhihu'] == 'comments'
 
 
-APP_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_app.mjs'
+APP_HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_app.mjs'
 
 # (scenario id, panels opened BEFORE the click, click ancestry, expectation:
 #  which of dashboard/history must STILL be open after the click)
@@ -1057,7 +1057,7 @@ class TestI18nRuntime:
         assert r['echo'] == 'totally.missing.key'
 
 
-RUNSMGR_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_runsmgr.mjs'
+RUNSMGR_HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_runsmgr.mjs'
 
 
 @pytest.fixture(scope='module')

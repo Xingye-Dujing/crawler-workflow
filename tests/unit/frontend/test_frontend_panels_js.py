@@ -21,9 +21,9 @@ import pytest
 from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_panels.mjs'
+HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_panels.mjs'
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
