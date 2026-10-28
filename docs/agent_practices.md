@@ -165,7 +165,15 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   'services'` in two and a half minutes. Rule: after a `git mv`, every moved path is a **new path** that must be
   added explicitly; read `git diff --cached --stat` (or `git status --short` for a leading `RM`/` M`) before
   committing. Local green says nothing about the index — the runner tests the index.
-- **A word-level rename must not run before the path rules, and it cannot see modules held through another module.**
+- **Before "creating" a file in this repo, ask whether it already exists — and run the whole family, not the new test.**
+  Stage 8's first knife (2026-10-28): I wrote `tests/frontend/page_scripts.mjs` as if it were new. It already existed,
+  with a different API (`loadPageScripts(sandbox, {jsDir, only})`), and four harnesses imported it. The write result
+  said **updated**, not created — that word is the tell — and `git status --short` showed `M` where I expected `??`.
+  What caught it was running every `tests/unit/test_frontend_*.py` rather than only the new contract:
+  58 errors, `SyntaxError: The requested module './page_scripts.mjs' does not provide an export named 'loadPageScripts'`,
+  and `git checkout --` restored the file. Two rules fall out: ① check existence first (`??` means new, `M` means you are
+  overwriting someone); ② a new test file is not the blast radius of a shared helper — the family that imports it is.
+- **A rename pass must not run before the path rules, and it cannot see modules held through another module.**
   Moving `utils/` into `core/` (2026-10-28) ended with two avoidable wounds. ① The rule `\bmachine_deps\b` → `machine`
   was applied to whole files to fix bare-module call sites, and it also rewrote the *string literal*
   `'utils/machine_deps.py'` into `'utils/machine.py'` inside `WINDOWS_TABLES` and the Dockerfile-env scan — a path

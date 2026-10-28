@@ -892,12 +892,39 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （如 `['custom-select.js','workflow.js','app.js']`）与两条按行清点键的契约测试 ——
     这套多文件装载机制正是 Stage 8 的第一块地基（`tests/frontend/page_scripts.mjs`），
     在 Stage 7 里做等于把同一个机制建两遍。#34 以 Python 侧结案，JS 侧在 #35 里有明文凭据要求。
-  - **下一刀 = Stage 8 第一片**：`tests/frontend/page_scripts.mjs`（从 `index.html` 解析脚本顺序，供所有
-    harness 复用）+ `app.js` 词典按域拆分（`i18n/en-<domain>.js` 形式，装载在 `app.js` 之后），
-    同步 harness `FILES`、`test_frontend_contract` / `test_frontend_i18n_js` 的清单来源，真浏览器复测。
-    之后：Stage 8 其余模块（`docs/frontend_modules.md` 顺序，第一站 `chart-preview.js`）；Stage 9 op 注册表；
-    Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、
-    `i18n_catalog/crawl.py` 907 在名单上）。`state`/`stores` 不进 core（运行层）。
+  - **Stage 8 第一片（harness 的装载顺序统一向页面要）已完成（2026-10-28，提交 `cb0799d`）**：
+    `tests/frontend/page_scripts.mjs` **早就存在**并读 `index.html` 的 `<script>` 顺序，但 7 个 harness
+    仍各自维护 `const FILES = [...]`，而且 4 份把 `custom-select.js` 排在 `workflow.js` 之前 ——
+    页面是反过来的，那些用例测的是一种浏览器从不执行的启动顺序。现在 7 份都走
+    `loadPageScripts(sandbox, { jsDir, only: [...] })`：`only` 只回答「这个场景要哪些模块」，
+    顺序由页面给；点名一个页面不再加载的文件会按名失败。两条新契约钉住不回退
+    （`test_no_harness_keeps_a_private_list_of_product_modules` 扫 `FILES = [`；
+    `test_the_harnesses_that_boot_a_world_ask_the_page_for_the_order` 给使用 loader 的数量设**下限**而不是精确集合，
+    这样删掉一个 harness 不会让规则悄悄管不到东西）。顺带删掉四处因此不再使用的 `node:path`/`node:fs` 导入。
+    **我自己在这一片里造的一个真错误（记进 `docs/agent_practices.md`）**：我「新建」`page_scripts.mjs`
+    并覆盖了它 —— Write 的返回词是 **updated** 而不是 created，而它确实有另一个 API（`loadPageScripts`），
+    4 个 harness 在 import 它。是 `tests/unit/test_frontend_*.py` 全家族跑出的 58 个 ERROR 暴露的
+    （`does not provide an export named 'loadPageScripts'`），`git checkout --` 恢复。
+    **规矩：在仓库里「新建」一个文件之前先看它是否已在**（`git status --short` 里的 `M` 就是答案；
+    `??` 才是真的新文件），而全家族测试是这类覆盖式写入唯一的 Detector。
+  - **Stage 8 剩余与下一刀（设计已定，必须一刀落地，不能半途）**：`app.js` 5,071 行里
+    `dict: { en: {…}, zh: {…} }` 占 3,654 行、en 侧 1,780 键 / 66 个前缀族
+    （`settings`=357 `biblio`+`biblioWs`=203 `toast`=78 `runsMgr`=78 `reusable`=62 `datasetMgr`=58
+    `schedMgr`=56 `validate`=51 `exportsMgr`=51 `studio`=45 `set`=45 `chart`=43 `wfHistory`=43 …）。
+    决定：`backend/static/js/i18n/<domain>.js`（约 9 个），每份
+    `(window.I18N_CATALOGUES = window.I18N_CATALOGUES || []).push({name, en: {…}, zh: {…}})`，
+    `app.js` 的 `dict` 由一个合并函数从该注册表构建并**在启动时拒绝同键两次**（与 Python 侧 `_merge_domain_table`
+    同一个理由：`{...a, ...b}` 会静默留后者）；`index.html` 把这些标签放在 `app.js` **之前**；
+    `page_scripts.mjs` 的 `only` 需要一条明示规则：选中 `app.js` 就连带词典文件（词典是 app.js 的数据，
+    不是可选模块）—— 这条必须写在 loader 里并由契约测试钉住，不能变成第二个手抄清单。
+    要同步的守卫：`test_frontend_contract._catalog_bodies()`（它已经是「唯一知道词典住在哪儿」的函数）、
+    `test_frontend_i18n_js` 的表面扫描、`harness_i18n_catalog.mjs`。
+    **风险明写**：词典搬家一半完成 = 产品 JS 直接坏掉（文字全空或 `t()` 回显 key），所以这一片必须
+    一次做完并跑真浏览器；如果上下文不够，宁可留在下一场按本节设计开工，不要中途停手。
+  - **下一刀 = Stage 8 第二片**：上面那件词典搬家；随后 `chart-preview.js`（`docs/frontend_modules.md` 的第一站，
+    约 1,170 行，牵动 4 个 harness + 1 处契约扫描）。再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
+    #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
+    `static/js/workflow.js`、`static/js/app.js` 在名单上）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。
