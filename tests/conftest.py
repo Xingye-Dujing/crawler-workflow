@@ -335,7 +335,7 @@ def clean_globals(request):
     """Undo the process-global side effects tests can leave behind.
 
     ``sys.stdout`` is snapshotted per test because the run worker replaces it
-    with ``_LogTee`` and only restores it at thread end; ``ml_base`` keeps a
+    with ``LogTee`` and only restores it at thread end; ``ml_base`` keeps a
     process-wide classifier cache whose entries would leak one test's fitted
     model into the next; the settings cache may have been warmed mid-test; and
     the i18n thread-local is restored because Werkzeug dispatches requests on

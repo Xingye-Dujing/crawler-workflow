@@ -326,7 +326,7 @@ D 组生命周期 × B 组对账 + E 组控制台审计零异常 + `测试：xxx
   不是产品缺陷**。开跑前查 `tasklist chromedriver.exe`，一次只留一个真机进程；日志文件也别共用同一个名字
   （两次运行写同一个 `.log` 会把先跑完那份的结论盖掉）。
 - `live_site` 下 `crawl_gate.reset()` 不自愈（`tests/conftest.py:257-259`），排队冷却**跨用例真实存在**——排期时按它。
-- run 级用例必须带 `serial` 标记（worker 会换 `sys.stdout` 为 `_LogTee`）。
+- run 级用例必须带 `serial` 标记（worker 会换 `sys.stdout` 为 `LogTee`）。
 - 评论节点**不受平台闸**（`app.py:3650-3654` 公开缺口）：source+comment 同平台真并发是可行的测试形状。
 - 并行=一次 execute 里的多组件；**两次 POST 永远排队**（一 run 一名额）。
 - 断言消息全走 `i18n.t()` 双语解析；`{platform}` 槽是词不是键。

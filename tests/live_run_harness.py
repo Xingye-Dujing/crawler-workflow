@@ -570,7 +570,7 @@ def fold_window(lines: list, seen_total: int, window: list, total: int) -> tuple
       **and** some lines are gone for good, so ``overflow`` is set rather than a shorter
       transcript passed off as the whole crawl;
     * total < cursor → the console was reset, i.e. a second run started in this process
-      (``_begin_run`` clears it). Its lines keep accumulating in the same recorder, because
+      (``begin_run`` clears it). Its lines keep accumulating in the same recorder, because
       a resume case wants the whole conversation, and ``reset`` says so out loud.
     """
     total = int(total)

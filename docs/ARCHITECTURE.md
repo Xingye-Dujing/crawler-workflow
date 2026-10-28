@@ -15,12 +15,12 @@ file is about *shape*. The numbers below are measured, not estimated.
 ## Backend layout (~68.1k Python LOC across 212 files, measured 2026-10-27)
 | area | contents |
 |---|---|
-| `app.py` | **3,253 LOC: the composition root, the run orchestration (`_begin_run`, the drain, `_run_node_durable`) and 27 `@app.route` handlers.** The other 101 route decorators are 23 Blueprints in `backend/api/` plus `sessions/routes.py`; the live URL map holds 129 rules over 123 unique paths (re-measure: `len(app.url_map.iter_rules())` — extraction moves handlers, never a path). What already left this file: the run queue (`services/runs/queue.py`), the payload guards (`services/runs/payload.py`) and the run-record reconciliation (`services/runs/settlement.py`, with `execute_lock` moved to `state.py` so the claim and the settle share one lock). Stage 6 of the plan takes the remaining routes and the orchestration out. |
+| `app.py` | **783 LOC: the composition root only** — the WSGI object, the request hooks, the 25 `register_blueprint` calls, the clock's two wiring lines, the startup recovery entry and the **three** routes that reach the run start (`/`, `/api/workflow/execute`, `/api/workflow/rerun-node`). The run orchestration is `engine/run.py` (1,407 LOC, measured 2026-10-28); the route clusters are `api/runs.py` (12) and `api/workflow.py` (12). The live URL map holds 129 rules over 123 unique paths (re-measure: `len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). What had already left this file before that: the run queue (`services/runs/queue.py`), the payload guards (`services/runs/payload.py`) and the run-record reconciliation (`services/runs/settlement.py`, with `execute_lock` moved to `state.py` so the claim and the settle share one lock). |
 | `core/config.py` | paths, env, constants (retention/queue/preflight/scheduler tick). |
 | `i18n.py` | the zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
 | `capabilities/` | the single crawl matrix, split by owner (2026-10-28): `platforms/<id>.py` declares one platform each (panel order pinned by `platforms/__init__`), `fields.py` the shared field atoms + mode factories, `catbus.py` the second engine's vocabulary, `model.py`/`requirements.py` the dataclasses and machine gates, `registry.py` the queries over all of it (the one answer validation, execution and the Data Source panel read). |
-| `scheduling/` | The 定时任务 domain (2026-10-28 from `scheduler.py` + `services/{schedule_store,cron}.py`): `clock.py` is an in-process daemon thread ticking `Config.SCHEDULER_TICK_SECONDS`, firing through the seam `app._start_scheduled_run` → `_begin_run` (never a second start path); `store.py` is `data/schedules.json`; `cron.py` parses/validates the time expressions. |
-| `engine/` | `workflow.py` (DAG resolve, `effective_workflow`, `node_label`), `plan.py` (what a run IS: its shape, its transport, whether it will pay for a model, which nodes a single-node rerun invalidates), `executor.py`, `logger.py`. |
+| `scheduling/` | The 定时任务 domain (2026-10-28 from `scheduler.py` + `services/{schedule_store,cron}.py`): `clock.py` is an in-process daemon thread ticking `Config.SCHEDULER_TICK_SECONDS`, firing through the seam `engine.run.start_scheduled_run` → `begin_run` (never a second start path); `store.py` is `data/schedules.json`; `cron.py` parses/validates the time expressions. |
+| `engine/` | `workflow.py` (DAG resolve, `effective_workflow`, `node_label`), `plan.py` (what a run IS: its shape, its transport, whether it will pay for a model, which nodes a single-node rerun invalidates), `run.py` (the run itself: `begin_run` and its worker, the durable node walk `run_node_durable`, the executor dispatch `execute_node`, the Stop verdict, the console tee/log sink and the queue drain, plus the two scheduled doors `scheduled_canvas`/`start_scheduled_run`), `executor.py`, `logger.py`. Nothing in this package may import `app` — that is the rule that forces the orchestration to hold its state through `state`/`stores`/`services` instead. |
 | `services/` | one flat module plus domain packages (grouped 2026-10-28): `lock_store` stays flat because its per-item pins span exports, runs, history and workflow files — grouping it under any one domain would lie. `charts/` (`registry` — **one `ChartSpec` per chart type**: family, ECharts-only, paper twin, required columns, x-axis rule; every other list is a projection of it, `contracts` — re-exports the biblio reads plus the limits that are not a type property, `visualizer` — the ECharts option + `ChartConfigError`, `tikz` — the LaTeX figure + three-line table, `pdf` — xelatex over a run's registered sources, `outputs` — the figure+table add-ons the render route and the visualize node share), `reports/` (`html` — the self-contained run report, `paper` — the article+ctex paper), `ingest/` (`catbus` — the second backend's subprocess bridge, `runtime`, `lifecycle`, `net` — the reachability probe, `parts` — the sharded part writer), `runs/` (`store` — the checkpointing core, `files`, `windows`, `compare`, `history`, `housekeeping`, `queue` — the waiting requests and their db mirror, `payload` — the two guards every run-start passes, `settlement` — stop/orphan reconciliation), `analysis/` (`pipeline` — the op executor, `params`, `process`, `llm`, `lexicon`, `lexicon_store`, `stats`), `biblio/` (`importer`, `schema`, `metrics`, `cluster`, `refs`, `fuse`, `geo`, `charts`, `store`, `monitor`, `sources`), `workflows/` (`manager`, `history`, `reusable`, `expand`, `bundle`), `datasets/` (`store`, `merge`, `dedupe`) and `exports/` (`writer`, `browser`). **The executor module that used to sit in this directory is deleted** — the executors live in
 `nodes/executors/` (Phase 1a), and keeping a copy in both places would have let whichever one was
 edited first silently win. Stage 4 of the plan replaced this name-prefix grouping with directories (2026-10-28). |
@@ -30,7 +30,7 @@ edited first silently win. Stage 4 of the plan replaced this name-prefix groupin
 | `sessions/` | the login-state domain (2026-10-27, from five root/`services` modules): `cookies.py` (the named jar `data/cookies/<platform>@<account>.json` + its folding rules, was `services/cookie_manager.py`), `flow.py` (where each platform's cookie is copied from, was `services/cookie_flow.py`), `profiles.py` (one Chrome `user-data-dir` per account: layout, freshness, the lock that keeps two crawls off one device, was `browser_profiles.py`), `template.py` (who may build the pristine device directory, was the 34-line `profiles.py`), `preflight.py` (the run-now verdict, was `cookie_preflight.py`), `routes.py` (2026-10-28: the `/api/cookies/*` + `/api/profiles/delete` cluster carved out of `app.py`, merged with the two `/api/browser/profiles*` routes that used to sit in `api/browser_profiles.py`; Blueprint `sessions`). `crawlers.core.browser` asks `profiles` for a path and nothing here asks the crawler layer back except `template`/`preflight`, so a session question stays answerable without buying a browser. |
 
 ### Why `app.py` is still big — and the coupling that constrains how to split it
-`app.py` mixes three jobs: (a) 39 route decorators, (b) the **run orchestration** (`_begin_run` alone is
+`app.py` mixes three jobs: (a) 39 route decorators, (b) the **run orchestration** (`begin_run` alone is
 ~895 lines: claiming the run, the queue, the checkpoint/reuse decisions, the stop path, the settlement),
 and (c) the module-level helpers that both of those reach (`execution_state` reads, `add_log`, the store
 getters, the LLM gate). The node executors are **no longer** part of it — all 14 live in
@@ -124,12 +124,17 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
   in `nodes/registry.py`; the shared legs are `services/ingest/runtime.py`, `services/ingest/lifecycle.py`,
   `services/analysis/params.py`, `services/analysis/process.py`, `services/analysis/llm.py`,
   `services/runs/files.py`, `services/runs/windows.py`.
+- `engine/run.py` — the run: `begin_run` (claim, queue hand-off, worker), `run_node_durable` (the
+  checkpointing walk), `execute_node` (the registry dispatch), `settle_node_as_stopped` (the Stop
+  verdict), `note_heavy_result`, the console tee/log sink, the drain and the two scheduled doors.
+  It reaches no Flask object: the app, the clock and a future CLI all ask the same module.
 - `app.py` — composition root: the app object, the request hooks (origin guard, no-store, language
-  pin), the console tee/log sink, **run orchestration** (`_begin_run`, the worker, `_run_node_durable`,
-  `_execute_node`) and the **three** routes that reach it: the served page `/`,
-  `/api/workflow/execute` and `/api/workflow/rerun-node`. Every other URL is a Blueprint; the
-  run-record cluster is `api/runs.py` and the saved-canvas/queue/stop-status cluster is
-  `api/workflow.py`.
+  pin), the clock's two wiring lines, startup recovery, and the **three** routes that reach the run
+  start: the served page `/`, `/api/workflow/execute` and `/api/workflow/rerun-node`. It calls the
+  orchestration as `run_engine.begin_run(...)`, so stubbing a run start has exactly one address
+  (`engine.run.begin_run`) that the route, the scheduled fire and the queue drain all honour.
+  Every other URL is a Blueprint; the run-record cluster is `api/runs.py` and the saved-canvas/queue/
+  stop-status cluster is `api/workflow.py`.
   Line and route counts are otherwise deliberately not quoted here, because the number changes with
   every feature and a doc that recites it is stale by construction.
 
@@ -174,7 +179,7 @@ That asymmetry is why R2 above was chosen over R1.
 
 The swings that followed this design (extract route clusters one blueprint at a time) were **not
 executed from this document**: they are Stage 6 of [`refactor_plan.md`](refactor_plan.md), which owns
-the order, the per-stage gate and the risk note that `_begin_run` is the highest-value, highest-risk
+the order, the per-stage gate and the risk note that `begin_run` is the highest-value, highest-risk
 single body left in `app.py`. What is kept above is the census, because it is the reason the seam
 rules are what they are: a move that leaves one writer on the old binding is not a refactor, it is a
 split-brain that only the user's next resume will discover.

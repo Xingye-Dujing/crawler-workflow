@@ -1,7 +1,7 @@
 """Single-node rerun (feature 12): wipe one node's subtree, then resume the SAME run so the
 engine re-executes exactly that subtree and reuses every kept upstream row.
 
-The real engine is never run here — ``_begin_run`` is monkeypatched — so these tests pin the
+The real engine is never run here — ``begin_run`` is monkeypatched — so these tests pin the
 endpoint's OWN logic: the downstream closure, the row invalidation against the store, the
 delegate-with-``resume_run_id`` hand-off, and the named refusals."""
 
@@ -154,7 +154,7 @@ class TestRerunEndpoint:
         assert fake_begin == []
 
     def test_rerunning_a_node_of_a_live_run_is_refused_and_keeps_every_row(self, client, app_module, fake_begin):
-        """The wipe runs BEFORE ``_begin_run`` can serialize against a live worker, so a
+        """The wipe runs BEFORE ``begin_run`` can serialize against a live worker, so a
         ``重跑节点`` on a finished node of a still-running run would delete that run's rows
         and release its dedupe claims mid-flight — the very loss ``继续`` from ``stopping`` is
         excluded to prevent. It must refuse by name and leave the rows (and the run) intact."""

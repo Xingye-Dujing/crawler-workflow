@@ -95,7 +95,7 @@ def toggle_schedule():
 def run_schedule():
     """Run one task right now, whatever its clock says (and even while it is switched off).
 
-    The run itself goes through ``_begin_run`` like any other, so a busy server QUEUES this fire as
+    The run itself goes through ``begin_run`` like any other, so a busy server QUEUES this fire as
     well — the answer says which of the two happened instead of the panel guessing from a toast.
     """
     data = _json_body()

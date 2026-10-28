@@ -285,7 +285,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   which marks every run still `running` as interrupted, so a second instance on the same `data/` kills the first one's
   live run. `CRAWLER_DATA_ROOT` (config.py) gives a process its own `data/`+`logs/` — the `/smoke-verify` boot and the
   UI tier's self-booted server use it.
-- **One run at a time; a busy server queues instead of refusing.** `_begin_run()` owns the whole start path, so the queue
+- **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the whole start path, so the queue
   must drain by calling *that* function, never a weaker second one. The hand-off is in the worker's `finally` and clears
   `execution_state['thread']` **first** — the claim also checks thread liveness, so an unwinding thread would queue the
   next request behind itself forever. Queues are in-memory and `tests/conftest.py` clears `_RUN_QUEUE` per test.
@@ -414,7 +414,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   lines of the *whole* run). `consoleViews` holds `{seen, lines}` per view (`'all'` plus each workflow id), **every**
   view is fed on every poll, and `switchWfTab` repaints from that view's history without moving its cursor.
 - **The console is ALSO persisted per run (`run_store.run_log`), but that durable log is a pure side effect of the live
-  path — it may never move the live console.** `_push_log` (state.py) writes through to `app`'s `_RunLogWriter` via the
+  path — it may never move the live console.** `_push_log` (state.py) writes through to `app`'s `RunLogWriter` via the
   `set_log_sink` seam; the writer files every physical line under the run that printed it (flush every 200 lines + on
   any error + once in the worker's `finally`), armed only inside a run's window so a stray post-run `add_log` cannot
   orphan rows. The durable viewer (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach
@@ -495,10 +495,10 @@ gets a run nobody asked for (and a canvas that spends accounts gets crawled twic
 `__main__`, and only when `not debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'` — i.e. in the process that really
 serves. `start`/`stop` are idempotent so a test (or a future caller) cannot stack threads.
 
-**A fire is the same start as a manual Run, because `_begin_run` owns the whole start path.** `scheduler` may not import
+**A fire is the same start as a manual Run, because `begin_run` owns the whole start path.** `scheduler` may not import
 `app` (the Blueprint imports the scheduler, so that would be a cycle), so app.py installs two seams at import:
-`set_run_starter(app._start_scheduled_run)` and `set_canvas_source(app._scheduled_canvas)`. `_start_scheduled_run` then
-calls `_begin_run` — the *only* start path — which is what makes a busy server **queue** the fire exactly like the Execute
+`set_run_starter(engine.run.start_scheduled_run)` and `set_canvas_source(engine.run.scheduled_canvas)`. `start_scheduled_run` then
+calls `begin_run` — the *only* start path — which is what makes a busy server **queue** the fire exactly like the Execute
 button instead of racing it (`queue:false` keeps the 400 for fail-fast callers, so a second path would have looked
 plausible). The scheduler is refused by name (`sched.notWired`) when nothing was wired, because a silently-dropped fire
 would look like "the scheduler does not work on this box" with no line saying why.
@@ -508,7 +508,7 @@ and `refused` for an executor saying no. They mean different things to the user 
 needs a model" versus "something is broken" — and the first version recorded both as `refused`. A crash also must not stop
 the clock for every other task, so the `except` is per-task and the tick continues.
 
-**One rule about a canvas, asked three times, from one function.** `app._scheduled_canvas` wraps the existing
+**One rule about a canvas, asked three times, from one function.** `engine.run.scheduled_canvas` wraps the existing
 `_workflow_needs_llm` (the same test the executor uses), and the panel's `runnable`/`why_not`, the save-time check and the
 fire-time check all go through it. Three copies would drift, and the drift is invisible until 03:00. This is why a
 scheduled canvas may not need a model at all: a cloud box has neither Ollama nor a person to answer a provider question,
@@ -835,7 +835,7 @@ message.
   written down, and NOT in `.pylintrc.tests` — a test that rebinds module state is a different problem.
 - **A checker's false positive is usually an imprecise type, and fixing the type is the real fix.**
   `_RUN_QUEUE: list = []` made every queue subscript an `E1136`; naming the element (`QueueEntry`) plus declaring the
-  local in `_start_next_queued` cleared all ten. `report_service`'s `E1135` survived a `TypedDict`, because pylint
+  local in `start_next_queued` cleared all ten. `report_service`'s `E1135` survived a `TypedDict`, because pylint
   traces the returned dict back to the `None` literal in `DEFAULT_OPTIONS`; a frozen `@dataclass` with typed fields
   is what it can read. `_abort = None` on the crawler class produced `E1102 not-callable` — annotating the contract
   (`Callable[[], bool] | None`) and reading `self._abort` instead of `getattr(self, '_abort', None)` removed both the

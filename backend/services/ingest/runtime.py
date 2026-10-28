@@ -70,7 +70,7 @@ def name_parts(params: dict, stamp: str = '') -> str:
     Two facts that used to live only in the node's form: which stretch of the calendar
     the crawl was asked to walk, and (on request) which record is writing these files.
     Empty answers stay empty rather than becoming a stray separator, and the stamp is
-    handed in rather than read from the clock — see ``_record_export_stamp`` for the
+    handed in rather than read from the clock — see ``record_export_stamp`` for the
     prefix a moving stamp would break.
     """
     window = window_tag(params.get('start_time'), params.get('end_time'))

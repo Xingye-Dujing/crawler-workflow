@@ -10,10 +10,11 @@ and the liveness check all read it — and ``runs.db`` holds only a recovery mir
 mirror failure must never break the request that triggered it. A restart therefore drops nothing
 the user was told about: ``load_pending_queue()`` re-fills an EMPTY queue at boot.
 
-Starting a queued request is deliberately **injected**: :func:`drain_queue` takes the app's
-``_begin_run`` as a callback, because a queue module that imported the application would both
-invert the layering and freeze a circular import in place. Everything the hand-off has to know
-about the *queue* — who is next, what the mirror says, who goes back to the front — stays here.
+Starting a queued request is deliberately **injected**: :func:`drain_queue` takes
+``engine.run.begin_run`` as a callback, because a queue module that imported the run start (or the
+application) would both invert the layering and freeze a circular import in place. Everything the
+hand-off has to know about the *queue* — who is next, what the mirror says, who goes back to the
+front — stays here.
 """
 
 import logging
@@ -155,7 +156,7 @@ def put_back(entry: QueueEntry) -> None:
 def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
     """Start the oldest waiting request with ``start_run``, at the end of a run.
 
-    ``start_run`` is injected because it is :func:`app._begin_run`: the queue may not import the
+    ``start_run`` is injected because it is :func:`engine.run.begin_run`: the queue may not import the
     application (that is a cycle, and the layering forbids it), while starting a run is exactly
     what a drain must be able to do. Everything about the *queue* stays here — who is next, the
     mirror, who goes back to the front, and the loop past a request that can never start.

@@ -26,7 +26,7 @@ def _upload(client, name: str):
 def _wait_for_worker(app_module, timeout: float = 30.0) -> bool:
     """Wait until the server would ACCEPT a start, not merely until ``running`` is false.
 
-    ``_begin_run`` counts a still-alive worker thread as busy (it clears ``running`` a moment
+    ``begin_run`` counts a still-alive worker thread as busy (it clears ``running`` a moment
     before the thread exits, so a Stop → Run cannot overlap two writers), and a start sent in
     that window is QUEUED — a 200 with no ``run_id``. Asking the server's own question here is
     what keeps a second run in one test from intermittently landing in the queue.

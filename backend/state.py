@@ -104,7 +104,7 @@ execution_state: dict = {
     'cookie_expired': False,
 }
 
-#: One parked Run request, in the shape ``app._begin_run`` re-dials it: the payload the
+#: One parked Run request, in the shape ``engine.run.begin_run`` re-dials it: the payload the
 #: browser sent, the language to answer in, and the identity the queue lists and mirrors.
 #: Named so the queue and its disk mirror agree on one shape instead of each writing
 #: ``dict`` and letting every reader guess the keys.

@@ -29,7 +29,7 @@ def workflow_shape_error(data: dict) -> str:
     if nodes is not None and (not isinstance(nodes, list) or any(not isinstance(node, dict) for node in nodes)):
         return t('api.workflowShapeInvalid')
     # A node's ``params`` is walked by ``.get`` all through the engine and the executor; a
-    # truthy non-dict (``params: 'x'``) raised AttributeError inside ``_begin_run`` before the
+    # truthy non-dict (``params: 'x'``) raised AttributeError inside ``begin_run`` before the
     # slot, and the queued path had no handler for it — an HTML 500, exactly what this guard
     # exists to prevent. Same for ``connections``: ``all_connections`` does not filter, so a
     # list of STRINGS reached ``dangling_connections``' ``c.get`` and threw mid-run.

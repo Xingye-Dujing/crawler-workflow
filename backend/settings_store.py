@@ -88,7 +88,7 @@ DEFAULTS = {
     #: run browses. It used to be one hardcoded constant for both. A headless run opens
     #: nothing the eye has to paint and can go wide; a windowed run shows real Chrome
     #: windows, so the same number costs the machine far more. The run's 无头/窗口 choice
-    #: picks which of the two applies (app.py::_begin_run); serial runs take turns anyway.
+    #: picks which of the two applies (engine.run.begin_run); serial runs take turns anyway.
     'max_visible_browsers': int(Config.DEFAULT_MAX_WORKERS),
     'max_headless_browsers': int(Config.DEFAULT_MAX_WORKERS),
     #: Wipe the console — every tab and its retained history, not just the visible one —

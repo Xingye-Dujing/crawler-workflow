@@ -8,7 +8,7 @@ the record of last time?* — and three modules answer different parts of it:
             missed moments, and the per-task history the panel renders;
 ``clock``   the in-process daemon thread. It owns timekeeping but NOT a way to start a run:
             ``app.py`` injects the two seams (``set_run_starter``/``set_canvas_source``), so every
-            fire takes the same ``_begin_run`` path a manual 执行 does and a busy server queues it.
+            fire takes the same ``begin_run`` path a manual 执行 does and a busy server queues it.
 
 The edge worth keeping straight: ``clock`` reads ``store`` and ``store`` reads ``cron``; neither
 asks ``app`` for anything, which is what lets the rules be driven across midnight, restarts and DST

@@ -8,7 +8,7 @@ refused again at the moment of the fire.
 
 Two boundaries are stubbed and nothing else:
 
-* ``engine.run.begin_run``, so a test never starts a crawl (this is the seam the real ``_start_scheduled_run``
+* ``engine.run.begin_run``, so a test never starts a crawl (this is the seam the real ``start_scheduled_run``
   calls through, which is why the glue is exercised here as well);
 * the schedules file, redirected per test, so a task written by one test is invisible to the next.
 
@@ -297,7 +297,7 @@ class TestTheRunVerb:
 
 
 class TestTheGlueAppInstalled:
-    """``_start_scheduled_run`` is what the scheduler calls; ``begin_run`` is the only thing stubbed."""
+    """``start_scheduled_run`` is what the scheduler calls; ``begin_run`` is the only thing stubbed."""
 
     def _task(self, client, canvas, name='可以定时的画布', **over):
         canvas(name, [NAME_NODE])

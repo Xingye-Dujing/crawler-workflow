@@ -15,7 +15,7 @@ missing. Where a test runs an LLM node (``TestEntityNode``), the transport
 itself is patched, so no daemon and no API are ever asked.
 
 The polling tests carry ``@pytest.mark.serial`` because the worker installs a
-``_LogTee`` over ``sys.stdout`` for the duration of the run.
+``LogTee`` over ``sys.stdout`` for the duration of the run.
 """
 
 import os
@@ -1005,7 +1005,7 @@ class TestStatusPayloadContract:
     def test_a_second_run_restarts_the_console_instead_of_accumulating(self, client, app_module, paste):
         """Pins the server half of the console freeze.
 
-        `_begin_run` clears the buffers, so the second run's `log_total` starts
+        `begin_run` clears the buffers, so the second run's `log_total` starts
         from a number SMALLER than what the browser last saw. A poller that keeps
         its own high-water index then slices past the end of the array and renders
         nothing for the rest of the run. The fix belongs in the browser (make that

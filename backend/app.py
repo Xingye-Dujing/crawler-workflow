@@ -683,7 +683,7 @@ app.register_blueprint(workflow_history_bp)
 app.register_blueprint(project_bp)
 app.register_blueprint(run_compare_bp)
 # Reusable-node templates: authored fragments offered by the canvas picker. Nothing here
-# executes them; the browser expands on Run and ``begin_run``/``_scheduled_canvas`` expand a
+# executes them; the browser expands on Run and ``begin_run``/``scheduled_canvas`` expand a
 # saved file's group before the engine sees it.
 app.register_blueprint(reusable_bp)
 # The run-record panel's read/write side (records, retention, the durable console) lives in

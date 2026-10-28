@@ -1,7 +1,7 @@
 """``scheduling.clock`` — the clock, its two seams, and the one start path it is allowed to use.
 
 The clock owns no way to start a run: ``app.py`` injects a starter, so a scheduled fire goes
-through the same ``_begin_run`` a manual 执行 does. What is pinned here is therefore the
+through the same ``begin_run`` a manual 执行 does. What is pinned here is therefore the
 scheduler's own behaviour: which tasks a tick fires and which it leaves alone, what each outcome is
 written down as (started / queued / refused / error), that a refused or crashed task does not fire
 in a loop, that a manual 立即执行 keeps a cron slot on its wall clock, that the language of a fire

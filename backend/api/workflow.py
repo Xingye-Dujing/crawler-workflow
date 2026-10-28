@@ -7,7 +7,7 @@ console, the node badges and the thread inspector read while a run is in flight.
 
 Two things are deliberately not here. ``/api/workflow/execute`` and ``/api/workflow/rerun-node``
 still live in ``app.py`` because starting a run is the orchestration's own work, and
-``_start_next_queued`` stays for the same reason — the queue drains by calling *that* function.
+``start_next_queued`` stays for the same reason — the queue drains by calling *that* function.
 Nothing in this module imports ``app``: the run's state comes from :mod:`state`, its records
 from :mod:`services.runs`, and the stop verdict is written by the settlement module that owns it.
 """
@@ -313,7 +313,7 @@ def workflow_queue_clear():
 
 @bp.route('/api/workflow/stop', methods=['POST'])
 def stop_workflow():
-    # Hold the claim lock across the guard-and-write. ``_begin_run`` claims a run under
+    # Hold the claim lock across the guard-and-write. ``begin_run`` claims a run under
     # this same lock, so a run finishing right now cannot hand off to a queued one and
     # then have ``running=False``/``stopping=True`` land on that brand-new run — the
     # interleaving that made a stop aimed at run A silently kill run B. The idle check
@@ -380,7 +380,7 @@ def stop_workflow():
     # it was cut short, and the worker's own finally writes the summary line
     # under those counters — zeroing them here turned every stopped run into
     # "运行结束（0/0 个节点完成）" and wiped the log that explained it. The next
-    # run resets both when it claims the slot (_begin_run), which is where a
+    # run resets both when it claims the slot (begin_run), which is where a
     # fresh slate belongs.
     execution_state.pop('current_input', None)
     execution_state['executor'] = None

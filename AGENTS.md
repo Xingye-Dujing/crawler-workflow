@@ -155,7 +155,7 @@ the contract.
 - **One server per data root, by design (local single-user tool).** `promote_stale_runs()` kills a same-`data/` rival's
   live run; `CRAWLER_DATA_ROOT` gives a process its own `data/`+`logs/` (`/smoke-verify` and the UI tier use it).
   Without it, **ask before booting a second server, and never kill a process on 5000.**
-- **One run at a time; a busy server queues instead of refusing.** `_begin_run()` owns the whole start path, so the queue
+- **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the whole start path, so the queue
   drains by calling *that* function, never a weaker one; `queue:false` keeps the 400 for fail-fast callers. The worker's
   `finally` clears `execution_state['thread']` **first** (the claim checks thread liveness). Queues are in-memory
   (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行.
@@ -241,9 +241,9 @@ the contract.
 
 - **The clock is one thread inside the server process, started only from `__main__`** (and, under the reloader, only in
   the real serving child), and **a fire takes the same start path as a manual Run** — `scheduling.clock` never starts a run
-  itself, it calls the seam `app._start_scheduled_run` → `_begin_run`, so a busy server **queues** the fire like any
-  other request. Two clocks would double-fire; a second start path would bypass `_begin_run`'s single-run ownership.
-- **A scheduled canvas may not need a model, and the rule is one rule asked twice** (`app._scheduled_canvas`, shared by
+  itself, it calls the seam `engine.run.start_scheduled_run` → `begin_run`, so a busy server **queues** the fire like any
+  other request. Two clocks would double-fire; a second start path would bypass `begin_run`'s single-run ownership.
+- **A scheduled canvas may not need a model, and the rule is one rule asked twice** (`engine.run.scheduled_canvas`, shared by
   the panel's verdict, save time and fire time): refused **by name**, never by a server-side key. **A moment missed while
   the server was down is recorded (`missed.count`), never replayed** — at most one event per restart. Refusals and
   accounting go to the task's own history (`last_run` + 20 entries), never into the run console, which gets exactly one
@@ -271,7 +271,7 @@ the contract.
   the whole run ship). `consoleViews` holds `{seen, lines}` per view (`'all'` + each workflow id), every view is fed on
   every poll, and `switchWfTab` repaints without moving the cursor.
 - **The console is ALSO persisted per run (`run_store.run_log`), as a pure side effect that may never move the live
-  console.** `_push_log` → `app._RunLogWriter` via `set_log_sink`, armed only inside a run's window. The durable viewer
+  console.** `_push_log` → `engine.run.RunLogWriter` via `set_log_sink`, armed only inside a run's window. The durable viewer
   (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach (`execution_state['logs']/_log_total/
   _wf_logs/_wf_log_total` + `?tail=5000`) must stay byte-identical with or without a sink** — a shifted total is a cursor
   that skips/repeats live lines after reload; `test_console_buffer.py` fails that invariant.

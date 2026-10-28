@@ -1,8 +1,8 @@
 """The in-process clock: fire scheduled canvases through the server's ONE start path.
 
 The scheduler owns a clock and a history. It does NOT own a way to start a run: ``app.py`` injects
-``_start_scheduled_run`` (``set_run_starter``), so every scheduled execution goes through
-``_begin_run`` — the same validations, the same claim, the same queue a manual 执行 uses. A fire
+``start_scheduled_run`` (``set_run_starter``), so every scheduled execution goes through
+``begin_run`` — the same validations, the same claim, the same queue a manual 执行 uses. A fire
 while the server is busy is QUEUED, never refused and never a second, weaker execution path.
 
 Two seams, both wired by ``app.py``:

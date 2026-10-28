@@ -94,7 +94,7 @@ def _start(client, workflow, name, **extra):
 
 
 class TestQueueHandOff:
-    """What `_start_next_queued` does with the request it popped.
+    """What `start_next_queued` does with the request it popped.
 
     The happy path (pop → start → log) is covered by the end-to-end queue test;
     the three other outcomes were not, and they are the ones that decide whether
@@ -643,7 +643,7 @@ class TestStoreFailures:
         # The finally itself must unwind to its last line. An early `created`
         # UnboundLocalError once killed it right here — the run still LOOKED
         # failed and freed, but `thread` was never released and, one line later,
-        # `_start_next_queued` never ran: every queued request waited behind a
+        # `start_next_queued` never ran: every queued request waited behind a
         # run that had already died. That is the stall 停止 must never become.
         assert app_module.execution_state['thread'] is None, 'the worker died inside its own finally'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])

@@ -83,7 +83,7 @@
 OOM 在三个节点之后发生而没有任何线索。
 
 要让这个成本真正降下来，得把节点之间的传递从「字典列表」改成 DataFrame（只在预览/导出/落库的边界转换）。
-那是一次动到执行器核心契约的改动，涉及 `_execute_node` 的返回值、`run_store` 的行写入、`upstream`
+那是一次动到执行器核心契约的改动，涉及 `execute_node` 的返回值、`run_store` 的行写入、`upstream`
 的传递形式与 HTTP 边界四处，值得单独一次改，而不是顺手带上。
 
 ### 排队、错峰与预检常量（`backend/core/config.py`）

@@ -806,18 +806,41 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     补 `@classmethod`（`@pytest.fixture` 之下）并把 `self` 改 `cls`，本仓库 `test_source_hygiene.py`
     已是同一形状。**剩下的第 4 条警告是 anyio 的**（`_pytest.python.CallSpec2` 改名），是第三方插件的事，
     不写 `filterwarnings` 去捂它。
-  - **下一刀 = Stage 6 第八片：运行编排本体**。`app.py` 剩下的主体是 `_begin_run`（约 890 行）+ worker
-    + `_run_node_durable` + `_execute_node` + `_settle_node_as_stopped` + `_note_heavy_result`
-    + `_start_next_queued` + `_scheduled_canvas`/`_start_scheduled_run`，目标是 `engine/run.py`。
-    搬前必须做一次**桩点清点**，且**三种形状都要查**（`setattr(app_module, 'X'`、`app_module.X`、
-    函数内 `from app import X`），外加 `getattr(app, 'X', None)` 这一静默形状：
-    `add_log`/`get_run_store`/`get_crawler`/`stop_requested`/`load_pending_queue` 都曾被打在 app 上，
-    编排一走这些桩就落空 —— 已有 `tests/executor_seams.py::forward` 这一先例可复用。
-  - **编排落位之后**：app 只剩 `/`、`execute`、`rerun-node` 三条路由，`execute`/`rerun-node` 才有意义变成
-    读 `engine/run.py` 的薄壳（第七片已把另外 12 条搬进 `api/workflow.py`，旧记录里「14 条路由才是薄壳」
-    一句已按现状更正）。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；Stage 10 结构；
-    #40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n
-    拆分后进 core。
+  - **Stage 6 第八片（运行编排）已完成（2026-10-28，三个提交 `d9ffed2`/`e73a580`/`e5cdea0`）**：
+    `app.py` 里剩下的运行主体全部搬进 `backend/engine/run.py`，改公开名 ——
+    8a `execute_node` / `run_node_durable` / `settle_node_as_stopped` / `note_heavy_result`
+    + `NON_INPUT_NODES` / `HEAVY_RESULT_ROWS`（283 行）；8b `LogTee` / `RunLogWriter` + 模块单例 /
+    `record_export_stamp` / `start_next_queued` / `cloud_refusal_response` / `begin_run`（976 行）；
+    8c `scheduled_canvas` / `start_scheduled_run`。**实测（不是估算）**：`app.py` 783 行、3 条 `@app.route`；
+    `engine/run.py` 1,407 行；25 个 Blueprint 模块 125 条 `@bp.route`；URL map 129 条规则 / 123 个不同路径
+    （第八片零路由改动：`git diff` 里没有任何 `@app.route`/`@bp.route`/`register_blueprint` 行）。
+    **一条架构主张随这一刀落地**：app 以 `run_engine.begin_run(...)` 调用编排，所以
+    「假的动作」只有一个打桩点 `engine.run.begin_run` —— 路由、定时触发、队列排水都读它。
+    若在 app 里再重绑一份（`from engine.run import begin_run`），打桩就分裂成两处，
+    `test_run_races` 那类测排水的用例会绿着测量一个从未安装假的真实运行。
+    **逐字节证明**：`build/proof_move.py` 拿 `git show HEAD:backend/app.py` 的每个成员原文与
+    `engine/run.py` 对比，只允许声明过的改名 —— 8a 4 成员、8b 7 成员均为「原文 + 改名」。
+    **搬前清点兑现（三种形状 + 一种静默形状）**：`setattr(app_module, …)` 共 57 处
+    （`get_crawler` 37 / `add_log` 10 / `_begin_run` 5 / `get_run_store` 2 / `stop_requested`
+    / `load_pending_queue` / `housekeep`）；`begin_run` 的 5 处桩 + `_start_next_queued` 5 处 +
+    `record_export_stamp` 3 处 + `close_run`/`get_run_store`/`_completed_lock`/`_results_snapshot`/
+    `_wf_local`/`reset_console_state`/`RunLogWriter` 各自改读真正的解析模块；
+    **两处是「绿而什么都没测」**：`test_run_log_writer` 与 `test_run_races` 打的是
+    `app.get_run_store`，而写台账的工作流在 `engine.run` 里解析它 —— 桩落空、断言照过。
+    改完之后它们真的测到了东西（`assert written == w.FLUSH_EVERY` 从 0 变成 200 才绿）。
+    **控制台接缝收敛成一个意思**：编排一走，`app` 不再自己打日志，`patch app.add_log` 的 20+ 处
+    要么改址、要么让 app 答出这个名字。取后者（按 `get_crawler` 的 PEP 562 先例在 `__getattr__`
+    里转发到 `state`），配合 `tests/executor_seams.py::forward` 与各模块的调用时转发，
+    「patch app.add_log」重新只有一个含义；`tests/api/conftest.py` 加一条 autouse 把
+    `engine.run.add_log` 也接到同一接缝。
+  - **下一刀 = Stage 6 收尾**：`/api/workflow/execute` 与 `/api/workflow/rerun-node` 现在才真是薄壳
+    —— 它们只做请求整形 + `run_engine.begin_run(...)`，可搬进 `api/workflow.py`，app 只剩 `/` 一条路由
+    与组合根本体（app 对象、钩子、25 次注册、时钟接线、启动恢复）。之后：Stage 7 i18n；Stage 8 前端；
+    Stage 9 op 注册表；Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407 行现在
+    就在这张名单上）。`state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core。
+  - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
+    （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
+    仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

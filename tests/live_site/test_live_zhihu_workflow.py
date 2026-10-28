@@ -2581,7 +2581,7 @@ def test_s1_stagger_spaces_the_two_starts_and_never_queues_them(client, app_modu
 def test_s2_the_browser_ceiling_narrows_the_parallel_pool_to_one_walk(client, app_module, monkeypatch):
     """S2 — plan §3-C: the concurrent-browser ceiling as the parallel pool's width.
 
-    ``_begin_run`` answers "how many workflows of one parallel run may be alive at once"
+    ``begin_run`` answers "how many workflows of one parallel run may be alive at once"
     with ``max_headless_browsers`` or ``max_visible_browsers`` — the run's 无头/窗口 choice
     picks which key, on one line — clamps it to 1..16, and the pool is then
     ``min(wf_count, that)``. A canvas carrying its own ``max_workers`` outranks the setting

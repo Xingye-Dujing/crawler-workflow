@@ -2060,8 +2060,8 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 凡有 token 没配 label 即红。
 
 真剩下的是**结局词**：抓取 honor 停止的方式是**返回**它已经采到的行，不是抛异常。而
-`_execute_source_node` 只在**进入节点前**查一次 `stop_requested()`（`_execute_node` 里那条
-`if stop_requested(): raise CrawlerStopped`），返回之后没人再问；`_run_node_durable` 的两条
+`_execute_source_node` 只在**进入节点前**查一次 `stop_requested()`（`execute_node` 里那条
+`if stop_requested(): raise CrawlerStopped`），返回之后没人再问；`run_node_durable` 的两条
 `except` 都要求**有人抛出**。于是一次被停止的走查会：节点 settle `done` → 运行记录写「运行完成」
 → 续跑横幅不给「继续」。回退验证拿到的就是这个字面断言：
 
@@ -2071,7 +2071,7 @@ E       AssertionError: assert 'done' == 'partial'
 ```
 
 评论节点同样：它的 URL 循环在顶上 `if not execution_state['running']: break`，跳出之后照样
-`return rows_out`。两处各补一次"回来了也要问一句"，走既有 `_settle_node_as_stopped`
+`return rows_out`。两处各补一次"回来了也要问一句"，走既有 `settle_node_as_stopped`
 （保留行、记 被停止、不计入 failed）。评论那处刻意放在 `writer.finish()` **之后**，
 `comment.done` 那行随之不再打印——被停止的运行由 `run.nodeStopped` 一个人说。
 
