@@ -1100,8 +1100,13 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     教训：切片脚本产出后要 `node --check`/`python -m compileall` 之外的**形状**检查（一行装饰器没人报错）。
     - **门禁**：`test_data_analysis`+`test_analysis_api`+`test_node_schema` **1,107 / 1,045 passed**；
       ruff check + format；产品档 pylint 10.00/10。
-  - **Stage 9 剩余**：12 个进程 op（`nodes/executors/process.py`，`execute_process_node` 的分派链）
-    仍是一处描述子，按同一模式搬到 `services/analysis/process_ops/` 或等价注册表。
+  - **Stage 9 剩余**：12 个进程 op（`services/analysis/process.py` 的 `PROCESS_ENUMS`/
+    `OUTPUT_ADD_COLUMNS`/`OUTPUT_REPLACE_COLUMNS`/`READ_PARAMS`/`PROCESS_OPS`）**已是每个 op 一处描述子**；
+    `nodes/executors/process.py` 的分派分支还是一条 if 链，属执行器的形状，不与描述子重复，故不改。
+  - **Stage 9 收尾门禁（2026-10-29，全量）**：fast **8,193 passed / 3 skipped（POSIX 执行位）/ 355 deselected**，
+    唯一 warning 是 jieba 的第三方 `pkg_resources` 弃用；`ruff check`+`format --check` **571 文件**全绿；
+    pylint 产品档 **322 文件**、tests 档 **274 文件**均 **10.00/10**。全量 fast 抓到的第七处扫描残留
+    （`test_visualization` 的图表清单/`center_node`）已单独提交 `55ed3dd`。
   - **再后**：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
     #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
     `static/js/panels/settings.js` 1,985、`static/js/workflow.js` 4,458、`static/js/canvas.js` 3,893 在名单上；
