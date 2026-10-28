@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[2]
@@ -302,7 +303,7 @@ class TestPageWiring:
         for key in keys:
             assert key in _ZH, key
             assert key in _EN, key
-        app = (STATIC / 'js' / 'app.js').read_text(encoding='utf-8')
+        browser = _catalog_keys()
         for key in (
             'wfHistory.tabHistory',
             'wfHistory.save',
@@ -315,7 +316,8 @@ class TestPageWiring:
             'style.layoutBaselineLabel',
             'style.layoutBaselineMissing',
         ):
-            assert f"'{key}'" in app, key
+            for lang in ('en', 'zh'):
+                assert key in browser[lang], f'{key} missing from the {lang} browser catalogue'
 
 
 class TestReusableTemplateTab:

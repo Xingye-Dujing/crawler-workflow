@@ -14,6 +14,8 @@ adding a chart meant editing them in lockstep. This module pins the shape of tha
 import re
 from pathlib import Path
 
+from frontend_catalogue import words_missing as _words_missing
+
 from services.charts import registry
 from services.charts.contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES, NO_X_TYPES
 from services.charts.registry import LATEX_UNBUILDABLE_TYPES
@@ -21,7 +23,6 @@ from services.charts.visualizer import CHART_TYPES, ECHARTS_ONLY_TYPES
 
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW_JS = REPO / 'backend' / 'static' / 'js' / 'workflow.js'
-APP_JS = REPO / 'backend' / 'static' / 'js' / 'app.js'
 
 
 def _js_array(source: str, name: str) -> list[str]:
@@ -72,6 +73,7 @@ class TestTheFrontEndIsPinnedNotASecondOpinion:
         assert set(_js_array(source, 'ECHARTS_ONLY_CHARTS')) == set(ECHARTS_ONLY_TYPES)
 
     def test_every_type_has_a_word_in_both_languages(self):
-        source = APP_JS.read_text(encoding='utf-8')
-        missing = [key for key in CHART_TYPES if source.count(f"chart.{key}'") < 2]
-        assert not missing, f'chart types with no zh+en label: {missing}'
+        # ``chart.<type>`` is a computed key, so it is asked of both languages of the whole browser
+        # dictionary — never counted in one file, which after the domain split holds only a part.
+        missing = _words_missing('chart.', CHART_TYPES)
+        assert missing == [], f'chart types with no zh+en label: {missing}'

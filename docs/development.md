@@ -134,7 +134,7 @@ crawler_workflow/
 │       ├── index.html
 │       ├── css/style.css
 │       └── js/
-│           ├── app.js            # 入口（i18n fetch 注入、节点库）；词典的本地余量 + 合并函数
+│           ├── app.js            # 入口（i18n fetch 注入、节点库、I18n 行为与 _mergeCatalogues）
 │           ├── i18n/             # 按域的浏览器词典（settings.js…），页面在 app.js 之前加载，同键两次即拒
 │           ├── canvas.js         # 画布与节点渲染（类型校验/种子优先读 NodeTypes）
 │           ├── workflow.js       # 执行、文件管理、全部对话框

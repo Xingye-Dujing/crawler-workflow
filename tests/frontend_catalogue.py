@@ -31,7 +31,11 @@ def catalog_files() -> list[Path]:
 
 
 def catalog_data(path: Path) -> str:
-    """The dictionary region of one catalogue file — its declarations, not its logic."""
+    """The dictionary region of one catalogue file — its declarations, not its logic.
+
+    ``app.js``'s region shrinks as domains move out and ends as ``dict: _mergeCatalogues()`` with no
+    literal of its own; that region declares no words and is skipped by the caller.
+    """
 
     src = path.read_text(encoding='utf-8')
     if path.name == 'app.js':
@@ -46,6 +50,8 @@ def catalog_bodies() -> dict[str, str]:
     bodies = {'en': [], 'zh': []}
     for path in catalog_files():
         data = catalog_data(path)
+        if 'zh: {' not in data:
+            continue  # app.js after the last domain moved out: it declares no words of its own
         middle = data.index('zh: {')
         bodies['en'].append(data[:middle])
         bodies['zh'].append(data[middle:])

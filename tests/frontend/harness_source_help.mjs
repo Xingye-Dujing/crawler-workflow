@@ -23,11 +23,10 @@
  * Usage: node harness_source_help.mjs <jsDir>
  * Prints one JSON object to stdout.
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const [jsDir] = process.argv.slice(2);
 
@@ -64,11 +63,11 @@ function world(answers, acceptValue) {
     };
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
-    const sources = ['canvas.js', 'workflow.js', 'app.js']
-        .map((name) => fs.readFileSync(path.join(jsDir, name), 'utf8'))
-        .join('\n;\n');
+    /* The page's modules in the page's order, through the shared loader, so app.js's catalogue
+       files come with it — without them the guide's words are raw keys. */
+    loadPageScripts(sandbox, { jsDir, only: ['canvas.js', 'workflow.js', 'app.js'] });
     vm.runInContext(
-        `${sources}\n;globalThis.__x = { canvas, I18n, sourceHelp,` +
+        'globalThis.__x = { canvas, I18n, sourceHelp,' +
             ' toggleSourceHelp, openSourceHelp, closeSourceHelp,' +
             ' isOpen: () => sourceHelp.isOpen(),' +
             ' body: () => document.getElementById("source-help-body"),' +

@@ -34,6 +34,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const [jsDir] = process.argv.slice(2);
 
@@ -141,11 +142,12 @@ function world(answers) {
     };
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
-    const sources = ['canvas.js', 'workflow.js', 'app.js']
-        .map((name) => fs.readFileSync(path.join(jsDir, name), 'utf8'))
-        .join('\n;\n');
+    /* The page's own modules, in the page's order, through the shared loader — which also brings
+       app.js's catalogue files (without them every ``t()`` echoes its key and the panel would look
+       "wordless" while the assertions compared keys to keys). */
+    loadPageScripts(sandbox, { jsDir, only: ['canvas.js', 'workflow.js', 'app.js'] });
     vm.runInContext(
-        `${sources}\n;globalThis.__x = { canvas, I18n, biblioWorkspace,` +
+        'globalThis.__x = { canvas, I18n, biblioWorkspace,' +
             ' body: () => document.getElementById("biblio-mgr-body"),' +
             ' setPanelOpen: (v) => { const p = document.getElementById("biblio-panel");' +
             '   if (!p) return false; p.classList[v ? "add" : "remove"]("open"); return true; } };',

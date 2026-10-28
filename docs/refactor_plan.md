@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 12 | 25,981 | `workflow.js` **13,026** · `app.js` 4,265（词典已搬出一域）· `canvas.js` 3,893 · `i18n/settings.js` 852 |
+| `backend/static/js/` | 20 | 26,323 | `workflow.js` **13,026** · `app.js` 1,450（词典已全部搬出）· `i18n/` 9 份共 4,009 · `canvas.js` 3,893 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -224,7 +224,7 @@ backend/
 | `app.py` | 3,537 | Stage 6（4,412 → 3,537 已由 sessions 路由搬出；剩 39 条路由 + 运行编排） |
 | `i18n.py` | 4620 | Stage 7 |
 
-前端另计：`workflow.js` 13,026 / `app.js` 4,265（余量）+ `i18n/settings.js` 852（已搬的第一个域）/ `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
+前端另计：`workflow.js` 13,026 / `app.js` 1,450（只剩合并函数与逻辑）+ `i18n/` 9 份 4,009（词典已全部搬出）/ `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
 
 1. 无 >900 行的产品模块；JS 无 >1,200 行文件；每个文件一个主题、每个目录一个域。
 
@@ -907,8 +907,9 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （`does not provide an export named 'loadPageScripts'`），`git checkout --` 恢复。
     **规矩：在仓库里「新建」一个文件之前先看它是否已在**（`git status --short` 里的 `M` 就是答案；
     `??` 才是真的新文件），而全家族测试是这类覆盖式写入唯一的 Detector。
-  - **Stage 8 第二片（浏览器词典按域搬家，第一刀 `settings`）已完成（2026-10-28）**：
-    `app.js` 5,071 → **4,265 行**，`dict` 从 3,654 行的一块变成「本地余量 + 注册表合并」。
+  - **Stage 8 第二片（浏览器词典按域搬家）已完成（2026-10-28）**：
+    `app.js` 5,071 → **1,450 行、0 个词**（`dict: _mergeCatalogues()` 不再带本地字面量），
+    九个域文件共 4,009 行。`dict` 从 3,654 行的一块变成「注册表合并」，同键两次在启动时按名拒绝。
     - **一个域一次运行**（`build/split_app_catalog.py <domain>`，一次性工具不进 git）：生成的
       `backend/static/js/i18n/settings.js` 是 `(globalThis.I18N_CATALOGUES = …).push({name, en, zh})`，
       `index.html` 把它的 `<script>` 放在 `app.js` **之前**。这一刀搬走 **402 键**（`settings.` 357 + `set.` 45），
@@ -943,13 +944,27 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     - **门禁（最终字节）**：fast **8,185 passed / 3 skipped / 355 deselected**（一次 2 红：两处按 app.js 计数的
       catbus 词典用例，改共享读者后复绿；该文件的 14 例全绿）；设备档（真 Chrome + 真 Ollama + 真 CatBus）
       **194 passed / 0 跳过 / 7 分 17 秒**；`ruff check` + `format --check`（532 文件）全绿；`node --check` 8 个改动文件全过。
-  - **Stage 8 剩余（同一套机制，每域一次运行）**：`panels / biblio / chrome / charts / nodes / crawl / checks`
-    七个域按 `build/split_app_catalog.py` 逐个搬（工具支持在已拆过的 `app.js` 上再跑：区域识别兼容
-    `dict: _mergeCatalogues(…)`，合并函数只安装一次）；每域照例加一个 `<script>` 并跑
-    `node --check` + 前端家族 + 词典等价证明。之后 `chart-preview.js`（`docs/frontend_modules.md` 的第一站，
-    约 1,170 行，牵动 4 个 harness + 1 处契约扫描）。再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
-    #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js`、`static/js/app.js` 在名单上）。
+  - **Stage 8 第二片收尾（2026-10-28，同一回合）**：剩下七个域（`panels` 462 / `biblio` 267 / `chrome` 254 /
+    `charts` 100 / `nodes` 135 / `crawl` 90 / `checks` 51）与最后一域 `misc`（114，把所有小族一次搬完）
+    逐个运行同一支工具，**`app.js` 5,071 → 1,450 行、0 个词**：`dict: _mergeCatalogues()` 不再带本地字面量。
+    合并结果每一刀之后都用 `build/verify_catalog_move.mjs` 对**原始 app.js** 复算：**1,875 键 × 2 语言、0 处差异**。
+    - **搬完后测试家族立刻抓出六处「按 app.js 数词」的旧读者**：`test_frontend_biblio_workspace_js`、
+      `test_frontend_cloud_js`（两处）、`test_frontend_reusable_js`、`test_frontend_wf_history_js`、
+      `test_chart_registry`、`test_node_plugins`、`test_platform_rules` —— 全部改成查「两种语言各一次」。
+      其中三支 harness（`biblio_workspace` / `fuse_panel` / `source_help`）还在**自己按名字读 app.js 拼源码**，
+      于是面板的词变成裸键、断言把键和键比了一遍仍然全绿：三支都改成 `loadPageScripts`。
+      **契约随之加宽**：`test_no_harness_keeps_a_private_list_of_product_modules` 现在同时拒绝
+      `FILES = [` 与「读取 jsDir 里的 app.js」（读单个叶子模块如 `custom-select.js` 不算——它从调用方拿词）。
+    - 工具本身在这一轮补了两个边界：最后一域留下空余量时生成 `_mergeCatalogues()`；
+      共享读者遇到「app.js 不再有自己的字面量」时跳过它而不是抛错。
+    - **门禁**：fast 首轮 2 红（两处按 app.js 计数的 catbus 词典用例）→ 改共享读者后复绿；前端家族 **1,463 passed**；
+      `ruff check` + `format --check`（532 文件）全绿；`node --check` 十个域文件 + app.js 全过；
+      设备档（真 Chrome + 真 Ollama + 真 CatBus）见本轮结果。
+  - **Stage 8 剩余（同一套机制，每域一次运行）**：词典已全部出 app.js。接下来是 `chart-preview.js`
+    （`docs/frontend_modules.md` 的第一站，约 1,170 行，牵动 4 个 harness + 1 处契约扫描）。
+    再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、#40 = 仍 >900 行模块的按职责拆分
+    （`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
+    `static/js/workflow.js`、`static/js/canvas.js` 在名单上；`app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
@@ -88,11 +89,14 @@ class TestTheDock:
         assert 'biblioWorkspace.onLanguageChange()' in _js('workflow.js')
 
     def test_both_languages_hold_the_panels_words(self):
-        src = _js('app.js')
-        used = set(re.findall(r"'(biblioWs\.[\w.]+)'", src))
+        # The keys the panel ASKS for come from its call sites; whether each is declared is asked of
+        # the whole browser dictionary (app.js's remainder plus every js/i18n/<domain>.js). A name
+        # ending in '.' is a composition root (`'biblioWs.shape.' + kind`), not a word of its own.
+        used = {key for key in re.findall(r"'(biblioWs\.[\w.]+)'", _js('workflow.js')) if not key.endswith('.')}
         assert used, 'the panel has no catalogue words'
-        for key in used:
-            assert src.count(f"'{key}'") >= 2, f'{key} is missing from one language'
+        keys = _catalog_keys()
+        missing = [f'{key} in {lang}' for key in sorted(used) for lang in ('en', 'zh') if key not in keys[lang]]
+        assert missing == [], f'the dock asks for words no catalogue defines: {missing}'
 
 
 # ─── what the panel prints (driven against the real workflow.js) ───────────

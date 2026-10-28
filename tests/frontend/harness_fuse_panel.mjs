@@ -24,11 +24,10 @@
  * Usage: node harness_fuse_panel.mjs <jsDir>
  * Prints one JSON object to stdout.
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const [jsDir] = process.argv.slice(2);
 
@@ -65,13 +64,10 @@ function world(columnsFor) {
     };
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
-    const sources = ['canvas.js', 'workflow.js', 'app.js']
-        .map((name) => fs.readFileSync(path.join(jsDir, name), 'utf8'))
-        .join('\n;\n');
-    vm.runInContext(
-        `${sources}\n;globalThis.__x = { canvas, I18n, openSettings, updateParam, nodeTypeWord, Diagnostics };`,
-        sandbox
-    );
+    /* The page's modules in the page's order, through the shared loader, so app.js's catalogue
+       files come with it — without them the panel's words are raw keys. */
+    loadPageScripts(sandbox, { jsDir, only: ['canvas.js', 'workflow.js', 'app.js'] });
+    vm.runInContext('globalThis.__x = { canvas, I18n, openSettings, updateParam, nodeTypeWord, Diagnostics };', sandbox);
     sandbox.fetch = () => Promise.resolve({ text: () => Promise.resolve('{"ok":true}'), status: 200 });
     const { canvas } = sandbox.__x;
     canvas.nodes = {};

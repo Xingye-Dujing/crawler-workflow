@@ -48,8 +48,10 @@
    「一个 `I18N_DICT` 常量文件」不同：每个域一份 `backend/static/js/i18n/<domain>.js`，
    `(globalThis.I18N_CATALOGUES = …).push({name, en, zh})`；`index.html` 在 `app.js` **之前**加载它们；
    `app.js` 的 `_mergeCatalogues(local)` 合并余量与注册表并**拒绝同键两次**（点名两边）。
-   首个域是 `settings`（402 键），`app.js` 5,071 → 4,265 行。剩下的域由
-   `build/split_app_catalog.py <domain>` 一次搬一个。**所有「词典住在哪」的问题只有一个读者**：
+   九个域（`settings` 402 / `panels` 462 / `biblio` 267 / `chrome` 254 / `nodes` 135 / `misc` 114 /
+   `charts` 100 / `crawl` 90 / `checks` 51 键），`app.js` 5,071 → **1,450 行、0 个词**；
+   每一域由 `build/split_app_catalog.py <domain>` 搬一次，搬后都用 `build/verify_catalog_move.mjs`
+   对**原始 app.js** 复算（1,875 键 × 2 语言、0 处差异）。**所有「词典住在哪」的问题只有一个读者**：
    `tests/frontend_catalogue.py`；双语契约的扫描范围就是它给出的文件集合。
 
 `tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供

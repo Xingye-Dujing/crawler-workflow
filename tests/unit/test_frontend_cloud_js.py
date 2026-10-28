@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
@@ -141,8 +142,10 @@ class TestTheChromeIsMarked:
         )
 
     def test_the_cloud_wording_exists_in_both_browser_catalogues(self):
+        keys = _catalog_keys()
+        for lang in ('en', 'zh'):
+            assert 'mode.llmCloud' in keys[lang], f'the {lang} catalogue lacks the cloud wording'
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        assert app.count("'mode.llmCloud'") == 2, 'both catalogues must carry the cloud wording'
         assert 'CloudMode' in app, 'the flag stopped being read from /api/config'
 
 
@@ -191,8 +194,13 @@ class TestTheFirstEntryNotice:
         assert booted['secondLanding']['dialogs'] == [], booted['secondLanding']
 
     def test_the_notice_text_exists_in_both_languages(self):
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        # Count the CATALOGUE entries (a key followed by a colon), not every mention of
-        # the string: the call site `I18n.t('privacy.body')` also names the key.
-        for key in ('privacy.body', 'privacy.gotIt', 'privacy.never'):
-            assert app.count(f"'{key}':") == 2, f'{key} must be in the English and the Chinese catalogue'
+        # The keys as the notice ASKS for them are one thing; whether each is declared is asked of
+        # the whole browser dictionary (app.js's remainder plus every js/i18n/<domain>.js).
+        keys = _catalog_keys()
+        missing = [
+            f'{key} in {lang}'
+            for key in ('privacy.body', 'privacy.gotIt', 'privacy.never')
+            for lang in ('en', 'zh')
+            if key not in keys[lang]
+        ]
+        assert missing == [], f'the notice asks for words no catalogue defines: {missing}'

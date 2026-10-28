@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[2]
@@ -267,7 +268,7 @@ class TestContracts:
         assert 'ReusableNodes.settingsHtml(nodeId)' in workflow
 
     def test_every_new_word_has_both_catalogues(self):
-        app = APP_JS.read_text(encoding='utf-8')
+        keys = _catalog_keys()
         for key in (
             'node.reusable',
             'ctx.createReusable',
@@ -280,4 +281,5 @@ class TestContracts:
             'reusable.badTemplate',
             'nodeType.reusable',
         ):
-            assert app.count(f"'{key}'") >= 2, f'{key} must exist in zh and en'
+            for lang in ('en', 'zh'):
+                assert key in keys[lang], f'{key} must exist in {lang}'

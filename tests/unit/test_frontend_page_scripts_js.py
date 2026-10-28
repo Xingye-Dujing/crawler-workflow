@@ -143,13 +143,22 @@ class TestThePageListsItsOwnModules:
         before ``workflow.js`` while the page loads them the other way round, so those scenarios
         evaluated a boot order no browser ever runs. A harness may still read a module's SOURCE
         (the catalogue and contract cases do); it may not decide for itself which product scripts to
-        evaluate, because that list goes stale silently the day a module is split.
+        evaluate, because that list goes stale silently the day a module is split — and a list that
+        stops including ``js/i18n/*.js`` turns every ``t()`` into its own key.
+
+        Two shapes are the same defect: a ``FILES = [`` constant, and reading app.js's text out of
+        the JS directory by name (``readFileSync(path.join(jsDir, 'app.js'))``) to concatenate it
+        with its siblings. Three harnesses did the second one and kept passing on keys-against-keys
+        comparisons after the dictionary moved (measured 2026-10-28). A harness that reads ONE leaf
+        module by name (``custom-select.js``, which takes its words from its callers) is not this
+        defect: the rule is about booting the app without the data the app merges.
         """
-        offenders = [
-            path.name
-            for path in sorted((REPO / 'tests' / 'frontend').glob('harness_*.mjs'))
-            if re.search(r'\bFILES\s*=\s*\[', path.read_text(encoding='utf-8'))
-        ]
+        offenders = []
+        for path in sorted((REPO / 'tests' / 'frontend').glob('harness_*.mjs')):
+            text = path.read_text(encoding='utf-8')
+            boots_app = re.search(r"""['"]app\.js['"]""", text)
+            if re.search(r'\bFILES\s*=\s*\[', text) or (boots_app and re.search(r'readFileSync\([^)]*jsDir', text)):
+                offenders.append(path.name)
         assert offenders == [], f'harnesses with a hand-maintained module list: {offenders}'
 
     def test_the_harnesses_that_boot_a_world_ask_the_page_for_the_order(self):

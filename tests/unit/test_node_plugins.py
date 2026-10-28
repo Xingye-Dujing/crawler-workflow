@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 from nodes import catalog
 
 pytestmark = pytest.mark.unit
@@ -85,10 +86,17 @@ def test_the_frontend_paste_guard_lists_the_same_types():
 
 
 def test_every_plugin_names_a_label_that_exists_in_both_catalogues():
-    source = (ROOT / 'backend' / 'static' / 'js' / 'app.js').read_text(encoding='utf-8')
-    for plugin in catalog.PLUGINS.values():
-        found = len(re.findall(rf"""['"]{re.escape(plugin.label_key)}['"]\s*:""", source))
-        assert found == 2, f'{plugin.type}: {plugin.label_key} appears {found} times (want zh + en)'
+    # The label keys are per type, so they are asked of both languages of the WHOLE browser
+    # dictionary (app.js's remainder plus every js/i18n/<domain>.js) — a count inside one file
+    # stopped meaning "both languages" the day the domains were split.
+    tables = _catalog_keys()
+    missing = [
+        f'{plugin.type}: {plugin.label_key} in {lang}'
+        for plugin in catalog.PLUGINS.values()
+        for lang in ('en', 'zh')
+        if plugin.label_key not in tables[lang]
+    ]
+    assert missing == [], f'node types with no zh+en label: {missing}'
 
 
 def test_an_unknown_type_has_no_plugin():

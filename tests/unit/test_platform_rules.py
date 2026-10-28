@@ -19,6 +19,7 @@ from capabilities.registry import mode_blocker
 from capabilities.requirements import REQUIREMENTS, machine_requirements, requirement_met
 from core import machine, procs
 from core.refs import MAX_FILENAME_BYTES, sanitize_filename
+from frontend_catalogue import catalog_keys
 
 from crawlers.core import browser
 from engine.workflow import WorkflowEngine
@@ -548,15 +549,20 @@ class TestAModeThatNeedsWindowsIsRefusedBeforeItCostsARun:
 
     def test_the_front_end_holds_the_same_token_list_as_the_server(self):
         # A computed key is only safe when the WHOLE universe of values was asked about (the nodeType
-        # lesson): a token the server can send with no word in app.js prints an empty reason.
+        # lesson): a token the server can send with no word in the browser dictionary prints an empty
+        # reason. The dictionary is app.js's remainder plus every js/i18n/<domain>.js.
         root = BACKEND / 'static' / 'js'
-        app_words = (root / 'app.js').read_text(encoding='utf-8')
+        words = catalog_keys()
         table = (root / 'workflow.js').read_text(encoding='utf-8')
         listed = set(re.findall(r"(\w+):\s*'cap\.requires[A-Za-z]+'", table))
         assert listed == set(REQUIREMENTS), listed
-        for token in REQUIREMENTS:
-            key = requirements.REQUIREMENT_LABELS[token]
-            assert app_words.count(f"'{key}'") >= 2, f'{key} needs a word in both catalogues'
+        missing = [
+            f'{requirements.REQUIREMENT_LABELS[token]} in {lang}'
+            for token in REQUIREMENTS
+            for lang in ('en', 'zh')
+            if requirements.REQUIREMENT_LABELS[token] not in words[lang]
+        ]
+        assert missing == [], f'requirement tokens with no word: {missing}'
 
     def test_the_harvest_mode_carries_the_requirement_and_the_boards_do_not(self):
         hongguo = next(capability for capability in capabilities.CAPABILITIES if capability.platform == 'hongguo')
