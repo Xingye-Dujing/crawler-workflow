@@ -449,7 +449,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = `d182ca7`**（Stage 5：图表注册表）→ `73a5c1e`（文档）→ `54d774a`（Stage 4 收尾：charts/reports/ingest）→ `3b96aa4`（analysis）→ `c436673`（runs）→
+  - **HEAD = `24d7e60`**（Stage 6 前两片：队列 / 开跑守卫 / 记录结算搬出 app）→ `91eb661`（文档）→
+    `d182ca7`（Stage 5：图表注册表）→ `73a5c1e`（文档）→ `54d774a`（Stage 4 收尾：charts/reports/ingest）→ `3b96aa4`（analysis）→ `c436673`（runs）→
     `fa0879d`（datasets+exports）→ `08d20c6`（workflows）→ `40c3c3c`（biblio）→ `466d74e`（文档）→ `69ce0ba`（文档）→ `8d0bbd7`（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
     → `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
     （UI 层开页等待，修一条 CI 抖动）→ `480a811`（文档：#25 收尾）
@@ -672,11 +673,33 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `label_key` 自证、前端三个数组被钉住、每个类型中英各有一个词。
     **门禁（本次字节）**：fast **8,178 passed / 3 skipped / 355 deselected**（pytest 9.2.0）；ruff check +
     format（521 files）；两档 pylint **exit=0、10.00/10**；设备档 **194 passed / 0 skipped**，4 分 11 秒。
-  - **下一刀 = Stage 6（任务 #33）**：`app.py` 降为纯组合根——39 条 `@app.route` 按域搬进 `api/` 的 Blueprint、
-    运行编排（`_begin_run`/队列/`_run_node_durable`）搬进 `services/runs/` 或新的运行域；`app` 只留
-    composition root + `__getattr__` 接缝。牵动面（两次 sessions 搬迁的经验）：测试的 `app_module.<x>` 打桩、
-    `_route_source_files()`、`tests/executor_seams.forward`、以及 `test_api_hardening` 的 `BODY_ROUTES` 登记。
-    `state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core；`i18n.py` 仍是 Stage 7。
+  - **Stage 6 前两片已完成（`24d7e60`，本次记录）**：`app.py` 4,412 → **3,253 行 / 27 条 `@app.route`**。
+    新增 `services/runs/queue.py`（`enqueue_run`/`queue_snapshot`/`cancel_queued`/`clear_queue`/
+    `mirror_queue`/`load_pending_queue`/`put_back`/`drain_queue(start_run)`）、
+    `services/runs/payload.py`（`workflow_shape_error` + `resume_refusal`，两条「按下 Run 那一刻就拒绝」的守卫）、
+    `services/runs/settlement.py`（`STOP_QUIT_GRACE`/`close_active_crawlers`/`mark_records_stopping`/
+    `settle_orphaned_records`/`reject_live_run`）；`execute_lock` 从 app 移进 `state.py`（**认领与结算必须同一把锁**）。
+    **drain 的落点是一次真实的设计更正**：先按「队列不懂怎么开跑」把 `_start_next_queued` 留在 app，
+    结果 app 里那行 `entry['workflow_name']` 被 pylint 判 E1136（`QueueEntry | None` 在跨 try 处不收缩），
+    而把 pop 写回同一个函数就是原来的形状（10.00/10）。最终形状：**队列自己做 pop/镜像/放回/循环跳过坏请求**，
+    app 只把 `_begin_run` 作为回调注入 —— 队列不许 import app（循环 + 分层），开跑又不是队列的知识。
+    **三条搬移后的接缝教训**（都已改并全绿）：① `tests/run_wait.py` 与 `tests/conftest.py` 原来读
+    `module._RUN_QUEUE`（穿过 app 摸 state 的列表）→ 改为在函数内 `from state import _RUN_QUEUE`
+    （**conftest 顶层不能 `import state`：`backend/` 是在 conftest 第 53 行才进 sys.path 的**，
+    这条以 ModuleNotFoundError 的形式当场抓到）；② `app_module._reject_live_run` → `reject_live_run`、
+    `monkeypatch.setattr(app_module, '_load_pending_queue', …)` → 新名（app 里仍是全局查找，桩照样生效）；
+    ③ 又踩一次「先加 import 后用」→ 钩子把 `run_queue`/`_RUN_QUEUE`/`drain_queue` 的 import 删了三回。
+    **门禁（本次字节）**：fast **8,180 passed / 3 skipped / 355 deselected**（pytest 9.2.0）；两档 pylint
+    **10.00/10、exit=0**；设备档 **194 passed / 0 skipped**（4 分 12 秒）；隔离根真启动 9 个 GET 全 200
+    （`/`、config、settings、workflow/list、workflow/queue、runs/list、stats/summary、capabilities、node-types），
+    随后已杀自己起的进程（PID 1236，端口 5057 无 LISTEN）并删临时数据根。
+  - **下一刀 = Stage 6 第三片**：把 `app.py` 剩下的 27 条路由按域搬成 Blueprint —— `api/runs.py`（11 条）
+    与 `api/workflow.py`（15 条 + `/` 留在 app），路由路径/方法逐条不变，`test_api_hardening` 的
+    `BODY_ROUTES`/`_route_source_files()` 与 `privacy_leaks` 的 view 名跟着改；`_begin_run` 与节点执行器
+    这一片**留在 app**（它才是组合根剩下的主体），若路由需要它就用注入/延迟查找，不 `import app`。
+    之后：Stage 6 第四片 = 运行编排本身进 `engine/run.py`；Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
+    Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；
+    `settings_store` 等 i18n 拆分后进 core。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，
