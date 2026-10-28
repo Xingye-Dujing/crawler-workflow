@@ -21,7 +21,7 @@ The second half of the file is the patience itself: it has to end on evidence, e
 
 import pytest
 from core.config import Config
-from test_crawler_base import bare
+from crawler_probe import bare
 
 import crawlers.core.crawler as base_module
 from crawlers.core.crawler import Crawler

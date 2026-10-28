@@ -180,7 +180,7 @@ class TestImportHygiene:
         Only statements at the top of the module count — importing inside a test or a
         fixture is the correct form, and five modules already do exactly that.
         """
-        tests_root = Path(__file__).resolve().parents[1]
+        tests_root = Path(__file__).resolve().parents[2]
         offenders = []
         for path in sorted(tests_root.rglob('*.py')):
             if path.name == 'conftest.py':

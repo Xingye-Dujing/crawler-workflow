@@ -24,12 +24,12 @@ import inspect
 from pathlib import Path
 
 import pytest
-from test_crawler_base import Probe, bare
+from crawler_probe import Probe, bare
 
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import CrawlerStopped
 
-CRAWLERS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'crawlers'
+CRAWLERS_DIR = Path(__file__).resolve().parents[3] / 'backend' / 'crawlers'
 
 #: `walk_feed` is asked `stopped=…`, `walk_pages` `alive=…`; both are the same question
 #: pointed the other way, and both are the only ways a shared walk can end early.

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from crawlers.engine import popup
 
-BACKEND = Path(__file__).resolve().parents[2] / 'backend'
+BACKEND = Path(__file__).resolve().parents[3] / 'backend'
 ENGINE = BACKEND / 'crawlers' / 'engine'
 PLATFORMS = BACKEND / 'crawlers' / 'platforms'
 
