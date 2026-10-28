@@ -22,6 +22,7 @@ const SPLIT_OF = {
         'panels/lexicon.js',
         'panels/datasets.js',
         'panels/files.js',
+        'panels/diagnostics.js',
     ],
 };
 

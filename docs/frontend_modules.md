@@ -31,6 +31,7 @@
 | `panels/lexicon.js` | 词表面板（停用词与 jieba 领域词，一行一词、加词框在上）（170 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 7,992 → 7,827 行。切点取在下一个函数**自己的注释之前**（取在函数行会把注释留在原文件） |
 | `panels/datasets.js` | 数据集管理器（重命名/删除/合并/累积谱系重置，名字与形状、被工作流引用时拒绝）（357 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 7,828 → 7,477 行。一次通过 |
 | `panels/files.js` | 工作流文件管理器（已存画布 / 画布历史 / 可复用模板 三个页签）（799 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 7,478 → 6,686 行。一次通过；「一次一个运行」的闸门 `refuseWhileRunning` 不属此面板，留在 `workflow.js` |
+| `panels/diagnostics.js` | 编辑期诊断（节点 emits/reads 对照、缺列与接线问题、成本估计与摘要）（258 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 6,687 → 6,436 行。**成本摘要不是设置面板的东西**：`renderCostSummary()` 由 `Diagnostics` 的 refresh 调用，`estimateCost` 用的是同段的 `_processLlm`/`_isLabelOp`/`_labelCallCap`，所以整段一起搬 |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
 
@@ -39,9 +40,7 @@
 `panels/cookies` + `panels/source-help` / `panels/biblio` / `panels/runlog` / `panels/exports` /
 `panels/runs`）与词典的九个域文件，下面只剩未做的：
 
-1. **`panels/diagnostics.js`** — 编辑期诊断（约 250 行）。**注意**：那一段夹着
-   `estimateCost`/`renderCostSummary`（成本摘要属于设置面板），切之前先按声明分家；涉及 `harness_panels`。
-2. **`settings.js`** — `openSettings` 与各节点设置渲染（约 2,000 行，依赖最多，放最后）；涉及
+1. **`settings.js`** — `openSettings` 与各节点设置渲染（约 2,000 行，依赖最多，放最后）；涉及
    `harness_panels`、`harness_panel_actions`、`harness_state`。
 
 `tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供
