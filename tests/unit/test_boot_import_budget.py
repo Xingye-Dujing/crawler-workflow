@@ -104,12 +104,16 @@ class TestBootImportBudget:
             [sys.executable, '-c', script],
             capture_output=True,
             env=environment,
-            text=True,
             timeout=180,
             check=False,  # asserted below, with the child's own returncode and stderr attached
         )
+        # Bytes, not ``text=True``: a piped child writes the machine's ANSI code page, and the
+        # CI runner's cp1252 cannot decode the UTF-8 the app prints — the reader thread raised
+        # ``UnicodeDecodeError`` and pytest reported it as an unhandled thread exception. The
+        # boundary is crossed in bytes precisely so the decode below is the only decoding.
+        failure = completed.stderr.decode('utf-8', 'replace')
         assert completed.returncode == 0, (
-            f'`import app` failed on this machine: rc={completed.returncode} stderr={(completed.stderr or "")[-1500:]}'
+            f'`import app` failed on this machine: rc={completed.returncode} stderr={failure[-1500:]}'
         )
         assert report.is_file(), f'the child exited 0 without writing its report to {report}'
         leaked = [name for name in report.read_text(encoding='utf-8').strip().split('|') if name]

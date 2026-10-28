@@ -97,12 +97,14 @@ def upload_dataset():
             # January/February/March workbook and reported that sheet's row count and columns as
             # if they were the whole file — a SILENT_SHORT the upload panel then analysed as truth.
             # More than one sheet holding rows is a choice of data, so it is refused by name.
-            filled = [name for name in sheet_names if not book.parse(name, nrows=1).empty]
+            # ``ExcelFile.parse`` is deprecated (pandas 3 warns on every call); ``read_excel``
+            # accepts the open workbook and keeps the parser for every sheet.
+            filled = [name for name in sheet_names if not pd.read_excel(book, sheet_name=name, nrows=1).empty]
             if len(filled) > 1:
                 return jsonify(
                     {'ok': False, 'error': t('api.excelMultiSheet', name=filename, sheets='、'.join(filled))}
                 ), 400
-            df = book.parse(filled[0] if filled else (sheet_names[0] if sheet_names else 0))
+            df = pd.read_excel(book, sheet_name=filled[0] if filled else (sheet_names[0] if sheet_names else 0))
             parsed = parse_frame(df)
             if parsed is not None:
                 df = use_biblio(parsed)
