@@ -93,12 +93,12 @@ def _catalog_texts():
 class TestCanvasSerialization:
     """toWorkflowJSON is the browser→backend wire; its shape is a real contract."""
 
-    @classmethod
     @pytest.fixture(scope='class')
+    @classmethod
     def payload(cls):
-        """A class-scoped fixture has to be a classmethod: defined as an instance method,
-        the one instance it fills is thrown away before the first test runs, so every
-        ``self.`` it set would be invisible to the tests it was built for.
+        """A class-scoped fixture in a class must be a classmethod (below the fixture, so the
+        fixture sees it), because each test gets a NEW instance while the fixture runs once
+        per class: state set on ``self`` would be invisible to every test it was built for.
         """
         node = shutil.which('node')
         if not node:
@@ -178,8 +178,8 @@ class TestLlmGateParity:
         ('node_level_ner_llm', {'text_column': '正文'}, 'ner'),
     ]
 
-    @classmethod
     @pytest.fixture(scope='class')
+    @classmethod
     def js_answers(cls, tmp_path_factory):
         if shutil.which('node') is None:
             pytest.skip('node not available')

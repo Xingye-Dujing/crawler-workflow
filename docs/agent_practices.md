@@ -36,13 +36,18 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   later redirect would be too late. `test_test_tiers.py` refuses the import statically; the session-finish snapshot
   refuses the write.
 - **A warning is a test that noticed something and passed anyway — fix what it noticed, never mute it.** Fixes landed
-  here because of warnings: class-scoped fixtures must be `@classmethod` (an instance-method fixture's `self` is
-  discarded before tests run, so any `self.` it sets is invisible to them); close file responses after reading; never
-  let a cookie-save open a **real Chrome inside the fast tier** (the plant swallowed a socket failure, answered
-  「种入失败」, left a `UserWarning`). A no-browser test says so (`profiles_off` in `tests/api/conftest.py`); a dependency
-  leaking its own handle is reported to the user, not filtered. One not ours, left visible (never filtered): jieba
-  0.42.1 (final) imports deprecated `pkg_resources` → one `DeprecationWarning` (`jieba_fast` too); see
-  `docs/development.md`.
+  here because of warnings: **a class-scoped fixture in a class is `@pytest.fixture` FIRST and `@classmethod` SECOND**
+  (an instance-method fixture's `self` is discarded before tests run, so any `self.` it sets is invisible to them);
+  pytest is unpinned, so CI moved from 9.1.1 to 9.2.0 mid-day on 2026-10-28 and the old order — `@classmethod` on top —
+  stopped being registered at all: every such test errored at setup with `fixture '<name>' not found`. Measured with
+  both versions in a throwaway venv: the swapped order, a `@staticmethod` fixture and a module-level fixture all pass
+  on 9.1.1 AND 9.2.0; only the old order breaks. `tests/unit/test_test_tiers.py::TestClassScopedFixturesAreVersionProof`
+  scans the suite for it. Other fixes from warnings: close file responses after reading; never let a cookie-save open a
+  **real Chrome inside the fast tier** (the plant swallowed a socket failure, answered 「种入失败」, left a
+  `UserWarning`). A no-browser test says so (`profiles_off` in `tests/api/conftest.py`); a dependency leaking its own
+  handle is reported to the user, not filtered. Not ours, left visible (never filtered): jieba 0.42.1 (final) imports
+  deprecated `pkg_resources` → one `DeprecationWarning` (`jieba_fast` too), and anyio's pytest plugin warns about
+  `CallSpec2` under 9.2.0; see `docs/development.md`.
 - **A stateful rule needs a stateless suite.** The suite shares ONE cookie directory, so `quiet_jar` snapshots and
   restores it per test — a login another test saved is a precondition this one never set up, and "is this cookie here?"
   passes for the wrong reason when inherited.

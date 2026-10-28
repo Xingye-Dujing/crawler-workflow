@@ -1075,3 +1075,28 @@ class TestLiveTierSkipsAreEnumerated:
             if not any(name == listed and reason in text for name, _lineno, text in reported)
         )
         assert not unused, f'the allowance lists skips the tier no longer has, drop them: {unused}'
+
+
+class TestClassScopedFixturesAreVersionProof:
+    """The decorator order that pytest 9.2 silently stopped registering.
+
+    ``pytest`` is unpinned in ``requirements.txt``, so CI installs whatever is newest: on
+    2026-10-28 it moved from 9.1.1 to 9.2.0 in the middle of the day, and every fixture written
+    ``@classmethod`` **above** ``@pytest.fixture`` stopped being registered — the tests errored at
+    setup with ``fixture '<name>' not found``, which is what a docs-only commit's fast tier
+    reported. Measured with both versions: ``@pytest.fixture`` first and ``@classmethod`` second
+    passes on 9.1.1 and 9.2.0 alike (plain-method and module-level shapes also pass on both).
+    This scan is the only thing that keeps a tidy-up from putting the old order back.
+    """
+
+    def test_no_fixture_is_decorated_with_classmethod_above_it(self):
+        offenders = []
+        for path in sorted(TESTS_DIR.rglob('*.py')):
+            lines = path.read_text(encoding='utf-8').splitlines()
+            for index, line in enumerate(lines[:-1]):
+                if line.strip() == '@classmethod' and lines[index + 1].strip().startswith('@pytest.fixture'):
+                    offenders.append(f'{path.relative_to(REPO_ROOT).as_posix()}:{index + 1}')
+        assert not offenders, (
+            'put @pytest.fixture above @classmethod (pytest 9.2 stops registering the other order): '
+            + ', '.join(offenders)
+        )

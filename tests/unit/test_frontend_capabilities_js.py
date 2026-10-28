@@ -327,8 +327,8 @@ class TestPlatformAdvice:
     """#181 — the advice screen is generated from matrix flags only. It must classify
     each platform by the flag the matrix set and name nothing a matrix did not."""
 
-    @classmethod
     @pytest.fixture(scope='class')
+    @classmethod
     def advice(cls, tmp_path_factory):
         tmp = tmp_path_factory.mktemp('caps-advice')
         matrix = {
@@ -603,7 +603,8 @@ class TestAModeThisMachineCannotRun:
     """
 
     @pytest.fixture(scope='module')
-    def verdicts(self, tmp_path_factory):
+    @classmethod
+    def verdicts(cls, tmp_path_factory):
         tmp = tmp_path_factory.mktemp('machine')
         matrix = _matrix()
         harvest = next(
@@ -783,8 +784,8 @@ class TestTheCrawlBackendOption:
                 mode.pop('cells', None)
         return matrix
 
-    @classmethod
     @pytest.fixture(scope='class')
+    @classmethod
     def options(cls, tmp_path_factory):
         """The five answers a panel can get about the second backend, in one node run.
 
