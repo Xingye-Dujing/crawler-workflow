@@ -219,6 +219,19 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   ``nodes`` and ``stores`` until ``git status`` was read, and was amended before it left the machine. The proof the
   move is complete is a **residual scan that refuses to finish** (``services[./]biblio_*`` anywhere), not a green
   suite — the suite had already run green locally before the missing files were noticed.
+- **Count references by the NAME a file binds, not by the module path (2026-10-28, found on the third group).**
+  Before moving ``net_probe`` the inventory grep for ``services\.net_probe`` reported 2 references; the move then had
+  to rewrite **50** ``net_probe.`` call sites, because the callers bind the module with ``from services import
+  net_probe`` and the module path never appears again. The inventory that works asks for the binder
+  (``from services import <old>``) and then greps the bare name. Related, same day: ① a **bare module reference** —
+  ``monkeypatch.setattr(net_probe, '_session', …)`` — is invisible to an attribute rule (the name is followed by a
+  comma, not a dot) and shows up only as F821 (23 sites across three groups; each fixed by hand after reading the
+  line); ② the multi-name import ``from services import latex_charts, visualizer`` matched the first rule and left the
+  second name behind, exactly like the biblio case — the rule set needs one rule per *name*, not per statement; ③ the
+  post-edit ``ruff --fix`` deleted the freshly re-added import in a test one more time (usage and import must land in
+  that order, never the reverse). Batching three groups behind ONE full-suite run was the user's call after the
+  per-group 8-minute run became the bottleneck: each commit still carries its own moves + call sites, and CI only
+  ever sees the final HEAD.
 - **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
   appeared" while the gate before it said everything was fine — because its bounded poll returned

@@ -449,7 +449,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = `40c3c3c`**（Stage 4 第一组：`services/biblio/`）→ `69ce0ba`（文档）→ `8d0bbd7`（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
+  - **HEAD = `54d774a`**（Stage 4 收尾：charts/reports/ingest）→ `3b96aa4`（analysis）→ `c436673`（runs）→
+    `fa0879d`（datasets+exports）→ `08d20c6`（workflows）→ `40c3c3c`（biblio）→ `466d74e`（文档）→ `69ce0ba`（文档）→ `8d0bbd7`（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
     → `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
     （UI 层开页等待，修一条 CI 抖动）→ `480a811`（文档：#25 收尾）
     ← `2c4bfd3`（真浏览器引擎选择器用例）← `a6b4df5`（capabilities 内部分拆第一步，Stage 3d）← `994a2ec`（`capabilities/` 包，Stage 3c）
@@ -641,16 +642,27 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     **门禁（本次字节）**：fast **8,171 passed / 3 skipped / 355 deselected**（用 pytest **9.2.0** 跑）；
     ruff check + format（511 files）；两档 pylint **exit=0、10.00/10**（产品 257 / tests 271，清单已重生成）；
     设备档 **194 passed / 0 skipped**，4 分 09 秒。
-  - **下一刀 = Stage 4 其余组**（按依赖从少到多）：`services/workflows/`（manager/history/reusable_*/project_bundle）→
-    `services/datasets/`（dataset_store/dataset_merge/exporter/export_browser/text_dedupe）→ `services/runs/`
-    （run_store/run_files/run_windows/run_compare/execution_history/housekeeping/lock_store）→ `services/analysis/`
-    （data_analysis/analysis_params/process_params/llm_run_context/lexicon*/stats/report_service）→
-    `services/crawl/`（catbus_bridge/crawl_runtime/crawler_lifecycle/part_writer/net_probe）→
-    `services/charts/`（与 Stage 5 合并做：chart_contracts/visualizer/latex_*）。每组一套：`build/move_<组>.py`
-    （三类规则 + 别名 + 残差拒绝）→ ruff → 目标组用例 → 全量 fast（9.2.0）→ ruff/两档 pylint（**重生成清单**）→
-    设备档（动了爬虫/图表/UI 时）→ commit（**`git add` 要覆盖所有改过的树**，本轮就漏了 `backend/api` 等 9 个文件，
-    靠 `git commit --amend` 在未推送前补齐）。`state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n
-    拆分后进 core；`i18n.py` 仍是 Stage 7。
+  - **Stage 4 全部落地（`3b96aa4`/`c436673`/`fa0879d`/`08d20c6`/`40c3c3c`/`54d774a`，本次记录）**：`services/` 从
+    48 个扁平模块变成「9 个域包 + 1 个刻意留扁平的模块」：
+    `biblio/`(11+formats 14)、`workflows/`(5)、`datasets/`(3)、`exports/`(2)、`runs/`(6)、`analysis/`(7)、
+    `charts/`(5：contracts/visualizer/tikz/pdf/outputs)、`reports/`(2：html/paper)、`ingest/`(5：catbus/runtime/
+    lifecycle/net/parts)；`lock_store.py` 留扁平并在 `docs/ARCHITECTURE.md` 写明理由（逐项锁跨导出/运行/历史/工作流，
+    归到任何单一域都是谎）。**包名 `ingest` 而不是 `crawl`**：`backend/crawlers` 已经是「爬取」的概念名，
+    再来一个 `services/crawl` 就是一个概念两个名字。`latex_compile` → `charts/pdf`、`latex_report` → `reports/paper`、
+    `latex_charts` → `charts/tikz` 是按「它实际产出什么」命名的（并避免两个 `latex.py`）。
+    **搬法与证据**：`build/move_services_group.py`（可改一张 `old → (package, new)` 表复用；四类规则 + 别名调用点
+    + `__file__` 报告 + **残差扫描拒绝** + 末尾 ruff）。每组的定向用例（biblio 387 / workflows 124 / datasets 330 /
+    runs 221 / analysis 1,126 / charts+reports+ingest 724）先绿，最后**一轮**全量门禁。按用户要求把「每组一轮 8 分钟
+    fast」合并成「三组搬完跑一轮」：中间三次 commit 各自包含自己的搬移与调用点，CI 只看最终 HEAD。
+    **本轮新增的坑（教训进 `agent_practices`）**：① **裸模块引用**（`monkeypatch.setattr(net_probe, …)`）不吃
+    「属性调用点」规则，23 处 F821；② 别按「模块路径」清点引用——`net_probe.` 的调用点在 test 里写的是
+    `net_probe.` 而 import 是 `from services import net_probe`，路径前缀 grep 只数到 2、实际 50 处；
+    **按绑定名清点**（`from services import <old>`）；③ 多名字导入 `from services import latex_charts, visualizer`
+    只会被第一条规则改到一半；④ `--fix` 再次把「调用点还没改」的 import 删掉（`test_settings_api` 第二处）。
+  - **下一刀 = Stage 5（任务 #32）**：图表插件注册表——`services/charts/contracts.py` 里
+    `BIBLIO_CHART_TYPES/READS/BUILDERS` 与 `charts.visualizer`/`charts.tikz`/`workflow.js` 三份图型列表合一，
+    新增一种图 = 1 个新文件 + 1 行注册；`graph3d` LaTeX 死分支与 `CATEGORY_COLORS` 双绑定（D9）同批删。
+    `state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core；`i18n.py` 仍是 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，
