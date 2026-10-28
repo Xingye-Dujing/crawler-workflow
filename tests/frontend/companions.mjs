@@ -17,6 +17,7 @@ const SPLIT_OF = {
         'panels/source-help.js',
         'panels/biblio.js',
         'panels/runlog.js',
+        'panels/exports.js',
     ],
 };
 

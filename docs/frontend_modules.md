@@ -26,6 +26,7 @@
 | `panels/cookies.js` + `panels/source-help.js` | Cookie 面板（登录对话框、单飞登录任务轮询、已存登录停靠表、账号候选）与导出指引浮层（970 + 175 行） | Stage 8（2026-10-28）：cookie 那段是**连续切片**，而导出指引正好夹在它中间，所以第一步把 1,125 行整段搬出、第二步再把指引切到自己的文件（`build/carve_cookie_panel.py` + `build/carve_source_help.py`，两次都按行切片并核对分区）。`workflow.js` 11,740 → 10,614 行；两件都进 `SPLIT_OF`。**测试跟着事实走**：cookie 删除对话框的调用点扫描、指引的 `GROUP_KEYS`/`style.display` 扫描、矩阵 action 存在性扫描（改为扫整棵 `js/`）与「死键」审计的 JS 面（改为 `rglob`，仍排除 `i18n/` 数据） |
 | `panels/biblio.js` | 文献计量工作区（运行/节点选择、分页表、产物链接、画布定位、项目快照与对比）（651 行） | Stage 8（2026-10-28）整段切片搬出；`workflow.js` 10,615 → 9,971 行。`biblioColumnWord`/`toggleBiblioPanel` 与被剪的 `BIBLIO_DIFF_LINES`/`_diffItem` 只有工作区自己用，一起搬；进 `SPLIT_OF` |
 | `panels/runlog.js` | 运行日志查看器（只读 `run_log` 表，服务端过滤 + 同样的参数下载 .txt）（226 行） | Stage 8（2026-10-28）；`workflow.js` 9,972 → 9,753 行。**这一刀两次被切片连带**：第一次把夹在同一片里的 `dataPreview` 与整个 `dashboard` 带走，第二次才发现 `escapeHtml`/`attrJsArg` 是**全页工具**（workflow.js 里 158 处、schedules.js 9 处），先把两个工具放回 `workflow.js`，再把 data preview + dashboard 整段退回（300 行）。教训：切之前按顶层声明清点这一片，不只看首尾标记 |
+| `panels/exports.js` | 导出产物面板（列表/下载/删除，名字原样回传）（491 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 9,754 → 9,270 行。有了伴生表，这一刀**一次通过**（harness_exports 已用 `sourceOf`） |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
 
@@ -38,8 +39,8 @@
    `runsManager` 在 `6,6xx` 附近 —— 是**多段**切片，搬之前按顶层声明清点每一段（上一刀的教训：
    同一片里的 `dataPreview`/`dashboard` 差点跟着走）；涉及 `harness_console`、`harness_runsmgr`、
    `harness_run_results`。
-2. **`panels/files.js` / `panels/datasets.js` / `panels/exports.js` / `panels/lexicon.js` / `panels/diagnostics.js`**
-   — 各自管理器与停靠面板（每个 150–800 行）；涉及对应 harness 与 `harness_panels`。
+2. **`panels/files.js` / `panels/datasets.js` / `panels/lexicon.js` / `panels/diagnostics.js`**
+   — 各自管理器与停靠面板（每个 150–800 行；`exports` 已搬，见 §2）；涉及对应 harness 与 `harness_panels`。
 3. **`settings.js`** — `openSettings` 与各节点设置渲染（约 2,000 行，依赖最多，放最后）；涉及
    `harness_panels`、`harness_panel_actions`、`harness_state`。
 
