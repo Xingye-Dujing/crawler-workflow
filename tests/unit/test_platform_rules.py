@@ -553,7 +553,8 @@ class TestAModeThatNeedsWindowsIsRefusedBeforeItCostsARun:
         # reason. The dictionary is app.js's remainder plus every js/i18n/<domain>.js.
         root = BACKEND / 'static' / 'js'
         words = catalog_keys()
-        table = (root / 'workflow.js').read_text(encoding='utf-8')
+        # The token → word table moved with the capability matrix (Stage 8): it is read there.
+        table = (root / 'capabilities.js').read_text(encoding='utf-8')
         listed = set(re.findall(r"(\w+):\s*'cap\.requires[A-Za-z]+'", table))
         assert listed == set(REQUIREMENTS), listed
         missing = [

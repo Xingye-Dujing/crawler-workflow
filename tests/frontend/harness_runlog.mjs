@@ -18,8 +18,9 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, dispatchOn } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = sourceOf(process.argv[2]);
 
 const PAGE = {
     ok: true,

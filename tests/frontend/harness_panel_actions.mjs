@@ -26,9 +26,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, resetWorld } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 const paths = process.argv.slice(2);
-const src = paths.map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = sourceOf(...paths);
 
 const answers = { confirm: true, dialog: null };
 /* Every dialog spec the modules under test asked for, in order. A dialog WITH an

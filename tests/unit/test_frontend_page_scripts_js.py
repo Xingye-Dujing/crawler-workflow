@@ -92,6 +92,52 @@ class TestThePageListsItsOwnModules:
         # page order — and the catalogue comes along although only app.js was named
         assert json.loads(answer.stdout) == ['i18n/chrome.js', 'app.js'], answer.stdout
 
+    def test_a_split_out_module_comes_with_the_file_it_was_split_from(self, tmp_path):
+        """Selecting ``workflow.js`` must also evaluate the modules split out of it.
+
+        The capability matrix, the chart preview and (earlier) the message catalogues used to live in
+        that one file. A harness that names only the old file boots half a layer and dies the first
+        time the scenario asks the other half anything — measured 2026-10-28, when moving the matrix
+        out broke 14 test modules at boot with ``Cannot read properties of undefined``.
+        """
+        dom = (REPO / 'tests' / 'frontend' / 'harness_dom.mjs').as_posix()
+        loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').as_posix()
+        driver = tmp_path / 'driver.mjs'
+        driver.write_text(
+            "import vm from 'node:vm';\n"
+            "import { pathToFileURL } from 'node:url';\n"
+            f'const {{ baseSandbox, fixWindow }} = await import(pathToFileURL({dom!r}).href);\n'
+            f'const {{ loadPageScripts }} = await import(pathToFileURL({loader!r}).href);\n'
+            'const sandbox = baseSandbox();\n'
+            'vm.createContext(sandbox);\n'
+            'fixWindow(vm, sandbox);\n'
+            "const loaded = loadPageScripts(sandbox, { only: ['workflow.js'] });\n"
+            'process.stdout.write(JSON.stringify(loaded));\n',
+            encoding='utf-8',
+        )
+        answer = run_node(str(driver))
+        assert answer.returncode == 0, answer.stderr[-600:]
+        loaded = json.loads(answer.stdout)
+        assert 'workflow.js' in loaded
+        assert 'capabilities.js' in loaded, f'the capability matrix is missing from {loaded}'
+        assert 'chart-preview.js' in loaded, f'the chart preview is missing from {loaded}'
+
+    def test_the_companion_map_names_files_the_page_really_ships(self):
+        """A companion the page does not load would be a harness-only file: the browser would never
+        have it, so the split would be a test fiction. The map is read from the loader source."""
+        loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').read_text(encoding='utf-8')
+        assert 'COMPANIONS' in loader or 'companions.mjs' in loader, 'the loader lost the companion rule'
+        companions = (REPO / 'tests' / 'frontend' / 'companions.mjs').read_text(encoding='utf-8')
+        block = companions[
+            companions.index('const SPLIT_OF = {') : companions.index('};', companions.index('const SPLIT_OF = {'))
+        ]
+        names = set(re.findall(r"'([\w-]+\.js)'", block))
+        # Both sides of every pair are page-shipped modules: the owner and the file split out of it.
+        page = set(_page_scripts(INDEX))
+        assert names <= page, f'companions the page never loads: {sorted(names - page)}'
+        for name in names:
+            assert (JS_DIR / name).is_file(), f'{name} is in the map but not on disk'
+
     def test_the_loader_reads_this_page_rather_than_a_checked_in_list(self):
         loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').read_text(encoding='utf-8')
         assert 'index.html' in loader

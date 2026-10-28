@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, readJson } from './harness_dom.mjs';
+import { sourcesWithCompanions } from './companions.mjs';
 
 const [canvasPath, wfPath, scPath, matrixPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
@@ -82,7 +83,11 @@ vm.runInContext(
 );
 
 vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
-vm.runInContext(fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__workflow = workflow;', sandbox);
+/* The workflow layer is more than one file now: its split-out halves are read from the same
+   directory and evaluated after it, each as its own script like a real <script> tag. */
+const workflowSources = sourcesWithCompanions([wfPath]);
+workflowSources[0] += '\n;globalThis.__workflow = workflow;';
+for (const code of workflowSources) vm.runInContext(code, sandbox);
 /* Hand the matrix to the stubbed endpoint and let the browser's own loader run,
    so the panel and the node defaults are built from the payload the server would
    really have sent. Awaited before any scenario: a node dropped into an

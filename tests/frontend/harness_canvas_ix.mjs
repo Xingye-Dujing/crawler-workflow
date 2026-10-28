@@ -32,9 +32,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, dispatchDocument, dispatchOn, dispatchWindow, fixWindow, flushFrames, resetWorld } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 const [canvasPath, wfPath] = process.argv.slice(2);
-const src = [canvasPath, wfPath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = sourceOf(canvasPath, wfPath);
 
 const KEYS = {
     'node.source': 'Data Source',

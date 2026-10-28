@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 21 | 26,335 | `workflow.js` **12,065** · `chart-preview.js` 973 · `app.js` 1,450（词典已全部搬出）· `i18n/` 9 份共 4,009 · `canvas.js` 3,893 |
+| `backend/static/js/` | 22 | 26,345 | `workflow.js` **11,739** · `canvas.js` 3,893 · `app.js` 1,450 · `chart-preview.js` 973 · `capabilities.js` 336 · `i18n/` 9 份共 4,009 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -972,12 +972,24 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     - **两支只加载部分模块的 harness**（`harness_data_preview` 的 `only`、`harness_async_panels` 的两槽 argv）
       会拿到「`_renderFailureView` is not defined」——前者补 `chart-preview.js` 到 `only`，
       后者改成按给定顺序逐个求值。**又一次证明「按名字读/两槽下标」在拆分时是缺陷形状**。
-  - **Stage 8 剩余（同一套机制，每域一次运行）**：词典已全部出 app.js，`chart-preview.js` 已出。
-    下一站 `capabilities.js`（约 350 行），随后 `panels/cookies` → `panels/runs`（含 `runLogViewer`）→
-    `panels/biblio` → 各面板 → `settings.js`，见 `docs/frontend_modules.md` §3。
-    再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、#40 = 仍 >900 行模块的按职责拆分
-    （`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js` 12,066、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
+  - **Stage 8 第四刀（`capabilities.js`）已完成（2026-10-28）**：`workflow.js` **12,066 → 11,739 行**，
+    新 `backend/static/js/capabilities.js` **336 行**（采集矩阵 `Capabilities`、机器判定 `Machine`、
+    微调模型清单 `BertModels`、以及 `CAPABILITY_REQUIREMENT_WORDS`）。
+    - **这一刀真正的产出是一条规则，不是一次搬移**：搬完后 **14 个测试模块**在启动时以
+      `Cannot read properties of undefined (reading 'load')` 报错 —— 它们只把 `workflow.js` 交给 harness，
+      而这层现在是几份文件。新 `tests/frontend/companions.mjs` 的 `SPLIT_OF`
+      （`workflow.js → chart-preview.js + capabilities.js`）声明这件事：
+      `page_scripts.mjs` 的 `only` 自动展开它，按路径拼接的 harness 用 `sourceOf`/`sourcesWithCompanions`
+      从同一目录读伴生文件。两条契约钉住：`loadPageScripts({only:['workflow.js']})` 必须真的加载两份伴生文件
+      （合成 driver 读回实际求值清单）、伴生表里的每个名字都必须是页面真的加载且磁盘真的存在的文件。
+      **以后每拆一次 workflow.js 只改这一张表。**
+    - **扫描随事实搬家**（这次只有一处）：`test_platform_rules` 的 `cap.requires*` 词表改读 `capabilities.js`。
+    - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档（真 Chrome + 真 Ollama + 真 CatBus）
+      **194 passed / 0 跳过**；`ruff check` + `format --check`（532 文件）全绿；`node --check` 二十个改动的 JS 全过。
+  - **Stage 8 剩余**：`panels/cookies` → `panels/runs`（含 `runLogViewer`）→ `panels/biblio` → 各面板 →
+    `settings.js`，见 `docs/frontend_modules.md` §3。再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
+    #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
+    `static/js/workflow.js` 11,739、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

@@ -14,9 +14,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { addOptions, baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 const wfPath = process.argv[2];
-const src = fs.readFileSync(wfPath, 'utf8');
+const src = sourceOf(wfPath);
 
 const sandbox = {
     ...baseSandbox(),

@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 const [canvasPath, wfPath, scPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
@@ -46,7 +47,7 @@ function world() {
     sandbox.window.explainWechatLimits = () => {};
     vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
     vm.runInContext(
-        fs.readFileSync(wfPath, 'utf8') +
+        sourceOf(wfPath) +
             '\n;globalThis.__workflow = workflow; globalThis.__platformAdviceMessage = platformAdviceMessage;' +
             'globalThis.__sourceNodeErrors = sourceNodeErrors; globalThis.__Machine = Machine;',
         sandbox,

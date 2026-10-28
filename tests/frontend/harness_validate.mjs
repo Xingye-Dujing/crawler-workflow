@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, readJson } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 const wfPath = process.argv[2];
 const scenarioPath = process.argv[3];
@@ -32,7 +33,7 @@ const scenarioPath = process.argv[3];
    from it, so rendering one without this answers "the list did not load" — which
    is itself a scenario, and the reason the argument stays optional. */
 const matrixPath = process.argv[4];
-const src = fs.readFileSync(wfPath, 'utf8');
+const src = sourceOf(wfPath);
 const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
 
 /* A parseable stand-in for the catalog: validate messages come back as

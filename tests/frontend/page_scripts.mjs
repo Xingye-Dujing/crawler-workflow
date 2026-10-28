@@ -21,6 +21,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
+import { withCompanions } from './companions.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = join(HERE, '..', '..');
 export const STATIC_DIR = join(REPO, 'backend', 'static');
@@ -62,6 +64,9 @@ export function loadPageScripts(sandbox, options = {}) {
         if (only.has('app.js')) {
             for (const name of names) if (name.startsWith(`${CATALOGUE_DIR}/`)) only.add(name);
         }
+        /* The same argument for the modules split OUT of workflow.js: they are what that layer IS
+           now, and the page never loads one without the others. */
+        for (const name of withCompanions(Array.from(only))) only.add(name);
     }
     const loaded = [];
     for (const name of names) {
