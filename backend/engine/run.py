@@ -44,7 +44,6 @@ from transport import _local_transport_refusal
 
 from analyzers.llm_client import ABORT_MARK
 from crawlers.core.faults import CrawlerStopped
-from engine import run as run_engine
 from engine.executor import TaskExecutor
 from engine.plan import component_name, llm_provider, run_mode, workflow_needs_llm
 from engine.workflow import WorkflowEngine, effective_workflow
@@ -1391,7 +1390,7 @@ def start_scheduled_run(task: dict, manual: bool) -> dict:
     if loaded['error']:
         return {'ok': False, 'error': loaded['error']}
     name = str(task.get('name') or '')
-    answer = run_engine.begin_run(
+    answer = begin_run(
         {'workflow': loaded['workflow'], 'workflow_name': name, 'lang': task.get('lang') or 'zh'},
         '',
     )

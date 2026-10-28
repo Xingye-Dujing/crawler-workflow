@@ -45,7 +45,6 @@ from core.refs import (
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
-from nodes.catalog import QUIET_NODE_TYPES as QUIET_NODE_TYPES
 from nodes.labels import node_label
 from scheduling import clock
 from sessions.routes import bp as sessions_bp

@@ -833,6 +833,17 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     里转发到 `state`），配合 `tests/executor_seams.py::forward` 与各模块的调用时转发，
     「patch app.add_log」重新只有一个含义；`tests/api/conftest.py` 加一条 autouse 把
     `engine.run.add_log` 也接到同一接缝。
+  - **第八片的 pylint 抓到两条我自己造的错（两档都 exit=4，分数仍 10.00/10 —— 分数不是门禁，退出码才是）**：
+    ① `engine/run.py:47 W0406 module import itself`：8c 的 import 合并是「按被搬文本用到的名字，去
+    app.py 的 import 表里找它的来源」，而 `_start_scheduled_run` 搬过去之前一行我刚把它的调用写成
+    `run_engine.begin_run(...)`（那是 app 需要的模块属性形状），于是合并器忠实地把
+    `from engine import run as run_engine` 搬进了 `run.py` 自己。**在同一模块里调用同模块的函数不需要
+    前缀**：正确形状是 `begin_run(...)`，app 才用 `run_engine.begin_run`。② `app.py:48 W0611 unused-import`：
+    整词改名脚本把 `from nodes.catalog import QUIET_NODE_TYPES as _QUIET_NODE_TYPES` 改成
+    `… as QUIET_NODE_TYPES` 而它唯一的用处在 8b 已搬走 —— **「限定形先改、裸名后改」的顺序对了，
+    但脚本不该产生 `X as X`**：改名后要按「这个别名还剩下什么」重问一遍，而不是只看 token 是否统一。
+    两条都是改完重跑两档才确认清零（`ruff` 一条都没报：F401 认为 `X as X` 是"用过的导入"，
+    而 pylint 的 unused-import 会看绑定名本身 —— 这类差异正是本项目坚持两档都跑的原因）。
   - **下一刀 = Stage 6 收尾**：`/api/workflow/execute` 与 `/api/workflow/rerun-node` 现在才真是薄壳
     —— 它们只做请求整形 + `run_engine.begin_run(...)`，可搬进 `api/workflow.py`，app 只剩 `/` 一条路由
     与组合根本体（app 对象、钩子、25 次注册、时钟接线、启动恢复）。之后：Stage 7 i18n；Stage 8 前端；
