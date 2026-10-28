@@ -9,23 +9,9 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-const SPLIT_OF = {
-    'workflow.js': [
-        'chart-preview.js',
-        'capabilities.js',
-        'panels/cookies.js',
-        'panels/source-help.js',
-        'panels/biblio.js',
-        'panels/runlog.js',
-        'panels/exports.js',
-        'panels/runs.js',
-        'panels/lexicon.js',
-        'panels/datasets.js',
-        'panels/files.js',
-        'panels/diagnostics.js',
-        'panels/settings.js',
-    ],
-};
+/* The map lives in splits.json so the Python drivers (frontend_catalogue.with_companions) and this
+ * loader read the same declaration; a second copy in a comment is how the two would drift. */
+const SPLIT_OF = JSON.parse(readFileSync(new URL('./splits.json', import.meta.url), 'utf8'));
 
 /** `names` plus every companion of the modules it names (for `loadPageScripts`'s `only`). */
 export function withCompanions(names) {

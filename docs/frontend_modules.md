@@ -34,13 +34,18 @@
 | `panels/diagnostics.js` | 编辑期诊断（节点 emits/reads 对照、缺列与接线问题、成本估计与摘要）（258 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 6,687 → 6,436 行。**成本摘要不是设置面板的东西**：`renderCostSummary()` 由 `Diagnostics` 的 refresh 调用，`estimateCost` 用的是同段的 `_processLlm`/`_isLabelOp`/`_labelCallCap`，所以整段一起搬 |
 | `panels/settings.js` | 节点设置面板：`openSettings`、源面板与全部参数渲染器（输入/下拉/勾选/数字）、分析/文献/图表设置、`renderResumeSettings`，以及它们读的 `ANALYSIS_OPS`/`FILTER_OPS`/`CONVERT_TYPES`/`BIBLIO_*`/`CHART_TYPES` 清单（1,985 行） | Stage 8（2026-10-29）**两段**切片：`nodeTypeWord` 被 `panels/files.js`/`panels/runs.js`/`reusable.js`/`zenviz.js` 共用，夹在两段之间，留在 `workflow.js`；重组核对 357,166 字节相等；`workflow.js` 6,436 → 4,458 行。进 `SPLIT_OF`；`harness_async_panels`/`harness_cloud` 改 `sourceOf`；`test_chart_registry`/`test_data_analysis`/`test_exporter`/`test_analysis_api`/`test_frontend_contract`/`test_frontend_js` 与五处 harness 扫描改读新文件 |
 
+| `panels/data-views.js` | 上传节点取文件与预览、训练 ML、通用数据预览、仪表盘网格、执行历史（1,147 行） | Stage 10b（2026-10-29）整段切片搬出；`workflow.js` 4,458 → **2,089** 行（连同下三片）。这套 `SPLIT_OF` 从 `tests/frontend/companions.mjs` 的字面量搬到 `tests/frontend/splits.json`，Python 驱动（`frontend_catalogue.with_companions`）与 node loader 读同一份；`harness_reusable` 改为接受「canvas、workflow、伴生…、reusable」 |
+| `panels/shell.js` | 大纲侧栏、语言切换、toast、进程列表、通用对话框、`fetchJSON`（702 行） | Stage 10b 整段切片搬出；`setLang` 里对 `biblioWorkspace`/`schedulesManager` 的语言回调随之移动，两处扫描改读本文件 |
+| `panels/run-results.js` | 续跑横幅与已载入运行结果抽屉（357 行） | Stage 10b 整段切片搬出 |
+| `workflow-layout.js` | `LayoutStrategy` 自动布局（Style 菜单）（163 行） | Stage 10b 整段切片搬出 |
+
 ## 3. 后续拆分顺序（每一行 = 一次提交）
 
 按「依赖少、harness 引用少、语义清晰」排序；括号里是该模块的主要外部引用方（决定要改哪些 harness）。
 **Stage 8 的十四站已全部落地**（见 §2：`node-types` / `schedules` / `reusable` / `chart-preview` / `capabilities` /
 `panels/cookies` + `panels/source-help` / `panels/biblio` / `panels/runlog` / `panels/exports` / `panels/runs` /
 `panels/lexicon` / `panels/datasets` / `panels/files` / `panels/diagnostics` / `panels/settings`），
-`workflow.js` 13,027 → 4,458 行。队列已空；`workflow.js` 本身仍是 4,458 行，归 #40 按职责继续拆。
+`workflow.js` 13,027 → 4,458 行。Stage 10b 又搬出四片（`panels/data-views.js`/`panels/shell.js`/`panels/run-results.js`/`workflow-layout.js`），`workflow.js` → **2,089 行**。余下的是 `workflow` 控制器对象（文件生命周期、运行前守卫、`execute`/`stop`/控制台重连）与 `nodeTypeWord` 等跨面板工具：它们是同一主题的一个对象，再拆需要把对象成员改成 `Object.assign` 分区，属单独一刀。
 
 `tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供
 `loadPageScripts(sandbox, {jsDir, only})`，**7 个 harness 已改用它**（2026-10-28）；选中 `app.js`

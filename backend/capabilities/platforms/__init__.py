@@ -2,7 +2,7 @@
 
 The tuple's order IS the Data Source panel's order; a platform's modes, fields and advice
 live together in its own module, so adding one is a new file and one line here — not an
-edit in five places. ``tests/unit/test_capabilities_layout.py`` pins the two together.
+edit in five places. ``tests/unit/foundation/test_capabilities_layout.py`` pins the two together.
 """
 
 from capabilities.model import Capability

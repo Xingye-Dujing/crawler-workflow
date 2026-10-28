@@ -575,7 +575,7 @@ def _restore_state(state: dict, backup: dict) -> None:
 
 
 # The column names below are the ones the real crawlers emit (see the
-# _URL_FIELDS / _BODY_FIELDS tuples in services/runs/store.py), so fixtures
+# _URL_FIELDS / _BODY_FIELDS tuples in services/runs/store/identity.py), so fixtures
 # exercise the same identity/dedupe code paths production uses.
 @pytest.fixture
 def sample_rows():

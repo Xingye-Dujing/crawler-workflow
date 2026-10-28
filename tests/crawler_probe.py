@@ -2,7 +2,7 @@
 
 Lived inside ``tests/unit/crawlers/test_crawler_base.py`` until the Stage 10 test-tree split put
 that file a directory away from ``tests/unit/runs/test_stop_wiring.py`` and
-``tests/unit/test_first_content.py``; a test module imported by path-relative name is a helper
+``tests/unit/crawlers/test_first_content.py``; a test module imported by path-relative name is a helper
 looking for a home, so it is one now.
 """
 

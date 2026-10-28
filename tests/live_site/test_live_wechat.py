@@ -7,7 +7,7 @@ and a zero read from nothing would be indistinguishable from real data.
 Nothing here logs in or visits 微信公众平台: WeChat bodies need no session, so the
 platform has no cookie row at all. "The diagnosis object carries no WeChat key"
 is a question about field shapes, not about the live site, and it is answered in
-tests/unit/test_wechat_diagnose.py against a scripted driver — no browser is
+tests/unit/crawlers/test_wechat_diagnose.py against a scripted driver — no browser is
 spent here for a capability this platform does not have.
 """
 

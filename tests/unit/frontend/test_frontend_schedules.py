@@ -22,7 +22,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from frontend_catalogue import with_catalogue
+from frontend_catalogue import with_catalogue, with_companions
 from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[3]
@@ -40,11 +40,13 @@ def results():
     proc = run_node(
         str(HARNESS),
         *with_catalogue(
-            [
-                JS_DIR / 'workflow.js',
-                JS_DIR / 'app.js',
-                JS_DIR / 'schedules.js',
-            ]
+            with_companions(
+                [
+                    JS_DIR / 'workflow.js',
+                    JS_DIR / 'app.js',
+                    JS_DIR / 'schedules.js',
+                ]
+            )
         ),
     )
     assert proc.returncode == 0, proc.stderr
@@ -255,7 +257,7 @@ def test_the_handle_was_wired_to_the_dock_resizer():
 def test_a_language_switch_reaches_the_panel():
     """``I18n.apply()`` only re-stamps ``data-i18n`` nodes; every word in this table is built here,
     so the switch has to call the panel or the table keeps the old language."""
-    assert "if (typeof schedulesManager !== 'undefined') schedulesManager.onLanguageChange();" in _js('workflow.js')
+    assert "if (typeof schedulesManager !== 'undefined') schedulesManager.onLanguageChange();" in _js('panels/shell.js')
 
 
 def test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel():

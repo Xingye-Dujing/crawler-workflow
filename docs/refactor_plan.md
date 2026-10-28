@@ -1129,6 +1129,19 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     产品档与 tests 档 pylint 均 **10.00/10**。`tests/unit` 现有 `frontend/`（42）、`analysis/`（9）、
     `crawlers/`（16）、`runs/`（10）、`sessions/`（3）、`i18n/`（2），其余根目录文件待下一批按域收拢。**收尾门禁**：全量 fast **8,194 passed / 3 skipped / 355 deselected**（唯一 warning 仍是
     jieba 第三方），ruff 全绿；本片只动测试与文档，两档 pylint 在上一轮全量后仅新增了一个测试函数（已在局部 10.00/10 验过）。
+  - **Stage 10b + #40 + #44 一整批（2026-10-29，本轮）**：
+    - **测试树收口**：`tests/unit` 根目录**清零**——余下 70 个文件按被测域进 `biblio/`(10)、`charts/`(3)、`crawlers/`(16)、`datasets/`(3)、`exports/`(4)、`workflows/`(5)、`runs/`(3)、`scheduling/`(3)、`ml/`(3)、`reports/`(1)、`foundation/`(10)、`gates/`(6)、`desktop/`(1)；深度变化处 `parents[2]`→`parents[3]`、`parents[1]`→`parents[2]`。文档与产品 docstring 里所有 `tests/unit/test_*.py` 旧路径同批改真（约 60 处）。`tests/crawler_probe.py` 仍是跨域共享 helper。
+    - **samples 去前缀**：`samples/biblio/`（15 个合成样例）、`samples/fuse/weibo.csv`、`samples/vendor/`（真实厂商导出，整体 gitignore）。`.gitignore` 的六条前缀规则收成 `samples/vendor/` 一条；`test_biblio_*`/`test_fuse_api`/`docs/analysis.md`/`agent_practices.md` 路径同步。
+    - **#40 后端拆包（六刀，行为逐字节不变，切片脚本在 `build/`）**：
+      `services/biblio/charts.py`(1,553) → `charts/{base,graph,timeline,maps,overlay,__init__}.py`（最大 460）；
+      `services/biblio/metrics.py`(1,996) → `metrics/{records,network,measures,build,export,__init__}.py`（最大 639），私有 helper 的测试改从 `metrics.network`/`metrics.records` 取；
+      `services/charts/tikz.py`(2,430) → `tikz_preamble`/`tikz_document`/`tikz_console`/`tikz_biblio`/`tikz_biblio_charts`/`tikz_biblio_tables` + 168 行的 `tikz.py` 门面（四个 mixin 组装 `LatexChartService`，公开名以 `__all__` 留在门面）；
+      `services/charts/visualizer.py`(1,805) → `style.py`(582) + `options.py`(799) + `visualizer.py`(507)，`ChartConfigError` 下沉 `contracts.py` 解开 service↔option 环；
+      `services/runs/store.py`(1,610) → `store/{identity,base,ledger,progress,upkeep,__init__}.py`（最大 564，`RunStore` 由五个 mixin 一次组装），两处类的表属性 `_ADDED_COLUMNS`/`BIBLIO_KINDS` 跟着去 base/ledger；
+      **未拆的 `engine/run.py`(1,406)** 与 `i18n_catalog/crawl.py`(907)：前者是 `begin_run` 一个 860 行的运行编排，闭包持有十多个局部量，拆它属行为变更（须真机 + 单独一刀）；后者是单域词典数据，不是多职责代码。两份都写在这里，不假装完成。
+    - **#44 插件补强**：`exports/writer.py` 的 7 分支 if 链换成 `WRITERS = {fmt: 方法名}` 注册表（`save` 查表，未知格式仍按名拒绝），并加契约测试「每个广告格式都有写手、每个写手都被广告」。biblio `formats/`、`charts/BUILDERS`、`analysis/ops/OPS`、`nodes/executors` 已是注册表，未重复改。
+    - **#43 前端一刀**：`workflow.js` 4,458 → **2,089**，四片进 `panels/data-views.js`(1,147)/`panels/shell.js`(702)/`panels/run-results.js`(357)/`workflow-layout.js`(163)，`index.html` 追加四行。**伴生表**从 `companions.mjs` 字面量迁到 `tests/frontend/splits.json`，node loader 与新增的 `frontend_catalogue.with_companions`（Python 驱动）读同一份；`harness_reusable` 改成接受「canvas、workflow、伴生…、reusable」。受影响的扫描改读新家：`test_visualization` 的 `center_node`、`test_biblio_workspace`/`test_frontend_schedules` 的语言回调、`test_frontend_contract` 的情感/倾向调色板与 `trainMLModel`、`test_frontend_page_scripts_js` 的伴生表校验。
+    - **门禁**：见本轮提交前的最后一次全量（fast / ruff / 两档 pylint / 设备档）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

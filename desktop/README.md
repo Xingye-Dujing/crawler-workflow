@@ -50,7 +50,7 @@ Inno Setup 把它刻进安装包。它长期就是那张 PNG 换了个 `.ico` �
 PyInstaller 把无效字节照抄进 exe 资源，还打印一句 `Copying icon to EXE` 好像成功了；Inno 直接拒绝编译
 （实测 `Resource update error: Icon file is invalid`），而且是在文件夹与 zip 已经花完十分钟之后才说。
 现在它由 `tools/build_icon.py` 从 `backend/static/icon.png` 生成（16/24/32/48/64/128/256 七档），
-构建脚本**动手之前**先检查头四个字节，`tests/unit/test_desktop_packaging.py` 逐帧钉住目录与画框。
+构建脚本**动手之前**先检查头四个字节，`tests/unit/desktop/test_desktop_packaging.py` 逐帧钉住目录与画框。
 改图标 = 改 `icon.png` 后跑一次 `.venv\Scripts\python.exe tools\build_icon.py`。
 
 常用参数：`-Clean` 重建构建环境与产物；`-NoZip` 跳过压缩；`-KeepWork` 保留
@@ -215,7 +215,7 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 
 三条刻意的规矩：
 
-1. **每个文件钉 SHA-256**（写在工具里，`tests/unit/test_vendored_assets.py` 复核）。第三方改了
+1. **每个文件钉 SHA-256**（写在工具里，`tests/unit/gates/test_vendored_assets.py` 复核）。第三方改了
    我们分发出去的字节，应当是一次有 diff 的复核，不是构建时的意外；工具遇到不匹配会打印它看到的哈希
    并拒绝覆盖。升级 = 同时改 URL 与 `sha256`，然后 `python tools/vendor_frontend_assets.py`。
 2. **底图要过内容断言，不只是"能解析"**：中国那份必须仍有 34 个省级要素、含台湾/香港/澳门与

@@ -370,7 +370,7 @@ class TestKeyReachability:
         assert 'f"{prefix}.' in sources or "f'{prefix}." in sources, (
             'the remedy keys are assembled per operating system; if that stops they must be checked '
             'literally — and every (family × platform) pair still has to exist in both languages, which '
-            'tests/unit/test_platform_rules.py walks from the value universe'
+            'tests/unit/crawlers/test_platform_rules.py walks from the value universe'
         )
 
     #: A hand-written ``t('key')`` whose key the catalogue does not hold.

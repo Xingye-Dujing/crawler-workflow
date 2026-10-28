@@ -1284,7 +1284,7 @@ class TestComments:
         assert '第8条内容' in got, f'the nodes past the cached offset were skipped: {sorted(got)}'
 
     def test_identity_columns_stay_out_of_the_dedupe_field_lists(self):
-        from services.runs.store import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS
+        from services.runs.store.identity import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS
 
         url = f'https://www.douyin.com/video/{ID}'
         threads = {

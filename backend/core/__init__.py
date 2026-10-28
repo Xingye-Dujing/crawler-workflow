@@ -12,5 +12,5 @@ The direction is one-way and mechanical: nothing under ``core/`` may import a do
 Flask/Selenium, or the ML stack (sklearn/scipy/matplotlib/joblib). pandas/numpy/requests are
 allowed — the app loads them on its boot path anyway — and the point is that a startup question
 and a name rule stay answerable without loading a crawler or the application. Pinned by
-``tests/unit/test_foundation_layering.py``.
+``tests/unit/foundation/test_foundation_layering.py``.
 """

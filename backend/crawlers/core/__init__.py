@@ -19,5 +19,5 @@ video).
 Nothing here knows what a 微博 or a 视频 is: selectors, endpoints, column names and per-site
 verdicts live in ``crawlers/platforms/<id>/``, and what a platform *offers* — its modes and fields —
 is declared in ``capabilities/``, which must stay importable without selenium. That separation is
-what keeps a DAG parse from loading a browser (``tests/unit/test_boot_import_budget.py``).
+what keeps a DAG parse from loading a browser (``tests/unit/foundation/test_boot_import_budget.py``).
 """

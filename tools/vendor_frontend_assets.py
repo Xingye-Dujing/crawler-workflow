@@ -10,7 +10,7 @@ the cause. Every asset the UI needs to draw is now a file the app serves itself.
 The pins are deliberate. Downloading "whatever upstream says today" into a shipped product would
 mean a third party can change what our users' screens execute, and a broken build would look like
 our bug. Each asset therefore carries the SHA-256 of the bytes that were reviewed; a changed
-upstream file is a named failure here and a red test (``tests/unit/test_vendored_assets.py``), and
+upstream file is a named failure here and a red test (``tests/unit/gates/test_vendored_assets.py``), and
 updating one is an edit with a diff, not an accident.
 
 Usage::

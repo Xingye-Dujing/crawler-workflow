@@ -46,6 +46,20 @@ class DataExporter:
 
     SUPPORTED_FORMATS = tuple(EXTENSIONS.keys())
 
+    #: One writer per format. This is the dispatch table ``save`` reads, so adding a
+    #: format is an extension + a name here + the writer itself — there is no if-chain
+    #: that can silently forget the new branch (the old chain raised "unsupported" for a
+    #: format it had just been taught to advertise).
+    WRITERS = {
+        'csv': '_write_csv',
+        'json': '_write_json',
+        'excel': '_write_excel',
+        'txt': '_write_txt',
+        'html': '_write_html',
+        'markdown': '_write_markdown',
+        'parquet': '_write_parquet',
+    }
+
     @classmethod
     def resolve(cls, fmt: str) -> str:
         """The canonical format key for *fmt* ('' when nothing was given)."""
@@ -154,22 +168,13 @@ class DataExporter:
 
         os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
 
-        if fmt == 'excel':
-            cls._write_excel(df, filepath, **kwargs)
-        elif fmt == 'csv':
-            cls._write_csv(df, filepath, **kwargs)
-        elif fmt == 'json':
-            cls._write_json(df, filepath, **kwargs)
-        elif fmt == 'txt':
-            cls._write_txt(df, filepath, text_column=text_column, **kwargs)
-        elif fmt == 'html':
-            cls._write_html(df, filepath, **kwargs)
-        elif fmt == 'markdown':
-            cls._write_markdown(df, filepath, **kwargs)
-        elif fmt == 'parquet':
-            cls._write_parquet(df, filepath, **kwargs)
-        else:
+        writer = getattr(cls, cls.WRITERS.get(fmt) or '', None)
+        if writer is None:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
+        if fmt == 'txt':
+            writer(df, filepath, text_column=text_column, **kwargs)
+        else:
+            writer(df, filepath, **kwargs)
 
         logger.info(t('export.done', n=len(df), path=filepath, fmt=fmt))
         return {'path': filepath, 'format': fmt, 'rows': len(df)}

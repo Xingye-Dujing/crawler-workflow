@@ -300,7 +300,7 @@ def _apply_request_lang():
 # The run's mutable state, the console buffers and the claim lock live in ``backend/state.py``:
 # the HTTP layer, the engine and the test harness share ONE object, mutated in place and never
 # rebound (``state.py`` carries the field-by-field comments; see docs/ARCHITECTURE.md). Payload→
-# DataFrame resolution is ``api/resolution.py``, the durable ledger is ``services/runs/store.py``,
+# DataFrame resolution is ``api/resolution.py``, the durable ledger is ``services/runs/store/__init__.py``,
 # and the run's verdict helpers are ``services/runs/settlement.py`` — nothing in this file
 # re-implements either question.
 
@@ -481,7 +481,7 @@ app.register_blueprint(run_compare_bp)
 # saved file's group before the engine sees it.
 app.register_blueprint(reusable_bp)
 # The run-record panel's read/write side (records, retention, the durable console) lives in
-# api/runs.py; the ledger itself is ``services/runs/store.py`` and what a dead worker leaves
+# api/runs.py; the ledger itself is ``services/runs/store/__init__.py`` and what a dead worker leaves
 # behind is ``services/runs/settlement.py``. Registered here so app-level before_request /
 # CORS still wrap it and every URL is unchanged.
 app.register_blueprint(runs_bp)

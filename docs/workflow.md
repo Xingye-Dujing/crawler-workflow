@@ -329,7 +329,7 @@
   指望它们都喂进去（只有第一个生效）。这些后果都由自动化测试锁定：前端 `tests/frontend/harness_canvas_ix.mjs` 的
   `connect_warnings`（每种警告是否弹出、撤销是否回退、按类静音是否生效、fan-out 只提示一次）与后端
   `tests/api/test_fan_in_fan_out_results.py`（每种 fan-in/fan-out 的执行结果与警告一致）、
-  `tests/unit/test_output_merge.py`（输出合并与列集不符的具名拒绝）。
+  `tests/unit/exports/test_output_merge.py`（输出合并与列集不符的具名拒绝）。
 - **适应 = 缩放到看得见**：「适应」不再把视角锁死在 100%（旧写法只居中，自动排布摊开的长链一旦超出窗口，
   节点就被挤出屏外，按钮反而"藏"而不是"显"）。它按**可视区**（`#workspace` 自己的盒子，不是 `window.innerWidth`——
   画布嵌在应用外框里，实测 1344×670 与 1920×1080 两者并不相等）求节点外接矩形的缩放比：**只缩不放**（上限 100%、

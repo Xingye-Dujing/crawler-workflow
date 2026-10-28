@@ -22,7 +22,7 @@ def exec_():
 
     The notice lives with the code that counts the rows, so the test asks that module and not
     ``app`` — and ``app`` no longer has an opinion about ``HEAVY_RESULT_ROWS`` to lend. A
-    function-scope import is still required: ``tests/unit/test_test_tiers.py`` refuses a
+    function-scope import is still required: ``tests/unit/gates/test_test_tiers.py`` refuses a
     module-level heavy import because collection would build the services against the
     repository's real ``data/``.
     """

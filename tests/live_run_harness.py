@@ -35,7 +35,7 @@ already refused elsewhere in the suite:
   legitimate. That is a false green in the one tier that exists to catch false greens.
 
 ``app`` is never imported at module level: collection beats every fixture, and ``app.py``
-freezes ``data/`` paths into singletons at its own import (``tests/unit/test_test_tiers.py``
+freezes ``data/`` paths into singletons at its own import (``tests/unit/gates/test_test_tiers.py``
 refuses it). Anything that needs the module takes it as an argument.
 """
 

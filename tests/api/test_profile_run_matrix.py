@@ -98,7 +98,7 @@ def matrix(monkeypatch, app_module, tmp_path):
     values = {'use_browser_profile': True, 'browser_profile_dir': str(tmp_path / 'profiles')}
     monkeypatch.setattr(profiles, 'get_setting', lambda key: values[key])
     # Both gate knobs, in one place a test can flip. The wait is a real one here — its
-    # *length* is asserted in tests/unit/test_crawl_gate.py against a fake clock — so
+    # *length* is asserted in tests/unit/crawlers/test_crawl_gate.py against a fake clock — so
     # this module shrinks it to keep the suite honest but fast.
     gate = {'same_platform_queue': True, 'same_platform_stagger': 0.05}
     monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: gate[key])

@@ -99,7 +99,7 @@
   Chrome is off-limits (copying it ships his whole life to a server), so the program makes its own blank directory
   once — `data/chrome_profile/_template`, created by launching an empty headless Chrome in it
   (`crawlers.base.warm_profile_dir`) — and every account directory created afterwards is cloned from it. Four rules
-  hold that together, each pinned by `tests/unit/test_profile_template_policy.py` and measured by
+  hold that together, each pinned by `tests/unit/sessions/test_profile_template_policy.py` and measured by
   `tests/integration/test_profile_template.py`: **"pristine" is answered by row counts, not by file names** (a blank
   first run writes `Cookies`/`Login Data`/`History`/`Preferences` empty, so names prove nothing); **the copy refuses
   its own denylist** — every store that can hold a session, `Local State` (the machine-bound key), and
@@ -129,7 +129,7 @@
     names a day, so it answers that day's ``00:00`` rather than a made-up reading. A year-less
     date (``09月26日 21:00``, ``09-10``) is deliberately NOT inferred — the same decision as
     bilibili's, because guessing the year moves a row into another year.
-  Pinned: ``tests/unit/test_times.py``.
+  Pinned: ``tests/unit/foundation/test_times.py``.
 
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
@@ -317,7 +317,7 @@
   signal which only per-platform live measurement (#7) can supply. Platforms with no reliable end signal
   stay fully un-armed (`end_reason=None`): weibo search (its `'end'` is a loop fallback, not a site
   marker), weibo/youtube author, bilibili search/author, xiaohongshu, twitter, zhihu author.
-  Pinned: `tests/api/test_under_target.py`, `tests/unit/test_hongguo_crawler.py`.
+  Pinned: `tests/api/test_under_target.py`, `tests/unit/crawlers/test_hongguo_crawler.py`.
 
 - **A 分批输出 stem is a storage key, not a label: it must be identical across every attempt of
   one run.** `PartWriter` adopts the shards a crashed attempt already flushed by matching
@@ -332,7 +332,7 @@
   component is not enough on its own — a parallel canvas opens several records inside one
   second. The time window a crawl was told to walk (`core.refs.window_tag`) is safe to put
   in the same stem for the same reason: it is a node parameter, so it cannot drift mid-run.
-  Pinned: `tests/unit/test_utils.py::TestExportStamp`, `tests/api/test_nodes_execution.py::
+  Pinned: `tests/unit/foundation/test_utils.py::TestExportStamp`, `tests/api/test_nodes_execution.py::
   TestWindowedFilenames::test_the_stamp_a_resume_reuses_is_the_record_and_not_the_clock`.
 - **A filename component is a name being chosen, so an ambiguous one is refused by name.**
   「文件名带时间范围」 asks the SAVE node to print a window it cannot see (it receives a table),
@@ -363,7 +363,7 @@
 - **拒绝按名，绝不静默降级。** 缺 Node／缺适配器／Node 版本过旧／清单读不出来／组合未适配／登录缺失／风控，
   每一条都 `raise` 一句点名原因（`catbus.*` 目录项 + 适配器自己的 hint），没有一条允许返回空表——
   节点会在空表上结算 DONE。后端切换也**不回退**：选了 CatBus 就不会"顺手"改用浏览器。
-- **后端是节点身份的一部分。** `services/runs/store.py::stable_params` 把 `backend` 计入指纹，同时把
+- **后端是节点身份的一部分。** `services/runs/store/identity.py::stable_params` 把 `backend` 计入指纹，同时把
   `selenium`／缺省折叠掉（与 `account`、`model` 同一条先例）：折叠前所有既有画布的指纹会集体改变，
   「继续」找不到自己付过钱的行，于是整库重采。CatBus 的行与 Selenium 的行因此永远分属两套去重账本、
   两个水位作用域。

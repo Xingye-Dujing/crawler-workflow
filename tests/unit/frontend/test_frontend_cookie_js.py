@@ -4,7 +4,7 @@ The panel answers "which page do I log in on?", and which platforms appear
 there is a product decision: only ``CookieManager.PLATFORMS`` has a row, so the
 samples below are real login platforms (bilibili takes a pasted entry link,
 zhihu does not). WeChat is not among them — its article bodies are served to
-anyone — and the guard for that absence lives in tests/unit/test_wechat_diagnose.py.
+anyone — and the guard for that absence lives in tests/unit/crawlers/test_wechat_diagnose.py.
 Its logic — fetch the flow, render it per selected platform, carry the pasted
 entry link into the request, keep the login buttons out of a verification — is
 JS, so the Python suite cannot see it. This module runs the untouched file.

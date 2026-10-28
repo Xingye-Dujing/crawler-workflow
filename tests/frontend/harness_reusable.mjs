@@ -8,7 +8,7 @@
  * inside, statuses aggregate (running dominates, then failed), the preview works while
  * collapsed, and a file save keeps the group instead of fossilising the expansion.
  *
- * Usage: node harness_reusable.mjs <canvas.js> <workflow.js> <reusable.js>
+ * Usage: node harness_reusable.mjs <canvas.js> <workflow.js> [companions…] <reusable.js>
  * Prints one JSON object to stdout.
  */
 import fs from 'node:fs';
@@ -16,8 +16,14 @@ import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, flushFrames } from './harness_dom.mjs';
 
-const [canvasPath, wfPath, reusablePath] = process.argv.slice(2);
-const src = [canvasPath, wfPath, reusablePath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+// Extra arguments between workflow.js and reusable.js are the companions split out of
+// workflow.js; the page loads them after it, so they are read in the order they arrive.
+const argv = process.argv.slice(2);
+const canvasPath = argv[0];
+const wfPath = argv[1];
+const reusablePath = argv[argv.length - 1];
+const companions = argv.slice(2, -1);
+const src = [canvasPath, wfPath, ...companions, reusablePath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
 
 const DICT = {
     en: {

@@ -10,7 +10,15 @@ from services.charts.registry import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES, NO_
 
 #: Re-exported for the modules (and tests) that have always imported these three names from
 #: here; ``services.charts.registry`` is their one declaration.
-__all__ = ['BIBLIO_CHART_TYPES', 'BIBLIO_CHART_READS', 'NO_X_TYPES']
+__all__ = ['BIBLIO_CHART_TYPES', 'BIBLIO_CHART_READS', 'ChartConfigError', 'NO_X_TYPES']
+
+
+class ChartConfigError(ValueError):
+    """Raised when the chart spec is missing required fields for the chosen type.
+
+    It lives here rather than beside the service so the option builder and the service can
+    both raise it without importing each other.
+    """
 
 
 #: Rows a structural-variation figure draws. A y-axis row has to be tall enough to carry its

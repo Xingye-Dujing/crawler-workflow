@@ -842,7 +842,7 @@ it by guessing token plumbing.
 2026-09-24, twice in one hour on `live_quick`, in two different variants): the crawl came back red
 with `TimeoutException: Timed out receiving message from renderer: -0.001` thrown out of a bare
 `self.driver.get(url)` — the *first* navigation of the search, and separately of a note page. Two
-consequences, both pinned by `tests/unit/test_xhs_crawler.py`:
+consequences, both pinned by `tests/unit/crawlers/test_xhs_crawler.py`:
 
 * the platform already had the honest answer for this state (`crawl.xhs.page_timeout` → keep
   polling, zero cards is a legitimate outcome) and never got to use it, because the exception came
@@ -1364,7 +1364,7 @@ table alone cannot tell a batched walk from a per-row one.
 判据：单跑 `test_live_zhihu_author.py` 15 分钟无输出且 `chromedriver.exe` 不在进程表里
 （浏览器根本没启动，说明卡在拿锁而不是卡在页面）。修法是 fixture 在向同一平台要第二个
 crawler 之前先把上一个关掉并交还这一轮（一次只可能有一个，这正是产品自己的规则），
-并由 `tests/unit/test_test_tiers.py::TestLiveCrawlerFixture` 用"重复持锁即抛"的假锁把这条
+并由 `tests/unit/gates/test_test_tiers.py::TestLiveCrawlerFixture` 用"重复持锁即抛"的假锁把这条
 钉住——它不需要浏览器，测的是测试自己的脚手架。
 
 ## What each mode actually does on screen (measured 2026-09-24)
@@ -1442,7 +1442,7 @@ and gives one window per workflow (verified by the user).
 留在代码里的两件事没变：
 * 分区仍是**数据**：`capabilities.registry.Capability.region`（`cn` / `overseas`）由矩阵一处声明，随
   `/api/capabilities` 发给浏览器；真机层的 `live_cn` / `live_os` 分组读它，
-  `tests/unit/test_test_tiers.py` 拿矩阵里的 region 核对每条 live 用例的 marker（矩阵没说的平台按
+  `tests/unit/gates/test_test_tiers.py` 拿矩阵里的 region 核对每条 live 用例的 marker（矩阵没说的平台按
   "不知道"处理：既不提醒也不拦）。
 * 提醒是**建议且可关**：真做了分流路由的机器两边都通，页面分不出那种机器和"只是开着 VPN"。
 
@@ -2017,7 +2017,7 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 
 症状不是崩溃，是**45 个断言在别的时间点也过、只有整轮跑才红**（各模块单跑全绿，因为它们没有提前
 导入 `app`）。第一层修法是把新文件改成用 `app_module` fixture（`import app` 因此发生在隔离之后），
-再在 `tests/unit/test_test_tiers.py` 里用 AST 静态拒绝任何测试文件的**模块级** `app` 导入。
+再在 `tests/unit/gates/test_test_tiers.py` 里用 AST 静态拒绝任何测试文件的**模块级** `app` 导入。
 
 但这层修法把安全性寄托在"每个人都记得用 fixture"上，而这条规矩本轮已经被违反两次（第一次是
 `integration` UI 层往真 `data/`、`logs/` 里落运行痕迹，那次写进 AGENTS 的是"本层不许写服务器，
@@ -2088,13 +2088,13 @@ E       AssertionError: assert 'done' == 'partial'
 展示它的界面位置，而这里能确定说的只有一句——**它可能还开着**。于是 `run.browserStuck`
 进控制台（说占多久、为什么），`_stuck_where()` 把卡住那一帧进 `logs/`。用 `logger.debug`
 而不是 `warning`：`LogBufferHandler` 会把 INFO 及以上的 logger 调用转发进控制台，英文帧地址
-走 `t()` 没有意义，而 `tests/unit/test_i18n.py::TestNoHardcodedConsoleText` 正是靠"debug 只进
+走 `t()` 没有意义，而 `tests/unit/i18n/test_i18n.py::TestNoHardcodedConsoleText` 正是靠"debug 只进
 文件"这条豁免的——第一次写成 warning 时它就是被这个用例挡下来的。
 
 **顺带量到的一个平台事实**（写下来是因为它会骗测试）：这台机器上 `time.monotonic()` 的
 步进约 16 毫秒——`time.sleep(0.005)` 之后再读，返回值**一模一样**。任何"用真实时钟测一个
 小于 16 毫秒的量"的断言都是掷硬币，`services/ingest/net.throughput` 的算术就因此需要注入
-时钟（`tests/unit/test_net_probe.py::_clock`）才能钉住 kB/s 的算法本身。
+时钟（`tests/unit/foundation/test_net_probe.py::_clock`）才能钉住 kB/s 的算法本身。
 
 ## 种进 profile 的 Cookie，只有带有效期的那部分留得住（measured 2026-09-26，#108）
 
@@ -2445,7 +2445,7 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
   上训出来的模型，把"没有好评色彩"读成了负面。因此 0.5 不是可写的常数：正/负两档阈值是节点参数
   （默认 0.6 / 0.4），`score` 列永远保留原始概率，用户在报告里重划档位即可，不必重跑分析。
 - **`bert` 这一路在本机不可测**：`transformers 5.13` 在，`torch` 不在，`find_spec` 就答得出缺哪个。
-  所以 `bert` mode 只有拒绝路径被测试覆盖（`tests/unit/test_sentiment_analyzer.py::TestBertMode` 里
+  所以 `bert` mode 只有拒绝路径被测试覆盖（`tests/unit/analysis/test_sentiment_analyzer.py::TestBertMode` 里
   推理管线是 stub 进 `sys.modules` 的），**真模型从未在这台机器上跑过**，README 也照这句话写。
 
 ### B站作者投稿的跨运行水位（2026-10-26，实现；尚未真机验收）

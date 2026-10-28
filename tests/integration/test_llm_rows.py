@@ -40,7 +40,7 @@ pytestmark = pytest.mark.unit
 # emotion.py contract" while returning ``(None, 0.0)`` for an unparseable answer
 # and accepting ``pos``/``neg``/``neutral`` — a label set and a failure shape the
 # module has never produced. Its replacements are pinned for real in
-# ``tests/unit/test_analyzer_llm_bodies.py``.
+# ``tests/unit/analysis/test_analyzer_llm_bodies.py``.
 parse_emotion = EmotionAnalyzer().parse_emotion_response
 
 

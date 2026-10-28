@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # sklearn and joblib are imported inside the functions that train or load a model, never here:
 # this module sits on the boot path (``analyzers`` is imported by ``app``), and pulling in all of
 # sklearn to answer a request that never trains an ML classifier cost 5.4 s of process start.
-# ``tests/unit/test_boot_import_budget.py`` fails if a top-level import comes back.
+# ``tests/unit/foundation/test_boot_import_budget.py`` fails if a top-level import comes back.
 
 
 class ModelNotTrainedError(ValueError):

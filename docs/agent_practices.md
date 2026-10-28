@@ -41,7 +41,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   pytest is unpinned, so CI moved from 9.1.1 to 9.2.0 mid-day on 2026-10-28 and the old order — `@classmethod` on top —
   stopped being registered at all: every such test errored at setup with `fixture '<name>' not found`. Measured with
   both versions in a throwaway venv: the swapped order, a `@staticmethod` fixture and a module-level fixture all pass
-  on 9.1.1 AND 9.2.0; only the old order breaks. `tests/unit/test_test_tiers.py::TestClassScopedFixturesAreVersionProof`
+  on 9.1.1 AND 9.2.0; only the old order breaks. `tests/unit/gates/test_test_tiers.py::TestClassScopedFixturesAreVersionProof`
   scans the suite for it. Other fixes from warnings: close file responses after reading; never let a cookie-save open a
   **real Chrome inside the fast tier** (the plant swallowed a socket failure, answered 「种入失败」, left a
   `UserWarning`). A no-browser test says so (`profiles_off` in `tests/api/conftest.py`); a dependency leaking its own
@@ -119,7 +119,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   to override the marker filter to run one device case, so the documented entry point was the broken one.
   Fixed by having `pytest_collection_modifyitems` record whether any selected item carries `integration`/
   `live_ollama` and gating the probe on it — verified on both halves: the browser-free file passes 66 with
-  the flag set, and a real device file still starts Chrome (5 passed, 21 s). `tests/unit/test_test_tiers.py`
+  the flag set, and a real device file still starts Chrome (5 passed, 21 s). `tests/unit/gates/test_test_tiers.py`
   now drives the hook with both selection shapes instead of trusting the flag is consulted.
 - **A comment naming its callers is a claim, and callers can be deleted around it.**
   `weibo/crawler.py` carried a block headed *"compatibility shims (kept for callers outside this module)"*
@@ -169,7 +169,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   Stage 8's first knife (2026-10-28): I wrote `tests/frontend/page_scripts.mjs` as if it were new. It already existed,
   with a different API (`loadPageScripts(sandbox, {jsDir, only})`), and four harnesses imported it. The write result
   said **updated**, not created — that word is the tell — and `git status --short` showed `M` where I expected `??`.
-  What caught it was running every `tests/unit/test_frontend_*.py` rather than only the new contract:
+  What caught it was running every `tests/unit/frontend/test_frontend_*.py` rather than only the new contract:
   58 errors, `SyntaxError: The requested module './page_scripts.mjs' does not provide an export named 'loadPageScripts'`,
   and `git checkout --` restored the file. Two rules fall out: ① check existence first (`??` means new, `M` means you are
   overwriting someone); ② a new test file is not the blast radius of a shared helper — the family that imports it is.
@@ -561,7 +561,7 @@ a moment the browser formatted would name a time the schedule does not mean: `ne
 rendered server-side in the *task's* zone, and the trigger sentence comes from the store's own `describe_trigger`. A
 status token the catalogue does not know shows **as itself** (the same rule as a stored value off an option list —
 `weird` is real information, and mapping it to a neighbouring word would be a lie). `schedules.js` therefore has no time
-arithmetic and no status vocabulary of its own; `tests/unit/test_frontend_schedules.py` drives the real file under node to
+arithmetic and no status vocabulary of its own; `tests/unit/frontend/test_frontend_schedules.py` drives the real file under node to
 keep it that way.
 
 **The dock list and the dock matrix are two places, and both are needed.** `DOCKED_PANELS` is the list
@@ -575,7 +575,7 @@ it was added. Hence the test that fails a docked panel missing from the matrix
 
 **cron is hand-rolled on purpose, and its edges are measured.** stdlib only (`zoneinfo`; zero new dependencies — the
 project's dependency rule), with `next_after()` strictly *after* the given moment so a tick landing exactly on the slot
-cannot fire the same slot twice. The edges a user hits once a year are pinned in `tests/unit/test_cron.py`: a
+cannot fire the same slot twice. The edges a user hits once a year are pinned in `tests/unit/scheduling/test_cron.py`: a
 spring-forward hour that does not exist is **skipped whole** (never fired twice), an autumn ambiguous hour runs on its
 **first** pass (`fold=0`), `0` and `7` are both Sunday, day-of-month and day-of-week are combined POSIX-style (OR), and an
 expression that can never fire (`0 0 30 2 *`) is refused **at save time** by name rather than stored and never answered.
@@ -768,7 +768,7 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   then pins every recipient's data home to the maintainer's install folder. `prune_dist.py` clears them before
   compression; `portable.txt` and `drivers/` are user choices and survive.
 - **Dialogs are frozen-only.** A source run has a live terminal, and an unattended build check must not stall on a
-  box nobody clicks: `_message_box()` returns unless `is_frozen()`. The stub in `tests/unit/test_desktop_packaging.py`
+  box nobody clicks: `_message_box()` returns unless `is_frozen()`. The stub in `tests/unit/desktop/test_desktop_packaging.py`
   asserts the `MessageBoxW` call really happens when frozen — an early-return test alone kept passing after the
   dialog call was deleted.
 - **pip hangs on a restricted workspace at `Looking in indexes`, with the network fine.** It unpacks into `%TEMP%`
@@ -819,7 +819,7 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   `CaiXiHui.exe` and printed `Copying icon to EXE` as if it had succeeded; Inno Setup refused to compile the
   installer at all — `Resource update error: Icon file is invalid` — and said so only *after* the folder build and the
   zip had taken their ten minutes. Fix: `tools/build_icon.py` generates the ICO from `backend/static/icon.png`
-  (16/24/32/48/64/128/256), `tests/unit/test_desktop_packaging.py::TestTheIconIsWhatItsNameSays` parses the directory
+  (16/24/32/48/64/128/256), `tests/unit/desktop/test_desktop_packaging.py::TestTheIconIsWhatItsNameSays` parses the directory
   and every frame offset, and `build_windows.ps1` checks the four header bytes **before** `Write-Step
   "Build environment"`, with an ordering assertion so the free check cannot drift after the expensive ones. The
   remaining question is answered on the artifact, not by reading the format spec: `[System.Drawing.Icon]
@@ -842,7 +842,7 @@ for objects that will not exist, which is a configuration mistake, not a prefere
 Product code takes `.pylintrc`; `tests/` takes `.pylintrc.tests`; the `backend/test_*.py` measurement scripts take
 `.pylintrc.probes`. **Nested config files are ignored by pylint** — measured: a `.pylintrc` in a subdirectory did not
 apply to files under it (the run from the repo root used the root config for both), so each tier is its own
-invocation with an explicit `--rcfile`. `tests/unit/test_lint_gate.py` pins the shape of the exemptions: the pytest
+invocation with an explicit `--rcfile`. `tests/unit/gates/test_lint_gate.py` pins the shape of the exemptions: the pytest
 idioms may not appear in the product list, `C0413` may not either, and `exclude-protected` is a named member, not a
 message.
 
@@ -871,10 +871,10 @@ message.
   question, instead of a caller reaching into someone's private.
 - **`webdriver.Chrome` is invisible to checkers** because `selenium.webdriver`'s exports are lazy (`__getattr__` over
   a table). Importing `selenium.webdriver.chrome.webdriver.WebDriver` by name removed the only inline
-  `# pylint: disable` in the crawler core. **It also moved a test seam**: `tests/unit/test_driver_options.py` patched
+  `# pylint: disable` in the crawler core. **It also moved a test seam**: `tests/unit/crawlers/test_driver_options.py` patched
   `base_module.webdriver.Chrome`, and the suite only complained when it actually ran (11 ERROR, not FAILED, and 53
   passed hid them). Patch the name the module constructs — and read the whole summary line, not the pass count.
-- **`W1203` cannot be fixed by lazy `%` here.** `tests/unit/test_i18n.py::TestNoHardcodedConsoleText` counts `%s`
+- **`W1203` cannot be fixed by lazy `%` here.** `tests/unit/i18n/test_i18n.py::TestNoHardcodedConsoleText` counts `%s`
   tokens as untranslated prose, and `t(key) + ': %s'` only trades the finding for `W1201`. The console-level answer
   is the pattern the rest of the codebase already uses: the reason travels as a named catalogue slot
   (`t('misc.cookie_save_failed', err=...)`), in both languages.
@@ -912,7 +912,7 @@ message.
   that works is statements inside `@()` (they flatten) plus a per-object projection:
   `@( Get-ChildItem … ; Get-ChildItem … ) | ForEach-Object { $_.FullName }`. Both CI steps now also print
   `linting NNN files`, because a gate that does not say how much it checked is not auditable after the fact.
-  Pinned by `tests/unit/test_lint_gate.py::TestTheStandards::test_ci_runs_the_two_tiers_it_can_and_says_why_not_the_third`.
+  Pinned by `tests/unit/gates/test_lint_gate.py::TestTheStandards::test_ci_runs_the_two_tiers_it_can_and_says_why_not_the_third`.
 - **A gate whose machine differs from the runner's proves less than it says.** The product tier read
   10.00/10 for weeks on this box and reported **19 × `E0401`** the first time it ran on CI (run
   40457992451): `torch`, `transformers`, `onnx`, `sentence_transformers`, `bertopic`, `uiautomation` —
@@ -1004,7 +1004,7 @@ message.
   `tests/api/test_node_matrix.py` resolves op→class through `importlib`, `tests/conftest.py` clears
   `sys.modules['analyzers.ml_base']._shared_classifiers`, and `test_multi_model_api.py` patches
   `app_module.<AnalyzerClass>` — a PEP 562 lazy barrel would break all four at once.
-- **Pin a budget with a module census, never with a stopwatch.** `tests/unit/test_boot_import_budget.py` walks the
+- **Pin a budget with a module census, never with a stopwatch.** `tests/unit/foundation/test_boot_import_budget.py` walks the
   module bodies with `ast` (names the file to fix) and imports `app` in a fresh subprocess to read
   `sys.modules` (catches transitive leakage). A wall-clock assertion would fail a slow runner and pass a fast one
   while proving nothing either way.
@@ -1038,7 +1038,7 @@ message.
   the pack ships fp16. Record agreement *and* ΔF1 *and* bytes; a single number hides which of the three is the reason.
 - **A stub that invents an API ships an `AttributeError` in the packaged app.** The `tokenizers` crate exposes
   `type_ids`; the hand-written fake said `token_type_ids`, and every stubbed case stayed green until the real graph
-  was run. `tests/unit/test_bert_onnx_real_crate.py` therefore uses the **installed** crate (a declared dependency)
+  was run. `tests/unit/ml/test_bert_onnx_real_crate.py` therefore uses the **installed** crate (a declared dependency)
   and fakes only the inference session — the piece a unit test genuinely cannot ship.
 
 
@@ -1071,7 +1071,7 @@ message.
   guide now says "Excel has no Cited References column — citation work needs the plain text" while
   keeping Excel as a working route for the keyword/subject/funding/usage networks. Declaring the
   entire download unusable would throw away four networks the file really answers.
-- **A fixture may copy structure but never facts.** The committed `samples/biblio_*_demo.*` files
+- **A fixture may copy structure but never facts.** The committed `samples/biblio/biblio_*_demo.*` files
   reproduce a real export's tags, header order, spacing, separators and banner row, with every value
   from a small synthetic pool; the vendor files themselves are gitignored because the Dimensions
   download states in its own first row that redistribution is prohibited. `FORMAT_CASES` therefore

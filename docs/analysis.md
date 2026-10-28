@@ -308,12 +308,12 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
   标题下的副文本写出「底图无此区域 N 个：…」与「并入其他区域 N 处：England→英国；Peoples R China→中华人民共和国」。
   名称解析走 `services/biblio/geo.py`：底图自身的 `name/zh/iso/alt` 先匹配，再借导入器已有的国别别名表
   （`biblio_formats/countries`，不另起一份拼写表），最后才是一张刻意保持短的桥表；
-  `tests/unit/test_biblio_geo.py` 拿**导入器能吐出的全部国名**逐个比对底图，一个都不许解析不出来。
+  `tests/unit/biblio/test_biblio_geo.py` 拿**导入器能吐出的全部国名**逐个比对底图，一个都不许解析不出来。
   同一地区的多种写法**按地区求和**（`biblio_geo.aggregate` 由图与 LaTeX 共用），纸质版按发文量排序画条形图（世界几何不进 LaTeX），全部数值见三线表。
 - **产物**：默认写 `<节点>_graph.graphml`、`_graph.gml`、`_graph.net`（Pajek：顶点按名字排序、边带权重）、`_graph.json`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。`dual_map` 形态没有单一网络图，只写表。
-- **边界**：CNKI 无被引次数与 CR，因此无共被引/耦合/引用突现；双图叠加的期刊—学科基线由用户导入（`samples/biblio_basemap_demo.csv` 是合成样例），不内置任何商业 JCR 数据，缺文件按名拒绝而不是画空图。
+- **边界**：CNKI 无被引次数与 CR，因此无共被引/耦合/引用突现；双图叠加的期刊—学科基线由用户导入（`samples/biblio/biblio_basemap_demo.csv` 是合成样例），不内置任何商业 JCR 数据，缺文件按名拒绝而不是画空图。
 
-演示：`data/workflows/文献计量演示：CNKI 与 CSSCI 知识图谱.json`（CNKI 关键词/作者 + CSSCI 文献共被引/来源期刊耦合/作者共被引，共 14 张图；双图叠加那条链默认**关闭**，因为基线要用户自备——先在数据集管理里上传 `samples/biblio_basemap_demo.csv`，在「双图叠加」节点选它作 basemap，再启用这两个节点）。**情感/话题叠加链也默认关闭**：它跑得起来（CNKI 摘要 → SnowNLP 情感 → 文本聚类 → 带两列标签的图谱 → 两张叠加图），但本机实测 SnowNLP 把这 36 条摘要涉及的 108 次关键词—文献共现**全判为正面**——一张全绿的横条图不是发现，也不该被当成演示结果。真实的用法是在爬取的短文本上跑情感步骤（或换用你训练/标注的标签列），再在 biblio 节点填入列名；启用这条链之前先在数据集里上传 CNKI 样例并在「上传 CNKI 样例」节点重新选择。工作流按数据集 id 引用本机已注册的两份样例；换一台机器时先上传 `samples/biblio_cnki_demo.txt` 与 `samples/biblio_cssci_demo.txt`，再在两个 Upload 节点里重新选择即可。
+演示：`data/workflows/文献计量演示：CNKI 与 CSSCI 知识图谱.json`（CNKI 关键词/作者 + CSSCI 文献共被引/来源期刊耦合/作者共被引，共 14 张图；双图叠加那条链默认**关闭**，因为基线要用户自备——先在数据集管理里上传 `samples/biblio/biblio_basemap_demo.csv`，在「双图叠加」节点选它作 basemap，再启用这两个节点）。**情感/话题叠加链也默认关闭**：它跑得起来（CNKI 摘要 → SnowNLP 情感 → 文本聚类 → 带两列标签的图谱 → 两张叠加图），但本机实测 SnowNLP 把这 36 条摘要涉及的 108 次关键词—文献共现**全判为正面**——一张全绿的横条图不是发现，也不该被当成演示结果。真实的用法是在爬取的短文本上跑情感步骤（或换用你训练/标注的标签列），再在 biblio 节点填入列名；启用这条链之前先在数据集里上传 CNKI 样例并在「上传 CNKI 样例」节点重新选择。工作流按数据集 id 引用本机已注册的两份样例；换一台机器时先上传 `samples/biblio/biblio_cnki_demo.txt` 与 `samples/biblio/biblio_cssci_demo.txt`，再在两个 Upload 节点里重新选择即可。
 
 ## 跨源融合
 - **`fuse` 节点**：把任意多张上游表折叠成一份规范记录表（`题名/作者/作者单位/来源期刊/年份/关键词/摘要/参考文献/记录ID/来源`）。

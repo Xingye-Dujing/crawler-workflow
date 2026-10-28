@@ -16,10 +16,19 @@ pytestmark = pytest.mark.api
 SAMPLES = Path(__file__).resolve().parents[2] / 'samples'
 
 
+def _sample(name: str) -> Path:
+    """Samples live under their domain folder; this test needs a biblio export and a text table."""
+    for domain in ('biblio', 'fuse', 'vendor'):
+        candidate = SAMPLES / domain / name
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f'no sample named {name} under {SAMPLES}')
+
+
 def _upload(client, name: str) -> str:
     response = client.post(
         '/api/data/upload',
-        data={'file': (io.BytesIO((SAMPLES / name).read_bytes()), name)},
+        data={'file': (io.BytesIO(_sample(name).read_bytes()), name)},
         content_type='multipart/form-data',
     )
     assert response.status_code == 200, response.get_json()
@@ -113,7 +122,7 @@ def _wait(app_module, timeout: float = 60.0) -> bool:
 @pytest.mark.serial
 def test_two_sources_fuse_into_one_graph_that_names_their_overlap(client, app_module):
     literature = _upload(client, 'biblio_cnki_demo.txt')
-    posts = _upload(client, 'fuse_weibo_demo.csv')
+    posts = _upload(client, 'weibo.csv')
     started = client.post(
         '/api/workflow/execute',
         json={'workflow': _canvas(literature, posts), 'workflow_name': 'fuse-e2e'},
@@ -152,7 +161,7 @@ def test_two_sources_fuse_into_one_graph_that_names_their_overlap(client, app_mo
 def test_a_fusion_node_with_one_parent_still_works_as_a_normalizer(client, app_module):
     """One source is not a mistake here: it is how a crawled table becomes the record shape a
     ``biblio`` node can read, which is the same node doing half its job."""
-    posts = _upload(client, 'fuse_weibo_demo.csv')
+    posts = _upload(client, 'weibo.csv')
     canvas = _canvas(posts, posts)
     canvas['nodes'] = [node for node in canvas['nodes'] if node['id'] != 'n-lit']
     canvas['connections'] = [conn for conn in canvas['connections'] if conn['from'] != 'n-lit']
@@ -169,7 +178,7 @@ def test_a_fusion_node_with_one_parent_still_works_as_a_normalizer(client, app_m
 @pytest.mark.serial
 def test_a_fusion_that_cannot_find_an_entity_refuses_by_naming_the_parent(client, app_module):
     literature = _upload(client, 'biblio_cnki_demo.txt')
-    posts = _upload(client, 'fuse_weibo_demo.csv')
+    posts = _upload(client, 'weibo.csv')
     canvas = _canvas(literature, posts)
     canvas['nodes'][2]['params']['entity_columns'] = '不存在的列'
     started = client.post('/api/workflow/execute', json={'workflow': canvas, 'workflow_name': 'fuse-refuse'})

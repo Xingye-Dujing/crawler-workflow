@@ -351,7 +351,7 @@
     哪怕那份文件五分钟前才导出。06:14 现场对照：用户自己的工作流执行搜得出结果，测试用拷贝起的
     新浏览器 06:13 被答 passport；换成用户自己的 profile 后同批用例 **6 passed、30.42 秒、作者模式
     真取到 5 行**。这就是为什么 Cookie 面板的每个平台说明、运行前的 Profile 提醒、以及并行冲突弹窗
-    都写着"第二台设备"（改文案会被 `tests/unit/test_i18n.py::TestTheOneSessionRuleIsSpoken` 判红），
+    都写着"第二台设备"（改文案会被 `tests/unit/i18n/test_i18n.py::TestTheOneSessionRuleIsSpoken` 判红），
     也是为什么真站层要验登录态抓取时必须由 `CIXI_LIVE_USE_USER_PROFILE=1` 明确授权它用你自己的 profile。
     推论：**同一时刻只跑一条微博，并且始终在同一条路径上跑**——换 profile、多设备登录、
     或在外部浏览器里重登又导出，都可能让站点把手里那份凭据判成旧的那一台。

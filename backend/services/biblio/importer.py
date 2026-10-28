@@ -428,7 +428,7 @@ def _cssci_value(fields: dict, *tags) -> str:
 def parse_cssci(text: str) -> tuple[list[dict], int]:
     """Read the CSSCI centre's bracket-tag download.
 
-    Tag names below are the ones the real file carries (see ``samples/CSSCI.txt``):
+    Tag names below are the ones the real file carries (see ``samples/vendor/CSSCI.txt``):
     来源作者 for the author list, 机构名称 for affiliations, 年代卷期 for the issue
     block and 关 键 词 padded inside the brackets. The old names (作者/年份/关键词) stay
     as candidates so a re-saved or older dialect still reads.

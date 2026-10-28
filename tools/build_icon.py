@@ -11,7 +11,7 @@ So the ICO is generated rather than renamed. Run it after changing the art:
 
     .venv/Scripts/python.exe tools/build_icon.py
 
-The byte shape of the result is pinned by ``tests/unit/test_desktop_packaging.py``.
+The byte shape of the result is pinned by ``tests/unit/desktop/test_desktop_packaging.py``.
 """
 
 from __future__ import annotations

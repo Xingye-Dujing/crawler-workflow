@@ -133,7 +133,7 @@ ERROR_PAGE_PREFIX = 'chrome-error://'
 
 #: Every word :func:`classify` may answer, closed on purpose: a consumer that tests
 #: ``== 'blocked'`` silently reads a word it has never seen as "not blocked", so a
-#: new verdict has to be a deliberate edit here (pinned by tests/unit/test_login_wall.py).
+#: new verdict has to be a deliberate edit here (pinned by tests/unit/crawlers/test_login_wall.py).
 VERDICTS = ('ok', 'login', 'blocked', 'unreachable')
 
 #: Chrome's own machine token, printed inside its error page. Measured in three

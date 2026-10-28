@@ -75,7 +75,7 @@ change is judged on all three, not on the machine it was typed on.
 - `ml_train/` (gitignored) trains the sklearn+bert models the `emotion`/`tendency`/`sentiment` analyzers load
   (registered in `data/model_registry.json`); changing their features/labels means retraining there. See
   `ml_train/README.md`.
-- **Test tiers** (`pytest.ini` excludes real tiers; pinned by `tests/unit/test_test_tiers.py`):
+- **Test tiers** (`pytest.ini` excludes real tiers; pinned by `tests/unit/gates/test_test_tiers.py`):
   - Fast: `.venv/Scripts/python.exe -m pytest -q` (~5.2k cases, no browser/daemon).
   - Device: `-m "integration or live_ollama"` (real Chrome on `file://` + real Ollama; LLM-boundary mocks by default).
   - Live: `-m live_quick` (one visit per platform) or `-m live_site` (full pass). **Never run a live tier unattended:
@@ -159,7 +159,7 @@ change is judged on all three, not on the machine it was typed on.
   in-memory (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行.
 - **A test that calls an executor function directly must leave the app quiet:** `clean_globals` *fails* a test that
   leaks `execution_state['running']`.
-- **Checkpointing is the core value** (`services/runs/store.py`): outputs and LLM answers persist so a run resumes,
+- **Checkpointing is the core value** (`services/runs/store/__init__.py`): outputs and LLM answers persist so a run resumes,
   not re-crawls/re-pays; keep `runs.db` state compatible. Three pinned rules: the row sink writes **one transaction
   per row**; the next slot is `MAX(seq)+1`, **never `COUNT(*)`**; a **cursor records position, not content**
   (`Crawler.seed` supplies ids; never re-feed an id list into `mark_position`).
@@ -329,7 +329,7 @@ Chinese messages with a type prefix matching history: `功能更新：`, `问题
 **How much to run per change is decided by what the change can break, not by ritual** (one full tier set is
 ~18 min — measured — and cannot be the per-commit price when a session lands several knives).
 
-- **Lane A — docs, comments, the anchor.** `tests/unit/test_doc_paths.py` only (it is the test a doc edit can
+- **Lane A — docs, comments, the anchor.** `tests/unit/gates/test_doc_paths.py` only (it is the test a doc edit can
   actually break), plus `ruff check` if a `.py` was touched. ~1 min.
 - **Lane B — a move, or test-seam retargeting where behavior is unchanged.** The moved module's own cases + the
   contract tests that name it + `ruff check`/`format --check` on the touched files. ~2 min. The **full fast suite

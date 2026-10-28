@@ -13,7 +13,7 @@ import pytest
 
 pytestmark = pytest.mark.api
 
-SAMPLES = Path(__file__).resolve().parents[2] / 'samples'
+SAMPLES = Path(__file__).resolve().parents[2] / 'samples' / 'biblio'
 
 
 def _upload(client, name: str) -> str:

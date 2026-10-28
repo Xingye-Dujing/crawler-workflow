@@ -7,7 +7,7 @@ import os
 #: ``backend/`` (the documented way to start the app) wrote ``backend/data/`` and ``backend/logs/``
 #: beside the code, while the checkout's real ``data/`` stayed untouched. Measured 2026-10-29: the
 #: stray root held a live Chrome profile, which the root-anchored ``data/*`` ignore rule does not
-#: cover. ``tests/unit/test_config_paths.py`` pins the depth so the next move cannot repeat it.
+#: cover. ``tests/unit/foundation/test_config_paths.py`` pins the depth so the next move cannot repeat it.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 #: The parent of ``data/`` and ``logs/``, for the one process that asks for its own.

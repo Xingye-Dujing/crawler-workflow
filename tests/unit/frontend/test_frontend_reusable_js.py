@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
+from frontend_catalogue import with_companions
 from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[3]
@@ -32,7 +33,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None,
 
 @pytest.fixture(scope='module')
 def ru() -> dict:
-    proc = run_node(str(HARNESS), str(CANVAS_JS), str(WORKFLOW_JS), str(REUSABLE_JS))
+    proc = run_node(str(HARNESS), *with_companions([CANVAS_JS, WORKFLOW_JS, REUSABLE_JS]))
     assert proc.returncode == 0, proc.stderr[-2500:]
     return json.loads(proc.stdout)
 

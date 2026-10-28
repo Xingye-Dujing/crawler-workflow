@@ -1,4 +1,4 @@
-/* Node harness for the canvas serialization contract (tests/unit/test_frontend_contract.py).
+/* Node harness for the canvas serialization contract (tests/unit/frontend/test_frontend_contract.py).
  *
  * Why this exists: /api/workflow/execute receives the JSON canvas.toWorkflowJSON()
  * builds, and a field dropped there (title once was) is invisible to every

@@ -2,7 +2,7 @@
 
 The column names below are the ones this download really writes (``Lens ID``, ``Author/s``,
 ``Issue Number``, ``Fields of Study``, ``MeSH Terms``, ``Citing Works Count``), read off the
-export in ``samples/``. Two things it does *not* carry decide what cannot be built from it,
+export in ``samples/vendor/``. Two things it does *not* carry decide what cannot be built from it,
 and both are stated rather than worked around:
 
 * ``References`` is a list of **Lens record ids** (``002-341-399-981-03X; …``), not citation

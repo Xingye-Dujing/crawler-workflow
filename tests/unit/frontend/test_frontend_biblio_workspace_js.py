@@ -89,7 +89,7 @@ class TestTheDock:
     def test_the_language_switch_repaints_it(self):
         """Every word in the dock is built by its own render(), so `I18n.apply()` never reaches
         it — the same bug class the other JS-rendered docks had."""
-        assert 'biblioWorkspace.onLanguageChange()' in _js('workflow.js')
+        assert 'biblioWorkspace.onLanguageChange()' in _js('panels/shell.js')
 
     def test_both_languages_hold_the_panels_words(self):
         # The keys the panel ASKS for come from its call sites; whether each is declared is asked of

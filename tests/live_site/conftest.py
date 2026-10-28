@@ -9,7 +9,7 @@ and selected explicitly:
 
 The second line is the tier a change is supposed to be checked against: 51 real
 crawls is not a gate anyone runs twice an hour, and a gate nobody runs is not a
-gate. ``live_quick`` is a subset of ``live_site`` (``tests/unit/test_test_tiers.py``
+gate. ``live_quick`` is a subset of ``live_site`` (``tests/unit/gates/test_test_tiers.py``
 pins that, and that every platform is still visited), so the full pass remains the
 one that says "everything".
 
@@ -171,7 +171,7 @@ def live_crawler(cookie_dir_str):
         # boards answer a fresh browser (measured 2026-10). Requiring one here would skip
         # the only tier that proves those crawls still work.
         # These two ``pytest.skip`` calls, with these two reasons, are the tier's whole skip
-        # allowance — pinned by name in ``tests/unit/test_test_tiers.py``. A run-level case that
+        # allowance — pinned by name in ``tests/unit/gates/test_test_tiers.py``. A run-level case that
         # wants to refuse to be skipped (``test_live_zhihu_workflow.py``) takes this fixture
         # lazily, through ``request.getfixturevalue``, behind its own precondition assert.
         if platform not in ('wechat', 'hongguo') and not has_cookie(platform):

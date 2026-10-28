@@ -1,0 +1,21 @@
+{
+    "workflow.js": [
+        "panels/data-views.js",
+        "panels/shell.js",
+        "panels/run-results.js",
+        "workflow-layout.js",
+        "chart-preview.js",
+        "capabilities.js",
+        "panels/cookies.js",
+        "panels/source-help.js",
+        "panels/biblio.js",
+        "panels/runlog.js",
+        "panels/exports.js",
+        "panels/runs.js",
+        "panels/lexicon.js",
+        "panels/datasets.js",
+        "panels/files.js",
+        "panels/diagnostics.js",
+        "panels/settings.js"
+    ]
+}

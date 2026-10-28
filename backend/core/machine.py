@@ -206,7 +206,7 @@ def find_chrome(explicit: str = '', env: dict | None = None, system: str | None 
 #: The families of 「缺它怎么办」 answer, each with one catalogue key per OS. A remedy is a different
 # sentence on each platform (Windows adds a font feature, Linux installs a distro package, macOS often
 # already has the font), so the sentence is chosen here and written in ``i18n`` — and
-# ``tests/unit/test_missing_dependency_messages.py`` walks THIS list times every platform, because a
+# ``tests/unit/foundation/test_missing_dependency_messages.py`` walks THIS list times every platform, because a
 # computed key nobody enumerated is how a refusal prints its own key.
 REMEDY_PREFIXES = ('deps.systemFont', 'deps.texFont', 'deps.texPackage', 'deps.xelatex')
 REMEDY_PLATFORMS = ('win32', 'linux', 'darwin')

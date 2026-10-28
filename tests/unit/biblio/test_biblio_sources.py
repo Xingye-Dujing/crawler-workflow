@@ -1,0 +1,114 @@
+"""The export guide's own contract: the panel may not know more or less than the parser.
+
+The guide is the only place the app tells a user what a vendor's export contains, so it is
+tested the way the cookie guide is — enumerated from the registry, not from a list someone
+remembers to update — and every assertion is about a claim the panel makes to a user.
+"""
+
+import re
+from pathlib import Path
+
+import pytest
+
+from services.biblio import formats, sources
+from services.biblio.importer import CNKI, CSSCI
+
+pytestmark = pytest.mark.unit
+
+SAMPLES = Path(__file__).resolve().parents[3] / 'samples' / 'biblio'
+
+#: The sources the panel answers for: the registry's formats plus the two Chinese paths that
+#: live in ``biblio_import``. Read from the registry so a new format cannot ship unread.
+EXPECTED = [CSSCI, CNKI] + list(formats.format_ids())
+
+
+class TestTheCatalogCoversTheReaders:
+    def test_every_readable_source_is_described(self):
+        assert [entry['id'] for entry in sources.all_sources()] == EXPECTED
+
+    def test_no_source_is_invented_for_a_reader_that_does_not_exist(self):
+        readers = {CNKI, CSSCI} | set(formats.format_ids())
+        assert set(sources.SITES) <= readers, f'guide names a source nobody can import: {set(sources.SITES) - readers}'
+
+    def test_extensions_and_capabilities_come_from_the_registry(self):
+        """Restating them here would let the panel promise a column the parser never fills."""
+        for entry in sources.all_sources():
+            spec = formats.FORMAT_BY_ID.get(entry['id'])
+            if spec is None:
+                continue
+            assert entry['extensions'] == list(spec.extensions)
+            assert entry['capabilities'] == {name: name in spec.capabilities for name in formats.CAPABILITIES}
+
+    def test_the_upload_dialog_is_asked_for_exactly_what_the_readers_accept(self):
+        """``accepted_extensions`` had no caller for a long time; the file picker is that caller.
+
+        Every extension the guide lists has to be one the upload route will try to parse, or a
+        user is offered a file type that comes back as an ordinary table.
+        """
+        offered = {extension for entry in sources.all_sources() for extension in entry['extensions']}
+        accepted = set(formats.accepted_extensions())
+        assert accepted <= offered, f'the registry accepts what no entry advertises: {accepted - offered}'
+
+
+class TestEveryEntrySaysSomethingTrue:
+    @pytest.mark.parametrize('fmt', EXPECTED)
+    def test_a_source_has_a_site_a_reason_and_at_least_one_step(self, fmt):
+        entry = sources.source_for(fmt)
+        assert re.match(r'^https://[a-z0-9.-]+\.[a-z]{2,}/$', str(entry['site'])), (
+            f'{fmt}: the panel hands the user a link; it has to be a full https URL'
+        )
+        purpose = str(entry['purpose'])
+        assert purpose and not purpose.startswith('source.'), f'{fmt}: purpose came back untranslated'
+        assert len(entry['steps']) >= 1, f'{fmt}: a guide with no steps is a label'
+        assert all(str(line).strip() for line in entry['steps'])
+        assert entry['missing'], f'{fmt}: every real export lacks something; saying so is the point'
+
+    @pytest.mark.parametrize('fmt', EXPECTED)
+    def test_the_steps_are_numbered_in_the_order_the_user_follows_them(self, fmt):
+        steps = [str(line) for line in sources.source_for(fmt)['steps']]
+        assert [line.split('.')[0] for line in steps] == [str(number) for number in range(1, len(steps) + 1)], steps
+
+    def test_lens_is_a_source_now_that_its_scholarly_export_was_read(self):
+        """The patent collection is still refused; the scholarly one has a reader and a guide."""
+        assert 'Lens' in EXPECTED
+        entry = sources.source_for('Lens')
+        assert entry['group'] == 'library'
+        # Both halves of the vendor's two collections are named, because the click that picks
+        # one is the click the user has to get right.
+        text = '\n'.join([str(entry['purpose']), *map(str, entry['steps']), *map(str, entry['missing'])])
+        assert 'Scholarly Works' in text and 'Patents' in text, text
+
+    def test_the_steps_name_the_button_when_a_vendor_offers_several(self):
+        """Dimensions sells three look-alike downloads and Lens two collections.
+
+        "导出为 CSV" leaves the user to guess, and guessing wrong costs a search and a re-export,
+        so the option names are asserted in both languages — they are Latin literals in each,
+        which is what makes this check language-independent.
+        """
+        for fmt, required in (
+            ('Dimensions', ('Export full record', 'bibliometric mapping', 'reference manager')),
+            ('Lens', ('Scholarly Works', 'Patents')),
+            ('WoS', ('Full Record and Cited References',)),
+            ('Scopus', ('Affiliations', 'References')),
+        ):
+            entry = sources.source_for(fmt)
+            text = '\n'.join([str(entry['purpose']), *map(str, entry['steps']), *map(str, entry['missing'])])
+            for needle in required:
+                assert needle.lower() in text.lower(), f'{fmt}: the guide never names {needle!r}'
+
+    def test_the_lens_scholarly_entry_tells_the_user_its_references_are_ids(self):
+        """The refusal the node would print is useless after the fact; the guide says it first."""
+        entry = sources.source_for('Lens')
+        text = '\n'.join(map(str, entry['missing']))
+        assert '002-341-399-981-03X' in text, text
+        assert 'Source Country' in text, text
+
+    def test_the_patent_collection_stays_a_refusal_and_not_a_source(self):
+        """One vendor, two collections: the guide describes the readable one and refuses the other."""
+        assert 'Lens Patents' not in EXPECTED
+        refusal = formats.detect_refusal(SAMPLES.joinpath('biblio_lens_patent_demo.csv').read_text('utf-8'))
+        assert 'Jurisdiction' in refusal, f'the refusal must name its evidence: {refusal!r}'
+
+    def test_the_tag_folding_matches_what_cssci_actually_writes(self):
+        assert sources.folded_tag('关 键 词') == '关键词'
+        assert sources.folded_tag('期\u3000\u3000刊') == '期刊'

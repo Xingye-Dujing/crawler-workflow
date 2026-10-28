@@ -127,11 +127,8 @@ class TestThePageListsItsOwnModules:
         have it, so the split would be a test fiction. The map is read from the loader source."""
         loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').read_text(encoding='utf-8')
         assert 'COMPANIONS' in loader or 'companions.mjs' in loader, 'the loader lost the companion rule'
-        companions = (REPO / 'tests' / 'frontend' / 'companions.mjs').read_text(encoding='utf-8')
-        block = companions[
-            companions.index('const SPLIT_OF = {') : companions.index('};', companions.index('const SPLIT_OF = {'))
-        ]
-        names = set(re.findall(r"'([\w-]+\.js)'", block))
+        companions = json.loads((REPO / 'tests' / 'frontend' / 'splits.json').read_text(encoding='utf-8'))
+        names = set(companions) | {name for group in companions.values() for name in group}
         # Both sides of every pair are page-shipped modules: the owner and the file split out of it.
         page = set(_page_scripts(INDEX))
         assert names <= page, f'companions the page never loads: {sorted(names - page)}'

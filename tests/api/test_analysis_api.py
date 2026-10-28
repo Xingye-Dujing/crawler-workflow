@@ -1250,7 +1250,7 @@ def _refused_when_blank() -> list:
     """The steps that need a column, a new name or a rename pair to do anything.
 
     Read off the gate's own table rather than pasted: this file used to keep its own
-    tuple of these names, and ``tests/unit/test_data_analysis.py`` fails any file that
+    tuple of these names, and ``tests/unit/analysis/test_data_analysis.py`` fails any file that
     does — a list of operation names is a copy that can disagree with the registry
     while still passing every test that uses it.
     """
@@ -2147,7 +2147,7 @@ def _run_analysis_node(client, app_module, paste, operation, params, records=Non
 class TestFilterOperatorsThroughTheApi:
     """Every comparison name the panel offers, through the node's own kwargs.
 
-    The service half is swept in ``tests/unit/test_data_analysis.py``; what this
+    The service half is swept in ``tests/unit/analysis/test_data_analysis.py``; what this
     class owns is the whole path a 过滤 rows node takes — flat form fields in,
     normalization, ``run_pipeline``, HTTP answer out — including the four names
     (``not_in``, ``gt``, ``lt``, ``lte``) no node-level case had ever sent, and a

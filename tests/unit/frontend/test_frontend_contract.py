@@ -482,11 +482,11 @@ class TestEmotionPaletteCoverage:
 
         labels = EmotionAnalyzer().valid_labels
         stats_src = (JS_DIR / 'stats.js').read_text(encoding='utf-8')
-        workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        chart_src = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
         assert 'Surprise' in labels, 'the emotion set must carry the SMP2020-EWECT Surprise class'
         for label in labels:
             assert f"'{label}':" in stats_src, f'stats.js has no colour for emotion {label}'
-            assert f"'{label}':" in workflow_src, f'workflow.js has no colour for emotion {label}'
+            assert f"'{label}':" in chart_src, f'data-views.js has no colour for emotion {label}'
 
 
 class TestTendencyPaletteCoverage:
@@ -500,11 +500,11 @@ class TestTendencyPaletteCoverage:
 
         labels = TendencyAnalyzer().valid_labels
         stats_src = (JS_DIR / 'stats.js').read_text(encoding='utf-8')
-        workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        chart_src = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
         assert len(labels) == 6
         for label in labels:
             assert f"'{label}':" in stats_src, f'stats.js has no colour for tendency {label}'
-            assert f"'{label}':" in workflow_src, f'workflow.js has no colour for tendency {label}'
+            assert f"'{label}':" in chart_src, f'data-views.js has no colour for tendency {label}'
 
 
 class TestCookiePanelParity:
@@ -819,7 +819,7 @@ class TestChromeOfThePageItself:
         third arrived: 「训练」 on a sentiment node would have fitted itself from the
         tendency column and reported ``ok``. The server answers from the same table that
         decides what ``mode='ml'`` loads, so the field is simply not sent."""
-        js = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        js = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
         body = js[js.index('async function trainMLModel(') :]
         body = body[: body.index('\n}\n')]
         assert 'label_column' not in body, 'the browser is choosing the label column again'

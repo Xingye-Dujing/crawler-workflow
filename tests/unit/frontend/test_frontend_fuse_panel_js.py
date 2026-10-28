@@ -1,6 +1,6 @@
 """The 跨源融合 settings panel, as a real browser sees it.
 
-The Python-side tests (`tests/unit/test_biblio_fuse.py`, `tests/api/test_fuse_api.py`) prove the
+The Python-side tests (`tests/unit/biblio/test_biblio_fuse.py`, `tests/api/test_fuse_api.py`) prove the
 fold, the refusals and the run. They cannot see the panel at all, and the panel had two defects
 that only the rendered markup shows: the type header printed the computed catalogue key
 「nodeType.fuse」 because no browser word existed, and the node listed no output columns even

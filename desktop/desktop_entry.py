@@ -18,7 +18,7 @@ window looking dead. This entry point owns the frozen-specific concerns instead:
   non-technical user can find without a tray icon dependency.
 
 Everything here is import-safe (no server starts at import) so the packaging contract can
-be tested by ``tests/unit/test_desktop_packaging.py`` without a frozen build.
+be tested by ``tests/unit/desktop/test_desktop_packaging.py`` without a frozen build.
 """
 
 from __future__ import annotations

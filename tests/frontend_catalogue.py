@@ -11,6 +11,7 @@ remainder.
 key) reads the value as written, English then Chinese.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -107,6 +108,23 @@ def entry_text(key: str, window: int = 900) -> tuple[str, str]:
         assert at != -1, f'{key} is not declared in the browser catalogue ({lang})'
         out.append(body[at : at + window])
     return out[0], out[1]
+
+
+#: The JS split map, shared with ``tests/frontend/companions.mjs`` so a driver that hands file
+#: paths to a harness loads the same files the page does (the harness would otherwise boot half a
+#: layer after a split and die on the first moved global).
+SPLITS = json.loads((Path(__file__).resolve().parent / 'frontend' / 'splits.json').read_text(encoding='utf-8'))
+
+
+def with_companions(paths) -> list[str]:
+    """``paths`` plus every file split out of each of them, in page order after the owner."""
+    out: list[str] = []
+    for item in paths:
+        path = Path(str(item))
+        out.append(str(path))
+        for extra in SPLITS.get(path.name, []):
+            out.append(str(path.parent / extra))
+    return out
 
 
 def with_catalogue(paths) -> list[str]:

@@ -3,7 +3,7 @@
 The panel this feeds is the only place the app tells a user "go to this site, click this
 button, upload the file that comes out". That makes it a claim about the outside world, so
 every line here is bounded by a file we actually parsed: the tag names, column headers,
-file names and missing fields come from the real exports in ``samples/`` (measured by
+file names and missing fields come from the real exports in ``samples/vendor/`` (measured by
 ``scratchpad/export_measure.py``-style runs, recorded in ``docs/analysis.md``), not from
 vendor marketing pages or from what a format specification says *could* appear.
 

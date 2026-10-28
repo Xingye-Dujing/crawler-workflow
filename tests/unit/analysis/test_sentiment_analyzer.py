@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 def exec_():
     """The process-node plugin, imported inside the test and never at module scope.
 
-    ``tests/unit/test_test_tiers.py`` refuses a module-level heavy import: collection
+    ``tests/unit/gates/test_test_tiers.py`` refuses a module-level heavy import: collection
     imports every file before any fixture runs, so ``Config.DATA_DIR`` would still point
     at the repository and the app's singleton services would write into the user's real
     ``data/`` for the rest of the session.
