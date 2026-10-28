@@ -30,7 +30,7 @@ from nodes.labels import node_label
 from services import catbus_bridge
 from services.crawl_runtime import item_scope, name_parts, source_stream
 from services.crawler_lifecycle import close_login_browser
-from services.run_files import record_file
+from services.runs.files import record_file
 
 NODE_TYPE = 'comment'
 

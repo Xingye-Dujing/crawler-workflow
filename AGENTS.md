@@ -161,7 +161,7 @@ the contract.
   (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行.
 - **A test that calls an executor function directly must leave the app quiet:** `clean_globals` *fails* a test that leaks
   `execution_state['running']`.
-- **Checkpointing is the core value** (`services/run_store.py`): outputs and LLM answers persist so a run resumes, not
+- **Checkpointing is the core value** (`services/runs/store.py`): outputs and LLM answers persist so a run resumes, not
   re-crawls/re-pays; keep `runs.db` state compatible. Three pinned rules: the row sink writes **one transaction per
   row**; the next slot is `MAX(seq)+1`, **never `COUNT(*)`**; a **cursor records position, not content** (`Crawler.seed`
   supplies ids; never re-feed an id list into `mark_position`).

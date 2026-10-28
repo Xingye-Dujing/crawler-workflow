@@ -26,7 +26,7 @@ def _stored_run(app_module, run_id='run-rep-1', workflow_name='stored-wf'):
     Going through /api/workflow/execute to obtain a run id would test the
     executor again; what is under test here is reading a *stored* run back.
     """
-    from services.run_store import NODE_DONE, RUN_COMPLETED
+    from services.runs.store import NODE_DONE, RUN_COMPLETED
 
     store = app_module.get_run_store()
     store.start_run(run_id, workflow_name, 'fp-1', node_total=2)
@@ -91,7 +91,7 @@ class TestGenerate:
         assert 'never-ran' in response.get_json()['error']
 
     def test_a_run_that_stored_nothing_refuses(self, client, app_module):
-        from services.run_store import NODE_DONE, RUN_COMPLETED
+        from services.runs.store import NODE_DONE, RUN_COMPLETED
 
         store = app_module.get_run_store()
         store.start_run('run-void', 'void-wf', 'fp', node_total=1)

@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from stores import get_run_store
 
-from services.run_compare import compare_runs
+from services.runs.compare import compare_runs
 
 bp = Blueprint('run_compare', __name__)
 

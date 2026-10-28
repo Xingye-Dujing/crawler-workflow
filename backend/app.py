@@ -92,7 +92,7 @@ from services import StatsService, lock_store
 from services.crawler_lifecycle import close_login_browser as _close_login_browser
 from services.data_analysis import UnknownOperationError
 from services.process_params import PROCESS_ENUMS
-from services.run_store import (
+from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
     NODE_PARTIAL,

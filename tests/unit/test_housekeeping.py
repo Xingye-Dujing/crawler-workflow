@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from services.housekeeping import Housekeeping
+from services.runs.housekeeping import Housekeeping
 
 pytestmark = pytest.mark.unit
 
@@ -58,7 +58,7 @@ def logs():
             records.append(record.getMessage())
 
     handler = _Grabber()
-    logger = logging.getLogger('services.housekeeping')
+    logger = logging.getLogger('services.runs.housekeeping')
     # A library logger has no level of its own, so it inherits the root's —
     # which is WARNING unless the app set it. Pin it for the assertion.
     previous_level = logger.level

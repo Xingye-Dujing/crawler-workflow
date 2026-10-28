@@ -1885,7 +1885,7 @@ class TestACommentNodeHonoursHeadless:
         import app as app_module
 
         import crawlers.commenting.session as comments_module
-        from services.run_store import RunStore
+        from services.runs.store import RunStore
 
         seen = {'headless': []}
 

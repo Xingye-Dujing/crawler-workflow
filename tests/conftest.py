@@ -487,7 +487,7 @@ def client(app_module, data_root, request):
     from services.biblio.store import BiblioStore
     from services.datasets.store import DatasetStore
     from services.lexicon_store import LexiconStore
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
     from services.workflows.history import WorkflowHistoryStore
 
     # A serial test needs a genuinely quiet server before it presses Run.
@@ -566,7 +566,7 @@ def _restore_state(state: dict, backup: dict) -> None:
 
 
 # The column names below are the ones the real crawlers emit (see the
-# _URL_FIELDS / _BODY_FIELDS tuples in services/run_store.py), so fixtures
+# _URL_FIELDS / _BODY_FIELDS tuples in services/runs/store.py), so fixtures
 # exercise the same identity/dedupe code paths production uses.
 @pytest.fixture
 def sample_rows():

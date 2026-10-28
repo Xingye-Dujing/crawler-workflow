@@ -13,7 +13,7 @@ from state import add_log
 
 from i18n import t
 from nodes.context import NodeCall
-from services.run_store import RUN_RUNNING
+from services.runs.store import RUN_RUNNING
 
 NODE_TYPE = 'resume'
 

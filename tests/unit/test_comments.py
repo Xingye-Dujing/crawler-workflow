@@ -910,7 +910,7 @@ class TestBilibiliParser:
         """'文章URL'/'评论者'/'评论内容' are deliberate near-misses of the ledger's
         field lists; a comment that borrowed '链接' would hash every row of one
         video to the same key and drop all but the first."""
-        from services.run_store import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS
+        from services.runs.store import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS
 
         rows = parse_bilibili_comments([_bili_reply('100', '甲', '好')], 'https://www.bilibili.com/video/BV1x/')
         for name in rows[0]:
@@ -947,7 +947,7 @@ class TestEngineAndIdentity:
     def test_comment_rows_keep_distinct_ledger_identity(self):
         # Rows of ONE article must not collapse onto one item_key — that would
         # silently drop every comment after the first into the dedupe ledger.
-        from services.run_store import item_key
+        from services.runs.store import item_key
 
         rows = parse_weibo_comments(
             {'data': [{'user': {'screen_name': '甲'}, 'text': 'a'}, {'user': {'screen_name': '乙'}, 'text': 'b'}]},

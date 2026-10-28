@@ -34,7 +34,7 @@ class _ExpiryHarness:
     """Own store + wiring for one simulated-expiry scenario."""
 
     def __init__(self, tmp_path):
-        from services.run_store import RunStore
+        from services.runs.store import RunStore
 
         self.store = RunStore(str(tmp_path / 'expiry.db'))
         self.run_id = 'live-expiry'

@@ -2,8 +2,8 @@
 
 import pytest
 
-from services.run_compare import compare_runs
-from services.run_store import NODE_DONE, RUN_COMPLETED, RunStore
+from services.runs.compare import compare_runs
+from services.runs.store import NODE_DONE, RUN_COMPLETED, RunStore
 
 
 @pytest.fixture()
@@ -95,7 +95,7 @@ class TestCompareRuns:
 
     def test_the_row_cap_is_named(self, store, monkeypatch):
         _two_runs(store)
-        monkeypatch.setattr('services.run_compare.MAX_COMPARE_ROWS', 1)
+        monkeypatch.setattr('services.runs.compare.MAX_COMPARE_ROWS', 1)
         with pytest.raises(ValueError) as exc:
             compare_runs(store, 'r1', 'r2', node_id='node-0')
         assert 'node-0' in str(exc.value) and '1' in str(exc.value)

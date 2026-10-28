@@ -1,4 +1,4 @@
-"""Tests for the durable checkpoint store behind 断点续跑 (services/run_store.py).
+"""Tests for the durable checkpoint store behind 断点续跑 (services/runs/store.py).
 
 This store is why an interrupted run resumes instead of re-crawling and
 re-paying the LLM for rows already produced, so the tests pin down the three
@@ -17,7 +17,7 @@ import threading
 import pytest
 from core.config import Config
 
-from services.run_store import (
+from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
     NODE_PARTIAL,
@@ -701,7 +701,7 @@ class TestRows:
         # _completed_lock and wants that RLock — AB-BA. The warning must fire OUTSIDE the lock.
         import logging
 
-        import services.run_store as run_store_mod
+        import services.runs.store as run_store_mod
 
         recorder = _DepthLock()
         store._lock = recorder

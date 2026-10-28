@@ -401,7 +401,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   「清理孤立文件 0 个，保留 0 个…」 unconditionally — so every tab the user (or a browser test) opened added another
   identical row to the run console. After ~80 page loads the console test's own three stubbed lines were buried under
   eighty of them and the device tier failed on CI while passing here, where fewer page loads happened between the two
-  tests. The rule is the one `services/housekeeping.py` already states for the automatic sweep — **silence is the
+  tests. The rule is the one `services/runs/housekeeping.py` already states for the automatic sweep — **silence is the
   normal case, say something only when something went** — and the manual 清理 keeps its answer through its own toast
   built from the response, so nothing loses feedback by the line being conditional. A test that opens a page is not a
   cheap read: it is a writer of the console, so anything printed at page-load time is multiplied by the suite's page

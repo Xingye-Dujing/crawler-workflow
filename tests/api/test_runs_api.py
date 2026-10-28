@@ -20,7 +20,7 @@ no crawler has to die to produce a half-finished run.
 import pytest
 
 from i18n import t
-from services.run_store import (
+from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
     NODE_PARTIAL,

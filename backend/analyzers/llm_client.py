@@ -830,10 +830,10 @@ def run_llm_dataframe(
     checkpoint = cfg.get('cache')
     store = cfg.get('store_for_cache')
     if checkpoint is None and store is not None:
-        # Imported inside the function: services.run_store is reached by the
+        # Imported inside the function: services.runs.store is reached by the
         # workflow executor, which imports the analyzers, which import this
         # module — a module-level import here would close that cycle.
-        from services.run_store import RowCache
+        from services.runs.store import RowCache
 
         checkpoint = RowCache(store, answer_scope(op, client, text_column, extra_key, build_prompt, prompt_template))
     if checkpoint is None and checkpoint_dir:

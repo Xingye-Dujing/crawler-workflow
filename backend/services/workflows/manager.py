@@ -71,7 +71,7 @@ class WorkflowManager:
         node, so this reads the canvas once rather than once for the parameters and again for the
         fingerprint.
         """
-        from services.run_store import fingerprints_for_workflow
+        from services.runs.store import fingerprints_for_workflow
 
         if not str(name or '').strip():
             return {}, False

@@ -363,7 +363,7 @@
 - **拒绝按名，绝不静默降级。** 缺 Node／缺适配器／Node 版本过旧／清单读不出来／组合未适配／登录缺失／风控，
   每一条都 `raise` 一句点名原因（`catbus.*` 目录项 + 适配器自己的 hint），没有一条允许返回空表——
   节点会在空表上结算 DONE。后端切换也**不回退**：选了 CatBus 就不会"顺手"改用浏览器。
-- **后端是节点身份的一部分。** `services/run_store.py::stable_params` 把 `backend` 计入指纹，同时把
+- **后端是节点身份的一部分。** `services/runs/store.py::stable_params` 把 `backend` 计入指纹，同时把
   `selenium`／缺省折叠掉（与 `account`、`model` 同一条先例）：折叠前所有既有画布的指纹会集体改变，
   「继续」找不到自己付过钱的行，于是整库重采。CatBus 的行与 Selenium 的行因此永远分属两套去重账本、
   两个水位作用域。

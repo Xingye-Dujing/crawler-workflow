@@ -48,7 +48,7 @@ def test_reread_of_same_url_is_deduped_by_the_ledger(live_crawler):
     already-collected item is refused by the sink, not duplicated."""
     from core.config import Config
 
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
 
     store = RunStore(str(Config.RUNS_DB))
     crawler = live_crawler('wechat')

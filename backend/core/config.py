@@ -92,7 +92,7 @@ class Config:
     RUN_KEEP_PER_WORKFLOW = 20
     RUN_KEEP_DAYS = 30
     # How often the retention settings above are actually applied without
-    # anybody asking (see services/housekeeping.py). Startup, then at most once
+    # anybody asking (see services/runs/housekeeping.py). Startup, then at most once
     # per this many minutes.
     HOUSEKEEPING_INTERVAL_MINUTES = 60
     #: How often the scheduled-task clock looks at its own list (backend/scheduling/clock.py). A rule is

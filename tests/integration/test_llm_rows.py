@@ -15,7 +15,7 @@ import types
 import pytest
 
 import analyzers.llm_client as lc
-import services.run_store
+import services.runs.store
 from analyzers.emotion import EmotionAnalyzer
 from analyzers.llm_client import (
     ABORT_MARK,
@@ -29,7 +29,7 @@ from analyzers.llm_client import (
     run_llm_rows,
     text_hash,
 )
-from services.run_store import RowCache, RunStore
+from services.runs.store import RowCache, RunStore
 
 pytestmark = pytest.mark.unit
 
@@ -522,7 +522,7 @@ class TestDurableAnswerCache:
                 super().__init__(store, scope)
                 RecordingRowCache.built.append(self)
 
-        monkeypatch.setattr(services.run_store, 'RowCache', RecordingRowCache)
+        monkeypatch.setattr(services.runs.store, 'RowCache', RecordingRowCache)
         client = ScriptedClient()
         replay(run_store, df_for_llm, client=client)
         assert len(RecordingRowCache.built) == 1

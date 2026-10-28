@@ -79,7 +79,7 @@ class TestWorkflowsRespectLock:
 
 class TestRunsRespectLock:
     def test_clear_spares_a_locked_run_and_removes_the_rest(self, client, app_module):
-        from services.run_store import RUN_COMPLETED
+        from services.runs.store import RUN_COMPLETED
 
         store = app_module._RUN_STORE
         for run_id in ('r-keep', 'r-drop'):
@@ -94,7 +94,7 @@ class TestRunsRespectLock:
         assert 'r-drop' not in ids, 'an unlocked run must still be cleared'
 
     def test_deleting_a_locked_run_is_refused(self, client, app_module):
-        from services.run_store import RUN_COMPLETED
+        from services.runs.store import RUN_COMPLETED
 
         store = app_module._RUN_STORE
         store.start_run('r-locked', 'wf', 'fp', node_total=0)

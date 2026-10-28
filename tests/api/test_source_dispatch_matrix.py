@@ -236,7 +236,7 @@ def stopped_run(tmp_path):
     mock that answered the shape the test expected would also pass when the executor
     looked in the wrong column, for the wrong node, or not at all.
     """
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
 
     store = RunStore(str(tmp_path / 'dispatch-resume.db'))
     store.start_run('r-dispatch', 'dispatch', 'fp-canvas', headless=True)
@@ -520,7 +520,7 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
     A real store sits under this because the thing under test is the hand-off between attempts.
     """
     import crawlers.platforms.hongguo.crawler as hongguo_module
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
 
     urls = [f'https://hongguoduanju.com/detail?series_id={7696063528179878930 + i}' for i in range(3)]
     seen = []
@@ -1202,7 +1202,7 @@ def test_a_fed_resume_rebuilds_the_list_and_crawls_only_the_missing_one(app_modu
     the list the second attempt rebuilds from the parent rows must be POSITIONALLY
     identical to the first one's, or the stored ``url_index`` skips the wrong link.
     """
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
 
     u1 = _SAMPLES[('urls', 'zhihu')]
     u2 = u1 + '1'
@@ -1241,7 +1241,7 @@ def test_a_comment_node_that_raises_still_publishes_its_part_files(app_module, r
     the merged file too, and with 「保留分片」 off those shards were never individually recorded,
     so 智能清除-by-record could not find them: orphaned files in the export folder. The source
     crawl closes the same hole by merging in every handler; the comment path must too."""
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
 
     u1 = _SAMPLES[('urls', 'zhihu')]
     u2 = u1 + '9'
@@ -1280,7 +1280,7 @@ def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monk
     the same comment id: the first pass must file it, the second must grow both narration lines.
     """
     from i18n import t
-    from services.run_store import RunStore
+    from services.runs.store import RunStore
 
     u1 = _SAMPLES[('urls', 'zhihu')]
     mode = capabilities.mode_for('zhihu', 'comments')

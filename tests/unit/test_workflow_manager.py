@@ -149,7 +149,7 @@ class TestCapturedParamsWithReusableNodes:
         """A run records expanded child ids; the saved file keeps the group. Without
         expanding before the lookup, every method paragraph/report node inside a
         reusable node would be filed as unverified while the file was right there."""
-        from services.run_store import fingerprints_for_workflow
+        from services.runs.store import fingerprints_for_workflow
         from services.workflows.expand import expand_reusable_workflow
 
         draft = {

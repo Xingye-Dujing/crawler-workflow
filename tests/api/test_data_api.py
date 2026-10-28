@@ -398,7 +398,7 @@ class TestClear:
         tab opens (app.js), so an unconditional sentence here is console noise by construction.
         Measured on the CI runner, where it put eighty 「清理孤立文件 0 个」 rows into the run
         console and buried the console test's own three lines under them. The automatic sweep
-        (`services/housekeeping.py`) already keeps to silence when nothing went."""
+        (`services/runs/housekeeping.py`) already keeps to silence when nothing went."""
         from i18n import t
 
         with caplog.at_level('INFO'):

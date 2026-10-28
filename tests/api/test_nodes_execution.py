@@ -34,8 +34,8 @@ def _forward_executor_seams(monkeypatch):
 
 
 def _note_window(*args):
-    """The crawl-window ledger now lives in ``services.run_windows`` (shared by output too)."""
-    from services.run_windows import note_window
+    """The crawl-window ledger now lives in ``services.runs.windows`` (shared by output too)."""
+    from services.runs.windows import note_window
 
     return note_window(*args)
 
@@ -570,7 +570,7 @@ class TestStampedOutputFilenames:
         and 继续 could no longer recognise the node it is resuming: every LLM cache
         key would miss and the chain above it would re-pay for its rows.
         """
-        from services.run_store import fingerprints_for_workflow
+        from services.runs.store import fingerprints_for_workflow
 
         ds = _upload(client, paste)
         workflow = self._workflow('fp', ds, filename_timestamp=True)
@@ -692,7 +692,7 @@ class TestWindowedFilenames:
         """``PartWriter`` adopts the shards an interrupted attempt flushed by matching its
         stem as a prefix. A stamp that moved between attempts would leave them orphaned
         beside a numbering restarting at 001 — which is why it is read off the record."""
-        from services.run_store import RunStore
+        from services.runs.store import RunStore
 
         store = RunStore(str(tmp_path / 'runs.db'))
         store.start_run('r1', 'wf', 'fp')
@@ -942,7 +942,7 @@ class TestResumeNode:
         assert run1 in blob, 'the adoption must name its source run'
 
     def test_auto_discovery_adopts_the_biggest_table_of_a_broken_same_shape_run(self, client, app_module, data_root):
-        from services.run_store import NODE_DONE, RUN_INTERRUPTED, RunStore, workflow_fingerprint
+        from services.runs.store import NODE_DONE, RUN_INTERRUPTED, RunStore, workflow_fingerprint
 
         # A prior run of EXACTLY this shape (what "继续" re-executes) is
         # forged straight into the store: node-1 is the resume node's own id

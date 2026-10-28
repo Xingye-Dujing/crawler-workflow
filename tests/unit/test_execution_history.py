@@ -1,4 +1,4 @@
-"""Tests for services/execution_history.py — the cross-run metrics ledger.
+"""Tests for services/runs/history.py — the cross-run metrics ledger.
 
 This table is what powers "how has the emotion mix moved over the last two
 weeks", so the pinned behaviour is about *queryability*: an 8-tuple per metric
@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from services.execution_history import ExecutionHistoryService as History
+from services.runs.history import ExecutionHistoryService as History
 
 pytestmark = pytest.mark.unit
 

@@ -28,7 +28,7 @@ import pytest
 from run_wait import run_finished
 
 from i18n import t
-from services.run_store import NODE_FAILED, RunStore
+from services.runs.store import NODE_FAILED, RunStore
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 

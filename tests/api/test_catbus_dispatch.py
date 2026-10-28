@@ -18,7 +18,7 @@ import capabilities.registry as capabilities
 import pytest
 
 from services import catbus_bridge as bridge
-from services.run_store import RunStore
+from services.runs.store import RunStore
 
 pytestmark = pytest.mark.api
 

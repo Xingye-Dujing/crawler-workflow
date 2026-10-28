@@ -13,7 +13,7 @@ too, so a loaded run's green/red marks have the same provenance as its tables.
 
 import pytest
 
-from services.run_store import NODE_DONE, RUN_COMPLETED, workflow_fingerprint
+from services.runs.store import NODE_DONE, RUN_COMPLETED, workflow_fingerprint
 
 pytestmark = pytest.mark.api
 

@@ -79,7 +79,7 @@ def _table(chart_type: str, title: str) -> str:
 def _run_with_charts(app_module, data_root, monkeypatch, *, workflow_name='成稿演示'):
     """A finished run that filed a figure and a table for each of two chart nodes, and nothing for
     a third."""
-    from services.run_store import NODE_DONE, RUN_COMPLETED
+    from services.runs.store import NODE_DONE, RUN_COMPLETED
     from services.workflows.manager import WorkflowManager
 
     store = app_module.get_run_store()
@@ -168,7 +168,7 @@ class TestThePaperDocument:
         assert t('report.method_unverified', names='x').split('x')[0] in document, document[-900:]
 
     def test_a_run_with_no_filed_latex_refuses_rather_than_emitting_an_empty_paper(self, client, app_module, data_root):
-        from services.run_store import NODE_DONE, RUN_COMPLETED
+        from services.runs.store import NODE_DONE, RUN_COMPLETED
 
         store = app_module.get_run_store()
         store.start_run('run-tex-2', '无 LaTeX', 'fp-tex-2', node_total=1)
@@ -200,7 +200,7 @@ class TestTheDocumentItself:
         from stores import get_run_store
 
         from services import latex_report
-        from services.run_store import NODE_DONE, RUN_COMPLETED
+        from services.runs.store import NODE_DONE, RUN_COMPLETED
         from services.workflows.manager import WorkflowManager
 
         store = get_run_store()

@@ -20,7 +20,7 @@ import time
 from core.config import Config
 from sessions.cookies import CookieManager
 
-from services.execution_history import ExecutionHistoryService
+from services.runs.history import ExecutionHistoryService
 
 #: 执行历史 service: one process-wide instance that opens ``data/history.db`` at import (the path
 #: is whatever ``Config`` held when ``app`` — which imports this first — was loaded; the test

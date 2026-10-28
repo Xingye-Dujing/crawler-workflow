@@ -422,7 +422,7 @@ def clear_datasets():
     # Silence is the normal case, and this route is not only a button: the page boot sweeps
     # orphans on EVERY tab that opens (app.js), so an unconditional line here added one more
     # identical sentence to the run console per page load — measured on the CI runner, where
-    # eighty of them buried the console test's own three lines. `services/housekeeping.py`
+    # eighty of them buried the console test's own three lines. `services/runs/housekeeping.py`
     # already keeps to this rule for the automatic sweep; a manual 清理 still reports through
     # its own toast from this response, so nothing loses its answer by being silent here.
     if removed:

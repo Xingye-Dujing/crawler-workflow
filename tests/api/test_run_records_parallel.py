@@ -24,7 +24,7 @@ import json
 import pytest
 from run_wait import run_finished
 
-from services.run_store import RunStore
+from services.runs.store import RunStore
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 

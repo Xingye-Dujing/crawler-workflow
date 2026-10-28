@@ -3,7 +3,7 @@
 import pytest
 from stores import get_run_store
 
-from services.run_store import NODE_DONE, RUN_COMPLETED
+from services.runs.store import NODE_DONE, RUN_COMPLETED
 
 pytestmark = pytest.mark.api
 
