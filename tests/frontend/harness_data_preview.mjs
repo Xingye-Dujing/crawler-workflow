@@ -193,7 +193,10 @@ async function runScenario(sc) {
     fixWindow(vm, sandbox);
     /* index.html's own order, so anything one file expects of another is the
        shipped arrangement rather than a convenience — asked of the page, not remembered here. */
-    loadPageScripts(sandbox, { jsDir, only: ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'] });
+    loadPageScripts(sandbox, {
+        jsDir,
+        only: ['custom-select.js', 'canvas.js', 'workflow.js', 'chart-preview.js', 'app.js'],
+    });
     sandbox.document.body.innerHTML = panelMarkup;
     syncIds(sandbox);
     if (sc.lang) vm.runInContext(`I18n.lang = ${JSON.stringify(sc.lang)};`, sandbox);

@@ -32,7 +32,7 @@ HARNESS = REPO / 'tests' / 'frontend' / 'harness_async_panels.mjs'
 
 @pytest.fixture(scope='module')
 def panels() -> dict:
-    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'), str(JS_DIR / 'canvas.js'))
+    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'), str(JS_DIR / 'chart-preview.js'))
     assert proc.returncode == 0, f'harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 

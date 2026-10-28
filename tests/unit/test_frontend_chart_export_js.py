@@ -292,7 +292,7 @@ class TestVectorSave:
     def test_the_serializer_asks_echarts_for_the_svg_renderer(self):
         """The vector file comes from a SECOND instance drawn through the SVG renderer; a button
         that re-encodes the canvas PNG would ship pixels wearing a .svg extension."""
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        source = (JS_DIR / 'chart-preview.js').read_text(encoding='utf-8')
         body = source[source.index('function chartSvgMarkup(') :]
         body = body[: body.index('\nfunction ')]
         assert "renderer: 'svg'" in body

@@ -53,7 +53,7 @@ VALIDATE_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_v
 CANVAS_JS = JS_DIR / 'canvas.js'
 
 # Files whose I18n.t('literal') calls are audited against the catalogues.
-I18N_USERS = ['app.js', 'canvas.js', 'workflow.js', 'menu.js', 'stats.js', 'schedules.js']
+I18N_USERS = ['app.js', 'canvas.js', 'workflow.js', 'chart-preview.js', 'menu.js', 'stats.js', 'schedules.js']
 
 _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*(?:,|\))""")
 # A call that passes variables used to be invisible here: the pattern demanded the closing paren
@@ -421,7 +421,9 @@ class TestBiblioPanelContract:
         assert missing == [], f'biblio defaults the canvas never seeds: {missing}'
 
     def test_bibliometric_labels_are_decluttered_before_render(self):
-        src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        # The resolver and its applyEchartsOption call site live in chart-preview.js since the
+        # Stage 8 split; scanning workflow.js for them would pass on a file that no longer holds them.
+        src = (JS_DIR / 'chart-preview.js').read_text(encoding='utf-8')
         assert 'function _graphLabelLayout' in src, 'graph/scatter labels need the collision resolver'
         assert "s.type === 'graph' || s.type === 'scatter'" in src
         # The solver measures the canvas it draws on, so it has to be given that instance.

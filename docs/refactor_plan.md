@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 20 | 26,323 | `workflow.js` **13,026** · `app.js` 1,450（词典已全部搬出）· `i18n/` 9 份共 4,009 · `canvas.js` 3,893 |
+| `backend/static/js/` | 21 | 26,335 | `workflow.js` **12,065** · `chart-preview.js` 973 · `app.js` 1,450（词典已全部搬出）· `i18n/` 9 份共 4,009 · `canvas.js` 3,893 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -960,11 +960,24 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     - **门禁**：fast 首轮 2 红（两处按 app.js 计数的 catbus 词典用例）→ 改共享读者后复绿；前端家族 **1,463 passed**；
       `ruff check` + `format --check`（532 文件）全绿；`node --check` 十个域文件 + app.js 全过；
       设备档（真 Chrome + 真 Ollama + 真 CatBus）见本轮结果。
-  - **Stage 8 剩余（同一套机制，每域一次运行）**：词典已全部出 app.js。接下来是 `chart-preview.js`
-    （`docs/frontend_modules.md` 的第一站，约 1,170 行，牵动 4 个 harness + 1 处契约扫描）。
+  - **Stage 8 第三刀（`chart-preview.js`）已完成（2026-10-28）**：`workflow.js` **13,027 → 12,066 行**，
+    新 `backend/static/js/chart-preview.js` **961 行**（调色板/主题颈口、标签避让、预览面板与 LaTeX 工具条、
+    按年份回放、PNG/SVG 导出、全屏窗口）。`build/carve_chart_preview.py` 按行切片并**证明三段切片正好
+    分区它切自的那段原文**（不是重打一遍）；运行日志查看器留在 `workflow.js`（下一站 `panels/runs.js`）。
+    - 新 `<script>` 紧跟 `workflow.js`：本文件与 `workflow.js` 只在调用时互相引用，加载顺序只需稳定。
+    - **两处扫描随事实搬家**：`test_frontend_contract` 的 `_graphLabelLayout` 扫描、`test_visualization` 的
+      `center_node: p.center_node,` 计数（选项构建随图表模块走、设置字段留下，所以两半一起读）、
+      `test_vendored_assets` 的底图表、`test_frontend_chart_export` 的 `renderer: 'svg'`；
+      `I18N_USERS` 加上 `chart-preview.js`，否则它的 `I18n.t` 调用点从此无人审计。
+    - **两支只加载部分模块的 harness**（`harness_data_preview` 的 `only`、`harness_async_panels` 的两槽 argv）
+      会拿到「`_renderFailureView` is not defined」——前者补 `chart-preview.js` 到 `only`，
+      后者改成按给定顺序逐个求值。**又一次证明「按名字读/两槽下标」在拆分时是缺陷形状**。
+  - **Stage 8 剩余（同一套机制，每域一次运行）**：词典已全部出 app.js，`chart-preview.js` 已出。
+    下一站 `capabilities.js`（约 350 行），随后 `panels/cookies` → `panels/runs`（含 `runLogViewer`）→
+    `panels/biblio` → 各面板 → `settings.js`，见 `docs/frontend_modules.md` §3。
     再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、#40 = 仍 >900 行模块的按职责拆分
     （`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js`、`static/js/canvas.js` 在名单上；`app.js` 已降到 1,450）。
+    `static/js/workflow.js` 12,066、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

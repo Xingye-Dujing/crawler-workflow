@@ -297,7 +297,11 @@ class TestNetworkCenter:
         assert max(data, key=lambda name: data[name]['symbolSize']) == '甲'
 
     def test_the_browser_threads_center_node_into_the_graph(self):
-        text = _WORKFLOW_JS.read_text(encoding='utf-8')
+        # The chart module moved out of workflow.js (Stage 8): the option builders went with it,
+        # while the settings field stayed — so the two halves are read together.
+        text = _WORKFLOW_JS.read_text(encoding='utf-8') + (_WORKFLOW_JS.parent / 'chart-preview.js').read_text(
+            encoding='utf-8'
+        )
         # preview, fullscreen export and the board each send it, and the settings field exists.
         assert text.count('center_node: p.center_node,') >= 3
         assert "'settings.networkCenter'" in text, 'the 关系图 settings render the centre field'

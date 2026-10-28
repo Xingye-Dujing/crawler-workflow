@@ -12,14 +12,17 @@
  * arrive — a guard that refused everything would also pass a test that only
  * measures the refusal) and once with the redraw landing mid-flight.
  *
- * Usage: node harness_async_panels.mjs <workflow.js> <canvas.js>
+ * Usage: node harness_async_panels.mjs <module.js> …   (workflow.js, chart-preview.js)
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
-const [wfPath, canvasPath] = process.argv.slice(2);
+/* Every module the driver named, in the order it named them: the dashboard's failure view lives in
+   chart-preview.js since the Stage 8 split, and a fixed two-slot argv would have silently pointed at
+   the wrong file. */
+const modules = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8'));
 
 const I18n = {
     lang: 'en',
@@ -75,7 +78,7 @@ function world(provider) {
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
     vm.runInContext(
-        fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__x = {openSettings, renderResumeSettings, dashboard};',
+        modules.join('\n;\n') + '\n;globalThis.__x = {openSettings, renderResumeSettings, dashboard};',
         sandbox
     );
     /* Every request is captured rather than answered: a scenario decides which one is

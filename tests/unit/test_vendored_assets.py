@@ -99,7 +99,8 @@ class TestThePageAsksNothingOffThisMachine:
         assert 'U+0000-00FF' in face, 'the latin subset went missing from the vendored stylesheet'
 
     def test_the_basemaps_are_read_from_this_apps_own_files(self):
-        js = (STATIC / 'js' / 'workflow.js').read_text(encoding='utf-8')
+        # The basemap table moved with the chart module (Stage 8): it is read where maps are drawn.
+        js = (STATIC / 'js' / 'chart-preview.js').read_text(encoding='utf-8')
         table = js.split('var urls = {')[1].split('};')[0]
         assert 'http' not in table, f'a basemap is off-box again: {table}'
         assert "'/geo/china.json'" in table
