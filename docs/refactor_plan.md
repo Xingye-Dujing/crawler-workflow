@@ -449,7 +449,8 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = `162924f`**（engine 站点事实归位）→ `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
+  - **HEAD = `8d0bbd7`**（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
+    → `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
     （UI 层开页等待，修一条 CI 抖动）→ `480a811`（文档：#25 收尾）
     ← `2c4bfd3`（真浏览器引擎选择器用例）← `a6b4df5`（capabilities 内部分拆第一步，Stage 3d）← `994a2ec`（`capabilities/` 包，Stage 3c）
     ← `6525f1d`（config→core，Stage 3b）
@@ -582,6 +583,17 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `/vendor/echarts.min.js` **全 200**；`/api/capabilities` 里 zhihu/wechat 的 `engines` 为
     `['selenium','catbus']`、`machine={'windows_desktop': True}`。验收后已杀进程、删 `build/pkg_root`，
     `dist/CaiXiHui` 只剩 `CaiXiHui.exe` + `_internal`（无 data/logs/instance.json/tmp*）；模型包未动。
+  - **`8d0bbd7` 修掉 CI fast 的真断点（本次记录）**：runner 在 2026-10-27T23:47Z 装到了 **pytest 9.2.0**
+    （`requirements.txt` 不钉版本），而 9.2.0 **不再注册 `@classmethod` 叠在 `@pytest.fixture` 之上的类夹具**，
+    五个这样的夹具全部在 setup 报 `fixture '<name>' not found`；`480a811` 之前 runner 装的还是 9.1.1，
+    所以这不是代码回归、也不是抖动。用一次性 venv 实测两版四种写法：**`@pytest.fixture` 在上、`@classmethod`
+    在下** 在 9.1.1 与 9.2.0 都通过（`@staticmethod` 与模块级夹具也都通过），只有旧顺序在 9.2.0 报错；
+    五处已换序，`verdicts`（module scope 却写成实例方法）也一并改成 classmethod（9.2 的弃用警告点名了它）。
+    新契约 `test_test_tiers.py::TestClassScopedFixturesAreVersionProof` 扫全 `tests/` 禁止旧顺序。
+    **证据**：本机用 `PYTHONPATH=<9.2.0 venv 的 site-packages>` 驱动 `.venv`（依赖齐全）跑**全量 fast：
+    8,171 passed / 3 skipped / 355 deselected**，4 warnings 全部来自第三方（anyio 的 `CallSpec2`、jieba 的
+    `pkg_resources`）。`da5ed56`/`162924f`/`c19b2fd` 三条的历史 CI 会显示 fast 红——原因就是这一条，已由
+    `8d0bbd7` 修正，不是那三条的内容有问题。
   - **Stage 3e capabilities 第二步已完成（`da5ed56`，本次记录）**：`registry.py`(1,577) →
     `platforms/<id>.py` × 9（一平台一文件，面板顺序钉在 `platforms/__init__.py`）+ `fields.py`（共享字段原子 +
     `posts_mode/author_mode/hot_mode/comment_mode` 四个工厂，私有名成为公开词表）+ `catbus.py`（第二引擎字段、
