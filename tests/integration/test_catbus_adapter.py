@@ -14,7 +14,7 @@ import shutil
 import pytest
 from device_policy import REQUIRE_CATBUS_ENV, unavailable
 
-from services import catbus_bridge as bridge
+from services.ingest import catbus as bridge
 
 pytestmark = [pytest.mark.integration]
 

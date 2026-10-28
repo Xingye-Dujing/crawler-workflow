@@ -17,7 +17,7 @@ import capabilities.registry as capabilities
 import pytest
 
 from crawlers.backends import catbus as catbus_module
-from services import catbus_bridge as bridge
+from services.ingest import catbus as bridge
 
 pytestmark = pytest.mark.unit
 

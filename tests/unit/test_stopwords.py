@@ -19,7 +19,7 @@ import pytest
 
 from analyzers.stopwords import STOPWORDS, cut, filter_tokens, is_meaningful
 from services.analysis.pipeline import DataAnalysisService as D
-from services.visualizer import VisualizationService as V
+from services.charts.visualizer import VisualizationService as V
 
 #: Words the study is about. A stop-word list that removes any of these is wrong, not aggressive.
 DOMAIN_TERMS = [

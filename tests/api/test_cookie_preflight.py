@@ -26,7 +26,7 @@ from sessions.cookies import CookieManager
 from state import cookie_manager
 
 import i18n
-from services import catbus_bridge
+from services.ingest import catbus
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -661,7 +661,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
     def test_a_logged_in_adapter_is_valid_and_buys_no_browser(self, monkeypatch):
         asked = []
         monkeypatch.setattr(
-            catbus_bridge,
+            catbus,
             'preflight',
             lambda platform, account='': (
                 asked.append((platform, account))
@@ -696,7 +696,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
                 'account': account,
             }
 
-        monkeypatch.setattr(catbus_bridge, 'preflight', fake_preflight)
+        monkeypatch.setattr(catbus, 'preflight', fake_preflight)
         verdict = preflight.probe('bilibili', backend='catbus')
         assert verdict['state'] == preflight.EXPIRED
         assert verdict['blocking'] is True
@@ -708,7 +708,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
     def test_a_backend_this_machine_cannot_ask_never_blocks_a_run(self, monkeypatch):
         """「问不到」 is not 「没登录」, the same rule the timeout and captcha branches follow."""
         monkeypatch.setattr(
-            catbus_bridge,
+            catbus,
             'preflight',
             lambda platform, account='': {
                 'available': False,
@@ -731,7 +731,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
         """
         with_cookie('zhihu')
         monkeypatch.setattr(
-            catbus_bridge,
+            catbus,
             'preflight',
             lambda platform, account='': {
                 'available': True,
@@ -748,7 +748,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
         # The cached browser verdict is still the browser's alone: asking again must not find the
         # adapter's answer under the same platform.
         monkeypatch.setattr(
-            catbus_bridge,
+            catbus,
             'preflight',
             lambda platform, account='': {
                 'available': True,
@@ -764,7 +764,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
         """A mixed canvas asks two questions in one press and gets two keys back."""
         with_cookie('zhihu')
         monkeypatch.setattr(
-            catbus_bridge,
+            catbus,
             'preflight',
             lambda platform, account='': {
                 'available': True,

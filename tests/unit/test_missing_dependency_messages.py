@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 from core import machine
 
-import services.latex_compile as latex_compile
-import services.visualizer as visualizer
+import services.charts.pdf as latex_compile
+import services.charts.visualizer as visualizer
 from analyzers.sentiment import BertClassifier
 
 pytestmark = pytest.mark.unit
@@ -114,7 +114,7 @@ class TestTheChineseFontAnswer:
                 raise ValueError(f'no {family}')
 
         monkeypatch.setattr('matplotlib.font_manager.fontManager', Manager())
-        with caplog.at_level(logging.WARNING, logger='services.visualizer'):
+        with caplog.at_level(logging.WARNING, logger='services.charts.visualizer'):
             visualizer._pyplot()
             visualizer._pyplot()  # thirty figures in one canvas must say it once
         assert visualizer.cjk_font() == ''
@@ -127,7 +127,7 @@ class TestTheChineseFontAnswer:
                 raise ValueError('absent')
 
         monkeypatch.setattr('matplotlib.font_manager.fontManager', Manager())
-        with caplog.at_level(logging.WARNING, logger='services.visualizer'):
+        with caplog.at_level(logging.WARNING, logger='services.charts.visualizer'):
             visualizer._pyplot()
         text = ' '.join(record.message for record in caplog.records)
         for family in visualizer._CJK_CANDIDATES:

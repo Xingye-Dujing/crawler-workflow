@@ -1,4 +1,4 @@
-"""Tests for services/visualizer.py — the chart-spec builder.
+"""Tests for services/charts/visualizer.py — the chart-spec builder.
 
 Two renderers sit behind one entry point, and the frontend consumes the
 ECharts option as raw JSON, so the contracts that matter are:
@@ -19,9 +19,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from services.chart_contracts import BIBLIO_CHART_TYPES
-from services.visualizer import ANNOTATED_TYPES, CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
-from services.visualizer import VisualizationService as V
+from services.charts.contracts import BIBLIO_CHART_TYPES
+from services.charts.visualizer import ANNOTATED_TYPES, CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
+from services.charts.visualizer import VisualizationService as V
 
 pytestmark = pytest.mark.unit
 
@@ -644,7 +644,7 @@ class TestChartDisplayLocalisation:
 
     def test_controlled_tokens_follow_the_run_language(self):
         from i18n import set_lang
-        from services.visualizer import _localize_label as localize
+        from services.charts.visualizer import _localize_label as localize
 
         set_lang('zh')
         assert localize('total') == '发帖量'
@@ -661,7 +661,7 @@ class TestChartDisplayLocalisation:
         stored columns; a chart of them must show the reader's own words in zh and the exact
         analyzer spelling in en — the same display-only contract as sentiment."""
         from i18n import set_lang
-        from services.visualizer import _localize_label as localize
+        from services.charts.visualizer import _localize_label as localize
 
         set_lang('zh')
         assert localize('emotion') == '情绪'
@@ -677,7 +677,7 @@ class TestChartDisplayLocalisation:
 
     def test_unknown_and_non_text_values_pass_through_untouched(self):
         from i18n import set_lang
-        from services.visualizer import _localize_label as localize
+        from services.charts.visualizer import _localize_label as localize
 
         set_lang('zh')
         assert localize('2022-01-24') == '2022-01-24', 'a date is not a label to translate'

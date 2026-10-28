@@ -814,15 +814,13 @@ class TestABrowserWithNoProcessId:
         crawler.driver = _WedgedNoPid()
         killed = []
         said = []
-        from services import crawler_lifecycle
+        from services.ingest import lifecycle
 
-        monkeypatch.setattr(crawler_lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
+        monkeypatch.setattr(lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
         # The seam is the reap helper, not ``subprocess``: which command stops a process is a
         # per-operating-system answer now, and a test that patched the Windows binary by name would
         # assert against a call site that no longer exists on a server.
-        monkeypatch.setattr(
-            crawler_lifecycle.procs, 'reap_process', lambda pid, *a, **kw: killed.append(pid) or (True, '')
-        )
+        monkeypatch.setattr(lifecycle.procs, 'reap_process', lambda pid, *a, **kw: killed.append(pid) or (True, ''))
         try:
             app_module._close_login_browser(crawler, quit_timeout=0.4)
         finally:
@@ -846,7 +844,7 @@ class TestABrowserWithNoProcessId:
         thread.start()
         time.sleep(0.2)
         try:
-            from services.crawler_lifecycle import stuck_where
+            from services.ingest.lifecycle import stuck_where
 
             where = stuck_where(thread)
         finally:
@@ -857,9 +855,9 @@ class TestABrowserWithNoProcessId:
         """The other direction, because a warning that fires on every normal close would
         teach the user to ignore the one time it means something."""
         said = []
-        from services import crawler_lifecycle
+        from services.ingest import lifecycle
 
-        monkeypatch.setattr(crawler_lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
+        monkeypatch.setattr(lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
         crawler = _StreamingCrawler()
         crawler.driver = _SlowSession(pid=0)
         app_module._close_login_browser(crawler, quit_timeout=5.0)

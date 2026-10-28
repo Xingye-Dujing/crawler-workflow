@@ -1105,7 +1105,7 @@ class TestProgressiveOutput:
 
         df = pd.DataFrame([{'正文': '甲'}, {'正文': '乙'}])
         run_ctx['publish'](df)
-        from services.part_writer import safe_stem
+        from services.ingest.parts import safe_stem
 
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p1')
         live = data_root / 'data' / 'exports' / f'{stem}.live.csv'
@@ -1130,7 +1130,7 @@ class TestProgressiveOutput:
         run_ctx['publish'](df)
         # No {this node}.live file: the export directory is session-scoped, so
         # only a p2-named snapshot would prove the feature fired.
-        from services.part_writer import safe_stem
+        from services.ingest.parts import safe_stem
 
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
         assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))

@@ -17,7 +17,7 @@ import pandas as pd
 
 from i18n import get_lang, t
 from services.biblio.geo import aggregate, display
-from services.chart_contracts import (
+from services.charts.contracts import (
     OVERLAY_ROW_LIMIT,
     OVERLAY_TOPIC_LIMIT,
     POLARITY_COLORS,
@@ -1289,7 +1289,7 @@ def _overlay_word(label: str) -> str:
     is local because ``visualizer`` imports this module when it builds a bibliometric option —
     a module-level back-import would be a cycle in the direction the layering already avoids.
     """
-    from services.visualizer import _localize_label
+    from services.charts.visualizer import _localize_label
 
     return _localize_label(label)
 

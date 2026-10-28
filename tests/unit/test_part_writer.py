@@ -12,7 +12,7 @@ import os
 import pandas as pd
 import pytest
 
-from services.part_writer import PartWriter, SnapshotWriter, safe_stem
+from services.ingest.parts import PartWriter, SnapshotWriter, safe_stem
 
 pytestmark = pytest.mark.unit
 

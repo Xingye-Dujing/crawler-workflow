@@ -32,9 +32,9 @@ import pandas as pd
 
 from analyzers.llm_client import ABORT_MARK
 from i18n import t
+from services.charts.visualizer import VisualizationService, _localize_label
 from services.exports.browser import resolve_export_file
 from services.exports.writer import DataExporter
-from services.visualizer import VisualizationService, _localize_label
 
 logger = logging.getLogger(__name__)
 

@@ -91,7 +91,7 @@ from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService, lock_store
 from services.analysis.pipeline import UnknownOperationError
 from services.analysis.process import PROCESS_ENUMS
-from services.crawler_lifecycle import close_login_browser as _close_login_browser
+from services.ingest.lifecycle import close_login_browser as _close_login_browser
 from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
@@ -3013,7 +3013,7 @@ def kill_process():
 
 # /api/visualize/render (the standalone chart door) now lives in backend/api/visualize.py
 # (Blueprint `visualize_bp`); see the app.register_blueprint(visualize_bp) below. It calls the
-# same services.latex_outputs / services.visualizer that _execute_visualize_node does, so the
+# same services.charts.outputs / services.charts.visualizer that _execute_visualize_node does, so the
 # HTTP preview and the node cannot drift. Path and behaviour are unchanged.
 
 

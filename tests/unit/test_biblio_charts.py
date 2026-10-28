@@ -6,8 +6,8 @@ import math
 import pandas as pd
 import pytest
 
-from services.chart_contracts import BIBLIO_CHART_TYPES
-from services.visualizer import ChartConfigError, VisualizationService
+from services.charts.contracts import BIBLIO_CHART_TYPES
+from services.charts.visualizer import ChartConfigError, VisualizationService
 
 pytestmark = pytest.mark.unit
 
@@ -222,7 +222,7 @@ class TestVariationView:
         assert '丙' not in option['xAxis']['data']
 
     def test_the_column_is_capped_and_the_cap_names_itself(self):
-        from services.chart_contracts import VARIATION_ROW_LIMIT
+        from services.charts.contracts import VARIATION_ROW_LIMIT
 
         rows = [
             {
@@ -414,7 +414,7 @@ class TestOverlayViews:
         assert option['visualMap']['max'] == 100
 
     def test_both_axes_are_capped_and_the_note_says_so(self):
-        from services.chart_contracts import OVERLAY_ROW_LIMIT, OVERLAY_TOPIC_LIMIT
+        from services.charts.contracts import OVERLAY_ROW_LIMIT, OVERLAY_TOPIC_LIMIT
 
         rows = []
         for index in range(OVERLAY_ROW_LIMIT + 4):

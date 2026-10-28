@@ -19,8 +19,8 @@ from core.refs import as_bool, sanitize_filename
 from state import add_log
 
 from i18n import t
-from services.latex_charts import LatexChartService
-from services.visualizer import LATEX_UNBUILDABLE_TYPES
+from services.charts.tikz import LatexChartService
+from services.charts.visualizer import LATEX_UNBUILDABLE_TYPES
 
 logger = logging.getLogger(__name__)
 

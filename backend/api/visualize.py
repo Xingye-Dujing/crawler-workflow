@@ -2,7 +2,7 @@
 
 The standalone chart door: render any registered dataset / workflow result / inline table into
 an ECharts option or a server-side PNG, with the optional LaTeX figure / three-line table
-produced through the same ``services.latex_outputs`` the ``visualize`` node executor uses — so
+produced through the same ``services.charts.outputs`` the ``visualize`` node executor uses — so
 the HTTP preview and the node can never drift apart. Every dependency is reachable without
 importing ``app``. Path and behaviour are unchanged.
 """
@@ -15,8 +15,8 @@ from flask import Blueprint, jsonify
 from api.http import _bad_body, _json_body
 from api.resolution import NoRunDataError, _resolve_dataframe
 from i18n import t
-from services.latex_outputs import build_latex_outputs
-from services.visualizer import ChartConfigError, VisualizationService, chart_engine
+from services.charts.outputs import build_latex_outputs
+from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 
 logger = logging.getLogger(__name__)
 

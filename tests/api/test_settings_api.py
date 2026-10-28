@@ -304,19 +304,19 @@ class TestTheSecondBackendPaths:
     @pytest.mark.parametrize('key', ['catbus_cli', 'catbus_node'])
     def test_saving_a_path_asks_the_machine_again(self, client, monkeypatch, key):
         """A cached 「本机没有 CatBus」 would otherwise grey out the option the user just fixed."""
-        from services import catbus_bridge
+        from services.ingest import catbus
 
         asked = []
-        monkeypatch.setattr(catbus_bridge, 'reset_probe_cache', lambda: asked.append(key))
+        monkeypatch.setattr(catbus, 'reset_probe_cache', lambda: asked.append(key))
         client.post('/api/settings', json={key: ''})
         assert asked == [key]
 
     def test_an_unrelated_save_leaves_the_verdict_alone(self, client, monkeypatch):
         """The probe costs a Node process; a window-size edit must not pay it."""
-        from services import catbus_bridge
+        from services.ingest import catbus
 
         asked = []
-        monkeypatch.setattr(catbus_bridge, 'reset_probe_cache', lambda: asked.append(1))
+        monkeypatch.setattr(catbus, 'reset_probe_cache', lambda: asked.append(1))
         client.post('/api/settings', json={'window_size': '800x600'})
         assert asked == []
 

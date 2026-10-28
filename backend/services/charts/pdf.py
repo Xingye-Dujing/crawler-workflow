@@ -1,6 +1,6 @@
 """Compile a LaTeX source to PDF with the machine's ``xelatex``.
 
-The ``visualize`` node emits a compilable ``standalone`` document (services/latex_charts); this turns that
+The ``visualize`` node emits a compilable ``standalone`` document (services/charts/tikz); this turns that
 source into the PDF a paper actually includes — one document, one ``xelatex`` pass. It shells out the same
 best-effort way the report PDF does: no ``xelatex``, or a run that will not produce a PDF, is a named
 refusal surfaced as ``{'error': …}``, never a crash and never a half-written file left in the export tree.
@@ -18,7 +18,7 @@ import tempfile
 from core import machine
 
 from i18n import t
-from services.latex_charts import LatexChartService
+from services.charts.tikz import LatexChartService
 from settings_store import get_setting
 
 

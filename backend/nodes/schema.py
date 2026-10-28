@@ -39,7 +39,7 @@ from services.biblio.fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
 from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
 from services.biblio.schema import output_columns as biblio_output_columns
 from services.biblio.schema import read_columns as biblio_read_columns
-from services.chart_contracts import BIBLIO_CHART_READS
+from services.charts.contracts import BIBLIO_CHART_READS
 
 
 def _tokenize_contract():

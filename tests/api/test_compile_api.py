@@ -12,7 +12,7 @@ import os
 import pytest
 from run_wait import run_finished
 
-import services.latex_compile as latex_compile
+import services.charts.pdf as latex_compile
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 

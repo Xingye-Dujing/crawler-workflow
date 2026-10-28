@@ -16,7 +16,7 @@ from core.config import Config
 
 import settings_store
 from i18n import get_lang, set_lang, t
-from services import catbus_bridge as bridge
+from services.ingest import catbus as bridge
 
 #: A trimmed copy of what ``catbus-crawler-workflow capabilities`` answers: the real shape, the real
 # statuses, and only the entries a test asks about.

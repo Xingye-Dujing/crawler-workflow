@@ -23,8 +23,8 @@ from core.refs import MAX_FILENAME_BYTES, sanitize_filename
 from crawlers.core import browser
 from engine.workflow import WorkflowEngine
 from i18n import MESSAGES, t
-from services import latex_charts, visualizer
-from services.latex_compile import XELATEX_PATHS
+from services.charts import tikz, visualizer
+from services.charts.pdf import XELATEX_PATHS
 
 pytestmark = pytest.mark.unit
 
@@ -43,7 +43,7 @@ BACKEND = Path(__file__).resolve().parents[2] / 'backend'
 WINDOWS_TABLES = {
     Path('core/machine.py'),
     Path('core/procs.py'),
-    Path('services/latex_compile.py'),
+    Path('services/charts/pdf.py'),
     Path('crawlers/platforms/hongguo/harvest.py'),
     Path('crawlers/platforms/hongguo/player_ui.py'),
     Path('crawlers/platforms/hongguo/trust.py'),
@@ -162,8 +162,8 @@ class TestThePlatformTablesAreComplete:
             ('CHROME_PATH_NAMES', machine.CHROME_PATH_NAMES),
             ('NAVIGATOR_PLATFORMS', machine.NAVIGATOR_PLATFORMS),
             ('XELATEX_PATHS', XELATEX_PATHS),
-            ('CTEX_FONTSET', latex_charts.CTEX_FONTSET),
-            ('CJK_FAMILY', latex_charts.CJK_FAMILY),
+            ('CTEX_FONTSET', tikz.CTEX_FONTSET),
+            ('CJK_FAMILY', tikz.CJK_FAMILY),
             ('REQUIREMENT_LABELS', requirements.REQUIREMENT_LABELS),
         ):
             assert set(table) == set(machine.REMEDY_PLATFORMS) or name == 'REQUIREMENT_LABELS', name
@@ -388,23 +388,23 @@ class TestTheMatplotlibFontStackHoldsEachOsNames:
 
 class TestThePaperFontSetFollowsTheMachine:
     def test_the_ctex_option_is_empty_on_windows_and_named_elsewhere(self):
-        assert latex_charts.ctex_options('win32') == ''
-        assert latex_charts.ctex_options('linux') == 'fontset=fandol'
-        assert latex_charts.ctex_options('darwin') == 'fontset=macnew'
+        assert tikz.ctex_options('win32') == ''
+        assert tikz.ctex_options('linux') == 'fontset=fandol'
+        assert tikz.ctex_options('darwin') == 'fontset=macnew'
 
     def test_the_package_line_carries_the_option(self):
-        assert latex_charts._packages('win32').splitlines()[0] == '\\usepackage{ctex}'
-        assert latex_charts._packages('linux').splitlines()[0] == '\\usepackage[fontset=fandol]{ctex}'
+        assert tikz._packages('win32').splitlines()[0] == '\\usepackage{ctex}'
+        assert tikz._packages('linux').splitlines()[0] == '\\usepackage[fontset=fandol]{ctex}'
 
     def test_windows_keeps_the_measured_fangsong_lines(self, monkeypatch):
         # 26/26 figures and tables compiled with exactly these three lines on MiKTeX (A19), so the Windows
         # branch is pinned rather than trusted to still say what it said.
         monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'win32')
-        assert r'\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}' in latex_charts.paper_preamble()
+        assert r'\setCJKmainfont[scale=0.95,AutoFakeBold=2.0]{FangSong}' in tikz.paper_preamble()
 
     def test_a_paper_asked_for_off_windows_names_no_font_that_is_not_there(self, monkeypatch):
         monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'linux')
-        preamble = latex_charts.paper_preamble()
+        preamble = tikz.paper_preamble()
         code = '\n'.join(line for line in preamble.splitlines() if not line.startswith('%'))
         assert '\\setCJKmainfont' not in code, 'FangSong is not installed on a Linux TeX Live'
         assert '\\usepackage[fontset=fandol]{ctex}' in preamble
@@ -412,7 +412,7 @@ class TestThePaperFontSetFollowsTheMachine:
 
     def test_the_pasted_hint_says_what_this_machine_used(self, monkeypatch):
         monkeypatch.setattr(machine, 'platform_name', lambda system=None: 'darwin')
-        head = latex_charts.LatexChartService._standalone_head('图', 'bar', 't', 'c')
+        head = tikz.LatexChartService._standalone_head('图', 'bar', 't', 'c')
         assert 'fontset=macnew' in head
         assert 'Songti SC' in head
 
@@ -532,9 +532,7 @@ class TestReapingABrowserWorksWhereTaskkillDoesNot:
         # The promise is about the worker's session, not about the process: leaving a live driver in place
         # is what made the next crawl of that platform wait out the profile lock.
         block = (
-            _backend_source('services/crawler_lifecycle.py')
-            .split('def close_login_browser', 1)[1]
-            .split('\ndef ', 1)[0]
+            _backend_source('services/ingest/lifecycle.py').split('def close_login_browser', 1)[1].split('\ndef ', 1)[0]
         )
         assert 'procs.reap_process(' in block
         assert 'crawler.driver = DeadDriver()' in block

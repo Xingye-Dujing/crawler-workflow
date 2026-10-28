@@ -292,7 +292,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
             # The second backend caches what this machine can do (a capability probe costs one Node
             # process), and a cached 「本机没有 CatBus」 would otherwise keep greyed out the option the
             # user has just pointed at a path — for minutes, with no way to see why.
-            from services import catbus_bridge
+            from services.ingest import catbus
 
-            catbus_bridge.reset_probe_cache()
+            catbus.reset_probe_cache()
         return dict(vals), warnings

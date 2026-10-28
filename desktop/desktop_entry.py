@@ -447,7 +447,7 @@ def dependency_report(app_dir_path, *, env=None) -> dict:
 
     from core import machine
 
-    from services.latex_compile import find_xelatex
+    from services.charts.pdf import find_xelatex
     from settings_store import get_setting
 
     env = os.environ if env is None else env

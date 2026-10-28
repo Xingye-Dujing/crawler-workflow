@@ -27,9 +27,9 @@ from crawlers.core.faults import CrawlerStopped
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label
-from services import catbus_bridge
-from services.crawl_runtime import item_scope, name_parts, source_stream
-from services.crawler_lifecycle import close_login_browser
+from services.ingest import catbus
+from services.ingest.lifecycle import close_login_browser
+from services.ingest.runtime import item_scope, name_parts, source_stream
 from services.runs.files import record_file
 
 NODE_TYPE = 'comment'
@@ -106,7 +106,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     """
     from crawlers.commenting.protocol import BLOCKED, DEAD, OK
     from crawlers.commenting.session import CommentSession
-    from services.part_writer import PartWriter, safe_stem
+    from services.ingest.parts import PartWriter, safe_stem
 
     params = node.get('params') or {}
     # A Data Source in comments mode carries the platform the user selected;
@@ -251,8 +251,8 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     # owner whose ``skipped_targets`` / ``end_reason`` the settlement reads by
                     # attribute. Asked before the browser branch, so a CatBus node never builds a
                     # Chrome, never plants a cookie and never takes a profile lock.
-                    _state, why = catbus_bridge.mode_state(kind, 'comments')
-                    if not catbus_bridge.supports(kind, 'comments'):
+                    _state, why = catbus.mode_state(kind, 'comments')
+                    if not catbus.supports(kind, 'comments'):
                         raise ValueError(t('catbus.refused', platform=kind, mode='comments', detail=why))
                     catbus_session = CatbusCrawler(
                         platform=kind,

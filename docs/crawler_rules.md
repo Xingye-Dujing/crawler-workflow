@@ -321,7 +321,7 @@
 
 - **A 分批输出 stem is a storage key, not a label: it must be identical across every attempt of
   one run.** `PartWriter` adopts the shards a crashed attempt already flushed by matching
-  `{stem}.part` as a directory prefix (`services/part_writer.py`), and `run.progress_file`
+  `{stem}.part` as a directory prefix (`services/ingest/parts.py`), and `run.progress_file`
   announces the merged file the user is told to open. So any component that changes between
   attempts of the SAME run silently orphanes those parts and restarts the numbering at 001
   beside them — the resume looks green and the merged table is only the tail. That is why the
@@ -356,7 +356,7 @@
 
 ## 第二采集后端 / The second crawl backend (CatBus)
 
-- **能力清单只有一个来源：适配器自己。** `backend/services/catbus_bridge.py` 读 `catbus-crawler-workflow capabilities`
+- **能力清单只有一个来源：适配器自己。** `backend/services/ingest/catbus.py` 读 `catbus-crawler-workflow capabilities`
   并按 `PROBE_TTL` 缓存，`平台 × 模式` 的可用性、输出列、身份列全部来自那份 JSON；Python 侧**不抄表**。
   抄一份就是本文件上面那条"矩阵是唯一口径"要防的那种东西：CatBus 升级改了组合，这边还在宣称能采。
   因此新增一个平台/模式**只改 CatBus**，这边面板下一轮探测自动出现该项；这边要改的是列映射的搬运规则，不是名单。

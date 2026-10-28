@@ -31,7 +31,7 @@ PANEL_ORDER = ['zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili', 'douyin', 
 #: Layers above the declarations. An import of any of these from ``capabilities`` would invert
 #: the arrow (the panel must be answerable without Selenium/pandas/the app) — the same rule
 #: ``test_foundation_layering`` applies to ``core``. Only module-level imports count; the two
-#: function-local ``services.catbus_bridge`` seams are the deliberate request-time dependency.
+#: function-local ``services.ingest.catbus`` seams are the deliberate request-time dependency.
 ABOVE_CAPABILITIES = {
     'app',
     'api',

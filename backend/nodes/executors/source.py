@@ -30,9 +30,9 @@ from i18n import t
 from nodes.context import NodeCall
 from nodes.executors.comment import execute_comment_node
 from nodes.labels import node_label
-from services import net_probe as network_probe
-from services.crawl_runtime import item_scope, name_parts, source_stream
-from services.crawler_lifecycle import close_login_browser
+from services.ingest import net as network_probe
+from services.ingest.lifecycle import close_login_browser
+from services.ingest.runtime import item_scope, name_parts, source_stream
 from services.runs.files import record_file
 from services.runs.windows import note_window
 
@@ -376,7 +376,7 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         parts = name_parts(params, (ctx or {}).get('export_stamp') or '')
         writer = None
         if part_size > 0:
-            from services.part_writer import PartWriter, safe_stem
+            from services.ingest.parts import PartWriter, safe_stem
 
             stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}{parts}')
             # Record each shard as it lands (so an interrupted run's parts are still attributed

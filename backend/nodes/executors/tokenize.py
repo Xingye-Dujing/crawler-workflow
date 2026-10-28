@@ -11,7 +11,7 @@ from state import add_log
 
 from i18n import t
 from nodes.context import NodeCall
-from services.visualizer import VisualizationService
+from services.charts.visualizer import VisualizationService
 
 NODE_TYPE = 'tokenize'
 

@@ -26,7 +26,7 @@ from services.exports.browser import (
     resolve_export_file,
     resolve_report_path,
 )
-from services.part_writer import PartWriter, safe_stem
+from services.ingest.parts import PartWriter, safe_stem
 
 pytestmark = pytest.mark.unit
 

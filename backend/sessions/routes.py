@@ -28,7 +28,7 @@ from state import add_log, cookie_manager, execution_state
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
 from i18n import get_lang, set_lang, t
-from services.crawler_lifecycle import close_login_browser as _close_login_browser
+from services.ingest.lifecycle import close_login_browser as _close_login_browser
 from sessions import preflight, profiles
 from sessions.cookies import CookieManager
 from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform

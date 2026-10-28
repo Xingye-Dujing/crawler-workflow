@@ -12,9 +12,9 @@ from state import add_log
 
 from i18n import t
 from nodes.context import NodeCall
-from services.latex_outputs import build_latex_outputs
+from services.charts.outputs import build_latex_outputs
+from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.runs.files import record_file
-from services.visualizer import ChartConfigError, VisualizationService, chart_engine
 
 NODE_TYPE = 'visualize'
 

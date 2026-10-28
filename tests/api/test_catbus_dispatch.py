@@ -6,7 +6,7 @@ planted, no profile lock taken, no ``get_crawler`` call at all. A dispatch that 
 would leave a browser starting for every CatBus node on a server that has no display, which is the
 class of failure this app refuses by name elsewhere.
 
-The adapter is answered at its own seam (``services.catbus_bridge``), so what is asserted here is
+The adapter is answered at its own seam (``services.ingest.catbus``), so what is asserted here is
 routing, arguments, and the ledger the rows are filed in — not CatBus's behaviour. The durable store
 is the real one, because "the rows landed" is the thing under test and a stub would agree to
 anything. ``app`` arrives through the ``app_module`` fixture rather than a module-level import: two
@@ -17,7 +17,7 @@ structural tests police that, because importing it boots the Flask app before co
 import capabilities.registry as capabilities
 import pytest
 
-from services import catbus_bridge as bridge
+from services.ingest import catbus as bridge
 from services.runs.store import RunStore
 
 pytestmark = pytest.mark.api
@@ -156,7 +156,7 @@ class TestTheSourceNodeChoosesItsBackend:
         dropping a stored condition over that difference yields a table that looks filtered. The
         adapter keeps and does not consume what it does not know, so forwarding costs noise while
         filtering costs a silent wrong answer. ``account`` is the one exception — it names a Selenium
-        session — and it is dropped one layer down, in :func:`catbus_bridge._params_payload`, which
+        session — and it is dropped one layer down, in :func:`catbus._params_payload`, which
         this case reaches by calling that function instead of stubbing past it.
         """
         _source_plugin().execute_source_node(
@@ -169,7 +169,7 @@ class TestTheSourceNodeChoosesItsBackend:
         assert 'account' in params, 'the payload is not filtered here —'
         # — and the bridge is where the Selenium account leaves. Asserted on the real function, so a
         # change to either side shows up.
-        from services.catbus_bridge import _params_payload
+        from services.ingest.catbus import _params_payload
 
         assert 'account' not in _params_payload(params, 'catbus-work')
 

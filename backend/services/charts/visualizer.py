@@ -31,7 +31,7 @@ import pandas as pd
 from core import machine
 
 from i18n import t
-from services.chart_contracts import BIBLIO_CHART_TYPES
+from services.charts.contracts import BIBLIO_CHART_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -513,7 +513,7 @@ ECHARTS_ONLY_TYPES = (
 #: show is worse than no annotation, because the user believes it is there.
 ANNOTATED_TYPES = ('bar', 'line', 'dual_line')
 
-#: The chart types ``services.latex_charts`` cannot draw on paper — exactly one, the model
+#: The chart types ``services.charts.tikz`` cannot draw on paper — exactly one, the model
 #: agreement matrix, whose point is the on-screen colour ramp. This is deliberately NOT
 #: ``ECHARTS_ONLY_TYPES``: that list says what *matplotlib* cannot render, while pgfplots draws
 #: the word cloud, the sankey, the map and every bibliometric view. Reading the wrong list here

@@ -4140,7 +4140,7 @@ def _overlay_options(lang: str) -> dict:
     import pandas as pd
 
     from i18n import set_lang
-    from services.visualizer import VisualizationService
+    from services.charts.visualizer import VisualizationService
 
     frame = pd.DataFrame(
         {
@@ -4177,7 +4177,7 @@ def _concentric_option(lang: str) -> dict:
     import pandas as pd
 
     from i18n import set_lang
-    from services.visualizer import VisualizationService
+    from services.charts.visualizer import VisualizationService
 
     names = ['数字治理', '数据要素', '公共服务', '协同监管', '算法问责', '开放数据']
     years = [2018, 2018, 2019, 2019, 2020, 2020]

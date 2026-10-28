@@ -84,7 +84,7 @@ def report_generate():
     It lands there and nowhere else, which is what makes the export panel's
     download and delete buttons work on it without a second set of routes.
     """
-    from services.report_service import ReportService, build_conclusion_prompt, summarize
+    from services.reports.html import ReportService, build_conclusion_prompt, summarize
 
     data = _json_body()
     if data is None:
@@ -200,9 +200,9 @@ def report_latex():
         return _bad_body()
     run_id = str(data.get('run_id') or '').strip()
     title = str(data.get('title') or '').strip()[:120]
-    from services import latex_report
+    from services.reports import paper
 
-    result = latex_report.generate(run_id, title=title, store=get_run_store(), export_dir=Config.EXPORT_DIR)
+    result = paper.generate(run_id, title=title, store=get_run_store(), export_dir=Config.EXPORT_DIR)
     # The source is registered even when the compiler refused: it is the artifact the reader can
     # act on (paste into their own paper, or run xelatex by hand), and the refusal above would
     # otherwise leave nothing behind but a log line.
@@ -234,7 +234,7 @@ def report_studio_images():
     happens to live in the same folder is not a chart whatever the user clicked.
     """
     from services.exports.browser import list_exports
-    from services.report_service import INLINE_IMAGE_EXT
+    from services.reports.html import INLINE_IMAGE_EXT
 
     rows = [
         {'name': row['name'], 'size': row['size'], 'mtime': row['mtime']}

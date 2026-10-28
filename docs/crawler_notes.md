@@ -1917,8 +1917,8 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 | `analyzers/keyword.py:45` | `== 'tfidf'` else textrank | 跑 TextRank，并把 `method` 列写成用户请求的名字 | 表里声称 TF-IDF，实际是共现图 |
 | `analyzers/emotion.py:130` / `tendency.py:148` | `== 'ml'` else LLM | **走 LLM 逐行** | 拼错 `ML` 就白付一整轮模型调用 |
 | `analyzers/ner.py:179` | `== 'llm'` else regex | 走规则 | 节点写着大模型，实体是正则抽的 |
-| `services/data_analysis.py` `convert_type` | else 分支 | `astype(str)` | 要 int 拿到文本，节点照 done |
-| `services/data_analysis.py` `fill_null` | 字典查不到 | 用字面值填充 | `method='mean'` 把单词 mean 写进每个空格 |
+| `services/analysis/pipeline.py` `convert_type` | else 分支 | `astype(str)` | 要 int 拿到文本，节点照 done |
+| `services/analysis/pipeline.py` `fill_null` | 字典查不到 | 用字面值填充 | `method='mean'` 把单词 mean 写进每个空格 |
 | `data_analysis` 各处 `if column not in df.columns: return df` | — | 整步跳过 | **过滤没生效却绿色**，导出的是没过滤的表 |
 | `drop_null`/`fill_null`/`drop_duplicates` 的列清单 | `[c for c in columns if c in df.columns] or None` | 名单全落空 → 子集为空 → **当成所有列** | 打错一个列名，`任一为空` 删掉远超目标的行 |
 
@@ -2093,7 +2093,7 @@ E       AssertionError: assert 'done' == 'partial'
 
 **顺带量到的一个平台事实**（写下来是因为它会骗测试）：这台机器上 `time.monotonic()` 的
 步进约 16 毫秒——`time.sleep(0.005)` 之后再读，返回值**一模一样**。任何"用真实时钟测一个
-小于 16 毫秒的量"的断言都是掷硬币，`services/net_probe.throughput` 的算术就因此需要注入
+小于 16 毫秒的量"的断言都是掷硬币，`services/ingest/net.throughput` 的算术就因此需要注入
 时钟（`tests/unit/test_net_probe.py::_clock`）才能钉住 kB/s 的算法本身。
 
 ## 种进 profile 的 Cookie，只有带有效期的那部分留得住（measured 2026-09-26，#108）

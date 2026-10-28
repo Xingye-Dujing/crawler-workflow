@@ -17,7 +17,7 @@ from state import add_log
 
 from i18n import t
 from nodes.context import NodeCall
-from services import latex_compile
+from services.charts import pdf
 
 NODE_TYPE = 'compile'
 
@@ -38,7 +38,7 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
     if not docs:
         return {'error': t('wf.compile_no_source')}
     out_name = f'compile-{node.get("id")}.pdf'
-    out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, Config.EXPORT_DIR)
     if 'error' in out:
         # Fold the reason into the returned error so _run_node_durable's single wf.node_failed
         # line carries it; a separate add_log was the duplicate line for one failure.

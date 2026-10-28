@@ -504,7 +504,7 @@ def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | N
     """The adapter entry to call, or '' when this machine has no CatBus.
 
     '' is a reason, not a failure: the CatBus backend then simply is not offered, and it is offered
-    nowhere in the UI either (see ``services/catbus_bridge.py``).
+    nowhere in the UI either (see ``services/ingest/catbus.py``).
     """
     explicit = catbus_entry_at(explicit, system)
     if explicit:

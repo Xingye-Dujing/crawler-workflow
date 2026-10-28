@@ -41,8 +41,8 @@ def _note_window(*args):
 
 
 def _name_parts(*args):
-    """The filename components now live in ``services.crawl_runtime``."""
-    from services.crawl_runtime import name_parts
+    """The filename components now live in ``services.ingest.runtime``."""
+    from services.ingest.runtime import name_parts
 
     return name_parts(*args)
 

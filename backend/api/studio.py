@@ -25,7 +25,7 @@ from stores import _load_dataset, get_run_store
 from api.http import _bad_body, _json_body, _safe_int
 from api.resolution import _durable_node_rows, _resolve_dataframe
 from i18n import t
-from services import latex_compile
+from services.charts import pdf
 
 
 def _read_text(path: str) -> str:
@@ -460,7 +460,7 @@ def studio_save_pdf():
         if os.path.isfile(path):
             docs.append(_read_text(path))
     out_name = re.sub(r'\.txt$', '', name, flags=re.IGNORECASE) + '.pdf'
-    out, staged = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    out, staged = pdf.compile_pdf(pdf.compose_tex(docs), out_name, Config.EXPORT_DIR)
     if 'error' in out:
         return jsonify({'ok': False, 'error': out['error']}), 500
     store.record_file(row['run_id'], str(row.get('node_id') or ''), staged, 'pdf')

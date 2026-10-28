@@ -15,7 +15,7 @@ import pytest
 
 from services.biblio import metrics
 from services.biblio.schema import ENTITY_COLUMNS, ENTITY_REQUIRED, ENTITY_TYPES
-from services.chart_contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES
+from services.charts.contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES
 
 pytestmark = pytest.mark.unit
 

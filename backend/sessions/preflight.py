@@ -40,7 +40,7 @@ from core.config import Config
 
 from crawlers import crawler_class, is_crawlable
 from i18n import t
-from services import catbus_bridge
+from services.ingest import catbus
 from sessions import profiles
 from sessions.cookies import CookieManager
 
@@ -381,7 +381,7 @@ def _probe_catbus(platform: str, account: str = '') -> dict:
     five-minute-old 「没登录」 is exactly the stale verdict that would block a run the user just
     fixed by logging in from a terminal.
     """
-    answer = catbus_bridge.preflight(platform, account)
+    answer = catbus.preflight(platform, account)
     if not answer.get('available') or str(answer.get('verdict') or '') == 'unverifiable':
         # 「问不到」 is not 「没登录」: an unreachable question must not block the run (the same rule
         # the timeout and captcha branches of the browser probe follow). An adapter that answered with

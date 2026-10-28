@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from engine.workflow import WorkflowEngine, effective_workflow
-from services.chart_contracts import BIBLIO_CHART_TYPES
+from services.charts.contracts import BIBLIO_CHART_TYPES
 
 pytestmark = pytest.mark.unit
 

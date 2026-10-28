@@ -9,7 +9,7 @@ half costs it nothing: no profile is claimed, ``driver`` stays ``None``, and no 
 
 **It is written for the backend as a whole, not for one platform.** Which cells exist, what columns a
 cell returns and which of those columns identify a row are all read out of the adapter's own manifest
-(:mod:`services.catbus_bridge`), so the day CatBus maps another site's search, comments or board, the
+(:mod:`services.ingest.catbus`), so the day CatBus maps another site's search, comments or board, the
 panel offers it, the node crawls it and the watermark keys it by that site's own identity column —
 with no branch added in this file. Nothing in this class names a platform: the comment walk asks the
 manifest the same cell question the panel does.
@@ -38,7 +38,7 @@ from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.core.faults import CrawlerStopped
 from i18n import t
-from services import catbus_bridge as bridge
+from services.ingest import catbus as bridge
 
 logger = logging.getLogger(__name__)
 

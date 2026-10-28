@@ -100,9 +100,9 @@ class TestCapabilitiesEndpoint:
         assert body['machine']['windows_desktop'] is (sys.platform.startswith('win')), body['machine']
         # The backend answer is the bridge's own dict, and it travels as status tokens plus catalogue
         # keys and the adapter's own per-cell prose (``reason``) — never invented here.
-        from services import catbus_bridge
+        from services.ingest import catbus
 
-        assert body['backends'] == {'catbus': catbus_bridge.status_payload()}
+        assert body['backends'] == {'catbus': catbus.status_payload()}
         for value in body['backends']['catbus'].values():
             if isinstance(value, str):
                 assert value == '' or '.' in value or value.isidentifier(), value
@@ -114,10 +114,10 @@ class TestCapabilitiesEndpoint:
         list; what this machine can run is this map's answer. A panel that received a sentence here
         would show the same form one language in and another language out.
         """
-        from services import catbus_bridge
+        from services.ingest import catbus
 
         monkeypatch.setattr(
-            catbus_bridge,
+            catbus,
             'status_payload',
             lambda: {
                 'available': True,

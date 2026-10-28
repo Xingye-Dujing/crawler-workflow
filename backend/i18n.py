@@ -2036,7 +2036,7 @@ _ZH = {
     'sched.startFailed': '定时任务「{name}」启动失败，已记入它的历史',
     'sched.missedLine': '定时任务「{name}」错过了一次触发（服务没在运行），已跳过并重排',
     'sched.tickFailed': '定时任务调度出错（这次的检查跳过了，下次照常）',
-    # 第二采集后端 CatBus（services/catbus_bridge.py）：每一句都点名缺的是哪一样。
+    # 第二采集后端 CatBus（services/ingest/catbus.py）：每一句都点名缺的是哪一样。
     # 一个读不到的答案不能变成空表，因为节点会在空表上判定完成。
     'catbus.noNode': '这台机器上没有 Node 运行时，CatBus 后端因此不可用（可用 CIXI_NODE_BIN 指定）',
     'catbus.noCli': (
@@ -4391,7 +4391,7 @@ _EN = {
         'scheduled task "{name}" missed a moment (the server was not running) — skipped and rescheduled'
     ),
     'sched.tickFailed': 'the scheduled-task clock hit an error (this check was skipped; the next one runs)',
-    # The second crawl backend, CatBus (services/catbus_bridge.py). Every sentence names which part
+    # The second crawl backend, CatBus (services/ingest/catbus.py). Every sentence names which part
     # is missing: an answer this side cannot read must never arrive as an empty table, because a node
     # settles DONE on an empty table.
     'catbus.noNode': 'this machine has no Node runtime, so the CatBus backend is unavailable (CIXI_NODE_BIN names one)',

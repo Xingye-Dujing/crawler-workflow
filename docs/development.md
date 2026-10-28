@@ -123,14 +123,10 @@ crawler_workflow/
 │   │   ├── exports/              # 导出目录：writer（多格式写）/ browser（列表·下载·删除的读取侧）
 │   │   ├── analysis/             # 分析域：pipeline（操作执行器）/ params（分析参数）/ process（处理节点矩阵）/ llm（模型上下文）/ lexicon（词表）/ lexicon_store / stats
 │   │   ├── workflows/            # 工作流域：manager（工作流文件）/ history（画布快照）/ reusable（模板）/ expand（展开）/ bundle（项目包）
-│   │   ├── report_service.py     # 一键自包含 HTML 运行报告（内容可定制；PDF 只走 LaTeX 成稿）
-│   │   ├── part_writer.py        # 分批落盘与实时快照（断点安全写）
-│   │   ├── visualizer.py         # 通用可视化服务（Visualize 节点）
-│   │   ├── latex_charts.py       # 图表 → 可编译 LaTeX 图 / booktabs 三线表源码
-│   │   ├── latex_compile.py      # 用本机 MiKTeX xelatex 把 LaTeX 合成为一份并编译成 PDF（编译节点 / 输出 PDF）
-│   │   ├── latex_outputs.py      # Visualize 节点与 /api/visualize/render 共用的 TikZ 图 / 三线表产出网
-│   │   ├── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（抗批量清空与单删）
-│   │   └── net_probe.py          # 分网探测：把「够不到站点」与「站点只是慢」分开，别误判成抓取失败
+│   │   ├── charts/               # 图表域：contracts（图型与列契约）/ visualizer（ECharts）/ tikz（LaTeX 图与三线表）/ pdf（xelatex）/ outputs（图+表产出）
+│   │   ├── reports/              # 报告域：html（自包含 HTML 运行报告）/ paper（论文成稿 article+ctex）
+│   │   ├── ingest/               # 采集运行域：catbus（第二后端桥）/ runtime / lifecycle / net（可达性探测）/ parts（分批落盘）
+│   │   └── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（跨域，刻意留扁平）
 │   └── static/                   # 前端静态文件
 │       ├── index.html
 │       ├── css/style.css

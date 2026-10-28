@@ -63,7 +63,7 @@ def _rows() -> list:
 def _figure(chart_type: str, title: str) -> str:
     import pandas as pd
 
-    from services.latex_charts import LatexChartService as L
+    from services.charts.tikz import LatexChartService as L
 
     return L.to_latex_document(pd.DataFrame(_rows()), chart_type, title=title)
 
@@ -71,7 +71,7 @@ def _figure(chart_type: str, title: str) -> str:
 def _table(chart_type: str, title: str) -> str:
     import pandas as pd
 
-    from services.latex_charts import LatexChartService as L
+    from services.charts.tikz import LatexChartService as L
 
     return L.to_latex_table(pd.DataFrame(_rows()), chart_type, title=title)
 
@@ -111,8 +111,8 @@ def _run_with_charts(app_module, data_root, monkeypatch, *, workflow_name='成�
             'connections': [],
         },
     )
-    monkeypatch.setattr('services.latex_compile.find_xelatex', lambda: 'xelatex')
-    monkeypatch.setattr('services.latex_compile.subprocess.run', _fake_xelatex())
+    monkeypatch.setattr('services.charts.pdf.find_xelatex', lambda: 'xelatex')
+    monkeypatch.setattr('services.charts.pdf.subprocess.run', _fake_xelatex())
     return store, export
 
 
@@ -187,7 +187,7 @@ class TestThePaperDocument:
 
     def test_a_missing_compiler_is_an_error_not_a_broken_file(self, client, app_module, data_root, monkeypatch):
         _store, export = _run_with_charts(app_module, data_root, monkeypatch)
-        monkeypatch.setattr('services.latex_compile.find_xelatex', lambda: '')
+        monkeypatch.setattr('services.charts.pdf.find_xelatex', lambda: '')
         response = client.post('/api/report/latex', json={'run_id': 'run-tex-1'})
         assert response.status_code == 400
         assert not list(export.glob('report-run-tex-1.pdf')), 'nothing half-written survives a refusal'
@@ -199,7 +199,7 @@ class TestTheDocumentItself:
     def test_the_method_lines_come_from_the_biblio_node_that_ran(self, monkeypatch, tmp_path):
         from stores import get_run_store
 
-        from services import latex_report
+        from services.reports import paper
         from services.runs.store import NODE_DONE, RUN_COMPLETED
         from services.workflows.manager import WorkflowManager
 
@@ -223,20 +223,20 @@ class TestTheDocumentItself:
             },
         )
         monkeypatch.setattr(
-            latex_report.WorkflowManager,
+            paper.WorkflowManager,
             'captured_params',
             lambda self, n, i, f: ({'entity_type': 'keyword', 'slice_years': 2, 'link_measure': 'cosine'}, True),
         )
         run = store.get_run('run-meth-1')
-        lines = latex_report._method_lines(run, list(run['nodes']))
+        lines = paper._method_lines(run, list(run['nodes']))
         assert len(lines) == 1
         assert '关键词' in lines[0], lines
         assert 'slice_years=2' in lines[0] and 'link_measure=cosine' in lines[0]
 
     def test_a_run_with_no_method_lines_still_ships_a_document_with_its_provenance(self):
-        from services import latex_report
+        from services.reports import paper
 
-        document = latex_report.build_document(
+        document = paper.build_document(
             # A real source from this project's own LaTeX writer: a body that is not one of its
             # standalone documents is refused rather than pasted in raw (a stray
             # \begin{document} mid-paper would break the compile).
@@ -249,28 +249,28 @@ class TestTheDocumentItself:
         assert 'r-1' in document and '今天' in document
 
     def test_nothing_filed_produces_no_document(self):
-        from services import latex_report
+        from services.reports import paper
 
-        assert latex_report.build_document([], title='t', meta={}, methods=[]) == ''
+        assert paper.build_document([], title='t', meta={}, methods=[]) == ''
 
     def test_the_page_holds_the_widest_body_this_project_writes(self):
         """A figure arrives as a 17.5 cm minipage and a network picture sizes itself to
         ``GRAPH_BOX_CM``. Tighten the margins and every figure silently shrinks its fonts instead of
         its page — so what is under test is the relationship between these numbers, not their values.
         """
-        import services.latex_charts as lc
-        from services import latex_report
+        import services.charts.tikz as lc
+        from services.reports import paper
 
-        assert latex_report.TEXTWIDTH_CM >= latex_report.WIDEST_BODY_CM
-        assert lc.GRAPH_BOX_CM[0] <= latex_report.TEXTWIDTH_CM, 'a figure sized to its box must not need shrinking'
-        assert lc.GRAPH_BOX_CM[1] <= latex_report.TEXTWIDTH_CM, 'the box is stated in both directions'
-        document = latex_report.build_document(
+        assert paper.TEXTWIDTH_CM >= paper.WIDEST_BODY_CM
+        assert lc.GRAPH_BOX_CM[0] <= paper.TEXTWIDTH_CM, 'a figure sized to its box must not need shrinking'
+        assert lc.GRAPH_BOX_CM[1] <= paper.TEXTWIDTH_CM, 'the box is stated in both directions'
+        document = paper.build_document(
             [{'figure': _figure('knowledge_graph', '图一'), 'table': '', 'caption': '图一'}],
             title='标题',
             meta={'workflow': 'wf', 'run_id': 'r-4', 'started': 'a', 'finished': 'b', 'figures': 1, 'tables': 0},
             methods=[],
         )
-        assert f'\\usepackage[a4paper,margin={latex_report.PAGE_MARGIN_CM}cm]{{geometry}}' in document
+        assert f'\\usepackage[a4paper,margin={paper.PAGE_MARGIN_CM}cm]{{geometry}}' in document
         assert '\\usepackage{float}' in document, '[H] comes from float'
 
     def test_a_table_longer_than_a_page_is_blocked_and_continued_not_cut(self):
@@ -278,19 +278,19 @@ class TestTheDocumentItself:
         sheet. It is now cut into page-sized blocks that repeat their header — and every row survives."""
 
         from i18n import t
-        from services import latex_report
-        from services.latex_charts import LatexChartService as L
+        from services.charts.tikz import LatexChartService as L
+        from services.reports import paper
 
         rows = [[f'关键词{i}', i, 1] for i in range(1, 61)]
         table = L._document(L._tabular(['节点', '频次', '度'], rows), 'knowledge_graph', '长表', table=True)
-        document = latex_report.build_document(
+        document = paper.build_document(
             [{'figure': '', 'table': table, 'caption': '长表'}],
             title='标题',
             meta={'workflow': 'wf', 'run_id': 'r-2', 'started': 'a', 'finished': 'b', 'figures': 0, 'tables': 1},
             methods=[],
         )
         blocks = document.count('\\begin{table}[H]')
-        assert blocks == 3, f'60 rows at {latex_report.TABLE_ROWS_PER_BLOCK} a block is three pages, not one'
+        assert blocks == 3, f'60 rows at {paper.TABLE_ROWS_PER_BLOCK} a block is three pages, not one'
         assert f'\\caption*{{长表{t("report.table_suffix")}{t("report.table_continued")}}}' in document
         # One number for one table: the continuation is captioned but never re-numbered.
         assert document.count('\\caption{长表') == 1 and document.count('\\label{tab:cixi-1}') == 1
@@ -301,15 +301,15 @@ class TestTheDocumentItself:
         """The block cutter reads this project's own shape — one row per line, a bold header between
         ``\\toprule`` and ``\\midrule``. A hand-edited .txt in the export folder is not cut up into
         something that no longer compiles."""
-        from services import latex_report
-        from services.latex_charts import LatexChartService as L
+        from services.charts.tikz import LatexChartService as L
+        from services.reports import paper
 
         odd = (
             '{\\footnotesize\n\\begin{tabular}{*{3}{l}}\n\\toprule\n甲 & 乙 & 丙 \\\\\n'
             '\\midrule\n1 & 2 & 3 \\\\ 4 & 5 & 6 \\bottomrule\n\\end{tabular}\n}'
         )
-        assert latex_report._split_table(odd) is None, 'its rows are not one-per-line, so it is not ours'
-        document = latex_report.build_document(
+        assert paper._split_table(odd) is None, 'its rows are not one-per-line, so it is not ours'
+        document = paper.build_document(
             # A real standalone around it: a body this service did not write at all is refused, and
             # that refusal must not be confused with "unparsable table shape".
             [{'figure': '', 'table': L._document(odd, 'knowledge_graph', '手改表', table=True), 'caption': '手改表'}],

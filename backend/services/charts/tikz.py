@@ -30,7 +30,7 @@ from core import machine
 from i18n import t
 from services.biblio.geo import aggregate as geo_aggregate
 from services.biblio.geo import display
-from services.chart_contracts import (
+from services.charts.contracts import (
     BIBLIO_CHART_TYPES,
     OVERLAY_ROW_LIMIT,
     OVERLAY_TABLE_LIMIT,
@@ -38,7 +38,7 @@ from services.chart_contracts import (
     POLARITY_LABELS,
     VARIATION_ROW_LIMIT,
 )
-from services.visualizer import (
+from services.charts.visualizer import (
     ChartConfigError,
     VisualizationService,
     _box_stats,

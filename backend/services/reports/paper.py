@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 
 from i18n import t
-from services.latex_charts import LatexChartService, esc, paper_preamble
+from services.charts.tikz import LatexChartService, esc, paper_preamble
 from services.workflows.manager import WorkflowManager
 
 #: The parameter names a method section quotes, in the order a reader meets them. Values stay the
@@ -382,7 +382,7 @@ def generate(run_id: str, *, title: str, store, export_dir: str) -> dict:
     if not document:
         return {'error': t('report.latex_no_sources', rid=run_id)}
 
-    from services import latex_compile
+    from services.charts import pdf
 
     stem = 'report-' + ''.join(ch for ch in run_id if ch.isalnum())[:12]
     tex_name = f'{stem}.tex'
@@ -391,7 +391,7 @@ def generate(run_id: str, *, title: str, store, export_dir: str) -> dict:
     # compiled is the only thing left to debug from.
     with open(os.path.join(export_dir, tex_name), 'w', encoding='utf-8') as handle:
         handle.write(document)
-    result, name = latex_compile.compile_pdf(document, f'{stem}.pdf', export_dir)
+    result, name = pdf.compile_pdf(document, f'{stem}.pdf', export_dir)
     if result.get('error'):
         return {'error': result['error'], 'tex_file': tex_name}
     return {'pdf_file': name, 'tex_file': tex_name, 'figures': figures, 'tables': tables}

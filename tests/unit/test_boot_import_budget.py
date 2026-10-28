@@ -39,7 +39,7 @@ BOOT_PATH_MODULES = (
     'analyzers/ml_base.py',
     'analyzers/significance.py',
     'services/biblio/cluster.py',
-    'services/visualizer.py',
+    'services/charts/visualizer.py',
 )
 
 

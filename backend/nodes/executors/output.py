@@ -18,7 +18,7 @@ from state import _wf_local, add_log
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label
-from services import latex_compile
+from services.charts import pdf
 from services.exports.writer import DataExporter, UnsupportedFormatError
 from services.runs.files import record_file
 from services.runs.windows import window_for_save
@@ -171,7 +171,7 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
         return {'pdf_file': filename, 'pdf_bytes': size}
     if not docs:
         return {'error': t('wf.compile_no_source')}
-    out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), filename, Config.EXPORT_DIR)
+    out, name = pdf.compile_pdf(pdf.compose_tex(docs), filename, Config.EXPORT_DIR)
     if 'error' in out:
         return out
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))

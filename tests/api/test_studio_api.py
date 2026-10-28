@@ -326,7 +326,7 @@ def fake_xelatex(monkeypatch):
     import os
     from types import SimpleNamespace
 
-    import services.latex_compile as latex_compile
+    import services.charts.pdf as latex_compile
 
     monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
 
@@ -400,7 +400,7 @@ class TestStudioSavePdf:
         assert 'gone-1.txt' in response.get_json()['error']
 
     def test_a_missing_compiler_fails_with_its_own_reason(self, client, data_root, monkeypatch):
-        import services.latex_compile as latex_compile
+        import services.charts.pdf as latex_compile
 
         _register(data_root, 'nofont.txt')
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: '')

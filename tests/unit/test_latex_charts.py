@@ -1,4 +1,4 @@
-"""Tests for services/latex_charts.py — the LaTeX figure / three-line-table generator.
+"""Tests for services/charts/tikz.py — the LaTeX figure / three-line-table generator.
 
 These assert the SOURCE is well-formed and complete (a document shell, the right commands, every
 data value present, TeX specials escaped, Chinese preserved, a crowded category axis thinned rather
@@ -12,10 +12,10 @@ import json
 import pandas as pd
 import pytest
 
-import services.latex_charts as lc
-from services.chart_contracts import BIBLIO_CHART_TYPES
-from services.latex_charts import LatexChartService as L
-from services.visualizer import CHART_TYPES, LATEX_UNBUILDABLE_TYPES, ChartConfigError
+import services.charts.tikz as lc
+from services.charts.contracts import BIBLIO_CHART_TYPES
+from services.charts.tikz import LatexChartService as L
+from services.charts.visualizer import CHART_TYPES, LATEX_UNBUILDABLE_TYPES, ChartConfigError
 
 pytestmark = pytest.mark.unit
 

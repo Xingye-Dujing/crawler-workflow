@@ -1,4 +1,4 @@
-"""Tests for services/report_service.py — the one-click HTML report.
+"""Tests for services/reports/html.py — the one-click HTML report.
 
 A report is a document someone else reads, and its content is text crawled off
 the internet, so the properties that matter are not layout details:
@@ -18,7 +18,7 @@ import re
 import pytest
 
 from services.exports.browser import REPORT_PREFIX, resolve_report_path
-from services.report_service import (
+from services.reports.html import (
     MAX_CHARTS,
     MAX_TABLE_ROWS,
     ReportService,
@@ -212,7 +212,7 @@ class TestDocument:
         assert '不足以出图' in markup
 
     def test_a_failing_chart_costs_a_line_and_not_the_report(self, service, monkeypatch):
-        from services import visualizer
+        from services.charts import visualizer
 
         def boom(*_args, **_kwargs):
             raise RuntimeError('matplotlib said no')
@@ -332,7 +332,7 @@ class TestCustomization:
     def test_a_runaway_row_cap_is_clamped_not_followed(self, service):
         # One node's whole table as markup is a document no one can open; the
         # cap is a ceiling the writer enforces whatever the body claims.
-        from services.report_service import MAX_TABLE_ROWS_CAP, _normalize_options
+        from services.reports.html import MAX_TABLE_ROWS_CAP, _normalize_options
 
         assert _normalize_options({'max_rows': 999999}).max_rows == MAX_TABLE_ROWS_CAP
         assert _normalize_options({'max_rows': 0}).max_rows == 1

@@ -1,6 +1,6 @@
 """The CatBus session object, driven without CatBus.
 
-Everything here goes through :mod:`services.catbus_bridge`'s own seam: the fake answers with
+Everything here goes through :mod:`services.ingest.catbus`'s own seam: the fake answers with
 ``Outcome`` objects, so each case states what this project does with an adapter answer — which rows
 reach the ledger, which refusal raises, which flag is deliberately never latched. The real subprocess
 boundary is ``test_catbus_bridge.py``'s business; a real crawl is ``live_quick``'s.
@@ -12,7 +12,7 @@ from crawlers.backends import catbus as catbus_module
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped
 from i18n import platform_label
-from services import catbus_bridge as bridge
+from services.ingest import catbus as bridge
 
 
 def outcome(**fields):

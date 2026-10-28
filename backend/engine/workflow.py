@@ -14,7 +14,7 @@ from sessions.cookies import CookieManager
 from i18n import t
 from services.biblio.fuse import collect_errors as fuse_param_errors
 from services.biblio.schema import collect_errors as biblio_param_errors
-from services.chart_contracts import NO_X_TYPES
+from services.charts.contracts import NO_X_TYPES
 
 logger = logging.getLogger(__name__)
 

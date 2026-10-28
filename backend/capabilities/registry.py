@@ -75,15 +75,15 @@ def has_platform(platform: str) -> bool:
 
 
 def _catbus_status() -> dict:
-    from services import catbus_bridge
+    from services.ingest import catbus
 
-    return catbus_bridge.status_payload()
+    return catbus.status_payload()
 
 
 def _catbus_platforms() -> dict:
-    from services import catbus_bridge
+    from services.ingest import catbus
 
-    return catbus_bridge.manifest_platforms()
+    return catbus.manifest_platforms()
 
 
 def catbus_platform_ids() -> tuple[str, ...]:
@@ -250,12 +250,12 @@ def catbus_run_errors(platform: str, mode_key: str) -> list[str]:
     an LLM step or a queue turn has been paid for is a refusal that cost the user the run. The caller
     wraps each detail in ``engine.source_catbus`` so the node is named once, not twice.
     """
-    from services import catbus_bridge
+    from services.ingest import catbus
 
-    info = catbus_bridge.probe()
+    info = catbus.probe()
     if not info.available:
         return [t(info.reason_key, **info.reason_params)]
-    state, why = catbus_bridge.mode_state(platform, mode_key)
+    state, why = catbus.mode_state(platform, mode_key)
     if state in ('available', 'partial'):
         return []
     label = str((_catbus_platforms().get(platform) or {}).get('label') or platform)
@@ -314,9 +314,9 @@ def needs_session(platform: str, mode_key: str, backend: str = BACKEND_SELENIUM)
     """
     backend = str(backend or BACKEND_SELENIUM).strip().lower()
     if backend == BACKEND_CATBUS:
-        from services import catbus_bridge
+        from services.ingest import catbus
 
-        return catbus_bridge.needs_session(platform, mode_key)
+        return catbus.needs_session(platform, mode_key)
     mode = mode_for(platform, mode_key, backend)
     return True if mode is None else bool(mode.needs_session)
 
@@ -385,9 +385,9 @@ def mode_for(platform: str, mode_key: str, backend: str = BACKEND_SELENIUM) -> M
 
 
 def _catbus_runnable(platform: str, mode_key: str) -> bool:
-    from services import catbus_bridge
+    from services.ingest import catbus
 
-    return catbus_bridge.supports(platform, mode_key)
+    return catbus.supports(platform, mode_key)
 
 
 def requested_mode_key(node: dict) -> str:

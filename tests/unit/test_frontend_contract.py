@@ -38,7 +38,7 @@ from services.biblio.schema import (
     PRUNING_SCOPES,
     SELECTION_MODES,
 )
-from services.chart_contracts import BIBLIO_CHART_TYPES
+from services.charts.contracts import BIBLIO_CHART_TYPES
 
 pytestmark = pytest.mark.unit
 

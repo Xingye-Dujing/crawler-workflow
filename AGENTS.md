@@ -29,10 +29,10 @@ change is judged on all three, not on the machine it was typed on. Why/evidence:
 - **`desktop/` is the ONE deliberate Windows-only tree** (PyInstaller/UPX/Inno). Its Windows facts stay there and
   must not leak into `backend/`; the packaged EXE is judged on Windows alone.
 - **Machine-level lookups are per-OS in one place.** Chrome / xelatex / **Node + the CatBus adapter**
-  candidates are tables keyed by the running OS in `core/machine.py` and `services/latex_compile.py`,
+  candidates are tables keyed by the running OS in `core/machine.py` and `services/charts/pdf.py`,
   and they are joined with the TARGET's separator (`ntpath`/`posixpath`) so a Windows test can ask what a
   Linux box would find. The CJK font stack and the ctex font set carry each OS's own names in
-  `services/visualizer.py` and `services/latex_charts.py`. `CHROME_BIN`/`CHROME_PATH` remain the explicit
+  `services/charts/visualizer.py` and `services/charts/tikz.py`. `CHROME_BIN`/`CHROME_PATH` remain the explicit
   override (`CIXI_NODE_BIN`/`NODE_BIN`, `CIXI_CATBUS_CLI`/`CATBUS_CLI`/`CATBUS_HOME` the adapter's). Never
   inline a `Program Files` path, a `.exe` name or a `taskkill` anywhere else.
 - **A `Popen` keyword that only exists on one OS belongs in `utils/procs`.** `windowsHide` is not a
@@ -168,7 +168,7 @@ the contract.
 - **The crawl backend is part of a node's identity.** `backend` (`selenium` / `catbus`) is keyed into the node
   fingerprint with `selenium`/blank **folded out** (the `account`/`model` precedent — unfolded, adding the switch
   would move every saved canvas's fingerprint and 继续 would re-crawl the whole library), so the two backends never
-  share a dedupe ledger, a cursor or a watermark scope. CatBus is a subprocess (`services/catbus_bridge.py`,
+  share a dedupe ledger, a cursor or a watermark scope. CatBus is a subprocess (`services/ingest/catbus.py`,
   `crawlers/backends/catbus.py`): which cells exist, which columns a row has and which column is its identity are read out of
   the adapter's own `capabilities` manifest — **never copied into a Python table**; and every failure names the
   missing part (no Node / no adapter / Node too old / unreadable manifest / no such cell / no CatBus login) rather

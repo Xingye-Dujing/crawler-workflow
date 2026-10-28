@@ -8,7 +8,7 @@ otherwise read as a broken test, and a test that reaches the internet on the fai
 path is a test that takes ten seconds to say nothing.
 
 Every case below therefore replaces one of the module's own two primitives
-(:func:`net_probe.reachable` / :func:`net_probe.throughput`) or the socket underneath
+(:func:`net.reachable` / :func:`net.throughput`) or the socket underneath
 them, and what is asserted is the *classification*, which is the part a message quotes.
 """
 
@@ -17,7 +17,7 @@ import socket
 
 import pytest
 
-from services import net_probe
+from services.ingest import net
 
 pytestmark = pytest.mark.unit
 
@@ -86,7 +86,7 @@ class FakeSession:
 
 
 def _chunks(total_bytes, size=None):
-    size = size or net_probe.SPEED_CHUNK
+    size = size or net.SPEED_CHUNK
     out = []
     remaining = total_bytes
     while remaining > 0:
@@ -111,10 +111,10 @@ class TestReachingAHost:
             opened.append(addr)
             return _Socket()
 
-        monkeypatch.setattr(net_probe.socket, 'create_connection', connect)
-        assert net_probe.reachable('www.baidu.com') == 'ok'
-        assert opened == [('www.baidu.com', net_probe.CONTROL_PORT)]
-        assert net_probe.CONTROL_TIMEOUT <= 3.0, 'a control host may not cost the run a long wait'
+        monkeypatch.setattr(net.socket, 'create_connection', connect)
+        assert net.reachable('www.baidu.com') == 'ok'
+        assert opened == [('www.baidu.com', net.CONTROL_PORT)]
+        assert net.CONTROL_TIMEOUT <= 3.0, 'a control host may not cost the run a long wait'
 
     @pytest.mark.parametrize(
         ('error', 'word'),
@@ -131,18 +131,18 @@ class TestReachingAHost:
         def raise_it(_addr, timeout=None):
             raise error
 
-        monkeypatch.setattr(net_probe.socket, 'create_connection', raise_it)
-        assert net_probe.reachable('example.com') == word
+        monkeypatch.setattr(net.socket, 'create_connection', raise_it)
+        assert net.reachable('example.com') == word
 
     def test_a_tls_failure_is_named_apart_from_a_refused_port(self):
         """Both mean the host answered, which is a different sentence to read than 'no route'."""
         import ssl
 
-        assert net_probe._classify(ssl.SSLError('handshake failure')) == 'tls_blocked'
+        assert net._classify(ssl.SSLError('handshake failure')) == 'tls_blocked'
 
     def test_the_unreachable_errno_list_covers_both_platform_spellings(self):
         for errno in (51, 101, 10051, 10065):
-            assert net_probe._classify(OSError(errno, 'no route')) == 'no_route', errno
+            assert net._classify(OSError(errno, 'no route')) == 'no_route', errno
 
 
 class TestTheSpeedSample:
@@ -150,45 +150,45 @@ class TestTheSpeedSample:
         """The bug this pins: ``throughput`` reached for a module global that only a
         helper creates, so the first real call was a ``NameError`` on the failure path —
         the one path where a probe is allowed to be asked at all."""
-        session = FakeSession(FakeResponse(_chunks(net_probe.SPEED_MIN_BYTES * 4)))
-        monkeypatch.setattr(net_probe, '_session', lambda: session)
-        monkeypatch.setattr(net_probe.time, 'monotonic', _clock([0.0, 0.5, 1.0]))
-        read = net_probe.SPEED_MIN_BYTES * 4
-        assert net_probe.throughput() == int(read / 1.0 / 1024)
+        session = FakeSession(FakeResponse(_chunks(net.SPEED_MIN_BYTES * 4)))
+        monkeypatch.setattr(net, '_session', lambda: session)
+        monkeypatch.setattr(net.time, 'monotonic', _clock([0.0, 0.5, 1.0]))
+        read = net.SPEED_MIN_BYTES * 4
+        assert net.throughput() == int(read / 1.0 / 1024)
         assert len(session.calls) == 1, 'the sample was not taken through the session'
 
     def test_a_response_that_is_not_a_200_is_not_a_measurement(self, monkeypatch):
-        monkeypatch.setattr(net_probe, '_session', lambda: FakeSession(FakeResponse([], status=404)))
-        assert net_probe.throughput() is None
+        monkeypatch.setattr(net, '_session', lambda: FakeSession(FakeResponse([], status=404)))
+        assert net.throughput() is None
 
     def test_a_handful_of_bytes_is_reported_as_no_number_at_all(self, monkeypatch):
         """Below the floor the figure is handshake, and a message quoting it would be a
         measurement of the probe rather than of the user's line."""
-        monkeypatch.setattr(net_probe, '_session', lambda: FakeSession(FakeResponse([b'x' * 64])))
-        monkeypatch.setattr(net_probe.time, 'monotonic', _clock([0.0, 0.5, 1.0]))
-        assert net_probe.throughput() is None
+        monkeypatch.setattr(net, '_session', lambda: FakeSession(FakeResponse([b'x' * 64])))
+        monkeypatch.setattr(net.time, 'monotonic', _clock([0.0, 0.5, 1.0]))
+        assert net.throughput() is None
 
     def test_a_line_that_refuses_to_be_measured_is_none_and_not_an_error(self, monkeypatch):
-        monkeypatch.setattr(net_probe, '_session', lambda: FakeSession(error=TimeoutError('stalled')))
-        assert net_probe.throughput() is None
+        monkeypatch.setattr(net, '_session', lambda: FakeSession(error=TimeoutError('stalled')))
+        assert net.throughput() is None
 
     def test_the_connection_is_released_even_when_the_window_ends_mid_body(self, monkeypatch):
         """The window is what keeps the probe cheap, and an abandoned streaming response
         is a leaked socket on exactly the path that runs repeatedly."""
-        response = FakeResponse(_chunks(net_probe.SPEED_MIN_BYTES * 8))
-        monkeypatch.setattr(net_probe, '_session', lambda: FakeSession(response))
-        monkeypatch.setattr(net_probe.time, 'monotonic', _clock([0.0, 1.0, 2.0, 3.0]))
-        assert net_probe.throughput(window=1.0) is not None
+        response = FakeResponse(_chunks(net.SPEED_MIN_BYTES * 8))
+        monkeypatch.setattr(net, '_session', lambda: FakeSession(response))
+        monkeypatch.setattr(net.time, 'monotonic', _clock([0.0, 1.0, 2.0, 3.0]))
+        assert net.throughput(window=1.0) is not None
         assert response.closed is True
 
     def test_the_shared_session_is_built_once_and_closed_at_exit(self, monkeypatch):
         import atexit
 
         made = []
-        monkeypatch.setattr(net_probe, '_SPEED_SESSION', None)
+        monkeypatch.setattr(net, '_SPEED_SESSION', None)
         monkeypatch.setattr(atexit, 'register', lambda *args, **kwargs: made.append(args[0]))
-        first = net_probe._session()
-        assert net_probe._session() is first, 'every diagnosis paid for a fresh TLS handshake'
+        first = net._session()
+        assert net._session() is first, 'every diagnosis paid for a fresh TLS handshake'
         assert made, 'the pool outlived the run with no way back'
 
 
@@ -207,31 +207,31 @@ class TestNamingTheHost:
     def test_a_matrix_domain_and_a_full_address_ask_the_same_question(self, given, host):
         """The port belongs to the page; this asks only whether the host is routable, so
         an address carrying :8123 must not become a probe of a port nobody serves."""
-        assert net_probe._host_of(given) == host
+        assert net._host_of(given) == host
 
 
 class TestTheClassification:
     """``diagnose`` is the only place the four control readings become one word."""
 
     def _wire(self, monkeypatch, states, speed=None, platform=''):
-        def fake_reachable(host, port=net_probe.CONTROL_PORT, timeout=net_probe.CONTROL_TIMEOUT):
+        def fake_reachable(host, port=net.CONTROL_PORT, timeout=net.CONTROL_TIMEOUT):
             if host == platform and platform:
                 return states.get('platform', 'ok')
             return states.get(host, 'ok')
 
-        monkeypatch.setattr(net_probe, 'reachable', fake_reachable)
-        monkeypatch.setattr(net_probe, 'throughput', lambda window=net_probe.SPEED_WINDOW: speed)
+        monkeypatch.setattr(net, 'reachable', fake_reachable)
+        monkeypatch.setattr(net, 'throughput', lambda window=net.SPEED_WINDOW: speed)
 
     def test_both_sides_dead_is_the_machine_not_the_network_choice(self, monkeypatch):
-        self._wire(monkeypatch, {net_probe.CONTROLS['cn']: 'unresolved', net_probe.CONTROLS['overseas']: 'unresolved'})
-        assert net_probe.diagnose('cn')['verdict'] == 'offline'
+        self._wire(monkeypatch, {net.CONTROLS['cn']: 'unresolved', net.CONTROLS['overseas']: 'unresolved'})
+        assert net.diagnose('cn')['verdict'] == 'offline'
 
     def test_the_other_side_alive_is_a_region_problem(self, monkeypatch):
         self._wire(
             monkeypatch,
-            {net_probe.CONTROLS['cn']: 'unresolved', net_probe.CONTROLS['overseas']: 'ok'},
+            {net.CONTROLS['cn']: 'unresolved', net.CONTROLS['overseas']: 'ok'},
         )
-        answer = net_probe.diagnose('cn')
+        answer = net.diagnose('cn')
         assert answer['verdict'] == 'region'
         assert answer['side'] == 'cn'
 
@@ -241,14 +241,14 @@ class TestTheClassification:
         def reach(host, **kwargs):
             return 'refused' if host == 'www.bilibili.com' else 'ok'
 
-        monkeypatch.setattr(net_probe, 'reachable', reach)
-        assert net_probe.diagnose('cn', 'www.bilibili.com')['verdict'] == 'blocked'
+        monkeypatch.setattr(net, 'reachable', reach)
+        assert net.diagnose('cn', 'www.bilibili.com')['verdict'] == 'blocked'
 
     def test_everything_routing_is_called_slow_and_says_so(self, monkeypatch):
         """The honest answer, which is that nothing was found: the message that follows
         this word may not name a cause."""
         self._wire(monkeypatch, {}, speed=2048)
-        answer = net_probe.diagnose('cn', 'www.bilibili.com')
+        answer = net.diagnose('cn', 'www.bilibili.com')
         assert answer['verdict'] == 'slow'
         assert answer['speed_kbps'] == 2048
 
@@ -260,38 +260,38 @@ class TestTheClassification:
             asked.append(host)
             return 'ok'
 
-        monkeypatch.setattr(net_probe, 'reachable', spy)
-        monkeypatch.setattr(net_probe, 'throughput', lambda **kw: 100)
-        assert net_probe.diagnose('cn', '')['verdict'] == 'slow'
-        assert asked == [net_probe.CONTROLS['cn'], net_probe.CONTROLS['overseas']]
+        monkeypatch.setattr(net, 'reachable', spy)
+        monkeypatch.setattr(net, 'throughput', lambda **kw: 100)
+        assert net.diagnose('cn', '')['verdict'] == 'slow'
+        assert asked == [net.CONTROLS['cn'], net.CONTROLS['overseas']]
 
     def test_an_unparseable_platform_leads_to_no_block_claim(self, monkeypatch):
         self._wire(monkeypatch, {}, platform='')
-        assert net_probe.diagnose('cn', '::::')['verdict'] == 'slow'
+        assert net.diagnose('cn', '::::')['verdict'] == 'slow'
 
     def test_a_speed_is_only_offered_when_the_line_could_be_read(self, monkeypatch):
-        self._wire(monkeypatch, {net_probe.CONTROLS['cn']: 'timed_out', net_probe.CONTROLS['overseas']: 'timed_out'})
-        answer = net_probe.diagnose('cn')
+        self._wire(monkeypatch, {net.CONTROLS['cn']: 'timed_out', net.CONTROLS['overseas']: 'timed_out'})
+        answer = net.diagnose('cn')
         assert answer['verdict'] == 'offline'
         assert answer['speed_kbps'] is None, 'the dead line was charged a measurement'
 
     def test_an_unknown_region_is_answered_as_the_domestic_side(self, monkeypatch):
         """The matrix's own default is ``cn``; a probe asked about a region it does not
         know must not pick the overseas controls and report a block that is not there."""
-        self._wire(monkeypatch, {net_probe.CONTROLS['overseas']: 'unresolved'})
-        assert net_probe.diagnose('mars')['side'] == 'cn'
+        self._wire(monkeypatch, {net.CONTROLS['overseas']: 'unresolved'})
+        assert net.diagnose('mars')['side'] == 'cn'
 
     def test_the_detail_quotes_every_host_it_asked(self, monkeypatch):
         """The sentence is advice; the detail is the evidence, and a user who disagrees
         with the advice has to be able to see what was measured."""
         self._wire(monkeypatch, {}, platform='www.douyin.com')
-        monkeypatch.setattr(net_probe, 'reachable', lambda host, **kw: 'refused' if host == 'www.douyin.com' else 'ok')
-        detail = net_probe.diagnose('cn', 'https://www.douyin.com/hot')['detail']
+        monkeypatch.setattr(net, 'reachable', lambda host, **kw: 'refused' if host == 'www.douyin.com' else 'ok')
+        detail = net.diagnose('cn', 'https://www.douyin.com/hot')['detail']
         assert 'www.baidu.com=ok' in detail and 'www.google.com=ok' in detail and 'www.douyin.com=refused' in detail
 
     def test_the_control_hosts_are_the_two_sides_and_not_the_platform_itself(self):
         """A platform's own outage would otherwise be reported as the network's fault,
         which is the one confusion this module was written to avoid."""
-        assert set(net_probe.CONTROLS) == {'cn', 'overseas'}
-        assert net_probe.CONTROLS['cn'] != net_probe.CONTROLS['overseas']
-        assert not any('douyin' in host or 'weibo' in host for host in net_probe.CONTROLS.values())
+        assert set(net.CONTROLS) == {'cn', 'overseas'}
+        assert net.CONTROLS['cn'] != net.CONTROLS['overseas']
+        assert not any('douyin' in host or 'weibo' in host for host in net.CONTROLS.values())

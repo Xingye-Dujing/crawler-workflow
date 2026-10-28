@@ -63,7 +63,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     # snapshot (atomic tmp+replace — an opened file is never half-written).
     live_writer = None
     if as_bool((node.get('params') or {}).get('live_export')):
-        from services.part_writer import SnapshotWriter, safe_stem
+        from services.ingest.parts import SnapshotWriter, safe_stem
 
         stem = safe_stem(f'{execution_state.get("workflow_name") or "llm"}-{node_id}')
         lfmt = 'json' if str((node.get('params') or {}).get('format') or 'csv') == 'json' else 'csv'

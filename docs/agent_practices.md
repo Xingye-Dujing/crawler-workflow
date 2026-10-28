@@ -949,7 +949,7 @@ message.
 - **Two frontend-adjacent traps found by the same move:** `services/biblio/cluster.py:111`'s return annotation
   `tuple[TfidfVectorizer, …]` is evaluated at `def` time, so the class has to be quoted *and* kept visible to
   readers (`if TYPE_CHECKING:` — ruff calls an unquoted string to a function-local import `F821`); and in
-  `services/visualizer.py`, `matplotlib.use('Agg')` plus the CJK `rcParams` block must travel **with** the import
+  `services/charts/visualizer.py`, `matplotlib.use('Agg')` plus the CJK `rcParams` block must travel **with** the import
   into one helper, because splitting them is how a server gains a window or a figure of tofu boxes instead of Chinese
   labels.
 - **The desktop self-check was sitting between picking the port and binding it.** Four filesystem probes and a TCP
@@ -1189,7 +1189,7 @@ message.
 - **Two answers to one machine-level question is the defect.** The launcher kept its own Chrome candidate
   list, its own MiKTeX scan, and a hardcoded `127.0.0.1:11434` — so a user who set 「设置 → Ollama 地址」 to
   another machine read "Ollama 未检测到" one line before the app answered from that daemon. Both now call
-  `core/machine.py` / `services/latex_compile.find_xelatex()`.
+  `core/machine.py` / `services/charts/pdf.find_xelatex()`.
 - **A default that points at a file which does not exist is a wrong default.** `Config.DRIVER_PATH` was
   `C:\Program Files\Google\Chrome\Application\chromedriver.exe`; almost nothing installs a driver there, and
   Selenium then dies with `The path is not a valid file`, naming a path the user never typed. Blank means
@@ -1339,7 +1339,7 @@ a real defect on at least one of the three, not a style preference. The rules ar
   classify the failure (1 unclassified / 2 usage-unsupported / 3 login / 4 not-implemented / 5 risk control /
   6 network / 7 upstream), and a `capabilities` command that answers 平台 × 模式 in machine-readable form.
   Porting those eleven platform clients into Python would be a second implementation to keep in step with
-  a project that is moving; the boundary is one file (`services/catbus_bridge.py`) and the contract is
+  a project that is moving; the boundary is one file (`services/ingest/catbus.py`) and the contract is
   documented in the CatBus repository's own `docs/crawler-workflow.md`.
 - **Why the manifest is read and never copied.** A local table of "what CatBus supports" would be the
   second opinion the frontend rule exists to stop: the day the adapter drops a cell, a copied table keeps
