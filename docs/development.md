@@ -140,6 +140,7 @@ crawler_workflow/
 │           ├── workflow.js       # 执行、文件管理、全部对话框
 │           ├── chart-preview.js  # 图表调色板/标签避让、预览面板与 LaTeX 工具条、按年份回放、全屏窗口
 │           ├── capabilities.js   # 采集矩阵、机器判定、已注册微调模型：三份取数与其问答
+│           ├── panels/           # 从 workflow.js 搬出的整块面板：cookies（登录对话框与已存登录）、source-help（导出指引）
 │           ├── reusable.js       # 可复用节点：模板展开、折叠呈现、状态汇总、解包
 │           ├── node-types.js     # 服务端节点目录：类型、词条、种子；失败点名并保留冷页兜底
 │           ├── menu.js           # 顶栏菜单状态

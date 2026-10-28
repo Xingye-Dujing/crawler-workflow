@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const SPLIT_OF = {
-    'workflow.js': ['chart-preview.js', 'capabilities.js'],
+    'workflow.js': ['chart-preview.js', 'capabilities.js', 'panels/cookies.js', 'panels/source-help.js'],
 };
 
 /** `names` plus every companion of the modules it names (for `loadPageScripts`'s `only`). */

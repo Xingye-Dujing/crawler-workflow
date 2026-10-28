@@ -23,12 +23,14 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourcesWithCompanions } from './companions.mjs';
 
-const modules = process.argv.slice(2).map((p) => ({ path: p, src: fs.readFileSync(p, 'utf8') }));
-/* One dock rule is read out of app.js's OWN text, so the list keeps where each source came from.
-   Nothing is addressed by index: app.js's catalogue files are part of this list (see
-   tests/frontend_catalogue.py::with_catalogue), and a positional read would grab the wrong file. */
-const appSrc = modules.find((m) => /(^|[\\/])app\.js$/.test(m.path)).src;
+/* Every module the driver named, in the order it named them, each followed by the files split out
+   of it (see companions.mjs) — the cookie panel now lives in its own file, and this harness drives
+   its dock. One dock rule is read out of app.js's OWN text, so its source is found by name. */
+const paths = process.argv.slice(2);
+const sources = sourcesWithCompanions(paths);
+const appSrc = fs.readFileSync(paths.find((p) => /(^|[\\/])app\.js$/.test(p)), 'utf8');
 
 const sandbox = {
     ...baseSandbox(),
@@ -37,7 +39,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-for (const m of modules) vm.runInContext(m.src, sandbox);
+for (const code of sources) vm.runInContext(code, sandbox);
 
 const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel', 'biblio-panel'];
 

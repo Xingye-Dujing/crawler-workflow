@@ -74,7 +74,7 @@ class TestTheOverlayIsBuiltLikeTheOthers:
         canvas = _js('canvas.js')
         escape_block = canvas[canvas.index("if (e.key === 'Escape')") : canvas.index("if (e.key === 'Escape')") + 700]
         assert 'closeSourceHelp' in escape_block, 'Escape closes the cheat sheet; this overlay is the same kind'
-        assert 'if (event.target === box) self.close();' in _js('workflow.js'), (
+        assert 'if (event.target === box) self.close();' in _js('panels/source-help.js'), (
             'a click inside the sheet must not close it'
         )
 
@@ -100,12 +100,12 @@ class TestTheOverlayIsBuiltLikeTheOthers:
                 assert key in bodies[lang], f'{key} missing from the {lang} catalogue'
         # A defined word nobody asks for is a dead key; a word asked for nobody defined is a
         # raw string on screen. Both directions are checked, from the same literal list.
-        asked = _js('workflow.js') + _js('app.js') + _markup()
+        asked = _js('workflow.js') + _js('panels/source-help.js') + _js('app.js') + _markup()
         for key in GUIDE_KEYS:
             assert f"'{key}'" in asked or f'data-i18n="{key}"' in asked, f'{key} is defined but never asked for'
         # The group headings are a literal map, not a spliced key: the audits only see literals.
         assert "GROUP_KEYS = { library: 'sourceHelp.groupLibrary', exchange: 'sourceHelp.groupExchange' }" in _js(
-            'workflow.js'
+            'panels/source-help.js'
         )
 
     def test_the_page_still_lists_the_bibliographic_extensions_before_any_request(self):
@@ -119,7 +119,7 @@ class TestTheOverlayIsBuiltLikeTheOthers:
 
 def placed_display_free() -> bool:
     """The toggle only adds/removes a class; a `style.display` write would outrank the stylesheet."""
-    source = _js('workflow.js')
+    source = _js('panels/source-help.js')
     block = source[source.index('var sourceHelp = {') : source.index('function toggleSourceHelp()')]
     return 'style.display' not in block
 

@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 22 | 26,345 | `workflow.js` **11,739** · `canvas.js` 3,893 · `app.js` 1,450 · `chart-preview.js` 973 · `capabilities.js` 336 · `i18n/` 9 份共 4,009 |
+| `backend/static/js/` | 24 | 26,365 | `workflow.js` **10,614** · `canvas.js` 3,893 · `app.js` 1,450 · `chart-preview.js` 973 · `panels/cookies.js` 970 · `capabilities.js` 336 · `panels/source-help.js` 175 · `i18n/` 9 份共 4,009 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -986,10 +986,28 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     - **扫描随事实搬家**（这次只有一处）：`test_platform_rules` 的 `cap.requires*` 词表改读 `capabilities.js`。
     - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档（真 Chrome + 真 Ollama + 真 CatBus）
       **194 passed / 0 跳过**；`ruff check` + `format --check`（532 文件）全绿；`node --check` 二十个改动的 JS 全过。
-  - **Stage 8 剩余**：`panels/cookies` → `panels/runs`（含 `runLogViewer`）→ `panels/biblio` → 各面板 →
-    `settings.js`，见 `docs/frontend_modules.md` §3。再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
-    #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js` 11,739、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
+  - **Stage 8 第五刀（`panels/cookies.js` + `panels/source-help.js`）已完成（2026-10-28）**：
+    `workflow.js` **11,740 → 10,614 行**，新 `panels/cookies.js` **970 行**（登录对话框、单飞登录任务轮询、
+    已存登录停靠表、账号候选）与 `panels/source-help.js` **175 行**（导出指引浮层）。
+    - **连续切片会把夹在中间的东西一起带走**：cookie 那段是一整片，而导出指引恰好落在其中。第一刀把
+      1,125 行整段搬出后，`test_frontend_source_help_js` 立刻以「点击浮层内部不得关闭」变红 ——
+      于是第二刀把指引切到自己的文件（两个脚本都按行切片并核对分区，`node --check` 通过）。
+      **教训：切片边界要按「这一片里到底有哪些顶层声明」核过，而不是只看首尾标记。**
+    - 两件都进 `SPLIT_OF`；`harness_panels` 改用 `sourcesWithCompanions`（它驱动 cookie 停靠表）。
+    - **三处扫描随事实搬家**：cookie 删除对话框调用点、指引的 `GROUP_KEYS`/`style.display`、
+      矩阵 action 存在性（改为扫整棵 `js/`）；**死键审计的 JS 面改成 `rglob` 并排除 `i18n/`**
+      （原来只扫 `js/*.js`，搬进 `js/panels/` 的词会被当成无人使用）。
+    - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档 **194 passed / 0 跳过**；
+      ruff check + format（532 文件）全绿；`node --check` 全过。
+  - **本机环境事实（2026-10-28，下一场会用到）**：Selenium Manager **下载不了 chromedriver**
+    （`NoSuchDriverException`），设备档会在客户端夹具上挂到 `--timeout`；本机 Chrome 148 自带
+    `C:\Program Files\Google\Chrome\Application\chromedriver.exe`，用
+    `CIXI_DRIVER_PATH="C:/Program Files/Google/Chrome/Application/chromedriver.exe"` 跑设备档即 **194 passed**。
+    `CIXI_DRIVER_PATH` 是文档里的显式覆盖，不是绕过检查。
+  - **Stage 8 剩余**：`panels/runs` → `panels/biblio` → 各面板 → `settings.js`，见 `docs/frontend_modules.md` §3。
+    再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、#40 = 仍 >900 行模块的按职责拆分
+    （`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
+    `static/js/workflow.js` 10,614、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

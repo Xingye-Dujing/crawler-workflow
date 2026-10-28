@@ -200,7 +200,8 @@ class TestJsCallSitePlaceholders:
 
     def test_the_dialog_that_shipped_a_raw_placeholder_is_filled_through_the_formatter(self):
         """The exact regression, pinned at the call site rather than only by the scan."""
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        # The cookie dialog lives in its own module since the Stage 8 split.
+        source = (JS_DIR / 'panels' / 'cookies.js').read_text(encoding='utf-8')
         # The account is a PARAMETER of the delete now (a management row deletes its own
         # login, not whatever is typed), so the pinned line names the argument it forwards.
         # What may not regress is that the dialog is told WHICH session is about to go.
@@ -301,10 +302,11 @@ def _app_surfaces():
     app_text = whole[:start] + whole[stop:]
     other_js = '\n'.join(
         p.read_text(encoding='utf-8')
-        for p in sorted(JS_DIR.glob('*.js'))
-        # ``js/i18n/*.js`` is declaration only (``glob`` is not recursive, so they are not here);
-        # counting a domain file as a use of its own keys would report nothing dead, ever.
-        if p.name != 'app.js'
+        for p in sorted(JS_DIR.rglob('*.js'))
+        # ``js/i18n/*.js`` is declaration only: counting a domain file as a use of its own keys would
+        # report nothing dead, ever. Every other module — subdirectories included, because the panels
+        # have been moving into ``js/panels/`` — is a surface that really asks for words.
+        if p.name != 'app.js' and p.parent.name != 'i18n'
     )
     html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
     backend = '\n'.join(

@@ -659,7 +659,11 @@ class TestCrawlMatrixParity:
         assert not missing, '\n'.join(missing)
 
     def test_the_matrix_sends_the_browser_only_to_functions_that_exist(self):
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        # Every page script shares one scope at run time, and the matrix's actions are reached from
+        # more than one file now (the cookie dialog lives in panels/). The question is "is this name
+        # declared anywhere the page loads", so the whole js tree is the source — a test that reads
+        # only workflow.js would call a function that has simply moved "missing".
+        source = '\n'.join(path.read_text(encoding='utf-8') for path in sorted(JS_DIR.rglob('*.js')))
 
         for cap in capabilities.CAPABILITIES:
             for mode in cap.modes:
