@@ -2,7 +2,7 @@ services:
   crawler:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
     image: crawler-workflow:latest
     container_name: crawler-workflow
     restart: unless-stopped

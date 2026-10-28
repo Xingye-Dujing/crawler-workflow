@@ -428,7 +428,7 @@ class TestTheDeployFilesSayWhatTheCodeReads:
 
     def test_every_environment_variable_the_image_exports_is_one_the_code_asks_for(self):
         root = BACKEND.parent
-        image = (root / 'Dockerfile').read_text(encoding='utf-8')
+        image = (root / 'deploy' / 'Dockerfile').read_text(encoding='utf-8')
         declared = set(re.findall(r'^ENV\s+([A-Z_][A-Z0-9_]*)', image, re.MULTILINE))
         sources = '\n'.join(
             path.read_text(encoding='utf-8', errors='replace')
@@ -437,6 +437,14 @@ class TestTheDeployFilesSayWhatTheCodeReads:
         unread = sorted(name for name in declared if f"'{name}'" not in sources and name not in self.INTERPRETER_VARS)
         assert unread == [], f'the image exports variables no code reads: {unread}'
         assert 'CIXI_DRIVER_PATH' in declared, 'the driver path knob is named CIXI_DRIVER_PATH, not CHROMEDRIVER_PATH'
+
+    def test_the_compose_file_builds_a_dockerfile_that_exists(self):
+        """The image moved under ``deploy/``; a compose file still naming the old path builds nothing."""
+        root = BACKEND.parent
+        compose = (root / 'docker-compose.yml').read_text(encoding='utf-8')
+        match = re.search(r'^\s*dockerfile:\s*(\S+)', compose, re.MULTILINE)
+        assert match, 'docker-compose.yml no longer names a dockerfile'
+        assert (root / match.group(1)).is_file(), f'compose builds {match.group(1)}, which is not in the checkout'
 
     def test_the_windows_only_optional_packages_are_marked(self):
         # ``uiautomation`` is a comtypes-based Windows sdist: unmarked, `pip install -r
