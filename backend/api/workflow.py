@@ -18,6 +18,7 @@ import os
 import threading
 
 from flask import Blueprint, jsonify, request
+from nodes.labels import node_label
 from state import (
     LOG_KEEP,
     _completed_lock,
@@ -34,6 +35,8 @@ from stores import (
 )
 
 from api.http import _bad_body, _bad_param, _json_body, _optional_int
+from engine import run as run_engine
+from engine.plan import downstream_closure
 from engine.workflow import effective_workflow
 from i18n import get_lang, set_lang, t
 from services import lock_store
@@ -49,7 +52,13 @@ from services.runs.settlement import (
     close_active_crawlers,
     mark_records_stopping,
 )
-from services.runs.store import workflow_fingerprint
+from services.runs.store import (
+    NODE_DONE,
+    NODE_RESTORED,
+    RUN_RUNNING,
+    RUN_STOPPING,
+    workflow_fingerprint,
+)
 from services.workflows.manager import WorkflowManager
 
 bp = Blueprint('workflow', __name__)
@@ -567,3 +576,89 @@ def kill_process():
         return jsonify({'ok': True, 'message': t('api.killDone', name=target.name)})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@bp.route('/api/workflow/execute', methods=['POST'])
+def execute_workflow():
+    """Start a run — or queue the request when a run is already going."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    answer = run_engine.begin_run(data, request.headers.get('X-Lang') or '')
+    return jsonify(answer['body']), answer['status']
+
+
+@bp.route('/api/workflow/rerun-node', methods=['POST'])
+def workflow_rerun_node():
+    """Re-run ONE node and everything downstream of it, reusing the kept upstream rows.
+
+    This is a resume with a targeted wipe: the target subtree's stored results are deleted,
+    then the SAME run is started with ``resume_run_id``. The existing reuse predicate then
+    finds those nodes with no stored row (so it executes them) while every upstream node
+    still holds its ``done``/``restored`` rows (so it is reused, never re-crawled or
+    re-paid) — one paste path, one resume path, no second engine."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    node_id = data.get('node_id')
+    if not isinstance(node_id, str) or not node_id.strip():
+        return _bad_param('node_id')
+    node_id = node_id.strip()
+    workflow = data.get('workflow')
+    if not isinstance(workflow, dict) or not workflow.get('nodes'):
+        return jsonify({'ok': False, 'error': t('api.workflowShapeInvalid')}), 400
+
+    effective = effective_workflow(workflow)
+    fingerprint = workflow_fingerprint(effective)
+    store = get_run_store()
+
+    run_id = str(data.get('resume_run_id') or '').strip()
+    if run_id:
+        run = store.get_run(run_id)
+        if run is None:
+            return jsonify({'ok': False, 'error': t('api.resumeMissing', rid=run_id)}), 400
+        if run.get('workflow_fingerprint') != fingerprint:
+            # Reusing this run would mix two different workflows' rows under one id; refuse by name.
+            return jsonify({'ok': False, 'error': t('api.rerunFingerprintMismatch')}), 409
+    else:
+        candidates = store.list_resumable(fingerprint, limit=1, include_finished=True)
+        if not candidates:
+            return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
+        run_id = candidates[0]['run_id']
+
+    # A run that is still executing is not a rerun target. The wipe below deletes this run's stored
+    # rows and releases its dedupe claims BEFORE ``begin_run`` can serialize against the live
+    # worker (``invalidate_nodes`` runs first, so the single-run queue cannot help); a 继续 would
+    # then re-crawl and re-pay a thread that is still writing. Refuse by name, keeping the rows.
+    target_run = store.get_run(run_id)
+    if target_run is None:
+        return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
+    if target_run.get('status') in (RUN_RUNNING, RUN_STOPPING):
+        return jsonify({'ok': False, 'error': t('api.rerunRunLive')}), 409
+
+    target = next((n for n in effective['nodes'] if n.get('id') == node_id), None)
+    if target is None:
+        return jsonify({'ok': False, 'error': t('api.rerunNoNode', node=node_id)}), 400
+    status = store.get_node_status(run_id, node_id)
+    if status not in (NODE_DONE, NODE_RESTORED):
+        return jsonify({'ok': False, 'error': t('api.rerunNoRows', node=node_label(target, node_id))}), 409
+    # Another run may still be writing. The wipe below deletes this subtree's rows
+    # BEFORE the start path can serialize, so refusing here is what keeps those rows
+    # from disappearing under a rerun that then has to wait (or is refused) anyway.
+    live_thread = execution_state.get('thread')
+    if execution_state.get('running') or (live_thread is not None and live_thread.is_alive()):
+        return jsonify({'ok': False, 'error': t('api.rerunBusy')}), 409
+
+    invalidated = downstream_closure(effective, node_id)
+    store.invalidate_nodes(run_id, invalidated)
+
+    # Replay through the ordinary start path as a resume of the very run we just pruned.
+    # Never park it: the wipe above already deleted this subtree's rows, and a queued
+    # rerun would leave that hole visible until some other run finishes.
+    data['resume_run_id'] = run_id
+    data['queue'] = False
+    answer = run_engine.begin_run(data, request.headers.get('X-Lang') or '')
+    body = dict(answer['body'])
+    body['rerun_from'] = node_id
+    body['invalidated'] = invalidated
+    return jsonify(body), answer['status']

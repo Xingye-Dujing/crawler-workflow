@@ -9,7 +9,7 @@
 ```
 crawler_workflow/
 ├── backend/
-│   ├── app.py                    # 引导（Flask 初始化 + 注册 25 个 blueprint）+ 3 条路由（页面、执行、重跑单节点）；运行编排在 engine/run.py
+│   ├── app.py                    # 引导（Flask 初始化 + 注册 25 个 blueprint + 时钟接线 + 启动恢复）+ 1 条路由（页面）；执行/重跑在 api/workflow.py，运行编排在 engine/run.py
 │   ├── core/                     # 地基包（只依赖 stdlib 与自身）
 │   │   ├── config.py             # 配置与数据路径
 │   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）

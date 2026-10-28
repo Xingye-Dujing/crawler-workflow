@@ -16,9 +16,6 @@ from api.diagnostics import bp as diagnostics_bp
 from api.exports import bp as exports_bp
 from api.history import bp as history_bp
 from api.http import (
-    _bad_body,
-    _bad_param,
-    _json_body,
     _safe_int,
 )
 from api.lexicon import bp as lexicon_bp
@@ -45,36 +42,20 @@ from core.refs import (
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
-from nodes.labels import node_label
 from scheduling import clock
 from sessions.routes import bp as sessions_bp
 from state import (
     _push_log,
-    execution_state,
-)
-from stores import (
-    get_run_store,
 )
 
 from engine import run as run_engine
 from engine.logger import setup_logger
-from engine.plan import (
-    downstream_closure,
-)
-from engine.workflow import effective_workflow
 from i18n import audit, set_lang, t
 from services.runs.queue import (
     load_pending_queue,
 )
 from services.runs.settlement import (
     housekeep,
-)
-from services.runs.store import (
-    NODE_DONE,
-    NODE_RESTORED,
-    RUN_RUNNING,
-    RUN_STOPPING,
-    workflow_fingerprint,
 )
 
 #: The comment router's supported platforms, as raw keys. They go into a
@@ -314,38 +295,31 @@ def _apply_request_lang():
 # pop/clear uses; every cache writer and the store creation still share the one `_DATASET_LOCK`.
 
 
-# The payload→DataFrame resolution web (_durable_node_rows / NoRunDataError /
-# _resolve_dataframe / _resolve_payload_dataframe) now lives in backend/api/resolution.py,
-# imported back under these names; every app route call site is unchanged.
-
-
 # ─── Shared process state ───
-# The run's mutable state lives in `backend/state.py` (imported above) so the HTTP layer and
-# the test harness share ONE object; it is mutated in place and never rebound. `state`
-# carries the field-by-field comments; see docs/ARCHITECTURE.md (Refactor step A).
-# _completed_lock lives in state.py (imported above) so the snapshot readers share one lock.
-
-
-# _results_snapshot lives in state.py (imported above) so a read-only Blueprint can take a
-# stable copy of execution_state['results'] without importing the whole Flask module.
+#
+# The run's mutable state, the console buffers and the claim lock live in ``backend/state.py``:
+# the HTTP layer, the engine and the test harness share ONE object, mutated in place and never
+# rebound (``state.py`` carries the field-by-field comments; see docs/ARCHITECTURE.md). Payload→
+# DataFrame resolution is ``api/resolution.py``, the durable ledger is ``services/runs/store.py``,
+# and the run's verdict helpers are ``services/runs/settlement.py`` — nothing in this file
+# re-implements either question.
 
 
 # ─── Durable run state ──────────────────────────────────────────
+#
 # The run ledger / dataset store / housekeeper / canvas-manager singletons and their locks live in
-# backend/stores.py; ``get_run_store`` is imported back here because a test that patches it must
-# still intercept the app-internal calls. What the housekeeper sweeps for is now called from
-# ``services.runs.settlement.housekeep``, not from this file.
+# ``backend/stores.py``. What the housekeeper sweeps is called from
+# ``services.runs.settlement.housekeep``, not from here.
 
 
 def __getattr__(name):
-    """Delegate the three store singletons to ``stores`` (PEP 562 module ``__getattr__``).
+    """Answer the names that used to be app globals from the module that owns them now.
 
-    ``_RUN_STORE``/``_DATASET_STORE``/``_HOUSEKEEPER`` are no longer app globals — they are
-    rebound per test on ``stores`` by ``conftest``. ``app._RUN_STORE`` still has to answer,
-    because ~118 test reads (plus the resume/live harness) reach it as an app attribute, so
-    read it through to the live ``stores`` value. A store-object WRITE must target ``stores``
-    (see its module docstring); setting ``app._RUN_STORE`` here would shadow this delegation
-    and silently detach the reader from the injected store.
+    PEP 562 module ``__getattr__``. Each branch exists because a test or a harness reaches the
+    name as ``app.<name>`` while the code that *writes* it lives elsewhere; a by-value re-export
+    would give ``app`` a second binding of its own, which is how a patch stops meaning anything
+    (``docs/agent_practices.md`` — the seam census). Reads through here are honest; a WRITE or a
+    PATCH belongs on the owner, and the branches say which is which.
     """
     if name in ('_RUN_STORE', '_DATASET_STORE', '_HOUSEKEEPER'):
         import stores
@@ -377,6 +351,23 @@ def __getattr__(name):
         import crawlers
 
         return getattr(crawlers, name)
+    if name == 'execution_state':
+        # The runtime dict itself, which lives in ``state``. ~35 test files and the isolation
+        # fixture read and mutate it as ``app.execution_state``; answering from ``state`` hands back
+        # the SAME object, so ``state['running'] = True`` and ``setitem(...)`` behave exactly as
+        # before. Rebinding the NAME (``app.execution_state = {...}``) would detach — which is why
+        # ``state.py`` says the same thing from its side.
+        import state
+
+        return getattr(state, name)
+    if name == 'get_run_store':
+        # A READ seam: tests ask ``app.get_run_store()`` for the live ledger after a run. The store
+        # singleton is ``stores``', so answer from there. Writing a fake store is NOT done here —
+        # a patch on this name would only move app's own binding, and the code that opens the store
+        # resolves it in its own module (see ``tests/api/test_run_races.py``).
+        import stores
+
+        return getattr(stores, name)
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
@@ -389,10 +380,8 @@ def index():
 
 
 # ─── Request validation helpers ────────────────────────────────
-
-
-# _json_body and _bad_body live in api.http now (imported at top) so a Blueprint can use them
-# without importing the whole Flask module. _bad_param stays: only app.py routes reach it.
+# The body coercions and the refusal envelopes live in ``api/http.py`` so a Blueprint can answer
+# a bad request without importing the Flask module.
 
 
 @app.errorhandler(413)
@@ -407,188 +396,40 @@ def _payload_too_large(_error):
     return jsonify({'ok': False, 'error': t('api.payloadTooLarge', limit=mb)}), 413
 
 
-# ─── Execution API ─────────────────────────────────────────────
-
-
 # ─── Run queue ────────────────────────────────────────────────
 # The queue itself — its list (``state._RUN_QUEUE``), its lock, its db mirror and the refusal at
-# the door — is :mod:`services.runs.queue`. What stays here is the one thing that cannot live
-# there: handing the slot to the next request means starting a run, which is this file's work.
+# the door — is :mod:`services.runs.queue`. What stays here is the wiring of its hand-off: the
+# drain calls ``engine.run.begin_run``, so the queue never has to import the run start.
 
 
 # ─── Scheduled tasks (the clock lives in scheduling/clock.py) ───
 #
-# The clock, the store and the history are in ``scheduling/clock.py`` / ``scheduling/store.py``,
-# which import without Flask. These two functions are the only parts it cannot own: reading the
-# canvas a task names, and starting the run its own way. A scheduled fire goes through
-# ``begin_run`` — resolved at CALL time, since the run-start path is defined further down this
-# file — so a timer gets the same execution a manual 执行 does: same validations, same claim, and
-# the same queue when a run is already going.
+# The clock, the task store and the history are ``scheduling/clock.py`` / ``scheduling/store.py``,
+# which import without Flask. The two doors a fire needs — reading the canvas a task names, and
+# starting the run — are ``engine.run.scheduled_canvas`` / ``start_scheduled_run``; they are
+# wired to the clock below as module attributes, so a scheduled fire goes through the SAME
+# ``begin_run`` a manual 执行 does: same validations, same claim, and the same queue when a run is
+# already going.
 
 
 clock.set_run_starter(run_engine.start_scheduled_run)
 clock.set_canvas_source(run_engine.scheduled_canvas)
 
 
-@app.route('/api/workflow/execute', methods=['POST'])
-def execute_workflow():
-    """Start a run — or queue the request when a run is already going."""
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    answer = run_engine.begin_run(data, request.headers.get('X-Lang') or '')
-    return jsonify(answer['body']), answer['status']
-
-
-@app.route('/api/workflow/rerun-node', methods=['POST'])
-def workflow_rerun_node():
-    """Re-run ONE node and everything downstream of it, reusing the kept upstream rows.
-
-    This is a resume with a targeted wipe: the target subtree's stored results are deleted,
-    then the SAME run is started with ``resume_run_id``. The existing reuse predicate then
-    finds those nodes with no stored row (so it executes them) while every upstream node
-    still holds its ``done``/``restored`` rows (so it is reused, never re-crawled or
-    re-paid) — one paste path, one resume path, no second engine."""
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    node_id = data.get('node_id')
-    if not isinstance(node_id, str) or not node_id.strip():
-        return _bad_param('node_id')
-    node_id = node_id.strip()
-    workflow = data.get('workflow')
-    if not isinstance(workflow, dict) or not workflow.get('nodes'):
-        return jsonify({'ok': False, 'error': t('api.workflowShapeInvalid')}), 400
-
-    effective = effective_workflow(workflow)
-    fingerprint = workflow_fingerprint(effective)
-    store = get_run_store()
-
-    run_id = str(data.get('resume_run_id') or '').strip()
-    if run_id:
-        run = store.get_run(run_id)
-        if run is None:
-            return jsonify({'ok': False, 'error': t('api.resumeMissing', rid=run_id)}), 400
-        if run.get('workflow_fingerprint') != fingerprint:
-            # Reusing this run would mix two different workflows' rows under one id; refuse by name.
-            return jsonify({'ok': False, 'error': t('api.rerunFingerprintMismatch')}), 409
-    else:
-        candidates = store.list_resumable(fingerprint, limit=1, include_finished=True)
-        if not candidates:
-            return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
-        run_id = candidates[0]['run_id']
-
-    # A run that is still executing is not a rerun target. The wipe below deletes this run's stored
-    # rows and releases its dedupe claims BEFORE ``begin_run`` can serialize against the live
-    # worker (``invalidate_nodes`` runs first, so the single-run queue cannot help); a 继续 would
-    # then re-crawl and re-pay a thread that is still writing. Refuse by name, keeping the rows.
-    target_run = store.get_run(run_id)
-    if target_run is None:
-        return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
-    if target_run.get('status') in (RUN_RUNNING, RUN_STOPPING):
-        return jsonify({'ok': False, 'error': t('api.rerunRunLive')}), 409
-
-    target = next((n for n in effective['nodes'] if n.get('id') == node_id), None)
-    if target is None:
-        return jsonify({'ok': False, 'error': t('api.rerunNoNode', node=node_id)}), 400
-    status = store.get_node_status(run_id, node_id)
-    if status not in (NODE_DONE, NODE_RESTORED):
-        return jsonify({'ok': False, 'error': t('api.rerunNoRows', node=node_label(target, node_id))}), 409
-    # Another run may still be writing. The wipe below deletes this subtree's rows
-    # BEFORE the start path can serialize, so refusing here is what keeps those rows
-    # from disappearing under a rerun that then has to wait (or is refused) anyway.
-    live_thread = execution_state.get('thread')
-    if execution_state.get('running') or (live_thread is not None and live_thread.is_alive()):
-        return jsonify({'ok': False, 'error': t('api.rerunBusy')}), 409
-
-    invalidated = downstream_closure(effective, node_id)
-    store.invalidate_nodes(run_id, invalidated)
-
-    # Replay through the ordinary start path as a resume of the very run we just pruned.
-    # Never park it: the wipe above already deleted this subtree's rows, and a queued
-    # rerun would leave that hole visible until some other run finishes.
-    data['resume_run_id'] = run_id
-    data['queue'] = False
-    answer = run_engine.begin_run(data, request.headers.get('X-Lang') or '')
-    body = dict(answer['body'])
-    body['rerun_from'] = node_id
-    body['invalidated'] = invalidated
-    return jsonify(body), answer['status']
-
-
-# _local_transport_refusal lives in transport.py (imported at top); the run executor (via
-# cloud_refusal_response below) and the /api/llm/* Blueprint both call that one function.
-
-
-# `_execute_upload_node` is a built-in plugin: backend/nodes/executors/upload.py. It registers itself
-# with ``nodes.registry``; dispatch reads that registry, not a module-level alias.
-
-
-# The numeric-coercion family (_safe_int / _safe_float / _optional_int / _optional_float) lives in
-# api.http now (imported at top); every app call site reads the app-level alias unchanged.
-
-
-# `_split_columns` now lives in core/refs.py (split_columns, imported back under this name).
-
-
-# `_execute_resume_node` is a built-in plugin: backend/nodes/executors/resume.py. It reads its ledger
-# through ctx['store'], not a global; the direct-call fallback lives in that module's ``run`` wrapper.
-
-
-#: Node types the console stays quiet about. A 工作流命名 node carries a label and
-#: computes nothing; an 上传文件 node re-reads a file the user already pointed at.
-#: Announcing "executing node …" and "node … done (2/4)" for those is two lines of
-#: noise per node that has no work to report, and on a canvas of mostly-plumbing
-#: nodes the lines that *do* matter — a crawl, a failure, a restored node — drowned
-#: in them. Only the generic per-node chatter is suppressed: what these nodes say
-#: about themselves (which file was loaded, how many rows) and anything that went
-#: wrong still reaches the console. The set itself lives on each node's plugin
-#: (``nodes/catalog.py``), so a quiet type is declared once, not in a second list here.
-
-
-#: Every node type is a plugin: ``nodes/executors/`` registers its own executor with the same
-#: table, so adding a node type never edits this module. See ``docs/refactor_plan.md``.
+# Every node type is a plugin: ``nodes/executors/`` registers its own executor with the same table,
+# so adding a node type never edits this module. The load is explicit because the registry is empty
+# until those modules are imported — dispatch reads ``nodes.registry``, never a module-level alias.
 node_registry.load_builtin_executors()
 
 
-# ─── Data API (standalone upload / analysis / visualization) ───
+# ─── Blueprints ────────────────────────────────────────────────
 #
-# These endpoints let Analysis and Visualize work as fully independent
-# tools — e.g. upload any CSV/JSON and chart it — without building a
-# crawler workflow at all. The same DataAnalysisService/VisualizationService/
-# DataExporter classes back both this API and the workflow nodes above, so
-# behaviour is identical either way.
-
-
-# The /api/data/{upload,datasets,paste,inspect,preview} handlers (list/detail/delete/rename
-# included) now live in backend/api/data.py (Blueprint `data_bp`); see the register below.
-
-
-# /api/analysis/{run,train} + the _ML_MODEL_TYPES/_ML_LABEL_COLUMNS constants now live in
-# backend/api/analysis.py (Blueprint `analysis_bp`); see the register below. The
-# frontend-contract test reads those constants from api.analysis. Behaviour unchanged.
-
-
-# /api/visualize/render (the standalone chart door) now lives in backend/api/visualize.py
-# (Blueprint `visualize_bp`); see the app.register_blueprint(visualize_bp) below. It calls the
-# same services.charts.outputs / services.charts.visualizer that _execute_visualize_node does, so the
-# HTTP preview and the node cannot drift. Path and behaviour are unchanged.
-
-
-# ─── One-click report ──────────────────────────────────────────
-
-# The /api/report/{generate,view,pdf,studio-images} cluster plus its report-only helpers
-# (_report_nodes, _find_chrome) now live in backend/api/report.py (Blueprint `report_bp`); see
-# the app.register_blueprint(report_bp) below. The /api/export/save route shares
-# backend/api/exports.py with the read side /api/exports/{list,download,delete,clear}; /api/locks
-# lives in api/locks.py. Paths and behaviour are unchanged — see the register_blueprint(...) calls.
-
-
-# ─── Stats API ─────────────────────────────────────────────────
-
-
-# The /api/stats/* cluster lives in api/stats.py (imported above); registered here so app-level
-# before_request / CORS still wrap it and the URLs are unchanged.
+# Every URL except the page itself is a Blueprint module (``backend/api/*.py`` plus
+# ``sessions/routes.py``), and they are registered HERE rather than in their own module: the
+# app-level ``before_request`` (origin guard, no-store, language pin), the error handlers and CORS
+# then wrap them and no path changes. Which module owns which cluster is in ``docs/ARCHITECTURE.md``
+# — this list is the wiring, not the map, and the order is the order the routes were added to the
+# app over time (Flask matches by rule, so it is not a precedence).
 app.register_blueprint(stats_bp)
 app.register_blueprint(locks_bp)
 app.register_blueprint(node_types_bp)
@@ -602,66 +443,20 @@ app.register_blueprint(visualize_bp)
 app.register_blueprint(report_bp)
 
 
-# ─── Cookie API ────────────────────────────────────────────────
-
-# The /api/cookies/* cluster, /api/profiles/delete and the two /api/browser/profiles routes now
-# live in ``sessions/routes.py`` (Blueprint ``sessions``); registered here so app-level
-# before_request / CORS still wrap them and every URL is unchanged.
+# The login-state cluster (``/api/cookies/*``, ``/api/profiles/delete``, ``/api/browser/profiles``)
+# is ``sessions/routes.py``; ``/api/config`` and ``/api/models`` are ``api/config.py``.
 app.register_blueprint(sessions_bp)
-
-
-# ─── Config API ────────────────────────────────────────────────
-
-
-# /api/config and /api/models live in api/config.py (imported above); registered here so app-level
-# before_request / CORS still wrap them and the URLs are unchanged. /api/capabilities stays below:
-# it extends the matrix with cookie_manager's live account list, so it moves when cookie_manager does.
 app.register_blueprint(config_bp)
-
-
-# /api/capabilities lives in api/capabilities.py (imported above); registered here so app-level
-# before_request / CORS still wrap it and the URL is unchanged. It reads state.cookie_manager.
+# ``/api/capabilities`` extends the static matrix with the live account list, so it reads
+# ``state.cookie_manager`` and moves no further than that singleton does.
 app.register_blueprint(capabilities_bp)
-
-
-# ─── Runtime settings API ──────────────────────────────────────
-#
-# Machine-local values that used to be hardcoded (chromedriver path, browser
-# window, timeouts, Ollama address). Persisted to data/settings.json by the
-# settings store; crawlers and LLM calls read them per run, so a save applies
-# on the next execution without restarting the server.
-
-
-# The /api/settings cluster lives in api/settings.py (imported above); registered here so
-# app-level before_request / CORS still wrap it and the URL is unchanged.
+# ``/api/settings`` holds machine-local values (driver path, window, timeouts, Ollama address) that
+# are re-read per run, so a save applies without restarting the server.
 app.register_blueprint(settings_bp)
-
-
-# ─── AI (LLM) API ──────────────────────────────────────────────
-#
-# The three /api/llm/* transport endpoints live in api/llm.py (imported above); the shared
-# _local_transport_refusal lives in transport.py. Registered here; URLs unchanged, app-level
-# before_request / CORS still wrap them.
 app.register_blueprint(llm_bp)
 
 
-# ─── Clear Dataset Cache API ─────────────────────────────────────
-# /api/data/clear now lives in backend/api/data.py (Blueprint `data_bp`) with the rest of the
-# dataset cluster; registered below. Behaviour unchanged.
-
-
-# ─── Chart Studio API (embedded ZENVIZ workbench) ─────────────────
-# The /api/studio/{dataset,sources,save-image} cluster and its private helpers/constants
-# (_first_tabular_result/_merge_unique_names/_merge_frames/_studio_dataset_merged/_column_names/
-# _probe_source, STUDIO_*/SRC_*/PROBE_MAX_COLUMNS/MAX_IMAGE_BYTES) now live in
-# backend/api/studio.py (Blueprint `studio_bp`); see the register below. Paths/behaviour unchanged.
-
-
 # ─── Execution History API (time-series comparison across runs) ───
-
-
-# The /api/history/* cluster lives in api/history.py (imported at top) and is registered here so
-# app-level before_request / error handlers / CORS still wrap it, and the URLs are unchanged.
 app.register_blueprint(history_bp)
 
 
@@ -690,8 +485,9 @@ app.register_blueprint(reusable_bp)
 # behind is ``services/runs/settlement.py``. Registered here so app-level before_request /
 # CORS still wrap it and every URL is unchanged.
 app.register_blueprint(runs_bp)
-# The saved-canvas / queue / stop-status cluster lives in api/workflow.py. What stays here is the
-# page, ``/api/workflow/execute`` and ``/api/workflow/rerun-node`` — the two doors that start a run.
+# The saved-canvas / queue / stop-status / execute / rerun-node cluster is api/workflow.py: 14 routes.
+# What stays in this module is the page and the wiring above — the composition root holds no
+# handler of its own except ``/``, because every question a route answers has an owner module.
 app.register_blueprint(workflow_bp)
 
 

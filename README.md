@@ -187,7 +187,7 @@ Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上�
 ```
 crawler_workflow/
 ├── backend/
-│   ├── app.py                    # Flask 主入口（组合根 + 节点执行表）
+│   ├── app.py                    # Flask 主入口（组合根：注册 Blueprint、时钟接线、启动恢复；页面路由）
 │   ├── core/                     # 地基包：只依赖 stdlib 与自身，谁都可以 import
 │   │   ├── config.py             # 配置与数据路径
 │   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）
@@ -210,7 +210,7 @@ crawler_workflow/
 │   │   └── backends/
 │   │       └── catbus.py         # 第二采集后端的会话（继承 Crawler 的流式/落库/水位契约）
 │   ├── analyzers/                # 分析模块（LLM + ML + BERT）
-│   ├── engine/                   # 工作流引擎：DAG 解析、运行计划（形状/传输/是否要模型）、执行器、日志
+│   ├── engine/                   # 工作流引擎：DAG 解析、运行计划（形状/传输/是否要模型）、运行本体 run.py（begin_run 与 worker、逐节点续跑、执行器分派、停止判定、队列排水）、执行器、日志
 │   ├── services/                 # 续跑存储 / 数据集 / 导出 / 报告 / 可视化 / LaTeX 等
 │   ├── sessions/                 # 登录态域：具名 Cookie、各账号的 Chrome profile、模板重建、运行前预检
 │   └── static/                   # 前端：index.html、css、js（canvas/workflow/app…）

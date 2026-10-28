@@ -15,7 +15,7 @@ file is about *shape*. The numbers below are measured, not estimated.
 ## Backend layout (~68.1k Python LOC across 212 files, measured 2026-10-27)
 | area | contents |
 |---|---|
-| `app.py` | **783 LOC: the composition root only** — the WSGI object, the request hooks, the 25 `register_blueprint` calls, the clock's two wiring lines, the startup recovery entry and the **three** routes that reach the run start (`/`, `/api/workflow/execute`, `/api/workflow/rerun-node`). The run orchestration is `engine/run.py` (1,407 LOC, measured 2026-10-28); the route clusters are `api/runs.py` (12) and `api/workflow.py` (12). The live URL map holds 129 rules over 123 unique paths (re-measure: `len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). What had already left this file before that: the run queue (`services/runs/queue.py`), the payload guards (`services/runs/payload.py`) and the run-record reconciliation (`services/runs/settlement.py`, with `execute_lock` moved to `state.py` so the claim and the settle share one lock). |
+| `app.py` | **578 LOC: the composition root only** — the WSGI object, the request hooks (origin guard, no-store, language pin), the 25 `register_blueprint` calls, the clock's two wiring lines, startup recovery, the PEP-562 read seams, and **one route**: the served page `/`. The run doors (`/api/workflow/execute`, `/api/workflow/rerun-node`) are `api/workflow.py` (14 routes, `@bp.route`), the run orchestration is `engine/run.py` (1,407 LOC), the run-record cluster is `api/runs.py` (12). Measured 2026-10-28: the URL map holds 129 rules over 123 unique paths (re-measure: `len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). |
 | `core/config.py` | paths, env, constants (retention/queue/preflight/scheduler tick). |
 | `i18n.py` | the zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
 | `capabilities/` | the single crawl matrix, split by owner (2026-10-28): `platforms/<id>.py` declares one platform each (panel order pinned by `platforms/__init__`), `fields.py` the shared field atoms + mode factories, `catbus.py` the second engine's vocabulary, `model.py`/`requirements.py` the dataclasses and machine gates, `registry.py` the queries over all of it (the one answer validation, execution and the Data Source panel read). |
@@ -129,12 +129,13 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
   verdict), `note_heavy_result`, the console tee/log sink, the drain and the two scheduled doors.
   It reaches no Flask object: the app, the clock and a future CLI all ask the same module.
 - `app.py` — composition root: the app object, the request hooks (origin guard, no-store, language
-  pin), the clock's two wiring lines, startup recovery, and the **three** routes that reach the run
-  start: the served page `/`, `/api/workflow/execute` and `/api/workflow/rerun-node`. It calls the
-  orchestration as `run_engine.begin_run(...)`, so stubbing a run start has exactly one address
-  (`engine.run.begin_run`) that the route, the scheduled fire and the queue drain all honour.
-  Every other URL is a Blueprint; the run-record cluster is `api/runs.py` and the saved-canvas/queue/
-  stop-status cluster is `api/workflow.py`.
+  pin), the clock's two wiring lines, the plugin load, the `register_blueprint` calls, startup
+  recovery, and **one** route: the served page `/`. Both run doors are `api/workflow.py`, which —
+  like every other caller — reaches the orchestration as `run_engine.begin_run(...)`, so stubbing a
+  run start has exactly one address (`engine.run.begin_run`) that the manual route, the rerun route,
+  the scheduled fire and the queue drain all honour. A by-value import would give each caller its own
+  binding; `tests/api/test_run_races.py::TestTheRunStartHasOneAddress` is the test that refuses it.
+  The run-record cluster is `api/runs.py`, the saved-canvas/queue/stop-status cluster `api/workflow.py`.
   Line and route counts are otherwise deliberately not quoted here, because the number changes with
   every feature and a doc that recites it is stale by construction.
 

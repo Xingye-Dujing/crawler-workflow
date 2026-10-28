@@ -22,7 +22,9 @@ otherwise land its rows in an unrelated test's store.
 """
 
 import contextlib
+import re
 import threading
+from pathlib import Path
 
 import pytest
 from run_wait import run_finished
@@ -49,13 +51,53 @@ def _forward_executor_seams(monkeypatch):
 def _run_module():
     """``engine.run`` — the module that owns both the run start and the queue drain.
 
-    These cases drive the drain directly, so the fake 执行 goes on the owner. ``app`` keeps a
-    re-export for its two routes only; patching there would let the drain call the real one and
-    the test would measure a run it never installed.
+    Every caller reaches it as an attribute of this module (see ``TestTheRunStartHasOneAddress``),
+    so this is the ONE place a fake 执行 has to be installed. A by-value import anywhere would hand
+    that caller its own binding, and a test of the queue drain would then measure a real run while
+    still reporting green.
     """
     import engine.run
 
     return engine.run
+
+
+class TestTheRunStartHasOneAddress:
+    """The seam rule slice 8/9 bought: one module owns ``begin_run``, and callers name the module."""
+
+    def test_no_module_imports_the_run_start_by_value(self):
+        backend = Path(__file__).resolve().parents[2] / 'backend'
+        by_value = []
+        for path in sorted(backend.rglob('*.py')):
+            if '__pycache__' in path.parts:
+                continue
+            text = path.read_text(encoding='utf-8')
+            for line in text.splitlines():
+                if re.search(r'from engine\.run import [^\n]*\bbegin_run\b', line):
+                    by_value.append(f'{path.name}: {line.strip()}')
+        assert not by_value, 'begin_run must be reached as engine.run.begin_run, never bound by value: ' + str(by_value)
+
+    def test_every_call_site_names_the_owner_module(self):
+        backend = Path(__file__).resolve().parents[2] / 'backend'
+        owners = ('run_engine.begin_run(', 'engine.run.begin_run(')
+        unattributed = []
+        for path in sorted(backend.rglob('*.py')):
+            if '__pycache__' in path.parts:
+                continue
+            text = path.read_text(encoding='utf-8')
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if 'begin_run(' not in line or line.lstrip().startswith('#'):
+                    continue
+                if 'def begin_run(' in line:
+                    continue
+                if any(call in line for call in owners):
+                    continue
+                if path == backend / 'engine' / 'run.py':
+                    # inside the owner a bare call is the same object; nothing to attribute
+                    continue
+                unattributed.append(f'{path.relative_to(backend)}:{lineno}: {line.strip()}')
+        assert not unattributed, 'a caller that binds begin_run by value creates a second patch point: ' + str(
+            unattributed
+        )
 
 
 RECORDS = [

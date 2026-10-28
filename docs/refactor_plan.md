@@ -844,11 +844,30 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     但脚本不该产生 `X as X`**：改名后要按「这个别名还剩下什么」重问一遍，而不是只看 token 是否统一。
     两条都是改完重跑两档才确认清零（`ruff` 一条都没报：F401 认为 `X as X` 是"用过的导入"，
     而 pylint 的 unused-import 会看绑定名本身 —— 这类差异正是本项目坚持两档都跑的原因）。
-  - **下一刀 = Stage 6 收尾**：`/api/workflow/execute` 与 `/api/workflow/rerun-node` 现在才真是薄壳
-    —— 它们只做请求整形 + `run_engine.begin_run(...)`，可搬进 `api/workflow.py`，app 只剩 `/` 一条路由
-    与组合根本体（app 对象、钩子、25 次注册、时钟接线、启动恢复）。之后：Stage 7 i18n；Stage 8 前端；
-    Stage 9 op 注册表；Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407 行现在
-    就在这张名单上）。`state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core。
+  - **Stage 6 第九片（最后两条路由）已完成（2026-10-28）**：`/api/workflow/execute` 与
+    `/api/workflow/rerun-node` 搬进 `api/workflow.py`（现 14 条 `@bp.route`，654 行），
+    app 只剩页面 `/` 一条 `@app.route`；`app.py` **578 行**。搬前先把「调用形状」定死：
+    **每个调用方都以模块属性取 `begin_run`**（`run_engine.begin_run(...)`），
+    并由新契约 `tests/api/test_run_races.py::TestTheRunStartHasOneAddress` 两条静态断言钉住
+    —— ① 任何 backend 文件都不得 `from engine.run import begin_run`（by-value 会让每个调用方
+    各自持有一份绑定，桩就分裂成多个地址）；② 除 owner 模块内部，`begin_run(` 只允许出现在带
+    `run_engine.`/`engine.run.` 前缀的行里。
+    **顺手清掉 app.py 里 60+ 行「搬走了」型面包屑**：那些注释逐条写着「X 现在住在 Y.py，行为不变」，
+    其中三处已经变成假话（说某名字"在文件顶部导入"、说两个函数"定义在本文件更下面"）——
+    注册清单本身就是地图，`docs/ARCHITECTURE.md` 才是谁住哪里的权威，所以只留真正回答一个问题的话。
+    **实测**：URL map 仍 129 条规则 / 123 个不同路径，只有两个 endpoint 获得 `workflow.` 前缀；
+    隔离根真启动后 `/`、config、workflow/list、queue、status、runs/list 全 200，
+    POST `execute`（空画布）与 POST `rerun-node`（无凭据）都返回 400 的真实拒绝，端口已释放。
+    **app 的 PEP 562 读接缝加了两个分支并写明理由**：路由一走，`execution_state` 与 `get_run_store`
+    在 app 里没人用了（ruff 立刻把导入剪掉），于是 35 个测试文件的 `app_module.execution_state`
+    与 13 个文件的 `app_module.get_run_store()` 全部 `AttributeError`。答案不是把导入塞回去
+    （那会造出第二个绑定），而是在 `__getattr__` 里按 owner 答：`execution_state` 交回**同一个 dict**
+    （原地改写照常生效），`get_run_store` 是**读接缝**、写/桩仍打在解析它的那个模块 ——
+    注释里就把这句话写清了，免得下一个人以为打 `app.get_run_store` 能拦到工作流。
+  - **下一刀 = Stage 7：i18n 按域拆分**（`backend/i18n.py` 与 `static/js/app.js` 两份词典；
+    `settings_store` 等 i18n 拆分后再进 core）。之后：Stage 8 前端模块化（`docs/frontend_modules.md`，
+    第一刀 `chart-preview.js`）；Stage 9 op 注册表；Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分
+    （`engine/run.py` 1,407 行、`api/workflow.py` 654 行已在名单附近）。`state`/`stores` 不进 core（运行层）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。
