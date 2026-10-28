@@ -316,7 +316,7 @@ def execute_node(
 
     The executor comes from ``nodes.registry``, where every node type registered itself when the
     plugin package was imported; the catalogue and the registry are pinned against each other by
-    ``tests/unit/test_node_plugins.py``.
+    ``tests/unit/analysis/test_node_plugins.py``.
     """
     ntype = node.get('type')
     executor = node_registry.executor_for(ntype)

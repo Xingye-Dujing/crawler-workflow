@@ -10,7 +10,7 @@ them in lockstep, and one miss was a figure that rendered but never printed.
 ``SPECS`` is now the single answer. The module-level tuples the rest of the code (and its tests)
 already import are **derived** below, so their names and order did not change. Adding a type is
 one ``ChartSpec`` line here plus its builder — the contract tests in
-``tests/unit/test_chart_registry.py`` refuse a spec whose builder, LaTeX twin or front-end word is
+``tests/unit/analysis/test_chart_registry.py`` refuse a spec whose builder, LaTeX twin or front-end word is
 missing. The front end keeps its own lists for rendering; they are pinned against this table, not
 kept as a second opinion.
 """

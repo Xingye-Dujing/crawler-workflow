@@ -1,7 +1,7 @@
 """The parameters a freshly created node starts with, per node type.
 
 One table for the whole product: the canvas seeds a new node from it, ``GET /api/node-types``
-serves it, and ``tests/unit/test_node_plugins`` pins it against the catalogue. ``source`` has no
+serves it, and ``tests/unit/analysis/test_node_plugins`` pins it against the catalogue. ``source`` has no
 entry on purpose — its defaults depend on the crawl matrix the browser has just fetched (platform,
 engine, mode), so the canvas derives them from that matrix instead of freezing one shape here.
 """

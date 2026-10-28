@@ -93,7 +93,7 @@ def _function_definition(function_name: str) -> ast.FunctionDef:
     raise AssertionError(f'{function_name} is declared nowhere under {ANALYSIS_DIR}')
 
 
-SETTINGS_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
+SETTINGS_JS = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
 
 
 def _source_walk(node):
@@ -677,7 +677,7 @@ class TestOperatorNameLists:
         operator edited the two copies they could see. Only the panel and this
         module may name the whole set, and both are pinned above.
         """
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[3]
         candidates = (
             list((root / 'backend').rglob('*.py'))
             + list((root / 'backend' / 'static').rglob('*.js'))
@@ -694,9 +694,10 @@ class TestOperatorNameLists:
                 found = {op for op in names if f"'{op}'" in match.group(0) or f'"{op}"' in match.group(0)}
                 if len(found) >= 4:
                     offenders.setdefault(path.relative_to(root).as_posix(), set()).update(found)
-        assert set(offenders) == {'backend/static/js/panels/settings.js', 'tests/unit/test_data_analysis.py'}, (
-            f'an unlinked copy of the operation names appeared in {sorted(offenders)}'
-        )
+        assert set(offenders) == {
+            'backend/static/js/panels/settings.js',
+            'tests/unit/analysis/test_data_analysis.py',
+        }, f'an unlinked copy of the operation names appeared in {sorted(offenders)}'
 
 
 # ─── every filter operator, on every column shape ──────────────────────

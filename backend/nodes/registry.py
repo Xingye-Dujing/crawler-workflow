@@ -1,13 +1,13 @@
 """The executor registry: type → ``run(node, call)``.
 
 The catalogue (``nodes/catalog.py``) says which types exist; this table says how they run. They are
-pinned against each other by ``tests/unit/test_node_plugins.py``, so a type cannot be declared with
+pinned against each other by ``tests/unit/analysis/test_node_plugins.py``, so a type cannot be declared with
 no executor, and an executor cannot be registered for a type nobody declared.
 
 Every node type is a plugin here: ``nodes/executors/<type>.py`` declares ``NODE_TYPE`` and
 ``run(node, call)``, and importing that package registers all of them. A plugin depends only on its
 arguments and the shared service modules — never on ``app``, which would import Flask into the
-worker and cycle back to this table (``tests/unit/test_node_plugins.py`` scans for that import).
+worker and cycle back to this table (``tests/unit/analysis/test_node_plugins.py`` scans for that import).
 
 ``load_builtin_executors`` is explicit rather than automatic because importing ``nodes`` from the
 engine (``engine/workflow``) would otherwise drag pandas, the analyzers and the biblio services into

@@ -25,7 +25,7 @@ from services.charts.visualizer import VisualizationService as V
 
 pytestmark = pytest.mark.unit
 
-_SETTINGS_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
+_SETTINGS_JS = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
 
 
 def _js_list(text: str, name: str) -> list:

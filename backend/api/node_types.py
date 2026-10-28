@@ -3,7 +3,7 @@
 The canvas needs three facts per type: does a pasted/restored canvas know it, what label and
 group does the palette show, and which parameters does a new node start with. Serving them from
 the server keeps ``nodes/catalog.py`` the single declaration; the frontend's own tables remain a
-cold-page fallback that ``tests/unit/test_node_plugins.py`` pins against this payload.
+cold-page fallback that ``tests/unit/analysis/test_node_plugins.py`` pins against this payload.
 """
 
 from flask import Blueprint, jsonify

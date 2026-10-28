@@ -21,7 +21,7 @@ from services.charts.contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES, NO
 from services.charts.registry import LATEX_UNBUILDABLE_TYPES
 from services.charts.visualizer import CHART_TYPES, ECHARTS_ONLY_TYPES
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 # The three arrays live with the settings panel that draws them (split out of workflow.js).
 SETTINGS_JS = REPO / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
 
