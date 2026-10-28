@@ -51,8 +51,6 @@ _STATE_KEYS = (
 @pytest.fixture
 def console(app_module):
     """An empty console, handed back afterwards (these buffers are process-wide)."""
-    from state import reset_console_state
-
     state = app_module.execution_state
     saved = {key: copy.deepcopy(state[key]) for key in _STATE_KEYS if key in state}
     reset_console_state()
