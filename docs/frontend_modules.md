@@ -44,12 +44,18 @@
    — 各自管理器与停靠面板（每个 150–800 行）；涉及对应 harness 与 `harness_panels`。
 7. **`settings.js`** — `openSettings` 与各节点设置渲染（约 2,000 行，依赖最多，放最后）；涉及
    `harness_panels`、`harness_panel_actions`、`harness_state`。
-8. **`app-i18n-catalogs.js`** — `I18n.dict` 的两份词典（约 3,700 行）拆成 `I18N_DICT` 常量文件，
-   `app.js` 只保留 `I18n` 行为；双语契约测试的扫描范围改为「catalog 文件 + app.js」。
+8. **`i18n/<domain>.js`** — 浏览器词典按域搬家，**已落地第一域（2026-10-28）**，与本节最初写的
+   「一个 `I18N_DICT` 常量文件」不同：每个域一份 `backend/static/js/i18n/<domain>.js`，
+   `(globalThis.I18N_CATALOGUES = …).push({name, en, zh})`；`index.html` 在 `app.js` **之前**加载它们；
+   `app.js` 的 `_mergeCatalogues(local)` 合并余量与注册表并**拒绝同键两次**（点名两边）。
+   首个域是 `settings`（402 键），`app.js` 5,071 → 4,265 行。剩下的域由
+   `build/split_app_catalog.py <domain>` 一次搬一个。**所有「词典住在哪」的问题只有一个读者**：
+   `tests/frontend_catalogue.py`；双语契约的扫描范围就是它给出的文件集合。
 
-建议新增 `tests/frontend/page_scripts.mjs`：从 `index.html` 解析 `<script src="/js/…">` 顺序并
-提供 `loadPageScripts(sandbox, jsDir, {only})`，harness 逐步改为调用它。这样第 3 步以后
-不再需要逐个 harness 加路径，且**加载顺序只有 `index.html` 一处**。
+`tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供
+`loadPageScripts(sandbox, {jsDir, only})`，**7 个 harness 已改用它**（2026-10-28）；选中 `app.js`
+时会连带 `js/i18n/*.js`（词典是 app.js 的数据，不是可选模块）。把文件路径直接交给 harness 的驱动
+用 `tests/frontend_catalogue.py::with_catalogue()` 补同一条规则。加载顺序只有 `index.html` 一处。
 
 ## 4. 每一步的验收
 

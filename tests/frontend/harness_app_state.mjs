@@ -19,7 +19,7 @@
  *   · `AppSettings` writes the server-side settings file, including the booleans
  *     that gate a run (cookie confirmation, live export).
  *
- * Usage: node harness_app_state.mjs <canvas.js> <workflow.js> <app.js>
+ * Usage: node harness_app_state.mjs <module.js> …   (canvas.js, workflow.js, app.js's catalogue, app.js)
  * Prints one JSON object to stdout.
  */
 import fs from 'node:fs';
@@ -27,8 +27,7 @@ import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, resetWorld } from './harness_dom.mjs';
 
-const [canvasPath, wfPath, appPath] = process.argv.slice(2);
-const src = [canvasPath, wfPath, appPath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
 
 /* app.js owns I18n (a top-level `const`), so nothing is seeded for it here: the
    assertions below read the effect of the REAL dictionary and the REAL apply(),

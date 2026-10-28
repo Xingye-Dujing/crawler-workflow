@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
 pytestmark = pytest.mark.unit
@@ -30,7 +31,7 @@ HARNESS = ROOT / 'tests' / 'frontend' / 'harness_cloud.mjs'
 def booted():
     if shutil.which('node') is None:
         pytest.skip('node not on PATH')
-    proc = run_node(HARNESS, JS_DIR / 'canvas.js', JS_DIR / 'workflow.js', JS_DIR / 'app.js')
+    proc = run_node(HARNESS, *with_catalogue([JS_DIR / 'canvas.js', JS_DIR / 'workflow.js', JS_DIR / 'app.js']))
     assert proc.returncode == 0, f'harness failed: {proc.stderr[-2000:]}'
     return json.loads(proc.stdout)
 

@@ -17,6 +17,9 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
+from frontend_catalogue import catalog_texts as _catalog_texts
+from frontend_catalogue import entry_text as _entry_text
 from node_runner import run_node
 
 pytestmark = pytest.mark.unit
@@ -303,22 +306,28 @@ class TestSavePlantsItsOwnProfile:
         gone rather than kept in case something wants it.
         """
         html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        keys = _catalog_keys()
+        declared = keys['en'] | keys['zh']
         assert 'refreshProfileCookie' not in html, 'the deleted button is wired back in'
         # Asked for the ELEMENT, not the word: the comment that records why it went away
         # names it, and a guard that fires on its own eulogy is a guard nobody can read.
         assert 'id="cookie-explain"' not in html, 'the explainer came back above the paste box'
         assert 'data-i18n="cookies.refreshExplain"' not in html, 'the explainer is back under another id'
-        assert "'cookies.refreshExplain'" not in app, 'a key whose only user is gone'
-        assert app.count("'set.useProfileInline'") == 2, 'both catalogues carry the switch line'
+        assert 'cookies.refreshExplain' not in declared, 'a key whose only user is gone'
+        for lang in ('en', 'zh'):
+            assert 'set.useProfileInline' in keys[lang], f'the {lang} catalogue lost the switch line'
         # The line says what opening the switch BUYS, which is the one thing worth writing
         # next to a checkbox; a bare restatement of the label teaches nobody anything.
+        benefit_line = _entry_text('set.useProfileInline')[0]
         for benefit in ('weibo', 'xiaohongshu', 'douyin'):
-            assert benefit in app, f'the switch line stopped naming the platforms it helps: {benefit}'
-        assert "'advice.title': 'What each platform prefers'" in app, 'the en heading carries the note again'
-        assert '全部读自采集矩阵' not in app, 'the zh heading tells the user where we read it from'
-        for dead in ("'cookies.refresh':", "'cookie.refreshWorking':", "'cookie.refreshed':", "'dialog.cookieRefresh'"):
-            assert dead not in app, f'the button is gone but its catalogue entry ({dead}) stayed'
+            assert benefit in benefit_line, f'the switch line stopped naming the platforms it helps: {benefit}'
+        headings = _catalog_texts()
+        assert headings['en']['advice.title'] == 'What each platform prefers', 'the en heading lost the note'
+        assert '全部读自采集矩阵' not in headings['zh']['advice.title'], (
+            'the zh heading tells the user where we read it from'
+        )
+        for dead in ('cookies.refresh', 'cookie.refreshWorking', 'cookie.refreshed', 'dialog.cookieRefresh'):
+            assert dead not in declared, f'the button is gone but its catalogue entry ({dead}) stayed'
 
 
 class TestAccountCandidatesAndManager:

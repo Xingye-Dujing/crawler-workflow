@@ -29,10 +29,9 @@ from pathlib import Path
 
 import capabilities.registry as capabilities
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
 from sessions.cookies import CookieManager
-
-import i18n
 
 pytestmark = [
     pytest.mark.unit,
@@ -464,16 +463,21 @@ class TestStaticWiring:
             assert f'id="{element_id}"' in html, f'{key} saves into a missing #{element_id}'
 
     def test_the_new_labels_exist_in_both_languages(self):
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        """Every setting/dialog word the page or app.js asks for is DECLARED, in both languages.
+
+        The declaration is looked up in the whole browser dictionary — app.js's remainder plus each
+        ``js/i18n/<domain>.js`` — because grepping app.js for the definitions reports a moved domain
+        as a missing word, which is the failure this file once shipped as a raw key on screen.
+        """
         html = INDEX.read_text(encoding='utf-8')
-        keys = set(re.findall(r'data-i18n="([A-Za-z][\w.]*)"', html))
-        keys |= set(re.findall(r"I18n\.t\('((?:set|dialog|settings)\.[\w.]+)'", app))
-        tables = [i18n._EN, i18n._ZH]
-        catalog = set(re.findall(r"'((?:set|dialog|settings)\.[\w.]+)':", app))
-        missing = [key for key in keys if key.startswith(('set.', 'dialog.', 'settings.')) and key not in catalog]
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        asked = set(re.findall(r'data-i18n="([A-Za-z][\w.]*)"', html))
+        asked |= set(re.findall(r"I18n\.t\('((?:set|dialog|settings)\.[\w.]+)'", app))
+        asked = {key for key in asked if key.startswith(('set.', 'dialog.', 'settings.'))}
+        assert len(asked) > 30, f'the ask-list shrank to {len(asked)} — this test stopped measuring'
+        keys = _catalog_keys()
+        missing = [f'{key} in {lang}' for key in sorted(asked) for lang in ('en', 'zh') if key not in keys[lang]]
         assert not missing, f'labels the UI asks for that no catalogue defines: {missing}'
-        for table in tables:
-            assert table, 'app.js catalogues are parsed from the file, not imported'
 
     def test_the_profile_controls_are_declared_in_the_settings_panel(self):
         html = INDEX.read_text(encoding='utf-8')

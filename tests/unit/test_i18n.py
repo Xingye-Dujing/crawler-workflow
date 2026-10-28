@@ -19,6 +19,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import entry_text
 
 import i18n
 from i18n import DEFAULT_LANG, LANGS, audit, get_lang, missing_keys, normalize, set_lang, t
@@ -619,21 +620,9 @@ class TestNoHardcodedConsoleText:
         assert self._scan(allowed, 'sample.py') == []
 
 
-#: app.js holds the interface wording: one object per language, English first.
-_JS_CATALOG = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'app.js'
-
-
 def _js_texts(key: str) -> tuple[str, str]:
-    """The English and Chinese values of one ``app.js`` catalogue key, as written."""
-    src = _JS_CATALOG.read_text(encoding='utf-8')
-    split = src.index('zh: {')
-    out = []
-    for block in (src[:split], src[split:]):
-        at = block.find(f"'{key}'")
-        assert at != -1, f'{key} is missing from one of the two interface catalogues'
-        out.append(block[at : at + 900])
-    # Exactly two blocks are read, English first: the caller unpacks them as a pair.
-    return out[0], out[1]
+    """The English and Chinese values of one browser-catalogue key, wherever its domain lives."""
+    return entry_text(key)
 
 
 class TestTheOneSessionRuleIsSpoken:

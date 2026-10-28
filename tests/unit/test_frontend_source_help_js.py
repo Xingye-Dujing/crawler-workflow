@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import catalog_bodies as _catalog_bodies
 from node_runner import run_node
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
@@ -55,11 +56,6 @@ def _js(name: str) -> str:
     return (JS_DIR / name).read_text(encoding='utf-8')
 
 
-def _catalog(text: str, start: str, stop: str) -> set:
-    body = text[text.index(start) : text.index(stop)]
-    return {match for match in re.findall(r"^\s*'([A-Za-z][\w.]*)':", body, re.M)}
-
-
 class TestTheOverlayIsBuiltLikeTheOthers:
     def test_the_page_holds_the_shell_the_renderer_writes_into(self):
         markup = _markup()
@@ -98,12 +94,10 @@ class TestTheOverlayIsBuiltLikeTheOthers:
         assert placed_display_free()
 
     def test_every_word_the_guide_uses_exists_in_both_languages(self):
-        app = _js('app.js')
-        english = _catalog(app, 'dict: {', 'zh: {')
-        chinese = _catalog(app, 'zh: {', '_missing:')
+        bodies = _catalog_bodies()
         for key in GUIDE_KEYS:
-            assert key in english, f'{key} missing from the English catalogue'
-            assert key in chinese, f'{key} missing from the Chinese catalogue'
+            for lang in ('en', 'zh'):
+                assert key in bodies[lang], f'{key} missing from the {lang} catalogue'
         # A defined word nobody asks for is a dead key; a word asked for nobody defined is a
         # raw string on screen. Both directions are checked, from the same literal list.
         asked = _js('workflow.js') + _js('app.js') + _markup()

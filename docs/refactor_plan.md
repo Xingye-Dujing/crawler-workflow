@@ -16,7 +16,7 @@
 | `backend/api/` | 26 | 3,436 | `studio.py` 516 · `data.py` 423 |
 | `backend/analyzers/` | 16 | 4,633 | `llm_client.py` 934 |
 | `backend/nodes/` `engine/` `utils/` | 30 | 4,953 | `executors/source.py` 565 · `engine/workflow.py` 624 |
-| `backend/static/js/` | 11 | 25,924 | `workflow.js` **13,015** · `app.js` 5,071 · `canvas.js` 3,893 |
+| `backend/static/js/` | 12 | 25,981 | `workflow.js` **13,026** · `app.js` 4,265（词典已搬出一域）· `canvas.js` 3,893 · `i18n/settings.js` 852 |
 | `backend/static/` 其它 | — | 24,205 | `zenviz.html` **16,852** · `css/style.css` 5,017 |
 | `tests/` | 308 | 120,914 | `test_ui_layout.py` 5,062 · `test_data_analysis.py` 3,503 |
 
@@ -224,7 +224,7 @@ backend/
 | `app.py` | 3,537 | Stage 6（4,412 → 3,537 已由 sessions 路由搬出；剩 39 条路由 + 运行编排） |
 | `i18n.py` | 4620 | Stage 7 |
 
-前端另计：`workflow.js` 13,026 / `app.js` 5,071 / `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
+前端另计：`workflow.js` 13,026 / `app.js` 4,265（余量）+ `i18n/settings.js` 852（已搬的第一个域）/ `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
 
 1. 无 >900 行的产品模块；JS 无 >1,200 行文件；每个文件一个主题、每个目录一个域。
 
@@ -907,21 +907,46 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （`does not provide an export named 'loadPageScripts'`），`git checkout --` 恢复。
     **规矩：在仓库里「新建」一个文件之前先看它是否已在**（`git status --short` 里的 `M` 就是答案；
     `??` 才是真的新文件），而全家族测试是这类覆盖式写入唯一的 Detector。
-  - **Stage 8 剩余与下一刀（设计已定，必须一刀落地，不能半途）**：`app.js` 5,071 行里
-    `dict: { en: {…}, zh: {…} }` 占 3,654 行、en 侧 1,780 键 / 66 个前缀族
-    （`settings`=357 `biblio`+`biblioWs`=203 `toast`=78 `runsMgr`=78 `reusable`=62 `datasetMgr`=58
-    `schedMgr`=56 `validate`=51 `exportsMgr`=51 `studio`=45 `set`=45 `chart`=43 `wfHistory`=43 …）。
-    决定：`backend/static/js/i18n/<domain>.js`（约 9 个），每份
-    `(window.I18N_CATALOGUES = window.I18N_CATALOGUES || []).push({name, en: {…}, zh: {…}})`，
-    `app.js` 的 `dict` 由一个合并函数从该注册表构建并**在启动时拒绝同键两次**（与 Python 侧 `_merge_domain_table`
-    同一个理由：`{...a, ...b}` 会静默留后者）；`index.html` 把这些标签放在 `app.js` **之前**；
-    `page_scripts.mjs` 的 `only` 需要一条明示规则：选中 `app.js` 就连带词典文件（词典是 app.js 的数据，
-    不是可选模块）—— 这条必须写在 loader 里并由契约测试钉住，不能变成第二个手抄清单。
-    要同步的守卫：`test_frontend_contract._catalog_bodies()`（它已经是「唯一知道词典住在哪儿」的函数）、
-    `test_frontend_i18n_js` 的表面扫描、`harness_i18n_catalog.mjs`。
-    **风险明写**：词典搬家一半完成 = 产品 JS 直接坏掉（文字全空或 `t()` 回显 key），所以这一片必须
-    一次做完并跑真浏览器；如果上下文不够，宁可留在下一场按本节设计开工，不要中途停手。
-  - **下一刀 = Stage 8 第二片**：上面那件词典搬家；随后 `chart-preview.js`（`docs/frontend_modules.md` 的第一站，
+  - **Stage 8 第二片（浏览器词典按域搬家，第一刀 `settings`）已完成（2026-10-28）**：
+    `app.js` 5,071 → **4,265 行**，`dict` 从 3,654 行的一块变成「本地余量 + 注册表合并」。
+    - **一个域一次运行**（`build/split_app_catalog.py <domain>`，一次性工具不进 git）：生成的
+      `backend/static/js/i18n/settings.js` 是 `(globalThis.I18N_CATALOGUES = …).push({name, en, zh})`，
+      `index.html` 把它的 `<script>` 放在 `app.js` **之前**。这一刀搬走 **402 键**（`settings.` 357 + `set.` 45），
+      余量 1,473 键仍在 `app.js`；**半搬的词典仍是完整词典**，所以每次提交都能单独部署。
+    - `app.js` 新增 `_mergeCatalogues(local)`：以余量为底、逐表合并，**同一个键被两个域声明就抛错并点名两边**
+      （与 Python 侧 `_merge_domain_table` 同一个理由；`{...a, ...b}` 会静默留后者）。
+    - 工具的三条自证（都在写盘前）：每个被搬走的键在两种语言里各出现 **1** 次、留下的 + 搬走的不重不漏、
+      写出的文件键集 == 计划搬走的集合；搬走后重新解析 `app.js` 再核一遍。**值逐字节不变**由
+      `build/verify_catalog_move.mjs` 证明（旧 `app.js` 与新世界各自 `I18n.dict`，1,875 键 × 2 语言 **0 处差异**）。
+    - **搬家的真实形状比「一行一键」复杂**：同一行可以打包多个键（逗号在括号深度 0 处才结束一个键）、
+      一个值可以跨行用 `+` 拼接、块注释的续行不带任何标记。行级解析器在这三种形状上都读过假条目并 REFUSE，
+      最终工具是**字符级扫描**（引号/注释优先于括号），搬走的块整体按固定位移重排，留下的字节原样拼接
+      （diff 里只有被删掉的行）。
+    - **两个读者合并成一个**：新 `tests/frontend_catalogue.py` 是唯一知道「词典住在哪些文件、长什么形状」的地方
+      （`catalog_files/catalog_data/catalog_bodies/catalog_keys/catalog_texts/words_missing/entry_text/with_catalogue`），
+      `test_frontend_contract` / `test_frontend_i18n_js` / `test_i18n` / `test_frontend_source_help_js` /
+      `test_frontend_cookie_js` / `test_frontend_profiles_js` / `test_catbus_capability_dimension` /
+      `test_frontend_page_scripts_js` 全部改读它。顺带把三处「在 app.js 里数该键出现 2 次」改成
+      **两种语言各查一次**（更强：分文件后计数法会把搬走的域报成全缺）。
+    - **可达性审计的规则改了**：词典自己声明一个键不算「有人用它」（旧口径靠 `> 2` 的巧合），
+      现在从 `app_text` 里切掉 `dict:` 到 `_missing:` 再数引用。
+    - **装载规则补上第二半**：`page_scripts.mjs` 在选中 `app.js` 时连带 `js/i18n/*.js`；它读页面的路径清单，
+      所以 `test_frontend_page_scripts_js::_page_scripts` 也改成返回**相对 `js/` 的全名**
+      （`i18n/settings.js`，不是末段），否则一个说「磁盘上没有」一个说「有」。**四个把文件路径直接交给
+      harness 的驱动**（panel_actions / panels / schedules / app_state / cloud）新增 `with_catalogue()`：
+      harness 改成「按给定顺序逐个求值」而不是按 argv 下标取名（`process.argv[3]` 会把词典文件当成 `app.js`）。
+      新契约 `test_a_driver_that_boots_app_js_hands_it_its_catalogue` 扫全部 `run_node(...)` 调用并要求
+      `with_catalogue`，还带一个**扫描量下限**（≥20 次调用），否则正则腐烂后它照样绿。
+    - **测试自己抓到的两处**：① `harness_panel_actions` 少了词典文件时把 `3 settings.rows` 印到屏幕上——
+      文字断言在回显的键上照样通过，这正是「没词的应用」的形状；② `test_frontend_profiles_js` 的
+      「每个设置词都在两种语言里」原来只查 app.js，搬走后 48 个键全报缺失。两处都改成走共享读者。
+    - **门禁（最终字节）**：fast **8,185 passed / 3 skipped / 355 deselected**（一次 2 红：两处按 app.js 计数的
+      catbus 词典用例，改共享读者后复绿；该文件的 14 例全绿）；设备档（真 Chrome + 真 Ollama + 真 CatBus）
+      **194 passed / 0 跳过 / 7 分 17 秒**；`ruff check` + `format --check`（532 文件）全绿；`node --check` 8 个改动文件全过。
+  - **Stage 8 剩余（同一套机制，每域一次运行）**：`panels / biblio / chrome / charts / nodes / crawl / checks`
+    七个域按 `build/split_app_catalog.py` 逐个搬（工具支持在已拆过的 `app.js` 上再跑：区域识别兼容
+    `dict: _mergeCatalogues(…)`，合并函数只安装一次）；每域照例加一个 `<script>` 并跑
+    `node --check` + 前端家族 + 词典等价证明。之后 `chart-preview.js`（`docs/frontend_modules.md` 的第一站，
     约 1,170 行，牵动 4 个 harness + 1 处契约扫描）。再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
     #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
     `static/js/workflow.js`、`static/js/app.js` 在名单上）。

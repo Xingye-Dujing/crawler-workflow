@@ -22,6 +22,8 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import DICT_KEY as _DICT_KEY
+from frontend_catalogue import catalog_bodies as _catalog_bodies
 from node_runner import run_node
 
 pytestmark = [
@@ -227,12 +229,18 @@ class TestCatalogueShape:
 
         The parity harness reads a parsed dictionary, which has already collapsed the pair —
         so a duplicated key is invisible to every "same keys, same slots" check while one of
-        the two answers is dead code that the next editor will wonder about.
+        the two answers is dead code that the next editor will wonder about. The count is taken
+        across EVERY file the dictionary is spread over: two domains claiming one key is the same
+        accident in a shape no side-by-side diff would show, which is why app.js's merge refuses it
+        at load rather than letting the later file win.
         """
-        source = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        counts = Counter(re.findall(r"^\s+'([A-Za-z][\w.]*)':", source, re.M))
-        wrong = {key: n for key, n in counts.items() if n != 2}
-        assert wrong == {}, f'each key belongs to exactly one catalogue per language: {wrong}'
+        wrong = {
+            f'{lang}:{key}'
+            for lang, body in _catalog_bodies().items()
+            for key, count in Counter(_DICT_KEY.findall(body)).items()
+            if count != 1
+        }
+        assert wrong == set(), f'a key is declared more than once in one language: {sorted(wrong)}'
 
     def test_every_account_label_the_server_sends_has_a_word_in_both_languages(self):
         """``labelKey`` crosses the wire as a KEY; the browser is the one that must own it.
@@ -258,14 +266,14 @@ class TestCatalogueShape:
 
 
 def _dead_app_keys(en_keys, app_text, other_js, html, backend):
-    """Every ``app.js`` catalogue key no app surface renders.
+    """Every browser-catalogue key no app surface renders.
 
     A key is reachable when some file spells it — ``I18n.t('k')`` / an inline handler in the JS,
     a ``data-i18n*`` in index.html, or a literal in the backend that ships it over the wire (a
     server-sent ``label_key`` such as ``cookies.accountDefault``) — OR when it is built at runtime
     off a ``'prefix.' +`` root the JS actually uses (``nodeType.``, ``op.``, ``platform.`` …).
-    ``app.js`` holds BOTH the dictionary and the app logic, so its own keys count as used only when
-    they appear more than the two catalogue definitions (one per language)."""
+    ``app_text`` is the LOGIC half of app.js: a dictionary declaring its own keys is not a use of
+    them, which is the same reason the backend's catalogue files are excluded below."""
     all_js = app_text + '\n' + other_js
     dyn_roots = {root for root in re.findall(r"['\"]([A-Za-z][\w.]*\.)['\"]\s*\+", all_js)}
 
@@ -280,15 +288,24 @@ def _dead_app_keys(en_keys, app_text, other_js, html, backend):
             continue
         if qcount(other_js, key) or qcount(html, key) or qcount(backend, key):
             continue
-        if qcount(app_text, key) > 2:  # 2 catalogue definitions; a 3rd is app.js's own logic
+        if qcount(app_text, key):
             continue
         dead.append(key)
     return sorted(dead)
 
 
 def _app_surfaces():
-    app_text = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-    other_js = '\n'.join(p.read_text(encoding='utf-8') for p in sorted(JS_DIR.glob('*.js')) if p.name != 'app.js')
+    whole = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+    # The dictionary is DATA, not a surface that asks for a word: cut it out of app.js's logic.
+    start, stop = whole.index('dict: '), whole.index('_missing:')
+    app_text = whole[:start] + whole[stop:]
+    other_js = '\n'.join(
+        p.read_text(encoding='utf-8')
+        for p in sorted(JS_DIR.glob('*.js'))
+        # ``js/i18n/*.js`` is declaration only (``glob`` is not recursive, so they are not here);
+        # counting a domain file as a use of its own keys would report nothing dead, ever.
+        if p.name != 'app.js'
+    )
     html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
     backend = '\n'.join(
         p.read_text(encoding='utf-8', errors='replace')

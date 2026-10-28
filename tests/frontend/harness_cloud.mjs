@@ -13,7 +13,7 @@
  *   · the flag arrives asynchronously, so everything above has to be re-applied when it
  *     lands rather than only at the first paint.
  *
- * Usage: node harness_cloud.mjs <canvas.js> <workflow.js> <app.js>
+ * Usage: node harness_cloud.mjs <module.js> …   (canvas.js, workflow.js, app.js's catalogue, app.js)
  * Prints one JSON object to stdout.
  */
 import fs from 'node:fs';
@@ -21,8 +21,7 @@ import vm from 'node:vm';
 
 import { addOptions, baseSandbox, fixWindow, resetWorld } from './harness_dom.mjs';
 
-const [canvasPath, wfPath, appPath] = process.argv.slice(2);
-const src = [canvasPath, wfPath, appPath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
 
 /* One /api/config answer, switchable per scenario: the real boot reads it once, and the
    assertions below are about what the page does with the answer it got. */

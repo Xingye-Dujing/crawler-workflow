@@ -18,6 +18,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[2]
@@ -31,9 +32,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None,
 def results():
     proc = run_node(
         str(HARNESS),
-        str(JS_DIR / 'workflow.js'),
-        str(JS_DIR / 'app.js'),
-        str(JS_DIR / 'schedules.js'),
+        *with_catalogue(
+            [
+                JS_DIR / 'workflow.js',
+                JS_DIR / 'app.js',
+                JS_DIR / 'schedules.js',
+            ]
+        ),
     )
     assert proc.returncode == 0, proc.stderr
     return proc.stdout

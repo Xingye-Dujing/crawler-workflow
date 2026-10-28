@@ -19,7 +19,7 @@
  *   · the language switch re-renders every JS-built surface, not just the
  *     attribute-stamped ones.
  *
- * Usage: node harness_panel_actions.mjs <canvas.js> <workflow.js> <stats.js> <app.js> <menu.js>
+ * Usage: node harness_panel_actions.mjs <module.js> …  (canvas, workflow, stats, app.js's catalogue, app, menu)
  * Prints one JSON object to stdout.
  */
 import fs from 'node:fs';

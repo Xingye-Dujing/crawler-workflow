@@ -26,10 +26,19 @@ STUDIO = STATIC / 'zenviz.html'
 JS_DIR = STATIC / 'js'
 
 PAGE_SCRIPT = re.compile(r'<script\b[^>]*\bsrc="(/js/[^"]+)"')
+# One nesting level of parentheses is all a ``run_node(...)`` call needs to be read whole; if the
+# call ever grows past that, the floor below stops reporting a scan that quietly matches nothing.
+_RUN_NODE_CALL = re.compile(r'run_node\((?:[^()]|\([^()]*\))*\)')
 
 
 def _page_scripts(page: Path) -> list[str]:
-    return [src.rsplit('/', 1)[1] for src in PAGE_SCRIPT.findall(page.read_text(encoding='utf-8'))]
+    """The module names the page loads, relative to ``js/`` — the SAME spelling the loader uses.
+
+    ``i18n/settings.js``, not ``settings.js``: a reader that kept only the last segment would call
+    a subdirectory module missing from disk while the loader found it, and the two would disagree
+    about which files the page ships.
+    """
+    return [src.removeprefix('/js/') for src in PAGE_SCRIPT.findall(page.read_text(encoding='utf-8'))]
 
 
 class TestThePageListsItsOwnModules:
@@ -40,7 +49,7 @@ class TestThePageListsItsOwnModules:
     def test_every_module_is_loaded_by_a_page(self):
         """A module loaded by neither page is dead code whose tests would still pass."""
         loaded = set(_page_scripts(INDEX)) | set(_page_scripts(STUDIO))
-        on_disk = {path.name for path in JS_DIR.glob('*.js')}
+        on_disk = {path.relative_to(JS_DIR).as_posix() for path in JS_DIR.rglob('*.js')}
         assert on_disk - loaded == set(), f'frontend modules no page loads: {sorted(on_disk - loaded)}'
 
     def test_the_chart_studio_bridge_is_loaded_by_the_studio_not_the_workbench(self):
@@ -88,6 +97,46 @@ class TestThePageListsItsOwnModules:
         assert 'index.html' in loader
         assert re.search(r'<script\\b', loader), 'the loader must parse <script> tags, not name files itself'
 
+    def test_a_key_two_domains_claim_is_refused_at_load(self, tmp_path):
+        """With the dictionary split across files, "the later file wins" would be a word nobody chose.
+
+        Inside one object a duplicate key is the same accident, but a side-by-side diff shows it;
+        across two files nothing does. So app.js's merge names both claimants and stops the page —
+        this proves the refusal fires on the real bundle, with a table that claims a word the
+        shipped ``settings`` domain already owns.
+        """
+        dom = (REPO / 'tests' / 'frontend' / 'harness_dom.mjs').as_posix()
+        loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').as_posix()
+        driver = tmp_path / 'driver.mjs'
+        driver.write_text(
+            "import vm from 'node:vm';\n"
+            "import { pathToFileURL } from 'node:url';\n"
+            f'const {{ baseSandbox, fixWindow }} = await import(pathToFileURL({dom!r}).href);\n'
+            f'const {{ loadPageScripts }} = await import(pathToFileURL({loader!r}).href);\n'
+            'const sandbox = baseSandbox();\n'
+            'vm.createContext(sandbox);\n'
+            'fixWindow(vm, sandbox);\n'
+            'vm.runInContext(\n'
+            "    \"globalThis.I18N_CATALOGUES = [{name: 'mine', en: {'settings.file': 'x'}, "
+            "zh: {'settings.file': 'x'}}];\",\n"
+            '    sandbox\n'
+            ');\n'
+            'let message = "";\n'
+            'try {\n'
+            "    loadPageScripts(sandbox, { only: ['app.js'] });\n"
+            '} catch (err) {\n'
+            '    message = String((err && err.message) || err);\n'
+            '}\n'
+            'process.stdout.write(JSON.stringify({ message }));\n',
+            encoding='utf-8',
+        )
+        answer = run_node(str(driver))
+        assert answer.returncode == 0, answer.stderr[-600:]
+        message = json.loads(answer.stdout)['message']
+        # Both claimants are named: an editor must be told which two files disagree about the word.
+        assert 'settings.file' in message and 'is defined by both' in message, message
+        assert 'mine' in message and 'settings' in message, message
+
     def test_no_harness_keeps_a_private_list_of_product_modules(self):
         """A hand-written ``FILES`` array is a second opinion about the page — and its ORDER is a
         second opinion too. Four harnesses had one, and every one of them put ``custom-select.js``
@@ -114,3 +163,23 @@ class TestThePageListsItsOwnModules:
         # palette / profiles. The floor, not the exact set: a new multi-module harness should join
         # this group, and a deleted one must not silently leave the rule covering nothing.
         assert len(users) >= 7, f'only these harnesses use the page loader: {users}'
+
+    def test_a_driver_that_boots_app_js_hands_it_its_catalogue(self):
+        """A harness that evaluates ``app.js`` without ``js/i18n/*.js`` runs an app with no words.
+
+        Every ``t()`` then echoes its own key, so an assertion about a sentence passes on the echo —
+        measured on 2026-10-28, when the panel-actions harness printed ``3 settings.rows`` where it
+        had printed ``3 rows``. The page-reading loaders handle this in ``page_scripts.mjs``; the
+        drivers that hand file paths over need the same rule from the same place, so this asks every
+        one of them.
+        """
+        calls_seen = 0
+        offenders = []
+        for path in sorted((REPO / 'tests').rglob('*.py')):
+            calls = [match.group(0) for match in _RUN_NODE_CALL.finditer(path.read_text(encoding='utf-8'))]
+            calls_seen += len(calls)
+            offenders += [
+                f'{path.name}: {call[:70]}…' for call in calls if "'app.js'" in call and 'with_catalogue' not in call
+            ]
+        assert calls_seen >= 20, f'the scan saw {calls_seen} run_node calls — its pattern has rotted'
+        assert offenders == [], f'harness drivers that boot app.js without its catalogue: {offenders}'

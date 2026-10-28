@@ -11,23 +11,19 @@
  * Usage: node harness_i18n_catalog.mjs <jsDir>
  * Prints {"en": {key: template}, "zh": {key: template}}.
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const sandbox = baseSandbox();
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
 
-/* The same load order index.html uses: app.js's catalog is read at call time by the
-   helpers defined in workflow.js, and a missing global at load time would skip the
-   whole suite rather than report a catalogue. */
-for (const f of ['custom-select.js', 'workflow.js', 'app.js']) {
-    vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
-}
+/* The page's own load order, not a list kept here: the catalogue is app.js's remainder merged with
+   every js/i18n/<domain>.js, and a private list would report the moved half as missing words. */
+loadPageScripts(sandbox, { jsDir, only: ['custom-select.js', 'workflow.js', 'app.js'] });
 
 process.stdout.write(
     JSON.stringify({

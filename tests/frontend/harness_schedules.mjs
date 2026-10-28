@@ -10,7 +10,7 @@
  * dialog for (`fields`/`toggles`/`buttons`) and what it does with the answer, not the dialog's own
  * rendering (harness_dialog_a11y.mjs drives that).
  *
- * Usage: node harness_schedules.mjs <workflow.js> <app.js> <schedules.js>
+ * Usage: node harness_schedules.mjs <module.js> …   (workflow.js, app.js's catalogue, app.js, schedules.js)
  * Output: one JSON object of observations on stdout.
  */
 import fs from 'node:fs';
@@ -18,9 +18,11 @@ import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
-const workflowSrc = fs.readFileSync(process.argv[2], 'utf8');
-const appSrc = fs.readFileSync(process.argv[3], 'utf8');
-const schedulesSrc = fs.readFileSync(process.argv[4], 'utf8');
+/* Every module the driver named, in the order it named them. Nothing here addresses them by index:
+   app.js merges js/i18n/<domain>.js, those files are part of the list (see
+   tests/frontend_catalogue.py::with_catalogue), and a positional read would boot the wrong half of
+   the application. Each is evaluated as its own script, like a real <script> tag. */
+const modules = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8'));
 
 const calls = { gets: 0, posts: [], toasts: [], dialogs: [], dialog: null };
 /* One mutable reply for every request, so a scenario can make the server refuse
@@ -48,9 +50,7 @@ sandbox.fetch = (url, options) => {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(workflowSrc, sandbox);
-vm.runInContext(appSrc, sandbox);
-vm.runInContext(schedulesSrc, sandbox);
+for (const src of modules) vm.runInContext(src, sandbox);
 /* Chinese: every status word differs from the token it came from, so "the token became
    a word" is an observation rather than a coincidence of English spelling. */
 vm.runInContext("I18n.lang = 'zh';", sandbox);

@@ -9,12 +9,11 @@ real one is exercised by the adapter's own tests and the real-CLI tier.
 """
 
 import json
-import re
-from pathlib import Path
 from types import SimpleNamespace
 
 import capabilities.registry as capabilities
 import pytest
+from frontend_catalogue import catalog_keys as _catalog_keys
 
 from crawlers.backends import catbus as catbus_module
 from services.ingest import catbus as bridge
@@ -242,29 +241,34 @@ class TestTheLabelCatalogueCoversEveryManifestMode:
         assert missing == [], f'CatBus modes with no panel label: {missing}'
 
     def test_every_label_exists_in_both_browser_catalogues(self):
-        source = (Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'app.js').read_text(
-            encoding='utf-8'
-        )
-        for mode, key in capabilities.CATBUS_MODE_LABELS.items():
-            occurrences = len(re.findall(rf"""['"]{re.escape(key)}['"]\s*:""", source))
-            assert occurrences == 2, f'{mode} -> {key} appears {occurrences} times (want zh + en)'
+        tables = _catalog_keys()
+        missing = [
+            f'{mode} -> {key} in {lang}'
+            for mode, key in capabilities.CATBUS_MODE_LABELS.items()
+            for lang in ('en', 'zh')
+            if key not in tables[lang]
+        ]
+        assert missing == [], f'CatBus mode labels no browser catalogue defines: {missing}'
 
     def test_the_engine_and_cell_words_exist_in_both_catalogues(self):
-        source = (Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'app.js').read_text(
-            encoding='utf-8'
-        )
-        for key in (
-            'settings.crawlEngine',
-            'settings.engineHint',
-            'settings.backendNoPlatform',
-            'settings.backendNoRunnable',
-            'settings.backendNoSelenium',
-            'settings.backendUnknown',
-            'settings.catbusModeNote',
-            'settings.catbusUrlsHint',
-            'validate.modeUnavailable',
-        ):
-            assert len(re.findall(rf"""['"]{re.escape(key)}['"]\s*:""", source)) == 2, key
+        tables = _catalog_keys()
+        missing = [
+            f'{key} in {lang}'
+            for key in (
+                'settings.crawlEngine',
+                'settings.engineHint',
+                'settings.backendNoPlatform',
+                'settings.backendNoRunnable',
+                'settings.backendNoSelenium',
+                'settings.backendUnknown',
+                'settings.catbusModeNote',
+                'settings.catbusUrlsHint',
+                'validate.modeUnavailable',
+            )
+            for lang in ('en', 'zh')
+            if key not in tables[lang]
+        ]
+        assert missing == [], f'panel words no browser catalogue defines: {missing}'
 
 
 class TestTheCrawlerRefusesAnIgnoredCondition:

@@ -17,16 +17,18 @@
  * `DOCKED_PANELS` member — `test_frontend_schedules.py` fails a panel that is
  * docked but missing here, because a dock nobody drives is a dock nobody checks.
  *
- * Usage: node harness_panels.mjs <workflow.js> <app.js> <schedules.js>
+ * Usage: node harness_panels.mjs <module.js> …   (workflow.js, app.js's catalogue, app.js, schedules.js)
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
-const workflowSrc = fs.readFileSync(process.argv[2], 'utf8');
-const appSrc = fs.readFileSync(process.argv[3], 'utf8');
-const schedulesSrc = fs.readFileSync(process.argv[4], 'utf8');
+const modules = process.argv.slice(2).map((p) => ({ path: p, src: fs.readFileSync(p, 'utf8') }));
+/* One dock rule is read out of app.js's OWN text, so the list keeps where each source came from.
+   Nothing is addressed by index: app.js's catalogue files are part of this list (see
+   tests/frontend_catalogue.py::with_catalogue), and a positional read would grab the wrong file. */
+const appSrc = modules.find((m) => /(^|[\\/])app\.js$/.test(m.path)).src;
 
 const sandbox = {
     ...baseSandbox(),
@@ -35,10 +37,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(workflowSrc, sandbox);
-/* app.js is an IIFE-ish sibling of workflow.js in the browser: same global. */
-vm.runInContext(appSrc, sandbox);
-vm.runInContext(schedulesSrc, sandbox);
+for (const m of modules) vm.runInContext(m.src, sandbox);
 
 const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel', 'biblio-panel'];
 

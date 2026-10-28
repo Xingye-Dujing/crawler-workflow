@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
 pytestmark = [
@@ -30,9 +31,13 @@ HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_app_state.
 def st():
     proc = run_node(
         str(HARNESS),
-        str(JS_DIR / 'canvas.js'),
-        str(JS_DIR / 'workflow.js'),
-        str(JS_DIR / 'app.js'),
+        *with_catalogue(
+            [
+                JS_DIR / 'canvas.js',
+                JS_DIR / 'workflow.js',
+                JS_DIR / 'app.js',
+            ]
+        ),
     )
     assert proc.returncode == 0, f'app-state harness failed: {proc.stderr[-2000:]}: {proc.stdout[-2000:]}'
     return json.loads(proc.stdout)

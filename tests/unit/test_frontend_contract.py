@@ -20,6 +20,10 @@ from pathlib import Path
 
 import capabilities.registry as capabilities
 import pytest
+from frontend_catalogue import catalog_bodies as _catalog_bodies
+from frontend_catalogue import catalog_keys as _catalog_keys
+from frontend_catalogue import catalog_texts as _catalog_texts
+from frontend_catalogue import words_missing as _words_missing
 from node_runner import run_node
 from sessions.cookies import CookieManager
 
@@ -57,37 +61,7 @@ _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*(?:,|\))""")
 # ``_VAR_CALL`` is the same audit widened, and ``_SLOT`` feeds the fill check below.
 _VAR_CALL = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*,\s*\{([^{}]*)\}\s*\)""")
 _SLOT = re.compile(r'\{(\w+)\}')
-_DICT_KEY = re.compile(r"""['"]([A-Za-z][\w.]*)['"]\s*:\s*['"]""")
 _DATA_I18N = re.compile(r'data-i18n="([A-Za-z][\w.]*)"')
-
-
-def _catalog_bodies():
-    """{lang: the source slice of that language's dict} — the one place that knows where the two
-    catalogues live in app.js, so a second reader cannot disagree about which half it parsed."""
-    src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-    en_start = src.index('dict: {')
-    return {
-        'en': src[en_start : src.index('zh: {', en_start)],
-        'zh': src[src.index('zh: {', en_start) : src.index('_missing:')],
-    }
-
-
-def _catalog_keys():
-    """{lang: set(keys)} parsed out of app.js's I18n.dict literals."""
-    return {lang: {m.group(1) for m in _DICT_KEY.finditer(body)} for lang, body in _catalog_bodies().items()}
-
-
-_TEXT_ENTRY = re.compile(r"""['"]([A-Za-z][\w.]*)['"]\s*:\s*'([^'\n]*)'""")
-
-
-def _catalog_texts():
-    """{lang: {key: text}} for the entries written on ONE line.
-
-    A template split across lines is left out rather than half-parsed: its slots are still
-    covered by the parity audit, and a regex that guessed at multi-line strings would report a
-    slot that is not there.
-    """
-    return {lang: dict(_TEXT_ENTRY.findall(body)) for lang, body in _catalog_bodies().items()}
 
 
 class TestCanvasSerialization:
@@ -427,15 +401,12 @@ class TestBiblioPanelContract:
 
     def test_every_bibliometric_view_has_a_word_in_both_catalogues(self):
         """``chart.<type>`` is a computed key: the dropdown asks for it by concatenation, so a
-        type with no entry renders as the raw key in one language. Both catalogues live in
-        ``app.js``, so the key must appear at least twice."""
-        src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        missing = [chart for chart in BIBLIO_CHART_TYPES if src.count(f"'chart.{chart}'") < 2]
+        type with no entry renders as the raw key in one language."""
+        missing = _words_missing('chart.', BIBLIO_CHART_TYPES)
         assert missing == [], f'bibliometric views with no zh/en word: {missing}'
 
     def test_every_label_source_has_a_word_in_both_catalogues(self):
-        src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        missing = [source for source in LABEL_SOURCES if src.count(f"'biblio.label_source.{source}'") < 2]
+        missing = _words_missing('biblio.label_source.', LABEL_SOURCES)
         assert missing == [], f'label sources with no zh/en word: {missing}'
 
     def test_a_new_biblio_parameter_is_seeded_on_a_new_node(self):
@@ -466,10 +437,11 @@ class TestPaletteContract:
 
     def test_every_palette_node_has_params_and_a_label(self):
         canvas_src = CANVAS_JS.read_text(encoding='utf-8')
-        app_src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        for ntype in self._palette_types():
+        types = self._palette_types()
+        for ntype in types:
             assert f"if (type === '{ntype}')" in canvas_src, f'getDefaultParams lacks {ntype}'
-            assert f"'node.{ntype}'" in app_src, f'catalogue lacks node.{ntype}'
+        missing = _words_missing('node.', types)
+        assert missing == [], f'catalogue has no label for a palette node: {missing}'
 
     def test_comments_is_a_source_mode_not_a_palette_item(self):
         # The standalone CMT node lingers in the engine for old canvases, but
@@ -566,16 +538,14 @@ class TestCookiePanelParity:
         renamed both a while ago and nothing went red: the guidance quietly started
         pointing at buttons no longer on screen, which no Python test can see unless
         somebody asks it to."""
-        app_src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        en_src = app_src[app_src.index('dict: {') : app_src.index('zh: {')]
-        zh_src = app_src[app_src.index('zh: {') : app_src.index('_missing:')]
+        bodies = _catalog_bodies()
 
         def labels(block: str) -> dict:
             found = dict(re.findall(r"'(cookies\.(?:generate|doneBtn))': '([^']*)'", block))
             assert len(found) == 2, f'the panel labels moved, and this test cannot follow: {found}'
             return found
 
-        for language, table, panel in (('zh', i18n._ZH, labels(zh_src)), ('en', i18n._EN, labels(en_src))):
+        for language, table, panel in (('zh', i18n._ZH, labels(bodies['zh'])), ('en', i18n._EN, labels(bodies['en']))):
             for platform in CookieManager.PLATFORMS:
                 steps = table[f'cookie.{platform}.steps']
                 for key in ('cookies.generate', 'cookies.doneBtn'):
@@ -918,18 +888,11 @@ class TestChromeOfThePageItself:
             'the tab template exists more than once, so the two bars can disagree'
         )
 
-        # The browser labels a platform from ``platform.*`` in app.js and the backend from
-        # ``i18n._PLATFORM_LABELS``. Two lists of the same nine words drift the moment one of
-        # them is edited — and the console and the dialog would then name the same site
-        # differently, in the same language, on the same screen.
-        source = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        for lang, body in (
-            ('en', source[source.index('dict: {') : source.index('zh: {')]),
-            (
-                'zh',
-                source[source.index('zh: {') : source.index('_missing:')],
-            ),
-        ):
+        # The browser labels a platform from ``platform.*`` in the catalogue and the backend from
+        # ``i18n._PLATFORM_LABELS``. Two lists of the same words drift the moment one of them is
+        # edited — and the console and the dialog would then name the same site differently, in the
+        # same language, on the same screen.
+        for lang, body in _catalog_bodies().items():
             front = dict(re.findall(r"""['"]platform\.([\w-]+)['"]\s*:\s*['"]([^'"]*)['"]""", body))
             back = i18n._PLATFORM_LABELS[lang]
             assert set(front) == set(back), f'{lang}: the two layers list different platforms'

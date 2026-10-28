@@ -19,6 +19,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from frontend_catalogue import with_catalogue
 from node_runner import run_node
 
 pytestmark = [
@@ -33,7 +34,9 @@ FILES = ('canvas.js', 'workflow.js', 'stats.js', 'app.js', 'menu.js')
 
 @pytest.fixture(scope='module')
 def pa():
-    proc = run_node(str(HARNESS), *[str(JS_DIR / name) for name in FILES])
+    # ``with_catalogue``: app.js merges js/i18n/*.js, and a harness that boots it without them runs
+    # an application with no words — every t() echoes its key and the text assertions measure echoes.
+    proc = run_node(str(HARNESS), *with_catalogue([JS_DIR / name for name in FILES]))
     assert proc.returncode == 0, f'panel-action harness failed: {proc.stderr[-2000:]}: {proc.stdout[-2000:]}'
     return json.loads(proc.stdout)
 
