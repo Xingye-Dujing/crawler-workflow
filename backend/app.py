@@ -11,7 +11,6 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
-import pandas as pd
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
 from api.capabilities import bp as capabilities_bp
@@ -67,7 +66,6 @@ from state import (
     add_log,
     execute_lock,
     execution_state,
-    history_service,
     reset_console_state,
     set_log_sink,
     stop_requested,
@@ -75,7 +73,6 @@ from state import (
 from stores import (
     _apply_dataset_meta,
     get_dataset_store,
-    get_housekeeper,
     get_run_store,
     get_workflow_history_store,
     get_workflow_manager,
@@ -95,9 +92,10 @@ from engine.plan import (
 )
 from engine.workflow import WorkflowEngine, effective_workflow
 from i18n import audit, get_lang, normalize, set_lang, t
-from services import StatsService, lock_store
+from services import lock_store
 from services.analysis.pipeline import UnknownOperationError
 from services.ingest.lifecycle import close_login_browser as _close_login_browser
+from services.runs.history import record_execution_history
 from services.runs.payload import resume_refusal, workflow_shape_error
 from services.runs.queue import (
     QUEUE_MAX,
@@ -111,9 +109,9 @@ from services.runs.queue import (
 from services.runs.settlement import (
     STOP_QUIT_GRACE,
     close_active_crawlers,
-    locked_run_ids,
+    close_run,
+    housekeep,
     mark_records_stopping,
-    prune_orphan_run_locks,
 )
 from services.runs.store import (
     NODE_DONE,
@@ -521,9 +519,10 @@ def _record_export_stamp(store, run_id: str) -> str:
 
 
 # ─── Durable run state ──────────────────────────────────────────
-# The run ledger + housekeeper singletons, their locks and get_run_store()/get_housekeeper()
-# now live in backend/stores.py (imported back near the top). They are reached here through
-# those getter names so a test that patches app.get_run_store still intercepts these calls.
+# The run ledger / dataset store / housekeeper / canvas-manager singletons and their locks live in
+# backend/stores.py; ``get_run_store`` is imported back here because a test that patches it must
+# still intercept the app-internal calls. What the housekeeper sweeps for is now called from
+# ``services.runs.settlement.housekeep``, not from this file.
 
 
 def __getattr__(name):
@@ -557,120 +556,6 @@ def __getattr__(name):
 
         return getattr(crawlers, name)
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
-
-
-def _as_run_ids(value) -> list[str]:
-    if isinstance(value, str):
-        return [value] if value else []
-    return [str(v) for v in (value or []) if str(v)]
-
-
-def _housekeep(exclude_run_id='', force: bool = False):
-    """Apply the retention settings, containing every failure.
-
-    A cleanup problem must never be what makes a run look failed, so nothing
-    here propagates. ``exclude_run_id`` protects the record the caller is still
-    writing — dropping its rows mid-run would destroy live state. It takes a
-    sequence too, because a serial multi-workflow run closes one record per
-    workflow and all of them are the state that was just built. The automatic
-    sweep also spares every 置顶 record (the user's directive: a pin that only
-    stopped a manual delete but not the age-based sweep is not a pin)."""
-    keep = _as_run_ids(exclude_run_id) + sorted(locked_run_ids())
-    with contextlib.suppress(Exception):
-        if force:
-            get_housekeeper().run_now(exclude_run_id=keep)
-        else:
-            get_housekeeper().maybe_run(exclude_run_id=keep)
-        # The chart backend is never touched by the runs.db sweep (it keys on its own
-        # id), so age its metric rows here — otherwise it grows forever and plots
-        # trends for crawls whose data is long gone.
-        history_service.purge_older_than(Config.RUN_KEEP_DAYS)
-    prune_orphan_run_locks()
-
-
-def _close_run(ctx: dict, outcome: str):
-    """Record how a run ended.
-
-    Never raises: losing the record must never lose the run itself — the rows were
-    already safely in the database, this says only whether they are complete.
-
-    But it does not swallow the failure *silently* either. A row left on 运行中 is read
-    back as "still crawling", the resume banner will not offer it, and the only repair
-    was restarting the service — measured, and it is why pressing 停止 used to look
-    slower than a restart. The console therefore says which record it could not close,
-    and `/api/runs/list` settles it on the next panel read (see ``run.reconciled``).
-
-    Serial mode with several workflows opens one record per workflow, and each is
-    closed with its own verdict the moment its workflow's turn ends; what is left
-    standing here is the record that was still executing when the run exited, and
-    the single-record case, where the whole run shares one verdict.
-    """
-    # ``open_records`` is set as soon as a record is opened, so a run that closed
-    # every workflow it started arrives here with an EMPTY list — which means
-    # nothing to close, not "close the run's own id" (that row may not exist at
-    # all after the split, and re-writing a verdict over a workflow that already
-    # got its own would be the worse mistake).
-    records = ctx.get('open_records')
-    with _completed_lock:
-        attempted = set(execution_state['attempted_nodes'])
-    for run_id in records if records is not None else [ctx['run_id']]:
-        try:
-            ctx['store'].settle_nodes(run_id)
-            ctx['store'].finish_run(run_id, outcome, attempted=attempted)
-        except Exception as e:
-            add_log(t('run.recordWriteFailed', rid=run_id, err=e))
-    if records is not None:
-        records[:] = []
-
-
-def _record_execution_history(
-    workflow: dict, engine: WorkflowEngine, results: dict, workflow_name: str = '', log_label: str = ''
-):
-    """After a run completes, snapshot per-node metrics (row counts, and
-    emotion/tendency distributions where present) into execution_history so
-    /api/history/* can chart trends across runs over time. Best-effort: a
-    failure here must never break the workflow run itself.
-
-    The name matters: without it every run was filed as "untitled" and the
-    history panel's per-workflow grouping could not distinguish anything.
-    """
-    try:
-        run_id = uuid.uuid4().hex[:12]
-        workflow_name = str(workflow_name or (workflow or {}).get('name') or '').strip() or 'untitled'
-        ts = history_service.now()
-        rows = []
-        # One run can have several nodes carrying the same distribution — the
-        # emotion process computes it, then the output node exports the very
-        # same column, and both used to be recorded. Two identical points at
-        # one timestamp drew a doubled tooltip, so per run a (metric, label)
-        # pair is recorded once, from the first node that produced it.
-        seen_metrics = set()
-        for nid, result in results.items():
-            if not isinstance(result, list) or not result:
-                continue
-            node = engine.nodes.get(nid, {})
-            ntype = node.get('type', '?')
-            rows.append((run_id, workflow_name, nid, ntype, 'rows', 'count', float(len(result)), ts))
-
-            df = pd.DataFrame(result)
-            if 'emotion' in df.columns:
-                dist = StatsService.emotion_distribution(result)
-                for label, value in zip(dist['labels'], dist['values'], strict=True):
-                    if ('emotion', label) in seen_metrics:
-                        continue
-                    seen_metrics.add(('emotion', label))
-                    rows.append((run_id, workflow_name, nid, ntype, 'emotion', label, float(value), ts))
-            if 'tendency' in df.columns:
-                dist = StatsService.tendency_distribution(result)
-                for label, value in zip(dist['labels'], dist['values'], strict=True):
-                    if ('tendency', label) in seen_metrics:
-                        continue
-                    seen_metrics.add(('tendency', label))
-                    rows.append((run_id, workflow_name, nid, ntype, 'tendency', label, float(value), ts))
-
-        history_service.record_many(rows, log_label=log_label)
-    except Exception:
-        logger.exception(t('misc.history_failed'))
 
 
 # ─── API Routes ────────────────────────────────────────────────
@@ -1875,7 +1760,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 for wf_idx, se in enumerate(sub_engines):
                     snapshot = _results_snapshot()
                     sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
-                    _record_execution_history(
+                    record_execution_history(
                         None,
                         se,
                         sub_results,
@@ -1914,7 +1799,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 with _completed_lock:
                     execution_state['outcome'] = 'failed'
             else:
-                _close_run(ctx, outcome)
+                close_run(ctx, outcome)
             with _completed_lock:
                 # Every exit must leave a verdict: the browser stops guessing from
                 # `completed < total` and reads this instead, and an empty string
@@ -1924,7 +1809,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # Retention is only real if something applies it. A finished run is
             # the natural moment: the databases are open, no writer is active and
             # the user just proved the machine is in use.
-            _housekeep(exclude_run_id=list(created) or [run_id])
+            housekeep(exclude_run_id=list(created) or [run_id])
             # The tee exists to catch the analyzers' print() output *during* a
             # run; leaving it installed meant every later print — from any
             # request — also showed up in the console panel.
@@ -2748,7 +2633,7 @@ def start_background_services() -> None:
     """
     # Retention is applied on its own, not only when somebody remembers to
     # click: startup is the other moment nothing is writing.
-    _housekeep(force=True)
+    housekeep(force=True)
     # A restart must not silently drop the requests the user already parked.
     restored = load_pending_queue()
     if restored:

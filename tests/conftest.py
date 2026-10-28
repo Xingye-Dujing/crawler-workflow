@@ -6,8 +6,9 @@ Three facts about this codebase drive everything here:
    next by top-level name (``from core.config import Config``). So backend/ goes on
    sys.path at *conftest import time*.
 2. Paths are captured **at import time, into module-level singletons**:
-   ``app.cookie_manager = CookieManager(Config.COOKIE_DIR)``, ``app.history_service``
-   opens ``data/history.db``, ``settings_store._PATH`` and ``analyzers/ml_base.MODEL_DIR``
+   ``state.cookie_manager = CookieManager(Config.COOKIE_DIR)`` and ``state.history_service``
+   (which opens ``data/history.db``) are built when ``state`` is imported,
+   ``settings_store._PATH`` and ``analyzers/ml_base.MODEL_DIR``
    are each computed once, and the lazy ``_RUN_STORE`` / ``_DATASET_STORE`` read
    ``Config.*_DB`` at first use.
 3. pytest imports *every collected test module* during collection — before any fixture

@@ -18,11 +18,13 @@ import logging
 import os
 import sqlite3
 import time
+import uuid
 
 import pandas as pd
 from core.config import Config
 
 from i18n import t
+from services.analysis.stats import StatsService
 
 logger = logging.getLogger(__name__)
 
@@ -201,3 +203,53 @@ class ExecutionHistoryService:
         conn.commit()
         conn.close()
         return int(cur.rowcount or 0)
+
+
+def record_execution_history(workflow: dict, engine, results: dict, workflow_name: str = '', log_label: str = ''):
+    """After a run completes, snapshot per-node metrics (row counts, and
+    emotion/tendency distributions where present) into execution_history so
+    /api/history/* can chart trends across runs over time. Best-effort: a
+    failure here must never break the workflow run itself.
+
+    The name matters: without it every run was filed as "untitled" and the
+    history panel's per-workflow grouping could not distinguish anything.
+    """
+    from state import history_service
+
+    try:
+        run_id = uuid.uuid4().hex[:12]
+        workflow_name = str(workflow_name or (workflow or {}).get('name') or '').strip() or 'untitled'
+        ts = history_service.now()
+        rows = []
+        # One run can have several nodes carrying the same distribution — the
+        # emotion process computes it, then the output node exports the very
+        # same column, and both used to be recorded. Two identical points at
+        # one timestamp drew a doubled tooltip, so per run a (metric, label)
+        # pair is recorded once, from the first node that produced it.
+        seen_metrics = set()
+        for nid, result in results.items():
+            if not isinstance(result, list) or not result:
+                continue
+            node = engine.nodes.get(nid, {})
+            ntype = node.get('type', '?')
+            rows.append((run_id, workflow_name, nid, ntype, 'rows', 'count', float(len(result)), ts))
+
+            df = pd.DataFrame(result)
+            if 'emotion' in df.columns:
+                dist = StatsService.emotion_distribution(result)
+                for label, value in zip(dist['labels'], dist['values'], strict=True):
+                    if ('emotion', label) in seen_metrics:
+                        continue
+                    seen_metrics.add(('emotion', label))
+                    rows.append((run_id, workflow_name, nid, ntype, 'emotion', label, float(value), ts))
+            if 'tendency' in df.columns:
+                dist = StatsService.tendency_distribution(result)
+                for label, value in zip(dist['labels'], dist['values'], strict=True):
+                    if ('tendency', label) in seen_metrics:
+                        continue
+                    seen_metrics.add(('tendency', label))
+                    rows.append((run_id, workflow_name, nid, ntype, 'tendency', label, float(value), ts))
+
+        history_service.record_many(rows, log_label=log_label)
+    except Exception:
+        logger.exception(t('misc.history_failed'))

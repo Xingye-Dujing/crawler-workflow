@@ -734,18 +734,38 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     教训：**清点一个模块的消费者要按「谁 bind 过它」而不是「谁写了那个路径」，而函数内的 `from app import X`
     与 `app_module.X` 两种形状都要查** —— 只 grep 文件顶部就漏了 3 个文件。修后 `tests/api/`
     **2,246 passed**。
-  - **下一刀 = Stage 6 第六片：运行编排**。`app.py` 剩下的主体是 `_begin_run` + worker +
-    `_run_node_durable` + `_execute_node` + `_close_run` + `_housekeep` + `_record_execution_history`
+  - **Stage 6 第六片（记录侧）已完成（本次记录）**：`_record_execution_history` →
+    `services/runs/history.py::record_execution_history`（`from state import history_service` 写在函数里，
+    与 `housekeeping.run_now` 同一手法 —— `state` 自己就 import 这个模块，顶层 import 就是环；
+    两种 import 顺序都实测过）；`_as_run_ids`/`_housekeep`/`_close_run` →
+    `services/runs/settlement.py` 的 `as_run_ids`/`housekeep`/`close_run`（置顶、保留策略、结算判决
+    本来就是同一个问题的三面）。`app.py` 2,779 → **2,669 行**，并因此**不再 import pandas**、
+    不再 import `StatsService`/`history_service`/`get_housekeeper`。
+    **一次我自己写坏的字节**：搬 `record_execution_history` 时我把 `days * 86400` 打成
+    `days * 84000 * 60 // 60`（= 84000，保留期提前 2.8% 生效），当场发现当场改回，最终 diff 里
+    那一行**没有出现在增删两侧**就是证据。教训：**手抄不是搬移**，长行必须逐字段 diff 复核；
+    脚本化的整块切割（本片用 `build/drop_record_from_app.py`，断言「范围里恰好 4 个 def」）比手抄稳。
+    **两条跟着搬的接缝**：`test_run_races.py` 的 `app_module._close_run(...)` → `close_run`
+    （连它上面的 docstring 一起改），`test_scheduler.py` 打给启动序列的桩
+    `setattr(app_module, '_housekeep', …)` → `'housekeep'`（桩仍打在 app 的绑定上，因为
+    `start_background_services` 调的就是 app 全局名）。文档侧顺手拆了 `ARCHITECTURE.md` 那条
+    「三个全局在 app.py」的旧表 —— 它现在属于 `stores.py`，而引用 `app.py:640/346/658` 的行号
+    在本仓库必然腐烂。
+    **定向门禁**：`test_scheduler` + `test_run_races` + `test_execution_history` + `test_doc_paths`
+    + `test_run_records_parallel` **114 passed**；ruff check 干净；隔离根真启动 9 个 GET 全 200
+    （`/`、config、runs/list、runs/stats、workflow/list、workflow/queue、stats/summary、
+    history/runs、workflow/status），随后已杀自己起的进程（PID 39784，5057 无 LISTEN）。
+  - **下一刀 = Stage 6 第七片：运行编排本体**。`app.py` 剩下的主体是 `_begin_run`（约 890 行）+ worker
+    + `_run_node_durable` + `_execute_node` + `_settle_node_as_stopped` + `_note_heavy_result`
     + `_start_next_queued` + `_scheduled_canvas`/`_start_scheduled_run`，目标是 `engine/run.py`。
-    它是本重构最大的一刀，**先切小的可验证片**：`_record_execution_history`（读 `history_service` +
-    `StatsService` + `pd`）与 `_close_run`/`_housekeep`（读 stores/settlement）先搬，`_begin_run` 最后。
-    编排落位后 `/api/workflow/*` 的 14 条路由才是薄壳，搬进 `api/workflow.py`，app 只剩 `/`、
-    `execute`、`rerun-node` —— 反过来先搬路由会造一个只为删除而存在的注入接缝。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
-    Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；
-    `settings_store` 等 i18n 拆分后进 core。**前置小刀已完成**：`workflow_manager` 不再是 app 全局，
-    它与 `WorkflowHistoryStore` 同款住进 `stores.get_workflow_manager()`（Blueprint 与引擎模块都不能
-    import app 才能读画布）；`tests/api/test_schedules_api.py` 的两处读取跟着改，其中 `canvas` fixture
-    因此不再需要 `app_module` 参数。
+    搬前必须做一次**桩点清点**（`grep "setattr(app_module, '"` 与 `app_module.<名>` 两种形状）：
+    `add_log`/`get_run_store`/`get_crawler`/`stop_requested`/`load_pending_queue` 都曾被打在 app 上，
+    编排一走这些桩就落空 —— 已有 `tests/executor_seams.py::forward` 这一先例可复用。
+  - **再下一刀**：编排落位后 `/api/workflow/*` 的 14 条路由才是薄壳，搬进 `api/workflow.py`
+    （save/load/list/rename/delete + queue×3 + stop/status/processes/kill），app 只剩 `/`、`execute`、
+    `rerun-node` —— 反过来先搬路由会造一个只为删除而存在的注入接缝。之后：Stage 7 i18n；Stage 8 前端；
+    Stage 9 op 注册表；Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core
+    （运行层）；`settings_store` 等 i18n 拆分后进 core。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

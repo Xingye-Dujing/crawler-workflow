@@ -16,6 +16,7 @@ import time from ``Config.DATA_DIR``.
 from pathlib import Path
 
 import pytest
+from state import history_service
 
 pytestmark = pytest.mark.api
 
@@ -77,13 +78,13 @@ class TestStatsEndpoints:
 
 class TestHistoryEndpoints:
     @pytest.fixture
-    def recorded(self, client, app_module, data_root):
+    def recorded(self, data_root):
         """File a handful of metric rows under a name no other test uses."""
 
         def _record(workflow_name, rows):
-            assert Path(app_module.history_service.db_path) == data_root / 'data' / 'history.db'
-            stamp = app_module.history_service.now()
-            app_module.history_service.record_many(
+            assert Path(history_service.db_path) == data_root / 'data' / 'history.db'
+            stamp = history_service.now()
+            history_service.record_many(
                 [
                     (f'hist-{workflow_name}', workflow_name, nid, ntype, metric, label, value, stamp)
                     for nid, ntype, metric, label, value in rows
@@ -93,10 +94,10 @@ class TestHistoryEndpoints:
 
         return _record
 
-    def test_the_import_time_history_service_is_the_tmp_one(self, app_module, data_root):
-        """``history_service`` is built while ``app`` is imported, so this is the
+    def test_the_import_time_history_service_is_the_tmp_one(self, data_root):
+        """``history_service`` is built while ``state`` is imported, so this is the
         one path a test could silently write into the real repository."""
-        assert Path(app_module.history_service.db_path) == data_root / 'data' / 'history.db'
+        assert Path(history_service.db_path) == data_root / 'data' / 'history.db'
 
     def test_runs_are_grouped_per_execution_with_workflow_names(self, client, recorded):
         rows = [('node-1', 'upload', 'rows', 'count', 6), ('node-2', 'analysis', 'rows', 'count', 4)]

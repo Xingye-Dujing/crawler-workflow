@@ -24,8 +24,9 @@ manual — has to ask the same question about what the user pinned.
 import contextlib
 import logging
 
-from state import add_log, execute_lock, execution_state, live_run_ids
-from stores import get_run_store
+from core.config import Config
+from state import _completed_lock, add_log, execute_lock, execution_state, history_service, live_run_ids
+from stores import get_housekeeper, get_run_store
 
 from i18n import t
 from services import lock_store
@@ -152,3 +153,72 @@ def prune_orphan_run_locks() -> None:
         for key in locked_run_ids():
             if key not in existing:
                 lock_store.drop('runs', key)
+
+
+def as_run_ids(value) -> list[str]:
+    """One id or a sequence of them, as a list of non-empty strings.
+
+    A serial pass closes one record per workflow, so every "spare these" parameter in this
+    domain takes either shape; normalising it in one place is what keeps 继续 from protecting
+    only the record the request thread happens to hold."""
+    if isinstance(value, str):
+        return [value] if value else []
+    return [str(v) for v in (value or []) if str(v)]
+
+
+def housekeep(exclude_run_id='', force: bool = False):
+    """Apply the retention settings, containing every failure.
+
+    A cleanup problem must never be what makes a run look failed, so nothing
+    here propagates. ``exclude_run_id`` protects the record the caller is still
+    writing — dropping its rows mid-run would destroy live state. It takes a
+    sequence too, because a serial multi-workflow run closes one record per
+    workflow and all of them are the state that was just built. The automatic
+    sweep also spares every 置顶 record (the user's directive: a pin that only
+    stopped a manual delete but not the age-based sweep is not a pin)."""
+    keep = as_run_ids(exclude_run_id) + sorted(locked_run_ids())
+    with contextlib.suppress(Exception):
+        if force:
+            get_housekeeper().run_now(exclude_run_id=keep)
+        else:
+            get_housekeeper().maybe_run(exclude_run_id=keep)
+        # The chart backend is never touched by the runs.db sweep (it keys on its own
+        # id), so age its metric rows here — otherwise it grows forever and plots
+        # trends for crawls whose data is long gone.
+        history_service.purge_older_than(Config.RUN_KEEP_DAYS)
+    prune_orphan_run_locks()
+
+
+def close_run(ctx: dict, outcome: str):
+    """Record how a run ended.
+
+    Never raises: losing the record must never lose the run itself — the rows were
+    already safely in the database, this says only whether they are complete.
+
+    But it does not swallow the failure *silently* either. A row left on 运行中 is read
+    back as "still crawling", the resume banner will not offer it, and the only repair
+    was restarting the service — measured, and it is why pressing 停止 used to look
+    slower than a restart. The console therefore says which record it could not close,
+    and `/api/runs/list` settles it on the next panel read (see ``run.reconciled``).
+
+    Serial mode with several workflows opens one record per workflow, and each is
+    closed with its own verdict the moment its workflow's turn ends; what is left
+    standing here is the record that was still executing when the run exited, and
+    the single-record case, where the whole run shares one verdict.
+    """
+    # ``open_records`` is set as soon as a record is opened, so a run that closed
+    # every workflow it started arrives here with an EMPTY list — which means
+    # nothing to close, not "close the run's own id" (that row may not exist at
+    # all after the split, and re-writing a verdict over a workflow that already
+    # got its own would be the worse mistake).
+    records = ctx.get('open_records')
+    with _completed_lock:
+        attempted = set(execution_state['attempted_nodes'])
+    for run_id in records if records is not None else [ctx['run_id']]:
+        try:
+            ctx['store'].settle_nodes(run_id)
+            ctx['store'].finish_run(run_id, outcome, attempted=attempted)
+        except Exception as e:
+            add_log(t('run.recordWriteFailed', rid=run_id, err=e))
+    if records is not None:
+        records[:] = []

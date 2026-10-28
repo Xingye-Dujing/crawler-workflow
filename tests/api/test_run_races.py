@@ -639,7 +639,7 @@ class TestStoreFailures:
         assert _wait(app_module)
 
     def test_losing_the_end_of_a_run_does_not_lose_the_run(self, client, app_module, paste):
-        """``_close_run`` is the last write of a run. If settling the record
+        """``close_run`` is the last write of a run. If settling the record
         throws, the rows are already stored — so the failure has to stay inside
         that one function rather than escape the worker's ``finally`` and leave
         the slot, the tee and the console in whatever state the exception hit."""
@@ -668,7 +668,7 @@ class TestStoreFailures:
             def finish_run(self, *a, **k):
                 raise OSError('locked')
 
-        app_module._close_run({'store': _Broken(), 'run_id': 'r1'}, 'completed')
+        app_module.close_run({'store': _Broken(), 'run_id': 'r1'}, 'completed')
 
 
 class TestStopWithoutABrowser:

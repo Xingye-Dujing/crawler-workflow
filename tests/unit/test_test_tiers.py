@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 from capabilities.registry import CAPABILITIES
-from state import cookie_manager
+from state import cookie_manager, history_service
 
 pytestmark = pytest.mark.unit
 
@@ -374,15 +374,12 @@ class TestUserDirectoryStaysReadOnly:
             'Config.DATASETS_DB': Config.DATASETS_DB,
             'settings_store._PATH': settings_store._PATH,
             'ml_base.MODEL_DIR': ml_base.MODEL_DIR,
+            # Both singletons are built while ``state`` is imported, which conftest does during
+            # collection — so this asks the question unconditionally now that neither of them is
+            # an ``app`` attribute. They are the same never-rebound objects the app reads.
+            'state.cookie_manager.cookie_dir': cookie_manager.cookie_dir,
+            'state.history_service.db_path': history_service.db_path,
         }
-        app = sys.modules.get('app')
-        if app is not None:
-            # Only reachable once some test has taken the app_module fixture — which is the moment
-            # the two singletons below freeze their paths, so when it has happened it must have
-            # happened against the throwaway root. The jar is read from its own module now (the
-            # cookie routes moved to ``sessions/routes.py``); it is the same never-rebound object.
-            found['state.cookie_manager.cookie_dir'] = cookie_manager.cookie_dir
-            found['app.history_service.db_path'] = app.history_service.db_path
         return found
 
     def test_every_path_captured_at_import_points_at_the_throwaway_root(self, data_root):

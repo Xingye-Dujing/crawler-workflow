@@ -140,13 +140,14 @@ whole design, which is why the executors take their state through `NodeCall` ins
 
 ## Seam census behind that rule (measured 2026-10-09 against the tests of that day, so the line numbers have moved)
 
-The store seam has **3 module globals** in `app.py` and **3 lazy getters** around them:
+The store seam has **3 module globals** (in `stores.py` since the extraction; the census below was
+taken while they still sat in `app.py`) and **3 lazy getters** around them:
 
-| owner (in `app.py`) | global | lock | getter | `global` sites |
+| owner | global | lock | getter | `global` sites |
 |---|---|---|---|---|
-| run store   | `_RUN_STORE`   | `_RUN_STORE_LOCK`   | `get_run_store`   | 1 (app.py:640) |
-| dataset store | `_DATASET_STORE` | `_DATASET_LOCK`   | `get_dataset_store` | 1 (app.py:346) |
-| housekeeper | `_HOUSEKEEPER` | `_HOUSEKEEPER_LOCK` | `get_housekeeper` | 1 (app.py:658) |
+| run store   | `_RUN_STORE`   | `_RUN_STORE_LOCK`   | `get_run_store`   | 1 |
+| dataset store | `_DATASET_STORE` | `_DATASET_LOCK`   | `get_dataset_store` | 1 |
+| housekeeper | `_HOUSEKEEPER` | `_HOUSEKEEPER_LOCK` | `get_housekeeper` | 1 |
 
 Test access splits sharply between reads and writes:
 
