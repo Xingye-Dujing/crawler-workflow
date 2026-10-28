@@ -449,8 +449,9 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = 本次提交**（文档：#25 收尾：用例 + EXE 重建记录）。顺序：`2c4bfd3`（真浏览器引擎选择器用例）
-    ← `a6b4df5`（capabilities 内部分拆第一步，Stage 3d）← `994a2ec`（`capabilities/` 包，Stage 3c）
+  - **HEAD = `162924f`**（engine 站点事实归位）→ `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
+    （UI 层开页等待，修一条 CI 抖动）→ `480a811`（文档：#25 收尾）
+    ← `2c4bfd3`（真浏览器引擎选择器用例）← `a6b4df5`（capabilities 内部分拆第一步，Stage 3d）← `994a2ec`（`capabilities/` 包，Stage 3c）
     ← `6525f1d`（config→core，Stage 3b）
     ← `33440b5`（utils→core 三件，Stage 3a）← `29fc100`（sessions/routes 归域）← `e221d9b`
     （补 scheduling 未 stage 的内容，修 CI E0611）← `097675b`（`scheduling/` 归域，CI 因漏 stage 红过）
@@ -460,9 +461,11 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     **CI 已读**：`f625560`/`85646bf`/`e221d9b`/`29fc100` 均 **success**（`29fc100` 的 fast 与 browser 两个 job 都绿）；
     `097675b` 是唯一红过的一条，已由 `e221d9b` 修正。恢复后第一件事：`gh run list --limit 4`
     （`gh` 不在 PATH：`"/c/Program Files/GitHub CLI/gh.exe"`）。
-  - **本地证据（本次字节）**：fast **8,159 passed / 3 skipped / 353 deselected** exit=0；
-    设备档（真 Chrome + 真 Ollama + 真 CatBus，`--timeout=300`）**194 passed / 0 skipped** exit=0；
-    两档 pylint **exit=0、10.00/10**（238 + 269 文件）；ruff check + format 493 files。
+  - **本地证据（本次字节）**：fast **8,170 passed / 3 skipped / 355 deselected** exit=0（`50d64cc` 之后一次
+    8,165，`162924f` 之后一次 8,170——新增的是两条结构契约）；ruff check + format **510 files**；
+    两档 pylint **exit=0、10.00/10**（产品 253 / tests 270）。设备档在 `162924f` 的字节上重跑：
+    **194 passed / 0 skipped / 378 deselected，4 分 16 秒**（真 Chrome + 真 Ollama + 真 CatBus，
+    三个 `CRAWLER_REQUIRE_*`/`CIXI_REQUIRE_CATBUS` 旗标 + `--timeout=300`）。
   - **Stage 2 第三刀 `backend/scheduling/` 已完成（本次提交）**：`backend/scheduler.py`(246) →
     `scheduling/clock.py`、`services/schedule_store.py`(490) → `scheduling/store.py`、`services/cron.py`(274) →
     `scheduling/cron.py`，新增 `scheduling/__init__.py` 域说明（不 import 子模块，故无环）。
@@ -579,10 +582,38 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `/vendor/echarts.min.js` **全 200**；`/api/capabilities` 里 zhihu/wechat 的 `engines` 为
     `['selenium','catbus']`、`machine={'windows_desktop': True}`。验收后已杀进程、删 `build/pkg_root`，
     `dist/CaiXiHui` 只剩 `CaiXiHui.exe` + `_internal`（无 data/logs/instance.json/tmp*）；模型包未动。
-  - **下一刀 = capabilities 第二步**：`fields.py`（共享字段与工厂）+ `platforms/<id>.py`（9 个 Capability 块各一文件）
-    + `platforms/__init__.py` 按面板顺序装配 `CAPABILITIES` + `catbus.py`；随后 Stage 1 ④：把
-    `crawlers/engine/{wall,popup}.py` 里按平台分支的判据词表迁进 `capabilities/platforms/<id>`（**一个平台只声明一处**）。
-    `state`/`stores` 按依赖结论另议（不进 core）；`settings_store` 等 i18n 拆分后进 core。`i18n.py` 仍是 Stage 7。
+  - **Stage 3e capabilities 第二步已完成（`da5ed56`，本次记录）**：`registry.py`(1,577) →
+    `platforms/<id>.py` × 9（一平台一文件，面板顺序钉在 `platforms/__init__.py`）+ `fields.py`（共享字段原子 +
+    `posts_mode/author_mode/hot_mode/comment_mode` 四个工厂，私有名成为公开词表）+ `catbus.py`（第二引擎字段、
+    模式词、独有平台/网络）+ `registry.py`（只剩查询面，~700 行，不再构造任何 `Capability`）。
+    切分用 `build/split_capabilities.py`：逐段字节相等的**重构证明**（`src[header:] == ''.join(pieces)`）、
+    `Capability` 块去 4 空格的逐行证明、元组按行重组的证明；改名只允许一张表（16 个标识符 + 4 个工厂）。
+    **行为证据**：旧 `as_dict()` 与新 `as_dict()` 的 JSON 逐字节相同；9 个平台的每个 mode/field 逐字段相等；
+    `CATBUS_*`/`FILE_FIELDS`/`BACKENDS` 相等。新契约 `tests/unit/test_capabilities_layout.py`（6 例）：
+    文件集 = 平台集、面板顺序、registry 不构造矩阵、capabilities 模块级不 import 上层/重库、
+    registry 重新导出的就是声明层的**同一对象**、共享词表公开。
+    **两次自伤（教训已进 `agent_practices`）**：① `_TIMES` 是 `COMMENT_TIMES` 的后缀 → 纯 `.replace` 产出了
+    `COMMENTTIMES`（F821），改名必须整词边界；② 漏了 `CAPABILITY = ` 前缀，裸 `Capability(...)` 是合法表达式，
+    `ruff format` 给它套了括号，失败直到装配时才以「模块没有 CAPABILITY」出现。
+  - **Stage 1 ④ 已完成（`162924f`，本次记录；范围按现实收窄）**：`engine/innertube.py`(219) →
+    `platforms/youtube/innertube.py`（YouTube 是唯一问它的站点）；三个首启对话框从 `engine/popup.py` 迁到
+    `platforms/{douyin,instagram,youtube}/dialogs.py`（`Prompt`/`dismiss` 机制留在 engine；douyin 的
+    `prompts = (dialogs.TRUST_LOGIN,)` 是唯一接线）。新契约 `tests/unit/test_engine_is_site_independent.py`（5 例）：
+    engine 里不得出现 `Prompt` 实例、不得 import 平台包、innertube 不得回到 engine、每个对话框住在以它的
+    key 命名的站点、douyin 真的连着它。
+    **`wall.py` 的词表刻意保留**（与计划原文的偏差，理由摆在这里）：它是**一个**分类器，每张页面都会拿全部
+    实测词表去判；按平台裁剪会把「在别的站点上也实测成立的词」变成看不见，且在每次 `classify()` 上多穿一个
+    平台参数——那是行为变更，需要它自己的真机证据，不能混进搬迁。`D8` 的其余条目（`_polite_pause` 基线、
+    `supports_crawl` 默认）今天已经在各平台类上，搬进 capabilities 会让爬虫反过来依赖声明层，不做。
+  - **`50d64cc` 修掉一条 CI 抖动（本次记录）**：`480a811`（纯文档）的 browser job 里
+    `test_opening_the_settings_panel_lands_focus_in_and_closing_returns_it[en]` 报 `canvas is not defined`，
+    而更晚定义的 `I18n` 正常 ⇒ 页面已 boot、`canvas.js` 没执行（同一字节在上一轮 CI 与本地全绿）。爬虫栈的
+    `page_load_strategy='eager'` 让 `driver.get` 在 DOM 可解析时就返回；`test_ui_layout.py` 的 54 处裸导航改为
+    `_load_app(canvas/I18n/readyState 三重等待)`，超时则打印页面的脚本清单与每个脚本的传输字节。
+  - **下一刀 = Stage 4（任务 #31）**：`services/` 50 个扁平的名称前缀模块改目录分组
+    （`run_store`/`workflow_*`/`dataset_*`/`biblio_*`/`crawl_*`/`latex_*`/`report_*`…），逐组一个 commit；
+    先把 `services` 的 import 面按前缀清点（`grep` 结果当清单，不靠记忆），每组的搬迁照本节的切分证明法。
+    `state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core；`i18n.py` 仍是 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

@@ -177,6 +177,26 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   run time and **no** linter can see it. Rule: dotted/prose rewrites belong to ``.md`` (and docstrings you edit by
   hand); ``.py`` code is changed by import rules and module-attribute rules only, and the diff must be read for
   ``.registry.``-style artefacts before the suite is trusted.
+- **A carve's rename map needs a whole-token guard, and "the file parses" is not proof the wiring exists.**
+  Splitting ``capabilities/registry.py`` into ``platforms/<id>.py`` (2026-10-28) was a byte-exact slice move with a
+  reconstitution assertion, and still broke twice. ① Plain ``str.replace`` of private atoms made ``_TIMES`` collide
+  with the *suffix* of ``COMMENT_TIMES`` (and ``_ACCOUNT`` with ``CATBUS_ACCOUNT``, ``_BOARD`` with
+  ``HONGGUO_BOARD``): the first map run produced ``*COMMENTTIMES`` and ruff answered F821 on a name nobody wrote.
+  The guard is ``(?<!\\w)OLD(?!\\w)`` for identifiers (no trailing guard for the call-form names that end in ``(``),
+  and the carve asserts the old name is gone **as a token**, not as a substring. ② The first version wrote each
+  module body without the ``CAPABILITY = `` prefix, leaving a bare ``Capability(...)`` expression statement —
+  legal Python, so it imported; ``ruff format`` then wrapped it in parentheses and the failure surfaced only as
+  ``module 'capabilities.platforms.zhihu' has no attribute 'CAPABILITY'`` from the assembly. A split must assert
+  the names the package will read exist, and the honest proof is a before/after comparison of the **behaviour**
+  (here: ``as_dict()`` byte-identical and every mode/field declaration equal), not of the moved text alone.
+- **The UI tier's driver is ``page_load_strategy='eager'``: ``driver.get`` returning is not evidence that a script
+  ran.** A CI run (2026-10-28) failed ``test_opening_the_settings_panel_lands_focus_in_and_closing_returns_it`` with
+  ``JavascriptException: canvas is not defined`` — while ``I18n``, defined in a LATER script (``app.js``), was fine,
+  so the page had booted and one earlier script had not. The same bytes passed locally and on the previous CI run, so
+  this is a load race, not a code defect. A test that drives page bindings must wait for them by name (``readyState
+  === 'complete'`` plus ``typeof canvas === 'object'``) and, on timeout, fail with the page's own evidence — the
+  document's script list and each script's transfer size — instead of letting a bare ``canvas is not defined`` be the
+  whole report. All 54 navigations in ``test_ui_layout.py`` now go through ``_load_app``.
 - **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
   `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never
   appeared" while the gate before it said everything was fine — because its bounded poll returned
