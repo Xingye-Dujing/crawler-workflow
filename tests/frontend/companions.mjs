@@ -19,6 +19,7 @@ const SPLIT_OF = {
         'panels/runlog.js',
         'panels/exports.js',
         'panels/runs.js',
+        'panels/lexicon.js',
     ],
 };
 

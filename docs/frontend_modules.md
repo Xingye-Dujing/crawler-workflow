@@ -28,6 +28,7 @@
 | `panels/runlog.js` | 运行日志查看器（只读 `run_log` 表，服务端过滤 + 同样的参数下载 .txt）（226 行） | Stage 8（2026-10-28）；`workflow.js` 9,972 → 9,753 行。**这一刀两次被切片连带**：第一次把夹在同一片里的 `dataPreview` 与整个 `dashboard` 带走，第二次才发现 `escapeHtml`/`attrJsArg` 是**全页工具**（workflow.js 里 158 处、schedules.js 9 处），先把两个工具放回 `workflow.js`，再把 data preview + dashboard 整段退回（300 行）。教训：切之前按顶层声明清点这一片，不只看首尾标记 |
 | `panels/exports.js` | 导出产物面板（列表/下载/删除，名字原样回传）（491 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 9,754 → 9,270 行。有了伴生表，这一刀**一次通过**（harness_exports 已用 `sourceOf`） |
 | `panels/runs.js` | 运行控制台（视图状态与游标、`takeLines`、标签条构建、开关/清空/重置）与运行记录管理器（1,284 行） | Stage 8（2026-10-29）**四段**切片搬出（每段先按顶层声明清点过）；`workflow.js` 9,271 → 7,991 行。`_wfActiveTab`/`switchWfTab` 留在 `workflow.js`（标签页由轮询器画）；`harness_console` 改用 `sourceOf`，两处静态扫描改读两文件合体 |
+| `panels/lexicon.js` | 词表面板（停用词与 jieba 领域词，一行一词、加词框在上）（170 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 7,992 → 7,827 行。切点取在下一个函数**自己的注释之前**（取在函数行会把注释留在原文件） |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
 
@@ -36,8 +37,8 @@
 `panels/cookies` + `panels/source-help` / `panels/biblio` / `panels/runlog` / `panels/exports` /
 `panels/runs`）与词典的九个域文件，下面只剩未做的：
 
-1. **`panels/files.js` / `panels/datasets.js` / `panels/lexicon.js` / `panels/diagnostics.js`**
-   — 各自管理器与停靠面板（每个 150–800 行）；涉及对应 harness 与 `harness_panels`。
+1. **`panels/files.js` / `panels/datasets.js` / `panels/diagnostics.js`**
+   — 各自管理器与停靠面板（每个 150–800 行；`exports`/`lexicon` 已搬，见 §2）；涉及对应 harness 与 `harness_panels`。
 2. **`settings.js`** — `openSettings` 与各节点设置渲染（约 2,000 行，依赖最多，放最后）；涉及
    `harness_panels`、`harness_panel_actions`、`harness_state`。
 
