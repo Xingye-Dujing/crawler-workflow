@@ -718,9 +718,10 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     搬完后 `api/workflow.py`（save/load/list/rename/delete + queue×3 + stop/status/processes/kill）
     与 app 只剩 `/`、`execute`、`rerun-node`。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
     Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；
-    `settings_store` 等 i18n 拆分后进 core。`workflow_manager` 这个 app 全局是第四片的阻塞点，
-    它该和 `WorkflowHistoryStore` 一样住进 `stores.py`（`get_workflow_manager()`），
-    `tests/api/test_schedules_api.py` 两处读它要跟着改。
+    `settings_store` 等 i18n 拆分后进 core。**前置小刀已完成**：`workflow_manager` 不再是 app 全局，
+    它与 `WorkflowHistoryStore` 同款住进 `stores.get_workflow_manager()`（Blueprint 与引擎模块都不能
+    import app 才能读画布）；`tests/api/test_schedules_api.py` 的两处读取跟着改，其中 `canvas` fixture
+    因此不再需要 `app_module` 参数。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

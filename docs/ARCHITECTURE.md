@@ -115,8 +115,9 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
 
 - `backend/state.py` — the in-place run state (`execution_state`, `_RUN_QUEUE`, `_dataset_cache`,
   console-buffer helpers), the eager `history_service`/`cookie_manager`, `_completed_lock`.
-- `backend/stores.py` — the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER` + the lazy
-  getters). This is the seam the test harness rebinds; writes to `app._RUN_STORE` would shadow it.
+- `backend/stores.py` — the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER`/the saved-canvas
+  `WorkflowManager` + the lazy getters). This is the seam the test harness rebinds; writes to
+  `app._RUN_STORE` would shadow it.
 - `backend/api/` — 23 blueprint modules + `http.py` (request coercions) + `resolution.py`
   (`_resolve_dataframe`, `NoRunDataError`). Blueprints are registered in `app.py`.
 - `backend/nodes/executors/` — all 14 node types, each `NODE_TYPE` + `run(node, call)`, self-registered

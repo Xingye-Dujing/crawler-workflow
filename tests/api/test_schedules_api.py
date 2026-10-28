@@ -22,6 +22,7 @@ import os
 import pytest
 from core.config import Config
 from scheduling import store
+from stores import get_workflow_manager
 
 from i18n import set_lang, t
 
@@ -50,9 +51,9 @@ MODEL_NODE = {'id': 'n2', 'type': 'process', 'params': {'operation': 'clean'}}
 
 
 @pytest.fixture
-def canvas(app_module):
+def canvas():
     """Write real canvas files (the verdict is read from the file) and remove them afterwards."""
-    manager = app_module.workflow_manager
+    manager = get_workflow_manager()
     made = []
 
     def _make(name, nodes):
@@ -117,9 +118,9 @@ class TestReadingThePanel:
         assert verdicts['要模型的画布']['runnable'] is False
         assert verdicts['要模型的画布']['why_not'] == _en('sched.canvasNeedsModel', name='要模型的画布')
 
-    def test_a_broken_canvas_file_is_not_offered_at_all(self, client, app_module, canvas):
+    def test_a_broken_canvas_file_is_not_offered_at_all(self, client, canvas):
         name = canvas('坏文件', [NAME_NODE])
-        with open(app_module.workflow_manager.path_for(name), 'w', encoding='utf-8') as handle:
+        with open(get_workflow_manager().path_for(name), 'w', encoding='utf-8') as handle:
             handle.write('{not json')
 
         # ``describe`` marks it broken and keeps it deletable in the 画布 panel; the schedule picker

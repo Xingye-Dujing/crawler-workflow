@@ -29,6 +29,7 @@ from services.datasets.store import SOURCE_UPLOAD, DatasetStore
 from services.runs.housekeeping import Housekeeping
 from services.runs.store import RunStore
 from services.workflows.history import WorkflowHistoryStore
+from services.workflows.manager import WorkflowManager
 
 # ─── Durable run state ──────────────────────────────────────────
 
@@ -143,6 +144,25 @@ def get_workflow_history_store() -> WorkflowHistoryStore:
             if _WORKFLOW_HISTORY_STORE is None:
                 _WORKFLOW_HISTORY_STORE = WorkflowHistoryStore()
     return _WORKFLOW_HISTORY_STORE
+
+
+# ─── Saved canvases ────────────────────────────────────────────
+
+#: The directory of saved workflow files. Cached like the stores above, and for the same
+#: reason it lives here: the workflow routes are a Blueprint and the run orchestration is an
+#: engine module, and neither may import ``app`` to reach a canvas on disk.
+_WORKFLOW_MANAGER = None
+_WORKFLOW_MANAGER_LOCK = threading.Lock()
+
+
+def get_workflow_manager() -> WorkflowManager:
+    """The single reader/writer of ``data/workflows``, opened on first use."""
+    global _WORKFLOW_MANAGER
+    if _WORKFLOW_MANAGER is None:
+        with _WORKFLOW_MANAGER_LOCK:
+            if _WORKFLOW_MANAGER is None:
+                _WORKFLOW_MANAGER = WorkflowManager()
+    return _WORKFLOW_MANAGER
 
 
 #: The read-through cache of loaded frames (``_dataset_cache``, from ``state``) is bounded so a

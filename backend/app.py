@@ -78,6 +78,7 @@ from stores import (
     get_housekeeper,
     get_run_store,
     get_workflow_history_store,
+    get_workflow_manager,
 )
 from transport import _local_transport_refusal
 
@@ -451,7 +452,9 @@ _run_log_writer = _RunLogWriter()
 
 
 # cookie_manager lives in state.py (imported at top) so the capabilities Blueprint can read it.
-workflow_manager = WorkflowManager()
+# The saved-canvas reader lives in stores.py (imported at top) for the same reason: the workflow
+# routes are a Blueprint and the run orchestration is an engine module, and neither may import
+# this file to reach a canvas on disk.
 # history_service lives in state.py (imported at top) so a Blueprint can read it.
 
 
@@ -851,7 +854,7 @@ def _request_workflow_name(raw) -> str | None:
     name = raw.strip()
     if not name:
         return None
-    clean = workflow_manager.clean_name(name)
+    clean = get_workflow_manager().clean_name(name)
     if clean == WorkflowManager.DEFAULT_NAME and name != WorkflowManager.DEFAULT_NAME:
         # The name cleaned down to nothing, so the fallback would point at
         # somebody else's file.
@@ -869,16 +872,16 @@ def save_workflow():
     if not isinstance(workflow, dict):
         return jsonify({'ok': False, 'error': t('api.paramInvalid', name='workflow')}), 400
     try:
-        path = workflow_manager.save(name, workflow)
+        path = get_workflow_manager().save(name, workflow)
     except OSError as e:
         logger.exception(t('misc.save_workflow_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
     # The file mapping is part of the save: every Upload node records which
     # stored dataset it reads, so reopening this workflow later finds its file
     # already loaded instead of asking for another upload.
-    bound = get_dataset_store().bind(workflow_manager.clean_name(name), _workflow_dataset_refs(workflow))
+    bound = get_dataset_store().bind(get_workflow_manager().clean_name(name), _workflow_dataset_refs(workflow))
     if bound:
-        logger.info(t('store.datasets_bound', wf=workflow_manager.clean_name(name), n=bound))
+        logger.info(t('store.datasets_bound', wf=get_workflow_manager().clean_name(name), n=bound))
     return jsonify({'ok': True, 'path': path, 'datasets': bound})
 
 
@@ -893,7 +896,7 @@ def load_workflow():
         # crawl that is still writing rows. The panel asks first; this is the
         # loud line that holds even when it does not.
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
-    workflow = workflow_manager.load(name)
+    workflow = get_workflow_manager().load(name)
     if not workflow:
         return jsonify({'ok': False, 'error': 'Not found'}), 404
     # Reconnect the nodes with their files *before* the canvas draws them, so
@@ -909,7 +912,7 @@ def list_workflows():
     # Objects, not bare stems: the management panel shows node/dataset counts and
     # a modified time per file, which is what makes 打开/重命名/删除 an informed
     # choice instead of a name-blind file picker.
-    return jsonify({'ok': True, 'workflows': workflow_manager.describe()})
+    return jsonify({'ok': True, 'workflows': get_workflow_manager().describe()})
 
 
 @app.route('/api/workflow/rename', methods=['POST'])
@@ -930,9 +933,9 @@ def rename_workflow():
         # Renaming the canvas that is mid-run would re-key the record it is
         # writing; the panel refuses first, this holds the line regardless.
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
-    if os.path.exists(workflow_manager.path_for(new)):
+    if os.path.exists(get_workflow_manager().path_for(new)):
         return jsonify({'ok': False, 'error': t('api.workflowNameTaken', name=new)}), 409
-    moved = workflow_manager.rename(old, new)
+    moved = get_workflow_manager().rename(old, new)
     if moved is None:
         # Unlike delete (idempotent), a rename of a missing file is a lost edit.
         return jsonify({'ok': False, 'error': t('api.workflowMissing', name=old)}), 404
@@ -941,7 +944,7 @@ def rename_workflow():
     # name would silently switch the renamed canvas back to the algorithm.
     get_workflow_history_store().rename_layout(old, new)
     logger.info(t('api.workflowRenamed', old=old, new=new))
-    return jsonify({'ok': True, 'name': new, 'path': workflow_manager.path_for(new), 'datasets': refs})
+    return jsonify({'ok': True, 'name': new, 'path': get_workflow_manager().path_for(new), 'datasets': refs})
 
 
 @app.route('/api/workflow/delete', methods=['POST'])
@@ -954,7 +957,7 @@ def delete_workflow():
         return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
     if lock_store.is_locked('workflows', name):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
-    workflow_manager.delete(name)
+    get_workflow_manager().delete(name)
     lock_store.drop('workflows', name)
     # The files stay: another workflow may well read the same one, and an
     # orphan is cleaned up later rather than on a deletion the user may undo
@@ -1063,7 +1066,7 @@ def _scheduled_canvas(name: str) -> dict:
     """
     if not name:
         return {'workflow': None, 'error': t('sched.workflowRequired')}
-    workflow = workflow_manager.load(name)
+    workflow = get_workflow_manager().load(name)
     if not workflow:
         return {'workflow': None, 'error': t('sched.canvasMissing', name=name)}
     # The saved file keeps reusable nodes as groups; this gate asks what a run will
