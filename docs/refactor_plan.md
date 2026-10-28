@@ -207,21 +207,21 @@ backend/
 
 ## 4. 「模范项目」判定标准（完成定义）
 
-**4.0 仍 >900 行的产品模块（2026-10-27 实测，就是 §4-1 的待办清单，一个不许漏）**
+**4.0 仍 >900 行的产品模块（2026-10-28 按新路径重测，就是 §4-1 的待办清单，一个不许漏）**
 
 | 文件 | 行 | 归属阶段 |
 |---|---|---|
 | `crawlers/core/crawler.py` | 1144 | Stage 1（③ 已落地：`core/faults.py` 93 + `core/browser.py` 344 于 2026-10-27 拆出，pacing 进 `engine/pacing.py`；剩余是导航到场判定与 Cookie 植入的会话编排，仍属爬取契约） |
 | `crawlers/platforms/hongguo/harvest.py` | 994 | Stage 1 已拆完（CA 信任 → `trust.py` 213；UIA 驱动 → `player_ui.py` 616；名称规则 → `naming.py` 83；剩下的就是"采集夹具 + 走路"这一件事） |
-| `services/data_analysis.py` | 3899 | Stage 9 |
-| `services/latex_charts.py` | 2430 | Stage 5 |
-| `services/bibliometrics.py` | 1996 | Stage 4 |
-| `services/visualizer.py` | 1874 | Stage 5 |
-| `services/biblio_charts.py` | 1553 | Stage 5 |
-| `services/run_store.py` | 1610 | Stage 4 |
-| `crawl_capabilities.py` | 1805 | Stage 3 |
-| `analyzers/llm_client.py` | 934 | Stage 4（`llm/`） |
-| `app.py` | 4412 | Stage 6 |
+| `services/analysis/pipeline.py` | 3899 | Stage 9（op 注册表：一个 op 一个文件 + 一行注册） |
+| `services/charts/tikz.py` | 2430 | Stage 5b（图/表/公式三本职责，拆 `charts/latex_{figures,tables,formulas}.py`；注册表已在 `charts/registry.py` 落好） |
+| `services/biblio/metrics.py` | 1996 | Stage 5b 同批：按「建图 / 指标 / 剪枝 / 输出」拆 |
+| `services/charts/visualizer.py` | 1805 | Stage 5b（调色板与字体栈已在文件头自证；拆「控制台图型」与「biblio 图型」两条 builder 路） |
+| `services/biblio/charts.py` | 1553 | Stage 5b（一个视图一个文件 + 注册一行） |
+| `services/runs/store.py` | 1610 | Stage 6（运行台账的分片：runs / nodes / rows / files / cache） |
+| `capabilities/registry.py` | 751 | 已在 Stage 3 拆完（1,577 → 751：查询面；声明在 `platforms/`） |
+| `analyzers/llm_client.py` | 934 | 与 `transport.py` 合并进 `llm/`（§5 目录树的 `llm/`） |
+| `app.py` | 3,537 | Stage 6（4,412 → 3,537 已由 sessions 路由搬出；剩 39 条路由 + 运行编排） |
 | `i18n.py` | 4620 | Stage 7 |
 
 前端另计：`workflow.js` 13,026 / `app.js` 5,071 / `canvas.js` 3,893 / `zenviz.html` 16,852 → Stage 8。
@@ -449,7 +449,7 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
 - **本轮已闭的欠账**：`CatbusCrawler.__getattr__` 消失（分派不再拼方法名）；`session.py` 的解析器再导出层删掉，
   两个测试改直连各平台模块；`test_node_matrix.py` 里一处重复的 `monkeypatch.setattr(CommentSession…)` 顺手去掉。
 - **压缩后的接续点（2026-10-28，Stage 2 已完；工作树干净）**
-  - **HEAD = `54d774a`**（Stage 4 收尾：charts/reports/ingest）→ `3b96aa4`（analysis）→ `c436673`（runs）→
+  - **HEAD = `d182ca7`**（Stage 5：图表注册表）→ `73a5c1e`（文档）→ `54d774a`（Stage 4 收尾：charts/reports/ingest）→ `3b96aa4`（analysis）→ `c436673`（runs）→
     `fa0879d`（datasets+exports）→ `08d20c6`（workflows）→ `40c3c3c`（biblio）→ `466d74e`（文档）→ `69ce0ba`（文档）→ `8d0bbd7`（pytest 9.2 夹具顺序修复）→ `c19b2fd`（文档）→ `162924f`（engine 站点事实归位）
     → `da5ed56`（capabilities 第二步：一平台一文件）→ `50d64cc`
     （UI 层开页等待，修一条 CI 抖动）→ `480a811`（文档：#25 收尾）
@@ -659,9 +659,23 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `net_probe.` 而 import 是 `from services import net_probe`，路径前缀 grep 只数到 2、实际 50 处；
     **按绑定名清点**（`from services import <old>`）；③ 多名字导入 `from services import latex_charts, visualizer`
     只会被第一条规则改到一半；④ `--fix` 再次把「调用点还没改」的 import 删掉（`test_settings_api` 第二处）。
-  - **下一刀 = Stage 5（任务 #32）**：图表插件注册表——`services/charts/contracts.py` 里
-    `BIBLIO_CHART_TYPES/READS/BUILDERS` 与 `charts.visualizer`/`charts.tikz`/`workflow.js` 三份图型列表合一，
-    新增一种图 = 1 个新文件 + 1 行注册；`graph3d` LaTeX 死分支与 `CATEGORY_COLORS` 双绑定（D9）同批删。
+  - **Stage 5 已完成（`d182ca7`，本次记录）**：新 `services/charts/registry.py` = 一个 `ChartSpec` 一行
+    （30 个图型：family `console`/`biblio`、`echarts_only`、`latex_buildable`、`reads`、`no_x`），
+    `CHART_TYPES`/`BIBLIO_CHART_TYPES`/`ECHARTS_ONLY_TYPES`/`LATEX_UNBUILDABLE_TYPES`/`NO_X_TYPES`/
+    `BIBLIO_CHART_READS` 全部**由它派生**，名称与顺序没变（面板顺序仍由 SPECS 决定）。
+    `contracts.py` 只剩「不随类型变化的限制」（行数上限、极性顺序/颜色）并**再导出**三个旧名字
+    （`__all__`，`test_doc_paths` 同族的可读性：import 即用）；`visualizer`/`outputs`/`test_latex_charts`
+    改从 registry 取；ECharts-only 的**顺序**不再被当作契约（旧测试改为集合比较，并在 docstring 写明原因：
+    两侧只用 `in` 判断）。D9 的 `CATEGORY_COLORS` 双绑定与 `graph3d` 死分支在更早的里程碑里已不存在
+    （grep 确认），本刀无行为变化。新契约 `tests/unit/test_chart_registry.py`（7 例）：派生元组 == 投影、
+    biblio 必有 reads / console 必无、唯一无纸面孪生是 `model_agreement`、未知类型返回 None、
+    `label_key` 自证、前端三个数组被钉住、每个类型中英各有一个词。
+    **门禁（本次字节）**：fast **8,178 passed / 3 skipped / 355 deselected**（pytest 9.2.0）；ruff check +
+    format（521 files）；两档 pylint **exit=0、10.00/10**；设备档 **194 passed / 0 skipped**，4 分 11 秒。
+  - **下一刀 = Stage 6（任务 #33）**：`app.py` 降为纯组合根——39 条 `@app.route` 按域搬进 `api/` 的 Blueprint、
+    运行编排（`_begin_run`/队列/`_run_node_durable`）搬进 `services/runs/` 或新的运行域；`app` 只留
+    composition root + `__getattr__` 接缝。牵动面（两次 sessions 搬迁的经验）：测试的 `app_module.<x>` 打桩、
+    `_route_source_files()`、`tests/executor_seams.forward`、以及 `test_api_hardening` 的 `BODY_ROUTES` 登记。
     `state`/`stores` 不进 core（运行层）；`settings_store` 等 i18n 拆分后进 core；`i18n.py` 仍是 Stage 7。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），

@@ -182,6 +182,15 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   run time and **no** linter can see it. Rule: dotted/prose rewrites belong to ``.md`` (and docstrings you edit by
   hand); ``.py`` code is changed by import rules and module-attribute rules only, and the diff must be read for
   ``.registry.``-style artefacts before the suite is trusted.
+- **A re-export needs `__all__`, and an order pin is a contract only where order is data.** Collapsing five
+  chart-type sets into `services/charts/registry.py` (2026-10-28) hit both. ① `contracts.py` kept
+  `BIBLIO_CHART_TYPES`/`NO_X_TYPES`/`BIBLIO_CHART_READS` as re-exports after the literals moved to the registry;
+  the PostToolUse ``ruff --fix`` deleted them as F401 — a name imported only to be handed on is *unused* unless the
+  module says so with ``__all__``. ② Deriving `ECHARTS_ONLY_TYPES` from the spec table put the types in panel order,
+  and a pre-existing test compared it **as a list** against the browser's array. Membership lists that both sides
+  only ever test with `in` must be compared as sets; the order pin belongs to the one list the panel actually walks
+  (`CHART_TYPES`). Changing the test to a set comparison is the honest fix — silently reordering the specs to satisfy
+  an accidental order pin would have made the table lie about the panel.
 - **A carve's rename map needs a whole-token guard, and "the file parses" is not proof the wiring exists.**
   Splitting ``capabilities/registry.py`` into ``platforms/<id>.py`` (2026-10-28) was a byte-exact slice move with a
   reconstitution assertion, and still broke twice. ① Plain ``str.replace`` of private atoms made ``_TIMES`` collide
