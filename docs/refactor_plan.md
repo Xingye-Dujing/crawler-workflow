@@ -1058,7 +1058,10 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （三个图表清单）、`test_data_analysis`（三个操作清单与「第四份拷贝」的位置）、`test_exporter`（格式下拉）、
     `test_analysis_api`（`renderAnalysisSettings`）、`test_frontend_contract`（PROCESS_OPS、BIBLIO 下拉、
     tokenize/pdf/resume 的持久化扫描、`I18N_USERS`）、`test_frontend_js`（续跑面板转义），以及
-    capabilities/cloud/panel_actions/reusable/source_help 六处扫描，全部改读 `panels/settings.js`。
+    capabilities/cloud/panel_actions/reusable/source_help 六处扫描，全部改读 `panels/settings.js`；
+    **全量 fast 又抓出第七处**：`test_visualization` 的 `CHART_TYPES`/`ECHARTS_ONLY_CHARTS`/
+    `CHARTS_WITH_ANNOTATIONS` 与「三处发送 `center_node`」也都搬了家——扫描改读 `panels/settings.js`
+    （`center_node` 那句按发送方拼 `workflow.js`+`chart-preview.js`+`settings.js` 三文件合体）。
     - **门禁**：前端 38 个 JS 测试模块全绿（1,408 + `test_frontend_js` 129）；`node --check` 两个文件；
       ruff check/format（275 文件）全绿；tests 档 pylint 10.00/10——**必须把 `tests/frontend_catalogue.py` 与
       `tests/node_runner.py` 放进同一次调用**，否则被 linter 的子集会报 E0401（它们靠同批分析进入 astroid 的模块表，

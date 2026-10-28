@@ -25,13 +25,13 @@ from services.charts.visualizer import VisualizationService as V
 
 pytestmark = pytest.mark.unit
 
-_WORKFLOW_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js'
+_SETTINGS_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
 
 
 def _js_list(text: str, name: str) -> list:
     """The quoted members of ``var NAME = […];`` in the browser's copy of a list."""
     declaration = re.search(rf'var {name} = \[([^\]]*)\];', text)
-    assert declaration, f'workflow.js no longer declares {name} as a flat array'
+    assert declaration, f'panels/settings.js no longer declares {name} as a flat array'
     return re.findall(r"'([^']*)'", declaration.group(1))
 
 
@@ -214,7 +214,7 @@ class TestChartCatalogue:
         assert set(ECHARTS_ONLY_TYPES) < set(CHART_TYPES)
 
     def test_the_browser_advertises_exactly_the_types_this_builds(self):
-        """``workflow.js`` keeps its own copy of both lists, and the two drift apart in the
+        """``panels/settings.js`` keeps its own copy of both lists, and the two drift apart in the
         one direction no test on the Python side can see: a panel that offers 双轴折线 while
         the service does not know the name hands the user an opaque node failure, and a panel
         that hides a type the service draws is a feature nobody finds.
@@ -222,14 +222,14 @@ class TestChartCatalogue:
         ``CHART_TYPES`` is order-sensitive (the panel walks it); the ECharts-only list is a
         membership set both sides only ever test with ``in``, so it is compared as a set — its
         order in ``services.charts.registry`` follows the panel, not the old literal."""
-        text = _WORKFLOW_JS.read_text(encoding='utf-8')
+        text = _SETTINGS_JS.read_text(encoding='utf-8')
         assert _js_list(text, 'CHART_TYPES') == list(CHART_TYPES)
         assert set(_js_list(text, 'ECHARTS_ONLY_CHARTS')) == set(ECHARTS_ONLY_TYPES)
 
     def test_the_browser_offers_event_markers_only_where_they_are_drawn(self):
         # The same drift in the other direction: a box the figure cannot honour is a date the
         # reader of the exported PNG believes is on the curve and never was.
-        text = _WORKFLOW_JS.read_text(encoding='utf-8')
+        text = _SETTINGS_JS.read_text(encoding='utf-8')
         assert _js_list(text, 'CHARTS_WITH_ANNOTATIONS') == list(ANNOTATED_TYPES)
 
 
@@ -297,10 +297,12 @@ class TestNetworkCenter:
         assert max(data, key=lambda name: data[name]['symbolSize']) == '甲'
 
     def test_the_browser_threads_center_node_into_the_graph(self):
-        # The chart module moved out of workflow.js (Stage 8): the option builders went with it,
-        # while the settings field stayed — so the two halves are read together.
-        text = _WORKFLOW_JS.read_text(encoding='utf-8') + (_WORKFLOW_JS.parent / 'chart-preview.js').read_text(
-            encoding='utf-8'
+        # The chart module moved out of workflow.js (Stage 8) and the settings field followed in
+        # the last knife — so the two halves are read together.
+        text = (
+            (_SETTINGS_JS.parent.parent / 'workflow.js').read_text(encoding='utf-8')
+            + (_SETTINGS_JS.parent.parent / 'chart-preview.js').read_text(encoding='utf-8')
+            + _SETTINGS_JS.read_text(encoding='utf-8')
         )
         # preview, fullscreen export and the board each send it, and the settings field exists.
         assert text.count('center_node: p.center_node,') >= 3
