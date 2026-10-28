@@ -20,36 +20,37 @@ below is the one place a chart type is routed, so a new figure is one method plu
 import pandas as pd
 
 from services.charts.contracts import BIBLIO_CHART_TYPES
-from services.charts.tikz_biblio import BiblioFigureMixin
-from services.charts.tikz_biblio_charts import BiblioChartMixin
-from services.charts.tikz_biblio_tables import BiblioTableMixin
-from services.charts.tikz_console import ConsoleFigureMixin
-from services.charts.tikz_document import DocumentShellMixin
-from services.charts.tikz_preamble import (
+from services.charts.visualizer import ChartConfigError
+
+from .tikz_biblio import BiblioFigureMixin
+from .tikz_biblio_charts import BiblioChartMixin
+from .tikz_biblio_tables import BiblioTableMixin
+from .tikz_console import ConsoleFigureMixin
+from .tikz_document import DocumentShellMixin
+from .tikz_preamble import (
     CJK_FAMILY as CJK_FAMILY,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     CTEX_FONTSET as CTEX_FONTSET,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     GRAPH_BOX_CM as GRAPH_BOX_CM,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     GRAPH_LINE_CM as GRAPH_LINE_CM,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     _packages as _packages,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     ctex_options as ctex_options,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     esc as esc,
 )
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     paper_preamble as paper_preamble,
 )
-from services.charts.visualizer import ChartConfigError
 
 #: Kept on this module because callers and tests address the paper helpers here
 #: (``reports/paper.py`` imports ``esc``/``paper_preamble``; the platform table tests ask

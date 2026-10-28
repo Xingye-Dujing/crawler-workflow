@@ -13,13 +13,14 @@ from services.charts.contracts import (
     POLARITY_LABELS,
     VARIATION_ROW_LIMIT,
 )
-from services.charts.tikz_preamble import (
+from services.charts.visualizer import ChartConfigError, _localize_label
+
+from .tikz_preamble import (
     _esc,
     _fold_label,
     _num,
     _sym,
 )
-from services.charts.visualizer import ChartConfigError, _localize_label
 
 
 class BiblioChartMixin:

@@ -12,7 +12,9 @@ import pandas as pd
 
 from i18n import t
 from services.biblio import cluster as clustering
-from services.biblio.metrics.measures import (
+from services.biblio.schema import LIMITS, normalize_params
+
+from .measures import (
     _bursts,
     _layout,
     _metrics,
@@ -21,7 +23,7 @@ from services.biblio.metrics.measures import (
     _node_usage_stats,
     _overlay_stats,
 )
-from services.biblio.metrics.network import (
+from .network import (
     _max_links,
     _normalized_edges,
     _prune,
@@ -29,7 +31,7 @@ from services.biblio.metrics.network import (
     _structural_variation,
     _threshold_edges,
 )
-from services.biblio.metrics.records import (
+from .records import (
     ENTITY_LABEL_KEYS,
     BiblioError,
     _apply_cluster_overrides,
@@ -44,7 +46,6 @@ from services.biblio.metrics.records import (
     _split,
     _unique_labels,
 )
-from services.biblio.schema import LIMITS, normalize_params
 
 # ─── Public build ───────────────────────────────────────────────
 

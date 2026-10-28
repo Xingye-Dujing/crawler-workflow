@@ -10,7 +10,10 @@ import math
 import pandas as pd
 
 from i18n import get_lang, t
-from services.biblio.charts.base import (
+from services.biblio.geo import aggregate, display
+from services.charts.contracts import VARIATION_ROW_LIMIT
+
+from .base import (
     DUAL_MAP_SIDE_LIMIT,
     GEO_BOTTOM,
     GEO_LEFT,
@@ -25,8 +28,6 @@ from services.biblio.charts.base import (
     _require,
     _text,
 )
-from services.biblio.geo import aggregate, display
-from services.charts.contracts import VARIATION_ROW_LIMIT
 
 
 def _side_slot(index: int, size: int) -> float:

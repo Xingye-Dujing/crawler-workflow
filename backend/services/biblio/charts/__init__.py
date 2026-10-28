@@ -7,8 +7,9 @@ place a view is registered, so a new figure is one function and one line here.
 import pandas as pd
 
 from i18n import t
-from services.biblio.charts import graph, maps, overlay, timeline
-from services.biblio.charts.base import BiblioChartError
+
+from . import graph, maps, overlay, timeline
+from .base import BiblioChartError
 
 BUILDERS = {
     'knowledge_graph': graph.knowledge_graph,

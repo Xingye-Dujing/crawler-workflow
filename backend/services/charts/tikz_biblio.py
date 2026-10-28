@@ -16,11 +16,12 @@ from services.charts.contracts import (
     OVERLAY_TABLE_LIMIT,
     OVERLAY_TOPIC_LIMIT,
 )
-from services.charts.tikz_preamble import (
+from services.charts.visualizer import ChartConfigError, VisualizationService
+
+from .tikz_preamble import (
     _CYCLE_NAMES,
     _esc,
 )
-from services.charts.visualizer import ChartConfigError, VisualizationService
 
 
 class BiblioFigureMixin:

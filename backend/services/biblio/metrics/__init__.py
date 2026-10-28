@@ -10,11 +10,12 @@ module is the public face: ``build``, its twin ``build_dual_map``, the snapshot
 split, the Pajek export and the burst primitive.
 """
 
-from services.biblio.metrics.build import build, build_dual_map
-from services.biblio.metrics.export import export_result, snapshot_capture
-from services.biblio.metrics.measures import kleinberg_bursts
-from services.biblio.metrics.records import BiblioError
 from services.biblio.schema import LIMITS
+
+from .build import build, build_dual_map
+from .export import export_result, snapshot_capture
+from .measures import kleinberg_bursts
+from .records import BiblioError
 
 __all__ = [
     'BiblioError',

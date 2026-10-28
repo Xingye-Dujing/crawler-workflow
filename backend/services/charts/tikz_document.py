@@ -6,7 +6,7 @@ figure and the table share it so a merged compile document restyles every chart 
 
 from core import machine
 
-from services.charts.tikz_preamble import (
+from .tikz_preamble import (
     CJK_FAMILY,
     _esc,
     _label_key,

@@ -7,13 +7,14 @@ charts: polarity is ordered negative → neutral → positive and coloured by me
 import pandas as pd
 
 from i18n import t
-from services.biblio.charts.base import BiblioChartError, _number, _parsed, _require, _text
 from services.charts.contracts import (
     OVERLAY_ROW_LIMIT,
     OVERLAY_TOPIC_LIMIT,
     POLARITY_COLORS,
     POLARITY_LABELS,
 )
+
+from .base import BiblioChartError, _number, _parsed, _require, _text
 
 # ─── sentiment / topic overlays ──────────────────────────────────
 

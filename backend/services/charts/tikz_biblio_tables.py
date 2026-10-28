@@ -8,8 +8,9 @@ from i18n import t
 from services.biblio.geo import aggregate as geo_aggregate
 from services.biblio.geo import display
 from services.charts.contracts import OVERLAY_TABLE_LIMIT, OVERLAY_TOPIC_LIMIT, POLARITY_LABELS
-from services.charts.tikz_preamble import _esc, _num
 from services.charts.visualizer import ChartConfigError, _localize_label
+
+from .tikz_preamble import _esc, _num
 
 
 class BiblioTableMixin:

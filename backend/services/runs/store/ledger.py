@@ -6,7 +6,8 @@ import logging
 import os
 
 from i18n import t
-from services.runs.store.identity import (
+
+from .identity import (
     NODE_FAILED,
     NODE_PARTIAL,
     NODE_PENDING,

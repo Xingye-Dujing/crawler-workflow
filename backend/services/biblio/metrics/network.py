@@ -13,8 +13,9 @@ import networkx as nx
 import numpy as np
 
 from i18n import t
-from services.biblio.metrics.records import _MAX_DOCS_PER_REF, BiblioError
 from services.biblio.schema import COUPLING_TYPES
+
+from .records import _MAX_DOCS_PER_REF, BiblioError
 
 # ─── Selection, edges and pruning ───────────────────────────────
 

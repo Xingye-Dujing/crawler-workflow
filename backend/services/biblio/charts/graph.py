@@ -10,7 +10,8 @@ import math
 import pandas as pd
 
 from i18n import t
-from services.biblio.charts.base import (
+
+from .base import (
     GRAPH_BOTTOM,
     GRAPH_LEFT,
     GRAPH_RIGHT,

@@ -12,7 +12,16 @@ import pandas as pd
 
 from i18n import t
 from services.charts.contracts import BIBLIO_CHART_TYPES
-from services.charts.tikz_preamble import (
+from services.charts.visualizer import (
+    ChartConfigError,
+    VisualizationService,
+    _box_stats,
+    _finite,
+    _histogram_bins,
+    _localize_label,
+)
+
+from .tikz_preamble import (
     _CHINA_LAT0,
     _CHINA_LAT1,
     _CHINA_LON0,
@@ -26,14 +35,6 @@ from services.charts.tikz_preamble import (
     _fold_label,
     _num,
     _sym,
-)
-from services.charts.visualizer import (
-    ChartConfigError,
-    VisualizationService,
-    _box_stats,
-    _finite,
-    _histogram_bins,
-    _localize_label,
 )
 
 

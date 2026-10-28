@@ -8,9 +8,10 @@ restyle defined here; the service in ``visualizer`` assembles this mixin.
 import pandas as pd
 
 from i18n import t
-from services.charts.contracts import ChartConfigError
-from services.charts.registry import BIBLIO_CHART_TYPES, CHART_TYPES
-from services.charts.style import (
+
+from .contracts import ChartConfigError
+from .registry import BIBLIO_CHART_TYPES, CHART_TYPES
+from .style import (
     _AXIS_STYLE,
     _GRID,
     _TEXT_STYLE,

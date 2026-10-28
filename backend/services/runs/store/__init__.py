@@ -16,8 +16,8 @@ The table domains live in sibling mixins (base/ledger/progress/upkeep); the publ
 names below are the surface every caller and test has always imported from here.
 """
 
-from services.runs.store.base import BaseMixin, RowCache
-from services.runs.store.identity import (
+from .base import BaseMixin, RowCache
+from .identity import (
     NODE_DONE,
     NODE_FAILED,
     NODE_PARTIAL,
@@ -40,9 +40,9 @@ from services.runs.store.identity import (
     stable_params,
     workflow_fingerprint,
 )
-from services.runs.store.ledger import FilesMixin, LogMixin, QueueMixin, RunsMixin
-from services.runs.store.progress import NodesMixin, RowsMixin
-from services.runs.store.upkeep import UpkeepMixin
+from .ledger import FilesMixin, LogMixin, QueueMixin, RunsMixin
+from .progress import NodesMixin, RowsMixin
+from .upkeep import UpkeepMixin
 
 __all__ = [
     'NODE_DONE',

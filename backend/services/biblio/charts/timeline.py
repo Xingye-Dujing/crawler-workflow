@@ -9,7 +9,8 @@ import math
 import pandas as pd
 
 from i18n import t
-from services.biblio.charts.base import (
+
+from .base import (
     BiblioChartError,
     _base_graph_series,
     _number,

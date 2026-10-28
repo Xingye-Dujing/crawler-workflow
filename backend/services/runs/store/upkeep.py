@@ -5,7 +5,7 @@ import time
 
 from core.config import Config
 
-from services.runs.store.identity import UNRESOLVED_RUN_STATUS
+from .identity import UNRESOLVED_RUN_STATUS
 
 logger = logging.getLogger(__name__)
 

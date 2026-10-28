@@ -7,7 +7,8 @@ import logging
 from core.config import Config
 
 from i18n import t
-from services.runs.store.identity import (
+
+from .identity import (
     NODE_FAILED,
     NODE_PARTIAL,
     NODE_RUNNING,
