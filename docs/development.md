@@ -121,7 +121,7 @@ crawler_workflow/
 │   │   ├── run_store.py          # 断点续跑核心：运行/节点/行/指纹/LLM缓存/运行→文件台账（runs.db）
 │   │   ├── dataset_store.py      # 上传文件持久化与工作流引用（datasets.db）
 │   │   ├── stats.py              # 情感/倾向性统计服务
-│   │   ├── workflow_manager.py   # 工作流持久化
+│   │   ├── workflows/            # 工作流域：manager（工作流文件）/ history（画布快照）/ reusable（模板）/ expand（展开）/ bundle（项目包）
 │   │   ├── exporter.py           # 通用多格式导出服务（Output 节点）
 │   │   ├── export_browser.py     # 导出目录的读取侧：列表/下载/删除与路径安全
 │   │   ├── report_service.py     # 一键自包含 HTML 运行报告（内容可定制；PDF 只走 LaTeX 成稿）

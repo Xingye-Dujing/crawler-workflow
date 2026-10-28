@@ -14,7 +14,7 @@ from scheduling.clock import status as scheduler_status
 
 from api.http import _bad_body, _json_body
 from i18n import t
-from services.workflow_manager import WorkflowManager
+from services.workflows.manager import WorkflowManager
 
 bp = Blueprint('schedules', __name__)
 

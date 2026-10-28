@@ -13,7 +13,7 @@ the same edge expectations.
 """
 
 from i18n import t
-from services.reusable_store import ALLOWED_TYPES
+from services.workflows.reusable import ALLOWED_TYPES
 
 
 def _name_of(node: dict) -> str:

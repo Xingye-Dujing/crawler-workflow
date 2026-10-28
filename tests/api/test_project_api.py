@@ -9,8 +9,8 @@ import pytest
 from core.config import Config
 from stores import get_dataset_store
 
-from services import reusable_store
-from services.workflow_manager import WorkflowManager
+from services.workflows import reusable
+from services.workflows.manager import WorkflowManager
 
 pytestmark = pytest.mark.api
 
@@ -48,7 +48,7 @@ def _workflow(dataset_id, template_id):
 
 def _seed(client):
     dataset = get_dataset_store().put(pd.DataFrame([{'标题': 'a'}, {'标题': 'b'}]), name='raw.csv', source='upload')
-    template = reusable_store.save_template(
+    template = reusable.save_template(
         {
             'name': '清洗模板',
             'description': '',
@@ -88,7 +88,7 @@ class TestProjectApi:
         # about whatever another test left behind.
         monkeypatch.setattr(Config, 'WORKFLOW_DIR', str(tmp_path / 'workflows'))
         dataset = get_dataset_store().put(pd.DataFrame([{'标题': 'a'}]), name='raw.csv', source='upload')
-        template = reusable_store.save_template(
+        template = reusable.save_template(
             {
                 'name': '清洗模板',
                 'description': '',

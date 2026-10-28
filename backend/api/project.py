@@ -1,6 +1,6 @@
 """Project bundles: download one zip, upload one zip.
 
-The packaging logic lives in ``services.project_bundle``; this module resolves "which
+The packaging logic lives in ``services.workflows.bundle``; this module resolves "which
 workflows", moves the file, and turns a named refusal into a 4xx. Export is a GET
 because it changes nothing; import is a multipart POST because the bundle is a file,
 not JSON. Neither route executes a workflow.
@@ -11,8 +11,8 @@ import io
 from flask import Blueprint, jsonify, request, send_file
 
 from i18n import t
-from services.project_bundle import build_bundle, import_bundle
-from services.workflow_manager import WorkflowManager
+from services.workflows.bundle import build_bundle, import_bundle
+from services.workflows.manager import WorkflowManager
 
 bp = Blueprint('project', __name__)
 

@@ -1,6 +1,6 @@
 """Reusable node templates: the picker's list, full reads, save and delete.
 
-The template is validated in ``services.reusable_store`` (types, wiring, one terminal,
+The template is validated in ``services.workflows.reusable`` (types, wiring, one terminal,
 one input meaning per slot), so a fragment that cannot be expanded is refused before it
 is ever offered to a canvas. No endpoint executes a template.
 """
@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request
 
 from api.http import _bad_body, _bad_param, _json_body
 from i18n import t
-from services.reusable_store import (
+from services.workflows.reusable import (
     TemplateCorruptError,
     delete_template,
     get_template,

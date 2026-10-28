@@ -1,4 +1,4 @@
-"""Tests for services/workflow_manager.py — saved canvases on disk.
+"""Tests for services/workflows/manager.py — saved canvases on disk.
 
 A workflow name is typed in the UI and becomes a file name, so the pinned
 contracts are the safety ones: one file per name (overwrite, never a pile of
@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from services.workflow_manager import WorkflowManager
+from services.workflows.manager import WorkflowManager
 
 pytestmark = pytest.mark.unit
 
@@ -149,8 +149,8 @@ class TestCapturedParamsWithReusableNodes:
         """A run records expanded child ids; the saved file keeps the group. Without
         expanding before the lookup, every method paragraph/report node inside a
         reusable node would be filed as unverified while the file was right there."""
-        from services.reusable_expand import expand_reusable_workflow
         from services.run_store import fingerprints_for_workflow
+        from services.workflows.expand import expand_reusable_workflow
 
         draft = {
             'nodes': [

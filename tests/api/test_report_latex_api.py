@@ -80,7 +80,7 @@ def _run_with_charts(app_module, data_root, monkeypatch, *, workflow_name='成�
     """A finished run that filed a figure and a table for each of two chart nodes, and nothing for
     a third."""
     from services.run_store import NODE_DONE, RUN_COMPLETED
-    from services.workflow_manager import WorkflowManager
+    from services.workflows.manager import WorkflowManager
 
     store = app_module.get_run_store()
     export = data_root / 'data' / 'exports'
@@ -201,7 +201,7 @@ class TestTheDocumentItself:
 
         from services import latex_report
         from services.run_store import NODE_DONE, RUN_COMPLETED
-        from services.workflow_manager import WorkflowManager
+        from services.workflows.manager import WorkflowManager
 
         store = get_run_store()
         store.start_run('run-meth-1', '方法核对', 'fp-m', node_total=1)

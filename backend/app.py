@@ -92,7 +92,6 @@ from services import StatsService, lock_store
 from services.crawler_lifecycle import close_login_browser as _close_login_browser
 from services.data_analysis import UnknownOperationError
 from services.process_params import PROCESS_ENUMS
-from services.reusable_expand import expand_reusable_workflow
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -107,7 +106,8 @@ from services.run_store import (
     fingerprints_for_workflow,
     workflow_fingerprint,
 )
-from services.workflow_manager import WorkflowManager
+from services.workflows.expand import expand_reusable_workflow
+from services.workflows.manager import WorkflowManager
 from settings_store import get_setting
 
 #: The comment router's supported platforms, as raw keys. They go into a

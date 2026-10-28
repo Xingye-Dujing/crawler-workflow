@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from services.workflow_history import (
+from services.workflows.history import (
     HistoryFullError,
     SnapshotCorruptError,
     WorkflowHistoryStore,
@@ -64,7 +64,7 @@ class TestSnapshots:
             second.close()
 
     def test_newest_first_and_same_instant_is_separated_by_insert_order(self, store, monkeypatch):
-        monkeypatch.setattr('services.workflow_history._now', lambda: 1000.0)
+        monkeypatch.setattr('services.workflows.history._now', lambda: 1000.0)
         older = store.save_snapshot(canvas(1), 'first', 'wf')
         newer = store.save_snapshot(canvas(2), 'second', 'wf')
         assert [row['id'] for row in store.list_snapshots()] == [newer['id'], older['id']]

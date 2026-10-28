@@ -8,10 +8,10 @@ import pandas as pd
 import pytest
 from core.config import Config
 
-from services import reusable_store
 from services.dataset_store import SOURCE_UPLOAD, DatasetStore
-from services.project_bundle import build_bundle, import_bundle
-from services.workflow_manager import WorkflowManager
+from services.workflows import reusable
+from services.workflows.bundle import build_bundle, import_bundle
+from services.workflows.manager import WorkflowManager
 
 
 @pytest.fixture(autouse=True)
@@ -92,7 +92,7 @@ def _seed(stores, workflow_name='项目A', template_name='清洗模板'):
         name='raw.csv',
         source=SOURCE_UPLOAD,
     )
-    template = reusable_store.save_template(_template(template_name))
+    template = reusable.save_template(_template(template_name))
     stores['workflows'].save(workflow_name, _workflow(dataset['dataset_id'], template['id'], workflow_name))
     return dataset, template
 
@@ -193,7 +193,7 @@ class TestBuildAndImport:
         target_datasets = DatasetStore(str(other / 'datasets.db'))
         target_workflows = WorkflowManager(str(other / 'workflows'))
         target_workflows.save('项目A', {'nodes': [], 'connections': []})
-        reusable_store.save_template(_template('清洗模板'))
+        reusable.save_template(_template('清洗模板'))
         summary = import_bundle(io.BytesIO(payload), dataset_store=target_datasets, workflow_manager=target_workflows)
 
         assert summary['workflows'] == [{'from': '项目A', 'to': '项目A (2)'}]

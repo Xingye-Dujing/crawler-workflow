@@ -26,7 +26,7 @@ import os
 
 from i18n import t
 from services.latex_charts import LatexChartService, esc, paper_preamble
-from services.workflow_manager import WorkflowManager
+from services.workflows.manager import WorkflowManager
 
 #: The parameter names a method section quotes, in the order a reader meets them. Values stay the
 #: app's own tokens (``top_n``, ``cosine``, ``mst``) because those are what the run record and the

@@ -5,8 +5,8 @@ import json
 import pytest
 from core.config import Config
 
-from services import reusable_store
-from services.reusable_store import (
+from services.workflows import reusable
+from services.workflows.reusable import (
     TemplateCorruptError,
     delete_template,
     get_template,
@@ -133,7 +133,7 @@ class TestRename:
 
     def test_a_corrupt_file_is_refused_instead_of_overwritten(self):
         saved = save_template(fragment())
-        path = reusable_store._path(saved['id'])
+        path = reusable._path(saved['id'])
         with open(path, 'w', encoding='utf-8') as f:
             f.write('{not json')
         with pytest.raises(ValueError) as exc:
@@ -176,7 +176,7 @@ class TestValidation:
         assert save_template(payload)['outputs'] == ['only']
 
     def test_the_size_cap_is_named(self, monkeypatch):
-        monkeypatch.setattr(reusable_store, 'MAX_NODES', 1)
+        monkeypatch.setattr(reusable, 'MAX_NODES', 1)
         with pytest.raises(ValueError) as exc:
             save_template(fragment())
         assert '1' in str(exc.value)
@@ -192,7 +192,7 @@ class TestValidation:
 class TestBrokenFiles:
     def test_a_corrupt_file_is_still_listed_so_it_can_be_deleted(self):
         saved = save_template(fragment())
-        path = reusable_store._path(saved['id'])
+        path = reusable._path(saved['id'])
         with open(path, 'w', encoding='utf-8') as f:
             f.write('{not json')
         rows = list_templates()
@@ -207,7 +207,7 @@ class TestBrokenFiles:
         assert get_template('r-000000000000') is None
 
     def test_the_store_is_a_directory_of_plain_json(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(reusable_store.Config, 'REUSABLE_DIR', str(tmp_path / 'reusable_nodes'))
+        monkeypatch.setattr(reusable.Config, 'REUSABLE_DIR', str(tmp_path / 'reusable_nodes'))
         saved = save_template(fragment())
         path = tmp_path / 'reusable_nodes' / f'{saved["id"]}.json'
         payload = json.loads(path.read_text(encoding='utf-8'))

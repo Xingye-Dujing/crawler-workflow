@@ -221,7 +221,7 @@ class TestContracts:
         assert created['model'] == [created['group']], 'the single clicked node leaves only the group'
 
     def test_the_browser_type_list_matches_the_template_validator(self):
-        from services.reusable_store import ALLOWED_TYPES
+        from services.workflows.reusable import ALLOWED_TYPES
 
         source = REUSABLE_JS.read_text(encoding='utf-8')
         match = re.search(r'var REUSABLE_ALLOWED_TYPES = \[(.*?)\];', source, re.S)

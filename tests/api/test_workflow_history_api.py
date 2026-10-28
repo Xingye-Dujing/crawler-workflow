@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from services.workflow_history import WorkflowHistoryStore
+from services.workflows.history import WorkflowHistoryStore
 
 pytestmark = pytest.mark.api
 

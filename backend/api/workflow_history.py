@@ -17,7 +17,7 @@ from stores import get_workflow_history_store
 
 from api.http import _bad_body, _bad_param, _json_body
 from i18n import t
-from services.workflow_history import HistoryFullError, SnapshotCorruptError
+from services.workflows.history import HistoryFullError, SnapshotCorruptError
 
 bp = Blueprint('workflow_history', __name__)
 

@@ -2,7 +2,7 @@
 
 import copy
 
-from services.reusable_expand import expand_reusable_workflow
+from services.workflows.expand import expand_reusable_workflow
 
 
 def group(group_id='g1', inputs=('a', 'b'), outputs=('c',), enabled=True, template_nodes=None):

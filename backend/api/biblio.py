@@ -235,7 +235,7 @@ def _captured_params(workflow_name: str, node_id: str, fingerprint: str) -> tupl
     Lives on ``WorkflowManager`` because the LaTeX report asks the same question of the same files;
     a second reader of the canvas would be a second opinion about what produced these rows.
     """
-    from services.workflow_manager import WorkflowManager
+    from services.workflows.manager import WorkflowManager
 
     return WorkflowManager().captured_params(workflow_name, node_id, fingerprint)
 

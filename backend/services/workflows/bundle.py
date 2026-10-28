@@ -38,9 +38,9 @@ from core.config import Config
 from stores import get_dataset_store
 
 from i18n import t
-from services import reusable_store
 from services.dataset_store import SOURCE_IMPORT, safe_records
-from services.workflow_manager import WorkflowManager
+from services.workflows import reusable
+from services.workflows.manager import WorkflowManager
 
 BUNDLE_FORMAT = 'cixi-project'
 BUNDLE_VERSION = 1
@@ -159,12 +159,12 @@ def _unique_workflow_name(manager: WorkflowManager, original: str, taken: set) -
 
 
 def _unique_template_name(original: str, taken: set) -> str:
-    base = (str(original or '').strip() or t('reusable.nameRequired'))[: reusable_store.MAX_NAME]
+    base = (str(original or '').strip() or t('reusable.nameRequired'))[: reusable.MAX_NAME]
     candidate = base
     suffix = 2
     while candidate.casefold() in taken:
         tail = f' ({suffix})'
-        candidate = base[: max(1, reusable_store.MAX_NAME - len(tail))] + tail
+        candidate = base[: max(1, reusable.MAX_NAME - len(tail))] + tail
         suffix += 1
     return candidate
 
@@ -246,8 +246,8 @@ def build_bundle(workflow_names, dataset_store=None, workflow_manager=None) -> t
     template_entries = []
     for index, template_id in enumerate(template_ids):
         try:
-            template = reusable_store.get_template(template_id)
-        except reusable_store.TemplateCorruptError:
+            template = reusable.get_template(template_id)
+        except reusable.TemplateCorruptError:
             template = None
         if template is None:
             warnings.append(t('project.templateMissing', id=template_id))
@@ -420,7 +420,7 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
             if not isinstance(payload, dict):
                 raise ValueError(t('project.templateInvalid', name=entry.get('name') or entry.get('id') or ''))
             try:
-                reusable_store.validate_template(payload)
+                reusable.validate_template(payload)
             except ValueError as e:
                 raise ValueError(
                     t('project.templateInvalid', name=payload.get('name') or entry.get('name') or '')
@@ -488,7 +488,7 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
             lineage_map[entry['name']] = new_name
             lineage_results.append({'from': entry['name'], 'to': new_name, 'version': created['version']})
 
-        taken_templates = {str(row['name']).casefold() for row in reusable_store.list_templates() if not row['broken']}
+        taken_templates = {str(row['name']).casefold() for row in reusable.list_templates() if not row['broken']}
         template_map = {}
         for row in templates:
             name = _unique_template_name(row['name'], taken_templates)
@@ -499,7 +499,7 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
             body.pop('updated_at', None)
             body['name'] = name
             try:
-                saved = reusable_store.save_template(body)
+                saved = reusable.save_template(body)
             except ValueError as e:
                 raise ValueError(t('project.templateInvalid', name=name)) from e
             template_map[row['id']] = {'id': saved['id'], 'name': saved['name']}

@@ -488,7 +488,7 @@ def client(app_module, data_root, request):
     from services.dataset_store import DatasetStore
     from services.lexicon_store import LexiconStore
     from services.run_store import RunStore
-    from services.workflow_history import WorkflowHistoryStore
+    from services.workflows.history import WorkflowHistoryStore
 
     # A serial test needs a genuinely quiet server before it presses Run.
     # This used to ``pytest.skip`` on a busy slot, which turned one slow run
