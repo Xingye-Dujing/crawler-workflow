@@ -1,6 +1,14 @@
 import os
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#: The repository root: three levels up from ``backend/core/config.py``.
+#:
+#: This was two levels while the file lived at ``backend/config.py``; moving it into ``core/`` kept
+#: the arithmetic and quietly halved nothing — it pointed at ``backend/`` instead, so a run from
+#: ``backend/`` (the documented way to start the app) wrote ``backend/data/`` and ``backend/logs/``
+#: beside the code, while the checkout's real ``data/`` stayed untouched. Measured 2026-10-29: the
+#: stray root held a live Chrome profile, which the root-anchored ``data/*`` ignore rule does not
+#: cover. ``tests/unit/test_config_paths.py`` pins the depth so the next move cannot repeat it.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 #: The parent of ``data/`` and ``logs/``, for the one process that asks for its own.
 #:
@@ -9,7 +17,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #: ``app.log`` while the in-process suite believes itself isolated — which is what happened before
 #: this switch existed. And ``/smoke-verify`` boots a second instance on another port: with no
 #: separate root, that instance's ``RunStore`` settles the user's live run as stale on startup.
-#: Unset, everything is exactly where it always was — beside the code.
+#: Unset, everything is at the checkout root: ``data/`` and ``logs/`` beside ``backend/``, wherever
+#: the process was started from.
 DATA_ROOT = os.environ.get('CRAWLER_DATA_ROOT') or BASE_DIR
 
 
