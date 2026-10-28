@@ -34,7 +34,7 @@ pytestmark = pytest.mark.unit
 # ``tests/`` is imported with the project root and ``backend/`` on sys.path
 # (tests/conftest.py); a fresh interpreter starts with neither, so the
 # subprocess check below has to hand backend/ over explicitly.
-_BACKEND_DIR = Path(__file__).resolve().parents[2] / 'backend'
+_BACKEND_DIR = Path(__file__).resolve().parents[3] / 'backend'
 
 
 def _simhash_in_subprocess(hash_seed: str) -> int:

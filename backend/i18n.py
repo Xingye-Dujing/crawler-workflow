@@ -38,7 +38,7 @@ _local = threading.local()
 # here so ``i18n`` stays the single surface every module imports. The merge is a function rather
 # than ``{**a, **b}`` because dict expansion lets a key declared in two domains silently keep
 # whichever came LAST — the same accident as a key typed twice in one table
-# (``tests/unit/test_i18n.py::TestNoDuplicateKeys``), only spread over two files where parity
+# (``tests/unit/i18n/test_i18n.py::TestNoDuplicateKeys``), only spread over two files where parity
 # cannot see it. Refusing at import time fails the suite on the wording nobody prints, instead of a
 # run answering a stale one.
 def _merge_domain_table(attribute: str) -> dict:

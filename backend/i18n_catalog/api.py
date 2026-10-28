@@ -3,7 +3,7 @@ durable ledger.
 
 Part of the zh/en message catalogue, merged by ``backend/i18n.py`` — the ``t()`` machinery,
 the thread-local language and the audit live there, so this module is data with no imports.
-Keys are sorted; the two tables in here must hold the same set (``tests/unit/test_i18n.py``).
+Keys are sorted; the two tables in here must hold the same set (``tests/unit/i18n/test_i18n.py``).
 """
 
 ZH = {

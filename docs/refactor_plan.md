@@ -1122,7 +1122,9 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     `live_test_plan.md`）里引用的旧测试路径一并改真；爬虫档 **617 passed / 3 skipped**，tests 档 pylint 10.00/10。
     **第四片**：10 个运行/引擎单测进 `tests/unit/runs/`（3 个 parents 深度调整）；被两个文件按裸名 import 的
     `Probe`/`bare` 从 `test_crawler_base.py` 提到 `tests/crawler_probe.py`——**目录名 `crawlers` 不能当包导入**
-    （会撞上 `backend/crawlers`），所以共享 helper 放在 `tests/` 顶层；相关两档 **960 passed / 3 skipped**。**收尾门禁**：全量 fast **8,194 passed / 3 skipped / 355 deselected**（唯一 warning 仍是
+    （会撞上 `backend/crawlers`），所以共享 helper 放在 `tests/` 顶层；相关两档 **960 passed / 3 skipped**。
+    **第五片**：3 个会话/Cookie 单测进 `tests/unit/sessions/`、2 个词典/文本单测进 `tests/unit/i18n/`
+    （2 个 parents 深度调整），`backend/i18n.py` 与 10 个 `i18n_catalog/*.py` 的 docstring 路径同步；**130 passed**。**收尾门禁**：全量 fast **8,194 passed / 3 skipped / 355 deselected**（唯一 warning 仍是
     jieba 第三方），ruff 全绿；本片只动测试与文档，两档 pylint 在上一轮全量后仅新增了一个测试函数（已在局部 10.00/10 验过）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且

@@ -26,7 +26,7 @@ from i18n import DEFAULT_LANG, LANGS, audit, get_lang, missing_keys, normalize, 
 
 pytestmark = pytest.mark.unit
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 
 #: The catalogue DATA — the merge in ``i18n.py`` and one module per domain under ``i18n_catalog/``.
 #: Scanning it as code would find every key "referenced" in its own definition and turn the
@@ -315,7 +315,7 @@ class TestKeyReachability:
 
     @staticmethod
     def _sources():
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[3]
         files = list((root / 'backend').rglob('*.py')) + list((root / 'backend' / 'static').rglob('*.js'))
         files += list((root / 'tests').rglob('*.py'))
         return '\n'.join(f.read_text(encoding='utf-8', errors='replace') for f in files if not _is_catalogue(f))
@@ -385,7 +385,7 @@ class TestKeyReachability:
         ``ds.too_many_rows`` as an error message, three dedupe notes) because
         parity and reachability are both silent about a key that is *missing*.
         """
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[3]
         missing = []
         for path in sorted((root / 'backend').rglob('*.py')):
             if _is_catalogue(path):
@@ -428,7 +428,7 @@ class TestCallSitePlaceholders:
         return names
 
     def _unfilled(self):
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[3]
         found = []
         for path in sorted((root / 'backend').rglob('*.py')):
             if _is_catalogue(path):
