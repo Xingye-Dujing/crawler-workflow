@@ -118,7 +118,7 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
 - `backend/stores.py` — the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER`/the saved-canvas
   `WorkflowManager` + the lazy getters). This is the seam the test harness rebinds; writes to
   `app._RUN_STORE` would shadow it.
-- `backend/api/` — 23 blueprint modules + `http.py` (request coercions) + `resolution.py`
+- `backend/api/` — 24 blueprint modules + `http.py` (request coercions) + `resolution.py`
   (`_resolve_dataframe`, `NoRunDataError`). Blueprints are registered in `app.py`.
 - `backend/nodes/executors/` — all 14 node types, each `NODE_TYPE` + `run(node, call)`, self-registered
   in `nodes/registry.py`; the shared legs are `services/ingest/runtime.py`, `services/ingest/lifecycle.py`,
@@ -126,11 +126,12 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
   `services/runs/files.py`, `services/runs/windows.py`.
 - `app.py` — composition root: the app object, the request hooks (origin guard, no-store, language
   pin), the console tee/log sink, **run orchestration** (`_begin_run`, the worker, `_run_node_durable`,
-  `_execute_node`) and the routes that still reach that orchestration — `/api/workflow/execute`,
-  `/api/workflow/rerun-node`, the panel's stop/status reads and the served page `/`. Every other URL
-  is a Blueprint; the run-record cluster is `api/runs.py`.
-  Line and route counts are deliberately not quoted here, because the number changes with every
-  feature and a doc that recites it is stale by construction.
+  `_execute_node`) and the **three** routes that reach it: the served page `/`,
+  `/api/workflow/execute` and `/api/workflow/rerun-node`. Every other URL is a Blueprint; the
+  run-record cluster is `api/runs.py` and the saved-canvas/queue/stop-status cluster is
+  `api/workflow.py`.
+  Line and route counts are otherwise deliberately not quoted here, because the number changes with
+  every feature and a doc that recites it is stale by construction.
 
 One durable rule from the keystone work, kept because it is a constraint and not a step: **never leave a
 reader hitting the old global.** An `app` alias plus `__getattr__` is a safety net only while it is the

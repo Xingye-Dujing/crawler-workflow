@@ -21,6 +21,7 @@ from run_wait import run_finished
 
 from analyzers.llm_client import LLMClient
 from engine import plan
+from services.ingest.lifecycle import close_login_browser
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
@@ -996,13 +997,13 @@ class TestBrowserReaper:
                 time.sleep(30)  # the wedged quit this path exists for
 
         started = time.monotonic()
-        app_module._close_login_browser(_Stuck(child), quit_timeout=0.5)
+        close_login_browser(_Stuck(child), quit_timeout=0.5)
         assert time.monotonic() - started < 20, 'the bounded close must return'
         child.wait(timeout=10)
         assert child.poll() is not None, 'the ignored driver process must be reaped by PID'
 
     def test_a_null_crawler_is_nothing_to_do(self, app_module):
-        app_module._close_login_browser(None)  # must not raise
+        close_login_browser(None)  # must not raise
 
 
 class TestStopAndKill:

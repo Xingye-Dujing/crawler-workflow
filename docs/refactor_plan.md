@@ -755,6 +755,32 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     + `test_run_records_parallel` **114 passed**；ruff check 干净；隔离根真启动 9 个 GET 全 200
     （`/`、config、runs/list、runs/stats、workflow/list、workflow/queue、stats/summary、
     history/runs、workflow/status），随后已杀自己起的进程（PID 39784，5057 无 LISTEN）。
+  - **Stage 6 第七片（薄路由）已完成（本次记录）**：`/api/workflow/*` 的 12 条薄路由搬进新
+    `backend/api/workflow.py`（Blueprint 名 `workflow`）—— 画布文件 5 条（save/load/list/rename/delete，
+    连同 `_workflow_dataset_refs`/`_restore_workflow_datasets`/`_request_workflow_name`）、队列 3 条、
+    stop/status/processes/processes-kill 4 条，外加 `CONSOLE_TAIL_DEFAULT` 与 `_status_tail`。
+    `app.py` 2,157 行（本会话起点 4,412）；**app 只剩 `/` + `execute` + `rerun-node` 三条路由**，
+    因为它们是仅有的两处直接调用 `_begin_run` 的门。搬移用 `build/carve_api_workflow.py`：
+    四段各自的首行与后继行定位、段内路由清单逐条钉住、段间不得重叠、`@app.route`→`@bp.route`
+    恰好 12 次、app 剩 3 次。**证据**：url_map 129 条规则的「路径 + 方法」集合逐字节不变，
+    只有 12 个 endpoint 获得 `workflow.` 前缀（仓库内无 `url_for` 依赖）；隔离根真启动后
+    `/`、config、workflow/list、workflow/queue、workflow/status、workflow/processes、runs/list 全 200，
+    `workflow/load?name=nope` 仍 404，POST `workflow/stop` 返回原信封（`idle: true`），端口已释放。
+    **新模块的 import 表是"猜"出来的，ruff 把这件事纠正了 12 次**：HEADER 里我按 app 原来的 import
+    照抄，结果 11 个名字根本没被这段路由用到（F401）而 9 个真正需要的（`os`、`ctypes` 已在、
+    `_optional_int`、`_apply_dataset_meta`、`WorkflowManager`、`get_workflow_history_store`、
+    `execute_lock`、`get_lang`/`set_lang`、`close_login_browser`）缺失（F821）——**"文件能 import"
+    不是接线的证据，逐名问 ruff 才是**（`docs/agent_practices.md` 那条老教训第 N 次成立）。
+    **搬走的接缝共 32 处读取/打桩点，全是同一个形状**：测试穿过 `app` 去读真正住在别处的名字 ——
+    `app_module._close_login_browser`（10 处：`test_stop_path` 7 / `test_nodes_execution` 2 /
+    `tests/integration/test_stop_reaper` 1，另加 2 条句子里的旧名）、`app_module.queue_snapshot`
+    （10 处：`test_api_hardening` 4 / `test_run_races` 3 / `test_workflow_api` 3）、
+    `app_module.lock_store`（4 处）、`app_module.LOG_KEEP`+`QUEUE_MAX`（7 处）、
+    `app_module._status_tail`（1 处）。app 不再 import 它们之后每一个都变成
+    `AttributeError: module 'app' has no attribute …`，而**只有跑全量 `tests/api/` 才会全部看见**
+    （分片跑 `test_workflow_api` 时它们各自绿过）。清点必须按「谁 bind 过这个名字」，
+    且要同时查 `app_module.X`、`from app import X` 与文档句子里的第三种形状。
+    **定向门禁**：`tests/api/` **2,246 passed**；ruff check + format 干净（519 files）。
   - **下一刀 = Stage 6 第七片：运行编排本体**。`app.py` 剩下的主体是 `_begin_run`（约 890 行）+ worker
     + `_run_node_durable` + `_execute_node` + `_settle_node_as_stopped` + `_note_heavy_result`
     + `_start_next_queued` + `_scheduled_canvas`/`_start_scheduled_run`，目标是 `engine/run.py`。

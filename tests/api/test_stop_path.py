@@ -49,6 +49,7 @@ from run_wait import run_finished
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import CrawlerStopped, DeadDriver
 from i18n import t
+from services.ingest.lifecycle import close_login_browser
 from services.runs import settlement
 from services.runs.store import (
     NODE_PARTIAL,
@@ -602,7 +603,7 @@ class TestTheReapedSession:
     def test_a_reaped_browser_holds_a_session_that_refuses_at_once(self, app_module):
         child, crawler, release = _wedged_crawler()
         try:
-            app_module._close_login_browser(crawler, quit_timeout=0.3)
+            close_login_browser(crawler, quit_timeout=0.3)
             assert isinstance(crawler.driver, DeadDriver), (
                 'the reap left the crawler holding the session it just killed, so its next command '
                 'is a retry ladder against a dead port'
@@ -628,9 +629,9 @@ class TestTheReapedSession:
         """
         child, crawler, release = _wedged_crawler()
         try:
-            app_module._close_login_browser(crawler, quit_timeout=0.3)
+            close_login_browser(crawler, quit_timeout=0.3)
             started = time.monotonic()
-            app_module._close_login_browser(crawler, quit_timeout=0.3)
+            close_login_browser(crawler, quit_timeout=0.3)
             took = time.monotonic() - started
             assert took < 0.3, f'the second call spent {took:.2f} s on a grace for a browser already reaped'
         finally:
@@ -670,7 +671,7 @@ class TestTheReapedSession:
         crawler = _StreamingCrawler()
         crawler.driver = _SlowSession(child.pid)
         try:
-            app_module._close_login_browser(crawler, quit_timeout=5.0)
+            close_login_browser(crawler, quit_timeout=5.0)
             assert crawler.driver is None, 'a session that closed itself was replaced with a dead one'
             assert child.poll() is None, 'a browser that quit politely had its process reaped anyway'
         finally:
@@ -774,7 +775,7 @@ class TestTheCommentSessionFollowsTheReap:
 
         session = comments_module.CommentSession(crawler.driver, owner=crawler, nap=lambda s: None)
         try:
-            app_module._close_login_browser(crawler, quit_timeout=0.4)
+            close_login_browser(crawler, quit_timeout=0.4)
             assert isinstance(session.driver, DeadDriver), 'the reap did not reach the comment walk'
             started = time.monotonic()
             with pytest.raises(CrawlerStopped):
@@ -823,7 +824,7 @@ class TestABrowserWithNoProcessId:
         # assert against a call site that no longer exists on a server.
         monkeypatch.setattr(lifecycle.procs, 'reap_process', lambda pid, *a, **kw: killed.append(pid) or (True, ''))
         try:
-            app_module._close_login_browser(crawler, quit_timeout=0.4)
+            close_login_browser(crawler, quit_timeout=0.4)
         finally:
             crawler.driver.gone.set()
 
@@ -861,7 +862,7 @@ class TestABrowserWithNoProcessId:
         monkeypatch.setattr(lifecycle, 'add_log', lambda msg, **kw: said.append(str(msg)))
         crawler = _StreamingCrawler()
         crawler.driver = _SlowSession(pid=0)
-        app_module._close_login_browser(crawler, quit_timeout=5.0)
+        close_login_browser(crawler, quit_timeout=5.0)
         expected = t('run.browserStuck', platform='zhihu', seconds=int(Config.PROFILE_LOCK_TIMEOUT))
         assert expected not in said, said
 

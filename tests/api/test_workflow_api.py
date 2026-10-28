@@ -22,9 +22,12 @@ import os
 
 import pandas as pd
 import pytest
+from api import workflow as workflow_api
 from run_wait import run_finished
+from state import LOG_KEEP
 
 from analyzers.llm_client import LLMClient
+from services.runs.queue import QUEUE_MAX, queue_snapshot
 
 pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 
@@ -413,16 +416,16 @@ class TestWorkflowExecute:
         assert queued.status_code == 200
         body = queued.get_json()
         assert body['queued'] is True and body['position'] == 1
-        assert [entry['workflow_name'] for entry in app_module.queue_snapshot()] == ['anything']
+        assert [entry['workflow_name'] for entry in queue_snapshot()] == ['anything']
 
         refused = client.post('/api/workflow/execute', json={'workflow': workflow, 'queue': False})
         assert refused.status_code == 400
         assert 'already running' in refused.get_json()['error']
-        assert len(app_module.queue_snapshot()) == 1, 'a refusal must not park a second copy'
+        assert len(queue_snapshot()) == 1, 'a refusal must not park a second copy'
 
         cancelled = client.post('/api/workflow/queue/cancel', json={'id': body['queue_id']}).get_json()
         assert cancelled['ok'] is True and cancelled['removed'] is True
-        assert app_module.queue_snapshot() == []
+        assert queue_snapshot() == []
         assert app_module.execution_state['running'] is True, 'cancelling a wait must not stop the run'
 
     @pytest.mark.serial
@@ -478,13 +481,13 @@ class TestWorkflowExecute:
 
     def test_a_full_queue_refuses_rather_than_parking_forever(self, client, app_module):
         app_module.execution_state['running'] = True
-        for index in range(app_module.QUEUE_MAX):
+        for index in range(QUEUE_MAX):
             payload = {'workflow': _e2e_workflow(f'wf-{index}'), 'workflow_name': f'wf-{index}'}
             assert client.post('/api/workflow/execute', json=payload).status_code == 200
         over = client.post('/api/workflow/execute', json={'workflow': _e2e_workflow('one-too-many')})
         assert over.status_code == 409
-        assert str(app_module.QUEUE_MAX) in over.get_json()['error']
-        assert len(client.get('/api/workflow/queue').get_json()['queue']) == app_module.QUEUE_MAX
+        assert str(QUEUE_MAX) in over.get_json()['error']
+        assert len(client.get('/api/workflow/queue').get_json()['queue']) == QUEUE_MAX
         client.post('/api/workflow/queue/clear', json={})
 
     def test_cancelling_an_unknown_queue_id_removes_nothing(self, client):
@@ -702,13 +705,13 @@ class TestConsoleStatusTail:
         assert body['workflows'][0]['total'] == 260
 
     def test_the_ask_is_clamped_to_the_buffer_never_past_it(self, client, app_module):
-        self._fill(app_module, app_module.LOG_KEEP + 100)
-        body = client.get(f'/api/workflow/status?tail={app_module.LOG_KEEP * 3}').get_json()
-        assert len(body['logs']) == app_module.LOG_KEEP, 'a tail cannot ship lines the server threw away'
-        assert body['log_total'] == app_module.LOG_KEEP + 100, 'and the total must still say how many existed'
+        self._fill(app_module, LOG_KEEP + 100)
+        body = client.get(f'/api/workflow/status?tail={LOG_KEEP * 3}').get_json()
+        assert len(body['logs']) == LOG_KEEP, 'a tail cannot ship lines the server threw away'
+        assert body['log_total'] == LOG_KEEP + 100, 'and the total must still say how many existed'
 
     @pytest.mark.parametrize('ask,expected', [('0', 1), ('-5', 1), ('abc', 200), ('', 200), (' 42 ', 42)])
-    def test_a_junk_or_empty_tail_is_the_default_not_an_error(self, app_module, ask, expected):
+    def test_a_junk_or_empty_tail_is_the_default_not_an_error(self, ask, expected):
         """Hand-typing a URL must not answer a 400 in the middle of a run: this is a
         nicety on a read-only path. And 0 is clamped UP, because a tail of zero lines is
         a console that never receives anything again."""
@@ -717,7 +720,7 @@ class TestConsoleStatusTail:
         class _Req:
             args = {'tail': ask}
 
-        seen.append(app_module._status_tail(_Req()))
+        seen.append(workflow_api._status_tail(_Req()))
         assert seen == [expected]
 
 

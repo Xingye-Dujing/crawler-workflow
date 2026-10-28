@@ -544,7 +544,7 @@ class TestOneBrowserPerProfile:
     def test_a_claim_taken_on_one_thread_can_be_released_from_another(self, tmp_path):
         """The browser is closed on a helper thread, so the lock has to survive that.
 
-        This is the shape every real crawl takes: ``_close_login_browser`` gives
+        This is the shape every real crawl takes: ``close_login_browser`` gives
         ``quit()`` a bounded grace on a side thread — and if the primitive were an
         RLock, the release there would raise, be swallowed, and leave the profile
         claimed for the rest of the process.

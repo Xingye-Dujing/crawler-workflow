@@ -20,6 +20,7 @@ no crawler has to die to produce a half-finished run.
 import pytest
 
 from i18n import t
+from services import lock_store
 from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
@@ -463,18 +464,18 @@ class TestRunHousekeeping:
         store = app_module._RUN_STORE
         _seed(store, 'ancient', name='wf', status=RUN_COMPLETED)
         store._execute("UPDATE runs SET started_at = '2019-01-01T00:00:00' WHERE run_id = 'ancient'")
-        app_module.lock_store.set_locked('runs', 'ancient', True)
+        lock_store.set_locked('runs', 'ancient', True)
         body = client.post('/api/runs/purge').get_json()
         assert body['removed']['runs'] == 0, 'a pinned run must not be aged out'
         assert store.get_run('ancient') is not None
-        assert 'ancient' in app_module.lock_store.all_locks()['runs']
+        assert 'ancient' in lock_store.all_locks()['runs']
 
     def test_purge_prunes_the_lock_of_a_run_that_no_longer_exists(self, client, app_module):
         """A lock whose record was deleted out from under it is a dead key; the sweep
         forgets it so locks.json cannot accumulate ids with no run behind them."""
-        app_module.lock_store.set_locked('runs', 'ghost', True)
+        lock_store.set_locked('runs', 'ghost', True)
         client.post('/api/runs/purge')
-        assert 'ghost' not in app_module.lock_store.all_locks()['runs']
+        assert 'ghost' not in lock_store.all_locks()['runs']
 
     def test_purge_of_an_empty_store_reports_zeros(self, client):
         assert client.post('/api/runs/purge').get_json() == {

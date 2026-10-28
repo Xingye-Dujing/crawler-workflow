@@ -24,6 +24,7 @@ import pytest
 from state import _RUN_QUEUE
 
 from services.runs.payload import workflow_shape_error
+from services.runs.queue import queue_snapshot
 
 pytestmark = pytest.mark.api
 
@@ -418,7 +419,7 @@ class TestResumeOfPurgedRun:
             json={'workflow': {'nodes': [], 'connections': []}, 'resume_run_id': 'never-existed'},
         )
         assert response.status_code == 400
-        assert app_module.queue_snapshot() == [], 'an impossible continue must not enter the queue'
+        assert queue_snapshot() == [], 'an impossible continue must not enter the queue'
         app_module.execution_state['running'] = False
 
     def test_a_record_purged_while_the_request_waited_is_dropped_on_drain(self, client, app_module):
@@ -435,7 +436,7 @@ class TestResumeOfPurgedRun:
             }
         )
         app_module._start_next_queued()
-        assert app_module.queue_snapshot() == [], 'the impossible entry must not be re-queued'
+        assert queue_snapshot() == [], 'the impossible entry must not be re-queued'
         assert app_module.execution_state['running'] is False
         assert any('purged-later' in line for line in app_module.execution_state['logs']), 'the console says why'
 
@@ -478,7 +479,7 @@ class TestRunPayloadShape:
         app_module.execution_state['running'] = True
         response = client.post('/api/workflow/execute', json={'workflow': [{'id': 'node-1'}]})
         assert response.status_code == 400
-        assert app_module.queue_snapshot() == [], 'a request that cannot run must not enter the queue'
+        assert queue_snapshot() == [], 'a request that cannot run must not enter the queue'
 
     def test_a_broken_queued_request_cannot_strand_the_ones_behind_it(self, client, app_module, monkeypatch):
         """Drain-time defence: an entry that dies is skipped, the next still runs.
@@ -505,7 +506,7 @@ class TestRunPayloadShape:
         )
         app_module._start_next_queued()
         assert attempts == ['broken', 'next'], 'the second request must not be stranded by the first'
-        assert app_module.queue_snapshot() == []
+        assert queue_snapshot() == []
 
 
 class TestNumericSettingsFields:

@@ -29,6 +29,7 @@ from device_policy import REQUIRE_BROWSER_ENV, unavailable
 
 from crawlers import get_crawler
 from crawlers.core.faults import CrawlerStopped, DeadDriver
+from services.ingest.lifecycle import close_login_browser
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
@@ -101,7 +102,7 @@ def test_a_reaped_browser_leaves_a_session_that_refuses_faster_than_a_dead_port_
         worker = _hang_one_command(driver, box)
 
         reaped_at = time.monotonic()
-        app_module._close_login_browser(crawler, quit_timeout=QUIT_GRACE)
+        close_login_browser(crawler, quit_timeout=QUIT_GRACE)
         reap_cost = round(time.monotonic() - reaped_at, 3)
         worker.join(HANG_MS / 1000 + 30)
         assert not worker.is_alive(), f'the kill did not free the command in flight: {box}'

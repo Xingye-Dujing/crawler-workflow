@@ -109,7 +109,7 @@ class TestQueueHandOff:
         lost = {'status': 200, 'body': {'ok': True, 'queued': True}}
         monkeypatch.setattr(app_module, '_begin_run', lambda data, lang: lost)
         app_module._start_next_queued()
-        assert [item['id'] for item in app_module.queue_snapshot()] == ['q1'], 'the request is kept, at the front'
+        assert [item['id'] for item in run_queue.queue_snapshot()] == ['q1'], 'the request is kept, at the front'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'loser' in blob and ('queue' in blob.lower() or '排队' in blob), blob
 
@@ -125,7 +125,7 @@ class TestQueueHandOff:
             lambda data, lang: {'status': 400, 'body': {'ok': False, 'error': 'no such run'}, 'drop': True},
         )
         app_module._start_next_queued()
-        assert app_module.queue_snapshot() == [], 'an impossible request must not wait for every future run'
+        assert run_queue.queue_snapshot() == [], 'an impossible request must not wait for every future run'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'no such run' in blob, blob
 
@@ -146,7 +146,7 @@ class TestQueueHandOff:
         monkeypatch.setattr(app_module, '_begin_run', flaky)
         _RUN_QUEUE[0]['data'] = {'boom': True}
         app_module._start_next_queued()
-        assert app_module.queue_snapshot() == [], 'both entries were consumed'
+        assert run_queue.queue_snapshot() == [], 'both entries were consumed'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'broken' in blob, 'the failing request is named, not silently swallowed'
 

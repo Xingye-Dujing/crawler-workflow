@@ -485,7 +485,7 @@ class TestClose:
         assert not os.path.exists(capture)
 
     def test_the_harness_poses_as_a_crawler_for_the_reaper(self):
-        # _close_login_browser reads .driver first: None must be a plain attribute,
+        # close_login_browser reads .driver first: None must be a plain attribute,
         # not a lazily-raising property, and the wall flags must exist to be False.
         harness = HongguoCommentHarness()
         assert harness.driver is None
