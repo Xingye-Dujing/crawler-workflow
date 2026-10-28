@@ -122,7 +122,6 @@ jobs:
   browser:
     runs-on: windows-latest
     timeout-minutes: 40
-    needs: fast
 
     env:
       CRAWLER_REQUIRE_BROWSER: '1'
