@@ -19,7 +19,7 @@ import hashlib
 import re
 
 from i18n import t
-from services.biblio_refs import references_json, structured_references
+from services.biblio.refs import references_json, structured_references
 
 BASE_COLUMNS = [
     '记录ID',
@@ -123,9 +123,9 @@ def detect_format(text: str) -> str | None:
         # plain-text cell. The parser then refuses it by name when it yields
         # zero records, instead of silently storing the whole file as content.
         return CNKI
-    from services import biblio_formats
+    from services.biblio import formats
 
-    return biblio_formats.detect_format(text)
+    return formats.detect_format(text)
 
 
 def _normalize_tag(name: str) -> str:
@@ -553,9 +553,9 @@ def parse_text(text: str, fmt: str | None = None) -> dict | None:
     """
     fmt = fmt or detect_format(text)
     if fmt is None:
-        from services import biblio_formats
+        from services.biblio import formats
 
-        refusal = biblio_formats.detect_refusal(text)
+        refusal = formats.detect_refusal(text)
         if refusal:
             raise ValueError(refusal)
         return None
@@ -564,20 +564,20 @@ def parse_text(text: str, fmt: str | None = None) -> dict | None:
     elif fmt == CSSCI:
         rows, skipped = parse_cssci(text)
     else:
-        from services import biblio_formats
+        from services.biblio import formats
 
-        rows, skipped = biblio_formats.parse_format(text, fmt)
+        rows, skipped = formats.parse_format(text, fmt)
     return _finalize(rows, fmt, skipped)
 
 
 def parse_frame(frame, fmt: str | None = None) -> dict | None:
     """Parse a spreadsheet/CSV frame when its columns name a known export."""
-    from services import biblio_formats
+    from services.biblio import formats
 
-    fmt = fmt or biblio_formats.detect_frame(frame)
+    fmt = fmt or formats.detect_frame(frame)
     if fmt is None:
         return None
-    rows, skipped = biblio_formats.parse_frame(frame, fmt)
+    rows, skipped = formats.parse_frame(frame, fmt)
     return _finalize(rows, fmt, skipped)
 
 

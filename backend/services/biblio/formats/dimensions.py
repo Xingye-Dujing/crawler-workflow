@@ -2,7 +2,7 @@
 
 The download's first row is not a header: Dimensions writes its copyright notice there,
 so a reader that takes line 1 as column names sees one long sentence and 34 unnamed
-columns. The banner is dropped in :func:`services.biblio_formats.common.frame_of`.
+columns. The banner is dropped in :func:`services.biblio.formats.common.frame_of`.
 
 Column names below are the ones the publication export really writes (``PubYear``,
 ``Pagination``, ``MeSH terms``, ``Times cited``, ``Fields of Research (ANZSRC 2020)``);
@@ -10,8 +10,8 @@ there is no ``Language`` and no ``Countries`` column in it, so those stay empty 
 of being invented from another field.
 """
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import (
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import (
     countries,
     frame_cell,
     frame_has_groups,
@@ -23,7 +23,7 @@ from services.biblio_formats.common import (
     split_keywords,
     year_of,
 )
-from services.biblio_refs import structured_references
+from services.biblio.refs import structured_references
 
 ID = 'Dimensions'
 LABEL = 'Dimensions'

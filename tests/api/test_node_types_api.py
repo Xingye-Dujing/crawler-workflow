@@ -11,7 +11,7 @@ import pytest
 from nodes.catalog import NODE_TYPES, PLUGINS
 from nodes.defaults import DYNAMIC_DEFAULTS, NODE_DEFAULTS
 
-from services.biblio_schema import DEFAULTS as BIBLIO_DEFAULTS
+from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 
 pytestmark = pytest.mark.api
 

@@ -8,7 +8,7 @@ promise — the fold, the naming, or the refusal.
 
 import pytest
 
-from services import biblio_fuse
+from services.biblio import fuse
 
 pytestmark = pytest.mark.unit
 
@@ -29,13 +29,13 @@ POSTS = [
 
 
 def _fuse(upstream, **params):
-    return biblio_fuse.fuse(upstream, params, 'fuse')
+    return fuse.fuse(upstream, params, 'fuse')
 
 
 class TestFolding:
     def test_two_sources_with_different_columns_become_one_record_table(self):
         result = _fuse([('node-1', LITERATURE), ('node-2', POSTS)])
-        assert result['columns'] == list(biblio_fuse.OUTPUT_COLUMNS)
+        assert result['columns'] == list(fuse.OUTPUT_COLUMNS)
         assert [row['关键词'] for row in result['rows'][:2]] == ['数字治理;算法问责', '数字治理;数据要素']
         # The post table's 话题 lands in 关键词, so a downstream biblio node needs no remapping.
         assert result['rows'][2]['关键词'] == '数字治理;算法问责'
@@ -107,7 +107,7 @@ class TestRefusals:
             _fuse([('node-9', [{'话题': '  '}])])
 
     def test_an_entity_role_with_no_candidates_is_refused_before_running(self):
-        errors = biblio_fuse.collect_errors({'entity_columns': '  '}, 'fuse')
+        errors = fuse.collect_errors({'entity_columns': '  '}, 'fuse')
         assert errors and 'fuse' in errors[0]
 
 
@@ -122,7 +122,7 @@ class TestContract:
     def test_the_role_parameters_are_the_ones_the_panel_edits(self):
         """``nodes/schema.py`` reports a fusion node's column dependencies from this list, so a
         parameter renamed on one side is a stale diagnostic on the other."""
-        assert biblio_fuse.ROLE_PARAMS == (
+        assert fuse.ROLE_PARAMS == (
             'entity_columns',
             'year_columns',
             'title_columns',

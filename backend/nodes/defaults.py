@@ -6,7 +6,7 @@ entry on purpose — its defaults depend on the crawl matrix the browser has jus
 engine, mode), so the canvas derives them from that matrix instead of freezing one shape here.
 """
 
-from services.biblio_schema import DEFAULTS as BIBLIO_DEFAULTS
+from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 
 #: Which types have static defaults. ``source`` and ``reusable`` are the documented exceptions:
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.

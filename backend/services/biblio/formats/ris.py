@@ -3,8 +3,8 @@
 import re
 from collections import defaultdict
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import (
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import (
     countries,
     make_row,
     references_from_field,
@@ -12,7 +12,7 @@ from services.biblio_formats.common import (
     split_keywords,
     year_of,
 )
-from services.biblio_refs import structured_references
+from services.biblio.refs import structured_references
 
 ID = 'RIS'
 LABEL = 'RIS'

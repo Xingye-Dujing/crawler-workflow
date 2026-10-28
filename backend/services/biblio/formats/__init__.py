@@ -1,11 +1,11 @@
 """Registry of bibliographic export formats.
 
-CNKI RefWorks and CSSCI stay in :mod:`services.biblio_import` (the original
+CNKI RefWorks and CSSCI stay in :mod:`services.biblio.importer` (the original
 Chinese path); this package owns the international formats. Adding a format is
 one module exporting a :class:`FormatSpec`, plus one tuple entry below.
 """
 
-from services.biblio_formats import (
+from services.biblio.formats import (
     bibtex,
     dimensions,
     endnote,
@@ -17,7 +17,7 @@ from services.biblio_formats import (
     unsupported,
     wos,
 )
-from services.biblio_formats.base import CAPABILITIES, FormatSpec
+from services.biblio.formats.base import CAPABILITIES, FormatSpec
 
 FORMAT_SPECS: tuple[FormatSpec, ...] = (
     pubmed.SPEC,
@@ -80,7 +80,7 @@ def detect_refusal(text: str) -> str:
     Called when detection found nothing, before the upload route stores the file as an
     ordinary table: a vendor can sell two different collections to one file type, and
     silently accepting the unreadable one is how a well-formed, meaningless graph appears.
-    See :mod:`services.biblio_formats.unsupported`.
+    See :mod:`services.biblio.formats.unsupported`.
     """
     for (checker,) in unsupported.REFUSALS:
         try:

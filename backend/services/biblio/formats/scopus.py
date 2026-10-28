@@ -11,8 +11,8 @@ count`` and ``Cited by``, and the article number as both ``Article number`` and
 
 import re
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import (
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import (
     countries,
     frame_cell,
     frame_has_groups,
@@ -25,7 +25,7 @@ from services.biblio_formats.common import (
     text,
     year_of,
 )
-from services.biblio_refs import structured_references
+from services.biblio.refs import structured_references
 
 ID = 'Scopus'
 LABEL = 'Scopus'

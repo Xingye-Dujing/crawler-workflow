@@ -1,7 +1,7 @@
 """Bibliometric network construction, metrics, bursts and citation graphs.
 
 The input is the normalized record table produced by
-:mod:`services.biblio_import`; the output is one row per entity with a JSON
+:mod:`services.biblio.importer`; the output is one row per entity with a JSON
 adjacency column. Everything a chart needs is in that one table, so a resume,
 a CSV export and a chart preview all see the same numbers.
 
@@ -24,9 +24,9 @@ import pandas as pd
 
 from analyzers.keyword import KeywordExtractor
 from i18n import t
-from services import biblio_cluster
-from services.biblio_refs import normalize_reference, parse_reference, references_from_json
-from services.biblio_schema import (
+from services.biblio import cluster as clustering
+from services.biblio.refs import normalize_reference, parse_reference, references_from_json
+from services.biblio.schema import (
     CITATION_TYPES,
     COUPLING_TYPES,
     LIMITS,
@@ -1705,7 +1705,7 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
 
     clusters = None
     if params['cluster']:
-        clusters = biblio_cluster.cluster_graph(
+        clusters = clustering.cluster_graph(
             graph,
             final_nodes,
             {name: node_docs.get(name, set()) for name in final_nodes},

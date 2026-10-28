@@ -31,11 +31,11 @@ from services.analysis_params import (
     normalize_analysis_params,
     replaced_columns,
 )
-from services.biblio_fuse import OUTPUT_COLUMNS as FUSE_OUTPUT_COLUMNS
-from services.biblio_fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
-from services.biblio_schema import CITATION_TYPES, COUPLING_TYPES
-from services.biblio_schema import output_columns as biblio_output_columns
-from services.biblio_schema import read_columns as biblio_read_columns
+from services.biblio.fuse import OUTPUT_COLUMNS as FUSE_OUTPUT_COLUMNS
+from services.biblio.fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
+from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
+from services.biblio.schema import output_columns as biblio_output_columns
+from services.biblio.schema import read_columns as biblio_read_columns
 from services.chart_contracts import BIBLIO_CHART_READS
 from services.data_analysis import STEP_PARAMS
 from services.process_params import OUTPUT_ADD_COLUMNS, OUTPUT_REPLACE_COLUMNS

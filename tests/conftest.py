@@ -484,7 +484,7 @@ def client(app_module, data_root, request):
 
     import stores
 
-    from services.biblio_store import BiblioStore
+    from services.biblio.store import BiblioStore
     from services.dataset_store import DatasetStore
     from services.lexicon_store import LexiconStore
     from services.run_store import RunStore

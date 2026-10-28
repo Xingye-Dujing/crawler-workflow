@@ -306,7 +306,7 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
   （MultiPolygon 允许不相交的分片，所以是坐标拼接而不是重画），与本应用中国底图（DataV/高德）的画法一致；格陵兰、北塞浦路斯等
   仍按 Natural Earth 原样分开，因为 WoS 的地址字段就是这么给的。**并入是有代价的，所以图上点名**：
   标题下的副文本写出「底图无此区域 N 个：…」与「并入其他区域 N 处：England→英国；Peoples R China→中华人民共和国」。
-  名称解析走 `services/biblio_geo.py`：底图自身的 `name/zh/iso/alt` 先匹配，再借导入器已有的国别别名表
+  名称解析走 `services/biblio/geo.py`：底图自身的 `name/zh/iso/alt` 先匹配，再借导入器已有的国别别名表
   （`biblio_formats/countries`，不另起一份拼写表），最后才是一张刻意保持短的桥表；
   `tests/unit/test_biblio_geo.py` 拿**导入器能吐出的全部国名**逐个比对底图，一个都不许解析不出来。
   同一地区的多种写法**按地区求和**（`biblio_geo.aggregate` 由图与 LaTeX 共用），纸质版按发文量排序画条形图（世界几何不进 LaTeX），全部数值见三线表。

@@ -9,7 +9,7 @@ quiet.
 
 import pytest
 
-from services.biblio_store import DIFF_LIMIT, BiblioStore, compare_snapshots
+from services.biblio.store import DIFF_LIMIT, BiblioStore, compare_snapshots
 
 pytestmark = pytest.mark.unit
 
@@ -140,7 +140,7 @@ class TestCapture:
     """`snapshot_capture` splits a stored table into nodes and edges before it is filed."""
 
     def test_a_nodes_table_loses_its_adjacency_to_the_edge_list_once(self):
-        from services.bibliometrics import snapshot_capture
+        from services.biblio.metrics import snapshot_capture
 
         rows = [
             {'节点': '甲', '频次': 3, '连接': '[{"target": "乙", "value": 1.0, "count": 2}]'},
@@ -156,7 +156,7 @@ class TestCapture:
     def test_a_dual_map_table_keeps_its_nodes_not_only_its_links(self):
         """A dual-map table names entities in ``source`` and marks a node row by an empty
         ``target``; reading only ``节点`` captured its links and lost every node."""
-        from services.bibliometrics import snapshot_capture
+        from services.biblio.metrics import snapshot_capture
 
         rows = [
             {'map': 'journal', 'source': '甲刊', 'target': '', 'weight': 14},

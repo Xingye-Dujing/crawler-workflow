@@ -377,7 +377,7 @@ _ZH = {
     'api.biblioLensPatent': '这是 Lens 的专利库导出（列里有 Jurisdiction、Inventors、Application Number），'
     '不是学术文献。文献计量网络按学术文献建模，把发明人与申请人当作者画出来只会得到一张错图；'
     '请在 Lens 里改选文献（非专利）集合后重新导出',
-    # ── 文献来源导出指引（services/biblio_sources.py） ──────────────
+    # ── 文献来源导出指引（services/biblio/sources.py） ──────────────
     # 每条只写「我们解析过的真实文件」能支持的话：缺什么就写缺什么，不猜站点还有别的按钮。
     'source.CNKI.purpose': '中文文献共现网络的入口：关键词、作者、机构、期刊都能建图。'
     '知网导出不含参考文献与被引次数，因此引文类分析会在运行前点名拒绝，而不是画空图。',
@@ -2480,7 +2480,7 @@ _EN = {
     'api.biblioLensPatent': 'This is a Lens PATENT export (its columns include Jurisdiction, Inventors and Application '
     'Number), not scholarly records. The bibliometric network models publications, so drawing '
     'inventors and applicants as authors would only produce a wrong figure',
-    # ── Bibliographic source export guide (services/biblio_sources.py) ──
+    # ── Bibliographic source export guide (services/biblio/sources.py) ──
     # Every line is bounded by a file we actually parsed: what a source lacks is stated as
     # missing, and no button is named that we have not seen in a real export.
     'source.CNKI.purpose': 'The entry point for co-occurrence networks in Chinese literature: keywords, authors, '

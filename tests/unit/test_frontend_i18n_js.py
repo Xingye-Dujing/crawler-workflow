@@ -402,22 +402,22 @@ class TestJsBiblioColumnWords:
     rather than as a key, but that fallback must never be what a SHIPPED column relies on."""
 
     def test_every_column_the_biblio_node_can_emit_has_a_word(self):
-        from services import biblio_schema
+        from services.biblio import schema
 
         groups = (
-            biblio_schema.BASE_COLUMNS,
-            biblio_schema.CLUSTER_COLUMNS,
-            biblio_schema.BURST_COLUMNS,
-            biblio_schema.CITATION_METRIC_COLUMNS,
-            biblio_schema.USAGE_METRIC_COLUMNS,
-            biblio_schema.SOURCE_COLUMNS,
-            biblio_schema.EDGE_COLUMNS,
-            biblio_schema.DUAL_MAP_COLUMNS,
-            biblio_schema.CLUSTER_TABLE_COLUMNS,
-            biblio_schema.BURST_TABLE_COLUMNS,
-            biblio_schema.VARIATION_COLUMNS,
-            biblio_schema.SENTIMENT_COLUMNS,
-            biblio_schema.TOPIC_COLUMNS,
+            schema.BASE_COLUMNS,
+            schema.CLUSTER_COLUMNS,
+            schema.BURST_COLUMNS,
+            schema.CITATION_METRIC_COLUMNS,
+            schema.USAGE_METRIC_COLUMNS,
+            schema.SOURCE_COLUMNS,
+            schema.EDGE_COLUMNS,
+            schema.DUAL_MAP_COLUMNS,
+            schema.CLUSTER_TABLE_COLUMNS,
+            schema.BURST_TABLE_COLUMNS,
+            schema.VARIATION_COLUMNS,
+            schema.SENTIMENT_COLUMNS,
+            schema.TOPIC_COLUMNS,
         )
         columns = set()
         for group in groups:

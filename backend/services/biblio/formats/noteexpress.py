@@ -15,8 +15,8 @@ column answers which *format* was read, not which database paid for it.
 
 import re
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import countries, make_row, split_authors, split_keywords, year_of
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import countries, make_row, split_authors, split_keywords, year_of
 
 ID = 'NoteExpress'
 LABEL = 'NoteExpress'

@@ -2,9 +2,9 @@
 
 import re
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import make_row, references_from_field, split_authors, year_of
-from services.biblio_refs import structured_references
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import make_row, references_from_field, split_authors, year_of
+from services.biblio.refs import structured_references
 
 ID = 'BibTeX'
 LABEL = 'BibTeX'

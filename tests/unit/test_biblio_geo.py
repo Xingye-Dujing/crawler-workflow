@@ -10,9 +10,9 @@ import json
 
 import pytest
 
-from services import biblio_geo
-from services.biblio_formats import countries as country_table
-from services.biblio_geo import BASEMAP_PATH, BRIDGE, display, known, resolve
+from services.biblio import geo
+from services.biblio.formats import countries as country_table
+from services.biblio.geo import BASEMAP_PATH, BRIDGE, display, known, resolve
 
 pytestmark = pytest.mark.unit
 
@@ -32,16 +32,16 @@ class TestTheBasemap:
         """Natural Earth leaves ``ISO_A3`` as ``-99`` for Norway and France while ``ADM0_A3`` holds
         the real code; reading the first column blindly keyed both to the same placeholder and the
         dedupe dropped France out of the world."""
-        names = {region['name'] for region in biblio_geo.regions().values()}
+        names = {region['name'] for region in geo.regions().values()}
         assert {'France', 'Norway', 'China', 'United Kingdom', 'United States of America'} <= names
 
     def test_taiwan_is_not_a_region_of_its_own_and_china_carries_its_geometry(self):
         """The one cartographic claim this file makes, stated as a test so a rebuild cannot lose it
         silently: the app's figures go into Chinese-language research, and the basemap it already
         uses for China draws Taiwan as part of it."""
-        codes = set(biblio_geo.regions())
+        codes = set(geo.regions())
         assert 'TWN' not in codes
-        china = biblio_geo.regions()['CHN']
+        china = geo.regions()['CHN']
         assert china['name'] == 'China'
         payload = json.loads(BASEMAP_PATH.read_text(encoding='utf-8'))
         polygons = next(

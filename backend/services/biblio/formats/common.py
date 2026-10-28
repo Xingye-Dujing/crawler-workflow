@@ -7,9 +7,9 @@ import re
 
 import pandas as pd
 
-from services.biblio_formats.countries import countries_in
-from services.biblio_import import _join_authors, _join_list, _row
-from services.biblio_refs import parse_reference, references_json, structured_references
+from services.biblio.formats.countries import countries_in
+from services.biblio.importer import _join_authors, _join_list, _row
+from services.biblio.refs import parse_reference, references_json, structured_references
 
 _CELL_SPLIT = re.compile(r'[;；]+')
 _YEAR = re.compile(r'(?:19|20)\d{2}')

@@ -18,9 +18,9 @@ import csv
 from pathlib import Path
 
 from i18n import t
-from services.biblio_schema import WATCH_UNSHAPED
-from services.biblio_store import compare_snapshots
-from services.bibliometrics import snapshot_capture
+from services.biblio.metrics import snapshot_capture
+from services.biblio.schema import WATCH_UNSHAPED
+from services.biblio.store import compare_snapshots
 
 #: One row per change the comparison found. ``前值`` is the baseline, ``后值`` this run.
 WATCH_COLUMNS = ('类别', '名称', '前值', '后值')

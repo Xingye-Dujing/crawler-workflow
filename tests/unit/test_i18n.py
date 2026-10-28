@@ -286,7 +286,7 @@ class TestKeyReachability:
     # Keys assembled at runtime cannot appear as a literal in any source file.
     DYNAMIC_PREFIXES = (
         'cookie.',  # services/flow.py: t(f'cookie.{platform}.purpose')
-        'source.',  # services/biblio_sources.py: t(f'source.{fmt}.purpose') for each readable format
+        'source.',  # services/biblio/sources.py: t(f'source.{fmt}.purpose') for each readable format
         'comment.status.',  # app.py: t(f'comment.status.{status}')
         'crawl.stopReason.',  # i18n.py: stop_reason_label maps a walk token through STOP_REASONS
         'deps.',  # core/machine.py: remedy(f'{prefix}.{platform}') — one per-OS sentence per family

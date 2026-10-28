@@ -23,7 +23,7 @@ import pandas as pd
 from core.config import Config
 from state import _dataset_cache
 
-from services.biblio_store import BiblioStore
+from services.biblio.store import BiblioStore
 from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping
 from services.lexicon_store import LexiconStore

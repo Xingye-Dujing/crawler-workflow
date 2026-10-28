@@ -8,8 +8,8 @@ import pytest
 
 from engine.workflow import WorkflowEngine
 from i18n import t
-from services import bibliometrics
-from services.biblio_schema import (
+from services.biblio import metrics
+from services.biblio.schema import (
     VARIATION_COLUMNS,
     classify_shape,
     collect_errors,
@@ -94,7 +94,7 @@ def _refs():
 
 class TestKeywordNetwork:
     def test_known_counts_and_edges(self):
-        result = bibliometrics.build(_keywords(), _params(), 'test')
+        result = metrics.build(_keywords(), _params(), 'test')
         rows = {row['节点']: row for row in result['rows']}
         assert set(rows) == {'甲', '乙', '丙'}
         assert {name: row['频次'] for name, row in rows.items()} == {'甲': 2, '乙': 2, '丙': 2}
@@ -104,23 +104,23 @@ class TestKeywordNetwork:
         assert all(item['count'] == 1 for item in links)
 
     def test_build_is_deterministic(self):
-        first = bibliometrics.build(_keywords(), _params(), 'test')
-        second = bibliometrics.build(_keywords(), _params(), 'test')
+        first = metrics.build(_keywords(), _params(), 'test')
+        second = metrics.build(_keywords(), _params(), 'test')
         assert first['rows'] == second['rows']
 
     def test_mst_keeps_a_tree(self):
-        result = bibliometrics.build(_keywords(), _params(pruning='mst', pruning_scope='merged'), 'test')
+        result = metrics.build(_keywords(), _params(pruning='mst', pruning_scope='merged'), 'test')
         assert len(result['edges']) == len(result['rows']) - 1
 
     def test_pathfinder_runs_per_slice_and_reports_its_pruning(self):
-        result = bibliometrics.build(_keywords(), _params(pruning='pathfinder'), 'test')
+        result = metrics.build(_keywords(), _params(pruning='pathfinder'), 'test')
         assert result['edges']
         assert result['summary']['pruning'] == 'pathfinder'
 
     def test_cluster_columns_only_appear_when_requested(self):
-        plain = bibliometrics.build(_keywords(), _params(), 'test')
+        plain = metrics.build(_keywords(), _params(), 'test')
         assert '聚类' not in plain['rows'][0]
-        clustered = bibliometrics.build(_keywords(), _params(cluster=True), 'test')
+        clustered = metrics.build(_keywords(), _params(cluster=True), 'test')
         assert {'聚类', '聚类标签', '轮廓值'} <= set(clustered['rows'][0])
         assert clustered['summary']['clusters']['k'] >= 1
 
@@ -128,22 +128,22 @@ class TestKeywordNetwork:
         """LLR picks a label from the corpus; sometimes the researcher already knows what the
         group is. The override wins, and the summary says which method actually produced the
         labels rather than the one that was asked for."""
-        asked = sorted({row['聚类'] for row in bibliometrics.build(_keywords(), _params(cluster=True), 'test')['rows']})
+        asked = sorted({row['聚类'] for row in metrics.build(_keywords(), _params(cluster=True), 'test')['rows']})
         first = asked[0]
-        result = bibliometrics.build(_keywords(), _params(cluster=True, cluster_labels=f'#{first}=人工命名'), 'test')
+        result = metrics.build(_keywords(), _params(cluster=True, cluster_labels=f'#{first}=人工命名'), 'test')
         landed = {row['聚类标签'] for row in result['rows'] if str(row['聚类']) == str(first)}
         assert landed == {'人工命名'}
         assert '+manual' in result['summary']['clusters']['method']
         assert any('人工簇标签已应用' in note for note in result['notes'])
 
     def test_a_cluster_label_without_the_hash_still_lands(self):
-        result = bibliometrics.build(_keywords(), _params(cluster=True, cluster_labels='0=裸键'), 'test')
+        result = metrics.build(_keywords(), _params(cluster=True, cluster_labels='0=裸键'), 'test')
         assert any(row['聚类标签'] == '裸键' for row in result['rows'] if str(row['聚类']) == '0')
 
     def test_a_label_for_a_cluster_that_is_not_there_is_named_not_dropped(self):
         """A stale line from an earlier slicing is a fact the user should see; silently ignoring
         it leaves them believing the cluster is called that."""
-        result = bibliometrics.build(_keywords(), _params(cluster=True, cluster_labels='#77=不存在的簇'), 'test')
+        result = metrics.build(_keywords(), _params(cluster=True, cluster_labels='#77=不存在的簇'), 'test')
         assert any('#77' in note and '未生效' in note for note in result['notes'])
         assert not any('人工簇标签已应用' in note for note in result['notes'])
 
@@ -154,17 +154,17 @@ class TestKeywordNetwork:
     def test_provenance_columns_appear_only_for_a_fused_table(self):
         """A plain literature table says nothing about which corpora use a term; growing an
         empty 来源 column would let the output look like a fusion that never happened."""
-        plain = bibliometrics.build(_keywords(), _params(), 'test')
+        plain = metrics.build(_keywords(), _params(), 'test')
         assert '来源' not in plain['rows'][0] and '跨源' not in plain['rows'][0]
         fused = [dict(row, 来源='文献') for row in _keywords().to_dict('records')]
-        result = bibliometrics.build(pd.DataFrame(fused), _params(), 'test')
+        result = metrics.build(pd.DataFrame(fused), _params(), 'test')
         assert {'来源', '跨源'} <= set(result['rows'][0])
         assert all(row['来源'] == '文献' and row['跨源'] is False for row in result['rows'])
 
     def test_a_missing_column_is_refused_by_name(self):
         frame = _keywords().drop(columns=['关键词'])
         with pytest.raises(ValueError, match='关键词'):
-            bibliometrics.build(frame, _params(), 'test')
+            metrics.build(frame, _params(), 'test')
 
     def test_a_crawled_table_can_map_its_own_columns(self):
         frame = pd.DataFrame(
@@ -174,7 +174,7 @@ class TestKeywordNetwork:
                 {'话题': '甲;丙', '用户名': 'C', '发布时间': '2022-03-05', '标题': 't3', '正文': '甲 丙'},
             ]
         )
-        result = bibliometrics.build(
+        result = metrics.build(
             frame,
             _params(
                 entity_type='keyword',
@@ -196,42 +196,42 @@ class TestKeywordNetwork:
             ]
         )
         with pytest.raises(ValueError):
-            bibliometrics.build(frame, _params(), 'test')
+            metrics.build(frame, _params(), 'test')
 
 
 class TestBurst:
     def test_a_known_spike_is_found(self):
-        bursts = bibliometrics.kleinberg_bursts([0, 0, 0, 10, 10, 0], [10] * 6, 1.0, 2, 2.0)
+        bursts = metrics.kleinberg_bursts([0, 0, 0, 10, 10, 0], [10] * 6, 1.0, 2, 2.0)
         assert bursts
         assert bursts[0]['start'] == 3
         assert bursts[0]['end'] == 4
         assert bursts[0]['strength'] > 0
 
     def test_a_flat_series_is_not_a_burst(self):
-        assert bibliometrics.kleinberg_bursts([1, 1, 1, 1], [5, 5, 5, 5], 1.0, 2, 2.0) == []
+        assert metrics.kleinberg_bursts([1, 1, 1, 1], [5, 5, 5, 5], 1.0, 2, 2.0) == []
 
 
 class TestCitations:
     def test_document_cocitation_uses_shared_references(self):
-        result = bibliometrics.build(_refs(), _params(entity_type='document_cocitation', burst=False), 'test')
+        result = metrics.build(_refs(), _params(entity_type='document_cocitation', burst=False), 'test')
         assert {row['节点'] for row in result['rows']} == {'甲文', '乙文'}
         assert len(result['edges']) == 1
         assert result['edges'][0]['count'] == 2
 
     def test_author_and_journal_cocitation(self):
-        authors = bibliometrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')
-        journals = bibliometrics.build(_refs(), _params(entity_type='journal_cocitation', burst=False), 'test')
+        authors = metrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')
+        journals = metrics.build(_refs(), _params(entity_type='journal_cocitation', burst=False), 'test')
         assert {row['节点'] for row in authors['rows']} == {'张三', '李四'}
         assert {row['节点'] for row in journals['rows']} == {'甲刊', '乙刊'}
 
     def test_bibliographic_coupling_connects_citing_papers(self):
-        result = bibliometrics.build(_refs(), _params(entity_type='bibliographic_coupling', burst=False), 'test')
+        result = metrics.build(_refs(), _params(entity_type='bibliographic_coupling', burst=False), 'test')
         assert {row['节点'] for row in result['rows']} == {'施引一', '施引二'}
         assert len(result['edges']) == 1
 
     def test_missing_references_refuse_the_citation_mode(self):
         with pytest.raises(ValueError):
-            bibliometrics.build(_keywords(), _params(entity_type='document_cocitation', burst=False), 'test')
+            metrics.build(_keywords(), _params(entity_type='document_cocitation', burst=False), 'test')
 
     def test_coupling_cannot_use_burst(self):
         with pytest.raises(ValueError):
@@ -249,7 +249,7 @@ class TestCitations:
                 {'题名': 'b', '年份': 2020, '关键词': 'AI;人工智能;噪声', '摘要': ''},
             ]
         )
-        result = bibliometrics.build(
+        result = metrics.build(
             frame,
             _params(aliases='人工智能=AI', exclude_values='噪声'),
             'test',
@@ -266,8 +266,8 @@ class TestCitations:
                 {'题名': 'E', '年份': 2022, '参考文献': '[1] C. C.\n[2] D. D.'},
             ]
         )
-        direct = bibliometrics.build(frame, _params(entity_type='document_cocitation', burst=False), 'test')
-        expanded = bibliometrics.build(
+        direct = metrics.build(frame, _params(entity_type='document_cocitation', burst=False), 'test')
+        expanded = metrics.build(
             frame,
             _params(entity_type='document_cocitation', burst=False, citation_expansion=1),
             'test',
@@ -297,7 +297,7 @@ class TestCitations:
             ]
         )
         basemap = pd.DataFrame({'期刊': ['甲源', '乙源'], '学科': ['公共管理', '信息科学']})
-        result = bibliometrics.build(
+        result = metrics.build(
             records,
             _params(entity_type='journal', output_shape='dual_map', basemap_dataset_id='x', burst=False),
             'dual',
@@ -319,23 +319,23 @@ class TestCitations:
 
 class TestPhaseTwoContracts:
     def test_document_is_the_cite_space_name_for_bibliographic_coupling(self):
-        coupling = bibliometrics.build(_refs(), _params(entity_type='bibliographic_coupling', burst=False), 'test')
-        document = bibliometrics.build(_refs(), _params(entity_type='document', burst=False), 'test')
+        coupling = metrics.build(_refs(), _params(entity_type='bibliographic_coupling', burst=False), 'test')
+        document = metrics.build(_refs(), _params(entity_type='document', burst=False), 'test')
         assert {row['节点'] for row in document['rows']} == {row['节点'] for row in coupling['rows']}
 
     def test_journal_coupling_connects_source_journals_by_shared_references(self):
-        result = bibliometrics.build(_refs(), _params(entity_type='journal', burst=False), 'test')
+        result = metrics.build(_refs(), _params(entity_type='journal', burst=False), 'test')
         assert {row['节点'] for row in result['rows']} == {'甲源', '乙源'}
         assert len(result['edges']) == 1
 
     def test_funder_cooccurrence_builds_grant_links(self):
-        result = bibliometrics.build(_refs(), _params(entity_type='funder', burst=False), 'test')
+        result = metrics.build(_refs(), _params(entity_type='funder', burst=False), 'test')
         assert {row['节点'] for row in result['rows']} == {'基金A', '基金B', '基金C'}
         assert any(edge['source'] == '基金A' and edge['target'] == '基金B' for edge in result['edges'])
         assert any(edge['source'] == '基金A' and edge['target'] == '基金C' for edge in result['edges'])
 
     def test_min_tc_uses_the_mapped_citation_count_column(self):
-        result = bibliometrics.build(
+        result = metrics.build(
             _refs(),
             _params(min_tc=5, selection='threshold', threshold_c=1),
             'test',
@@ -349,8 +349,8 @@ class TestPhaseTwoContracts:
                 {'题名': 'b', '年份': 2021, '关键词': '甲;乙', '摘要': ''},
             ]
         )
-        kept = bibliometrics.build(frame, _params(selection='threshold', threshold_c=1), 'test')
-        pruned = bibliometrics.build(frame, _params(selection='threshold', threshold_c=1, threshold_cc=2), 'test')
+        kept = metrics.build(frame, _params(selection='threshold', threshold_c=1), 'test')
+        pruned = metrics.build(frame, _params(selection='threshold', threshold_c=1, threshold_cc=2), 'test')
         assert len(pruned['edges']) < len(kept['edges'])
         assert all(edge['count'] >= 2 for edge in pruned['edges'])
 
@@ -363,7 +363,7 @@ class TestPhaseTwoContracts:
                 {'题名': 'd', '年份': 2021, '关键词': '丙;丁', '摘要': ''},
             ]
         )
-        result = bibliometrics.build(
+        result = metrics.build(
             frame,
             _params(selection='threshold', threshold_c=1, largest_component=True),
             'test',
@@ -372,12 +372,12 @@ class TestPhaseTwoContracts:
         assert any('最大连通分量' in note or 'largest connected component' in note for note in result['notes'])
 
     def test_cite_space_node_names_alias_the_same_constructions(self):
-        journal = bibliometrics.build(_refs(), _params(entity_type='journal', burst=False), 'test')
-        source = bibliometrics.build(_refs(), _params(entity_type='source', burst=False), 'test')
-        funder = bibliometrics.build(_refs(), _params(entity_type='funder', burst=False), 'test')
-        grant = bibliometrics.build(_refs(), _params(entity_type='grant', burst=False), 'test')
-        document = bibliometrics.build(_refs(), _params(entity_type='document_cocitation', burst=False), 'test')
-        article = bibliometrics.build(_refs(), _params(entity_type='article', burst=False), 'test')
+        journal = metrics.build(_refs(), _params(entity_type='journal', burst=False), 'test')
+        source = metrics.build(_refs(), _params(entity_type='source', burst=False), 'test')
+        funder = metrics.build(_refs(), _params(entity_type='funder', burst=False), 'test')
+        grant = metrics.build(_refs(), _params(entity_type='grant', burst=False), 'test')
+        document = metrics.build(_refs(), _params(entity_type='document_cocitation', burst=False), 'test')
+        article = metrics.build(_refs(), _params(entity_type='article', burst=False), 'test')
         assert {row['节点'] for row in source['rows']} == {row['节点'] for row in journal['rows']}
         assert {row['节点'] for row in grant['rows']} == {row['节点'] for row in funder['rows']}
         assert {row['节点'] for row in article['rows']} == {row['节点'] for row in document['rows']}
@@ -389,8 +389,8 @@ class TestPhaseTwoContracts:
                 {'题名': 'b', '年份': 2021, '关键词': '甲;乙;丙', '摘要': ''},
             ]
         )
-        slices = bibliometrics.build(frame, _params(pruning='mst', pruning_scope='slices'), 'test')
-        merged = bibliometrics.build(frame, _params(pruning='mst', pruning_scope='merged'), 'test')
+        slices = metrics.build(frame, _params(pruning='mst', pruning_scope='slices'), 'test')
+        merged = metrics.build(frame, _params(pruning='mst', pruning_scope='merged'), 'test')
         assert len(merged['edges']) == len(merged['rows']) - 1
         assert len(slices['edges']) >= len(merged['edges'])
         # The scope is named with the interface's own word, not the stored token: a Chinese
@@ -399,10 +399,10 @@ class TestPhaseTwoContracts:
         assert any('MST' in note and t('biblio.pruning_scope.merged') in note for note in merged['notes'])
 
     def test_citation_metrics_are_emitted_only_when_the_data_has_them(self):
-        with_metrics = bibliometrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')
+        with_metrics = metrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')
         assert all('总被引' in row and 'H指数' in row for row in with_metrics['rows'])
         assert max(row['H指数'] for row in with_metrics['rows']) >= 1
-        without = bibliometrics.build(_keywords(), _params(), 'test')
+        without = metrics.build(_keywords(), _params(), 'test')
         assert all('总被引' not in row for row in without['rows'])
         assert '总被引' not in output_columns(_params(), list(_keywords().columns))
         assert '总被引' in output_columns(_params(), list(_refs().columns))
@@ -428,8 +428,8 @@ class TestPhaseTwoContracts:
         assert any('bursts' in message for message in collect_errors(_params(output_shape='bursts'), 'test'))
 
     def test_exports_write_graphml_gml_and_json(self, tmp_path):
-        result = bibliometrics.build(_keywords(), _params(cluster=True, burst=True), 'test')
-        files = bibliometrics.export_result(result, str(tmp_path), 'demo')
+        result = metrics.build(_keywords(), _params(cluster=True, burst=True), 'test')
+        files = metrics.export_result(result, str(tmp_path), 'demo')
         assert files['biblio_graphml'].endswith('_graph.graphml')
         assert files['biblio_gml'].endswith('_graph.gml')
         assert files['biblio_json'].endswith('_graph.json')
@@ -474,11 +474,11 @@ class TestContracts:
     def test_cluster_labels_name_the_member_fallback(self):
         import networkx as nx
 
-        from services import biblio_cluster
+        from services.biblio import cluster
 
         graph = nx.Graph()
         graph.add_weighted_edges_from([('甲', '乙', 1.0), ('丙', '丁', 1.0)])
-        result = biblio_cluster.cluster_graph(graph, ['甲', '乙', '丙', '丁'], {}, [], 2, 'tfidf', 3)
+        result = cluster.cluster_graph(graph, ['甲', '乙', '丙', '丁'], {}, [], 2, 'tfidf', 3)
         assert result['fallback'] is True
         assert result['summary']['method'] == 'members'
         assert '甲' in result['members']['甲']['cluster_label']
@@ -511,7 +511,7 @@ def test_a_stored_table_reads_back_the_shape_it_was_emitted_as(columns, shape):
 
 def test_every_output_shape_reads_back():
     """One direction without the other is how a new shape would silently lose its label."""
-    from services.biblio_schema import OUTPUT_SHAPES
+    from services.biblio.schema import OUTPUT_SHAPES
 
     for shape in OUTPUT_SHAPES:
         assert classify_shape(output_columns({'output_shape': shape})) == shape
@@ -536,21 +536,21 @@ class TestPathfinderReduction:
 
     def test_the_bottleneck_norm_drops_the_dominated_chord(self):
         # A→B→C costs max(0.5, 0.5) = 0.5, better than the chord's own 0.6.
-        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('inf')) == {('A', 'B'), ('B', 'C')}
+        assert metrics._pfnet_keys(self.TRIANGLE, _pf('inf')) == {('A', 'B'), ('B', 'C')}
 
     def test_the_sum_and_euclidean_norms_keep_it_because_two_links_really_do_cost_more(self):
         # 0.5 + 0.5 = 1.0 and √(0.5²+0.5²) ≈ 0.707, both worse than 0.6.
-        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('1')) == set(self.TRIANGLE)
-        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('2')) == set(self.TRIANGLE)
+        assert metrics._pfnet_keys(self.TRIANGLE, _pf('1')) == set(self.TRIANGLE)
+        assert metrics._pfnet_keys(self.TRIANGLE, _pf('2')) == set(self.TRIANGLE)
 
     def test_the_depth_limit_decides_whether_a_long_way_round_counts(self):
         chain = _edges(('A', 'B', 0.8), ('B', 'C', 0.8), ('C', 'D', 0.8), ('A', 'D', 0.3))
         # Two hops cannot get from A to D, so the direct link stands; at three hops it is dominated.
-        assert ('A', 'D') in bibliometrics._pfnet_keys(chain, _pf('inf', lmax=2))
-        assert ('A', 'D') not in bibliometrics._pfnet_keys(chain, _pf('inf', lmax=3))
+        assert ('A', 'D') in metrics._pfnet_keys(chain, _pf('inf', lmax=2))
+        assert ('A', 'D') not in metrics._pfnet_keys(chain, _pf('inf', lmax=3))
 
     def test_the_keep_fraction_leaves_the_strongest_survivors(self):
-        assert bibliometrics._pfnet_keys(self.TRIANGLE, _pf('1', dmax=0.5)) == {('A', 'B'), ('B', 'C')}
+        assert metrics._pfnet_keys(self.TRIANGLE, _pf('1', dmax=0.5)) == {('A', 'B'), ('B', 'C')}
 
     def test_the_bottleneck_case_at_full_depth_is_the_same_graph_as_the_spanning_forest(self):
         """The fast path is not a weaker substitute: PFNET(r=∞, unlimited depth) IS the maximum
@@ -565,39 +565,39 @@ class TestPathfinderReduction:
             ('D', 'E', 0.6),
             ('A', 'E', 0.1),
         )
-        assert bibliometrics._pfnet_keys(edges, _pf('inf')) == bibliometrics._global_mst_keys(edges)
+        assert metrics._pfnet_keys(edges, _pf('inf')) == metrics._global_mst_keys(edges)
 
     def test_a_network_wider_than_the_budget_refuses_and_names_its_numbers(self, monkeypatch):
-        monkeypatch.setattr(bibliometrics, '_PFNET_WORK_BUDGET', 10)
+        monkeypatch.setattr(metrics, '_PFNET_WORK_BUDGET', 10)
         with pytest.raises(ValueError) as exc:
-            bibliometrics._pfnet_keys(self.TRIANGLE, _pf('1'))
+            metrics._pfnet_keys(self.TRIANGLE, _pf('1'))
         text = str(exc.value)
         assert '3' in text and '10' in text, text
 
     def test_two_and_three_nodes_have_no_indirect_path_to_compare(self):
-        assert bibliometrics._pfnet_keys(_edges(('A', 'B', 0.5)), _pf('1')) == {('A', 'B')}
+        assert metrics._pfnet_keys(_edges(('A', 'B', 0.5)), _pf('1')) == {('A', 'B')}
 
 
 class TestPathfinderInTheRun:
     def test_the_exponent_changes_the_pruned_network(self):
         """A run that prunes identically whatever r says would be a switch that switches nothing."""
-        few = bibliometrics.build(_keywords(), _params(pruning='pathfinder', pruning_scope='merged'), 'test')
-        many = bibliometrics.build(
+        few = metrics.build(_keywords(), _params(pruning='pathfinder', pruning_scope='merged'), 'test')
+        many = metrics.build(
             _keywords(), _params(pruning='pathfinder', pruning_scope='merged', pathfinder_r='1'), 'test'
         )
         assert len(many['edges']) >= len(few['edges'])
         assert many['edges'] != few['edges'] or len(many['edges']) > len(few['edges'])
 
     def test_the_console_names_the_parameters_that_ran(self):
-        result = bibliometrics.build(
+        result = metrics.build(
             _keywords(), _params(pruning='pathfinder', pathfinder_r='2', pathfinder_lmax=3, pathfinder_dmax=0.8), 'test'
         )
         line = next(note for note in result['notes'] if 'Pathfinder' in note)
         assert 'r=2' in line and '3' in line and '0.8' in line
 
     def test_pruning_a_slice_network_is_not_the_same_job_as_pruning_the_merged_one(self):
-        per_slice = bibliometrics.build(_keywords(), _params(pruning='pathfinder', pathfinder_r='1'), 'test')
-        merged = bibliometrics.build(
+        per_slice = metrics.build(_keywords(), _params(pruning='pathfinder', pathfinder_r='1'), 'test')
+        merged = metrics.build(
             _keywords(), _params(pruning='pathfinder', pruning_scope='merged', pathfinder_r='1'), 'test'
         )
         assert per_slice['notes'] != merged['notes']
@@ -650,7 +650,7 @@ class TestStructuralVariation:
         base.update(overrides)
         params = _params(**base)
         # A DataFrame has no truth value, so the default cannot be `frame or …`.
-        result = bibliometrics.build(_sv_frame() if frame is None else frame, params, 'test')
+        result = metrics.build(_sv_frame() if frame is None else frame, params, 'test')
         return result['variation']
 
     def test_a_completely_different_neighbourhood_is_one_bit(self):
@@ -703,7 +703,7 @@ class TestStructuralVariation:
     def test_the_variation_table_has_its_own_shape_and_reads_back(self):
         params = _params(variation=True, output_shape='variation')
         assert output_columns(params) == list(VARIATION_COLUMNS)
-        result = bibliometrics.build(_sv_frame(), params, 'test')
+        result = metrics.build(_sv_frame(), params, 'test')
         assert list(result['variation'][0]) == list(VARIATION_COLUMNS)
         assert classify_shape(result['variation'][0]) == 'variation'
 
@@ -720,7 +720,7 @@ class TestStructuralVariation:
             ]
         )
         with pytest.raises(ValueError) as exc:
-            bibliometrics.build(frame, _params(variation=True), 'test')
+            metrics.build(frame, _params(variation=True), 'test')
         assert '切片' in str(exc.value) or 'slice' in str(exc.value)
 
     def test_a_coupling_network_refuses_the_switch_rather_than_inventing_slices(self):
@@ -731,14 +731,12 @@ class TestStructuralVariation:
             ]
         )
         with pytest.raises(ValueError) as exc:
-            bibliometrics.build(
-                frame, _params(entity_type='bibliographic_coupling', variation=True, burst=False), 'test'
-            )
+            metrics.build(frame, _params(entity_type='bibliographic_coupling', variation=True, burst=False), 'test')
         assert '耦合' in str(exc.value) or 'coupling' in str(exc.value)
 
     def test_the_variation_table_is_written_as_an_artifact(self, tmp_path):
-        result = bibliometrics.build(_sv_frame(), _params(variation=True), 'test')
-        files = bibliometrics.export_result(result, str(tmp_path), 'sv')
+        result = metrics.build(_sv_frame(), _params(variation=True), 'test')
+        files = metrics.export_result(result, str(tmp_path), 'sv')
         assert 'biblio_variation' in files
         assert '结构变化' in Path(files['biblio_variation']).read_text(encoding='utf-8-sig')
 
@@ -768,27 +766,27 @@ class TestFractionalCounting:
         three times). Fractional counting spreads the long document's single unit over its ten
         pairs, so the same edge reads 2.1/3 — the two short documents now outweigh the one long
         one, which is the whole point."""
-        full = bibliometrics.build(_counting_frame(), _params(counting='full'), 'test')
-        split = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        full = metrics.build(_counting_frame(), _params(counting='full'), 'test')
+        split = metrics.build(_counting_frame(), _params(counting='fractional'), 'test')
         assert _edge(full, '甲', '乙')['weight'] == pytest.approx(1.0)
         assert _edge(split, '甲', '乙')['weight'] == pytest.approx(0.7)
 
     def test_the_reported_count_is_still_the_number_of_times_they_met(self):
         """Normalization belongs to the strength only. A table whose 次数 quietly became 0.1 is a
         table that no longer answers the question the column asks."""
-        split = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        split = metrics.build(_counting_frame(), _params(counting='fractional'), 'test')
         assert _edge(split, '甲', '乙')['count'] == 3
         assert _edge(split, '丙', '丁')['count'] == 1
 
     def test_a_long_list_no_longer_buys_six_strong_links(self):
-        full = bibliometrics.build(_counting_frame(), _params(counting='full'), 'test')
-        split = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        full = metrics.build(_counting_frame(), _params(counting='full'), 'test')
+        split = metrics.build(_counting_frame(), _params(counting='fractional'), 'test')
         assert _edge(full, '甲', '丙') is not None
         assert _edge(split, '甲', '丙') is None
 
     def test_the_console_says_the_counting_ran_and_which_documents_were_split(self):
-        quiet = bibliometrics.build(_counting_frame(), _params(counting='full'), 'test')
-        loud = bibliometrics.build(_counting_frame(), _params(counting='fractional'), 'test')
+        quiet = metrics.build(_counting_frame(), _params(counting='full'), 'test')
+        loud = metrics.build(_counting_frame(), _params(counting='fractional'), 'test')
         assert not any('分数' in note or 'ractional' in note for note in quiet['notes'])
         assert any(('1 篇' in note or '1 document' in note) for note in loud['notes']), loud['notes']
 
@@ -801,7 +799,7 @@ class TestFractionalCounting:
                 {'题名': 'b', '年份': 2021, '关键词': '丙;丁', '摘要': ''},
             ]
         )
-        result = bibliometrics.build(frame, _params(counting='fractional'), 'test')
+        result = metrics.build(frame, _params(counting='fractional'), 'test')
         assert not any('分数' in note or 'ractional' in note for note in result['notes'])
 
     def test_coupling_has_no_third_document_to_split_and_refuses_by_name(self):
@@ -838,14 +836,12 @@ class TestSentimentAndTopicOverlay:
         )
 
     def test_without_a_mapping_the_table_is_byte_for_byte_what_it_was(self):
-        result = bibliometrics.build(self._frame(), _params(), 'test')
+        result = metrics.build(self._frame(), _params(), 'test')
         assert not ({'情感倾向', '情感分布', '主导话题', '话题分布'} & set(result['rows'][0]))
         assert 'overlay' not in result['summary']
 
     def test_the_distribution_counts_the_documents_that_mention_the_node(self):
-        result = bibliometrics.build(
-            self._frame(), _params(sentiment_column='sentiment', topic_column='cluster'), 'test'
-        )
+        result = metrics.build(self._frame(), _params(sentiment_column='sentiment', topic_column='cluster'), 'test')
         by_name = {row['节点']: row for row in result['rows']}
         assert json.loads(by_name['乙']['情感分布']) == {'negative': 1, 'positive': 2}
         # 甲 is mentioned by t1, t2 and t4; t4 has no label, so the denominator is two documents.
@@ -860,34 +856,30 @@ class TestSentimentAndTopicOverlay:
         first must not decide the dominant label — otherwise two orderings of one corpus
         disagree about the node."""
         frame = self._frame()
-        forward = bibliometrics.build(frame, _params(sentiment_column='sentiment'), 'test')
-        backward = bibliometrics.build(
-            frame.iloc[::-1].reset_index(drop=True), _params(sentiment_column='sentiment'), 'test'
-        )
+        forward = metrics.build(frame, _params(sentiment_column='sentiment'), 'test')
+        backward = metrics.build(frame.iloc[::-1].reset_index(drop=True), _params(sentiment_column='sentiment'), 'test')
         labels = {row['节点']: row['情感倾向'] for row in forward['rows']}
         assert labels == {row['节点']: row['情感倾向'] for row in backward['rows']}
         assert labels['甲'] == 'negative', 'tie between negative and positive resolves to the label text'
 
     def test_a_partly_unlabelled_column_is_printed_not_silently_narrowed(self):
-        result = bibliometrics.build(self._frame(), _params(sentiment_column='sentiment'), 'test')
+        result = metrics.build(self._frame(), _params(sentiment_column='sentiment'), 'test')
         assert any('sentiment' in note and '1/4' in note for note in result['notes']), result['notes']
 
     def test_a_named_column_the_table_does_not_carry_refuses_by_name(self):
-        with pytest.raises(bibliometrics.BiblioError, match='sentiment'):
-            bibliometrics.build(
-                self._frame().drop(columns=['sentiment']), _params(sentiment_column='sentiment'), 'test'
-            )
+        with pytest.raises(metrics.BiblioError, match='sentiment'):
+            metrics.build(self._frame().drop(columns=['sentiment']), _params(sentiment_column='sentiment'), 'test')
 
     def test_a_column_with_no_labels_at_all_refuses_instead_of_shipping_empty_columns(self):
         frame = self._frame().assign(sentiment='')
-        with pytest.raises(bibliometrics.BiblioError, match='sentiment'):
-            bibliometrics.build(frame, _params(sentiment_column='sentiment'), 'test')
+        with pytest.raises(metrics.BiblioError, match='sentiment'):
+            metrics.build(frame, _params(sentiment_column='sentiment'), 'test')
 
     def test_an_integral_float_label_loses_its_point_zero(self):
         """A cluster id that round-tripped through a CSV as 2.0 is the same category as 2;
         keyed apart, one cluster would be drawn as two topics."""
         frame = self._frame().assign(cluster=[1.0, 1.0, 2.0, 2.0])
-        result = bibliometrics.build(frame, _params(topic_column='cluster'), 'test')
+        result = metrics.build(frame, _params(topic_column='cluster'), 'test')
         by_name = {row['节点']: row for row in result['rows']}
         assert set(json.loads(by_name['乙']['话题分布'])) == {'1', '2'}
         assert by_name['乙']['主导话题'] == '1'
@@ -909,7 +901,7 @@ class TestSentimentAndTopicOverlay:
                 {'题名': 't2', '年份': 2019, '关键词': '丙;丁', '摘要': '', 'sentiment': ''},
             ]
         )
-        result = bibliometrics.build(frame, _params(sentiment_column='sentiment'), 'test')
+        result = metrics.build(frame, _params(sentiment_column='sentiment'), 'test')
         by_name = {row['节点']: row for row in result['rows']}
         assert json.loads(by_name['甲']['情感分布']) == {'positive': 1}
         assert by_name['丙']['情感分布'] == '{}'
@@ -932,7 +924,7 @@ class TestClusterLabelSource:
             'usage': '使用次数',
             'year': '年份',
         }
-        return bibliometrics._doc_terms(self.ROW, columns, 'keyword', source, self.COLUMNS)
+        return metrics._doc_terms(self.ROW, columns, 'keyword', source, self.COLUMNS)
 
     def test_all_is_the_mix_this_node_always_used(self):
         terms = self.terms('all')
@@ -947,22 +939,22 @@ class TestClusterLabelSource:
 
     def test_an_explicit_source_with_no_column_refuses_by_name(self):
         frame = _keywords().drop(columns=['摘要'])
-        with pytest.raises(bibliometrics.BiblioError, match='摘要'):
-            bibliometrics.build(frame, _params(label_source='abstract'), 'test')
-        with pytest.raises(bibliometrics.BiblioError, match='作者'):
-            bibliometrics.build(_keywords().drop(columns=['作者']), _params(label_source='author'), 'test')
+        with pytest.raises(metrics.BiblioError, match='摘要'):
+            metrics.build(frame, _params(label_source='abstract'), 'test')
+        with pytest.raises(metrics.BiblioError, match='作者'):
+            metrics.build(_keywords().drop(columns=['作者']), _params(label_source='author'), 'test')
         # A non-keyword graph asks the canonical 关键词 column for the keyword source.
         author_frame = pd.DataFrame([{'题名': 't', '年份': 2020, '作者': 'A;B', '摘要': 'x'}])
-        with pytest.raises(bibliometrics.BiblioError, match='关键词'):
-            bibliometrics.build(author_frame, _params(entity_type='author', label_source='keywords'), 'test')
+        with pytest.raises(metrics.BiblioError, match='关键词'):
+            metrics.build(author_frame, _params(entity_type='author', label_source='keywords'), 'test')
 
     def test_an_unknown_source_is_refused_by_name(self):
         assert any('label_source' in message for message in collect_errors(_params(label_source='body'), 'test'))
 
     def test_the_default_keeps_the_labels_an_old_canvas_produced(self):
         assert normalize_params(_params(), 'test')['label_source'] == 'all'
-        old = bibliometrics.build(_keywords(), _params(cluster=True, cluster_count=2), 'test')
-        explicit = bibliometrics.build(_keywords(), _params(cluster=True, cluster_count=2, label_source='all'), 'test')
+        old = metrics.build(_keywords(), _params(cluster=True, cluster_count=2), 'test')
+        explicit = metrics.build(_keywords(), _params(cluster=True, cluster_count=2, label_source='all'), 'test')
         assert [row['聚类标签'] for row in old['rows']] == [row['聚类标签'] for row in explicit['rows']]
 
 
@@ -974,8 +966,8 @@ class TestPajekExport:
                 {'题名': 'b', '年份': 2021, '关键词': '协同 监管;数字治理', '摘要': ''},
             ]
         )
-        result = bibliometrics.build(frame, _params(), 'test')
-        files = bibliometrics.export_result(result, str(tmp_path), 'demo')
+        result = metrics.build(frame, _params(), 'test')
+        files = metrics.export_result(result, str(tmp_path), 'demo')
         assert files['biblio_pajek'].endswith('_graph.net')
         text = Path(files['biblio_pajek']).read_text(encoding='utf-8')
         assert text.startswith('*Vertices 2\n'), text

@@ -1,6 +1,6 @@
 """ECharts options for the bibliometric views.
 
-These builders read the fixed columns emitted by ``services.bibliometrics``.
+These builders read the fixed columns emitted by ``services.biblio.metrics``.
 A missing required column is a named refusal, never an empty frame. Options
 are plain JSON: no ``renderItem`` callbacks, so a preview, a saved chart and a
 fullscreen render all draw the same figure.
@@ -16,7 +16,7 @@ import math
 import pandas as pd
 
 from i18n import get_lang, t
-from services.biblio_geo import aggregate, display
+from services.biblio.geo import aggregate, display
 from services.chart_contracts import (
     OVERLAY_ROW_LIMIT,
     OVERLAY_TOPIC_LIMIT,

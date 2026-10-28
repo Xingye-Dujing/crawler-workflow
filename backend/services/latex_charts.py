@@ -28,8 +28,8 @@ import pandas as pd
 from core import machine
 
 from i18n import t
-from services.biblio_geo import aggregate as geo_aggregate
-from services.biblio_geo import display
+from services.biblio.geo import aggregate as geo_aggregate
+from services.biblio.geo import display
 from services.chart_contracts import (
     BIBLIO_CHART_TYPES,
     OVERLAY_ROW_LIMIT,

@@ -16,8 +16,8 @@ and both are stated rather than worked around:
   declared either.
 """
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import (
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import (
     frame_cell,
     frame_has_groups,
     frame_of,
@@ -33,7 +33,7 @@ LABEL = 'Lens'
 #: ``Lens ID`` names the vendor, and the second group separates the scholarly collection from
 #: the patent one, which shares ``Lens ID`` and ``Title`` but writes neither of these columns.
 #: A signature that only required the id would claim the patent export and draw applicants as
-#: authors — :mod:`services.biblio_formats.unsupported` exists for exactly that file.
+#: authors — :mod:`services.biblio.formats.unsupported` exists for exactly that file.
 _GROUPS = (
     ('Lens ID',),
     ('Citing Works Count', 'Fields of Study'),

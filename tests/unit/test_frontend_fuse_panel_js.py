@@ -67,7 +67,7 @@ class TestTheLineageIsVisible:
     def test_the_panel_and_the_server_agree_on_the_record_table(self):
         """The list below is the browser's expectation; the engine's is the fact. A rename on one
         side is a stale lineage line on the other, and only this comparison notices."""
-        from services.biblio_fuse import OUTPUT_COLUMNS
+        from services.biblio.fuse import OUTPUT_COLUMNS
 
         assert list(OUTPUT_COLUMNS) == COLUMNS
 

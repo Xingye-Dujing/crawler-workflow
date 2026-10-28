@@ -6,7 +6,7 @@ in each language. This module holds only the OTHER thing: the differences betwee
 
 Two name lists meet here and they disagree on purpose:
 
-* ``services/biblio_formats/countries.py`` emits the spellings the exports use
+* ``services/biblio/formats/countries.py`` emits the spellings the exports use
   (``PEOPLES R CHINA`` → ``People's Republic of China``, ``ENGLAND``, ``SOUTH KOREA``);
 * Natural Earth emits ``China``, ``United Kingdom``, ``South Korea``, ``Czechia``, ``eSwatini``.
 
@@ -23,7 +23,7 @@ import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
-BASEMAP_PATH = Path(__file__).resolve().parents[1] / 'static' / 'geo' / 'world.json'
+BASEMAP_PATH = Path(__file__).resolve().parents[2] / 'static' / 'geo' / 'world.json'
 
 _PUNCT = re.compile(r'[^0-9a-z\u4e00-\u9fff]+')
 
@@ -234,7 +234,7 @@ def _importer_alias():
     ``CHINA MAINLAND`` are one country; a second spelling table here would be a second opinion
     about the same exports, and the two would drift.
     """
-    from services.biblio_formats.countries import country_in_affiliation
+    from services.biblio.formats.countries import country_in_affiliation
 
     return country_in_affiliation
 

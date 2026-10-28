@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from services.biblio_formats import FORMAT_SPECS
-from services.biblio_import import CNKI, CSSCI, detect_format, parse_bytes, parse_frame, parse_text
+from services.biblio.formats import FORMAT_SPECS
+from services.biblio.importer import CNKI, CSSCI, detect_format, parse_bytes, parse_frame, parse_text
 
 pytestmark = pytest.mark.unit
 
@@ -138,7 +138,7 @@ class TestInternationalFormats:
             assert (SAMPLES / name).is_file(), f'{name} is missing'
         claimed = {name for name, _fmt, _rows, _refs in FORMAT_CASES}
         for path in sorted(SAMPLES.glob('biblio_*_demo.*')):
-            # CNKI and CSSCI are read by services.biblio_import, not by the registry, so their
+            # CNKI and CSSCI are read by services.biblio.importer, not by the registry, so their
             # fixtures are exempt from the registry side but not from being claimed below.
             if path.name in claimed or path.name in ('biblio_cnki_demo.txt', 'biblio_cssci_demo.txt'):
                 continue

@@ -20,11 +20,11 @@ from stores import get_biblio_store, get_run_store
 
 from api.http import _bad_body, _json_body
 from i18n import t
-from services.biblio_formats import accepted_extensions
-from services.biblio_schema import classify_shape
-from services.biblio_sources import all_sources
-from services.biblio_store import snapshot_header
-from services.bibliometrics import snapshot_capture
+from services.biblio.formats import accepted_extensions
+from services.biblio.metrics import snapshot_capture
+from services.biblio.schema import classify_shape
+from services.biblio.sources import all_sources
+from services.biblio.store import snapshot_header
 
 bp = Blueprint('biblio', __name__)
 
@@ -57,7 +57,7 @@ def biblio_runs():
 def export_guide():
     """The export guide: one entry per source the importer can read, in detection order.
 
-    Sentences are built here (``services.biblio_sources``) from the thread's language, exactly
+    Sentences are built here (``services.biblio.sources``) from the thread's language, exactly
     like the cookie guide, so the browser draws what the server knows instead of keeping its
     own copy of which site exports what. Extension and capability lists come from the format
     registry, which is the only thing that can say what a parser accepts.

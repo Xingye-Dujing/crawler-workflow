@@ -13,8 +13,8 @@ import json
 import pandas as pd
 import pytest
 
-from services import bibliometrics
-from services.biblio_schema import ENTITY_COLUMNS, ENTITY_REQUIRED, ENTITY_TYPES
+from services.biblio import metrics
+from services.biblio.schema import ENTITY_COLUMNS, ENTITY_REQUIRED, ENTITY_TYPES
 from services.chart_contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES
 
 pytestmark = pytest.mark.unit
@@ -122,7 +122,7 @@ def test_every_advertised_entity_type_builds_a_graph(entity_type):
     would otherwise only surface when a user's canvas happened to use it; five of these types
     had no test at all before this audit.
     """
-    result = bibliometrics.build(_corpus(), _params(entity_type), 'parity')
+    result = metrics.build(_corpus(), _params(entity_type), 'parity')
     assert result['summary']['entity_type'] == entity_type
     assert result['rows'], f'{entity_type} built no nodes'
     assert result['edges'], f'{entity_type} built no links'
@@ -140,9 +140,9 @@ def test_every_entity_type_declares_the_columns_it_needs():
 
 
 def test_every_advertised_view_has_a_builder_and_a_read_contract():
-    from services import biblio_charts
+    from services.biblio import charts
 
-    assert set(biblio_charts.BUILDERS) == set(BIBLIO_CHART_TYPES)
+    assert set(charts.BUILDERS) == set(BIBLIO_CHART_TYPES)
     assert set(BIBLIO_CHART_READS) == set(BIBLIO_CHART_TYPES)
     for chart_type in BIBLIO_CHART_TYPES:
         assert BIBLIO_CHART_READS[chart_type], f'{chart_type} declares no required column'
@@ -157,21 +157,21 @@ class TestPerformanceGuards:
     """
 
     def test_the_node_cap_names_the_count_and_the_cap(self, monkeypatch):
-        monkeypatch.setitem(bibliometrics.LIMITS, 'max_nodes', 3)
+        monkeypatch.setitem(metrics.LIMITS, 'max_nodes', 3)
         with pytest.raises(ValueError) as err:
-            bibliometrics.build(_corpus(), _params('keyword'), 'parity')
+            metrics.build(_corpus(), _params('keyword'), 'parity')
         assert '5' in str(err.value) and '3' in str(err.value), str(err.value)
 
     def test_the_edge_cap_names_the_count_and_the_cap(self, monkeypatch):
-        monkeypatch.setitem(bibliometrics.LIMITS, 'max_edges', 1)
+        monkeypatch.setitem(metrics.LIMITS, 'max_edges', 1)
         with pytest.raises(ValueError) as err:
-            bibliometrics.build(_corpus(), _params('keyword'), 'parity')
+            metrics.build(_corpus(), _params('keyword'), 'parity')
         assert '1' in str(err.value), str(err.value)
 
     def test_the_spectral_clustering_cap_refuses_before_the_cubic_work(self, monkeypatch):
-        from services import biblio_cluster
+        from services.biblio import cluster
 
-        monkeypatch.setattr(biblio_cluster, 'MAX_CLUSTER_NODES', 3)
+        monkeypatch.setattr(cluster, 'MAX_CLUSTER_NODES', 3)
         with pytest.raises(ValueError) as err:
-            bibliometrics.build(_corpus(), {**_params('keyword'), 'cluster': True}, 'parity')
+            metrics.build(_corpus(), {**_params('keyword'), 'cluster': True}, 'parity')
         assert '3' in str(err.value), str(err.value)

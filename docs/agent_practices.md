@@ -557,7 +557,7 @@ comparing rows in arrival order reports a weight change on every edge that merel
 other side.
 
 **A monitor reads history, so it is the first caller to meet an older row shape.** Two defects lived
-in that comparison until cross-run monitoring (`services/biblio_monitor.py`) walked in front of it:
+in that comparison until cross-run monitoring (`services/biblio/monitor.py`) walked in front of it:
 
 * `params_differ` indexed the LEFT dict (`a_params[key]`) while iterating `set(a) | set(b)`, so the
   first capture filed after a parameter was ADDED raised `KeyError` when compared with an old
@@ -600,7 +600,7 @@ for objects that will not exist, which is a configuration mistake, not a prefere
   settings header read 「nodeType.fuse」 for a whole commit after the fusion node shipped, and a Chinese workspace
   table printed `map` / `source` / `x` as column headers. The guard is therefore the *reference set*, not the call
   site: `test_frontend_i18n_js.py::TestJsNodeTypeWords` walks `engine.workflow.NODE_TYPES` and
-  `::TestJsBiblioColumnWords` walks the ten column constants in `services/biblio_schema.py`, both in both languages.
+  `::TestJsBiblioColumnWords` walks the ten column constants in `services/biblio/schema.py`, both in both languages.
   The same class bit a third time from the other direction: `op.<name>` is assembled from the dropdown arrays in
   `workflow.js`, so `test_frontend_contract.py::TestFrontendCatalog` now walks `ANALYSIS_OPS` ∪ `PROCESS_OPS` and asks
   for a word in both catalogues — measured green the day `cluster_review` shipped, which is the point: the guard is
@@ -929,7 +929,7 @@ message.
   module bodies with `ast` (names the file to fix) and imports `app` in a fresh subprocess to read
   `sys.modules` (catches transitive leakage). A wall-clock assertion would fail a slow runner and pass a fast one
   while proving nothing either way.
-- **Two frontend-adjacent traps found by the same move:** `services/biblio_cluster.py:111`'s return annotation
+- **Two frontend-adjacent traps found by the same move:** `services/biblio/cluster.py:111`'s return annotation
   `tuple[TfidfVectorizer, …]` is evaluated at `def` time, so the class has to be quoted *and* kept visible to
   readers (`if TYPE_CHECKING:` — ruff calls an unquoted string to a function-local import `F821`); and in
   `services/visualizer.py`, `matplotlib.use('Agg')` plus the CJK `rcParams` block must travel **with** the import
@@ -1000,7 +1000,7 @@ message.
   fixture to invent a column its vendor does not export.
 - **Recognising a file is not the same as being able to read it.** Detection answers "not mine" with
   a plain table, which is the wrong answer for a file that shares column names with a format we do
-  read. `services/biblio_formats/unsupported.py` holds those refusals outside `FORMAT_SPECS` (a
+  read. `services/biblio/formats/unsupported.py` holds those refusals outside `FORMAT_SPECS` (a
   refusal is not a reader), and `biblio_import.parse_text` raises its sentence before the route falls
   back — a silently accepted patent export draws applicants and owners as authors and never says so.
 - **One vendor, two collections, overlapping column names: the signature must require the columns

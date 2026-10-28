@@ -7,7 +7,7 @@ language switch in the panel means one refetch rather than a second copy of the 
 
 import pytest
 
-from services import biblio_sources
+from services.biblio.sources import all_sources
 
 pytestmark = pytest.mark.api
 
@@ -21,7 +21,7 @@ def sources(client):
 
 class TestTheGuideIsServed:
     def test_every_readable_source_arrives_in_the_response(self, sources):
-        assert [entry['id'] for entry in sources['sources']] == [entry['id'] for entry in biblio_sources.all_sources()]
+        assert [entry['id'] for entry in sources['sources']] == [entry['id'] for entry in all_sources()]
 
     def test_the_response_ships_the_file_types_the_picker_should_offer(self, sources):
         assert sources['extensions'], 'an empty accept list would hide every bibliographic format from the dialog'

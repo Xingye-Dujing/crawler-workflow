@@ -16,7 +16,7 @@ from stores import _load_dataset
 
 from i18n import t
 from nodes.context import NodeCall
-from services import bibliometrics
+from services.biblio import metrics
 
 NODE_TYPE = 'biblio'
 
@@ -35,7 +35,7 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
         basemap_df = _load_dataset(basemap_id)
         if basemap_df is None:
             raise ValueError(t('biblio.dual_map_needs_basemap', nid=label))
-    result = bibliometrics.build(pd.DataFrame(current_input), params, label, basemap_df=basemap_df)
+    result = metrics.build(pd.DataFrame(current_input), params, label, basemap_df=basemap_df)
     summary = result.get('summary') or {}
     entity = str(summary.get('entity_type') or params.get('entity_type') or 'keyword')
     window = summary.get('window') or {}
@@ -70,7 +70,7 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
 
     if as_bool(params.get('export_files'), True):
         try:
-            files = bibliometrics.export_result(result, Config.EXPORT_DIR, f'{label}-{node.get("id") or "biblio"}')
+            files = metrics.export_result(result, Config.EXPORT_DIR, f'{label}-{node.get("id") or "biblio"}')
         except Exception as exc:
             raise ValueError(t('biblio.export_failed', err=exc)) from exc
         if ctx and ctx.get('store') and ctx.get('run_id'):
@@ -102,12 +102,12 @@ def _watch_capture(node: dict, ctx: dict | None, params: dict, rows: list, shape
         return None
     from stores import get_biblio_store
 
-    from services import biblio_monitor
+    from services.biblio import monitor
 
     store = (ctx or {}).get('store')
     run_id = str((ctx or {}).get('run_id') or '')
     run_record = store.get_run(run_id) if store and run_id else None
-    return biblio_monitor.watch(
+    return monitor.watch(
         rows,
         params,
         node_id=str(node.get('id') or 'biblio'),

@@ -8,8 +8,8 @@ means a real file and tests over it, never a fixture written from a specificatio
 
 import re
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import (
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import (
     cell,
     countries,
     frame_has_groups,

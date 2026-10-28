@@ -3909,7 +3909,7 @@ def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, dr
       actually disappears is ECharts' decision, not the option author's.
 
     Nothing is written: the option is handed straight to the preview window in the shape
-    ``services/biblio_charts`` ships it (every node carrying its own ``yearSeries``).
+    ``services/biblio/charts`` ships it (every node carrying its own ``yearSeries``).
     """
     driver.set_window_size(1650, 1080)
     _load_app(driver, app_url)
@@ -4025,7 +4025,7 @@ def test_the_world_map_loads_its_shipped_basemap_and_prints_no_colliding_labels(
       (adding 'shiftY' switches hiding off again — 12 labels with the collisions, against 10 without).
 
     Nothing is written to the server; the option is built in the page in the shape
-    ``services/biblio_charts`` ships.
+    ``services/biblio/charts`` ships.
     """
     driver.set_window_size(1650, 1080)
     served = _read_url_json(app_url + '/geo/world.json')

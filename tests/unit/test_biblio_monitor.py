@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from i18n import t
-from services.biblio_monitor import WATCH_COLUMNS, watch
-from services.biblio_store import BiblioStore
+from services.biblio.monitor import WATCH_COLUMNS, watch
+from services.biblio.store import BiblioStore
 
 pytestmark = pytest.mark.unit
 
@@ -193,7 +193,7 @@ class TestRefusals:
             _run([], {'watch_project': 'P'}, biblio, export_dir)
 
     def test_a_baseline_without_a_project_is_refused_before_the_run(self):
-        from services.biblio_schema import collect_errors
+        from services.biblio.schema import collect_errors
 
         errors = collect_errors({'watch_baseline': '基线'}, 'node-2')
         assert any('监测' in str(error) or 'project' in str(error) for error in errors), errors

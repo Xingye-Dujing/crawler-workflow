@@ -3,8 +3,8 @@
 import re
 from collections import defaultdict
 
-from services.biblio_formats.base import FormatSpec
-from services.biblio_formats.common import (
+from services.biblio.formats.base import FormatSpec
+from services.biblio.formats.common import (
     countries,
     frame_cell,
     frame_has_groups,

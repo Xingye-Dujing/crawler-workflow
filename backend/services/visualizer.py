@@ -763,11 +763,11 @@ class VisualizationService:
 
         # ── Bibliometric views (fixed columns from the biblio node) ──
         if chart_type in BIBLIO_CHART_TYPES:
-            from services import biblio_charts
+            from services.biblio import charts
 
             try:
-                return biblio_charts.build(df, chart_type, base)
-            except biblio_charts.BiblioChartError as exc:
+                return charts.build(df, chart_type, base)
+            except charts.BiblioChartError as exc:
                 raise ChartConfigError(str(exc)) from exc
 
         # ── Pie ──

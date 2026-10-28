@@ -23,7 +23,7 @@ from stores import _load_dataset, _register_dataset, get_dataset_store
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
-from services.biblio_import import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
+from services.biblio.importer import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
 from services.data_analysis import DataAnalysisService
 from services.dataset_merge import merge_datasets
 from services.dataset_store import SOURCE_PASTE, SOURCE_UPLOAD

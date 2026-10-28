@@ -25,7 +25,7 @@ from sessions.cookies import CookieManager
 
 import i18n
 from crawlers import CRAWLERS, is_crawlable
-from services.biblio_schema import (
+from services.biblio.schema import (
     COUNTING_MODES,
     DEFAULTS,
     ENTITY_TYPES,

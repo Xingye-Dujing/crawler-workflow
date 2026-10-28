@@ -1,15 +1,15 @@
 """Vendor collections we recognise but deliberately do not read, and what we say instead.
 
-These are not formats, so they are not in :data:`services.biblio_formats.FORMAT_SPECS`:
+These are not formats, so they are not in :data:`services.biblio.formats.FORMAT_SPECS`:
 accepting a file here would produce a table of the right shape and the wrong meaning. The
 evidence is a real Lens export whose columns are ``Jurisdiction``, ``Kind``,
 ``Application Number``, ``Inventors``, ``Applicants``, ``Owners`` and ``CPC Classifications``
 — the patent collection, sharing ``Title`` and ``Lens ID`` with the scholarly one that
-:mod:`services.biblio_formats.lens` reads.
+:mod:`services.biblio.formats.lens` reads.
 """
 
 from i18n import t
-from services.biblio_formats.common import header_of
+from services.biblio.formats.common import header_of
 
 #: Column names that only appear in a patent download.
 LENS_PATENT_MARKERS = frozenset(

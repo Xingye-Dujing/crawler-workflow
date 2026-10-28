@@ -10,8 +10,8 @@ vendor marketing pages or from what a format specification says *could* appear.
 Consequences worth stating:
 
 * No XML reader for PubMed exists here, because nobody has a PubMed XML export to test it.
-* Lens is readable in its scholarly-works shape (:mod:`services.biblio_formats.lens`) and
-  refused by name in its patent shape (:mod:`services.biblio_formats.unsupported`); the two
+* Lens is readable in its scholarly-works shape (:mod:`services.biblio.formats.lens`) and
+  refused by name in its patent shape (:mod:`services.biblio.formats.unsupported`); the two
   downloads share ``Lens ID`` and ``Title``, so only the columns that differ decide.
 * ``extensions`` and ``capabilities`` are read from the format registry, never restated, so
   the panel cannot disagree with the parser about what a file carries.
@@ -22,8 +22,8 @@ from __future__ import annotations
 import re
 
 from i18n import t
-from services import biblio_formats
-from services.biblio_import import CNKI, CSSCI
+from services.biblio import formats
+from services.biblio.importer import CNKI, CSSCI
 
 #: Official starting point for each source. Institutional access (WoS, Scopus, Dimensions)
 #: usually arrives through a university proxy, so this is where to search, not a promise
@@ -58,7 +58,7 @@ GROUPS = {
     'NoteExpress': 'exchange',
 }
 
-#: CNKI and CSSCI live outside the registry (``services.biblio_import``), so their labels and
+#: CNKI and CSSCI live outside the registry (``services.biblio.importer``), so their labels and
 #: extensions are declared here; everything else is taken from the registry itself.
 _EXTRA_LABELS = {CNKI: '中国知网 · RefWorks', CSSCI: 'CSSCI'}
 _EXTRA_EXTENSIONS = {CNKI: ('.txt',), CSSCI: ('.txt',)}
@@ -78,7 +78,7 @@ def source_for(fmt: str) -> dict[str, object]:
     Mirrors :func:`services.flow.flow_for`: the server ships sentences, the browser
     only draws them, so a language switch is one refetch and never a second copy of the text.
     """
-    spec = biblio_formats.FORMAT_BY_ID.get(fmt)
+    spec = formats.FORMAT_BY_ID.get(fmt)
     label = spec.label if spec else _EXTRA_LABELS.get(fmt, fmt)
     extensions = spec.extensions if spec else _EXTRA_EXTENSIONS.get(fmt, ())
     declared = spec.capabilities if spec else frozenset()
@@ -88,7 +88,7 @@ def source_for(fmt: str) -> dict[str, object]:
         'group': GROUPS.get(fmt, 'exchange'),
         'site': SITES.get(fmt, ''),
         'extensions': list(extensions),
-        'capabilities': {name: name in declared for name in biblio_formats.CAPABILITIES},
+        'capabilities': {name: name in declared for name in formats.CAPABILITIES},
         'purpose': t(f'source.{fmt}.purpose'),
         'steps': _split_lines(t(f'source.{fmt}.steps')),
         'missing': _split_lines(t(f'source.{fmt}.missing')),
@@ -97,7 +97,7 @@ def source_for(fmt: str) -> dict[str, object]:
 
 def all_sources() -> list[dict[str, object]]:
     """Every source the importer can read, in the order detection itself tries them."""
-    return [source_for(fmt) for fmt in ([CSSCI, CNKI] + list(biblio_formats.format_ids()))]
+    return [source_for(fmt) for fmt in ([CSSCI, CNKI] + list(formats.format_ids()))]
 
 
 def folded_tag(tag: str) -> str:
