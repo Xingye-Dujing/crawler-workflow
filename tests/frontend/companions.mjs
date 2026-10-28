@@ -20,6 +20,7 @@ const SPLIT_OF = {
         'panels/exports.js',
         'panels/runs.js',
         'panels/lexicon.js',
+        'panels/datasets.js',
     ],
 };
 
