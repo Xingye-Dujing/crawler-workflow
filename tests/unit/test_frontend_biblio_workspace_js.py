@@ -62,7 +62,10 @@ class TestTheDock:
         assert 'id="btn-biblio"' not in _markup(), 'the top-bar duplicate is gone'
 
     def test_the_page_loads_the_file_that_defines_the_toggler(self):
-        assert 'function toggleBiblioPanel()' in _js('workflow.js')
+        # The workspace moved to panels/biblio.js (Stage 8); the page must still load it, which is
+        # what makes the toggler reachable from the toolbar and the status dock.
+        assert 'function toggleBiblioPanel()' in _js('panels/biblio.js')
+        assert 'src="/js/panels/biblio.js"' in (STATIC / 'index.html').read_text(encoding='utf-8')
 
     def test_the_stylesheet_docks_sizes_and_scrolls_it(self):
         css = (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
@@ -92,7 +95,7 @@ class TestTheDock:
         # The keys the panel ASKS for come from its call sites; whether each is declared is asked of
         # the whole browser dictionary (app.js's remainder plus every js/i18n/<domain>.js). A name
         # ending in '.' is a composition root (`'biblioWs.shape.' + kind`), not a word of its own.
-        used = {key for key in re.findall(r"'(biblioWs\.[\w.]+)'", _js('workflow.js')) if not key.endswith('.')}
+        used = {key for key in re.findall(r"'(biblioWs\.[\w.]+)'", _js('panels/biblio.js')) if not key.endswith('.')}
         assert used, 'the panel has no catalogue words'
         keys = _catalog_keys()
         missing = [f'{key} in {lang}' for key in sorted(used) for lang in ('en', 'zh') if key not in keys[lang]]
