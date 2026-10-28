@@ -23,6 +23,7 @@ const SPLIT_OF = {
         'panels/datasets.js',
         'panels/files.js',
         'panels/diagnostics.js',
+        'panels/settings.js',
     ],
 };
 

@@ -14,15 +14,14 @@
  *
  * Usage: node harness_async_panels.mjs <module.js> …   (workflow.js, chart-preview.js)
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
-/* Every module the driver named, in the order it named them: the dashboard's failure view lives in
-   chart-preview.js since the Stage 8 split, and a fixed two-slot argv would have silently pointed at
-   the wrong file. */
-const modules = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8'));
+/* Every module the driver named, in the order it named them, each followed by its companions
+   (panels/settings.js holds `openSettings`; a two-slot argv would silently point elsewhere). */
+const src = sourceOf(...process.argv.slice(2));
 
 const I18n = {
     lang: 'en',
@@ -78,7 +77,7 @@ function world(provider) {
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
     vm.runInContext(
-        modules.join('\n;\n') + '\n;globalThis.__x = {openSettings, renderResumeSettings, dashboard};',
+        src + '\n;globalThis.__x = {openSettings, renderResumeSettings, dashboard};',
         sandbox
     );
     /* Every request is captured rather than answered: a scenario decides which one is

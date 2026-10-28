@@ -80,7 +80,7 @@ OPERATIONS = [
 # the assertions below compare names without becoming a fourth copy of them.
 
 DATA_ANALYSIS_PY = Path(m.__file__)
-WORKFLOW_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js'
+SETTINGS_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
 
 
 def _source_walk(node):
@@ -119,9 +119,9 @@ def _compared_literals(function_name: str, subject: str) -> list:
 
 
 def _js_array(name: str) -> list:
-    """The string literals of workflow.js's ``var NAME = […];`` dropdown source."""
-    match = re.search(rf'var {name} = \[([^\]]*)\];', WORKFLOW_JS.read_text(encoding='utf-8'))
-    assert match, f'{name} is no longer a flat literal array in workflow.js'
+    """The string literals of settings.js's ``var NAME = […];`` dropdown source."""
+    match = re.search(rf'var {name} = \[([^\]]*)\];', SETTINGS_JS.read_text(encoding='utf-8'))
+    assert match, f'{name} is no longer a flat literal array in settings.js'
     return re.findall(r"'([^']*)'", match.group(1))
 
 
@@ -631,7 +631,7 @@ class TestOperatorNameLists:
     """ONE place where the browser's operator names meet Python's registry.
 
     The 分析 node's dropdowns are three flat literal arrays in
-    ``backend/static/js/workflow.js`` (``ANALYSIS_OPS`` / ``FILTER_OPS`` /
+    ``backend/static/js/panels/settings.js`` (``ANALYSIS_OPS`` / ``FILTER_OPS`` /
     ``CONVERT_TYPES``); Python keeps its own answers — ``_operations()`` for the
     steps, the ``if op == …`` chain inside ``filter_rows`` for the comparisons,
     the ``if dtype == …`` chain inside ``convert_type`` for the types. They were
@@ -686,7 +686,7 @@ class TestOperatorNameLists:
                 found = {op for op in names if f"'{op}'" in match.group(0) or f'"{op}"' in match.group(0)}
                 if len(found) >= 4:
                     offenders.setdefault(path.relative_to(root).as_posix(), set()).update(found)
-        assert set(offenders) == {'backend/static/js/workflow.js', 'tests/unit/test_data_analysis.py'}, (
+        assert set(offenders) == {'backend/static/js/panels/settings.js', 'tests/unit/test_data_analysis.py'}, (
             f'an unlinked copy of the operation names appeared in {sorted(offenders)}'
         )
 

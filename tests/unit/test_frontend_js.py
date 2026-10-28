@@ -1240,7 +1240,7 @@ class TestPanelEscaping:
         and the row limit never appear. They take server data (a run id, a node id)
         into attributes, so they are pinned at the line that writes them instead.
         """
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        source = (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
         for site in (
             "'<option value=\"' + escapeHtml(r.run_id) + '\"'",
             "'<option value=\"' + escapeHtml(n.node_id) + '\"'",

@@ -275,7 +275,7 @@ class TestDatasetActions:
         assert pa['dataset_lineage_reset_declined']['requested'] == 0
 
     def test_the_accumulate_node_offers_the_same_reset(self):
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        source = (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
         assert "datasetManager.resetLineage(\\''" in source or 'datasetManager.resetLineage(' in source
         assert 'settings.accumulateHint' in source
 

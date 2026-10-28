@@ -135,7 +135,7 @@ class TestTheChromeIsMarked:
             assert needle in block, f'{needle} is not covered by the cloud rule: {block}'
 
     def test_the_process_node_asks_the_flag_instead_of_hardcoding_a_word(self):
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        source = (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
         assert 'llmModeLabel()' in source, 'the mode option went back to a fixed catalogue key'
         assert "I18n.t('mode.llm')" not in source, (
             'a label built straight from mode.llm names Ollama on a host that cannot run it'

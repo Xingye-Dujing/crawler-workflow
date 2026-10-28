@@ -1049,10 +1049,28 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     同段的 `_processLlm`/`_isLabelOp`/`_labelCallCap` —— 整段一起搬才对。
     - **门禁**：fast **8,190 passed / 3 skipped / 355 deselected**；设备档 **194 passed / 0 跳过**；
       ruff check + format（532 文件）全绿。
-  - **Stage 8 只剩最后一站**：`settings.js`（`openSettings` 与各节点设置渲染，约 2,000 行，依赖最多，
-    见 `docs/frontend_modules.md` §3）。再后：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
+  - **Stage 8 第十四刀（`panels/settings.js`）已完成（2026-10-29）**：`workflow.js` **6,436 → 4,458 行**，
+    新 `panels/settings.js` **1,985 行**（`openSettings` 与全部节点设置渲染：源面板、参数输入/下拉/勾选、
+    分析/文献/图表设置、`renderResumeSettings`，以及它们读的 `ANALYSIS_OPS`/`BIBLIO_*`/`CHART_TYPES` 清单）。
+    **两段**切片：`nodeTypeWord`（四个模块共用的全页词表函数）夹在中间，留在 `workflow.js`；重组核对
+    357,166 字节逐字节相等。`panels/settings.js` 进 `SPLIT_OF['workflow.js']`；两个仍拼 argv 的 harness
+    （`harness_async_panels`、`harness_cloud`）改用 `sourceOf`。扫描路径跟着事实走：`test_chart_registry`
+    （三个图表清单）、`test_data_analysis`（三个操作清单与「第四份拷贝」的位置）、`test_exporter`（格式下拉）、
+    `test_analysis_api`（`renderAnalysisSettings`）、`test_frontend_contract`（PROCESS_OPS、BIBLIO 下拉、
+    tokenize/pdf/resume 的持久化扫描、`I18N_USERS`）、`test_frontend_js`（续跑面板转义），以及
+    capabilities/cloud/panel_actions/reusable/source_help 六处扫描，全部改读 `panels/settings.js`。
+    - **门禁**：前端 38 个 JS 测试模块全绿（1,408 + `test_frontend_js` 129）；`node --check` 两个文件；
+      ruff check/format（275 文件）全绿；tests 档 pylint 10.00/10——**必须把 `tests/frontend_catalogue.py` 与
+      `tests/node_runner.py` 放进同一次调用**，否则被 linter 的子集会报 E0401（它们靠同批分析进入 astroid 的模块表，
+      全量 CI 正是这样通过的）。
+  - **Stage 8 完成**：九站 + 词典九域 + 十四刀，`workflow.js` **13,027 → 4,458 行**（−66%），`app.js` 5,071 → 1,450。
+  - **CI 的两条警告已真修（2026-10-29）**：`api/data.py` 的 `ExcelFile.parse`（pandas 3 弃用）改用
+    `pd.read_excel(book, sheet_name=…)`；`test_boot_import_budget` 的子进程不再用 `text=True`
+    （CI 的 cp1252 读线程在 UTF-8 输出上抛 `UnicodeDecodeError`），改为按字节取回、由断言处 UTF-8 解码。
+  - **再后**：Stage 9 op 注册表（#36）、Stage 10 结构（#37）、
     #40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、`i18n_catalog/crawl.py` 907、
-    `static/js/workflow.js` 6,436、`static/js/canvas.js` 3,893 在名单上；`app.js` 已降到 1,450）。
+    `static/js/panels/settings.js` 1,985、`static/js/workflow.js` 4,458、`static/js/canvas.js` 3,893 在名单上；
+    `app.js` 已降到 1,450）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

@@ -16,12 +16,12 @@
  * Usage: node harness_cloud.mjs <module.js> …   (canvas.js, workflow.js, app.js's catalogue, app.js)
  * Prints one JSON object to stdout.
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { addOptions, baseSandbox, fixWindow, resetWorld } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
-const src = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = sourceOf(...process.argv.slice(2));
 
 /* One /api/config answer, switchable per scenario: the real boot reads it once, and the
    assertions below are about what the page does with the answer it got. */

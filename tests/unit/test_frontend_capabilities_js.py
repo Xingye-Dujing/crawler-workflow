@@ -203,7 +203,7 @@ class TestPanelReadsWhatTheNodeHolds:
         as text, and a boolean inside an inline handler is source text rather than a
         stored value — both of those stay, and are not this rule.
         """
-        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        source = (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
         assert "this.checked ? 'true' : 'false'" not in source, 'a checkbox is writing the text grammar again'
 
     def test_an_unticked_box_stays_unticked_in_the_file_it_writes(self, tmp_path):

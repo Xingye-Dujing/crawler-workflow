@@ -68,7 +68,7 @@ class TestTheOverlayIsBuiltLikeTheOthers:
         # opener is the button beside the file picker (built in JS, not in the page).
         assert 'onclick="toggleSourceHelp()"' not in markup
         assert markup.count('onclick="closeSourceHelp()"') == 1, 'the header closes it'
-        assert _js('workflow.js').count('onclick="toggleSourceHelp()"') == 1
+        assert _js('panels/settings.js').count('onclick="toggleSourceHelp()"') == 1
 
     def test_the_closer_is_reachable_from_escape_and_from_the_scrim_only(self):
         canvas = _js('canvas.js')
@@ -100,7 +100,9 @@ class TestTheOverlayIsBuiltLikeTheOthers:
                 assert key in bodies[lang], f'{key} missing from the {lang} catalogue'
         # A defined word nobody asks for is a dead key; a word asked for nobody defined is a
         # raw string on screen. Both directions are checked, from the same literal list.
-        asked = _js('workflow.js') + _js('panels/source-help.js') + _js('app.js') + _markup()
+        asked = (
+            _js('workflow.js') + _js('panels/settings.js') + _js('panels/source-help.js') + _js('app.js') + _markup()
+        )
         for key in GUIDE_KEYS:
             assert f"'{key}'" in asked or f'data-i18n="{key}"' in asked, f'{key} is defined but never asked for'
         # The group headings are a literal map, not a spliced key: the audits only see literals.

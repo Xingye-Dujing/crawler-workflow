@@ -32,16 +32,15 @@
 | `panels/datasets.js` | 数据集管理器（重命名/删除/合并/累积谱系重置，名字与形状、被工作流引用时拒绝）（357 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 7,828 → 7,477 行。一次通过 |
 | `panels/files.js` | 工作流文件管理器（已存画布 / 画布历史 / 可复用模板 三个页签）（799 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 7,478 → 6,686 行。一次通过；「一次一个运行」的闸门 `refuseWhileRunning` 不属此面板，留在 `workflow.js` |
 | `panels/diagnostics.js` | 编辑期诊断（节点 emits/reads 对照、缺列与接线问题、成本估计与摘要）（258 行） | Stage 8（2026-10-29）整段切片搬出；`workflow.js` 6,687 → 6,436 行。**成本摘要不是设置面板的东西**：`renderCostSummary()` 由 `Diagnostics` 的 refresh 调用，`estimateCost` 用的是同段的 `_processLlm`/`_isLabelOp`/`_labelCallCap`，所以整段一起搬 |
+| `panels/settings.js` | 节点设置面板：`openSettings`、源面板与全部参数渲染器（输入/下拉/勾选/数字）、分析/文献/图表设置、`renderResumeSettings`，以及它们读的 `ANALYSIS_OPS`/`FILTER_OPS`/`CONVERT_TYPES`/`BIBLIO_*`/`CHART_TYPES` 清单（1,985 行） | Stage 8（2026-10-29）**两段**切片：`nodeTypeWord` 被 `panels/files.js`/`panels/runs.js`/`reusable.js`/`zenviz.js` 共用，夹在两段之间，留在 `workflow.js`；重组核对 357,166 字节相等；`workflow.js` 6,436 → 4,458 行。进 `SPLIT_OF`；`harness_async_panels`/`harness_cloud` 改 `sourceOf`；`test_chart_registry`/`test_data_analysis`/`test_exporter`/`test_analysis_api`/`test_frontend_contract`/`test_frontend_js` 与五处 harness 扫描改读新文件 |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
 
 按「依赖少、harness 引用少、语义清晰」排序；括号里是该模块的主要外部引用方（决定要改哪些 harness）。
-**已落地的九站见 §2**（`node-types` / `schedules` / `reusable` / `chart-preview` / `capabilities` /
-`panels/cookies` + `panels/source-help` / `panels/biblio` / `panels/runlog` / `panels/exports` /
-`panels/runs`）与词典的九个域文件，下面只剩未做的：
-
-1. **`settings.js`** — `openSettings` 与各节点设置渲染（约 2,000 行，依赖最多，放最后）；涉及
-   `harness_panels`、`harness_panel_actions`、`harness_state`。
+**Stage 8 的十四站已全部落地**（见 §2：`node-types` / `schedules` / `reusable` / `chart-preview` / `capabilities` /
+`panels/cookies` + `panels/source-help` / `panels/biblio` / `panels/runlog` / `panels/exports` / `panels/runs` /
+`panels/lexicon` / `panels/datasets` / `panels/files` / `panels/diagnostics` / `panels/settings`），
+`workflow.js` 13,027 → 4,458 行。队列已空；`workflow.js` 本身仍是 4,458 行，归 #40 按职责继续拆。
 
 `tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供
 `loadPageScripts(sandbox, {jsDir, only})`，**7 个 harness 已改用它**（2026-10-28）；选中 `app.js`

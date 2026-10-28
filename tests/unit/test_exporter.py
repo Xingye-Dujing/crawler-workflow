@@ -102,9 +102,9 @@ class TestFormatSelection:
         supported list; pinning "the first match" would test the wrong node.
         """
         assert E.SUPPORTED_FORMATS == ('csv', 'json', 'excel', 'txt', 'html', 'markdown', 'parquet')
-        source = (Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js').read_text(
-            encoding='utf-8'
-        )
+        source = (
+            Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
+        ).read_text(encoding='utf-8')
         offered = [
             tuple(re.findall(r"'([a-z]+)'", group)) for group in re.findall(r"\[('(?:[^']|'[^'])*')\]\.map", source)
         ]
