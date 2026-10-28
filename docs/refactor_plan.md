@@ -693,13 +693,34 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     **10.00/10、exit=0**；设备档 **194 passed / 0 skipped**（4 分 12 秒）；隔离根真启动 9 个 GET 全 200
     （`/`、config、settings、workflow/list、workflow/queue、runs/list、stats/summary、capabilities、node-types），
     随后已杀自己起的进程（PID 1236，端口 5057 无 LISTEN）并删临时数据根。
-  - **下一刀 = Stage 6 第三片**：把 `app.py` 剩下的 27 条路由按域搬成 Blueprint —— `api/runs.py`（11 条）
-    与 `api/workflow.py`（15 条 + `/` 留在 app），路由路径/方法逐条不变，`test_api_hardening` 的
-    `BODY_ROUTES`/`_route_source_files()` 与 `privacy_leaks` 的 view 名跟着改；`_begin_run` 与节点执行器
-    这一片**留在 app**（它才是组合根剩下的主体），若路由需要它就用注入/延迟查找，不 `import app`。
-    之后：Stage 6 第四片 = 运行编排本身进 `engine/run.py`；Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
+  - **Stage 6 第三片已完成（本次记录，hash 见本条 commit）**：`/api/runs/*` 12 条路由搬进新
+    `backend/api/runs.py`（Blueprint 名 `runs`）。`app.py` 3,214 → **2,917 行**，297 行整块移出，
+    除装饰器接收者（`@app.route` → `@bp.route`）与两个改名的 helper 外**逐字节相同**；
+    `build/carve_api_runs.py` 钉住「路由清单 == 12 条且顺序一致」「handler 名单 == 13 个（含 `_log_filters`）」
+    「`@bp.route` == 12 且无 `@app.route` 残留」「改名用整词守卫、旧名按 token 消失」。
+    **`_locked_run_ids`/`_prune_orphan_run_locks` 不再留在 app**：路由与编排都要问它们，于是搬进
+    `services/runs/settlement.py`（公开名 `locked_run_ids`/`prune_orphan_run_locks`），app 的 `_housekeep`
+    与 Blueprint 都从那里读 —— 置顶是「记录还在不在」的问题，属于结算域而不是 app。
+    **证据**：`url_map` 前后对比 129 条规则，路径 + 方法集合逐字节相同，只有 endpoint 前缀从
+    `runs_list` 变成 `runs.runs_list`（Blueprint 的命名空间，仓库内无 `url_for` 依赖）；
+    隔离根真启动后 `/`、config、`runs/list|status|stats`、`workflow/list`、`workflow/queue` 全 200，
+    POST `runs/purge`、`workflow/queue/clear` 返回原形状，`runs/deadbeef/log.txt` 仍是 404 文本。
+    **两条跟着搬走的接缝**：`tests/api/test_stop_path.py` 的 `app_module.reject_live_run` →
+    `settlement.reject_live_run`（函数已不在 app，桩要打在真正读它的那个名字上）；app 的
+    `Response`/`live_run_ids`/`reject_live_run`/`settle_orphaned_records` 四个 import 随调用点消失而删除
+    （钩子会把它们**加回来**：先删调用点后删 import 的顺序在本片里被验证 —— 反序就是 F821/F401 交替）。
+    **定向门禁**：`tests/api/` + `test_test_tiers` **2,294 passed**；ruff check + format 干净。
+  - **下一刀 = Stage 6 第四片，但顺序先做编排**：`/api/workflow/*` 的路由里
+    `execute`/`rerun-node`/`status`/`stop`/`processes` 都直接吃 `_begin_run` 与 worker 状态，
+    先把「运行编排」搬进 `engine/run.py`（`_begin_run`、worker、`_run_node_durable`、`_execute_node`、
+    `_close_run`、`_housekeep`、`_start_next_queued`、`_record_execution_history`、`_scheduled_canvas`
+    的启动侧），路由随后就是薄壳 —— 反过来先搬路由会造一个只为删除而存在的注入接缝。
+    搬完后 `api/workflow.py`（save/load/list/rename/delete + queue×3 + stop/status/processes/kill）
+    与 app 只剩 `/`、`execute`、`rerun-node`。之后：Stage 7 i18n；Stage 8 前端；Stage 9 op 注册表；
     Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分。`state`/`stores` 不进 core（运行层）；
-    `settings_store` 等 i18n 拆分后进 core。
+    `settings_store` 等 i18n 拆分后进 core。`workflow_manager` 这个 app 全局是第四片的阻塞点，
+    它该和 `WorkflowHistoryStore` 一样住进 `stores.py`（`get_workflow_manager()`），
+    `tests/api/test_schedules_api.py` 两处读它要跟着改。
   - **门禁配方（每次照抄，别再摸索）**：`build/make_lint_lists.py` 生成 CI 同形制的绝对/正斜杠/LF 清单
     （产品 237 = backend 递归减 `test_*.py` 209 + desktop 6 + tools 3 + ml_train/scripts 16；tests 268），
     然后 `pylint --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $(tr -d '\r' < build/lint_product.txt | tr '\n' ' ')`，

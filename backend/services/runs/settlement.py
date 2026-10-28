@@ -15,14 +15,20 @@ a measurement, not by reading the code:
 
 ``execute_lock`` lives in :mod:`state`: it is the same lock that claims a run, and a settle that
 did not take it could settle a row a run an instant older had just opened.
+
+The two lock-ledger functions are here for the same reason they are asked next to a settle: a
+pin whose record is gone is state an abandoned path left behind, and every sweep — automatic or
+manual — has to ask the same question about what the user pinned.
 """
 
+import contextlib
 import logging
 
 from state import add_log, execute_lock, execution_state, live_run_ids
 from stores import get_run_store
 
 from i18n import t
+from services import lock_store
 from services.ingest.lifecycle import close_login_browser
 
 logger = logging.getLogger(__name__)
@@ -130,3 +136,19 @@ def reject_live_run(run_id: str) -> bool:
     if not run_id:
         return False
     return str(run_id) in live_run_ids()
+
+
+def locked_run_ids() -> set[str]:
+    """Run ids the user pinned (置顶). Retention — automatic *or* manual — must spare
+    them, exactly as 清空/删除 already do; otherwise a lock silently dies to age."""
+    return {str(key) for key in (lock_store.all_locks().get('runs') or [])}
+
+
+def prune_orphan_run_locks() -> None:
+    """Forget 置顶 keys whose run row no longer exists. A record can be removed by a
+    path that did not drop its lock; without this, locks.json accumulates dead ids."""
+    with contextlib.suppress(Exception):
+        existing = get_run_store().run_ids()
+        for key in locked_run_ids():
+            if key not in existing:
+                lock_store.drop('runs', key)

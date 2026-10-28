@@ -49,6 +49,7 @@ from run_wait import run_finished
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import CrawlerStopped, DeadDriver
 from i18n import t
+from services.runs import settlement
 from services.runs.store import (
     NODE_PARTIAL,
     RUN_INTERRUPTED,
@@ -229,7 +230,7 @@ class TestTheRecordFlipsWithTheRequest:
         record = _record(client, app_module, run_id)
         assert record['status'] == RUN_STOPPING, 'the panel would still read 运行中 after 停止'
         # …and while the worker still owns it, nothing else may settle or delete it.
-        assert app_module.reject_live_run(run_id) is True
+        assert settlement.reject_live_run(run_id) is True
 
         gate['release'].set()
         assert run_finished(app_module)
@@ -249,7 +250,7 @@ class TestTheRecordFlipsWithTheRequest:
         assert gate['inside'].wait(10), 'the crawl never started'
         client.post('/api/workflow/stop')
         assert app_module.execution_state['running'] is False, 'the premise: Stop already cleared the flag'
-        assert app_module.reject_live_run(run_id) is True
+        assert settlement.reject_live_run(run_id) is True
 
         for route in ('/api/runs/clear', '/api/runs/purge'):
             answer = client.post(route, json={'confirm': True})
