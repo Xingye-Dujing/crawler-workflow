@@ -14,8 +14,9 @@ import pytest
 
 import services.charts.tikz as lc
 from services.charts.contracts import BIBLIO_CHART_TYPES
+from services.charts.registry import LATEX_UNBUILDABLE_TYPES
 from services.charts.tikz import LatexChartService as L
-from services.charts.visualizer import CHART_TYPES, LATEX_UNBUILDABLE_TYPES, ChartConfigError
+from services.charts.visualizer import CHART_TYPES, ChartConfigError
 
 pytestmark = pytest.mark.unit
 

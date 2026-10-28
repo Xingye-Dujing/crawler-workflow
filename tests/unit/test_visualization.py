@@ -217,10 +217,14 @@ class TestChartCatalogue:
         """``workflow.js`` keeps its own copy of both lists, and the two drift apart in the
         one direction no test on the Python side can see: a panel that offers 双轴折线 while
         the service does not know the name hands the user an opaque node failure, and a panel
-        that hides a type the service draws is a feature nobody finds."""
+        that hides a type the service draws is a feature nobody finds.
+
+        ``CHART_TYPES`` is order-sensitive (the panel walks it); the ECharts-only list is a
+        membership set both sides only ever test with ``in``, so it is compared as a set — its
+        order in ``services.charts.registry`` follows the panel, not the old literal."""
         text = _WORKFLOW_JS.read_text(encoding='utf-8')
         assert _js_list(text, 'CHART_TYPES') == list(CHART_TYPES)
-        assert _js_list(text, 'ECHARTS_ONLY_CHARTS') == list(ECHARTS_ONLY_TYPES)
+        assert set(_js_list(text, 'ECHARTS_ONLY_CHARTS')) == set(ECHARTS_ONLY_TYPES)
 
     def test_the_browser_offers_event_markers_only_where_they_are_drawn(self):
         # The same drift in the other direction: a box the figure cannot honour is a date the

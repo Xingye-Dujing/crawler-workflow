@@ -31,7 +31,11 @@ import pandas as pd
 from core import machine
 
 from i18n import t
-from services.charts.contracts import BIBLIO_CHART_TYPES
+from services.charts.registry import (
+    BIBLIO_CHART_TYPES,
+    CHART_TYPES,
+    ECHARTS_ONLY_TYPES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,40 +131,6 @@ def _pyplot():
             )
         )
     return plt
-
-
-CHART_TYPES = (
-    'bar',
-    'line',
-    'dual_line',
-    'stack_pct',
-    'topic_map',
-    'topic_terms',
-    'pie',
-    'scatter',
-    'histogram',
-    'box',
-    'heatmap',
-    'model_agreement',
-    'sankey',
-    'network',
-    'knowledge_graph',
-    'cluster_timeline',
-    'burst',
-    'timezone',
-    'circular',
-    'landscape',
-    'biblio_heatmap',
-    'graph3d',
-    'variation',
-    'dual_map',
-    'geo_map',
-    'sentiment_overlay',
-    'topic_overlay',
-    'concentric',
-    'wordcloud',
-    'map',
-)
 
 
 def _json_safe(value):
@@ -476,49 +446,10 @@ WORDCLOUD_STYLES = {
     },
 }
 
-# These have no sane matplotlib equivalent without extra heavy dependencies
-# (echarts-wordcloud, a sankey layout engine, GeoJSON map data) — they are
-# ECharts-only. render_image() raises a clear ChartConfigError for these.
-# ``dual_line`` joins them for a different reason: a second axis is drawable with
-# ``twinx()``, but the right-hand scale, legend and shared tooltip are the parts that make
-# 热度 and 强度 readable on one figure, and re-implementing them per engine is how the two
-# engines start telling the same data differently.
-ECHARTS_ONLY_TYPES = (
-    'wordcloud',
-    'sankey',
-    'map',
-    'dual_line',
-    'topic_map',
-    'topic_terms',
-    'network',
-    'model_agreement',
-    'knowledge_graph',
-    'cluster_timeline',
-    'burst',
-    'timezone',
-    'circular',
-    'landscape',
-    'biblio_heatmap',
-    'graph3d',
-    'variation',
-    'dual_map',
-    'geo_map',
-    'sentiment_overlay',
-    'topic_overlay',
-    'concentric',
-)
-
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other
 #: type that is handed the box is refused rather than ignored: an annotation the figure does not
 #: show is worse than no annotation, because the user believes it is there.
 ANNOTATED_TYPES = ('bar', 'line', 'dual_line')
-
-#: The chart types ``services.charts.tikz`` cannot draw on paper — exactly one, the model
-#: agreement matrix, whose point is the on-screen colour ramp. This is deliberately NOT
-#: ``ECHARTS_ONLY_TYPES``: that list says what *matplotlib* cannot render, while pgfplots draws
-#: the word cloud, the sankey, the map and every bibliometric view. Reading the wrong list here
-#: is how the visualize node's LaTeX box silently did nothing for those charts.
-LATEX_UNBUILDABLE_TYPES = ('model_agreement',)
 
 
 class ChartConfigError(ValueError):
