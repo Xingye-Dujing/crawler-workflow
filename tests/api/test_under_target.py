@@ -301,7 +301,11 @@ def test_a_real_crawler_states_no_opinion_until_it_notes(app_module, monkeypatch
     short crawl would start getting refused — this test is what catches that, where the
     seam tests above supply their own value and could not.
     """
-    monkeypatch.setattr(app_module, 'stop_requested', lambda: False)
+    # ``stop_requested`` is read by the node walk, which lives in ``engine.run`` now — a patch on
+    # ``app`` would answer a module that no longer asks the question.
+    import engine.run
+
+    monkeypatch.setattr(engine.run, 'stop_requested', lambda: False)
     crawler = _SimCrawler([{'作者': 'a', '正文': 'b'}])
     assert crawler.end_reason is None, 'a fresh crawl has not run — it must state no opinion'
     assert crawler.walk_counts == {}

@@ -40,7 +40,7 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
     out_name = f'compile-{node.get("id")}.pdf'
     out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, Config.EXPORT_DIR)
     if 'error' in out:
-        # Fold the reason into the returned error so _run_node_durable's single wf.node_failed
+        # Fold the reason into the returned error so run_node_durable's single wf.node_failed
         # line carries it; a separate add_log was the duplicate line for one failure.
         out['error'] = t('run.compileFailed', err=out['error'])
         return out

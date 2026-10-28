@@ -309,7 +309,7 @@ class TestVisualizeNode:
     def test_a_wireless_visualize_node_prints_the_reason_once(self, client, app_module):
         """One failure, one line.
 
-        _run_node_durable turns a node's ``{'error': …}`` into the single attributed
+        run_node_durable turns a node's ``{'error': …}`` into the single attributed
         wf.node_failed line, so the visualize executor ALSO printing the bare sentence was a
         second console line for one failure. A chart node with no incoming wire reaches the
         refusal (the empty-upstream skip only fires when there IS an upstream), so this is the

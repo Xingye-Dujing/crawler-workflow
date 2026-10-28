@@ -18,15 +18,17 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def exec_():
-    """The application module, imported inside the test and never at module scope.
+    """``engine.run``, imported inside the test and never at module scope.
 
-    ``tests/unit/test_test_tiers.py`` refuses a module-level ``import app``: collection
-    imports every file before any fixture runs, so the app would be built while
-    ``Config.DATA_DIR`` still pointed at the repository.
+    The notice lives with the code that counts the rows, so the test asks that module and not
+    ``app`` — and ``app`` no longer has an opinion about ``HEAVY_RESULT_ROWS`` to lend. A
+    function-scope import is still required: ``tests/unit/test_test_tiers.py`` refuses a
+    module-level heavy import because collection would build the services against the
+    repository's real ``data/``.
     """
-    import app
+    import engine.run
 
-    return app
+    return engine.run
 
 
 @pytest.fixture
@@ -44,15 +46,15 @@ def spoken(exec_, monkeypatch):
 
 class TestHeavyResultNotice:
     def test_a_small_result_says_nothing(self, exec_, spoken):
-        exec_._note_heavy_result([{'a': 1}] * 10, '清洗 #n1')
+        exec_.note_heavy_result([{'a': 1}] * 10, '清洗 #n1')
         assert spoken == []
 
     def test_one_row_below_the_threshold_still_says_nothing(self, exec_, spoken):
-        exec_._note_heavy_result([{}] * (exec_.HEAVY_RESULT_ROWS - 1), '清洗 #n1')
+        exec_.note_heavy_result([{}] * (exec_.HEAVY_RESULT_ROWS - 1), '清洗 #n1')
         assert spoken == []
 
     def test_a_large_result_names_the_node_and_the_count(self, exec_, spoken):
-        exec_._note_heavy_result([{}] * exec_.HEAVY_RESULT_ROWS, '清洗 #n1')
+        exec_.note_heavy_result([{}] * exec_.HEAVY_RESULT_ROWS, '清洗 #n1')
         assert len(spoken) == 1, spoken
         assert '清洗 #n1' in spoken[0], 'an OOM with no node name is not a report'
         assert str(exec_.HEAVY_RESULT_ROWS) in spoken[0], spoken[0]
@@ -61,12 +63,12 @@ class TestHeavyResultNotice:
         """A visualize/output node answers a DICT — a chart spec or a refusal — and there
         are no rows in it to hold, so announcing a memory cost would be a fabricated one.
         """
-        exec_._note_heavy_result({'error': 'x'}, '可视化 #n2')
+        exec_.note_heavy_result({'error': 'x'}, '可视化 #n2')
         assert spoken == []
 
     def test_the_notice_is_not_a_refusal(self, exec_, spoken):
         """It must not raise and must not change the rows: a big table is often exactly
         what was asked for, and the run is still the user's to finish."""
         rows = [{'a': 1}] * exec_.HEAVY_RESULT_ROWS
-        exec_._note_heavy_result(rows, '清洗 #n1')
+        exec_.note_heavy_result(rows, '清洗 #n1')
         assert len(rows) == exec_.HEAVY_RESULT_ROWS

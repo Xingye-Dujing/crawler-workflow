@@ -276,7 +276,7 @@ class TestClassifyVerdict:
             assert harness.names_key(rendered, key), f'{key} does not match its own rendered line'
 
     def test_stop_is_graded_by_the_line_the_executor_actually_prints(self):
-        """``crawl.stopped`` is the *message of* ``CrawlerStopped`` and ``_settle_node_as_stopped``
+        """``crawl.stopped`` is the *message of* ``CrawlerStopped`` and ``settle_node_as_stopped``
         is handed ``err=''``, so it reaches neither console nor record. A whitelist entry no code
         can print is how a later platform's author concludes that stopping is graded — by a line
         that never appears — while a real 停止 short-crawl reads as silent."""

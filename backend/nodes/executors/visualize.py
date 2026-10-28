@@ -66,7 +66,7 @@ def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     wordcloud_style = params.get('wordcloud_style')
 
     if not current_input:
-        # A refused export answers as data, not as a console line: _run_node_durable turns this
+        # A refused export answers as data, not as a console line: run_node_durable turns this
         # {'error': …} into the single attributed wf.node_failed line, so printing the bare
         # sentence here too was the second console line for one failure.
         return {'error': t('wf.visualize_no_input')}

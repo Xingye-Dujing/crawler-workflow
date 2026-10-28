@@ -440,7 +440,7 @@ class TestPromoteStale:
             assert promoted.get_run('r1')['status'] == RUN_INTERRUPTED
             # Nothing had been published when the process died, so this node kept
             # nothing. ``partial`` would promise rows that are not there — and this
-            # is the same rule the live path applies (``_run_node_durable`` settles on
+            # is the same rule the live path applies (``run_node_durable`` settles on
             # the rows in hand), which the promotion used to contradict by marking
             # every interrupted node partial whatever it had produced.
             assert promoted.node_statuses('r1')['node-1']['status'] == NODE_FAILED

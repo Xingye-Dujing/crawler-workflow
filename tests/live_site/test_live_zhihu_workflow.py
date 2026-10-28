@@ -1031,7 +1031,7 @@ def test_e1_stop_then_e2_continue_finishes_the_same_table(client, app_module, mo
         assert cursor and int(cursor.get('scanned') or 0) > 0, f'the cursor must record the position reached: {cursor}'
         assert run.status['failed_nodes'] == 0, f"停止 is the user's own button, not a failure: {run.status}"
         # What the Stop prints is ONE line: ``run.nodeStopped``. ``crawl.stopped`` is the
-        # *message of* the CrawlerStopped exception and ``_settle_node_as_stopped`` is handed
+        # *message of* the CrawlerStopped exception and ``settle_node_as_stopped`` is handed
         # ``err=''``, so it reaches neither the console nor the record — asserting it here would
         # pay for a real 40-row crawl to discover a test bug (``tests/api/test_stop_path.py``
         # has known this all along). If the project ever wants a crawl-level "which button did
@@ -1133,7 +1133,7 @@ def test_e3_a_parallel_run_cut_short_convicts_one_walk_and_hands_the_lane_back(c
 
     E1 cannot cover this. A parallel run is one record whose nodes are executed on different
     threads, so the settlement has to be gathered from two unwinding workers: the killed crawl
-    reports itself through ``_settle_node_as_stopped`` while the finished one has already written
+    reports itself through ``settle_node_as_stopped`` while the finished one has already written
     ``done``, and the single finish line has to count the cut-short node as *stopped* rather than
     failed. Both halves are asserted on the component's own console slice — a stop named in one
     workflow must not be read as a stop in the other, which is the same attribution rule the
@@ -1843,7 +1843,7 @@ def _crawl_window(rec, *, start_key='crawl.zhihu.start', end_key='crawl.zhihu.fi
     """The console indexes at which the crawls of one platform were *inside* their walk.
 
     ``wf.executing_node`` cannot answer an overlap question: the executor prints it before
-    ``_execute_node`` takes the platform's turn (``app.py`` logs, then holds the lane), so a
+    ``execute_node`` takes the platform's turn (``engine/run.py`` logs, then holds the lane), so a
     canvas that queued both crawls still announces both up front. The crawler's own first and
     last lines are inside the hold, which is what makes the pair a window worth reading.
     """

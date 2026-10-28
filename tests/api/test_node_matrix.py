@@ -1729,7 +1729,7 @@ class TestFeedSourceFromUpload:
     """upload → 链接模式（评论）: the wired column drives the crawl end to end.
 
     The dispatch-matrix file calls the executor with a hand-made ``upstream``;
-    nothing but this path covers the FORWARDING leg — ``_execute_node`` handing the
+    nothing but this path covers the FORWARDING leg — ``execute_node`` handing the
     parent pairs into ``_execute_source_node`` at all. Revert that one kwarg and
     the fed crawl silently degrades to the old "wire is a lie" behaviour, which
     only a whole-request run can see.

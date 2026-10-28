@@ -105,7 +105,7 @@ SILENT_SHORT = 'SILENT_SHORT'
 #:
 #: ``crawl.stopped`` deliberately is NOT here, and neither is any other sentence the code
 #: never prints: the token the Stop carries is the *message of* ``CrawlerStopped``, and
-#: ``_settle_node_as_stopped`` drops it (the node has one true line, ``run.nodeStopped``).
+#: ``settle_node_as_stopped`` drops it (the node has one true line, ``run.nodeStopped``).
 #: A dead entry in a closed whitelist is how the next platform's author concludes that
 #: stopping is graded when it is graded by ``run.nodeStopped`` alone.
 SHARED_EXITS = (

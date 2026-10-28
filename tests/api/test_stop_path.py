@@ -271,7 +271,11 @@ class TestTheRecordFlipsWithTheRequest:
         """
         answer = client.post('/api/workflow/stop').get_json()
         assert answer['ok'] is True and answer['idle'] is True, answer
-        assert app_module.stop_requested() is False
+        # The flag is ``state``'s, and it is read by the node walk in ``engine.run`` — asking
+        # ``app`` for it would only work while the orchestration still lived there.
+        import state
+
+        assert state.stop_requested() is False
         assert client.get('/api/workflow/status').get_json()['stopping'] is False
 
     def test_the_verdict_replaces_the_intermediate_word(self, client, app_module, monkeypatch):

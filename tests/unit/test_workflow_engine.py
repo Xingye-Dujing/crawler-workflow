@@ -544,7 +544,7 @@ class TestValidate:
     def test_an_unknown_node_type_is_refused_by_name(self, en, ntype):
         """A hand-edited canvas can name a node anything.
 
-        A type with no executor used to pass validation silently, fall through ``_execute_node`` to
+        A type with no executor used to pass validation silently, fall through ``execute_node`` to
         an empty table, and settle the node DONE on nothing measured — the silent completion AGENTS.md
         forbids. validate now refuses it by name, before the run is paid for.
         """
