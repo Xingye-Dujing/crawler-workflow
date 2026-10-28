@@ -143,7 +143,7 @@ def _run(client, app_module, workflow):
 
 
 def _stored_run(run_id):
-    from app import get_run_store
+    from stores import get_run_store
 
     return get_run_store().get_run(run_id)
 
