@@ -39,11 +39,12 @@ from state import (
     set_log_sink,
     stop_requested,
 )
-from stores import get_run_store
+from stores import get_run_store, get_workflow_manager
 from transport import _local_transport_refusal
 
 from analyzers.llm_client import ABORT_MARK
 from crawlers.core.faults import CrawlerStopped
+from engine import run as run_engine
 from engine.executor import TaskExecutor
 from engine.plan import component_name, llm_provider, run_mode, workflow_needs_llm
 from engine.workflow import WorkflowEngine, effective_workflow
@@ -1352,3 +1353,55 @@ def begin_run(data: dict, lang_header: str) -> dict:
         return {'status': 500, 'body': {'ok': False, 'error': str(e)}}
 
     return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}
+
+
+def scheduled_canvas(name: str) -> dict:
+    """The saved canvas a scheduled task will run, or the reason it may not run on a timer.
+
+    One answer for two moments: the schedule form refuses a canvas that cannot run unattended
+    while the user is still choosing, and the fire refuses it again if the file changed since.
+    Both rules are enforced here rather than in the panel, because a hand-written POST would
+    otherwise skip them: the file must exist, and its steps must not need a model — a timer has no
+    browser request behind it, so there is nowhere for an API key to come from, and a run that
+    quietly skipped its analysis would look exactly like one that analysed something.
+    """
+    if not name:
+        return {'workflow': None, 'error': t('sched.workflowRequired')}
+    workflow = get_workflow_manager().load(name)
+    if not workflow:
+        return {'workflow': None, 'error': t('sched.canvasMissing', name=name)}
+    # The saved file keeps reusable nodes as groups; this gate asks what a run will
+    # actually call, so expand before asking whether a model is needed. (The expanded
+    # graph is also what begin_run receives; there it is already group-free.)
+    workflow, reusable_error = expand_reusable_workflow(workflow)
+    if reusable_error:
+        return {'workflow': None, 'error': reusable_error}
+    if workflow_needs_llm(workflow):
+        return {'workflow': None, 'error': t('sched.canvasNeedsModel', name=name)}
+    return {'workflow': workflow, 'error': ''}
+
+
+def start_scheduled_run(task: dict, manual: bool) -> dict:
+    """Start one scheduled run and say what happened (started / queued / refused).
+
+    ``run_id`` comes back so the task's own history can point at the record: that id is how the
+    user opens the console of the fire that just happened.
+    """
+    loaded = scheduled_canvas(str(task.get('workflow') or ''))
+    if loaded['error']:
+        return {'ok': False, 'error': loaded['error']}
+    name = str(task.get('name') or '')
+    answer = run_engine.begin_run(
+        {'workflow': loaded['workflow'], 'workflow_name': name, 'lang': task.get('lang') or 'zh'},
+        '',
+    )
+    body = answer.get('body') or {}
+    if answer.get('status') != 200 or not body.get('ok'):
+        return {'ok': False, 'error': str(body.get('error') or '')}
+    queued = bool(body.get('queued'))
+    if not queued:
+        # Only a run that really started gets a console line. A queued fire has no console of its
+        # own yet (the queue narrates when it starts) and a refusal has none at all — that one is
+        # recorded in the task's own history, which is where the user looks for it.
+        add_log(t('sched.firedManual' if manual else 'sched.fired', name=name))
+    return {'ok': True, 'queued': queued, 'run_id': str(body.get('run_id') or ''), 'error': ''}

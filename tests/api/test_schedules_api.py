@@ -312,7 +312,7 @@ class TestTheGlueAppInstalled:
             _run_module(), 'begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
         )
 
-        answer = app_module._start_scheduled_run(task, False)
+        answer = _run_module().start_scheduled_run(task, False)
 
         assert answer == {'ok': False, 'error': _en('sched.canvasNeedsModel', name='要模型的画布')}
         assert called == [], 'a refused canvas was handed to the executor anyway'
@@ -333,13 +333,13 @@ class TestTheGlueAppInstalled:
             _run_module(), 'begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
         )
 
-        answer = app_module._start_scheduled_run(task, False)
+        answer = _run_module().start_scheduled_run(task, False)
 
         assert answer['ok'] is True, answer
         assert called, 'a canvas that calls no model was refused anyway'
         # The switch-off is what makes the difference: the same node left ON stays refused.
         still_on = dict(task, workflow='模型开着的画布')
-        assert app_module._start_scheduled_run(still_on, False) == {
+        assert _run_module().start_scheduled_run(still_on, False) == {
             'ok': False,
             'error': _en('sched.canvasNeedsModel', name='模型开着的画布'),
         }
@@ -354,7 +354,7 @@ class TestTheGlueAppInstalled:
         )
         monkeypatch.setattr(app_module, 'add_log', lambda line: None)
 
-        answer = app_module._start_scheduled_run(task, False)
+        answer = _run_module().start_scheduled_run(task, False)
 
         assert answer == {'ok': True, 'queued': False, 'run_id': 'r1', 'error': ''}
         assert seen[0][0]['lang'] == 'en'
@@ -371,8 +371,8 @@ class TestTheGlueAppInstalled:
         lines = []
         monkeypatch.setattr(app_module, 'add_log', lines.append)
 
-        app_module._start_scheduled_run(task, False)
-        app_module._start_scheduled_run(task, True)
+        _run_module().start_scheduled_run(task, False)
+        _run_module().start_scheduled_run(task, True)
 
         assert lines == [
             _en('sched.fired', name='每天早八'),

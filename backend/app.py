@@ -51,19 +51,16 @@ from scheduling import clock
 from sessions.routes import bp as sessions_bp
 from state import (
     _push_log,
-    add_log,
     execution_state,
 )
 from stores import (
     get_run_store,
-    get_workflow_manager,
 )
 
 from engine import run as run_engine
 from engine.logger import setup_logger
 from engine.plan import (
     downstream_closure,
-    workflow_needs_llm,
 )
 from engine.workflow import effective_workflow
 from i18n import audit, set_lang, t
@@ -80,7 +77,6 @@ from services.runs.store import (
     RUN_STOPPING,
     workflow_fingerprint,
 )
-from services.workflows.expand import expand_reusable_workflow
 
 #: The comment router's supported platforms, as raw keys. They go into a
 #: ``{platforms}`` slot that localizes *and joins* them, so they must arrive as a
@@ -363,6 +359,16 @@ def __getattr__(name):
         import state
 
         return getattr(state, name)
+    if name == 'add_log':
+        # The console seam. Tests of the run path patch ``app.add_log`` to capture what the run
+        # prints, while the modules that print (``engine.run``, the source executor) resolve the
+        # name in their own namespace and forward it here at CALL time (``tests/executor_seams.py``
+        # and the autouse fixture in ``tests/api/conftest.py``). Nothing in this file logs any
+        # more, so answering from ``state`` keeps 「patch app.add_log」 meaning one thing instead of
+        # leaving each test to guess which module the line is printed from.
+        import state
+
+        return getattr(state, name)
     if name == 'get_crawler':
         # The one crawler-factory seam tests patch (``tests/executor_seams.py`` forwards
         # ``app.get_crawler`` into the source executor at call time, and ~40 pre-split tests
@@ -421,60 +427,8 @@ def _payload_too_large(_error):
 # the same queue when a run is already going.
 
 
-def _scheduled_canvas(name: str) -> dict:
-    """The saved canvas a scheduled task will run, or the reason it may not run on a timer.
-
-    One answer for two moments: the schedule form refuses a canvas that cannot run unattended
-    while the user is still choosing, and the fire refuses it again if the file changed since.
-    Both rules are enforced here rather than in the panel, because a hand-written POST would
-    otherwise skip them: the file must exist, and its steps must not need a model — a timer has no
-    browser request behind it, so there is nowhere for an API key to come from, and a run that
-    quietly skipped its analysis would look exactly like one that analysed something.
-    """
-    if not name:
-        return {'workflow': None, 'error': t('sched.workflowRequired')}
-    workflow = get_workflow_manager().load(name)
-    if not workflow:
-        return {'workflow': None, 'error': t('sched.canvasMissing', name=name)}
-    # The saved file keeps reusable nodes as groups; this gate asks what a run will
-    # actually call, so expand before asking whether a model is needed. (The expanded
-    # graph is also what begin_run receives; there it is already group-free.)
-    workflow, reusable_error = expand_reusable_workflow(workflow)
-    if reusable_error:
-        return {'workflow': None, 'error': reusable_error}
-    if workflow_needs_llm(workflow):
-        return {'workflow': None, 'error': t('sched.canvasNeedsModel', name=name)}
-    return {'workflow': workflow, 'error': ''}
-
-
-def _start_scheduled_run(task: dict, manual: bool) -> dict:
-    """Start one scheduled run and say what happened (started / queued / refused).
-
-    ``run_id`` comes back so the task's own history can point at the record: that id is how the
-    user opens the console of the fire that just happened.
-    """
-    loaded = _scheduled_canvas(str(task.get('workflow') or ''))
-    if loaded['error']:
-        return {'ok': False, 'error': loaded['error']}
-    name = str(task.get('name') or '')
-    answer = run_engine.begin_run(
-        {'workflow': loaded['workflow'], 'workflow_name': name, 'lang': task.get('lang') or 'zh'},
-        '',
-    )
-    body = answer.get('body') or {}
-    if answer.get('status') != 200 or not body.get('ok'):
-        return {'ok': False, 'error': str(body.get('error') or '')}
-    queued = bool(body.get('queued'))
-    if not queued:
-        # Only a run that really started gets a console line. A queued fire has no console of its
-        # own yet (the queue narrates when it starts) and a refusal has none at all — that one is
-        # recorded in the task's own history, which is where the user looks for it.
-        add_log(t('sched.firedManual' if manual else 'sched.fired', name=name))
-    return {'ok': True, 'queued': queued, 'run_id': str(body.get('run_id') or ''), 'error': ''}
-
-
-clock.set_run_starter(_start_scheduled_run)
-clock.set_canvas_source(_scheduled_canvas)
+clock.set_run_starter(run_engine.start_scheduled_run)
+clock.set_canvas_source(run_engine.scheduled_canvas)
 
 
 @app.route('/api/workflow/execute', methods=['POST'])
