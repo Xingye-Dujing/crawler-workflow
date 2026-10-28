@@ -8,7 +8,7 @@ refused again at the moment of the fire.
 
 Two boundaries are stubbed and nothing else:
 
-* ``app._begin_run``, so a test never starts a crawl (this is the seam the real ``_start_scheduled_run``
+* ``engine.run.begin_run``, so a test never starts a crawl (this is the seam the real ``_start_scheduled_run``
   calls through, which is why the glue is exercised here as well);
 * the schedules file, redirected per test, so a task written by one test is invisible to the next.
 
@@ -27,6 +27,18 @@ from stores import get_workflow_manager
 from i18n import set_lang, t
 
 pytestmark = pytest.mark.api
+
+
+def _run_module():
+    """``engine.run`` — the one place a fake run start can be installed.
+
+    ``app`` reaches it as ``run_engine.begin_run``, so a patch here governs the manual route, the
+    scheduled fire and the queue drain alike; a patch on an app-level re-export would govern one of
+    the three and leave the others crawling.
+    """
+    import engine.run
+
+    return engine.run
 
 
 @pytest.fixture(autouse=True)
@@ -234,7 +246,7 @@ class TestTheRunVerb:
         # The task's own language (not the request's) is what the fire narrates in — see _fire.
         task = self._ready(client, canvas, lang='en')
         monkeypatch.setattr(
-            app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'run-7'}}
+            _run_module(), 'begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'run-7'}}
         )
         lines = []
         monkeypatch.setattr(app_module, 'add_log', lines.append)
@@ -251,7 +263,7 @@ class TestTheRunVerb:
     ):
         task = self._ready(client, canvas)
         monkeypatch.setattr(
-            app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'queued': True}}
+            _run_module(), 'begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'queued': True}}
         )
         lines = []
         monkeypatch.setattr(app_module, 'add_log', lines.append)
@@ -264,8 +276,8 @@ class TestTheRunVerb:
     def test_a_refused_run_answers_400_and_is_kept_in_the_history(self, client, canvas, app_module, monkeypatch):
         task = self._ready(client, canvas)
         monkeypatch.setattr(
-            app_module,
-            '_begin_run',
+            _run_module(),
+            'begin_run',
             lambda data, lang: {'status': 400, 'body': {'ok': False, 'error': '已经有运行在进行'}},
         )
         monkeypatch.setattr(app_module, 'add_log', lambda line: None)
@@ -285,7 +297,7 @@ class TestTheRunVerb:
 
 
 class TestTheGlueAppInstalled:
-    """``_start_scheduled_run`` is what the scheduler calls; ``_begin_run`` is the only thing stubbed."""
+    """``_start_scheduled_run`` is what the scheduler calls; ``begin_run`` is the only thing stubbed."""
 
     def _task(self, client, canvas, name='可以定时的画布', **over):
         canvas(name, [NAME_NODE])
@@ -297,7 +309,7 @@ class TestTheGlueAppInstalled:
         task = {'id': 'x', 'name': '要模型', 'workflow': '要模型的画布', 'lang': 'zh'}
         called = []
         monkeypatch.setattr(
-            app_module, '_begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
+            _run_module(), 'begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
         )
 
         answer = app_module._start_scheduled_run(task, False)
@@ -318,7 +330,7 @@ class TestTheGlueAppInstalled:
         task = {'id': 'x', 'name': '关掉也要模型', 'workflow': '模型关掉的画布', 'lang': 'zh'}
         called = []
         monkeypatch.setattr(
-            app_module, '_begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
+            _run_module(), 'begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
         )
 
         answer = app_module._start_scheduled_run(task, False)
@@ -336,8 +348,8 @@ class TestTheGlueAppInstalled:
         task = self._task(client, canvas, lang='en')
         seen = []
         monkeypatch.setattr(
-            app_module,
-            '_begin_run',
+            _run_module(),
+            'begin_run',
             lambda data, lang: seen.append((data, lang)) or {'status': 200, 'body': {'ok': True, 'run_id': 'r1'}},
         )
         monkeypatch.setattr(app_module, 'add_log', lambda line: None)
@@ -354,7 +366,7 @@ class TestTheGlueAppInstalled:
         set_lang('en')
         task = self._task(client, canvas)
         monkeypatch.setattr(
-            app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'r1'}}
+            _run_module(), 'begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'r1'}}
         )
         lines = []
         monkeypatch.setattr(app_module, 'add_log', lines.append)

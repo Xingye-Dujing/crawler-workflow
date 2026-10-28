@@ -7,7 +7,16 @@ delegate-with-``resume_run_id`` hand-off, and the named refusals."""
 
 import pytest
 
+from services.runs.store import RUN_COMPLETED
+
 pytestmark = pytest.mark.api
+
+
+def _run_module():
+    """``engine.run`` owns the run start, so that is where a fake 执行 has to be installed."""
+    import engine.run
+
+    return engine.run
 
 
 def _workflow():
@@ -28,14 +37,13 @@ def _seed_completed_run(store, app_module, run_id='rerun1', node_ids=('n1', 'n2'
     for nid in node_ids:
         store.begin_node(run_id, nid, 'process', fingerprint='node-' + nid)
         store.finish_node(run_id, nid, app_module.NODE_DONE)
-    store.finish_run(run_id, app_module.RUN_COMPLETED)
+    store.finish_run(run_id, RUN_COMPLETED)
     return fp
 
 
 @pytest.fixture
 def fake_begin(monkeypatch):
     """Replace the real start path with a recorder, so nothing runs while we observe the hand-off."""
-    import app as app_module
 
     calls = []
 
@@ -43,7 +51,7 @@ def fake_begin(monkeypatch):
         calls.append((data, lang))
         return {'status': 200, 'body': {'ok': True, 'run_id': data.get('resume_run_id') or 'new'}}
 
-    monkeypatch.setattr(app_module, '_begin_run', _fake)
+    monkeypatch.setattr(_run_module(), 'begin_run', _fake)
     return calls
 
 

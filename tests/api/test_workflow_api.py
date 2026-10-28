@@ -24,7 +24,7 @@ import pandas as pd
 import pytest
 from api import workflow as workflow_api
 from run_wait import run_finished
-from state import LOG_KEEP
+from state import LOG_KEEP, reset_console_state
 
 from analyzers.llm_client import LLMClient
 from services.runs.queue import QUEUE_MAX, queue_snapshot
@@ -676,7 +676,7 @@ class TestConsoleStatusTail:
     """
 
     def _fill(self, app_module, n, wf=False):
-        app_module.reset_console_state()
+        reset_console_state()
         for i in range(n):
             app_module._push_log(f'line-{i:05d}', wf_idx=0 if wf else None)
 

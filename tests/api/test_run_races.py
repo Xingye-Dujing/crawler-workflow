@@ -26,7 +26,7 @@ import threading
 
 import pytest
 from run_wait import run_finished
-from state import _RUN_QUEUE
+from state import _RUN_QUEUE, _wf_local
 
 from i18n import t
 from services.runs import queue as run_queue
@@ -46,8 +46,21 @@ def _forward_executor_seams(monkeypatch):
     forward(monkeypatch, source, 'add_log', app_module)
 
 
-RECORDS = [{'标题': f'文{i}', '正文': f'正文{i}', '点赞': i} for i in range(1, 5)]
-#: The same table with one figure corrected: still 4 rows, still the same file
+def _run_module():
+    """``engine.run`` — the module that owns both the run start and the queue drain.
+
+    These cases drive the drain directly, so the fake 执行 goes on the owner. ``app`` keeps a
+    re-export for its two routes only; patching there would let the drain call the real one and
+    the test would measure a run it never installed.
+    """
+    import engine.run
+
+    return engine.run
+
+
+RECORDS = [
+    {'标题': f'文{i}', '正文': f'正文{i}', '点赞': i} for i in range(1, 5)
+]  #: The same table with one figure corrected: still 4 rows, still the same file
 #: name, and a different content hash — which is what makes a re-upload a new id.
 RESAVED = [{'标题': f'文{i}', '正文': f'正文{i}', '点赞': i + 10} for i in range(1, 5)]
 
@@ -107,8 +120,8 @@ class TestQueueHandOff:
         # The slot is gone by the time the hand-off asks for it: another request
         # (a manual Run press) claimed it in between.
         lost = {'status': 200, 'body': {'ok': True, 'queued': True}}
-        monkeypatch.setattr(app_module, '_begin_run', lambda data, lang: lost)
-        app_module._start_next_queued()
+        monkeypatch.setattr(_run_module(), 'begin_run', lambda data, lang: lost)
+        _run_module().start_next_queued()
         assert [item['id'] for item in run_queue.queue_snapshot()] == ['q1'], 'the request is kept, at the front'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'loser' in blob and ('queue' in blob.lower() or '排队' in blob), blob
@@ -120,11 +133,11 @@ class TestQueueHandOff:
             [{'id': 'q1', 'workflow_name': 'stale', 'nodes': 1, 'queued_at': 0.0, 'data': {}, 'lang': 'en'}],
         )
         monkeypatch.setattr(
-            app_module,
-            '_begin_run',
+            _run_module(),
+            'begin_run',
             lambda data, lang: {'status': 400, 'body': {'ok': False, 'error': 'no such run'}, 'drop': True},
         )
-        app_module._start_next_queued()
+        _run_module().start_next_queued()
         assert run_queue.queue_snapshot() == [], 'an impossible request must not wait for every future run'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'no such run' in blob, blob
@@ -143,9 +156,9 @@ class TestQueueHandOff:
                 raise RuntimeError('payload exploded')
             return {'status': 200, 'body': {'ok': True, 'run_id': 'r-next'}}
 
-        monkeypatch.setattr(app_module, '_begin_run', flaky)
+        monkeypatch.setattr(_run_module(), 'begin_run', flaky)
         _RUN_QUEUE[0]['data'] = {'boom': True}
-        app_module._start_next_queued()
+        _run_module().start_next_queued()
         assert run_queue.queue_snapshot() == [], 'both entries were consumed'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'broken' in blob, 'the failing request is named, not silently swallowed'
@@ -154,16 +167,16 @@ class TestQueueHandOff:
         second = {'id': 'q1', 'workflow_name': 'second', 'nodes': 1, 'queued_at': 0.0, 'data': {}, 'lang': 'en'}
         self._seed(app_module, [second])
         monkeypatch.setattr(
-            app_module, '_begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'abc123'}}
+            _run_module(), 'begin_run', lambda data, lang: {'status': 200, 'body': {'ok': True, 'run_id': 'abc123'}}
         )
-        app_module._start_next_queued()
+        _run_module().start_next_queued()
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'second' in blob and 'abc123' in blob, blob
 
     def test_an_empty_queue_hands_over_nothing(self, client, app_module, monkeypatch):
         called = []
-        monkeypatch.setattr(app_module, '_begin_run', lambda data, lang: called.append(data) or {})
-        app_module._start_next_queued()
+        monkeypatch.setattr(_run_module(), 'begin_run', lambda data, lang: called.append(data) or {})
+        _run_module().start_next_queued()
         assert called == [], 'a finisher must not invent a run'
 
 
@@ -617,7 +630,10 @@ class TestStoreFailures:
         def refuse():
             raise OSError('runs.db is not a database')
 
-        monkeypatch.setattr(app_module, 'get_run_store', refuse)
+        # The worker resolves the store through ``engine.run``, so that is where the refusal goes —
+        # a patch on ``app`` would leave the real store in place and this case would report a clean
+        # failure it never caused.
+        monkeypatch.setattr(_run_module(), 'get_run_store', refuse)
         workflow, name = _upload_flow(client, paste, 'no-store')
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
         assert started.status_code == 200, started.get_json()
@@ -633,7 +649,7 @@ class TestStoreFailures:
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'store' in blob.lower() or 'run record' in blob.lower(), blob
         # The next run must be able to start at all.
-        monkeypatch.setattr(app_module, 'get_run_store', lambda: app_module._RUN_STORE)
+        monkeypatch.setattr(_run_module(), 'get_run_store', lambda: app_module._RUN_STORE)
         again = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
         assert again.get_json().get('ok') is True and not again.get_json().get('queued')
         assert _wait(app_module)
@@ -668,7 +684,9 @@ class TestStoreFailures:
             def finish_run(self, *a, **k):
                 raise OSError('locked')
 
-        app_module.close_run({'store': _Broken(), 'run_id': 'r1'}, 'completed')
+        from services.runs.settlement import close_run
+
+        close_run({'store': _Broken(), 'run_id': 'r1'}, 'completed')
 
 
 class TestStopWithoutABrowser:
@@ -912,7 +930,7 @@ class TestAStoppedRunOwnsItsThreads:
                     {
                         'node': str(node.get('id')),
                         'thread': threading.current_thread(),
-                        'wf_idx': getattr(app_module._wf_local, 'idx', None),
+                        'wf_idx': getattr(_wf_local, 'idx', None),
                         'leave': leave,
                     }
                 )

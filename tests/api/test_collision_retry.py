@@ -64,12 +64,14 @@ def running(app_module, monkeypatch):
     """A live run, a cheap back-off, and a console to read the announcement off."""
     import threading
 
+    import state
+
     monkeypatch.setitem(app_module.execution_state, 'running', True)
     # The back-off now wakes on the run's cancel_event; a fresh unset one says
     # "nobody stopped" so the retry path is the only variable under test.
     monkeypatch.setitem(app_module.execution_state, 'cancel_event', threading.Event())
     monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0.01)
-    app_module.reset_console_state()
+    state.reset_console_state()
     return app_module.execution_state
 
 

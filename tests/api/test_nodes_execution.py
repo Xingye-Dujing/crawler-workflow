@@ -21,6 +21,7 @@ from run_wait import run_finished
 
 from analyzers.llm_client import LLMClient
 from engine import plan
+from services.analysis.pipeline import UnknownOperationError
 from services.ingest.lifecycle import close_login_browser
 
 pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
@@ -42,6 +43,17 @@ def _note_window(*args):
     from services.runs.windows import note_window
 
     return note_window(*args)
+
+
+def _run_module():
+    """The module that owns the run start: ``engine.run``.
+
+    These cases call it directly rather than through HTTP, so they ask the owner — ``app`` only
+    keeps a re-export for its two routes, and a patch there would not reach the queue drain.
+    """
+    import engine.run
+
+    return engine.run
 
 
 def _name_parts(*args):
@@ -672,7 +684,9 @@ class TestWindowedFilenames:
 
     def test_a_new_run_starts_with_no_window_of_its_own(self, app_module):
         _note_window(0, '2026-01-01', '2026-01-31')
-        app_module.reset_console_state()
+        import state
+
+        state.reset_console_state()
         assert app_module.execution_state['_time_windows'] == {}, (
             'a run must not name its files after the stretch the last one walked'
         )
@@ -700,11 +714,11 @@ class TestWindowedFilenames:
 
         store = RunStore(str(tmp_path / 'runs.db'))
         store.start_run('r1', 'wf', 'fp')
-        first = app_module._record_export_stamp(store, 'r1')
+        first = _run_module().record_export_stamp(store, 'r1')
         store.start_run('r1', 'wf', 'fp')  # what 继续 does to the same row
-        assert app_module._record_export_stamp(store, 'r1') == first, 'a resume must write the same names'
+        assert _run_module().record_export_stamp(store, 'r1') == first, 'a resume must write the same names'
         store.start_run('r2', 'wf', 'fp')
-        second = app_module._record_export_stamp(store, 'r2')
+        second = _run_module().record_export_stamp(store, 'r2')
         assert second != first, f'two records collided onto one file name: {first} / {second}'
         assert second.endswith('-r2'), f'the record is what makes this name unique: {second}'
 
@@ -854,7 +868,7 @@ class TestRunShapeIsReadNotCompared:
         # A blank states nothing, which is the declared default — not a refusal.
         assert plan.run_mode({}) == 'parallel'
         assert plan.run_mode({'mode': '   '}) == 'parallel'
-        with pytest.raises(app_module.UnknownOperationError) as bad:
+        with pytest.raises(UnknownOperationError) as bad:
             plan.run_mode({'mode': 'concurrent'})
         assert 'concurrent' in str(bad.value) and 'parallel' in str(bad.value)
 
@@ -868,7 +882,7 @@ class TestRunShapeIsReadNotCompared:
         assert plan.llm_provider({'provider': 'OpenRouter'}) == 'openrouter'
         # A blank states nothing → the declared default, not a refusal.
         assert plan.llm_provider({}) == 'ollama'
-        with pytest.raises(app_module.UnknownOperationError) as bad:
+        with pytest.raises(UnknownOperationError) as bad:
             plan.llm_provider({'provider': 'nonsense'})
         assert 'nonsense' in str(bad.value) and 'openrouter' in str(bad.value)
         # The client itself never folds an un-normalized name — a caller that bypasses the door
@@ -885,7 +899,7 @@ class TestRunShapeIsReadNotCompared:
             },
             'llm': {'provider': 'nonsense', 'model': 'm'},
         }
-        answer = app_module._begin_run(data, 'en')
+        answer = _run_module().begin_run(data, 'en')
         assert answer['status'] == 400, answer
         assert 'nonsense' in answer['body']['error']
         assert 'openrouter' in answer['body']['error'], 'the refusal must name the legal transports'
@@ -901,7 +915,7 @@ class TestRunShapeIsReadNotCompared:
                 'settings': {'mode': 'concurrent'},
             }
         }
-        answer = app_module._begin_run(data, 'en')
+        answer = _run_module().begin_run(data, 'en')
         assert answer['status'] == 400, answer
         assert 'concurrent' in answer['body']['error']
         assert 'parallel' in answer['body']['error'], 'the refusal must say what the legal names are'

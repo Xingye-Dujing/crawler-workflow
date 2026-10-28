@@ -4,6 +4,23 @@ import pytest
 from sessions import profiles
 
 
+@pytest.fixture(autouse=True)
+def _forward_run_console(monkeypatch):
+    """A test's patch of ``app.add_log`` still captures what the run worker prints.
+
+    The orchestration resolves ``add_log`` in its own module (``engine.run``), so patching the app
+    re-export alone would silence only the app-side lines and let the worker print into the real
+    buffer — the case would then assert on console text it never captured. Same call-time lookup
+    the executor seams already use (``tests/executor_seams.py``).
+    """
+    import app as app_module
+    from executor_seams import forward
+
+    import engine.run
+
+    forward(monkeypatch, engine.run, 'add_log', app_module)
+
+
 @pytest.fixture
 def profiles_off(monkeypatch):
     """This test's machine has no browser profiles, so nothing buys a Chrome.

@@ -410,8 +410,10 @@ def clean_globals(request):
     platform_gate = sys.modules.get('crawl_gate')
     if platform_gate is not None and request.node.get_closest_marker('live_site') is None:
         platform_gate.reset()
+    console_state = sys.modules.get('state')
+    if console_state is not None:
+        console_state.reset_console_state()
     if app is not None:
-        app.reset_console_state()
         app.execution_state['open_records'][:] = records_backup[0]
         app.execution_state['owned_records'].clear()
         app.execution_state['owned_records'].update(records_backup[1])

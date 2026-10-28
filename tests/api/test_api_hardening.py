@@ -21,12 +21,20 @@ import re
 from pathlib import Path
 
 import pytest
-from state import _RUN_QUEUE
+from state import _RUN_QUEUE, _completed_lock, _results_snapshot
 
 from services.runs.payload import workflow_shape_error
 from services.runs.queue import queue_snapshot
 
 pytestmark = pytest.mark.api
+
+
+def _run_module():
+    """``engine.run``: the owner of the run start and of the queue drain these cases drive."""
+    import engine.run
+
+    return engine.run
+
 
 RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 # Routes whose only job on this input is to refuse it: none of them may reach
@@ -367,14 +375,14 @@ class TestResultSnapshot:
         # endpoints iterate the same dict. Under the lock the endpoints copy
         # first, so a mutation lands between two polls, never mid-iteration.
         app_module.execution_state['results'] = {'node-1': [{'title': 'sanya'}]}
-        snapshot = app_module._results_snapshot()
+        snapshot = _results_snapshot()
         assert snapshot == {'node-1': [{'title': 'sanya'}]}
         snapshot['node-2'] = [{'title': 'haikou'}]
         assert 'node-2' not in app_module.execution_state['results'], 'the snapshot must be a copy'
         # ...and it has to hand the lock back, or the next publish would wait
         # forever behind a status poll.
-        assert app_module._completed_lock.acquire(blocking=False), '_results_snapshot left the lock held'
-        app_module._completed_lock.release()
+        assert _completed_lock.acquire(blocking=False), '_results_snapshot left the lock held'
+        _completed_lock.release()
 
         # /api/workflow/status answers a bare progress object (no ``ok`` field —
         # the console polls it as fast as it can), the stats routes wrap theirs.
@@ -435,7 +443,7 @@ class TestResumeOfPurgedRun:
                 'lang': 'zh',
             }
         )
-        app_module._start_next_queued()
+        _run_module().start_next_queued()
         assert queue_snapshot() == [], 'the impossible entry must not be re-queued'
         assert app_module.execution_state['running'] is False
         assert any('purged-later' in line for line in app_module.execution_state['logs']), 'the console says why'
@@ -497,14 +505,14 @@ class TestRunPayloadShape:
                 raise RuntimeError('boom')
             return {'status': 200, 'body': {'ok': True, 'run_id': 'r-' + name}}
 
-        monkeypatch.setattr(app_module, '_begin_run', pretend_to_begin)
+        monkeypatch.setattr(_run_module(), 'begin_run', pretend_to_begin)
         _RUN_QUEUE.extend(
             [
                 {'id': 'a', 'workflow_name': 'broken', 'data': {'workflow_name': 'broken'}, 'lang': 'zh'},
                 {'id': 'b', 'workflow_name': 'next', 'data': {'workflow_name': 'next'}, 'lang': 'zh'},
             ]
         )
-        app_module._start_next_queued()
+        _run_module().start_next_queued()
         assert attempts == ['broken', 'next'], 'the second request must not be stranded by the first'
         assert queue_snapshot() == []
 

@@ -1,4 +1,4 @@
-"""The durable-console write-through behind ``state.set_log_sink`` (``app._RunLogWriter``).
+"""The durable-console write-through behind ``state.set_log_sink`` (``engine.run.RunLogWriter``).
 
 The live console lives in memory and is wiped when the next run starts; the whole point of
 this writer is that a run's console survives into ``run_store.run_log`` so it can be read
@@ -40,17 +40,22 @@ class _RecordingStore:
 
 @pytest.fixture
 def writer(app_module):
-    """A fresh writer + a recording store wired into ``app``; run state put back after."""
+    """A fresh writer + a recording store wired into the module that writes; state put back after."""
+    import engine.run
+
     state_dict = app_module.execution_state
     saved = {key: copy.deepcopy(state_dict[key]) for key in ('run_id', '_wf_names') if key in state_dict}
-    real_get_store = app_module.get_run_store
+    # The writer resolves the store through ITS own module global (``engine.run``), so that is where
+    # the recording store goes; patching ``app.get_run_store`` would leave the real store in place
+    # and every batch assertion here would measure nothing while still passing on a green app.
+    real_get_store = engine.run.get_run_store
     store = _RecordingStore()
-    app_module.get_run_store = lambda: store
-    w = app_module._RunLogWriter()
+    engine.run.get_run_store = lambda: store
+    w = engine.run.RunLogWriter()
     try:
         yield app_module, w, store, state_dict
     finally:
-        app_module.get_run_store = real_get_store
+        engine.run.get_run_store = real_get_store
         for key in ('run_id', '_wf_names'):
             state_dict.pop(key, None)
         state_dict.update(saved)
@@ -141,7 +146,9 @@ class TestFlushCadence:
         Doing the swap outside the lock let a concurrent push append into the list reset had
         just replaced, so a stopped run's durable console lost its tail. reset() must acquire
         the same lock flush() uses."""
-        module, w, _store, _state = writer
+
+        _module, w, _store, _state = writer
+        import engine.run
 
         class _Probe:
             def __init__(self):
@@ -155,7 +162,7 @@ class TestFlushCadence:
                 return False
 
         probe = _Probe()
-        monkeypatch.setattr(module, '_completed_lock', probe)
+        monkeypatch.setattr(engine.run, '_completed_lock', probe)
         w.reset()
         assert probe.n == 1, 'reset must serialize with push under _completed_lock'
 
@@ -189,5 +196,7 @@ class TestSinkWiring:
         the fast tier unless pinned, and would mean no durable log at all."""
         import inspect
 
-        sig = inspect.signature(app_module._RunLogWriter.push)
+        import engine.run
+
+        sig = inspect.signature(engine.run.RunLogWriter.push)
         assert list(sig.parameters) == ['self', 'parts', 'wf_idx', 'level']

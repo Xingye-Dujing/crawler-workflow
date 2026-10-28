@@ -210,13 +210,19 @@ class TestCallSites:
     def test_both_run_start_and_the_scheduled_canvas_expand_before_using_the_workflow(self):
         from pathlib import Path
 
-        source = (Path(__file__).resolve().parents[2] / 'backend' / 'app.py').read_text(encoding='utf-8')
-        assert source.count('expand_reusable_workflow(') >= 2, (
-            'both _begin_run (manual/queued) and _scheduled_canvas must expand'
+        backend = Path(__file__).resolve().parents[2] / 'backend'
+        app_source = (backend / 'app.py').read_text(encoding='utf-8')
+        run_source = (backend / 'engine' / 'run.py').read_text(encoding='utf-8')
+        # The two doors live in different files now (the run start moved to ``engine/run.py``), so
+        # the rule is counted across both — one expansion per door, never one shared assumption.
+        assert app_source.count('expand_reusable_workflow(') + run_source.count('expand_reusable_workflow(') >= 2, (
+            'both begin_run (manual/queued) and _scheduled_canvas must expand'
         )
-        begin = source[source.index('def _begin_run(') :][:8000]
+        begin = run_source[run_source.index('def begin_run(') :][:8000]
         assert 'expand_reusable_workflow(' in begin
-        scheduled = source[source.index('def _scheduled_canvas(') : source.index('def _start_scheduled_run(')]
+        scheduled = app_source[
+            app_source.index('def _scheduled_canvas(') : app_source.index('def _start_scheduled_run(')
+        ]
         assert 'expand_reusable_workflow(' in scheduled
         assert scheduled.index('expand_reusable_workflow(') < scheduled.index('workflow_needs_llm('), (
             'the LLM gate must see the expanded children, not the group'

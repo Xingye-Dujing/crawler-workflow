@@ -1,4 +1,4 @@
-"""The console line buffer behind ``/api/workflow/status`` (``app.py::_push_log``).
+"""The console line buffer behind ``/api/workflow/status`` (``state.py::_push_log``).
 
 The browser reads the console by DELTA: it remembers how many lines it has seen and
 asks for the tail, because the server keeps only the last ``LOG_KEEP`` lines of the
@@ -20,6 +20,7 @@ import logging
 from pathlib import Path
 
 import pytest
+from state import reset_console_state
 
 pytestmark = pytest.mark.unit
 
@@ -50,9 +51,11 @@ _STATE_KEYS = (
 @pytest.fixture
 def console(app_module):
     """An empty console, handed back afterwards (these buffers are process-wide)."""
+    from state import reset_console_state
+
     state = app_module.execution_state
     saved = {key: copy.deepcopy(state[key]) for key in _STATE_KEYS if key in state}
-    app_module.reset_console_state()
+    reset_console_state()
     yield app_module, state
     state.update(saved)
 
@@ -141,7 +144,7 @@ class TestDurableSink:
         _replay()
         with_sink = copy.deepcopy({key: buffer[key] for key in ('logs', '_log_total', '_wf_logs', '_wf_log_total')})
 
-        app.reset_console_state()
+        reset_console_state()
         state.set_log_sink(None)
         _replay()
         without_sink = {key: copy.deepcopy(buffer[key]) for key in with_sink}
@@ -227,7 +230,7 @@ class TestConsoleReset:
         state['_wf_names'] = {2: '评论采集'}
         state.update({'total_nodes': 5, 'completed_nodes': 3, 'skipped_nodes': 1, 'failed_nodes': 1})
 
-        app.reset_console_state()
+        reset_console_state()
 
         assert state['logs'] == []
         assert state['_log_total'] == 0
@@ -247,7 +250,7 @@ class TestConsoleReset:
         app, state = console
         app.add_log('上一轮的行')
         held = state['logs']
-        app.reset_console_state()
+        reset_console_state()
         assert state['logs'] is not held
         assert len(held) == 1 and held[0].endswith('上一轮的行'), (
             'the list a reader is holding must not be mutated underneath it'
@@ -270,7 +273,7 @@ class TestConsoleReset:
         app.add_log('一行')
         untouched = {key: state[key] for key in ('running', 'thread', 'workflow_name', 'results', 'outcome')}
 
-        app.reset_console_state()
+        reset_console_state()
 
         assert state['logs'] == [], 'the console itself did go'
         for key, value in untouched.items():
@@ -289,13 +292,20 @@ class TestConsoleReset:
         missing = [key for key in state._console_baseline() if key not in state.execution_state]
         assert missing == []
 
-    def test_app_py_empties_the_console_in_exactly_one_place(self, console):
+    def test_the_run_start_empties_the_console_in_exactly_one_place(self, console):
+        """Neither module that starts a run may re-implement the reset.
+
+        The scan covers ``app.py`` AND ``engine/run.py`` because the run start moved to the second
+        one — the rule is about the code that opens a run, not about which file it sat in.
+        """
         app = console[0]
-        source = Path(app.__file__).read_text(encoding='utf-8')
-        assert "execution_state['logs'] = []" not in source, (
-            'the run start reset its own copy of the buffer again; call reset_console_state() '
-            'so the suite and the run start cannot drift'
-        )
+        backend = Path(app.__file__).parent
+        sources = {name: (backend / name).read_text(encoding='utf-8') for name in ('app.py', 'engine/run.py')}
+        for name, source in sources.items():
+            assert "execution_state['logs'] = []" not in source, (
+                f'{name} reset its own copy of the buffer again; call reset_console_state() '
+                'so the suite and the run start cannot drift'
+            )
 
     def test_the_shared_buffer_keeps_the_tail_but_counts_every_line(self, console):
         app, state = console
