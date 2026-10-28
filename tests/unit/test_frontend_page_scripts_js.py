@@ -9,12 +9,15 @@ page — and then of the harnesses: no private list, and the worlds they boot ar
 through the page.
 """
 
+import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
+from node_runner import run_node
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
 REPO = Path(__file__).resolve().parents[2]
 STATIC = REPO / 'backend' / 'static'
@@ -44,6 +47,41 @@ class TestThePageListsItsOwnModules:
         """The bridge talks to the iframe's `window`; loaded on the workbench it is noise at best."""
         assert 'zenviz-bridge.js' in _page_scripts(STUDIO)
         assert 'zenviz-bridge.js' not in _page_scripts(INDEX)
+
+    def test_selecting_app_js_also_loads_the_catalogue_it_merges(self, tmp_path):
+        """app.js without its data is an app with no words — every ``t()`` would echo the key.
+
+        The rule lives in the loader so no harness can forget it; this proves the loader applies it
+        with a synthetic page rather than trusting the shipped one to already be split.
+        """
+        js = tmp_path / 'js'
+        (js / 'i18n').mkdir(parents=True)
+        (js / 'i18n' / 'chrome.js').write_text(
+            'globalThis.SEEN = (globalThis.SEEN || []).concat("chrome");', encoding='utf-8'
+        )
+        (js / 'app.js').write_text('globalThis.SEEN = (globalThis.SEEN || []).concat("app");', encoding='utf-8')
+        page = tmp_path / 'index.html'
+        page.write_text(
+            '<script src="/js/i18n/chrome.js"></script><script src="/js/app.js"></script>',
+            encoding='utf-8',
+        )
+        driver = tmp_path / 'driver.mjs'
+        loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').as_posix()
+        driver.write_text(
+            "import vm from 'node:vm';\n"
+            "import { pathToFileURL } from 'node:url';\n"
+            f'const {{ loadPageScripts }} = await import(pathToFileURL({loader!r}).href);\n'
+            'const sandbox = { console };\n'
+            'vm.createContext(sandbox);\n'
+            f'const loaded = loadPageScripts(sandbox, {{ jsDir: {str(js)!r}, only: ["app.js"], '
+            f'indexHtml: {str(page)!r} }});\n'
+            'process.stdout.write(JSON.stringify(loaded));\n',
+            encoding='utf-8',
+        )
+        answer = run_node(str(driver))
+        assert answer.returncode == 0, answer.stderr[-400:]
+        # page order — and the catalogue comes along although only app.js was named
+        assert json.loads(answer.stdout) == ['i18n/chrome.js', 'app.js'], answer.stdout
 
     def test_the_loader_reads_this_page_rather_than_a_checked_in_list(self):
         loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').read_text(encoding='utf-8')

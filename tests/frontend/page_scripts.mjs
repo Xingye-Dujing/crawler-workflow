@@ -26,6 +26,8 @@ export const REPO = join(HERE, '..', '..');
 export const STATIC_DIR = join(REPO, 'backend', 'static');
 export const JS_DIR = join(STATIC_DIR, 'js');
 export const INDEX_HTML = join(STATIC_DIR, 'index.html');
+/** Where the per-domain message catalogues live, relative to `js/` (see app.js's merge). */
+export const CATALOGUE_DIR = 'i18n';
 
 /** The `/js/*.js` names index.html loads, in page order (vendor bundles excluded). */
 export function pageScriptNames(indexHtml = INDEX_HTML) {
@@ -44,13 +46,21 @@ export function pageScriptNames(indexHtml = INDEX_HTML) {
 export function loadPageScripts(sandbox, options = {}) {
     const jsDir = options.jsDir || JS_DIR;
     const names = pageScriptNames(options.indexHtml || INDEX_HTML);
-    const only = options.only ? new Set(options.only) : null;
+    let only = options.only ? new Set(options.only) : null;
     if (only) {
         const unknown = Array.from(only).filter((name) => !names.includes(name));
         if (unknown.length) {
             throw new Error(
                 `index.html does not load ${unknown.join(', ')} — a harness may only name files the page ships`
             );
+        }
+        /* app.js without the catalogue files is an app with no words: every t() would echo its
+           key and a text assertion would pass on an empty string somewhere else. The catalogue is
+           app.js's DATA, split out for file size, so selecting app.js selects it too — one rule in
+           the loader rather than a list every harness has to remember (and a harness that does
+           name them is harmless: a Set). */
+        if (only.has('app.js')) {
+            for (const name of names) if (name.startsWith(`${CATALOGUE_DIR}/`)) only.add(name);
         }
     }
     const loaded = [];
