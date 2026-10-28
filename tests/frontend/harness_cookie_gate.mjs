@@ -20,14 +20,15 @@
  *              cookiePlatform, cookiePanelOpen, sentProfile}}
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { addOptions, baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-const FILES = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
+/* A selection, not an order: page_scripts reads index.html for the order the browser uses. */
+const WANTED = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
 
 const ALL_COOKIES = {
     ok: true,
@@ -59,9 +60,7 @@ function world(sc) {
     routes['/api/workflow/execute'] = { ok: true, run_id: 'r1' };
     routes['/api/cookies/preflight'] = sc.preflight === undefined ? CLEAN : sc.preflight;
     if (sc.matrix) routes['/api/capabilities'] = sc.matrix;
-    for (const file of FILES) {
-        vm.runInContext(fs.readFileSync(path.join(jsDir, file), 'utf8'), sandbox, { filename: file });
-    }
+    loadPageScripts(sandbox, { jsDir, only: WANTED });
     /* Declared after the load: workflow.js declares `fetchJSON` and `showToast`
        itself, and a function declaration in the script wins over anything seeded
        before it — which is how a refused run used to report as a missing POST with

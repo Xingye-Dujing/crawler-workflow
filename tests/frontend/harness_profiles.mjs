@@ -19,14 +19,15 @@ scenarios.json = [ { id, matrix, settings, nodes, profiles, choice, openSettings
 Prints {id: {notice, dialog, result, openedSettings, rows, kinds, box, panelHint}}.
 */
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-const FILES = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
+/* A selection, not an order: page_scripts reads index.html for the order the browser uses. */
+const WANTED = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
 
 function world(sc) {
     const sandbox = { ...baseSandbox(), console: { log: () => {}, warn: () => {}, error: () => {} } };
@@ -36,9 +37,7 @@ function world(sc) {
     routes['/api/settings'] = { ok: true, settings: sc.settings || {} };
     routes['/api/browser/profiles'] = sc.profiles === 'throw' ? { nonsense: 1 } : sc.profiles;
     if (sc.matrix) routes['/api/capabilities'] = sc.matrix;
-    for (const f of FILES) {
-        vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
-    }
+    loadPageScripts(sandbox, { jsDir, only: WANTED });
     sandbox.__dialog = null;
     vm.runInContext(
         `showDialog = function (options) {

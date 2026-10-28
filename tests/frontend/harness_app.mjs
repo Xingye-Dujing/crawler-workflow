@@ -13,10 +13,10 @@
  * Prints {id: {panel: isOpen}} for every floating panel.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, makeTarget } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -25,13 +25,10 @@ const sandbox = baseSandbox();
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
 
-/* Load order mirrors index.html: workflow.js defines closeSettings/showToast
-   that app.js's click-away handlers call; app.js defines the I18n catalog
-   those functions read at CALL time (never at load time). */
-const FILES = ['custom-select.js', 'workflow.js', 'app.js'];
-for (const f of FILES) {
-    vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
-}
+/* Which modules this scenario needs — the ORDER is the page's, not ours: the loader reads
+   index.html, so a module split out of workflow.js lands here without an edit, and a name the
+   page no longer loads fails by name instead of quietly shrinking the world under test. */
+loadPageScripts(sandbox, { jsDir, only: ['workflow.js', 'custom-select.js', 'app.js'] });
 
 const PANELS = ['dashboard-panel', 'history-panel', 'node-settings', 'cookie-dialog'];
 const report = {};

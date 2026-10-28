@@ -31,10 +31,10 @@
  *     channel is the only place that difference is visible.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const [jsDir, scenarioPath, panelMarkupPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
@@ -192,10 +192,8 @@ async function runScenario(sc) {
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
     /* index.html's own order, so anything one file expects of another is the
-       shipped arrangement rather than a convenience. */
-    for (const file of ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js']) {
-        vm.runInContext(fs.readFileSync(path.join(jsDir, file), 'utf8'), sandbox, { filename: file });
-    }
+       shipped arrangement rather than a convenience — asked of the page, not remembered here. */
+    loadPageScripts(sandbox, { jsDir, only: ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'] });
     sandbox.document.body.innerHTML = panelMarkup;
     syncIds(sandbox);
     if (sc.lang) vm.runInContext(`I18n.lang = ${JSON.stringify(sc.lang)};`, sandbox);

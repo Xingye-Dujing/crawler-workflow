@@ -6,11 +6,10 @@
    actions live inside the box, which lives inside the overlay — focusables() must find them),
    calls showDialog synchronously (its body up to opening runs before the first await), and reports
    the attributes plus one Tab-wrap observation. */
-import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, dispatchDocument, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const sandbox = baseSandbox();
@@ -26,10 +25,9 @@ sandbox.I18n = I18n;
 sandbox.showToast = () => {};
 sandbox.showDialog = undefined; // defined by workflow.js
 
-const FILES = ['canvas.js', 'workflow.js'];
-for (const f of FILES) {
-    vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
-}
+/* A selection, not an order: page_scripts reads index.html for the order the browser uses.
+   No app.js here — this scenario owns its own I18n stub, so the real catalog must not load. */
+loadPageScripts(sandbox, { jsDir, only: ['canvas.js', 'workflow.js'] });
 vm.runInContext('globalThis.window = globalThis;', sandbox);
 sandbox.clearInterval = () => {};
 

@@ -3,9 +3,10 @@
 ``tests/frontend/page_scripts.mjs`` reads ``<script src="/js/…">`` out of ``index.html``
 so a harness never keeps a second copy of the module list. That only helps if the page
 itself lists every module: a new file that nobody references would load in the browser
-nowhere and in the harness nowhere, and both would stay green. These cases ask the two
-questions in opposite directions — every script the page names exists, and every module
-on disk is named by a page.
+nowhere and in the harness nowhere, and both would stay green. So the questions are asked
+in both directions — every script the page names exists, every module on disk is named by a
+page — and then of the harnesses: no private list, and the worlds they boot are loaded
+through the page.
 """
 
 import re
@@ -48,3 +49,30 @@ class TestThePageListsItsOwnModules:
         loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').read_text(encoding='utf-8')
         assert 'index.html' in loader
         assert re.search(r'<script\\b', loader), 'the loader must parse <script> tags, not name files itself'
+
+    def test_no_harness_keeps_a_private_list_of_product_modules(self):
+        """A hand-written ``FILES`` array is a second opinion about the page — and its ORDER is a
+        second opinion too. Four harnesses had one, and every one of them put ``custom-select.js``
+        before ``workflow.js`` while the page loads them the other way round, so those scenarios
+        evaluated a boot order no browser ever runs. A harness may still read a module's SOURCE
+        (the catalogue and contract cases do); it may not decide for itself which product scripts to
+        evaluate, because that list goes stale silently the day a module is split.
+        """
+        offenders = [
+            path.name
+            for path in sorted((REPO / 'tests' / 'frontend').glob('harness_*.mjs'))
+            if re.search(r'\bFILES\s*=\s*\[', path.read_text(encoding='utf-8'))
+        ]
+        assert offenders == [], f'harnesses with a hand-maintained module list: {offenders}'
+
+    def test_the_harnesses_that_boot_a_world_ask_the_page_for_the_order(self):
+        """The replacement for the deleted lists: importing the loader is what says so."""
+        users = [
+            path.name
+            for path in sorted((REPO / 'tests' / 'frontend').glob('harness_*.mjs'))
+            if 'loadPageScripts' in path.read_text(encoding='utf-8')
+        ]
+        # 2026-10-28: app / comment-region-notice / cookie-gate / data-preview / dialog-a11y /
+        # palette / profiles. The floor, not the exact set: a new multi-module harness should join
+        # this group, and a deleted one must not silently leave the rule covering nothing.
+        assert len(users) >= 7, f'only these harnesses use the page loader: {users}'

@@ -12,14 +12,15 @@ scenario = { id, nodes, connections, answers }  // answers: { comment: <button v
 Prints {id: {hasComment, confirm, dialogs: [{message, labels}]}}
 */
 import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-const FILES = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
+/* A selection, not an order: page_scripts reads index.html for the order the browser uses. */
+const WANTED = ['custom-select.js', 'canvas.js', 'workflow.js', 'app.js'];
 
 const out = {};
 for (const sc of scenarios) {
@@ -27,9 +28,7 @@ for (const sc of scenarios) {
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
     sandbox.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve('{}') });
-    for (const file of FILES) {
-        vm.runInContext(fs.readFileSync(path.join(jsDir, file), 'utf8'), sandbox, { filename: file });
-    }
+    loadPageScripts(sandbox, { jsDir, only: WANTED });
     sandbox.__dialogs = [];
     vm.runInContext(
         `showDialog = function (options) {

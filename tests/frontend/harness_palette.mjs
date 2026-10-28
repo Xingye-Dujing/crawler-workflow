@@ -6,20 +6,17 @@
    globals workflow.js declares), builds a small palette, and reports which items/categories
    survive each query. `filterPalette` is a top-level function, so the context can call it
    directly without firing DOMContentLoaded. */
-import fs from 'node:fs';
-import path from 'node:path';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const sandbox = baseSandbox();
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-const FILES = ['custom-select.js', 'workflow.js', 'app.js'];
-for (const f of FILES) {
-    vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f });
-}
+/* A selection, not an order: page_scripts reads index.html for the order the browser uses. */
+loadPageScripts(sandbox, { jsDir, only: ['custom-select.js', 'workflow.js', 'app.js'] });
 
 const doc = sandbox.document;
 const scope = doc.getElementById('node-palette');
