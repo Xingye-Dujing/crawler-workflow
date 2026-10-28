@@ -1,4 +1,4 @@
-"""Tests for the cleaning/transform toolbox in services/data_analysis.py.
+"""Tests for the cleaning/transform toolbox in services/analysis/pipeline.py.
 
 This is the code behind the "Analysis" node's step list, and the pipeline
 report is what the console shows the user after a run, so the tests concentrate
@@ -26,9 +26,9 @@ import pytest
 
 # One alias for the live module: the encoder tests patch its module state, and the source
 # guards below read its ``__file__`` — both need the module object, not a copy of a name.
-import services.data_analysis as m
-from services.data_analysis import DataAnalysisService as D
-from services.data_analysis import UnknownOperationError, _stage_order
+import services.analysis.pipeline as m
+from services.analysis.pipeline import DataAnalysisService as D
+from services.analysis.pipeline import UnknownOperationError, _stage_order
 
 pytestmark = pytest.mark.unit
 
@@ -1699,7 +1699,7 @@ class TestTopicByStage:
         assert (out['doc_n'] == 0).any(), 'six topics over six posts per stage leaves topics unused'
 
     def test_an_unknown_word_source_is_refused_by_the_gate(self):
-        from services.data_analysis import STEP_PARAMS, normalize_step_params, validate_step
+        from services.analysis.pipeline import STEP_PARAMS, normalize_step_params, validate_step
 
         params = normalize_step_params('topic_by_stage', {'column': '正文', 'stage_col': '阶段', 'topics': '2'})
         assert 'word_source' not in params, 'an absent select is left to the operation itself'
@@ -1919,7 +1919,7 @@ class TestTopicLabel:
         assert result['主题概括'].notna().all()
 
     def test_the_gate_knows_its_columns_and_its_switch(self):
-        from services.data_analysis import LLM_OPS, STEP_PARAMS, normalize_step_params, validate_step
+        from services.analysis.pipeline import LLM_OPS, STEP_PARAMS, normalize_step_params, validate_step
 
         assert frozenset({'topic_label', 'cluster_label', 'cluster_review'}) == LLM_OPS
         params = normalize_step_params('topic_label', {'words_col': ' 词 ', 'summary_col': ' 概括 ', 'on_fail': ''})
@@ -2202,7 +2202,7 @@ class TestTopicModelEmbedding:
         assert len(builds) == 1, f'the encoder was rebuilt per call: {builds}'
 
     def test_blank_method_defaults_to_auto_and_a_bad_one_is_refused(self):
-        from services.data_analysis import normalize_step_params, validate_step
+        from services.analysis.pipeline import normalize_step_params, validate_step
 
         assert normalize_step_params('topic_model', {'column': '正文', 'method': ''})['method'] == 'auto'
         with pytest.raises(UnknownOperationError, match='method'):
@@ -2293,7 +2293,7 @@ class TestTopicViewsEmbedding:
         assert len(emb) == len(lda), 'two stages x two topics each, for either method'
 
     def test_the_method_enum_defaults_to_auto_and_refuses_a_bogus_one(self):
-        from services.data_analysis import normalize_step_params, validate_step
+        from services.analysis.pipeline import normalize_step_params, validate_step
 
         for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
             assert normalize_step_params(op, {'column': '正文', 'method': ''})['method'] == 'auto'
@@ -2418,7 +2418,7 @@ class TestTopicViews:
     def test_mds_of_a_known_square_comes_back_a_square(self):
         # Four points at the corners of a unit square: the distances alone must recover two
         # axes of equal spread and the right diagonal, with no help from the original layout.
-        from services.data_analysis import _mds_2d
+        from services.analysis.pipeline import _mds_2d
 
         sides, diagonal = 1.0, 2**0.5
         distances = [
@@ -2900,7 +2900,7 @@ class TestCooccur:
         assert (strict['value'] == 3).all()
 
     def test_the_candidate_cap_is_refused_rather_than_clipped(self):
-        from services.data_analysis import COOCCUR_WORD_CAP
+        from services.analysis.pipeline import COOCCUR_WORD_CAP
 
         frame = self._frame(['警方 通报 调查'] * 2)
         with pytest.raises(UnknownOperationError) as excinfo:

@@ -255,7 +255,7 @@ class TestTheTablesLiveWithTheirOwners:
     """
 
     def test_every_process_contract_op_is_an_operation_the_executor_serves(self):
-        from services.process_params import (
+        from services.analysis.process import (
             OUTPUT_ADD_COLUMNS,
             OUTPUT_REPLACE_COLUMNS,
             PROCESS_OPS,
@@ -275,7 +275,7 @@ class TestTheTablesLiveWithTheirOwners:
         }
 
     def test_every_analysis_contract_op_is_a_step_the_service_serves(self):
-        from services.analysis_params import (
+        from services.analysis.params import (
             STEP_ADD_MAYBE,
             STEP_ADD_ONE,
             STEP_DYNAMIC_REPLACE,
@@ -283,7 +283,7 @@ class TestTheTablesLiveWithTheirOwners:
             STEP_REPLACE,
             STEP_UNKNOWN,
         )
-        from services.data_analysis import DataAnalysisService
+        from services.analysis.pipeline import DataAnalysisService
 
         served = set(DataAnalysisService._operations())
         declared = (

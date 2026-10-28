@@ -386,7 +386,7 @@ def clean_globals(request):
     # The sentence-transformer weight cache is process-global for the same reason as the shared
     # classifiers: a fake encoder installed by one case must not answer the next case's embedding
     # call, or that case measures a model it never set up (a green that never built its own fake).
-    da = sys.modules.get('services.data_analysis')
+    da = sys.modules.get('services.analysis.pipeline')
     if da is not None:
         da._EMBED_MODEL_CACHE.clear()
     ss = sys.modules.get('settings_store')
@@ -484,9 +484,9 @@ def client(app_module, data_root, request):
 
     import stores
 
+    from services.analysis.lexicon_store import LexiconStore
     from services.biblio.store import BiblioStore
     from services.datasets.store import DatasetStore
-    from services.lexicon_store import LexiconStore
     from services.runs.store import RunStore
     from services.workflows.history import WorkflowHistoryStore
 

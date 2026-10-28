@@ -109,7 +109,7 @@ def _source_plugin():
 
 def _llm_run_ctx(node, op, ctx=None):
     """The one builder the process/analysis executors and the API share."""
-    from services.llm_run_context import build_llm_run_ctx
+    from services.analysis.llm import build_llm_run_ctx
 
     return build_llm_run_ctx(node, op, ctx)
 

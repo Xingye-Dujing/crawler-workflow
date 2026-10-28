@@ -2,7 +2,7 @@
 
 Why this is a module and not a local set inside each step: the corpus steps used to disagree.
 ``keyword`` dropped tokens shorter than two characters and nothing else, the LDA/topic-map/
-topic-salience/coherence tokenisers in ``services.data_analysis`` filtered only "has a letter or
+topic-salience/coherence tokenisers in ``services.analysis.pipeline`` filtered only "has a letter or
 digit in it", and the word cloud carried its own small set. So the same corpus produced 特征词 like
 ``自己 / 一直 / 成为 / 一个 / 这个`` (measured on the 刘学州 export: several of a phase's top seven
 words were pronouns and function words), and a 共词网络 whose strongest edges joined those. A topic

@@ -10,7 +10,7 @@ missing-column flag: the whole point is to never tell the user a column is absen
 we cannot actually see the table (AGENTS: refuse by name, never guess a shape).
 
 The per-op tables live beside the code that owns them now: process ops declare theirs in
-``services/process_params.py``, analysis steps in ``services/analysis_params.py``, and the
+``services/analysis/process.py``, analysis steps in ``services/analysis/params.py``, and the
 tokenize/visualize read lists in their own plugins. This module only aggregates them.
 
 ``referenced_columns`` answers the other half: which columns a node will READ from its
@@ -21,7 +21,7 @@ columns and flags a provable miss — the schema truth lives here, the wording l
 
 from __future__ import annotations
 
-from services.analysis_params import (
+from services.analysis.params import (
     STEP_ADD_MAYBE,
     STEP_ADD_ONE,
     STEP_DYNAMIC_REPLACE,
@@ -31,15 +31,15 @@ from services.analysis_params import (
     normalize_analysis_params,
     replaced_columns,
 )
+from services.analysis.pipeline import STEP_PARAMS
+from services.analysis.process import OUTPUT_ADD_COLUMNS, OUTPUT_REPLACE_COLUMNS
+from services.analysis.process import READ_PARAMS as PROCESS_READ_PARAMS
 from services.biblio.fuse import OUTPUT_COLUMNS as FUSE_OUTPUT_COLUMNS
 from services.biblio.fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
 from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
 from services.biblio.schema import output_columns as biblio_output_columns
 from services.biblio.schema import read_columns as biblio_read_columns
 from services.chart_contracts import BIBLIO_CHART_READS
-from services.data_analysis import STEP_PARAMS
-from services.process_params import OUTPUT_ADD_COLUMNS, OUTPUT_REPLACE_COLUMNS
-from services.process_params import READ_PARAMS as PROCESS_READ_PARAMS
 
 
 def _tokenize_contract():
@@ -71,7 +71,7 @@ def _normalized_kwargs(op: str, params: dict) -> dict:
 
     A canvas stores each field FLAT beside ``operation`` under the *panel's* name
     (``phase_new_col``, ``label_summary_col``); the executor reads a *canonical* name
-    (``new_col``, ``summary_col``). ``services.analysis_params`` is the only authority on that
+    (``new_col``, ``summary_col``). ``services.analysis.params`` is the only authority on that
     mapping, so it is asked here rather than duplicated — the old ``[{'op': op}]`` threw
     every sibling away and the model computed the DEFAULT column name for a node the user
     had given a new one, hiding the very column downstream steps read.

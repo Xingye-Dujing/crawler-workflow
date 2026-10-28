@@ -13,9 +13,9 @@ import pytest
 import stores
 
 from analyzers import stopwords
-from services import lexicon as lexicon_service
-from services.lexicon import materialize_userdict, reload_userdict, userdict_path
-from services.lexicon_store import LexiconStore
+from services.analysis import lexicon as lexicon_service
+from services.analysis.lexicon import materialize_userdict, reload_userdict, userdict_path
+from services.analysis.lexicon_store import LexiconStore
 
 
 def _store(tmp_path):

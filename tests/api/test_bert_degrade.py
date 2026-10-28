@@ -26,7 +26,7 @@ class TestBertDefaultModel:
         bert-capable op IS bert (the frontend panel default is pinned in test_frontend_js). Without
         this, someone could flip PROCESS_ENUMS['sentiment'/'tendency'] back to snownlp/llm — only
         emotion was previously guarded — and an untouched node would silently stop running bert."""
-        from services.process_params import PROCESS_ENUMS
+        from services.analysis.process import PROCESS_ENUMS
 
         for op in ('sentiment', 'emotion', 'tendency'):
             default, allowed = PROCESS_ENUMS[op]['mode']

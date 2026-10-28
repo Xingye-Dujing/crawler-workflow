@@ -66,7 +66,7 @@ def filter_comments_by_time(rows: list, params: dict, label: str) -> list:
         raise ValueError(t('comment.bad_range', nid=label))
     if not rows:
         return rows
-    from services.data_analysis import _to_datetime
+    from services.analysis.pipeline import _to_datetime
 
     times = _to_datetime(pd.Series([r.get('评论时间') for r in rows], dtype='object'))
     lo_day, hi_day = lo.normalize(), hi.normalize()

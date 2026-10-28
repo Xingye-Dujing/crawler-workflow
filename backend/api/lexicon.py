@@ -15,8 +15,8 @@ from stores import get_lexicon_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import t
-from services.lexicon import reload_userdict
-from services.lexicon_store import KINDS
+from services.analysis.lexicon import reload_userdict
+from services.analysis.lexicon_store import KINDS
 
 logger = logging.getLogger(__name__)
 

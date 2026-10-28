@@ -175,7 +175,7 @@ class TestDeclaredMode:
         return process
 
     def test_the_two_modes_are_what_the_matrix_declares(self, exec_):
-        from services.process_params import PROCESS_ENUMS
+        from services.analysis.process import PROCESS_ENUMS
 
         default, allowed = PROCESS_ENUMS['clean']['mode']
         assert allowed == ('regex', 'llm')

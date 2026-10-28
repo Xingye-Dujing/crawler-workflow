@@ -14,9 +14,9 @@ from stores import get_run_store
 
 from i18n import t
 from nodes.context import NodeCall
-from services.analysis_params import normalize_analysis_params
-from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
-from services.llm_run_context import build_llm_run_ctx
+from services.analysis.llm import build_llm_run_ctx
+from services.analysis.params import normalize_analysis_params
+from services.analysis.pipeline import LLM_OPS, DataAnalysisService, UnknownOperationError
 
 NODE_TYPE = 'analysis'
 

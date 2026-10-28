@@ -10,7 +10,7 @@ service rather than inside one node plugin.
 from api.http import _safe_float
 
 from i18n import t
-from services.data_analysis import UnknownOperationError
+from services.analysis.pipeline import UnknownOperationError
 
 #: The select-shaped parameter of each analysis-algorithm node, and the spellings that
 #: mean something to it. This is the same rule the crawl matrix applies to a ``select``

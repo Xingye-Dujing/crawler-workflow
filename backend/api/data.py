@@ -4,7 +4,7 @@ Upload / list / detail / delete / rename / paste / inspect / preview / clear for
 files. Every dependency is reachable without importing ``app``: the store and its
 read-through cache come from ``stores`` (``get_dataset_store``/``_load_dataset``/
 ``_register_dataset``) and ``state`` (``_dataset_cache``); payload→DataFrame resolution from
-``api.resolution``; the cleaning report from ``services.data_analysis``; request coercions and
+``api.resolution``; the cleaning report from ``services.analysis.pipeline``; request coercions and
 the 400 helpers from ``api.http``; ``json_safe_records``/``as_bool`` from ``core.refs``.
 Paths and behaviour are unchanged; none of these handlers has a monkeypatch seam.
 """
@@ -23,8 +23,8 @@ from stores import _load_dataset, _register_dataset, get_dataset_store
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
+from services.analysis.pipeline import DataAnalysisService
 from services.biblio.importer import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
-from services.data_analysis import DataAnalysisService
 from services.datasets.merge import merge_datasets
 from services.datasets.store import SOURCE_PASTE, SOURCE_UPLOAD
 

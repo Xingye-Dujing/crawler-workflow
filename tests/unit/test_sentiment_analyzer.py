@@ -56,7 +56,7 @@ class TestDeclaredModes:
     """The select-shaped parameter of the node, refused by name like every other one."""
 
     def test_the_four_modes_are_what_the_matrix_declares(self, exec_):
-        from services.process_params import PROCESS_ENUMS
+        from services.analysis.process import PROCESS_ENUMS
 
         default, allowed = PROCESS_ENUMS['sentiment']['mode']
         assert allowed == ('llm', 'ml', 'snownlp', 'bert')
@@ -431,7 +431,7 @@ class TestOperationContract:
         """Every place the executor decides something about an op knows it from one of
         these tables; a sentiment node missing from one of them is a node that silently
         does the wrong thing rather than one that fails loudly."""
-        from services.process_params import _TEXT_COLUMN_OPS, PROCESS_ENUMS
+        from services.analysis.process import _TEXT_COLUMN_OPS, PROCESS_ENUMS
 
         assert 'sentiment' in PROCESS_ENUMS
         assert 'sentiment' in _TEXT_COLUMN_OPS

@@ -1,6 +1,6 @@
 """The shared stop-word rule — one list, every step that counts words.
 
-Before this module the steps disagreed: the LDA sites in ``services.data_analysis`` filtered only
+Before this module the steps disagreed: the LDA sites in ``services.analysis.pipeline`` filtered only
 "has a letter or digit", ``analyzers.keyword`` dropped one-character tokens, and the word cloud
 carried its own small set. The result was measured on the 刘学州 export — a phase's top feature
 words included 自己 / 一直 / 成为 / 一个 / 这个, and 共词网络's strongest edges joined those. A topic
@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 
 from analyzers.stopwords import STOPWORDS, cut, filter_tokens, is_meaningful
-from services.data_analysis import DataAnalysisService as D
+from services.analysis.pipeline import DataAnalysisService as D
 from services.visualizer import VisualizationService as V
 
 #: Words the study is about. A stop-word list that removes any of these is wrong, not aggressive.

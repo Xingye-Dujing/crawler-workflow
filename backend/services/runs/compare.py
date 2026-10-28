@@ -15,7 +15,7 @@ and the comparison continues over the nodes the two runs actually share.
 import pandas as pd
 
 from i18n import t
-from services.data_analysis import DataAnalysisService
+from services.analysis.pipeline import DataAnalysisService
 
 MAX_COMPARE_ROWS = 200_000
 MAX_SAMPLE_ROWS = 200

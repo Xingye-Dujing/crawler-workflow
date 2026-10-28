@@ -83,7 +83,7 @@ def _ensure_userdict() -> None:
 def forget_userdict() -> None:
     """Drop the remembered userdict path so the next :func:`_ensure_userdict` re-reads the file.
 
-    ``services.lexicon.reload_userdict`` calls this after a panel edit: the file at the same path
+    ``services.analysis.lexicon.reload_userdict`` calls this after a panel edit: the file at the same path
     now holds different words, and a guard keyed on the PATH alone cannot see that a rewrite
     happened. The remembered path is a cache marker, not an answer, so only this module clears it.
     """

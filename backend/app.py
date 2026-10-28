@@ -89,9 +89,9 @@ from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow
 from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService, lock_store
+from services.analysis.pipeline import UnknownOperationError
+from services.analysis.process import PROCESS_ENUMS
 from services.crawler_lifecycle import close_login_browser as _close_login_browser
-from services.data_analysis import UnknownOperationError
-from services.process_params import PROCESS_ENUMS
 from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
@@ -3483,7 +3483,7 @@ def _debug_enabled() -> bool:
 # (keyword, tokenize, topic, ML, word cloud) sees the same words — not just the keyword
 # path that used to load it lazily. An empty lexicon writes nothing and is a no-op.
 try:
-    from services.lexicon import load_userdict as _load_userdict
+    from services.analysis.lexicon import load_userdict as _load_userdict
 
     _load_userdict()
 except Exception:  # a broken user dict must never stop the server from booting

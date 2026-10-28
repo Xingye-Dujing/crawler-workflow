@@ -180,7 +180,7 @@ class TestSampleStepIsReproducible:
         """run_pipeline is pure — the same goes for the seed it derives."""
         import pandas as pd
 
-        from services.data_analysis import DataAnalysisService, _stable_seed
+        from services.analysis.pipeline import DataAnalysisService, _stable_seed
 
         records = self._many_records()
         df = pd.DataFrame(records)
@@ -199,7 +199,7 @@ class TestSampleStepIsReproducible:
     def test_an_explicit_seed_overrides_the_derived_one(self):
         import pandas as pd
 
-        from services.data_analysis import DataAnalysisService
+        from services.analysis.pipeline import DataAnalysisService
 
         df = pd.DataFrame(self._many_records())
         derived, _ = DataAnalysisService.run_pipeline(df, self.SAMPLE_STEPS)
@@ -755,7 +755,7 @@ class TestPanelParamsReachTheOperator:
 
     @staticmethod
     def _normalize(op, **params):
-        from services.analysis_params import normalize_analysis_params
+        from services.analysis.params import normalize_analysis_params
 
         return normalize_analysis_params(op, params)
 
@@ -801,7 +801,7 @@ class TestPanelParamsReachTheOperator:
         so the effect is checked end to end through the real pipeline."""
         import pandas as pd
 
-        from services.data_analysis import DataAnalysisService
+        from services.analysis.pipeline import DataAnalysisService
 
         rows = [{'a': 1, 'b': None}, {'a': None, 'b': 2}, {'a': 3, 'b': 4}]
 
@@ -1229,7 +1229,7 @@ CLEAN_TABLE = [
 
 
 def _normalize(op: str, params: dict) -> dict:
-    from services.analysis_params import normalize_analysis_params
+    from services.analysis.params import normalize_analysis_params
 
     return normalize_analysis_params(op, params)
 
@@ -1241,7 +1241,7 @@ def _analysis_plugin():
 
 
 def _registry() -> list:
-    from services.data_analysis import DataAnalysisService
+    from services.analysis.pipeline import DataAnalysisService
 
     return sorted(DataAnalysisService._operations())
 
@@ -1254,7 +1254,7 @@ def _refused_when_blank() -> list:
     does — a list of operation names is a copy that can disagree with the registry
     while still passing every test that uses it.
     """
-    from services.data_analysis import STEP_PARAMS
+    from services.analysis.pipeline import STEP_PARAMS
 
     return sorted(
         name for name, spec in STEP_PARAMS.items() if spec.get('one') or spec.get('nonblank') or spec.get('mapping')
@@ -1267,7 +1267,7 @@ def _inert_when_blank() -> list:
     ``join_tables`` is left out: the node executor, not the normalizer, is the only
     caller that can supply its right-hand table (pinned by its own test below).
     """
-    from services.data_analysis import STEP_PARAMS
+    from services.analysis.pipeline import STEP_PARAMS
 
     refused = set(_refused_when_blank())
     return sorted(name for name in STEP_PARAMS if name not in refused and name != 'join_tables')
@@ -1479,7 +1479,7 @@ class TestNormalizedKwargs:
         """
         import pandas as pd
 
-        from services.data_analysis import DataAnalysisService
+        from services.analysis.pipeline import DataAnalysisService
 
         frame = pd.DataFrame(CLEAN_TABLE)
         result, report = DataAnalysisService.run_pipeline(frame, [{'op': op, 'params': _normalize(op, {})}])
@@ -1495,7 +1495,7 @@ class TestNormalizedKwargs:
         """
         import pandas as pd
 
-        from services.data_analysis import DataAnalysisService, UnknownOperationError
+        from services.analysis.pipeline import DataAnalysisService, UnknownOperationError
 
         frame = pd.DataFrame(CLEAN_TABLE)
         params = _normalize(op, {})
@@ -1508,7 +1508,7 @@ class TestNormalizedKwargs:
         read off the gate, so a step whose spec changes moves between the halves on
         its own.
         """
-        from services.data_analysis import STEP_PARAMS
+        from services.analysis.pipeline import STEP_PARAMS
 
         registry = set(_registry())
         assert set(_inert_when_blank()) | set(_refused_when_blank()) | {'join_tables'} == registry
@@ -1946,7 +1946,7 @@ class TestTheLabellingStepNeedsTheRunModel:
         assert t('analysis.label_no_llm', op='topic_label') in response.get_json()['error']
 
     def test_a_run_without_a_model_is_refused_before_the_first_call(self, app_module, monkeypatch):
-        from services.data_analysis import UnknownOperationError
+        from services.analysis.pipeline import UnknownOperationError
 
         calls = []
         monkeypatch.setattr(
@@ -2105,7 +2105,7 @@ def _run_analysis_chain(client, app_module, paste, operation, params, records=No
     """
     from run_wait import run_finished
 
-    from services.data_analysis import DataAnalysisService
+    from services.analysis.pipeline import DataAnalysisService
 
     body = records or FILTER_TABLE
     dataset_id = paste(body, name='analysis-node.csv')

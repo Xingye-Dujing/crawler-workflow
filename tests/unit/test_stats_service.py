@@ -1,4 +1,4 @@
-"""Tests for services/stats.py — the tiny distribution helpers.
+"""Tests for services/analysis/stats.py — the tiny distribution helpers.
 
 The charts and the execution-history series plot *counts*, and they address
 labels positionally (labels[i] with values[i]), so both properties matter: the
@@ -8,7 +8,7 @@ bucket.
 
 import pytest
 
-from services.stats import StatsService as S
+from services.analysis.stats import StatsService as S
 
 pytestmark = pytest.mark.unit
 

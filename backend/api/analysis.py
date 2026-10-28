@@ -4,7 +4,7 @@
 stores the result; ``train`` fits a traditional ML classifier from LLM-labeled rows. The two
 module constants (``_ML_MODEL_TYPES`` / ``_ML_LABEL_COLUMNS``) pin the trainable model names and
 their label columns and are read by the frontend-contract test, so they move with the cluster.
-Deps are all cycle-free (``api.resolution``/``stores``/``services.data_analysis``/``analyzers``/
+Deps are all cycle-free (``api.resolution``/``stores``/``services.analysis.pipeline``/``analyzers``/
 ``api.http``/``core.refs``/``i18n``); the handlers themselves have no monkeypatch seam.
 """
 
@@ -22,7 +22,7 @@ from analyzers import (
 from api.http import _bad_body, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
-from services.data_analysis import DataAnalysisService
+from services.analysis.pipeline import DataAnalysisService
 from services.datasets.store import SOURCE_ANALYSIS
 
 bp = Blueprint('analysis', __name__)

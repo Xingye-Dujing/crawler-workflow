@@ -40,9 +40,9 @@ from analyzers.bot import BotLikelihoodAnalyzer
 from analyzers.sentiment import bert_backend, resolve_bert_model
 from i18n import t
 from nodes.context import NodeCall
-from services.data_analysis import UnknownOperationError
-from services.llm_run_context import build_llm_run_ctx
-from services.process_params import check_process_params, enum_param, sentiment_thresholds
+from services.analysis.llm import build_llm_run_ctx
+from services.analysis.pipeline import UnknownOperationError
+from services.analysis.process import check_process_params, enum_param, sentiment_thresholds
 
 NODE_TYPE = 'process'
 

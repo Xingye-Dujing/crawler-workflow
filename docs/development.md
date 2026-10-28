@@ -121,11 +121,10 @@ crawler_workflow/
 │   │   ├── runs/                 # 运行域：store（断点续跑核心，runs.db）/ files（产物台账）/ windows / compare / history（history.db）/ housekeeping
 │   │   ├── datasets/             # 数据集域：store（datasets.db）/ merge（多源合并）/ dedupe（归一化与 SimHash 近重复）
 │   │   ├── exports/              # 导出目录：writer（多格式写）/ browser（列表·下载·删除的读取侧）
-│   │   ├── stats.py              # 情感/倾向性统计服务
+│   │   ├── analysis/             # 分析域：pipeline（操作执行器）/ params（分析参数）/ process（处理节点矩阵）/ llm（模型上下文）/ lexicon（词表）/ lexicon_store / stats
 │   │   ├── workflows/            # 工作流域：manager（工作流文件）/ history（画布快照）/ reusable（模板）/ expand（展开）/ bundle（项目包）
 │   │   ├── report_service.py     # 一键自包含 HTML 运行报告（内容可定制；PDF 只走 LaTeX 成稿）
 │   │   ├── part_writer.py        # 分批落盘与实时快照（断点安全写）
-│   │   ├── data_analysis.py      # 通用数据清洗服务（Analysis 节点）
 │   │   ├── visualizer.py         # 通用可视化服务（Visualize 节点）
 │   │   ├── latex_charts.py       # 图表 → 可编译 LaTeX 图 / booktabs 三线表源码
 │   │   ├── latex_compile.py      # 用本机 MiKTeX xelatex 把 LaTeX 合成为一份并编译成 PDF（编译节点 / 输出 PDF）
