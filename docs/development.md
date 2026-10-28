@@ -15,7 +15,8 @@ crawler_workflow/
 │   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）
 │   │   ├── machine.py            # 按 OS 分支的机器事实（Chrome/驱动/xelatex/Node 位置）
 │   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
-│   ├── i18n.py                   # zh/en 消息目录（X-Lang 请求头切换）
+│   ├── i18n.py                   # zh/en 消息机制（t()/线程语言/audit + 合并按域词典）
+│   ├── i18n_catalog/             # 消息本体：一域一文件（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings）
 │   ├── settings_store.py         # 运行时可改设置（data/settings.json）
 │   ├── scheduling/               # 定时任务域
 │   │   ├── clock.py              # 进程内 daemon 按 SECONDS tick，到点走 app 的唯一启动路径

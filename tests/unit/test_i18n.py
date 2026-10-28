@@ -27,6 +27,26 @@ pytestmark = pytest.mark.unit
 
 REPO = Path(__file__).resolve().parents[2]
 
+#: The catalogue DATA — the merge in ``i18n.py`` and one module per domain under ``i18n_catalog/``.
+#: Scanning it as code would find every key "referenced" in its own definition and turn the
+#: reachability and quote-shape guards into tautologies, so the data files are never call sites.
+CATALOGUE_DIR = REPO / 'backend' / 'i18n_catalog'
+
+
+def _is_catalogue(path: Path) -> bool:
+    return path.name == 'i18n.py' or path.parent == CATALOGUE_DIR
+
+
+def _module_order() -> list:
+    """The domain modules the merge walks, in ``MODULES`` order — the order the tables are built in."""
+    init = ast.parse((CATALOGUE_DIR / '__init__.py').read_text(encoding='utf-8'))
+    tuple_node = next(
+        node.value for node in init.body if isinstance(node, ast.Assign) and node.targets[0].id == 'MODULES'
+    )
+    order = [element.id for element in tuple_node.elts]
+    assert order, 'the catalogue package stopped naming MODULES'
+    return order
+
 
 @pytest.fixture
 def restore_lang():
@@ -297,7 +317,7 @@ class TestKeyReachability:
         root = Path(__file__).resolve().parents[2]
         files = list((root / 'backend').rglob('*.py')) + list((root / 'backend' / 'static').rglob('*.js'))
         files += list((root / 'tests').rglob('*.py'))
-        return '\n'.join(f.read_text(encoding='utf-8', errors='replace') for f in files if f.name != 'i18n.py')
+        return '\n'.join(f.read_text(encoding='utf-8', errors='replace') for f in files if not _is_catalogue(f))
 
     @staticmethod
     def _referenced(key: str, sources: str) -> bool:
@@ -367,7 +387,7 @@ class TestKeyReachability:
         root = Path(__file__).resolve().parents[2]
         missing = []
         for path in sorted((root / 'backend').rglob('*.py')):
-            if path.name == 'i18n.py':
+            if _is_catalogue(path):
                 continue
             for number, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
                 for key in self._CALL.findall(line):
@@ -410,7 +430,7 @@ class TestCallSitePlaceholders:
         root = Path(__file__).resolve().parents[2]
         found = []
         for path in sorted((root / 'backend').rglob('*.py')):
-            if path.name == 'i18n.py':
+            if _is_catalogue(path):
                 continue
             try:
                 tree = ast.parse(path.read_text(encoding='utf-8'))
@@ -463,12 +483,33 @@ class TestNoDuplicateKeys:
 
     @staticmethod
     def _key_lists():
-        source = (Path(__file__).resolve().parents[2] / 'backend' / 'i18n.py').read_text(encoding='utf-8')
-        found = {}
-        for node in ast.walk(ast.parse(source)):
-            if isinstance(node, ast.Assign) and getattr(node.targets[0], 'id', '') in ('_ZH', '_EN'):
-                found[node.targets[0].id] = [key.value for key in node.value.keys]
+        """The catalogue as the merge sees it: one key list per language, in ``MODULES`` order.
+
+        The tables live in ``backend/i18n_catalog/<domain>.py`` now, so a duplicate is possible in a
+        new shape — the same key in two DOMAIN files. That is why the lists are concatenated in merge
+        order and read as a multiset: ``sorted(zh) == sorted(en)`` catches a key claimed twice on one
+        side, and ``_merge_domain_table`` refuses it at import time besides.
+        """
+        order = _module_order()
+
+        found = {'_ZH': [], '_EN': []}
+        for name in order:
+            module_tree = ast.parse((CATALOGUE_DIR / f'{name}.py').read_text(encoding='utf-8'))
+            for node in module_tree.body:
+                if isinstance(node, ast.Assign) and getattr(node.targets[0], 'id', '') in ('ZH', 'EN'):
+                    found['_ZH' if node.targets[0].id == 'ZH' else '_EN'].extend(key.value for key in node.value.keys)
         return found
+
+    def test_every_catalogue_module_is_merged(self):
+        """A domain file nobody imports holds messages that can never print.
+
+        The split made this possible: ``i18n`` reads ``MODULES``, so forgetting to list a new domain
+        silently drops its words — parity, reachability and ``audit()`` would all still be green
+        because the keys simply are not in the tables any more.
+        """
+        listed = set(_module_order())
+        on_disk = {path.stem for path in CATALOGUE_DIR.glob('*.py')} - {'__init__'}
+        assert listed == on_disk, f'merged={sorted(listed)} on disk={sorted(on_disk)}'
 
     def test_neither_catalogue_defines_a_key_twice(self):
         lists = self._key_lists()

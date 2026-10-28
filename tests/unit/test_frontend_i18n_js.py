@@ -293,7 +293,8 @@ def _app_surfaces():
     backend = '\n'.join(
         p.read_text(encoding='utf-8', errors='replace')
         for p in sorted((ROOT / 'backend').rglob('*.py'))
-        if p.name != 'i18n.py'
+        # the catalogue DATA declares keys; counting it as a surface would report every word as used
+        if p.name != 'i18n.py' and p.parent.name != 'i18n_catalog'
     )
     return app_text, other_js, html, backend
 

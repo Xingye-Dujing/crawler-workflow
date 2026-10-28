@@ -36,6 +36,7 @@ _PROJECT_DIRS = (
     'desktop',
     'docs',
     'engine',
+    'i18n_catalog',
     'ml_train',
     'nodes',
     'samples',

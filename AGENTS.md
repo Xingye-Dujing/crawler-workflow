@@ -257,8 +257,11 @@ the contract.
 
 ## Console, messages and i18n
 
-- UI text supports zh/en via `backend/i18n.py` — add every new user-facing string there (both languages) **and** in the
-  `backend/static/js/app.js` catalogs.
+- UI text supports zh/en via `backend/i18n.py` — it merges the catalogue data in `backend/i18n_catalog/<domain>.py`
+  (one module per domain, `crawl`/`collect`/`cookie`/`sched`/`run`/`analysis`/`biblio`/`charts`/`api`/`settings`);
+  add every new user-facing string to **its own domain, in both languages**, and to the
+  `backend/static/js/app.js` catalogs. A key declared in two domains is refused at import time, and a domain file
+  missing from `MODULES` is a failed test — those are the two new ways to lose a word since the split.
 - **A missing `t()` keyword is a printed bug, not a crash:** `t()` returns the raw template when a param is missing (a
   forgotten `{reads}` prints `阅读={reads}`), and parity/reachability are blind to it — `test_i18n.py::
   TestCallSitePlaceholders` walks every `t('literal', …)` with `ast` and refuses the mismatch.

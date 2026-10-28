@@ -864,10 +864,40 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     （那会造出第二个绑定），而是在 `__getattr__` 里按 owner 答：`execution_state` 交回**同一个 dict**
     （原地改写照常生效），`get_run_store` 是**读接缝**、写/桩仍打在解析它的那个模块 ——
     注释里就把这句话写清了，免得下一个人以为打 `app.get_run_store` 能拦到工作流。
-  - **下一刀 = Stage 7：i18n 按域拆分**（`backend/i18n.py` 与 `static/js/app.js` 两份词典；
-    `settings_store` 等 i18n 拆分后再进 core）。之后：Stage 8 前端模块化（`docs/frontend_modules.md`，
-    第一刀 `chart-preview.js`）；Stage 9 op 注册表；Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分
-    （`engine/run.py` 1,407 行、`api/workflow.py` 654 行已在名单附近）。`state`/`stores` 不进 core（运行层）。
+  - **Stage 7（i18n Python 侧）已完成（2026-10-28）**：`backend/i18n.py` **4,620 → 252 行**，只剩机制
+    （`t()` / 线程本地语言 / `audit` / `normalize` / `platform_label` / `STOP_REASONS`）与合并；消息本体
+    进 `backend/i18n_catalog/`，**一域一文件**（`crawl` 907 / `run` 821 / `analysis` 747 / `biblio` 373 /
+    `api` 359 / `settings` 282 / `charts` 221 / `collect` 417 / `cookie` 280 / `sched` 108 行）。
+    **1,440 键 × 2 语言，逐值 AST 相同**（`build/split_i18n_7.py` 在写盘前先证明，再改 i18n.py；
+    条目按 **token** 切分而不是按行 —— 括号式隐式拼接的 `value_node.end_lineno` 停在最后一个字符串行，
+    照行切会把每个文件的收尾 `),` 吃掉，十个生成模块全部语法错；同一次遍历还须从 `{` 的**下一行**起算，
+    否则首条目把 `_ZH = {` 自己搬进数据文件）。281 条写在键上方的注释一并随条目走（那是措辞决定的历史）。
+    **合并是新写的接缝，两条守卫**：① `_merge_domain_table` 在导入时拒绝「同一键被两个域声明」
+    （`{**a, **b}` 会静默留后者）；② `test_every_catalogue_module_is_merged` 比对 `MODULES` 与磁盘文件 ——
+    一个没被列出的域文件会让它的词永远打不出来，而 parity/可达性/`audit()` 全都照绿。
+    **随拆分一起改的口**：`desktop/caixihui.spec` 的 `collect_submodules` 元组加 `i18n_catalog`
+    （`TestTheBuildKnowsEveryPackage` 当场拦下，没让它只在本机绿）；`test_doc_paths._PROJECT_DIRS` 加同名条目
+    （同一类守卫）；`test_i18n` / `test_frontend_i18n_js` 的扫描排除从「文件名 == i18n.py」改成
+    「词典数据（合并处 + 包内文件）」—— 否则每个键都在自己定义处被"引用"一次，可达性与引号形状两条守卫
+    会同时变成恒真。AGENTS 的 i18n 条目、README、`docs/ARCHITECTURE.md`（新行）、`docs/development.md` 树、
+    `docs/agent_practices.md` 一条新教训同步。
+    **门禁（最终字节）**：fast **8,183 passed / 3 skipped / 355 deselected / 1 warning**；
+    两档 pylint **exit=0**（产品 284 文件、tests 272 文件，零 E/W/F）；设备档 **194 passed / 0 跳过**
+    （第一次跑出 `device exit=1`：`tests/integration/conftest.py:71` 的真 Chrome 会话夹具卡在
+    Selenium Manager 解析浏览器路径上，两次 300 s 超时 —— 环境抖动，与本轮改动无关；复跑全绿，
+    且**包装器那次也报了 exit code 0**，因为 shell 的最后一条命令是 `tail`：证据只读日志自己的摘要行）。
+  - **计划更正（用户已授权按推荐执行，这里记录取舍而不是悄悄丢任务）**：#34 原写「Python 与 JS 两份词典」。
+    JS 侧**移交 #35（Stage 8）第一步**：`app.js` 5,071 行里 `dict.en` / `dict.zh` 各约 1,846 行，
+    拆成按域文件要动 `index.html` 的 `<script>` 顺序、≥4 个 harness 的 `FILES` 清单
+    （如 `['custom-select.js','workflow.js','app.js']`）与两条按行清点键的契约测试 ——
+    这套多文件装载机制正是 Stage 8 的第一块地基（`tests/frontend/page_scripts.mjs`），
+    在 Stage 7 里做等于把同一个机制建两遍。#34 以 Python 侧结案，JS 侧在 #35 里有明文凭据要求。
+  - **下一刀 = Stage 8 第一片**：`tests/frontend/page_scripts.mjs`（从 `index.html` 解析脚本顺序，供所有
+    harness 复用）+ `app.js` 词典按域拆分（`i18n/en-<domain>.js` 形式，装载在 `app.js` 之后），
+    同步 harness `FILES`、`test_frontend_contract` / `test_frontend_i18n_js` 的清单来源，真浏览器复测。
+    之后：Stage 8 其余模块（`docs/frontend_modules.md` 顺序，第一站 `chart-preview.js`）；Stage 9 op 注册表；
+    Stage 10 结构；#40 = 仍 >900 行模块的按职责拆分（`engine/run.py` 1,407、`api/workflow.py` 654、
+    `i18n_catalog/crawl.py` 907 在名单上）。`state`/`stores` 不进 core（运行层）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。

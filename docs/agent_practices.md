@@ -215,6 +215,26 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   ``module 'capabilities.platforms.zhihu' has no attribute 'CAPABILITY'`` from the assembly. A split must assert
   the names the package will read exist, and the honest proof is a before/after comparison of the **behaviour**
   (here: ``as_dict()`` byte-identical and every mode/field declaration equal), not of the moved text alone.
+- **Splitting a data table by AST line spans breaks on parenthesised values; delimit entries by TOKENS.**
+  Moving the 4,600-line message catalogue into ``backend/i18n_catalog/<domain>.py`` (2026-10-28) failed twice
+  before anything shipped. ① Taking an entry as ``lines[key_line : value_node.end_lineno]`` is right for
+  ``'k': 'text',`` and wrong for the multi-line form::
+
+      'k': (
+          'a'
+          'b'
+      ),
+
+  because the parentheses are syntax, not part of the value node — every generated module lost its closing
+  ``),`` and failed to parse. The fix is ``tokenize``: an entry ends at the comma token whose bracket depth is the
+  dict's own level, which also carries each entry's leading comment lines with it (281 of them, and a wording
+  decision's history is in those comments). ② The same walk started the first entry at the ``_ZH = {`` line, so
+  that header text landed inside a domain file — the entry start is the line **after** the brace. ③ The proof that
+  nothing changed has to compare the **values** (``ast.dump`` per key), not the text, because re-indenting is a
+  legitimate transformation; and the split creates a hazard the old single dict could not have: a domain file that
+  exists but is not in ``MODULES`` holds messages that can never print, with parity/reachability/``audit()`` all
+  still green. So the merge refuses a key claimed twice at import time, and
+  ``test_i18n.py::test_every_catalogue_module_is_merged`` compares ``MODULES`` with the files on disk.
 - **The UI tier's driver is ``page_load_strategy='eager'``: ``driver.get`` returning is not evidence that a script
   ran.** A CI run (2026-10-28) failed ``test_opening_the_settings_panel_lands_focus_in_and_closing_returns_it`` with
   ``JavascriptException: canvas is not defined`` — while ``I18n``, defined in a LATER script (``app.js``), was fine,
