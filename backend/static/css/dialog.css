@@ -1,0 +1,294 @@
+/* dialog.css — 通用对话框、Cookie 对话框、云端部署与仅 Windows 能力提示
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Dialog ─────────────────────────────────────────────────────────────── */
+#dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#dialog-overlay.open {
+  display: flex;
+}
+#dialog-box {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  padding: 20px;
+  min-width: 360px;
+  max-width: 480px;
+  box-shadow: var(--shadow);
+}
+.dialog-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: var(--radius);
+  line-height: 0;
+}
+.dialog-close:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.dialog-close svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+#dialog-message {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 16px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+#dialog-input-area {
+  margin-bottom: 12px;
+}
+#dialog-list-area {
+  margin-bottom: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+#dialog-list-area .dialog-list-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-align: left;
+  transition: all 0.1s;
+}
+#dialog-list-area .dialog-list-item:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+/* A checkbox row and a labelled field, used by the report dialog's form. Each is
+   one line and never wider than the dialog, so a long studio-chart file name
+   wraps instead of pushing a horizontal scrollbar onto the page. */
+#dialog-list-area .dialog-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+#dialog-list-area .dialog-toggle input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+#dialog-list-area .dialog-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+#dialog-list-area .dialog-field input {
+  width: 84px;
+  max-width: 40%;
+  box-sizing: border-box;
+}
+#dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+#dialog-actions .menu-btn {
+  min-width: 60px;
+  max-width: 100%;
+  /* `.menu-btn` is nowrap, so a label like 继续用 Profile（同一台设备，同平台仍会轮流跑）
+     measured wider than the 480px dialog and ran out of it: the row could neither shrink
+     nor wrap. A dialog button's text is allowed to take a second line instead. */
+  white-space: normal;
+  line-height: 1.35;
+  text-align: center;
+}
+
+/* ── Cookie dialog ──────────────────────────────────────────────────────── */
+/* The cookie dialog's button rows. .menu-btn is white-space: nowrap, so in
+   English "Save Cookies / Generate via Browser / Verify cookie" measures 363px
+   inside a 339px dialog — the row could neither shrink nor wrap, and the panel
+   grew a horizontal scrollbar that hid the third button's edge. Chinese labels
+   are shorter, which is exactly why the defect only showed up in English. */
+.cookie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* ─── Cloud deployment ─────────────────────────────────────────────────────
+   ``html[data-cloud]`` is set from the SERVER's own answer (/api/config → cloud_mode),
+   not from a guess about the machine: these are the controls that ask for something a
+   cloud host does not have — a display to open a window on, an Ollama daemon running on
+   the same machine as the crawl.
+
+   Hiding is presentation only. Every route behind one of these controls still answers a
+   request (a saved workflow, an old tab, a hand-written POST) and refuses it by name,
+   because a button that disappeared is not a permission. */
+html[data-cloud="1"] .cloud-hide,
+html[data-cloud="1"] #btn-headless,
+html[data-cloud="1"] .ai-only-ollama {
+  display: none !important;
+}
+/* ─── Windows-only machine capabilities ─────────────────────────────────────
+   ``html[data-win-desktop]`` comes from the server's own answer (/api/capabilities →
+   machine.windows_desktop), the same one the 采集内容 select greys options out of. These four rows
+   configure the 红果 comment harvest — a desktop player, a local proxy, a system certificate
+   authority — and on a Linux server or a Mac there is no player to point at.
+
+   Hiding is presentation only: the node still refuses by name at validation and inside its own
+   executor, because a setting row that disappeared is not a permission. */
+html[data-win-desktop="0"] .windows-only {
+  display: none !important;
+}
+/* The account candidates are CustomSelect's own popup shape (``.cand-menu`` / ``.cand-option``
+   in custom-select.js), not a rule here: a list permanently under the box made this panel
+   taller for a choice made once per login, and a popup that lives inside a scrolling dialog
+   gets clipped by it. What stays is the card list. */
+/* One card per saved login: metadata about eight platforms and their accounts is a list of
+   wrapping lines, not a table with columns — a row that wraps is a row that still reads. */
+.cookie-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+}
+.cookie-row {
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.cookie-row-head {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.cookie-row-meta {
+  overflow-wrap: anywhere;
+}
+.cookie-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.cookie-mini {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.cookie-mini:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.cookie-row-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
+#cookie-dialog {
+  position: fixed;
+  right: -360px;
+  top: 50%;
+  transform: translateY(-50%);
+  /* Wide enough that the eight-platform step guide — the tall part — wraps into a
+     box that fits a laptop window without a vertical scrollbar (#175). The node form
+     stays at 340px; this panel carries much more text, so it reads better broader. */
+  width: 600px;
+  max-width: calc(100vw - 24px);
+  /* Same reason as #node-settings: the eight-platform guide is far taller than a
+     short window, and an uncapped box scrolls the page instead of itself. */
+  max-height: calc(100vh - 24px);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 1002;
+  transition:
+    right 0.3s,
+    opacity 0.3s;
+  overflow-y: auto;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+#cookie-dialog.open {
+  right: 12px;
+  opacity: 1;
+  pointer-events: all;
+}
+#cookie-content textarea.settings-input {
+  resize: vertical;
+  font-size: 11px;
+  font-family: var(--font);
+}
+/* Per-platform cookie guidance: full sentences that must wrap instead of
+   pushing a horizontal scrollbar into the panel (a long WeChat explanation is
+   the widest text this dialog ever holds). */
+#cookie-guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  background: var(--hover);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Verification results arrive as several sentences joined by newlines. */
+#cookie-status {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* The Cookie panel's own footnote: it is the only place the interface explains what a
+   "Profile" is, so it is boxed like the platform guide above it (same border, radius and
+   line length) and given real side padding instead of riding the dialog edge. */
+#cookie-explain {
+  margin: 4px 12px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+

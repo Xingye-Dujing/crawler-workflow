@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
+from static_assets import css_text
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -24,7 +25,6 @@ WORKFLOW_JS = STATIC / 'js' / 'workflow.js'
 CANVAS_JS = STATIC / 'js' / 'canvas.js'
 MENU_JS = STATIC / 'js' / 'menu.js'
 INDEX_HTML = STATIC / 'index.html'
-STYLE_CSS = STATIC / 'css' / 'style.css'
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -276,7 +276,7 @@ class TestPageWiring:
         assert 'onchange="wfFiles.importProject(this)"' in page
 
     def test_the_tabs_share_the_run_panel_styles_and_the_bar_has_its_own(self):
-        css = STYLE_CSS.read_text(encoding='utf-8')
+        css = css_text()
         assert '#workflows-tabs' in css
         assert '.wf-history-bar' in css
         assert '.wf-project-bar' in css

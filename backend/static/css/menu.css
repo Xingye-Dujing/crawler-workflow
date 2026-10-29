@@ -1,0 +1,633 @@
+/* menu.css — 顶栏菜单、菜单内的色板/圆角控件、下拉面板与原生控件
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Menu ───────────────────────────────────────────────────────────────────
+   Mirrors ZENVIZ's top bar exactly: a 48px ink-ruled strip, groups of
+   [tiny uppercase label + one button], hairline group dividers, and a floating
+   dropdown per group. "Active" is always an inset ink underline — never a
+   filled (black or blue) background.
+   ────────────────────────────────────────────────────────────────────────── */
+#menu-trigger {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  z-index: 1000;
+}
+
+#top-menu {
+  position: fixed;
+  left: 0;
+  top: calc(-1 * var(--menuH));
+  width: 100%;
+  height: var(--menuH);
+  background: var(--bg);
+  border-bottom: 1px solid var(--ink);
+  display: flex;
+  align-items: center;
+  /* Centred AND overflowing is the one combination that hides content with no way
+     back: a scroller cannot reach negative overflow, so the first buttons hung off
+     the left edge at 1366px English (measured: first -63, last 1414 of 1344).
+     `safe center` keeps the centred look while the row fits and falls back to a
+     start-anchored row when it does not. */
+  justify-content: safe center;
+  gap: 2px;
+  z-index: 999;
+  padding: 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* A thin, VISIBLE bar: this is the page's only menu, and hiding the scrollbar
+     turned "the window is narrower than the toolbar" into buttons that simply
+     cannot be found. */
+  scrollbar-width: thin;
+  transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#top-menu::-webkit-scrollbar {
+  height: 6px;
+}
+#top-menu::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+#menu-trigger:hover ~ #top-menu,
+#top-menu:hover,
+#top-menu.pinned {
+  top: 0;
+}
+
+.menu-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  position: relative;
+  flex-shrink: 0;
+}
+.menu-group + .menu-group::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 19px;
+  background: var(--line);
+}
+
+.menu-label {
+  font-size: 9px;
+  letter-spacing: 1.7px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 0 4px;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.menu-btn {
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  background: transparent;
+  font-family: var(--font);
+}
+.menu-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+}
+/* Active / open: hairline border + ink underline — never an inverted fill */
+.menu-btn.active {
+  color: var(--text);
+  background: var(--hover);
+  border-color: var(--border);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+/* `.toggle-on` is no longer a state flag on the bar — it is the "primary"
+   affordance used by buttons rendered inside panels (settings, dialogs). */
+.menu-btn.toggle-on {
+  color: var(--text);
+  background: var(--hover);
+  border-color: var(--border);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+
+.pin-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: var(--text-faint);
+  transition: all 0.15s;
+  flex-shrink: 0;
+  background: transparent;
+}
+.pin-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+.pin-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+}
+.pin-btn.pinned {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+.pin-btn.pinned svg {
+  transform: rotate(180deg);
+}
+.pin-btn:focus-visible {
+  outline: none;
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+
+/* ── Flat-bar inline controls (background swatches + radius slider) ────────── */
+.bar-bg-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+}
+.bar-bg-dot {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background-color: var(--bg);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.bar-bg-dot:hover {
+  border-color: var(--border);
+}
+.bar-bg-dot.active {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+/* tiny pattern previews that echo the actual canvas backgrounds */
+.bar-bg-dot[data-bg="bg-grid"] {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+.bar-bg-dot[data-bg="bg-dots"] {
+  background-image: radial-gradient(var(--text-dim) 1px, transparent 1.4px);
+  background-size: 5px 5px;
+}
+.bar-bg-dot[data-bg="bg-cross"] {
+  background-image: linear-gradient(
+    45deg,
+    transparent 43%,
+    var(--line) 43%,
+    var(--line) 57%,
+    transparent 57%
+  );
+  background-size: 5px 5px;
+}
+.bar-bg-dot[data-bg="bg-diagonal"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--line) 0,
+    var(--line) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+.bar-bg-dot[data-bg="bg-void"] {
+  background: var(--bg);
+}
+
+/* background swatch cluster inside the style submenu */
+.settings-bg-options {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* keep the bar visible while the style submenu is open (unpinned mode) */
+body.style-menu-open #top-menu {
+  top: 0;
+}
+.dd-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.bar-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 84px;
+  height: 3px;
+  background: var(--line);
+  border-radius: var(--radius-round);
+  outline: none;
+  cursor: pointer;
+  /* grey, never the browser-default blue, to match the ZENVIZ palette */
+  accent-color: #777;
+}
+.bar-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-round);
+  background: var(--ink);
+  border: none;
+  cursor: pointer;
+}
+.bar-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: var(--radius-round);
+  background: var(--ink);
+  cursor: pointer;
+}
+.bar-slider-val {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  min-width: 22px;
+  text-align: left;
+}
+
+/* ── Menu dropdown (ZENVIZ `.dropdown` / `.dd-*`) ─────────────────────────── */
+.dropdown {
+  display: none;
+  position: fixed;
+  z-index: 1800;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  min-width: 220px;
+  padding: 4px;
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  animation: dropIn 0.14s ease;
+}
+.dropdown.open {
+  display: block;
+}
+/* Wider variant for the AI panel — it hosts a small form, not just menu rows. */
+.dropdown.dropdown-wide {
+  width: 330px;
+  padding: 8px;
+  /* These panels grow with every setting; on a short window the AI panel would
+     otherwise run off the bottom of the screen with no way to reach the last
+     rows (the menu is anchored under the bar, not vertically clamped). */
+  max-height: calc(100vh - 70px);
+  overflow-y: auto;
+}
+#ai-menu .dd-item-row,
+#settings-menu .dd-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  /* These two panels carry full sentences (path labels, the cookie-check
+     inline hint), not just menu words. Inheriting the base row's
+     `white-space: nowrap` pushed the settings panel past its fixed width and
+     raised a horizontal scrollbar the user could not dismiss — wrapping is
+     the real fix: the panel never scrolls sideways. */
+  white-space: normal;
+}
+#ai-menu .dd-item-row > span:first-child,
+#settings-menu .dd-item-row > span:first-child {
+  flex: 0 0 92px;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+#settings-menu .settings-checkbox-label {
+  /* The inline checkbox hint is a whole clause; keep the tick aligned with the
+     text block it belongs to rather than floating on its first line. */
+  white-space: normal;
+  align-items: flex-start;
+}
+#settings-menu .settings-checkbox-label input {
+  margin-top: 2px;
+}
+#ai-menu .dd-ctrl,
+#settings-menu .dd-ctrl {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+#ai-menu .settings-input,
+#ai-menu .settings-select,
+#settings-menu .settings-input,
+#settings-menu .settings-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+#ai-menu .menu-btn,
+#settings-menu .menu-btn {
+  flex: 0 0 auto;
+}
+/* A row with no label (a lone button — 采集建议 / 保存设置 / model refresh): the
+   fixed 92px label gutter would shove the button right and leave dead space left.
+   Collapse the empty gutter and centre the button across the row. */
+#ai-menu .dd-item-row:has(> span:first-child:empty),
+#settings-menu .dd-item-row:has(> span:first-child:empty) {
+  justify-content: center;
+}
+#ai-menu .dd-item-row:has(> span:first-child:empty) > span:first-child,
+#settings-menu .dd-item-row:has(> span:first-child:empty) > span:first-child {
+  display: none;
+}
+/* A lone action button in a control column (the 采集建议 / 保存设置 rows). The
+   rows above give the empty label column its 92px, which squeezed the button; a
+   long nowrap label — and in English the advice caption is far wider — then
+   overflowed the fixed panel and raised a sideways scrollbar. Let it take the
+   remaining width and wrap, exactly as the sentence rows above already do. Scoped
+   to the settings menu only: the AI panel's own buttons already fit unwrapped. */
+#settings-menu .dd-ctrl > .menu-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
+/* Path fields want the full width; numeric ones stay short. */
+#settings-menu .settings-input-sm {
+  flex: 0 0 96px;
+}
+/* The profile table: one full-width block inside the settings menu. A label +
+   control row would have squeezed eight platform states into the narrow right
+   column, which is what produced a sideways scrollbar there. */
+#settings-menu .dd-item-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 12px;
+}
+#settings-menu .dd-block-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+#settings-menu .dd-block-note {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* Vertical scrolling inside a declared list is allowed; sideways never. */
+  max-height: 168px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Square on purpose: a rounded box cuts the first and last row's descenders at
+     the curve, and this list is scrollable, so its edge is where text gets read. */
+  border-radius: 0;
+  padding: 2px 0;
+}
+.profile-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.profile-item .profile-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.profile-item .profile-state {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.profile-item .profile-chip {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  /* Square, and the hairline divider colour: --border is the strong ink colour, and
+     a rounded chip clips its own 9px text. */
+  border: 1px solid var(--line);
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.ai-hint {
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.ai-hint > div {
+  margin-bottom: 5px;
+}
+.ai-hint-title {
+  font-weight: 600;
+  color: var(--text);
+}
+.ai-hint-note {
+  margin-bottom: 0 !important;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+/* Local Ollama address — read-only here; the value lives in 设置. */
+.ai-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+@keyframes dropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Popups that hang directly off a control animate on opacity only: a translate
+   would make them clip the trigger they belong to for the length of the
+   animation, and the first press would land on the popup instead of the
+   control. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dd-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.dd-item:hover,
+.dd-item-row:hover {
+  background: var(--hover);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.dd-item:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.dd-item:disabled:hover {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: transparent;
+}
+.dd-item.active,
+.dd-item.selected {
+  color: var(--ink);
+  background: var(--hover);
+  border-color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+.dd-item .muted {
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+}
+
+.dd-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+
+.dd-label {
+  padding: 7px 10px 4px;
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+.dd-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 28px;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  gap: 10px;
+}
+.dd-item-row > span:first-child {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+  flex: 0 0 auto;
+}
+
+/* ── Native controls: kill the browser's default blue ───────────────────── */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress,
+select {
+  accent-color: #777;
+}
+input[type="checkbox"] {
+  background: #e9e9e9;
+}
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 12px;
+  padding: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+  border: 0;
+}
+input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+  border: 0;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -5px;
+  background: #777;
+  border: 0.5px solid rgba(26, 26, 26, 0.25);
+  border-radius: var(--radius-round);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #777;
+  border: 0.5px solid rgba(26, 26, 26, 0.25);
+  border-radius: var(--radius-round);
+  cursor: pointer;
+}
+/* Ink focus ring instead of the UA's blue halo */
+:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+

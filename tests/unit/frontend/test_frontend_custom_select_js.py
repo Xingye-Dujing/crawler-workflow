@@ -39,12 +39,12 @@ from pathlib import Path
 
 import pytest
 from node_runner import run_node
+from static_assets import css_text
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
-CSS = REPO / 'backend' / 'static' / 'css' / 'style.css'
 HARNESS = REPO / 'tests' / 'frontend' / 'harness_custom_select.mjs'
 
 
@@ -666,10 +666,10 @@ class TestPlacement:
     def test_the_width_is_capped_and_the_cap_is_the_stylesheets_own(self, world):
         """`place()` widens the popup to its content, and the ceiling for that is
         stated twice: `MENU_MAX_WIDTH` here and `.cselect-menu { max-width }` in
-        style.css. Two numbers that drift are a popup the CSS clips or a control
+        css/controls.css. Two numbers that drift are a popup the CSS clips or a control
         that stops honouring its own ceiling."""
         measured = px(ctl(world, 'place-width-cap', 'kw')['menuStyle']['width'])
-        rule = re.search(r'\.cselect-menu\s*\{[^}]*?max-width:\s*(\d+)px', CSS.read_text(encoding='utf-8'))
+        rule = re.search(r'\.cselect-menu\s*\{[^}]*?max-width:\s*(\d+)px', css_text())
         assert rule, 'no max-width on .cselect-menu to compare the JS ceiling with'
         assert measured == float(rule.group(1)), (
             f'place() caps the popup at {measured}px but the stylesheet allows {rule.group(1)}px'

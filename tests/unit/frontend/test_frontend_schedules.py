@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import with_catalogue, with_companions
 from node_runner import run_node
+from static_assets import css_text
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -211,7 +212,7 @@ def _js(name):
 
 
 def _css():
-    return (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+    return css_text()
 
 
 def test_the_page_carries_the_panel_its_body_and_its_handle():

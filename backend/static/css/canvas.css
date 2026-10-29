@@ -1,0 +1,883 @@
+/* canvas.css — 工作区与画布、续跑横幅、节点、启用/禁用、端口、节点面板、大纲侧栏
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Workspace / canvas ─────────────────────────────────────────────────── */
+#workspace {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  cursor: default;
+}
+/* ── Resume banner ──────────────────────────────────────────────────────────
+   Sits above the canvas because a resumable run is a fact about *this*
+   workflow, not about any one node. `hidden` is the plain utility class the
+   rest of the shell uses. */
+#resume-banner {
+  position: absolute;
+  top: 8px;
+  /* The menu bar is fixed and slides over the top of the workspace whenever it is
+     pinned open (or a style submenu holds it up), and a banner at 8px disappeared
+     underneath it — including the 继续 button the user came for. Animating the offset
+     means the banner does not teleport when the menu is pinned mid-run. */
+  transition: top 180ms ease;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(760px, calc(100% - 40px));
+  padding: 8px 10px 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 10px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  font-size: 11px;
+  color: var(--text);
+}
+#resume-banner.hidden {
+  display: none;
+}
+/* Same fact the menu's own rules state (`top: 0` when pinned), applied to what the
+   menu covers: the banner moves down by the bar's height while it is showing. */
+#top-menu.pinned ~ #workspace #resume-banner,
+body.style-menu-open #workspace #resume-banner {
+  top: calc(var(--menuH) + 8px);
+}
+#resume-banner .resume-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e08a00;
+}
+#resume-banner .resume-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+#resume-banner .resume-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#resume-banner .resume-actions .menu-btn {
+  padding: 4px 9px;
+  font-size: 10px;
+}
+#resume-banner .resume-actions .menu-btn.primary {
+  border-color: var(--accent, var(--ink));
+  color: var(--accent, var(--ink));
+}
+
+/* Overview minimap: a fixed corner box. Node rectangles and the viewport frame are
+   positioned children written by canvas.renderMinimap(); pointer-events lets a click
+   re-centre the camera. */
+#minimap {
+  position: absolute;
+  left: 14px;
+  /* Docked bottom-LEFT: the right column already holds the outline sidebar, so a
+     bottom-right box slid under it. The offset also clears the fixed status bar
+     (height --barH) by the same 14px margin, so the box is never hidden behind it. */
+  bottom: calc(var(--barH) + 14px);
+  width: 176px;
+  height: 176px;
+  border: 1px solid var(--border, #444);
+  border-radius: 8px;
+  background: var(--scrim, rgba(0, 0, 0, 0.35));
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 20;
+}
+
+#minimap .minimap-node {
+  position: absolute;
+  background: var(--accent, #4a90d9);
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+#minimap .minimap-node.mm-off {
+  opacity: 0.3;
+}
+
+#minimap .minimap-view {
+  position: absolute;
+  border: 1px solid var(--text, #ddd);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+/* Rubber-band selection rectangle drawn on the empty canvas surface. */
+.marquee {
+  position: absolute;
+  border: 1px solid var(--accent, #4a90d9);
+  background: rgba(74, 144, 217, 0.12);
+  pointer-events: none;
+  z-index: 15;
+}
+
+#canvas-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
+  transform: translate(0, 0) scale(1);
+  transform-origin: 0 0;
+  /* NOTE: deliberately no `will-change: transform` here. Promoting this
+       10000x10000 element to a composited layer caps its texture at the GPU
+       max (~16k px) and forces a permanent downsample — that is what made the
+       whole canvas look blurry. Without it the browser rasterizes only the
+       visible viewport at full resolution, so nodes stay crisp at any zoom. */
+  background: transparent;
+}
+#svg-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* The wires live in a coordinate system this box defines, and this element is
+     100% of #canvas-inner — a finite 10000x10000 one. A node is a plain <div>, so
+     dragging it past that border still shows it; an <svg> ROOT clips to its
+     viewport by UA default, so the wire between two such nodes was CUT, not
+     missing — the farther apart they sat, the more of the curve disappeared, and a
+     node at a negative coordinate lost its incoming wire the same way. `visible`
+     un-clips it, which is what makes the canvas infinite for the wires as well as
+     for the boxes. Window clipping is #workspace's job (inset: 0; overflow:
+     hidden), so nothing paints over the menu or a docked panel. */
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+}
+#svg-layer .conn-line {
+  stroke: var(--conn-color);
+  stroke-width: var(--conn-width);
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition:
+    stroke 0.15s,
+    stroke-width 0.15s;
+}
+#svg-layer .conn-line.temp {
+  stroke-dasharray: 6 4;
+  stroke: var(--text-dim);
+  stroke-width: 1.5px;
+}
+.conn-delete-hit {
+  stroke: transparent;
+  stroke-width: 14px;
+  fill: none;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* ── Nodes ──────────────────────────────────────────────────────────────── */
+.node {
+  position: absolute;
+  min-width: 220px;
+  /* A node's summary carries user text — a keyword, a filename, a column list —
+     and with no ceiling a long one grew the box past the viewport. min-width alone
+     never bounded it, so a single wide node made the whole page scroll sideways. */
+  max-width: 340px;
+  min-height: 80px;
+  background: var(--node-bg);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  box-shadow: var(--shadow-soft);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.3s;
+}
+.node:hover {
+  border-color: var(--line);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    var(--shadow-soft);
+  z-index: 20;
+}
+.node.selected {
+  border-color: var(--ink);
+  box-shadow:
+    inset 0 0 0 1px var(--ink),
+    0 2px 10px rgba(26, 26, 26, 0.08);
+  z-index: 20;
+}
+
+/* An Upload node whose saved file was deleted from the library: the box is marked
+   even though the panel already says why, so the break is findable at a glance
+   across the canvas without opening every node. */
+.node.node-missing {
+  border-color: var(--err);
+  box-shadow: inset 0 0 0 1px var(--err);
+}
+.dataset-missing {
+  font-size: 11px;
+  color: var(--err);
+}
+.dataset-hint {
+  margin-top: 4px;
+}
+/* The upload node's two buttons and its status word: one row when it fits, wrapping when the
+   panel narrows, so 已加载 never gets pushed past the frame. */
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  row-gap: 6px;
+}
+.upload-status {
+  font-size: 11px;
+  color: var(--text-dim);
+  /* A long file name may wrap inside the status word, not overflow the panel. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dataset-detail {
+  margin-top: 8px;
+}
+/* The search box and the picker are two controls in one group; flush against each other the
+   dropdown reads as part of the search field. */
+.dataset-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dataset-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.dataset-detail-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 400;
+  padding: 2px 8px 2px 0;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.dataset-detail-table td {
+  padding: 2px 0;
+  word-break: break-all;
+}
+
+/* Edit-time diagnostics: a count badge + red frame on a node with a problem, and the
+   pre-run cost line in the status bar. */
+.node.node-invalid {
+  border-color: var(--err);
+}
+.node-validate-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--err);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 5;
+}
+.node-output-cols {
+  line-height: 1.5;
+}
+.cost-summary {
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+  cursor: help;
+}
+
+/* Lexicon manager chips: one per term, each removable. */
+.lexicon-body {
+  padding: 8px;
+}
+.lexicon-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lexicon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 12px;
+  background: var(--surface, transparent);
+}
+.lexicon-chip-x {
+  border: none;
+  background: transparent;
+  color: var(--err);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.lexicon-hint {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.node-header {
+  height: 30px;
+  border-bottom: 1px solid var(--line2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  cursor: grab;
+  flex-shrink: 0;
+  background: transparent;
+}
+.node-header:active {
+  cursor: grabbing;
+}
+.node-title {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 500;
+  /* A flex item's default min-width is its content's, so without this the title
+     pushes the action buttons out of the header instead of truncating. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-actions {
+  display: flex;
+  gap: 6px;
+}
+.node-action-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all 0.1s;
+  letter-spacing: 0.5px;
+}
+.node-action-btn svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+  pointer-events: none;
+}
+.node-action-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+}
+.node-action-btn.del:hover {
+  color: var(--err);
+  border-color: var(--err);
+}
+.node-content {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  /* pre-wrap still keeps an unbroken run of characters together — a URL, a long
+     filename, a keyword with no spaces in it — and that run widened the node past
+     the viewport. Breaking anywhere costs nothing visually and bounds the box. */
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Node accents — muted editorial hues, applied as a left rule on the header */
+.node-type-source .node-header {
+  border-left: 3px solid var(--accent-source);
+}
+.node-type-upload .node-header {
+  border-left: 3px solid var(--accent-upload);
+}
+.node-type-process .node-header {
+  border-left: 3px solid var(--accent-process);
+}
+.node-type-analysis .node-header {
+  border-left: 3px solid var(--accent-analysis);
+}
+.node-type-biblio .node-header {
+  border-left: 3px solid var(--accent-biblio);
+}
+.node-type-visualize .node-header {
+  border-left: 3px solid var(--accent-visualize);
+}
+.node-type-compile .node-header {
+  border-left: 3px solid var(--accent-compile);
+}
+.node-type-tokenize .node-header {
+  border-left: 3px solid var(--accent-tokenize);
+}
+.node-type-output .node-header {
+  border-left: 3px solid var(--accent-output);
+}
+.node-type-name .node-header {
+  border-left: 3px solid var(--accent-name);
+}
+.node-type-resume .node-header {
+  border-left: 3px solid var(--accent-resume);
+}
+.node-type-comment .node-header {
+  border-left: 3px solid var(--accent-comment);
+}
+.node-type-source.selected {
+  border-color: var(--accent-source);
+}
+.node-type-upload.selected {
+  border-color: var(--accent-upload);
+}
+.node-type-process.selected {
+  border-color: var(--accent-process);
+}
+.node-type-analysis.selected {
+  border-color: var(--accent-analysis);
+}
+.node-type-biblio.selected {
+  border-color: var(--accent-biblio);
+}
+.node-type-visualize.selected {
+  border-color: var(--accent-visualize);
+}
+.node-type-compile.selected {
+  border-color: var(--accent-compile);
+}
+.node-type-tokenize.selected {
+  border-color: var(--accent-tokenize);
+}
+.node-type-resume.selected {
+  border-color: var(--accent-resume);
+}
+.node-type-comment.selected {
+  border-color: var(--accent-comment);
+}
+.node-type-output.selected {
+  border-color: var(--accent-output);
+}
+.node-type-name.selected {
+  border-color: var(--accent-name);
+}
+
+.node.node-folded .node-content {
+  display: none;
+}
+.node.node-folded {
+  min-height: auto;
+  height: 32px;
+  overflow: hidden;
+}
+.node.node-folded .node-actions {
+  display: none;
+}
+
+/* ── Enable / disable ──────────────────────────────────────────────────── */
+/* The power toggle reuses the action-button look but is NOT a .node-action-btn, so the
+   settings/delete buttons keep the positions every caller and test relies on. */
+.node-power-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+}
+.node-power-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.node-power-btn:hover {
+  opacity: 1;
+}
+/* An off switch reads dim; a node the run will actually visit keeps a lit power glyph. */
+.node-power-btn.power-off {
+  opacity: 1;
+  color: #e5484d;
+}
+/* Directly disabled (own switch or its whole type): greyed and translucent. */
+.node.node-off {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+/* Starved by a disabled upstream: present but unable to run — a dashed frame says so. */
+.node.node-starved {
+  filter: grayscale(0.7);
+  opacity: 0.6;
+  border-style: dashed;
+}
+.node-state-badge {
+  position: absolute;
+  top: -9px;
+  right: 6px;
+  z-index: 35;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 8px;
+  color: #fff;
+  background: #8a8f98;
+  pointer-events: none;
+}
+.node.node-starved .node-state-badge {
+  background: #b58900;
+}
+/* The loaded run's verdict, on the box itself: green check = finished with rows,
+   yellow spinner = running right now (parallel runs spin several at once), red X =
+   anything that did not finish successfully. Placed on the opposite corner from
+   the disabled/starved badge so the two can be read at the same time. */
+.node-run-badge {
+  position: absolute;
+  top: -9px;
+  left: 6px;
+  z-index: 36;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-round);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.node-run-badge svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.node-run-badge.run-done {
+  background: var(--ok);
+}
+.node-run-badge.run-failed {
+  background: var(--err);
+}
+.node-run-badge.run-running {
+  /* Yellow rather than --warn: a spinner is a motion cue, and the muted brown
+     disappears against the node header in the light theme. */
+  background: #e0a800;
+}
+.node-run-spinner {
+  width: 9px;
+  height: 9px;
+  border: 2px solid rgba(58, 44, 0, 0.28);
+  border-top-color: #3a2c00;
+  border-radius: var(--radius-round);
+  animation: node-run-spin 0.8s linear infinite;
+}
+@keyframes node-run-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .node-run-spinner {
+    animation-duration: 2.4s;
+  }
+}
+#svg-layer .conn-line.conn-disabled {
+  stroke: #b9bdc4;
+  opacity: 0.4;
+}
+
+/* ── Ports ──────────────────────────────────────────────────────────────── */
+.node-port {
+  position: absolute;
+  width: var(--port-size);
+  height: var(--port-size);
+  background: var(--port-color);
+  border: 2px solid var(--bg);
+  z-index: 30;
+  cursor: crosshair;
+  transition:
+    transform 0.15s,
+    background 0.15s,
+    opacity 0.2s;
+  opacity: 0;
+  /* ports are dots, not boxes — 50% is a shape, not a corner value */
+  border-radius: var(--radius-round);
+}
+.node:hover .node-port,
+.node.selected .node-port {
+  opacity: 0.85;
+}
+.node-port:hover {
+  transform: scale(1.8);
+  background: var(--ink);
+  opacity: 1 !important;
+}
+.node-port-in {
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.node-port-in:hover {
+  transform: translateY(-50%) scale(1.8);
+}
+.node-port-out {
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.node-port-out:hover {
+  transform: translateY(-50%) scale(1.8);
+}
+.node-port.connected {
+  background: var(--text);
+  border-color: var(--bg);
+}
+.node-port.dragging {
+  opacity: 1 !important;
+  transform: translateY(-50%) scale(2);
+  background: var(--accent-source);
+}
+
+/* ── Palette ────────────────────────────────────────────────────────────── */
+#node-palette {
+  position: fixed;
+  left: 12px;
+  top: 60px;
+  width: 180px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 100;
+  padding: 8px;
+  box-shadow: var(--shadow-soft);
+}
+.palette-header {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 4px 6px 8px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* The library floats over the canvas, so a wide layout hides behind it. The toggle
+   collapses the panel to just its header row — the affordance must stay clickable,
+   so only the category/item list hides, never the header. */
+.palette-toggle {
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 5px;
+}
+.palette-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+#node-palette.collapsed .palette-cat,
+#node-palette.collapsed .palette-item {
+  display: none;
+}
+.palette-cat {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+  padding: 8px 6px 3px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  font-weight: 500;
+}
+.palette-item {
+  padding: 7px 10px;
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 11px;
+  border: 1px solid transparent;
+  transition: all 0.1s;
+  margin-bottom: 2px;
+}
+.palette-item:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+.palette-tag {
+  display: inline-block;
+  min-width: 36px;
+  margin-right: 6px;
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+/* ── Outline sidebar (right) ──────────────────────────────────────────── */
+/* The canvas navigator: one row per node, a click pans+zooms to it. It mirrors
+   the palette's look and its collapse rule (only the list hides, the header —
+   with its toggle — always stays reachable). Docked right at z-index 100; the
+   node-settings slide-in sits above it (1001) because it is transient. */
+#outline-panel {
+  position: fixed;
+  right: 12px;
+  top: 60px;
+  width: 200px;
+  /* The ceiling leaves a bottom gap equal to the top one: the box sits 12px under
+     the 48px menu (60-48), so it must also stop 12px above the 28px status bar —
+     100vh-(60+28+12)=100vh-100px. The old 84px reserved only 24px, less than the
+     bar, so a full list slid behind it. */
+  max-height: calc(100vh - 100px);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 100;
+  padding: 8px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+}
+.outline-header {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 4px 6px 8px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+}
+.outline-toggle {
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 5px;
+}
+.outline-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+/* The filter box is the flexible middle item of the header row; min-width:0 lets it
+   shrink to the panel's width instead of overflowing at its intrinsic default width. */
+.outline-filter {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--text);
+}
+/* Same care for the palette search: fill the panel width and never push past it. */
+.palette-search {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  min-width: 0;
+  margin: 6px 8px;
+  font-size: 11px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--text);
+}
+.outline-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  /* The universal `*` reset rounds every box; the list must stay square so a selected
+     row is not clipped at the container's corners (mirrors the squared .outline-row). */
+  border-radius: 0;
+}
+#outline-panel.collapsed .outline-list {
+  display: none;
+}
+.outline-empty {
+  padding: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.outline-row {
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  border: 1px solid transparent;
+  /* No rounding: the active/hover selection is a 1px border all the way around, and
+     rounded corners (with the row's overflow:hidden for the ellipsis) clipped its ends
+     so the highlight read as cut off. A squared row shows the selection in full. */
+  border-radius: 0;
+  transition: all 0.1s;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: var(--radius);
+}
+.outline-row:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+.outline-row.outline-active {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+/* A disabled / starved node is not on the run graph — still listed (the outline is
+   a complete map) but dimmed so it does not read as live. */
+.outline-row.outline-off {
+  opacity: 0.45;
+}
+.outline-type {
+  display: inline-block;
+  min-width: 34px;
+  margin-right: 6px;
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+

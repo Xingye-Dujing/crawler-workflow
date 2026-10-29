@@ -11,7 +11,19 @@
     <script src="/vendor/echarts.min.js"></script>
     <script src="/vendor/echarts-gl.min.js"></script>
     <script src="/vendor/echarts-wordcloud.min.js"></script>
-    <link rel="stylesheet" href="/css/style.css" />
+    <!-- One stylesheet per UI domain, loaded in the order the rules were written: the cascade
+         tie-breaks the same way it did when this was one 5,017-line file, and a reordered list
+         would silently redecide which rule wins. Test contract: test_frontend_page_markup. -->
+    <link rel="stylesheet" href="/css/base.css" />
+    <link rel="stylesheet" href="/css/menu.css" />
+    <link rel="stylesheet" href="/css/canvas.css" />
+    <link rel="stylesheet" href="/css/panels.css" />
+    <link rel="stylesheet" href="/css/controls.css" />
+    <link rel="stylesheet" href="/css/console.css" />
+    <link rel="stylesheet" href="/css/reusable.css" />
+    <link rel="stylesheet" href="/css/workspace.css" />
+    <link rel="stylesheet" href="/css/dialog.css" />
+    <link rel="stylesheet" href="/css/overlays.css" />
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
   </head>
   <body class="bg-grid">

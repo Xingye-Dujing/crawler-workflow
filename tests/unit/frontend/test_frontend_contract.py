@@ -26,6 +26,7 @@ from frontend_catalogue import catalog_texts as _catalog_texts
 from frontend_catalogue import words_missing as _words_missing
 from node_runner import run_node
 from sessions.cookies import CookieManager
+from static_assets import css_text
 
 import i18n
 from crawlers import CRAWLERS, is_crawlable
@@ -709,7 +710,7 @@ class TestChromeOfThePageItself:
         """The bar is ``position: fixed`` and slides over the top of the workspace while
         pinned, so a banner at ``top: 8px`` sat underneath it — including the 继续 button
         the user came to the page to press."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
         assert '--menuH' in css, 'the rule needs the bar height, and the bar is what owns it'
         assert '#top-menu.pinned ~ #workspace #resume-banner' in css
@@ -732,7 +733,7 @@ class TestChromeOfThePageItself:
         edge with its scrollbar hidden. The browser tier measures the pixels; this
         pins the declarations that produce them, so the fix cannot be dropped by an
         edit that never opens Chrome."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         bar = css[css.index('#top-menu {') : css.index('#menu-trigger:hover')]
         assert 'justify-content: safe center' in bar, f'the bar is centred again: {bar}'
         assert 'scrollbar-width: none' not in bar, 'the overflow affordance is hidden again'
@@ -754,7 +755,7 @@ class TestChromeOfThePageItself:
         """``overflow-y: auto`` on a vertically centred, uncapped box does nothing:
         the box grows to its content and hangs off the viewport, so the top of a long
         node form simply existed above the screen (measured ``top: -177`` in 550px)."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         for selector in ('#node-settings {', '#cookie-dialog {'):
             block = css[css.index(selector) : css.index('}', css.index(selector))]
             assert 'max-height: calc(100vh - 24px)' in block, f'{selector} can outgrow the screen again'
@@ -765,7 +766,7 @@ class TestChromeOfThePageItself:
         single option longer than the capped menu was cut with no ellipsis, no
         scrollbar meaning and no tooltip — and the option text of this app is crawled
         column names, which are exactly that long."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         label = css[css.index('.cselect-option-label {') : css.index('}', css.index('.cselect-option-label {'))]
         assert 'text-overflow: ellipsis' in label and 'min-width: 0' in label, label
         menu = css[css.index('.cselect-menu {') : css.index('}', css.index('.cselect-menu {'))]
@@ -782,7 +783,7 @@ class TestChromeOfThePageItself:
         boxes sat, the less of the wire between them existed. `overflow: visible` is the
         one declaration that un-clips it, and #workspace is then what keeps the paint
         inside the window, so the named clipper is checked as well as the fix."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
 
         def block_of(selector):
@@ -930,7 +931,7 @@ class TestChromeOfThePageItself:
         """共 N 个文件 / 合计 X counts the whole export folder, so it belongs under the
         table as a summary — the user asked for exactly that after trying it pinned at the
         head, where it read as a figure about the first row."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         block = css[css.index('.exports-summary {') :]
         block = block[: block.index('}')]
         assert 'text-align: center' in block
@@ -1004,7 +1005,7 @@ class TestOverlayLayering:
         return int(match.group(1))
 
     def test_the_fullscreen_chart_window_out_ranks_the_dashboard(self):
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         fullscreen = self._z_index(css, '#chart-fullscreen-panel')
         board = self._z_index(css, '#dashboard-panel')
         assert fullscreen > board, (
@@ -1015,7 +1016,7 @@ class TestOverlayLayering:
     def test_the_fullscreen_window_also_covers_the_preview_panels(self):
         """It is also launched from the visualize / data preview surfaces, so it must clear
         those too (they sit at 1002, under the board)."""
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         fullscreen = self._z_index(css, '#chart-fullscreen-panel')
         for preview in ('#chart-preview-panel', '#data-preview-panel'):
             assert fullscreen > self._z_index(css, preview), f'{preview} must stay under the full-screen window'
@@ -1028,7 +1029,7 @@ class TestTouchTargets:
     hit area to finger size, and stops the browser swallowing a canvas drag as a page scroll."""
 
     def test_coarse_pointer_block_widens_targets_and_pins_touch_action(self):
-        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         start = css.find('@media (pointer: coarse)')
         assert start >= 0, 'no (pointer: coarse) touch-target block'
         block = css[start:]

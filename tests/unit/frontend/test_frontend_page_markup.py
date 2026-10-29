@@ -245,6 +245,45 @@ class TestThePageLoadsItsScripts:
         )
 
 
+class TestThePageLoadsItsStylesheets:
+    """``style.css`` was one 5,017-line file; it is now one sheet per UI domain, and the page
+    list is the only thing that decides which rule wins a tie. So the list itself is a contract:
+    every sheet on disk is loaded, no sheet twice, and no page reaches for a file that is not there."""
+
+    CSS_DIR = STATIC / 'css'
+    _CSS_HREF = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/css/([^"]+)"')
+
+    def _hrefs(self, page: Path) -> list[str]:
+        return self._CSS_HREF.findall(page.read_text(encoding='utf-8'))
+
+    def test_every_stylesheet_the_pages_name_exists_and_is_named_once(self):
+        offenders = []
+        for page in (INDEX, STUDIO):
+            hrefs = self._hrefs(page)
+            missing = [name for name in hrefs if not (self.CSS_DIR / name).is_file()]
+            duplicated = sorted({name for name in hrefs if hrefs.count(name) > 1})
+            offenders += [f'{page.name}: missing {missing}' for missing in [missing] if missing]
+            offenders += [f'{page.name}: loaded twice {duplicated}' for duplicated in [duplicated] if duplicated]
+        assert offenders == [], offenders
+
+    def test_no_stylesheet_on_disk_is_unloaded(self):
+        """An orphan sheet is either dead code or a file somebody forgot to link — the browser
+        never parses it, so a rule that looks fixed there is not fixed at all."""
+        loaded = set(self._hrefs(INDEX)) | set(self._hrefs(STUDIO))
+        on_disk = {path.name for path in self.CSS_DIR.glob('*.css')}
+        assert on_disk - loaded == set(), f'stylesheets no page loads: {sorted(on_disk - loaded)}'
+
+    def test_the_workbench_loads_its_sheets_in_the_order_the_rules_were_written(self):
+        """The split is by contiguous slice, so the page order IS the old file order."""
+        from static_assets import css_text  # the helper the CSS-reading tests share
+
+        sheet = css_text(INDEX)
+        # The first and last rule of the old single stylesheet, in the order they were written:
+        # the design-system banner before any selector, the export-guide overlay after.
+        assert sheet.index('Crawler Workflow — design system') < sheet.index('#top-menu {')
+        assert sheet.index('#top-menu {') < sheet.index('Export-guide overlay')
+
+
 class TestTheStudioPageLoadsItsFiles:
     def test_the_studio_page_carries_no_inline_style_or_script(self, studio_sweep):
         """The chart studio was a 16,852-line document: a ~1,920-line ``<style>`` and a

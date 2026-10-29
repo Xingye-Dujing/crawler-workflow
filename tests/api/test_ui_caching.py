@@ -13,7 +13,15 @@ import pytest
 pytestmark = pytest.mark.api
 
 # The document and every script/stylesheet the boot is made of.
-BOOT_ASSETS = ['/', '/index.html', '/css/style.css', '/js/canvas.js', '/js/app.js', '/js/workflow.js']
+BOOT_ASSETS = [
+    '/',
+    '/index.html',
+    '/css/base.css',
+    '/css/overlays.css',
+    '/js/canvas.js',
+    '/js/app.js',
+    '/js/workflow.js',
+]
 
 
 class TestUiCaching:

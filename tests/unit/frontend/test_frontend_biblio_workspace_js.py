@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
+from static_assets import css_text
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -68,7 +69,7 @@ class TestTheDock:
         assert 'src="/js/panels/biblio.js"' in (STATIC / 'index.html').read_text(encoding='utf-8')
 
     def test_the_stylesheet_docks_sizes_and_scrolls_it(self):
-        css = (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         for selector in (
             '#biblio-panel {',
             '#biblio-panel.open,',
@@ -80,7 +81,7 @@ class TestTheDock:
     def test_a_disabled_paging_button_looks_disabled(self):
         """The panel sets `disabled` at the first and last page; a button that still reads as
         clickable is the one symptom a screenshot caught and no assertion would have."""
-        css = (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         assert '.runs-mgr-btn:disabled {' in css
 
     def test_the_handle_really_gets_a_resize_handler(self):
@@ -287,7 +288,7 @@ class TestTypingFields:
     def test_the_stylesheet_themes_the_panels_own_fields(self):
         """These inputs carry no .settings-input class, so without a rule of their own they are
         UA-painted: a white box with black text on the dark panel."""
-        css = (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         block = css[css.index('.biblio-bar select,') :]
         rule = block[: block.index('}')]
         for declaration in ('background: transparent', 'color: var(--text)', 'border: 1px solid var(--line)'):

@@ -16,6 +16,7 @@ from pathlib import Path
 import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
+from static_assets import css_text
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -685,7 +686,7 @@ class TestAModeThisMachineCannotRun:
         page = (REPO / 'backend' / 'static' / 'index.html').read_text(encoding='utf-8')
         rows = re.findall(r'<div class="dd-item-row windows-only">\s*<span data-i18n="([^"]+)"', page)
         assert rows == ['set.hgPlayer', 'set.mitmdump', 'set.harvestPort', 'set.harvestCA'], rows
-        sheet = (REPO / 'backend' / 'static' / 'css' / 'style.css').read_text(encoding='utf-8')
+        sheet = css_text()
         assert 'html[data-win-desktop="0"] .windows-only' in sheet
 
 

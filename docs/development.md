@@ -127,13 +127,20 @@ crawler_workflow/
 │   │   ├── exports/              # 导出目录：writer（多格式写）/ browser（列表·下载·删除的读取侧）
 │   │   ├── analysis/             # 分析域：pipeline（操作执行器）/ params（分析参数）/ process（处理节点矩阵）/ llm（模型上下文）/ lexicon（词表）/ lexicon_store / stats
 │   │   ├── workflows/            # 工作流域：manager（工作流文件）/ history（画布快照）/ reusable（模板）/ expand（展开）/ bundle（项目包）
-│   │   ├── charts/               # 图表域：contracts（图型、列契约与 ChartConfigError）/ style（字体·调色板·取值助手）/ options（ECharts 选项分派）/ visualizer（服务与 matplotlib）/ tikz*（LaTeX：preamble/document/console/biblio 图/biblio 表，服务在 tikz.py 组装）/ pdf（xelatex）/ outputs（图+表产出）
+│   │   ├── charts/               # 图表域：contracts（图型、列契约与 ChartConfigError）/ style（字体·调色板·取值助手）/ options/（ECharts 底稿 + 每图型一个 builder 注册表）/ visualizer（服务与 matplotlib）/ tikz*（LaTeX：preamble/document/console/biblio 图/biblio 表，服务在 tikz.py 组装）/ pdf（xelatex）/ outputs（图+表产出）
 │   │   ├── reports/              # 报告域：html（自包含 HTML 运行报告）/ paper（论文成稿 article+ctex）
 │   │   ├── ingest/               # 采集运行域：catbus（第二后端桥）/ runtime / lifecycle / net（可达性探测）/ parts（分批落盘）
 │   │   └── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（跨域，刻意留扁平）
 │   └── static/                   # 前端静态文件
 │       ├── index.html
-│       ├── css/style.css
+│       ├── css/                    # 按 UI 域一样式表（2026-10-29 由 style.css 5,017 行按连续切片拆开）
+│       │   ├── base.css            # 设计令牌 / 暗色主题 / reset / 底色
+│       │   ├── menu.css            # 顶栏与下拉；canvas.css 画布·节点·端口·面板；panels.css 停靠面板内容
+│       │   ├── controls.css        # 自定义下拉 / 候选区 / 右键菜单
+│       │   ├── console.css         # 状态栏 / 运行控制台 / 运行记录 / 画布历史
+│       │   ├── reusable.css        # 可复用节点；workspace.css 定时·文献·进程；dialog.css 对话框·Cookie·云端
+│       │   ├── overlays.css        # toast / 拖拽缩放 / 滚动条 / 抽屉 / 快捷键 / 导出指引
+│       │   └── zenviz.css          # 图表工作室页自己的一份（原内联 <style>）
 │       └── js/
 │           ├── app.js            # 入口（i18n fetch 注入、节点库、I18n 行为与 _mergeCatalogues）
 │           ├── i18n/             # 按域的浏览器词典（settings.js…），页面在 app.js 之前加载，同键两次即拒

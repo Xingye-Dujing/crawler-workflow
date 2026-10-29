@@ -63,8 +63,11 @@ split must move that shared state to a place both `app.py` and `conftest.py` can
 receivers**. Renaming any of them is a user-visible break, which is why the split moves code between
 files and never renames a global. Its one inline script — the pre-paint theme/background/language
 bootstrap — is `js/theme-boot.js` now, loaded as the page's first blocking script, so the page
-carries no inline JavaScript and a strict CSP can ban it. `css/style.css` is 5,017 lines over 44
-panel banners.
+carries no inline JavaScript and a strict CSP can ban it. The stylesheet split the same way on
+2026-10-29: `css/style.css` (5,017 lines over 44 banners) is **ten per-domain sheets** (`base`/`menu`/
+`canvas`/`panels`/`controls`/`console`/`reusable`/`workspace`/`dialog`/`overlays`), each a contiguous
+slice, loaded by `index.html` in the order the rules were written — so the cascade is unchanged and
+`tests/static_assets.py::css_text()` is how a test reads a declaration without naming the file.
 
 The codebase already uses a lightweight namespace convention (`const Foo = { … }`), but everything
 loads as flat `<script>` tags in a fixed order — which is why `AGENTS.md` warns that a top-level

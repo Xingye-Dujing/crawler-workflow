@@ -1,0 +1,369 @@
+/* controls.css — 自定义下拉、多选清单、输入候选区、右键菜单
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Custom select (the native popup is OS-drawn and can't be themed) ─────── */
+.cselect {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  /* As a flex item its default min-width is its content's, so a long option label
+     grew the control past the panel instead of letting the value's ellipsis do its
+     job — which reads to the user as a horizontal bar, not as a long name. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+/* the real control stays in the DOM for value/change, just never seen */
+.cselect > select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  pointer-events: none;
+}
+.cselect:hover {
+  border-color: var(--border);
+}
+.cselect:focus-within {
+  border-color: var(--ink);
+}
+.cselect.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cselect-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: inherit;
+}
+.cselect-trigger:focus {
+  outline: none;
+}
+.cselect-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cselect-arrow {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+.cselect.open .cselect-arrow {
+  transform: rotate(180deg);
+}
+
+.cselect-menu {
+  display: none;
+  position: fixed;
+  /* Must outrank #dialog-overlay (z-index 9999): this popup is appended to
+     <body> as position:fixed, so a dropdown opened INSIDE a modal dialog (the
+     schedule editor, run-log, help, …) is stacked against the dialog itself.
+     At 2400 it sat under the dialog and the options could not be clicked. */
+  z-index: 10000;
+  min-width: 90px;
+  /* The ceiling place() aims for (MENU_MAX_WIDTH in custom-select.js); stated here
+     too so a long option cannot widen the popup past the screen edge. */
+  max-width: 340px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  animation: fadeIn 0.12s ease;
+}
+.cselect-menu.open {
+  display: block;
+}
+.cselect-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.cselect-option:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.cselect-option.selected {
+  color: var(--text);
+  background: var(--hover);
+  border-color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+/* An option the app disabled on purpose stays in the list — being visible is
+   the point, since that is how it explains why it cannot be chosen. */
+.cselect-option.disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+.cselect-option.disabled:hover {
+  background: transparent;
+  color: var(--text-faint);
+}
+.cselect-option-note {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
+/* On a disabled row the reason is the one part that has to stay readable. */
+.cselect-option.disabled .cselect-option-note {
+  color: var(--text-dim);
+}
+
+/* ── Multiple: a checklist rather than a menu ────────────────────────────── */
+/* Several rows can be chosen at once, so a tick box says "chosen" where the ink
+   underline alone reads as "current". Still no filled swatch anywhere. */
+.cselect-option.multi {
+  align-items: center;
+}
+/* A ticked row keeps its tick and nothing more. The shared `.selected` rule
+   paints the row with the same background and ink border the hover state uses,
+   and in a menu that stays open — where several rows get ticked in one pass —
+   every row the cursor has visited reads as "still hovered". Here the tick IS
+   the selection indicator, so the hover look belongs to hover alone. */
+.cselect-option.multi.selected {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+}
+/* An option longer than the capped menu used to overflow its own row inside a box
+   whose `overflow-y: auto` computes overflow-x to auto — silently cut, with no
+   ellipsis and nothing to hover. Crawled column names are exactly this shape. The
+   multi-select rows keep their own stretch rule below. */
+.cselect-option-label {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cselect-option.multi .cselect-option-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cselect-check {
+  flex: 0 0 auto;
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.cselect-option:hover .cselect-check {
+  border-color: var(--text-dim);
+}
+.cselect-option.selected .cselect-check,
+.cselect-option.disabled .cselect-check {
+  border-color: var(--ink);
+}
+.cselect-option.disabled .cselect-check {
+  opacity: 0.4;
+}
+.cselect-option.selected .cselect-check::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 4px;
+  height: 7px;
+  border: solid var(--ink);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+/* The keyboard cursor only has to be visible when the arrows move without
+   selecting — on a checklist, otherwise the arrow key would look like a tick.
+   On a checklist it marks itself on the tick box rather than the row: the row
+   background is the hover look, and a cursor that just sits on a row (the last
+   one clicked, or where the list opened) must not read as hovered. */
+.cselect-option.active:not(.selected) {
+  background: var(--hover);
+  color: var(--text);
+}
+.cselect-option.multi.active:not(.selected) {
+  background: transparent;
+  color: var(--text);
+}
+.cselect-option.multi.active .cselect-check {
+  border-color: var(--ink);
+}
+/* Hover outranks both of those states — it is the row the pointer is actually
+   on, and the whole point of this block is that only it may look hovered. */
+.cselect-option.multi.selected:hover,
+.cselect-option.multi.active:not(.selected):hover {
+  background: var(--hover);
+}
+
+/* ── Input candidate area (suggestions / autocomplete) ───────────────────── */
+/* Same shell as the select menu so both candidate UIs read identically. */
+.cand-menu {
+  display: none;
+  position: fixed;
+  /* same reasoning as .cselect-menu — outrank #dialog-overlay (9999) */
+  z-index: 10000;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  animation: fadeIn 0.12s ease;
+}
+.cand-menu.open {
+  display: block;
+}
+.cand-option {
+  display: block;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.cand-option:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+/* keyboard cursor — no blue highlight anywhere */
+.cand-option.active {
+  color: var(--text);
+  background: var(--hover);
+  border-color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+
+/* Number inputs: the native steppers are OS-drawn and unthemeable, so they go.
+   Values stay editable by typing; the-bar sliders already cover dragging. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+/* Clear ("⨯") affordance on search fields is also UA chrome */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Chrome paints an opaque blue/yellow wash behind autofilled fields; the only
+   way through is an inset shadow of the page colour, hence the large spread. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset;
+  caret-color: var(--text);
+  transition: background-color 9999s ease-out 0s;
+}
+
+.settings-input::placeholder {
+  color: var(--text-faint);
+}
+.settings-hint {
+  font-size: 9px;
+  color: var(--text-faint);
+  letter-spacing: 0.4px;
+  line-height: 1.5;
+  /* Wrapped hint text used to start flush against the panel's frame; a little air on both
+     sides is what makes it read as a note rather than as a clipped label. */
+  margin: 5px 0 4px;
+  padding: 0 8px;
+}
+
+.node-action-btn.settings-open {
+  border: 1px dashed var(--text) !important;
+  color: var(--text) !important;
+}
+
+/* ── Context menu ───────────────────────────────────────────────────────── */
+#context-menu {
+  position: fixed;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  padding: 4px;
+  min-width: 180px;
+  z-index: 2500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s;
+  box-shadow: var(--shadow);
+}
+#context-menu.open {
+  opacity: 1;
+  pointer-events: all;
+}
+.ctx-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-align: left;
+  transition: all 0.1s;
+}
+.ctx-item:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+.ctx-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+

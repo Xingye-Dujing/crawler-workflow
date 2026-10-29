@@ -1,0 +1,328 @@
+/* reusable.css — 可复用节点：头部控件、内部舞台与预览
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Reusable nodes: header controls, the inside stage, and its preview ──
+   A reusable node is one box whose content becomes a small read-only canvas. The
+   stage sits inside the node's own border, so no second frame can ever enclose a
+   neighbour: the outer box IS the frame. */
+.node-type-reusable .node-header {
+  border-left: 3px solid var(--accent-source);
+}
+.node-ru-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0;
+}
+.node-ru-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+}
+.node-ru-btn svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  pointer-events: none;
+}
+.node.node-reusable-expanded {
+  max-width: none;
+}
+.node.node-reusable-expanded .node-content {
+  overflow: visible;
+}
+.node-reusable-stage {
+  margin-top: 8px;
+  white-space: normal;
+}
+.reusable-stage {
+  position: relative;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+.reusable-stage-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.reusable-stage-lines path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.2;
+}
+.reusable-inner-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: var(--node-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+.rin-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-bottom: 1px solid var(--line2);
+  background: var(--hover);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rin-type {
+  font-size: 7px;
+  letter-spacing: 0.4px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rin-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 9px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rin-slot {
+  font-size: 7px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-round);
+  padding: 0 3px;
+  flex-shrink: 0;
+}
+.rin-slot.rin-out {
+  color: var(--ink);
+}
+.rin-body {
+  padding: 3px 5px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--text-dim);
+  overflow: hidden;
+  max-height: 42px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reusable-stage.compact .rin-body {
+  display: none;
+}
+.reusable-stage-empty {
+  padding: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.rin-status {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-round);
+  flex-shrink: 0;
+  margin-left: auto;
+  background: var(--line);
+}
+.rin-status.st-done {
+  background: var(--ok);
+}
+.rin-status.st-running {
+  background: var(--warn);
+}
+.rin-status.st-partial,
+.rin-status.st-pending {
+  background: var(--warn);
+}
+.rin-status.st-failed,
+.rin-status.st-unknown {
+  background: var(--err);
+}
+.reusable-settings-name {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.reusable-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 0;
+}
+.reusable-slot-index {
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-round);
+  font-size: 9px;
+  color: var(--text);
+}
+.settings-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+#reusable-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+#reusable-preview-overlay.open {
+  display: flex;
+}
+#reusable-preview-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  padding: 12px 16px 14px;
+  width: min(1280px, 100%);
+  max-height: 92vh;
+  color: var(--text);
+}
+#reusable-preview-box .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+.reusable-preview-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.reusable-preview-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+}
+.reusable-preview-stage {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.reusable-preview-side {
+  width: 270px;
+  flex-shrink: 0;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+.rps-section {
+  margin-bottom: 12px;
+}
+.rps-section h4 {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.rps-slots,
+.rps-nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rps-slots li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text);
+  padding: 2px 0;
+}
+.rps-index {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-round);
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.rps-output {
+  font-size: 11px;
+  color: var(--text);
+}
+.rps-nodes li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line2);
+  font-size: 11px;
+}
+.rps-node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rps-node-type {
+  font-size: 9px;
+  color: var(--text-faint);
+}
+.reusable-preview-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line2);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+@media (max-width: 860px) {
+  .reusable-preview-body {
+    flex-direction: column;
+  }
+  .reusable-preview-side {
+    width: 100%;
+    max-height: none;
+  }
+}
+

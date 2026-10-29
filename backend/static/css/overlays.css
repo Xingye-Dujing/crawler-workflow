@@ -1,0 +1,728 @@
+/* overlays.css — 浮层：toast、可拖拽/缩放面板、滚动条、触摸目标、剪贴板抽屉、缩放控件、快捷键帮助、导出指引
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--ink);
+  padding: 8px 20px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  /* A validation toast now carries one numbered line per problem, so it needs to
+     wrap inside the screen instead of pushing a horizontal scrollbar past it
+     (`white-space` was the default `normal`, which would have collapsed the newlines
+     into a single unreadable sentence). */
+  white-space: pre-line;
+  max-width: min(80vw, 520px);
+  text-align: left;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+  max-width: 70vw;
+}
+#toast.show {
+  opacity: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Chart Studio — the embedded ZENVIZ surface
+   A full-bleed overlay: one slim host bar on top (workflow context +
+   data hand-off), the chart studio itself below. Same-origin iframe, so the
+   host can talk to the studio through postMessage.
+   ══════════════════════════════════════════════════════════════════════════ */
+#studio-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: var(--bg);
+  display: none;
+  flex-direction: column;
+}
+#studio-overlay.open {
+  display: flex;
+}
+
+.studio-bar {
+  flex: 0 0 auto;
+  /* The studio's nav now rides in here too, so the row can outgrow one line
+       on a narrow window — wrap rather than clip. */
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.studio-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.studio-brand strong {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+.studio-brand span {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.studio-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The studio's own nav, re-hosted inside the bar. Same language as the main
+   menu: tiny uppercase label + one button per group, hairline dividers, and an
+   ink underline (never a filled swatch) for the open group. */
+.studio-menus {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+}
+.studio-menus:empty {
+  display: none;
+}
+.studio-menus .menu-group {
+  padding: 0 3px;
+}
+.studio-menus .menu-label {
+  font-size: 8px;
+  letter-spacing: 1.4px;
+}
+.studio-menus .menu-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+.studio-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.studio-field > label {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.studio-select {
+  min-width: 190px;
+  max-width: 260px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 11px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.studio-select:focus {
+  border-color: var(--ink);
+}
+/* The merge control only exists once there are two tables to combine. */
+.studio-field[hidden] {
+  display: none;
+}
+.studio-select.compact {
+  min-width: 0;
+  max-width: 150px;
+}
+.studio-btn {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.studio-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--bg);
+}
+.studio-btn.primary {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+.studio-btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.studio-btn[disabled]:hover {
+  color: var(--text-dim);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.92);
+}
+.studio-status {
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-frame-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+#studio-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--bg);
+}
+.studio-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  z-index: 2;
+  transition: opacity 0.3s;
+}
+.studio-loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Draggable + resizable panel support ─────────────────────────────────── */
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid var(--text-dim);
+  border-bottom: 1px solid var(--text-dim);
+  transition: border-color 0.2s;
+}
+.resize-handle:hover::after {
+  border-color: var(--text);
+}
+.panel-dragging .resize-handle,
+.panel-dragging .resize-handle::after {
+  border-color: var(--text);
+}
+
+#node-settings.open .resize-handle,
+#cookie-dialog.open .resize-handle,
+#processes-panel.open .resize-handle,
+#chart-preview-panel.open .resize-handle,
+#chart-fullscreen-panel.open .resize-handle,
+#data-preview-panel.open .resize-handle,
+#history-panel.open .resize-handle,
+.panel-dragging .resize-handle {
+  opacity: 1;
+}
+
+.panel-dragging {
+  transition: none !important;
+  user-select: none !important;
+  z-index: 2000 !important;
+  opacity: 1 !important;
+  pointer-events: all !important;
+}
+
+#console-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+}
+#console-resize-handle:hover,
+#console-resize-handle.active {
+  background: var(--line);
+}
+
+#console-panel.popout {
+  position: fixed !important;
+  bottom: auto !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 700px !important;
+  height: 400px !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 3000 !important;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+#console-panel.popout.panel-dragging {
+  transform: none !important;
+}
+#console-panel.popout .resize-handle {
+  opacity: 1;
+}
+#console-panel.popout #console-resize-handle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  #node-palette {
+    display: none;
+  }
+  #outline-panel {
+    display: none;
+  }
+  #stats-panel {
+    width: 280px;
+  }
+  .studio-bar {
+    padding: 8px 12px;
+  }
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(26, 26, 26, 0.18);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Coarse pointer (touch) targets ───────────────────────────────────────── */
+/* On a tablet or phone a finger replaces the cursor, and controls sized for a fine cursor
+   are hard to hit. Scope this to (pointer: coarse) so a desktop viewport — and every layout
+   test measured on one — is byte-for-byte unchanged; a desktop Chrome reports a fine pointer
+   and never enters this block. The canvas already opens its context menu on a long-press
+   (a touch fires contextmenu), so renaming a node and its per-node actions are reachable by
+   touch already. This only widens existing targets to finger size and stops the browser from
+   treating a drag inside the canvas as a page scroll. */
+@media (pointer: coarse) {
+  #workspace,
+  #svg-layer,
+  .node {
+    touch-action: none; /* a drag here is our gesture (move / wire / pan), not the browser's scroll */
+  }
+  .node-action-btn,
+  .node-power-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .menu-btn {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .conn-delete-hit {
+    stroke-width: 30px; /* a finger needs a wide enough landing pad to tap a thin wire */
+  }
+}
+
+/* ── Clipboard drawer (right slide-in) ───────────────────────────────────────
+   A persisted history of copied nodes/text. Fixed + parked outside the viewport so a
+   CLOSED drawer never grows the page's horizontal bar (fixed content outside the
+   viewport is clipped, not scrollable); .open slides it in. The list is the only
+   internal scroller; the header title ellipsizes so English labels cannot overflow
+   the panel and trip the layout audit.
+
+   CLOSED MEANS GONE — and it takes both properties, because each one alone still left
+   part of the panel on screen. Measured in real Chrome (960px window, the drawer's own
+   280px box): the closed drawer used to paint its last 12 columns over the canvas, and
+   those 12 columns hit-tested as `clipboard-list`.
+
+   * the slide is `100% + 12px`, not `100%`. `100%` is the box's own width, but
+     `right: 12px` parks its right edge 12px INSIDE the layout viewport, so translating
+     by the width alone leaves exactly those 12px showing — which is the sliver the user
+     sees at the canvas's right edge;
+   * `visibility: hidden` (delayed past the 0.15s slide, so the drawer is still seen
+     leaving) because the box-shadow blurs 3px PAST the border box: parked at
+     `clientWidth` exactly, the smear alone still paints a few columns. A shadow is not
+     hit-testable, so only pixels can prove this — the integration tier compares the
+     closed drawer's right-edge strip byte-for-byte against the same box forced to
+     `display:none`, after a closed-vs-closed control that must match exactly (otherwise
+     the comparison is not reproducible and is refused, never quietly passed).
+
+   The column that matters is `clientWidth`, not `innerWidth`: it excludes a classic
+   scrollbar, so it is the right-most column the user can actually see. */
+#clipboard-drawer {
+  position: fixed;
+  /* Floats off every edge like #outline-panel rather than flush to the right: 12px
+     under the 48px menu (top 60), and a bottom gap equal to the top one so a full
+     list stops 12px above the 28px status bar (100vh-100px) — never sliding behind
+     it. That 12px is also what the closed transform has to pay for, above. */
+  right: 12px;
+  top: 60px;
+  width: 280px;
+  height: calc(100vh - 100px);
+  max-height: calc(100vh - 100px);
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(calc(100% + 12px));
+  visibility: hidden;
+  transition:
+    transform 0.15s ease,
+    visibility 0s linear 0.15s;
+}
+
+#clipboard-drawer.open {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.15s ease;
+}
+
+#clipboard-drawer .clip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#clipboard-drawer .clip-header-btns {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* The clipboard filter shares the app's one input look (.settings-input) — border,
+   focus accent and type — so it no longer renders as a bare browser search box. Its
+   corner comes from the global `*` reset (var(--radius)), never a literal here. */
+#clipboard-drawer .clip-search {
+  margin: 8px;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+#clipboard-drawer .clip-search::placeholder {
+  color: var(--text-dim);
+}
+#clipboard-drawer .clip-search:focus {
+  border-color: var(--ink);
+}
+
+.clipboard-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.clip-empty {
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 12px 4px;
+  text-align: center;
+}
+
+.clip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line2);
+}
+
+.clip-row.clip-pinned {
+  background: rgba(74, 144, 217, 0.06);
+}
+
+/* Only the draggable (node/nodes) rows show the grab hand, keyed off the real
+   `draggable` attribute the renderer writes — so a text row never advertises a
+   drag it cannot start, and :active gives the same lift feedback the palette has. */
+.clip-row[draggable="true"] {
+  cursor: grab;
+}
+.clip-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.clip-badge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  padding: 1px 4px;
+}
+
+.clip-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.clip-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
+.clip-btn {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+
+.clip-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.clip-btn.clip-danger {
+  color: rgba(160, 60, 60, 0.9);
+}
+
+.clip-btn.clip-danger:hover {
+  color: #8c2828;
+  border-color: rgba(140, 40, 40, 0.4);
+  background: rgba(140, 40, 40, 0.08);
+}
+
+/* ── Zoom controls (status bar) ── */
+.zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+.zoom-readout {
+  cursor: pointer;
+}
+.zoom-btn {
+  min-width: 22px;
+  padding: 0 6px;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+/* ── Keyboard-shortcut help overlay ── */
+#help-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#help-overlay.open {
+  display: flex;
+}
+#help-box {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  padding: 12px 16px 16px;
+  min-width: 340px;
+  max-width: 460px;
+  color: var(--text);
+}
+#help-box .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.help-keys {
+  flex: 0 0 168px;
+  text-align: right;
+  color: var(--text-dim);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+/* ── Export-guide overlay: one section per bibliographic source ──
+   Same shell shape as the cheat sheet above (fixed scrim, centred box, `.open` toggles
+   display), but scrollable: ten sources with their steps cannot fit a 340px sheet. The
+   narrow-viewport case is handled by `width: min(...)` and `inset: 0` rather than a media
+   query, exactly like #help-box, because a centred fixed overlay can never hang off-screen. */
+#source-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+#source-help-overlay.open {
+  display: flex;
+}
+#source-help-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  padding: 12px 16px 16px;
+  width: min(760px, 100%);
+  max-height: 82vh;
+  color: var(--text);
+}
+#source-help-box .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex: 0 0 auto;
+}
+#source-help-body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.source-help-group {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.source-help-item {
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.source-help-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.source-help-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.source-help-site {
+  font-family: monospace;
+  font-size: 11px;
+}
+.source-help-site a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+.source-help-site a:hover,
+.source-help-site a:focus-visible {
+  text-decoration: underline;
+}
+.source-help-ext {
+  font-family: monospace;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.source-help-purpose {
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.source-help-steps {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.source-help-missing {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warn);
+}
+.source-help-loading {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.dataset-compare-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}

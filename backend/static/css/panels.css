@@ -1,0 +1,901 @@
+/* panels.css — 面板公共外壳与各停靠面板内容（统计、图表预览、回放、全屏、加载、数据预览、仪表盘、执行历史、运行记录、节点设置）
+ *
+ * Split out of style.css on 2026-10-29 as a contiguous slice: index.html loads these
+ * files in the order below, which is the order the rules were written in, so the cascade
+ * is unchanged (a stylesheet that reordered sections would silently redecide every tie).
+ */
+/* ── Generic panel chrome (shared by every side panel) ──────────────────── */
+.panel-header,
+.settings-header,
+.console-header {
+  padding: 10px 11px 8px;
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.panel-close {
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  padding: 3px 7px;
+  transition: all 0.1s;
+  text-transform: none;
+}
+.panel-close:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+}
+
+/* A bulk destroy must not read like a bulk refresh. The per-row 删除 already reddens on
+   hover, so the header button that empties the whole list borrows that same colour instead
+   of inventing one: one panel, one vocabulary for "this takes data away". */
+.panel-close.danger {
+  color: rgba(160, 60, 60, 0.9);
+}
+.panel-close.danger:hover {
+  color: #8c2828;
+  border-color: rgba(140, 40, 40, 0.4);
+  background: rgba(140, 40, 40, 0.08);
+}
+
+/* ── Stats panel ────────────────────────────────────────────────────────── */
+#stats-panel {
+  position: fixed;
+  right: -340px;
+  top: 0;
+  width: 340px;
+  height: 100vh;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  z-index: 200;
+  transition: right 0.3s;
+  display: flex;
+  flex-direction: column;
+}
+#stats-panel.open {
+  right: 0;
+}
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line2);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1;
+  padding: 8px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  letter-spacing: 0.4px;
+}
+.tab-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--border);
+  background: var(--hover);
+}
+.chart-container {
+  flex: 1;
+  min-height: 200px;
+}
+
+/* Shown in place of a pie when the ECharts CDN never arrived (this is a local tool,
+   sometimes offline). An empty panel reads as "this run produced no sentiment";
+   say which library is missing instead. */
+.chart-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+/* ── Chart preview panel (Visualize node) ───────────────────────────────── */
+#chart-preview-panel {
+  position: fixed;
+  right: -420px;
+  top: 10%;
+  width: 400px;
+  height: 60vh;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  opacity: 0;
+  z-index: 1002;
+  transition: right 0.3s;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+#chart-preview-panel.open {
+  right: 12px;
+  opacity: 1;
+  pointer-events: all;
+}
+#chart-preview-echarts {
+  flex: 1;
+  min-height: 200px;
+  width: 100%;
+}
+#chart-preview-image {
+  margin: auto;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  object-fit: contain;
+  display: block;
+}
+
+/* ── Year-by-year replay bar ─────────────────────────────────────────────
+   Appended under the chart in both the preview panel and the full-screen window (both are
+   flex columns, so the chart keeps the height and the bar takes its own row). The slider is a
+   native range input: left alone it is OS-painted, which is the same defect the bibliometrics
+   dock shipped twice — a control that ignores the theme is unreadable on a dark panel. */
+.chart-replay-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+}
+.chart-replay-range {
+  flex: 1;
+  min-width: 90px;
+  accent-color: var(--accent);
+  background: transparent;
+}
+.chart-replay-range:focus {
+  outline: 1px solid var(--accent);
+}
+.chart-replay-year {
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.chart-replay-hint {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* ── Full-screen chart window (draggable + resizable, one chart at a time) ── */
+/* Starts centred via transform; makeDraggable's convertToFloating reads that transform
+   on first mousedown and pins left/top in its place, so the window is both centred and
+   draggable. It must sit above BOTH the preview panel (1002) AND the board it opens from:
+   the dashboard grid is #dashboard-panel at 1003, so a full-screen chart launched from a
+   board cell used to TIE with the board and end up buried under it at an unstable DOM order.
+   One step above the dashboard (1004) keeps the full-screen window on top of everything it
+   can be opened over. */
+#chart-fullscreen-panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 80vw;
+  height: 80vh;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  z-index: 1004;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+#chart-fullscreen-panel.open {
+  display: flex;
+}
+#chart-fullscreen-echarts {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+#chart-fullscreen-image {
+  margin: auto;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  object-fit: contain;
+  display: block;
+}
+
+/* ── Loading spinner ────────────────────────────────────────────────────── */
+.loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 120px;
+  width: 100%;
+}
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-top-color: var(--ink);
+  border-radius: var(--radius-round);
+  animation: loading-spin 0.7s linear infinite;
+}
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Data preview panel ─────────────────────────────────────────────────── */
+#data-preview-panel {
+  position: fixed;
+  right: -480px;
+  top: 8%;
+  width: 460px;
+  height: 65vh;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  opacity: 0;
+  z-index: 1002;
+  transition: right 0.3s;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+#data-preview-panel.open {
+  right: 12px;
+  opacity: 1;
+  pointer-events: all;
+}
+.data-preview-meta {
+  padding: 7px 11px;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+}
+.data-preview-table-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 0 4px;
+}
+.data-preview-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line2);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+pre.data-preview-text {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  background: transparent;
+}
+table.data-preview-table,
+table.history-runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: var(--font);
+}
+table.data-preview-table th,
+table.data-preview-table td,
+table.history-runs-table th,
+table.history-runs-table td {
+  border: 1px solid var(--line2);
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+table.data-preview-table th,
+table.history-runs-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: 0.4px;
+}
+table.data-preview-table tr:hover td,
+table.history-runs-table tr:hover td {
+  background: var(--hover);
+}
+
+/* One delete button per recorded run. Square and narrow on purpose: the runs
+   table lives in a resizable panel, and a wide action column is a horizontal
+   scrollbar at the panel's minimum width. */
+table.history-runs-table td.history-ops {
+  text-align: right;
+  padding: 2px 4px;
+  white-space: normal;
+}
+button.history-del {
+  font-size: 11px;
+  font-family: var(--font);
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+button.history-del:hover {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+/* ── Dashboard ──────────────────────────────────────────────────────────── */
+#dashboard-panel {
+  position: fixed;
+  inset: 6%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 1003;
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+}
+#dashboard-panel.open {
+  display: flex;
+}
+.dashboard-grid {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.dashboard-cell {
+  border: 1px solid var(--line);
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+.dashboard-cell-title {
+  padding: 7px 10px;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+}
+.dashboard-cell-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.dashboard-cell-body img {
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  display: block;
+}
+.dashboard-cell-error {
+  padding: 12px;
+  font-size: 11px;
+  color: var(--err);
+}
+.dashboard-cell-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 12px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.dashboard-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* ── Execution history ──────────────────────────────────────────────────── */
+#history-panel {
+  position: fixed;
+  right: -640px;
+  top: 6%;
+  width: 600px;
+  height: 75vh;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  opacity: 0;
+  z-index: 1002;
+  transition: right 0.3s;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+#history-panel.open {
+  right: 12px;
+  opacity: 1;
+  pointer-events: all;
+}
+.history-controls {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line2);
+  flex-wrap: wrap;
+}
+#history-chart {
+  /* Centred in the panel with breathing room either side, so the plot
+     itself reads as level rather than pressed against the edges. The
+     echarts grid's left/right margins are symmetric to match. The chart
+     container inherits --font (Literata for latin/digits, 宋体 for CJK) —
+     echarts text blocks also set it explicitly, this covers the fallback. */
+  flex: 0 0 48%;
+  width: calc(100% - 24px);
+  max-width: 600px;
+  min-height: 260px;
+  margin: 8px auto 0;
+  padding: 6px 4px 0;
+  box-sizing: border-box;
+  font-family: var(--font);
+}
+#history-runs-wrap {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ── Run records manager (docked bottom panel content) ──────────────────── */
+.runs-mgr-empty {
+  padding: 14px 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+}
+/* The export panel's totals sit under the table as a centred summary of it: they count
+   the whole folder rather than the rows above, which is what makes them a summary and
+   not a header. */
+.exports-summary {
+  padding: 10px 6px 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.runs-mgr-table {
+  width: 100%;
+  font-size: 11px;
+}
+.runs-mgr-table th {
+  text-align: left;
+  padding: 6px 6px 4px;
+  font-weight: 500;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+  white-space: nowrap;
+}
+.runs-mgr-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line2);
+  vertical-align: top;
+}
+.runs-mgr-wf {
+  /* A record of a parallel run carries every workflow's name, so the cell needs
+     more room than one label ever needed; the text wraps rather than widening the
+     panel, which is what keeps the page free of a horizontal scrollbar. */
+  max-width: 168px;
+  overflow-wrap: anywhere;
+}
+.runs-mgr-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+/* The one record whose results the canvas is showing. Green is the same "settled"
+   reading the node badges use; it marks a choice, not a verdict. */
+.runs-mgr-tag.loaded {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.runs-mgr-loaded {
+  padding: 7px 8px 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+  overflow-wrap: anywhere;
+}
+.runs-mgr-id {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.runs-mgr-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.runs-mgr-status {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.runs-mgr-status.st-running,
+/* Neither of these has a verdict yet, and both mean "a run is still being written
+   or torn down" — so they wear the same neutral chip rather than the amber of a
+   record that ended. */
+.runs-mgr-status.st-stopping {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--text);
+}
+.runs-mgr-status.st-interrupted {
+  background: rgba(166, 111, 48, 0.14);
+  color: #8a5a26;
+}
+.runs-mgr-status.st-completed {
+  background: rgba(58, 111, 58, 0.12);
+  color: #3a6f3a;
+}
+.runs-mgr-status.st-failed,
+.runs-mgr-status.st-abandoned {
+  background: rgba(140, 40, 40, 0.1);
+  color: #8c2828;
+}
+/* A status word this build does not know: shown as the stored token in a neutral
+   chip, never translated into a friendlier verdict it never gave. */
+.runs-mgr-status.st-unknown {
+  background: rgba(26, 26, 26, 0.06);
+  color: var(--text-dim);
+  font-style: italic;
+}
+.runs-mgr-btn.loaded {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.runs-mgr-ops {
+  white-space: nowrap;
+}
+.runs-mgr-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+  padding: 2px 8px;
+  margin: 1px 2px 1px 0;
+  cursor: pointer;
+  border-radius: var(--radius);
+  font-family: var(--font);
+}
+.runs-mgr-btn:hover {
+  background: var(--hover);
+}
+/* A disabled action has to look disabled. The workspace's 上一页/下一页 carry the attribute at
+   exactly the two moments they do nothing (first page, last page), and without this rule they
+   read as clickable — the screenshot showed a live-looking pair on a one-page table. */
+.runs-mgr-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.runs-mgr-btn:disabled:hover {
+  background: transparent;
+}
+.runs-mgr-btn.del:hover {
+  background: rgba(140, 40, 40, 0.08);
+  border-color: rgba(140, 40, 40, 0.4);
+}
+/* The lock is a state, not an action, so it is marked by the button's own colour:
+   a locked row's button reads as engaged. #182. */
+.runs-mgr-btn.lock {
+  color: var(--text-dim);
+}
+.runs-mgr-btn.lock.locked {
+  /* A pinned/locked row reads as engaged in red (the lock glyph is currentColor). */
+  color: #8c2828;
+  border-color: #8c2828;
+}
+/* The drawn padlock inherits the button's colour (currentColor) and is an outline,
+   so it matches the grey palette the emoji never could. */
+.runs-mgr-btn.lock .lock-svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -1px;
+}
+.runs-mgr-detail {
+  background: var(--hover);
+  border-left: 3px solid var(--line);
+  padding: 10px 12px;
+}
+.runs-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.runs-compare-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.runs-compare-pair {
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.runs-compare-note {
+  font-size: 10px;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+.runs-compare-detail {
+  border-top: 1px solid var(--line2);
+  padding-top: 8px;
+}
+.runs-compare-subtitle {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 6px 0 4px;
+}
+.runs-compare-counts {
+  font-size: 11px;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.runs-compare-scroll {
+  overflow-x: auto;
+}
+.runs-compare-samples {
+  margin-top: 4px;
+}
+.rm-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.rm-meta-title {
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.rm-meta-note {
+  overflow-wrap: anywhere;
+}
+.rm-nodes {
+  display: grid;
+  gap: 6px;
+}
+/* One heading per workflow inside a run record. `overflow: hidden` is what both makes
+   the name shrinkable (an automatic min size does not apply to a clipped box) and lets
+   the ellipsis say the text was cut. Measured with the browser test: dropping
+   `min-width` changes nothing, which is why it is not carried here. */
+.rm-group {
+  margin-bottom: 10px;
+}
+.rm-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.rm-group-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text);
+}
+.rm-group-tally {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.rm-node {
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+.rm-node-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+.rm-node-id {
+  min-width: 52px;
+  font-weight: 500;
+}
+.rm-node-type {
+  min-width: 64px;
+  color: var(--text-dim);
+}
+.rm-node-rows {
+  margin-left: auto;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.rm-node-duration {
+  /* Per-node wall time (runs-manager detail). Same language-neutral MM:SS the run row uses;
+     a node still in flight reads an em-dash, never a fabricated 0. */
+  min-width: 44px;
+  text-align: right;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rm-node-err {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--line2);
+  font-size: 10px;
+  color: #8c2828;
+  overflow-wrap: anywhere;
+}
+/* Node cards take the canvas's own per-type accents, so the detail reads in
+   the same colour language as the workflow it describes. */
+.rm-node.nt-source {
+  border-left-color: var(--accent-source);
+}
+.rm-node.nt-upload {
+  border-left-color: var(--accent-upload);
+}
+.rm-node.nt-process {
+  border-left-color: var(--accent-process);
+}
+.rm-node.nt-analysis {
+  border-left-color: var(--accent-analysis);
+}
+.rm-node.nt-biblio {
+  border-left-color: var(--accent-biblio);
+}
+.rm-node.nt-visualize {
+  border-left-color: var(--accent-visualize);
+}
+.rm-node.nt-compile {
+  border-left-color: var(--accent-compile);
+}
+.rm-node.nt-tokenize {
+  border-left-color: var(--accent-tokenize);
+}
+.rm-node.nt-output {
+  border-left-color: var(--accent-output);
+}
+.rm-node.nt-resume {
+  border-left-color: var(--accent-resume);
+}
+.rm-node.nt-name {
+  border-left-color: var(--accent-name);
+}
+.rm-node.nt-comment {
+  border-left-color: var(--accent-comment);
+}
+.runs-mgr-status.st-skipped {
+  background: rgba(26, 26, 26, 0.05);
+  color: var(--text-faint);
+}
+
+/* ── Node settings sidebar ──────────────────────────────────────────────── */
+#node-settings {
+  position: fixed;
+  right: -360px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 340px;
+  /* Without a ceiling the box grows to its content, so it is the PANEL that hangs
+     off the viewport (measured: top -177 / bottom 727 in a 550px window) and the
+     `overflow-y: auto` below never engages — the top of a long node form simply
+     existed above the screen. A max-height is what makes that scroll real. */
+  max-height: calc(100vh - 24px);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 1001;
+  transition:
+    right 0.3s,
+    opacity 0.3s;
+  /* The CONTENT scrolls, not the panel: the header and the resize grip then stay exactly where
+     they are while a long node form moves under them (the grip used to ride up with the scroll). */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+#node-settings.open {
+  right: 12px;
+  opacity: 1;
+  pointer-events: all;
+}
+#settings-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.settings-header {
+  cursor: grab;
+}
+.settings-header:active {
+  cursor: grabbing;
+}
+.settings-group {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line2);
+}
+.settings-label {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  display: block;
+  margin-bottom: 6px;
+}
+.settings-checkbox-label {
+  font-size: 11px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.settings-input,
+.settings-select {
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.settings-input:focus,
+.settings-select:focus {
+  border-color: var(--ink);
+}
+

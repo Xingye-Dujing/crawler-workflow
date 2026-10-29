@@ -20,13 +20,13 @@ from pathlib import Path
 
 import pytest
 from node_runner import run_node
+from static_assets import css_text
 
 REPO = Path(__file__).resolve().parents[3]
 HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_wfmgr.mjs'
 STATIC = REPO / 'backend' / 'static'
 WORKFLOW_JS = STATIC / 'js' / 'workflow.js'
 INDEX_HTML = STATIC / 'index.html'
-STYLE_CSS = STATIC / 'css' / 'style.css'
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -110,7 +110,7 @@ class TestPageWiring:
         assert "'workflows-panel'" in docked
 
     def test_the_css_sized_for_the_other_docks_covers_it_too(self):
-        css = STYLE_CSS.read_text(encoding='utf-8')
+        css = css_text()
         for selector in (
             '#workflows-panel',
             '#workflows-panel.open',

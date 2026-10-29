@@ -16,6 +16,7 @@ import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from frontend_catalogue import with_companions
 from node_runner import run_node
+from static_assets import css_text
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -26,7 +27,6 @@ WORKFLOW_JS = STATIC / 'js' / 'workflow.js'
 REUSABLE_JS = STATIC / 'js' / 'reusable.js'
 APP_JS = STATIC / 'js' / 'app.js'
 INDEX_HTML = STATIC / 'index.html'
-STYLE_CSS = STATIC / 'css' / 'style.css'
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -254,7 +254,7 @@ class TestContracts:
         assert 'data-i18n="reusable.autoLayoutOnExpand"' in page
         app = APP_JS.read_text(encoding='utf-8')
         assert 'reusableAutoLayout' in app
-        css = STYLE_CSS.read_text(encoding='utf-8')
+        css = css_text()
         assert '.settings-checkbox' in css
 
     def test_the_canvas_routes_the_layout_button_and_paints_group_statuses(self):

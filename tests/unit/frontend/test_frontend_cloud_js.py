@@ -20,6 +20,7 @@ import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from frontend_catalogue import with_catalogue
 from node_runner import run_node
+from static_assets import css_text
 
 pytestmark = pytest.mark.unit
 
@@ -129,7 +130,7 @@ class TestTheChromeIsMarked:
         assert 'btn-headless' in headless
 
     def test_the_stylesheet_hides_the_marker_the_headless_switch_and_the_local_rows(self):
-        css = (JS_DIR.parent / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         block = css[css.index('html[data-cloud="1"]') : css.index('html[data-cloud="1"]') + 320]
         for needle in ('.cloud-hide', '#btn-headless', '.ai-only-ollama'):
             assert needle in block, f'{needle} is not covered by the cloud rule: {block}'

@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from static_assets import css_text
 
 REPO = Path(__file__).resolve().parents[3]
 STATIC = REPO / 'backend' / 'static'
@@ -91,7 +92,7 @@ class TestThePageAsksNothingOffThisMachine:
             assert f'src="/vendor/{name}"' in html, f'{name} is not served from /vendor'
 
     def test_the_ui_face_is_declared_locally_and_named_by_the_stylesheet(self):
-        css = (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
+        css = css_text()
         face = (STATIC / 'vendor' / 'fonts' / 'literata.css').read_text(encoding='utf-8')
         assert 'Literata' in css.split('--font:')[1][:80], 'the design token no longer asks for the vendored face'
         assert "'Literata'" in face or 'Literata' in face

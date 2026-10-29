@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_bodies as _catalog_bodies
 from node_runner import run_node
+from static_assets import css_text
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -49,7 +50,7 @@ def _markup() -> str:
 
 
 def _css() -> str:
-    return (STATIC / 'css' / 'style.css').read_text(encoding='utf-8')
+    return css_text()
 
 
 def _js(name: str) -> str:
