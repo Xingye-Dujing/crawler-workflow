@@ -12,13 +12,20 @@ def _forward_run_console(monkeypatch):
     re-export alone would silence only the app-side lines and let the worker print into the real
     buffer — the case would then assert on console text it never captured. Same call-time lookup
     the executor seams already use (``tests/executor_seams.py``).
+
+    Every module that prints from the run path has to be listed here, one per forward: the
+    scheduled fire's narration moved to ``engine.run_schedule`` on 2026-10-29, and a fixture that
+    kept forwarding only to ``engine.run`` would let that line print into the real buffer while
+    the test asserted on a list it never filled.
     """
     import app as app_module
     from executor_seams import forward
 
     import engine.run
+    import engine.run_schedule
 
     forward(monkeypatch, engine.run, 'add_log', app_module)
+    forward(monkeypatch, engine.run_schedule, 'add_log', app_module)
 
 
 @pytest.fixture

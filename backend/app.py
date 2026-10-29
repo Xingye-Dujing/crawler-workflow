@@ -48,7 +48,7 @@ from runtime.state import (
 from scheduling import clock
 from sessions.routes import bp as sessions_bp
 
-from engine import run as run_engine
+from engine import run_schedule
 from engine.logger import setup_logger
 from i18n import audit, set_lang, t
 from services.runs.queue import (
@@ -406,14 +406,15 @@ def _payload_too_large(_error):
 #
 # The clock, the task store and the history are ``scheduling/clock.py`` / ``scheduling/store.py``,
 # which import without Flask. The two doors a fire needs — reading the canvas a task names, and
-# starting the run — are ``engine.run.scheduled_canvas`` / ``start_scheduled_run``; they are
-# wired to the clock below as module attributes, so a scheduled fire goes through the SAME
+# starting the run — are ``engine.run_schedule.scheduled_canvas`` / ``start_scheduled_run``; they
+# are wired to the clock below as module attributes, so a scheduled fire goes through the SAME
 # ``begin_run`` a manual 执行 does: same validations, same claim, and the same queue when a run is
-# already going.
+# already going. ``run_schedule`` itself reaches that start by name (``engine.run.begin_run``), so
+# one patch of it governs the manual route, the drain and this fire alike.
 
 
-clock.set_run_starter(run_engine.start_scheduled_run)
-clock.set_canvas_source(run_engine.scheduled_canvas)
+clock.set_run_starter(run_schedule.start_scheduled_run)
+clock.set_canvas_source(run_schedule.scheduled_canvas)
 
 
 # Every node type is a plugin: ``nodes/executors/`` registers its own executor with the same table,

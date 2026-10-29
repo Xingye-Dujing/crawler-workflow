@@ -253,11 +253,12 @@ change is judged on all three, not on the machine it was typed on.
 
 - **The clock is one thread inside the server process, started only from `__main__`** (and, under the reloader, only
   in the real serving child), and **a fire takes the same start path as a manual Run** — `scheduling.clock` never
-  starts a run itself, it calls the seam `engine.run.start_scheduled_run` → `begin_run`, so a busy server **queues**
-  the fire like any other request. Two clocks would double-fire; a second start path would bypass `begin_run`'s
-  single-run ownership.
-- **A scheduled canvas may not need a model, and the rule is one rule asked twice** (`engine.run.scheduled_canvas`,
-  shared by the panel's verdict, save time and fire time): refused **by name**, never by a server-side key. **A
+  starts a run itself, it calls the seam `engine.run_schedule.start_scheduled_run` → `begin_run`, so a busy
+  server **queues** the fire like any other request. Two clocks would double-fire; a second start path would
+  bypass `begin_run`'s single-run ownership.
+- **A scheduled canvas may not need a model, and the rule is one rule asked twice**
+  (`engine.run_schedule.scheduled_canvas`, shared by the panel's verdict, save time and fire time): refused
+  **by name**, never by a server-side key. **A
   moment missed while the server was down is recorded (`missed.count`), never replayed** — at most one event per
   restart. Refusals and accounting go to the task's own history (`last_run` + 20 entries), never into the run
   console, which gets exactly one attributed line when a run really starts (a queued fire is narrated by the
@@ -289,8 +290,8 @@ change is judged on all three, not on the machine it was typed on.
   lines of the whole run ship). `consoleViews` holds `{seen, lines}` per view (`'all'` + each workflow id), every
   view is fed on every poll, and `switchWfTab` repaints without moving the cursor.
 - **The console is ALSO persisted per run (`run_store.run_log`), as a pure side effect that may never move the live
-  console.** `_push_log` → `engine.run.RunLogWriter` via `set_log_sink`, armed only inside a run's window. The
-  durable viewer (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach
+  console.** `_push_log` → `engine.run_logs.RunLogWriter` via `set_log_sink`, armed only inside a run's window.
+  The durable viewer (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach
   (`execution_state['logs']/_log_total/_wf_logs/_wf_log_total` + `?tail=5000`) must stay byte-identical with or
   without a sink** — a shifted total is a cursor that skips/repeats live lines after reload;
   `test_console_buffer.py` fails that invariant.

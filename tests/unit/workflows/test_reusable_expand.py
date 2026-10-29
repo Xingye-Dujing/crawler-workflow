@@ -177,7 +177,7 @@ class TestCallSites:
         or a timer would start a clean step that needs credentials it can never have."""
         from runtime.stores import get_workflow_manager
 
-        from engine.run import scheduled_canvas
+        from engine.run_schedule import scheduled_canvas
 
         manager = get_workflow_manager()
 
@@ -211,17 +211,19 @@ class TestCallSites:
     def test_both_run_start_and_the_scheduled_canvas_expand_before_using_the_workflow(self):
         from pathlib import Path
 
-        run_source = (Path(__file__).resolve().parents[3] / 'backend' / 'engine' / 'run.py').read_text(encoding='utf-8')
-        # Both doors are in this module now (the run start and the scheduled canvas moved together),
-        # so the rule is two expansions in the file that owns them — one per door, never one
-        # shared assumption about the other.
-        assert run_source.count('expand_reusable_workflow(') >= 2, (
-            'both begin_run (manual/queued) and scheduled_canvas must expand'
-        )
+        engine_dir = Path(__file__).resolve().parents[3] / 'backend' / 'engine'
+        run_source = (engine_dir / 'run.py').read_text(encoding='utf-8')
+        schedule_source = (engine_dir / 'run_schedule.py').read_text(encoding='utf-8')
+        # Two doors, two expansions — one in the module that starts a run, one in the module the
+        # clock is wired to. Reading them separately is what keeps this honest: after the schedule
+        # seam moved out of run.py (2026-10-29), a count over the old single file would have found
+        # one door and called the rule satisfied while the other door silently stopped expanding.
         begin = run_source[run_source.index('def begin_run(') :][:8000]
-        assert 'expand_reusable_workflow(' in begin
-        scheduled = run_source[run_source.index('def scheduled_canvas(') : run_source.index('def start_scheduled_run(')]
-        assert 'expand_reusable_workflow(' in scheduled
+        assert 'expand_reusable_workflow(' in begin, 'the run start stopped expanding the group'
+        scheduled = schedule_source[
+            schedule_source.index('def scheduled_canvas(') : schedule_source.index('def start_scheduled_run(')
+        ]
+        assert 'expand_reusable_workflow(' in scheduled, 'the schedule gate stopped expanding the group'
         assert scheduled.index('expand_reusable_workflow(') < scheduled.index('workflow_needs_llm('), (
             'the LLM gate must see the expanded children, not the group'
         )

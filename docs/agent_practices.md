@@ -284,6 +284,23 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   object is the same object. Both are in ``build/verify_canvas_split.py`` / ``build/verify_canvas_surface.py``.
   Also: ``page_js`` exists because "who binds ``canvas``" is a per-PAGE question — asked of the directory it
   reports the studio page's own local ``canvas`` as a collision, and that document never loads these files.
+- **Moving a Python function moves its patch seam with it — and a stale seam is GREEN, not red
+  (measured 2026-10-29, on ``engine/run.py`` → ``engine/run_schedule.py``).** Tests of the run path patch
+  ``app.add_log`` and rely on ``tests/api/conftest.py`` forwarding that name into the module which
+  actually resolves it. The fixture listed ``engine.run``; when the scheduled fire's narration moved to
+  a new module, its ``add_log`` resolved THERE, so two schedule cases asserted on a list nobody filled
+  — and they had failed loudly (``assert [] == [...]``) only because the assertion happened to demand
+  the lines. A case that asserted "no line printed" instead would have passed the whole way through the
+  move. So the census is now read from the source: ``tests/unit/gates/test_console_seam_census.py``
+  parses every ``engine/*.py`` with ``ast`` for a ``from runtime.state import add_log`` and requires
+  each hit to appear in the forward list, and rejects the reverse (a forward to a module that no longer
+  logs is a fixture pretending to cover something). Same reasoning as ``executor_seams.forward``: the
+  seam has to be enumerated by the code's shape, never by whoever remembers to edit a conftest.
+  The companion fact from that move: ``start_scheduled_run`` reaches ``begin_run`` as
+  ``run_engine.begin_run`` looked up INSIDE the function. ``tests/api/test_run_races.py`` already refuses
+  a by-value ``from engine.run import begin_run`` anywhere in ``backend`` — with the schedule door in its
+  own module that rule is what keeps "one fake run start" meaning one thing; a module-level import of the
+  *name* would have made the schedule tests start a real crawl while reporting green.
 - **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
   ``services/biblio_*`` modules into ``services/biblio/`` (2026-10-28) went 122 references clean on the first pass and
   still failed five ways: ① **``ruff --fix`` deletes the import a pending rename is about to use** — after
@@ -558,7 +575,9 @@ serves. `start`/`stop` are idempotent so a test (or a future caller) cannot stac
 
 **A fire is the same start as a manual Run, because `begin_run` owns the whole start path.** `scheduler` may not import
 `app` (the Blueprint imports the scheduler, so that would be a cycle), so app.py installs two seams at import:
-`set_run_starter(engine.run.start_scheduled_run)` and `set_canvas_source(engine.run.scheduled_canvas)`. `start_scheduled_run` then
+`set_run_starter(engine.run_schedule.start_scheduled_run)` and `set_canvas_source(engine.run_schedule.scheduled_canvas)`
+(both doors moved out of ``engine.run`` into ``engine.run_schedule`` on 2026-10-29; the app still installs them at import).
+`start_scheduled_run` then
 calls `begin_run` — the *only* start path — which is what makes a busy server **queue** the fire exactly like the Execute
 button instead of racing it (`queue:false` keeps the 400 for fail-fast callers, so a second path would have looked
 plausible). The scheduler is refused by name (`sched.notWired`) when nothing was wired, because a silently-dropped fire
@@ -569,7 +588,7 @@ and `refused` for an executor saying no. They mean different things to the user 
 needs a model" versus "something is broken" — and the first version recorded both as `refused`. A crash also must not stop
 the clock for every other task, so the `except` is per-task and the tick continues.
 
-**One rule about a canvas, asked three times, from one function.** `engine.run.scheduled_canvas` wraps the existing
+**One rule about a canvas, asked three times, from one function.** `engine.run_schedule.scheduled_canvas` wraps the existing
 `_workflow_needs_llm` (the same test the executor uses), and the panel's `runnable`/`why_not`, the save-time check and the
 fire-time check all go through it. Three copies would drift, and the drift is invisible until 03:00. This is why a
 scheduled canvas may not need a model at all: a cloud box has neither Ollama nor a person to answer a provider question,

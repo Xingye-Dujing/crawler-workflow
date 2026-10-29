@@ -118,7 +118,9 @@ crawler_workflow/
 │   ├── engine/                   # 工作流引擎
 │   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹
 │   │   ├── plan.py               # 这次运行「是什么」：并行/串行、传输方式、要不要模型、重跑一个节点会作废哪些
-│   │   ├── run.py                # 运行本体：begin_run 与 worker、逐节点续跑 run_node_durable、执行器分派 execute_node、停止判定、日志 tee、队列排水、定时两扇门
+│   │   ├── run.py                # 运行本体：begin_run 与 worker、逐节点续跑 run_node_durable、执行器分派 execute_node、停止判定、队列排水
+│   │   ├── run_logs.py           # 控制台的两条写路径：抓 print() 的 LogTee 与按运行落库的 RunLogWriter（由 begin_run 的运行窗口启停）
+│   │   ├── run_schedule.py       # 定时触发的两扇门：这份画布能不能无人值守地跑（scheduled_canvas）、这一次触发发生了什么
 │   │   ├── executor.py           # 线程池执行器
 │   │   └── logger.py             # 日志管理
 │   ├── services/                 # 服务模块

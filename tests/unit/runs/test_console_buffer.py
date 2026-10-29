@@ -294,11 +294,14 @@ class TestConsoleReset:
         """Neither module that starts a run may re-implement the reset.
 
         The scan covers ``app.py`` AND ``engine/run.py`` because the run start moved to the second
-        one — the rule is about the code that opens a run, not about which file it sat in.
+        one — the rule is about the code that opens a run, not about which file it sat in. The
+        console's own write paths join the list (``engine/run_logs.py`` since 2026-10-29): a reset
+        re-implemented anywhere the console is written is the same drift, whichever module hosts it.
         """
         app = console[0]
         backend = Path(app.__file__).parent
-        sources = {name: (backend / name).read_text(encoding='utf-8') for name in ('app.py', 'engine/run.py')}
+        names = ('app.py', 'engine/run.py', 'engine/run_logs.py')
+        sources = {name: (backend / name).read_text(encoding='utf-8') for name in names}
         for name, source in sources.items():
             assert "execution_state['logs'] = []" not in source, (
                 f'{name} reset its own copy of the buffer again; call reset_console_state() '

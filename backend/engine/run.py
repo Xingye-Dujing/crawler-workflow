@@ -10,13 +10,18 @@ import it: this module imports ``state``/``stores``/``services``/``engine`` and 
 Why these four are together: they are one decision chain — dispatch the node, store its rows,
 grade the outcome. Splitting them across modules is how a Stop and a failure end up with two
 different answers about what the node did.
+
+What is NOT here, because it answers a different question: the console's write paths
+(``engine.run_logs`` — the print() tee and the durable per-run log, armed and disarmed by this
+module's run window) and the scheduler's seam (``engine.run_schedule`` — may this canvas run
+unattended, and what happened when it fired). Both moved out on 2026-10-29 as verbatim copies;
+``begin_run`` is still the only path that starts a run, and the queue drains by calling it.
 """
 
 import contextlib
 import logging
 import sys
 import threading
-import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -30,7 +35,6 @@ from nodes.labels import node_label
 from runtime.settings import get_setting
 from runtime.state import (
     _completed_lock,
-    _push_log,
     _results_snapshot,
     _wf_local,
     add_log,
@@ -40,13 +44,14 @@ from runtime.state import (
     set_log_sink,
     stop_requested,
 )
-from runtime.stores import get_run_store, get_workflow_manager
+from runtime.stores import get_run_store
 from runtime.transport import _local_transport_refusal
 
 from analyzers.llm_client import ABORT_MARK
 from crawlers.core.faults import CrawlerStopped
 from engine.executor import TaskExecutor
 from engine.plan import component_name, llm_provider, run_mode, workflow_needs_llm
+from engine.run_logs import LogTee, run_log_writer
 from engine.workflow import WorkflowEngine, effective_workflow
 from i18n import normalize, set_lang, t
 from services.analysis.pipeline import UnknownOperationError
@@ -362,104 +367,6 @@ def note_heavy_result(rows, label: str) -> None:
     if not isinstance(rows, list) or len(rows) < HEAVY_RESULT_ROWS:
         return
     add_log(t('run.heavy_result', nid=label, n=len(rows)))
-
-
-class LogTee:
-    """Fallback: tee print() output into execution_state['logs'] (catches analyzer print() calls)."""
-
-    def __init__(self, original):
-        self._original = original
-
-    def write(self, text):
-        if text and text != '\n':
-            ts = time.strftime('%H:%M:%S')
-            for line in text.rstrip('\n').split('\n'):
-                msg = line.rstrip()
-                if msg:
-                    _push_log(f'[{ts}] {msg}')
-        self._original.write(text)
-
-    def flush(self):
-        self._original.flush()
-
-    def unwrap(self):
-        """The stream this tee replaced — how a caller takes the tee off without reaching in."""
-        return self._original
-
-
-class RunLogWriter:
-    """Write-through of the live console into the durable per-run log (``run_store.run_log``).
-
-    Installed as ``state``'s log sink only for the window a run is in flight (armed in
-    ``begin_run``, disarmed in the worker's ``finally``), so a message logged outside any
-    run never reaches it — otherwise a later cookie/preview ``add_log`` would append to a
-    completed record's log. The sink runs *inside* ``_push_log`` while it holds
-    ``_completed_lock``, so ``push`` may only touch in-memory state cheaply; it accumulates
-    lines and hands the batch to SQLite every ``FLUSH_EVERY`` lines or the moment one is an
-    error (so a crash leaves the tail it printed, not a whole run's worth unwritten).
-
-    It must never write the console back (no ``add_log``/``logger`` on failure — the log
-    handler forwards here, so a failure log would recurse). A store error keeps the batch for
-    the next flush, bounded by a hard cap so a permanently-dead DB cannot grow memory forever.
-    """
-
-    FLUSH_EVERY = 200
-    HARD_CAP = 2000
-
-    def __init__(self):
-        self._buf: list = []
-        self._buf_run_id: str | None = None
-
-    def reset(self) -> None:
-        """Drop any leftover batch without writing it (a new run, or an armed re-entry).
-
-        Takes ``_completed_lock`` for the whole swap (the same way ``flush`` does): ``push``
-        runs under that lock, so replacing ``_buf`` without it let a concurrent push append
-        into the list ``reset`` had just swapped out — the durable log of a stopped run lost
-        its tail. Neither caller holds the lock, so acquiring it here cannot self-deadlock."""
-        with _completed_lock:
-            self._buf = []
-            self._buf_run_id = None
-
-    def push(self, parts, wf_idx, level) -> None:
-        # Runs while the caller holds ``_completed_lock`` (see ``state._push_log``); every
-        # mutation below is therefore serialized with every other console writer.
-        rid = str(execution_state.get('run_id') or '')
-        if not rid:
-            return
-        if rid != self._buf_run_id and self._buf:
-            # Serial split: the previous component's record is closed — flush its lines under
-            # ITS id before switching, or they would be re-filed onto the next workflow.
-            self._drain()
-        self._buf_run_id = rid
-        stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
-        name = str((execution_state.get('_wf_names') or {}).get(wf_idx, '')) if wf_idx is not None else ''
-        lvl = level or 'info'
-        for line in parts:
-            self._buf.append((stamp, wf_idx, name, lvl, line))
-        if lvl == 'error' or len(self._buf) >= self.FLUSH_EVERY:
-            self._drain()
-
-    def _drain(self) -> None:
-        if not self._buf or not self._buf_run_id:
-            self._buf = []
-            return
-        rid = self._buf_run_id
-        batch = self._buf
-        try:
-            get_run_store().append_log(rid, batch)
-            self._buf = []
-        except Exception:
-            # Keep the batch for a later flush; bound it if the store stays down. No logging
-            # here — the console handler forwards back into ``push`` and would recurse.
-            self._buf = batch if len(batch) <= self.HARD_CAP else batch[-self.FLUSH_EVERY :]
-
-    def flush(self) -> None:
-        with _completed_lock:
-            self._drain()
-
-
-run_log_writer = RunLogWriter()
 
 
 def record_export_stamp(store, run_id: str) -> str:
@@ -1352,55 +1259,3 @@ def begin_run(data: dict, lang_header: str) -> dict:
         return {'status': 500, 'body': {'ok': False, 'error': str(e)}}
 
     return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}
-
-
-def scheduled_canvas(name: str) -> dict:
-    """The saved canvas a scheduled task will run, or the reason it may not run on a timer.
-
-    One answer for two moments: the schedule form refuses a canvas that cannot run unattended
-    while the user is still choosing, and the fire refuses it again if the file changed since.
-    Both rules are enforced here rather than in the panel, because a hand-written POST would
-    otherwise skip them: the file must exist, and its steps must not need a model — a timer has no
-    browser request behind it, so there is nowhere for an API key to come from, and a run that
-    quietly skipped its analysis would look exactly like one that analysed something.
-    """
-    if not name:
-        return {'workflow': None, 'error': t('sched.workflowRequired')}
-    workflow = get_workflow_manager().load(name)
-    if not workflow:
-        return {'workflow': None, 'error': t('sched.canvasMissing', name=name)}
-    # The saved file keeps reusable nodes as groups; this gate asks what a run will
-    # actually call, so expand before asking whether a model is needed. (The expanded
-    # graph is also what begin_run receives; there it is already group-free.)
-    workflow, reusable_error = expand_reusable_workflow(workflow)
-    if reusable_error:
-        return {'workflow': None, 'error': reusable_error}
-    if workflow_needs_llm(workflow):
-        return {'workflow': None, 'error': t('sched.canvasNeedsModel', name=name)}
-    return {'workflow': workflow, 'error': ''}
-
-
-def start_scheduled_run(task: dict, manual: bool) -> dict:
-    """Start one scheduled run and say what happened (started / queued / refused).
-
-    ``run_id`` comes back so the task's own history can point at the record: that id is how the
-    user opens the console of the fire that just happened.
-    """
-    loaded = scheduled_canvas(str(task.get('workflow') or ''))
-    if loaded['error']:
-        return {'ok': False, 'error': loaded['error']}
-    name = str(task.get('name') or '')
-    answer = begin_run(
-        {'workflow': loaded['workflow'], 'workflow_name': name, 'lang': task.get('lang') or 'zh'},
-        '',
-    )
-    body = answer.get('body') or {}
-    if answer.get('status') != 200 or not body.get('ok'):
-        return {'ok': False, 'error': str(body.get('error') or '')}
-    queued = bool(body.get('queued'))
-    if not queued:
-        # Only a run that really started gets a console line. A queued fire has no console of its
-        # own yet (the queue narrates when it starts) and a refusal has none at all — that one is
-        # recorded in the task's own history, which is where the user looks for it.
-        add_log(t('sched.firedManual' if manual else 'sched.fired', name=name))
-    return {'ok': True, 'queued': queued, 'run_id': str(body.get('run_id') or ''), 'error': ''}

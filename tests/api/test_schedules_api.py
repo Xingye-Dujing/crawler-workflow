@@ -41,6 +41,18 @@ def _run_module():
     return engine.run
 
 
+def _schedule_module():
+    """``engine.run_schedule`` — the door the clock is wired to (moved out of ``engine.run`` 2026-10-29).
+
+    Calling the door here while the fake run start is patched onto ``engine.run`` is what proves the
+    two are still one path: the schedule reaches ``begin_run`` by name on that module, so the fake
+    below is the thing this calls, and no crawl can start from a schedule test.
+    """
+    import engine.run_schedule
+
+    return engine.run_schedule
+
+
 @pytest.fixture(autouse=True)
 def _home(tmp_path, monkeypatch):
     """A store of this test's own; the canvas directory stays the suite's isolated one."""
@@ -312,7 +324,7 @@ class TestTheGlueAppInstalled:
             _run_module(), 'begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
         )
 
-        answer = _run_module().start_scheduled_run(task, False)
+        answer = _schedule_module().start_scheduled_run(task, False)
 
         assert answer == {'ok': False, 'error': _en('sched.canvasNeedsModel', name='要模型的画布')}
         assert called == [], 'a refused canvas was handed to the executor anyway'
@@ -333,13 +345,13 @@ class TestTheGlueAppInstalled:
             _run_module(), 'begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
         )
 
-        answer = _run_module().start_scheduled_run(task, False)
+        answer = _schedule_module().start_scheduled_run(task, False)
 
         assert answer['ok'] is True, answer
         assert called, 'a canvas that calls no model was refused anyway'
         # The switch-off is what makes the difference: the same node left ON stays refused.
         still_on = dict(task, workflow='模型开着的画布')
-        assert _run_module().start_scheduled_run(still_on, False) == {
+        assert _schedule_module().start_scheduled_run(still_on, False) == {
             'ok': False,
             'error': _en('sched.canvasNeedsModel', name='模型开着的画布'),
         }
@@ -354,7 +366,7 @@ class TestTheGlueAppInstalled:
         )
         monkeypatch.setattr(app_module, 'add_log', lambda line: None)
 
-        answer = _run_module().start_scheduled_run(task, False)
+        answer = _schedule_module().start_scheduled_run(task, False)
 
         assert answer == {'ok': True, 'queued': False, 'run_id': 'r1', 'error': ''}
         assert seen[0][0]['lang'] == 'en'
@@ -371,8 +383,8 @@ class TestTheGlueAppInstalled:
         lines = []
         monkeypatch.setattr(app_module, 'add_log', lines.append)
 
-        _run_module().start_scheduled_run(task, False)
-        _run_module().start_scheduled_run(task, True)
+        _schedule_module().start_scheduled_run(task, False)
+        _schedule_module().start_scheduled_run(task, True)
 
         assert lines == [
             _en('sched.fired', name='每天早八'),
