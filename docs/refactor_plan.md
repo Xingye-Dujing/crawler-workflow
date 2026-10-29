@@ -113,9 +113,6 @@ backend/
 
   core/                   # 地基：谁都能依赖它，它不依赖业务
     config.py             # ← config.py
-    state.py              # ← state.py（运行期内存态 + 控制台缓冲 + 停止判定）
-    settings.py           # ← settings_store.py
-    stores.py             # ← stores.py（进程级 store 单例，测试接缝）
     coerce.py             # ← api/http.py 里的数值/枚举收敛助手（解掉 D7 的反向依赖）
     machine.py            # ← utils/machine_deps.py
     procs.py              # ← utils/procs.py
@@ -123,6 +120,13 @@ backend/
     text/                 # ← i18n.py 拆：__init__ 只放行为，词条按域分文件
       zh/{common,api,crawl,run,node,chart,biblio,settings,dialog,toast,report,deps}.py
       en/…                #   与 zh 同名一一对应
+
+  runtime/                # 进程级运行层（2026-10-29 落地；它确实 import 域包，故不放进 core）
+    state.py              # ← state.py（运行期内存态 + 控制台缓冲 + 停止判定）
+    stores.py             # ← stores.py（进程级 store 单例，测试接缝）
+    settings.py           # ← settings_store.py
+    gate.py               # ← crawl_gate.py（同平台采集闸门）
+    transport.py          # ← transport.py（云端模型传输拒绝）
 
   capabilities/           # 声明层：零重依赖（不 import selenium/pandas/app），启动即可问
     model.py              # Field / Mode / Capability 数据类
@@ -135,7 +139,6 @@ backend/
 
   crawlers/               # 采集实现层（可以 import selenium；capabilities/ 不行）
     registry.py           # ← crawlers/__init__.py 的 CRAWLERS + get_crawler/cookie_hosts/is_crawlable
-    gate.py               # ← crawl_gate.py
     core/
       crawler.py          # ← base.py 拆 1：Crawler 主体（seed/emit/游标/水位/收尾判定）
       faults.py           # ← base.py 拆 2：CrawlerStopped/DeadDriver/PageNotArrived/ProfileUnavailable + 分类
@@ -1143,6 +1146,12 @@ Stage 1 动工前先读 `docs/crawler_rules.md` 与 `docs/crawler_notes.md` 对�
     - **#43 前端一刀**：`workflow.js` 4,458 → **2,089**，四片进 `panels/data-views.js`(1,147)/`panels/shell.js`(702)/`panels/run-results.js`(357)/`workflow-layout.js`(163)，`index.html` 追加四行。**伴生表**从 `companions.mjs` 字面量迁到 `tests/frontend/splits.json`，node loader 与新增的 `frontend_catalogue.with_companions`（Python 驱动）读同一份；`harness_reusable` 改成接受「canvas、workflow、伴生…、reusable」。受影响的扫描改读新家：`test_visualization` 的 `center_node`、`test_biblio_workspace`/`test_frontend_schedules` 的语言回调、`test_frontend_contract` 的情感/倾向调色板与 `trainMLModel`、`test_frontend_page_scripts_js` 的伴生表校验。
     - **index.html 质量收口（2026-10-29）**：页面唯一一段内联脚本（31 行首帧主题引导）搬成 `js/theme-boot.js`，仍是 `<body>` 第一个阻塞脚本（`defer/async` 会让浅色底先画出来），页面自此**没有内联 JavaScript**；引导同时在首帧写出 `html.lang`（英文选择此前要等 app.js 才到辅助技术）与 `color-scheme`（原生滚动条/表单控件此前永远是浅色），`I18n.apply()`/`applyTheme()` 在运行期维持这两项。新增 `tests/unit/frontend/test_frontend_page_markup.py` 一次 `html.parser` 扫描钉住六条文档契约：id 唯一（重复 id 会让 `getElementById` 静默指向第一个）、标签成对嵌套（错闭的 `div` 会让浏览器重挂载整块面板）、idref 指向存在的元素、每个按钮/链接有可访问名、无内联脚本、每个模块只加载一次且 `theme-boot.js` 是第一个且阻塞；`harness_theme.mjs` 预置深色/英文草稿读取首帧结果。`test_frontend_contract` 的 `data-i18n` 审计从只认文本键扩到 `-title`/`-placeholder` 两种变体（原先这两个属性里的键无人检查）。
     - **门禁（本轮全量，2026-10-29）**：fast **8,207 passed / 3 skipped / 355 deselected**（唯一 warning 仍是 jieba 第三方）；ruff check + format **597 文件**全绿；pylint 产品档 346 文件、tests 档 276 文件均 **10.00/10**；设备档（三个 `CRAWLER_REQUIRE_*` + `--timeout=300`）**189 passed / 5 skipped**（5 条为未设 `CIXI_REQUIRE_CATBUS` 的 CatBus 适配器用例）；`/smoke-verify`：5057 引导成功，9 个 GET（含新增 `/js/theme-boot.js`）全 200。真机 `live_quick` 未跑（需用户在场）。
+  - **Stage 11（2026-10-29，本轮）：大文件与插件收口**
+    - **图表工作室页面文件化**：`zenviz.html` 16,852 → **218 行**；内联 `<style>`（~1,920 行）与 `<script>`（~14,700 行）原字节搬到 `css/zenviz.css` 与 `js/zenviz-page.js`（JS 仍是同一个 IIFE、缩进未动——模板字符串跨行，去缩进会改字符串内容；CSS 只去掉行首的页面对齐六格，空白在 CSS 里无语义）。`test_frontend_page_markup.py` 的文档契约套到第二个页面（id 唯一/标签成对/idref 存在/控件可访问名/无内联脚本或样式/模块在盘且只加载一次）；读旧内联 CSS 的顶栏一致性用例改读 `css/zenviz.css`。
+    - **backend 根收口**：`state/stores/settings_store/crawl_gate/transport` → `runtime/`（`state`/`stores`/`settings`/`gate`/`transport`），根只剩 `app.py` 与 `i18n.py`。**为何不进 `core/`**：core 的“不 import 域包”由 `test_foundation_layering` 钉住，而 state/stores 在 import 时就要构造 sessions/services 的单例——目标树据此改真（§3 已改）。新增两枚结构针：根模块集合固定、runtime 不得 import app。95 个引用文件同步（含 conftest 的三处 `sys.modules` 探针、`test_test_tiers` 的捕获路径清单、桌面 spec 的 hiddenimports 增列 runtime 包）。`crawl_gate.py` 在目标树里原本放在 crawlers 包下，实际放 `runtime/gate.py`：`crawlers/__init__` 会急切 import 全部平台爬虫，从那里取闸门会把 Selenium 拖进只问设置的测试。
+    - **图表选项插件化**：`services/charts/options.py`(799) → `options/{base,series,distributions,relations,topics}.py`，`@builder('type')` 注册进 `BUILDERS`，同一图型两次注册直接拒绝；bibliometric 家族仍由 `biblio/charts.build` 构建。行为证据：改前对 22 个用例（注释线、中心子图、词云分词/样式、单列箱线等）快照 `_build_option` 的输出 JSON，改后**逐字节相同**；新增四枚契约（控制台图型集合 == builder 集合、重复注册拒绝、builder 丢失按名拒绝、builder 必须住在家族模块）。
+    - **门禁（2026-10-29 全量）**：fast **8,220 passed / 3 skipped / 355 deselected**（473 s；唯一 warning 仍是 jieba 第三方）；ruff check + format **603 文件**全绿；pylint 产品档 352 文件、tests 档 276 文件均 **10.00/10**（两档 `--fail-on=W,E,F` 均 exit 0；本轮当场抓到并修掉两条真问题：`desktop/desktop_entry.py` 的 `settings_store` 旧 import、builder 从类外访问三个 `_` 私有助手——后者改为公开名 `apply_heatmap_option`/`agreement_matrix`/`ego_subgraph`，测试同步）；设备档（三个 `CRAWLER_REQUIRE_*` + `--timeout=300`）**189 passed / 5 skipped**（5 条为未设 `CIXI_REQUIRE_CATBUS` 的 CatBus 用例）；`/smoke-verify`：5057 引导成功，`/`、8 个 API GET、`/zenviz.html`、新静态文件 `/js/zenviz-page.js` 与 `/css/zenviz.css` 全 **200**。真机 `live_quick` 未跑（需用户在场）。
+    - **下一批候选（本轮实测，尚未动）**：`engine/run.py` 1,406（`begin_run` 闭包持十余局部量，属行为变更，须单独一刀 + 设备档）；`canvas.js` 3,893（相机/连线/节点渲染，页面契约多）；`panels/settings.js` 1,985 与 `app.js` 1,456（可继续按对象切片，`SPLIT_OF` 机制已就绪）；`style.css` 5,017（可按域拆，但 13 个测试直接读该文件，须先立共享读取助手）；`zenviz-page.js` 14,723（IIFE 内共享 `state`，拆分要先立命名空间，风险高于收益）；`nodes/schema.py` 的节点列聚合链（18 个 `elif`，动作小但牵动 lineage 契约）。
   - **两条如实记录的偏差**：① `e73a580` 的提交说明写「829 → 791 行」，实际提交字节是 783 行
     （我在 `ruff format` 之前取的数）；② 第八片的桩点里 `housekeep`/`load_pending_queue` 仍打在 app 上且
     仍然有效，因为调用它们的 `start_background_services()` 还在 app —— 若把启动恢复搬走，这两处要一起改。
