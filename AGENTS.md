@@ -170,10 +170,13 @@ change is judged on all three, not on the machine it was typed on.
   in-memory (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行.
 - **A run helper that needs no state from the claim lives at module scope, and a captured name is a
   parameter.** Four were lifted out of `begin_run`'s closure on 2026-10-29 (`_wf_display_name`,
-  `_run_single_workflow`, `_continue_record`, `_close_component_record`): inside a closure no test can
-  reach them. Re-indenting is not a rewrite, so the proof is `ast.dump` equality (multi-line strings
-  modulo leading whitespace, single-line strings strict) plus `symtable` showing **no** free variables —
-  never a byte diff.
+  `_run_single_workflow`, `_continue_record`, `_close_component_record`), and the last six followed
+  the same day (`_carries_artifact`, `_node_of`, `_inputs_for`, `_component_run`,
+  `_run_workflow_wrapper`, and `run` itself → `_run_worker` with the eight claim-time names as
+  parameters): inside a closure no test can reach them. Re-indenting is not a rewrite, so the proof
+  is `ast.dump` equality (multi-line strings modulo leading whitespace, single-line strings strict)
+  plus `symtable` showing **no** free variables — never a byte diff.
+  `tests/unit/gates/test_run_worker_module_scope.py` fails any re-embedding.
 - **A test that calls an executor function directly must leave the app quiet:** `clean_globals` *fails* a test that
   leaks `execution_state['running']`.
 - **Checkpointing is the core value** (`services/runs/store/__init__.py`): outputs and LLM answers persist so a run resumes,

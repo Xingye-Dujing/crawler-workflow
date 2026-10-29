@@ -319,6 +319,17 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   can make an intermediate helper's free-variable COUNT go up (``_component_run`` now closes over
   ``resumable``/``resuming`` to hand them down): the goal is a visible source for each value, not the
   smallest closure.
+- **The same proof normalises TWO things a naive compare gets wrong (fourth lift, 2026-10-29, the
+  last six helpers of ``engine/run.py`` — ``run`` itself became ``_run_worker``).** ① the original
+  image must have its constants folded but NOT its call arguments dropped — dropping on both sides
+  turned the short original calls into zero-argument ones and "failed" a verbatim move; only the
+  lifted side loses the parameters the knife added. ② a rename (``run`` → ``_run_worker``) is part of
+  the move, so the comparison aligns the names first; the rename itself is pinned elsewhere (the gate
+  asserts the thread ``target`` and the kill-guard thread ``name='run'`` separately). Call sites that
+  do not travel with the extracted block (``_inputs_for(nid)`` inside ``_run_single_workflow``) are a
+  third class of missed edit the arity change turns loud — list them from ``grep`` before proving,
+  not after. ``tests/unit/gates/test_run_worker_module_scope.py`` now refuses any FunctionDef nested
+  inside a module-level function of ``engine/run.py``: the lift is permanent or it is caught.
 - **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
   ``services/biblio_*`` modules into ``services/biblio/`` (2026-10-28) went 122 references clean on the first pass and
   still failed five ways: ① **``ruff --fix`` deletes the import a pending rename is about to use** — after

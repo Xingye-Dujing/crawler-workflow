@@ -18,12 +18,14 @@ unattended, and what happened when it fired). Both moved out on 2026-10-29 as ve
 ``begin_run`` is still the only path that starts a run, and the queue drains by calling it.
 
 The one rule for what stays INSIDE ``begin_run``: a helper that needs no state from the claim
-belongs at module scope, where a test can reach it and a reader can see its inputs. Four were
-lifted out on 2026-10-29 for exactly that reason — ``_wf_display_name`` (closed over nothing),
+belongs at module scope, where a test can reach it and a reader can see its inputs. Ten were
+lifted out on 2026-10-29 for exactly that reason — first ``_wf_display_name`` (closed over nothing),
 ``_run_single_workflow`` (one value: ``headless``), ``_continue_record`` (``resumable``,
-``resuming``) and ``_close_component_record`` (``ctx``, ``store``); each captured name became a
-parameter. ``begin_run.run`` is still nested because it genuinely closes over eight of the claim's
-results; lifting it is a behavior change, not a move.
+``resuming``) and ``_close_component_record`` (``ctx``, ``store``), then ``_carries_artifact``,
+``_node_of``, ``_inputs_for``, ``_component_run``, ``_run_workflow_wrapper`` and the worker body
+itself (``run`` → ``_run_worker``, the claim's eight results as eight parameters); each captured
+name became a parameter and the file now nests no function inside a function at all.
+``tests/unit/gates/test_run_worker_module_scope.py`` refuses a move back.
 """
 
 import contextlib
@@ -115,6 +117,15 @@ def settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: int
     return rows, NODE_PARTIAL
 
 
+def _carries_artifact(res: object) -> bool:
+    # A visualize / compile parent hands down a DICT, not rows; that dict IS its product (a chart spec
+    # carrying LaTeX, or a staged PDF). "empty upstream" must not read a chart as nothing, or a
+    # chart→save(PDF) and a chart→compile would both be skipped before either runs.
+    if not isinstance(res, dict) or res.get('error'):
+        return False
+    return any(key in res for key in ('latex', 'latex_table', 'pdf_file'))
+
+
 def run_node_durable(
     ctx: dict,
     node: dict,
@@ -188,14 +199,6 @@ def run_node_durable(
         store.finish_node(run_id, nid, NODE_RESTORED)
         add_log(t('run.restored', nid=label, n=len(rows)), wf_idx=wf_idx)
         return rows, NODE_RESTORED
-
-    def _carries_artifact(res: object) -> bool:
-        # A visualize / compile parent hands down a DICT, not rows; that dict IS its product (a chart spec
-        # carrying LaTeX, or a staged PDF). "empty upstream" must not read a chart as nothing, or a
-        # chart→save(PDF) and a chart→compile would both be skipped before either runs.
-        if not isinstance(res, dict) or res.get('error'):
-            return False
-        return any(key in res for key in ('latex', 'latex_table', 'pdf_file'))
 
     if (
         upstream
@@ -432,6 +435,41 @@ def _wf_display_name(wf_engine, wf_idx: int) -> str:
     )
 
 
+def _node_of(wf_engine, nid: str) -> dict:
+    return wf_engine.nodes.get(nid) or {}
+
+
+def _inputs_for(wf_engine, nid: str, upstream_of, results, wf_idx):
+    """→ (rows of the first incoming connection, [(parent_id, result), …]).
+
+    The full list travels with the node so a join can use the *second*
+    incoming connection as its right-hand table; every other node just
+    takes the first one.
+    """
+    parents = upstream_of.get(nid) or []
+    if not parents:
+        # A source (crawler or upload) has nothing upstream.
+        return [], []
+    # ``fuse`` is the one node type where several wires are the feature, not a warning:
+    # it folds every parent and logs what each contributed, so the "the first is the
+    # primary input" sentence would describe a rule this node deliberately does not have.
+    if len(parents) > 1 and _node_of(wf_engine, nid).get('type') != 'fuse':
+        add_log(
+            t(
+                'wf.multi_input',
+                nid=node_label(_node_of(wf_engine, nid), nid),
+                up=node_label(_node_of(wf_engine, parents[0]), parents[0]),
+                n=len(parents),
+            ),
+            wf_idx=wf_idx,
+        )
+    pairs = [(pid, results.get(pid)) for pid in parents]
+    primary = pairs[0][1]
+    # A chart spec (dict) is not tabular input; neither is a node that
+    # has not produced a list.
+    return (primary if isinstance(primary, list) else []), pairs
+
+
 def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
     """Execute one workflow (single connected component) level by level,
     with its own isolated wf_input. Returns {nid: result, ...}.
@@ -467,39 +505,6 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
     for conn in wf_engine.connections:
         upstream_of.setdefault(conn['to'], []).append(conn['from'])
 
-    def _node_of(nid: str) -> dict:
-        return wf_engine.nodes.get(nid) or {}
-
-    def _inputs_for(nid: str):
-        """→ (rows of the first incoming connection, [(parent_id, result), …]).
-
-        The full list travels with the node so a join can use the *second*
-        incoming connection as its right-hand table; every other node just
-        takes the first one.
-        """
-        parents = upstream_of.get(nid) or []
-        if not parents:
-            # A source (crawler or upload) has nothing upstream.
-            return [], []
-        # ``fuse`` is the one node type where several wires are the feature, not a warning:
-        # it folds every parent and logs what each contributed, so the "the first is the
-        # primary input" sentence would describe a rule this node deliberately does not have.
-        if len(parents) > 1 and _node_of(nid).get('type') != 'fuse':
-            add_log(
-                t(
-                    'wf.multi_input',
-                    nid=node_label(_node_of(nid), nid),
-                    up=node_label(_node_of(parents[0]), parents[0]),
-                    n=len(parents),
-                ),
-                wf_idx=wf_idx,
-            )
-        pairs = [(pid, results.get(pid)) for pid in parents]
-        primary = pairs[0][1]
-        # A chart spec (dict) is not tabular input; neither is a node that
-        # has not produced a list.
-        return (primary if isinstance(primary, list) else []), pairs
-
     for level in levels:
         if not execution_state['running']:
             break
@@ -513,7 +518,7 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
                 # still be in this attempt's population, or the settle pass in
                 # the finish line would filter the very node it exists to count.
                 execution_state['attempted_nodes'].add(nid)
-            primary, upstream = _inputs_for(nid)
+            primary, upstream = _inputs_for(wf_engine, nid, upstream_of, results, wf_idx)
             # The output (save) node merges every parent's rows into one table; to make that
             # table say which rows came from which platform (what 跨平台对比 reads), the run
             # loop — the only place holding the whole graph — resolves each parent's platform
@@ -528,7 +533,7 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
                 # which WIRE to cut is the one thing the console rule exists to stop.
                 _labels_of = {}
                 for _pid, _res in upstream:
-                    _pn = _node_of(str(_pid))
+                    _pn = _node_of(wf_engine, str(_pid))
                     _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
                     _platform_of[str(_pid)] = str(_p)
                     _labels_of[str(_pid)] = node_label(_pn, str(_pid))
@@ -619,6 +624,423 @@ def _close_component_record(sub_ctx: dict, ctx: dict, store) -> None:
     store.finish_run(rid, outcome, attempted=visited)
     with contextlib.suppress(ValueError):
         ctx['open_records'].remove(rid)
+
+
+def _component_run(
+    wf_idx, sub_engine, ctx, created, resumable, resuming, wf_fp, skipped_str, store, run_id, mode, headless
+):
+    """Open this workflow's own record and return the context its nodes run
+    under. Called as the turn arrives, which is what makes an unreached
+    workflow leave no record at all — the point of the split.
+
+    Workflow zero takes the id the HTTP response already handed out, so the
+    browser, the status endpoint and the resume banner all name a row that
+    exists. The others are minted as they are reached.
+
+    ``wf_idx`` is the component's position, the same word the serial loop and
+    ``_wf_display_name`` use: naming it ``index`` here shadowed the module's
+    ``index()`` route for the whole closure, which is a footgun, not a shortcut.
+    """
+    name = _wf_display_name(sub_engine, wf_idx)
+    earlier = _continue_record(name, resumable, resuming)
+    rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
+    store.start_run(
+        rid,
+        name,
+        wf_fp,
+        mode=mode,
+        headless=headless,
+        llm=execution_state['llm'],
+        lang=execution_state.get('lang'),
+        node_total=len(sub_engine.nodes),
+        wf_count=1,
+        skipped_workflows=skipped_str if wf_idx == 0 else '',
+    )
+    created.append(rid)
+    ctx['open_records'].append(rid)
+    execution_state['owned_records'].add(rid)
+    with _completed_lock:
+        execution_state['attempt_records'].add(rid)
+    # The status endpoint and the resume banner follow the record that is
+    # being written RIGHT NOW, so a stop mid-run leaves the panel offering
+    # the workflow that was interrupted rather than the first one.
+    execution_state['run_id'] = rid
+    if earlier:
+        saved = sum(int(n.get('row_count') or 0) for n in earlier.get('nodes') or [])
+        add_log(t('run.resume_from', at=earlier.get('started_at') or '?', rows=saved), wf_idx=wf_idx)
+    else:
+        add_log(t('run.started', rid=rid), wf_idx=wf_idx)
+    return dict(
+        ctx,
+        run_id=rid,
+        resume=bool(earlier),
+        # Read after start_run, for the same reason as above: nodes the
+        # promotion left 'running' must read as partial to be resumable.
+        statuses=store.node_statuses(rid),
+        # Per RECORD, not per canvas: in a split run each workflow owns a row,
+        # and its files should carry the minute that row began.
+        export_stamp=record_export_stamp(store, rid),
+    )
+
+
+def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock):
+    # Pool threads do not inherit the starter's thread-local.
+    set_lang(execution_state.get('lang'))
+    try:
+        results = _run_single_workflow(wf_engine, wf_idx, ctx, headless)
+        with wf_lock:
+            all_results.update(results)
+    except Exception:
+        # One console line per dead workflow. The log handler
+        # forwards every logger call to the console as well, so
+        # logging *and* add_log printed the same sentence twice —
+        # and the logger form is the one that also carries the
+        # traceback to the log file.
+        logger.exception(t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx)))
+    finally:
+        # Same release as the serial path: a pool thread that kept
+        # its index would file anything it logs afterwards —
+        # teardown included — under that one workflow's tab.
+        _wf_local.idx = None
+        _wf_local.name = ''
+
+
+def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers):
+    # The run thread starts here, not in a request handler — inherit the
+    # language the UI asked for, or every line below would come out in the
+    # server default.
+    set_lang(execution_state.get('lang'))
+    sys.stdout = LogTee(sys.__stdout__)
+    # Everything below is recorded against one run row, so whatever leaves
+    # this thread early — Stop, an exception, the process dying — leaves
+    # behind enough state to continue instead of starting over.
+    #
+    # Opening the store is INSIDE the try on purpose. runs.db can refuse
+    # (disk full, a file that is not a database, a locked connection), and a
+    # thread that died before its ``finally`` would leave the application
+    # believing a run is still in flight: ``running`` stuck True, the console
+    # tee installed over every later request's stdout, and every subsequent
+    # Run parked in a queue behind a run that can never finish.
+    ctx = None
+    outcome = RUN_FAILED
+    # Bound BEFORE the try: the finally reaches for it on every exit, and a
+    # failure before the store opened (a refused runs.db, a Stop caught in
+    # the first moments) used to raise UnboundLocalError *inside the
+    # finally* — skipping the rest of it: the queue never got the slot back,
+    # the log tee stayed over every later request's stdout. A stop that will
+    # not finish is exactly the stall this whole path exists to avoid.
+    created: list = []
+    try:
+        store = get_run_store()
+        # Structure identity is taken on the effective graph, so it agrees with the key
+        # the resume banner matches on (:func:`effective_workflow`) — disabling a node and
+        # re-enabling it returns to the same identity, and a disabled node is absent from
+        # both this fingerprint and the per-node fingerprints below.
+        effective = effective_workflow(workflow)
+        wf_fp = workflow_fingerprint(effective)
+        ctx = {
+            'store': store,
+            'run_id': run_id,
+            'resume': bool(resume_run_id),
+            'fingerprints': fingerprints_for_workflow(effective),
+            'statuses': {},
+            # The resume-node's "newest unfinished run" fallback must pick from
+            # THIS workflow's shape only — node ids repeat across workflows.
+            'wf_fp': wf_fp,
+            # {node_id: count} of items the incremental ledger refused; the
+            # status endpoint mirrors it (shared dict, written by row sinks).
+            'skipped_seen': {},
+            # None = follow the setting; True/False = what the user chose for
+            # this run when the canvas asked them (parallel + same platform).
+            'use_profile': use_profile,
+        }
+        execution_state['skipped_seen'] = ctx['skipped_seen']
+        engine = WorkflowEngine(workflow, execution_state['executor'])
+        errors = engine.validate()
+        if errors:
+            for e in errors:
+                add_log(t('wf.validation_error', err=e))
+            execution_state['running'] = False
+            # Mistakes in the definition, not something to continue later.
+            # Announced as its own outcome: nothing ran, so a progress line
+            # reading "0/N, can continue" would describe a run that never was.
+            outcome = RUN_FAILED
+            with _completed_lock:
+                execution_state['outcome'] = 'rejected'
+                execution_state['total_nodes'] = 0
+                execution_state['completed_nodes'] = 0
+            add_log(t('run.rejected', n=len(errors)))
+            return
+
+        # Split into per-workflow connected components
+        components = engine.find_workflows()
+        components = engine.sort_workflows(components)
+        sub_engines = [engine.extract_subworkflow(c) for c in components]
+
+        wf_count = len(sub_engines)
+        execution_state['wf_count'] = wf_count
+        execution_state['total_nodes'] = sum(len(se.nodes) for se in sub_engines)
+        add_log(t('wf.found', n=wf_count))
+
+        # ─── one record per execution, or one per workflow? ────────────────
+        # Serial mode runs the workflows one after another, so a workflow that
+        # never got its turn has nothing to record: in serial mode every workflow
+        # that STARTS opens its own row and closes it with its own verdict when its
+        # turn ends. Parallel mode runs them as one piece of work, so it keeps the
+        # single row named 'A + B'. Both spellings store the CANVAS fingerprint,
+        # because that is the key the resume banner and /api/runs/resumable match
+        # on — separating the records without separating that key is what keeps
+        # 继续 findable after the split.
+        split_records = mode == 'serial' and wf_count > 1
+        # The named workflows the user switched off for this attempt. A disabled workflow is
+        # not an effective component, so it opens no row on its own — the record's only trace
+        # of it is this list, which is what lets the panel say "X ran, Y was skipped" instead
+        # of the canvas silently looking like it had one fewer workflow.
+        skipped_str = ' + '.join(execution_state.get('skipped_workflow_labels') or [])
+        if skipped_str:
+            # Say it out loud: a run of fewer workflows than the canvas drew must name who is
+            # sitting this one out, or the user reads a silent omission as a lost record.
+            add_log(t('run.skippedWorkflows', names=skipped_str))
+        created = []  # rebind the outer pre-name so the finally always sees a list
+        # THE SAME list object the claim put in `execution_state`: 停止 reads it from
+        # the request thread, so a rebind here would leave it writing to a list
+        # nobody is looking at.
+        ctx['open_records'] = execution_state['open_records']
+        if not split_records:
+            store.start_run(
+                run_id,
+                workflow_name,
+                wf_fp,
+                mode=mode,
+                headless=headless,
+                llm=execution_state['llm'],
+                lang=execution_state.get('lang'),
+                node_total=execution_state['total_nodes'],
+                wf_count=wf_count,
+                skipped_workflows=skipped_str,
+            )
+            created.append(run_id)
+            ctx['open_records'].append(run_id)
+            execution_state['owned_records'].add(run_id)
+            with _completed_lock:
+                execution_state['attempt_records'].add(run_id)
+            # Read *after* start_run so nodes left 'running' by the promotion
+            # are visible as partial, which is what makes them resumable.
+            ctx['statuses'] = store.node_statuses(run_id)
+            ctx['export_stamp'] = record_export_stamp(store, run_id)
+            if resume_run_id:
+                previous = store.get_run(run_id) or {}
+                saved = sum(int(n.get('row_count') or 0) for n in previous.get('nodes') or [])
+                add_log(t('run.resume_from', at=previous.get('started_at') or '?', rows=saved))
+            else:
+                add_log(t('run.started', rid=run_id))
+        if use_profile is False:
+            # One line, because the alternative is the user reading a silent
+            # deviation: the setting says profiles are on, and this run is
+            # deliberately crawling in throwaway browsers instead.
+            add_log(t('run.profileOff'))
+
+        # Finished rows count too: 继续 on a row the panel offers is "run this
+        # again from its checkpoints", and that has to land on the same row rather
+        # than beside it — which is exactly what the single-record case does.
+        resumable = store.list_resumable(fingerprint=wf_fp, limit=50, include_finished=True) if split_records else []
+        resuming = bool(resume_run_id)
+
+        if mode == 'serial' or wf_count <= 1:
+            # ── Serial: one workflow at a time ──
+            all_results = {}
+            for wf_idx, se in enumerate(sub_engines):
+                if not execution_state['running']:
+                    break
+                sub_ctx = (
+                    _component_run(
+                        wf_idx, se, ctx, created, resumable, resuming, wf_fp, skipped_str, store, run_id, mode, headless
+                    )
+                    if split_records
+                    else ctx
+                )
+                # Tagged with its OWN index: this line is printed before
+                # _run_single_workflow sets the thread-local, so it used to be
+                # filed under the *previous* component's tab — workflow A's
+                # console announcing 「开始执行工作流「B」」.
+                add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)), wf_idx=wf_idx)
+                try:
+                    results = _run_single_workflow(se, wf_idx, sub_ctx, headless)
+                finally:
+                    # Released, not left standing. Serial mode runs in the RUN
+                    # thread, so the index of the component that just finished
+                    # would otherwise route every later run-level line — the
+                    # finish line, 存储不可用, the queue hand-off — into that one
+                    # workflow's tab instead of the shared console, and every
+                    # node recorded after it into that one workflow's group.
+                    _wf_local.idx = None
+                    _wf_local.name = ''
+                if split_records:
+                    _close_component_record(sub_ctx, ctx, store)
+                all_results.update(results)
+            # update(), not replace(): a branch that died halfway already
+            # published its partial rows, and they must survive the merge.
+            # Under the readers' lock — /api/stats/* iterates this dict.
+            with _completed_lock:
+                execution_state['results'].update(all_results)
+            # No "workflow completed" line here: `run.finished` below says the
+            # same thing with numbers attached, and two sentences for one fact
+            # is two chances for them to disagree (they used to: a stopped run
+            # still got told it had completed).
+        else:
+            # ── Parallel: one thread per workflow ──
+
+            all_results = {}
+            wf_lock = threading.Lock()
+
+            pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
+            futures = [
+                pool.submit(_run_workflow_wrapper, se, i, ctx, headless, all_results, wf_lock)
+                for i, se in enumerate(sub_engines)
+            ]
+            # Wait for all to finish (respecting stop)
+            for fut in futures:
+                if not execution_state['running']:
+                    # Cancel remaining
+                    for f in futures:
+                        f.cancel()
+                    break
+                with contextlib.suppress(Exception):
+                    fut.result()
+            # `wait=True`, and this is the reason the whole branch exists: the run
+            # thread that passes this line goes on to clear `running`, settle the
+            # record and hand the queue to the NEXT run, whose console, node
+            # counters and `results` dict are the same objects these threads are
+            # still writing to. `cancel_futures` drops the workflows that never
+            # started; the ones that did must finish what they are inside, which
+            # `/api/workflow/stop` makes short by closing their crawlers.
+            pool.shutdown(wait=True, cancel_futures=True)
+
+            # Merged whether or not the run finished: update() keeps partial
+            # rows from branches that stopped mid-way (a Stop, or a dieing
+            # LLM) instead of throwing away what they already produced.
+            with wf_lock, _completed_lock:
+                execution_state['results'].update(all_results)
+            # No "all workflows completed" line: `run.finished` below is the
+            # one sentence that says how the run ended, with its numbers.
+
+        still_running = execution_state['running']
+        # Settle FIRST, then read the verdict. A node abandoned mid-crawl only
+        # becomes partial/failed inside settle_nodes, and the comment here used to
+        # promise the opposite of the code: the count was taken before that pass
+        # (and from the whole record, so a node deleted from the canvas kept
+        # failing every later 继续). Now the finish line, the stored outcome and
+        # the browser's toast all describe the same settled, current attempt.
+        # ``created`` is the record this execution actually wrote: one row for a
+        # parallel or single-workflow run, one per workflow that got its turn in a
+        # serial one. Settling them all and merging the statuses is what lets the
+        # single finish line below still speak for the canvas.
+        statuses = {}
+        for rid in created:
+            store.settle_nodes(rid)
+            statuses.update(store.node_statuses(rid))
+        with _completed_lock:
+            attempted = set(execution_state['attempted_nodes'])
+            stopped = set(execution_state['stopped_node_ids']) & attempted
+        broken = sum(
+            1
+            for nid, state in statuses.items()
+            if nid in attempted and nid not in stopped and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
+        )
+        with _completed_lock:
+            execution_state['failed_nodes'] = broken
+            execution_state['outcome'] = 'interrupted' if not still_running else ('failed' if broken else 'completed')
+        finish_line = t(
+            'run.finished',
+            done=execution_state['completed_nodes'],
+            total=execution_state['total_nodes'],
+        )
+        # Starved and lost nodes are named in the same sentence instead of
+        # quietly subtracting from a ratio the reader cannot interpret.
+        if execution_state['skipped_nodes']:
+            finish_line += t('run.finished.skipped', n=execution_state['skipped_nodes'])
+        # A stop is not a failure, and counting the nodes it cut as failures made
+        # every stopped run read as a broken workflow — the one claim on that line
+        # the user caused themselves.
+        if stopped:
+            finish_line += t('run.finished.stopped', n=len(stopped))
+        if broken:
+            finish_line += t('run.finished.failed', n=broken)
+        add_log(finish_line)
+        if still_running:
+            # One history entry per connected component, each under its
+            # OWN name-node label — a multi-workflow canvas must land in
+            # the history panel as separate named workflows, not all
+            # under whichever name node happens to come first.
+            for wf_idx, se in enumerate(sub_engines):
+                snapshot = _results_snapshot()
+                sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
+                record_execution_history(
+                    None,
+                    se,
+                    sub_results,
+                    component_name(se) or workflow_name,
+                    log_label=_wf_display_name(se, wf_idx),
+                )
+        # 'completed' must mean every node really finished. A node that failed
+        # or stopped half-way leaves gaps; marking the run complete hid it from
+        # the resume banner forever and the 未处理 rows were never filled — the
+        # opposite of what checkpoints are for. One broken node downgrades the
+        # whole run to 'failed'.
+        outcome = RUN_FAILED if broken else RUN_COMPLETED
+        if not still_running:
+            outcome = RUN_INTERRUPTED
+
+    except Exception:
+        # See the parallel branch above: the logger line already reaches the
+        # console, so a second add_log was the same sentence twice.
+        logger.exception(t('wf.exec_exception'))
+        outcome = RUN_INTERRUPTED if not execution_state['running'] else RUN_FAILED
+        with _completed_lock:
+            execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
+    finally:
+        execution_state['running'] = False
+        # The stop is answered as of this line, not "sometime after": `stopping`
+        # is what `stop_requested()` reads, and leaving it set for a settled run
+        # would make the next helper that calls an executor function directly
+        # refuse to work over a run that finished two hours ago.
+        execution_state['stopping'] = False
+        # Whatever is left claiming to be running was killed, not finished;
+        # the rows it published are what the next attempt resumes from. With
+        # no context the store never opened at all, so there is no run row to
+        # close — the console line is then the only record that this happened.
+        if ctx is None:
+            add_log(t('run.store_unavailable'))
+            with _completed_lock:
+                execution_state['outcome'] = 'failed'
+        else:
+            close_run(ctx, outcome)
+        with _completed_lock:
+            # Every exit must leave a verdict: the browser stops guessing from
+            # `completed < total` and reads this instead, and an empty string
+            # would leave the last run's answer standing on screen.
+            if not execution_state['outcome']:
+                execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
+        # Retention is only real if something applies it. A finished run is
+        # the natural moment: the databases are open, no writer is active and
+        # the user just proved the machine is in use.
+        housekeep(exclude_run_id=list(created) or [run_id])
+        # The tee exists to catch the analyzers' print() output *during* a
+        # run; leaving it installed meant every later print — from any
+        # request — also showed up in the console panel.
+        if isinstance(sys.stdout, LogTee):
+            sys.stdout = sys.stdout.unwrap()
+        # Flush the run's own trailing console lines to the durable log, then disarm: the
+        # sink must go before the slot is handed to the next run, so a queued run's first
+        # line never writes into this run's batch. Flushing first loses the finish line —
+        # every ``add_log`` up to and including the verdict has already been buffered.
+        run_log_writer.flush()
+        set_log_sink(None)
+        # Release the handle this thread was recognised by, then let the
+        # queue have the slot. Both before anything else in this finally can
+        # be reordered: start_next_queued checks liveness through it.
+        execution_state['thread'] = None
+        start_next_queued()
 
 
 def begin_run(data: dict, lang_header: str) -> dict:
@@ -834,420 +1256,18 @@ def begin_run(data: dict, lang_header: str) -> dict:
                 # the claim back — the guard must not lock out every later Run.
                 execution_state['running'] = False
 
-    def run():
-        # The run thread starts here, not in a request handler — inherit the
-        # language the UI asked for, or every line below would come out in the
-        # server default.
-        set_lang(execution_state.get('lang'))
-        sys.stdout = LogTee(sys.__stdout__)
-        # Everything below is recorded against one run row, so whatever leaves
-        # this thread early — Stop, an exception, the process dying — leaves
-        # behind enough state to continue instead of starting over.
-        #
-        # Opening the store is INSIDE the try on purpose. runs.db can refuse
-        # (disk full, a file that is not a database, a locked connection), and a
-        # thread that died before its ``finally`` would leave the application
-        # believing a run is still in flight: ``running`` stuck True, the console
-        # tee installed over every later request's stdout, and every subsequent
-        # Run parked in a queue behind a run that can never finish.
-        ctx = None
-        outcome = RUN_FAILED
-        # Bound BEFORE the try: the finally reaches for it on every exit, and a
-        # failure before the store opened (a refused runs.db, a Stop caught in
-        # the first moments) used to raise UnboundLocalError *inside the
-        # finally* — skipping the rest of it: the queue never got the slot back,
-        # the log tee stayed over every later request's stdout. A stop that will
-        # not finish is exactly the stall this whole path exists to avoid.
-        created: list = []
-        try:
-            store = get_run_store()
-            # Structure identity is taken on the effective graph, so it agrees with the key
-            # the resume banner matches on (:func:`effective_workflow`) — disabling a node and
-            # re-enabling it returns to the same identity, and a disabled node is absent from
-            # both this fingerprint and the per-node fingerprints below.
-            effective = effective_workflow(workflow)
-            wf_fp = workflow_fingerprint(effective)
-            ctx = {
-                'store': store,
-                'run_id': run_id,
-                'resume': bool(resume_run_id),
-                'fingerprints': fingerprints_for_workflow(effective),
-                'statuses': {},
-                # The resume-node's "newest unfinished run" fallback must pick from
-                # THIS workflow's shape only — node ids repeat across workflows.
-                'wf_fp': wf_fp,
-                # {node_id: count} of items the incremental ledger refused; the
-                # status endpoint mirrors it (shared dict, written by row sinks).
-                'skipped_seen': {},
-                # None = follow the setting; True/False = what the user chose for
-                # this run when the canvas asked them (parallel + same platform).
-                'use_profile': use_profile,
-            }
-            execution_state['skipped_seen'] = ctx['skipped_seen']
-            engine = WorkflowEngine(workflow, execution_state['executor'])
-            errors = engine.validate()
-            if errors:
-                for e in errors:
-                    add_log(t('wf.validation_error', err=e))
-                execution_state['running'] = False
-                # Mistakes in the definition, not something to continue later.
-                # Announced as its own outcome: nothing ran, so a progress line
-                # reading "0/N, can continue" would describe a run that never was.
-                outcome = RUN_FAILED
-                with _completed_lock:
-                    execution_state['outcome'] = 'rejected'
-                    execution_state['total_nodes'] = 0
-                    execution_state['completed_nodes'] = 0
-                add_log(t('run.rejected', n=len(errors)))
-                return
-
-            # Split into per-workflow connected components
-            components = engine.find_workflows()
-            components = engine.sort_workflows(components)
-            sub_engines = [engine.extract_subworkflow(c) for c in components]
-
-            wf_count = len(sub_engines)
-            execution_state['wf_count'] = wf_count
-            execution_state['total_nodes'] = sum(len(se.nodes) for se in sub_engines)
-            add_log(t('wf.found', n=wf_count))
-
-            # ─── one record per execution, or one per workflow? ────────────────
-            # Serial mode runs the workflows one after another, so a workflow that
-            # never got its turn has nothing to record: in serial mode every workflow
-            # that STARTS opens its own row and closes it with its own verdict when its
-            # turn ends. Parallel mode runs them as one piece of work, so it keeps the
-            # single row named 'A + B'. Both spellings store the CANVAS fingerprint,
-            # because that is the key the resume banner and /api/runs/resumable match
-            # on — separating the records without separating that key is what keeps
-            # 继续 findable after the split.
-            split_records = mode == 'serial' and wf_count > 1
-            # The named workflows the user switched off for this attempt. A disabled workflow is
-            # not an effective component, so it opens no row on its own — the record's only trace
-            # of it is this list, which is what lets the panel say "X ran, Y was skipped" instead
-            # of the canvas silently looking like it had one fewer workflow.
-            skipped_str = ' + '.join(execution_state.get('skipped_workflow_labels') or [])
-            if skipped_str:
-                # Say it out loud: a run of fewer workflows than the canvas drew must name who is
-                # sitting this one out, or the user reads a silent omission as a lost record.
-                add_log(t('run.skippedWorkflows', names=skipped_str))
-            created = []  # rebind the outer pre-name so the finally always sees a list
-            # THE SAME list object the claim put in `execution_state`: 停止 reads it from
-            # the request thread, so a rebind here would leave it writing to a list
-            # nobody is looking at.
-            ctx['open_records'] = execution_state['open_records']
-            if not split_records:
-                store.start_run(
-                    run_id,
-                    workflow_name,
-                    wf_fp,
-                    mode=mode,
-                    headless=headless,
-                    llm=execution_state['llm'],
-                    lang=execution_state.get('lang'),
-                    node_total=execution_state['total_nodes'],
-                    wf_count=wf_count,
-                    skipped_workflows=skipped_str,
-                )
-                created.append(run_id)
-                ctx['open_records'].append(run_id)
-                execution_state['owned_records'].add(run_id)
-                with _completed_lock:
-                    execution_state['attempt_records'].add(run_id)
-                # Read *after* start_run so nodes left 'running' by the promotion
-                # are visible as partial, which is what makes them resumable.
-                ctx['statuses'] = store.node_statuses(run_id)
-                ctx['export_stamp'] = record_export_stamp(store, run_id)
-                if resume_run_id:
-                    previous = store.get_run(run_id) or {}
-                    saved = sum(int(n.get('row_count') or 0) for n in previous.get('nodes') or [])
-                    add_log(t('run.resume_from', at=previous.get('started_at') or '?', rows=saved))
-                else:
-                    add_log(t('run.started', rid=run_id))
-            if use_profile is False:
-                # One line, because the alternative is the user reading a silent
-                # deviation: the setting says profiles are on, and this run is
-                # deliberately crawling in throwaway browsers instead.
-                add_log(t('run.profileOff'))
-
-            # Finished rows count too: 继续 on a row the panel offers is "run this
-            # again from its checkpoints", and that has to land on the same row rather
-            # than beside it — which is exactly what the single-record case does.
-            resumable = (
-                store.list_resumable(fingerprint=wf_fp, limit=50, include_finished=True) if split_records else []
-            )
-            resuming = bool(resume_run_id)
-
-            def _component_run(wf_idx, sub_engine):
-                """Open this workflow's own record and return the context its nodes run
-                under. Called as the turn arrives, which is what makes an unreached
-                workflow leave no record at all — the point of the split.
-
-                Workflow zero takes the id the HTTP response already handed out, so the
-                browser, the status endpoint and the resume banner all name a row that
-                exists. The others are minted as they are reached.
-
-                ``wf_idx`` is the component's position, the same word the serial loop and
-                ``_wf_display_name`` use: naming it ``index`` here shadowed the module's
-                ``index()`` route for the whole closure, which is a footgun, not a shortcut.
-                """
-                name = _wf_display_name(sub_engine, wf_idx)
-                earlier = _continue_record(name, resumable, resuming)
-                rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
-                store.start_run(
-                    rid,
-                    name,
-                    wf_fp,
-                    mode=mode,
-                    headless=headless,
-                    llm=execution_state['llm'],
-                    lang=execution_state.get('lang'),
-                    node_total=len(sub_engine.nodes),
-                    wf_count=1,
-                    skipped_workflows=skipped_str if wf_idx == 0 else '',
-                )
-                created.append(rid)
-                ctx['open_records'].append(rid)
-                execution_state['owned_records'].add(rid)
-                with _completed_lock:
-                    execution_state['attempt_records'].add(rid)
-                # The status endpoint and the resume banner follow the record that is
-                # being written RIGHT NOW, so a stop mid-run leaves the panel offering
-                # the workflow that was interrupted rather than the first one.
-                execution_state['run_id'] = rid
-                if earlier:
-                    saved = sum(int(n.get('row_count') or 0) for n in earlier.get('nodes') or [])
-                    add_log(t('run.resume_from', at=earlier.get('started_at') or '?', rows=saved), wf_idx=wf_idx)
-                else:
-                    add_log(t('run.started', rid=rid), wf_idx=wf_idx)
-                return dict(
-                    ctx,
-                    run_id=rid,
-                    resume=bool(earlier),
-                    # Read after start_run, for the same reason as above: nodes the
-                    # promotion left 'running' must read as partial to be resumable.
-                    statuses=store.node_statuses(rid),
-                    # Per RECORD, not per canvas: in a split run each workflow owns a row,
-                    # and its files should carry the minute that row began.
-                    export_stamp=record_export_stamp(store, rid),
-                )
-
-            if mode == 'serial' or wf_count <= 1:
-                # ── Serial: one workflow at a time ──
-                all_results = {}
-                for wf_idx, se in enumerate(sub_engines):
-                    if not execution_state['running']:
-                        break
-                    sub_ctx = _component_run(wf_idx, se) if split_records else ctx
-                    # Tagged with its OWN index: this line is printed before
-                    # _run_single_workflow sets the thread-local, so it used to be
-                    # filed under the *previous* component's tab — workflow A's
-                    # console announcing 「开始执行工作流「B」」.
-                    add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)), wf_idx=wf_idx)
-                    try:
-                        results = _run_single_workflow(se, wf_idx, sub_ctx, headless)
-                    finally:
-                        # Released, not left standing. Serial mode runs in the RUN
-                        # thread, so the index of the component that just finished
-                        # would otherwise route every later run-level line — the
-                        # finish line, 存储不可用, the queue hand-off — into that one
-                        # workflow's tab instead of the shared console, and every
-                        # node recorded after it into that one workflow's group.
-                        _wf_local.idx = None
-                        _wf_local.name = ''
-                    if split_records:
-                        _close_component_record(sub_ctx, ctx, store)
-                    all_results.update(results)
-                # update(), not replace(): a branch that died halfway already
-                # published its partial rows, and they must survive the merge.
-                # Under the readers' lock — /api/stats/* iterates this dict.
-                with _completed_lock:
-                    execution_state['results'].update(all_results)
-                # No "workflow completed" line here: `run.finished` below says the
-                # same thing with numbers attached, and two sentences for one fact
-                # is two chances for them to disagree (they used to: a stopped run
-                # still got told it had completed).
-            else:
-                # ── Parallel: one thread per workflow ──
-
-                all_results = {}
-                wf_lock = threading.Lock()
-
-                def _run_workflow_wrapper(wf_engine, wf_idx):
-                    # Pool threads do not inherit the starter's thread-local.
-                    set_lang(execution_state.get('lang'))
-                    try:
-                        results = _run_single_workflow(wf_engine, wf_idx, ctx, headless)
-                        with wf_lock:
-                            all_results.update(results)
-                    except Exception:
-                        # One console line per dead workflow. The log handler
-                        # forwards every logger call to the console as well, so
-                        # logging *and* add_log printed the same sentence twice —
-                        # and the logger form is the one that also carries the
-                        # traceback to the log file.
-                        logger.exception(t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx)))
-                    finally:
-                        # Same release as the serial path: a pool thread that kept
-                        # its index would file anything it logs afterwards —
-                        # teardown included — under that one workflow's tab.
-                        _wf_local.idx = None
-                        _wf_local.name = ''
-
-                pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
-                futures = [pool.submit(_run_workflow_wrapper, se, i) for i, se in enumerate(sub_engines)]
-                # Wait for all to finish (respecting stop)
-                for fut in futures:
-                    if not execution_state['running']:
-                        # Cancel remaining
-                        for f in futures:
-                            f.cancel()
-                        break
-                    with contextlib.suppress(Exception):
-                        fut.result()
-                # `wait=True`, and this is the reason the whole branch exists: the run
-                # thread that passes this line goes on to clear `running`, settle the
-                # record and hand the queue to the NEXT run, whose console, node
-                # counters and `results` dict are the same objects these threads are
-                # still writing to. `cancel_futures` drops the workflows that never
-                # started; the ones that did must finish what they are inside, which
-                # `/api/workflow/stop` makes short by closing their crawlers.
-                pool.shutdown(wait=True, cancel_futures=True)
-
-                # Merged whether or not the run finished: update() keeps partial
-                # rows from branches that stopped mid-way (a Stop, or a dieing
-                # LLM) instead of throwing away what they already produced.
-                with wf_lock, _completed_lock:
-                    execution_state['results'].update(all_results)
-                # No "all workflows completed" line: `run.finished` below is the
-                # one sentence that says how the run ended, with its numbers.
-
-            still_running = execution_state['running']
-            # Settle FIRST, then read the verdict. A node abandoned mid-crawl only
-            # becomes partial/failed inside settle_nodes, and the comment here used to
-            # promise the opposite of the code: the count was taken before that pass
-            # (and from the whole record, so a node deleted from the canvas kept
-            # failing every later 继续). Now the finish line, the stored outcome and
-            # the browser's toast all describe the same settled, current attempt.
-            # ``created`` is the record this execution actually wrote: one row for a
-            # parallel or single-workflow run, one per workflow that got its turn in a
-            # serial one. Settling them all and merging the statuses is what lets the
-            # single finish line below still speak for the canvas.
-            statuses = {}
-            for rid in created:
-                store.settle_nodes(rid)
-                statuses.update(store.node_statuses(rid))
-            with _completed_lock:
-                attempted = set(execution_state['attempted_nodes'])
-                stopped = set(execution_state['stopped_node_ids']) & attempted
-            broken = sum(
-                1
-                for nid, state in statuses.items()
-                if nid in attempted and nid not in stopped and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
-            )
-            with _completed_lock:
-                execution_state['failed_nodes'] = broken
-                execution_state['outcome'] = (
-                    'interrupted' if not still_running else ('failed' if broken else 'completed')
-                )
-            finish_line = t(
-                'run.finished',
-                done=execution_state['completed_nodes'],
-                total=execution_state['total_nodes'],
-            )
-            # Starved and lost nodes are named in the same sentence instead of
-            # quietly subtracting from a ratio the reader cannot interpret.
-            if execution_state['skipped_nodes']:
-                finish_line += t('run.finished.skipped', n=execution_state['skipped_nodes'])
-            # A stop is not a failure, and counting the nodes it cut as failures made
-            # every stopped run read as a broken workflow — the one claim on that line
-            # the user caused themselves.
-            if stopped:
-                finish_line += t('run.finished.stopped', n=len(stopped))
-            if broken:
-                finish_line += t('run.finished.failed', n=broken)
-            add_log(finish_line)
-            if still_running:
-                # One history entry per connected component, each under its
-                # OWN name-node label — a multi-workflow canvas must land in
-                # the history panel as separate named workflows, not all
-                # under whichever name node happens to come first.
-                for wf_idx, se in enumerate(sub_engines):
-                    snapshot = _results_snapshot()
-                    sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
-                    record_execution_history(
-                        None,
-                        se,
-                        sub_results,
-                        component_name(se) or workflow_name,
-                        log_label=_wf_display_name(se, wf_idx),
-                    )
-            # 'completed' must mean every node really finished. A node that failed
-            # or stopped half-way leaves gaps; marking the run complete hid it from
-            # the resume banner forever and the 未处理 rows were never filled — the
-            # opposite of what checkpoints are for. One broken node downgrades the
-            # whole run to 'failed'.
-            outcome = RUN_FAILED if broken else RUN_COMPLETED
-            if not still_running:
-                outcome = RUN_INTERRUPTED
-
-        except Exception:
-            # See the parallel branch above: the logger line already reaches the
-            # console, so a second add_log was the same sentence twice.
-            logger.exception(t('wf.exec_exception'))
-            outcome = RUN_INTERRUPTED if not execution_state['running'] else RUN_FAILED
-            with _completed_lock:
-                execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
-        finally:
-            execution_state['running'] = False
-            # The stop is answered as of this line, not "sometime after": `stopping`
-            # is what `stop_requested()` reads, and leaving it set for a settled run
-            # would make the next helper that calls an executor function directly
-            # refuse to work over a run that finished two hours ago.
-            execution_state['stopping'] = False
-            # Whatever is left claiming to be running was killed, not finished;
-            # the rows it published are what the next attempt resumes from. With
-            # no context the store never opened at all, so there is no run row to
-            # close — the console line is then the only record that this happened.
-            if ctx is None:
-                add_log(t('run.store_unavailable'))
-                with _completed_lock:
-                    execution_state['outcome'] = 'failed'
-            else:
-                close_run(ctx, outcome)
-            with _completed_lock:
-                # Every exit must leave a verdict: the browser stops guessing from
-                # `completed < total` and reads this instead, and an empty string
-                # would leave the last run's answer standing on screen.
-                if not execution_state['outcome']:
-                    execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
-            # Retention is only real if something applies it. A finished run is
-            # the natural moment: the databases are open, no writer is active and
-            # the user just proved the machine is in use.
-            housekeep(exclude_run_id=list(created) or [run_id])
-            # The tee exists to catch the analyzers' print() output *during* a
-            # run; leaving it installed meant every later print — from any
-            # request — also showed up in the console panel.
-            if isinstance(sys.stdout, LogTee):
-                sys.stdout = sys.stdout.unwrap()
-            # Flush the run's own trailing console lines to the durable log, then disarm: the
-            # sink must go before the slot is handed to the next run, so a queued run's first
-            # line never writes into this run's batch. Flushing first loses the finish line —
-            # every ``add_log`` up to and including the verdict has already been buffered.
-            run_log_writer.flush()
-            set_log_sink(None)
-            # Release the handle this thread was recognised by, then let the
-            # queue have the slot. Both before anything else in this finally can
-            # be reordered: start_next_queued checks liveness through it.
-            execution_state['thread'] = None
-            start_next_queued()
-
     # Named 'run' so the process-monitor's kill guard (see ``kill_process``) actually
     # matches: it refuses to inject SystemExit into ('MainThread', 'run'), but an
     # unnamed thread reported as "Thread-N" and a stray click on the live run worker
     # could raise SystemExit between acquiring a browser and registering it, orphaning
     # a Chrome and holding its profile lock for the full timeout.
     try:
-        execution_state['thread'] = threading.Thread(target=run, daemon=True, name='run')
+        execution_state['thread'] = threading.Thread(
+            target=_run_worker,
+            args=(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers),
+            daemon=True,
+            name='run',
+        )
         execution_state['thread'].start()
     except Exception as e:
         # A thread that never started never runs its finally, so the claim would stay
