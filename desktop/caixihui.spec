@@ -12,13 +12,17 @@ transformers / pyarrow / mitmproxy) and by excluding optional stacks here. See
 
 import glob
 import os
+import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 SPEC_DIR = Path(SPECPATH).resolve()
 ROOT = SPEC_DIR.parent
 BACKEND = ROOT / 'backend'
+if str(SPEC_DIR) not in sys.path:
+    sys.path.insert(0, str(SPEC_DIR))
+from frozen_modules import package_module_names
 # UPX is NOT applied here: PyInstaller compresses nothing and barely says so when the tool is
 # not on PATH, which would make the shipped folder's size a guess. `build_windows.ps1` runs
 # `compress_dist.py` after the prune step — it names the missing tool, verifies each file with
@@ -68,12 +72,19 @@ except Exception:
 
 hiddenimports = []
 # Every top-level backend package is named here, not left to static analysis: ``nodes/registry.py``
-# loads its plugins with ``importlib.import_module('nodes.executors')`` — a string. Today PyInstaller
-# happens to follow that literal, but a package that is only ever reached by name is one refactor away
-# from shipping an exe whose node types simply are not there. ``tests/unit/test_desktop_packaging.py``
-# fails if a package appears under backend/ without being added here (and if one is named here and gone).
+# loads its plugins with ``importlib.import_module('nodes.executors')`` — a string the import graph
+# cannot follow. This is not a hypothetical: a measured build (2026-10-29) shipped zero node plugins
+# and died on the user's machine with ``ModuleNotFoundError: No module named 'nodes.executors'``,
+# because the loop below called ``collect_submodules`` — which (a) needs the package on the SPEC's
+# own sys.path (``pathex`` is only handed to Analysis, several lines later) and returns an empty list
+# in silence when it is not, and (b) imports the package to read its ``__path__``, which this app must
+# not do at build time (``runtime.state``/``stores`` build their singletons at import). Listing the
+# tree imports nothing: see desktop/frozen_modules.py.
+# ``tests/unit/desktop/test_desktop_packaging.py`` fails if a package appears under backend/ without
+# being added here, if one named here has stopped existing, and if a file in a named package is not
+# in the collected set.
 for package in ('api', 'crawlers', 'services', 'analyzers', 'core', 'capabilities', 'engine', 'nodes', 'sessions', 'scheduling', 'i18n_catalog', 'runtime'):
-    hiddenimports += collect_submodules(package)
+    hiddenimports += package_module_names(BACKEND, package)
 hiddenimports += [
     'core.config',
     'i18n',

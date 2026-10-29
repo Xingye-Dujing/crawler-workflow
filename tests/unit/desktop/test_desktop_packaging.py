@@ -44,6 +44,15 @@ def desktop():
     return _load('desktop_entry', PACKAGING / 'desktop_entry.py')
 
 
+def _frozen():
+    """``desktop/frozen_modules.py`` — the tree reader the spec itself imports.
+
+    Loaded by path (``desktop/`` is not on this suite's ``sys.path``), so the test asks the same
+    function the build uses instead of re-implementing it and drifting.
+    """
+    return _load('frozen_modules', PACKAGING / 'frozen_modules.py')
+
+
 @pytest.fixture(scope='module')
 def prune_module():
     return _load('prune_dist', PACKAGING / 'prune_dist.py')
@@ -360,18 +369,28 @@ class TestPortSelection:
 
 
 class TestTheBuildKnowsEveryPackage:
-    """``collect_submodules`` is called on a HARD-CODED tuple, so a new top-level package is
+    """The spec walks a HARD-CODED tuple of backend packages, so a new top-level package is
     invisible to the build until someone remembers to add it — and the packaged app then fails
     on the user's machine, not in this suite. The whole restructure (docs/refactor_plan.md) is
     exactly a sequence of new top-level packages, so this is the gate that makes moving files
     safe: the spec has to name every package that exists, and no package that does not.
+
+    Listing the packages was never enough on its own, and 2026-10-29 measured it: the loop used
+    ``PyInstaller.utils.hooks.collect_submodules``, which needs the package on the SPEC's own
+    ``sys.path`` (``pathex`` is only handed to ``Analysis``, several lines later) and answers an
+    EMPTY LIST in silence when it is not — while also importing the package to read its
+    ``__path__``, which this app must not do at build time. The build therefore carried only what
+    the static graph reached, and the shipped exe died on startup with
+    ``ModuleNotFoundError: No module named 'nodes.executors'`` (a string import the graph cannot
+    follow). So the checks below ask about FILES, through the same function the spec uses.
     """
 
     @staticmethod
     def _collected(spec_text: str) -> set[str]:
-        """The package names the spec walks with ``collect_submodules``."""
+        """The package names the spec walks with ``package_module_names``."""
         block = re.search(
-            r'for package in \(([^)]*)\):\s*\n\s*hiddenimports \+= collect_submodules\(package\)', spec_text
+            r'for package in \(([^)]*)\):\s*\n\s*hiddenimports \+= package_module_names\(BACKEND, package\)',
+            spec_text,
         )
         assert block, 'the spec no longer collects submodules from a package tuple — the build list moved'
         return {name for name in re.findall(r"'([^']+)'", block.group(1))}
@@ -406,6 +425,61 @@ class TestTheBuildKnowsEveryPackage:
         shrunk = self._collected(spec) - {'crawlers'}
         assert 'crawlers' in self._backend_packages() and shrunk, 'this fixture needs the real list to differ from one'
         assert shrunk != self._backend_packages(), 'dropping a package from the spec changed nothing'
+
+    def test_the_named_packages_yield_every_module_file_they_hold(self):
+        """A package in the tuple is only worth naming if its FILES come out of the collector.
+
+        This is the check that would have caught the 2026-10-29 build: the tuple already said
+        ``nodes``, and that was not enough. The names below are the ones no static import graph can
+        reach (``nodes.executors`` is loaded by string) or that a recent move created
+        (``engine.run_logs``/``engine.run_schedule``) — a missing one is a startup crash on the
+        user's machine with nothing in this suite to say so.
+        """
+        collected = _frozen().package_module_names
+        backend = REPO / 'backend'
+        spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
+        names: set[str] = set()
+        for package in self._collected(spec):
+            names |= set(collected(backend, package))
+        for required in ('nodes.executors', 'runtime.gate', 'engine.run_logs', 'engine.run_schedule'):
+            assert required in names, f'{required} would be missing from the exe'
+        # …and the enumeration really is the tree: every module file under a named package is in it.
+        uncollected = set()
+        for package in self._collected(spec):
+            for path in sorted((backend / package).rglob('*.py')):
+                if '__pycache__' in path.parts or path.stem.startswith('test_'):
+                    continue
+                parts = list(path.relative_to(backend / package).parts)
+                if path.stem == '__init__':
+                    parts.pop()
+                else:
+                    parts[-1] = path.stem
+                if parts and '.'.join([package, *parts]) not in names:
+                    uncollected.add('.'.join([package, *parts]))
+        assert uncollected == set(), f'these files exist but are not collected: {sorted(uncollected)[:10]}'
+
+    def test_the_collector_reads_the_tree_without_importing_the_app(self):
+        """The reason ``collect_submodules`` cannot be used here: it imports what it lists.
+
+        ``runtime.state``/``runtime.stores`` build their singletons at import, so a spec that
+        imported them would create a data root mid-build — and an unlisted package returns ``[]``
+        in silence. This module must therefore be a reader and nothing more.
+        """
+        source = (PACKAGING / 'frozen_modules.py').read_text(encoding='utf-8')
+        assert not re.search(
+            r'^\s*(?:from|import)\s+(?:nodes|runtime|engine|api|services|app|PyInstaller)\b', source, re.M
+        ), 'frozen_modules.py imports the app or PyInstaller: the spec must be able to run it cold'
+        assert _frozen().package_module_names(REPO / 'backend', 'no_such_package') == []
+
+    def test_dropping_a_package_loses_the_string_imported_subpackage(self):
+        """The trap is live: with ``nodes`` gone from the tuple, ``nodes.executors`` stops shipping."""
+        frozen = _frozen()
+        spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
+        without_nodes = self._collected(spec) - {'nodes'}
+        names: set[str] = set()
+        for package in without_nodes:
+            names |= set(frozen.package_module_names(REPO / 'backend', package))
+        assert 'nodes.executors' not in names, 'the collector is finding nodes.executors somewhere else'
 
     def test_every_stated_module_still_exists(self):
         """Root modules are named one by one (they are imported lazily or from the launcher), so a
