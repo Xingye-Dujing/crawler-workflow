@@ -47,6 +47,39 @@ class TestThemeSwitch:
         assert theme['dark']['active'] == ['dark']
         assert theme['auto']['active'] == ['auto'], 'auto stays the lit option even though it resolves light'
 
+    def test_native_widgets_follow_the_resolved_theme(self, theme):
+        """Scrollbars, form controls and the canvas backdrop are painted by the UA from
+        ``color-scheme``; a dark chrome with a light scheme keeps white scrollbars."""
+        assert theme['light']['colorScheme'] == 'light'
+        assert theme['dark']['colorScheme'] == 'dark'
+        assert theme['auto']['colorScheme'] == 'light', 'auto resolved light, so the scheme does too'
+
+
+class TestThemeFirstPaint:
+    """theme-boot.js, the page's first script, applies the SAVED choice before any app code.
+
+    The harness seeds ``theme: dark, bg: void, lang: en`` before loading the page, so these
+    assertions read what the first painted frame would show — not what a later repaint fixes.
+    """
+
+    def test_the_saved_theme_is_on_the_document_before_app_code_runs(self, theme):
+        boot = theme['boot']
+        assert boot['choice'] == 'dark'
+        assert boot['resolved'] == 'dark'
+        assert boot['colorScheme'] == 'dark', 'the UA scheme must not stay light until app.js boots'
+
+    def test_the_saved_background_and_language_are_applied_before_first_paint(self, theme):
+        boot = theme['boot']
+        assert boot['bg'] is True
+        assert boot['grid'] is False, 'the default grid background must be replaced, not kept alongside'
+        assert boot['lang'] == 'en'
+        assert boot['htmlLang'] == 'en', 'a reader would otherwise keep the declared zh-CN voice'
+
+    def test_the_document_language_follows_a_language_switch(self, theme):
+        """setLang() flips ``body.dataset.lang`` and repaints through I18n.apply(); the
+        document's own ``lang`` has to move with it or assistive tech stays Chinese."""
+        assert theme['lang_attr'] == {'zh': 'zh-CN', 'en': 'en'}
+
 
 class TestThemeCharts:
     def test_charts_recolour_with_the_theme(self, theme):

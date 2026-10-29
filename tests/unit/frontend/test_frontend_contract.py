@@ -72,7 +72,9 @@ _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*(?:,|\))""")
 # ``_VAR_CALL`` is the same audit widened, and ``_SLOT`` feeds the fill check below.
 _VAR_CALL = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*,\s*\{([^{}]*)\}\s*\)""")
 _SLOT = re.compile(r'\{(\w+)\}')
-_DATA_I18N = re.compile(r'data-i18n="([A-Za-z][\w.]*)"')
+# All three attributes app.js re-words (text, title, placeholder). Matching only
+# ``data-i18n=`` let a title/placeholder key rot unnoticed until the language flipped.
+_DATA_I18N = re.compile(r'data-i18n(?:-title|-placeholder)?="([A-Za-z][\w.]*)"')
 
 
 class TestCanvasSerialization:
@@ -346,7 +348,8 @@ class TestLlmGateParity:
 
 class TestFrontendCatalog:
     def test_every_static_label_in_the_page_exists_in_both_languages(self):
-        """``data-i18n`` is how the HTML gets re-worded when the language flips.
+        """``data-i18n`` / ``-title`` / ``-placeholder`` are how the HTML gets re-worded
+        when the language flips.
 
         A key that exists in no catalogue is invisible until someone switches to
         the other language and finds a button still wearing the first one's text

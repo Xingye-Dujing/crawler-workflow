@@ -95,6 +95,9 @@ const I18n = {
     },
     apply() {
         this.lang = document.body.dataset.lang || 'en';
+        /* The page is declared lang="zh-CN"; an English choice has to reach assistive
+           technology too, or the reader keeps a Chinese voice for English words. */
+        document.documentElement.lang = this.lang === 'en' ? 'en' : 'zh-CN';
         document.querySelectorAll('[data-i18n]').forEach(el => {
             el.textContent = this.t(el.dataset.i18n);
         });
@@ -253,7 +256,10 @@ function applyTheme() {
     var html = document.documentElement;
     var choice = html.dataset.themeChoice || 'auto';
     html.dataset.themeChoice = choice;
-    html.dataset.theme = resolveTheme(choice);
+    var resolved = resolveTheme(choice);
+    html.dataset.theme = resolved;
+    /* Native widgets (scrollbars, form controls) follow the same choice as the tokens. */
+    html.style.colorScheme = resolved;
     document.querySelectorAll('.theme-opt').forEach(function (el) {
         el.classList.toggle('active', el.dataset.themeChoice === choice);
     });

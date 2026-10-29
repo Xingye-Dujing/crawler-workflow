@@ -18,6 +18,7 @@
 
 | 模块 | 内容 | 说明 |
 |---|---|---|
+| `theme-boot.js` | 首帧主题引导：把保存的 theme/bg/lang（含自动跟随系统）落到 `<html>`/`<body>` 上，并同步 `color-scheme` 与 `html.lang` | 2026-10-29 从 `index.html` 的**唯一一段内联脚本**搬出，仍是 `<body>` 的第一个阻塞脚本（`defer/async` 都会让浅色底先画出来）；`tests/unit/frontend/test_frontend_page_markup.py` 钉住「无内联脚本 + 它是第一个且阻塞」，首帧行为由 `harness_theme.mjs` 预置草稿后读取 |
 | `node-types.js` | `NodeTypes`：服务端节点目录（类型/词条/分组/种子） | Phase 2；画布验证与种子优先读它，冷页用 `canvas.js` 的兜底表（双向钉住） |
 | `schedules.js` | 定时任务面板 | 早于本方案，作为"面板整份搬出"的先例 |
 | `reusable.js` | 可复用节点（模板、展开、预览） | 同上 |

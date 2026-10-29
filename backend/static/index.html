@@ -15,37 +15,10 @@
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
   </head>
   <body class="bg-grid">
-    <script>
-      /* Apply saved settings immediately to prevent flash */
-      (function () {
-        try {
-          var s = JSON.parse(localStorage.getItem("crawler_settings"));
-          if (s) {
-            var body = document.body;
-            /* Resolve the saved theme (auto follows the OS) on <html> before first paint,
-               so a dark choice never flashes light. Nothing forces body.theme-light any more. */
-            var choice = s.theme || "auto";
-            var html = document.documentElement;
-            html.dataset.themeChoice = choice;
-            html.dataset.theme = choice !== "auto"
-              ? choice
-              : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-            var bgs = [
-              "bg-void",
-              "bg-grid",
-              "bg-dots",
-              "bg-cross",
-              "bg-diagonal",
-            ];
-            bgs.forEach(function (b) {
-              body.classList.remove(b);
-            });
-            if (s.bg) body.classList.add(s.bg);
-            body.dataset.lang = s.lang || "zh";
-          }
-        } catch (e) {}
-      })();
-    </script>
+    <!-- The saved theme/background/language are applied before the first paint. This must
+         stay the FIRST script on the page and must stay blocking (no defer/async): a
+         deferred copy would repaint after the light default was already drawn. -->
+    <script src="/js/theme-boot.js"></script>
     <!-- Menu Trigger -->
     <div id="menu-trigger"></div>
 

@@ -58,10 +58,13 @@ split must move that shared state to a place both `app.py` and `conftest.py` can
 | `node-types.js` | The served node catalogue (`/api/node-types`): types, word keys, groups and seed parameters. The canvas reads it as soon as it answers; its own literal table is the cold-page fallback, pinned to the server by tests. |
 | `custom-select.js`, `menu.js`, `stats.js`, `zenviz*.js` | widget + Chart-Studio host/bridge. `zenviz.html` itself is 16,852 lines and loads `zenviz-bridge.js`, which the workbench page does **not**. |
 
-**The callable surface is markup, not code.** `index.html` (2,336 lines) carries 123 `onclick`,
+**The callable surface is markup, not code.** `index.html` (2,335 lines) carries 123 `onclick`,
 23 `oninput`, 18 `onchange` attributes naming **66 bare global functions** and **20 namespace
 receivers**. Renaming any of them is a user-visible break, which is why the split moves code between
-files and never renames a global. `css/style.css` is 5,017 lines over 44 panel banners.
+files and never renames a global. Its one inline script — the pre-paint theme/background/language
+bootstrap — is `js/theme-boot.js` now, loaded as the page's first blocking script, so the page
+carries no inline JavaScript and a strict CSP can ban it. `css/style.css` is 5,017 lines over 44
+panel banners.
 
 The codebase already uses a lightweight namespace convention (`const Foo = { … }`), but everything
 loads as flat `<script>` tags in a fixed order — which is why `AGENTS.md` warns that a top-level

@@ -13,6 +13,10 @@ import { loadPageScripts } from './page_scripts.mjs';
 
 const jsDir = process.argv[2];
 const sandbox = baseSandbox();
+/* A saved dark / English / void choice, so the page's own pre-paint bootstrap
+   (theme-boot.js, the first script on the page) has something to apply before any
+   app code runs — the flash the bootstrap exists to prevent. */
+sandbox.__stored.crawler_settings = JSON.stringify({ theme: 'dark', bg: 'bg-void', lang: 'en' });
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
 loadPageScripts(sandbox, { jsDir });
@@ -31,6 +35,24 @@ mkBtn('dark');
 const R = (expr) => vm.runInContext(expr, sandbox);
 
 const report = {};
+report.boot = {
+    choice: doc.documentElement.dataset.themeChoice,
+    resolved: doc.documentElement.dataset.theme,
+    colorScheme: doc.documentElement.style.colorScheme,
+    htmlLang: doc.documentElement.lang,
+    lang: doc.body.dataset.lang,
+    bg: doc.body.classList.contains('bg-void'),
+    grid: doc.body.classList.contains('bg-grid'),
+};
+
+/* The mechanism setLang drives: I18n.apply re-declares the document language too. */
+report.lang_attr = R(`(function () {
+    var out = {};
+    document.body.dataset.lang = 'zh'; I18n.apply(); out.zh = document.documentElement.lang;
+    document.body.dataset.lang = 'en'; I18n.apply(); out.en = document.documentElement.lang;
+    return out;
+})()`);
+
 for (const choice of ['light', 'dark', 'auto']) {
     report[choice] = R(
         `(function () {
@@ -41,6 +63,7 @@ for (const choice of ['light', 'dark', 'auto']) {
             });
             return {
                 resolved: document.documentElement.dataset.theme,
+                colorScheme: document.documentElement.style.colorScheme,
                 stored: JSON.parse(localStorage.getItem('crawler_settings')).theme,
                 active,
             };
