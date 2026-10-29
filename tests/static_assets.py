@@ -18,6 +18,7 @@ STATIC = REPO / 'backend' / 'static'
 INDEX = STATIC / 'index.html'
 STUDIO = STATIC / 'zenviz.html'
 CSS_DIR = STATIC / 'css'
+JS_DIR = STATIC / 'js'
 
 _STYLESHEET = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/css/([^"]+)"')
 
@@ -30,3 +31,30 @@ def css_files(page: Path = INDEX) -> list[Path]:
 def css_text(page: Path = INDEX) -> str:
     """Everything those files contain, concatenated in page order — the sheet the browser parses."""
     return '\n'.join(path.read_text(encoding='utf-8') for path in css_files(page))
+
+
+def js_files(name: str) -> list[Path]:
+    """One module under ``js/`` plus every file split out of it, in page order.
+
+    The split map (``tests/frontend/splits.json``, the same one the node loader and
+    ``frontend_catalogue.with_companions`` read) decides the members, so a scan of "the settings
+    panel" keeps working when a panel is cut again — and cannot quietly miss the half that moved.
+    """
+    from frontend_catalogue import with_companions
+
+    seen: list[Path] = []
+    for item in with_companions([JS_DIR / name]):
+        path = Path(str(item))
+        if path not in seen:
+            seen.append(path)
+    return seen
+
+
+def js_text(*names: str) -> str:
+    """The source the browser actually evaluates for those modules: each owner, then its split-outs."""
+    paths: list[Path] = []
+    for name in names:
+        for path in js_files(name):
+            if path not in paths:
+                paths.append(path)
+    return '\n'.join(path.read_text(encoding='utf-8') for path in paths)

@@ -26,7 +26,7 @@ from frontend_catalogue import catalog_texts as _catalog_texts
 from frontend_catalogue import words_missing as _words_missing
 from node_runner import run_node
 from sessions.cookies import CookieManager
-from static_assets import css_text
+from static_assets import css_text, js_text
 
 import i18n
 from crawlers import CRAWLERS, is_crawlable
@@ -52,8 +52,8 @@ JS_DIR = STATIC_DIR / 'js'
 HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_canvas.mjs'
 VALIDATE_HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_validate.mjs'
 CANVAS_JS = JS_DIR / 'canvas.js'
-# The node settings panel (openSettings and every field renderer) lives in its own module.
-SETTINGS_JS = JS_DIR / 'panels' / 'settings.js'
+# The node settings panel is four modules: the shell plus one per node type (see splits.json).
+# Reads go through ``js_text('panels/settings.js')``, which follows the split map.
 
 # Files whose I18n.t('literal') calls are audited against the catalogues.
 I18N_USERS = [
@@ -61,6 +61,9 @@ I18N_USERS = [
     'canvas.js',
     'workflow.js',
     'panels/settings.js',
+    'panels/node-analysis.js',
+    'panels/node-biblio.js',
+    'panels/node-chart.js',
     'chart-preview.js',
     'menu.js',
     'stats.js',
@@ -208,7 +211,7 @@ class TestLlmGateParity:
         ``saveState()`` + ``updateNodeDisplay()`` every open, so Ctrl+Z walked back through a stack
         of panel views and the file looked modified after nothing was edited. Read from the source:
         the defaults are still written (the preview needs them), but the branch may not persist."""
-        source = SETTINGS_JS.read_text(encoding='utf-8')
+        source = js_text('panels/settings.js')
         start = source.index('if (isTokenizeUpstream) {')
         branch = source[start : source.index('return html;', start)]
         assert "p.x_field = 'word'" in branch, 'the derived default was dropped (preview would break)'
@@ -219,7 +222,7 @@ class TestLlmGateParity:
         """Same rule on the OTHER side of the edge: the 分词 node fills word_freq when a chart sits
         downstream, but a panel OPEN is not a user edit, so the branch may not persist it (connectNodes
         already writes it as a real change when the wire is made)."""
-        source = SETTINGS_JS.read_text(encoding='utf-8')
+        source = js_text('panels/settings.js')
         start = source.index("node.type === 'tokenize'")
         branch = source[start : source.index("node.type === 'name'", start)]
         assert "p.output_mode = 'word_freq'" in branch, 'the derived default was dropped (run would read a stale mode)'
@@ -229,7 +232,7 @@ class TestLlmGateParity:
     def test_opening_an_output_panel_is_not_an_undo_step(self):
         """A pdf-only output forces ``format='pdf'`` in the live model for the run, but must not
         saveState() on the open."""
-        source = SETTINGS_JS.read_text(encoding='utf-8')
+        source = js_text('panels/settings.js')
         start = source.index('var pdfOnly = _outputIsPdfOnly(nodeId);')
         branch = source[start : source.index('var fmt = pdfOnly', start)]
         assert "p.format = 'pdf'" in branch, 'the forced pdf default was dropped'
@@ -238,7 +241,7 @@ class TestLlmGateParity:
     def test_the_resume_default_pick_does_not_persist_on_render(self):
         """renderResumeSettings back-fills the newest run when the stored one was purged — a derived
         default, not a choice — so it writes the value but never saveState() from the render path."""
-        source = SETTINGS_JS.read_text(encoding='utf-8')
+        source = js_text('panels/settings.js')
         marker = 'p.resume_run_id = runs[0].run_id;'
         idx = source.index(marker)
         window = source[idx : idx + 120]
@@ -246,7 +249,7 @@ class TestLlmGateParity:
         assert 'canvas.saveState(' not in window, 'the resume default pick persisted an edit on a render'
 
     def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
-        """``PROCESS_OPS`` in panels/settings.js is what the 算法处理 node's dropdown offers; the
+        """``PROCESS_OPS`` in the settings panel is what the 算法处理 node's dropdown offers; the
         branches inside ``execute_process_node`` are what actually run. Read from the
         source of both, because either half drifting is silent in the other direction:
 
@@ -256,7 +259,7 @@ class TestLlmGateParity:
         """
         import ast
 
-        js = SETTINGS_JS.read_text(encoding='utf-8')
+        js = js_text('panels/settings.js')
         listed = js[js.index('var PROCESS_OPS = [') :]
         offered = re.findall(r"""'([a-z_]+)'""", listed[: listed.index('];')])
 
@@ -378,7 +381,7 @@ class TestFrontendCatalog:
         universe of what can be asked: an op added to ``ANALYSIS_OPS`` without a catalogue entry
         prints ``op.cluster_review`` on the node card and in the 步骤 list, in one language only.
         """
-        js = SETTINGS_JS.read_text(encoding='utf-8')
+        js = js_text('panels/settings.js')
         offered = set()
         for name in ('ANALYSIS_OPS', 'PROCESS_OPS'):
             body = js[js.index(f'var {name} = [') :]
@@ -396,9 +399,9 @@ class TestBiblioPanelContract:
 
     @staticmethod
     def _js_array(name: str) -> list[str]:
-        src = SETTINGS_JS.read_text(encoding='utf-8')
+        src = js_text('panels/settings.js')
         match = re.search(rf'var {name} = \[([^\]]*)\];', src)
-        assert match, f'panels/settings.js no longer declares {name} as a flat array'
+        assert match, f'the settings panel no longer declares {name} as a flat array'
         return re.findall(r"'([^']*)'", match.group(1))
 
     def test_every_panel_list_matches_the_service(self):

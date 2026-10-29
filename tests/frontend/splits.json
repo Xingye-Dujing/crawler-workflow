@@ -17,5 +17,10 @@
         "panels/files.js",
         "panels/diagnostics.js",
         "panels/settings.js"
+    ],
+    "panels/settings.js": [
+        "panels/node-analysis.js",
+        "panels/node-biblio.js",
+        "panels/node-chart.js"
     ]
 }

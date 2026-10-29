@@ -117,14 +117,44 @@ SPLITS = json.loads((Path(__file__).resolve().parent / 'frontend' / 'splits.json
 
 
 def with_companions(paths) -> list[str]:
-    """``paths`` plus every file split out of each of them, in page order after the owner."""
+    """``paths`` plus every file split out of each of them, in page order after the owner.
+
+    The map is keyed by the page's own spelling (``panels/settings.js``, not ``settings.js``): the
+    page list, the node loader and this driver have to agree on one name for one file, or a module
+    split out of a split-out module is silently never loaded. The closure is transitive for the same
+    reason ``tests/frontend/companions.mjs`` expands until the frontier empties.
+    """
     out: list[str] = []
     for item in paths:
-        path = Path(str(item))
-        out.append(str(path))
-        for extra in SPLITS.get(path.name, []):
-            out.append(str(path.parent / extra))
+        for name in _closure(item):
+            out.append(str(name))
     return out
+
+
+def _closure(item) -> list[Path]:
+    path = Path(str(item))
+    order = [path]
+    seen = {path.as_posix()}
+    frontier = [path]
+    while frontier:
+        nxt = []
+        for current in frontier:
+            for extra in SPLITS.get(_page_spelling(current), []):
+                candidate = JS_DIR / extra
+                if candidate.as_posix() not in seen:
+                    seen.add(candidate.as_posix())
+                    order.append(candidate)
+                    nxt.append(candidate)
+        frontier = nxt
+    return order
+
+
+def _page_spelling(path: Path) -> str:
+    """The file's name as ``js/`` knows it — the only spelling the split map is keyed by."""
+    try:
+        return path.resolve().relative_to(JS_DIR).as_posix()
+    except ValueError:
+        return path.name
 
 
 def with_catalogue(paths) -> list[str]:

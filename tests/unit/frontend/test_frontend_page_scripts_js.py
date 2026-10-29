@@ -93,12 +93,19 @@ class TestThePageListsItsOwnModules:
         assert json.loads(answer.stdout) == ['i18n/chrome.js', 'app.js'], answer.stdout
 
     def test_a_split_out_module_comes_with_the_file_it_was_split_from(self, tmp_path):
-        """Selecting ``workflow.js`` must also evaluate the modules split out of it.
+        """Selecting ``workflow.js`` must also evaluate the modules split out of it — **and the ones
+        split out of those**.
 
         The capability matrix, the chart preview and (earlier) the message catalogues used to live in
         that one file. A harness that names only the old file boots half a layer and dies the first
         time the scenario asks the other half anything — measured 2026-10-28, when moving the matrix
         out broke 14 test modules at boot with ``Cannot read properties of undefined``.
+
+        The second level is the same trap one step deeper: ``panels/settings.js`` was cut again on
+        2026-10-29 into one module per node type, so a one-level expansion hands a harness the panel
+        shell WITHOUT the analysis/biblio/chart renderers it calls, and the scenario dies on a name
+        that exists on the page. Transitivity is what the rule means; it is asserted here rather than
+        trusted to the loader.
         """
         dom = (REPO / 'tests' / 'frontend' / 'harness_dom.mjs').as_posix()
         loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').as_posix()
@@ -121,6 +128,21 @@ class TestThePageListsItsOwnModules:
         assert 'workflow.js' in loaded
         assert 'capabilities.js' in loaded, f'the capability matrix is missing from {loaded}'
         assert 'chart-preview.js' in loaded, f'the chart preview is missing from {loaded}'
+        # Two levels deep: the settings panel is itself split by node type, and a harness that names
+        # workflow.js boots the whole panel family or it boots a panel that dies on first open.
+        for name in ('panels/settings.js', 'panels/node-analysis.js', 'panels/node-chart.js'):
+            assert name in loaded, f'{name} is missing from {loaded} — the closure stopped one level short'
+
+    def test_the_python_driver_expands_the_same_closure_as_the_loader(self, tmp_path):
+        """The two readers of ``splits.json`` must agree file-for-file, or a Python driver boots a
+        different page than a node harness does and their green means different things."""
+        from frontend_catalogue import with_companions
+
+        js = REPO / 'backend' / 'static' / 'js'
+        expanded = [Path(str(item)).relative_to(js).as_posix() for item in with_companions([js / 'workflow.js'])]
+        assert 'panels/settings.js' in expanded
+        for name in ('panels/node-analysis.js', 'panels/node-biblio.js', 'panels/node-chart.js'):
+            assert name in expanded, f'the Python closure stopped one level short at {name}'
 
     def test_the_companion_map_names_files_the_page_really_ships(self):
         """A companion the page does not load would be a harness-only file: the browser would never

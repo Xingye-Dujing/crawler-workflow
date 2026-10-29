@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from static_assets import js_text
 
 from services.charts.contracts import BIBLIO_CHART_TYPES
 from services.charts.visualizer import ANNOTATED_TYPES, CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
@@ -25,13 +26,13 @@ from services.charts.visualizer import VisualizationService as V
 
 pytestmark = pytest.mark.unit
 
-_SETTINGS_JS = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
+_SETTINGS_JS = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'node-chart.js'
 
 
 def _js_list(text: str, name: str) -> list:
     """The quoted members of ``var NAME = […];`` in the browser's copy of a list."""
     declaration = re.search(rf'var {name} = \[([^\]]*)\];', text)
-    assert declaration, f'panels/settings.js no longer declares {name} as a flat array'
+    assert declaration, f'the chart node panel no longer declares {name} as a flat array'
     return re.findall(r"'([^']*)'", declaration.group(1))
 
 
@@ -214,7 +215,7 @@ class TestChartCatalogue:
         assert set(ECHARTS_ONLY_TYPES) < set(CHART_TYPES)
 
     def test_the_browser_advertises_exactly_the_types_this_builds(self):
-        """``panels/settings.js`` keeps its own copy of both lists, and the two drift apart in the
+        """``panels/node-chart.js`` keeps its own copy of both lists, and the two drift apart in the
         one direction no test on the Python side can see: a panel that offers 双轴折线 while
         the service does not know the name hands the user an opaque node failure, and a panel
         that hides a type the service draws is a feature nobody finds.
@@ -222,14 +223,14 @@ class TestChartCatalogue:
         ``CHART_TYPES`` is order-sensitive (the panel walks it); the ECharts-only list is a
         membership set both sides only ever test with ``in``, so it is compared as a set — its
         order in ``services.charts.registry`` follows the panel, not the old literal."""
-        text = _SETTINGS_JS.read_text(encoding='utf-8')
+        text = js_text('panels/settings.js')
         assert _js_list(text, 'CHART_TYPES') == list(CHART_TYPES)
         assert set(_js_list(text, 'ECHARTS_ONLY_CHARTS')) == set(ECHARTS_ONLY_TYPES)
 
     def test_the_browser_offers_event_markers_only_where_they_are_drawn(self):
         # The same drift in the other direction: a box the figure cannot honour is a date the
         # reader of the exported PNG believes is on the curve and never was.
-        text = _SETTINGS_JS.read_text(encoding='utf-8')
+        text = js_text('panels/settings.js')
         assert _js_list(text, 'CHARTS_WITH_ANNOTATIONS') == list(ANNOTATED_TYPES)
 
 
@@ -303,7 +304,7 @@ class TestNetworkCenter:
             (_SETTINGS_JS.parent.parent / 'workflow.js').read_text(encoding='utf-8')
             + (_SETTINGS_JS.parent.parent / 'chart-preview.js').read_text(encoding='utf-8')
             + (_SETTINGS_JS.parent / 'data-views.js').read_text(encoding='utf-8')
-            + _SETTINGS_JS.read_text(encoding='utf-8')
+            + js_text('panels/settings.js')
         )
         # preview, fullscreen export and the board each send it, and the settings field exists.
         assert text.count('center_node: p.center_node,') >= 3

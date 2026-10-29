@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from static_assets import js_text
 
 # One alias for the live module: the encoder tests patch its module state, and the source
 # guards below read its ``__file__`` — both need the module object, not a copy of a name.
@@ -93,7 +94,7 @@ def _function_definition(function_name: str) -> ast.FunctionDef:
     raise AssertionError(f'{function_name} is declared nowhere under {ANALYSIS_DIR}')
 
 
-SETTINGS_JS = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
+SETTINGS_JS = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'node-analysis.js'
 
 
 def _source_walk(node):
@@ -127,9 +128,9 @@ def _compared_literals(function_name: str, subject: str) -> list:
 
 
 def _js_array(name: str) -> list:
-    """The string literals of settings.js's ``var NAME = […];`` dropdown source."""
-    match = re.search(rf'var {name} = \[([^\]]*)\];', SETTINGS_JS.read_text(encoding='utf-8'))
-    assert match, f'{name} is no longer a flat literal array in settings.js'
+    """The string literals of the analysis panel's ``var NAME = […];`` dropdown source."""
+    match = re.search(rf'var {name} = \[([^\]]*)\];', js_text('panels/settings.js'))
+    assert match, f'{name} is no longer a flat literal array in the analysis panel'
     return re.findall(r"'([^']*)'", match.group(1))
 
 
@@ -639,7 +640,7 @@ class TestOperatorNameLists:
     """ONE place where the browser's operator names meet Python's registry.
 
     The 分析 node's dropdowns are three flat literal arrays in
-    ``backend/static/js/panels/settings.js`` (``ANALYSIS_OPS`` / ``FILTER_OPS`` /
+    ``backend/static/js/panels/node-analysis.js`` (``ANALYSIS_OPS`` / ``FILTER_OPS`` /
     ``CONVERT_TYPES``); Python keeps its own answers — ``_operations()`` for the
     steps, the ``if op == …`` chain inside ``filter_rows`` for the comparisons,
     the ``if dtype == …`` chain inside ``convert_type`` for the types. They were
@@ -695,7 +696,7 @@ class TestOperatorNameLists:
                 if len(found) >= 4:
                     offenders.setdefault(path.relative_to(root).as_posix(), set()).update(found)
         assert set(offenders) == {
-            'backend/static/js/panels/settings.js',
+            'backend/static/js/panels/node-analysis.js',
             'tests/unit/analysis/test_data_analysis.py',
         }, f'an unlinked copy of the operation names appeared in {sorted(offenders)}'
 

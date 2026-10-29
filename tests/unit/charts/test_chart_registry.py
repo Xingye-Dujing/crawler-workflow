@@ -17,6 +17,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from frontend_catalogue import words_missing as _words_missing
+from static_assets import js_text
 
 from services.charts import registry
 from services.charts.contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES, NO_X_TYPES, ChartConfigError
@@ -24,8 +25,8 @@ from services.charts.registry import LATEX_UNBUILDABLE_TYPES
 from services.charts.visualizer import CHART_TYPES, ECHARTS_ONLY_TYPES
 
 REPO = Path(__file__).resolve().parents[3]
-# The three arrays live with the settings panel that draws them (split out of workflow.js).
-SETTINGS_JS = REPO / 'backend' / 'static' / 'js' / 'panels' / 'settings.js'
+# The three arrays live with the chart node's settings module, beside the form that draws them.
+SETTINGS_JS = REPO / 'backend' / 'static' / 'js' / 'panels' / 'node-chart.js'
 
 
 def _js_array(source: str, name: str) -> list[str]:
@@ -70,7 +71,7 @@ class TestTheRegistryIsTheOneDeclaration:
 
 class TestTheFrontEndIsPinnedNotASecondOpinion:
     def test_the_page_offers_exactly_the_registry_types(self):
-        source = SETTINGS_JS.read_text(encoding='utf-8')
+        source = js_text('panels/settings.js')
         assert _js_array(source, 'CHART_TYPES') == list(CHART_TYPES)
         assert _js_array(source, 'BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
         assert set(_js_array(source, 'ECHARTS_ONLY_CHARTS')) == set(ECHARTS_ONLY_TYPES)

@@ -40,6 +40,9 @@
 | `panels/shell.js` | 大纲侧栏、语言切换、toast、进程列表、通用对话框、`fetchJSON`（702 行） | Stage 10b 整段切片搬出；`setLang` 里对 `biblioWorkspace`/`schedulesManager` 的语言回调随之移动，两处扫描改读本文件 |
 | `panels/run-results.js` | 续跑横幅与已载入运行结果抽屉（357 行） | Stage 10b 整段切片搬出 |
 | `workflow-layout.js` | `LayoutStrategy` 自动布局（Style 菜单）（163 行） | Stage 10b 整段切片搬出 |
+| `panels/node-analysis.js` | 分析节点的设置：`ANALYSIS_OPS`/`FILTER_OPS`/`CONVERT_TYPES` 与 `renderAnalysisSettings`（389 行） | 2026-10-29 从 `panels/settings.js` 按**连续切片**拆出（切片脚本核对四片拼接与原件逐字节相同）。它同时是 `splits.json` 里 `panels/settings.js` 的伴生：**伴生展开改成传递闭包**（node loader 与 `frontend_catalogue.with_companions` 同一规则），否则"命名 workflow.js 的 harness"只会拿到面板外壳而拿不到这一片 |
+| `panels/node-biblio.js` | 文献计量与融合节点的设置：`BIBLIO_*` 十张清单、`FUSE_ROLE_FIELDS`、`renderBiblioSettings`/`renderFuseSettings`（224 行） | 同上一次切片 |
+| `panels/node-chart.js` | 可视化节点的设置：`CHART_TYPES`/`BIBLIO_CHARTS`/`ENGINES`/`ECHARTS_ONLY_CHARTS`/`CHARTS_WITH_*` 与 `renderVisualizeSettings`（238 行） | 同上；`test_chart_registry`/`test_visualization`/`test_frontend_contract` 的清单扫描改读**面板合体**（`static_assets.js_text('panels/settings.js')` 沿伴生表展开，扫描不再自己猜文件名） |
 | `zenviz-page.js` + `css/zenviz.css` | 图表工作室页面自身：14,720 行的 IIFE（引擎渲染、属性面板、导入导出、持久化）与 1,927 行样式 | 2026-10-29 从 `zenviz.html`（16,852 行）的**内联 `<style>`/`<script>`** 原字节搬出，页面剩 218 行；JS 仍是**一个 IIFE、缩进未动**（模板字符串跨行，去缩进会改到字符串内容），CSS 只去了行首页面对齐的六格。文件化换来 `node --check`、可审 diff 与严格 CSP（禁用内联）。`zenviz-page.js` 只由 `zenviz.html` 加载（与 `zenviz-bridge.js` 同），`tests/unit/frontend/test_frontend_page_markup.py` 把同一套文档契约（id 唯一/成对/可访问名/无内联/模块在盘）套到工作室页 |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）

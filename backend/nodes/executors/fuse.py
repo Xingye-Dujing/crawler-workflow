@@ -21,7 +21,7 @@ from services.biblio import fuse
 NODE_TYPE = 'fuse'
 
 
-def emit_columns(node: dict, _merged: list[str] | None) -> list[str]:
+def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
     """A fusion node's output is a fixed contract, not a projection of its inputs: that is the
     whole point — downstream reads canonical names whatever the sources called their columns."""
     return list(fuse.OUTPUT_COLUMNS)
