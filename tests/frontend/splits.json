@@ -1,4 +1,7 @@
 {
+    "canvas.js": [
+        "clipboard.js"
+    ],
     "workflow.js": [
         "panels/data-views.js",
         "panels/shell.js",

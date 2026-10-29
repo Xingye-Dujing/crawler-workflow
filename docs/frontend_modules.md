@@ -40,6 +40,7 @@
 | `panels/shell.js` | 大纲侧栏、语言切换、toast、进程列表、通用对话框、`fetchJSON`（702 行） | Stage 10b 整段切片搬出；`setLang` 里对 `biblioWorkspace`/`schedulesManager` 的语言回调随之移动，两处扫描改读本文件 |
 | `panels/run-results.js` | 续跑横幅与已载入运行结果抽屉（357 行） | Stage 10b 整段切片搬出 |
 | `workflow-layout.js` | `LayoutStrategy` 自动布局（Style 菜单）（163 行） | Stage 10b 整段切片搬出 |
+| `clipboard.js` | 剪贴板抽屉（复制历史的持久列表、粘贴/改名/置顶/删除）与快捷键帮助浮层：`Clipboard` / `toggleClipboardDrawer` / `toggleShortcutsHelp`（366 行） | 2026-10-29 从 `canvas.js` 尾部原字节搬出（拼回核对：canvas.js 现存 3,535 行 + 本片正文 == 原 3,893 行文件逐行相同，零差异）。`canvas.js` 是图对象，抽屉与帮助框不是它的成员；名字仍是页面全局，因为 `index.html` 的 onclick 按名字调它们。进 `splits.json['canvas.js']` |
 | `panels/node-analysis.js` | 分析节点的设置：`ANALYSIS_OPS`/`FILTER_OPS`/`CONVERT_TYPES` 与 `renderAnalysisSettings`（389 行） | 2026-10-29 从 `panels/settings.js` 按**连续切片**拆出（切片脚本核对四片拼接与原件逐字节相同）。它同时是 `splits.json` 里 `panels/settings.js` 的伴生：**伴生展开改成传递闭包**（node loader 与 `frontend_catalogue.with_companions` 同一规则），否则"命名 workflow.js 的 harness"只会拿到面板外壳而拿不到这一片 |
 | `panels/node-biblio.js` | 文献计量与融合节点的设置：`BIBLIO_*` 十张清单、`FUSE_ROLE_FIELDS`、`renderBiblioSettings`/`renderFuseSettings`（224 行） | 同上一次切片 |
 | `panels/node-chart.js` | 可视化节点的设置：`CHART_TYPES`/`BIBLIO_CHARTS`/`ENGINES`/`ECHARTS_ONLY_CHARTS`/`CHARTS_WITH_*` 与 `renderVisualizeSettings`（238 行） | 同上；`test_chart_registry`/`test_visualization`/`test_frontend_contract` 的清单扫描改读**面板合体**（`static_assets.js_text('panels/settings.js')` 沿伴生表展开，扫描不再自己猜文件名） |
