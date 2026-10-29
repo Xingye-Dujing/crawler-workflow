@@ -16,5 +16,10 @@ def execute_name_node(_node: dict) -> list:
     return []
 
 
+def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
+    """The lineage view's answer: this node contributes no columns to anything downstream."""
+    return []
+
+
 def run(node: dict, _call: NodeCall) -> list:
     return execute_name_node(node)

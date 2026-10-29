@@ -2,7 +2,7 @@
 
 The panel stores everything as strings — a comma-separated column list, a text number, a
 checkbox spelled ``'true'`` — while ``DataAnalysisService`` takes typed kwargs. This module is
-the one translation layer; ``nodes/schema.py`` reads the same rules to say which columns
+the one translation layer; the analysis plugin reads the same rules to say which columns
 a step consumes, so a new field is declared once instead of in two shapes.
 """
 

@@ -15,10 +15,26 @@ from core.refs import json_safe_records as _json_safe_records
 from runtime.state import add_log
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, node_params, split_panel_columns
 from services.biblio import fuse
 
 NODE_TYPE = 'fuse'
+
+
+def emit_columns(node: dict, _merged: list[str] | None) -> list[str]:
+    """A fusion node's output is a fixed contract, not a projection of its inputs: that is the
+    whole point — downstream reads canonical names whatever the sources called their columns."""
+    return list(fuse.OUTPUT_COLUMNS)
+
+
+def read_columns(node: dict) -> list[str]:
+    """Every candidate column, because which one a given parent answers with is data-dependent;
+    diagnostics flags a candidate only when NO parent can supply it."""
+    params = node_params(node)
+    found: list[str] = []
+    for key in fuse.ROLE_PARAMS:
+        found += split_panel_columns(params.get(key))
+    return found
 
 
 def execute_fuse_node(node: dict, _current_input: list, upstream: list = None, ctx: dict = None):

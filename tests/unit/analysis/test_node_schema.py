@@ -3,10 +3,13 @@
 These are the truths behind the canvas badges: what a node emits, what it reads, and
 which node a validation message belongs to. The cardinal property under test is that an
 unknown producer (a crawl) is never turned into a false "missing column" downstream —
-the model returns None there, and None propagates. The per-op tables live beside the code
-that owns them (process/analysis params, the tokenize/visualize plugins); this module only
-aggregates, so moving the same test here proves the aggregation kept every answer.
+the model returns None there, and None propagates. A node type's column rule lives with
+the node type (its ``emit_columns`` / ``read_columns`` in ``nodes/executors/<type>.py``);
+``nodes/schema.py`` only walks the graph and asks, so the same test also proves the
+dispatch kept every answer.
 """
+
+from pathlib import Path
 
 from nodes.schema import compute_columns, referenced_columns
 
@@ -309,3 +312,68 @@ class TestTheTablesLiveWithTheirOwners:
         import importlib.util
 
         assert importlib.util.find_spec('services.node_schema') is None
+
+
+#: Node types whose table no static view can see — declared, not defaulted.
+UNMODELLED_OUTPUTS = {'comment', 'compile', 'output', 'resume', 'source', 'visualize'}
+
+#: Node types that read named columns from their input.
+COLUMN_READERS = {'analysis', 'biblio', 'fuse', 'process', 'tokenize', 'visualize'}
+
+
+class TestTheContractIsDeclaredPerPlugin:
+    """``nodes/schema.py`` asks each plugin; it no longer holds the rules itself.
+
+    A type that gains a column rule without a hook (or the reverse) used to be invisible: the
+    ``elif`` chain simply did not mention it and the node answered "unknown" forever, which reads
+    as a clean run rather than as a missing model. Enumerating both sets makes the omission a
+    test failure instead.
+    """
+
+    @staticmethod
+    def _plugins() -> dict:
+        import importlib
+
+        from nodes import registry
+
+        registry.load_builtin_executors()
+        return {
+            node_type: importlib.import_module(registry.executor_for(node_type).__module__)
+            for node_type in sorted(registry.registered_types())
+        }
+
+    def test_every_type_either_declares_its_output_or_is_listed_as_unmodelled(self):
+        plugins = self._plugins()
+        declared = {node_type for node_type, module in plugins.items() if hasattr(module, 'emit_columns')}
+        assert declared | UNMODELLED_OUTPUTS == set(plugins), (
+            f'a node type has no output contract at all: {sorted(set(plugins) - declared - UNMODELLED_OUTPUTS)}'
+        )
+        assert not declared & UNMODELLED_OUTPUTS, (
+            f'a declared plugin is still listed as unmodelled: {sorted(declared & UNMODELLED_OUTPUTS)}'
+        )
+
+    def test_a_reader_is_a_plugin_that_declares_one(self):
+        plugins = self._plugins()
+        readers = {node_type for node_type, module in plugins.items() if hasattr(module, 'read_columns')}
+        assert readers == COLUMN_READERS, f'read_columns lives on: {sorted(readers)}'
+
+    def test_no_plugin_imports_the_lineage_view(self):
+        """The view imports the plugins (lazily, at use time); a plugin importing it back would
+        make the lineage question unanswerable before ``app`` has finished loading."""
+        import ast
+
+        offenders = []
+        for module in self._plugins().values():
+            path = Path(module.__file__)
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'), str(path))):
+                if isinstance(node, ast.ImportFrom) and (node.module or '').startswith('nodes.schema'):
+                    offenders.append(f'{path.name}:{node.lineno}')
+                if isinstance(node, ast.Import) and any(a.name == 'nodes.schema' for a in node.names):
+                    offenders.append(f'{path.name}:{node.lineno}')
+        assert offenders == [], f'plugins reaching back into the lineage view: {offenders}'
+
+    def test_a_type_the_registry_does_not_serve_is_unknown_not_an_error(self):
+        """Diagnostics runs on canvases written by an older build: an unregistered type must be
+        modelled as "nothing is known", never raise while a panel is being drawn."""
+        assert compute_columns({'x': {'id': 'x', 'type': 'no_such_node'}}, []) == {'x': None}
+        assert referenced_columns({'x': {'id': 'x', 'type': 'no_such_node', 'params': {}}}) == {'x': []}

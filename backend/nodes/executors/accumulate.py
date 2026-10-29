@@ -18,6 +18,12 @@ from nodes.context import NodeCall
 NODE_TYPE = 'accumulate'
 
 
+def emit_columns(_node: dict, merged: list[str] | None) -> list[str] | None:
+    """It appends rows and passes the table through, so the schema IS the upstream schema
+    (unknown when the upstream is unknown)."""
+    return merged
+
+
 def execute_accumulate_node(node: dict, current_input: list, ctx: dict = None):
     params = node.get('params') or {}
     name = str(params.get('lineage_name') or '').strip()

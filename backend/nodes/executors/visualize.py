@@ -11,7 +11,8 @@ from core.refs import as_bool
 from runtime.state import add_log
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, columns_from_params, node_params, split_panel_columns
+from services.charts.contracts import BIBLIO_CHART_READS
 from services.charts.outputs import build_latex_outputs
 from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.runs.files import record_file
@@ -21,6 +22,16 @@ NODE_TYPE = 'visualize'
 #: The columns a chart reads from its upstream table (``stack_fields`` is split like a list by
 #: the lineage model; a biblio chart adds its own contract through ``chart_contracts``).
 READ_PARAMS = ('x_field', 'y_field', 'y2_field', 'label_field', 'value_field')
+
+
+def read_columns(node: dict) -> list[str]:
+    """The fields this chart reads from its input table, plus the biblio view's fixed columns."""
+    params = node_params(node)
+    found = columns_from_params(params, READ_PARAMS)
+    found += split_panel_columns(params.get('stack_fields'))
+    chart = str(params.get('chart_type') or '')
+    found += list(BIBLIO_CHART_READS.get(chart, ()))
+    return [c for c in found if c]
 
 
 def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):

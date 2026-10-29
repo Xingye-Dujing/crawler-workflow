@@ -9,180 +9,61 @@ downstream of an unknown is unknown too, and an unknown never produces a
 missing-column flag: the whole point is to never tell the user a column is absent when
 we cannot actually see the table (AGENTS: refuse by name, never guess a shape).
 
-The per-op tables live beside the code that owns them now: process ops declare theirs in
-``services/analysis/process.py``, analysis steps in ``services/analysis/params.py``, and the
-tokenize/visualize read lists in their own plugins. This module only aggregates them.
+**A node type's column rule lives with the node type.** A plugin in ``nodes/executors/<type>.py``
+may declare ``emit_columns(node, merged)`` and/or ``read_columns(node)``; this module walks the
+graph, folds the fan-in and asks. A plugin that declares nothing is unknown — that is the answer,
+not a gap: ``source``, ``comment``, ``resume``, ``output``, ``compile`` and ``visualize`` are
+exactly the nodes whose table no static view can see. The old shape (one 340-line module holding
+eighteen ``elif ntype == …`` branches, with the process/analysis/biblio/fuse/upload rules written
+inside it) meant a new node type silently answered "unknown" from a chain nobody had edited.
 
-``referenced_columns`` answers the other half: which columns a node will READ from its
-input, taken straight from the params the user typed (a chart's ``x_field``, an analysis
-step's ``column``). The frontend compares those against the upstream node's emitted
-columns and flags a provable miss — the schema truth lives here, the wording lives there.
+``referenced_columns`` answers the other half: which columns a node will READ from its input,
+taken straight from the params the user typed (a chart's ``x_field``, an analysis step's
+``column``). The frontend compares those against the upstream node's emitted columns and flags a
+provable miss — the schema truth lives with the plugin, the wording lives there.
 """
 
 from __future__ import annotations
 
-from services.analysis.params import (
-    STEP_ADD_MAYBE,
-    STEP_ADD_ONE,
-    STEP_DYNAMIC_REPLACE,
-    STEP_PASSTHROUGH,
-    STEP_REPLACE,
-    STEP_UNKNOWN,
-    normalize_analysis_params,
-    replaced_columns,
-)
-from services.analysis.pipeline import STEP_PARAMS
-from services.analysis.process import OUTPUT_ADD_COLUMNS, OUTPUT_REPLACE_COLUMNS
-from services.analysis.process import READ_PARAMS as PROCESS_READ_PARAMS
-from services.biblio.fuse import OUTPUT_COLUMNS as FUSE_OUTPUT_COLUMNS
-from services.biblio.fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
-from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
-from services.biblio.schema import output_columns as biblio_output_columns
-from services.biblio.schema import read_columns as biblio_read_columns
-from services.charts.contracts import BIBLIO_CHART_READS
+import importlib
+
+from nodes import registry
 
 
-def _tokenize_contract():
-    """The tokenize plugin's output table and read list, imported lazily.
+def _plugin(node_type: str):
+    """The executor module that owns *node_type*, or ``None`` when nothing is registered for it.
 
-    Importing ``nodes.executors`` runs its package initializer (which registers every
-    executor and therefore pulls the analyzers); the lineage view is requested long after
-    boot, so the import belongs at use time rather than at module load.
+    The registry is asked rather than ``importlib.import_module('nodes.executors.' + type)``
+    because the registry is the one place that knows which plugin serves which type (``compile``
+    is imported under a different module name precisely because it shadows a builtin). Nothing is
+    memoised here: ``nodes.registry.reset_for_tests`` exists, and a cache keyed by node type would
+    outlive a swapped-out plugin and answer from the old one.
+
+    Importing the executor package runs every plugin's module body — pandas, the analyzers, the
+    services — so this happens at use time, never at module load: parsing a DAG must not become a
+    crawler import.
     """
-    from nodes.executors import tokenize
-
-    return tokenize.OUTPUT_COLUMNS, tokenize.READ_PARAMS
-
-
-def _visualize_read_params():
-    from nodes.executors import visualize
-
-    return visualize.READ_PARAMS
-
-
-def _split_columns(value) -> list[str]:
-    if isinstance(value, (list, tuple)):
-        return [str(v).strip() for v in value if str(v).strip()]
-    return [p.strip() for p in str(value or '').replace('，', ',').split(',') if p.strip()]
-
-
-def _normalized_kwargs(op: str, params: dict) -> dict:
-    """The executor's own kwargs for one panel's flat params, or the params themselves.
-
-    A canvas stores each field FLAT beside ``operation`` under the *panel's* name
-    (``phase_new_col``, ``label_summary_col``); the executor reads a *canonical* name
-    (``new_col``, ``summary_col``). ``services.analysis.params`` is the only authority on that
-    mapping, so it is asked here rather than duplicated — the old ``[{'op': op}]`` threw
-    every sibling away and the model computed the DEFAULT column name for a node the user
-    had given a new one, hiding the very column downstream steps read.
-    """
-    try:
-        normalized = normalize_analysis_params(op, params)
-    except Exception:  # a preview must degrade to "read what is there", never crash
-        normalized = {}
-    return {**params, **normalized} if isinstance(normalized, dict) else dict(params)
-
-
-def _step_kwargs(step: dict) -> dict:
-    """One entry of a ``steps`` list, with its column kwargs resolved to canonical names.
-
-    A step already carrying a ``params`` dict is an executor-shaped step (``/api/analysis``
-    hands these) and its names are canonical; a flat step is panel-shaped and goes through
-    the same translator.
-    """
-    nested = step.get('params')
-    if isinstance(nested, dict):
-        return {**step, **nested}
-    op = str(step.get('op') or step.get('operation') or '')
-    if not op:
-        return dict(step)
-    return _normalized_kwargs(op, step)
-
-
-def _steps_of(params: dict) -> list[dict]:
-    """The (op, canonical kwargs) pairs one analysis node will run, in order.
-
-    Two shapes reach this function: the canvas's single flat ``operation`` with its panel
-    fields beside it, and an API caller's ``steps`` list. Each is normalised through the
-    executor's own translator so the column model below can key on canonical names.
-    """
-    steps = params.get('steps')
-    if isinstance(steps, list):
-        return [_step_kwargs(s) for s in steps if isinstance(s, dict)]
-    op = params.get('operation')
-    if not op:
-        return []
-    return [{'op': op, **_normalized_kwargs(str(op), params)}]
-
-
-def _node_operation(node: dict) -> str:
-    return str(node.get('operation') or (node.get('params') or {}).get('operation') or '')
-
-
-def _dataset_columns(node: dict) -> list[str] | None:
-    dataset_id = (node.get('params') or {}).get('dataset_id')
-    if not dataset_id:
+    registry.load_builtin_executors()
+    executor = registry.executor_for(str(node_type or ''))
+    if executor is None:
         return None
-    try:
-        from runtime.stores import get_dataset_store
+    return importlib.import_module(executor.__module__)
 
-        meta = get_dataset_store().meta(dataset_id)
-    except Exception:  # a store read must never turn a preview into a 500
+
+def _hook(node_type: str, name: str):
+    plugin = _plugin(node_type)
+    return getattr(plugin, name, None) if plugin is not None else None
+
+
+def _merged_columns(out: dict, parents: list[str]) -> list[str] | None:
+    """The parents' union in edge order, or None when any parent is unknown."""
+    parent_cols = [out.get(parent_id) for parent_id in parents]
+    if any(cols is None for cols in parent_cols):
         return None
-    if not meta:
-        return None
-    cols = meta.get('columns')
-    return list(cols) if cols else None
-
-
-def _analysis_output(params: dict, upstream: list[str] | None) -> list[str] | None:
-    cols = upstream
-    for step in _steps_of(params):
-        op = str(step.get('op') or '')
-        if op in STEP_UNKNOWN:
-            return None
-        if op in STEP_DYNAMIC_REPLACE:
-            derived = replaced_columns(op, step)
-            if derived is None:
-                return None
-            cols = derived
-            continue
-        if op in STEP_REPLACE:
-            cols = list(STEP_REPLACE[op])
-            continue
-        if op == 'select_columns':
-            chosen = _split_columns(step.get('columns'))
-            cols = chosen or cols
-            continue
-        if op in STEP_ADD_ONE:
-            if cols is None:
-                return None
-            param, default = STEP_ADD_ONE[op]
-            new_col = str(step.get(param) or default or '').strip()
-            if not new_col and op == 'bin_column':
-                # The executor writes f"{column}_bin" when the name box is blank, so the
-                # lineage has to say the same thing rather than drop the column entirely.
-                column = str(step.get('column') or '').strip()
-                new_col = f'{column}_bin' if column else ''
-            if new_col:
-                cols = cols + [new_col]
-            # `bin_time` is the one step that may add a SECOND column; every other single-add
-            # step ends here, so the extra read below is skipped rather than falling through
-            # (falling through would reach `return None` and call a known op unknown).
-            if op not in STEP_ADD_MAYBE:
-                continue
-        if op in STEP_ADD_MAYBE:
-            if cols is None:
-                return None
-            for param, default in STEP_ADD_MAYBE[op]:
-                added = str(step.get(param) or default or '').strip()
-                if added and added not in cols:
-                    cols = cols + [added]
-            continue
-        if op in STEP_PASSTHROUGH:
-            continue
-        return None  # an op the model has not enumerated → unknown, never a guess
-    return cols
+    merged: list[str] = []
+    for cols in parent_cols:
+        merged += [column for column in (cols or []) if column not in merged]
+    return merged
 
 
 def compute_columns(nodes: dict, connections: list) -> dict:
@@ -194,51 +75,13 @@ def compute_columns(nodes: dict, connections: list) -> dict:
             upstream.setdefault(dst, []).append(src)
 
     out: dict[str, list[str] | None] = {}
-    order = _topo_ids(nodes, connections)
-    for nid in order:
+    for nid in _topo_ids(nodes, connections):
         node = nodes[nid]
-        ntype = node.get('type')
-        params = node.get('params') or {}
-        parents = upstream.get(nid, [])
-        parent_cols = [out.get(p) for p in parents]
-        if any(c is None for c in parent_cols):
-            merged = None
-        elif parent_cols:
-            merged = []
-            for c in parent_cols:
-                merged += [x for x in c if x not in merged]
+        emit = _hook(node.get('type'), 'emit_columns')
+        if emit is None:
+            out[nid] = None  # no declared contract: unknown, never a guess
         else:
-            merged = []
-        if ntype == 'name':
-            out[nid] = []
-        elif ntype == 'upload':
-            out[nid] = _dataset_columns(node)
-        elif ntype == 'tokenize':
-            tokenize_output, _reads = _tokenize_contract()
-            out[nid] = list(tokenize_output.get(str(params.get('output_mode') or 'word_freq'), ()))
-        elif ntype == 'process':
-            op = _node_operation(node)
-            if op in OUTPUT_REPLACE_COLUMNS:
-                out[nid] = list(OUTPUT_REPLACE_COLUMNS[op])
-            elif op in OUTPUT_ADD_COLUMNS:
-                out[nid] = None if merged is None else merged + [c for c in OUTPUT_ADD_COLUMNS[op] if c not in merged]
-            else:
-                out[nid] = None  # keyword/ner/cluster/bot/bert/…: data-dependent
-        elif ntype == 'analysis':
-            out[nid] = _analysis_output(params, merged)
-        elif ntype == 'biblio':
-            out[nid] = biblio_output_columns(params, merged or [])
-        elif ntype == 'fuse':
-            # A fusion node's output is a fixed contract, not a projection of its inputs: that
-            # is the whole point — downstream reads canonical names whatever the sources called
-            # their columns.
-            out[nid] = list(FUSE_OUTPUT_COLUMNS)
-        elif ntype == 'accumulate':
-            # It appends rows and passes the union through, so the schema is exactly the
-            # upstream schema (unknown when the upstream is unknown).
-            out[nid] = merged
-        else:
-            out[nid] = None  # source/comment/resume/visualize/output/compile: unknown or non-tabular
+            out[nid] = emit(node, _merged_columns(out, upstream.get(nid, [])))
     return out
 
 
@@ -246,74 +89,13 @@ def referenced_columns(nodes: dict) -> dict:
     """{node_id: [column names this node will read from its input]}."""
     reads: dict[str, list[str]] = {}
     for nid, node in nodes.items():
-        ntype = node.get('type')
-        params = node.get('params') or {}
-        found: list[str] = []
-        if ntype == 'process':
-            for p in PROCESS_READ_PARAMS.get(_node_operation(node), ()):
-                v = str(params.get(p) or '').strip()
-                if v:
-                    found.append(v)
-        elif ntype == 'tokenize':
-            _output, tokenize_reads = _tokenize_contract()
-            for p in tokenize_reads:
-                v = str(params.get(p) or '').strip()
-                if v:
-                    found.append(v)
-        elif ntype == 'visualize':
-            for p in _visualize_read_params():
-                v = str(params.get(p) or '').strip()
-                if v:
-                    found.append(v)
-            found += _split_columns(params.get('stack_fields'))
-            chart = str(params.get('chart_type') or '')
-            found += list(BIBLIO_CHART_READS.get(chart, ()))
-        elif ntype == 'fuse':
-            # Every candidate column, because which one a given parent answers with is data-
-            # dependent; diagnostics flags a candidate only when NO parent can supply it.
-            for key in FUSE_ROLE_PARAMS:
-                found += _split_columns(params.get(key))
-        elif ntype == 'biblio':
-            entity = str(params.get('entity_type') or 'keyword')
-            columns = biblio_read_columns(params)
-            if entity in CITATION_TYPES or entity in COUPLING_TYPES:
-                found += [columns['reference'], columns['year']]
-                if entity in ('document', 'bibliographic_coupling'):
-                    found.append(columns['title'])
-                if entity == 'journal':
-                    found.append(columns['entity'])
-            elif entity == 'term':
-                found.append(columns['year'])
-            else:
-                found += [columns['entity'], columns['year']]
-            if str(params.get('min_tc') or '').strip():
-                found.append(columns['tc'])
-            if str(params.get('min_usage') or '').strip():
-                found.append(columns['usage'])
-            for key in ('sentiment_column', 'topic_column'):
-                value = str(params.get(key) or '').strip()
-                if value:
-                    found.append(value)
-            # An explicit label source is a hard read; ``all`` is the lenient historical mix and
-            # asks nothing (a table without 摘要 still labels from its keywords).
-            source = str(params.get('label_source') or 'all')
-            if source == 'title':
-                found.append(columns['title'])
-            elif source == 'abstract':
-                found.append(columns['abstract'])
-            elif source == 'keywords':
-                found.append(columns['entity'] if entity == 'keyword' else '关键词')
-            elif source == 'author':
-                found.append(columns['entity'] if entity == 'author' else '作者')
-            if str(params.get('output_shape') or '') == 'dual_map':
-                found += ['参考文献', '来源期刊', '学科', '年份']
-        elif ntype == 'analysis':
-            for step in _steps_of(params):
-                spec = STEP_PARAMS.get(str(step.get('op') or ''), {})
-                for key in ('one', 'some'):
-                    for pname in spec.get(key, ()):
-                        found += _split_columns(step.get(pname))
-        reads[nid] = [c for c in found if c]
+        read = _hook(node.get('type'), 'read_columns')
+        if read is None:
+            reads[nid] = []
+            continue
+        # The blank-filter is the view's own rule, not each plugin's: an empty box asks for
+        # nothing, and a blank must never reach a badge as a column name.
+        reads[nid] = [column for column in read(node) or [] if column]
     return reads
 
 

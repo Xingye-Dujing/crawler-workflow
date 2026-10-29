@@ -15,10 +15,60 @@ from runtime.state import add_log
 from runtime.stores import _load_dataset
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, node_params
 from services.biblio import metrics
+from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
+from services.biblio.schema import output_columns as biblio_output_columns
+from services.biblio.schema import read_columns as biblio_read_columns
 
 NODE_TYPE = 'biblio'
+
+
+def emit_columns(node: dict, merged: list[str] | None) -> list[str]:
+    """The record table a biblio node writes, from the fixed columns of its entity type."""
+    return biblio_output_columns(node_params(node), merged or [])
+
+
+def read_columns(node: dict) -> list[str]:
+    """Which columns this node reads from its input, per entity and label source.
+
+    An explicit label source is a hard read; ``all`` is the lenient historical mix and asks
+    nothing (a table without 摘要 still labels from its keywords).
+    """
+    params = node_params(node)
+    entity = str(params.get('entity_type') or 'keyword')
+    columns = biblio_read_columns(params)
+    found: list[str] = []
+    if entity in CITATION_TYPES or entity in COUPLING_TYPES:
+        found += [columns['reference'], columns['year']]
+        if entity in ('document', 'bibliographic_coupling'):
+            found.append(columns['title'])
+        if entity == 'journal':
+            found.append(columns['entity'])
+    elif entity == 'term':
+        found.append(columns['year'])
+    else:
+        found += [columns['entity'], columns['year']]
+    if str(params.get('min_tc') or '').strip():
+        found.append(columns['tc'])
+    if str(params.get('min_usage') or '').strip():
+        found.append(columns['usage'])
+    for key in ('sentiment_column', 'topic_column'):
+        value = str(params.get(key) or '').strip()
+        if value:
+            found.append(value)
+    source = str(params.get('label_source') or 'all')
+    if source == 'title':
+        found.append(columns['title'])
+    elif source == 'abstract':
+        found.append(columns['abstract'])
+    elif source == 'keywords':
+        found.append(columns['entity'] if entity == 'keyword' else '关键词')
+    elif source == 'author':
+        found.append(columns['entity'] if entity == 'author' else '作者')
+    if str(params.get('output_shape') or '') == 'dual_map':
+        found += ['参考文献', '来源期刊', '学科', '年份']
+    return found
 
 
 def execute_biblio_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):

@@ -14,9 +14,28 @@ from runtime.state import add_log
 from runtime.stores import _apply_dataset_meta, _load_dataset, get_dataset_store
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, node_params
 
 NODE_TYPE = 'upload'
+
+
+def emit_columns(node: dict, _merged: list[str] | None) -> list[str] | None:
+    """The columns the referenced dataset really holds, read from its stored meta.
+
+    No ``dataset_id`` (or a dataset that is gone) is UNKNOWN, never an empty list: the lineage
+    view must not tell the user a column is missing when the node simply points at nothing.
+    """
+    dataset_id = node_params(node).get('dataset_id')
+    if not dataset_id:
+        return None
+    try:
+        meta = get_dataset_store().meta(dataset_id)
+    except Exception:  # a preview must never turn a store read into a 500
+        return None
+    if not meta:
+        return None
+    cols = meta.get('columns')
+    return list(cols) if cols else None
 
 
 def execute_upload_node(node: dict):

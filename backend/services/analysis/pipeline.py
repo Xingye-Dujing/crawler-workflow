@@ -22,7 +22,7 @@ from services.analysis.topic_kernels import (
     _stage_order,
 )
 
-# Re-exported for the callers that name THIS module: ``nodes/schema.py`` reads ``STEP_PARAMS``,
+# Re-exported for the callers that name THIS module: the analysis plugin reads ``STEP_PARAMS``,
 # ``nodes/executors/comment.py`` reads ``_to_datetime``, and the tests read the guards. Stage 9
 # moved the bodies out; the entry points stay where they always were.
 __all__ = [

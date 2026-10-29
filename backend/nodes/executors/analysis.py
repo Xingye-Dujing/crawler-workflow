@@ -13,12 +13,139 @@ from runtime.state import add_log, execution_state
 from runtime.stores import get_run_store
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, node_params, split_panel_columns
 from services.analysis.llm import build_llm_run_ctx
-from services.analysis.params import normalize_analysis_params
-from services.analysis.pipeline import LLM_OPS, DataAnalysisService, UnknownOperationError
+from services.analysis.params import (
+    STEP_ADD_MAYBE,
+    STEP_ADD_ONE,
+    STEP_DYNAMIC_REPLACE,
+    STEP_PASSTHROUGH,
+    STEP_REPLACE,
+    STEP_UNKNOWN,
+    normalize_analysis_params,
+    replaced_columns,
+)
+from services.analysis.pipeline import LLM_OPS, STEP_PARAMS, DataAnalysisService, UnknownOperationError
 
 NODE_TYPE = 'analysis'
+
+
+# ─── Column contract ─── the op tables are this node's own; the lineage view asks rather than
+# keeping a second copy. ``None`` from any of these means "unknown", never "empty".
+
+
+def _normalized_kwargs(op: str, params: dict) -> dict:
+    """The executor's own kwargs for one panel's flat params, or the params themselves.
+
+    A canvas stores each field FLAT beside ``operation`` under the *panel's* name
+    (``phase_new_col``, ``label_summary_col``); the executor reads a *canonical* name
+    (``new_col``, ``summary_col``). ``services.analysis.params`` is the only authority on that
+    mapping, so it is asked here rather than duplicated — the old ``[{'op': op}]`` threw
+    every sibling away and the model computed the DEFAULT column name for a node the user
+    had given a new one, hiding the very column downstream steps read.
+    """
+    try:
+        normalized = normalize_analysis_params(op, params)
+    except Exception:  # a preview must degrade to "read what is there", never crash
+        normalized = {}
+    return {**params, **normalized} if isinstance(normalized, dict) else dict(params)
+
+
+def _step_kwargs(step: dict) -> dict:
+    """One entry of a ``steps`` list, with its column kwargs resolved to canonical names.
+
+    A step already carrying a ``params`` dict is an executor-shaped step (``/api/analysis``
+    hands these) and its names are canonical; a flat step is panel-shaped and goes through
+    the same translator.
+    """
+    nested = step.get('params')
+    if isinstance(nested, dict):
+        return {**step, **nested}
+    op = str(step.get('op') or step.get('operation') or '')
+    if not op:
+        return dict(step)
+    return _normalized_kwargs(op, step)
+
+
+def _steps_of(params: dict) -> list[dict]:
+    """The (op, canonical kwargs) pairs one analysis node will run, in order.
+
+    Two shapes reach this function: the canvas's single flat ``operation`` with its panel
+    fields beside it, and an API caller's ``steps`` list. Each is normalised through the
+    executor's own translator so the column model can key on canonical names.
+    """
+    steps = params.get('steps')
+    if isinstance(steps, list):
+        return [_step_kwargs(s) for s in steps if isinstance(s, dict)]
+    op = params.get('operation')
+    if not op:
+        return []
+    return [{'op': op, **_normalized_kwargs(str(op), params)}]
+
+
+def _output_of(params: dict, upstream: list[str] | None) -> list[str] | None:
+    """Walk the node's steps and say what columns come out — or None when a step is unmodelled."""
+    cols = upstream
+    for step in _steps_of(params):
+        op = str(step.get('op') or '')
+        if op in STEP_UNKNOWN:
+            return None
+        if op in STEP_DYNAMIC_REPLACE:
+            derived = replaced_columns(op, step)
+            if derived is None:
+                return None
+            cols = derived
+            continue
+        if op in STEP_REPLACE:
+            cols = list(STEP_REPLACE[op])
+            continue
+        if op == 'select_columns':
+            chosen = split_panel_columns(step.get('columns'))
+            cols = chosen or cols
+            continue
+        if op in STEP_ADD_ONE:
+            if cols is None:
+                return None
+            param, default = STEP_ADD_ONE[op]
+            new_col = str(step.get(param) or default or '').strip()
+            if not new_col and op == 'bin_column':
+                # The executor writes f"{column}_bin" when the name box is blank, so the
+                # lineage has to say the same thing rather than drop the column entirely.
+                column = str(step.get('column') or '').strip()
+                new_col = f'{column}_bin' if column else ''
+            if new_col:
+                cols = cols + [new_col]
+            # `bin_time` is the one step that may add a SECOND column; every other single-add
+            # step ends here, so the extra read below is skipped rather than falling through
+            # (falling through would reach `return None` and call a known op unknown).
+            if op not in STEP_ADD_MAYBE:
+                continue
+        if op in STEP_ADD_MAYBE:
+            if cols is None:
+                return None
+            for param, default in STEP_ADD_MAYBE[op]:
+                added = str(step.get(param) or default or '').strip()
+                if added and added not in cols:
+                    cols = cols + [added]
+            continue
+        if op in STEP_PASSTHROUGH:
+            continue
+        return None  # an op the model has not enumerated → unknown, never a guess
+    return cols
+
+
+def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
+    return _output_of(node_params(node), merged)
+
+
+def read_columns(node: dict) -> list[str]:
+    found: list[str] = []
+    for step in _steps_of(node_params(node)):
+        spec = STEP_PARAMS.get(str(step.get('op') or ''), {})
+        for key in ('one', 'some'):
+            for pname in spec.get(key, ()):
+                found += split_panel_columns(step.get(pname))
+    return [c for c in found if c]
 
 
 def execute_analysis_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):

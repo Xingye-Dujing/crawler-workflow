@@ -133,7 +133,11 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
 - `backend/api/` — 24 blueprint modules + `http.py` (request coercions) + `resolution.py`
   (`_resolve_dataframe`, `NoRunDataError`). Blueprints are registered in `app.py`.
 - `backend/nodes/executors/` — all 14 node types, each `NODE_TYPE` + `run(node, call)`, self-registered
-  in `nodes/registry.py`; the shared legs are `services/ingest/runtime.py`, `services/ingest/lifecycle.py`,
+  in `nodes/registry.py`, **plus its own column contract** (`emit_columns(node, merged)` /
+  `read_columns(node)`, both optional: a plugin that declares nothing is UNKNOWN to the lineage view,
+  which is the answer for a crawl). `nodes/schema.py` only walks the graph, folds the fan-in and asks
+  (`_plugin` resolves a type through the registry, so the plugin is the one place its columns are
+  written); the shared legs are `services/ingest/runtime.py`, `services/ingest/lifecycle.py`,
   `services/analysis/params.py`, `services/analysis/process.py`, `services/analysis/llm.py`,
   `services/runs/files.py`, `services/runs/windows.py`.
 - `engine/run.py` — the run: `begin_run` (claim, queue hand-off, worker), `run_node_durable` (the

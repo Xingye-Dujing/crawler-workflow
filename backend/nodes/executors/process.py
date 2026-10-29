@@ -39,10 +39,17 @@ from analyzers import (
 from analyzers.bot import BotLikelihoodAnalyzer
 from analyzers.sentiment import bert_backend, resolve_bert_model
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, columns_from_params, node_operation, node_params
 from services.analysis.llm import build_llm_run_ctx
 from services.analysis.pipeline import UnknownOperationError
-from services.analysis.process import check_process_params, enum_param, sentiment_thresholds
+from services.analysis.process import (
+    OUTPUT_ADD_COLUMNS,
+    OUTPUT_REPLACE_COLUMNS,
+    READ_PARAMS,
+    check_process_params,
+    enum_param,
+    sentiment_thresholds,
+)
 
 NODE_TYPE = 'process'
 
@@ -221,6 +228,27 @@ def _effective_bert_model(op: str, params: dict) -> str:
     listed = bert_model_list(params)
     named = listed[0] if len(listed) == 1 else ''
     return named or str(params.get('bert_model') or '').strip() or default_model_path_for(op)
+
+
+def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
+    """The process op's own column table, or unknown for the data-dependent ops.
+
+    ``OUTPUT_REPLACE_COLUMNS`` / ``OUTPUT_ADD_COLUMNS`` are declared beside the op itself; this is
+    the only place that turns them into a node's output shape, so a renamed op column is refused
+    in one spot rather than in the lineage viewer.
+    """
+    op = node_operation(node)
+    if op in OUTPUT_REPLACE_COLUMNS:
+        return list(OUTPUT_REPLACE_COLUMNS[op])
+    if op in OUTPUT_ADD_COLUMNS:
+        if merged is None:
+            return None
+        return merged + [c for c in OUTPUT_ADD_COLUMNS[op] if c not in merged]
+    return None  # keyword/ner/cluster/bot/bert/…: data-dependent
+
+
+def read_columns(node: dict) -> list[str]:
+    return columns_from_params(node_params(node), READ_PARAMS.get(node_operation(node), ()))
 
 
 def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
