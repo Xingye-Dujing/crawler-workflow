@@ -14,13 +14,16 @@
  * Usage: node harness_menu.mjs <canvas.js> <workflow.js> <stats.js> <app.js> <menu.js>
  * Prints one JSON object to stdout.
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, dispatchDocument, dispatchWindow, fixWindow, resetWorld } from './harness_dom.mjs';
+import { sourcesWithCompanions } from './companions.mjs';
 
+/* Every module the driver named plus everything split out of it (see companions.mjs): the menu's
+   bar reads `LLMSettings`/`AppSettings`, and those moved out of `app.js` on 2026-10-29 — a harness
+   that concatenates only the files it was handed boots an app whose settings objects are missing. */
 const paths = process.argv.slice(2);
-const src = paths.map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = sourcesWithCompanions(paths).join('\n;\n');
 
 const requests = [];
 const sandbox = {

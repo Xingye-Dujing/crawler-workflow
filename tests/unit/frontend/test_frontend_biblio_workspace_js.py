@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
-from static_assets import css_text
+from static_assets import css_text, js_text
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -38,7 +38,9 @@ def placed() -> dict:
 
 
 def _js(name: str) -> str:
-    return (JS_DIR / name).read_text(encoding='utf-8')
+    """One module's source, with everything split out of it: the dock wiring moved to its own
+    file on 2026-10-29, and a by-name read would report a wired handle as an unwired one."""
+    return js_text(name)
 
 
 def _markup() -> str:

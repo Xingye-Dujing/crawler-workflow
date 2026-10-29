@@ -32,6 +32,7 @@ import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
 from sessions.cookies import CookieManager
+from static_assets import js_text
 
 pytestmark = [
     pytest.mark.unit,
@@ -454,7 +455,7 @@ class TestStaticWiring:
     """The browser reads ids and labels that Python can check without a DOM."""
 
     def test_every_settings_key_points_at_a_real_control(self):
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        app = js_text('app.js')
         block = app.split('_inputMap', 1)[1].split('}', 1)[0]
         pairs = dict(re.findall(r"(\w+):\s*'(set-[\w-]+)'", block))
         html = INDEX.read_text(encoding='utf-8')
@@ -467,10 +468,12 @@ class TestStaticWiring:
 
         The declaration is looked up in the whole browser dictionary — app.js's remainder plus each
         ``js/i18n/<domain>.js`` — because grepping app.js for the definitions reports a moved domain
-        as a missing word, which is the failure this file once shipped as a raw key on screen.
+        as a missing word, which is the failure this file once shipped as a raw key on screen. The
+        ASK side is read the same way (``js_text`` expands the split map), or the day the settings
+        panel is cut again the ask-list shrinks and this test quietly stops measuring.
         """
         html = INDEX.read_text(encoding='utf-8')
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        app = js_text('app.js')
         asked = set(re.findall(r'data-i18n="([A-Za-z][\w.]*)"', html))
         asked |= set(re.findall(r"I18n\.t\('((?:set|dialog|settings)\.[\w.]+)'", app))
         asked = {key for key in asked if key.startswith(('set.', 'dialog.', 'settings.'))}

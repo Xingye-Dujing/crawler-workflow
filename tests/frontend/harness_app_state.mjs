@@ -22,12 +22,16 @@
  * Usage: node harness_app_state.mjs <module.js> …   (canvas.js, workflow.js, app.js's catalogue, app.js)
  * Prints one JSON object to stdout.
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow, resetWorld } from './harness_dom.mjs';
+import { sourcesWithCompanions } from './companions.mjs';
 
-const src = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+/* The modules the driver named, each with everything later split out of it (see companions.mjs):
+   this harness exports `LLMSettings`, `AppSettings` and `convertToFloating` by name, and on
+   2026-10-29 all three moved out of `app.js` into their own files — without the closure the
+   `globalThis.__app` line below dies on a binding the page still has. */
+const src = sourcesWithCompanions(process.argv.slice(2)).join('\n;\n');
 
 /* app.js owns I18n (a top-level `const`), so nothing is seeded for it here: the
    assertions below read the effect of the REAL dictionary and the REAL apply(),

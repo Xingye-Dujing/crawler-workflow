@@ -13,16 +13,17 @@
  * Usage: node harness_schedules.mjs <module.js> …   (workflow.js, app.js's catalogue, app.js, schedules.js)
  * Output: one JSON object of observations on stdout.
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourcesWithCompanions } from './companions.mjs';
 
-/* Every module the driver named, in the order it named them. Nothing here addresses them by index:
-   app.js merges js/i18n/<domain>.js, those files are part of the list (see
+/* Every module the driver named, in the order it named them, each followed by everything split out
+   of it (see companions.mjs). Nothing here addresses them by index: app.js merges
+   js/i18n/<domain>.js, those files are part of the list (see
    tests/frontend_catalogue.py::with_catalogue), and a positional read would boot the wrong half of
    the application. Each is evaluated as its own script, like a real <script> tag. */
-const modules = process.argv.slice(2).map((p) => fs.readFileSync(p, 'utf8'));
+const modules = sourcesWithCompanions(process.argv.slice(2));
 
 const calls = { gets: 0, posts: [], toasts: [], dialogs: [], dialog: null };
 /* One mutable reply for every request, so a scenario can make the server refuse

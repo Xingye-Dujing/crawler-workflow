@@ -133,6 +133,79 @@ class TestThePageListsItsOwnModules:
         for name in ('panels/settings.js', 'panels/node-analysis.js', 'panels/node-chart.js'):
             assert name in loaded, f'{name} is missing from {loaded} — the closure stopped one level short'
 
+    def test_a_module_the_driver_named_itself_is_still_read_once(self, tmp_path):
+        """Expanding a closure must not duplicate what the caller already listed.
+
+        Two harnesses name a panel AND the owner it was split out of (the schedules driver passes
+        ``workflow.js`` and ``panels/shell.js``). Evaluated twice, the second pass is a redeclaration
+        of that file's top-level ``const`` in the shared global lexical scope, and the boot dies on
+        ``Identifier 'Outline' has already been declared`` — a crash that reads like the map's fault
+        rather than a duplicated read. The owner must also survive: dropping it (the first version of
+        this rule did) makes every companion reference undefined instead.
+        """
+        companions = (REPO / 'tests' / 'frontend' / 'companions.mjs').as_posix()
+        driver = tmp_path / 'driver.mjs'
+        driver.write_text(
+            "import { pathToFileURL } from 'node:url';\n"
+            "import { join } from 'node:path';\n"
+            'import { readFileSync } from "node:fs";\n'
+            f'const {{ sourcesWithCompanions }} = await import(pathToFileURL({companions!r}).href);\n'
+            f'const js = {str((REPO / "backend" / "static" / "js").as_posix())!r};\n'
+            'const count = (names) => sourcesWithCompanions(names.map((n) => join(js, n))).length;\n'
+            'const texts = sourcesWithCompanions([join(js, "workflow.js")]);\n'
+            'process.stdout.write(JSON.stringify({\n'
+            '    owner: count(["workflow.js"]),\n'
+            '    owner_plus_companion: count(["workflow.js", "panels/shell.js"]),\n'
+            '    owner_twice: count(["workflow.js", "workflow.js"]),\n'
+            '    owner_first: texts[0].includes("const workflow = {"),\n'
+            '    owner_bytes: texts[0].length,\n'
+            '    raw_bytes: readFileSync(join(js, "workflow.js"), "utf8").length,\n'
+            '    bytes: texts.map((t) => t.length).reduce((a, b) => a + b, 0),\n'
+            '}));\n',
+            encoding='utf-8',
+        )
+        answer = run_node(str(driver))
+        assert answer.returncode == 0, answer.stderr[-600:]
+        facts = json.loads(answer.stdout)
+        assert facts['owner'] == facts['owner_plus_companion'] == facts['owner_twice'], facts
+        assert facts['owner_first'] is True, 'the owner itself vanished from its own closure'
+        # …and the closure really is the owner PLUS its halves, not a truncated read of one file.
+        # Both lengths are measured in node, so the unit is the same on both sides of the compare.
+        assert facts['owner_bytes'] == facts['raw_bytes'], facts
+        assert facts['bytes'] > facts['owner_bytes'], facts
+
+    def test_naming_app_js_brings_the_three_halves_and_the_words(self, tmp_path):
+        """``app.js`` was cut again on 2026-10-29 (LLM settings, machine settings, panel windows).
+
+        A harness that names only the entry file would boot an app whose ``LLMSettings`` is
+        undefined — the same half-layer death the map exists to prevent, and the exact failure the
+        menu harness measured the day the objects moved out. The catalogue rides along by the other
+        rule, so this also proves the two rules stack instead of displacing each other.
+        """
+        dom = (REPO / 'tests' / 'frontend' / 'harness_dom.mjs').as_posix()
+        loader = (REPO / 'tests' / 'frontend' / 'page_scripts.mjs').as_posix()
+        driver = tmp_path / 'driver.mjs'
+        driver.write_text(
+            "import vm from 'node:vm';\n"
+            "import { pathToFileURL } from 'node:url';\n"
+            f'const {{ baseSandbox, fixWindow }} = await import(pathToFileURL({dom!r}).href);\n'
+            f'const {{ loadPageScripts }} = await import(pathToFileURL({loader!r}).href);\n'
+            'const sandbox = baseSandbox();\n'
+            'vm.createContext(sandbox);\n'
+            'fixWindow(vm, sandbox);\n'
+            "const loaded = loadPageScripts(sandbox, { only: ['app.js'] });\n"
+            'process.stdout.write(JSON.stringify(loaded));\n',
+            encoding='utf-8',
+        )
+        answer = run_node(str(driver))
+        assert answer.returncode == 0, answer.stderr[-600:]
+        loaded = json.loads(answer.stdout)
+        for name in ('llm-settings.js', 'app-settings.js', 'floating-panels.js'):
+            assert name in loaded, f'{name} is missing from {loaded}'
+        assert any(name.startswith('i18n/') for name in loaded), f'the catalogue did not come along: {loaded}'
+        # page order, not closure order: the halves sit right after the file they came from
+        assert loaded.index('app.js') < loaded.index('llm-settings.js') < loaded.index('floating-panels.js'), loaded
+
     def test_the_python_driver_expands_the_same_closure_as_the_loader(self, tmp_path):
         """The two readers of ``splits.json`` must agree file-for-file, or a Python driver boots a
         different page than a node harness does and their green means different things."""
@@ -143,6 +216,13 @@ class TestThePageListsItsOwnModules:
         assert 'panels/settings.js' in expanded
         for name in ('panels/node-analysis.js', 'panels/node-biblio.js', 'panels/node-chart.js'):
             assert name in expanded, f'the Python closure stopped one level short at {name}'
+        halves = [Path(str(item)).relative_to(js).as_posix() for item in with_companions([js / 'app.js'])]
+        assert halves == [
+            'app.js',
+            'llm-settings.js',
+            'app-settings.js',
+            'floating-panels.js',
+        ], halves
 
     def test_the_companion_map_names_files_the_page_really_ships(self):
         """A companion the page does not load would be a harness-only file: the browser would never

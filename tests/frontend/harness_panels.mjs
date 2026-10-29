@@ -19,7 +19,6 @@
  *
  * Usage: node harness_panels.mjs <module.js> …   (workflow.js, app.js's catalogue, app.js, schedules.js)
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
@@ -27,10 +26,12 @@ import { sourcesWithCompanions } from './companions.mjs';
 
 /* Every module the driver named, in the order it named them, each followed by the files split out
    of it (see companions.mjs) — the cookie panel now lives in its own file, and this harness drives
-   its dock. One dock rule is read out of app.js's OWN text, so its source is found by name. */
+   its dock. One dock rule is read out of app.js's OWN text, so its source is found by name — and by
+   the names of everything that was later cut out of it, or the rule would read a moved file as an
+   absent one. */
 const paths = process.argv.slice(2);
 const sources = sourcesWithCompanions(paths);
-const appSrc = fs.readFileSync(paths.find((p) => /(^|[\\/])app\.js$/.test(p)), 'utf8');
+const appSrc = sourcesWithCompanions(paths.filter((p) => /(^|[\\/])app\.js$/.test(p))).join('\n;\n');
 
 const sandbox = {
     ...baseSandbox(),

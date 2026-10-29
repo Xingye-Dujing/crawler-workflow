@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import with_catalogue, with_companions
 from node_runner import run_node
-from static_assets import css_text
+from static_assets import css_text, js_text
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -208,7 +208,9 @@ def _html():
 
 
 def _js(name):
-    return (JS_DIR / name).read_text(encoding='utf-8')
+    """One module's source, with everything split out of it: the dock wiring moved to its own
+    file on 2026-10-29, and a by-name read would report a wired handle as an unwired one."""
+    return js_text(name)
 
 
 def _css():

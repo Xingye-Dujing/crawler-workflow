@@ -21,6 +21,7 @@ from frontend_catalogue import catalog_keys as _catalog_keys
 from frontend_catalogue import catalog_texts as _catalog_texts
 from frontend_catalogue import entry_text as _entry_text
 from node_runner import run_node
+from static_assets import js_text
 
 pytestmark = pytest.mark.unit
 
@@ -408,8 +409,13 @@ class TestAccountCandidatesAndManager:
 
     def test_the_deleted_keys_left_both_catalogues(self):
         """A sentence nobody renders must not stay in the word list either — a dead key is
-        how a removed feature gets resurrected by the next person who finds it."""
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        how a removed feature gets resurrected by the next person who finds it.
+
+        The scan reads app.js AND every module split out of it: 「where the settings panel lives」
+        has moved three times, and a file-name scan would report a key as gone the day the half that
+        still prints it is cut into its own file.
+        """
+        app = js_text('app.js')
         for key in (
             "'cookies.profileOff'",
             "'cookies.profileUnused'",

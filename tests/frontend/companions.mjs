@@ -50,17 +50,29 @@ export function withCompanions(names) {
  *
  * A path is matched to the map by its spelling under `js/` (what the page uses); a driver that hands
  * over something outside `js/` is read as-is, with no companions to add.
+ *
+ * A file is emitted ONCE per call, even when the driver named it itself and it is also a companion of
+ * something else it named (`harness_schedules.mjs` lists `workflow.js` and `panels/shell.js`, and the
+ * panel is a companion of the workflow). Evaluated twice, its top-level `const` is a redeclaration in
+ * the shared global lexical scope and the boot dies on `Identifier 'Outline' has already been
+ * declared` — an error that would look like the map's fault rather than a duplicated read.
  */
 export function sourcesWithCompanions(paths) {
     const sources = [];
+    const read = new Set();
+    const emit = (absolute) => {
+        if (read.has(absolute)) return;
+        read.add(absolute);
+        sources.push(readFileSync(absolute, 'utf8'));
+    };
     for (const path of paths) {
         const absolute = resolve(String(path));
         const relativeToJs = relative(JS_DIR, absolute).split(sep).join('/');
         if (relativeToJs.startsWith('..')) {
-            sources.push(readFileSync(absolute, 'utf8'));
+            emit(absolute);
             continue;
         }
-        for (const name of closure([relativeToJs])) sources.push(readFileSync(join(JS_DIR, name), 'utf8'));
+        for (const name of closure([relativeToJs])) emit(join(JS_DIR, name));
     }
     return sources;
 }

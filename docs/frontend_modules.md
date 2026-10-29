@@ -9,11 +9,14 @@
 
 - 页面按固定顺序加载 `<script>`（`index.html`），无打包器；顶层 `function` 声明成为 `window`
   属性，顶层 `const` 只是全局词法绑定（`AGENTS.md` 的六条前端规则之一）。
-- 测试通过 `tests/frontend/harness_*.mjs` 把**真实文件**装进 node `vm`；每个 harness 自己列出
-  要加载的文件。因此拆分一个模块时，**只有引用该模块符号的 harness** 需要加一行路径，
-  其余 harness 不受影响（未加载的模块只在被调用时才解析）。
-- 契约测试会按源码扫描 `workflow.js`/`app.js`（i18n 键、`PROCESS_OPS`、面板清单、图型清单）。
-  拆分时同步把扫描路径指到新文件——这是"同一事实只有一个家"的检查，不是放宽。
+- 测试通过 `tests/frontend/harness_*.mjs` 把**真实文件**装进 node `vm`。加载来源只有一处：
+  `tests/frontend/page_scripts.mjs` 从 `index.html` 解析 `<script>` 顺序，按路径交给 harness 的
+  驱动则经 `tests/frontend/companions.mjs`（node）与 `frontend_catalogue.with_companions`（Python）
+  沿 `tests/frontend/splits.json` 展开**传递闭包**。所以拆分一个模块**不需要改任何 harness**——
+  需要的是把新文件登记进那份表（漏登记 = harness 装的是半个应用，页面却带着另一半跑）。
+- 契约测试会按源码扫描模块（i18n 键、`PROCESS_OPS`、面板清单、图型清单、dock 接线）。扫描读
+  `tests/static_assets.py::js_text(name)`，它沿同一张伴生表展开——指到单个文件的 grep 会在下一次
+  拆分时把"搬走的半边"读成"不存在的事实"，这不是放宽，而是把检查留在它真正的位置。
 
 ## 2. 已落地
 
@@ -44,6 +47,7 @@
 | `panels/node-analysis.js` | 分析节点的设置：`ANALYSIS_OPS`/`FILTER_OPS`/`CONVERT_TYPES` 与 `renderAnalysisSettings`（389 行） | 2026-10-29 从 `panels/settings.js` 按**连续切片**拆出（切片脚本核对四片拼接与原件逐字节相同）。它同时是 `splits.json` 里 `panels/settings.js` 的伴生：**伴生展开改成传递闭包**（node loader 与 `frontend_catalogue.with_companions` 同一规则），否则"命名 workflow.js 的 harness"只会拿到面板外壳而拿不到这一片 |
 | `panels/node-biblio.js` | 文献计量与融合节点的设置：`BIBLIO_*` 十张清单、`FUSE_ROLE_FIELDS`、`renderBiblioSettings`/`renderFuseSettings`（224 行） | 同上一次切片 |
 | `panels/node-chart.js` | 可视化节点的设置：`CHART_TYPES`/`BIBLIO_CHARTS`/`ENGINES`/`ECHARTS_ONLY_CHARTS`/`CHARTS_WITH_*` 与 `renderVisualizeSettings`（238 行） | 同上；`test_chart_registry`/`test_visualization`/`test_frontend_contract` 的清单扫描改读**面板合体**（`static_assets.js_text('panels/settings.js')` 沿伴生表展开，扫描不再自己猜文件名） |
+| `llm-settings.js` + `app-settings.js` + `floating-panels.js` | `app.js` 的三段：LLM 传输/模型/密钥与 `testAIConnection`（301 行）、本机设置与 `BrowserProfiles`（227 行）、面板作为窗口的行为（拖拽、缩放、控制台弹出、九个 dock 的高度、外点关闭、首次打开的包装，405 行） | 2026-10-29 **连续切片**拆出（`build/split_app_js.py`：四个文件的行段按原顺序拼回 == 原 1,456 行文件，只少了三行空行，正文逐行零差异）。`boot()` 留在 `app.js`——它点名每个要启动的模块，是入口的一部分；三段里的加载期语句只有 `window.X = X` 与 `document.addEventListener(...)`，没有 DOMContentLoaded 监听，所以「boot 注册」相对它们的先后与原来一致（新文件排在 `app.js` 之后、`reusable.js` 之前）。进 `splits.json['app.js']`。**顺带补齐了三处绕过伴生表的读法**：`harness_menu`/`harness_app_state`/`harness_schedules` 自己 `readFileSync(argv)`，拆分后 boot 里少了搬走的对象；`companions.mjs` 因此给 `sourcesWithCompanions` 加了「一次调用里同一文件只读一遍」（驱动同时点名 owner 与它的伴生时，第二遍是顶层 `const` 的重声明） |
 | `zenviz-page.js` + `css/zenviz.css` | 图表工作室页面自身：14,720 行的 IIFE（引擎渲染、属性面板、导入导出、持久化）与 1,927 行样式 | 2026-10-29 从 `zenviz.html`（16,852 行）的**内联 `<style>`/`<script>`** 原字节搬出，页面剩 218 行；JS 仍是**一个 IIFE、缩进未动**（模板字符串跨行，去缩进会改到字符串内容），CSS 只去了行首页面对齐的六格。文件化换来 `node --check`、可审 diff 与严格 CSP（禁用内联）。`zenviz-page.js` 只由 `zenviz.html` 加载（与 `zenviz-bridge.js` 同），`tests/unit/frontend/test_frontend_page_markup.py` 把同一套文档契约（id 唯一/成对/可访问名/无内联/模块在盘）套到工作室页 |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
@@ -54,10 +58,16 @@
 `panels/lexicon` / `panels/datasets` / `panels/files` / `panels/diagnostics` / `panels/settings`），
 `workflow.js` 13,027 → 4,458 行。Stage 10b 又搬出四片（`panels/data-views.js`/`panels/shell.js`/`panels/run-results.js`/`workflow-layout.js`），`workflow.js` → **2,089 行**。余下的是 `workflow` 控制器对象（文件生命周期、运行前守卫、`execute`/`stop`/控制台重连）与 `nodeTypeWord` 等跨面板工具：它们是同一主题的一个对象，再拆需要把对象成员改成 `Object.assign` 分区，属单独一刀。
 
+`app.js` 同法已在 2026-10-29 落地三段（见 §2 最后一行的前三片）：1,456 → **545 行**，`boot()` 留在入口。
+`panels/settings.js` 再按节点类型切三片（1,985 → 1,155），`canvas.js` 搬出尾部抽屉（3,893 → 3,535）。
+仍未动的两座大文件：`canvas.js` 3,535（图对象成员：小地图/自动布局/撤销，同样要 `Object.assign` 分区）与
+`zenviz-page.js` 14,723（IIFE 内共享 `state`，拆分要先立命名空间，风险高于收益）。
+
 `tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供
-`loadPageScripts(sandbox, {jsDir, only})`，**7 个 harness 已改用它**（2026-10-28）；选中 `app.js`
-时会连带 `js/i18n/*.js`（词典是 app.js 的数据，不是可选模块）。把文件路径直接交给 harness 的驱动
-用 `tests/frontend_catalogue.py::with_catalogue()` 补同一条规则。加载顺序只有 `index.html` 一处。
+`loadPageScripts(sandbox, {jsDir, only})`，**15 个 harness 已改用它**（2026-10-29）；选中 `app.js`
+时会连带 `js/i18n/*.js`（词典是 app.js 的数据，不是可选模块）与它的三段切片。把文件路径直接交给 harness 的驱动
+用 `tests/frontend_catalogue.py::with_catalogue()` 补词典规则、`companions.mjs` 的 `sourcesWithCompanions`
+补伴生规则（一次调用内每个文件只读一遍）。加载顺序只有 `index.html` 一处。
 
 ## 4. 每一步的验收
 

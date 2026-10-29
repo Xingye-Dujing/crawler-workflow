@@ -103,7 +103,11 @@ change is judged on all three, not on the machine it was typed on.
 - **A JS split registers its new file in `tests/frontend/splits.json`, and the companion closure is
   TRANSITIVE** (same rule in `companions.mjs` and `frontend_catalogue.with_companions`, keyed by the
   page's own spelling `panels/x.js`): a harness naming `workflow.js` must receive the modules split out
-  of the modules split out of it, or it boots a panel without the half that paints it.
+  of the modules split out of it, or it boots a panel without the half that paints it. A harness takes
+  its files through `sourcesWithCompanions` (**one read per file** — naming an owner and its companion
+  is not a licence to evaluate it twice, and a doubled top-level `const` is a redeclaration), never its
+  own `readFileSync(argv)`; a Python-side source scan reads `static_assets.js_text(name)`, which follows
+  the same map.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields
   the selected mode requires; if not loaded, refuse — never guess a shape. A stored value off the option list shows
   as itself (`selectOptionTags`/`boolParam`), never option #0.

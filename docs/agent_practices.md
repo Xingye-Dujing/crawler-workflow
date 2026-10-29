@@ -251,6 +251,24 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   === 'complete'`` plus ``typeof canvas === 'object'``) and, on timeout, fail with the page's own evidence — the
   document's script list and each script's transfer size — instead of letting a bare ``canvas is not defined`` be the
   whole report. All 54 navigations in ``test_ui_layout.py`` now go through ``_load_app``.
+- **A harness that reads module files by hand is a second opinion about the split map — and the map
+  must also read each file once (measured 2026-10-29, on the ``app.js`` cut).** Three harnesses
+  (``harness_menu`` / ``harness_app_state`` / ``harness_schedules``) did their own
+  ``argv.map(readFileSync)`` instead of ``companions.mjs``, so when ``LLMSettings`` and ``AppSettings``
+  moved out of ``app.js`` their boots died with ``ReferenceError: LLMSettings is not defined`` — the
+  exact half-layer shape ``splits.json`` exists to prevent, arrived at by a harness ignoring it. Fixing
+  them surfaced the other half: ``harness_schedules`` names ``workflow.js`` **and** one of its
+  companions, so naive expansion evaluates a file twice, and in the shared global lexical scope a
+  second top-level ``const`` is ``SyntaxError: Identifier 'Outline' has already been declared``.
+  ``sourcesWithCompanions`` therefore dedupes per call (owner still first, never dropped — a first
+  attempt that registered the owner before emitting it deleted ``workflow.js`` from every harness and
+  was caught by 931 errors, not by luck). The same knife moved the *static* scans onto
+  ``static_assets.js_text('app.js')`` (``_inputMap``, the ``set.`` ask-list, deleted keys, dock
+  wiring): a by-name grep reads a moved file as an absent fact, which is a check that quietly stops
+  checking. ``I18N_USERS`` was a hand-kept list of 14 files; the tree has 37, so 709 literal
+  ``I18n.t('…')`` calls were outside the word audit while every one of them was in fact clean — it is
+  now derived (``js/**/*.js`` minus the ``i18n/`` data) with a scope floor, because "add the new file
+  to the list" is the step that gets forgotten and reports nothing.
 - **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
   ``services/biblio_*`` modules into ``services/biblio/`` (2026-10-28) went 122 references clean on the first pass and
   still failed five ways: ① **``ruff --fix`` deletes the import a pending rename is about to use** — after

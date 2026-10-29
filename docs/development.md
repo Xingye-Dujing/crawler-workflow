@@ -142,9 +142,13 @@ crawler_workflow/
 │       │   ├── overlays.css        # toast / 拖拽缩放 / 滚动条 / 抽屉 / 快捷键 / 导出指引
 │       │   └── zenviz.css          # 图表工作室页自己的一份（原内联 <style>）
 │       └── js/
-│           ├── app.js            # 入口（i18n fetch 注入、节点库、I18n 行为与 _mergeCatalogues）
+│           ├── app.js            # 入口（i18n fetch 注入、I18n 行为与 _mergeCatalogues、Settings/CloudMode、boot 序列）
+│           ├── llm-settings.js   # app.js 的 LLM 传输/模型/密钥三段之一（2026-10-29 连续切片）
+│           ├── app-settings.js   # 本机设置与 BrowserProfiles（同批切片，页面紧接 app.js 加载）
+│           ├── floating-panels.js# 面板作为窗口：拖拽/缩放/控制台弹出/dock 高度/外点关闭（同上）
 │           ├── i18n/             # 按域的浏览器词典（settings.js…），页面在 app.js 之前加载，同键两次即拒
 │           ├── canvas.js         # 画布与节点渲染（类型校验/种子优先读 NodeTypes）
+│           ├── clipboard.js      # canvas.js 尾部的复制历史抽屉与快捷键帮助（同法切片，紧随 canvas.js）
 │           ├── workflow.js       # 执行、文件管理、全部对话框
 │           ├── chart-preview.js  # 图表调色板/标签避让、预览面板与 LaTeX 工具条、按年份回放、全屏窗口
 │           ├── capabilities.js   # 采集矩阵、机器判定、已注册微调模型：三份取数与其问答

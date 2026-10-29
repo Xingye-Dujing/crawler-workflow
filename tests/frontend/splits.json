@@ -1,4 +1,9 @@
 {
+    "app.js": [
+        "llm-settings.js",
+        "app-settings.js",
+        "floating-panels.js"
+    ],
     "canvas.js": [
         "clipboard.js"
     ],

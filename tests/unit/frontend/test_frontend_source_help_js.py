@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_bodies as _catalog_bodies
 from node_runner import run_node
-from static_assets import css_text
+from static_assets import css_text, js_text
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
 
@@ -54,7 +54,9 @@ def _css() -> str:
 
 
 def _js(name: str) -> str:
-    return (JS_DIR / name).read_text(encoding='utf-8')
+    """One module's source — with every file split out of it, so a word that moved out of the
+    file the scenario names is still seen as asked for (``js_text`` reads the page's split map)."""
+    return js_text(name)
 
 
 class TestTheOverlayIsBuiltLikeTheOthers:

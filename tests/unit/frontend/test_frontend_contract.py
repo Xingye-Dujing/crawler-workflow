@@ -55,20 +55,13 @@ CANVAS_JS = JS_DIR / 'canvas.js'
 # The node settings panel is four modules: the shell plus one per node type (see splits.json).
 # Reads go through ``js_text('panels/settings.js')``, which follows the split map.
 
-# Files whose I18n.t('literal') calls are audited against the catalogues.
-I18N_USERS = [
-    'app.js',
-    'canvas.js',
-    'workflow.js',
-    'panels/settings.js',
-    'panels/node-analysis.js',
-    'panels/node-biblio.js',
-    'panels/node-chart.js',
-    'chart-preview.js',
-    'menu.js',
-    'stats.js',
-    'schedules.js',
-]
+# Every module the page ships that ASKS for a word — derived from the tree, not listed by hand.
+# A list of the files that "matter" is a second opinion about the app's shape: the day a module is
+# split, the half that moved takes its call sites out of the audit without anything failing
+# (measured 2026-10-29: 23 modules and 709 literal ``I18n.t('…')`` calls were outside the 14 names
+# this used to be, all of them clean, so widening costs nothing and keeps the next split honest).
+# The one exclusion is ``js/i18n/``, which DECLARES words rather than asking for them.
+I18N_USERS = sorted(path for path in JS_DIR.rglob('*.js') if path.parent.name != 'i18n')
 
 _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*(?:,|\))""")
 # A call that passes variables used to be invisible here: the pattern demanded the closing paren
@@ -309,14 +302,38 @@ class TestLlmGateParity:
     def test_every_literal_i18n_key_exists_in_both_languages(self):
         catalogs = _catalog_keys()
         missing = []
-        for name in I18N_USERS:
-            src = (JS_DIR / name).read_text(encoding='utf-8')
+        for path in I18N_USERS:
+            name = path.relative_to(JS_DIR).as_posix()
+            src = path.read_text(encoding='utf-8')
             for m in _KEY_REF.finditer(src):
                 key = m.group(2)
                 for lang, table in catalogs.items():
                     if key not in table:
                         missing.append(f'{name}: {key} missing from {lang}')
         assert not missing, '\n'.join(missing)
+
+    def test_the_word_audit_reads_the_whole_tree_not_a_short_list(self):
+        """The scope is derived (``js/**/*.js`` minus the ``i18n/`` DATA), so a module that is split
+        cannot take its own call sites out of the audit by moving.
+
+        A list would have to be edited by whoever splits a file, and forgetting to edit it is not a
+        red test — it is 700 word look-ups nobody checks any more. This pins that the derivation is
+        still looking at the app, including the files that moved most recently.
+        """
+        names = {path.relative_to(JS_DIR).as_posix() for path in I18N_USERS}
+        assert len(names) >= 30, f'the word audit only sees {len(names)} modules — the derivation rotted'
+        assert not [name for name in names if name.startswith('i18n/')], 'the catalogue DECLARES words'
+        for name in (
+            'llm-settings.js',
+            'app-settings.js',
+            'floating-panels.js',
+            'panels/node-chart.js',
+            'clipboard.js',
+            'zenviz-page.js',
+        ):
+            assert name in names, f'{name} asks for words but is not in the audit scope'
+        seen = sum(len(_KEY_REF.findall(path.read_text(encoding='utf-8'))) for path in I18N_USERS)
+        assert seen >= 1200, f'the literal-call scan sees {seen} keys — the pattern has rotted'
 
     def test_a_variable_call_fills_every_slot_it_is_handed(self):
         """``I18n.t('chart.replayYear', {year: 2019})`` names its key at the call site and fills
@@ -330,8 +347,9 @@ class TestLlmGateParity:
         texts = _catalog_texts()
         checked = 0
         problems = []
-        for name in I18N_USERS:
-            src = (JS_DIR / name).read_text(encoding='utf-8')
+        for path in I18N_USERS:
+            name = path.relative_to(JS_DIR).as_posix()
+            src = path.read_text(encoding='utf-8')
             for match in _VAR_CALL.finditer(src):
                 key, body = match.group(2), match.group(3)
                 given = set(re.findall(r'(?:^|[,{])\s*(\w+)\s*:', body))
@@ -590,7 +608,7 @@ class TestSettingsPanelParity:
     missing from any of the four is a setting that exists in one file only."""
 
     def _input_map(self) -> dict:
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        app = js_text('app.js')
         block = app.split('_inputMap', 1)[1].split('}', 1)[0]
         return dict(re.findall(r"(\w+):\s*'(set-[\w-]+)'", block))
 
@@ -704,8 +722,9 @@ class TestChromeOfThePageItself:
         styled with the page, and answer with a bare boolean that says nothing about what
         is about to be lost. The app has its own dialog for every one of them."""
         offender = re.compile(r"""window\.(?:confirm|alert|prompt)\s*\(""")
-        for name in I18N_USERS:
-            source = (JS_DIR / name).read_text(encoding='utf-8')
+        for path in I18N_USERS:
+            name = path.relative_to(JS_DIR).as_posix()
+            source = path.read_text(encoding='utf-8')
             hits = [line.strip() for line in source.splitlines() if offender.search(line)]
             assert not hits, f'{name} still interrupts the user with a native dialog: {hits}'
 
@@ -858,7 +877,7 @@ class TestChromeOfThePageItself:
         top-level const) is already written down in AGENTS.md as a frontend rule, and this
         is the call site that would have made it a silent no-op.
         """
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        app = js_text('app.js')
         wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
         assert "boot('consoleReconnect'" in app, 'a boot step that is not registered is a boot step that never runs'
         assert 'workflow.reconnectConsole()' in app
@@ -955,8 +974,11 @@ class TestEveryServedScriptParses:
 
     @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
     def test_each_script_under_static_js_is_valid_javascript(self):
-        scripts = sorted(JS_DIR.glob('*.js'))
-        assert len(scripts) >= 7, f'expected the served scripts, found {[s.name for s in scripts]}'
+        # ``rglob``, not ``glob``: the panels live in ``js/panels/`` and the catalogues in ``js/i18n/``,
+        # and a parse error in either would blank the page exactly as loudly — the docstring always
+        # said "the whole served directory", and until 2026-10-29 it only saw the top level.
+        scripts = sorted(JS_DIR.rglob('*.js'))
+        assert len(scripts) >= 40, f'expected the served scripts, found {len(scripts)}'
         broken = []
         for script in scripts:
             proc = run_node('--check', str(script))
