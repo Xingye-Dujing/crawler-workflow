@@ -301,6 +301,24 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   a by-value ``from engine.run import begin_run`` anywhere in ``backend`` — with the schedule door in its
   own module that rule is what keeps "one fake run start" meaning one thing; a module-level import of the
   *name* would have made the schedule tests start a real crawl while reporting green.
+- **Lifting a nested helper out of a closure is proved with ``ast`` + ``symtable``, never with a byte
+  diff (measured 2026-10-29, four helpers out of ``begin_run``).** Moving a function from inside another
+  function to module scope re-indents it, and indentation is part of a multi-line string's VALUE — the
+  docstrings of the functions nested *inside* the moved one (``_inputs_for``, ``_node_of``) shift by four
+  spaces, which a byte compare reports as a content change and a careless ``dedent`` would really be. So
+  the check is: per-function ``ast.dump`` equal (annotations and returns normalised, the added parameters
+  removed from the lifted side only), multi-line strings equal after stripping each line's leading
+  whitespace, single-line strings (every message, key, label) compared strictly. Then ``symtable`` states
+  the point of the move: the lifted function has no free variables, and its former host no longer lists it
+  as one. Both checks ran AGAINST THE FORMATTED FILE, not only against the bytes the script wrote — the
+  first lift's naive ``textwrap.dedent`` comparison failed on a docstring whose first line starts at
+  column 0, which is how the hazard got written down here. What the lift buys: a closure is invisible to
+  every test (nothing can patch or drive ``_run_single_workflow`` while it lives inside ``begin_run``),
+  and it is exactly the piece of the run path whose rules — 「一个节点失败后交回它已挣到的东西」、
+  「每个 workflow 自己收尾」 — the suite most needs to address directly. Captured names becoming parameters
+  can make an intermediate helper's free-variable COUNT go up (``_component_run`` now closes over
+  ``resumable``/``resuming`` to hand them down): the goal is a visible source for each value, not the
+  smallest closure.
 - **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
   ``services/biblio_*`` modules into ``services/biblio/`` (2026-10-28) went 122 references clean on the first pass and
   still failed five ways: ① **``ruff --fix`` deletes the import a pending rename is about to use** — after

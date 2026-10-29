@@ -18,11 +18,12 @@ unattended, and what happened when it fired). Both moved out on 2026-10-29 as ve
 ``begin_run`` is still the only path that starts a run, and the queue drains by calling it.
 
 The one rule for what stays INSIDE ``begin_run``: a helper that needs no state from the claim
-belongs at module scope, where a test can reach it and a reader can see its inputs.
-``_wf_display_name`` and ``_run_single_workflow`` were lifted out on 2026-10-29 for exactly that
-reason — the first already closed over nothing, and the second over a single value (``headless``),
-which is now a parameter. ``begin_run.run`` is still nested because it genuinely closes over eight
-of the claim's results; lifting it is a behavior change, not a move.
+belongs at module scope, where a test can reach it and a reader can see its inputs. Four were
+lifted out on 2026-10-29 for exactly that reason — ``_wf_display_name`` (closed over nothing),
+``_run_single_workflow`` (one value: ``headless``), ``_continue_record`` (``resumable``,
+``resuming``) and ``_close_component_record`` (``ctx``, ``store``); each captured name became a
+parameter. ``begin_run.run`` is still nested because it genuinely closes over eight of the claim's
+results; lifting it is a behavior change, not a move.
 """
 
 import contextlib
@@ -576,6 +577,50 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
     return results
 
 
+def _continue_record(name: str, resumable: list, resuming: bool) -> dict:
+    """The row this workflow should keep writing, if it is a 继续.
+
+    Only the resume path adopts: the attempt after a 继续 must accumulate
+    onto the rows that already exist, so it finds each workflow's own
+    unfinished row of this canvas again instead of opening a fresh one per
+    press. A plain Run is a new attempt and gets new rows — "one record per
+    attempt" is what makes the panel's history mean anything.
+    """
+    if not resuming:
+        return {}
+    for candidate in resumable:
+        if str(candidate.get('workflow_name') or '') == name:
+            return dict(candidate)
+    return {}
+
+
+def _close_component_record(sub_ctx: dict, ctx: dict, store) -> None:
+    """Give one workflow its own verdict, the moment its turn ends.
+
+    The run-level finish line below can only speak for the whole canvas,
+    and after the split there is no whole-canvas row to speak for: each
+    workflow's row is closed here, so a canvas whose second workflow was
+    stopped while the first finished shows 已完成 and 已中断 side by side
+    instead of one verdict smeared over both.
+
+    It takes only the context: the verdict comes from the RECORD's own rows
+    (``settle_nodes`` re-reads them), so this never needed the sub-engine.
+    """
+    rid = sub_ctx['run_id']
+    store.settle_nodes(rid)
+    statuses = store.node_statuses(rid)
+    with _completed_lock:
+        visited = set(execution_state['attempted_nodes'])
+        still_running = bool(execution_state['running'])
+    broken = sum(
+        1 for nid, state in statuses.items() if nid in visited and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
+    )
+    outcome = RUN_INTERRUPTED if not still_running else (RUN_FAILED if broken else RUN_COMPLETED)
+    store.finish_run(rid, outcome, attempted=visited)
+    with contextlib.suppress(ValueError):
+        ctx['open_records'].remove(rid)
+
+
 def begin_run(data: dict, lang_header: str) -> dict:
     """Claim the run slot and start the worker, or put this request in the queue.
 
@@ -932,22 +977,6 @@ def begin_run(data: dict, lang_header: str) -> dict:
             )
             resuming = bool(resume_run_id)
 
-            def _continue_record(name: str) -> dict:
-                """The row this workflow should keep writing, if it is a 继续.
-
-                Only the resume path adopts: the attempt after a 继续 must accumulate
-                onto the rows that already exist, so it finds each workflow's own
-                unfinished row of this canvas again instead of opening a fresh one per
-                press. A plain Run is a new attempt and gets new rows — "one record per
-                attempt" is what makes the panel's history mean anything.
-                """
-                if not resuming:
-                    return {}
-                for candidate in resumable:
-                    if str(candidate.get('workflow_name') or '') == name:
-                        return dict(candidate)
-                return {}
-
             def _component_run(wf_idx, sub_engine):
                 """Open this workflow's own record and return the context its nodes run
                 under. Called as the turn arrives, which is what makes an unreached
@@ -962,7 +991,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
                 ``index()`` route for the whole closure, which is a footgun, not a shortcut.
                 """
                 name = _wf_display_name(sub_engine, wf_idx)
-                earlier = _continue_record(name)
+                earlier = _continue_record(name, resumable, resuming)
                 rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
                 store.start_run(
                     rid,
@@ -1002,34 +1031,6 @@ def begin_run(data: dict, lang_header: str) -> dict:
                     export_stamp=record_export_stamp(store, rid),
                 )
 
-            def _close_component_record(sub_ctx: dict) -> None:
-                """Give one workflow its own verdict, the moment its turn ends.
-
-                The run-level finish line below can only speak for the whole canvas,
-                and after the split there is no whole-canvas row to speak for: each
-                workflow's row is closed here, so a canvas whose second workflow was
-                stopped while the first finished shows 已完成 and 已中断 side by side
-                instead of one verdict smeared over both.
-
-                It takes only the context: the verdict comes from the RECORD's own rows
-                (``settle_nodes`` re-reads them), so this never needed the sub-engine.
-                """
-                rid = sub_ctx['run_id']
-                store.settle_nodes(rid)
-                statuses = store.node_statuses(rid)
-                with _completed_lock:
-                    visited = set(execution_state['attempted_nodes'])
-                    still_running = bool(execution_state['running'])
-                broken = sum(
-                    1
-                    for nid, state in statuses.items()
-                    if nid in visited and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
-                )
-                outcome = RUN_INTERRUPTED if not still_running else (RUN_FAILED if broken else RUN_COMPLETED)
-                store.finish_run(rid, outcome, attempted=visited)
-                with contextlib.suppress(ValueError):
-                    ctx['open_records'].remove(rid)
-
             if mode == 'serial' or wf_count <= 1:
                 # ── Serial: one workflow at a time ──
                 all_results = {}
@@ -1054,7 +1055,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
                         _wf_local.idx = None
                         _wf_local.name = ''
                     if split_records:
-                        _close_component_record(sub_ctx)
+                        _close_component_record(sub_ctx, ctx, store)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
                 # published its partial rows, and they must survive the merge.

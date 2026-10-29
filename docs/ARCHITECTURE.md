@@ -15,7 +15,7 @@ file is about *shape*. The numbers below are measured, not estimated.
 ## Backend layout (~68.1k Python LOC across 212 files, measured 2026-10-27)
 | area | contents |
 |---|---|
-| `app.py` | **578 LOC: the composition root only** — the WSGI object, the request hooks (origin guard, no-store, language pin), the 25 `register_blueprint` calls, the clock's two wiring lines, startup recovery, the PEP-562 read seams, and **one route**: the served page `/`. The run doors (`/api/workflow/execute`, `/api/workflow/rerun-node`) are `api/workflow.py` (14 routes, `@bp.route`), the run orchestration is `engine/run.py` (1,263 LOC), the run-record cluster is `api/runs.py` (12). Measured 2026-10-28: the URL map holds 129 rules over 123 unique paths (re-measure: `len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). |
+| `app.py` | **578 LOC: the composition root only** — the WSGI object, the request hooks (origin guard, no-store, language pin), the 25 `register_blueprint` calls, the clock's two wiring lines, startup recovery, the PEP-562 read seams, and **one route**: the served page `/`. The run doors (`/api/workflow/execute`, `/api/workflow/rerun-node`) are `api/workflow.py` (14 routes, `@bp.route`), the run orchestration is `engine/run.py` (1,271 LOC), the run-record cluster is `api/runs.py` (12). Measured 2026-10-28: the URL map holds 129 rules over 123 unique paths (re-measure: `len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). |
 | `core/config.py`, `core/refs.py` | paths, env, constants (retention/queue/preflight/scheduler tick); `refs` holds the shared value rules (`as_bool`, `platform_for`, `sanitize_filename`). The old `utils/` package was folded in here — there is no `backend/utils/` any more. |
 | `i18n.py` | the zh/en message machinery (`t()`, `set_lang` thread-local, `audit`, the merge). The messages themselves are data in `i18n_catalog/`: one module per domain, merged in `MODULES` order, a key claimed twice refused at import. |
 | `i18n_catalog/` | The catalogue data, one module per domain (10 as of 2026-10-28: `crawl`, `collect`, `cookie`, `sched`, `run`, `analysis`, `biblio`, `charts`, `api`, `settings`), 1,440 keys per language. Nothing imports it except `i18n.py`; a new message goes to the module that owns the question it answers, and `tests/unit/i18n/test_i18n.py` refuses a domain file missing from `MODULES` (an unmerged module would drop its words silently). |
@@ -142,10 +142,12 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
   `services/runs/files.py`, `services/runs/windows.py`.
 - `engine/run.py` — the run: `begin_run` (claim, queue hand-off, worker), `run_node_durable` (the
   checkpointing walk), `execute_node` (the registry dispatch), `settle_node_as_stopped` (the Stop
-  verdict), `note_heavy_result`, the display name of one component (`_wf_display_name`) and the
-  level-by-level walk of one workflow (`_run_single_workflow`) — the last two lifted out of
-  `begin_run`'s closure on 2026-10-29 so they hold no captured state at all (`headless` became a
-  parameter). The console's own write paths are
+  verdict), `note_heavy_result`, and the four helpers a worker needs but no claim decides —
+  `_wf_display_name`, `_run_single_workflow`, `_continue_record`, `_close_component_record`. Those
+  four were lifted out of `begin_run`'s closure on 2026-10-29: every captured name became a
+  parameter, so each holds **no** free variable (`symtable` is the check) and a test can finally
+  reach them by module name. `begin_run.run` stays nested — it closes over eight values the claim
+  computes, and lifting it is a behavior change, not a move. The console's own write paths are
   `engine/run_logs.py` (armed and disarmed by this module's run window) and the scheduled fire's two
   doors are `engine/run_schedule.py`, which reaches `begin_run` by name. None of it reaches a Flask
   object: the app, the clock and a future CLI all ask the same module.
