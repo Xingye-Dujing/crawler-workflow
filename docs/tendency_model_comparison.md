@@ -7,8 +7,10 @@
 
 ## 1. 实验设置（可复现）
 
-- 数据：`ml_train/datasets/tendency_distilled.csv`，7721 行，6 类。类别分布（实测）：
-  Objective/Praise/Satire 各 1600、Criticism 1336、Advocacy 1221、**Controversy 仅 364（4.7%）**。
+- 数据：`ml_train/datasets/tendency_distilled.csv`，**§7.1 并入 batch1 之前的初始蒸馏为 7,721 行**、6 类。
+  当时类别分布（实测）：Objective/Praise/Satire 各 1600、Criticism 1336、Advocacy 1221、
+  **Controversy 仅 364（4.7%）**。**该 csv 现为 8,208 行 / Controversy 388**（batch1 真实数据已并入，见 §7.1；
+  batch2 已回退、搁置在 `controversy_labeled.csv` 不入训练，见 §7.4）。
 - 标签来源：Qwen（本地 Ollama）蒸馏——即 `scripts/distill_tendency_labels.py` 的输出。
   **含义**：本文件所有 macro-F1 都是「编码器 vs Qwen 标签」= 模仿度，不是对人工真值的准确度（见 §5 局限）。
 - 硬件/软件：RTX 4060 Laptop 8GB、torch 2.14.1+cu126、transformers 5.13.0、bf16、max_len 128、seed 42。
@@ -116,6 +118,9 @@ Top 误分：`Satire→Praise 15`、`Criticism→Controversy 10`、`Objective→
 - **有效杠杆**：类权重、真实数据爬取、自训练（间接）。三者叠加把 Controversy F1 从 0.235 抬到 ~0.49–0.54。
 - **无效/退步**：gte-base-zh（退步）、focal/LR 扫描（噪声内）、英文 ModernBERT（语言不符）。
 - **剩余瓶颈**：类边界（Controversy↔Criticism、Satire↔Praise），需人工留出集判定是否 Qwen 老师本身就在混淆。
+- **与 `ml_train/README.md` 的口径**：README 把推荐模型（`tendency_stance_v2_cyberbully`）的分数四舍五入到两位，
+  写作 **macro-F1 ≈0.69 / Controversy ≈0.50**；本文件 §7.3 的实测精确值是 **0.681 / 0.537**——同一组数，两种精度，
+  不是两个模型。引用时按需要取精确值。
 
 ### 7.4 反面教训：batch2「离题」真实数据反而有害（固定评估 A/B 实测）
 第二批又爬了 13 个网暴/争议事件（微博可回溯约 5 年，非仅 1 年），得 1549 条评论、Qwen 标注后并入语料（8208→9800，Controversy 388→491）。但直接重训的对比不可信——**换了语料就换了 5% 验证集**，0.537→0.453 的"下降"部分是评估集漂移造成的假象。

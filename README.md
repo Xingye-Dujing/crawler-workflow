@@ -4,275 +4,176 @@
 分析与可视化工作流系统：拖拽式画布把「采集 → 清洗 → 分析 → 可视化」串成一条可运行的工作流，内置
 **断点续跑**——任务中断后可从检查点继续，已花费的采集与 LLM 成本不会重复支付。
 
-> **TL;DR** — 采集中外文社媒九平台的数据，用本地大模型与 sklearn 清洗分析，在画布上出图出报告。
-> 跑起来：`cd backend && python app.py`（先在 `.venv/` 里 `pip install -r requirements.txt`）。
-> 本文只是**预览**，分平台采集细节、分析/可视化、引擎、API、配置、开发验证的完整文档在 [`docs/`](docs/) 下，见文末**文档索引**。
+> 本文是**预览**。分平台采集细节、分析/可视化、引擎、API、配置、开发验证的完整文档都在 [`docs/`](docs/)
+> 下（见文末**文档索引**）；面向 AI agent 的规则在 [`AGENTS.md`](AGENTS.md)。
 
 ## 快速开始
 
 > 所有运行与安装一律在项目虚拟环境 `.venv/`（Python 3.11）中进行，勿使用系统 Python。
 
 **1. 环境要求**
-> 本项目按 **Windows / Linux / macOS 三套系统**开发：源码版在三种系统上都能跑（云端部署目标是 Linux）。
-> 只有两处是系统专属：`desktop/` 打包目录（PyInstaller + UPX + Inno Setup，天生只出 Windows exe），
-> 以及「红果短剧评论收割」（要驱动本机播放器进程 + 装系统证书，只有 Windows 桌面做得到）。
-> 后者在 Linux/macOS 与 cloud 模式下**按名拒绝**，并且面板不再给出那个选项（不是等到运行才报错）。
+
+本项目按 **Windows / Linux / macOS 三套系统**开发，源码版三者都能跑（云端部署目标是 Linux）。只有两处
+系统专属：`desktop/` 打包目录（PyInstaller + UPX + Inno，只出 Windows exe），以及「红果短剧评论收割」
+（要驱动本机播放器进程 + 装系统证书，只有 Windows 桌面做得到）——后者在 Linux/macOS 与 cloud 模式下
+**按名拒绝**，面板也不再给出那个选项。
 
 - Python 3.11+（代码使用 `zip(..., strict=True)`）
-- Chrome 浏览器（Selenium 驱动）。Linux 装 `chromium` + `chromium-driver`（或 Google 的 `google-chrome-stable`），
-  macOS 装 Chrome 的 `.app`；程序按当前系统去查这些位置，也认环境变量 `CHROME_PATH` / `CHROME_BIN`。
-  chromedriver **不随项目分发**：驱动与 Chrome 的大版本一对一绑定，
-  带一份固定驱动等于带一份会过期的东西，所以留空即可，Selenium 会在首次采集时自动取匹配版本（需要联网）；
-  设置面板里的「驱动路径」只用于你明确放置的那份，指向不存在的文件时采集会按名拒绝并说明怎么办
-- [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一即可）；云端 `CRAWLER_CLOUD=1` 只留 OpenRouter
-- `xelatex`：只有「编译为 PDF / 论文成稿」需要。Windows 用 MiKTeX，Linux 用 `apt install texlive-xetex texlive-lang-chinese`，
-  macOS 用 MacTeX；没有它 LaTeX 源照出，PDF 按名拒绝（拒绝的话会按你所在的系统说该装哪一个）
-- 若用 Matplotlib 引擎渲染中文图表，需系统装有中文字体：Windows 自带黑体/微软雅黑，
-  Linux 用 `apt install fonts-noto-cjk`（或 `fonts-wqy-zenhei`），macOS 自带苹方/宋体；
-  一个都没有时控制台会点名「找过的字体名 + 该系统该怎么补」，而不是静默画出满图方框
-- 前端资源已全部随仓库分发（ECharts 及其 GL / 词云扩展、中国与世界底图、界面字体，见 `backend/static/vendor/`），
-  因此离线的机器也画得出图；缺失文件时每个画图位置都会指名是哪个文件没加载
+- Chrome（Selenium 驱动）。Linux 装 `chromium` + `chromium-driver`（或 `google-chrome-stable`），macOS
+  装 Chrome 的 `.app`；程序按当前系统查找，也认 `CHROME_PATH` / `CHROME_BIN`。**chromedriver 不随项目
+  分发**（驱动与 Chrome 大版本一对一绑定），Selenium 首次采集时自动取匹配版本（需联网）。
+- [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一）；云端 `CRAWLER_CLOUD=1` 只留 OpenRouter
+- `xelatex`：仅「编译 PDF / 论文成稿」需要（Windows MiKTeX，Linux `texlive-xetex texlive-lang-chinese`，
+  macOS MacTeX）。没有它 LaTeX 源照出、PDF 按名拒绝。
+- Matplotlib 渲染中文图需系统中文字体（Linux `fonts-noto-cjk`）；缺失时控制台点名该系统该怎么补，而非静默画方框。
+- 前端资源已随仓库分发：ECharts 及其 GL / 词云扩展、界面字体在 `backend/static/vendor/`，中国与世界底图在
+  `backend/static/geo/`——离线机器也画得出图，缺失文件时每个画图位置都指名是哪个文件没加载。
 
 **2. 建虚拟环境、装依赖**
 
 ```bash
 cd crawler_workflow
 python -m venv .venv
-source .venv/Scripts/activate        # Windows；cmd 下用 .venv\Scripts\activate
-source .venv/bin/activate            # Linux / macOS
+source .venv/Scripts/activate        # Windows（cmd 用 .venv\Scripts\activate）；Linux/macOS 用 .venv/bin/activate
 pip install -r requirements.txt
+ollama pull qwen3.5:9b               # 可选；用 OpenRouter 可跳过
+cd backend && python app.py          # 访问 http://127.0.0.1:5000（端口 PORT、地址 HOST 用环境变量改）
 ```
 
-**3. 下载 Ollama 模型（可选，用 OpenRouter 可跳过）**
+`backend/` 是 `sys.path` 根，必须从这里启动。默认只监听本机、不自动开浏览器；开发时 `FLASK_DEBUG=1` 开热重载。
 
-```bash
-ollama pull qwen3.5:9b
-```
-
-**4. 启动应用**
-
-```bash
-cd backend
-python app.py
-```
-
-访问 http://127.0.0.1:5000（端口 `PORT`、监听地址 `HOST` 均可用环境变量改，默认只监听本机、不自动开浏览器；
-开发时 `FLASK_DEBUG=1` 打开热重载）。`backend/` 是 `sys.path` 根，必须从这里启动。
-
-**一次只能运行一个 `app.py` 服务**：本项目按"本机单人使用"设计，所有状态存在同一份 `data/`
-（`runs.db`/`datasets.db`/`cookies/`/`exports/`），服务启动会把遗留的"运行中"记录判为**已中断**（续跑横幅的来源），
-同时开两个实例（比如端口 5000 与 5057 各一个）时，后启动的会立刻把前一个正在写入的运行标成中断，两边还会互相改写同一节点的行与游标——要换端口就先停掉旧实例，别并行开着。确需第二个实例（跑验证脚本、测试里自启的那台），用
+**一次只能运行一个 `app.py` 服务**：本项目按「本机单人使用」设计，所有状态存在同一份 `data/`
+（`runs.db`/`datasets.db`/`cookies/`/`exports/`）。同时开两个实例会把正在写入的运行判为中断、两边互改同一
+节点的行与游标——要换端口先停掉旧实例。确需第二个实例（验证脚本、测试自启）时，用
 `CRAWLER_DATA_ROOT=<目录>` 给它一份自己的 `data/`+`logs/`，两边互不干涉。
 
-**4b. Windows 免环境桌面版（给不装 Python 的人）**
-> 这一节只关于 Windows：`desktop/` 是本项目里**唯一**故意写死系统的目录（PyInstaller + UPX + Inno Setup 只能产
-> 出 exe），它的 Windows 假设不外溢到 `backend/`。源码版（上面几节）在 Windows / Linux / macOS 都能跑，
-> 云端部署的目标是 Linux（`python app.py cloud`）。
-
-`desktop/` 提供 PyInstaller **onedir** 打包：生成一个文件夹（外加压缩 zip，`-Installer` 再出一个
-Inno Setup 安装包 `CaiXiHui-Setup.exe`），
-双击 `CaiXiHui.exe` 即启动本地服务并打开浏览器，运行时不需要装 Python 或第三方库。
-构建命令、体积边界与首启依赖自检见 [`desktop/README.md`](desktop/README.md)；数据默认在
-`%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt` 可切成便携模式。那个位置写不进去时会自动换到
-`%LOCALAPPDATA%\CaiXiHui` 或 exe 所在文件夹并在控制台点名原因；真的一个都写不进去时会**弹窗**说明并把
-traceback 写进 `startup_error.log`——控制台窗口随进程消失，不弹窗就等于没报错。
-Chrome、Ollama、MiKTeX 仍是外部可选依赖：不装 Chrome 只能做上传/分析（缺 Chrome、设置里的浏览器路径不存在、
-驱动与 Chrome 版本不配对，这三种情况都按名拒绝并写出该怎么办）；不装 Ollama 就用 OpenRouter 或不用模型节点；
-不装 MiKTeX 就出得了 LaTeX 源、出不了 PDF。**chromedriver 不在包里**——驱动与 Chrome 的大版本一对一绑定，
-发一份固定驱动就是发一份会过期的东西，所以交给 Selenium 首次采集时自动取匹配版本（这一步需要联网）。
-界面本身不再依赖网络：ECharts 及其 GL / 词云扩展、中国与世界的底图、界面字体都在包里
-（`backend/static/vendor/`，由 `tools/vendor_frontend_assets.py` 按 SHA-256 钉住取回），
-断网的机器照样画得出图；真浏览器用例逐条核对过页面没有向本站之外的任何地址要过东西。
-打包**默认用 UPX 压一遍 pyd/dll**（`-NoUpx` 关掉；找不到 upx 就按名失败，不会假装压过），
-依赖自检（Chrome / chromedriver / Ollama / xelatex）挪到了端口绑定之后的一条后台线程里——
-它以前卡在绑定前面，是启动窗口空等的来源。
-微调 BERT 的四个模型**不在应用包里**：它们是单独的「模型包」zip（fp16 ONNX，解压后约 780MB、包体 756MB），
-解压后让 `bert_models/` 与 `CaiXiHui.exe` 同级即可，下次启动会自动登记进模型列表；不放模型包时
-应用照常工作，只是那三个节点会降级并打印实际模式。
-**要求分发只给一个文件**的话就给 `CaiXiHui-Setup.exe`：它把解压这件事一次性做完在安装动作里，程序本体
-仍是解开的文件夹——每次启动不用重新解压（运行时单文件 onefile 被明确排除，理由见 `desktop/README.md`）。
-
-**5. 可选：OpenRouter / 云端部署** — 不设任何旗标就是本机形状。要放到服务器上给别人访问，用
-`python app.py cloud`（或 `CRAWLER_CLOUD=1`）：同时关掉本地模型界面、强制无头抓取、拒绝浏览器生成。
-云端开关、隐私边界与 profile 模板规则的完整说明见 [`docs/config.md`](docs/config.md)。
+**云端 / 桌面版**：放服务器给别人访问用 `python app.py cloud`（或 `CRAWLER_CLOUD=1`）——关掉本地模型界面、
+强制无头抓取、拒绝浏览器生成（开关、隐私边界、profile 模板规则见 [`docs/config.md`](docs/config.md)）。
+给不装 Python 的人（仅 Windows）：`desktop/` 用 PyInstaller onedir 打包出 `CaiXiHui.exe`（`-Installer` 再出
+Inno 安装包），双击即启本地服务并开浏览器；数据默认在 `%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt`
+切便携模式。构建命令、体积边界、首启依赖自检与「为什么排除 onefile」见 [`desktop/README.md`](desktop/README.md)。
+微调 BERT 的四个模型不在应用包里，是单独的模型包 zip，解压到与 exe 同级即可自动登记；不放则相关节点降级并打印实际模式。
 
 ## 功能一览
 
-- **多平台数据采集**：知乎 / 微博 / 小红书 / 微信公众号 / 哔哩哔哩 / 抖音 / 红果短剧 / YouTube / X（推特）
-  （Instagram 已可存 Cookie，采集待接入），关键词 / 某作者的作品 / 热榜 / 评论多种模式，
-  红果短剧的评论由带代理的桌面播放器旁听收割（App 协议签名不复刻，见 docs/collection.md）：
-  这条能力**只有 Windows 桌面做得到**（要驱动本机播放器进程、把抓包 CA 装进系统证书库），所以在 Linux、macOS
-  与 cloud 模式下它被**按名拒绝**，并且数据源面板里那一栏采集内容是**列着但置灰**的（括号里写明原因）——
-  节点存的正是这个模式，直接不列出会让面板画成「第一个模式」，那是面板在谎报这次运行会做什么；
-  四个只有桌面才需要设置的红果收割项也一并从设置面板收起：
-  每行输入可以是剧集链接，也可以直接是**剧名**（在播放器自己的榜单里找——网页热榜与客户端榜单是两套排序），
-  输出带 剧名 / 集序号 / 分集ID，某集没收满、某部剧进不去、或播放流中途切到了别的剧都会在结束时
-  **具名报错**（陌生剧的行按请求体的 book 丢弃，绝不盖本剧剧名）、已采行照常保留，
-  采集量只由你填的目标数决定，支持分批输出、上游喂链接、多账号与持久 Profile。→ [`docs/collection.md`](docs/collection.md)
-- **第二采集方式（CatBus）**：数据源与评论节点按 **平台 × 引擎 × 功能** 组织——先选平台，再选 Selenium 或
-  [CatBus](https://github.com/cv-cat/catbus)，功能列表随引擎变化。它是一层子进程边界（`catbus-crawler-workflow`
-  的 JSONL stdout + stderr 摘要信封），不是第二个爬虫实现：**哪些平台 × 功能可采、输出哪些列、参数是什么、
-  哪一列是它的身份，全部读自适配器自己的 `capabilities` 清单**（按 5 分钟缓存），所以本项目不抄一份能力表；
-  CatBus 独有的读命令（粉丝列表、热搜词、直播间、收藏夹、合集……）自动成为可选功能，写操作在清单生成时机械排除。
-  清单里不可运行的组合**列着、置灰、写明原因**，运行时也**按名拒绝**，绝不静默换后端、换榜单或降级成一次空采集；
-  节点上填了适配器不消费的采集条件（时间窗、评论预览等）同样在起子进程之前拒绝。行仍然一行一个事务落库、
-  按行流式到达即入账，中途停止保留已采到的每一条。
-  两条与浏览器后端的真实差异都**打印出来**：CatBus 没有偏移量（续跑重放靠去重账本，不靠游标；
-  跨运行水位因此只界定「哪些行入库」而不省请求），以及它用**自己的账号文件**（`catbus <平台> auth login`），
-  与本项目存的 Cookie 互不相干——运行前的登录门按后端分别发问，键也分开（`bilibili@work#catbus`），
-  一侧的死登录不会拦下另一侧的运行。可用性由本机决定：找不到 Node、找不到适配器、Node 版本过旧都各自有名有姓，
-  此时引擎选项仍在、置灰并写明原因。两个本机路径（适配器入口与 Node）在「设置」面板里填，**不必改 `PATH`**，
-  留空就按本机系统自动查找。快手 / TikTok / 京东 / 淘宝 / 闲鱼目前只有 CatBus 引擎。启用方式见
-  [`docs/collection.md` 的「让它真的能跑」](docs/collection.md#让它真的能跑)。→ [`docs/collection.md`](docs/collection.md)
-- **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调；
-  BERT 有**两个运行时**——装了 torch/transformers 就用它（开发机可上 GPU），否则用 onnxruntime + tokenizers 跑导出的 ONNX 图，**打包版就是这一条**，日志会说明是哪个运行时、什么精度答的）、
-  情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
-- **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、分组聚合（多指标）、**事件研究套件**（阶段划分 / 分阶段 LDA /
-  主题流向 / 情感演化 / 二次爆发预警 / 曲线外推（移动平均 · Holt · 季节 Holt-Winters/朴素）），主题步骤（主题模型 / 分阶段 / 距离图 / 显著词）默认
-`auto`（装了编码器用 embedding+KMeans，没装自动走 LDA，控制台都如实写明用了哪种；可选装 `requirements-optional.txt`，也可显式选 `embedding`/`lda`），输出列三种方法一致，通用导出（CSV/JSON/Excel/TXT/HTML/Markdown，Parquet 需可选引擎 pyarrow）、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
-- **文献计量 / 知识图谱**：Upload 自动识别**真实导出件**（CNKI 的 RefWorks / NoteExpress / EndNote 三种按钮、CSSCI 文本、WoS 纯文本·Excel·RIS·BibTeX、Scopus CSV（中英文界面表头与两种列名都认）、Dimensions CSV（选 Export full record）、Lens 学术文献集合 CSV（专利集合按名拒绝）、PubMed Medline 文本与 CSV、RIS、BibTeX、EndNote），也保留普通文本行为；界内「数据来源」浮层逐个来源给官网、导出步骤与「这份导出实际缺什么」；Bibliometrics 节点按时间切片构建关键词 / 作者 / 机构 /
-  国家 / 学科 / 主题词 / 来源期刊耦合 / 基金共现 / 文献耦合，以及文献·作者·期刊共被引，支持 TopN / Top% / g-index / 阈值三元组、TC/usage 过滤、look-back、cosine/Dice/Jaccard/关联强度、整次/分数计数（一篇 150 条引用的文章不再压过 12 条的）、
-  MST / Pathfinder（r 范数、最长间接路径、保留比例都可调，超规模按名拒绝）、最大连通分量、度 / 中介 / 特征向量 / PageRank / Sigma / H 指数、谱聚类与 LLR/LSI/MI/TF-IDF 标签（标签词来源可选 `label_source`：全部/题名/摘要/关键词/作者；可用 `cluster_labels` 人工覆盖簇名）、Kleinberg 突现，输出 GraphML/GML/JSON/CSV/Pajek；
-  输出形态可选节点 / 边表 / 聚类表 / 突现表 / **结构变异表**（相邻切片之间连接模式的 Jensen–Shannon 散度，比特；阈值可设）/ **双图叠加**（期刊网络 × 学科网络 + 叠加引用线，需要自备「期刊—学科」basemap 数据集，缺基线按名拒绝，不内置任何商业 JCR 数据）；**情感 / 话题叠加**（`sentiment_column` / `topic_column` 填上游已经写出的标签列——情感/情绪/倾向步骤的 `sentiment`/`emotion`/`tendency`，或逐文档的话题归属，文本聚类的 `cluster` 也可当话题代理：每个节点追加 `情感倾向`+`情感分布`、`主导话题`+`话题分布`，分布是「提及该节点的文档里各标签的篇数」，分母只含**有标签的文档**，空白不当中性；填了表中没有的列、或整列没有任何标签都按名拒绝）。
-  它吃的是**普通表格**：列映射可把爬取数据的「话题 / 用户名 / 发布时间」接进来，不只服务文献。→ [`docs/analysis.md`](docs/analysis.md#文献计量)
-  顶栏还有**文献计量工作区**停靠面板：按运行列出其中的文献计量节点、分页读回已存表（节点 / 边 / 聚类 / 突现 / 双图形态由服务端从列名判读）、下载该节点登记的 GraphML/GML/JSON/CSV/Pajek 产物、一键在画布中定位该节点——读的是持久台账，所以重启、刷新、改过画布之后仍然看得到那次运行的结果。此外可把某次捕获**存成项目里的快照**（参数只在能与运行记下的节点指纹核对时才随快照存档），再**与基准快照对比**：节点/连边/簇/突现的增减与逐列变化，以及**变了哪几项参数**，都由服务端算好后原样印出。表格**表头用界面语言**（`map` 在中文界面读作「叠加图」），鼠标悬停即见磁盘上的真实列名，导出文件仍对得上；面板自己的输入框与下拉跟随深色模式，逐字筛选时不会丢光标。
-- **LLM 簇综述·研究前沿**：Analysis 节点的 `cluster_review` 是「聚类摘要」的文献计量版——喂给本地模型的不是簇内文本，而是这一簇**已有的度量**（LLR 标签、节点数、按频次排序的代表节点、年份跨度，全部取自表格，缺哪列就少一行，不写「未知」诱使模型编造），请它写 3–5 句这个簇构成什么研究前沿、往哪走。付费纪律与其他模型步骤一致：没起模型先在名字上拒绝、Stop 把没问到的簇标为未处理（节点结算为 PARTIAL 而非已完成）、按 prompt 缓存所以续跑不重付、簇数上限；实际用的模型名随结果打印，`fallback` 兜底句会**在格子里**写明没经过模型。
-- **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
-  占比堆叠 / 模型一致率 / 知识图谱 / 环形图谱 / 聚类时间线 / 景观图 / 突现词图 / 时区图 / 聚类年份热力图 / 三维图谱 / 结构变异图 / 双图叠加图 / **情感叠加图**（每个节点一条 100% 堆叠横条，极性按负面→中性→正面排布）/ **话题叠加热力图**（节点 × 话题，格子是占比）/ **国家地区地理图**（世界底图随仓库分发：Natural Earth 1:110m，public domain，239 区域约 200 KB，110m 缺的小国从 50m 补齐；台湾/港澳按本应用中国底图的画法并入中国并在图上点名）/ **同心环布局**（每个首次出现年份一圈，内环最早、外环最新，环内按频次顺时针；没有年份的节点单独成最外一环并标明）、LaTeX 图与三线表（除「模型一致率」外每种图都有，含十四类文献计量图）、MiKTeX 编译成 PDF、Chart Studio 工作台；预览与全屏窗口各有「存为图片」(PNG@2×) 与「存为 SVG」(矢量、标签仍是可编辑文字) 两个一键导出，LaTeX 工具条上还有「编译为 PDF」（只编译运行台账登记过的源文件）；报告面板另有「**论文成稿（LaTeX）**」——只交一个 `run_id`，服务端把这次运行**已登记**的图与三线表读回来合成一份 `article`+`ctex` 文档（方法段 + 图 1/表 1/图 2/表 2 + 运行编号与时间窗），本机 `xelatex` 编译成 PDF；每一项钉在 `[H]` 位置（不让 TeX 把图挪到下一节之后）、贴进来的正文按页宽**只缩不放**、网络图反过来按版面定自己的尺寸、会互相遮盖的中文标签丢弃并在图上点名、超过一页的三线表整页切块并重复表头（只有第一块编号，一行不丢）；文献图谱标签会碰撞避让并留在标题与图例预留带内；
-知识图谱与环形图下方多一条**按年份回放**条（播放 / 逐年拖动 / 看完整图）——节点按累计频次长大、连边在两端都出现的那一年才出现，
-而存出去的 PNG/SVG/LaTeX 仍是完整网络（动画不印在纸上）。→ [`docs/analysis.md`](docs/analysis.md)
-- **跨源融合**：`fuse` 节点把任意多张上游表（文献导出、爬虫表、分析结果）折叠成一份**规范记录表**，
-  每个角色（实体 / 年份 / 题名 / 作者 / 机构 / 文本 / 参考文献 / 来源）按**候选列顺序**尝试——文献叫「关键词」、
-  帖子叫「话题」，折叠后是同一个词表；每行的**来源**随行保留（表内自带平台列就逐行取，否则用为父节点写的
-  `node-1 = 文献`，什么都没写就按父节点 id 登记，绝不替它猜一个「文献」）。下游 `biblio` 节点用默认列映射即可运行，
-  并且因为输入带 `来源` 而**多出 `来源` / `跨源` 两列**：哪些词只在一个语料里出现、哪些词文献和社媒都在谈，
-  直接可读。融合表可另存 CSV 进运行产物。
-- **跨 run 监测（超越点）**：`biblio` 节点填一个 `watch_project`，每次运行就把这张网络存成该项目的一个快照并与**上一次捕获**对比
-  （也可指名更早的一次，回答「比上个月变了什么」）：新增/消失的节点与连边、新簇与消失的簇、**新突现与结束的突现**、
-  被改过的参数，逐条打印到运行控制台，另存一份变化表 CSV 登记为运行产物；项目不存在自动新建，首次捕获照实说「无更早的快照可比」。
-  把它交给顶栏**定时任务**按周期跑同一张画布，就是一条领域监测流水线（时钟与手动运行走同一条启动路径，服务器忙则排队）。
-  `watch_*` 参数既不改变任何一行输出，就不进节点指纹、也不写进快照参数——否则每次捕获都差在自己的名字上。
-- **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、
-  右侧大纲侧栏一键定位节点、自动排布上下顺序可指定、运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
-- **画布历史与布局基准**：底部「工作流文件」面板新增「画布历史」页签——随时把当前画布存成一份**命名快照**（独立于工作流文件，存在 `data/workflow_history.db`），列表可恢复/重命名/删除（保存栏显示已用份数）；恢复前会先列出**与当前画布的差异**（会回来/会消失的节点、连线增减、位置变化），确认后恢复画布是**一个撤销步骤**（Ctrl+Z 可回退）；列表显示来源工作流、保存时间、节点/连线数与「基准」标记。快照上限 100 份，满了**按名拒绝**而不是偷偷丢掉最旧的一份。样式菜单的「自动排布」有两个策略：**算法排布**（原算法）与**按历史基准恢复**（每个已保存工作流单独存一个基准快照，在历史行上「设为布局基准」；基准缺失按名拒绝，基准里没有的新节点仍由算法摆放）。快照保存的是**文件形状**，所以可复用节点的折叠/展开状态跟着历史一起持久化。
-- **可复用节点**：选中一组处理/分析/可视化/分词/文献/融合/输出/编译节点，右键「创建可复用节点」即可把这段内部逻辑存成 JSON 模板（`data/reusable_nodes/`）并收成一个可复用节点；也可从模板库插入。节点左侧可以接**多条输入线**，落线顺序对应模板里排好的输入槽；折叠时它只占一个普通节点，运行状态是内部所有节点的汇总（运行中优先、失败其次），展开时内部节点按保存的尺寸/位置在**自己的边框内**显示，各自带状态；「内部预览」窗口在折叠状态下也能看整段逻辑与状态。运行前会展开成带命名空间的真实子图，外部连线改接到输入槽与唯一输出端；文件保存仍保留这个组（不会把展开结果写死）。样式菜单可控制「展开时自动排布」——展开后立刻重排一次，避免变大的块遮住邻居；自动排布始终把展开组当作**一个块**，边框不会圈住不属于它的节点。内部节点默认只读展示；要改可先「解包为普通节点」（外部连线按输入槽重接、模板保留），编辑后再创建模板。保存的模板在底部「工作流文件」面板的「可复用节点」页签统一管理：可直接**预览**（不必先插入）、插入、**重命名**或**删除模板**（只删模板文件，已插入实例保留自己的快照）；重命名只改模板名，不影响内部节点。模板行左侧的拖拽柄可把模板**拖到画布任意位置插入**（落点即节点位置），与「插入」按钮走同一条插入逻辑。
-- **跨运行采集水位**：哔哩哔哩作者投稿模式可勾选「停在上一次运行的边界」——完整运行成功后记住最新 BV 号，下一次运行遇到该 BV 就停止翻页，不再抓取已经采过的旧视频；仅该模式支持，不能与「重新采集」同时开启，失败/停止/欠采不推进水位。
-- **累积数据集**：节点库新增「累积数据集」节点，接一份上游表格并在每次运行时把新增行追加到带版本的长期数据集，下游拿到全量表；去重方式显式选「整行完全相同」或「按指定列」，列变化按名拒绝，版本记录在 `datasets.db`；累积节点设置和数据集面板都有「重置累积数据集」独立按钮（清空谱系与版本指针，已存版本保留）。
-- **数据集多源合并**：数据集面板可把多份同构数据集「加入合并」并命名生成新数据集；按第一份的列序对齐，缺/多列按名拒绝（不静默补空值），默认加「来源」列记录每行来自哪份文件。
-- **运行级对比**：运行记录「当前工作流」页签里任一次运行可点「对比」并选另一次；服务端给出每个共同节点的状态/行数变化，并对默认节点（最近开始且有行的共同节点）计算新增/消失/变化行与列增减，样本可在行内展开查看；两次运行结构不同会明说，只比较共同节点。
-- **项目包导出/导入**：底部「工作流文件」面板顶部可把**当前工作流或全部工作流**连同引用数据集、可复用模板导出为一个 zip；导入时重新分配 id 并改写引用，同名工作流/模板自动加 ` (2)`，不覆盖已有文件。包里不含 Cookie、API key、模型权重和运行日志；数据集缺失在导出时按名拒绝，模板缺失只记警告（实例自带快照仍可用）。
-- **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、
-  保留策略与运行时长；控制台文本另按运行号**持久化**（`run_log`，每条物理行都存），事后在运行记录里「查看运行日志」——按级别 / 工作流标签过滤、搜索、加载更早、下载 `.txt`（实时控制台与刷新重连一律不变）。
-  **每个节点每次运行的表格输出都按运行号持久化**（`node_rows` + `node_runs`；图表/编译产物登记为文件，图可由该次上游行重绘）。
-  画布进入时默认载入**本工作流最近一次运行**的结果与节点成败；运行记录新增「当前工作流 / 全部记录」两个页签，前者只用同一结构指纹匹配的运行，可**载入任意一次**并标出「已载入」，预览、图表与看板随即改读那一次的行（绝不把不同运行的行拼成一张表）。
-  节点角标按所选运行显示：**绿勾 = 完成/已复用，黄色转圈 = 正在运行（并行时多个同时转），红叉 = 没有成功完成**；未知状态绝不画成成功。节点右键另有「从此节点重跑」，与运行详情的同名按钮一样只重算该节点及其下游、复用上游已存行。→ [`docs/workflow.md`](docs/workflow.md)
-- **定时任务（为云服务器准备）**：应用内常驻一个调度时钟（`python app.py` 起来就有），到点自动执行一份已存画布——
-  顶栏 Run 菜单 / 状态栏按钮 / 面板关闭按钮三处开合同一个停靠面板。时间可写预设（每天 / 每周+星期 / 每 N 分钟）
-  或 **cron 五段表达式**，每个任务可指定 **IANA 时区**（留空=服务器本地时区，云机器常是 UTC）；预设只在算时间时
-  展开，存储原样保留你写的那句话。**定时任务不碰模型**：画布里只要有需要模型的节点，这个画布在选择时就标明
-  「不能定时」并写出原因，保存与触发再各查一次（服务器上不替你决定提供方、也不用环境变量里的 key）。服务器停机
-  期间错过的时刻**只记一条「已错过」不补跑**，重新计时从「现在」往后排；到点后一律走与手动 Run 同一条启动路径，
-  服务正忙就**排队**。每个任务自带「最近一次」（状态/说明/运行号可点进那次控制台）与最多 20 条历史，拒绝与崩溃
-  分别记名；控制台只在一趟真的启动时得到一行归属消息。下次运行/最近一次的时刻、任务句子、可跑性判定全部由服务端
-  按任务时区算好送来，前端不自己算时间也不猜状态词。台账在 `data/schedules.json`（gitignore）。
-  → [`docs/workflow.md`](docs/workflow.md#定时任务)
-- **界面**：中英双语、亮/暗主题（`自动`跟随系统或手动切换，图表配色与 PNG 导出同步跟随）、节点库与右侧大纲支持按名称/类型/缩写搜索过滤、节点库条目为 `role=button` 且 Tab 可达（`Enter`/空格或直接点击即在画布添加该类型节点）、`Ctrl`/`Cmd`+`F` 唤起大纲查找、选中节点 `Ctrl`/`Cmd`+`C`/`V` 复制粘贴（副本错位叠开）与方向键微移（`Shift` 精调 1px）在输入框外生效、框内不劫持、`W`/`A`/`S`/`D` 键把选中跳到该方向最近的节点（纯选择、不挪位置，与方向键微调互不抢键）、选中节点按 `Enter` **开合其设置面板**（即切换：再按一次即关，面板打开后焦点已落在首个控件、面板内对普通输入框按 `Enter` 也关，但按钮/链接/多行文本框/自定义下拉不抢其 `Enter`）、右键「复制节点为 JSON / 从 JSON 导入节点」可跨画布分享单个节点、对话框为模态且键盘可达（Tab 焦点锁在框内、Esc 关闭、role/aria-modal 语义）、启动步骤各自兜异常、离线不拖垮整页；画布支持触控板双指滚动平移 / 捏合缩放与平板双指手势；状态栏一个 `●` 表示画布有未保存改动（只跟踪节点/连线模型，平移视角不算改动，保存/打开即清除），打开另一份工作流仅在确有未保存改动时才二次确认；已打开的文件在每次改动后**静默自动保存**（几秒去抖、绝不新建未命名文件、无提示音），刷新/关闭页面前若有未保存改动则浏览器原生提醒；`L` 键连线（选中一个节点按 `L` 定起点、选中第二个再按 `L` 完成，`Esc` 取消）；`Shift` 点选 + 空白处**框选**可多选，批量删除/方向键微移一次生效（选择是视图态，不进撤销历史）；右下角**缩略总览图**按当前缩放画出所有节点与视口框、点击即把画布居中到该处；**剪贴板抽屉**（顶栏「视图」组或 `toggleClipboardDrawer()` 开合）把每次复制（单/多选节点、复制为 JSON、手动「添加文本」）累积成一份持久化清单，存于独立的 `crawler_clipboard` 键（与草稿 `crawler_canvas` 分离、刷新/重开仍在），可对任意一条**粘贴 / 重命名 / 置顶 / 删除 / 全部清空**，节点条目还能直接**拖到画布**生成（与「粘贴」按钮共用同一粘贴通道、落点即放置处）；抽屉与菜单栏/状态栏各留 12px 间距、浮于画布之上（同右侧大纲栏，不再互相遮盖），支持搜索过滤、上限 50 条且**置顶条目不被容量淘汰**；文本条目若是节点 JSON 还能「作为节点插入」。抽屉是视图态，绝不进 `getState()`/撤销历史，粘贴一律复用画布同一 `_pasteAt` 通道，且**跨标签页实时同步**（另一处窗口改了剪贴板，本窗口经 `storage` 事件自动刷新）；状态栏新增缩放控件 `[−] 百分比 [+]`（点数字即「适应」，另可 `+`/`-`/`0` 键位），`?`/`F1` 打开**快捷键一览浮层**（逐条对应实际绑定）；多选后右键可**对齐 / 分布**（左右上下、水平/垂直居中、水平/垂直等距，一次操作=一步撤销）；拖线**拒绝成环**（在唯一提交点 `connectNodes` 前置有向可达性检测，指针与 `L` 键两路同规则，避免跑出无解的环）；「视图」菜单另有**剪贴板抽屉**与快捷键入口。后端：运行**队列重启不再丢失**（待运行请求镜像到 `runs.db`，开机自动回填，仍严格一次跑一个）；运行详情的每张节点卡片可对已完成节点**「从此节点重跑」**（只重算该节点及其全部下游，未变的上游已存行原样复用、绝不重采/重付费）；数据集面板可勾选两份**行级对比**（`POST /api/data/diff`，报出新增/删除行与增删列，仅在显式指定唯一键列时才判定「变更行」，绝不臆测主键）。**运行前诊断**：每个节点常驻校验角标（缺配置 / 断线 / 引用了上游没有的列，悬浮看原因、点击选中并滚到该节点），设置面板顶部显示该节点**会输出哪些列**（爬虫 / 续跑等运行前不可知者如实标注、绝不臆造），状态栏给出**预计行数与 LLM 调用数**（按采集矩阵默认值估，无界情形标「不封顶」）——把「跑完才发现列名 / 配置错」提前到编辑期。→ [`docs/workflow.md`](docs/workflow.md)
-- **节点类型**：Name / Data Source / Upload / Process / Analysis / Bibliometrics / Fuse（跨源融合）/ Accumulate（累积数据集）/ Visualize / Compile / Tokenize / Output / Resume / Comment。类型与行形态由 `backend/nodes/catalog.py` 单点声明，14 个执行器插件全部在 `backend/nodes/executors/`、统一注册表在 `backend/nodes/registry.py`，新增类型需同时过 `tests/unit/analysis/test_node_plugins.py`；详见 [重构方案](docs/refactor_plan.md)。→ [`docs/workflow.md`](docs/workflow.md#节点类型)
-- **词库 / 停用词管理**：底栏「词库」面板可增删两类用户词表——**停用词**（在内置列表之外，额外从关键词 / 主题 / 词云 / ML 结果过滤掉）与**领域词库**（让分词器整体保留的专业词，可带词频）。持久化于 `data/lexicon.db`（`/api/lexicon`），分析管线经唯一入口 `analyzers/stopwords.py` 读取并按版本缓存失效；领域词在应用启动时写入并全局加载 jieba 用户词典（修掉了此前只有关键词路径可见的缺陷）。改词**从下一次运行起生效**。网暴词族是正则、按 AGENTS 保持「在代码里」，不在可编辑范围。
-- **HTTP API**：工作流、运行记录、数据集、分析/可视化/导出、Chart Studio、统计/历史、AI/Cookie/系统全部端点。→ [`docs/api.md`](docs/api.md)
-- **配置**：环境变量、运行时设置（`data/settings.json`）、保留策略 / 内存 / 排队-错峰-预检常量、云端部署。→ [`docs/config.md`](docs/config.md)
+每项细节都在 `docs/`，此处一行一个能力 + 去处。
+
+- **多平台数据采集**：知乎 / 微博 / 小红书 / 微信公众号 / 哔哩哔哩 / 抖音 / 红果短剧 / YouTube / X（Instagram
+  已可存 Cookie，采集待接入）；关键词 / 作者作品 / 热榜 / 评论多模式，支持分批流式落库、上游喂链接、多账号与持久
+  Profile。红果评论由带代理的桌面播放器旁听收割（**仅 Windows**，其他平台按名拒绝且置灰写明原因）。→ [`docs/collection.md`](docs/collection.md)
+- **第二采集引擎（CatBus）**：数据源/评论节点按 **平台 × 引擎 × 功能** 组织；哪些可采、输出哪些列、哪列是身份，
+  全部读自适配器自己的 `capabilities` 清单（本项目不抄表）；不可运行组合列着、置灰、写明原因，运行时按名拒绝，绝不
+  静默换后端或降级成空采。两条与浏览器后端的真实差异都打印出来（无偏移量、用 CatBus 自己的账号文件、登录门键分开）。
+  快手 / TikTok / 京东 / 淘宝 / 闲鱼目前只有 CatBus 引擎。→ [`docs/collection.md`](docs/collection.md)
+- **AI 分析**：Ollama / OpenRouter 双提供方；情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，默认微调
+  BERT，跑不动自动降级并打印实际模式；BERT 有 torch 与 onnxruntime 两个运行时）、情感极性、NER、关键词、聚类、异常、
+  相关性、显著性检验（Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、[`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
+- **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、分组聚合、**事件研究套件**（阶段划分 / 分阶段 LDA / 主题
+  流向 / 情感演化 / 二次爆发预警 / 曲线外推），主题步骤默认 `auto`（装了编码器用 embedding+KMeans，否则 LDA，都如实写明）；
+  通用导出（CSV/JSON/Excel/TXT/HTML/Markdown，Parquet 需可选 pyarrow）、一键运行报告与「智能清除」。→ [`docs/analysis.md`](docs/analysis.md)
+- **文献计量 / 知识图谱**：Upload 自动识别真实导出件（CNKI/CSSCI/WoS/Scopus/Dimensions/Lens/PubMed/RIS/BibTeX/
+  EndNote…，见 `services/biblio/formats/`）；Bibliometrics 节点按时间切片构建关键词/作者/机构/国家/学科/共被引等网络，
+  支持 TopN/g-index/TC 过滤/Pathfinder/MST/多种中心性/谱聚类与标签/Kleinberg 突现，输出 GraphML/GML/JSON/CSV/Pajek 及
+  节点/边/聚类/突现/结构变异/双图叠加/情感·话题叠加分层；列映射可把爬取数据接进网络。顶栏**文献计量工作区**停靠面板
+  读持久台账，可快照存项目并与基准对比。→ [`docs/analysis.md`](docs/analysis.md#文献计量)
+- **LLM 簇综述·研究前沿**：Analysis 的 `cluster_review` 喂本地模型的不是簇内文本而是这一簇已有的度量（缺哪列就少一行，
+  不写「未知」诱使编造）；付费纪律与其他模型步骤一致（没起模型先按名拒绝、Stop 标未处理并结算 PARTIAL、按 prompt 缓存续跑不重付）。
+- **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 / 占比堆叠 / 知识
+  图谱 / 环形 / 时间线 / 突现词 / 时区 / 三维 / 结构变异 / 双图叠加 / 情感叠加 / 话题叠加 / 国家地理图 / 同心环布局，
+  LaTeX 图与三线表、MiKTeX 编译 PDF、Chart Studio 工作台；「存为图片 (PNG@2×)」与「存为 SVG」两个一键导出；
+  「论文成稿（LaTeX）」只交 `run_id` 就把台账登记过的图与三线表合成 `article`+`ctex` 文档并本机编译。→ [`docs/analysis.md`](docs/analysis.md)
+- **跨源融合（`fuse`）**：把任意多张上游表按**候选列顺序**折叠成一份规范记录表（来源随行保留，绝不猜），下游 `biblio`
+  节点因输入带 `来源` 而多出 `来源`/`跨源` 两列，可读「哪些词只在一个语料、哪些两边都在谈」。
+- **跨 run 监测（超越点）**：`biblio` 填 `watch_project` 就把每次网络存成项目快照并与上次捕获对比（增减节点/连边/簇/
+  突现、改过的参数逐条打印），交给定时任务按周期跑同一画布即成领域监测流水线。
+- **工作流引擎**：拖拽画布、fan-in/fan-out、禁用即不存在、撤销/重做、视角持久化、大纲定位、自动排布、运行队列、
+  停止与并行/串行。节点类型 14 个：Name / Data Source / Upload / Process / Analysis / Bibliometrics / Fuse /
+  Accumulate / Visualize / Compile / Tokenize / Output / Resume / Comment，类型与行形态由 `nodes/catalog.py` 单点声明，
+  执行器全在 `nodes/executors/`、注册表在 `nodes/registry.py`。→ [`docs/workflow.md`](docs/workflow.md)
+- **画布历史 / 可复用节点 / 布局基准**：把画布存成命名快照（`data/workflow_history.db`，恢复前列差异、恢复是一步撤销、
+  上限 100 份满了按名拒绝）；选中一组节点可「创建可复用节点」收成一个模板（`data/reusable_nodes/`，折叠时只占一个节点、
+  运行态为内部汇总、展开时接输入槽），可拖拽柄拖到画布插入、预览/重命名/删除模板。自动排布有「算法排布」与「按历史基准恢复」两策略。→ [`docs/workflow.md`](docs/workflow.md)
+- **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、保留策略；
+  控制台文本按运行号持久化（`run_log`，事后可按级别/工作流过滤搜索下载 `.txt`，实时控制台与刷新重连不变）；每个节点每次
+  运行的表格输出按运行号持久化（`node_rows`/`node_runs`）；进入画布默认载入本工作流最近一次运行结果，节点角标绿勾=完成/复用、
+  黄转圈=运行中、红叉=未成功，未知绝不画成成功；「从此节点重跑」只重算该节点及下游、复用上游已存行。→ [`docs/workflow.md`](docs/workflow.md)
+- **累积数据集 / 数据集合并 / 跨运行水位**：Accumulate 节点把新增行追加到带版本长期数据集（去重方式显式选，列变化按名拒绝）；
+  数据集面板可多源合并同构数据集（缺/多列按名拒绝，默认加「来源」列）、行级对比；哔哩哔哩作者投稿模式可「停在上一次运行边界」的水位续跑。→ [`docs/workflow.md`](docs/workflow.md)
+- **定时任务（为云服务器准备）**：应用内常驻调度时钟，到点执行已存画布（预设或 cron 五段、每任务可指定 IANA 时区，留空=服务器本地）；
+  **定时任务不碰模型**（含模型节点的画布在选择时就标明「不能定时」并写原因）；停机错过的时刻只记一条「已错过」不补跑；到点走与
+  手动 Run 同一条启动路径、服务忙则排队；下次/最近时刻、任务句子、可跑性判定全部服务端算好送来。台账在 `data/schedules.json`。→ [`docs/workflow.md`](docs/workflow.md#定时任务)
+- **界面**：中英双语、亮/暗主题（`自动`跟随系统，图表配色与 PNG 同步）、搜索过滤、复制粘贴/框选/方向键微移/`WASD` 选择/`Enter` 开合面板/
+  `L` 连线/缩略总览图/剪贴板抽屉、连线拒绝成环、运行前诊断（每个节点常驻校验角标、设置面板顶部显示会输出哪些列、状态栏给预计行数与 LLM
+  调用数）；后端运行队列镜像到 `runs.db` 重启不丢。→ [`docs/workflow.md`](docs/workflow.md)
+- **词库 / 停用词**：底栏「词库」面板增删停用词与领域词库（`data/lexicon.db`，`/api/lexicon`），管线经唯一入口读取按版本缓存，
+  领域词启动时写入并全局加载 jieba 用户词典；改词从下一次运行起生效。
+- **HTTP API / 配置**：全部端点见 [`docs/api.md`](docs/api.md)；环境变量、运行时设置、常量、云端部署见 [`docs/config.md`](docs/config.md)。
 
 ## 项目结构
 
 ```
 crawler_workflow/
 ├── backend/
-│   ├── app.py                    # Flask 主入口（组合根：注册 Blueprint、时钟接线、启动恢复；页面路由）
-│   ├── core/                     # 地基包：只依赖 stdlib 与自身，谁都可以 import
-│   │   ├── config.py             # 配置与数据路径
-│   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）
-│   │   ├── machine.py            # 按操作系统分支的机器事实（Chrome/驱动/xelatex/Node 的位置）
-│   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
-│   ├── i18n.py                   # zh/en 消息目录（合并 i18n_catalog/ 的按域数据）
-│   ├── i18n_catalog/             # 消息本体，按域一文件（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings）
-│   ├── runtime/                  # 进程级运行层（根目录只剩 app.py 与 i18n.py）
-│   │   ├── state.py              # 运行态与 console 缓冲（execution_state/队列/日志），app 与测试共引
-│   │   ├── stores.py             # run/dataset/housekeeper 单例与惰性 getter（测试接缝）
-│   │   ├── settings.py           # 运行时可改设置（data/settings.json）
-│   │   ├── gate.py               # 同平台采集闸门（真排队/错峰）
-│   │   └── transport.py          # 模型传输选择与云端拒绝
-│   ├── scheduling/               # 定时任务域（时钟 / 台账 / cron 语法）
-│   │   ├── clock.py              # 进程内 daemon 时钟；到点走与手动 Run 同一条启动路径
-│   │   ├── store.py              # 台账 data/schedules.json：时间归一、下次运行、触发记账与「已错过」
-│   │   └── cron.py               # 五段表达式解析/校验/next_after（只用 stdlib zoneinfo）
-│   ├── capabilities/             # 采集矩阵（一个平台一个文件：platforms/<id>.py + fields/catbus/registry）
-│   │   ├── platforms/<id>.py     # 平台声明：模式 × 引擎 × 功能 × 字段；面板顺序钉在 platforms/__init__
-│   │   ├── fields.py             # 共享字段原子与模式工厂
-│   │   ├── catbus.py             # 第二引擎的参数表单与独有平台词
-│   │   └── registry.py           # 查询面：校验 / 执行 / 前端面板的唯一口径
-│   ├── nodes/                    # 节点插件目录（catalog + context + registry + executors/；目录与执行器/前端白名单互相钉住）
-│   ├── crawlers/                 # 各平台爬虫 + 无站点依赖的机械层 engine/
-│   │   ├── core/                 # 爬虫基类与共享机械（crawler.py / browser.py / faults.py / video.py）
-│   │   └── backends/
-│   │       └── catbus.py         # 第二采集后端的会话（继承 Crawler 的流式/落库/水位契约）
-│   ├── analyzers/                # 分析模块（LLM + ML + BERT）
-│   ├── engine/                   # 工作流引擎：DAG 解析、运行计划（形状/传输/是否要模型）、运行本体 run.py（begin_run 与 worker、逐节点续跑、执行器分派、停止判定、队列排水）、控制台写路径 run_logs.py、定时两扇门 run_schedule.py、执行器、日志
-│   ├── services/                 # 续跑存储 / 数据集 / 导出 / 报告 / 可视化 / LaTeX 等
-│   ├── sessions/                 # 登录态域：具名 Cookie、各账号的 Chrome profile、模板重建、运行前预检
-│   └── static/                   # 前端：index.html、css、js（canvas/workflow/app…）
+│   ├── app.py                    # Flask 组合根：注册 Blueprint、请求钩子、时钟接线、启动恢复；唯一路由是页面 /
+│   ├── core/                     # 地基包（config/refs/machine/procs）：只依赖 stdlib，谁都可以 import
+│   ├── i18n.py + i18n_catalog/   # zh/en 机器 + 按域数据（10 个域文件）
+│   ├── runtime/                  # 进程级运行层：state / stores（测试接缝）/ settings / gate / transport
+│   ├── api/                      # 全部 HTTP 端点：24 个 Blueprint 模块 + http.py（请求强转）+ resolution.py
+│   ├── scheduling/               # 定时任务域：clock / store（data/schedules.json）/ cron
+│   ├── capabilities/             # 采集矩阵：platforms/<id>.py + fields/catbus/registry
+│   ├── nodes/                    # 节点插件：catalog + registry + executors/（14 类型）+ schema
+│   ├── engine/                   # 工作流引擎：DAG/计划/run.py（无嵌套函数）/run_logs/run_schedule
+│   ├── services/                 # charts/reports/ingest/runs/analysis/biblio/workflows/datasets/exports + lock_store
+│   ├── analyzers/                # LLM + sklearn + BERT 分析
+│   ├── crawlers/                 # 各平台爬虫 + 无站点依赖的 engine/ + backends/catbus
+│   ├── sessions/                 # 登录态域：具名 Cookie、各账号 Chrome profile、模板、预检、路由
+│   └── static/                   # 前端：index.html、css/（10 张分域表）、js/（canvas/workflow/app…）、geo/、vendor/
 ├── data/                         # 运行时数据（gitignore；仅 workflows/ 进版本库）
-├── docs/                         # 文档：采集/分析/工作流/API/配置/开发 + 实测记录 + 重构方案
-├── tests/                        # 单元 / API / 集成 / 前端 JS / 真站各测试层
+├── docs/                         # 文档（采集/分析/工作流/API/配置/开发 + 实测记录 + 重构方案）
+├── tests/                        # unit / api / integration / frontend / 真站各层
 ├── ml_train/                     # 训练脚本与模型（gitignored）
 ├── logs/                         # 运行日志（自动轮转）
-├── requirements.txt              # 依赖声明（可选 torch/transformers 在 requirements-optional.txt）
-└── README.md
+├── desktop/                      # Windows 打包（PyInstaller/UPX/Inno，唯一故意写死系统的目录）
+└── requirements.txt              # 依赖声明（可选 torch/transformers 在 requirements-optional.txt）
 ```
 
-完整的逐模块目录树见 [`docs/development.md`](docs/development.md)。
+完整逐模块目录树见 [`docs/development.md`](docs/development.md)。
 
 ## 使用示例
 
 **从画布跑一条完整工作流**：拖入 Data Source 选平台+关键词 → Process 选清洗/情感/倾向并在 AI 面板选提供方与模型
-→ 可选 Analysis 做确定性清洗、Tokenize 出词频 → 加 Visualize 看分布、Output 选导出格式 → 连线、加 Name 命名
-→ 菜单 Execute 运行。
+→ 可选 Analysis 做确定性清洗、Tokenize 出词频 → 加 Visualize 看分布、Output 选导出格式 → 连线、加 Name 命名 → 菜单 Execute。
 
-**只处理已有数据（不采集）**：直接拖一个 Visualize（或 Analysis / Bibliometrics）节点，把数据源切成 Upload File 上传
-CSV/TSV/JSON/TXT/Excel/NBIB/RIS/BibTeX/EndNote/NoteExpress，配好字段后点 Preview Chart 即可，不必跑整条工作流。文献导出件会自动解析成文献记录表（`记录ID/题名/作者/作者单位/来源期刊/年份/关键词/摘要/参考文献/引文/引用次数…`），其它普通文本与 CSV 仍按原有方式导入；「数据来源」浮层（上传节点面板里的「文献数据文件如何获得？」按钮）逐个来源给出官网、导出点哪一项、以及这份导出实际不带什么字段。
-Bibliometrics 节点的列映射可以把任意表（包括爬取数据的「话题 / 用户名 / 发布时间」）接成网络，不绑定文献导出。
-Excel 一次只导入**一张表**：
-含多个非空工作表的工作簿会**按名拒绝**并列出各表名，请先把要用的那张拆成单表再上传（过去会静默只读第一张、
-却把它的行列当成整份文件的结果）。Upload 节点还能在面板的
-「从已保存数据集选择」下拉里直接挂载数据库里已存的文件（此前上传、粘贴或分析产出的），无需重复上传。
-该下拉可**搜索过滤**、每行显示**来源/列数/行数**、按**最近使用**排序，库为空时给出**直达数据集管理**的引导；
-「详情」展开可见列、被本画布哪些节点引用、被哪些工作流引用；「应用到其他上传节点」一键把同一份数据分发给画布上
-其余 Upload 节点；被删掉的文件会以**红色断链**标出（清空失效 id 以免运行读到死指针，同时说明原因）。
+**只处理已有数据（不采集）**：直接拖一个 Visualize（或 Analysis / Bibliometrics）节点，把数据源切成 Upload File
+上传 CSV/TSV/JSON/TXT/Excel/NBIB/RIS/BibTeX/EndNote/NoteExpress，配好字段后 Preview Chart 即可；文献导出件会自动解析成
+文献记录表，其它普通文本/CSV 仍按原有方式导入。Excel 一次只导一张表（多非空工作表会按名拒绝并列表名）；Upload 面板的
+「从已保存数据集选择」可挂载库里已存文件，支持搜索、显来源/列数/行数、详情与被引用、「应用到其他上传节点」、断链红标。
 
-**中断后续跑**：执行中 Stop、关服务或中途失败都没关系——已完成的节点与已处理的行都在 `data/runs.db`。
-重开工作流后顶部出现"检测到中断的运行"横幅，点「继续」只重跑缺失部分（LLM 走缓存不重付费），点「重新开始」
-则忽略检查点全量重跑。原平台已登出/已花过成本时，拖一个 Resume 节点直接收养历史运行的输出行。
+**中断后续跑**：执行中 Stop、关服务或中途失败都没关系——已完成的节点与已处理的行都在 `data/runs.db`。重开工作流后顶部出现
+"检测到中断的运行"横幅，点「继续」只重跑缺失部分（LLM 走缓存不重付费），点「重新开始」全量重跑；原平台已登出/已花成本时，
+拖一个 Resume 节点直接收养历史运行的输出行。
 
 ## 文档索引
 
 | 文件 | 里面是什么 |
 |---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、两个大文件的耦合约束、以及分步（每步过测试）的重构路线 |
-| [`docs/refactor_plan.md`](docs/refactor_plan.md) | **全项目结构审计与重构总纲**（实测缺陷分类、目标目录树、分层规则、10 个阶段与完成定义；节点插件化已落地，是后续阶段的样板） |
-| [`docs/frontend_modules.md`](docs/frontend_modules.md) | `workflow.js` 的**逐模块拆分方案**：边界、加载顺序、要改的 harness、每步验收 |
-| [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限（面向使用者） |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、大文件的耦合约束、接缝规则 |
+| [`docs/refactor_plan.md`](docs/refactor_plan.md) | **全项目结构审计与重构总纲**（缺陷分类、目标目录树、分层规则、阶段与完成定义） |
+| [`docs/frontend_modules.md`](docs/frontend_modules.md) | `workflow.js` 的**逐模块拆分方案** |
+| [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限 |
 | [`docs/analysis.md`](docs/analysis.md) | AI 分析 · 数据处理 · 可视化 的完整细节 |
 | [`docs/workflow.md`](docs/workflow.md) | 工作流引擎 · 断点续跑 · 界面 · 节点类型 |
 | [`docs/api.md`](docs/api.md) | Flask 后端全部 HTTP 端点 |
 | [`docs/config.md`](docs/config.md) | 环境变量 · 运行时设置 · 常量 · 云端部署 |
-| [`docs/development.md`](docs/development.md) | 完整项目结构 · 训练 ML 模型 · pytest 各层怎么跑 · 格式化钩子的坑 |
-| [`docs/crawler_notes.md`](docs/crawler_notes.md) | 逐平台**真机实测记录**（登录墙 / 翻页契约 / 字段来源）——改爬虫前先看 |
+| [`docs/development.md`](docs/development.md) | 完整项目结构 · 训练模型 · pytest 各层 · 格式化钩子的坑 |
+| [`docs/crawler_notes.md`](docs/crawler_notes.md) | 逐平台**真机实测记录**（改爬虫前先看） |
 | [`docs/crawler_rules.md`](docs/crawler_rules.md) | 采集端工程**规则** |
 | [`docs/live_test_plan.md`](docs/live_test_plan.md) | 全平台真机验收的用例矩阵与运行手册 |
 | [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比研究 |
-| [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 为何这三类分析主推**微调 BERT** 而非通用大模型：质量/速度/成本对比（含实测 accuracy/F1 与本机 GPU 吞吐 rows/s） |
-| [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的项目规则与改动流程（测试不变量在此，不在文档里重复） |
+| [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 为何这三类分析主推**微调 BERT**（含实测 accuracy/F1 与吞吐） |
+| [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的项目规则与改动流程（测试不变量在此） |
 
 ---
 
-本项目依赖由 `.venv/` 承载，代码风格由 `ruff.toml` 约束（行宽 120、单引号）。开发与验证流程、
-各测试层命令见 [`docs/development.md`](docs/development.md) 与 [`AGENTS.md`](AGENTS.md)。
+本项目依赖由 `.venv/` 承载，代码风格由 `ruff.toml` 约束（行宽 120、单引号）。开发与验证流程、各测试层命令见
+[`docs/development.md`](docs/development.md) 与 [`AGENTS.md`](AGENTS.md)。

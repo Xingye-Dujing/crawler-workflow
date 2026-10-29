@@ -2,189 +2,112 @@
 
 > 本文是采析绘文档的一部分，返回总览见 [README.md](../README.md)。
 
-项目结构（完整目录树）、如何训练传统 ML 模型、pytest 各测试层的运行命令与格式化钩子的坑。面向 agent 的测试不变量与改动流程见仓库根的 [AGENTS.md](../AGENTS.md)，本文只保留人类可读的「每一层怎么跑」命令与说明。
+项目结构（目录树）、如何训练传统 ML 模型、pytest 各测试层的运行命令与格式化钩子的坑。面向 agent 的测试不变量与改动流程见仓库根的 [AGENTS.md](../AGENTS.md)；逐条规则的真实证据（崩溃、实测数字）见 [agent_practices.md](agent_practices.md)，各平台实测契约见 [crawler_notes.md](crawler_notes.md)，真站验收矩阵与运行手册见 [live_test_plan.md](live_test_plan.md)。本文只保留人类可读的「每一层怎么跑」命令与说明。
 
 ## 项目结构
 
 ```
 crawler_workflow/
 ├── backend/
-│   ├── app.py                    # 引导（Flask 初始化 + 注册 25 个 blueprint + 时钟接线 + 启动恢复）+ 1 条路由（页面）；执行/重跑在 api/workflow.py，运行编排在 engine/run.py
+│   ├── app.py                    # 引导（Flask 初始化 + 注册 25 个 Blueprint + 时钟接线 + 启动恢复）+ 1 条路由（页面）。执行/重跑在 api/workflow.py，运行编排在 engine/run.py
 │   ├── core/                     # 地基包（只依赖 stdlib 与自身）
-│   │   ├── config.py             # 配置与数据路径
-│   │   ├── refs.py               # 小工具（开关读取、名称解析、文件名、平台识别）
+│   │   ├── config.py             # 配置与数据路径、保留/排队/预检常量
+│   │   ├── refs.py               # 开关读取、名称解析、文件名、平台识别
 │   │   ├── machine.py            # 按 OS 分支的机器事实（Chrome/驱动/xelatex/Node 位置）
 │   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
 │   ├── i18n.py                   # zh/en 消息机制（t()/线程语言/audit + 合并按域词典）
-│   ├── i18n_catalog/             # 消息本体：一域一文件（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings）
-│   ├── runtime/                  # 进程级运行层（2026-10-29 从根目录收进来：根只剩 app.py 与 i18n.py）
-│   │   ├── state.py              # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
-│   │   ├── stores.py             # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
-│   │   ├── settings.py           # 运行时可改设置（data/settings.json；原 settings_store.py）
+│   ├── i18n_catalog/<domain>.py  # 服务端消息本体：一域一文件（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings）
+│   ├── runtime/                  # 进程级运行层（根只剩 app.py 与 i18n.py）
+│   │   ├── state.py              # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/add_log…）
+│   │   ├── stores.py             # run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
+│   │   ├── settings.py           # 运行时可改设置（data/settings.json，DEFAULTS/save_settings；原 settings_store.py）
 │   │   ├── gate.py               # 同平台采集闸门（真排队/错峰；原 crawl_gate.py）
 │   │   └── transport.py          # Ollama/OpenRouter 传输选择与「本机端口没人听」拒绝
-│   ├── scheduling/               # 定时任务域
-│   │   ├── clock.py              # 进程内 daemon 按 SECONDS tick，到点走 app 的唯一启动路径
-│   │   ├── store.py              # 定时任务台账（data/schedules.json）：时间归一、下次运行、触发记账与「已错过」
-│   │   └── cron.py               # cron 五段解析/校验/next_after 与 IANA 时区（只用 stdlib zoneinfo）
+│   ├── scheduling/               # 定时任务域：clock.py（进程内 daemon，到点走唯一启动路径）/ store.py（data/schedules.json）/ cron.py（五段解析 + IANA 时区）
 │   ├── capabilities/             # 采集矩阵（一个平台一个文件）
-│   │   ├── platforms/<id>.py     # 平台声明：模式 / 字段 / 建议；面板顺序由 platforms/__init__ 钉住
+│   │   ├── platforms/<id>.py     # 平台声明：模式/字段/建议；面板顺序由 platforms/__init__ 钉住
 │   │   ├── fields.py             # 共享字段原子与四个模式工厂（posts/author/hot/comment）
 │   │   ├── catbus.py             # 第二引擎的参数表单与 CatBus 独有平台/模式词
+│   │   ├── model.py / requirements.py  # 已注册微调模型读取 / 「对机器的要求」判定
 │   │   └── registry.py           # 查询面：校验、执行与前端面板的唯一口径
-│   ├── sessions/                 # 登录态域（2026-10-27 从根目录与 services/ 合成）
-│   │   ├── cookies.py            # 具名 Cookie 罐：data/cookies/<平台>@<账号>.json 与账号折叠规则
-│   │   ├── flow.py               # 各平台 Cookie 的用途/获取步骤/入口链接白名单
-│   │   ├── profiles.py           # 各账号一个 Chrome user-data-dir：布局、新鲜度、一把锁挡住两次采集同开一台设备
-│   │   ├── template.py           # 谁可以重建那份 pristine 设备目录（浏览器启动器由外面递进来）
-│   │   ├── preflight.py          # 运行前 Cookie 预检：哪些模式需要登录态
-│   │   └── routes.py             # /api/cookies/*、/api/profiles/delete、/api/browser/profiles*（Blueprint sessions）
-│   ├── api/                      # Flask Blueprint：按域拆出的路由簇（17 个已注册 + 2 个共享工具）
-│   │   ├── http.py               # 共享请求工具（_json_body/_bad_body/_safe_int/_bad_param 等）
-│   │   ├── resolution.py         # 数据帧解析（_resolve_dataframe/_resolve_payload_dataframe/NoRunDataError）
-│   │   ├── analysis.py           # /api/analysis/{run,train}（含 ML 训练常量）
+│   ├── sessions/                 # 登录态域：cookies.py（具名 Cookie 罐）/ flow.py / profiles.py（一账号一 user-data-dir）/ template.py（pristine 重建）/ preflight.py / routes.py（sessions Blueprint）
+│   ├── api/                      # Flask Blueprint：按域拆出的路由簇（24 个已注册 + 2 个共享工具）
+│   │   ├── http.py               # 共享请求工具（_json_body/_bad_body/_safe_int/_bad_param…）
+│   │   ├── resolution.py         # 数据帧解析（_resolve_dataframe/NoRunDataError）
+│   │   ├── analysis.py           # /api/analysis/{run,train}
+│   │   ├── biblio.py             # /api/biblio/*（项目/快照/对比/表/来源）
 │   │   ├── capabilities.py       # /api/capabilities（采集面板的字段口径）
-│   │   ├── config.py             # /api/config/*（设置 + 已注册 BERT 模型表 /api/models）
-│   │   ├── data.py               # /api/data/*（上传/粘贴/预览/删除数据集）
-│   │   ├── exports.py            # /api/export/save + /api/exports/{list,download,delete,clear}
-│   │   ├── history.py            # /api/history/*（执行历史与趋势）
-│   │   ├── llm.py                # /api/llm/*（模型测试/补全）
-│   │   ├── locks.py              # /api/locks（导出产物钉住台账）
-│   │   ├── report.py             # /api/report/{generate,view,pdf,studio-images}
-│   │   ├── schedules.py          # /api/schedules*（定时任务：读/存/删/开关/立即执行）
+│   │   ├── config.py             # /api/config + /api/models
+│   │   ├── data.py               # /api/data/*（上传/粘贴/预览/合并/diff/重命名/删除）
+│   │   ├── diagnostics.py        # /api/workflow/diagnostics（只读校验）
+│   │   ├── exports.py            # /api/export/save + /api/exports/*（含 ledger/clear-*）
+│   │   ├── history.py            # /api/history/*
+│   │   ├── lexicon.py            # /api/lexicon GET/POST/DELETE
+│   │   ├── llm.py                # /api/llm/*
+│   │   ├── locks.py              # /api/locks（导出/运行/历史/工作流条目的钉住锁）
+│   │   ├── node_types.py         # /api/node-types（服务端节点目录）
+│   │   ├── project.py            # /api/project/{export,import}
+│   │   ├── report.py             # /api/report/{generate,view,latex,studio-images}
+│   │   ├── reusable.py           # /api/reusable*（含 rename）
+│   │   ├── run_compare.py        # /api/runs/compare
+│   │   ├── runs.py               # /api/runs/*（list/status/resumable/log/purge/...）
+│   │   ├── schedules.py          # /api/schedules*
 │   │   ├── settings.py           # /api/settings/*
-│   │   ├── stats.py              # /api/stats/*（情感/倾向性统计）
-│   │   ├── studio.py             # /api/studio/*（Chart Studio 数据源与存图）
-│   │   └── visualize.py          # /api/visualize/render（独立出图，与 Visualize 节点共用 services 网）
+│   │   ├── stats.py              # /api/stats/*
+│   │   ├── studio.py             # /api/studio/*
+│   │   ├── visualize.py          # /api/visualize/render
+│   │   ├── workflow.py           # /api/workflow/*（execute/stop/status/rerun-node/queue/processes/...）
+│   │   └── workflow_history.py   # /api/workflow/history*（含 rename/layout）
 │   ├── crawlers/                 # 采集实现层
-│   │   ├── __init__.py           # 平台注册表 + get_crawler/cookie_hosts/crawler_class/is_crawlable
-│   │   │                         #   （工厂在这里：Cookie 文件与 Profile 目录按账号拼，播种只此一处）
-│   │   ├── core/                 # 所有爬虫共用的机械（不含任何站点事实）
-│   │   │   ├── crawler.py        # 爬虫基类（登录墙判定、Cookie 播种、流式落盘、游标/水位、收尾判定）
-│   │   │   ├── browser.py        # 一台 Chrome 的装配：开关、指纹遮罩、profile 认领、具名拒绝
-│   │   │   ├── faults.py         # 四类失败词汇（停止/死驱动/profile 被占/页面没到）——不含浏览器
-│   │   │   └── video.py          # 视频平台共用基类（VideoCrawler + 通用行工具 _stamp/_as_int）
-│   │   ├── backends/
-│   │   │   └── catbus.py         # 第二采集后端（列、身份列、可采格都读适配器自己的清单）
-│   │   ├── commenting/           # 评论引擎（一个会话读多条链接）
-│   │   │   ├── session.py        # CommentSession：活驱动 + 共享元素读取 + 一处 walk 分派
-│   │   │   ├── walks.py          # 注册表：平台 → 该站的评论走路（分派不再拼方法名）
-│   │   │   └── protocol.py       # 无浏览器共用基件：OK/BLOCKED/DEAD + as_count/_json_or_none/_strip_tags/_stamp/_query_value
-│   │   ├── platforms/            # 一个平台一个目录：目录名就是全站使用的平台 id
-│   │   │   ├── zhihu/            # crawler.py + comments.py（走路含面板 JS 与泵 JS）
-│   │   │   ├── weibo/            # crawler.py + comments.py（走路走页内 buildComments）
-│   │   │   │   └── rows.py       # 微博的串→值规则：uid 形状、两种时间格式并一、话题名在 URL 里
-│   │   │   ├── xiaohongshu/      # crawler.py + comments.py（走路滚 .note-scroller）
-│   │   │   ├── bilibili/         # crawler.py + comments.py（分页搜索 + 详情 API + 热榜；走路含错误码归责）
-│   │   │   ├── douyin/           # crawler.py + comments.py（搜索栏驱动 + 走路滚面板并展开楼中楼）
-│   │   │   │   ├── overlay.py    # 同文档内的弹层读一条视频（mixin：不点击就不换页，省掉逐条导航）
-│   │   │   │   ├── rows.py       # 抖音的串→值规则：id/sec_uid 形状、榜单空与 0 之别、日期只认带年份的
-│   │   │   ├── youtube/          # crawler.py + comments.py（页内 innertube JSON，走路也在这里）
-│   │   │   ├── twitter/          # crawler.py + comments.py（可见窗口读虚拟时间线与回复）
-│   │   │   ├── wechat/           # crawler.py（按链接读正文，无登录态可要）
-│   │   │   ├── hongguo/          # crawler.py + comments.py + harvest.py（走路即 harness.walk）+ addon.py（唯一 Windows 桌面能力）
-│   │   │   │   ├── player_ui.py  # PlayerUI：窗口/前台/整树走查/点击（UIA 驱动，Windows 事实集中在此）
-│   │   │   │   ├── naming.py     # 名称规则：卡片与屏头何时算"这部剧"、哪个控件是「展开回复」（无驱动可测）
-│   │   │   │   └── trust.py      # mitmproxy CA：PEM→DER、crypt32 读库、写库放子进程（写会挂死本机）
-│   │   │   └── instagram/        # crawler.py（只捕 Cookie，supports_crawl=False ⇒ 具名拒绝）
-│   │   └── engine/               # 与任何站点无关的机械层——新抓取一律先走这里，不在平台模块里复制循环
-│   │       ├── counters.py       # 一个解析器读遍 万/千/亿 与 K/M/B（「97 views」「1,027,710次观看」）
-│   │       ├── wall.py           # 登录墙 / 风控页 / 弹回首页三种拦截的判定
-│   │       ├── popup.py          # 首次进入的对话框（平台只声明提示词与按钮）
-│   │       ├── feed.py           # 无限列表的滚动收割（含虚拟列表的「窗口换了没有」信号）
-│   │       ├── pager.py          # 跟着服务端自己给的游标翻页，不自增页码
-│   │       ├── pagefetch.py      # 页内 fetch 的三种形状（取文本 / 取 JSON / 带超时），墙文案要从文本里读
-│   │       ├── jsonpath.py       # 在页面内嵌 JSON 里取值
-│   │       ├── times.py          # 相对说法与绝对时间的一种转换
-│   │       ├── pacing.py         # 慢速采集唯一倍率与 throttled_sleep（DOM 爬虫与评论走路共用同一个开关）
-│   │       └── innertube.py      # YouTube 的页内 JSON 传输与「这条分页属于哪个列表」选择
+│   │   ├── __init__.py           # 平台注册表 + get_crawler/cookie_hosts/is_crawlable（工厂在此：Cookie 文件与 Profile 目录按账号拼）
+│   │   ├── core/                 # 共用机械（不含站点事实）：crawler.py（基类：登录墙/Cookie 播种/流式落盘/游标/收尾）、browser.py、faults.py、video.py
+│   │   ├── backends/catbus.py    # 第二采集后端（列、身份列、可采格都读适配器自己的清单）
+│   │   ├── commenting/           # 评论引擎：session.py（活驱动 + 共享读取）、walks.py（平台→走路注册表）、protocol.py（无浏览器共用基件）
+│   │   ├── platforms/<id>/       # 一个平台一个目录（目录名=全站平台 id）：zhihu/weibo/xiaohongshu/bilibili/douyin（含 overlay.py、rows.py）/youtube（innertube）/twitter/wechat（无登录态）/hongguo（player_ui/naming/trust——唯一 Windows 桌面能力）/instagram（只捕 Cookie）
+│   │   └── engine/               # 与站点无关的机械层（新抓取一律先走这里）：counters/wall/popup/feed/pager/pagefetch/jsonpath/times/pacing/innertube
 │   ├── analyzers/                # 分析模块（LLM + ML 双模式）
-│   │   ├── ml_base.py            # 传统 ML 底座（TF-IDF + 分类器）
-│   │   ├── llm_client.py         # Ollama / OpenRouter 客户端
-│   │   ├── cleaner.py            # 广告/噪声语义清洗（LLM）
-│   │   ├── emotion.py            # 情感分类（LLM + ML + BERT 可选）
-│   │   ├── tendency.py           # 倾向性分析（LLM + ML + BERT 可选）
-│   │   ├── keyword.py            # 关键词提取（TF-IDF / TextRank）
-│   │   ├── clustering.py         # 文本聚类（K-Means / DBSCAN）
-│   │   ├── ner.py                # 命名实体识别（正则规则 + LLM 双模式）
-│   │   ├── anomaly.py            # 异常检测（Isolation Forest）
-│   │   └── correlation.py        # 相关性分析（Pearson / Spearman / Kendall）
-│   ├── nodes/                    # 节点插件目录：catalog 是类型/行形态/分组/quiet 的唯一声明
-│   │   ├── catalog.py            # 类型目录；执行器表与前端粘贴白名单由 test_node_plugins 与它互相钉住
-│   │   ├── context.py            # NodeCall：每个执行器收到的唯一调用形状
-│   │   ├── registry.py           # type → run(node, call)；重复注册按名拒绝
-│   │   └── executors/            # 14 个节点执行器插件：name/upload/resume/tokenize/accumulate/compile/biblio/fuse/output/visualize/analysis/process/comment/source
-│   │       └── __init__.py       # 导入并注册全部插件（由 registry.load_builtin_executors 触发）
+│   │   ├── ml_base.py / llm_client.py  # TF-IDF+分类器底座 / Ollama·OpenRouter 客户端
+│   │   ├── cleaner.py / keyword.py / ner.py / clustering.py / anomaly.py / correlation.py
+│   │   ├── emotion.py / tendency.py / sentiment.py  # 情感/倾向/情感极性的 LLM+ML+BERT
+│   │   └── aggression.py / bot.py / significance.py / stopwords.py  # 召回式攻击词表 / 水号 / 显著词 / 停用词
+│   ├── nodes/                    # 节点插件：catalog.py（类型/形态/分组/quiet 唯一声明）、context.py（NodeCall）、registry.py（type→run，重复注册按名拒）、executors/（14 个插件：name/upload/resume/tokenize/accumulate/compile/biblio/fuse/output/visualize/analysis/process/comment/source，__init__ 触发注册）
 │   ├── engine/                   # 工作流引擎
-│   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹
-│   │   ├── plan.py               # 这次运行「是什么」：并行/串行、传输方式、要不要模型、重跑一个节点会作废哪些
-│   │   ├── run.py                # 运行本体：begin_run 与 worker、逐节点续跑 run_node_durable、执行器分派 execute_node、停止判定、队列排水
-│   │   ├── run_logs.py           # 控制台的两条写路径：抓 print() 的 LogTee 与按运行落库的 RunLogWriter（由 begin_run 的运行窗口启停）
-│   │   ├── run_schedule.py       # 定时触发的两扇门：这份画布能不能无人值守地跑（scheduled_canvas）、这一次触发发生了什么
+│   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹、node_label/effective_workflow
+│   │   ├── plan.py               # 这次运行「是什么」：并行/串行、传输、要不要模型、重跑一个节点作废哪些
+│   │   ├── run.py                # 运行本体：begin_run→_run_worker（零嵌套函数）、run_node_durable、execute_node、停止判定、队列排水、HEAVY_RESULT_ROWS/note_heavy_result
+│   │   ├── run_logs.py           # 控制台两条写路径：抓 print() 的 LogTee 与按运行落库的 RunLogWriter
+│   │   ├── run_schedule.py       # 定时触发的两扇门：scheduled_canvas（能不能无人值守跑）+ 这一次触发记账
 │   │   ├── executor.py           # 线程池执行器
 │   │   └── logger.py             # 日志管理
-│   ├── services/                 # 服务模块
-│   │   ├── runs/                 # 运行域：store/（断点续跑核心，按表域拆成 identity/base/ledger/progress/upkeep 五个 mixin，`RunStore` 一次组装，runs.db）/ files（产物台账）/ windows / compare / history（history.db）/ housekeeping / queue（排队与镜像）/ payload（开跑前的两道拒绝）/ settlement（停止与孤儿记录结算）
-│   │   ├── datasets/             # 数据集域：store（datasets.db）/ merge（多源合并）/ dedupe（归一化与 SimHash 近重复）
-│   │   ├── exports/              # 导出目录：writer（多格式写）/ browser（列表·下载·删除的读取侧）
-│   │   ├── analysis/             # 分析域：pipeline（操作执行器）/ params（分析参数）/ process（处理节点矩阵）/ llm（模型上下文）/ lexicon（词表）/ lexicon_store / stats
-│   │   ├── workflows/            # 工作流域：manager（工作流文件）/ history（画布快照）/ reusable（模板）/ expand（展开）/ bundle（项目包）
-│   │   ├── charts/               # 图表域：contracts（图型、列契约与 ChartConfigError）/ style（字体·调色板·取值助手）/ options/（ECharts 底稿 + 每图型一个 builder 注册表）/ visualizer（服务与 matplotlib）/ tikz*（LaTeX：preamble/document/console/biblio 图/biblio 表，服务在 tikz.py 组装）/ pdf（xelatex）/ outputs（图+表产出）
-│   │   ├── reports/              # 报告域：html（自包含 HTML 运行报告）/ paper（论文成稿 article+ctex）
-│   │   ├── ingest/               # 采集运行域：catbus（第二后端桥）/ runtime / lifecycle / net（可达性探测）/ parts（分批落盘）
-│   │   └── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（跨域，刻意留扁平）
-│   └── static/                   # 前端静态文件
+│   ├── services/                 # runs/（store：identity/base/ledger/progress/upkeep 五 mixin 组 RunStore/runs.db；files/windows/compare/history/history.db/housekeeping/queue/payload/settlement）、datasets/（store/merge/dedupe）、exports/（writer/browser）、analysis/（pipeline/params/process/llm/lexicon/lexicon_store/stats）、workflows/（manager/history/reusable/expand/bundle）、charts/（contracts/style/options/visualizer/tikz*/pdf/outputs）、reports/（html/paper）、ingest/（catbus/runtime/lifecycle/net/parts）、lock_store.py
+│   └── static/
 │       ├── index.html
-│       ├── css/                    # 按 UI 域一样式表（2026-10-29 由 style.css 5,017 行按连续切片拆开）
-│       │   ├── base.css            # 设计令牌 / 暗色主题 / reset / 底色
-│       │   ├── menu.css            # 顶栏与下拉；canvas.css 画布·节点·端口·面板；panels.css 停靠面板内容
-│       │   ├── controls.css        # 自定义下拉 / 候选区 / 右键菜单
-│       │   ├── console.css         # 状态栏 / 运行控制台 / 运行记录 / 画布历史
-│       │   ├── reusable.css        # 可复用节点；workspace.css 定时·文献·进程；dialog.css 对话框·Cookie·云端
-│       │   ├── overlays.css        # toast / 拖拽缩放 / 滚动条 / 抽屉 / 快捷键 / 导出指引
-│       │   └── zenviz.css          # 图表工作室页自己的一份（原内联 <style>）
+│       ├── css/                  # 按 UI 域一样式表：base/menu/canvas/panels/controls/console/reusable/workspace/dialog/overlays/zenviz（2026-10-29 由 5,017 行 style.css 连续切片拆开）
 │       └── js/
-│           ├── app.js            # 入口（i18n fetch 注入、I18n 行为与 _mergeCatalogues、Settings/CloudMode、boot 序列）
-│           ├── llm-settings.js   # app.js 三段之一：LLM 传输/模型/密钥（2026-10-29 连续切片）
-│           ├── app-settings.js   # 本机设置与 BrowserProfiles（同批切片，页面紧接 app.js 加载）
-│           ├── floating-panels.js# 面板作为窗口：拖拽/缩放/控制台弹出/dock 高度/外点关闭（同上）
-│           ├── i18n/             # 按域的浏览器词典（settings.js…），页面在 app.js 之前加载，同键两次即拒
-│           ├── canvas.js         # 画布与节点渲染（类型校验/种子优先读 NodeTypes）——`canvas` 唯一的绑定处
-│           ├── clipboard.js      # canvas.js 尾部的复制历史抽屉与快捷键帮助（同法切片，紧随 canvas.js）
-│           ├── canvas-view.js    # canvas 对象的段：相机/捏合/minimap 与携带相机的 draft（Object.assign 进同一个 canvas）
-│           ├── canvas-snapshot.js# canvas 对象的段：getState/restoreState 与撤销历史（相机不在快照里）
-│           ├── canvas-visuals.js # canvas 对象的段：禁用级联、运行徽标、校验描红、折叠
-│           ├── canvas-auto-layout.js # canvas 对象的段：autoLayout 拓扑分层与 runAutoLayout 策略分派
+│           ├── app.js            # 入口（i18n fetch 注入、_mergeCatalogues、Settings/CloudMode、boot 序列）
+│           ├── llm-settings.js / app-settings.js / floating-panels.js   # app.js 三段连续切片
+│           ├── theme-boot.js / workflow-layout.js   # 主题引导 / 画布排布（独立切片）
+│           ├── i18n/<domain>.js  # 浏览器词典（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings/checks/misc/nodes/panels/chrome），页面在 app.js 之前加载
+│           ├── canvas.js         # 画布与节点渲染（`canvas` 唯一绑定处）
+│           ├── clipboard.js / canvas-view.js / canvas-snapshot.js / canvas-visuals.js / canvas-auto-layout.js   # canvas 对象的段（Object.assign 进同一个 canvas）
 │           ├── workflow.js       # 执行、文件管理、全部对话框
-│           ├── chart-preview.js  # 图表调色板/标签避让、预览面板与 LaTeX 工具条、按年份回放、全屏窗口
-│           ├── capabilities.js   # 采集矩阵、机器判定、已注册微调模型：三份取数与其问答
-│           ├── panels/           # 从 workflow.js 搬出的整块面板：data-views、shell、run-results、cookies、source-help、biblio、runlog、exports、runs、lexicon、datasets、files、diagnostics、settings
-│           ├── reusable.js       # 可复用节点：模板展开、折叠呈现、状态汇总、解包
-│           ├── node-types.js     # 服务端节点目录：类型、词条、种子；失败点名并保留冷页兜底
-│           ├── menu.js           # 顶栏菜单状态
-│           ├── stats.js          # 情感/倾向性 ECharts 统计
-│           ├── custom-select.js  # 主题化下拉组件
-│           ├── schedules.js      # 定时任务面板（停靠 dock）：读服务端给的整份 payload 渲染，不在前端算时间
-│           ├── zenviz.js         # 内嵌 Chart Studio 图表库
-│           └── zenviz-bridge.js  # Studio 与画布的数据桥接
-├── data/                         # 运行时数据（gitignore；只有 workflows/ 例外，见下）
-│   ├── runs.db                   # 断点续跑状态（节点行/指纹/LLM缓存/运行→文件台账 run_files）
-│   ├── datasets.db               # 持久化的上传数据集与引用
-│   ├── history.db                # 执行历史与趋势
-│   ├── settings.json             # 运行时设置（驱动路径等）
-│   ├── schedules.json            # 定时任务台账（任务、下次运行、最近一次、已错过次数、逐条历史）
-│   ├── cookies/                  # 平台 Cookie
-│   ├── exports/                  # 导出数据
-│   ├── workflows/                # 工作流配置（**进版本库**：这是作者写出来的成果，不是运行时垃圾）
-│   ├── checkpoints/              # LLM 逐行检查点（runs.db 不可用时的兜底）
-│   └── models/                   # 训练好的 ML 模型
-├── docs/
-│   └── crawler_notes.md          # 各平台实测记录（登录墙/翻页契约/字段来源），改爬虫前先看
+│           ├── panels/           # 从 workflow.js 搬出的整块面板：data-views/shell/run-results/cookies/source-help/biblio/runlog/exports/runs/lexicon/datasets/files/diagnostics/settings/node-analysis/node-biblio/node-chart
+│           ├── chart-preview.js / capabilities.js / reusable.js / node-types.js / menu.js / stats.js / custom-select.js / schedules.js
+│           └── zenviz.js / zenviz-bridge.js / zenviz-page.js   # 内嵌 Chart Studio 图表库 / 与画布桥接 / 工作室页
+├── data/                         # 运行时数据（gitignore；只有 workflows/ 例外）
+│   ├── runs.db                   # 断点续跑状态（节点行/指纹/LLM 缓存/运行→文件台账 run_files/run_log）
+│   ├── datasets.db               # 持久化上传数据集与引用 · history.db：执行历史与趋势 · lexicon.db：词表 · workflow_history.db：画布快照
+│   ├── settings.json             # 运行时设置（DEFAULTS 见 runtime/settings.py）· schedules.json：定时任务台账
+│   ├── model_registry.json       # 微调模型清单 · locks.json：面板条目钉住台账
+│   ├── cookies/ · exports/ · models/ · checkpoints/ · chrome_profile/<平台>/<账号> · harvest/（红果收割产物）
+│   └── workflows/                # 工作流配置（**进版本库**：作者写出的成果，引用数据集按 id）
+├── build/make_lint_lists.py      # 生成三档 pylint 的目标清单（一次性脚本其余已删；结果由测试钉住）
+├── .pylintrc · .pylintrc.tests · .pylintrc.probes
+├── docs/                         # 本文所在，含 crawler_rules.md（采集端规则）/crawler_notes.md（实测）/agent_practices.md（证据）/live_test_plan.md
 ├── logs/
-├── requirements.txt
+├── requirements.txt · requirements-optional.txt
 └── README.md
 ```
-
 
 ## 训练传统 ML 模型
 
@@ -196,148 +119,105 @@ crawler_workflow/
 4. 系统自动从上游节点结果中提取文本列和标签列训练模型
 5. 训练完成后，后续执行将使用 ML 模式批量推理（无需 Ollama / 不耗 token）
 
-ML 模型保存在 `data/models/` 目录下，训练一次后持久可用。
-
+ML 模型保存在 `data/models/` 下，训练一次后持久可用；`ml_train/`（gitignored）训练情绪/倾向/情感的 sklearn+bert 模型并登记进 `data/model_registry.json`。
 
 ## 开发与验证
 
-- 依赖安装、lint（ruff + pylint）、启动与测试均使用项目虚拟环境 `.venv/`
-- 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过
-  `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
+- 依赖安装、lint（ruff + pylint）、启动与测试均使用项目虚拟环境 `.venv/`（Python 3.11）
+- 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过 `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
 
-### 自动化测试（pytest，快速层约 5977 用例，设备层 99；以 `pytest -q` 为准）
+### 自动化测试（pytest）
 
-测试体系分六层，位于 `tests/` 目录：所有写入都落在临时目录（绝不触碰真实 `data/`）；
-`live_site` 层会真实读取 `data/cookies/` 里的登录态去访问目标站点，而 `live_quick`
-是它的一个子集（每个可爬平台各一条真采集），用来在每次改动后把关——51 条真爬要跑一个多小时，
-没人会在每次改动前跑它，而一道没人跑的闸门等于没有闸门：
+测试体系分六层，位于 `tests/`（约 **265** 个测试文件）。当前**收集数**：快速层 **8,249**（共 8,604 项中 355 项被
+`pytest.ini` 排除）、设备层 **194**、`live_site` **161**、`live_quick` **11**。所有写入都落在临时目录（绝不触碰真实
+`data/`）。每层的「证明了什么」一句话，详细 bug 故事见 [agent_practices.md](agent_practices.md) 与 [crawler_notes.md](crawler_notes.md)，
+不在此复述：
 
-**真站层的会话形状必须和你自己抓取时一样**（2026-09-26 实测的教训）：它用
-`scratchpad/live_profiles/<平台>` 这个**跨运行保留**的 profile，Cookie 文件只在第一次使用时种进去，
-之后由站点自己更新那份 jar——和你一样；只有你重存了 Cookie（`needs_refresh` 为真）才再种一次。
-以前它每轮都从一个全新空 profile 起步、把同一份保存的凭据重放进新浏览器，而微博正是对这个形状
-回登录页，且风控记在**账号**上，于是测试把用户自己的抓取一起弹下了登录页。同理微博**每轮只问一次**
-（`live_attempts`）：再问一遍只是把被拒的端点再问一遍，花的却是你的额度。要重置某个平台的测试
-登录态，删掉 `scratchpad/live_profiles/<平台>` 即可。**这一层不要无人值守跑**——它每轮都在消耗真实账号。
-
-**但"另一个 profile"本身就还是第二台设备**：实测到你自己点执行能搜出微博结果，而测试用同一份 Cookie
-的副本（05:23 重存的那对）起的新浏览器被答 passport——站点认的是它一路滚下来的那份 jar，不是拷贝。
-所以要真验"登录态抓取"这条路，得让测试用**你自己的** profile：加环境变量
-`CIXI_LIVE_USE_USER_PROFILE=1` 就是明确授权，真站层会落在 `data/chrome_profile/<平台>`，
-而隔离看门狗只为此放行 `data/chrome_profile` 这一棵子树（`data/cookies`、工作流、三个 .db、`logs/`
-照样一粒字节都不许动）。默认关：开着它，测试就是在花你的真实会话。
-
-| 层 | 内容 | 外部依赖 |
-|----|------|----------|
-| `tests/unit` | 纯逻辑：断点续跑存储（含**进程被硬杀后按已落库的行回填「已存行数」与完成数**——那一列只有收尾那次写入会更新，正是被跳过的那次；什么行都没保住的节点判 failed 而不是 partial，与执行器同一口径；`node_done` 只数真正完成的节点，restored 算完成；**改工作流名字不是一次新计算**——标签进过节点指纹，而父指纹喂给子节点，于是改一个名字让整条链作废，还顺带移动了去重台账的作用域（`'item:' + 节点指纹`），续跑就把已采过的条目整批重爬重付；**续跑要改写记录的描述字段**（mode/无头/工作流名/结构指纹/语言，`started_at` 不动）；**被保留策略裁剪的运行交回它的"已采集"认领**（那些行已被删除，留着认领等于让以后同一次采集静默少给条目，而手动删除仍保留认领））、数据集存储、DAG 引擎（另含**悬空连线不再被报成"存在环"**、**空画布一律拒绝而不是"完成 0/0"**）、执行器（另含**一层任务必须等它自己启动的线程全部退出才交回运行线程**——被停止的那层以前 `shutdown(wait=False)` 就走，而它的调用者紧接着释放运行槽；`stop()` 也不再顺手把池句柄置空，那会让真正拥有池的那层在收尾时抛 `AttributeError`）、14 种清洗算子、10 种图表、6 种导出（**导出文件名的时间戳写在扩展名之前**，名字被占用就退让成 `-2`/`-3`，且永不返回一个已存在的名字）、分析器、i18n、浏览器启动参数（**图片偏好必须是明确答复**：抓取写"封锁"、人眼窗口写"允许"，只"不写这个偏好"会继承 profile 里上一次抓取的封锁——这正是登录窗口扫不出二维码的原因）、**导出目录读取与路径规则**（子目录不遍历、符号链接指向外部即拒、被占用的文件不误报成功）、**日志轮转**（滚出 .1…​.N、上限、纯追加退路）、**保留策略时间闸**（首发/窗内跳过/一个库报错不阻断另一个）、**Cookie 入口链接白名单**（伪后缀、userinfo 夹带、scheme 注入一律拒）、**微信能力边界**（诊断只剩通用的 {platform,url,login_wall} 三键，源码内不得再出现 searchbiz/appmsg/fakeid；批量抓取逐篇只播一行——`get_detail` 里不得有 info 级日志，任何微信消息不得承诺 阅读/点赞/打赏 这些它取不到的数字，也不得有 `--- `/`>>> ` 装饰）；**目录的 AST 门**（`t('key', …)` 的每个调用点必须填齐该模板的占位符——缺参数时 `t()` 有意原样返回模板而不在爬取中途崩掉，于是漏一个关键字就是屏幕上多出一行 `阅读={reads}`；parity/可达性/中英对齐对这种错误全部沉默，因为它钉的都是"键存在且被引用"）；**前端 JS 行为层**：`tests/frontend/*.mjs` 用 node 直接加载真实的 canvas.js / workflow.js / app.js，测 validate 预检门（**含"数据源要什么由矩阵说"这一条**：B 站作者模式与热榜填好必须 0 错、抖音作者字段空着必须点名 author 字段、微博没有作者模式必须按名字拒而不是要关键词、矩阵没加载时必须说"没法核对"而不是瞎猜一个字段——把改动前的 workflow.js 拿去跑同一批场景，作者与热榜两条都会拿到「缺少关键词」）、**键盘归属**（选中节点后在多行框里按 Backspace 不得删掉节点、输入 f 不得被折叠快捷键吞掉——旧实现在 TEXTAREA 里照删不误），**设置面板与快照**（`harness_state.mjs` 的 paramEdits/autosaves/initialPush 场景：撤销必须回得到上一个参数值、60 次自动保存不得挤掉真实历史、打开 5 节点草稿只留 1 个撤销点）、**数据集重命名送出的是用户输入而非按钮记号**（同时断言对话框规格里主按钮不带 value——带了我就会把 'ok' 存成文件名）、**打开文件要读回全部四项运行设置**（parallel/headless 两个方向都得生效，否则打开一次就把文件改错）、**stats.js 的缺库降级**（`harness_stats.mjs`：无 echarts 时 init/refresh/renderPie 都不抛、提示以元素形式渲染、有库时两张饼图照常建立）、**数据源面板的采集矩阵驱动层**（`harness_capabilities.mjs` 用后端当场导出的矩阵当载荷：没载荷/载荷是废的/平台没声明/字段名不是标识符/按钮指向不存在的函数，五种答复各测各的；新画布节点的默认值必须逐项等于矩阵声明的默认值）、**节点参数只是数据、不是标记**（同一批设置面板再用「一个引号就能逃出 `value="…"`」的载荷重画一遍：20 个面板每个自由文本字段都必须以转义形式出现、且原样标签一个都不许落到 HTML 里——旧写法把 `p.text_column`/`p.title`/`p.x_field`/进程名等 20+ 处直接拼进面板，改一下工作流 JSON 就能在打开节点时执行脚本；另外断言"确实投毒成功了"，否则面板把字段整个删掉也能算过；续跑面板由 await fetch 填充、本 harness 画不到它，就钉它写 HTML 的那三行）、**切换语言必须重画 JS 拼出来的表**（`sandbox.setLang('en')` 之后，数据集表与执行历史表的表头要真的换成英文、旧语言的词一个不剩——`harness_panel_actions.mjs` 用两条 route 喂数据，读的是产品自己赋的 `innerHTML`；这两处以前一个有方法没人调、一个连方法都没有）、**粘贴项只在剪贴板有东西时出现**（复制前后各测一次）、弹窗外点关闭、目录双语对齐、undo/redo、工作流保存/打开/新建全链路、运行记录面板转义与按钮、**运行控制台的游标与标签页历史**（`harness_console.mjs` 一格一格喂真实的 `pollStatus`：首屏全给、二屏只补缺、服务端缓冲被下一次运行清零时必须从头读懂（曾经"第二次运行后控制台永久冻结"）、超过 200 行时增量只能来自 total 而不是数组长度、清空之后只播下一行不重播缓冲、**切走再切回必须原样看到自己那几行且下一格不重复**、没被看过的标签页打开时不得空着、乙的行不得混进「全部」、**刷新页面后必须自己把控制台接回来**（`?tail=` 整段重放：行数=回包行数、三个游标都推到服务端总数、紧接着的普通轮询只补新的一行不重播尾巴、运行中就接管轮询并打开面板、已结束只重放且**不发结束 toast 也不自动弹面板**、空缓冲什么都不画、两次重连只能有一个定时器））、**导出产物面板**（不可下载项不给下载按钮、文件名同时做 HTML 与 JS 双重转义、大小读数 B/KB/MB、表头按目录合计而非分页计数、空目录是空态而非报错）、**Cookie 面板**（按平台渲染步骤、切换不重复堆叠、入口链接随请求送出、被拒链接提示、验证中隐藏登录按钮、重开面板接管在跑的任务、**账号候选是一个聚焦/输入时才弹出的下拉，点中就把名字填进框**（列表常驻会为一个"每次登录只选一次"的选择把面板撑高，而装在滚动对话框里的候选会被它裁掉；现在候选挂在 `<body>` 上、`onfocus/onclick/oninput` 打开、`onblur` 关闭。每一项带的是**账号名本身**——`default`、`default2`、`work`——显示的是对应的词，默认那份也有名字、不再留空（"哪有同一个东西不同规范的"）；没存任何登录时候选为空；点中一项 = 填框 + 一条 toast，测的是按钮自己的监听器而非手调函数）、**账号框每敲一个字状态行就重画且不再多问一次服务器**（三种账号形状各测一次，并数 `/api/cookies/status` 一共被请求几次）、**停靠表里那一行的删除/重命名都作用于该行点名的登录、不是输入框里那份**（已保存的登录现在是底部状态栏一个与其它停靠面板互斥的独立表格，读服务端而非对话框缓存；点 work 行的按钮时账号框写着 default2，断言送出去的是 work；重命名同样取该行的名字并把框跟到新名，默认那行的重命名是"显示但按下去拒绝"（disabled+title+toast），改成自己原名不发一个请求）、被 sent 到面板时平台与账号一起落地（平台不在下拉里就两边都不动，半个着陆等于指向别人的登录）、**删除按钮先问再动**：取消时一个请求都不发、确认时送的是下拉框此刻选中的平台、删除后必须顺手刷新状态、被拒时不假装成功、profile 警告原样转达；`showDialog` 规格断言按按钮 value 判定，因为带输入框的对话框是"输入框优先"的）、**运行前的 Cookie 闸门**（`harness_cookie_gate.mjs` 跑真实的 `workflow.execute()`：不爬任何东西的画布一个请求都不发、续跑永不被拦、平台清单来自数据源节点**和**评论节点链接的域名（去重按节点顺序）、失效就**不发**运行请求且弹窗点名平台并引用后端原话、**没有任何"照样跑"按钮**（按取消和按去更新一样拦下）、"无法核对"只提示不拦、预检本身失败时如实说明这不是通过、开了自动验证才逐平台探测、关掉时什么都不问静默放行、以及**逐次运行的 profile 答复要原样送去预检**（选"本次不用"传 false、没得选时字段整个缺席而不是替用户改成 false）；这条链上还抓到一个真 bug：app.js 把 `openCookieDialog` 包一层加拖拽/缩放，包装函数丢掉了参数，于是"把你带到出问题的那个平台"永远停在上次选中的平台）、**画布指针交互层**（拖出临时连线、自环与重复连线被拒、落空取消、分词↔可视化连线强制 word_freq、一条连线一个悬停删除区且点击真删、同一帧多次调度只重绘一次、端点消失不画幽灵线、折叠、缩放上下限与像素取整、复位居中、自动布局按依赖顺序且分组件不重叠、设置面板开-关-重开与删节点不留孤面板、真实改名对话框、委托事件、右键平移阈值决定是否弹菜单、**右键菜单按自己的真实尺寸钳位**（旧的 200px 常数既可能让菜单跑到屏幕外、也可能提前把它挤回来；语言与折叠项都会改变它的宽高）、**节点绝不按 DOM id 查找**（文本门禁止 canvas.js 出现变量参数的 `getElementById`，并断言 `_nodeEl` 真的被用到）、**一次按键只出一条 toast 且里面有全部问题**（`harness_panel_actions.mjs` 造两个坏数据源跑真 `execute()`：一条消息、行数=问题数、表头写着这个数、且没有发出运行请求；只有一个问题时不得带列表头）、**折叠项的 data-action 跟着当前状态走**（右键"折叠/展开"文案换了而动作没换，就是点了没反应）、从草稿 init 恢复含损坏草稿）、**应用状态层**（`LLMSettings.payload()` 这个运行请求体的真正组装者首次被执行：两种传输各存各的模型、选 Ollama 绝不带 OpenRouter 的 key、未知 provider 归一化、旧扁平键一次性迁移、坏草稿仍可用；RunState 存-写-刷新且 running 不落盘；Settings 草稿的保存与回填改用真实词典断言 `[data-i18n]` 盖章；AppSettings 拉取/单飞/强制刷新、复选框按 checked 回填、只提交改动过的字段、失败与警告都要让用户看到）、**面板动作层**（横幅出现并写清已完成节点与已存行数、继续送出 resume_run_id、重新开始先 discard 再冷启动、运行中拦截二次尝试、中断走 discard 而完成走 delete、详情行只取一次且再点不重请求、导出/数据集/进程/顶栏每一动作的请求体与取消、**执行历史逐条删除**（每行一个按钮且 id 原样留在属性里、点「取消」一个请求都不发、确认后只送被点那一行的 run_id 并同时重载列表与序列、`deleted:0` 说成"已经不在了"而非"已删除"、被服务端拒绝时不假装刷新过）、**运行记录标签读的是 mode 不是 wf_count**（parallel×2→「并行 ×2」、serial×2→「串行 ×2」而绝不出「并行」、单工作流两种 mode 都不打模式标、无头/窗口恒打），）、**顶部菜单**（menu.js 此前没有任何测试加载过它：开关镜像、运行按钮永不禁用只改口、停止按钮的可按性、语言与背景色块的 active 标记、圆角回读与钳制、子菜单互斥与外部点击/Esc/缩放关闭）；另含 node 无关的静态契约测试（序列化字段、键目录、**每一个被服务的 JS 文件都必须真的解析得动**（`node --check` 逐个跑 `backend/static/js/*.js`，新文件出现即自动纳入）：一段中文面板说明被写成三个相邻字符串——那是 Python 的续行写法、JS 不认——于是整个文件停止求值，页面同时报 `SyntaxError: Unexpected string`、`I18n is not defined`、`Settings is not defined`，因为**一个文件解析失败就是它里面所有全局一起消失**；harness 只解析自己加载的那几个文件，所以这道门是按目录走的）；**Cookie 面板的三向对齐**：HTML 里的平台下拉框逐项等于后端白名单、画布数据源的平台列表逐项等于「真能爬」的那些、每个平台使用说明里点名的按钮必须是界面词典此刻的文案——按钮改过一次名，八份指南就会集体指着不存在的控件，而这正是本次实测到的状态）、**服务端设置的四处对齐**（`settings_store.DEFAULTS` 的每个键都必须出现在 `AppSettings._inputMap`、index.html 里那个控件的 id、以及 `onSettingInput('键')` 的接线里——少一处就是一个"存在但没人能改"的设置；自动验证与旧确认框必须在两种语言里互相指明对方，不然用户以为关掉了弹框却还在开浏览器）与**共享登录墙判定**（X 的 `/i/flow/login`、Instagram 的 `/accounts/login/`、Google 中转页都要认得，正文里提一次「请先登录」不算墙）与 **Cookie 归属过滤**（本站域名与它的每个播种主机都放行，登录中转站与 `evilyoutube.com` 这类伪后缀一律拦）、**浏览器 Profile 的 JS 层**（`harness_profiles.mjs` 跑真实的 workflow.js + app.js：运行前提醒的纯判定（开=不问、矩阵没到=不许乱承诺、未标记的平台不打扰、两个被标记的平台只弹一次并报数）、"继续运行"才放行而"先去设置"不开跑并真的打开面板、设置面板里每个平台一行、建议标记落在矩阵说的那些行上、服务器空答复时显示"读不到"而不是留个看起来健康的空表、打开设置面板这个动作本身就是读取时机） | 无（JS 行为层需 node，缺 node 自动跳过） |
-| `tests/api` | Flask test_client：覆盖 50+ 端点，含「上传→清洗→导出」完整执行链路、Cookie 登录状态机、**Cookie 用途接口与验证任务**（无 Cookie 直接拒、越界链接拒、探测崩溃判 error 不挂面板、登录按钮不得应答验证、验证与登录共用单飞锁、**验证有三种结论**（回验证码/风控必须说"没有结论"，既不能算可用也不能算失效）、**运行前 Cookie 预检**（逐平台判定与缓存：只有登录页算失效；风控、超时、驱动起不来、profile 被占用一律"无法核对"且不拦；无 Cookie 也无 profile 才算"没东西可测"并拦下；已用过的 profile 即使没有 Cookie 文件也值得探测；结论缓存 TTL 内不再开第二个浏览器、`fresh` 强制复检、只缓存 valid/expired 两种；保存/删除 Cookie 与扫码取回都会作废缓存；越界平台名整体拒绝而不是悄悄丢掉；探测必须走可见窗口且绝不把浏览器实时 Cookie 回写文件；并行上限是真的（上限 1 时两个平台确实不重叠）；超时的平台仍出现在答复里且不算拦截；文案按请求语言渲染）、**删除已存 Cookie**（删除只动文件、profile 仍登录时回话说清并多一行；没得删是 404 而不是假装删过；一次删除只播一行；删完还能重新存回）、**Cookie 中途过期→节点判失败→换 Cookie 续跑不重复**的完整模拟、**十类节点逐一执行验证（分词/图表/导出格式/续跑收养）**、**节点×算子×参数功能矩阵**（处理节点的关键词/聚类/相关性/情感/倾向/异常检测、分析节点 14 个清洗算子含 join 的第二入边与分箱的两种 bins 写法、分词三种输出模式与 `top_n=0` 的真实语义、十种图表走节点与走 `/api/visualize/render` 两条路、输出节点每种受支持格式与文件名越界清理、**输出节点「文件名追加本次运行时间」**（一次运行落一个
-带时间的名字且绝不写出未带时间的那个、同一秒内的第二次运行各留一份、时间戳不进节点指纹（进了就等于
-每次续跑都认不出自己）、不勾选时仍是旧的一次覆盖一个文件）、评论节点 `per_article_file` 与 `comment_limit` 边界、数据源「重新采集」释放台账、**评论节点的「重新采集」曾经根本不在表单上**（评论与数据源共用同一本去重台账，没有这个开关时第二次运行交回一张空表、读起来像"这篇文章没有更多评论"；用户 2026-09-26 报微博那条时确认**七个平台的评论节点全都没有**，微信的手写表单也漏了 —— 因此新加的三条规则都是横向的：矩阵里每个采集模式都必须声明该字段、两个流式执行器都必须真的读到它、评论节点的表单本身第一次被渲染出来检查（面板是手写的，所以"矩阵说有"曾经什么都不证明）；顺带修掉一个更贵的错：勾选曾把 `recrawl` 带进节点指纹，于是勾上它不是**释放**台账而是**换了一个作用域**，日志老实写着 released 0 而旧认领永远留在原地），以及面板能产出而单测没覆盖的边界值 `0/-5/abc/''/1e400`）、**队列交棒的四种结局**（占到槽、槽被抢所以退回队首、永不可能启动的继续直接丢弃、坏载荷不拖住后一条）、**被停止的并行运行不得把节点线程留给下一次运行**（三条工作流并行、各自停在节点里；交回运行槽的那一刻是否还有线程在节点内。只有"第一个组件已经返回而另一个还挂着"这一种时序看得见那个分支，所以测试按 `_wf_local.idx` 认出第一个组件、只放行它——把 `wait=True` 回退成 `wait=False` 即红）、**25 个「平台×采集内容」组合的派发矩阵**（`tests/api/test_source_dispatch_matrix.py`：每一个组合都真走一遍执行器，断言命中的是不是矩阵点名的 handler、参数与 `crawl_kwargs` 逐项相等（不许多不许少不许被默认值悄悄替掉）、评论模式必须交给评论引擎而不是平台自己的正文抓取；**每一个非评论「平台×模式」组合都断言"选了无头就仍以无头建浏览器"**（#148 之后不再有 `needs_window` 或 `never_headless` 把源节点偷偷换成可见窗口——知乎作者、抖音、X 全在这一格里，跑的是伪装无头；评论区节点同样尊重无头——由 `TestACommentNodeHonoursHeadless` 钉住"无头运行里滚动型评论区仍以无头建浏览器、不开窗、不写 forced_visible"）；矩阵点名的爬虫方法与评论注册表里的 `walks.walk_for(<平台>)` 必须真实存在（2026-10-27 起分派是注册表，不再是拼出来的 `crawl_<平台>` 方法名）——作者与热榜模式此前从未被派发到过，因为套件里每个假爬虫只有 `search`）、以线程存活而非 running 标志决定的占用、正在写的运行不得被丢弃/删除、保留策略对实活运行的豁免、存储打不开时运行仍干净收尾并释放槽位、改过节点参数后续跑必须重算该节点、**连点两次「继续」**（第二次仍然复用上一次的复原结果——判定只认 done 的话，续跑的省成本只兑现一次点击）、**已从画布删除的节点不得让后续运行一直失败**（结束行与运行状态只数这次真跑过的节点）、跨进程重启续跑、**并行运行的记录与续跑**（一条画布跑两个工作流＝一条记录但两个名字都在 `workflow_name` 里、重名的两个工作流名字只写一次而 `并行 ×2` 仍成立、单工作流的记录名字一个字符都不能变因为它是查旧行的键、旧数据库缺 `wf_count` 列时打开即补且旧行读作 1、失败的那条工作流不得连累另一条重跑且改动只重算自己——两条工作流各自取回自己的行）、**名字里含 `+` 的工作流不得借用别人的行**（查旧行时先按浏览器显示的整串名字精确匹配，只有落空才放宽到组合名的片段——否则一条真叫「节奏」的画布会读到「节奏 + BPM」那次运行的表）、**无头/窗口与平台清单**（`/api/browser/profiles` 只列能取 Cookie 的平台，微信因不需要登录而不在表内；同一张表尾的 `template` 行说"新账号能不能克隆"，而 pristine 是**读表里的行数**判出来的——空白首启的 Chrome 自己就写出 `Cookies`/`Login Data`/`History`/`Preferences` 四个空文件，按文件名判定会把每一个真模板都判脏，`tests/unit/sessions/test_profile_template_policy.py` + 真 Chrome 的 `tests/integration/test_profile_template.py` 两头钉住）、（`/api/history/delete` 只删那一次运行的指标、其余历史与趋势图不动、名字列表里不再留下没有行的工作流、`deleted: 0` 如实回答"已经不在了"而不是谎报删除、缺 run_id 一律 400 且不动任何行）、**并行/串行 × 同平台/不同平台 × profile 开关的运行矩阵**（真锁而非假桩：并行同平台 + 用 Profile → 两次采集的生命周期零重叠且两个节点都 done；+ 不用 → 确实重叠；并行不同平台 → 必须重叠（否则就是凭空加的成本）；串行 → 无竞争；没送答案 → 工厂收到 None 并按设置解析出真实目录；送 False → 解析出 None；**「同平台排队」开关本身也是矩阵的一列**：开→即使不用 profile 同平台两条采集也不重叠、且排队只在控制台播一次，关→真重叠；另含**撞墙重试的四种形状**（第 0 行就撞→退避后重试一次并播一行、已采到行才撞→绝不重试（那是 Cookie 死亡，走续跑）、带着游标来→绝不重试、运行已被停止→绝不重试，以及重试前必须清掉上一次那面的墙标志，否则节点会谎报一个没撞到的墙）；同一画布串行跑时记录存 `mode=serial` 而 `wf_count` 仍是 2——标签读的是 mode 不是数量）、**控制台噪声与事实的分界**（命名/上传两个节点不再播报"正在执行节点"与"节点完成 n/N"，但"已载入 xxx.csv：N 行"照旧、文件丢失时节点仍判失败且原因带节点标签——压噪声不得压掉可诊断性）、**拒绝必须让节点失败**（未知处理算子与分词的三种拒答以前 `return []`：节点照 done、运行照绿、导出一个只有表头的文件，且唯一那句解释不带节点名，于是所有健康节点都被指认为凶手；现在一律 raise，原因随 `节点 X 执行失败` 送出且只送一次）、**一次失败只播一遍**（LLM 传输死亡以前是三行——本模块 say、run_llm_dataframe 再 logger.error、执行器再节点失败——而熔断文案本身就有两句；现在只有带节点名的那一行留下，`llm.aborted` 只报"保住了几行"；逐行进度与逐批进度同一时刻只有一个在说话，被稀释时批标记才出声）、**控制台行缓冲自身**（`tests/unit/runs/test_console_buffer.py`：超过 200 行时裁剪与 `_log_total` 必须同步、多行错误按物理行逐条入缓冲（驱动堆栈以前算 1 条而 DOM 画 3 行，游标就错位）、空消息不占行；**控制台基线只有一份定义** `state.reset_console_state()`，运行开始与测试隔离共用它——直接调用执行函数的测试不经过运行开始，也就没人替它清屏，两处各写一份内联重置就是"上一次运行的 25 行日志出现在三个文件之外的断言里"；外加**模块级 `import app` 的门**——collection 早于任何 fixture，那样导入了 app 就会把它的单例服务绑到用户真实 `data/` 上，本轮就真的把测试名字写进了你的执行历史）、**串行运行的标签页归属**（组件之间必须交还线程局部的 wf 索引，否则「开始执行工作流 B」会被写进 A 的标签页缓冲）、**评论 Cookie 失效点名真被撞的平台**（以前硬编码四平台列表，爬 YouTube/X 被撞墙时报告里没有一个名字是对的）、**续跑节点用「标题 #id」说话**、**排队位次不借用"未命名工作流{i}"的模板**（那个 {i} 是画布上的组件序号，不是队列深度）、**导出产物三端点**（列表分页与合计分离、下载按名解析、`../` 与绝对路径与子目录一律 404、删除越界名不生效、畸形请求 400）、**停止（空闲/运行中）→记录判中断且数据保全、线程强杀保护主线程、卡死浏览器按 PID 定向回收**、**停止路径的整条契约**（`tests/api/test_stop_path.py`：按「停止」的那一刻运行记录就翻成 `stopping`，而 worker 仍被关在一个 40 秒的页面加载里——面板因此不再需要重启服务；结论落地后由运行自己改写；爬虫收到的是执行器给出的**活谓词**，停止后它的下一行 `emit` 直接抛 `CrawlerStopped` 并保住已入库的行；被剪短的节点是「被停止」不是「失败」，结束行也就不能写 1 个失败；停止后不再启动下一次抓取；评论节点自开的浏览器必须被停止线程回收（它以前根本不在名单里）；本进程开过而没人收尾的记录在刷新列表时被判定为中断并写明原因，而**别人家的运行中记录一律不碰**；正在收尾的运行不得被删除/丢弃；`mark_stopping` 只能覆盖 `running`、启动清理与保留策略都要把 `stopping` 算作"还没结论"）、设置面板布尔开关、API 加固（每一条带体 POST 路由逐条点名，漏一条就红——矩阵由 app.py 现算，不写死条数） | 无（外部调用全 mock） |
-| `tests/integration` | LLM 传输边界（OpenRouter 一律 mock，绝不真实请求）、行运行器（断点/熔断/取消）、真 Chrome 解析 `file://` 夹具、**Profile 会记住抓取的图片封锁**（同一个临时 profile 先按抓取跑一次：
-页面上那张 1×1 PNG 的 `naturalWidth` 必须为 0，且 Chrome 自己写下的 `Default/Preferences` 里必须真的留着
-`images: 2`——这条"会残留"的前提一旦哪天不成立，测试就指名要求复核代码，而不是让修复悄悄失去依据；
-再以登录窗口开在**同一个**目录里：图片必须加载得出来），微博/知乎假驱动登录墙判定、**登录页"路过型闪现"不得钉死判墙**（假驱动每次读取给出下一页：先 passport 再回内容页 → `login_wall` 必须仍为 False；一直停在 passport → 必须判墙；而**干净落地的页面只许被读一次**——逐条详情抓取每次都付这个钱，所以等待只对"疑似墙"开销）、**小红书导航契约**（renderer 超时是本页自己回答的"没就绪"，而不是把节点带崩的驱动堆栈；抛掉的那次请求仍要记进 `requests` 成本账；慢页面不等于 Cookie 死了）、**"绕开 `Crawler.open` 的导航"是一张只能变小的账**（逐文件数出仍以裸 `driver.get` 进页面的位置并钉死条数：新增一处即红，改走 `open` 之后不清掉条目同样红）、**矩阵里发出的每个字段都必须真的被爬虫读到**（`crawl_kwargs` 按关键字送参、而爬虫方法都以 `**_kwargs` 收尾，所以面板上一个没人读的开关会被静默吞掉——这条测试当场指出小红书的 评论预览 是从 kwargs 袋子里显式取的，于是"显式形参"与"模块内写出该 key"两种写法都算已读）、**知乎正文展开契约**（假卡片自带三种「阅读全文」形态：就地重画同一个节点 / 点了没回应 / 专栏卡一碰就跳走——最后一种在假驱动里直接判失败，所以"绝不点专栏卡"是被证明的而不是一句注释；展开之后**只有正文被换掉**，发布时间与作者仍是列表原本报的那一份（实测同一次点击会把日期挪去 `.ContentItem-time` 并去掉正文开头的 `作者名：`）；连吃三次没回应就本次不再付费并把话说明；勾选关掉时一次都不点、改为说明整列都是摘要；锚点没挂上的卡种类未知，同样不点）、**哔哩哔哩假驱动翻页契约**（首页不带 `page=`、广告/课程卡不耗请求、`-404` 跳过而非停摆、非 `-404` 的拒绝在零结果时raise 可执行错误、游标按页记录并可续页）、**抖音假驱动契约**（**假浏览器必须先有真浏览器那条性质：列表是一份文档，不是书签**——搜索卡只在
-`/search/` 上应答、停在视频页时滚窗口不长列表、重新导航就回到第一屏（之前滚出来的批次要重新滚才有）。
-补上这条性质之后，把 `_open_each` 退回旧的"读一屏→逐条开详情→再滚"交错写法，三条新用例立刻全红
-（其中一条正是用户日志那一次：目标 50 只交第一屏 26 条）；两趟写法下三条全绿，并额外断言
-**详情页开始之后一次滚动都不许发生**、列表被预算吃掉时走法真的回去重开一次；
-结果页只走作者网格与热榜、**骨架行不算结果**（等锚点而不是等节点，永不填充→合法 0 行且不付费访问）、验证码标题→可执行错误而非空表、弹窗在到达时就被我方清掉、行数只带自解释的四个计数、**断言行里没有播放数列**、已开过的视频不重复付费、达标后不再多滚一轮、**作者模式只跳容器不滚窗口**（滚窗口=0 次容器跳转，否则页脚推荐视频会假装成作品在翻页）、**作品数为空不算 0 作品**（-1 与 0 是两句话：前者是页面没给数字、必须拒；后者是这个人真没发过）、**续跑必须走过自己已付过的那一屏**（旧实现在"屏上 id 全认识"处直接收尾，等于把死掉那次的行交回来 yet 目标没满也不报错——作者与热榜两条路都被这个共享循环覆盖）、评论滚动去重）、**X 假驱动契约**（进度只认「保住的行」——三种屏各 2~3 张卡、id 轮换，按节点数判进度会在第一屏就收工；游标必须把 **id 集合与本次关键词**一起记下，否则续跑不知道自己爬过什么；一张卡恰好一次 `execute_script`，整屏最多两次列表查询，任何按字段回查定位器的写法即红；登录浮层与 403 都 raise 可执行错误而不是交 0 行，而「真的没人发」是合法的 0 行；回复用同一条走法，根推文自己不得作为回复入表，未渲染=死链、渲染了但只有根推文=未开放评论）、**真浏览器 UI 回归：自启服务器后逐容器 × 中英双语实测「容器不得溢出自身盒子、页面级不出水平滚动条」**（20+1 个顶层容器 × 双语，每个容器都带一个在真 Chrome 里数出来的元素数下限，其中 `#profile-status` 是异步渲染的那一类——检查前要先等它把行画出来，否则量一个空盒子也算过；并显式拒掉「id 不存在就退回量整页」的退化——这两条加进来当天就抓到一个不存在的 `#settings-panel` 一直在替整页体检背名、以及 `.panel` 这个不存在的类让窄窗口检查扫了 0 个元素却常绿；声明可滚的容器单独放行，但其中被截断的单元格必须带省略号——静默裁掉等于让用户读不到数据；表单控件与 `option` 自身的文字滚动不算截断）、**并行运行记录在真浏览器里的样子**（用真实的 `runsManager.render` 画一条 `wf_count=2` 的记录，不写服务器：合名两个都要看得见、两枚标签都要在、标签自身的字不得被裁、名字格不得跑出视口、页面不得因此出水平条；**并行与串行两种 mode 各测一遍，并断言"不得出现另一种说法"**）**执行历史那一行的删除按钮在真浏览器里点一次**（按钮是委托出去的，只有真点击能证明它有效：行表每次重载都会重建，逐行绑 listener 的写法正是这里出错的样子；送出的必须是所点那一行的 run_id；删除列不撑出页面级水平滚动条、按钮文字不被裁断；fetch 全程打桩——本层绝不写服务器，真删会抹掉用户自己的执行历史）、**控制台标签页在真浏览器里切走再切回**（「全部」→甲→乙→全部：每个标签页只看到自己的行，切回来还是原来那几行、不重不漏；这一步必须留在真 DOM 里——清屏与重画的语义在桩里和在浏览器里不是一回事）、**「正在停止」这条记录在真浏览器里的样子**（同样用真实的 `runsManager.render` 画一条 `status=stopping` 的行：它必须有自己那颗灰色标签、两种语言都不被裁字、不得借用「已完成」的说法，也不得给出「继续/重新开始」按钮——那几秒里它的行还在被写；顺带钉住"不认识的状态一律原样印出存储里的词，而不是替它挑一个好听的结论"），窄窗口下浮动面板不得跑到视口外，节点框宽度上限与标题省略号、标记里没有内联事件、委托出去的编辑/删除按钮在真实点击下仍作用于自己那个节点、**Profile 开关真的到达浏览器**（不解析 chrome://version 的本地化标签，而是看 Chrome 有没有把自有文件写进我们指定的目录；第二次启动不再往里种 Cookie，spy 只记 `_plant`；关闭后那个目录压根不被创建）、双击改名走对话框、草稿恢复保住节点 id 且后续新建不撞号、撤销重做保住 id 与用户起的名字、**顶栏在真 Chrome 的三档宽度 × 双语下"放不下就必须靠左锚定并真的留出滚动条"**（居中 + 隐藏滚动条是够不着的组合：滚动条滚不到负方向的溢出，1366px 英文下第一个按钮实测挂在 x=-63，两头都点不到；断言里另有一条"1024px 必须确实溢出"，否则这个用例已经不再给它施压）、**居中的长面板必须有高度上限**（`overflow-y: auto` 对一块比屏幕还高的盒子什么都不做——实测 top=-177：表单开头几栏存在于屏幕上方之外；现在断言整块落在视口内且它自己确实要滚）、**下拉单选行与多选一样带省略号、完整文字挂在 title**（选项文字是爬来的列名，天生就长；同时断言"确实被裁了"，否则这条也停止体检）、`escapeHtml` 在真 DOM 里把日志文本挡在元素之外（该层不写服务器：应用没有 data 目录覆盖开关，跑一次流程就会往真实 `data/` 与 `logs/` 里留东西） | 夹具层需 Chrome |
+| 层 | 证明什么 | 外部依赖 |
+|----|----------|----------|
+| `tests/unit` | 纯逻辑：断点续跑存储（被硬杀后按已落库行回填「已存行数」与完成数；`node_done` 只数真完成、restored 算完成；改工作流名/标签不进节点指纹、续跑改写记录描述字段、保留策略交回认领）、数据集存储、DAG 引擎（悬空连线不报"环"、空画布拒绝）、执行器（一层任务等自己启动的线程全退才交回槽）、清洗算子/图表/导出/分析器/i18n、浏览器启动参数（图片偏好须明确答复）、日志轮转、保留策略时间闸、Cookie 白名单、微信能力边界；**前端 JS 行为层**用 node 真加载 canvas/workflow/app（validate 预检门、键盘归属、撤销历史、Cookie 闸门、控制台游标与标签页历史、面板转义、目录双语对齐、每个被服务的 JS 文件都过 `node --check`）；**多处三向对齐门**（Cookie 面板 HTML↔白名单↔词典、`settings.DEFAULTS`↔`AppSettings._inputMap`↔index.html↔接线、共享登录墙判定、Cookie 归属过滤、Profile 的 JS 层） | 无（JS 层需 node，缺 node 自动跳过） |
+| `tests/api` | Flask test_client 覆盖 50+ 端点：「上传→清洗→导出」全链路、Cookie 状态机与三种验证结论、运行前预检逐平台与缓存、节点执行与节点×算子×参数矩阵、`recrawl` 释放台账、队列交棒四种结局、被停止的并行不留线程、25 个「平台×采集内容」派发矩阵（含「无头仍无头建浏览器」）、保留策略对活运行的豁免、续跑用「标题 #id」、并行/串行×同平台×profile 的运行矩阵（真锁非假桩）、撞墙重试四种形状、控制台噪声分界、拒绝必须让节点失败、一次失败只播一遍、`test_console_buffer.py` 的控制台基线不变量、串行标签页归属、导出三端点路径规则、停止路径整条契约、每条带体 POST 路由点名加固（矩阵由 app.py 现算） | 无（外部调用全 mock） |
+| `tests/integration` | LLM 传输边界（OpenRouter 一律 mock）、行运行器、真 Chrome 解析 `file://` 夹具、Profile 记住图片封锁、登录墙判定与"路过型闪现不钉死判墙"、各平台假驱动契约（小红书/知乎展开/B 站翻页/抖音"列表是一份文档"/X 进度只认保住的行）、矩阵每字段都被爬虫读到、真浏览器 UI 回归（逐容器 × 双语测溢出）、并行记录/历史删除/控制台切换/stopping 记录在真浏览器里的样子（**fetch 全程打桩，本层不写服务器**） | 夹具层需 Chrome |
 | `live_ollama`（marker） | 真调本地 Ollama 的活模型用例（服务不可达自动跳过） | Ollama |
-| `live_site`（marker） | **全平台真实爬取 × 双浏览器模式**：知乎/微博/小红书/哔哩哔哩/YouTube 各自的搜索抓取、微信的推文正文抓取，都分别以 无头 与 可见窗口 两种模式真跑真断言；抖音与 X 在 #148 给无头换上桌面指纹后**也两种形状真跑**（无头那条断言「要么出真行、要么点名拒绝，绝不安静交 0 行」，不再假定它必被验证码挡）；YouTube 反过来钉两种模式**结果一致**（它走页内 JSON），并真跑「某作者的作品」与「按频道链接再进一次」；哔哩哔哩 另真跑「某作者的作品」（UP 的 UID 当场从搜索行的 UP主ID 里取，
-再走他自己的空间列表，断言每一行都属于这一个 UP、播放数仍是接口给的整数、游标里记着走的是谁的空间）、**热榜两张表真跑**（热门榜分页取到新的一批、周排行榜一次回整张表，并断言**请求数 ≤2 且不含任何 `web-interface/view`**——"这个模式不逐条取详情"是一句成本承诺，只能用计数证明；另断言两榜的集合确实不同、行字段与搜索模式完全一致）、**抖音热榜也真跑**（插 Cookie 的一次性浏览器读 `/hot`，断言整块榜只发**一次**请求、爬虫自己拼出的那条 URL 原样出现、行数 20~60、每行链接就是 `/hot/<sentence_id>/<词>`、四个计数列"要么是整数要么是空"且至少一行真带 观看数、并且**没有** 话题 这一列）；抖音 也真跑「某作者的作品」（`sec_uid` 当场从**本次搜到并打开过**的视频页上取 `a[href*="/user/"]`，
-再走他的作品网格：断言行数、每行链接与 视频ID 自洽、点赞数是真的整数、**行里不存在播放数列**、
-每行都恰好一次视频页导航（一次主页导航 + 逐行详情，绝不为翻页重载主页），以及**每一行的作者名都等于主页自报的昵称**——
-出现陌生作者名就说明网格或详情读串了人）；评论节点七平台真测（微博/小红书无头、哔哩哔哩无头游标翻页、知乎评论无头与窗口两形状都跑（#148 之后无头照样滚取全）、YouTube 游标翻页、X 无头并按 id 窗口滚过第一屏；抖音以「评论数≥30 的视频至少收到 30 条」证明容器滚动真的在喂列表、(作者,内容) 不重复；YouTube 以「三个最热视频至少有一个翻页成功（>20 条）」证明游标没停在第一页）与**真浏览器 Cookie 中途失效→续跑**用例；知乎无头风控零结果按设计语义处理（明确无结果页→可执行报错，未触发请求的空壳→合法 0 行）；**知乎存下的正文按它自己那一页的长度来判**（同一个浏览器里再打开那条回答、读页面自身的正文长度，存下来的不得少于它的 70%——"搜索列表只给摘要"这件事，只有回答自己的页能判，拍一个字符常数只是猜）；**运行级知乎矩阵**（`tests/live_site/test_live_zhihu_workflow.py` + 平台无关的
-`tests/live_run_harness.py`）不再直接调爬虫，而是像用户那样 `POST /api/workflow/execute` 真跑一次运行，然后读**运行记录 + 控制台**：
-无头/窗口 × 串行/并行、目标 10/20/40/50、展开与摘要两形状、同词二跑必点名「全部已采过」、作者与热榜（含 40 问 30 行的封顶声明）、
-喂链接的评论节点、**停止→继续**七格（E1/E2 采集中途停 → 记录 interrupted、节点 partial、游标 `scanned>0`、续到满额且不重行；
-E3 并行中途停 —— 一条记录两个组件，只有真在跑的那条被点名「被停止」，已完成的组件表格原样留着，且**下一条采集不得再等平台时段**；
-E4 评论在文章之间停 —— 交还的行数必须恰好等于已点名那几篇各自报的数，并且**不打** `comment.done` 总结行；
-E5 改了 keyword 再续跑 —— 旧行与旧游标被丢弃，所以既不出现 `run.resume_crawl`/`crawl.resume_have`，游标里的 keyword 也换成新的那条；
-E6 Cookie 中途失效续跑 —— 只注入 `login_wall` 这一个事实（行是真爬出来的），节点 partial、运行 failed、`run.cookieExpired` 只打一次、
-状态里 `cookie_expired` 在场，继续后从已存行数**接着数**而不是从 1 重来；E7 `断点续跑` 节点把别的运行存下的表读进新图 —— 按名点名那条运行与那个节点、
-点错节点时退回「取最全的一张」、无表可取时点名 `resume.no_run`/`resume.empty`，而 0 行存量绝不被当作「上次算过了」）、并行/真排队两态、
-以及原样跑用户自己的 `data/workflows/测试：知乎.json`（只读，断言被禁用的三个组件被点名）。判据是 FULL / NAMED_SHORT / SILENT_SHORT
-三判：**低于目标但控制台点名的算过（记 WARN），没点名的算红**；每条用例把整段控制台与一行结论落到 `scratchpad/live_audit/`
-（绝不写 logs/），于是红一次不必再付一遍爬取的钱；爬虫级 live 用例缺对应 Cookie 时按闭表跳过，而**运行级知乎矩阵一条都不跳过**——缺会话按名判红（只有无 Chrome/无驱动时 B1/B2 经 `live_crawler` 夹具才灰） | Chrome + 已存 Cookie |
-| `live_quick`（marker） | **`live_site` 的子集：每个可爬平台恰好一条真采集**（哔哩哔哩搜索、微博时间窗搜索、微信正文、小红书卡片、知乎搜索、抖音可见搜索、X 帖子形状、YouTube 无 facts 快路径、微博评论引擎），9 条、每条只取 3~5 行，是改动前后的日常闸门。`tests/unit/gates/test_test_tiers.py` 钉住它必须是 `live_site` 的子集（否则"全量"会在没人注意时变小）、矩阵里每个平台都必须被某条 quick 用例真触及、总数不超过预算，并禁止整模块打这个标记（那样短层会长回长层）。`TestLiveCrawlerFixture` 另测**真机层脚手架本身**：一条用例向同一平台要第二个浏览器时，fixture 必须先关掉上一个并把这一轮交还——锁不可重入，否则会卡在 `crawl_gate` 里等 900 秒（没有浏览器弹出、没有输出，看起来只像"这条用例很慢"），有这条断言在，那种卡死当场就是红 | Chrome + 已存 Cookie |
+| `live_site`（marker） | **全平台真实爬取 × 双浏览器模式**：各平台搜索/正文/评论真跑真断言，断言按站点给的数（卡片评论数/页面自身计数/榜单规模）派生且双向；运行级知乎矩阵像用户那样 `POST /api/workflow/execute` 再读运行记录+控制台（停止→继续七格 E1–E7、并行/真排队、原样跑用户画布）；判据 FULL/NAMED_SHORT/SILENT_SHORT，整段控制台与结论落到 `scratchpad/live_audit/`（绝不写 `logs/`） | Chrome + 已存 Cookie |
+| `live_quick`（marker） | **`live_site` 的子集：每个可爬平台恰好一条真采集**（**11** 条，每条只取 3~5 行），改动前后的日常闸门；`test_test_tiers.py` 钉住它必须是 `live_site` 子集、矩阵每平台都被触及、总数不超预算、禁止整模块打此标记 | Chrome + 已存 Cookie |
+
+**真站层的会话形状必须和你自己抓取时一样**（实测教训，详见 crawler_notes）：它用 `scratchpad/live_profiles/<平台>`
+这个跨运行保留的 profile，Cookie 只在第一次使用时种进去、之后由站点自己更新那份 jar；微博每轮只问一次。
+**但"另一个 profile"本身就还是第二台设备**——要真验"登录态抓取"这条路，得让测试用你自己的 profile：加
+`CIXI_LIVE_USE_USER_PROFILE=1`（明确授权）就落在 `data/chrome_profile/<平台>`，隔离看门狗只为此时放行这一棵子树。
+**这一层不要无人值守跑**——它每轮都在消耗真实账号。
 
 ```bash
-# 快速套件（默认，约 7~8 分钟、8.1k 用例；上面三层未打 marker 的部分）
-python -m pytest -q
+# 快速套件（默认，约 7~8 分钟、8.2k 用例；上面三层未打 marker 的部分）
+.venv/Scripts/python.exe -m pytest -q
 
 # 设备套件（真 Chrome + 真 Ollama）
-python -m pytest -q -m "integration or live_ollama"
+.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"
 
-# 设备套件「要么真跑，要么报错」：
-# 默认情况下浏览器/守护进程起不来只是 skip，而一整档的 skip 在 -q 下读起来和通过没有区别
-# （实测：chromedriver 能启动但随即崩溃时，整个 UI 布局文件的 99 条全部静默跳过）。
-# 要一个可以当证据的绿色，就带上开关：不可用会当场失败，并说明缺的是什么。
-CRAWLER_REQUIRE_BROWSER=1 CRAWLER_REQUIRE_OLLAMA=1 python -m pytest -q -m "integration or live_ollama"
+# 设备套件「要么真跑，要么报错」：默认下浏览器/守护进程起不来只是 skip，
+# 而一整档 skip 在 -q 下读起来和通过没区别。要一个能当证据的绿色就带上开关：
+CRAWLER_REQUIRE_BROWSER=1 CRAWLER_REQUIRE_OLLAMA=1 .venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"
 
-# 真站层按网络分两组跑：先国内（关 VPN），再海外（开 VPN）
-python -m pytest -q -m "live_quick and live_cn"     # 国内：抖音/微博/知乎/小红书/B站/微信
-python -m pytest -q -m "live_quick and live_os"     # 海外：X、YouTube
+# 真站层按网络分两组：先国内（关 VPN），再海外（开 VPN）
+.venv/Scripts/python.exe -m pytest -q -m "live_quick and live_cn"     # 国内：抖音/微博/知乎/小红书/B站/微信
+.venv/Scripts/python.exe -m pytest -q -m "live_quick and live_os"     # 海外：X、YouTube
 
-# 想让真站层用你自己的登录态（否则它用自己的测试 profile，微博会把它当第二台设备拒掉）：
-# 这一句就是授权，只有这一次运行会写进 data/chrome_profile
-CIXI_LIVE_USE_USER_PROFILE=1 python -m pytest -q -m "live_quick and live_cn"
-python -m pytest -q -m "live_site and live_cn"      # 全量同理，只在最终验收跑
-python -m pytest -q -m "live_site and live_os"
+# 想让真站层用你自己的登录态（否则它用自己的测试 profile，微博会把你当第二台设备拒掉）：
+CIXI_LIVE_USE_USER_PROFILE=1 .venv/Scripts/python.exe -m pytest -q -m "live_quick and live_cn"
+.venv/Scripts/python.exe -m pytest -q -m "live_site and live_cn"      # 全量同理，只在最终验收跑
 
 # 覆盖率
-python -m pytest -q --cov=backend --cov-report=term
+.venv/Scripts/python.exe -m pytest -q --cov=backend --cov-report=term
 ```
+
+运行单个设备/live 用例时**也要覆盖 marker 过滤**（只给文件名会报 `N deselected`）。
+
+### Lint：三档标准，三次运行，都要干净
+
+`build/make_lint_lists.py` 生成每档的目标清单（嵌套配置不会被 pylint 读到，所以每档是独立一次带 `--rcfile` 的调用）：
+
+```bash
+.venv/Scripts/ruff.exe   check backend/ tests/
+.venv/Scripts/ruff.exe   format --check backend/ tests/
+.venv/Scripts/pylint.exe --rcfile=.pylintrc        <product targets>   # backend 去掉其 test_*.py + desktop/tools/ml_train/scripts
+.venv/Scripts/pylint.exe --rcfile=.pylintrc.tests  tests/
+.venv/Scripts/pylint.exe --rcfile=.pylintrc.probes backend/test_*.py   # 一次性探针脚本的本地档（CI 不跑）
+```
+
+**绝不写 `# pylint: disable` 或 `# noqa`，也绝不为消掉一条告警而放宽 `.pylintrc*`**：修根因；真正无意义的消息，
+例外连同理由写在该树自己的 config 里。
 
 ### 关于格式化：不要只依赖编辑器钩子
 
-`ruff format` 与 `ruff --fix` 用「写临时文件 → 改名覆盖」落盘。**在限制写入的工作区（含本项目的沙箱会
-话）这一步会直接失败**（`os error 5`），于是钩子静默什么都没做，而编辑看起来是成功的——格式债就这样
-一点点积累起来。实测过一次：因为 `ruff` 连缓存都写不进去而整体退出，6 处超长行是在提交前才被发现的。
+`ruff format` 与 `ruff --fix` 用「写临时文件 → 改名覆盖」落盘。在限制写入的工作区（含本项目沙箱会话）这一步
+会直接失败（`os error 5`），钩子静默什么都没做而编辑看起来成功——格式债就这样积累。所以格式与 lint 由
+`.github/workflows/ci.yml` 兜底：它跑 `ruff check`、`ruff format --check`、两档 pylint（产品 / tests，各一次 `--rcfile`）、
+fast 全量，以及一个用真 Chrome 跑 `-m integration` 的 `browser` job（`.pylintrc.probes` 是本地档，CI 不跑）。本地提交前请显式跑一遍上面的命令。
 
-所以格式与 lint 由 `.github/workflows/ci.yml` 兜底。它现在跑：`ruff check`、`ruff format --check`、
-**两档 pylint**（产品档 / tests 档，各一次 `--rcfile`）、**fast 全量**，以及一个用真 Chrome 跑
-`-m integration` 的 `browser` job；本地提交前请**显式**跑一遍：
-
-```bash
-.venv/Scripts/ruff.exe check backend/ tests/
-.venv/Scripts/ruff.exe format --check backend/ tests/
-```
-
-**"CI 有没有覆盖某一步"只能查运行历史，不能读本地 yaml**（读文件会把"计划要做"说成"已经在做"——
-本项目真的这样错过一次）。仓库公开，所以不需要 `gh` 也不需要登录：
+**"CI 有没有覆盖某一步"只能查运行历史，不能读本地 yaml**（读文件会把"计划要做"说成"已经在做"）：
 
 ```bash
 curl -s https://api.github.com/repos/Xingye-Dujing/crawler-workflow/actions/runs | head
 curl -s https://api.github.com/repos/Xingye-Dujing/crawler-workflow/actions/runs/<id>/jobs
 ```
 
-第二条给出每个 job 的 `steps[].name`，那就是 CI 实际执行的步骤清单。推送之后要复核新步骤是否真跑，
-用的也是这两条命令。
-
-可选依赖（`bert` 模式需要的 torch/transformers，几个 GB，不装也能正常用其它所有功能）见
-`requirements-optional.txt` 开头的说明。
-
-修改代码后的完整验证流程见 `AGENTS.md` 的 "Change workflow"。全平台真机验收的用例矩阵、数量不达标的
-代码级嫌疑清单与运行手册见 `docs/live_test_plan.md`。
+第二条给出每个 job 的 `steps[].name`，那就是 CI 实际执行的步骤清单。可选依赖（`bert` 模式需要的
+torch/transformers，几个 GB，不装也能正常用其它功能）见 `requirements-optional.txt`。修改代码后的完整验证流程见
+`AGENTS.md` 的 "Change workflow"。全平台真机验收的用例矩阵与运行手册见 [live_test_plan.md](live_test_plan.md)。
 
 ## 已知的一个第三方警告（保持可见，绝不过滤）
 
-`AGENTS.md` 定「警告是测到了却没挂的测试——修它测到的东西，绝不消音」，`pytest.ini` 里没有 `filterwarnings`。
-快速套件目前始终恰好打印 **一个** `DeprecationWarning`：
+快速套件始终恰好打印**一个** `DeprecationWarning`：
 
 ```
 .venv/.../jieba/_compat.py:18: DeprecationWarning: pkg_resources is deprecated as an API
 ```
 
-- **出处不在本仓库代码**：`jieba/__init__ → _compat → import pkg_resources`（`_compat.py:18`），而 setuptools ≥74
-  一 `import pkg_resources` 就发这条 DeprecationWarning。本仓库自身代码零警告（约 5977 用例只此一条，且全属外部）。
+- **出处不在本仓库代码**：`jieba/__init__ → _compat → import pkg_resources`，而 setuptools ≥74 一 `import pkg_resources` 就发这条警告。本仓库自身代码零警告（8,249 用例只此一条，且全属外部）。
 - **无法靠升级消除**：jieba 最新版即 0.42.1（已停更，PyPI 无更新版本），其 import 改不掉。
-- **实测「换 jieba_fast」不成立**：jieba_fast 0.53 的 `jieba_fast/_compat.py:6` 同样 `import pkg_resources`，照发此警告；
-  且它并非完全等价替身——`cut_for_search` 与 jieba 结果不同（lcut/extract_tags/textrank/posseg 相同）。
-- **清零只剩两条都不划算的路**：①换掉整个分词器（非 jieba 血缘，分词结果会变，tokenize/关键词/词云/聚类/LDA
-  一切派生数字与列契约都要重新推导核验）；②把 setuptools 钉到 <74（本质是把一条正当的前瞻性弃用警告压下去，
-  属「消音」，违反仓库规则）。
+- **实测「换 jieba_fast」不成立**：jieba_fast 0.53 的 `_compat.py:6` 同样 `import pkg_resources` 照发此警告，且 `cut_for_search` 结果与 jieba 不同（非等价替身）。
+- **清零只剩两条都不划算的路**：①换掉整个分词器（分词结果会变，tokenize/关键词/词云/聚类/LDA 一切派生数字与列契约都要重推）；②把 setuptools 钉到 <74（本质是把一条正当的前瞻性弃用警告压下去，属「消音」，违反仓库规则）。
 
-结论：这条警告在 jieba 血缘内不可消除、又非本仓库代码，按「报告、不过滤」处理——保留可见，仅在此记明来历，
-既不写 `filterwarnings`，也不为此改动产品行为。将来若真替换分词器，须连同所有分词派生量一并重验，再删本节。
+结论：按「报告、不过滤」处理，保留可见，仅在此记明来历——既不写 `filterwarnings`，也不为此改产品行为。
+`pytest.ini` 里没有 `filterwarnings`。将来若真替换分词器，须连同所有分词派生量一并重验，再删本节。

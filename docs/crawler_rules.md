@@ -18,7 +18,7 @@
   declares each platform's modes, the fields each mode needs (widget, default, floor, ceiling, required-ness, and
   `fed_by` = the link field a wired upstream column may replace), which crawler method runs, and `region`
   (`cn` / `overseas`) — the overseas-VPN question and the `live_cn`/`live_os` markers read it rather than holding
-  lists of their own. `_execute_source_node` dispatches, `engine/workflow.py::validate` refuses, and
+  lists of their own. `execute_source_node` (`nodes/executors/source.py`) dispatches, `engine/workflow.py::validate` refuses, and
   `GET /api/capabilities` hands the browser the identical description its Data Source panel is generated from. A new
   platform or mode is **one matrix entry**, never an `if platform == '…'` branch in four files. It sits at the
   backend root because `engine/workflow.py` reads it and must not import the crawler package. Field labels are
@@ -32,9 +32,11 @@
 - **A headless run stays headless — nothing forces a window (#148).** A headless Chrome carries a desktop
   fingerprint, so every node/comment panel honours 无头/窗口 verbatim; `无头→窗口`/`forced_visible` are retired and
   `Mode.collects` is the single answer to "does a visible window show anything?" (the panel note and the comment
-  engine's window decision both read it). Two measured traps: a sticky header can cover douyin's 筛选 opener's
-  centre, so `menu.hover` also fires enter events on the node (`ActionChains` alone misses it); and a *stored*
-  profile preference outlives the crawl, so 取/验证 Cookie and the pre-run probe write 允许 explicitly
+  engine's window decision both read it). Two traps once guarded it: ~~a sticky header covering douyin's 筛选
+  opener's centre, so `menu.hover` also fired enter events on the node (`ActionChains` alone missed it)~~ —
+  **RETIRED**: douyin 搜索/筛选 was deleted 2026-09-30 and `engine/menu.py` no longer exists (see `docs/crawler_notes.md`
+  Douyin「已移除」section), so no hover-menu guard survives; do not re-add it; and a *stored*
+  profile preference still outlives the crawl, so 取/验证 Cookie and the pre-run probe write 允许 explicitly
   (`crawlers/core/browser.py::content_prefs`) or a window shows a QR-less login.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`, `engine.wall`
   (the four page verdicts), `engine.popup.Prompt` + a platform's `prompts`, `engine.feed.walk_feed` / `wait_for` /
@@ -46,16 +48,15 @@
   point: it survives a renderer timeout and **records whether the navigation settled** — a load that never finished
   is a slow network, not a refusal, and a refusal may name only what the code can see. It clears the dialog, and
   latches a wall only once it is still there after re-reading. **A navigation that never committed is re-driven, not
-  refused:** after a cold launch the very first `get` can leave the tab parked on its own `chrome://new-tab-page`
-  (empty address bar, spinning forever until a manual Enter), and `wall.classify` reads that internal page as
-  `blocked` — filing a keyword that plainly has results behind a false 风控; the same parked page makes
-  `_load_cookies` plant every cookie into a document whose origin matches nothing, so the session itself rides on a
-  launch that did not fire. `Crawler._drive_off_internal_page` re-issues the `get` while the browser is on one of its
-  own pages (`never_arrived`) and is shared by `open` *and* `_load_cookies` so the two never disagree about whether
-  the site was actually reached. `NAV_RETRY` is measured to 1 (the user's fix was one Enter, and it keeps the probe's
-  page loads inside `COOKIE_PREFLIGHT_TIMEOUT`). It fires on that shape only — a committed page, a real wall and the
-  browser's own `chrome-error://` are each answered once — and a *deliberate* internal navigation stays outside it:
-  the template warmer enters `about:blank` on purpose, so it is a bare `driver.get`, never re-driven off itself.
+  refused:** after a cold launch the first `get` can leave the tab parked on `chrome://new-tab-page` (spinning until a
+  manual Enter), and `wall.classify` reads it as `blocked` — filing a keyword with results behind a false 风控; the same
+  parked page makes `_load_cookies` plant every cookie into a document whose origin matches nothing.
+  `Crawler._drive_off_internal_page` re-issues the `get` while the browser is on one of its own pages (`never_arrived`)
+  and is shared by `open` *and* `_load_cookies` so they never disagree about whether the site was reached. `NAV_RETRY`
+  is measured to **1** (the user's fix was one Enter; it keeps the probe's page loads inside
+  `COOKIE_PREFLIGHT_TIMEOUT`). It fires on that shape only — a committed page, a real wall and the browser's own
+  `chrome-error://` are each answered once — and a *deliberate* internal navigation stays outside it: the template
+  warmer enters `about:blank` on purpose (a bare `driver.get`, never re-driven off itself).
 - **A slow network is not a refusal, and only a refusal may be named one.** One page's *first content* gets
   `Config.PAGE_WAIT_TIMEOUT` via `Crawler.wait_for_first_content` — stop-aware, out early on evidence, refused once
   this browser has watched two expire; "any new rows?" keeps its short budget, because stretching a progress
@@ -63,11 +64,11 @@
   is the browser's own page, read from `documentURI` since `current_url` still shows what was asked for, and it sets
   **neither** wall flag — the site never saw the session.
 - **One profile is one browser, and a parallel canvas has to be told that.** chromedriver pre-writes the profile's
-  `Preferences`, so two sessions in one directory cannot both come up: `browser_profiles.acquire_profile(dir)` is a
+  `Preferences`, so two sessions in one directory cannot both come up: `sessions/profiles.py::acquire_profile(dir)` is a
   plain, **non-reentrant** `Lock` held for the crawler's whole life (a *side* thread releases it at close). The user
   answers 用 Profile per run as `use_profile`; 真排队 has answered it for the whole program. **A site's rate limit is
   a second collision** — two throwaway browsers can still be bounced as the *account* searching twice in one
-  second — so `crawl_gate` lanes crawls by (platform, account): one login takes turns, two logins run at once (真排队
+  second — so `runtime/gate.py` (the `hold` seam) lanes crawls by (platform, account): one login takes turns, two logins run at once (真排队
   holds a lane until its crawl *finishes*, 错峰 only spaces its starts). A matrix `serial_only` platform is always
   queued whatever the switch says; the browser warns first. A wall met **before the first row** retries once after a
   back-off; a wall met after rows is the cookie dying and must go to 继续 instead. **Absence means "follow the
@@ -88,11 +89,11 @@
   **the saved cookie file is imported once** (first use of the directory) and is not re-planted by a crawl —
   overwriting a live profile with an old snapshot is the harm, not the fix. What changed (2026-09-28): **saving a
   cookie is itself the update**. A paste is the newest session there is, so `POST /api/cookies/save` plants it into
-  that account's profile on the spot (`app.py::_plant_saved_cookie_into_profile`, the only caller of
+  that account's profile on the spot (`sessions/routes.py::_plant_saved_cookie_into_profile`, the only caller of
   `get_crawler(refresh_cookies=True)`); the panel's 「把 Cookie 更新进 Profile」 button and
   `POST /api/cookies/refresh-profile` were deleted with it. When that browser is held, the save still succeeds, says
   so, and the next crawl of that account imports the newer file because `planting` also honours
-  `browser_profiles.needs_refresh` (file stamp newer than the marker's). **Never write the browser's live jar back to a
+  `sessions/profiles.py::needs_refresh` (file stamp newer than the marker's). **Never write the browser's live jar back to a
   saved cookie file.** `Capability.profile_recommended` is the single source for "this platform punishes a throwaway
   browser"; a second list of platforms anywhere else will drift.
 - **A new account's device directory is generated, never copied.** Cloud has no login window and the user's daily
@@ -120,9 +121,9 @@
   - **the recognised set is CLOSED.** ``relative_to_absolute`` admits a listed set of Chinese and
     English shapes and answers ``''`` for anything else, so a topic tag or a layout string can
     never become a timestamp — which is the same protection bilibili's author mode bought by
-    leaving relative words empty (``crawler_notes`` line ~578) and the reason douyin's
-    ``_publish_from_info`` **still refuses** them: that cell is a ``·``-split segment, not a
-    dedicated time node, so we cannot be sure the token is a time at all. ``_clean_publish``
+    leaving relative words empty (``crawler_notes`` Bilibili 作者 section) and the reason douyin's
+    ``publish_from_info`` (`crawlers/platforms/douyin/rows.py`) **still refuses** them: that cell is a ``·``-split
+    segment, not a dedicated time node, so we cannot be sure the token is a time at all. ``clean_publish``
     (the cell the page labels 发布时间) does convert.
   - **the precision is stated, not dressed up.** An OFFSET (``3小时前``) names an instant, so it
     answers ``now − N`` and keeps the clock; a NAMED DAY with no clock (``昨天``, ``yesterday``)
@@ -144,12 +145,12 @@
   number:** only a newest-first walk with a stable item identity may stop at the previous completed run's newest id
   (today Bilibili author / BV号), the boundary item itself is not fetched, and only a clean finish advances it —
   wall/risk/stop/shortfall never do. Other modes refuse the switch by name; it is mutually exclusive with 重新采集.
-- **youtube**: JSON-first via `engine/innertube` POSTs issued *inside* one loaded page (never hardcode
+- **youtube**: JSON-first via `crawlers/platforms/youtube/innertube.py` POSTs issued *inside* one loaded page (never hardcode
   `INNERTUBE_*`); headless is fine; a channel's uploads come from the loaded `/@handle/videos` document; a
   continuation token is chosen by **which list it is an element of**.
 - **weibo**: never judge the wall from the URL right after `get()` (it flashes the passport page then bounces);
   `/ajax/statuses/mymblog` is a per-session edge 403 → refuse loudly, never an empty table
-  (`backend/test_weibo_recipe.py`); the window scroll brings no new rows, and a search page serves *recommended*
+  (`backend/test_weibo_recipe.py` — 脚本已归档，数字即结论); the window scroll brings no new rows, and a search page serves *recommended*
   posts inside the same `#pl_feedlist_index` even when it also prints 「抱歉，未找到相关结果」 (measured 2026-09-28).
 - **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit outcome —
   don't loosen the assertion; comments run in either shape (#148). **A search card is an excerpt**, so the body
@@ -171,87 +172,67 @@
   `search`/`get_detail` are named refusals — no such mode was ever measured.
   **Its comments exist only in the app protocol, and this tool never speaks it — it listens.** The signature is
   body-covering (byte-identical replay answers 110001, measured 2026-10-19), so the 评论 mode drives the third-party
-  desktop player behind our own mitmproxy and parses what the player legitimately fetched
-  (the capture harness in `crawlers/platforms/hongguo/harvest.py`, the UIA driver in that package's
-  `player_ui.py`, its pure name rules in `naming.py`; full chain in `docs/crawler_notes.md` 红果短剧). Rules that keep it honest: a player
-  window the USER opened is refused by name, never killed — only Popen-children of this node get reaped;
-  navigation is the leaderboard page's per-card ``▶ 播放`` (the 找剧 page has NO search box — measured), and
-  the comment trigger is the action-rail ``💬 <count>`` click that opens the drawer (the feed's silent prefetch
-  died with a protocol update the same day); danmaku-guide rows (`create_timestamp == 0`) are dropped and
-  counted, never emitted as comments; a page whose NON-ZERO `book_id` names another drama is discarded by
-  name (real rows print `book_id: "0"`, so 0 means "unnamed", not "wrong show"); the walk may only say
-  `site_end` when the ARITHMETIC closes — every group's kept reached the `total` the site itself printed
-  (`has_more: false` alone is a cursor window ending, not a thread: measured 20 kept of 800) — and any
-  scroll failure leaves `UNDER_TARGET`; the harness ALSO publishes `shortfall` (rows the site counted
-  that this walk did not keep), because comparing ROWS against the total is NOT a fair test — reply rows
-  ride in the table under no episode's printed total, and a short 698-comment episode can otherwise be
-  masked by 400 children harvested elsewhere; a UIA tree that never wakes is its OWN named refusal (`treeCold`),
-  never a fake 搜不到剧 — and warming is the FULL walk itself (partial early-return walks read the tree cold
-  forever); mitmproxy 11's `Response` has no `get_json()` (a bare `except` turned it into a silently empty
-  capture — decode `response.content` explicitly); a topmost window over the player silently steals every
-  synthetic click (measured); and the comment engine's U1 gate reads `end_reason` BY ATTRIBUTE, so every
-  browser adapter stays untouched. WebView2 CDP is a dead end (the loader env var is overridden by the
-  app's own options) — do not retry it.
-  **Four more, from the second live run the same night** (each one cost real rows): the drawer's per-comment
-  button is literally named `回复` and it opens the COMPOSER — clicking it steals the keyboard from the wheel and
-  an 800-comment episode comes home as 20 rows, so an expand click must match `is_expand_control` (the name
-  carries 回复 AND one of 展开/查看/更多), every visible expansion gets clicked per episode (not one), and
-  `SendKeys {Esc}` hands the focus back. One silent scroll is never the end of a thread: paging retries with an
-  escalating action (wheel → Esc+harder wheel → `{PageDown}`) and a growing window, and only after `_MAX_STALLS`
-  silences does the episode settle short — naming `kept` against the site's `total`. The WEB board and the
-  CLIENT's boards are two different rankings, so the comment form also accepts a plain 剧名: that is declared
-  once as `Field.accepts_names` and the panel check, `engine.workflow` validation and the comment router all read
-  the matrix (a name-fed row keeps `文章URL` BLANK — no page was opened, no link is invented — and the 错剧 guard
-  falls back to the first non-zero `book_id` of the walk as its reference). A tree that goes cold MID-walk raises
-  the dedicated `TreeCold` (never compare message text), gets one louder re-wake, and then skips THAT drama by
-  name into `skipped_targets` while the rest still harvest; the engine refuses the node at the end naming them,
-  rows kept. `文章URL` itself is NOT renamed for the drama's sake: it is the join key of all eight comment tables
-  (66 references), and 短剧 semantics live in the added columns 剧名 / 集序号 / 分集ID (the id column held a
-  per-EPISODE `group_id` and was misnamed 剧集ID).
-  **And six more, from auditing that change** (each is a way the node could still settle `DONE` over a hole):
-  an expanded child thread prints its OWN `total` too, so `reply/list` pages are graded in `_reply_progress`
-  and `site_end` now requires children as well as episodes — clicking 展开 once and taking 20 of 200 is a named
-  gap (`子回复不完整`), never a full table; a walk that ends with NOTHING (`titleMissing`, or `noTraffic` on the
-  first episode — the popup-blocked-drama case) goes through `_mark_short()` + `skipped_targets` like any other
-  hole, because a bare `([], DEAD)` fed neither tail gate and a five-drama feed came home as a four-drama table
-  marked 正常; a reply page is stamped with the drama whose drawer asked for it (`_stamp`), since expansion
-  fires up to 40 requests, the per-episode grace is short, and a late page drained under the NEXT target
-  corrupts 剧名/文章URL rather than merely losing a row; card matching takes an EXACT normalised title across
-  the whole tree before any prefix match, because `斗罗大陆` answers a request for `斗罗大陆 第二季` and the 错剧
-  guard cannot catch it on a name-fed walk (the reference `book_id` is read from the wrong drama's own first
-  page); the board list is read AFTER the switcher is opened, never from the closed page — one tab named like a
-  board satisfies the same pattern as the whole list, and the walk then "cannot find" every drama on another
-  board; and 停止 is asked inside every UIA wait (`PlayerUI` holds the harness `abort`, and `open_drama`'s
-  `except Exception` re-raises `CrawlerStopped`), otherwise a cold tree burns minutes per drama uninterruptibly
-  and a Stop mid-open was filed as 「搜不到这部剧」.
-  **Three more, measured on the third live run (2026-10-20, capture kept on disk)**: `reply/list` is a
-  DIFFERENT envelope — `data.comment_list_info` + `data.reply_list[]`, element body under a CAPITALISED
-  `Common`, own id `reply_id`, parent in `data.comment`, and **no `data_list` at all** — so reading only
-  `data_list` made every 「包含子回复」 run silently collect ZERO children (53 expansion clicks, 0 rows);
-  normalise the element into the `comment/list` shape and keep ONE row builder. Which drama a page belongs
-  to is asked of the **request** (`req_body.business_param.book_id`), never of the rows: another drama's
-  comment pages print `expand.book_id == "0"`, and grading the payload let 30 stranger rows into the table
-  under the fed 剧名. The gate covers reply pages too (the expansion clicks on whatever is on screen). And
-  the web `series_id` is **not** the client `book_id` (same drama measured: `7696437705822981182` vs
-  `7697823071830297624`) — two id spaces, so the reference is the first page's own book and comparing the
-  two would refuse every page a link-fed walk correctly asked for. When a page arrives for a different
-  book the walk names it and **stops the drama** (`feedDrifted`) rather than spending every remaining
-  episode's full wait on traffic it will never accept. The walk also **asks the screen before it
-  harvests** (`PlayerUI.screen_drama_title` → `_confirm_position`): the player prints `@剧名` in the
-  header. That header is the ONLY screen fact the drawer-open tree offers — the `N / M` episode
-  counter is on the video page but **absent once the comment drawer is open** (measured in the warm
-  dump), so the walk cannot read its own position from it and a gate built on `第N集` (what it numbers
-  was never established) would refuse dramas it was harvesting correctly. The header answers at entry
-  and after each `next_episode`, and it is read with two rules that bias toward PROCEEDING, because a
-  wrong 「drifted」 throws away a drama the user paid to open while a wrong 「keep going」 is caught a
-  layer down by the traffic gate: a single foreign read is **re-asked** before it is a verdict (the
-  header prints whatever is on stage and the browse page keeps naming the PREVIOUS show for a moment
-  after a card click), and the match is a prefix in EITHER direction at any length (the header is the
-  BASE name, the request may carry a season suffix — or the reverse). Not exactly one `@`-prefixed
-  text means no answer (a 弹幕/reply that opens with `@昵称` sits before the header in tree order). A
-  tree that prints nothing confirms nothing, and the traffic gate stays underneath as the second line
-  of defense. A `next_episode()` that fails to land is **counted** (`_count_unfinished`), not just
-  licensed false: the never-reached episodes print no total, so shortfall alone cannot name that hole.
+  desktop player behind our own mitmproxy and parses what the player legitimately fetched (capture harness
+  `crawlers/platforms/hongguo/harvest.py`, UIA driver `player_ui.py`, pure name rules `naming.py`; full chain in
+  `docs/crawler_notes.md` 红果短剧). Honesty rules: a player window the **USER** opened is refused by name, never
+  killed (only Popen-children of this node get reaped); navigation is the leaderboard page's per-card ``▶ 播放`` (the
+  找剧 page has NO search box — measured); the comment trigger is the action-rail ``💬 <count>`` click that opens the
+  drawer (the feed's silent prefetch died with a protocol update the same day); danmaku-guide rows (`create_timestamp
+  == 0`) are dropped and counted, never emitted; a page whose NON-ZERO `book_id` names another drama is discarded by
+  name (real rows print `book_id: "0"`, so 0 = "unnamed", not "wrong show"); the walk says `site_end` only when the
+  ARITHMETIC closes — every group's kept reached the site's own `total` (`has_more: false` alone is a cursor window
+  ending, not a thread: measured 20 kept of 800) — else any scroll failure leaves `UNDER_TARGET`; the harness ALSO
+  publishes `shortfall` (rows the site counted this walk did not keep), because comparing ROWS to total is NOT a fair
+  test — reply rows ride under no episode's printed total, so a short 698-comment episode can be masked by 400 children
+  harvested elsewhere; a UIA tree that never wakes is its OWN named refusal (`treeCold`), never a fake 搜不到剧, and
+  warming is the FULL walk (partial early-return walks read the tree cold forever); mitmproxy 11's `Response` has no
+  `get_json()` (a bare `except` made it a silently empty capture — decode `response.content` explicitly); a topmost
+  window over the player silently steals every synthetic click (measured); the comment engine's U1 gate reads
+  `end_reason` BY ATTRIBUTE so every browser adapter stays untouched. **WebView2 CDP is a dead end (the loader env var
+  is overridden by the app's own options) — do not retry it.**
+  **Expand/paging/board rules (each cost real rows):** the drawer's per-comment button is literally named `回复` and it
+  opens the COMPOSER — clicking it steals the keyboard and an 800-comment episode comes home as 20 rows, so an expand
+  click must match `is_expand_control` (name carries 回复 AND one of 展开/查看/更多), every visible expansion is clicked
+  per episode (not one), and `SendKeys {Esc}` hands focus back; one silent scroll is never the end — paging retries an
+  escalating action (wheel → Esc+harder wheel → `{PageDown}`) with a growing window, and only after `_MAX_STALLS`
+  silences does the episode settle short, naming `kept` against `total`. The WEB board and the CLIENT boards are two
+  different rankings, so the comment form also accepts a plain 剧名 (declared once as `Field.accepts_names`, read by
+  panel check, `engine/workflow` validation and the comment router); a name-fed row keeps `文章URL` **BLANK** (no page
+  opened, no link invented) and the 错剧 guard falls back to the walk's first non-zero `book_id`. A tree that goes cold
+  MID-walk raises the dedicated `TreeCold` (never compare message text), gets one louder re-wake, then skips THAT drama
+  by name into `skipped_targets` while the rest harvest; the engine refuses the node at the end naming them, rows kept.
+  `文章URL` is NOT renamed for the drama: it is the join key of all eight comment tables (66 references); 短剧 semantics
+  live in 剧名 / 集序号 / 分集ID (the id column held a per-EPISODE `group_id` and was misnamed 剧集ID).
+  **Gate hardening (ways the node could settle `DONE` over a hole):** an expanded child thread prints its OWN `total`
+  too, so `reply/list` pages are graded in `_reply_progress` and `site_end` requires children as well as episodes
+  (clicking 展开 once and taking 20 of 200 is a named gap `子回复不完整`); a walk ending with NOTHING (`titleMissing`, or
+  `noTraffic` on the first episode — popup-blocked-drama) goes through `_mark_short()` + `skipped_targets`, because a
+  bare `([], DEAD)` fed neither tail gate and a five-drama feed came home as a four-drama 正常 table; a reply page is
+  stamped with the drama whose drawer asked for it (`_stamp`) — expansion fires up to 40 requests, the per-episode
+  grace is short, and a late page drained under the NEXT target corrupts 剧名/文章URL; card matching takes an EXACT
+  normalised title across the whole tree before any prefix match (`斗罗大陆` answers a request for `斗罗大陆 第二季` and the
+  错剧 guard cannot catch it on a name-fed walk); the board list is read AFTER the switcher is opened (one tab named
+  like a board satisfies the same pattern as the whole list); 停止 is asked inside every UIA wait (`PlayerUI` holds the
+  harness `abort`, `open_drama`'s `except Exception` re-raises `CrawlerStopped`) — else a cold tree burns minutes per
+  drama uninterruptibly and a mid-open Stop was filed 「搜不到这部剧」.
+  **Envelope drift (third live run, 2026-10-20):** `reply/list` is a DIFFERENT envelope — `data.comment_list_info` +
+  `data.reply_list[]`, element body under a CAPITALISED `Common`, own id `reply_id`, parent in `data.comment`, and **no
+  `data_list` at all** — reading only `data_list` made every 「包含子回复」 run collect ZERO children (53 expansion clicks,
+  0 rows); normalise into the `comment/list` shape and keep ONE row builder. Which drama a page belongs to is asked of
+  the **request** (`req_body.business_param.book_id`), never of the rows (another drama's pages print `expand.book_id ==
+  "0"`; grading the payload let 30 stranger rows into the table). The gate covers reply pages too. The web `series_id`
+  is **not** the client `book_id` (same drama: `7696437705822981182` vs `7697823071830297624`) — two id spaces, so the
+  reference is the first page's own book. A page for a different book names it and **stops the drama** (`feedDrifted`)
+  rather than spending every remaining episode's full wait on traffic it will never accept. The walk **asks the screen
+  before harvesting** (`PlayerUI.screen_drama_title` → `_confirm_position`): the player prints `@剧名` in the header, the
+  ONLY drawer-open screen fact (`N / M` episode counter is on the video page but **absent once the drawer is open**, so
+  a `第N集` gate would refuse dramas being harvested correctly). The header answers at entry and after each
+  `next_episode`, read with two PROCEED-biased rules (a wrong 「drifted」 throws away a paid drama; a wrong 「keep
+  going」 is caught by the traffic gate): a single foreign read is **re-asked** before it is a verdict, and the match
+  is a prefix in EITHER direction at any length (header is BASE name, request may carry a season suffix). Not exactly
+  one `@`-prefixed text means no answer (a 弹幕/reply opening with `@昵称` sits before the header in tree order); a tree
+  that prints nothing confirms nothing and the traffic gate stays underneath. A `next_episode()` that fails to land is
+  **counted** (`_count_unfinished`) — never-reached episodes print no total, so shortfall alone cannot name that hole.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by validation;
   such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must clear
   `TestCookiePanelParity` + `TestPlatformOrder`.
@@ -259,7 +240,7 @@
   `crawlers.is_crawlable()` who has a crawler. Captured cookies are filtered to their own platform
   (`cookie_flow.retain_for_platform`) because logins detour through Google/Facebook — never widen YouTube's list to
   `.google.com` (that is Gmail and Drive).
-- **Cookie death mid-crawl is a designed path**: `login_wall` + under-target rows → `_execute_source_node` sets
+- **Cookie death mid-crawl is a designed path**: `login_wall` + under-target rows → `execute_source_node` (`nodes/executors/source.py`) sets
   `execution_state['cookie_expired']` (rides on `/api/workflow/status` for the toast), logs `run.cookieExpired`, and
   **RAISES** so the node settles `partial` and the RUN becomes `failed` → the resume banner offers 继续 from the
   stored cursor. Never downgrade this to "completed with fewer rows" — that hides the gap forever. Comment nodes
@@ -278,14 +259,14 @@
   next paragraph) and U1 itself still skips when `risk_blocked` is set, so the two refusals never collide; a license is
   never one of the three.
   **A short crawl the platform marked `risk_blocked` is named 风控 (back off), not 采得不足 (U1) and never a dead
-  cookie.** `_execute_source_node` raises `run.riskControlled` when `risk_blocked`, the target was missed and there is
+  cookie.** `execute_source_node` raises `run.riskControlled` when `risk_blocked`, the target was missed and there is
   NO login wall — keeping the rows, failing the run so 继续 appears, and telling the user to WAIT (it explicitly suggests
   慢速采集), because re-running straight into risk control is forbidden advice and re-saving a session that may be fine
   is a lie. Douyin is the reason this exists: its 验证码中间页 speaks only in the tab TITLE, which `classify` never reads,
   so `DouyinCrawler._latch_risk_if_walled` sets `risk_blocked` at the ONE crawl-level point a captcha can end an author
   walk — a profile grid that never arrived — deliberately NOT `login_wall`. It is NOT re-checked at the end of a walk:
   a per-detail-page 验证码 (measured to fire on a share of every walk) leaves a stale title that would false-convict a
-  crawl that collected everything the site has. The comment node splits the same way: `_execute_comment_node` records
+  crawl that collected everything the site has. The comment node splits the same way: `execute_comment_node` (`nodes/executors/comment.py`) records
   which blocked platforms latched `risk_blocked`, and raises `run.riskControlled` only when EVERY blocked platform named
   风控 and none named a login wall; any cookie wall, or any platform naming neither, keeps the original cookie verdict AND
   its `cookie_expired` toast flag (a bare BLOCKED never set that flag before either, so nothing regresses).
@@ -385,7 +366,7 @@
   适配器另外拒绝 `msg *`（私信是用户的私人通信，不是要采集的内容）。新增一个读命令时清单自动带上它，
   不需要在采析绘里加一行；新增一个写命令也不可能自动出现在面板上。适配器测试同时从 `vocab.ts` 源码清点
   `write(` 的键集合，与 `mutating` 字段双向核对——只靠字段自己作证，漏标一次就会把写命令暴露成采集模式。
-- **引擎是一等维度（平台 × 引擎 × 功能）。** `Mode`/`Capability` 之外，`crawl_capabilities` 从适配器清单
+- **引擎是一等维度（平台 × 引擎 × 功能）。** `Mode`/`Capability` 之外，`capabilities/registry.py` + `capabilities/platforms/<id>.py`（原 `crawl_capabilities`）从适配器清单
   物化 CatBus 独有模式（`user.followers`、`keyword.hot`…），`modes_for/mode_for/mode_of_node/crawl_kwargs`
   全部按引擎发问；`as_dict()` 给每个平台 `engines`、给每个模式 `engines` + `cells`（`runnable`／原因／列）。
   面板按 平台 → 引擎 → 功能 渲染，功能列表随引擎变；不可运行的一对**列着、置灰、点名**——绝不消失，

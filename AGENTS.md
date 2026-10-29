@@ -76,7 +76,7 @@ change is judged on all three, not on the machine it was typed on.
   (registered in `data/model_registry.json`); changing their features/labels means retraining there. See
   `ml_train/README.md`.
 - **Test tiers** (`pytest.ini` excludes real tiers; pinned by `tests/unit/gates/test_test_tiers.py`):
-  - Fast: `.venv/Scripts/python.exe -m pytest -q` (~5.2k cases, no browser/daemon).
+  - Fast: `.venv/Scripts/python.exe -m pytest -q` (~8.2k cases, no browser/daemon).
   - Device: `-m "integration or live_ollama"` (real Chrome on `file://` + real Ollama; LLM-boundary mocks by default).
   - Live: `-m live_quick` (one visit per platform) or `-m live_site` (full pass). **Never run a live tier unattended:
     it spends the user's accounts.** It keeps its own profile root (a copied login is a second device); only
@@ -84,8 +84,8 @@ change is judged on all three, not on the machine it was typed on.
     `live_os` — **ask which network he is on**, then run the other.
   - **An unavailable browser/daemon SKIPS, so a tier can look green without running** — when green must be evidence,
     set `CRAWLER_REQUIRE_BROWSER=1`/`CRAWLER_REQUIRE_OLLAMA=1` to FAIL instead of skip. `CRAWLER_REQUIRE_NODE=1`
-    does the same for the ~43 frontend JS cases that `skipif(node is None)`: it aborts the session in
-    `pytest_configure`, because "43 skipped" is indistinguishable from a tier that never existed.
+    does the same for the ~43 frontend JS modules that `skipif(node is None)` (together ~1.4k cases): it aborts the
+    session in `pytest_configure`, because "43 skipped" is indistinguishable from a tier that never existed.
   - **To run one device/live case, override the marker filter too** (naming the file alone reports `N deselected`).
   - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked Chrome/Ollama).
     OpenRouter is **never** really called — patch `analyzers.llm_client.requests.post/get`. Frontend JS needs `node`.
@@ -359,7 +359,8 @@ Chinese messages with a type prefix matching history: `功能更新：`, `问题
 - **Lane C — real behavior changes: run orchestration, resume/checkpoint, `runs.db`, UI, crawling, the LLM
   boundary.** Full fast always; the device tier when UI/engine/LLM/crawling is touched; pylint at batch end.
   Being wrong here costs a spent account, a corrupted run record, or a figure that lies in a paper.
-- **GitHub Actions on every push is the backstop** (fast + ruff + three pylint tiers; gitee has no CI), so a local
+- **GitHub Actions on every push is the backstop** (fast + ruff + the product and tests pylint tiers —
+  the probes tier is local-only, `backend/test_*.py` matches nothing today; gitee has no CI), so a local
   batch run is not the only copy of the evidence — it is the copy that decides whether to push.
 - **The closure gate is NOT a lane**: any "it is done" claim still means one full run of every tier, nothing
   deselected, nothing skipped, no file needing a change in that run.
