@@ -23,6 +23,7 @@ pytestmark = pytest.mark.unit
 REPO = Path(__file__).resolve().parents[3]
 STATIC = REPO / 'backend' / 'static'
 INDEX = STATIC / 'index.html'
+STUDIO = STATIC / 'zenviz.html'
 JS_DIR = STATIC / 'js'
 
 #: Tags the HTML spec leaves unclosed; every other tag in this page is written closed.
@@ -110,50 +111,96 @@ def sweep():
     return parser
 
 
+@pytest.fixture(scope='module')
+def studio_sweep():
+    """The chart-studio page is much smaller than the workbench (its markup is ~120
+    elements); the same four document questions still apply to it."""
+    parser = _Sweep()
+    parser.feed(STUDIO.read_text(encoding='utf-8'))
+    assert parser.tags >= 100, f'the studio sweep only saw {parser.tags} elements'
+    assert len(parser.ids) >= 40, f'the studio sweep only saw {len(parser.ids)} ids'
+    assert len(parser.controls) >= 15, f'the studio sweep only saw {len(parser.controls)} buttons/links'
+    return parser
+
+
+def _duplicate_ids(parser, page):
+    seen = {}
+    duplicates = []
+    for element_id, tag, (line, _col) in parser.ids:
+        if element_id in seen:
+            duplicates.append(f'#{element_id} (<{tag}>) at line {line}, first at line {seen[element_id]}')
+        else:
+            seen[element_id] = line
+    assert not duplicates, f'duplicate ids in {page}: ' + '; '.join(duplicates)
+
+
+def _nesting_errors(parser, page):
+    assert not parser.errors, f'mis-nested markup in {page}:\n' + '\n'.join(parser.errors)
+    assert not parser.stack, f'unclosed tags in {page}: {[tag for tag, _pos in parser.stack]}'
+
+
+def _dangling_idrefs(parser, page):
+    known = {element_id for element_id, _tag, _pos in parser.ids}
+    dangling = [
+        f'{name}="{value}" at line {pos[0]}'
+        for name, value, pos in parser.idrefs
+        for token in value.split()
+        if token not in known
+    ]
+    assert not dangling, f'references to missing ids in {page}: ' + '; '.join(dangling)
+
+
+def _unnamed_controls(parser, page):
+    """An icon-only control with no text and no ``aria-label`` is announced as
+    "button" — the SVG inside it carries no name."""
+    unnamed = [
+        f'<{control["tag"]}> at line {control["pos"][0]}'
+        for control in parser.controls
+        if not (
+            control['text']
+            or control['attrs'].get('aria-label')
+            or control['attrs'].get('title')
+            or control['attrs'].get('data-i18n-title')
+        )
+    ]
+    assert not unnamed, f'controls with no accessible name in {page}: ' + ', '.join(unnamed)
+
+
 class TestTheDocumentIsADocument:
     def test_every_id_is_unique(self, sweep):
         """``getElementById`` answers the FIRST match, so a duplicate id silently moves a
         panel, a label or a harness stub to the wrong element."""
-        seen = {}
-        duplicates = []
-        for element_id, tag, (line, _col) in sweep.ids:
-            if element_id in seen:
-                duplicates.append(f'#{element_id} (<{tag}>) at line {line}, first at line {seen[element_id]}')
-            else:
-                seen[element_id] = line
-        assert not duplicates, 'duplicate ids in index.html: ' + '; '.join(duplicates)
+        _duplicate_ids(sweep, 'index.html')
 
     def test_the_markup_nests_cleanly(self, sweep):
         """An unclosed or mis-nested tag makes the browser re-parent panels: the page
         still renders, but the panel a test (or a user) expects inside a container is
         not, and every position-based assumption downstream is wrong."""
-        assert not sweep.errors, 'mis-nested markup in index.html:\n' + '\n'.join(sweep.errors)
-        assert not sweep.stack, f'unclosed tags: {[tag for tag, _pos in sweep.stack]}'
+        _nesting_errors(sweep, 'index.html')
 
     def test_every_id_reference_names_an_element_that_exists(self, sweep):
-        known = {element_id for element_id, _tag, _pos in sweep.ids}
-        dangling = [
-            f'{name}="{value}" at line {pos[0]}'
-            for name, value, pos in sweep.idrefs
-            for token in value.split()
-            if token not in known
-        ]
-        assert not dangling, 'references to missing ids in index.html: ' + '; '.join(dangling)
+        _dangling_idrefs(sweep, 'index.html')
 
     def test_every_button_and_link_has_an_accessible_name(self, sweep):
-        """An icon-only control with no text and no ``aria-label`` is announced as
-        "button" — the SVG inside it carries no name."""
-        unnamed = [
-            f'<{control["tag"]}> at line {control["pos"][0]}'
-            for control in sweep.controls
-            if not (
-                control['text']
-                or control['attrs'].get('aria-label')
-                or control['attrs'].get('title')
-                or control['attrs'].get('data-i18n-title')
-            )
-        ]
-        assert not unnamed, 'controls with no accessible name: ' + ', '.join(unnamed)
+        _unnamed_controls(sweep, 'index.html')
+
+
+class TestTheStudioPageIsADocument:
+    """``zenviz.html`` is a second page with its own ids and controls; it was 16,852 lines
+    of inline style + script until 2026-10-29, which is exactly the shape in which a
+    duplicate id or a mis-closed div goes unnoticed."""
+
+    def test_every_id_is_unique(self, studio_sweep):
+        _duplicate_ids(studio_sweep, 'zenviz.html')
+
+    def test_the_markup_nests_cleanly(self, studio_sweep):
+        _nesting_errors(studio_sweep, 'zenviz.html')
+
+    def test_every_id_reference_names_an_element_that_exists(self, studio_sweep):
+        _dangling_idrefs(studio_sweep, 'zenviz.html')
+
+    def test_every_button_and_link_has_an_accessible_name(self, studio_sweep):
+        _unnamed_controls(studio_sweep, 'zenviz.html')
 
 
 class TestThePageLoadsItsScripts:
@@ -196,3 +243,39 @@ class TestThePageLoadsItsScripts:
         assert html.index('/js/theme-boot.js') < html.index('id="menu-trigger"'), (
             'the bootstrap must run before the visible chrome is parsed'
         )
+
+
+class TestTheStudioPageLoadsItsFiles:
+    def test_the_studio_page_carries_no_inline_style_or_script(self, studio_sweep):
+        """The chart studio was a 16,852-line document: a ~1,920-line ``<style>`` and a
+        ~14,700-line inline ``<script>``. Both are files now — a strict CSP can ban inline
+        code, and ``node --check`` never saw the largest script in the project."""
+        assert not studio_sweep.inline_scripts, f'inline script bodies are back: {studio_sweep.inline_scripts}'
+        html = STUDIO.read_text(encoding='utf-8')
+        assert re.search(r'<style\b', html) is None, 'an inline <style> block is back in zenviz.html'
+
+    def test_every_module_the_studio_names_is_shipped(self, studio_sweep):
+        missing = []
+        for attrs, pos in studio_sweep.scripts:
+            match = _SCRIPT_SRC.match(attrs.get('src') or '')
+            if match and not (JS_DIR / match.group(1)).is_file():
+                missing.append(f'/js/{match.group(1)} at line {pos[0]}')
+        assert not missing, f'zenviz.html loads scripts that are not on disk: {missing}'
+        names = [attrs.get('src') for attrs, _pos in studio_sweep.scripts if attrs.get('src')]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        assert not duplicates, f'zenviz.html loads these more than once: {duplicates}'
+
+    def test_the_studio_page_script_and_its_stylesheet_are_page_owned(self, studio_sweep, sweep):
+        """The studio app is loaded by the studio page only (like its bridge): the workbench
+        has its own embedded host, and two page apps on one page would fight over ``#chart-mount``."""
+        loaded = {
+            _SCRIPT_SRC.match(attrs['src']).group(1)
+            for attrs, _pos in studio_sweep.scripts
+            if _SCRIPT_SRC.match(attrs['src'])
+        }
+        workbench = {
+            _SCRIPT_SRC.match(attrs['src']).group(1) for attrs, _pos in sweep.scripts if _SCRIPT_SRC.match(attrs['src'])
+        }
+        assert 'zenviz-page.js' in loaded, f'the studio page app is not loaded: {sorted(loaded)}'
+        assert 'zenviz-page.js' not in workbench, 'the studio page app leaked onto the workbench page'
+        assert (STATIC / 'css' / 'zenviz.css').is_file()

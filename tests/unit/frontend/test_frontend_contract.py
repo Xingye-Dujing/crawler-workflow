@@ -742,10 +742,11 @@ class TestChromeOfThePageItself:
         assert 'display: none' not in css[css.index('#top-menu::-webkit-scrollbar {') :].split('}')[0]
 
     def test_the_workbench_copy_of_the_bar_keeps_the_same_rule(self):
-        """``zenviz.html`` carries its own inline copy of the top-menu block for the
-        embedded workbench. Left alone, the main-page fix silently forks."""
-        page = (STATIC_DIR / 'zenviz.html').read_text(encoding='utf-8')
-        bar = page[page.index('#top-menu {') : page.index('#menu-trigger:hover')]
+        """``css/zenviz.css`` carries its own copy of the top-menu block for the embedded
+        workbench. Left alone, the main-page fix silently forks. (The block lived inline in
+        ``zenviz.html`` until 2026-10-29; the stylesheet is where the page reads it now.)"""
+        css = (STATIC_DIR / 'css' / 'zenviz.css').read_text(encoding='utf-8')
+        bar = css[css.index('#top-menu {') : css.index('#menu-trigger:hover')]
         assert 'justify-content: safe center' in bar, 'the embedded page still centres an overflowing row'
         assert 'scrollbar-width: none' not in bar
 

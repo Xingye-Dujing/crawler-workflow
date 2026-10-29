@@ -1,7 +1,8 @@
 # 前端模块化方案 / Frontend module plan
 
-> 背景：`backend/static/js/workflow.js` 现有 **~13,000 行**、146 个顶层函数与十余个命名空间对象，
-> 是仓库里最大的单文件。本文件是**已落地部分**与**后续按序拆分**的契约；每一步都必须全量测试
+> 背景：`backend/static/js/workflow.js` 曾 **~13,000 行**、146 个顶层函数与十余个命名空间对象，
+> 是仓库里最大的单文件；Stage 8 与 10b 的十四 + 四刀之后它剩 **2,089 行**。
+> 本文件是**已落地部分**与**后续按序拆分**的契约；每一步都必须全量测试
 > 通过、单独提交，且不改变任何全局名字（`onclick="…"` 与 harness 都按名字调用）。
 
 ## 1. 现状与约束
@@ -39,6 +40,7 @@
 | `panels/shell.js` | 大纲侧栏、语言切换、toast、进程列表、通用对话框、`fetchJSON`（702 行） | Stage 10b 整段切片搬出；`setLang` 里对 `biblioWorkspace`/`schedulesManager` 的语言回调随之移动，两处扫描改读本文件 |
 | `panels/run-results.js` | 续跑横幅与已载入运行结果抽屉（357 行） | Stage 10b 整段切片搬出 |
 | `workflow-layout.js` | `LayoutStrategy` 自动布局（Style 菜单）（163 行） | Stage 10b 整段切片搬出 |
+| `zenviz-page.js` + `css/zenviz.css` | 图表工作室页面自身：14,720 行的 IIFE（引擎渲染、属性面板、导入导出、持久化）与 1,927 行样式 | 2026-10-29 从 `zenviz.html`（16,852 行）的**内联 `<style>`/`<script>`** 原字节搬出，页面剩 218 行；JS 仍是**一个 IIFE、缩进未动**（模板字符串跨行，去缩进会改到字符串内容），CSS 只去了行首页面对齐的六格。文件化换来 `node --check`、可审 diff 与严格 CSP（禁用内联）。`zenviz-page.js` 只由 `zenviz.html` 加载（与 `zenviz-bridge.js` 同），`tests/unit/frontend/test_frontend_page_markup.py` 把同一套文档契约（id 唯一/成对/可访问名/无内联/模块在盘）套到工作室页 |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
 
