@@ -21,6 +21,7 @@ import time
 
 from core import machine
 from core.config import Config
+from runtime.settings import get_setting
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -29,7 +30,6 @@ from sessions import profiles
 
 from crawlers.core.faults import ProfileUnavailableError
 from i18n import t
-from settings_store import get_setting
 
 logger = logging.getLogger(__name__)
 

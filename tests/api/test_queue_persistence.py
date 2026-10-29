@@ -12,7 +12,7 @@ exercised in ``test_api_hardening``.
 """
 
 import pytest
-from state import _RUN_QUEUE
+from runtime.state import _RUN_QUEUE
 
 from services.runs import queue as run_queue
 

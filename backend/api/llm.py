@@ -3,7 +3,7 @@
 The settings panel chooses a transport (local Ollama daemon or OpenRouter ``:free``); the API key
 never touches disk here — the browser keeps it in localStorage and posts it per request. Three
 endpoints: the OpenRouter catalog, the local daemon's tags, and a tiny round-trip test. Depends on
-``analyzers.llm_client`` + ``transport`` + ``api.http`` + ``settings_store``; no run state, no
+``analyzers.llm_client`` + ``runtime.transport`` + ``api.http`` + ``runtime.settings``; no run state, no
 stores. ``LLMClient`` is the same class ``app.py`` imports, so tests that stub
 ``app_module.LLMClient.chat`` still reach this route. Paths unchanged.
 """
@@ -14,12 +14,12 @@ import time
 import requests
 from core.config import Config
 from flask import Blueprint, jsonify
-from transport import _local_transport_refusal
+from runtime.settings import get_setting
+from runtime.transport import _local_transport_refusal
 
 from analyzers.llm_client import LLMClient, LLMError, list_free_models, list_ollama_models
 from api.http import _bad_body, _json_body
 from i18n import t
-from settings_store import get_setting
 
 logger = logging.getLogger('api.llm')
 

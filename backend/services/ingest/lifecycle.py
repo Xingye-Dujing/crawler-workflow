@@ -17,7 +17,7 @@ import threading
 
 from core import procs
 from core.config import Config
-from state import add_log
+from runtime.state import add_log
 
 from crawlers.core.faults import DeadDriver
 from i18n import t

@@ -15,7 +15,7 @@ import os
 
 from core.config import Config
 from core.refs import as_bool
-from state import _completed_lock, add_log, execution_state
+from runtime.state import _completed_lock, add_log, execution_state
 
 from analyzers.llm_client import LLMClient
 from i18n import t

@@ -32,12 +32,7 @@ ABOVE_CORE = {
     'sessions',
     'scheduling',
     'i18n',
-    'state',
-    'stores',
-    'settings_store',
-    'crawl_capabilities',
-    'crawl_gate',
-    'transport',
+    'runtime',
 }
 HEAVY = {'sklearn', 'scipy', 'matplotlib', 'joblib', 'torch', 'transformers', 'selenium', 'flask'}
 
@@ -79,3 +74,32 @@ class TestTheFoundationImportsNoLayerAboveIt:
     def test_the_old_utils_tree_is_gone(self):
         """The move is only finished when the old package cannot come back by habit."""
         assert not (CORE.parent / 'utils').exists(), 'backend/utils/ still exists; the three modules live in core/ now'
+
+
+class TestTheBackendRootStaysThin:
+    """The root holds the composition root and the message machinery, nothing else.
+
+    ``state``/``stores``/``settings_store``/``crawl_gate``/``transport`` used to sit beside
+    ``app.py``; they are the process-wide runtime layer now (``runtime/``). A new root module is
+    how that layer starts to grow back: it is importable by everything, so it attracts imports
+    from every direction and the next one is a cycle nobody sees until collection fails.
+    """
+
+    def test_only_app_and_i18n_are_modules_at_the_root(self):
+        root = CORE.parent
+        modules = {path.name for path in root.glob('*.py')} - {'__init__.py'}
+        assert modules == {'app.py', 'i18n.py'}, (
+            f'backend/ holds {sorted(modules)}; process-wide wiring belongs in runtime/, domain code in its '
+            'own package — the root is the composition root (app.py) and the message machinery (i18n.py)'
+        )
+
+    def test_the_runtime_package_never_imports_the_application(self):
+        """``runtime`` is imported BY ``app``; importing it back would close the cycle at import."""
+        offenders = []
+        for path in sorted((CORE.parent / 'runtime').glob('*.py')):
+            roots = _roots(path)
+            if 'app' in roots:
+                offenders.append(path.name)
+        assert offenders == [], (
+            f'runtime/ imports app: {offenders} — the composition root imports runtime, not the reverse'
+        )

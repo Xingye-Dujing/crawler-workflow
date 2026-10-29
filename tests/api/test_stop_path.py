@@ -273,7 +273,7 @@ class TestTheRecordFlipsWithTheRequest:
         assert answer['ok'] is True and answer['idle'] is True, answer
         # The flag is ``state``'s, and it is read by the node walk in ``engine.run`` — asking
         # ``app`` for it would only work while the orchestration still lived there.
-        import state
+        from runtime import state
 
         assert state.stop_requested() is False
         assert client.get('/api/workflow/status').get_json()['stopping'] is False

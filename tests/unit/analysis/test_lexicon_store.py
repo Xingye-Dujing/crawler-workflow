@@ -10,7 +10,7 @@ import os
 
 import jieba
 import pytest
-import stores
+from runtime import stores
 
 from analyzers import stopwords
 from services.analysis import lexicon as lexicon_service

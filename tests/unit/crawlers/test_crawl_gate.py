@@ -1,6 +1,6 @@
 """The same-platform gate: who waits, who only waits *to start*, and what each says.
 
-``crawl_gate`` decides whether two workflows crawling weibo collide at the site or
+``gate`` decides whether two workflows crawling weibo collide at the site or
 take turns, and the two modes it offers are genuinely different promises, so they are
 tested apart:
 
@@ -25,8 +25,8 @@ mode that silently *over*-serialises would take away the 并行 the user asked f
 
 import threading
 
-import crawl_gate
 import pytest
+from runtime import gate
 
 pytestmark = pytest.mark.unit
 
@@ -44,31 +44,31 @@ def isolated(monkeypatch):
     reference to the same function the test would poll on, so patching the stdlib would
     also blind every wait in here.
     """
-    crawl_gate.reset()
+    gate.reset()
     waits = []
     clock = {'now': 1000.0}
-    monkeypatch.setattr(crawl_gate, '_now', lambda: clock['now'])
+    monkeypatch.setattr(gate, '_now', lambda: clock['now'])
 
     def _sleep(seconds, abort):
         waits.append(seconds)
         clock['now'] += seconds
 
-    monkeypatch.setattr(crawl_gate, '_interruptible_sleep', _sleep)
-    monkeypatch.setattr(crawl_gate.Config, 'PLATFORM_GATE_TIMEOUT', 0.3)
+    monkeypatch.setattr(gate, '_interruptible_sleep', _sleep)
+    monkeypatch.setattr(gate.Config, 'PLATFORM_GATE_TIMEOUT', 0.3)
     return {'waits': waits, 'clock': clock}
 
 
 def _settings(monkeypatch, *, queue, stagger=10.0):
     """Pin both knobs at once: the mode is a setting and so is the wait it pays."""
     values = {'same_platform_queue': queue, 'same_platform_stagger': stagger}
-    monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: values[key])
+    monkeypatch.setattr(gate, 'get_setting', lambda key: values[key])
 
 
 def _holder(platform, inside, release, account=''):
     """A crawl that occupies *platform*'s lane until the test lets it out."""
 
     def body():
-        with crawl_gate.hold(platform, account=account):
+        with gate.hold(platform, account=account):
             if inside is not None:
                 inside.set()
             if release is not None:
@@ -81,14 +81,14 @@ def _holder(platform, inside, release, account=''):
 
 def _enter(platform):
     """Take the turn and report the answer the caller gets — so a thread can hand it back."""
-    with crawl_gate.hold(platform) as waited:
+    with gate.hold(platform) as waited:
         return waited
 
 
 class TestStrictQueue:
     def test_an_empty_platform_costs_nothing(self, monkeypatch, isolated):
         _settings(monkeypatch, queue=True)
-        with crawl_gate.hold('weibo') as waited:
+        with gate.hold('weibo') as waited:
             assert waited is False
         assert isolated['waits'] == [], 'a serial canvas must not pay for a policy that protects a parallel one'
 
@@ -103,7 +103,7 @@ class TestStrictQueue:
         answers, finished = [], threading.Event()
 
         def waiter():
-            with crawl_gate.hold('weibo') as waited:
+            with gate.hold('weibo') as waited:
                 answers.append(waited)
             finished.set()
 
@@ -149,7 +149,7 @@ class TestStrictQueue:
         holder = _holder('weibo', inside, release)
         assert inside.wait(5)
         release.set()
-        with crawl_gate.hold('weibo') as waited:
+        with gate.hold('weibo') as waited:
             assert waited is True
         holder.join(5)
         assert isolated['waits'] == [], f'0 seconds still slept: {isolated["waits"]}'
@@ -159,7 +159,7 @@ class TestStrictQueue:
         inside, release = threading.Event(), threading.Event()
         holder = _holder('weibo', inside, release)
         assert inside.wait(5)
-        with crawl_gate.hold('zhihu') as waited:
+        with gate.hold('zhihu') as waited:
             assert waited is False, 'a gate on weibo charged zhihu for it'
         assert isolated['waits'] == []
         release.set()
@@ -177,7 +177,7 @@ class TestStrictQueue:
         answers, finished = [], threading.Event()
 
         def other():
-            with crawl_gate.hold('weibo', account='work') as waited:
+            with gate.hold('weibo', account='work') as waited:
                 answers.append(waited)
             finished.set()
 
@@ -201,7 +201,7 @@ class TestStrictQueue:
         answers, finished = [], threading.Event()
 
         def waiter():
-            with crawl_gate.hold('weibo', account='work') as waited:
+            with gate.hold('weibo', account='work') as waited:
                 answers.append(waited)
             finished.set()
 
@@ -225,7 +225,7 @@ class TestStrictQueue:
         blocked = threading.Event()
 
         def waiter():
-            with crawl_gate.hold('weibo'):
+            with gate.hold('weibo'):
                 blocked.set()
 
         thread = threading.Thread(target=waiter)
@@ -248,7 +248,7 @@ class TestStrictQueue:
         blocked = threading.Event()
 
         def waiter():
-            with crawl_gate.hold('weibo', account=''):
+            with gate.hold('weibo', account=''):
                 blocked.set()
 
         thread = threading.Thread(target=waiter)
@@ -269,7 +269,7 @@ class TestStrictQueue:
         holder = _holder('weibo', inside, release)
         assert inside.wait(5)
         try:
-            with pytest.raises(RuntimeError) as caught, crawl_gate.hold('weibo'):
+            with pytest.raises(RuntimeError) as caught, gate.hold('weibo'):
                 pass
             assert 'weibo' not in str(caught.value) and ('微博' in str(caught.value) or 'Weibo' in str(caught.value))
         finally:
@@ -284,7 +284,7 @@ class TestStrictQueue:
         stopped = threading.Event()
         stopped.set()
         try:
-            with pytest.raises(RuntimeError) as caught, crawl_gate.hold('weibo', abort=stopped.is_set):
+            with pytest.raises(RuntimeError) as caught, gate.hold('weibo', abort=stopped.is_set):
                 pass
             text = str(caught.value)
             assert '取消' in text or 'cancel' in text.lower(), f'not the cancellation line: {text}'
@@ -306,7 +306,7 @@ class TestStaggerOnly:
         holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         try:
-            with crawl_gate.hold('zhihu') as waited:
+            with gate.hold('zhihu') as waited:
                 assert waited is True, 'it started on top of another crawl and was not told it had waited'
                 assert inside.is_set(), 'the first crawl had already left — that overlap was not measured'
         finally:
@@ -322,7 +322,7 @@ class TestStaggerOnly:
         holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         try:
-            with crawl_gate.hold('zhihu'):
+            with gate.hold('zhihu'):
                 pass
         finally:
             release.set()
@@ -338,7 +338,7 @@ class TestStaggerOnly:
         for company that had gone home."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         for _round in range(3):
-            with crawl_gate.hold('zhihu') as waited:
+            with gate.hold('zhihu') as waited:
                 assert waited is False
         assert isolated['waits'] == [], f'a serial hand-off paid a gap: {isolated["waits"]}'
 
@@ -351,7 +351,7 @@ class TestStaggerOnly:
         assert inside.wait(5)
         try:
             for _round in range(2):
-                with crawl_gate.hold('zhihu'):
+                with gate.hold('zhihu'):
                     pass
         finally:
             release.set()
@@ -363,8 +363,8 @@ class TestStaggerOnly:
         """Spacing is measured from the last *overlapping* start, so the first crawl of
         a platform is not made to wait for a company that was never in the room."""
         _settings(monkeypatch, queue=False, stagger=10.0)
-        crawl_gate._LAST_START['zhihu'] = 0.0
-        with crawl_gate.hold('zhihu') as waited:
+        gate._LAST_START['zhihu'] = 0.0
+        with gate.hold('zhihu') as waited:
             assert waited is False
         assert isolated['waits'] == []
 
@@ -373,7 +373,7 @@ class TestStaggerOnly:
         inside, release = threading.Event(), threading.Event()
         holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
-        with crawl_gate.hold('zhihu') as waited:
+        with gate.hold('zhihu') as waited:
             assert waited is False
             assert isolated['waits'] == []
         release.set()
@@ -389,9 +389,9 @@ class TestStaggerOnly:
         assert inside.wait(5)
         try:
             for _round in range(2):
-                with crawl_gate.hold('zhihu'):
+                with gate.hold('zhihu'):
                     pass
-            with crawl_gate.hold('bilibili') as waited:
+            with gate.hold('bilibili') as waited:
                 assert waited is False
         finally:
             release.set()
@@ -402,22 +402,22 @@ class TestStaggerOnly:
         """The wait in this mode can be minutes long, and 停止 has to reach it — the
         same promise the queue makes, for a different reason."""
         _settings(monkeypatch, queue=False, stagger=60.0)
-        real_sleep = crawl_gate._interruptible_sleep
+        real_sleep = gate._interruptible_sleep
         slept = []
 
         def sleeping(seconds, abort):
             slept.append(seconds)
             real_sleep(seconds, abort)
 
-        monkeypatch.setattr(crawl_gate, '_interruptible_sleep', sleeping)
-        monkeypatch.setattr(crawl_gate.Config, 'PLATFORM_GATE_TIMEOUT', 5.0)
+        monkeypatch.setattr(gate, '_interruptible_sleep', sleeping)
+        monkeypatch.setattr(gate.Config, 'PLATFORM_GATE_TIMEOUT', 5.0)
         inside, release = threading.Event(), threading.Event()
         holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         stopped = threading.Event()
         stopped.set()
         try:
-            with crawl_gate.hold('zhihu', abort=stopped.is_set) as waited:
+            with gate.hold('zhihu', abort=stopped.is_set) as waited:
                 assert waited is True
         finally:
             release.set()
@@ -441,7 +441,7 @@ class TestSerialOnlyBelow:
         answers, finished = [], threading.Event()
 
         def waiter():
-            with crawl_gate.hold('weibo') as waited:
+            with gate.hold('weibo') as waited:
                 answers.append(waited)
             finished.set()
 
@@ -465,7 +465,7 @@ class TestSerialOnlyBelow:
         assert inside.wait(5)
 
         def waiter():
-            with crawl_gate.hold('weibo', log=lines.append):
+            with gate.hold('weibo', log=lines.append):
                 pass
 
         second = threading.Thread(target=waiter)
@@ -485,7 +485,7 @@ class TestSerialOnlyBelow:
         holder = _holder('bilibili', inside, release)
         assert inside.wait(5)
         try:
-            with crawl_gate.hold('bilibili'):
+            with gate.hold('bilibili'):
                 assert inside.is_set(), 'bilibili was parked behind a rule only weibo carries'
         finally:
             release.set()
@@ -503,7 +503,7 @@ class TestModeIsolation:
         assert inside.wait(5)
         _settings(monkeypatch, queue=False, stagger=1.0)
         try:
-            with crawl_gate.hold('zhihu'):
+            with gate.hold('zhihu'):
                 pass  # 错峰 says this may enter while the strict holder is still inside
         finally:
             release.set()
@@ -511,6 +511,6 @@ class TestModeIsolation:
 
     def test_an_unnamed_platform_is_passed_through(self, monkeypatch, isolated):
         _settings(monkeypatch, queue=True)
-        with crawl_gate.hold('') as waited:
+        with gate.hold('') as waited:
             assert waited is False
         assert isolated['waits'] == []

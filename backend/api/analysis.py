@@ -10,7 +10,7 @@ Deps are all cycle-free (``api.resolution``/``stores``/``services.analysis.pipel
 
 from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify
-from stores import _register_dataset
+from runtime.stores import _register_dataset
 
 from analyzers import (
     EmotionAnalyzer,

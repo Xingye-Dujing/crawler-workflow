@@ -4,7 +4,7 @@ With a run context the crawler streams into the database instead of building a l
 memory: rows survive whatever kills the run, and items an earlier attempt already collected
 are given back to it so it can stop scraping early rather than refilling them.
 
-The lane splits per ACCOUNT (``crawl_gate._lane``): the measured wall is one SESSION searching
+The lane splits per ACCOUNT (``gate._lane``): the measured wall is one SESSION searching
 twice, so two logins of one platform are two lanes and may crawl at the same moment — which is
 the whole reason accounts exist here. Holding it around the WHOLE node (rather than around each
 request) keeps a retry inside the turn: a retry that released the queue first would collide
@@ -16,11 +16,11 @@ import os
 import time
 
 import capabilities.registry as capabilities
-import crawl_gate
 from api.http import _safe_int
 from core.config import Config
 from core.refs import as_bool, comment_platforms, split_urls
-from state import _wf_local, add_log, execution_state, stop_requested
+from runtime import gate
+from runtime.state import _wf_local, add_log, execution_state, stop_requested
 
 from crawlers import get_crawler, is_crawlable
 from crawlers.backends.catbus import CatbusCrawler
@@ -100,7 +100,7 @@ def crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict,
     mid-crawl. That one must not be retried here — it settles the node partial, fails
     the run and hands the user the 继续 banner, which is the path that keeps the rows
     already paid for. The wait happens **inside** the platform's turn (see
-    ``crawl_gate.hold`` in :func:`run`), or a retry would queue up behind the very
+    ``gate.hold`` in :func:`run`), or a retry would queue up behind the very
     workflow it is waiting for.
     """
     try:
@@ -562,5 +562,5 @@ def run(node: dict, call: NodeCall):
     # reaches this function without a claim in place has no run to be "not running", and inferring
     # 「the user pressed 停止」 from that abandoned the queue for every such call instead of holding
     # the lane.
-    with crawl_gate.hold(platform, log=add_log, abort=stop_requested, account=account):
+    with gate.hold(platform, log=add_log, abort=stop_requested, account=account):
         return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)

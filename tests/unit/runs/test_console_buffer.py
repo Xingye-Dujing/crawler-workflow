@@ -1,4 +1,4 @@
-"""The console line buffer behind ``/api/workflow/status`` (``state.py::_push_log``).
+"""The console line buffer behind ``/api/workflow/status`` (``runtime/state.py::_push_log``).
 
 The browser reads the console by DELTA: it remembers how many lines it has seen and
 asks for the tail, because the server keeps only the last ``LOG_KEEP`` lines of the
@@ -20,7 +20,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from state import reset_console_state
+from runtime.state import reset_console_state
 
 pytestmark = pytest.mark.unit
 
@@ -66,7 +66,7 @@ def sink(console):
     restore it; leaving a recorder installed would let it leak into the next test in the
     session (and into any real run another test drives). This fixture always clears it.
     """
-    import state
+    from runtime import state
 
     received = []
 
@@ -285,7 +285,7 @@ class TestConsoleReset:
         # console subsystem moved out of ``app`` so the services/ executors can log
         # without a Flask import cycle). A function-scope import — the file's own
         # hygiene rule allows this, it only bans a module-level one.
-        import state
+        from runtime import state
 
         missing = [key for key in state._console_baseline() if key not in state.execution_state]
         assert missing == []
@@ -309,7 +309,7 @@ class TestConsoleReset:
         app, state = console
         # ``LOG_KEEP`` is the buffer's own bound and lives in ``state`` with the writers; asking
         # ``app`` for it would make the test depend on which module happens to re-export it.
-        from state import LOG_KEEP
+        from runtime.state import LOG_KEEP
 
         produced = LOG_KEEP + 50
         for i in range(produced):
@@ -322,7 +322,7 @@ class TestConsoleReset:
 
     def test_a_workflow_buffer_is_trimmed_and_counted_the_same_way(self, console):
         app, state = console
-        from state import LOG_KEEP
+        from runtime.state import LOG_KEEP
 
         produced = LOG_KEEP + 10
         for i in range(produced):

@@ -12,7 +12,7 @@ import pandas as pd
 from core.config import Config
 from core.refs import as_bool
 from core.refs import json_safe_records as _json_safe_records
-from state import add_log
+from runtime.state import add_log
 
 from i18n import t
 from nodes.context import NodeCall

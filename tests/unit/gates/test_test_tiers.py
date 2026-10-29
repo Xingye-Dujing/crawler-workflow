@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 from capabilities.registry import CAPABILITIES
-from state import cookie_manager, history_service
+from runtime.state import cookie_manager, history_service
 
 pytestmark = pytest.mark.unit
 
@@ -260,9 +260,9 @@ class TestRegionSplit:
     def test_the_warning_switch_hides_the_question_and_nothing_else(self):
         """Turning the dialog off must not change what a run does — the split of the
         live tier and the crawl itself read the matrix, never this setting."""
-        text = (REPO_ROOT / 'backend' / 'settings_store.py').read_text(encoding='utf-8')
+        text = (REPO_ROOT / 'backend' / 'runtime' / 'settings.py').read_text(encoding='utf-8')
         assert "'ask_overseas_network': True" in text, 'asking is the default until somebody says otherwise'
-        gate = (REPO_ROOT / 'backend' / 'crawl_gate.py').read_text(encoding='utf-8')
+        gate = (REPO_ROOT / 'backend' / 'runtime' / 'gate.py').read_text(encoding='utf-8')
         assert 'ask_overseas_network' not in gate, 'a cosmetic dialog must not be wired into what actually runs'
 
 
@@ -358,8 +358,8 @@ class TestUserDirectoryStaysReadOnly:
     def _every_captured_path(self) -> dict:
         """Each place a module-level singleton wrote down a path, as it stands right now."""
         from core.config import Config
+        from runtime import settings
 
-        import settings_store
         from analyzers import ml_base
 
         found = {
@@ -372,13 +372,13 @@ class TestUserDirectoryStaysReadOnly:
             'Config.LOG_DIR': Config.LOG_DIR,
             'Config.RUNS_DB': Config.RUNS_DB,
             'Config.DATASETS_DB': Config.DATASETS_DB,
-            'settings_store._PATH': settings_store._PATH,
+            'runtime.settings._PATH': settings._PATH,
             'ml_base.MODEL_DIR': ml_base.MODEL_DIR,
             # Both singletons are built while ``state`` is imported, which conftest does during
             # collection — so this asks the question unconditionally now that neither of them is
             # an ``app`` attribute. They are the same never-rebound objects the app reads.
-            'state.cookie_manager.cookie_dir': cookie_manager.cookie_dir,
-            'state.history_service.db_path': history_service.db_path,
+            'runtime.state.cookie_manager.cookie_dir': cookie_manager.cookie_dir,
+            'runtime.state.history_service.db_path': history_service.db_path,
         }
         return found
 
@@ -586,14 +586,14 @@ class TestLiveCrawlerFixture:
     the gate for ``Config.PLATFORM_GATE_TIMEOUT`` — 900 seconds that look exactly like a
     slow crawl, because the wait happens before the browser exists. That is a property of
     this fixture rather than of any site, so it is checked by driving the fixture itself
-    with both ends replaced: :func:`crawl_gate.hold` becomes a recorder that refuses an
+    with both ends replaced: :func:`gate.hold` becomes a recorder that refuses an
     overlapping turn, and ``get_crawler`` a stub that closes on command.
     """
 
     def _drive(self, monkeypatch, raises=None):
         import importlib.util
 
-        import crawl_gate
+        from runtime import gate
 
         import crawlers
 
@@ -638,7 +638,7 @@ class TestLiveCrawlerFixture:
             made.append(stub)
             return stub
 
-        monkeypatch.setattr(crawl_gate, 'hold', fake_hold)
+        monkeypatch.setattr(gate, 'hold', fake_hold)
         monkeypatch.setattr(crawlers, 'get_crawler', fake_get_crawler)
         # ``__wrapped__`` is the undecorated generator function: pytest refuses to have a
         # fixture called directly, and it is right — but driving the helper's own body is
@@ -789,16 +789,15 @@ class TestLiveTierSessionShape:
         tier's directory" — the seam is :func:`sessions.template.root_dir`, which every crawl and
         every marker path goes through."""
         import isolation_guard
+        from runtime import settings
         from sessions import profiles
-
-        import settings_store
 
         module = _live_conftest()
         monkeypatch.delenv(isolation_guard.USER_PROFILE_ENV, raising=False)
         target = tmp_path / 'live_profiles'
         monkeypatch.setattr(module, 'LIVE_PROFILE_ROOT', target)
-        monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
-        monkeypatch.setattr(settings_store, '_values', None)
+        monkeypatch.setattr(settings, '_PATH', str(tmp_path / 'settings.json'))
+        monkeypatch.setattr(settings, '_values', None)
         module.live_profile_root.__wrapped__()
         assert profiles.is_enabled() is True, 'a tier that silently fell back to no profile replants every run'
         assert profiles.root_dir() == str(target.resolve()), profiles.root_dir()
@@ -806,13 +805,12 @@ class TestLiveTierSessionShape:
     def test_a_profile_root_inside_the_user_directory_is_refused(self, monkeypatch, tmp_path):
         """The one mistake this fixture could make that would do harm rather than lose fidelity."""
         import isolation_guard
-
-        import settings_store
+        from runtime import settings
 
         module = _live_conftest()
         monkeypatch.delenv(isolation_guard.USER_PROFILE_ENV, raising=False)
         monkeypatch.setattr(module, 'LIVE_PROFILE_ROOT', REPO_ROOT / 'data' / 'chrome_profile')
-        monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
+        monkeypatch.setattr(settings, '_PATH', str(tmp_path / 'settings.json'))
         with pytest.raises(AssertionError) as refused:
             module.live_profile_root.__wrapped__()
         assert 'user' in str(refused.value).lower(), refused.value

@@ -1,6 +1,6 @@
 """Tests for the runtime settings panel and the AI endpoints behind it.
 
-``settings_store`` is the machine-local half of the app: the values that used
+``settings`` is the machine-local half of the app: the values that used
 to be hardcoded in ``core/config.py`` and now get edited from the browser. The
 contract worth pinning is that a bad edit degrades *loudly and locally* — the
 handler answers 200 with a warning and falls back to the default, because a
@@ -16,8 +16,7 @@ import json
 
 import pytest
 from core.config import Config
-
-import settings_store
+from runtime import settings
 
 pytestmark = pytest.mark.api
 
@@ -30,10 +29,10 @@ def settings_file(tmp_path, monkeypatch):
     that wrote there would decide what another test's ``GET`` sees.
     """
     path = tmp_path / 'settings.json'
-    monkeypatch.setattr(settings_store, '_PATH', str(path))
-    monkeypatch.setattr(settings_store, '_values', None)
+    monkeypatch.setattr(settings, '_PATH', str(path))
+    monkeypatch.setattr(settings, '_values', None)
     yield path
-    settings_store._values = None
+    settings._values = None
 
 
 class _FakeResponse:
@@ -70,16 +69,16 @@ class TestSettingsRead:
     def test_get_returns_every_key_the_defaults_advertise(self, client):
         body = client.get('/api/settings').get_json()
         assert body['ok'] is True
-        assert set(body['settings']) == set(settings_store.DEFAULTS)
+        assert set(body['settings']) == set(settings.DEFAULTS)
         assert body['settings']['window_size'] == '1920x1080'
         assert body['settings']['page_load_timeout'] == 40
         assert body['settings']['ollama_host'] == Config.OLLAMA_HOST
 
     def test_get_survives_a_corrupt_settings_file(self, client, settings_file):
         settings_file.write_text('{not json', encoding='utf-8')
-        settings_store._values = None
+        settings._values = None
         body = client.get('/api/settings').get_json()
-        assert body['settings'] == settings_store.DEFAULTS
+        assert body['settings'] == settings.DEFAULTS
 
 
 class TestSettingsWrite:
@@ -97,7 +96,7 @@ class TestSettingsWrite:
         assert on_disk['window_size'] == '1280x720'
         # Readers pull through the cache, which proves the save was applied and
         # not merely written.
-        assert settings_store.get_setting('ollama_host') == 'http://ollama.lan:11434'
+        assert settings.get_setting('ollama_host') == 'http://ollama.lan:11434'
 
     def test_a_bare_object_is_accepted_as_the_patch(self, client):
         body = client.post('/api/settings', json={'element_timeout': 30}).get_json()
@@ -109,7 +108,7 @@ class TestSettingsWrite:
         assert 'secret' not in body['settings']
         assert body['settings']['window_size'] == '900x900'
 
-    @pytest.mark.parametrize('key', [key for key, value in settings_store.DEFAULTS.items() if isinstance(value, bool)])
+    @pytest.mark.parametrize('key', [key for key, value in settings.DEFAULTS.items() if isinstance(value, bool)])
     @pytest.mark.parametrize(
         ('sent', 'expected'),
         [
@@ -128,10 +127,10 @@ class TestSettingsWrite:
         # A GET sees the same value the POST settled on (persisted, not echoed).
         assert client.get('/api/settings').get_json()['settings'][key] is expected
 
-    @pytest.mark.parametrize('key', [key for key, value in settings_store.DEFAULTS.items() if isinstance(value, bool)])
+    @pytest.mark.parametrize('key', [key for key, value in settings.DEFAULTS.items() if isinstance(value, bool)])
     def test_garbage_in_a_switch_falls_back_to_the_default_and_says_which(self, client, key):
         body = client.post('/api/settings', json={key: 'maybe'}).get_json()
-        assert body['settings'][key] is settings_store.DEFAULTS[key]
+        assert body['settings'][key] is settings.DEFAULTS[key]
         assert any(key in warning for warning in body['warnings']), body['warnings']
 
     @pytest.mark.parametrize(
@@ -205,7 +204,7 @@ class TestSettingsWrite:
     @pytest.mark.parametrize('sent', [-1, 601, 'minutes', None, '1e400'])
     def test_an_unusable_stagger_falls_back_and_says_which_number_was_refused(self, client, sent):
         body = client.post('/api/settings', json={'same_platform_stagger': sent}).get_json()
-        assert body['settings']['same_platform_stagger'] == settings_store.DEFAULTS['same_platform_stagger']
+        assert body['settings']['same_platform_stagger'] == settings.DEFAULTS['same_platform_stagger']
         assert any('same_platform_stagger' in warning for warning in body['warnings']), body['warnings']
 
     @pytest.mark.parametrize('key', ['max_visible_browsers', 'max_headless_browsers'])
@@ -224,18 +223,18 @@ class TestSettingsWrite:
         # 0 and 17 are the two bounds the panel cannot reach (min 1, max 16) but a crafted
         # request can — they must refuse loudly, not silently widen the pool to 0 workers.
         body = client.post('/api/settings', json={key: sent}).get_json()
-        assert body['settings'][key] == settings_store.DEFAULTS[key]
+        assert body['settings'][key] == settings.DEFAULTS[key]
         assert any(key in warning for warning in body['warnings']), body['warnings']
 
     def test_the_gate_reads_the_stagger_the_panel_saved(self, client, app_module):
         """The last mile: a number that lands in settings.json but is never read is a
         knob that does nothing, and only this round trip can tell that apart."""
-        import crawl_gate
+        from runtime import gate
 
         saved = client.post('/api/settings', json={'same_platform_stagger': 37, 'same_platform_queue': True}).get_json()
         assert saved['warnings'] == [], saved['warnings']
-        assert crawl_gate.stagger() == 37.0
-        assert crawl_gate.strict() is True
+        assert gate.stagger() == 37.0
+        assert gate.strict() is True
 
     def test_trailing_slash_is_stripped_from_a_good_host(self, client):
         body = client.post('/api/settings', json={'ollama_host': 'http://box:11434/'}).get_json()
@@ -282,7 +281,7 @@ class TestTheSecondBackendPaths:
             body = client.post('/api/settings', json={'catbus_cli': str(path)}).get_json()
             assert body['warnings'] == [], body['warnings']
             assert body['settings']['catbus_cli'] == str(path)
-            assert settings_store.get_setting('catbus_cli') == str(path), 'the bridge reads it back'
+            assert settings.get_setting('catbus_cli') == str(path), 'the bridge reads it back'
 
     def test_a_path_that_is_not_there_keeps_the_value_and_names_itself(self, client, tmp_path):
         ghost = str(tmp_path / 'nowhere' / 'cli.js')
@@ -353,7 +352,7 @@ class TestLlmPanelEndpoints:
         assert 'Could not fetch the OpenRouter model list' in body['error']
 
     def test_ollama_tags_come_from_the_configured_address(self, client, llm_client, monkeypatch):
-        monkeypatch.setattr(settings_store, '_values', {'ollama_host': 'http://ollama.test:11434'})
+        monkeypatch.setattr(settings, '_values', {'ollama_host': 'http://ollama.test:11434'})
         payload = {'models': [{'name': 'qwen3.5:9b'}, {'name': 'nomic-embed-text'}, {'model': 'fallback:tag'}]}
         calls = []
         _patch_http(monkeypatch, llm_client, 'get', response=_FakeResponse(payload), calls=calls)
@@ -364,7 +363,7 @@ class TestLlmPanelEndpoints:
         assert body['host'] == 'http://ollama.test:11434'
 
     def test_unreachable_daemon_reports_the_address_it_tried(self, client, llm_client, monkeypatch):
-        monkeypatch.setattr(settings_store, '_values', {'ollama_host': 'http://dead.host:11434'})
+        monkeypatch.setattr(settings, '_values', {'ollama_host': 'http://dead.host:11434'})
         error = llm_client.requests.ConnectionError('refused')
         _patch_http(monkeypatch, llm_client, 'get', error=error)
         response = client.get('/api/llm/ollama/models')
@@ -407,6 +406,6 @@ class TestLlmPanelEndpoints:
     def test_a_saved_value_survives_a_lost_cache(self, client, settings_file):
         """Dropping the cache is what a server restart does: the file decides."""
         client.post('/api/settings', json={'window_size': '700x700'})
-        settings_store._values = None
+        settings._values = None
         assert settings_file.exists()
         assert client.get('/api/settings').get_json()['settings']['window_size'] == '700x700'

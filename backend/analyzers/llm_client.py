@@ -61,7 +61,7 @@ def _settings_host() -> str:
     """Ollama daemon address from the runtime settings store. Imported lazily
     so the analyzers package keeps working when copied without the backend."""
     try:
-        from settings_store import get_setting
+        from runtime.settings import get_setting
 
         return str(get_setting('ollama_host') or '')
     except Exception:

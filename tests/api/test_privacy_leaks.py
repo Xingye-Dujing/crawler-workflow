@@ -16,7 +16,7 @@ import json
 import pytest
 from core.config import Config
 from flask import jsonify
-from state import cookie_manager
+from runtime.state import cookie_manager
 
 pytestmark = pytest.mark.api
 

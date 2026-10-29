@@ -20,7 +20,7 @@ from api.http import _safe_float, _safe_int
 from core.config import Config
 from core.refs import as_bool
 from core.refs import split_columns as _split_columns
-from state import add_log
+from runtime.state import add_log
 
 from analyzers import (
     BERT_BATCH,

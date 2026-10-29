@@ -37,9 +37,9 @@ import threading
 import time
 
 from core.config import Config
+from runtime.settings import get_setting
 
 from sessions.cookies import ACCOUNT_RE, CookieManager
-from settings_store import get_setting
 
 #: Written inside a platform's directory the first time it is used. Its presence is
 #: the whole difference between "import the saved cookie file" and "leave this

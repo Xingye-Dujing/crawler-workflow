@@ -21,9 +21,9 @@ from concurrent.futures import Future
 
 import pytest
 from core.config import Config
+from runtime.state import cookie_manager
 from sessions import preflight, profiles, routes
 from sessions.cookies import CookieManager
-from state import cookie_manager
 
 import i18n
 from services.ingest import catbus

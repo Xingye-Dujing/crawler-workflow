@@ -124,7 +124,7 @@ def _dataset_columns(node: dict) -> list[str] | None:
     if not dataset_id:
         return None
     try:
-        from stores import get_dataset_store
+        from runtime.stores import get_dataset_store
 
         meta = get_dataset_store().meta(dataset_id)
     except Exception:  # a store read must never turn a preview into a 500

@@ -43,7 +43,7 @@ def run_finished(module, timeout: float = 30.0) -> bool:
 
 def wait_until_quiet(module, timeout: float = 30.0) -> bool:
     """True once nothing is running *and* nothing is waiting to start."""
-    from state import _RUN_QUEUE  # imported per call: backend/ joins sys.path in conftest
+    from runtime.state import _RUN_QUEUE  # imported per call: backend/ joins sys.path in conftest
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -55,7 +55,7 @@ def wait_until_quiet(module, timeout: float = 30.0) -> bool:
 
 def describe_state(module) -> str:
     """A failure message that names what is actually blocking the test."""
-    from state import _RUN_QUEUE
+    from runtime.state import _RUN_QUEUE
 
     state = module.execution_state
     thread = state.get('thread')

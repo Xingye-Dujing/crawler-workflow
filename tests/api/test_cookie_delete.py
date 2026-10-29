@@ -12,9 +12,9 @@ import os
 import shutil
 
 import pytest
+from runtime.state import cookie_manager
 from sessions import profiles
 from sessions.cookies import CookieManager
-from state import cookie_manager
 
 import i18n
 

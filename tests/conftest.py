@@ -8,7 +8,7 @@ Three facts about this codebase drive everything here:
 2. Paths are captured **at import time, into module-level singletons**:
    ``state.cookie_manager = CookieManager(Config.COOKIE_DIR)`` and ``state.history_service``
    (which opens ``data/history.db``) are built when ``state`` is imported,
-   ``settings_store._PATH`` and ``analyzers/ml_base.MODEL_DIR``
+   ``runtime.settings._PATH`` and ``analyzers/ml_base.MODEL_DIR``
    are each computed once, and the lazy ``_RUN_STORE`` / ``_DATASET_STORE`` read
    ``Config.*_DB`` at first use.
 3. pytest imports *every collected test module* during collection — before any fixture
@@ -110,10 +110,10 @@ def _isolate_paths() -> Path:
     Config.BIBLIO_DB = str(root / 'data' / 'biblio.db')
     Config.WORKFLOW_HISTORY_DB = str(root / 'data' / 'workflow_history.db')
 
-    import settings_store
+    from runtime import settings
 
-    settings_store._PATH = str(root / 'data' / 'settings.json')
-    settings_store._values = None
+    settings._PATH = str(root / 'data' / 'settings.json')
+    settings._values = None
 
     return root
 
@@ -391,7 +391,7 @@ def clean_globals(request):
     da = sys.modules.get('services.analysis.topic_kernels')
     if da is not None:
         da._EMBED_MODEL_CACHE.clear()
-    ss = sys.modules.get('settings_store')
+    ss = sys.modules.get('runtime.settings')
     if ss is not None:
         ss._values = None
     # The pre-run cookie gate caches a verdict for a few minutes — deliberately, and
@@ -408,10 +408,10 @@ def clean_globals(request):
     # excluded: there, spacing across cases is the thing under test, because the site
     # answers a second search of one account with a login wall no matter which test sent
     # the first one.
-    platform_gate = sys.modules.get('crawl_gate')
+    platform_gate = sys.modules.get('runtime.gate')
     if platform_gate is not None and request.node.get_closest_marker('live_site') is None:
         platform_gate.reset()
-    console_state = sys.modules.get('state')
+    console_state = sys.modules.get('runtime.state')
     if console_state is not None:
         console_state.reset_console_state()
     if app is not None:
@@ -486,7 +486,7 @@ def client(app_module, data_root, request):
     not depend on console language.
     """
 
-    import stores
+    from runtime import stores
 
     from services.analysis.lexicon_store import LexiconStore
     from services.biblio.store import BiblioStore
@@ -506,7 +506,7 @@ def client(app_module, data_root, request):
     # Imported here, not at the top: ``backend/`` only joins sys.path below, and the
     # queue's owner is ``state`` now — ``app`` no longer binds the list. The queue's
     # operations live in ``services/runs/queue.py``, which mutates this same object.
-    from state import _RUN_QUEUE
+    from runtime.state import _RUN_QUEUE
 
     state_backup = _snapshot_state(module.execution_state)
     # The run queue is module state, not execution_state: a request one test

@@ -16,8 +16,8 @@ No Chrome is bought by any test here: the factory is stubbed and records the dec
 """
 
 import pytest
+from runtime.state import cookie_manager
 from sessions import preflight, profiles, routes
-from state import cookie_manager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 

@@ -11,9 +11,9 @@ import threading
 import time
 
 import pytest
+from runtime.state import cookie_manager
 from sessions import routes
 from sessions.cookies import CookieManager
-from state import cookie_manager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 

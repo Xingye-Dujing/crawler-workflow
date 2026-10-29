@@ -40,6 +40,7 @@ from capabilities import requirements
 from core import machine
 from core.config import Config
 from core.refs import as_bool
+from runtime.settings import get_setting
 
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET
@@ -49,7 +50,6 @@ from crawlers.platforms.hongguo.comments import hg_comment_rows, hg_page_title, 
 from crawlers.platforms.hongguo.naming import norm_title, screen_names
 from crawlers.platforms.hongguo.player_ui import PLAYER_CLASS, PlayerUI, TreeColdError
 from i18n import t
-from settings_store import get_setting
 
 logger = logging.getLogger(__name__)
 

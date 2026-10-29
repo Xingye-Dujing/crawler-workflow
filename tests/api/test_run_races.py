@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 from run_wait import run_finished
-from state import _RUN_QUEUE, _wf_local
+from runtime.state import _RUN_QUEUE, _wf_local
 
 from i18n import t
 from services.runs import queue as run_queue
@@ -486,7 +486,7 @@ class TestResumeAfterInterruption:
         try:
             # Opening the store *is* the boot-time promotion (RunStore.__init__
             # calls promote_stale_runs), so the assertion is about its effect.
-            import stores
+            from runtime import stores
 
             restarted = RunStore(str(db_path))
             monkeypatch.setattr(stores, '_RUN_STORE', restarted)

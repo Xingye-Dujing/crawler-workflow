@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 
 from core.config import Config
+from runtime.settings import get_setting
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -16,7 +17,6 @@ from crawlers.engine import feed, popup
 from crawlers.engine.pacing import throttled_sleep
 from crawlers.engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
 from i18n import t
-from settings_store import get_setting
 
 logger = logging.getLogger(__name__)
 

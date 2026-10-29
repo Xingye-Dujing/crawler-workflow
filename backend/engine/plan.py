@@ -54,7 +54,7 @@ def llm_provider(llm_cfg: dict) -> str:
     ``provider if provider in (...) else 'ollama'``: a hand-typed or stale-tab
     ``"OpenRouter"`` (wrong case) became a silent local-daemon call looking for a tag that does
     not exist, the whole node failed, yet the durable run record still claimed the transport was
-    OpenRouter — a record naming a transport that never ran. ``transport.py`` already refuses
+    OpenRouter — a record naming a transport that never ran. ``runtime/transport.py`` already refuses
     this shape for the cloud host; a local host must refuse it too rather than guess.
     """
     raw = (llm_cfg or {}).get('provider')

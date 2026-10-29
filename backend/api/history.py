@@ -7,7 +7,7 @@ helpers from ``api.http`` rather than importing ``app`` (a cycle).
 """
 
 from flask import Blueprint, jsonify, request
-from state import history_service
+from runtime.state import history_service
 
 from api.http import _bad_body, _json_body, _safe_int
 from i18n import t

@@ -42,7 +42,7 @@ from core.config import Config
 from sessions.cookies import CookieManager
 
 from i18n import t
-from settings_store import get_setting
+from runtime.settings import get_setting
 
 #: One lock per platform, created on first use and never removed: a workflow that
 #: finishes must not free a lock another one is already waiting on.

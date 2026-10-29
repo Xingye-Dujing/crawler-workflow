@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 
 import pytest
-from state import _RUN_QUEUE, _completed_lock, _results_snapshot
+from runtime.state import _RUN_QUEUE, _completed_lock, _results_snapshot
 
 from services.runs.payload import workflow_shape_error
 from services.runs.queue import queue_snapshot

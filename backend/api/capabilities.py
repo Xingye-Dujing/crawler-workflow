@@ -9,8 +9,8 @@ from ``state.cookie_manager``. Paths unchanged; app-level ``before_request`` / C
 import capabilities.registry as capabilities
 from capabilities import requirements
 from flask import Blueprint, jsonify
+from runtime.state import cookie_manager
 from sessions.cookies import CookieManager
-from state import cookie_manager
 
 bp = Blueprint('capabilities', __name__)
 

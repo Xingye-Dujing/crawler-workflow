@@ -17,7 +17,12 @@ crawler_workflow/
 │   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
 │   ├── i18n.py                   # zh/en 消息机制（t()/线程语言/audit + 合并按域词典）
 │   ├── i18n_catalog/             # 消息本体：一域一文件（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings）
-│   ├── settings_store.py         # 运行时可改设置（data/settings.json）
+│   ├── runtime/                  # 进程级运行层（2026-10-29 从根目录收进来：根只剩 app.py 与 i18n.py）
+│   │   ├── state.py              # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
+│   │   ├── stores.py             # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
+│   │   ├── settings.py           # 运行时可改设置（data/settings.json；原 settings_store.py）
+│   │   ├── gate.py               # 同平台采集闸门（真排队/错峰；原 crawl_gate.py）
+│   │   └── transport.py          # Ollama/OpenRouter 传输选择与「本机端口没人听」拒绝
 │   ├── scheduling/               # 定时任务域
 │   │   ├── clock.py              # 进程内 daemon 按 SECONDS tick，到点走 app 的唯一启动路径
 │   │   ├── store.py              # 定时任务台账（data/schedules.json）：时间归一、下次运行、触发记账与「已错过」
@@ -27,10 +32,6 @@ crawler_workflow/
 │   │   ├── fields.py             # 共享字段原子与四个模式工厂（posts/author/hot/comment）
 │   │   ├── catbus.py             # 第二引擎的参数表单与 CatBus 独有平台/模式词
 │   │   └── registry.py           # 查询面：校验、执行与前端面板的唯一口径
-│   ├── state.py                  # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
-│   ├── stores.py                 # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
-│   ├── transport.py              # Ollama/OpenRouter 传输选择与「本机端口没人听」拒绝
-│   ├── crawl_gate.py             # 采集前置闸门（登录墙/风控判定入口）
 │   ├── sessions/                 # 登录态域（2026-10-27 从根目录与 services/ 合成）
 │   │   ├── cookies.py            # 具名 Cookie 罐：data/cookies/<平台>@<账号>.json 与账号折叠规则
 │   │   ├── flow.py               # 各平台 Cookie 的用途/获取步骤/入口链接白名单

@@ -16,10 +16,10 @@ import subprocess
 import tempfile
 
 from core import machine
+from runtime.settings import get_setting
 
 from i18n import t
 from services.charts.tikz import LatexChartService
-from settings_store import get_setting
 
 
 def compose_tex(docs) -> str:

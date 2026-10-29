@@ -21,8 +21,8 @@ import os
 
 import pytest
 from core.config import Config
+from runtime.stores import get_workflow_manager
 from scheduling import store
-from stores import get_workflow_manager
 
 from i18n import set_lang, t
 

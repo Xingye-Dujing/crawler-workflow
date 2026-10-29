@@ -34,7 +34,7 @@ edited first silently win. Stage 4 of the plan replaced this name-prefix groupin
 `begin_run`, ~895 lines: claiming the run, the queue, the checkpoint/reuse decisions, the stop path,
 the settlement), and (c) module-level helpers both reached (`execution_state` reads, `add_log`, store
 getters, the LLM gate). All three have moved: the routes are `api/*.py` + `sessions/routes.py`, the
-orchestration is `engine/run.py`, and the shared singletons are `state.py`/`stores.py` at the root.
+orchestration is `engine/run.py`, and the shared singletons are `runtime/state.py`/`runtime/stores.py`.
 `app.py` is now 578 lines of composition root (blueprints, request hooks, startup recovery, the served
 page) plus the PEP-562 read seams that keep old attribute reads resolving.
 
@@ -104,8 +104,8 @@ The two rules that resolved this for the store registry, and that still govern t
   `app_module.get_run_store` still redirects app-internal calls (they resolve by name at call time) but
   reaches no Blueprint that imported from `stores`. Patch targets then split by caller, which is a trap.
 - **R2 (single seam, chosen)** — every writer binds to the new owner and `app` never re-exports the
-  name as an alias; all callers do `from stores import get_run_store`. Function patches target
-  `stores.get_run_store` uniformly. `backend/stores.py` owns the registry under this rule;
+  name as an alias; all callers do `from runtime.stores import get_run_store`. Function patches target
+  `runtime.stores.get_run_store` uniformly. `backend/runtime/stores.py` owns the registry under this rule;
   `app.py` keeps a PEP-562 `__getattr__` only for the three store globals, which is what the test
   harness rebinds.
 
@@ -117,11 +117,16 @@ the first attempt fail with 43 errors. Same lesson, same size ratio, for the exe
 
 ## What owns what today
 
-- `backend/state.py` — the in-place run state (`execution_state`, `_RUN_QUEUE`, `_dataset_cache`,
-  console-buffer helpers), the eager `history_service`/`cookie_manager`, `_completed_lock`.
-- `backend/stores.py` — the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER`/the saved-canvas
-  `WorkflowManager` + the lazy getters). This is the seam the test harness rebinds; writes to
-  `app._RUN_STORE` would shadow it.
+- `backend/runtime/` — the process-wide layer (moved out of the root on 2026-10-29; root is now only
+  `app.py` + `i18n.py`, pinned by `test_foundation_layering.py`):
+  - `state.py` — the in-place run state (`execution_state`, `_RUN_QUEUE`, `_dataset_cache`,
+    console-buffer helpers), the eager `history_service`/`cookie_manager`, `_completed_lock`.
+  - `stores.py` — the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER`/the saved-canvas
+    `WorkflowManager` + the lazy getters). This is the seam the test harness rebinds; writes to
+    `app._RUN_STORE` would shadow it.
+  - `settings.py` — runtime-editable settings over `data/settings.json` (was `settings_store.py`).
+  - `gate.py` — the same-platform crawl gate (was `crawl_gate.py`): one platform is one conversation.
+  - `transport.py` — the cloud refusal for local-only model transports.
 - `backend/api/` — 24 blueprint modules + `http.py` (request coercions) + `resolution.py`
   (`_resolve_dataframe`, `NoRunDataError`). Blueprints are registered in `app.py`.
 - `backend/nodes/executors/` — all 14 node types, each `NODE_TYPE` + `run(node, call)`, self-registered
@@ -151,7 +156,7 @@ whole design, which is why the executors take their state through `NodeCall` ins
 
 ## Seam census behind that rule (measured 2026-10-09 against the tests of that day, so the line numbers have moved)
 
-The store seam has **3 module globals** (in `stores.py` since the extraction; the census below was
+The store seam has **3 module globals** (in `runtime/stores.py` since the extraction; the census below was
 taken while they still sat in `app.py`) and **3 lazy getters** around them:
 
 | owner | global | lock | getter | `global` sites |

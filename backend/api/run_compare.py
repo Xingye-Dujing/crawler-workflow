@@ -1,7 +1,7 @@
 """Run-to-run comparison: two recorded runs, one server-computed diff."""
 
 from flask import Blueprint, jsonify, request
-from stores import get_run_store
+from runtime.stores import get_run_store
 
 from services.runs.compare import compare_runs
 

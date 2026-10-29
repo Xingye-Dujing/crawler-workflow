@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 import requests
+from runtime import settings
 
-import settings_store
 from crawlers.commenting.protocol import OK
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.platforms.hongguo import crawler as hongguo
@@ -38,7 +38,7 @@ _TIMEOUT = 120  # one real episode page, generously
 def _configure_player() -> str:
     """Resolve the player exe for THIS run and put it into the (throwaway) settings store.
 
-    The suite isolates ``settings_store`` to a tmp root, so the user's real
+    The suite isolates ``settings`` to a tmp root, so the user's real
     ``data/settings.json`` is invisible to ``find_player`` — the live tier runs on his
     desktop precisely to use that file, so it is read here READ-ONLY as a fallback and
     copied into the isolated store the harness will consult.
@@ -51,7 +51,7 @@ def _configure_player() -> str:
         except (OSError, ValueError):
             candidate = ''
         if candidate and os.path.isfile(candidate):
-            settings_store.save_settings({'hongguo_player_path': candidate})
+            settings.save_settings({'hongguo_player_path': candidate})
             path = candidate
     return path
 

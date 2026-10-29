@@ -28,10 +28,10 @@ from pathlib import Path
 
 import capabilities.registry as capabilities
 import pytest
+from runtime.settings import DEFAULTS, save_settings
 from sessions import profiles
 
 import crawlers as crawlers_pkg
-from settings_store import DEFAULTS, save_settings
 
 pytestmark = pytest.mark.unit
 

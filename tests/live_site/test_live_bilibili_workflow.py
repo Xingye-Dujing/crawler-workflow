@@ -658,7 +658,7 @@ def test_g1_two_bilibili_searches_in_parallel_both_arrive(client, app_module, mo
     canvas must deliver both tables rather than silently dropping one behind a queue or a lane.
 
     The two lane switches are set **for this cell** and restored (they are global settings, not canvas
-    settings — ``crawl_gate`` never reads the canvas block). Left at the defaults, the queue would hold the
+    settings — ``gate`` never reads the canvas block). Left at the defaults, the queue would hold the
     lane for the whole crawl and 乙 would arrive strictly after 甲 — real, but not the overlap this cell names.
     """
     harness.real_jar(monkeypatch)

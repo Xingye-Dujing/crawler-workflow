@@ -8,7 +8,7 @@ offers — plus the LaTeX figure/table add-ons both callers share.
 
 import pandas as pd
 from core.refs import as_bool
-from state import add_log
+from runtime.state import add_log
 
 from i18n import t
 from nodes.context import NodeCall

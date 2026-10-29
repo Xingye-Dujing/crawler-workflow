@@ -6,7 +6,7 @@ minutes later in an unwatched thread — and the queued path takes the same two 
 request cannot be legal on the live path and broken on the queue path.
 """
 
-from stores import get_run_store
+from runtime.stores import get_run_store
 
 from i18n import t
 

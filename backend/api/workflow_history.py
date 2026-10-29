@@ -13,7 +13,7 @@ Named refusals rather than silent behaviour:
 """
 
 from flask import Blueprint, jsonify, request
-from stores import get_workflow_history_store
+from runtime.stores import get_workflow_history_store
 
 from api.http import _bad_body, _bad_param, _json_body
 from i18n import t

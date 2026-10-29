@@ -42,11 +42,11 @@ from core.refs import (
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
-from scheduling import clock
-from sessions.routes import bp as sessions_bp
-from state import (
+from runtime.state import (
     _push_log,
 )
+from scheduling import clock
+from sessions.routes import bp as sessions_bp
 
 from engine import run as run_engine
 from engine.logger import setup_logger
@@ -261,11 +261,11 @@ def pin_console_streams() -> list[str]:
 pin_console_streams()
 
 
-# cookie_manager lives in state.py (imported at top) so the capabilities Blueprint can read it.
-# The saved-canvas reader lives in stores.py (imported at top) for the same reason: the workflow
+# cookie_manager lives in runtime/state.py (imported at top) so the capabilities Blueprint can read it.
+# The saved-canvas reader lives in runtime/stores.py (imported at top) for the same reason: the workflow
 # routes are a Blueprint and the run orchestration is an engine module, and neither may import
 # this file to reach a canvas on disk.
-# history_service lives in state.py (imported at top) so a Blueprint can read it.
+# history_service lives in runtime/state.py (imported at top) so a Blueprint can read it.
 
 
 @app.before_request
@@ -288,18 +288,18 @@ def _apply_request_lang():
 #
 # The dictionary is only a read-through cache now: the store is the source of
 # truth, so anything registered days ago still resolves.
-# _dataset_cache is imported from state.py (mutated in place, never rebound).
+# _dataset_cache is imported from runtime/state.py (mutated in place, never rebound).
 # The dataset singleton, its lock, the read-through cache helpers (_cache_dataset/_register_dataset/
-# _load_dataset/_apply_dataset_meta) and get_dataset_store() now live in backend/stores.py. app
+# _load_dataset/_apply_dataset_meta) and get_dataset_store() now live in backend/runtime/stores.py. app
 # re-imports the three the routes call and keeps `_dataset_cache` (from state) for its own direct
 # pop/clear uses; every cache writer and the store creation still share the one `_DATASET_LOCK`.
 
 
 # ─── Shared process state ───
 #
-# The run's mutable state, the console buffers and the claim lock live in ``backend/state.py``:
+# The run's mutable state, the console buffers and the claim lock live in ``backend/runtime/state.py``:
 # the HTTP layer, the engine and the test harness share ONE object, mutated in place and never
-# rebound (``state.py`` carries the field-by-field comments; see docs/ARCHITECTURE.md). Payload→
+# rebound (``runtime/state.py`` carries the field-by-field comments; see docs/ARCHITECTURE.md). Payload→
 # DataFrame resolution is ``api/resolution.py``, the durable ledger is ``services/runs/store/__init__.py``,
 # and the run's verdict helpers are ``services/runs/settlement.py`` — nothing in this file
 # re-implements either question.
@@ -308,7 +308,7 @@ def _apply_request_lang():
 # ─── Durable run state ──────────────────────────────────────────
 #
 # The run ledger / dataset store / housekeeper / canvas-manager singletons and their locks live in
-# ``backend/stores.py``. What the housekeeper sweeps is called from
+# ``backend/runtime/stores.py``. What the housekeeper sweeps is called from
 # ``services.runs.settlement.housekeep``, not from here.
 
 
@@ -322,14 +322,14 @@ def __getattr__(name):
     PATCH belongs on the owner, and the branches say which is which.
     """
     if name in ('_RUN_STORE', '_DATASET_STORE', '_HOUSEKEEPER'):
-        import stores
+        from runtime import stores
 
         return getattr(stores, name)
     if name == '_dataset_cache':
         # The dataset read-through cache lives in ``state`` (it moved out with the store
         # helpers); ``conftest`` still empties it as ``app._dataset_cache``, so answer from
         # its real home. ``clear()`` mutates in place — no rebinding, same object.
-        import state
+        from runtime import state
 
         return getattr(state, name)
     if name == 'add_log':
@@ -339,7 +339,7 @@ def __getattr__(name):
         # and the autouse fixture in ``tests/api/conftest.py``). Nothing in this file logs any
         # more, so answering from ``state`` keeps 「patch app.add_log」 meaning one thing instead of
         # leaving each test to guess which module the line is printed from.
-        import state
+        from runtime import state
 
         return getattr(state, name)
     if name == 'get_crawler':
@@ -356,8 +356,8 @@ def __getattr__(name):
         # fixture read and mutate it as ``app.execution_state``; answering from ``state`` hands back
         # the SAME object, so ``state['running'] = True`` and ``setitem(...)`` behave exactly as
         # before. Rebinding the NAME (``app.execution_state = {...}``) would detach — which is why
-        # ``state.py`` says the same thing from its side.
-        import state
+        # ``runtime/state.py`` says the same thing from its side.
+        from runtime import state
 
         return getattr(state, name)
     if name == 'get_run_store':
@@ -365,7 +365,7 @@ def __getattr__(name):
         # singleton is ``stores``', so answer from there. Writing a fake store is NOT done here —
         # a patch on this name would only move app's own binding, and the code that opens the store
         # resolves it in its own module (see ``tests/api/test_run_races.py``).
-        import stores
+        from runtime import stores
 
         return getattr(stores, name)
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

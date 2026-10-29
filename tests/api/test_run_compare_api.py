@@ -1,7 +1,7 @@
 """HTTP contract for run-to-run comparison."""
 
 import pytest
-from stores import get_run_store
+from runtime.stores import get_run_store
 
 from services.runs.store import NODE_DONE, RUN_COMPLETED
 

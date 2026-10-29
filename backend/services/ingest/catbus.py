@@ -116,9 +116,9 @@ def explicit_paths() -> tuple[str, str]:
     :mod:`core.machine` answer that, and ``PATH`` is only the last fallback there, never a thing
     the user is asked to edit.
     """
-    # Imported here rather than at module scope: ``settings_store`` reads ``Config``, and this module
+    # Imported here rather than at module scope: ``runtime.settings`` reads ``Config``, and this module
     # is read by the capabilities endpoint at import time on a cold start.
-    from settings_store import get_setting
+    from runtime.settings import get_setting
 
     node = str(get_setting('catbus_node') or '').strip() or str(Config.CATBUS_NODE or '').strip()
     cli = str(get_setting('catbus_cli') or '').strip() or str(Config.CATBUS_CLI or '').strip()

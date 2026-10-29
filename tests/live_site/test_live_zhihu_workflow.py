@@ -64,9 +64,8 @@ from pathlib import Path
 import live_run_driver as driver
 import live_run_harness as harness
 import pytest
+from runtime import settings
 from sessions import preflight, profiles
-
-import settings_store
 
 pytestmark = [
     pytest.mark.live_site,
@@ -390,7 +389,7 @@ def _discover_people_token(live_crawler, keyword: str) -> str:
     Re-implemented here rather than imported from ``test_live_zhihu_author`` because the
     release contract differs: the tier's crawler holds the platform's turn *and* the profile
     directory for its whole life, and an app-driven crawl takes the same two locks. Leaving
-    this one open parks the run inside ``crawl_gate`` for 900 s with no browser on screen —
+    this one open parks the run inside ``gate`` for 900 s with no browser on screen —
     the 15-minute no-output stall this tier already documents.
     """
     crawler = live_crawler(PLATFORM, headless=False)
@@ -1112,7 +1111,7 @@ def _one_closed_one_walking(run: LiveRun) -> bool:
     The moment E3 presses 停止 in, and stated as a *shape* rather than as a node id because
     真排队 hands the platform's turn to whichever thread reached it first: waiting for
     「node-1 is done」 would be a bet on that order. Lose the bet and the button is pressed while
-    the sibling still waits inside ``crawl_gate.hold``, where a Stop is answered by
+    the sibling still waits inside ``gate.hold``, where a Stop is answered by
     ``run.queueAbandoned`` and settles a *second* node as stopped — a different fact from the one
     this case is about, and one ``assert_l3`` rightly refuses.
 
@@ -1154,8 +1153,8 @@ def test_e3_a_parallel_run_cut_short_convicts_one_walk_and_hands_the_lane_back(c
     label_of = {part['source']: part['label'] for part in parts}
     walks = [part['source'] for part in parts]
     titles = {node['id']: str(node['title']) for node in canvas['nodes'] if node['type'] == 'source'}
-    before = settings_store.get_setting('same_platform_queue')
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': True})
+    before = settings.get_setting('same_platform_queue')
+    _saved, warnings = settings.save_settings({'same_platform_queue': True})
     assert not warnings, warnings
     try:
         with LiveRun(
@@ -1256,7 +1255,7 @@ def test_e3_a_parallel_run_cut_short_convicts_one_walk_and_hands_the_lane_back(c
             )
             free.finish(answer=answer)
     finally:
-        settings_store.save_settings({'same_platform_queue': before})
+        settings.save_settings({'same_platform_queue': before})
 
 
 def test_e4_a_stop_between_articles_keeps_the_panels_that_reported(client, app_module, monkeypatch):
@@ -1873,8 +1872,8 @@ def test_g1_parallel_with_the_queue_off_really_overlaps(client, app_module, monk
     # multi-screen walk that is still in flight when the second one starts.
     canvas = _two_search_components(keywords=KEYWORDS['G1'], target=DEEP_TARGET, headless=False, use_profile=False)
     keys = ('same_platform_queue', 'same_platform_stagger')
-    before = {key: settings_store.get_setting(key) for key in keys}
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': False, 'same_platform_stagger': 0})
+    before = {key: settings.get_setting(key) for key in keys}
+    _saved, warnings = settings.save_settings({'same_platform_queue': False, 'same_platform_stagger': 0})
     assert not warnings, warnings
     try:
         with LiveRun(
@@ -1911,7 +1910,7 @@ def test_g1_parallel_with_the_queue_off_really_overlaps(client, app_module, monk
             assert answer['verdict'] == harness.FULL, answer
             run.finish(answer=answer, node_id='node-1')
     finally:
-        settings_store.save_settings(before)
+        settings.save_settings(before)
 
 
 def test_g1b_parallel_with_the_queue_on_waits_and_says_so(client, app_module, monkeypatch):
@@ -1925,8 +1924,8 @@ def test_g1b_parallel_with_the_queue_on_waits_and_says_so(client, app_module, mo
     """
     harness.real_jar(monkeypatch)
     canvas = _two_search_components(keywords=KEYWORDS['G1B'], target=10, headless=False, use_profile=False)
-    before = settings_store.get_setting('same_platform_queue')
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': True})
+    before = settings.get_setting('same_platform_queue')
+    _saved, warnings = settings.save_settings({'same_platform_queue': True})
     assert not warnings, warnings
     try:
         with LiveRun(client, app_module, canvas, case_id='G1B', mode='posts', target=10, timeout=DEEP_TIMEOUT) as run:
@@ -1947,7 +1946,7 @@ def test_g1b_parallel_with_the_queue_on_waits_and_says_so(client, app_module, mo
             assert answer['verdict'] == harness.FULL, answer
             run.finish(answer=answer, node_id='node-1')
     finally:
-        settings_store.save_settings({'same_platform_queue': before})
+        settings.save_settings({'same_platform_queue': before})
 
 
 def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_module, monkeypatch):
@@ -1974,8 +1973,8 @@ def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_mod
     # arrives at a profile its sibling has already released, the lock is never asked anything, and
     # this cell passes by never testing the thing it is named for.
     keys = ('same_platform_queue', 'same_platform_stagger')
-    before = {key: settings_store.get_setting(key) for key in keys}
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': False, 'same_platform_stagger': 0})
+    before = {key: settings.get_setting(key) for key in keys}
+    _saved, warnings = settings.save_settings({'same_platform_queue': False, 'same_platform_stagger': 0})
     assert not warnings, warnings
     try:
         with LiveRun(
@@ -2003,7 +2002,7 @@ def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_mod
             assert answer['verdict'] == harness.FULL, answer
             run.finish(answer=answer, node_id='node-1')
     finally:
-        settings_store.save_settings(before)
+        settings.save_settings(before)
 
 
 # ─── H · the shipped acceptance canvas ──────────────────────────────────
@@ -2410,8 +2409,8 @@ def test_h3_the_whole_shipped_canvas_in_parallel_headless(client, app_module, mo
     workflow = _all_enabled(_acceptance_workflow())
     _on, _off, parts = _acceptance_parts(workflow)
     workflow['settings'] = dict(workflow['settings'], mode='parallel', headless=True, max_workers=2)
-    before = settings_store.get_setting('same_platform_queue')
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': False})
+    before = settings.get_setting('same_platform_queue')
+    _saved, warnings = settings.save_settings({'same_platform_queue': False})
     assert not warnings, warnings
     try:
         with LiveRun(
@@ -2446,7 +2445,7 @@ def test_h3_the_whole_shipped_canvas_in_parallel_headless(client, app_module, mo
             _summary_row(run, case_id='H3', parts=parts, answers=answers, kept=kept, asked=asked)
             run.close()
     finally:
-        settings_store.save_settings({'same_platform_queue': before})
+        settings.save_settings({'same_platform_queue': before})
 
 
 # ─── S · the settings page's own switches (plan §3-C) ───────────────────
@@ -2457,7 +2456,7 @@ def test_h3_the_whole_shipped_canvas_in_parallel_headless(client, app_module, mo
 #: * it must sit ABOVE the catalogue default, because the cell's whole claim is that the spacing
 #:   read the settings page rather than a stale default — and the line announces the seconds it
 #:   owes, so an interval at or under the default could be satisfied by the default itself. The
-#:   assert below compares against ``settings_store.DEFAULTS`` instead of repeating this number;
+#:   assert below compares against ``settings.DEFAULTS`` instead of repeating this number;
 #: * it must sit BELOW the life of one walk. Measured: a windowed 正文 search delivers 10 rows in
 #:   ~10 s and 40 rows in ~24 s (``scratchpad/live_audit/20260927-223207/verdicts.csv``), so at
 #:   the 40 s first drafted here — and at the 12 s default G1 and G3 also tripped on — the first
@@ -2476,7 +2475,7 @@ def test_s1_stagger_spaces_the_two_starts_and_never_queues_them(client, app_modu
     """S1 — plan §3-C: 同平台排队 off with a non-zero 错峰 interval is its own branch of the
     gate, with its own sentence, and the console lines are what tell the branches apart.
 
-    ``crawl_gate.hold`` answers 真排队 and 错峰 from the same switch: ``run.platformQueued``
+    ``gate.hold`` answers 真排队 and 错峰 from the same switch: ``run.platformQueued``
     prints only in the queue branch (seat held until the crawl finishes), ``run.platformStaggered``
     only in the spacing one (``_space_the_start``, seat held for the wait and the walk, gap
     owed only while a sibling is actually in flight). So the cell is three claims. The
@@ -2493,11 +2492,11 @@ def test_s1_stagger_spaces_the_two_starts_and_never_queues_them(client, app_modu
     """
     harness.real_jar(monkeypatch)
     canvas = _two_search_components(keywords=KEYWORDS['S1'], target=S1_TARGET, headless=False, use_profile=False)
-    before_queue = settings_store.get_setting('same_platform_queue')
-    before_stagger = settings_store.get_setting('same_platform_stagger')
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': False, 'same_platform_stagger': S1_STAGGER})
+    before_queue = settings.get_setting('same_platform_queue')
+    before_stagger = settings.get_setting('same_platform_stagger')
+    _saved, warnings = settings.save_settings({'same_platform_queue': False, 'same_platform_stagger': S1_STAGGER})
     assert not warnings, warnings
-    assert settings_store.get_setting('same_platform_stagger') == S1_STAGGER, 'the page did not take the number'
+    assert settings.get_setting('same_platform_stagger') == S1_STAGGER, 'the page did not take the number'
     try:
         with LiveRun(
             client, app_module, canvas, case_id='S1', mode='posts', target=S1_TARGET, timeout=DEEP_TIMEOUT
@@ -2528,7 +2527,7 @@ def test_s1_stagger_spaces_the_two_starts_and_never_queues_them(client, app_modu
             # interval is set a full default above the page's ask (``S1_STAGGER`` vs
             # ``DEFAULTS``) to leave room for it. What the stamps below measure is the third
             # opinion: the seconds the line promised are the seconds that passed.
-            default = settings_store.DEFAULTS['same_platform_stagger']
+            default = settings.DEFAULTS['same_platform_stagger']
             assert n > default, (
                 f'the page was asked for {S1_STAGGER}s and the gate announced {n}s, at or below the '
                 f'{default}s the catalogue defaults to — a spacing that ignored the settings page '
@@ -2575,7 +2574,7 @@ def test_s1_stagger_spaces_the_two_starts_and_never_queues_them(client, app_modu
             assert answer['verdict'] == harness.FULL, answer
             run.finish(answer=answer, node_id='node-1')
     finally:
-        settings_store.save_settings({'same_platform_queue': before_queue, 'same_platform_stagger': before_stagger})
+        settings.save_settings({'same_platform_queue': before_queue, 'same_platform_stagger': before_stagger})
 
 
 def test_s2_the_browser_ceiling_narrows_the_parallel_pool_to_one_walk(client, app_module, monkeypatch):
@@ -2613,12 +2612,12 @@ def test_s2_the_browser_ceiling_narrows_the_parallel_pool_to_one_walk(client, ap
     )
     canvas['settings'].pop('max_workers', None)
     keys = ('same_platform_queue', 'same_platform_stagger', 'max_visible_browsers')
-    before = {key: settings_store.get_setting(key) for key in keys}
-    _saved, warnings = settings_store.save_settings(
+    before = {key: settings.get_setting(key) for key in keys}
+    _saved, warnings = settings.save_settings(
         {'same_platform_queue': False, 'same_platform_stagger': 0, 'max_visible_browsers': 1}
     )
     assert not warnings, warnings
-    assert settings_store.get_setting('max_visible_browsers') == 1, 'the ceiling did not take'
+    assert settings.get_setting('max_visible_browsers') == 1, 'the ceiling did not take'
     try:
         with LiveRun(client, app_module, canvas, case_id='S2', mode='posts', target=5, timeout=DEEP_TIMEOUT) as run:
             run.wait()
@@ -2652,4 +2651,4 @@ def test_s2_the_browser_ceiling_narrows_the_parallel_pool_to_one_walk(client, ap
             assert answer['verdict'] == harness.FULL, answer
             run.finish(answer=answer, node_id='node-1')
     finally:
-        settings_store.save_settings(before)
+        settings.save_settings(before)

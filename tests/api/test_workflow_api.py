@@ -24,7 +24,7 @@ import pandas as pd
 import pytest
 from api import workflow as workflow_api
 from run_wait import run_finished
-from state import LOG_KEEP, reset_console_state
+from runtime.state import LOG_KEEP, reset_console_state
 
 from analyzers.llm_client import LLMClient
 from services.runs.queue import QUEUE_MAX, queue_snapshot

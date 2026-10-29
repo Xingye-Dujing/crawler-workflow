@@ -195,7 +195,12 @@ crawler_workflow/
 │   │   └── procs.py              # 进程细节（创建标志、驱动进程树回收）
 │   ├── i18n.py                   # zh/en 消息目录（合并 i18n_catalog/ 的按域数据）
 │   ├── i18n_catalog/             # 消息本体，按域一文件（crawl/collect/cookie/sched/run/analysis/biblio/charts/api/settings）
-│   ├── settings_store.py         # 运行时可改设置（data/settings.json）
+│   ├── runtime/                  # 进程级运行层（根目录只剩 app.py 与 i18n.py）
+│   │   ├── state.py              # 运行态与 console 缓冲（execution_state/队列/日志），app 与测试共引
+│   │   ├── stores.py             # run/dataset/housekeeper 单例与惰性 getter（测试接缝）
+│   │   ├── settings.py           # 运行时可改设置（data/settings.json）
+│   │   ├── gate.py               # 同平台采集闸门（真排队/错峰）
+│   │   └── transport.py          # 模型传输选择与云端拒绝
 │   ├── scheduling/               # 定时任务域（时钟 / 台账 / cron 语法）
 │   │   ├── clock.py              # 进程内 daemon 时钟；到点走与手动 Run 同一条启动路径
 │   │   ├── store.py              # 台账 data/schedules.json：时间归一、下次运行、触发记账与「已错过」

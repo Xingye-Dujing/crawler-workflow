@@ -15,8 +15,8 @@ Nothing here re-runs an analysis: the panel reads what a run already proved.
 """
 
 from flask import Blueprint, jsonify, request
-from state import add_log
-from stores import get_biblio_store, get_run_store
+from runtime.state import add_log
+from runtime.stores import get_biblio_store, get_run_store
 
 from api.http import _bad_body, _json_body
 from i18n import t

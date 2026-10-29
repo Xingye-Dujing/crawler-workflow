@@ -62,7 +62,7 @@ class Housekeeping:
             # keep serving a deleted dataset's rows while /datasets/<id> 404s. The two MANUAL
             # clear paths (api/data.py) empty this cache; the automatic sweep must not be the
             # one door that forgets, or the same divergence arrives on a schedule.
-            from state import _dataset_cache
+            from runtime.state import _dataset_cache
 
             _dataset_cache.clear()
         result = {

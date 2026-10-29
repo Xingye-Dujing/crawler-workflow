@@ -423,7 +423,7 @@ _USER_STOP = {'version': None, 'set': frozenset()}
 
 def _user_stopwords() -> frozenset:
     try:
-        from stores import get_lexicon_store
+        from runtime.stores import get_lexicon_store
 
         store = get_lexicon_store()
         version = store.version()

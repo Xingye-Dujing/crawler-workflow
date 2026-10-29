@@ -11,8 +11,8 @@ import pandas as pd
 from core.config import Config
 from core.refs import as_bool
 from core.refs import json_safe_records as _json_safe_records
-from state import add_log
-from stores import _load_dataset
+from runtime.state import add_log
+from runtime.stores import _load_dataset
 
 from i18n import t
 from nodes.context import NodeCall
@@ -100,7 +100,7 @@ def _watch_capture(node: dict, ctx: dict | None, params: dict, rows: list, shape
     """
     if not str(params.get('watch_project') or '').strip():
         return None
-    from stores import get_biblio_store
+    from runtime.stores import get_biblio_store
 
     from services.biblio import monitor
 

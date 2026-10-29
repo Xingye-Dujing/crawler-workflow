@@ -1,8 +1,8 @@
 """The process-wide store singletons — the run ledger, the dataset store, the housekeeper.
 
 These are the three lazily-opened SQLite-backed objects every route and the run worker reach
-for. They live here, not in ``app.py``, for one reason: a Blueprint (or a future executor module
-under ``services/``) must be able to call ``get_run_store()``/``get_dataset_store()`` WITHOUT
+for. They live in ``runtime/``, not in ``app.py``, for one reason: a Blueprint (or a node executor
+under ``nodes/``) must be able to call ``get_run_store()``/``get_dataset_store()`` WITHOUT
 importing the whole Flask module, which is a cycle. ``app.py`` imports the three getters back, so
 its dispatch and every existing ``app.get_run_store()`` read still resolve — and a test that
 patches ``app.get_run_store`` (a function) still intercepts the app-internal bare calls, because
@@ -10,10 +10,10 @@ those look the name up in ``app``'s namespace.
 
 The seam that the test harness rebinds is the THREE module globals below (``_RUN_STORE`` /
 ``_DATASET_STORE`` / ``_HOUSEKEEPER``), not copies of them. ``conftest`` writes these names on
-``stores`` (``stores._RUN_STORE = <fresh tmp store>``) per test, and ``app._RUN_STORE`` reads the
-same object through ``app``'s ``__getattr__`` delegation. So the injection point and the readers
-agree on exactly one place: this module. A write to ``app._RUN_STORE`` would create a shadowing
-global in ``app`` and detach the two — which is why every store-object write site targets
+``runtime.stores`` (``stores._RUN_STORE = <fresh tmp store>``) per test, and ``app._RUN_STORE``
+reads the same object through ``app``'s ``__getattr__`` delegation. So the injection point and the
+readers agree on exactly one place: this module. A write to ``app._RUN_STORE`` would create a
+shadowing global in ``app`` and detach the two — which is why every store-object write site targets
 ``stores``, never ``app``.
 """
 
@@ -21,8 +21,8 @@ import threading
 
 import pandas as pd
 from core.config import Config
-from state import _dataset_cache
 
+from runtime.state import _dataset_cache
 from services.analysis.lexicon_store import LexiconStore
 from services.biblio.store import BiblioStore
 from services.datasets.store import SOURCE_UPLOAD, DatasetStore

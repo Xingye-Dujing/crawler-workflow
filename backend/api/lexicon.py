@@ -11,7 +11,7 @@ import logging
 
 from core.refs import as_bool
 from flask import Blueprint, jsonify, request
-from stores import get_lexicon_store
+from runtime.stores import get_lexicon_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import t

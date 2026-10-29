@@ -197,7 +197,7 @@ class TestTheDocumentItself:
     """The .tex is the deliverable a reader keeps, so its shape is under test too."""
 
     def test_the_method_lines_come_from_the_biblio_node_that_ran(self, monkeypatch, tmp_path):
-        from stores import get_run_store
+        from runtime.stores import get_run_store
 
         from services.reports import paper
         from services.runs.store import NODE_DONE, RUN_COMPLETED

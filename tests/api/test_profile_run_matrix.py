@@ -26,9 +26,9 @@ time spans, which is the only thing the user actually feels.
 import threading
 import time
 
-import crawl_gate
 import pytest
 from run_wait import run_finished
+from runtime import gate
 from sessions import profiles
 
 from crawlers.core.crawler import Crawler
@@ -100,8 +100,8 @@ def matrix(monkeypatch, app_module, tmp_path):
     # Both gate knobs, in one place a test can flip. The wait is a real one here — its
     # *length* is asserted in tests/unit/crawlers/test_crawl_gate.py against a fake clock — so
     # this module shrinks it to keep the suite honest but fast.
-    gate = {'same_platform_queue': True, 'same_platform_stagger': 0.05}
-    monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: gate[key])
+    knobs = {'same_platform_queue': True, 'same_platform_stagger': 0.05}
+    monkeypatch.setattr(gate, 'get_setting', lambda key: knobs[key])
     SPANS.clear()
     asked = []
 
@@ -111,7 +111,7 @@ def matrix(monkeypatch, app_module, tmp_path):
         return _MatrixCrawler(platform, profile)
 
     monkeypatch.setattr(app_module, 'get_crawler', _factory)
-    return {'asked': asked, 'gate': gate}
+    return {'asked': asked, 'gate': knobs}
 
 
 def _source(node_id, platform, keyword=None):
@@ -143,7 +143,7 @@ def _run(client, app_module, workflow):
 
 
 def _stored_run(run_id):
-    from stores import get_run_store
+    from runtime.stores import get_run_store
 
     return get_run_store().get_run(run_id)
 
@@ -190,7 +190,7 @@ class TestSamePlatformParallel:
     def test_turning_the_queue_off_restores_true_overlap(self, client, app_module, matrix, monkeypatch):
         """Off is the user's own choice and must mean the old behaviour, not a weaker
         on: two crawls of one platform alive at the same moment, gaps and all."""
-        monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: False)
+        monkeypatch.setattr(gate, 'get_setting', lambda key: False)
         _run(client, app_module, _canvas([_source('s-1', 'bilibili'), _source('s-2', 'bilibili')], use_profile=False))
         assert len(SPANS) == 2, SPANS
         assert _overlaps(), f'the queue is off and they still took turns: {SPANS}'

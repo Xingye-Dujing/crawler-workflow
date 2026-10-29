@@ -684,7 +684,7 @@ class TestWindowedFilenames:
 
     def test_a_new_run_starts_with_no_window_of_its_own(self, app_module):
         _note_window(0, '2026-01-01', '2026-01-31')
-        import state
+        from runtime import state
 
         state.reset_console_state()
         assert app_module.execution_state['_time_windows'] == {}, (
@@ -976,7 +976,7 @@ class TestResumeNode:
         maker.finish_run('forged-1', RUN_INTERRUPTED)
         maker._conn.close()
 
-        import stores
+        from runtime import stores
 
         stores._RUN_STORE = RunStore(db)
         started = client.post('/api/workflow/execute', json={'workflow': lonely, 'workflow_name': 'auto-resume'})

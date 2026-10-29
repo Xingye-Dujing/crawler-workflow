@@ -42,12 +42,7 @@ ABOVE_CAPABILITIES = {
     'nodes',
     'sessions',
     'scheduling',
-    'state',
-    'stores',
-    'settings_store',
-    'crawl_capabilities',
-    'crawl_gate',
-    'transport',
+    'runtime',
 }
 HEAVY = {'sklearn', 'scipy', 'matplotlib', 'joblib', 'torch', 'transformers', 'selenium', 'flask', 'pandas'}
 

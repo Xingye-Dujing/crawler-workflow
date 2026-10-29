@@ -175,7 +175,7 @@ class TestCallSites:
     def test_the_scheduled_canvas_gate_sees_an_llm_step_inside_a_group(self):
         """The file keeps the group; the schedule gate must expand before asking for a model,
         or a timer would start a clean step that needs credentials it can never have."""
-        from stores import get_workflow_manager
+        from runtime.stores import get_workflow_manager
 
         from engine.run import scheduled_canvas
 

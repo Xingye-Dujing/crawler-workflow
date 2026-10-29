@@ -1,17 +1,17 @@
 """Shared process state that the run pipeline mutates in place.
 
-This lives here — not in ``app.py`` — so the HTTP layer (today the routes in ``app.py``,
-tomorrow split into Blueprints) and the test harness can import the ONE object each of them
-is about without importing the whole Flask module. ``docs/ARCHITECTURE.md`` (Refactor step A)
-explains the sequence this unlocks.
+This lives in ``runtime/`` — not in ``app.py`` — so the HTTP layer (the ``api`` Blueprints and
+``sessions/routes.py``) and the test harness can import the ONE object each of them is about
+without importing the whole Flask module. ``runtime/__init__`` explains the layer.
 
 The contract that makes moving these out of ``app.py`` safe: **every value here is mutated in
-place and never rebound.** ``app.py`` does ``from state import execution_state, _RUN_QUEUE,
+place and never rebound.** ``app.py`` does ``from runtime.state import execution_state, _RUN_QUEUE,
 _dataset_cache``, so ``app.execution_state`` stays the very same object the routes, the run
 worker, ``tests/conftest.py`` and ``run_wait.py`` all read and write. Rebinding one of these
-names (``execution_state = {...}``) would silently detach ``app`` from ``state`` — the leaked-flag
-tripwires in the conftest would then be checking a stale object. If a future change must replace
-one of these wholesale, mutate it (``clear()``/``update()``/slice-assign) instead of rebinding.
+names (``execution_state = {...}``) would silently detach ``app`` from ``runtime.state`` — the
+leaked-flag tripwires in the conftest would then be checking a stale object. If a future change
+must replace one of these wholesale, mutate it (``clear()``/``update()``/slice-assign) instead of
+rebinding.
 """
 
 import threading

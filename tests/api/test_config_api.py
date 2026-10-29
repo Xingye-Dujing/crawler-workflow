@@ -24,9 +24,9 @@ import capabilities.registry as capabilities
 import pytest
 from capabilities import requirements
 from core.config import Config
+from runtime.state import cookie_manager
 from sessions import profiles
 from sessions.cookies import CookieManager
-from state import cookie_manager
 
 pytestmark = pytest.mark.api
 

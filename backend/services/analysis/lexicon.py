@@ -33,7 +33,7 @@ def materialize_userdict() -> int:
     "no user dict" — the built-in pipeline must still run.
     """
     try:
-        from stores import get_lexicon_store
+        from runtime.stores import get_lexicon_store
 
         rows = get_lexicon_store().list('userdict')
     except Exception:

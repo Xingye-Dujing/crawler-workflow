@@ -185,7 +185,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
 - **`getattr(x, name, None)` is the seam shape that never reports.** The same family, found by the batched full
   gate (2026-10-28): `tests/live_run_harness.py::real_jar/no_jar` located the cookie jar through
   `getattr(module, 'cookie_manager', None)` with `module` = the imported `app`. The instance had long since moved to
-  `state.cookie_manager` (`backend/state.py:36`), so the lookup answered `None`, the `if manager is not None:` guard
+  `state.cookie_manager` (`backend/runtime/state.py:36`), so the lookup answered `None`, the `if manager is not None:` guard
   politely skipped the patch, and **88 live cases redirected only `Config.COOKIE_DIR`** — the jar that decides whether
   to run kept reading the throwaway directory. A live case could therefore crawl with the user's real session while
   claiming it had proved the anonymous path, which is the one thing those two helpers exist to prevent. Nothing failed:
@@ -442,7 +442,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   lines of the *whole* run). `consoleViews` holds `{seen, lines}` per view (`'all'` plus each workflow id), **every**
   view is fed on every poll, and `switchWfTab` repaints from that view's history without moving its cursor.
 - **The console is ALSO persisted per run (`run_store.run_log`), but that durable log is a pure side effect of the live
-  path — it may never move the live console.** `_push_log` (state.py) writes through to `app`'s `RunLogWriter` via the
+  path — it may never move the live console.** `_push_log` (runtime/state.py) writes through to `app`'s `RunLogWriter` via the
   `set_log_sink` seam; the writer files every physical line under the run that printed it (flush every 200 lines + on
   any error + once in the worker's `finally`), armed only inside a run's window so a stray post-run `add_log` cannot
   orphan rows. The durable viewer (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach

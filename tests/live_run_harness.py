@@ -152,7 +152,7 @@ def real_jar(monkeypatch) -> str:
     the gate kept reading the throwaway one, which is exactly the "claimed anonymous,
     crawled logged in" hole this helper exists to close.
     """
-    from state import cookie_manager
+    from runtime.state import cookie_manager
 
     monkeypatch.setattr(Config, 'COOKIE_DIR', str(COOKIE_DIR))
     monkeypatch.setattr(cookie_manager, 'cookie_dir', str(COOKIE_DIR))
@@ -169,7 +169,7 @@ def no_jar(monkeypatch, root) -> str:
     rides along in the browser. Pair it with an explicit ``use_profile=False``, because a *profile* keeps
     its own session no matter what the cookie directory holds.
     """
-    from state import cookie_manager
+    from runtime.state import cookie_manager
 
     empty = Path(root) / 'no_cookies'
     empty.mkdir(parents=True, exist_ok=True)
@@ -834,7 +834,7 @@ def abort_run(client, module, rec, budget: float = 600.0, run_id: str = '') -> d
       the tripwire that normally fails a test for leaking a run never sees it, and the handle
       to the browser the worker is inside is discarded with the state — 停止 could no longer
       reach it through the registry either;
-    * the orphan keeps the platform's turn in :mod:`crawl_gate` and the profile directory, so
+    * the orphan keeps the platform's turn in :mod:`gate` and the profile directory, so
       the next case's ``_wait_for_quiet_server`` (30 s) times out and the rest of the tier
       errors for a reason that belongs to a different test;
     * and it keeps *writing into the shared console*, whose lines the next case folds into
@@ -953,8 +953,8 @@ def start(
 def lane_switches(*, queue: bool, stagger: int):
     """Set the two global lane switches for one cell, and put them back afterwards.
 
-    Both are read through ``settings_store.get_setting`` by :func:`crawl_gate.hold` and
-    :func:`crawl_gate.stagger` — **never** from a run's ``settings`` block, so a canvas carrying
+    Both are read through ``settings.get_setting`` by :func:`gate.hold` and
+    :func:`gate.stagger` — **never** from a run's ``settings`` block, so a canvas carrying
     ``same_platform_stagger`` is stating a number nobody reads. And they are restored, because the tier's
     settings file is session-wide: leaving the queue off would have a later platform's cells crawling
     two-at-a-time and blaming the platform when the site answers with a wall.
@@ -963,16 +963,16 @@ def lane_switches(*, queue: bool, stagger: int):
     measures overlap has to state the lane it measured, and the second copy of a settings dance is where
     one platform starts quietly testing a different configuration than another.
     """
-    import settings_store
+    from runtime import settings
 
     keys = ('same_platform_queue', 'same_platform_stagger')
-    before = {key: settings_store.get_setting(key) for key in keys}
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': queue, 'same_platform_stagger': stagger})
+    before = {key: settings.get_setting(key) for key in keys}
+    _saved, warnings = settings.save_settings({'same_platform_queue': queue, 'same_platform_stagger': stagger})
     assert not warnings, warnings
     try:
         yield
     finally:
-        settings_store.save_settings({key: before[key] for key in keys})
+        settings.save_settings({key: before[key] for key in keys})
 
 
 def read_record(client, run_id: str) -> dict:

@@ -2,7 +2,7 @@
 
 import pandas as pd
 import pytest
-from stores import get_dataset_store
+from runtime.stores import get_dataset_store
 
 from services.datasets.merge import SOURCE_COLUMN
 

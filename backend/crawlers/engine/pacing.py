@@ -8,7 +8,7 @@ decision. Two homes for one switch is how a setting ends up honoured by half the
 
 import time
 
-from settings_store import get_setting
+from runtime.settings import get_setting
 
 #: How much :func:`throttled_sleep` and :meth:`Crawler._polite_pause` stretch every pause
 #: when the 慢速采集 (``gentle_crawl``) setting is on. It is a pure pacing multiplier — it

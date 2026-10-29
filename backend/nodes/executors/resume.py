@@ -9,7 +9,7 @@ singleton directly — it is pure against ``ctx``.
 """
 
 from api.http import _safe_int
-from state import add_log
+from runtime.state import add_log
 
 from i18n import t
 from nodes.context import NodeCall
@@ -78,6 +78,6 @@ def run(node: dict, call: NodeCall) -> list:
 def _default_store():
     # The direct-call path (no run context) needs a store; import here so the module stays importable
     # without the app's store singletons. ``app._run_resume`` used to inline this fallback.
-    from stores import get_run_store
+    from runtime.stores import get_run_store
 
     return get_run_store()

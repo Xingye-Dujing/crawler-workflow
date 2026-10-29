@@ -7,7 +7,7 @@ are unchanged; the app-level ``before_request`` / CORS still wrap them.
 """
 
 from flask import Blueprint, jsonify
-from state import _results_snapshot
+from runtime.state import _results_snapshot
 
 from services import StatsService
 

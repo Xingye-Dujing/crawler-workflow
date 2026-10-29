@@ -16,7 +16,7 @@ import time from ``Config.DATA_DIR``.
 from pathlib import Path
 
 import pytest
-from state import history_service
+from runtime.state import history_service
 
 pytestmark = pytest.mark.api
 

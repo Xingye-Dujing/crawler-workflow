@@ -64,7 +64,7 @@ def running(app_module, monkeypatch):
     """A live run, a cheap back-off, and a console to read the announcement off."""
     import threading
 
-    import state
+    from runtime import state
 
     monkeypatch.setitem(app_module.execution_state, 'running', True)
     # The back-off now wakes on the run's cancel_event; a fresh unset one says

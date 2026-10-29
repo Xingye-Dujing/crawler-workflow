@@ -13,8 +13,8 @@ import textwrap
 
 import pytest
 from core.config import Config
+from runtime import settings
 
-import settings_store
 from i18n import get_lang, set_lang, t
 from services.ingest import catbus as bridge
 
@@ -181,7 +181,7 @@ class TestTheDiscoveryVerdict:
         """
         asked = []
         monkeypatch.setattr(
-            settings_store,
+            settings,
             'get_setting',
             lambda key: {'catbus_node': '/opt/nvm/v24/bin/node', 'catbus_cli': '/srv/catbus'}.get(key, ''),
         )
@@ -205,7 +205,7 @@ class TestTheDiscoveryVerdict:
     def test_an_empty_field_hands_the_environment_to_discovery(self, monkeypatch):
         """「留空=自动」 means the env default and then the per-OS tables, not 「nothing configured」."""
         asked = []
-        monkeypatch.setattr(settings_store, 'get_setting', lambda key: '')
+        monkeypatch.setattr(settings, 'get_setting', lambda key: '')
         monkeypatch.setattr(Config, 'CATBUS_NODE', '')
         monkeypatch.setattr(Config, 'CATBUS_CLI', '/env/only/cli.js')
         monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '/usr/bin/node')

@@ -586,7 +586,7 @@ def _execute(client, workflow, name):
 def test_a_watched_canvas_files_one_capture_per_run_and_says_so(client, app_module):
     """The monitor's whole point is the SECOND run: the first has nothing to compare with, and the
     second must find the first, report what moved, and leave a file the panel can hand over."""
-    from stores import get_biblio_store
+    from runtime.stores import get_biblio_store
 
     records = _upload(client, 'biblio_cnki_demo.txt')
     first = _execute(client, _watch_workflow(records['dataset_id'], {}), 'watch-repeat')
@@ -631,7 +631,7 @@ def test_a_watched_canvas_files_one_capture_per_run_and_says_so(client, app_modu
 @pytest.mark.serial
 def test_a_narrower_window_is_reported_as_a_parameter_change_not_as_a_vanishing_field(client, app_module):
     """A monitor that blames the field for someone editing the node is worse than no monitor."""
-    from stores import get_biblio_store
+    from runtime.stores import get_biblio_store
 
     records = _upload(client, 'biblio_cssci_demo.txt')
     _execute(client, _watch_workflow(records['dataset_id'], {'watch_project': '窗口监测'}), 'watch-window')

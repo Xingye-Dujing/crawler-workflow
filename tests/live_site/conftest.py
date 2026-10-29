@@ -40,8 +40,7 @@ from pathlib import Path
 import isolation_guard
 import pytest
 from real_paths import COOKIE_DIR, has_cookie
-
-import settings_store
+from runtime import settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -133,7 +132,7 @@ def live_profile_root():
     user's directory, so the warnings come back as a failure rather than as a log line.
     """
     root = resolve_profile_root(isolation_guard.uses_user_profile())
-    _saved, warnings = settings_store.save_settings({'browser_profile_dir': str(root), 'use_browser_profile': True})
+    _saved, warnings = settings.save_settings({'browser_profile_dir': str(root), 'use_browser_profile': True})
     assert not warnings, f'the tier profile root was refused, so crawls would use the user directory: {warnings}'
     return str(root)
 
@@ -152,13 +151,13 @@ def live_crawler(cookie_dir_str):
 
     **Every crawler here is built inside the product's own same-platform gate.** The tier
     used to drive browsers directly, so it ran a second policy beside the one that decides
-    when a platform may be crawled: ``app.py`` holds :func:`crawl_gate.hold` for a crawl's
+    when a platform may be crawled: ``app.py`` holds :func:`gate.hold` for a crawl's
     whole life, and now so does every case in here. That is fidelity, not protection — the
     2026-09-24 weibo refusals that first looked like "crawled too soon after its sibling"
     turned out to be intermittent risk control (see ``docs/crawler_notes.md``), and the gate
     deliberately adds no cooldown of its own.
     """
-    import crawl_gate
+    from runtime import gate
 
     from crawlers import get_crawler
     from crawlers.core.faults import ProfileUnavailableError
@@ -188,7 +187,7 @@ def live_crawler(cookie_dir_str):
         stack = contextlib.ExitStack()
         # Taken before the browser exists: the turn has to cover the *whole* crawl, or
         # two tests would each cool down for a crawl that had not started yet.
-        stack.enter_context(crawl_gate.hold(platform))
+        stack.enter_context(gate.hold(platform))
         try:
             crawler = get_crawler(
                 platform,
@@ -281,7 +280,7 @@ def live_search(live_crawler):
     to spend. A refusal is asserted as a refusal instead (see
     ``test_live_weibo.py::test_visible_window_search_works_too``).
 
-    Each crawl is created inside :func:`crawl_gate.hold`, the same turn the app takes for a
+    Each crawl is created inside :func:`gate.hold`, the same turn the app takes for a
     crawl's whole life, so the tier orders one platform's crawls the way the program does
     rather than running its own policy beside it.
     """
@@ -331,7 +330,7 @@ def weibo_windowed(cookie_dir_str):
     """
     from datetime import date, timedelta
 
-    import crawl_gate
+    from runtime import gate
 
     from crawlers import get_crawler
 
@@ -349,7 +348,7 @@ def weibo_windowed(cookie_dir_str):
     # credential, and the ACCOUNT carries the flag — which is why ``live_search`` ends a weibo
     # attempt instead of repeating it. Refusing to retry is what keeps this tier from spending an
     # allowance that belongs to the user.
-    with crawl_gate.hold('weibo'):
+    with gate.hold('weibo'):
         crawler = get_crawler(
             'weibo',
             headless=True,

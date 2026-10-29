@@ -580,7 +580,7 @@ class TestCookiePanelParity:
 
 class TestSettingsPanelParity:
     """A server-side setting reaches the screen through four files, and three of them
-    are never read by any other test: ``settings_store.DEFAULTS`` (the key), the bool
+    are never read by any other test: ``settings.DEFAULTS`` (the key), the bool
     branch in ``save_settings`` (so it saves at all), ``AppSettings._inputMap`` (so it
     is read back), and the control in index.html (so a user can change it). A key
     missing from any of the four is a setting that exists in one file only."""
@@ -591,13 +591,13 @@ class TestSettingsPanelParity:
         return dict(re.findall(r"(\w+):\s*'(set-[\w-]+)'", block))
 
     def test_every_server_setting_has_a_wired_control(self):
-        import settings_store
+        from runtime import settings
 
         pairs = self._input_map()
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
-        missing = sorted(key for key in settings_store.DEFAULTS if key not in pairs)
+        missing = sorted(key for key in settings.DEFAULTS if key not in pairs)
         assert not missing, f'settings nobody can edit from the panel: {missing}'
-        for key in settings_store.DEFAULTS:
+        for key in settings.DEFAULTS:
             element_id = pairs[key]
             assert f'id="{element_id}"' in html, f'{key} is mapped to a missing #{element_id}'
             assert f"onSettingInput('{key}'" in html, f'#{element_id} never tells the server about {key}'

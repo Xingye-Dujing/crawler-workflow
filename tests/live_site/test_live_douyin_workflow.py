@@ -539,7 +539,7 @@ def test_g1_two_douyin_walks_in_parallel_both_arrive(client, app_module, monkeyp
     serves.
 
     The two lane switches are set **for this cell** and restored after it (they are global settings,
-    not canvas settings — ``crawl_gate`` never reads the canvas block). Left at their defaults the
+    not canvas settings — ``gate`` never reads the canvas block). Left at their defaults the
     queue would hold the lane for the whole crawl and 乙 would arrive strictly *after* 甲, which is a
     real behaviour worth a row in the ledger but not the overlap this cell claims to measure.
     """

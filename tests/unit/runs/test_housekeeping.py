@@ -126,7 +126,7 @@ class TestSweep:
         """The manual clear paths empty ``state._dataset_cache``; the automatic sweep deletes the
         same rows, and if it left the cache standing, /preview would still serve a deleted
         dataset's rows while /datasets/<id> 404s."""
-        from state import _dataset_cache
+        from runtime.state import _dataset_cache
 
         _dataset_cache['gone'] = object()
         Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=3)).run_now()
@@ -134,7 +134,7 @@ class TestSweep:
 
     def test_a_purge_that_removed_nothing_leaves_the_cache_alone(self):
         """Nothing went, so a still-live dataset the cache holds must not be dropped."""
-        from state import _dataset_cache
+        from runtime.state import _dataset_cache
 
         marker = object()
         _dataset_cache['keep'] = marker

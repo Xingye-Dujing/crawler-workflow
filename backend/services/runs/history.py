@@ -214,7 +214,7 @@ def record_execution_history(workflow: dict, engine, results: dict, workflow_nam
     The name matters: without it every run was filed as "untitled" and the
     history panel's per-workflow grouping could not distinguish anything.
     """
-    from state import history_service
+    from runtime.state import history_service
 
     try:
         run_id = uuid.uuid4().hex[:12]

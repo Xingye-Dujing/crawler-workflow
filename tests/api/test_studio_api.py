@@ -310,7 +310,7 @@ LATEX_TABLE = (
 
 def _register(data_root, name, kind='latex', run_id='run-pdf', node_id='node-2', content=None):
     """File a source in the export folder AND in the run ledger, the way a visualize node does."""
-    from stores import get_run_store
+    from runtime.stores import get_run_store
 
     exports = data_root / 'data' / 'exports'
     exports.mkdir(parents=True, exist_ok=True)
@@ -354,7 +354,7 @@ class TestStudioSavePdf:
         written = data_root / 'data' / 'exports' / body['filename']
         assert written.read_bytes().startswith(b'%PDF')
         # Recorded under the SAME run and node, so the export panel and 智能清除 see it.
-        from stores import get_run_store
+        from runtime.stores import get_run_store
 
         rows = get_run_store().files_for_run(run_id, node_id, 'pdf')
         assert [row['name'] for row in rows] == ['图23-a1b2.pdf']
