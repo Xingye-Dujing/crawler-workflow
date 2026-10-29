@@ -100,6 +100,10 @@ change is judged on all three, not on the machine it was typed on.
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js`/`workflow.js`/`app.js`
   into a node `vm` (`harness_dom.mjs`), driven by `tests/unit/frontend/test_frontend_*`; any result-affecting JS change must
   sync a scenario; `urlPlatform` is contract-pinned against `core.refs.platform_for`.
+- **A JS split registers its new file in `tests/frontend/splits.json`, and the companion closure is
+  TRANSITIVE** (same rule in `companions.mjs` and `frontend_catalogue.with_companions`, keyed by the
+  page's own spelling `panels/x.js`): a harness naming `workflow.js` must receive the modules split out
+  of the modules split out of it, or it boots a panel without the half that paints it.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields
   the selected mode requires; if not loaded, refuse — never guess a shape. A stored value off the option list shows
   as itself (`selectOptionTags`/`boolParam`), never option #0.
