@@ -14,10 +14,12 @@ adding a chart meant editing them in lockstep. This module pins the shape of tha
 import re
 from pathlib import Path
 
+import pandas as pd
+import pytest
 from frontend_catalogue import words_missing as _words_missing
 
 from services.charts import registry
-from services.charts.contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES, NO_X_TYPES
+from services.charts.contracts import BIBLIO_CHART_READS, BIBLIO_CHART_TYPES, NO_X_TYPES, ChartConfigError
 from services.charts.registry import LATEX_UNBUILDABLE_TYPES
 from services.charts.visualizer import CHART_TYPES, ECHARTS_ONLY_TYPES
 
@@ -78,3 +80,41 @@ class TestTheFrontEndIsPinnedNotASecondOpinion:
         # dictionary — never counted in one file, which after the domain split holds only a part.
         missing = _words_missing('chart.', CHART_TYPES)
         assert missing == [], f'chart types with no zh+en label: {missing}'
+
+
+class TestEveryConsoleTypeHasOneBuilder:
+    """The option builder is a registry, not an ``if`` chain: one type, one plugin entry.
+
+    The old ``_build_option`` was a 700-line chain of ``if chart_type == …`` blocks. A type that
+    existed in ``CHART_TYPES`` but was never reached by the chain fell through to the generic
+    bar/line axes — a figure that looked complete and was not what the user asked for.
+    """
+
+    def test_the_registry_covers_exactly_the_console_types(self):
+        from services.charts.options import BUILDERS
+
+        assert set(BUILDERS) == set(CHART_TYPES) - set(BIBLIO_CHART_TYPES), (
+            'every console type must have exactly one builder; the bibliometric family is built by '
+            'services.biblio.charts from the node-written frame'
+        )
+
+    def test_a_second_claim_on_one_type_is_refused(self):
+        from services.charts.options import builder
+
+        with pytest.raises(ValueError, match='already has a builder'):
+            builder('bar')(lambda *_args: None)
+
+    def test_a_type_whose_builder_vanished_is_refused_by_name(self, monkeypatch):
+        from services.charts import options
+        from services.charts.visualizer import VisualizationService as V
+
+        monkeypatch.delitem(options.BUILDERS, 'bar')
+        with pytest.raises(ChartConfigError, match='Unsupported chart type: bar'):
+            V._build_option(pd.DataFrame({'作者': ['甲'], '点赞': [1.0]}), 'bar', x='作者', y='点赞')
+
+    def test_every_builder_sits_in_a_family_module(self):
+        """A builder defined in ``base`` would make the registry a second monolith."""
+        from services.charts.options import BUILDERS
+
+        homes = {fn.__module__.rsplit('.', 1)[-1] for fn in BUILDERS.values()}
+        assert homes == {'series', 'distributions', 'relations', 'topics'}, homes
