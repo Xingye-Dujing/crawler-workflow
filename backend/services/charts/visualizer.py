@@ -200,7 +200,7 @@ class VisualizationService(OptionMixin):
         return list(labels), list(values)
 
     @staticmethod
-    def _apply_heatmap_option(base, xcats, ycats, matrix, min_val, max_val):
+    def apply_heatmap_option(base, xcats, ycats, matrix, min_val, max_val):
         """Turn an (xcats × ycats) numeric matrix into the shared ECharts heatmap spec.
 
         Both the data heatmap and the 模型一致率 matrix draw identically, so the colour ramp,
@@ -258,7 +258,7 @@ class VisualizationService(OptionMixin):
         return base
 
     @classmethod
-    def _agreement_matrix(cls, df, model_col, label_col, id_col):
+    def agreement_matrix(cls, df, model_col, label_col, id_col):
         """Pairwise label-agreement (percent of the rows two models both answered where they
         chose the same label), aligned by ``id_col`` across the tidy multi-model table.
 
@@ -373,7 +373,7 @@ class VisualizationService(OptionMixin):
         return nodes, links
 
     @classmethod
-    def _ego_subgraph(cls, nodes, links, center):
+    def ego_subgraph(cls, nodes, links, center):
         """Reduce a co-occurrence graph to one node's ego-network: the centre word, the words
         directly co-occurring with it, and the edges among that set. ``center`` must name a node
         already in the graph — a word this data never linked is refused BY NAME, not quietly

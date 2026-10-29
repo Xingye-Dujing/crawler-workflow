@@ -56,7 +56,7 @@ def _heatmap(cls, base: dict, req: ChartRequest) -> dict:
     # Bounds come from the usable numbers only: an all-missing cell makes
     # the aggregate NaN, and NaN bounds would leave the colour scale blank.
     vals = _finite(v for row in matrix for v in row)
-    return cls._apply_heatmap_option(base, xcats, ycats, matrix, min(vals) if vals else 0, max(vals) if vals else 1)
+    return cls.apply_heatmap_option(base, xcats, ycats, matrix, min(vals) if vals else 0, max(vals) if vals else 1)
 
 
 @builder('model_agreement')
@@ -67,13 +67,13 @@ def _model_agreement(cls, base: dict, req: ChartRequest) -> dict:
     ``model_field``/``agreement_label_field``/``id_field``), so a renamed analysis output refuses
     by name rather than rendering a matrix of the wrong thing.
     """
-    cats, matrix = cls._agreement_matrix(
+    cats, matrix = cls.agreement_matrix(
         req.df,
         req.kwargs.get('model_field') or '模型',
         req.kwargs.get('agreement_label_field'),
         req.kwargs.get('id_field') or '原行',
     )
-    return cls._apply_heatmap_option(base, cats, cats, matrix, 0, 100)
+    return cls.apply_heatmap_option(base, cats, cats, matrix, 0, 100)
 
 
 @builder('sankey')
@@ -131,7 +131,7 @@ def _network(cls, base: dict, req: ChartRequest) -> dict:
         )
     center = str(req.kwargs.get('center_node') or '').strip()
     if center:
-        nodes, links = cls._ego_subgraph(nodes, links, center)
+        nodes, links = cls.ego_subgraph(nodes, links, center)
     incident: dict = {}
     for link in links:
         for name in (link['source'], link['target']):

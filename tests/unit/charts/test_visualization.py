@@ -331,20 +331,20 @@ class TestModelAgreement:
         )
 
     def test_pairwise_rate_and_diagonal_on_the_shared_rows(self):
-        _cats, matrix = V._agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
+        _cats, matrix = V.agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
         assert matrix[0][0] == 100.0 == matrix[1][1], 'a model always agrees with itself'
         assert matrix[0][1] == pytest.approx(round(2 / 3 * 100, 2)), '2 of 3 shared rows agree'
         assert matrix[1][0] == matrix[0][1], 'the matrix is symmetric'
 
     def test_the_model_axis_keeps_the_table_order_not_alphabetical(self):
-        cats, _ = V._agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
+        cats, _ = V.agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
         assert cats == ['B', 'A'], 'first appearance in the table, never a re-sort'
 
     def test_a_row_one_model_left_blank_is_neither_agreement_nor_disagreement(self):
         tidy = self._tidy()
         # Drop A's row 0 → the pair is scored over ids {1,2} only: 1 disagrees, 2 agrees → 50%.
         tidy = tidy[~((tidy['模型'] == 'A') & (tidy['原行'] == 0))]
-        _, matrix = V._agreement_matrix(tidy, '模型', 'emotion', '原行')
+        _, matrix = V.agreement_matrix(tidy, '模型', 'emotion', '原行')
         assert matrix[0][1] == pytest.approx(50.0)
 
     def test_two_models_answering_nothing_agree_on_nothing(self):
@@ -357,13 +357,13 @@ class TestModelAgreement:
         # disagreement either: the pair is scored over rows {0,1} only → 1 of 2 = 50%, where the
         # old behaviour reported 2 of 3 = 66.7% and inflated the cell by a row nobody judged.
         tidy.loc[tidy['原行'] == 2, 'emotion'] = ''
-        _, matrix = V._agreement_matrix(tidy, '模型', 'emotion', '原行')
+        _, matrix = V.agreement_matrix(tidy, '模型', 'emotion', '原行')
         assert matrix[0][1] == pytest.approx(50.0), matrix[0][1]
         # And a pair that answered nothing on EVERY row has no measured agreement to report:
         # 0 rows scored must not read as a confident 100%.
         nothing = self._tidy()
         nothing['emotion'] = ''
-        _, blank = V._agreement_matrix(nothing, '模型', 'emotion', '原行')
+        _, blank = V.agreement_matrix(nothing, '模型', 'emotion', '原行')
         assert blank[0][1] == 0.0, blank
 
     def test_it_draws_a_square_heatmap_scaled_noughto_100(self):
@@ -377,7 +377,7 @@ class TestModelAgreement:
     def test_a_single_model_refuses_instead_of_painting_a_1x1_square(self):
         single = pd.DataFrame({'原行': [0, 1], '模型': ['A', 'A'], 'emotion': ['Joy', 'Sad']})
         with pytest.raises(ChartConfigError, match='at least 2 models'):
-            V._agreement_matrix(single, '模型', 'emotion', '原行')
+            V.agreement_matrix(single, '模型', 'emotion', '原行')
 
     def test_a_named_column_that_is_not_there_is_reported(self):
         with pytest.raises(ChartConfigError, match='Field not found in the data: nope'):
