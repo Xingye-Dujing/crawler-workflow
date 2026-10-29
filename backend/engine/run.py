@@ -16,6 +16,13 @@ What is NOT here, because it answers a different question: the console's write p
 module's run window) and the scheduler's seam (``engine.run_schedule`` — may this canvas run
 unattended, and what happened when it fired). Both moved out on 2026-10-29 as verbatim copies;
 ``begin_run`` is still the only path that starts a run, and the queue drains by calling it.
+
+The one rule for what stays INSIDE ``begin_run``: a helper that needs no state from the claim
+belongs at module scope, where a test can reach it and a reader can see its inputs.
+``_wf_display_name`` and ``_run_single_workflow`` were lifted out on 2026-10-29 for exactly that
+reason — the first already closed over nothing, and the second over a single value (``headless``),
+which is now a parameter. ``begin_run.run`` is still nested because it genuinely closes over eight
+of the claim's results; lifting it is a behavior change, not a move.
 """
 
 import contextlib
@@ -401,6 +408,174 @@ def cloud_refusal_response(provider: str) -> dict:
     return {'status': 400, 'body': {'ok': False, 'error': _local_transport_refusal(provider)}}
 
 
+def _wf_display_name(wf_engine, wf_idx: int) -> str:
+    """Console name of one component: the user's 工作流命名 label when the
+    canvas carries one, else the workflow name the browser sent with the
+    run, else a localized placeholder. Never the old positional 'WF1' —
+    an index the user cannot map back to a canvas is noise.
+
+    A canvas holding two components and no name node has to be told apart
+    somehow: both used to announce themselves with the same single name, so
+    the console said the same workflow started twice, and the two console tabs
+    carried identical labels. The index is appended only in that case, and
+    only while the name is still the fallback.
+    """
+    named = component_name(wf_engine)
+    if named:
+        return named
+    fallback = str(execution_state.get('workflow_name') or '').strip() or t('wf.unnamed', i=wf_idx + 1)
+    return (
+        t('wf.component_indexed', name=fallback, i=wf_idx + 1, n=execution_state.get('wf_count') or 1)
+        if (execution_state.get('wf_count') or 1) > 1
+        else fallback
+    )
+
+
+def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
+    """Execute one workflow (single connected component) level by level,
+    with its own isolated wf_input. Returns {nid: result, ...}.
+
+    At each level the input is SNAPSHOTTED so that forked nodes at the
+    same level all receive the same parent data (e.g. node-1 → node-2 AND
+    node-1 → node-4 → both see node-1's result, not node-2's).
+
+    A node that fails no longer ends the branch. It hands downstream what
+    it managed to produce — the rows the model already answered, the items
+    the crawler already scraped — which is the whole point of checkpointing
+    them, and the console says that is what happened.
+    """
+    _wf_local.idx = wf_idx
+    # Console messages address this workflow by the name the user gave it
+    # (its name node) — 'WF0' style indices forced a cross-reference against
+    # the canvas for every line. The same name is what the run record groups
+    # its nodes by, so the panel and the console never call one workflow two
+    # things; it travels on the thread-local because a node is recorded deep
+    # inside this thread's call stack, where no argument carries it.
+    wf_name = _wf_display_name(wf_engine, wf_idx)
+    _wf_local.name = wf_name
+    with _completed_lock:
+        execution_state['_wf_names'][wf_idx] = wf_name
+    levels = wf_engine.group_by_level()
+    results = {}
+    # Every node reads the result of the node wired into it. A level-wide
+    # "last transform wins" input is wrong as soon as one workflow holds two
+    # data branches: with s1→p1 and s2→p2 both feeding a later node, p1 and
+    # p2 would each receive whichever source ran last, so p1 would silently
+    # process s2's rows.
+    upstream_of = {}
+    for conn in wf_engine.connections:
+        upstream_of.setdefault(conn['to'], []).append(conn['from'])
+
+    def _node_of(nid: str) -> dict:
+        return wf_engine.nodes.get(nid) or {}
+
+    def _inputs_for(nid: str):
+        """→ (rows of the first incoming connection, [(parent_id, result), …]).
+
+        The full list travels with the node so a join can use the *second*
+        incoming connection as its right-hand table; every other node just
+        takes the first one.
+        """
+        parents = upstream_of.get(nid) or []
+        if not parents:
+            # A source (crawler or upload) has nothing upstream.
+            return [], []
+        # ``fuse`` is the one node type where several wires are the feature, not a warning:
+        # it folds every parent and logs what each contributed, so the "the first is the
+        # primary input" sentence would describe a rule this node deliberately does not have.
+        if len(parents) > 1 and _node_of(nid).get('type') != 'fuse':
+            add_log(
+                t(
+                    'wf.multi_input',
+                    nid=node_label(_node_of(nid), nid),
+                    up=node_label(_node_of(parents[0]), parents[0]),
+                    n=len(parents),
+                ),
+                wf_idx=wf_idx,
+            )
+        pairs = [(pid, results.get(pid)) for pid in parents]
+        primary = pairs[0][1]
+        # A chart spec (dict) is not tabular input; neither is a node that
+        # has not produced a list.
+        return (primary if isinstance(primary, list) else []), pairs
+
+    for level in levels:
+        if not execution_state['running']:
+            break
+        for nid in level:
+            if not execution_state['running']:
+                break
+            node = wf_engine.nodes[nid]
+            label = node_label(node, nid)
+            with _completed_lock:
+                # Recorded before the node runs: one abandoned mid-crawl must
+                # still be in this attempt's population, or the settle pass in
+                # the finish line would filter the very node it exists to count.
+                execution_state['attempted_nodes'].add(nid)
+            primary, upstream = _inputs_for(nid)
+            # The output (save) node merges every parent's rows into one table; to make that
+            # table say which rows came from which platform (what 跨平台对比 reads), the run
+            # loop — the only place holding the whole graph — resolves each parent's platform
+            # here. None for every other node type; a non-crawl parent (upload/resume) is '' ,
+            # never a guessed platform.
+            _platform_of = None
+            _labels_of = None
+            if node.get('type') == 'output' and upstream:
+                _platform_of = {}
+                # The same graph reach the merge needs to NAME its parents: its refusals and
+                # its 「已合并」 line quote the parent, and a bare `node-2` in a message about
+                # which WIRE to cut is the one thing the console rule exists to stop.
+                _labels_of = {}
+                for _pid, _res in upstream:
+                    _pn = _node_of(str(_pid))
+                    _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
+                    _platform_of[str(_pid)] = str(_p)
+                    _labels_of[str(_pid)] = node_label(_pn, str(_pid))
+            result, status = run_node_durable(
+                ctx,
+                node,
+                headless,
+                primary,
+                upstream,
+                wf_idx,
+                platform_of=_platform_of,
+                label_of=_labels_of,
+            )
+            results[nid] = result
+            if status == NODE_SKIPPED:
+                # Neither done nor failed: it never got input to work on. The
+                # reason was announced by run_node_durable; counting it as
+                # done would lie the other way.
+                with _completed_lock:
+                    execution_state['skipped_nodes'] += 1
+                continue
+            if status == NODE_RESTORED:
+                # 'run.restored' already announced this node in its own
+                # words; counting it as done is right — its rows are in
+                # hand — but a second line calling it 'completed' only
+                # repeats what the user just read.
+                with _completed_lock:
+                    execution_state['completed_nodes'] += 1
+                continue
+            with _completed_lock:
+                # Failed/partial do NOT count as done: the run's progress
+                # line must say how much actually finished, not how many
+                # nodes were visited. Their story is told by node_failed
+                # and the partial-rows line.
+                if status not in (NODE_FAILED, NODE_PARTIAL):
+                    execution_state['completed_nodes'] += 1
+                done = execution_state['completed_nodes']
+                planned = execution_state['total_nodes']
+            if status in (NODE_FAILED, NODE_PARTIAL):
+                continue
+            if node.get('type') not in QUIET_NODE_TYPES:
+                add_log(
+                    t('wf.node_completed', wf=wf_name, nid=label, done=done, total=planned),
+                    wf_idx=wf_idx,
+                )
+    return results
+
+
 def begin_run(data: dict, lang_header: str) -> dict:
     """Claim the run slot and start the worker, or put this request in the queue.
 
@@ -613,172 +788,6 @@ def begin_run(data: dict, lang_header: str) -> dict:
                 # A rejection (already-configured checks, malformed body) gives
                 # the claim back — the guard must not lock out every later Run.
                 execution_state['running'] = False
-
-    def _wf_display_name(wf_engine, wf_idx: int) -> str:
-        """Console name of one component: the user's 工作流命名 label when the
-        canvas carries one, else the workflow name the browser sent with the
-        run, else a localized placeholder. Never the old positional 'WF1' —
-        an index the user cannot map back to a canvas is noise.
-
-        A canvas holding two components and no name node has to be told apart
-        somehow: both used to announce themselves with the same single name, so
-        the console said the same workflow started twice, and the two console tabs
-        carried identical labels. The index is appended only in that case, and
-        only while the name is still the fallback.
-        """
-        named = component_name(wf_engine)
-        if named:
-            return named
-        fallback = str(execution_state.get('workflow_name') or '').strip() or t('wf.unnamed', i=wf_idx + 1)
-        return (
-            t('wf.component_indexed', name=fallback, i=wf_idx + 1, n=execution_state.get('wf_count') or 1)
-            if (execution_state.get('wf_count') or 1) > 1
-            else fallback
-        )
-
-    def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict):
-        """Execute one workflow (single connected component) level by level,
-        with its own isolated wf_input. Returns {nid: result, ...}.
-
-        At each level the input is SNAPSHOTTED so that forked nodes at the
-        same level all receive the same parent data (e.g. node-1 → node-2 AND
-        node-1 → node-4 → both see node-1's result, not node-2's).
-
-        A node that fails no longer ends the branch. It hands downstream what
-        it managed to produce — the rows the model already answered, the items
-        the crawler already scraped — which is the whole point of checkpointing
-        them, and the console says that is what happened.
-        """
-        _wf_local.idx = wf_idx
-        # Console messages address this workflow by the name the user gave it
-        # (its name node) — 'WF0' style indices forced a cross-reference against
-        # the canvas for every line. The same name is what the run record groups
-        # its nodes by, so the panel and the console never call one workflow two
-        # things; it travels on the thread-local because a node is recorded deep
-        # inside this thread's call stack, where no argument carries it.
-        wf_name = _wf_display_name(wf_engine, wf_idx)
-        _wf_local.name = wf_name
-        with _completed_lock:
-            execution_state['_wf_names'][wf_idx] = wf_name
-        levels = wf_engine.group_by_level()
-        results = {}
-        # Every node reads the result of the node wired into it. A level-wide
-        # "last transform wins" input is wrong as soon as one workflow holds two
-        # data branches: with s1→p1 and s2→p2 both feeding a later node, p1 and
-        # p2 would each receive whichever source ran last, so p1 would silently
-        # process s2's rows.
-        upstream_of = {}
-        for conn in wf_engine.connections:
-            upstream_of.setdefault(conn['to'], []).append(conn['from'])
-
-        def _node_of(nid: str) -> dict:
-            return wf_engine.nodes.get(nid) or {}
-
-        def _inputs_for(nid: str):
-            """→ (rows of the first incoming connection, [(parent_id, result), …]).
-
-            The full list travels with the node so a join can use the *second*
-            incoming connection as its right-hand table; every other node just
-            takes the first one.
-            """
-            parents = upstream_of.get(nid) or []
-            if not parents:
-                # A source (crawler or upload) has nothing upstream.
-                return [], []
-            # ``fuse`` is the one node type where several wires are the feature, not a warning:
-            # it folds every parent and logs what each contributed, so the "the first is the
-            # primary input" sentence would describe a rule this node deliberately does not have.
-            if len(parents) > 1 and _node_of(nid).get('type') != 'fuse':
-                add_log(
-                    t(
-                        'wf.multi_input',
-                        nid=node_label(_node_of(nid), nid),
-                        up=node_label(_node_of(parents[0]), parents[0]),
-                        n=len(parents),
-                    ),
-                    wf_idx=wf_idx,
-                )
-            pairs = [(pid, results.get(pid)) for pid in parents]
-            primary = pairs[0][1]
-            # A chart spec (dict) is not tabular input; neither is a node that
-            # has not produced a list.
-            return (primary if isinstance(primary, list) else []), pairs
-
-        for level in levels:
-            if not execution_state['running']:
-                break
-            for nid in level:
-                if not execution_state['running']:
-                    break
-                node = wf_engine.nodes[nid]
-                label = node_label(node, nid)
-                with _completed_lock:
-                    # Recorded before the node runs: one abandoned mid-crawl must
-                    # still be in this attempt's population, or the settle pass in
-                    # the finish line would filter the very node it exists to count.
-                    execution_state['attempted_nodes'].add(nid)
-                primary, upstream = _inputs_for(nid)
-                # The output (save) node merges every parent's rows into one table; to make that
-                # table say which rows came from which platform (what 跨平台对比 reads), the run
-                # loop — the only place holding the whole graph — resolves each parent's platform
-                # here. None for every other node type; a non-crawl parent (upload/resume) is '' ,
-                # never a guessed platform.
-                _platform_of = None
-                _labels_of = None
-                if node.get('type') == 'output' and upstream:
-                    _platform_of = {}
-                    # The same graph reach the merge needs to NAME its parents: its refusals and
-                    # its 「已合并」 line quote the parent, and a bare `node-2` in a message about
-                    # which WIRE to cut is the one thing the console rule exists to stop.
-                    _labels_of = {}
-                    for _pid, _res in upstream:
-                        _pn = _node_of(str(_pid))
-                        _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
-                        _platform_of[str(_pid)] = str(_p)
-                        _labels_of[str(_pid)] = node_label(_pn, str(_pid))
-                result, status = run_node_durable(
-                    ctx,
-                    node,
-                    headless,
-                    primary,
-                    upstream,
-                    wf_idx,
-                    platform_of=_platform_of,
-                    label_of=_labels_of,
-                )
-                results[nid] = result
-                if status == NODE_SKIPPED:
-                    # Neither done nor failed: it never got input to work on. The
-                    # reason was announced by run_node_durable; counting it as
-                    # done would lie the other way.
-                    with _completed_lock:
-                        execution_state['skipped_nodes'] += 1
-                    continue
-                if status == NODE_RESTORED:
-                    # 'run.restored' already announced this node in its own
-                    # words; counting it as done is right — its rows are in
-                    # hand — but a second line calling it 'completed' only
-                    # repeats what the user just read.
-                    with _completed_lock:
-                        execution_state['completed_nodes'] += 1
-                    continue
-                with _completed_lock:
-                    # Failed/partial do NOT count as done: the run's progress
-                    # line must say how much actually finished, not how many
-                    # nodes were visited. Their story is told by node_failed
-                    # and the partial-rows line.
-                    if status not in (NODE_FAILED, NODE_PARTIAL):
-                        execution_state['completed_nodes'] += 1
-                    done = execution_state['completed_nodes']
-                    planned = execution_state['total_nodes']
-                if status in (NODE_FAILED, NODE_PARTIAL):
-                    continue
-                if node.get('type') not in QUIET_NODE_TYPES:
-                    add_log(
-                        t('wf.node_completed', wf=wf_name, nid=label, done=done, total=planned),
-                        wf_idx=wf_idx,
-                    )
-        return results
 
     def run():
         # The run thread starts here, not in a request handler — inherit the
@@ -1034,7 +1043,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
                     # console announcing 「开始执行工作流「B」」.
                     add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)), wf_idx=wf_idx)
                     try:
-                        results = _run_single_workflow(se, wf_idx, sub_ctx)
+                        results = _run_single_workflow(se, wf_idx, sub_ctx, headless)
                     finally:
                         # Released, not left standing. Serial mode runs in the RUN
                         # thread, so the index of the component that just finished
@@ -1066,7 +1075,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
                     # Pool threads do not inherit the starter's thread-local.
                     set_lang(execution_state.get('lang'))
                     try:
-                        results = _run_single_workflow(wf_engine, wf_idx, ctx)
+                        results = _run_single_workflow(wf_engine, wf_idx, ctx, headless)
                         with wf_lock:
                             all_results.update(results)
                     except Exception:
