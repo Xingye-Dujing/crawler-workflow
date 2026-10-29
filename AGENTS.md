@@ -107,7 +107,10 @@ change is judged on all three, not on the machine it was typed on.
   its files through `sourcesWithCompanions` (**one read per file** — naming an owner and its companion
   is not a licence to evaluate it twice, and a doubled top-level `const` is a redeclaration), never its
   own `readFileSync(argv)`; a Python-side source scan reads `static_assets.js_text(name)`, which follows
-  the same map.
+  the same map. **Splitting an object's MEMBERS keeps ONE global via `Object.assign(obj, { … })`** (a
+  later script cannot rebind a top-level `const`, and onclick handlers name the object): the member
+  lines stay verbatim, and the sections' member sets must be disjoint — a member declared twice is not
+  an error but a silent overwrite.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields
   the selected mode requires; if not loaded, refuse — never guess a shape. A stored value off the option list shows
   as itself (`selectOptionTags`/`boolParam`), never option #0.

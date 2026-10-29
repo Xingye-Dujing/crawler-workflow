@@ -2309,6 +2309,16 @@
     <!-- The copy-history drawer and the shortcut-help overlay: canvas.js's own tail, moved to
          a file of its own on 2026-10-29 (still page globals, still loaded right after it). -->
     <script src="/js/clipboard.js"></script>
+    <!-- The four sections of the canvas object, cut out on 2026-10-29 as `Object.assign(canvas, …)`
+         blocks: the camera and minimap, the model snapshot with its undo history, the painting of
+         derived state (enable/disable, run badges, fold) and auto-layout. `canvas` stays one global —
+         the markup and every panel call `canvas.x()` by name — so these files add members to it
+         rather than declaring a second object, and they load before anything can ask the canvas
+         for anything. -->
+    <script src="/js/canvas-view.js"></script>
+    <script src="/js/canvas-snapshot.js"></script>
+    <script src="/js/canvas-visuals.js"></script>
+    <script src="/js/canvas-auto-layout.js"></script>
     <script src="/js/workflow.js"></script>
     <script src="/js/panels/data-views.js"></script>
     <script src="/js/panels/shell.js"></script>

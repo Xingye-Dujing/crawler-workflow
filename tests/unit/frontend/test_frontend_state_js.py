@@ -23,6 +23,7 @@ from pathlib import Path
 import capabilities.registry as capabilities
 import pytest
 from node_runner import run_node
+from static_assets import js_text
 
 pytestmark = [
     pytest.mark.unit,
@@ -1009,9 +1010,11 @@ class TestFileLifecycle:
         reads measured whatever element got there first. The DOM stub cannot express
         the collision (its registry lets the later element win, a browser keeps the
         first), so the rule is pinned where it is written: every node lookup goes
-        through `canvas._nodeEl`, and no call in the file takes a variable id.
+        through `canvas._nodeEl`, and no call in the canvas's files takes a variable id. The scan
+        reads the whole closure (``js_text``), because the object is split across five files since
+        2026-10-29 and a by-name read would police one of them and call that the rule.
         """
-        source = (JS_DIR / 'canvas.js').read_text(encoding='utf-8')
+        source = js_text('canvas.js')
         by_variable = re.findall(r"getElementById\(\s*(?!['\"])[^)]*\)", source)
         assert by_variable == [], f'node lookups must go through _nodeEl: {by_variable}'
         assert source.count('this._nodeEl(') >= 8, 'the helper exists but nothing uses it'

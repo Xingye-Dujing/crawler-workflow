@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { sourceOf } from './companions.mjs';
 
 const [canvasPath, nodeTypesPath, scPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
@@ -44,8 +45,10 @@ function world(sc) {
     fixWindow(vm, sandbox);
     /* node-types.js announces its answer on the document; the DOM stub has no event bus. */
     sandbox.document.dispatchEvent = () => {};
-    vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
-    vm.runInContext(fs.readFileSync(nodeTypesPath, 'utf8') + '\n;globalThis.__NodeTypes = NodeTypes;', sandbox);
+    /* `sourceOf` follows the split map: the canvas object is several files since 2026-10-29, and
+       reading only `canvas.js` boots a canvas whose `init` calls a member that is not there. */
+    vm.runInContext(sourceOf(canvasPath) + '\n;globalThis.__canvas = canvas;', sandbox);
+    vm.runInContext(sourceOf(nodeTypesPath) + '\n;globalThis.__NodeTypes = NodeTypes;', sandbox);
     return sandbox;
 }
 

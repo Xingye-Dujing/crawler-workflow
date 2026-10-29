@@ -82,7 +82,11 @@ vm.runInContext(
     sandbox,
 );
 
-vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
+/* The canvas is more than one file since 2026-10-29: its object sections are separate companions
+   too, and a canvas without them dies the first time `init()` reaches `this._pushState()`. */
+const canvasSources = sourcesWithCompanions([canvasPath]);
+canvasSources[0] += '\n;globalThis.__canvas = canvas;';
+for (const code of canvasSources) vm.runInContext(code, sandbox);
 /* The workflow layer is more than one file now: its split-out halves are read from the same
    directory and evaluated after it, each as its own script like a real <script> tag. */
 const workflowSources = sourcesWithCompanions([wfPath]);

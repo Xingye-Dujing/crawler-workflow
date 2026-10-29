@@ -223,6 +223,17 @@ class TestThePageListsItsOwnModules:
             'app-settings.js',
             'floating-panels.js',
         ], halves
+        # the canvas object's sections ride along the same way — `canvas.init()` calls members that
+        # now live in other files, so a one-file read boots a canvas whose undo path is missing
+        canvas = [Path(str(item)).relative_to(js).as_posix() for item in with_companions([js / 'canvas.js'])]
+        assert canvas == [
+            'canvas.js',
+            'clipboard.js',
+            'canvas-view.js',
+            'canvas-snapshot.js',
+            'canvas-visuals.js',
+            'canvas-auto-layout.js',
+        ], canvas
 
     def test_the_companion_map_names_files_the_page_really_ships(self):
         """A companion the page does not load would be a harness-only file: the browser would never

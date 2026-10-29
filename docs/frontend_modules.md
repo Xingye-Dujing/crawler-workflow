@@ -48,6 +48,7 @@
 | `panels/node-biblio.js` | 文献计量与融合节点的设置：`BIBLIO_*` 十张清单、`FUSE_ROLE_FIELDS`、`renderBiblioSettings`/`renderFuseSettings`（224 行） | 同上一次切片 |
 | `panels/node-chart.js` | 可视化节点的设置：`CHART_TYPES`/`BIBLIO_CHARTS`/`ENGINES`/`ECHARTS_ONLY_CHARTS`/`CHARTS_WITH_*` 与 `renderVisualizeSettings`（238 行） | 同上；`test_chart_registry`/`test_visualization`/`test_frontend_contract` 的清单扫描改读**面板合体**（`static_assets.js_text('panels/settings.js')` 沿伴生表展开，扫描不再自己猜文件名） |
 | `llm-settings.js` + `app-settings.js` + `floating-panels.js` | `app.js` 的三段：LLM 传输/模型/密钥与 `testAIConnection`（301 行）、本机设置与 `BrowserProfiles`（227 行）、面板作为窗口的行为（拖拽、缩放、控制台弹出、九个 dock 的高度、外点关闭、首次打开的包装，405 行） | 2026-10-29 **连续切片**拆出（`build/split_app_js.py`：四个文件的行段按原顺序拼回 == 原 1,456 行文件，只少了三行空行，正文逐行零差异）。`boot()` 留在 `app.js`——它点名每个要启动的模块，是入口的一部分；三段里的加载期语句只有 `window.X = X` 与 `document.addEventListener(...)`，没有 DOMContentLoaded 监听，所以「boot 注册」相对它们的先后与原来一致（新文件排在 `app.js` 之后、`reusable.js` 之前）。进 `splits.json['app.js']`。**顺带补齐了三处绕过伴生表的读法**：`harness_menu`/`harness_app_state`/`harness_schedules` 自己 `readFileSync(argv)`，拆分后 boot 里少了搬走的对象；`companions.mjs` 因此给 `sourcesWithCompanions` 加了「一次调用里同一文件只读一遍」（驱动同时点名 owner 与它的伴生时，第二遍是顶层 `const` 的重声明） |
+| `canvas-view.js` + `canvas-snapshot.js` + `canvas-visuals.js` + `canvas-auto-layout.js` | `canvas` 对象的四个主题段：相机/捏合/minimap 与携带相机的 draft（362 行）、`getState`/`restoreState`/撤销历史（212 行）、派生状态的绘制——禁用级联、运行徽标、校验描红、折叠（245 行）、`autoLayout` 与 `runAutoLayout`（207 行） | 2026-10-29 从**一个 3,487 行的对象字面量**里切出。`canvas` 必须仍是一个全局（页面 onclick 与各面板都按名字调 `canvas.x()`），而后来的脚本无法重绑定顶层 `const`——所以每片不是新对象，而是 `Object.assign(canvas, { 原成员行 })`：成员行逐字节未动、未重缩进。核对：七个行段（留下三段 + 搬走四段）按原顺序拼回 == 原 3,535 行文件（只少四行段间空行）；再用 node 分别装载「原单文件」与「新家族」比对 `Object.keys(canvas)` —— **158 个成员，名字、种类、函数形参数量完全相同**。新增 `test_frontend_canvas_sections_js.py` 三枚针：整页只有 `canvas.js` 绑定 `canvas`、每片必须恰好一个 assign 语句且以 `});` 收尾、各片成员互不重叠且并集 == 家族表面（重复成员在 JS 里不是错误，后一次 assign 静默覆盖前一次——两个文件之间的同一个键，diff 看不见）。连带把六个 harness 从自己 `readFileSync(canvasPath)` 改为走伴生表（`canvas.init()` 会调搬到 `canvas-snapshot.js` 的 `_pushState`，只读一个文件就是半个画布），并让 `harness_reusable` 的位置参数切片回归为「按名字的完整 argv 展开」 |
 | `zenviz-page.js` + `css/zenviz.css` | 图表工作室页面自身：14,720 行的 IIFE（引擎渲染、属性面板、导入导出、持久化）与 1,927 行样式 | 2026-10-29 从 `zenviz.html`（16,852 行）的**内联 `<style>`/`<script>`** 原字节搬出，页面剩 218 行；JS 仍是**一个 IIFE、缩进未动**（模板字符串跨行，去缩进会改到字符串内容），CSS 只去了行首页面对齐的六格。文件化换来 `node --check`、可审 diff 与严格 CSP（禁用内联）。`zenviz-page.js` 只由 `zenviz.html` 加载（与 `zenviz-bridge.js` 同），`tests/unit/frontend/test_frontend_page_markup.py` 把同一套文档契约（id 唯一/成对/可访问名/无内联/模块在盘）套到工作室页 |
 
 ## 3. 后续拆分顺序（每一行 = 一次提交）
@@ -58,10 +59,13 @@
 `panels/lexicon` / `panels/datasets` / `panels/files` / `panels/diagnostics` / `panels/settings`），
 `workflow.js` 13,027 → 4,458 行。Stage 10b 又搬出四片（`panels/data-views.js`/`panels/shell.js`/`panels/run-results.js`/`workflow-layout.js`），`workflow.js` → **2,089 行**。余下的是 `workflow` 控制器对象（文件生命周期、运行前守卫、`execute`/`stop`/控制台重连）与 `nodeTypeWord` 等跨面板工具：它们是同一主题的一个对象，再拆需要把对象成员改成 `Object.assign` 分区，属单独一刀。
 
-`app.js` 同法已在 2026-10-29 落地三段（见 §2 最后一行的前三片）：1,456 → **545 行**，`boot()` 留在入口。
-`panels/settings.js` 再按节点类型切三片（1,985 → 1,155），`canvas.js` 搬出尾部抽屉（3,893 → 3,535）。
-仍未动的两座大文件：`canvas.js` 3,535（图对象成员：小地图/自动布局/撤销，同样要 `Object.assign` 分区）与
-`zenviz-page.js` 14,723（IIFE 内共享 `state`，拆分要先立命名空间，风险高于收益）。
+`app.js` 同法已在 2026-10-29 落地三段（见 §2 的 `llm-settings.js`/`app-settings.js`/`floating-panels.js`）：1,456 → **545 行**，`boot()` 留在入口。
+`panels/settings.js` 再按节点类型切三片（1,985 → 1,155），`canvas.js` 搬出尾部抽屉（3,893 → 3,535），
+同一天 `canvas` 对象按主题切成四段（3,535 → **2,553**，见 §2 倒数第二行）——对象成员不能再做「连续切片」，
+它们分散在整个字面量里，所以那四片是 `Object.assign` 段而不是独立全局。
+`workflow.js` 余下的是控制器对象本身（文件生命周期、运行前守卫、`execute`/`stop`/控制台重连）与 `nodeTypeWord`
+等跨面板工具；`canvas.js` 余下的是图模型与节点增删。两座都还是「一个对象」，再拆同属 `Object.assign` 分区那一刀。
+仍未动的只有 `zenviz-page.js` 14,723（一个 IIFE 内共享 `state`，要先立命名空间，风险高于收益）。
 
 `tests/frontend/page_scripts.mjs` 已经从 `index.html` 解析 `<script src="/js/…">` 顺序并提供
 `loadPageScripts(sandbox, {jsDir, only})`，**15 个 harness 已改用它**（2026-10-29）；选中 `app.js`

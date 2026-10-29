@@ -449,7 +449,7 @@ class TestBiblioPanelContract:
         """``canvas.js`` seeds what a freshly dropped node holds; a parameter the server knows and
         the seed does not is a box that renders its placeholder while the run uses the default —
         the panel and the executor disagreeing about the same node."""
-        src = (JS_DIR / 'canvas.js').read_text(encoding='utf-8')
+        src = js_text('canvas.js')
         block = src[src.index("if (type === 'biblio') return {") :]
         block = block[: block.index('\n        };')]
         seeded = set(re.findall(r'(\w+):', block))
@@ -474,7 +474,7 @@ class TestPaletteContract:
         return re.findall(r'data-type="([\w]+)"', palette)
 
     def test_every_palette_node_has_params_and_a_label(self):
-        canvas_src = CANVAS_JS.read_text(encoding='utf-8')
+        canvas_src = js_text('canvas.js')
         types = self._palette_types()
         for ntype in types:
             assert f"if (type === '{ntype}')" in canvas_src, f'getDefaultParams lacks {ntype}'
@@ -485,7 +485,7 @@ class TestPaletteContract:
         # The standalone CMT node lingers in the engine for old canvases, but
         # new users reach 评论采集 through the Data Source's collect mode.
         assert 'comment' not in self._palette_types()
-        canvas_src = CANVAS_JS.read_text(encoding='utf-8')
+        canvas_src = js_text('canvas.js')
         assert "if (type === 'source') return this._defaultSourceParams();" in canvas_src, (
             'the Data Source stopped seeding itself from the matrix'
         )
@@ -834,7 +834,7 @@ class TestChromeOfThePageItself:
         # And nothing bounds the NODE coordinate either — an unbounded pan is what lets a
         # port sit outside the world box in the first place, so a clamp appearing here
         # would mean the un-clipped wire was unnecessary after all.
-        js = (JS_DIR / 'canvas.js').read_text(encoding='utf-8')
+        js = js_text('canvas.js')
         assert "['panX', view.panX, -Infinity, Infinity]" in js, 'pan gained a bound'
         assert "['panY', view.panY, -Infinity, Infinity]" in js, 'pan gained a bound'
 

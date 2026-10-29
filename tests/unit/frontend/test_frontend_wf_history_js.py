@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from node_runner import run_node
-from static_assets import css_text
+from static_assets import css_text, js_text
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -188,7 +188,7 @@ class TestLayoutStrategy:
         assert wfh['missing_layout']['toasts'] == ['BASELINE-GONE']
 
     def test_the_layout_button_routes_through_the_strategy(self):
-        canvas = CANVAS_JS.read_text(encoding='utf-8')
+        canvas = js_text('canvas.js')
         assert re.search(r'async runAutoLayout\(\)', canvas)
         assert 'LayoutStrategy.layout()' in canvas
         assert "case 'autoLayout':\n                    this.runAutoLayout();" in canvas

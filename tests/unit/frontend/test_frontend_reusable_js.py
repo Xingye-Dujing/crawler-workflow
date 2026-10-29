@@ -16,7 +16,7 @@ import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from frontend_catalogue import with_companions
 from node_runner import run_node
-from static_assets import css_text
+from static_assets import css_text, js_text
 
 REPO = Path(__file__).resolve().parents[3]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -258,7 +258,7 @@ class TestContracts:
         assert '.settings-checkbox' in css
 
     def test_the_canvas_routes_the_layout_button_and_paints_group_statuses(self):
-        canvas = CANVAS_JS.read_text(encoding='utf-8')
+        canvas = js_text('canvas.js')
         assert 'ReusableNodes.expand' in canvas
         assert 'expandReusable' in canvas
         assert 'ReusableNodes.paintStatuses' in canvas

@@ -12,13 +12,16 @@
  * Usage: node harness_autosave.mjs <canvas.js> <workflow.js>
  * Prints one JSON object to stdout.
  */
-import fs from 'node:fs';
 import vm from 'node:vm';
 
 import { baseSandbox, dispatchWindow, fixWindow } from './harness_dom.mjs';
+import { sourcesWithCompanions } from './companions.mjs';
 
+/* The two layers plus everything split out of either (see companions.mjs): `canvas.init()` calls
+   `this._pushState()`, which is a member of `canvas-snapshot.js` since 2026-10-29, and a harness
+   that reads only the two files it was handed boots half an object. */
 const [canvasPath, wfPath] = process.argv.slice(2);
-const src = [canvasPath, wfPath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
+const src = sourcesWithCompanions([canvasPath, wfPath]).join('\n;\n');
 
 const I18n = {
     lang: 'en',

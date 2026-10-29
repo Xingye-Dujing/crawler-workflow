@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import catalog_keys as _catalog_keys
 from nodes import catalog
+from static_assets import js_text
 
 pytestmark = pytest.mark.unit
 
@@ -75,7 +76,7 @@ def test_the_frontend_paste_guard_lists_the_same_types():
     is a paste the panel accepts and the engine refuses — refused by name at run time, but only
     after the user wired it up.
     """
-    source = (JS / 'canvas.js').read_text(encoding='utf-8')
+    source = js_text('canvas.js')
     match = re.search(r'_VALID_NODE_TYPES:\s*\[([^\]]*)\]', source)
     assert match, 'canvas.js no longer declares the paste-import type list'
     names = set(re.findall(r"'([\w.-]+)'", match.group(1)))

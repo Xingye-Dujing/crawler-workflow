@@ -47,18 +47,18 @@ byte-clean — `AGENTS.md` calls it out explicitly. So **`create_app()` is not a
 module into a factory would orphan every one of those references and silently break isolation. Any
 split must move that shared state to a place both `app.py` and `conftest.py` can import from, *first*.
 
-## Frontend layout (~41.3k JS LOC across 46 files, no build step)
+## Frontend layout (~41.3k JS LOC across 50 files, no build step)
 | file | role |
 |---|---|
 | `workflow.js` | **2,089 LOC** — the workflow controller object (file lifecycle, pre-run gate, `execute`/`stop`, console reattach) and the cross-panel tools (`nodeTypeWord`, `escapeHtml`, `attrJsArg`). Stage 8 + 10b moved every docked panel out to `panels/*.js` and the layout to `workflow-layout.js` (`docs/frontend_modules.md` is the per-module record). |
 | `app.js` | **545 LOC** — the entry: the `X-Lang` fetch patch, `I18n` + `_mergeCatalogues`, `RunState`, `Settings`, theme/`filterPalette`, `CloudMode`, `PrivacyNotice`, and the `boot()` sequence. What it no longer holds: `llm-settings.js` (301 — the LLM transport, models, key, `testAIConnection`), `app-settings.js` (227 — machine-local settings, `onSettingInput`, `BrowserProfiles`) and `floating-panels.js` (405 — drag, resize, console pop-out, every dock's height, the click-away closers, the first-open wrappers). All three were contiguous slices cut on 2026-10-29, loaded in that order right after `app.js`. The zh/en catalogues it used to hold (~3,700 of the old 5,071) are the data modules `i18n/*.js`. |
-| `canvas.js` | 3,535 LOC — node graph, camera (`pan/zoom`, kept out of `getState`), pointer/touch gestures, auto-layout. Its copy-history drawer and shortcut-help overlay are `clipboard.js` (366), cut on 2026-10-29 and loaded right after it. |
+| `canvas.js` | 2,553 LOC — the `canvas` object: graph model, node CRUD, selection, wiring, painting, serialization of the file shape. It is ONE global made of five files since 2026-10-29: `canvas-view.js` (362 — camera, pinch, minimap, the draft that carries the view), `canvas-snapshot.js` (212 — `getState`/`restoreState`/`undo`, the camera deliberately outside the snapshot), `canvas-visuals.js` (245 — disable cascade, run badges, validation outlines, fold) and `canvas-auto-layout.js` (207). A later script cannot rebind a top-level `const`, so each section is an `Object.assign(canvas, { … })` block of original member lines — pinned by `tests/unit/frontend/test_frontend_canvas_sections_js.py`. The copy-history drawer and shortcut-help overlay are `clipboard.js` (366), cut on 2026-10-29 and loaded right after it. |
 | `reusable.js` | 1,021 LOC — reusable node templates: fold/expand, in-card preview, unwrap. |
 | `schedules.js` | 475 LOC — the 定时任务 dock: it renders the server's payload (`/api/schedules*`) and nothing else. Deliberately **no** time arithmetic and **no** status vocabulary of its own (a token the catalogue does not know shows as itself) — see the 定时任务 rules in `AGENTS.md`. |
 | `node-types.js` | The served node catalogue (`/api/node-types`): types, word keys, groups and seed parameters. The canvas reads it as soon as it answers; its own literal table is the cold-page fallback, pinned to the server by tests. |
 | `custom-select.js`, `menu.js`, `stats.js`, `zenviz*.js` | widget + Chart-Studio host/bridge. `zenviz.html` is **218 lines of markup** since 2026-10-29: its ~1,920-line `<style>` and ~14,700-line inline `<script>` are `css/zenviz.css` and `js/zenviz-page.js`. The page loads `zenviz-bridge.js` and its page app, which the workbench page does **not**. |
 
-**The callable surface is markup, not code.** `index.html` (2,362 lines) carries 123 `onclick`,
+**The callable surface is markup, not code.** `index.html` (2,372 lines) carries 123 `onclick`,
 23 `oninput`, 18 `onchange` attributes naming **66 bare global functions** and **20 namespace
 receivers**. Renaming any of them is a user-visible break, which is why the split moves code between
 files and never renames a global. Its one inline script — the pre-paint theme/background/language

@@ -5,7 +5,11 @@
         "floating-panels.js"
     ],
     "canvas.js": [
-        "clipboard.js"
+        "clipboard.js",
+        "canvas-view.js",
+        "canvas-snapshot.js",
+        "canvas-visuals.js",
+        "canvas-auto-layout.js"
     ],
     "workflow.js": [
         "panels/data-views.js",

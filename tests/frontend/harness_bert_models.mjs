@@ -51,7 +51,8 @@ function world() {
     vm.createContext(sandbox);
     fixWindow(vm, sandbox);
     sandbox.window.explainWechatLimits = () => {};
-    vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
+    /* the canvas object lives in several files since 2026-10-29 — `sourceOf` follows the split map */
+    vm.runInContext(sourceOf(canvasPath) + '\n;globalThis.__canvas = canvas;', sandbox);
     vm.runInContext(sourceOf(wfPath), sandbox);
     return sandbox;
 }

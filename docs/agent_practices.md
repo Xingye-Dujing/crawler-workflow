@@ -269,6 +269,21 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   ``I18n.t('…')`` calls were outside the word audit while every one of them was in fact clean — it is
   now derived (``js/**/*.js`` minus the ``i18n/`` data) with a scope floor, because "add the new file
   to the list" is the step that gets forgotten and reports nothing.
+- **An object cannot be split by concatenation, and its members cannot be re-bound (measured on the
+  ``canvas.js`` cut, 2026-10-29).** ``canvas`` is one top-level ``const`` object of 158 members that the
+  page's markup and every panel call by name, so a second file has exactly one way to add to it:
+  ``Object.assign(canvas, { …members… })`` — which is why the four sections carry the original member
+  lines verbatim inside that wrapper rather than declaring anything. Two hazards came with the shape.
+  ① ``Object.assign`` does not complain when the same member is declared twice: the later call silently
+  replaces the earlier one, which is the duplicate-key accident spread over two files where no diff shows
+  it. ``tests/unit/frontend/test_frontend_canvas_sections_js.py`` loads each section against a bare object
+  in its own context (so a section cannot borrow members from another file), asserts the per-section key
+  sets are disjoint and that their union equals the family's ``Object.keys(canvas)``. ② The same knife
+  showed the *proof* of a member split is not the byte rejoin alone: the rejoin says nothing was lost, the
+  key-surface compare (old single file vs the family, names + kinds + function arities identical) says the
+  object is the same object. Both are in ``build/verify_canvas_split.py`` / ``build/verify_canvas_surface.py``.
+  Also: ``page_js`` exists because "who binds ``canvas``" is a per-PAGE question — asked of the directory it
+  reports the studio page's own local ``canvas`` as a collision, and that document never loads these files.
 - **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
   ``services/biblio_*`` modules into ``services/biblio/`` (2026-10-28) went 122 references clean on the first pass and
   still failed five ways: ① **``ruff --fix`` deletes the import a pending rename is about to use** — after

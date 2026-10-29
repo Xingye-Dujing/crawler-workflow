@@ -21,6 +21,18 @@ CSS_DIR = STATIC / 'css'
 JS_DIR = STATIC / 'js'
 
 _STYLESHEET = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/css/([^"]+)"')
+_SCRIPT = re.compile(r'<script\b[^>]*\bsrc="/js/([^"]+)"')
+
+
+def page_js(page: Path = INDEX) -> list[Path]:
+    """The ``/js/…`` modules one page boots, in the page's own order.
+
+    Asked of ``index.html`` this is the workbench; of ``zenviz.html``, the studio. A rule about
+    "who binds a global" has to be scoped to a page, because the two pages share the ``js/``
+    directory and neither loads the other's modules.
+    """
+
+    return [JS_DIR / name for name in _SCRIPT.findall(page.read_text(encoding='utf-8'))]
 
 
 def css_files(page: Path = INDEX) -> list[Path]:
