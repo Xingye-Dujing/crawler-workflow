@@ -26,16 +26,18 @@ def manager(tmp_path):
 
 class TestPlatformWhitelist:
     def test_the_cookie_whitelist_is_the_platform_list(self):
-        """Eight platforms hold a cookie file. WeChat is deliberately not one of
+        """Nine platforms hold a cookie file. WeChat is deliberately not one of
         them: its article bodies are served to anyone, and the keyword search that
         did need a login was removed — a cookie row would be advice to log in for
-        nothing."""
+        nothing. CNKI is one because its export endpoint and a fresh device's
+        slider both make the saved session the way in."""
         assert CookieManager.PLATFORMS == (
             'zhihu',
             'weibo',
             'xiaohongshu',
             'bilibili',
             'douyin',
+            'cnki',
             'twitter',
             'instagram',
             'youtube',

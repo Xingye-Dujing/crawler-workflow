@@ -8,6 +8,7 @@ edit in five places. ``tests/unit/foundation/test_capabilities_layout.py`` pins 
 from capabilities.model import Capability
 from capabilities.platforms import (
     bilibili,
+    cnki,
     douyin,
     hongguo,
     twitter,
@@ -26,6 +27,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     bilibili.CAPABILITY,
     douyin.CAPABILITY,
     hongguo.CAPABILITY,
+    cnki.CAPABILITY,
     # The overseas three come last on purpose: they are the newest entries and the
     # panel's order is this tuple's order, so the platforms a Chinese-language
     # user reaches for first stay at the top of the list.

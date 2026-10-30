@@ -9,9 +9,9 @@ before rewriting, doubting, or "simplifying away" a rule. Grep by the bolded tit
 
 ## Project
 
-采析绘 (crawler_workflow): Flask + zero-build vanilla-JS; crawls 9 social-media platforms (instagram cookie-capture
-only) via Selenium, cleans and analyzes text with local Ollama LLMs + scikit-learn, renders a drag-and-drop workflow
-canvas.
+采析绘 (crawler_workflow): Flask + zero-build vanilla-JS; crawls 9 social-media platforms plus CNKI literature export
+(instagram cookie-capture only) via Selenium, cleans and analyzes text with local Ollama LLMs + scikit-learn, renders
+a drag-and-drop workflow canvas.
 
 ## Cross-platform (MANDATORY on every change)
 

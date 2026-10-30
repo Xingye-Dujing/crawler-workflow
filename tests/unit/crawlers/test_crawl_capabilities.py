@@ -326,6 +326,7 @@ class TestModeResolution:
         assert mode_keys_for('douyin') == ('author', 'hot', 'comments')
         assert mode_keys_for('hongguo') == ('hot', 'comments'), 'boards, plus the player-backed comment harvest'
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
+        assert mode_keys_for('cnki') == ('posts',), 'CNKI has one crawl: search, select and export RefWorks records'
         assert 'hot' not in mode_keys_for('xiaohongshu'), '小红书 has no measurable board'
 
     def test_an_unknown_mode_key_reads_as_the_first_mode(self):

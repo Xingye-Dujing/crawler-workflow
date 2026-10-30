@@ -799,6 +799,17 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
   96 px (≈10 CJK chars); browser tier measures both overlays at 400 px in zh and en.
 - **The guide has to name the click, not the capability.** Dimensions writes a full-record CSV, a VOSviewer/CiteSpace
   network file and a BibTeX, and only the first is read; each source's steps say which to pick and avoid.
+- **An automated export must land on the same parser as the upload it replaces.** CNKI's 「导出/参考文献」 is the site's
+  own window (`manage/export.html`), and its on-screen list is only a 20-record preview — the full selection is the
+  `CNKI-…txt` behind 「导出题录文件」. So the crawler 全选s each page (the site accumulates), downloads the file, strips
+  the blank line CNKI writes between every field, and hands the records to `services.biblio.importer.parse_cnki` — one
+  record shape, one `记录ID`, one set of "this format has no references" refusals. A second parser inside a crawler
+  would let a crawled table and an uploaded file disagree about the same paper. **The public ``/dm8/API/GetExport``
+  recipe is wrong for this version**: measured 2026-10-30 it answers `code=0 暂无数据` even logged in, while the menu →
+  `manage/export.html` → 「导出题录文件」 path returned all 40 selected records. The way in is the profile: a fresh
+  headless *and* a fresh visible Chrome both land on `/verify/home` (slider), so the cookie row is not optional
+  (`docs/crawler_notes.md` → 中国知网). A download that never appears is carried into the console as a named refusal,
+  never retried into a short table.
 
 ### Canvas history, layout baselines and reusable nodes
 

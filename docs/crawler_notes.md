@@ -1086,6 +1086,61 @@ A re-drive that fires logs one `crawl.redrive` line (the parked address it is le
 machine whose every cold launch parks-and-recovers is a broken launch the console can now name, rather
 than a silent reload the user watches with no explanation.
 
+## 中国知网（CNKI）
+
+**新设备先撞滑块，不是检索结果（measured 2026-10-30）。** 用本项目自己的 `browser.launch` 分别以无头与可见窗口打开
+`https://kns.cnki.net/kns8s/search`，两次都落到 `https://kns.cnki.net/verify/home?captchaType=blockPuzzle&ident=…`，
+标题与正文都是「安全验证」，DOM 里没有搜索框/结果表。`wall.classify` 已把「安全验证」判为 `blocked`（风控），所以爬虫
+按名拒绝而不是交空表。结论：**这条路必须走 Profile/Cookie**——在 Cookie 面板的登录窗口里完成一次滑块并保存，之后同一设备
+才有结果页。**复测（同日）**：用完滑块并登录的那个持久化 profile 再开一次，检索页直接可用（`captcha=False`、`search=True`）；
+导出菜单的处理器确实先查 `islogin()`，未登录不导出，登录后的同一 profile 导出成功——所以「保存一次即可」这一点成立，
+但 Profile 被删/换设备仍会重新触发滑块。
+
+**检索页与结果页（真机 DOM，2026-10-30，用户完成滑块后实测）：**
+
+* 搜索页 `https://kns.cnki.net/kns8s/search`；输入框 `input.search-input`；按钮 `input.search-btn`（`type=button`，
+  需 JS `.click()`）。提交后 URL 带 `captchaId=…`，结果表 20 行。
+* 结果表 `.result-table-list tbody tr`；每行复选框 `input.cbItem`（`name=CookieName`），其 `value` 是加密导出键，
+  可能以 `!` 结尾；标题 `td.name a.fz14`；总数 `.pagerTitleCell`（「共找到 1,512 条结果」）；页码 `.countPageMark`
+  （「1/76」）；下一页是 `.pages a` 里文字为 `下一页` 的那个（实测 `#PageNext`，`data-curpage=2`）。
+* 页首「全选」是 `#selectCheckAll1`（`input name=selectCheckbox`），**只勾选当页**；站点把跨页选择累积在
+  localStorage（`FileNameSNZKPT` 逗号列表、`SEARCHINFONZKPT`、`filenameIndexNZKPT`），`#selectCount` 显示累计数。
+  站点自身的 `filenameClick` 在 `filenameCount()>=500` 时拒绝第 501 条并提示「最多选择 500 篇」——**单次选择上限 500**，
+  超过要分批（我们的爬虫在加页前就 flush，绝不让站点静默丢掉尾部）。
+
+**导出链路（两次真机实测，纠正了公开配方）：**
+
+* 公开配方（GitHub `cookjohn/cnki-skills`，2026-10）说「结果页复选框 value 直接 POST
+  `/dm8/API/GetExport`，`displaymode=RefWorks`」。实测**这个接口返回 `{"code":0,"msg":"暂无数据","data":null}`**：
+  未登录与登录后都一样，换 `Refworks`/`RefWorks`、加 `searchinfo`/`mapIndex` 也一样。**不要走这个接口。**
+* 站点自己的链路：点「导出与分析 → 导出文献 → Refworks」（`li.export ul.secondUl li` 中
+  `a[exporttype="Refworks"]` 的父 `li`）→ 打开新窗口
+  `https://kns.cnki.net/dm8/manage/export.html?language=CHS&uniplatform=NZKPT`。菜单处理器先查
+  `islogin()`，未登录直接弹登录框，所以 Profile/Cookie 是硬前提。
+* **导出页的屏幕列表只是预览**：实测勾选 40 条，`#result ul.literature-list li` 只渲染 20 条；
+  同一页的「导出题录文件」按钮（`a[title="导出题录文件"]`）下载的 `CNKI-<时间>.txt` 才是全量 40 条。
+  爬虫因此用 CDP `Page.setDownloadBehavior` 把下载落到临时目录、点该按钮、读文件，**不读预览列表**。
+* 下载文件的字段之间**每行一个空行**（`RT Journal Article\n\nSR 1\n\nA1 …`）。共享的
+  `services.biblio.importer.parse_cnki` 会把空行当记录边界，直接喂会只剩题名/作者；爬虫先去掉空行、按 `RT ` 切记录，
+  再交给同一个导入器（与上传 `samples/vendor/CNKI-20261025153417286-RefWorks.txt` 同一解析器）。
+* 实测（2026-10-30，目标 25）：第 1 页全选 20、第 2 页全选 20（累计 40）→ 一次导出下载 40 条 → 解析 40、
+  按目标写入 25；25 个 `记录ID` 互异，其中 23 条同时有年份/期刊/摘要（另 2 条是站点未给这些字段的记录）。
+* **为什么用 Refworks（同批 150 条三份真实导出件对比，measured 2026-10-30）：** RefWorks 150 行 / 16 列，
+  含摘要、关键词、DOI、文献类型、**语言**；NoteExpress 与 EndNote 各 150 行 / 15 列，摘要/关键词/DOI 有、
+  **语言无**；真机再导一份 BibTex（AIGC 前 20 条）只有 DOI/文献类型，**摘要与关键词都没有**。所以 RefWorks 是
+  项目支持的格式里字段最全的一个，也是爬虫固定使用的格式（`exporttype=Refworks`，下载后交给 `parse_cnki`）。
+  **三份都不含参考文献列表与被引次数**，所以共被引/文献耦合/引文突现无论选哪个格式都做不了；关键词/作者/机构
+  共现、聚类、突现、时区图不受影响。
+* 逐页选择/翻页的暂停取 1.2 s / 1.5 s；公开配方也警告太快会触发验证码。
+* **无头会在导出页被 403 拒绝（measured 2026-10-30）。** 同一个已登录 profile 用 `headless=True` 跑：检索页正常出 20 行，
+  但打开的 `manage/export.html` 是知网自己的错误页——「kns.cnki.net 拒绝了我们的连接请求 / 您无权查看此网页 /
+  HTTP ERROR 403」，页面里没有「导出题录文件」。可见窗口的同一 profile 正常下载 40 条。**所以 CNKI 采集要用窗口模式**
+  （工作流 `headless: false`）；爬虫把这种页面按名报成 `exportForbidden`，不再等满 20 秒才说找不到按钮。
+
+**游标只记页码**：结果顺序按站点默认相关度排，续跑从存储的页码重开，该页从头重走，重复行靠台账按 `记录ID` 去重——页内行号是"我们自己的猜测"，
+猜错会静默跳过一行，所以不记。**只有站点自己不再给 `下一页` 才算 `site_end`**；某批导出返回不足、解析为空、或某页没画出行，
+都记为 `refused`/`UNDER_TARGET`，绝不把短表许可成「站点只有这么多」；有洞时游标不前进，让「继续」重取该批。
+
 ## Cookie capture vs crawling
 
 `CookieManager.PLATFORMS` (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,

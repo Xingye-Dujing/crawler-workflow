@@ -57,7 +57,7 @@ class CookieManager:
     platform: an unknown one is refused, never turned into a path.
     """
 
-    PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin', 'twitter', 'instagram', 'youtube')
+    PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin', 'cnki', 'twitter', 'instagram', 'youtube')
 
     #: The platform's own login has a NAME like any other account — ``default`` — because one
     #: thing cannot have two rules. It is also the only name that is spelled two ways: the

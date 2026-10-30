@@ -3,6 +3,7 @@ from sessions import profiles
 from sessions.cookies import CookieManager
 
 from crawlers.platforms.bilibili.crawler import BilibiliCrawler
+from crawlers.platforms.cnki.crawler import CnkiCrawler
 from crawlers.platforms.douyin.crawler import DouyinCrawler
 from crawlers.platforms.hongguo.crawler import HongguoCrawler
 from crawlers.platforms.instagram.crawler import InstagramCrawler
@@ -24,6 +25,7 @@ CRAWLERS = {
     'bilibili': BilibiliCrawler,
     'douyin': DouyinCrawler,
     'hongguo': HongguoCrawler,
+    'cnki': CnkiCrawler,
     'youtube': YouTubeCrawler,
     'twitter': TwitterCrawler,
     # Cookie capture only: the panel can save a login session for this one while

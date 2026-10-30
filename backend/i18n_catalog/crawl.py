@@ -42,6 +42,28 @@ ZH = {
         '本机没有可用的 Chrome，采集打不开浏览器。安装 Chrome，'
         '或在「设置 → 浏览器路径」里指向它（本系统的可执行名：{browser}）'
     ),
+    'crawl.cnki.emptyRecord': '[知网] 导出页有一条 RefWorks 记录没有题名，按导入器规则跳过',
+    'crawl.cnki.downloadFailed': '[知网] 导出题录文件没有下载成功：{err}',
+    'crawl.cnki.exportBatch': '[知网] 已导出本次选择 {n} 篇（第 {first}-{last} 页）',
+    'crawl.cnki.exportForbidden': '[知网] 导出页被站点拒绝（{err}）：无头模式常被拒绝，请改用窗口模式并确认登录',
+    'crawl.cnki.exportEmpty': '[知网] 导出页没有返回任何 RefWorks 记录（可能未登录或该批次无数据）',
+    'crawl.cnki.finished': '[知网] 检索结束，共导出 {n} 篇（目标 {total} 篇）',
+    'crawl.cnki.loginNeeded': '[知网] 导出前需要登录：请在 Cookie 面板保存知网登录（或机构 IP 权限）后再试',
+    'crawl.cnki.noExportIds': '[知网] 结果行没有导出键（页面结构可能变了）：拒绝交空表，请先更新选择器',
+    'crawl.cnki.noExportButton': '[知网] 导出页找不到「导出题录文件」按钮（{err}）',
+    'crawl.cnki.noExportMenu': '[知网] 结果页找不到「导出文献」菜单（{err}）：页面结构可能变了',
+    'crawl.cnki.noExportWindow': '[知网] 点了导出但没有打开导出窗口（可能被浏览器拦截，或会话不被接受）',
+    'crawl.cnki.noPage': '[知网] 检索结果页没有出现（页面可能仍在加载、被拦截，或站点改了布局）',
+    'crawl.cnki.noResults': '[知网] 检索 "{kw}" 没有结果（站点自己写 0 条）',
+    'crawl.cnki.nothingSelected': '[知网] 勾选后站点的已选数为 0，导出被拒绝',
+    'crawl.cnki.selectPage': '[知网] 第 {page} 页全选 {n} 条（累计已选 {selected} 条）',
+    'crawl.cnki.pageError': '[知网] 检索页操作失败：{err}',
+    'crawl.cnki.selectFailed': '[知网] 勾选文献失败：{err}',
+    'crawl.cnki.start': '[知网] 开始检索 "{kw}"，目标 {n} 篇文献',
+    'crawl.cnki.target_reached': '[知网] 已达到目标 {n} 篇，停止翻页',
+    'crawl.cnki.verifyRequired': (
+        '[知网] 站点要求安全验证（滑块）：请在 Cookie 面板「浏览器生成」里完成验证并保存登录，然后重试'
+    ),
     'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
     # ── 爬虫内部的调试信息 ────────────────────────────────────
     # 这些走 logging.debug，默认级别下不打印；仍走 i18n，别让控制台里
@@ -481,6 +503,39 @@ EN = {
     'crawl.chromeMissing': (
         'No Chrome on this machine, so a crawl has no browser to open. Install Chrome, or point '
         'Settings → browser path at it (the executable name on this system is {browser})'
+    ),
+    'crawl.cnki.emptyRecord': '[CNKI] an exported RefWorks record has no title; skipped by the importer rule',
+    'crawl.cnki.downloadFailed': '[CNKI] the exported record file could not be downloaded: {err}',
+    'crawl.cnki.exportBatch': '[CNKI] exported {n} records from this selection (pages {first}-{last})',
+    'crawl.cnki.exportForbidden': (
+        '[CNKI] the export page refused this session ({err}): headless is often refused here — use a window and '
+        'confirm the login'
+    ),
+    'crawl.cnki.exportEmpty': '[CNKI] the export page returned no RefWorks records (not signed in, or an empty batch)',
+    'crawl.cnki.finished': '[CNKI] search finished, {n} records exported (target {total})',
+    'crawl.cnki.loginNeeded': (
+        '[CNKI] the export needs a login: save a CNKI session (or institutional IP access) in the Cookie panel first'
+    ),
+    'crawl.cnki.noExportIds': (
+        '[CNKI] the result rows carry no export key (the page model may have moved): refusing to hand back an empty '
+        'table — update the selectors first'
+    ),
+    'crawl.cnki.noExportButton': '[CNKI] the export page has no "export record file" button ({err})',
+    'crawl.cnki.noExportMenu': '[CNKI] the 导出文献 menu is gone from the result page ({err}): the page model moved',
+    'crawl.cnki.noExportWindow': (
+        '[CNKI] the export was clicked but no export window opened (blocked by the browser, or the session was refused)'
+    ),
+    'crawl.cnki.noPage': '[CNKI] the result page never appeared (still loading, blocked, or the layout changed)',
+    'crawl.cnki.noResults': '[CNKI] "{kw}" returned no results (the site itself printed 0)',
+    'crawl.cnki.nothingSelected': '[CNKI] the site still counts 0 selected rows, so the export was refused',
+    'crawl.cnki.selectPage': '[CNKI] selected the whole page {page} ({n} rows, {selected} selected so far)',
+    'crawl.cnki.pageError': '[CNKI] an action on the result page failed: {err}',
+    'crawl.cnki.selectFailed': '[CNKI] ticking the result rows failed: {err}',
+    'crawl.cnki.start': '[CNKI] searching "{kw}", target {n} records',
+    'crawl.cnki.target_reached': '[CNKI] target of {n} records reached, stop paging',
+    'crawl.cnki.verifyRequired': (
+        '[CNKI] the site asked for its security check (a slider): finish it in the Cookie panel’s "Generate via '
+        'Browser" window, save that login, then retry'
     ),
     'crawl.cookiesSeeded': 'Cookies seeded: {host} accepted {n}/{total}',
     # ── crawler internals (debug level) ───────────────────────

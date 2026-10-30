@@ -63,7 +63,7 @@ crawler_workflow/
 │   │   ├── core/                 # 共用机械（不含站点事实）：crawler.py（基类：登录墙/Cookie 播种/流式落盘/游标/收尾）、browser.py、faults.py、video.py
 │   │   ├── backends/catbus.py    # 第二采集后端（列、身份列、可采格都读适配器自己的清单）
 │   │   ├── commenting/           # 评论引擎：session.py（活驱动 + 共享读取）、walks.py（平台→走路注册表）、protocol.py（无浏览器共用基件）
-│   │   ├── platforms/<id>/       # 一个平台一个目录（目录名=全站平台 id）：zhihu/weibo/xiaohongshu/bilibili/douyin（含 overlay.py、rows.py）/youtube（innertube）/twitter/wechat（无登录态）/hongguo（player_ui/naming/trust——唯一 Windows 桌面能力）/instagram（只捕 Cookie）
+│   │   ├── platforms/<id>/       # 一个平台一个目录（目录名=全站平台 id）：zhihu/weibo/xiaohongshu/bilibili/douyin（含 overlay.py、rows.py）/youtube（innertube）/twitter/wechat（无登录态）/hongguo（player_ui/naming/trust——唯一 Windows 桌面能力）/cnki（检索+RefWorks 导出）/instagram（只捕 Cookie）
 │   │   └── engine/               # 与站点无关的机械层（新抓取一律先走这里）：counters/wall/popup/feed/pager/pagefetch/jsonpath/times/pacing/innertube
 │   ├── analyzers/                # 分析模块（LLM + ML 双模式）
 │   │   ├── ml_base.py / llm_client.py  # TF-IDF+分类器底座 / Ollama·OpenRouter 客户端

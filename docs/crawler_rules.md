@@ -323,6 +323,23 @@
   this table does not describe — a CSV labelled with the wrong month reads as evidence.
   The resolved name is still never written back into `node['params']` (the fingerprint rule).
 
+- **cnki (中国知网)**: **全选 selects only the current page**; the site accumulates the selection across pages in
+  localStorage, so click 全选 on every page and export once at the end (per batch when the site's own 500-selection
+  ceiling is reached). The export is `导出与分析 → 导出文献 → Refworks`, which opens `manage/export.html`; its on-screen
+  list is a **preview capped at 20** (measured: 40 selected → 20 `li`), so click 「导出题录文件」 and read the downloaded
+  `CNKI-…txt` — it writes a blank line between every field, and those blanks are stripped before the shared importer
+  (`services.biblio.importer.parse_cnki`) sees the records. **Refworks is the format**: same 150-record batch measured
+  RefWorks 16 columns (abstract/keywords/DOI/doctype/**language**) vs NoteExpress/EndNote 15 (no language) and a real
+  BibTex export with no abstract or keywords; none of the supported formats carries a reference list or times-cited, so
+  citation analyses still refuse. **Use a visible window: a headless session gets HTTP 403 on
+  the export page** (measured 2026-10-30: search worked, `manage/export.html` was 无权查看此网页; the same profile in a
+  window downloaded 40/40), so the crawler names that page (`exportForbidden`) instead of waiting for a button.
+  **`POST /dm8/API/GetExport` returns `code=0 暂无数据` even logged in — do not use it.** A fresh browser is sent to
+  `/verify/home` (Tencent slider), so the profile/cookie row is the way in. **Only a missing 下一页 licenses a shortfall**
+  (`site_end`): a short batch, a failed download or an empty mid-list page is `refused`/`UNDER_TARGET`, and the cursor
+  stays before that batch. RefWorks carries no reference list and no times-cited, so citation analyses still refuse at
+  run start. Live measurement: `docs/crawler_notes.md` → 中国知网.
+
 ## 平台边界 / Which machine a mode is allowed to run on
 
 - **一个采集模式能不能跑，问 `capabilities.registry.requirement_met(token)` 这一个问题，问四次。** 红果短剧的评论

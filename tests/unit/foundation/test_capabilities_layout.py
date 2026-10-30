@@ -26,7 +26,18 @@ STDLIB = set(sys.stdlib_module_names)
 
 #: The panel's order, and the only list of it: a Chinese-language user reaches for the first
 #: entries, and the overseas three come last because they are the newest additions.
-PANEL_ORDER = ['zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili', 'douyin', 'hongguo', 'youtube', 'twitter']
+PANEL_ORDER = [
+    'zhihu',
+    'weibo',
+    'xiaohongshu',
+    'wechat',
+    'bilibili',
+    'douyin',
+    'hongguo',
+    'cnki',
+    'youtube',
+    'twitter',
+]
 
 #: Layers above the declarations. An import of any of these from ``capabilities`` would invert
 #: the arrow (the panel must be answerable without Selenium/pandas/the app) — the same rule

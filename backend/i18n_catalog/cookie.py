@@ -15,6 +15,14 @@ ZH = {
         '2. 打开任意视频并滚到评论区，能看到评论列表即可\n'
         '3. 回到本面板点「已完成登录」'
     ),
+    'cookie.cnki.purpose': (
+        '解锁知网检索与 RefWorks 导出；导出接口需要可用的登录态（或机构 IP 权限）。新设备常被要求完成一次滑块安全验证。'
+    ),
+    'cookie.cnki.steps': (
+        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里打开知网（如出现安全验证，请完成滑块）\n'
+        '2. 登录后随便检索一次，能看到结果列表即可\n'
+        '3. 回到本面板点「已完成登录」'
+    ),
     'cookie.delete.failed': '删除 Cookie 文件失败：{err}',
     'cookie.delete.none': '{platform} 没有已保存的 Cookie 可删除',
     'cookie.delete.profileHolds': '注意：{platform} 的浏览器 profile 仍是登录状态，删这个文件不会把它登出',
@@ -141,6 +149,15 @@ EN = {
     'cookie.bilibili.steps': (
         '1. Press "Generate via Browser" and sign in to Bilibili in the Chrome window (QR or phone)\n'
         '2. Open any video and scroll to the comment area until the list renders\n'
+        '3. Come back here and press "Done \u2014 I logged in"'
+    ),
+    'cookie.cnki.purpose': (
+        'Unlocks CNKI search and RefWorks export; the export endpoint needs a live login (or institutional IP '
+        'access). A new device is usually asked for the slider check once.'
+    ),
+    'cookie.cnki.steps': (
+        '1. Press "Generate via Browser" and open CNKI in that Chrome window (finish the slider if it appears)\n'
+        '2. Sign in and run one search; the result list rendering is enough\n'
         '3. Come back here and press "Done \u2014 I logged in"'
     ),
     'cookie.delete.failed': 'Could not delete the cookie file: {err}',
