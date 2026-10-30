@@ -22,7 +22,7 @@
         "operation": "drop_duplicates"
       },
       "operation": "drop_duplicates",
-      "x": 1199,
+      "x": 1141,
       "y": 392,
       "folded": false
     },
@@ -51,7 +51,7 @@
         "top_n": 60,
         "year_column": "年份"
       },
-      "x": 1539,
+      "x": 1481,
       "y": 231,
       "folded": false
     },
@@ -66,7 +66,7 @@
         "engine": "echarts",
         "title": "关键词共现知识图谱"
       },
-      "x": 1879,
+      "x": 1821,
       "y": 0,
       "folded": false
     },
@@ -81,7 +81,7 @@
         "engine": "echarts",
         "title": "关键词聚类时间线"
       },
-      "x": 1879,
+      "x": 1821,
       "y": 154,
       "folded": false
     },
@@ -96,7 +96,7 @@
         "engine": "echarts",
         "title": "关键词突现图"
       },
-      "x": 1879,
+      "x": 1821,
       "y": 308,
       "folded": false
     },
@@ -111,7 +111,7 @@
         "engine": "echarts",
         "title": "关键词时区图"
       },
-      "x": 1879,
+      "x": 1821,
       "y": 462,
       "folded": false
     },
@@ -135,7 +135,7 @@
         "top_n": 60,
         "year_column": "年份"
       },
-      "x": 1539,
+      "x": 1481,
       "y": 385,
       "folded": false
     },
@@ -150,7 +150,7 @@
         "engine": "echarts",
         "title": "作者合作知识图谱"
       },
-      "x": 1879,
+      "x": 1821,
       "y": 616,
       "folded": false
     },
@@ -174,7 +174,7 @@
         "top_n": 60,
         "year_column": "年份"
       },
-      "x": 1539,
+      "x": 1481,
       "y": 539,
       "folded": false
     },
@@ -189,7 +189,7 @@
         "engine": "echarts",
         "title": "机构共现知识图谱"
       },
-      "x": 1879,
+      "x": 1821,
       "y": 770,
       "folded": false
     },
@@ -211,7 +211,7 @@
         "target_count": 3000
       },
       "x": 460,
-      "y": 385,
+      "y": 376,
       "folded": false
     },
     {
@@ -219,12 +219,12 @@
       "type": "analysis",
       "title": "文献清洗（去首尾空白）",
       "params": {
-        "operation": "strip_whitespace",
-        "columns": "题名,作者,作者单位,来源期刊,关键词,摘要,DOI"
+        "columns": "题名,作者,作者单位,来源期刊,关键词,摘要,DOI",
+        "operation": "strip_whitespace"
       },
       "operation": "strip_whitespace",
-      "x": 820,
-      "y": 385,
+      "x": 800,
+      "y": 392,
       "folded": false
     }
   ],
@@ -285,8 +285,8 @@
     "disabledTypes": [],
     "view": {
       "panX": 40,
-      "panY": 155.14340161981892,
-      "zoom": 0.7751310147689376
+      "panY": 145.62763351298383,
+      "zoom": 0.7971582557569818
     }
   },
   "name": "AIGC文献计量（知网自动采集3000篇·去重清洗）"

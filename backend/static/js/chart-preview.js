@@ -220,11 +220,13 @@ function _graphLabelLayout(series, instance) {
             }
             if (clear) {
                 placed.push(placedBox);
-                /* Returning hideOverlap hands the label to ECharts' own second pass, which
-                   hides the losers of a collision by priority. The callback's `ignore` flag is
-                   read by 5.4.4 only at creation, not from this return, so it cannot hide. */
+                /* dx/dy, never absolute x/y: an absolute label is pinned to the canvas and
+                   stayed behind when the user zoomed or panned the graph (measured: the
+                   nodes moved, the text did not). An offset keeps the label attached to its
+                   node, so roam moves both. Returning hideOverlap hands collisions to
+                   ECharts' own second pass, which keeps the higher priority label. */
                 return {
-                    x: placedBox.x, y: placedBox.y, width: width, height: height,
+                    dx: placedBox.x - rect.x, dy: placedBox.y - rect.y, width: width, height: height,
                     hideOverlap: true, priority: 100000 - (params.dataIndex || 0)
                 };
             }
@@ -237,7 +239,7 @@ function _graphLabelLayout(series, instance) {
         };
         placed.push({x: clamped.x, y: clamped.y, width: width, height: height});
         return {
-            x: clamped.x, y: clamped.y, width: width, height: height,
+            dx: clamped.x - rect.x, dy: clamped.y - rect.y, width: width, height: height,
             hideOverlap: true, priority: 100000 - (params.dataIndex || 0)
         };
     };

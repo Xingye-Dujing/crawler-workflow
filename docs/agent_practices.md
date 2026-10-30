@@ -785,7 +785,14 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
   budget (`side²×0.35/1800`, highest frequency first) keeps a 330px tile from becoming a white mound. ECharts 5.4.4 reads a
   `labelLayout` callback's x/y but **not** its `ignore`; returning `hideOverlap:true` + `priority` hands the losers to
   ECharts' own pass. A panel settles one frame after `init` (fullscreen host measured 1202→1260), hence `settleChart`.
-  Pinned: `TestFreeGraphFitsTheSurface` + the backend layout/anchor cases.
+  **The callback must return `dx`/`dy`, never absolute `x`/`y`:** an absolute label is pinned to the canvas and stayed
+  behind when the graph was zoomed or panned (measured 2026-10-30 in the dashboard cell: the nodes moved, the text did
+  not). An offset keeps the label attached to its node, so roam moves both. Pinned: `TestFreeGraphFitsTheSurface`, the
+  backend layout/anchor cases and `harness_label_layout.mjs`.
+- **A keyword chip belongs above its bubble, not beside it.** The cluster timeline's span line runs through the bubble
+  centre, so a right-hand chip printed straight across the line joining two bubbles; `position:'top'` on both the series
+  and each point's label (a point-level `position` overrides the series) clears it. Same-era points of one cluster are
+  labelled once per (year, cluster) — coincident chips printed on each other.
 - **A light label chip keeps dark ink in both themes.** The biblio builders paint `rgba(255,255,255,…)` chips in every
   theme; `patchOptionForTheme` recoloured their text to the theme foreground, so the dark theme printed white on white and
   the 关键词共现 graph read as blank boxes. The chip's own background decides the ink.

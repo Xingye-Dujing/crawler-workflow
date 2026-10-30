@@ -75,7 +75,7 @@ def cluster_timeline(df: pd.DataFrame, base: dict) -> dict:
                         'borderColor': '#e74c3c' if burst_strength > 0 else color,
                         'borderWidth': 2 if burst_strength > 0 else 0,
                     },
-                    'label': {'show': id(row) in labelled, 'position': 'right'},
+                    'label': {'show': id(row) in labelled, 'position': 'top'},
                 }
             )
             spans.extend([[first, index], [max(first, last), index], None])
@@ -85,17 +85,17 @@ def cluster_timeline(df: pd.DataFrame, base: dict) -> dict:
                 'name': f'#{cluster} {group["label"]}',
                 'data': points,
                 'label': {
+                    # Above the bubble, not to its right: a keyword that starts at the same
+                    # year as its cluster's last point printed straight through the span
+                    # line joining the two bubbles (measured on the 1100px figure).
                     'show': True,
-                    'position': 'right',
+                    'position': 'top',
+                    'distance': 3,
                     'color': '#222',
                     'fontSize': 9,
                     'formatter': '{@[3]}',
                     'backgroundColor': 'rgba(255,255,255,0.8)',
-                    'padding': [2, 3],
-                    # A chip that runs past the last bubble is cut by the canvas edge; cap
-                    # its width and ellipsize, the full name is in the tooltip.
-                    'width': 96,
-                    'overflow': 'truncate',
+                    'padding': [1, 4],
                 },
                 # A keyword chip is secondary to the bubble it names: when the surface is
                 # narrow the honest answer is to drop the colliding chip, not to stack them

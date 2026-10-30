@@ -1,0 +1,356 @@
+{
+  "nodes": [
+    {
+      "id": "node-0",
+      "type": "name",
+      "title": "文献计量",
+      "params": {
+        "layout_order": "1",
+        "workflow_name": "数字媒介中的大学生恋爱与亲密关系·文献计量（知网4检索 合并去重）"
+      },
+      "x": 0,
+      "y": 385,
+      "folded": false
+    },
+    {
+      "id": "node-1",
+      "type": "upload",
+      "title": "知网检索1",
+      "params": {
+        "dataset_id": "040098e46547926c",
+        "dataset_name": "知网检索1·CNKI-20261029221011951.txt",
+        "row_count": 28
+      },
+      "x": 460,
+      "y": 154,
+      "folded": false
+    },
+    {
+      "id": "node-2",
+      "type": "upload",
+      "title": "知网检索2",
+      "params": {
+        "dataset_id": "2cec0f00d0a1d365",
+        "dataset_name": "知网检索2·CNKI-20261029221242988.txt",
+        "row_count": 2
+      },
+      "x": 460,
+      "y": 308,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "upload",
+      "title": "知网检索3",
+      "params": {
+        "dataset_id": "f66eb0156e04a215",
+        "dataset_name": "知网检索3·CNKI-20261029221333963.txt",
+        "row_count": 7
+      },
+      "x": 460,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-4",
+      "type": "upload",
+      "title": "知网检索4",
+      "params": {
+        "dataset_id": "d1269fba2736ca6b",
+        "dataset_name": "知网检索4·CNKI-20261029221413742.txt",
+        "row_count": 29
+      },
+      "x": 460,
+      "y": 616,
+      "folded": false
+    },
+    {
+      "id": "node-5",
+      "type": "fuse",
+      "title": "合并 4 个检索",
+      "params": {
+        "affiliation_columns": "作者单位",
+        "author_columns": "作者",
+        "entity_columns": "关键词",
+        "export_files": false,
+        "keep_undated": true,
+        "reference_columns": "参考文献",
+        "source_columns": "平台",
+        "source_labels": "node-1=检索1\nnode-2=检索2\nnode-3=检索3\nnode-4=检索4",
+        "text_columns": "摘要",
+        "title_columns": "题名",
+        "year_columns": "年份"
+      },
+      "x": 859,
+      "y": 385,
+      "folded": false
+    },
+    {
+      "id": "node-6",
+      "type": "analysis",
+      "title": "跨检索去重（按题名）",
+      "params": {
+        "columns": "题名",
+        "mode": "normalized",
+        "operation": "drop_duplicates"
+      },
+      "operation": "drop_duplicates",
+      "x": 1199,
+      "y": 392,
+      "folded": false
+    },
+    {
+      "id": "node-7",
+      "type": "biblio",
+      "title": "关键词共现·突现·聚类",
+      "params": {
+        "abstract_column": "摘要",
+        "burst": true,
+        "cluster": true,
+        "cluster_count": "",
+        "entity_column": "",
+        "entity_type": "keyword",
+        "export_files": true,
+        "label_method": "llr",
+        "largest_component": false,
+        "link_measure": "cosine",
+        "min_count": 2,
+        "output_shape": "nodes",
+        "pruning": "mst",
+        "reference_column": "参考文献",
+        "selection": "top_n",
+        "slice_years": 5,
+        "title_column": "题名",
+        "top_n": 60,
+        "year_column": "年份"
+      },
+      "x": 1539,
+      "y": 231,
+      "folded": false
+    },
+    {
+      "id": "node-8",
+      "type": "visualize",
+      "title": "关键词共现知识图谱",
+      "params": {
+        "chart_type": "knowledge_graph",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "关键词共现知识图谱"
+      },
+      "x": 1879,
+      "y": 0,
+      "folded": false
+    },
+    {
+      "id": "node-9",
+      "type": "visualize",
+      "title": "关键词聚类时间线",
+      "params": {
+        "chart_type": "cluster_timeline",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "关键词聚类时间线"
+      },
+      "x": 1879,
+      "y": 154,
+      "folded": false
+    },
+    {
+      "id": "node-10",
+      "type": "visualize",
+      "title": "关键词突现图",
+      "params": {
+        "chart_type": "burst",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "关键词突现图"
+      },
+      "x": 1879,
+      "y": 308,
+      "folded": false
+    },
+    {
+      "id": "node-11",
+      "type": "visualize",
+      "title": "关键词时区图",
+      "params": {
+        "chart_type": "timezone",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "关键词时区图"
+      },
+      "x": 1879,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-12",
+      "type": "biblio",
+      "title": "作者合作网络",
+      "params": {
+        "abstract_column": "摘要",
+        "burst": false,
+        "cluster": false,
+        "entity_column": "",
+        "entity_type": "author",
+        "export_files": true,
+        "link_measure": "cosine",
+        "min_count": 1,
+        "output_shape": "nodes",
+        "pruning": "none",
+        "reference_column": "参考文献",
+        "title_column": "题名",
+        "top_n": 60,
+        "year_column": "年份"
+      },
+      "x": 1539,
+      "y": 385,
+      "folded": false
+    },
+    {
+      "id": "node-13",
+      "type": "visualize",
+      "title": "作者合作知识图谱",
+      "params": {
+        "chart_type": "knowledge_graph",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "作者合作知识图谱"
+      },
+      "x": 1879,
+      "y": 616,
+      "folded": false
+    },
+    {
+      "id": "node-14",
+      "type": "biblio",
+      "title": "机构（作者单位）共现",
+      "params": {
+        "abstract_column": "摘要",
+        "burst": false,
+        "cluster": false,
+        "entity_column": "",
+        "entity_type": "institution",
+        "export_files": true,
+        "link_measure": "cosine",
+        "min_count": 1,
+        "output_shape": "nodes",
+        "pruning": "none",
+        "reference_column": "参考文献",
+        "title_column": "题名",
+        "top_n": 60,
+        "year_column": "年份"
+      },
+      "x": 1539,
+      "y": 539,
+      "folded": false
+    },
+    {
+      "id": "node-15",
+      "type": "visualize",
+      "title": "机构共现知识图谱",
+      "params": {
+        "chart_type": "knowledge_graph",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "机构共现知识图谱"
+      },
+      "x": 1879,
+      "y": 770,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-0",
+      "to": "node-1"
+    },
+    {
+      "from": "node-0",
+      "to": "node-2"
+    },
+    {
+      "from": "node-0",
+      "to": "node-3"
+    },
+    {
+      "from": "node-0",
+      "to": "node-4"
+    },
+    {
+      "from": "node-1",
+      "to": "node-5"
+    },
+    {
+      "from": "node-2",
+      "to": "node-5"
+    },
+    {
+      "from": "node-3",
+      "to": "node-5"
+    },
+    {
+      "from": "node-4",
+      "to": "node-5"
+    },
+    {
+      "from": "node-5",
+      "to": "node-6"
+    },
+    {
+      "from": "node-6",
+      "to": "node-7"
+    },
+    {
+      "from": "node-7",
+      "to": "node-8"
+    },
+    {
+      "from": "node-7",
+      "to": "node-9"
+    },
+    {
+      "from": "node-7",
+      "to": "node-10"
+    },
+    {
+      "from": "node-7",
+      "to": "node-11"
+    },
+    {
+      "from": "node-6",
+      "to": "node-12"
+    },
+    {
+      "from": "node-12",
+      "to": "node-13"
+    },
+    {
+      "from": "node-6",
+      "to": "node-14"
+    },
+    {
+      "from": "node-14",
+      "to": "node-15"
+    }
+  ],
+  "settings": {
+    "mode": "serial",
+    "headless": true,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 40,
+      "panY": 155.14340161981892,
+      "zoom": 0.7751310147689376
+    }
+  },
+  "name": "数字媒介中的大学生恋爱与亲密关系·文献计量（知网4检索合并去重）"
+}

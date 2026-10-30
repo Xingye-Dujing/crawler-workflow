@@ -55,7 +55,20 @@ function place(fn, rect, index) {
         getItemRect: () => ({ x: rect.x + rect.width / 2 - 5, y: rect.y + rect.height / 2 - 5, width: 10, height: 10 }),
         getLabelRect: () => rect,
     };
-    return fn(params, handle);
+    const out = fn(params, handle);
+    /* The solver answers with a dx/dy offset so the label stays attached to its node and
+       follows roam; the cases below still compare the resulting BOX. */
+    if (out && out.ignore !== true && (out.dx !== undefined || out.dy !== undefined)) {
+        return {
+            x: rect.x + (out.dx || 0),
+            y: rect.y + (out.dy || 0),
+            width: rect.width,
+            height: rect.height,
+            hideOverlap: out.hideOverlap,
+            priority: out.priority,
+        };
+    }
+    return out;
 }
 
 const inside = (box, pad) =>
@@ -135,10 +148,13 @@ const cases = {};
     const small = { width: 600, height: 400 };
     api.applyEchartsOption(instanceFor(small), option);
     const fn = option.series[0].labelLayout;
-    const out = fn(
+    const raw = fn(
         { dataIndex: 0, labelRect: { x: 560, y: 200, width: 60, height: 16 } },
         { getItemRect: () => ({ x: 585, y: 205, width: 10, height: 10 }), getLabelRect: () => ({ x: 560, y: 200, width: 60, height: 16 }) }
     );
+    const out = raw && (raw.dx !== undefined || raw.dy !== undefined)
+        ? { x: 560 + (raw.dx || 0), y: 200 + (raw.dy || 0), width: 60, height: 16, ignore: raw.ignore }
+        : raw;
     /* The band is read back from the series: applyEchartsOption re-fits a free graph into a
        square rect first, and the solver must measure THAT band, not the authoring one. */
     const s = option.series[0];
