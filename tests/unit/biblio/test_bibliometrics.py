@@ -318,6 +318,24 @@ class TestCitations:
             normalize_params(_params(output_shape='dual_map'), 'test')
 
 
+class TestFreeGraphLayout:
+    def test_the_layout_keeps_the_spring_pictures_aspect(self, monkeypatch):
+        """x and y used to be normalised separately, stretching every graph to a square: a
+        cluster twice as wide as tall was drawn square, so its members read as further apart
+        horizontally than vertically. One scale for both axes keeps the picture's shape."""
+        from services.biblio.metrics import measures
+
+        positions = {'甲': (0.0, 0.0), '乙': (2.0, 0.0), '丙': (0.0, 1.0)}
+        monkeypatch.setattr(measures.nx, 'spring_layout', lambda *_a, **_k: positions)
+        placed = measures._layout(measures.nx.Graph(), ['甲', '乙', '丙'])
+        xs = [x for x, _ in placed.values()]
+        ys = [y for _, y in placed.values()]
+        assert max(xs) - min(xs) == pytest.approx(900.0)
+        assert max(ys) - min(ys) == pytest.approx(450.0)
+        assert (max(xs) + min(xs)) / 2 == pytest.approx(500.0)
+        assert (max(ys) + min(ys)) / 2 == pytest.approx(500.0)
+
+
 class TestPhaseTwoContracts:
     def test_document_is_the_cite_space_name_for_bibliographic_coupling(self):
         coupling = metrics.build(_refs(), _params(entity_type='bibliographic_coupling', burst=False), 'test')

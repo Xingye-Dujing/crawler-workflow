@@ -775,6 +775,20 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
   reserved band (`left/top/right/bottom`; legend `#5` once printed over 风险沟通); two follow-ups: a **percentage** inset is
   a length too (`'10%'`→NaN→0, clamp vanishes), and a **rotated** label can't be clamped (circular `rotateLabel:true` left
   a vertical term on the title). Pinned: `tests/frontend/harness_label_layout.mjs`.
+- **A free graph is fitted into a SQUARE plot, and its labels follow the area.** ECharts fits `layout:'none'` into the
+  series rect with one scale per axis (`View.calculateTransform`), so a 330×257 board tile drew a 900×900 layout 28% wider
+  than tall — the "看板变形" the user reported. Measured 2026-10-30 on a real 3000-record AIGC run: preview 401×401, board
+  cell 359×359, fullscreen 500×500, resized panel 670×670 after the fix. Three parts belong together: the spring layout is
+  normalised with ONE scale (x/y separately stretched the picture at the data level), two invisible `_bbox_` anchors pin
+  the data box to 50..950, and the browser sizes the rect itself (title above, legend only when ≥620px wide). Labels: the
+  server solver's 1.5 px/unit assumption is wrong at any other size, so symbols/offsets scale with the square and a label
+  budget (`side²×0.35/1800`, highest frequency first) keeps a 330px tile from becoming a white mound. ECharts 5.4.4 reads a
+  `labelLayout` callback's x/y but **not** its `ignore`; returning `hideOverlap:true` + `priority` hands the losers to
+  ECharts' own pass. A panel settles one frame after `init` (fullscreen host measured 1202→1260), hence `settleChart`.
+  Pinned: `TestFreeGraphFitsTheSurface` + the backend layout/anchor cases.
+- **A light label chip keeps dark ink in both themes.** The biblio builders paint `rgba(255,255,255,…)` chips in every
+  theme; `patchOptionForTheme` recoloured their text to the theme foreground, so the dark theme printed white on white and
+  the 关键词共现 graph read as blank boxes. The chip's own background decides the ink.
 - **`ECHARTS_ONLY_TYPES` was a statement about matplotlib misread as one about LaTeX, switching paper output off.**
   `build_latex_outputs` skipped every type on it, so `emit_latex` was a no-op for word cloud/sankey/map/topic/network/all
   nine biblio views (a skipped add-on isn't an error, so nothing complained). The skip now asks its own question

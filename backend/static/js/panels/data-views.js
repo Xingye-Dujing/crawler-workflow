@@ -688,7 +688,13 @@ var dashboard = {
         vizNodeIds.forEach(function (id) {
             var node = canvas.nodes[id];
             var cell = document.createElement('div');
-            cell.className = 'dashboard-cell';
+            /* A free-layout graph needs area, not width alone: in a 320px column its
+               square plot collapses to ~250px and the labels are unreadable. Two columns
+               and a taller cell keep it legible; the fit itself stays square. */
+            var graphTypes = ['knowledge_graph', 'landscape', 'concentric'];
+            cell.className = node.params && graphTypes.indexOf(node.params.chart_type) >= 0
+                ? 'dashboard-cell dashboard-cell-wide'
+                : 'dashboard-cell';
             cell.innerHTML =
                 '<div class="dashboard-cell-title">' + escapeHtml(node.title || id) +
                 /* A node id is minted, never typed, so it is safe to put in the handler: the
@@ -781,6 +787,7 @@ var dashboard = {
                 this._instances[nodeId] = inst;
                 this._options[nodeId] = result.option;
                 applyEchartsOption(inst, result.option);
+                settleChart(inst);
             }
         } catch (e) {
             if (!this._isLiveCell(grid, cell)) return;
@@ -796,7 +803,9 @@ var dashboard = {
 window.addEventListener('resize', function () {
     Object.keys(dashboard._instances).forEach(function (id) {
         var inst = dashboard._instances[id];
-        if (inst) inst.resize();
+        /* resizeChart re-fits a free graph's square rect; resize() alone would keep the old
+           margins and stretch the picture into the new cell shape. */
+        if (inst) resizeChart(inst);
     });
 });
 

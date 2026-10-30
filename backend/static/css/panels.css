@@ -115,10 +115,11 @@
 /* ── Chart preview panel (Visualize node) ───────────────────────────────── */
 #chart-preview-panel {
   position: fixed;
-  right: -420px;
+  right: -560px;
   top: 10%;
-  width: 400px;
-  height: 60vh;
+  width: 540px;
+  max-width: 92vw;
+  height: 70vh;
   background: var(--bg);
   border: 1px solid var(--line);
   opacity: 0;
@@ -388,6 +389,18 @@ button.history-del:hover {
   height: 300px;
   display: flex;
   flex-direction: column;
+}
+/* A free-layout graph is fitted into a square plot: give it two columns and a tall cell,
+   or the square shrinks to the height and the whole figure reads as a stamp. */
+.dashboard-cell-wide {
+  grid-column: span 2;
+  height: 480px;
+}
+@media (max-width: 760px) {
+  .dashboard-cell-wide {
+    grid-column: auto;
+    height: 420px;
+  }
 }
 .dashboard-cell-title {
   padding: 7px 10px;

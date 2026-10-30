@@ -156,6 +156,20 @@ def test_knowledge_graph_deduplicates_an_undirected_edge(frame):
     assert {links[0]['source'], links[0]['target']} == {'甲', '乙'}
 
 
+def test_a_knowledge_graph_pins_its_bounding_box_to_a_square(frame):
+    """ECharts fits a free layout into the plot with a scale per axis, so a non-square data
+    box is drawn stretched. The two invisible corner nodes make the box 50..950 on both axes
+    (they paint nothing) and the browser squares the plot, so one scale serves both axes."""
+    option = VisualizationService.to_echarts_option(frame, 'knowledge_graph')
+    data = option['series'][0]['data']
+    anchors = [item for item in data if str(item['name']).startswith('_bbox_')]
+    assert len(anchors) == 2
+    assert {(item['x'], item['y']) for item in anchors} == {(50.0, 50.0), (950.0, 950.0)}
+    assert all(item['symbolSize'] == 0 and item['label']['show'] is False for item in anchors)
+    real = [item for item in data if not str(item['name']).startswith('_bbox_')]
+    assert {item['name'] for item in real} == {'甲', '乙', '丙'}
+
+
 def test_a_missing_fixed_column_is_named(frame):
     broken = frame.drop(columns=['连接'])
     with pytest.raises(ChartConfigError, match='连接'):

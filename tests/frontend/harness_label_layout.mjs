@@ -139,7 +139,10 @@ const cases = {};
         { dataIndex: 0, labelRect: { x: 560, y: 200, width: 60, height: 16 } },
         { getItemRect: () => ({ x: 585, y: 205, width: 10, height: 10 }), getLabelRect: () => ({ x: 560, y: 200, width: 60, height: 16 }) }
     );
-    const box = { x0: 24, y0: 70, x1: 600 - 170, y1: 400 - 30 };
+    /* The band is read back from the series: applyEchartsOption re-fits a free graph into a
+       square rect first, and the solver must measure THAT band, not the authoring one. */
+    const s = option.series[0];
+    const box = { x0: s.left, y0: s.top, x1: small.width - s.right, y1: small.height - s.bottom };
     cases.wired_to_instance = {
         installed: typeof fn === 'function',
         got: out,

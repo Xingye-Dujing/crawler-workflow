@@ -461,10 +461,26 @@ class TestBiblioPanelContract:
         # Stage 8 split; scanning workflow.js for them would pass on a file that no longer holds them.
         src = (JS_DIR / 'chart-preview.js').read_text(encoding='utf-8')
         assert 'function _graphLabelLayout' in src, 'graph/scatter labels need the collision resolver'
-        assert "s.type === 'graph' || s.type === 'scatter'" in src
+        # A cartesian scatter (cluster timeline) keeps ECharts' own axis-aware placement; the
+        # pixel solver is for free layouts, where nothing else measures the canvas.
+        assert "s.type === 'graph' || (s.type === 'scatter' && !option.xAxis)" in src
         # The solver measures the canvas it draws on, so it has to be given that instance.
         assert 's.labelLayout = _graphLabelLayout(s, instance)' in src
         assert 'function bounds()' in src, 'the resolver must keep labels inside the reserved band'
+        # A free graph is fitted into a square rect; a per-axis fit is the measured stretch.
+        assert 'function _fitFreeGraph' in src
+        assert 'function resizeChart' in src, 'a panel resize must re-fit, not only re-paint'
+        # A light label chip keeps dark ink in both themes (white-on-white in dark was measured).
+        assert "s.label.color = s.label.backgroundColor ? '#222'" in src
+
+    def test_a_knowledge_graph_cell_gets_two_columns(self):
+        """The board's 320px column shrinks a free graph's square plot to ~250px, where the
+        labels cannot be read. The cell that hosts one spans two columns and grows taller."""
+        js = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
+        assert "['knowledge_graph', 'landscape', 'concentric']" in js
+        assert "'dashboard-cell dashboard-cell-wide'" in js
+        css = (STATIC_DIR / 'css' / 'panels.css').read_text(encoding='utf-8')
+        assert '.dashboard-cell-wide' in css and 'grid-column: span 2' in css
 
 
 class TestPaletteContract:

@@ -3969,7 +3969,12 @@ def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, dr
                 playWord: I18n.t('chart.replayPlay'),
                 pauseWord: I18n.t('chart.replayPause'),
                 year2018: I18n.t('chart.replayYear', { year: 2018 }),
-                storedUntouched: JSON.stringify(_chartPreviewOption).indexOf('"symbolSize":30') >= 0,
+                /* The fit scales symbolSize for the surface it is drawn on (30 -> 30*k); the
+                   authoring size survives beside it in _cixiSize. A replay frame may cut the
+                   displayed option, but it must not rewrite either number. */
+                storedUntouched: (_chartPreviewOption.series[0].data || []).some(function (node) {
+                    return node._cixiSize === 30;
+                }),
             };
             """
         )

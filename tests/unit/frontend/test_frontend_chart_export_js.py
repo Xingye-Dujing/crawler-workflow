@@ -380,3 +380,24 @@ class TestReplayingTheNetwork:
         assert case['opened']['years'] == [2020, 2021]
         assert case['opened']['bar'] is True and case['opened']['state'] is True
         assert case['closed'] == {'hasOption': False, 'bar': False}
+
+
+class TestFreeGraphFitsTheSurface:
+    """ECharts fits a layout:'none' graph with one scale per axis, so the plot rect must be
+    square or the picture is stretched; and the label count must follow the area or a small
+    tile becomes a white mound. Both are measured here through the real ``applyEchartsOption``."""
+
+    def test_the_plot_rect_is_square_at_a_board_tile_size(self, saved):
+        case = saved['graph_fit']['small']
+        assert case['plot_w'] == case['plot_h'] == 179
+
+    def test_the_label_budget_follows_the_area(self, saved):
+        small = saved['graph_fit']['small']
+        large = saved['graph_fit']['large']
+        assert 0 < small['shown'] < small['nodes'], 'a 330px tile cannot print every name'
+        assert large['shown'] > small['shown'], 'the bigger surface earns more labels'
+
+    def test_a_resize_refits_at_the_new_size_instead_of_repainting(self, saved):
+        case = saved['graph_fit']['large']
+        assert case['plot_w'] == case['plot_h'] == 692
+        assert case['right'] == 196, 'the legend column is reserved again once there is room'

@@ -136,7 +136,19 @@ function patchOptionForTheme(option) {
     });
     (option.series || []).forEach(function (s) {
         if (!s) return;
-        if (s.label) s.label.color = p.tooltipText;
+        /* A label that paints its own chip keeps the backend's light chip in BOTH themes
+           (the biblio builders write rgba(255,255,255,…)), so its ink must stay dark.
+           Recolouring it to the theme's foreground painted white text on a white box in
+           the dark theme — measured on the 关键词共现 graph, where every label vanished. */
+        if (s.label) s.label.color = s.label.backgroundColor ? '#222' : p.tooltipText;
+        if (s.label && s.label.backgroundColor && _isDarkTheme()) {
+            /* 0.8 white over a dark canvas turned every chip mid-grey; a paper chip keeps
+               its ink readable against the figure behind it. */
+            s.label.backgroundColor = 'rgba(246,247,249,0.94)';
+        }
+        (s.data || []).forEach(function (item) {
+            if (item && item.label && item.label.backgroundColor) item.label.color = '#222';
+        });
         if (s.labelLine && s.labelLine.lineStyle) s.labelLine.lineStyle.color = p.labelLine;
         if (s.type === 'wordCloud' && s.textStyle) s.textStyle.color = p.tooltipText;
     });
@@ -184,7 +196,12 @@ function _graphLabelLayout(series, instance) {
                    candidate[0] + width <= box.x1 && candidate[1] + height <= box.y1;
         }
         var candidates = [[rect.x, rect.y]];
-        for (var shift = 6; shift <= 600; shift += 6) {
+        /* A label may step away from its node, but not wander across the figure: the old
+           600px reach let every surplus label pile up in the first free corner, which is
+           exactly the white stack measured on a 330px dashboard cell. Beyond a short hop
+           the truthful answer is "no room", and the label is dropped (the node stays). */
+        var reach = Math.max(12, Math.min(box.x1 - box.x0, box.y1 - box.y0) * 0.09);
+        for (var shift = 4; shift <= reach; shift += 4) {
             candidates.push([rect.x, rect.y - shift]);
             candidates.push([rect.x, rect.y + shift]);
             candidates.push([rect.x - shift, rect.y]);
@@ -203,17 +220,169 @@ function _graphLabelLayout(series, instance) {
             }
             if (clear) {
                 placed.push(placedBox);
-                return {x: placedBox.x, y: placedBox.y, width: width, height: height};
+                /* Returning hideOverlap hands the label to ECharts' own second pass, which
+                   hides the losers of a collision by priority. The callback's `ignore` flag is
+                   read by 5.4.4 only at creation, not from this return, so it cannot hide. */
+                return {
+                    x: placedBox.x, y: placedBox.y, width: width, height: height,
+                    hideOverlap: true, priority: 100000 - (params.dataIndex || 0)
+                };
             }
         }
-        return {ignore: true};
+        /* No free slot: clamp inside the plot and let hideOverlap drop the losers rather
+           than paint a box clipped by the canvas edge. */
+        var clamped = {
+            x: Math.min(Math.max(rect.x, box.x0), Math.max(box.x0, box.x1 - width)),
+            y: Math.min(Math.max(rect.y, box.y0), Math.max(box.y0, box.y1 - height))
+        };
+        placed.push({x: clamped.x, y: clamped.y, width: width, height: height});
+        return {
+            x: clamped.x, y: clamped.y, width: width, height: height,
+            hideOverlap: true, priority: 100000 - (params.dataIndex || 0)
+        };
     };
+}
+
+/* A free-layout graph is fitted by ECharts one axis at a time: scaleX = rect.width/spanX,
+   scaleY = rect.height/spanY. The backend pins the data box to the square 50..950, so the
+   rect must be square too or the picture is stretched — the measured dashboard defect,
+   where a 330x257 tile drew a 900x900 layout 28% wider than tall. This gives the series a
+   square rect (title above, cluster legend on the right only when there is room), scales
+   symbols and label offsets with it, and puts the biggest nodes first so the label solver
+   spends the space that exists on the labels that matter. Re-run on every resize: a
+   percentage margin would stretch again the moment the panel changes shape. */
+function _chartSurfaceSize(instance) {
+    if (!instance || typeof instance.getWidth !== 'function' || typeof instance.getHeight !== 'function') return [0, 0];
+    return [instance.getWidth(), instance.getHeight()];
+}
+
+function _fitFreeGraph(option, instance) {
+    /* Every graph series, not only layout:'none': a circular/concentric ring drawn into a
+       wide rect is an ellipse for the same reason, because the fit is per axis. */
+    var graph = (option.series || []).find(function (s) { return s && s.type === 'graph'; });
+    if (!graph) return;
+    var free = graph.layout === 'none';
+    var size = _chartSurfaceSize(instance);
+    var w = size[0];
+    var h = size[1];
+    if (!w || !h) return;
+    var showLegend = !!(option.legend && w >= 620 && h >= 380);
+    if (option.legend) option.legend.show = showLegend;
+    var top = 56, bottom = 22, left = 12, right = showLegend ? 196 : 12;
+    var side = Math.max(120, Math.min(w - left - right, h - top - bottom));
+    var x0 = left + (w - left - right - side) / 2;
+    var y0 = top + (h - top - bottom - side) / 2;
+    graph.left = Math.round(x0);
+    graph.top = Math.round(y0);
+    /* Derived, not rounded independently: two roundings can leave the rect one pixel out of
+       square, which is precisely the stretch this function exists to remove. */
+    graph.right = w - graph.left - side;
+    graph.bottom = h - graph.top - side;
+    // Symbols follow the square, but not below 62%: at a small tile a 3px disc reads as a
+    // speck and the labels look like the graph. Above paper size they stop growing.
+    if (!free) return;
+    // Symbols follow the square, but not below 62%: at a small tile a 3px disc reads as a
+    // speck and the labels look like the graph. Above paper size they stop growing.
+    var k = Math.min(1.25, Math.max(0.62, side / 900));
+    var offsetK = side / 1350;
+    (graph.data || []).forEach(function (item) {
+        if (!item) return;
+        if (item._cixiSize === undefined) {
+            item._cixiSize = typeof item.symbolSize === 'number' ? item.symbolSize : 0;
+            item._cixiOffset = item.label && item.label.offset ? item.label.offset.slice() : null;
+        }
+        item.symbolSize = item._cixiSize > 0 ? Math.max(3, Math.round(item._cixiSize * k * 100) / 100) : 0;
+        if (item.label && item._cixiOffset) {
+            item.label.offset = [
+                Math.round(item._cixiOffset[0] * offsetK * 10) / 10,
+                Math.round(item._cixiOffset[1] * offsetK * 10) / 10
+            ];
+        }
+    });
+    (graph.data || []).sort(function (a, b) { return ((b && b.value) || 0) - ((a && a.value) || 0); });
+    /* Label budget: a name chip is ~90x20px, and oversubscribing the square is exactly how a
+       small cell became a white stack. Highest-frequency names claim the space first; a name
+       that cannot be shown stays a hover target rather than a rectangle on top of its
+       neighbours. */
+    var budget = Math.max(4, Math.floor((side * side) * 0.35 / 1800));
+    (graph.data || []).forEach(function (item, index) {
+        if (!item || String(item.name || '').indexOf('_bbox_') === 0) return;
+        item.label = item.label || {};
+        item.label.show = index < budget;
+    });
+}
+
+/* A category axis reserves its longest name out of the plot: the biblio timeline asks for
+   a 260px label column, which is fine at paper width and leaves a 330px board cell with
+   almost no plot. The label keeps its truncation, but its column follows the surface. */
+function _fitCategoryAxes(option, instance) {
+    var w = _chartSurfaceSize(instance)[0];
+    if (!w) return;
+    var width = Math.round(Math.max(64, Math.min(260, w * 0.28)));
+    [].concat(option.yAxis || []).forEach(function (ax) {
+        if (!ax || ax.type !== 'category' || !ax.axisLabel) return;
+        ax.axisLabel.width = width;
+        ax.axisLabel.overflow = 'truncate';
+    });
+    /* A year axis: ECharts prints 2023 as "2,023" and six of them touch in a board cell.
+       Write the year plainly and tilt the ticks once the surface is too narrow for the row. */
+    var narrow = w < 640;
+    [].concat(option.xAxis || []).forEach(function (ax) {
+        if (!ax || ax.type !== 'value' || ax.minInterval !== 1) return;
+        if (!(ax.min >= 1900 && ax.max <= 2100)) return;
+        ax.axisLabel = ax.axisLabel || {};
+        /* Tilted years need a bottom band a 300px board cell does not have (measured: cut
+           in half). Drop every other year instead — the axis still says where it starts and
+           ends, and no tick is clipped. */
+        ax.axisLabel.rotate = 0;
+        ax.axisLabel.formatter = function (value) {
+            var year = Math.round(value);
+            if (w < 560 && year % 2 !== 0) return '';
+            return String(year);
+        };
+    });
+    /* Point labels on a cartesian scatter (cluster timeline) hang to the right of their
+       bubble; in a narrow cell the last ones are cut by the canvas edge. Below the width
+       at which they fit, the chart keeps its bubbles and drops the printed names — the
+       hover tooltip still answers. */
+    (option.series || []).forEach(function (s) {
+        if (!s || s.type !== 'scatter' || !option.xAxis) return;
+        if (s._cixiLabelShow === undefined) s._cixiLabelShow = !(s.label && s.label.show === false);
+        if (s.label) s.label.show = s._cixiLabelShow && !narrow;
+        (s.data || []).forEach(function (item) {
+            if (!item || !item.label) return;
+            if (item._cixiLabelShow === undefined) item._cixiLabelShow = item.label.show !== false;
+            item.label.show = item._cixiLabelShow && !narrow;
+        });
+    });
+}
+
+/* A floating panel settles its width one frame after it is shown (measured: the full-screen
+   host was 1202px during init and 1260px after layout), so the fit is repeated once the
+   surface is final. Without this the square rect is computed for a width nobody sees. */
+function settleChart(instance) {
+    if (!instance || !instance.__cixiRefit) return;
+    var run = function () {
+        if (instance.__cixiRefit) instance.__cixiRefit();
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+}
+
+/* Every resize of a chart surface goes through here, so the free graph is re-fitted at
+   the new aspect instead of only being re-painted into it. */
+function resizeChart(instance) {
+    if (!instance) return;
+    instance.resize();
+    if (instance.__cixiRefit) instance.__cixiRefit();
 }
 
 function applyEchartsOption(instance, option) {
     patchOptionForTheme(option);
+    _fitFreeGraph(option, instance);
+    _fitCategoryAxes(option, instance);
     (option.series || []).forEach(function (s) {
-        if (s && (s.type === 'graph' || s.type === 'scatter') && Array.isArray(s.data) && s.data.length) {
+        if (s && (s.type === 'graph' || (s.type === 'scatter' && !option.xAxis)) && Array.isArray(s.data) && s.data.length) {
             s.labelLayout = _graphLabelLayout(s, instance);
         }
         /* A choropleth's labels sit on geometry the author cannot shift: at the preview panel's
@@ -240,6 +409,20 @@ function applyEchartsOption(instance, option) {
         instance.setOption(option, true);
         instance.resize();
     }
+    var needsFit = (option.series || []).some(function (s) {
+        return s && s.type === 'graph';
+    }) || [].concat(option.yAxis || []).some(function (ax) {
+        return ax && ax.type === 'category';
+    });
+    instance.__cixiRefit = needsFit ? function () {
+        _fitFreeGraph(option, instance);
+        _fitCategoryAxes(option, instance);
+        instance.setOption(option, true);
+    } : null;
+    /* The panel can settle to a different size between init and this call (measured on the
+       fullscreen window: 1202 -> 1260 after resize()), and margins computed for the old size
+       leave the square 58px wide of square. Re-fit at the size that is actually on screen. */
+    if (instance.__cixiRefit) instance.__cixiRefit();
 }
 
 var _chartPreviewInstance = null;
@@ -634,7 +817,7 @@ function renderChartPreview(result) {
             minH: 200,
             maxW: window.innerWidth - 40,
             maxH: window.innerHeight - 40,
-            onResize: function () { if (_chartPreviewInstance) _chartPreviewInstance.resize(); }
+            onResize: function () { if (_chartPreviewInstance) resizeChart(_chartPreviewInstance); }
         });
         if (!panel.querySelector('.resize-handle')) {
             var rh = document.createElement('div');
@@ -667,11 +850,12 @@ function renderChartPreview(result) {
             echartsDiv.innerHTML = '';
             _chartPreviewInstance = echarts.init(echartsDiv);
             if (!_chartPreviewResizeHandler) {
-                _chartPreviewResizeHandler = function () { _chartPreviewInstance.resize(); };
+                _chartPreviewResizeHandler = function () { resizeChart(_chartPreviewInstance); };
                 window.addEventListener('resize', _chartPreviewResizeHandler);
             }
         }
         applyEchartsOption(_chartPreviewInstance, result.option);
+        settleChart(_chartPreviewInstance);
         _replayAttach('preview', result.option);
     }
     _renderLatexBar(result);
@@ -824,7 +1008,7 @@ async function openChartFullscreen(nodeId) {
             minH: 240,
             maxW: window.innerWidth - 20,
             maxH: window.innerHeight - 20,
-            onResize: function () { if (_chartFullscreenInstance) _chartFullscreenInstance.resize(); }
+            onResize: function () { if (_chartFullscreenInstance) resizeChart(_chartFullscreenInstance); }
         });
         if (!panel.querySelector('.resize-handle')) {
             var rh = document.createElement('div');
@@ -904,6 +1088,7 @@ function _paintFullscreenOption(option) {
     _chartFullscreenInstance = echarts.init(div);
     _chartFullscreenOption = option;
     applyEchartsOption(_chartFullscreenInstance, option);
+    settleChart(_chartFullscreenInstance);
     _replayAttach('fullscreen', option);
 }
 

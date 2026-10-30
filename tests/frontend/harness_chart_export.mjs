@@ -147,6 +147,7 @@ function world(render) {
             ' savePreviewImage, saveDashboardImage, saveChartPicture,' +
             ' savePreviewVector, saveChartVector, chartSvgMarkup,' +
             ' saveChartPdf, getLatexFile: () => _lastLatexFile,' +
+            ' applyEchartsOption, resizeChart,' +
             ' openChartFullscreen, closeChartFullscreen, saveFullscreenImage,' +
             ' getFullscreenInstance: () => _chartFullscreenInstance,' +
             ' getFullscreenOption: () => _chartFullscreenOption,' +
@@ -462,6 +463,50 @@ async function previewIdentityCase() {
     };
 }
 
+/* A free graph is drawn into a SQUARE rect and its label count follows the area. ECharts fits
+   a layout:'none' graph with one scale per axis, so a 330x257 tile used to stretch the picture;
+   and 59 labels in that tile printed as a white mound. Two sizes prove both rules, and the
+   resize call proves the rect is re-fitted at the NEW size rather than re-painted into it. */
+function graphFitCase() {
+    const w = world();
+    const inst = {
+        applied: [],
+        width: 330,
+        height: 257,
+        setOption(opt) { this.applied.push(opt); },
+        resize() {},
+        dispose() {},
+        getWidth() { return this.width; },
+        getHeight() { return this.height; },
+    };
+    const option = GRAPH_OPTION();
+    option.legend = { data: ['全部'], show: true };
+    for (let i = 0; i < 30; i += 1) {
+        option.series[0].data.push({ name: 'n' + i, x: i, y: i, symbolSize: 20, value: 30 - i, label: { show: true } });
+    }
+    w.x.applyEchartsOption(inst, option);
+    const small = measure(option);
+    inst.width = 900;
+    inst.height = 900;
+    w.x.resizeChart(inst);
+    const large = measure(option);
+    return { small, large };
+    function measure(opt) {
+        const s = opt.series[0];
+        return {
+            left: s.left,
+            top: s.top,
+            right: s.right,
+            bottom: s.bottom,
+            plot_w: inst.width - s.left - s.right,
+            plot_h: inst.height - s.top - s.bottom,
+            shown: s.data.filter((item) => item.label && item.label.show).length,
+            nodes: s.data.length,
+        };
+    }
+}
+
+out.graph_fit = graphFitCase();
 out.fullscreen_from_board_option = await fullscreenFromBoardOptionCase();
 out.fullscreen_from_board_image = await fullscreenFromBoardImageCase();
 out.fullscreen_refetch = await fullscreenRefetchCase();

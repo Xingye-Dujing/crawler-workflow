@@ -17,6 +17,7 @@ from .base import (
     _parsed,
     _require,
     _text,
+    bbox_anchors,
 )
 
 
@@ -47,7 +48,17 @@ def cluster_timeline(df: pd.DataFrame, base: dict) -> dict:
         color = base['color'][index % len(base['color'])]
         points = []
         group_rows = sorted(group['nodes'], key=lambda item: (-_number(item['频次'], 0.0), _text(item['节点'])))
-        labelled = {id(row) for row in group_rows[:3]}
+        # Two keywords of one cluster that start in the same year share a point's exact
+        # coordinates, so their chips printed on top of each other. Keep the most frequent
+        # name per (year, cluster) slot; the CSV and the three-line table keep the rest.
+        labelled = set()
+        slots: set[tuple[int, int]] = set()
+        for row in group_rows[:3]:
+            slot = (int(_number(row['首年'], 0)), index)
+            if slot in slots:
+                continue
+            slots.add(slot)
+            labelled.add(id(row))
         for row in sorted(group['nodes'], key=lambda item: (_number(item['首年'], 0), _text(item['节点']))):
             first = int(_number(row['首年'], 0))
             last = int(_number(row['末年'], first))
@@ -81,24 +92,39 @@ def cluster_timeline(df: pd.DataFrame, base: dict) -> dict:
                     'formatter': '{@[3]}',
                     'backgroundColor': 'rgba(255,255,255,0.8)',
                     'padding': [2, 3],
+                    # A chip that runs past the last bubble is cut by the canvas edge; cap
+                    # its width and ellipsize, the full name is in the tooltip.
+                    'width': 96,
+                    'overflow': 'truncate',
                 },
-                'labelLayout': {'hideOverlap': False, 'moveOverlap': 'shiftY', 'draggable': True},
+                # A keyword chip is secondary to the bubble it names: when the surface is
+                # narrow the honest answer is to drop the colliding chip, not to stack them
+                # on top of each other (measured: a 330px board cell printed six names over
+                # one another).
+                'labelLayout': {'hideOverlap': True, 'moveOverlap': 'shiftY', 'draggable': True},
             }
         )
-    base['grid'] = {'left': '24%', 'right': '8%', 'top': '12%', 'bottom': '14%', 'containLabel': True}
+    # The keyword chips hang to the right of their bubble; the gutter keeps the last one
+    # inside the canvas instead of letting the edge cut it.
+    base['grid'] = {'left': '24%', 'right': '12%', 'top': '12%', 'bottom': '14%', 'containLabel': True}
     base['xAxis'] = {
         'type': 'value',
         'name': t('chart.biblio_year'),
         'minInterval': 1,
         'min': min(years) - 1,
         'max': max(years) + 1,
+        # Six year ticks at a board cell's width printed over one another; ECharts keeps
+        # the ones that fit instead of every label overlapping its neighbour, and a year
+        # is written plainly — the default formatter printed 2023 as "2,023".
+        'axisLabel': {'hideOverlap': True, 'formatter': '{value}'},
     }
     base['yAxis'] = {
         'type': 'category',
         'data': categories,
         'inverse': True,
-        'name': t('chart.biblio_cluster'),
-        'axisLabel': {'fontSize': 9, 'width': 260, 'overflow': 'truncate', 'interval': 0},
+        # No axis name: rotated 90° it stood in the label column and its two glyphs read as
+        # a stray word under the third cluster (measured on the 1100px figure).
+        'axisLabel': {'fontSize': 9, 'width': 260, 'overflow': 'truncate', 'interval': 0, 'hideOverlap': True},
     }
     base['series'] = scatter + [
         {
@@ -144,6 +170,7 @@ def burst(df: pd.DataFrame, base: dict) -> dict:
         'minInterval': 1,
         'min': first_year - 1,
         'max': last_year + 1,
+        'axisLabel': {'hideOverlap': True, 'formatter': '{value}'},
     }
     series = []
     markers = []
@@ -229,12 +256,13 @@ def timezone(df: pd.DataFrame, base: dict) -> dict:
         'minInterval': 1,
         'min': min(years) - 1,
         'max': max(years) + 1,
+        'axisLabel': {'hideOverlap': True, 'formatter': '{value}'},
     }
     base['yAxis'] = {
         'type': 'category',
         'data': names,
         'inverse': True,
-        'axisLabel': {'fontSize': 9, 'width': 240, 'overflow': 'truncate', 'interval': 0},
+        'axisLabel': {'fontSize': 9, 'width': 240, 'overflow': 'truncate', 'interval': 0, 'hideOverlap': True},
     }
     base['series'] = [{'type': 'scatter', 'name': t('chart.biblio_activity'), 'data': data}]
     return base
@@ -294,6 +322,7 @@ def landscape(df: pd.DataFrame, base: dict) -> dict:
             }
         )
     base['tooltip']['formatter'] = None
+    data.extend(bbox_anchors())
     base['series'] = [
         {
             'type': 'graph',

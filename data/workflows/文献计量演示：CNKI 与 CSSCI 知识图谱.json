@@ -653,7 +653,7 @@
         "variation_min": 0.05,
         "year_column": "年份"
       },
-      "x": 774,
+      "x": 775,
       "y": 1052,
       "folded": false
     },
@@ -901,7 +901,6 @@
       "type": "biblio",
       "title": "文献计量",
       "params": {
-        "enabled": false,
         "abstract_column": "摘要",
         "aliases": "",
         "basemap_dataset_id": "",
@@ -915,6 +914,7 @@
         "cluster_count": "",
         "cluster_labels": "",
         "counting": "full",
+        "enabled": false,
         "entity_column": "",
         "entity_type": "keyword",
         "exclude_values": "",
@@ -959,8 +959,8 @@
         "watch_project": "",
         "year_column": "年份"
       },
-      "x": 7,
-      "y": 1072,
+      "x": 0,
+      "y": 2858,
       "folded": false
     }
   ],
@@ -1124,9 +1124,9 @@
     "max_workers": 4,
     "disabledTypes": [],
     "view": {
-      "panX": 265.46645406955804,
-      "panY": -980.7124451984694,
-      "zoom": 1.1224381964449215
+      "panX": 543.1483739837399,
+      "panY": 88,
+      "zoom": 0.27235772357723576
     }
   },
   "name": "文献计量演示：CNKI 与 CSSCI 知识图谱"

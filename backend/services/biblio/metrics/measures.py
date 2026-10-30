@@ -286,12 +286,18 @@ def _layout(graph: nx.Graph, nodes: list[str]) -> dict[str, tuple[float, float]]
     ys = [positions[name][1] for name in nodes]
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
-    span_x = max_x - min_x or 1.0
-    span_y = max_y - min_y or 1.0
+    span = max(max_x - min_x, max_y - min_y) or 1.0
+    # ONE scale for both axes: the spring layout is isotropic, and normalising x and y
+    # separately stretched every graph to a square 900x900 box — the wide cluster then
+    # read as if its members were further apart horizontally than vertically. The chart
+    # builder pads the bounding box back to a square, so the rendered picture keeps this
+    # aspect and an ECharts view rect of the same aspect scales it uniformly.
+    center_x = (min_x + max_x) / 2.0
+    center_y = (min_y + max_y) / 2.0
     return {
         name: (
-            round(50.0 + 900.0 * (positions[name][0] - min_x) / span_x, 3),
-            round(50.0 + 900.0 * (positions[name][1] - min_y) / span_y, 3),
+            round(500.0 + 900.0 * (positions[name][0] - center_x) / span, 3),
+            round(500.0 + 900.0 * (positions[name][1] - center_y) / span, 3),
         )
         for name in nodes
     }

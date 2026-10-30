@@ -82,6 +82,32 @@ def _base_graph_series(base: dict, title: str) -> None:
     base['title']['text'] = title or base['title']['text']
 
 
+def bbox_anchors() -> list[dict]:
+    """Two invisible corner nodes that pin a free-layout graph's box to 50..950.
+
+    ECharts fits a ``layout:'none'`` graph's data bounding box into the series rect with a
+    separate scale per axis. A spring layout is isotropic, so a box that is wider than it is
+    tall would be stretched horizontally on screen; these anchors make the box square (the
+    browser keeps the rect square too), so one scale serves both axes. They draw nothing,
+    answer no pointer and own no label.
+    """
+    return [
+        {
+            'name': name,
+            'x': x,
+            'y': y,
+            'symbolSize': 0,
+            'value': 0,
+            'category': 0,
+            'itemStyle': {'opacity': 0},
+            'label': {'show': False},
+            'emphasis': {'disabled': True},
+            'silent': True,
+        }
+        for name, (x, y) in (('_bbox_min_', (50.0, 50.0)), ('_bbox_max_', (950.0, 950.0)))
+    ]
+
+
 def _node_rows(df: pd.DataFrame, *, require_coordinates: bool = False):
     columns = ('节点', '连接', '频次')
     if require_coordinates:

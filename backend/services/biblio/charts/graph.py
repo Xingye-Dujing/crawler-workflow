@@ -27,6 +27,7 @@ from .base import (
     _parsed,
     _require,
     _text,
+    bbox_anchors,
 )
 
 
@@ -223,6 +224,8 @@ def _graph_option(df: pd.DataFrame, base: dict, *, layout: str, require_coordina
     rows, names = _node_rows(df, require_coordinates=require_coordinates)
     categories = _categories(rows, names, df)
     data = _node_data(rows, names, base, layout=layout, categories=categories)
+    if layout == 'none':
+        data.extend(bbox_anchors())
     links = _graph_links(rows, names)
     base['legend'] = _legend(categories[1])
     series = {
