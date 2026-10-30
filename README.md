@@ -48,7 +48,9 @@ cd backend && python app.py          # 访问 http://127.0.0.1:5000（端口 POR
 `CRAWLER_DATA_ROOT=<目录>` 给它一份自己的 `data/`+`logs/`，两边互不干涉。
 
 **云端 / 桌面版**：放服务器给别人访问用 `python app.py cloud`（或 `CRAWLER_CLOUD=1`）——关掉本地模型界面、
-强制无头抓取、拒绝浏览器生成（开关、隐私边界、profile 模板规则见 [`docs/config.md`](docs/config.md)）。
+强制无头抓取、拒绝浏览器生成，并且**强制登录**：启动前必须设置 `CRAWLER_AUTH_PASSWORD` 与自己的
+`SECRET_KEY`，否则按名拒绝启动；设置后全站（页面、静态资源、`/api/*`）都要求登录，顶栏出现「退出登录」
+（开关、隐私边界、profile 模板规则见 [`docs/config.md`](docs/config.md)）。
 给不装 Python 的人（仅 Windows）：`desktop/` 用 PyInstaller onedir 打包出 `CaiXiHui.exe`（`-Installer` 再出
 Inno 安装包），双击即启本地服务并开浏览器；数据默认在 `%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt`
 切便携模式。构建命令、体积边界、首启依赖自检与「为什么排除 onefile」见 [`desktop/README.md`](desktop/README.md)。
@@ -158,7 +160,7 @@ crawler_workflow/
 | 文件 | 里面是什么 |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、大文件的耦合约束、接缝规则 |
-| [`docs/refactor_plan.md`](docs/refactor_plan.md) | **全项目结构审计与重构总纲**（缺陷分类、目标目录树、分层规则、阶段与完成定义） |
+| [`docs/archive/refactor_plan_2026-10.md`](docs/archive/refactor_plan_2026-10.md) | **已归档**：2026-10 全项目结构审计与重构总纲（缺陷分类、目标目录树、分层规则、阶段账本与完成定义；重构已完成）。现行结构看上一行 |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | `workflow.js` 的**逐模块拆分方案** |
 | [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限 |
 | [`docs/analysis.md`](docs/analysis.md) | AI 分析 · 数据处理 · 可视化 的完整细节 |
@@ -177,3 +179,9 @@ crawler_workflow/
 
 本项目依赖由 `.venv/` 承载，代码风格由 `ruff.toml` 约束（行宽 120、单引号）。开发与验证流程、各测试层命令见
 [`docs/development.md`](docs/development.md) 与 [`AGENTS.md`](AGENTS.md)。
+
+## 许可与备份
+
+MIT，见 [`LICENSE`](LICENSE)。`data/` 不在 git 里（只有 `data/workflows/` 例外），所以远端之外还需要还原点：
+`tools/backup.py` 生成 git bundle + 数据归档（默认不含 Cookie），远端同时推 `crawler-github` 与 `gitee`。
+用法与恢复步骤见 [`docs/development.md`](docs/development.md#备份与恢复)。

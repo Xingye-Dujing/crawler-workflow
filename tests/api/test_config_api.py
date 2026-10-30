@@ -30,7 +30,7 @@ from sessions.cookies import CookieManager
 
 pytestmark = pytest.mark.api
 
-CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers', 'cloud_mode'}
+CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers', 'cloud_mode', 'auth_required'}
 # The cookie panel's platform set is the manager's own list — mirroring it here
 # would only ever record the last time someone forgot the other side.
 COOKIE_PLATFORMS = set(CookieManager.PLATFORMS)
@@ -48,6 +48,9 @@ class TestConfigEndpoint:
         assert body['default_headless'] is Config.DEFAULT_HEADLESS
         assert body['max_workers'] == Config.DEFAULT_MAX_WORKERS
         assert body['cloud_mode'] is Config.CLOUD_MODE, 'the whole Ollama/headless UI hiding reads this flag'
+        assert body['auth_required'] is bool(str(Config.AUTH_PASSWORD or '').strip()), (
+            'the 退出登录 entry is shown from this flag, never from a page-side guess'
+        )
 
     def test_config_is_not_cached_at_import_time(self, client, monkeypatch):
         monkeypatch.setattr(Config, 'OLLAMA_MODEL', 'patched-model:1')
@@ -57,6 +60,7 @@ class TestConfigEndpoint:
             'default_headless': True,
             'max_workers': 9,
             'cloud_mode': Config.CLOUD_MODE,
+            'auth_required': bool(str(Config.AUTH_PASSWORD or '').strip()),
         }
 
     def test_config_is_read_only(self, client):

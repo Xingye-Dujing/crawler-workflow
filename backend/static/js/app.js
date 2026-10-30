@@ -19,12 +19,34 @@
             const opts = Object.assign({}, init || {});
             opts.headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined) || undefined);
             if (!opts.headers.has('X-Lang')) opts.headers.set('X-Lang', lang);
-            return nativeFetch(input, opts);
+            return nativeFetch(input, opts).then(redirectIfAuthRequired);
         } catch (e) {
             return nativeFetch(input, init);
         }
     };
 })();
+
+/* A 401 that carries X-Auth-Required is an EXPIRED / MISSING LOGIN, not a node refusing
+   something: the server marks its own refusals, so the page can tell them apart and send the
+   user to the login page with the address it was on. Any other 401 is left to the caller. */
+function redirectIfAuthRequired(response) {
+    if (!response || response.status !== 401) return response;
+    const marker = response.headers && response.headers.get && response.headers.get('X-Auth-Required');
+    if (!marker || typeof location === 'undefined' || typeof location.assign !== 'function') return response;
+    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+    return response;
+}
+
+/* End this browser's login (the top bar's 退出登录 entry). A POST, because a cross-site link or
+   image must not be able to end someone's session; the server answers with a redirect to the
+   login page either way, so the navigation below is the one thing left to do. */
+function logout() {
+    fetch('/logout', { method: 'POST' })
+        .catch(() => { })
+        .then(() => {
+            if (typeof location !== 'undefined' && typeof location.assign === 'function') location.assign('/login');
+        });
+}
 
 /* The words themselves are data: ``js/i18n/<domain>.js`` pushes {name, en, zh} onto one
  * registry ahead of this file, and the merge below is the only place that decides who wins.
@@ -320,12 +342,16 @@ function filterPalette(query) {
 const CloudMode = {
     on: false,
     applied: false,
+    /* Whether this host asks for a login. It rides the same /api/config answer as the cloud
+       flag — the page must not ask a second question whose answer could disagree. */
+    authRequired: false,
 
     /* Fed by the one /api/config read the page already makes at boot
        (``LLMSettings.loadDefaults``) — this module does not fetch, because a second
        request for the same payload would be a second answer to keep in sync. */
-    set(flag) {
+    set(flag, authRequired) {
         this.on = !!flag;
+        this.authRequired = !!authRequired;
         this.apply();
         /* The panel is filled from localStorage, which may name a transport this
            host cannot serve. Re-apply it from the truth instead of leaving a selected
@@ -338,6 +364,10 @@ const CloudMode = {
 
     apply() {
         document.documentElement.dataset.cloud = this.on ? '1' : '0';
+        /* The way out of a login exists only where there is one; a desktop page with no
+           session to end must not offer to end it. */
+        const out = document.getElementById('btn-logout');
+        if (out) out.hidden = !this.authRequired;
         if (this.on) {
             /* The transport is taken OUT of the select, not merely styled away: a hidden
                <option> is still a value the element can be asked for (keyboard, a stale

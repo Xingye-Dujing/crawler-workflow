@@ -371,7 +371,7 @@ class TestPortSelection:
 class TestTheBuildKnowsEveryPackage:
     """The spec walks a HARD-CODED tuple of backend packages, so a new top-level package is
     invisible to the build until someone remembers to add it — and the packaged app then fails
-    on the user's machine, not in this suite. The whole restructure (docs/refactor_plan.md) is
+    on the user's machine, not in this suite. The whole restructure (docs/archive/refactor_plan_2026-10.md) is
     exactly a sequence of new top-level packages, so this is the gate that makes moving files
     safe: the spec has to name every package that exists, and no package that does not.
 

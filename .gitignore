@@ -3,6 +3,9 @@
 .ruff_cache/
 .pytest_cache/
 __pycache__/
+# Restore points written by tools/backup.py (a git bundle + a data archive). They can be large and
+# may hold credentials with --with-cookies, so they never belong in history.
+backups/
 # The runtime state stays out of the repo (runs.db / datasets.db / cookies / exports),
 # but a saved workflow is authored work the user wants versioned — it references datasets
 # by id, so a checkout of it is only useful next to the same data/, which is stated in the

@@ -32,7 +32,12 @@ class Config:
     # ``desktop/desktop_entry.py::find_driver``, which keeps the legacy path as a *candidate*).
     DRIVER_PATH = os.environ.get('CIXI_DRIVER_PATH', '')
 
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'crawler-workflow-secret-key')
+    #: The key that signs Flask's session cookie (which now carries the login). Known in advance
+    #: is the same as not secret: anyone can mint a cookie this server accepts. Cloud mode refuses
+    #: to start with it (``api/auth.py::startup_error``); a local run keeps the convenience default
+    #: because the cookie never leaves the machine.
+    DEFAULT_SECRET_KEY = 'crawler-workflow-secret-key'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or DEFAULT_SECRET_KEY
 
     #: Cloud deployment switch. On a public server there is no local model to talk to, no
     #: display to open a window on, and no browser to click 「生成 Cookie」 with — and the user
@@ -42,6 +47,18 @@ class Config:
     #: Set it with ``CRAWLER_CLOUD=1`` or ``python app.py cloud`` — app.py raises the variable
     #: *before* importing this module, because a class attribute is read once at import time.
     CLOUD_MODE = str(os.environ.get('CRAWLER_CLOUD') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+    #: Login for a shared host. A password turns on the login page and the session gate
+    #: (``api/auth.py``); an empty password means no login, which is the local single-user
+    #: default. Cloud mode REQUIRES one — app.py refuses to start without it, by name, because
+    #: a public URL with no authentication exposes every saved cookie, dataset, run record and
+    #: the ability to start crawls on the owner's accounts.
+    AUTH_USER = os.environ.get('CRAWLER_AUTH_USER') or 'admin'
+    AUTH_PASSWORD = os.environ.get('CRAWLER_AUTH_PASSWORD') or ''
+    #: Set to 1 when the page is actually reached over HTTPS (a proxy terminates TLS), so the
+    #: session cookie is marked Secure. Left off on a plain-HTTP local/LAN run, where a Secure
+    #: cookie is never sent back and the login would silently not stick.
+    HTTPS_ONLY = str(os.environ.get('CRAWLER_HTTPS') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
     # Paths
     DATA_DIR = os.path.join(DATA_ROOT, 'data')

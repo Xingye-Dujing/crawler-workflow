@@ -2,16 +2,16 @@
 
 Docs in this repo are evidence, not prose: `docs/crawler_notes.md` is 2,450 lines of measurements that
 name the file and line a finding came from, and `AGENTS.md` points its rules at the same places. A
-restructure (docs/refactor_plan.md) moves those files by the dozen, and a citation that now points at
+restructure moves those files by the dozen, and a citation that now points at
 nothing is worse than none — it reads like the measurement still stands. This test is the tripwire for
 that, and it is deliberately run *before* the moves start.
 
-Two exclusions, each a fact rather than an exemption:
+One exclusion, a fact rather than an exemption: **deleted one-off probes** (`backend/test_*.py`), archived
+outside the repo on purpose — the docs cite them as the provenance of a number, not as code that should exist.
 
-* **deleted one-off probes** (`backend/test_*.py`): those scripts were archived outside the repo on
-  purpose, and the docs cite them as the provenance of a number, not as code that should exist;
-* **the plan itself** (`docs/refactor_plan.md`): it names target paths that do not exist yet, which is
-  the opposite of a stale citation.
+`docs/archive/` is **not** scanned: it holds completed process records (the refactor ledger), and a path
+inside it may name a file that has since moved or been deleted. That is history, not a stale rule — see
+`docs/archive/README.md`.
 
 Anything else that goes missing is a regression, so a fabricated path is proven to be caught.
 """
@@ -70,23 +70,12 @@ DOC_FILES = sorted((REPO / 'docs').glob('*.md')) + [
 #: Cited as the source of a measurement, then deleted on purpose. Not a broken reference.
 DELETED_PROBES = re.compile(r'(?:^|/)test_[A-Za-z0-9_]*\.py$')
 
-#: Files whose job is to name paths that do not exist yet.
-_PLANS = {'refactor_plan.md'}
-
 #: A module that was deleted, cited as the thing that was deleted. `docs/collection.md` and
 #: `docs/crawler_notes.md` record that 抖音's sort menu went together with its `search()` and its live
 #: cases — naming the removed file IS the measurement. Adding to this list is a decision to argue
 #: about, the same way an exemption in a linter config is.
 _DELETED_MODULES = {
     'engine/menu.py': 'the 抖音 sort-menu helper, deleted with the mode it served (docs/crawler_notes.md 338)',
-    # 2026-10-27: the login-state domain was assembled out of modules that lived elsewhere, and
-    # docs/ARCHITECTURE.md names the old path so a reader who arrives with the old spelling in mind
-    # can see where it went. The file is gone; the citation is the provenance, not a claim.
-    'services/cookie_manager.py': 'moved to sessions/cookies.py (docs/ARCHITECTURE.md sessions row)',
-    'services/cookie_flow.py': 'moved to sessions/flow.py (docs/ARCHITECTURE.md sessions row)',
-    # 2026-10-28: the two /api/browser/profiles routes merged into sessions/routes.py with the
-    # rest of the cookie surface; ARCHITECTURE names the old path as provenance.
-    'api/browser_profiles.py': 'merged into sessions/routes.py (docs/ARCHITECTURE.md sessions row)',
 }
 
 
@@ -96,8 +85,6 @@ def _doc_files() -> list[Path]:
 
 def unresolved(text: str, origin: str) -> list[str]:
     """The project paths in *text* that no longer resolve, from a document called *origin*."""
-    if origin in _PLANS:
-        return []
     bad = []
     for match in CITATION.finditer(text):
         cited = match.group(1)
@@ -144,8 +131,13 @@ class TestTheDocsPointAtRealFiles:
         """The probe scripts were archived outside the repo; docs naming them record provenance."""
         assert unresolved('measured by `backend/test_weibo_recipe.py` on 2026-09-27', 'crawler_notes.md') == []
 
-    def test_the_plan_may_name_paths_that_do_not_exist_yet(self):
-        assert unresolved('`core/coerce.py` holds the coercions', 'refactor_plan.md') == []
+    def test_the_archive_is_not_scanned_and_that_is_deliberate(self):
+        """Completed process records keep their old paths on purpose; scanning them would force a
+        rewrite of history every time a file moves. The corpus is checked so a future `glob('**/*.md')`
+        change cannot quietly pull the archive in."""
+        archived = sorted((REPO / 'docs' / 'archive').glob('*.md'))
+        assert archived, 'the archive directory vanished — README points at it'
+        assert all(path.parent.name != 'archive' for path in _doc_files()), 'the archive joined the scan'
 
     def test_an_excused_citation_is_still_a_citation(self):
         """A ledger nobody checks becomes a hiding place: an entry whose file is no longer cited

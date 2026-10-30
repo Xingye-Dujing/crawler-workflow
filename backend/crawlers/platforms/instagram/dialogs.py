@@ -2,7 +2,7 @@
 
 Declared here for the same reason douyin's trust-login prompt is: the dialog's wording is a
 property of the site. Nothing mounts it yet (the platform is cookie-capture only in this app),
-which is stated in docs/refactor_plan.md's D9 rather than papered over.
+which is stated in docs/archive/refactor_plan_2026-10.md's D9 rather than papered over.
 """
 
 from crawlers.engine.popup import Prompt

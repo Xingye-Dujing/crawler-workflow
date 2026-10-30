@@ -28,6 +28,9 @@ def get_config():
             # told once: where its own data lands. It is a fact about the server, so the server
             # says it — a frontend guess would be a second opinion about the deployment.
             'cloud_mode': Config.CLOUD_MODE,
+            # Whether this host asks for a login. The page shows 退出登录 only when it does, and
+            # keeps the button out of a desktop session that has no session to end.
+            'auth_required': bool(str(Config.AUTH_PASSWORD or '').strip()),
         },
     )
 

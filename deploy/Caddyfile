@@ -1,6 +1,19 @@
 # 采析绘 crawler_workflow — 反向代理配置
-# 部署时写入宿主机 /etc/caddy/Caddyfile，将 80 端口反代到容器映射的 5000。
-:80 {
+# 部署时写入宿主机 /etc/caddy/Caddyfile。
+#
+# 生产：把 example.com 换成你的域名（DNS 指向这台机器），Caddy 自动签发并续期 HTTPS，
+# 80 端口的明文请求会被自动跳转。登录由应用自己负责（容器里的 CRAWLER_AUTH_PASSWORD）——
+# 反向代理不会替应用鉴权，cloud 模式在没有密码时会拒绝启动。
+# profile 模板与 Cookie 都是账号凭据：它们只应走 HTTPS，别把明文 80 直接暴露到公网。
+example.com {
     encode gzip
-    reverse_proxy 127.0.0.1:5000
+    reverse_proxy 127.0.0.1:5000 {
+        header_up X-Forwarded-Proto {scheme}
+    }
 }
+
+# 内网 / 无域名试跑（没有 HTTPS，仅限本机或可信局域网；不要把这一段暴露到公网）：
+# :80 {
+#     encode gzip
+#     reverse_proxy 127.0.0.1:5000
+# }

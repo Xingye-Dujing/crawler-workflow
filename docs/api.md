@@ -2,8 +2,22 @@
 
 > 本文是采析绘文档的一部分，返回总览见 [README.md](../README.md)。
 
-Flask 后端全部 HTTP 端点（`app.py` 引导页 + 25 个 Blueprint；URL map 共 129 条规则、123 条去重路径），按功能分组。
+Flask 后端全部 HTTP 端点（`app.py` 引导页 + 26 个 Blueprint；URL map 共 131 条规则、125 条去重路径），按功能分组。
 CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [docs/crawler_rules.md](crawler_rules.md)。
+
+### 认证（仅在设置 `CRAWLER_AUTH_PASSWORD` 时生效）
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/login` | GET | 登录页（`text/html`，跟随浏览器 `Accept-Language`，可用 `?lang=zh|en` 指定）；已登录时 302 到 `next` 或 `/`；未设置密码时 302 到 `/` |
+| `/login` | POST | 表单 `username` / `password` / `next`：成功写会话并 302 到 `next`（只接受本站路径，`//host`、`\`、`http(s)://` 一律回 `/`）；失败 401 并重绘页面，无会话写入 |
+| `/logout` | POST | 清会话并 302 到 `/login`；会话 id 在服务端**吊销**（重放旧 Cookie 无效）；GET 不到达处理函数（405 或静态兜底 404），宁可失败也不让跨站链接结束会话 |
+
+未登录时：`/api/*` 一律 401（`{ok:false, error}` 且带 `X-Auth-Required: 1`，前端据此跳登录页），其余路径 302 到
+`/login?next=<原地址>`。会话是签名的非持久 Cookie（`cixi_session`，HttpOnly / SameSite=Lax，`CRAWLER_HTTPS=1`
+时 Secure），Cookie 里只有一枚随机会话 id，是否仍有效由服务端进程内的登记表回答——所以退出登录会真正吊销该
+会话、改密码会撤销所有已发出的会话；服务重启则所有人重新登录。cloud 模式没设密码或仍用仓库默认
+`SECRET_KEY` 时，`app.py` 在启动前按名拒绝。
 
 ### 工作流
 

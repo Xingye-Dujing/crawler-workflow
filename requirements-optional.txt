@@ -27,8 +27,11 @@
 # Used by: the Process nodes' sentiment / emotion / tendency operations, mode
 # `bert`. The model itself is a separate download named in the node -- see the README's bert note.
 
-torch
-transformers
+# Pinned like requirements.txt (2026-10-30). torch's local segment (`+cu126` here) is
+# deliberately NOT in the pin: `torch==2.14.1` matches the CUDA wheel a builder installs
+# through --extra-index-url as well as the CPU one, and the comment below explains why.
+torch==2.14.1
+transformers==5.13.0
 
 # -- Parquet export: the columnar engine behind the Output node's `parquet` format ----------
 # `df.to_parquet` needs an engine; `pyarrow` is the one this project names. pandas resolves it
@@ -40,7 +43,7 @@ transformers
 #
 # Used by: the Output node / /api/export/save with format `parquet`.
 
-pyarrow
+pyarrow==24.0.0
 
 # -- Topic modeling: `auto` uses embedding when this stack is present, else LDA -------------
 # `sentence-transformers` (with torch/transformers) is imported by product code --
@@ -55,10 +58,10 @@ pyarrow
 # encoder the embedding path won on both corpora. `bertopic`/`umap-learn`/`hdbscan` are used ONLY by
 # that offline script, not by the app (BERTopic was judged heavier for no gain and was not adopted).
 # None of these are CI-installed.
-sentence-transformers
-bertopic
-umap-learn
-hdbscan
+sentence-transformers==6.1.0
+bertopic==0.17.4
+umap-learn==0.5.12
+hdbscan==0.8.44
 
 # -- Hongguo short-drama comment harvest: the desktop player's proxy signer needs both ------
 # The Hongguo comment endpoint is signature-guarded (x-medusa/x-helios; a byte-identical
@@ -80,8 +83,8 @@ hdbscan
 # itself is gated by `crawl_capabilities.requirement_met('windows_desktop')`, which refuses it on any
 # non-Windows host or in cloud mode, and the panel greys the option out from the same answer.
 
-mitmproxy; sys_platform == "win32"
-uiautomation; sys_platform == "win32"
+mitmproxy==11.0.2; sys_platform == "win32"
+uiautomation==2.0.29; sys_platform == "win32"
 
 # -- ONNX export of the fine-tuned BERTs: dev-only tools, NOT the runtime that answers --
 # `onnx` is imported by exactly one thing: `ml_train/scripts/export_onnx_bert.py`, which turns a
@@ -95,4 +98,4 @@ uiautomation; sys_platform == "win32"
 #
 # Used by: ml_train/scripts/export_onnx_bert.py, ml_train/scripts/eval_onnx_parity.py (offline).
 
-onnx
+onnx==1.23.2

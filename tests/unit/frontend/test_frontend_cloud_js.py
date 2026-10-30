@@ -205,3 +205,47 @@ class TestTheFirstEntryNotice:
             if key not in keys[lang]
         ]
         assert missing == [], f'the notice asks for words no catalogue defines: {missing}'
+
+
+class TestTheWayOutOfALogin:
+    """退出登录 exists where there is a session to end, and nowhere else.
+
+    ``/api/config`` carries both facts in one answer (``cloud_mode`` and ``auth_required``), and
+    the page must not ask a second question whose answer could disagree with the first.
+    """
+
+    def test_a_desktop_boot_has_no_way_out_to_offer(self, booted):
+        assert booted['desktop']['logoutHidden'] is True, booted['desktop']
+
+    def test_a_plain_cloud_host_without_a_password_offers_nothing(self, booted):
+        assert booted['cloud']['logoutHidden'] is True, booted['cloud']
+
+    def test_a_host_that_asks_for_a_login_shows_the_entry(self, booted):
+        assert booted['loginHost']['authRequired'] is True, booted['loginHost']
+        assert booted['loginHost']['logoutHidden'] is False, booted['loginHost']
+
+    def test_the_entry_hides_again_when_a_later_answer_drops_it(self, booted):
+        """The same switch that shows it must undo it: a login turned off on the server has to
+        stop the page offering an exit that now leads nowhere."""
+        assert booted['loginHost']['hidesWhenNotRequired'] is True, booted['loginHost']
+
+    def test_the_entry_is_a_word_in_both_languages(self):
+        keys = _catalog_keys()
+        for lang in ('en', 'zh'):
+            assert 'btn.logout' in keys[lang], f'the {lang} catalogue lacks the logout word'
+
+
+class TestTheExpiredSession:
+    """What the page does when the server answers 401 about the login itself."""
+
+    def test_logout_posts_to_the_server_then_navigates(self, booted):
+        assert booted['logout'] == {
+            'request': {'url': '/logout', 'method': 'POST'},
+            'navigatedTo': '/login',
+        }, booted['logout']
+
+    def test_an_ordinary_response_is_left_alone(self, booted):
+        assert booted['authRedirect']['afterOk'] is None, booted['authRedirect']
+
+    def test_an_auth_401_returns_to_the_login_with_the_address(self, booted):
+        assert booted['authRedirect']['after401'] == '/login?next=%2F', booted['authRedirect']

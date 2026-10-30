@@ -114,6 +114,21 @@ ZH = {
     ),
     'api.workflowRenamed': '工作流已重命名：{old} → {new}',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
+    'auth.badCredentials': '账号或密码不正确',
+    'auth.cloudNeedsPassword': (
+        'cloud 模式必须设置登录密码，否则任何人都能访问这台服务器：请在启动前设置 '
+        'CRAWLER_AUTH_PASSWORD（账号默认 admin，可用 CRAWLER_AUTH_USER 改名）'
+    ),
+    'auth.loginHint': '这台服务器上保存着采集登录态、数据集与运行记录，登录后才能访问。',
+    'auth.loginNeedsSecretKey': (
+        '启用登录后必须设置 SECRET_KEY（现在还是仓库里的默认值）：会话 Cookie 用它签名，'
+        '密钥公开等于任何人都能伪造一个已登录的会话'
+    ),
+    'auth.loginTitle': '登录',
+    'auth.password': '密码',
+    'auth.required': '需要先登录',
+    'auth.signIn': '登录',
+    'auth.username': '账号',
     'compare.nodeMissing': '运行 {rid} 里没有节点 {node}',
     'compare.runMissing': '没有这次运行：{rid}',
     'compare.sameRun': '不能拿一次运行和它自己对比',
@@ -309,6 +324,21 @@ EN = {
     ),
     'api.workflowRenamed': 'Workflow renamed: {old} → {new}',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
+    'auth.badCredentials': 'Wrong username or password',
+    'auth.cloudNeedsPassword': (
+        'Cloud mode needs a login password, or anyone with the address can use this server: set '
+        'CRAWLER_AUTH_PASSWORD before starting (the username is admin unless CRAWLER_AUTH_USER names another)'
+    ),
+    'auth.loginHint': 'This server keeps crawl sessions, datasets and run records — sign in to continue.',
+    'auth.loginNeedsSecretKey': (
+        'A login requires its own SECRET_KEY (this server is still using the repository default): the '
+        'session cookie is signed with it, and a published key lets anyone mint a logged-in session'
+    ),
+    'auth.loginTitle': 'Sign in',
+    'auth.password': 'Password',
+    'auth.required': 'Sign in first',
+    'auth.signIn': 'Sign in',
+    'auth.username': 'Username',
     'compare.nodeMissing': 'Run {rid} has no node {node}',
     'compare.runMissing': 'No such run: {rid}',
     'compare.sameRun': 'A run cannot be compared with itself',

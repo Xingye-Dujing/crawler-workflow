@@ -124,6 +124,8 @@ BODYLESS_POSTS = {
     '/api/runs/purge': 'applies the retention policy, which lives in settings',
     '/api/workflow/queue/clear': 'drops every parked request',
     '/api/workflow/stop': 'sets the stop flag',
+    '/login': 'urlencoded HTML login form, not a JSON body',
+    '/logout': 'takes no input at all — it clears the session and redirects',
 }
 
 

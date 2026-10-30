@@ -7,7 +7,7 @@ own ``_VALID_NODE_TYPES`` plus a labels map. Adding a type meant editing all thr
 was forgotten; a contract test comparing them did not exist.
 
 This is the backend half of the plugin seam (the frontend still renders its own catalogue until
-Phase 2 — see ``docs/refactor_plan.md``): one ``NodePlugin`` per type declares what the type is for,
+Phase 2 — see ``docs/archive/refactor_plan_2026-10.md``): one ``NodePlugin`` per type declares what the type is for,
 which shape it carries downstream, and whether its console lines are quiet. The engine derives its
 sets from here, and the executor table in ``app.py`` is pinned against it by a test, so a new type
 cannot be half-registered.

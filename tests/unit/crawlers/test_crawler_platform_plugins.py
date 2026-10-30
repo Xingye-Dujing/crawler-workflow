@@ -1,6 +1,6 @@
 """The platform plugin boundary: one directory per site, and sites may not reach into each other.
 
-`docs/refactor_plan.md` Stage 1 moved each platform into `crawlers/platforms/<id>/` because one
+`docs/archive/refactor_plan_2026-10.md` Stage 1 moved each platform into `crawlers/platforms/<id>/` because one
 platform's code used to live in three places (its crawler module, its `comments_<id>.py`, and that
 platform's method + in-page JS inside the shared `comments.py`). Splitting files is easy to undo
 silently — a new helper lands in a sibling platform, or a directory appears that nothing registers —

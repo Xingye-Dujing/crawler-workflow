@@ -7,7 +7,7 @@ Two layers, deliberately separate:
 - ``nodes.registry`` — type → ``run(node, call)``; built-in plugins self-register from
   ``nodes.executors``, and ``app`` registers the executors that still live there.
 
-See ``docs/refactor_plan.md`` for the full target and the migration phases.
+See ``docs/archive/refactor_plan_2026-10.md`` for the full target and the migration phases.
 """
 
 from nodes.catalog import (

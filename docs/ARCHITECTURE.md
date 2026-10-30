@@ -14,7 +14,7 @@ not estimated.
 ## Backend layout (70,187 Python LOC across 328 files)
 | area | contents |
 |---|---|
-| `app.py` | **579 LOC: the composition root only** — the WSGI object, the request hooks (origin guard, no-store, language pin), the 25 `register_blueprint` calls, the clock's two wiring lines, startup recovery, the PEP-562 read seams, and **one route**: the served page `/`. The run doors (`/api/workflow/execute`, `/api/workflow/rerun-node`) are `api/workflow.py`; run orchestration is `engine/run.py` (1,291 LOC, **zero nested functions** — every run helper is at module scope, pinned by `tests/unit/gates/test_run_worker_module_scope.py`); the run-record cluster is `api/runs.py`. The URL map holds **129 rules over 123 unique paths** (`len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). |
+| `app.py` | **611 LOC: the composition root only** — the WSGI object, the request hooks (origin guard, login gate, no-store, language pin), the 26 `register_blueprint` calls, the clock's two wiring lines, startup recovery, the PEP-562 read seams, and **one route**: the served page `/`. The run doors (`/api/workflow/execute`, `/api/workflow/rerun-node`) are `api/workflow.py`; run orchestration is `engine/run.py` (1,291 LOC, **zero nested functions** — every run helper is at module scope, pinned by `tests/unit/gates/test_run_worker_module_scope.py`); the run-record cluster is `api/runs.py`. The URL map holds **131 rules over 125 unique paths** (`len(list(app.url_map.iter_rules()))` — extraction moves handlers, never a path). |
 | `core/` | `config.py` (paths, env, constants), `refs.py` (shared value rules: `as_bool`, `platform_for`, `sanitize_filename`), `machine.py` (per-OS machine facts: Chrome / driver / xelatex / Node locations), `procs.py` (`popen_kwargs()`, driver process-tree reclaim). The old `utils/` package was folded in here — there is no `backend/utils/`. |
 | `i18n.py` + `i18n_catalog/` | The zh/en machinery (`t()`, thread-local `set_lang`, `audit`, the merge). The messages are **data**, one module per domain — 10 domains (`crawl`/`collect`/`cookie`/`sched`/`run`/`analysis`/`biblio`/`charts`/`api`/`settings`), merged in `MODULES` order; a key claimed twice is refused at import. `tests/unit/i18n/test_i18n.py` refuses a domain file missing from `MODULES` (an unmerged module would drop its words silently). |
 | `capabilities/` | The single crawl matrix, split by owner: `platforms/<id>.py` (one platform each; panel order pinned by `platforms/__init__`), `fields.py` (shared field atoms + mode factories), `catbus.py` (the second engine's vocabulary), `model.py`/`requirements.py` (dataclasses, machine gates), `registry.py` (the queries — the one answer validation, execution and the Data Source panel read). |
@@ -60,8 +60,9 @@ treat `pytest -q` as the source of truth since the case count is parametrized. F
 hence `CRAWLER_REQUIRE_NODE=1`, which aborts the session instead). See `AGENTS.md` for the
 "nothing skipped" closure gate.
 
-The single roadmap lives in [`refactor_plan.md`](refactor_plan.md) (the audit, target tree, layering
-rules, stage order, definition of done). This file describes only **what is there today**.
+The roadmap that produced this tree lives in [`archive/refactor_plan_2026-10.md`](archive/refactor_plan_2026-10.md)
+(the audit, target tree, layering rules, stage order, definition of done; completed 2026-10-29). This file
+describes only **what is there today**.
 
 ## Refactor constraint that shapes every move (finding E)
 
@@ -102,9 +103,10 @@ Tests that patched them under `app.*` were re-pointed in the same commit as the 
   buffer, `history_service`/`cookie_manager`), `stores.py` (the store registry + lazy getters — the seam
   the harness rebinds), `settings.py` (`data/settings.json`), `gate.py` (same-platform crawl gate),
   `transport.py` (cloud refusal for local-only model transports).
-- `backend/api/` — 24 blueprint modules + `http.py` (request coercions) + `resolution.py`
+- `backend/api/` — 25 blueprint modules + `http.py` (request coercions) + `resolution.py`
   (`_resolve_dataframe`, `NoRunDataError`), all registered in `app.py`. Together they hold the whole HTTP
-  surface (123 unique paths); `app.py` itself keeps only the `/` route.
+  surface (125 unique paths); `app.py` itself keeps only the `/` route. `auth.py` is the login page,
+  the session gate and the cloud-mode startup refusal.
 - `backend/nodes/executors/` — all 14 node types, each `NODE_TYPE` + `run(node, call)` + its own column
   contract (`emit_columns`/`read_columns`), self-registered in `nodes/registry.py`. `nodes/schema.py` only
   walks the graph and resolves a type through the registry, so the plugin is the one place its columns are

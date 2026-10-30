@@ -26,6 +26,10 @@ const src = sourceOf(...process.argv.slice(2));
 /* One /api/config answer, switchable per scenario: the real boot reads it once, and the
    assertions below are about what the page does with the answer it got. */
 let cloudAnswer = false;
+/* Whether this host asks for a login. Separate from cloudAnswer because the two facts are
+   independent: an operator may put a password on a LAN box that is not in cloud mode. */
+let authAnswer = false;
+let navigatedTo = null;
 const requests = [];
 const sandbox = { ...baseSandbox() };
 vm.createContext(sandbox);
@@ -47,6 +51,7 @@ sandbox.fetch = () => {
                 default_headless: true,
                 max_workers: 4,
                 cloud_mode: cloudAnswer,
+                auth_required: authAnswer,
             }),
     });
 };
@@ -65,6 +70,13 @@ sandbox.showDialog = (spec) => {
 };
 
 const doc = sandbox.document;
+/* Where the page would navigate. `logout` and `redirectIfAuthRequired` both call it; the real
+   Location in a browser has it, and the base sandbox's stub only carries href/origin. */
+sandbox.location.pathname = '/';
+sandbox.location.search = '';
+sandbox.location.assign = (url) => {
+    navigatedTo = url;
+};
 const flush = async () => {
     for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
 };
@@ -91,6 +103,12 @@ function buildAiMenu() {
     ollamaModel.id = 'ai-ollama-model';
     ollamaModel.className = 'ai-only-ollama';
     doc2.body.appendChild(ollamaModel);
+    /* The way out of a login: the top bar's 退出登录 entry, hidden in the shipped markup and
+       shown by CloudMode.apply() only when /api/config says this host asks for a login. */
+    const logoutBtn = doc2.createElement('button');
+    logoutBtn.id = 'btn-logout';
+    logoutBtn.hidden = true;
+    doc2.body.appendChild(logoutBtn);
 }
 
 const providerValues = () =>
@@ -121,6 +139,7 @@ out.desktop = {
     payload: LLMSettings.payload().provider,
     label: llmModeLabel(),
     configAsked: requests.length,
+    logoutHidden: doc.getElementById('btn-logout').hidden,
     /* The notice is a cloud thing or it is noise: on the machine whose owner is standing
        in front of it, "your cookies live on this disk" says nothing they can act on. */
     dialogs: dialogs.slice(),
@@ -157,7 +176,21 @@ out.cloud = {
     payloadModel: cloudPayload.model,
     label: llmModeLabel(),
     ollamaRowDisplay: Array.prototype.map.call(doc.querySelectorAll('.ai-only-ollama'), (el) => el.style.display),
+    logoutHidden: doc.getElementById('btn-logout').hidden,
 };
+
+/* ── a host that asks for a login: the way out exists ─────────────────── */
+authAnswer = true;
+boot();
+await LLMSettings.loadDefaults();
+await flush();
+out.loginHost = {
+    authRequired: CloudMode.authRequired,
+    logoutHidden: doc.getElementById('btn-logout').hidden,
+};
+CloudMode.set(true, false);
+out.loginHost.hidesWhenNotRequired = doc.getElementById('btn-logout').hidden;
+authAnswer = false;
 
 /* ── the notice: asked once, and 「不再提醒」 means this browser ───────── */
 const NOTICE_KEY = 'crawler_privacy_ack';
@@ -217,5 +250,28 @@ out.labels = labels;
 CloudMode.set(true);
 CloudMode.set(false);
 out.turnsBack = { flag: CloudMode.on, dataCloud: doc.documentElement.dataset.cloud };
+
+/* ── the way out, and the expired-session redirect ─────────────────────── */
+navigatedTo = null;
+let logoutRequest = null;
+const configFetch = sandbox.fetch;
+sandbox.fetch = (url, init) => {
+    logoutRequest = { url: String(url), method: (init && init.method) || 'GET' };
+    return Promise.resolve({ status: 200, json: () => Promise.resolve({}) });
+};
+sandbox.logout();
+await flush();
+out.logout = { request: logoutRequest, navigatedTo };
+sandbox.fetch = configFetch;
+
+navigatedTo = null;
+sandbox.redirectIfAuthRequired({ status: 200, headers: { get: () => null } });
+const afterOk = navigatedTo;
+navigatedTo = null;
+sandbox.redirectIfAuthRequired({
+    status: 401,
+    headers: { get: (name) => (name === 'X-Auth-Required' ? '1' : null) },
+});
+out.authRedirect = { afterOk, after401: navigatedTo };
 
 process.stdout.write(JSON.stringify(out));

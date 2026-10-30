@@ -13,6 +13,14 @@ services:
       PORT: "5000"
       CRAWLER_DATA_ROOT: "/app"
       FLASK_DEBUG: "0"
+      # cloud mode refuses to start without these two (api/auth.py names whichever is missing).
+      # `${VAR:?message}` makes compose stop before the container even boots, so the answer is a
+      # sentence about the missing variable rather than a restart loop reading the app's log.
+      CRAWLER_AUTH_USER: ${CRAWLER_AUTH_USER:-admin}
+      CRAWLER_AUTH_PASSWORD: ${CRAWLER_AUTH_PASSWORD:?export CRAWLER_AUTH_PASSWORD before docker compose up}
+      SECRET_KEY: ${SECRET_KEY:?export SECRET_KEY (a random 32-byte hex) before docker compose up}
+      # The proxy terminates TLS; the session cookie must be marked Secure.
+      CRAWLER_HTTPS: ${CRAWLER_HTTPS:-1}
     volumes:
       - crawler-data:/app/data
       - crawler-logs:/app/logs

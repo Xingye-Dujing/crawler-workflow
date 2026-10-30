@@ -6,7 +6,8 @@ Read the matching section before rewriting, doubting, or "simplifying away" a ru
 a broken feature, a silently-skipped green tier, a blank page). **Grep by the bolded rule title** — the same anchor
 `AGENTS.md` uses; every bolded title survives on purpose.
 
-Dedup with the other docs: the refactor **ledger** is `docs/refactor_plan.md`; **crawler imperatives** live only in
+Dedup with the other docs: the refactor **ledger** is `docs/archive/refactor_plan_2026-10.md` (archived when
+the refactor completed); **crawler imperatives** live only in
 `docs/crawler_rules.md` (linked, never copied here). A whole-project refactor (Stages 0–11) is complete; this file
 records why each rule exists, not the migration narration.
 

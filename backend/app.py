@@ -7,6 +7,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
+from api import auth as web_auth
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
 from api.capabilities import bp as capabilities_bp
@@ -81,8 +82,25 @@ def _cloud_requested(argv) -> bool:
 if _cloud_requested(sys.argv[1:]):
     Config.CLOUD_MODE = True
 
+# A cloud host is the one shape that reaches strangers, so it cannot start without a login and a
+# session key of its own (api/auth.py::startup_error names whichever is missing). Refusing here,
+# before any request can be served, is the point: a server that boots "fine" and serves everyone
+# has already failed by the time anyone notices.
+_cloud_refusal = web_auth.startup_error()
+if _cloud_refusal:
+    raise SystemExit(_cloud_refusal)
+
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
+# The login is a signed session cookie: HttpOnly so page scripts cannot read it, SameSite=Lax so a
+# foreign page's POST does not carry it, and Secure only when a proxy actually terminates TLS (a
+# Secure cookie on plain HTTP is never sent back, which would look like "the password is ignored").
+app.config.update(
+    SESSION_COOKIE_NAME='cixi_session',
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=Config.HTTPS_ONLY,
+)
 
 # The UI is served by THIS process and every one of its ``fetch`` calls uses a relative
 # ``/api/...`` path, so no legitimate request is ever cross-origin. The old ``CORS(app)``
@@ -280,6 +298,17 @@ def _apply_request_lang():
     set_lang(request.headers.get('X-Lang') or request.args.get('lang') or 'zh')
 
 
+@app.before_request
+def _require_login():
+    """Refuse an unauthenticated request before any route can answer it.
+
+    Runs after the language pin (the 401's sentence is translated) and after the origin guard
+    (a foreign page stays a 403 whatever its session says). A no-op whenever no password is
+    configured, which is the local single-user default.
+    """
+    return web_auth.gate()
+
+
 # Uploaded, pasted and cleaned files live in the DatasetStore (data/datasets.db)
 # rather than in this process. They back the Upload node exactly as the registry
 # below used to — a file becomes ordinary rows, and no downstream node knows it
@@ -434,6 +463,9 @@ node_registry.load_builtin_executors()
 app.register_blueprint(stats_bp)
 app.register_blueprint(locks_bp)
 app.register_blueprint(node_types_bp)
+# The login page and 退出登录 (api/auth.py). The gate that refuses every other route lives in
+# ``_require_login`` above, so a route added later cannot forget it.
+app.register_blueprint(web_auth.bp)
 app.register_blueprint(exports_bp)
 app.register_blueprint(data_bp)
 app.register_blueprint(diagnostics_bp)

@@ -204,6 +204,18 @@
         >
           Cookies
         </button>
+        <!-- Shown only on a host that asks for a login (/api/config.auth_required); a desktop
+             session has no session to end, so the entry stays out of the bar. -->
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-logout"
+          onclick="logout()"
+          data-i18n="btn.logout"
+          hidden
+        >
+          退出登录
+        </button>
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.data">Data</span>

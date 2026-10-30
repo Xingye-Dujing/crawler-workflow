@@ -206,6 +206,25 @@ curl -s https://api.github.com/repos/Xingye-Dujing/crawler-workflow/actions/runs
 torch/transformers，几个 GB，不装也能正常用其它功能）见 `requirements-optional.txt`。修改代码后的完整验证流程见
 `AGENTS.md` 的 "Change workflow"。全平台真机验收的用例矩阵与运行手册见 [live_test_plan.md](live_test_plan.md)。
 
+## 备份与恢复
+
+`data/` 不在 git 里（只有 `data/workflows/` 是版本化的例外），所以一次 push 保护不了运行记录、数据集与登录态；
+仓库的 git 历史也曾被工具误删过一次。两条互补的备份路径：
+
+- **远端**：每次提交后同时 push `crawler-github` 与 `gitee`（`git remote -v` 核对）；两个远端都不含 `data/`。
+- **还原点**：`tools/backup.py` 在 `backups/<时间>/` 下写三样东西——`repo.bundle`（全部 ref，
+  `git clone repo.bundle` 即可恢复代码与历史）、`data.zip`（`workflows/`、`reusable_nodes/`、`*.db`、
+  `settings.json`、`model_registry.json`）、`manifest.json`（时间、HEAD、工作区是否脏、远端、成员清单）。
+  - 默认**不含** `data/cookies/`：那是明文账号凭据，备份文件常被拷来拷去。确需时加 `--with-cookies`，
+    并把那份 zip 当作密码保管。
+  - 不含 `chrome_profile/`、`exports/`、`logs/`：浏览器数据与可再生文件，不值得进归档。
+  - 命令：`.venv/Scripts/python.exe tools/backup.py [--out <目录>] [--with-cookies]`（Linux/macOS 用
+    `.venv/bin/python`）。`backups/` 已在 `.gitignore` 内。
+  - **`runs.db` 会随运行增长**（本机实测 5.8 GB）：备份前先按保留策略清一次，或把 `--data` 指向一份精简副本；
+    清单里的 `data_bytes` 与命令输出都会报出这次归档了多大。
+- **恢复**：停服务 → `git clone backups/<ts>/repo.bundle crawler_workflow` → 把 `data.zip` 解到该**检出根目录**
+  （包内已带 `data/` 前缀）→ 建 `.venv`、`pip install -r requirements.txt` → 从 `backend/` 启动。
+
 ## 已知的一个第三方警告（保持可见，绝不过滤）
 
 快速套件始终恰好打印**一个** `DeprecationWarning`：

@@ -210,14 +210,21 @@ class TestTheSweepItself:
 class TestSessionsAreNotASecretInTheDefaultBoot:
     """``SECRET_KEY`` signs Flask sessions, and the built-in value is a published constant.
 
-    The honest reason that is not a hole today: this app never imports ``flask.session`` —
-    it is a cookie-less JSON API with no login of its own. That is a property of the code,
-    not of the environment, so it is pinned at the import: the day a module starts using
-    sessions, the shipped default key becomes a real finding and this test says so before
-    the deploy does.
+    The app used to import no ``flask.session`` at all — it was a cookie-less JSON API with no
+    login of its own, which is what made the published fallback harmless. The login (2026-10-30)
+    is exactly that exception: ``api/auth.py`` is the ONE module allowed to hold a session, and the
+    rule that justifies it is enforced at startup instead of hidden — ``api.auth.startup_error``
+    refuses to boot a host that has a password but still signs its cookie with the published key
+    (cloud mode additionally refuses to boot without a password at all). This test is the tripwire
+    for both halves: a second session user, or a startup that forgets the key rule, fails here
+    before a deploy finds it.
     """
 
-    def test_no_backend_module_imports_flask_session(self, app_module):
+    #: The one module allowed to sign a session, and why: the login must remember that this
+    #: browser signed in, and it does so in a cookie only after the key rule above has passed.
+    SESSION_MODULE = 'auth.py'
+
+    def test_only_the_login_module_imports_flask_session(self, app_module):
         import ast
         from pathlib import Path
 
@@ -226,15 +233,25 @@ class TestSessionsAreNotASecretInTheDefaultBoot:
         for path in sorted(backend.rglob('*.py')):
             if path.name.startswith('test_'):
                 continue  # the manual probe scripts in backend/ are not shipped code paths
+            if path.name == self.SESSION_MODULE:
+                continue
             tree = ast.parse(path.read_text(encoding='utf-8'))
             for node in ast.walk(tree):
                 imports_flask = isinstance(node, ast.ImportFrom) and (node.module or '').split('.')[0] == 'flask'
                 if imports_flask and any(alias.name == 'session' for alias in node.names):
                     hits.append(f'{path.name}:{node.lineno}')
-        assert hits == [], f'Flask sessions are now in use, so the published default SECRET_KEY signs them: {hits}'
+        assert hits == [], f'more than the login now depends on Flask sessions: {hits}'
+
+    def test_a_login_signed_with_the_published_key_refuses_to_start(self, monkeypatch):
+        from api import auth
+
+        monkeypatch.setattr(Config, 'AUTH_PASSWORD', 'a password')
+        monkeypatch.setattr(Config, 'SECRET_KEY', Config.DEFAULT_SECRET_KEY)
+        message = auth.startup_error()
+        assert message and 'SECRET_KEY' in message, message
 
     def test_the_built_in_key_is_still_the_documented_fallback(self):
-        assert Config.SECRET_KEY == 'crawler-workflow-secret-key', (
+        assert Config.SECRET_KEY == Config.DEFAULT_SECRET_KEY, (
             'someone changed the shipped default — update this file and the README, because '
             'the point of the pin is that the fallback is public and therefore unused'
         )
