@@ -37,7 +37,7 @@ import uuid
 
 import requests
 from capabilities import requirements
-from core import machine
+from core import machine, procs
 from core.refs import as_bool
 from runtime import paths
 from runtime.settings import get_setting
@@ -797,6 +797,7 @@ class HongguoCommentHarness:
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            **procs.popen_kwargs(),
         )
         deadline = time.time() + 15
         while time.time() < deadline:
@@ -857,6 +858,7 @@ class HongguoCommentHarness:
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            **procs.popen_kwargs(),
         )
 
     # ─── the walk's bookkeeping ───
@@ -960,15 +962,9 @@ class HongguoCommentHarness:
             setattr(self, attr, None)
             if handle is None:
                 continue
-            try:
-                subprocess.run(
-                    ['taskkill', '/F', '/T', '/PID', str(handle.pid)],
-                    capture_output=True,
-                    timeout=8,
-                    check=False,
-                )
-            except Exception as exc:
-                logger.debug('hongguo harvest: reaping %s failed: %s', getattr(handle, 'pid', '?'), exc)
+            stopped, reason = procs.reap_process(handle.pid)
+            if not stopped:
+                logger.debug('hongguo harvest: reaping %s failed: %s', handle.pid, reason)
         try:
             if self._capture and os.path.exists(self._capture):
                 os.remove(self._capture)

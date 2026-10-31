@@ -25,7 +25,7 @@ import sqlite3
 import threading
 import time
 
-from core.config import Config
+from runtime import paths
 
 #: Columns that describe a node's neighbourhood rather than the node. The edges are captured
 #: separately, so storing `连接` inside every node row would double the payload and let the two
@@ -245,7 +245,7 @@ class BiblioStore:
     """Projects and captured bibliometrics tables."""
 
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or Config.BIBLIO_DB
+        self.db_path = db_path or paths.active().biblio_db
         os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)

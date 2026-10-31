@@ -1,5 +1,6 @@
 """The account registry's rules: bootstrap, login, sessions, lockout and administration."""
 
+import contextlib
 import os
 import threading
 import time
@@ -119,6 +120,101 @@ def test_unknown_username_answers_the_same_refusal(service):
     assert 'nobody' not in str(exc.value)
 
 
+def test_a_burst_of_wrong_passwords_locks_the_account_not_one_attempt(service, monkeypatch):
+    """The failed-attempt counter is added IN THE ROW, not in Python.
+
+    Reading ``failed_attempts``, adding one and writing the total back is the classic lost update:
+    a scripted burst of five concurrent guesses all read the same number, so the account ended the
+    attack at 「1 failure」 and 「连续 5 次锁 15 分钟」 — the whole point of the lock — never arrived.
+    The barrier makes the burst real instead of hoping threads interleave: every thread has already
+    read the row before any of them increments it.
+    """
+    from services.accounts import service as accounts_service
+
+    attempts = 5
+    accounts_service.reset_throttle()
+    _bootstrap(service)
+    arrived = threading.Barrier(attempts)
+
+    def everyone_has_read_the_row(_password, _hash):
+        arrived.wait(timeout=10)
+        return False
+
+    monkeypatch.setattr(security, 'verify_password', everyone_has_read_the_row)
+
+    def guess():
+        with contextlib.suppress(AccountError):
+            _login(service, password='wrong-password')
+
+    threads = [threading.Thread(target=guess) for _ in range(attempts)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=20)
+
+    row = service.store.get_user_by_username('admin')
+    assert int(row['failed_attempts']) == attempts, row['failed_attempts']
+    assert float(row['locked_until']) > time.time(), 'a five-guess burst left the account unlocked'
+
+
+def test_a_lock_is_never_armed_over_a_login_that_just_succeeded(service):
+    """The lock write re-checks the counter it was computed from.
+
+    The increment and the lock are two writes, and a correct login can land between them and zero
+    the counter. Arming anyway would refuse the person who just proved the password — so the row
+    must still be at that number for the lock to be written."""
+    admin = _bootstrap(service)
+    user_id = admin['user_id']
+    assert service.store.bump_failure(user_id, time.time()) == 1
+    service.store.record_login(user_id, time.time(), '127.0.0.1')
+    assert service.store.set_locked_until(user_id, time.time() + 900, 1) is False
+    assert float(service.store.get_user(user_id)['locked_until']) == 0
+
+
+def test_the_failure_window_is_bounded_by_size_not_by_politeness(service, monkeypatch):
+    """A stranger typing a thousand random usernames used to leave a thousand permanent entries.
+
+    ``_prune`` only ever cleans the key a login just touched, so nothing revisits the entries an
+    attacker abandoned: memory grew with the traffic and every later login scanned a longer
+    dictionary. The window therefore has a size ceiling, and the entries it drops are the oldest —
+    the per-account lock lives in the database and is not affected."""
+    from services.accounts import service as accounts_service
+
+    accounts_service.reset_throttle()
+    monkeypatch.setattr(accounts_service, 'MAX_WINDOWS', 8)
+    throttle = accounts_service._throttle
+    for index in range(40):
+        throttle.record('10.0.0.1', f'guessed-name-{index}')
+    assert len(throttle._hits) <= 8, len(throttle._hits)
+    assert throttle._key('10.0.0.1', 'guessed-name-39') in throttle._hits
+    assert throttle._key('10.0.0.1', 'guessed-name-0') not in throttle._hits
+
+
+def test_a_wrong_current_password_is_refused_like_a_wrong_login(service, monkeypatch):
+    """The change-password endpoint proved the old password with no window at all.
+
+    Anyone holding a live session — a shared unlocked browser, any same-origin script — could guess
+    「当前密码」 without limit, and every guess costs this server a scrypt run: an unbounded request
+    that is also unbounded CPU. The login window is the same guard, keyed to the account."""
+    from services.accounts import service as accounts_service
+
+    accounts_service.reset_throttle()
+    monkeypatch.setattr(accounts_service, 'IP_FAILURE_LIMIT', 3)
+    _bootstrap(service)
+    ticket = _login(service, username='admin', password=PASSWORD)
+    for _ in range(3):
+        with pytest.raises(AccountError) as exc:
+            service.change_password(ticket.account, 'nope', 'a-brand-new-password', ticket.token, ip='10.2.2.2')
+        assert exc.value.key == 'accounts.currentPasswordWrong'
+    with pytest.raises(AccountError) as exc:
+        service.change_password(ticket.account, 'nope', 'a-brand-new-password', ticket.token, ip='10.2.2.2')
+    assert exc.value.key == 'accounts.tooManyAttempts'
+    # The right answer from a fresh address is still accepted, and it clears that address's window.
+    service.change_password(ticket.account, PASSWORD, 'a-brand-new-password', ticket.token, ip='10.3.3.3')
+    assert not accounts_service._throttle.blocked('10.3.3.3', 'change:' + ticket.account.user_id)
+    accounts_service.reset_throttle()
+
+
 def test_disabled_account_cannot_log_in(service):
     admin = _bootstrap(service)
     admin = _admin(service)
@@ -166,6 +262,42 @@ def test_change_password_keeps_the_current_session_only(service):
     with pytest.raises(AccountError) as exc:
         service.change_password(first.account, PASSWORD, 'yet-another-password', first.token)
     assert exc.value.key == 'accounts.currentPasswordWrong'
+
+
+def test_the_delete_probe_never_hands_out_the_row(service):
+    """:meth:`check_deletable` reads the ``users`` table, so it must answer in the public shape.
+
+    The route discards the value today — one line of luck, not a rule. A row carries
+    ``password_hash``, and this service promises never to return one."""
+    _bootstrap(service)
+    admin = _admin(service)
+    bob = service.create_user(admin, 'bob', PASSWORD)
+    answer = service.check_deletable(admin, bob['user_id'], 'bob')
+    assert 'password_hash' not in answer, sorted(answer)
+    assert answer['username'] == 'bob'
+    with pytest.raises(AccountError) as exc:
+        service.check_deletable(admin, bob['user_id'], 'nobody')
+    assert exc.value.key == 'accounts.confirmMismatch'
+
+
+def test_replacing_the_service_closes_the_store_it_replaced(tmp_path, monkeypatch):
+    """Dropping the singleton is not dropping its connection.
+
+    ``AccountsStore`` holds one SQLite handle for its lifetime, so every replacement left a live
+    ``accounts.db`` connection (and its ``-wal``/``-shm``) behind — on Windows that is also a
+    directory nothing can delete, and across a test session it is one handle per login."""
+    import sqlite3
+
+    from services.accounts import service as accounts_service
+
+    database = tmp_path / 'accounts.db'
+    monkeypatch.setattr(Config, 'ACCOUNTS_DB', str(database))
+    first = AccountService()
+    accounts_service.reset_service(first)
+    accounts_service.reset_service(AccountService())
+    with pytest.raises(sqlite3.ProgrammingError):
+        first.store._conn.execute('SELECT 1')
+    accounts_service.reset_service()
 
 
 def test_the_last_active_admin_cannot_be_disabled_or_deleted(service):

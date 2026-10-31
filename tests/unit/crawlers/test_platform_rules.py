@@ -7,6 +7,7 @@ machine has no Linux runtime (no docker, no WSL, by the user's decision), so a r
 an explicitly unverified surface, named as such in ``docs/agent_practices.md``.
 """
 
+import ast
 import io
 import os
 import re
@@ -126,6 +127,24 @@ class TestTheRuleHasTeeth:
                     offenders.append(f'{relative}:{line[:90]}')
         assert offenders == [], 'Windows-only code outside the per-OS tables:\n' + '\n'.join(offenders)
 
+    def test_the_reaper_command_is_written_down_exactly_once(self):
+        """``taskkill`` belongs to :mod:`core.procs` alone — a general exemption is not a licence.
+
+        The harvest module is on the table list because it genuinely talks to the Windows certificate
+        store and finds the player window through ``ctypes.windll``. That says nothing about killing a
+        process, and the inline ``taskkill /F /T /PID`` that used to sit inside its ``close()`` is
+        precisely the hand-rolled reaper this module exists to prevent: off Windows it raises
+        ``FileNotFoundError``, and the reaper module was born from one such raise being swallowed
+        together with the line that marked a session dead."""
+        reaper = (BACKEND / 'core' / 'procs.py').resolve()
+        offenders = []
+        for path in sorted(BACKEND.rglob('*.py')):
+            if path.name.startswith('test_') or '__pycache__' in path.parts or path.resolve() == reaper:
+                continue
+            if any('taskkill' in line for line in _code_lines(path.read_text(encoding='utf-8', errors='replace'))):
+                offenders.append(path.relative_to(BACKEND).as_posix())
+        assert offenders == [], 'an inline reaper: ' + ', '.join(offenders)
+
     def test_the_scan_sees_a_windows_call_and_ignores_prose_about_one(self):
         # A guard that cannot fire is worse than no guard: it only claims the rule is checked.
         sample = 'x = 1\n"""\nUsed to run taskkill /F /IM chromedriver.exe here.\n"""\ny = ctypes.windll\n'
@@ -138,6 +157,67 @@ class TestTheRuleHasTeeth:
             path = BACKEND / relative
             assert path.is_file(), path
             assert _WINDOWS_ARTIFACT.search(path.read_text(encoding='utf-8')), relative
+
+
+class TestSpawnedHelpersOpenNoWindow:
+    """Every child this backend starts goes through :func:`core.procs.popen_kwargs`.
+
+    ``windowsHide`` is not a ``Popen`` keyword at all (``TypeError``), and ``CREATE_NO_WINDOW`` exists
+    only on Windows — which is why the answer is one helper that returns ``{}`` on POSIX and the flag
+    here. A spawn site that skips it prints a black console window for every PDF compiled, every
+    harvest proxy, every reaped browser, on a packaged server that has no console of its own.
+    """
+
+    _SPAWNS = ('run', 'Popen', 'check_output', 'check_call')
+
+    def _spawn_calls(self, tree):
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            base = node.func.value
+            if node.func.attr in self._SPAWNS and isinstance(base, ast.Name) and base.id == 'subprocess':
+                yield node
+
+    @staticmethod
+    def _is_the_helper(value) -> bool:
+        """``procs.popen_kwargs()`` from a caller; the bare ``popen_kwargs()`` inside its own module.
+
+        The rule is WHERE the flag comes from, not how the caller spells it."""
+        if not isinstance(value, ast.Call):
+            return False
+        func = value.func
+        if isinstance(func, ast.Attribute):
+            return func.attr == 'popen_kwargs'
+        return isinstance(func, ast.Name) and func.id == 'popen_kwargs'
+
+    def _uses_the_helper(self, node) -> bool:
+        return any(
+            isinstance(kw, ast.keyword) and kw.arg is None and self._is_the_helper(kw.value) for kw in node.keywords
+        )
+
+    def test_every_backend_spawn_site_hides_its_console(self):
+        offenders = []
+        for path in sorted(BACKEND.rglob('*.py')):
+            if path.name.startswith('test_') or '__pycache__' in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            offenders.extend(
+                f'{path.relative_to(BACKEND).as_posix()}:{node.lineno}'
+                for node in self._spawn_calls(tree)
+                if not self._uses_the_helper(node)
+            )
+        assert offenders == [], 'started without procs.popen_kwargs(): ' + ', '.join(offenders)
+
+    def test_the_gate_notices_a_site_that_forgets_the_helper(self):
+        """A scan that matches nothing reports a green rule nobody wrote."""
+        node = next(self._spawn_calls(ast.parse('import subprocess\nsubprocess.run(["x"], capture_output=True)\n')))
+        assert self._uses_the_helper(node) is False
+        starred = next(
+            self._spawn_calls(
+                ast.parse('import subprocess\nfrom core import procs\nsubprocess.run(["x"], **procs.popen_kwargs())\n')
+            )
+        )
+        assert self._uses_the_helper(starred) is True
 
 
 class TestThePlatformTablesAreComplete:

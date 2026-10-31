@@ -118,12 +118,34 @@ function handlePasswordChangeRequired(response) {
 
 /* End this browser's login (the top bar's 退出登录 entry). A POST, because a cross-site link or
    image must not be able to end someone's session; the server answers with a redirect to the
-   login page either way, so the navigation below is the one thing left to do. */
+   login page either way, so the navigation below is the one thing left to do — AFTER the server
+   agrees. Navigating on a refused POST sends the user to 「/login」 over a session that is still
+   alive, and that page answers by bouncing them straight back to the canvas: the sign-out button
+   looks broken and the cookie keeps working. */
+function _retryLogout() {
+    /* A refusal is almost always a token the page no longer has: changing a password rotates the
+       session, and /api/config is where the current CSRF token is published. Re-read it and ask
+       once more rather than reporting a failure the user cannot act on. */
+    return fetch('/api/config')
+        .then((response) => response.json())
+        .then((body) => {
+            const token = body && body.auth && body.auth.csrf_token;
+            if (!token) return false;
+            Auth.token = token;
+            return fetch('/logout', { method: 'POST', headers: { 'X-CSRF-Token': token } })
+                .then((again) => !!again.ok, () => false);
+        }, () => false);
+}
+
 function logout() {
-    fetch('/logout', { method: 'POST' })
-        .catch(() => { })
-        .then(() => {
-            if (typeof location !== 'undefined' && typeof location.assign === 'function') location.assign('/login');
+    return fetch('/logout', { method: 'POST' })
+        .then((response) => (response.ok ? true : _retryLogout()), () => _retryLogout())
+        .then((ended) => {
+            if (ended) {
+                if (typeof location !== 'undefined' && typeof location.assign === 'function') location.assign('/login');
+                return;
+            }
+            showToast(I18n.t('accounts.logoutRefused'));
         });
 }
 

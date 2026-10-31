@@ -91,6 +91,7 @@ def reap_process(pid: int, system: str | None = None, proc_root: str = '/proc') 
                 capture_output=True,
                 timeout=8,
                 check=False,
+                **popen_kwargs(system),
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return False, str(exc)

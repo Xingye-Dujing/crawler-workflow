@@ -274,10 +274,13 @@ class RowsMixin:
     def replace_rows(self, run_id: str, node_id: str, rows: list, label: str = ''):
         """Store a node's complete output at once. Atomic nodes (pandas
         transforms, charts, exports) have no meaningful intermediate state, so
-        their durable form is simply "the result"."""
-        with self._lock:
-            self._conn.execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
-            self._conn.commit()
+        their durable form is simply "the result".
+
+        One transaction, and the payload is built BEFORE anything is deleted: the delete and the
+        insert used to be two commits, so a process killed between them — or one row that refused
+        to serialise — left the node with no rows and no ``finish_node``. ``settle_nodes`` then read
+        zero and the record said a table that had been produced had produced nothing.
+        """
         limit = Config.RUN_MAX_ROWS_PER_NODE
         if len(rows) > limit:
             logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
@@ -285,12 +288,21 @@ class RowsMixin:
         stamp = self.now()
         payload = [(run_id, node_id, i, item_key(row), _dumps(row), stamp) for i, row in enumerate(rows)]
         with self._lock:
-            self._conn.executemany(
-                'INSERT OR REPLACE INTO node_rows (run_id, node_id, seq, row_key, payload, created_at) '
-                'VALUES (?, ?, ?, ?, ?, ?)',
-                payload,
-            )
-            self._conn.commit()
+            try:
+                self._conn.execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+                self._conn.executemany(
+                    'INSERT OR REPLACE INTO node_rows (run_id, node_id, seq, row_key, payload, created_at) '
+                    'VALUES (?, ?, ?, ?, ?, ?)',
+                    payload,
+                )
+                self._conn.commit()
+            except Exception:
+                # Nothing in this store rolls back anywhere else, because nothing else leaves a
+                # transaction half-open: here the DELETE is already staged, and an aborted insert
+                # that was not wound back would be COMMITTED by the next write on this connection —
+                # the same lost table, one operation later and far from its cause.
+                self._conn.rollback()
+                raise
         return len(rows)
 
     def load_rows(self, run_id: str, node_id: str) -> list:

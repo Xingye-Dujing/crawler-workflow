@@ -3,8 +3,8 @@
 Twelve routes over the durable ledger — which runs can be continued, the records themselves,
 the live status of the run in flight, retention (purge / discard / delete / clear, each of which
 must spare what the user pinned), the detail panel, and the two console-log reads. Nothing here
-starts a run: ``/api/workflow/execute`` and the orchestration stay in ``app.py``, and the panel
-asks ``state`` who is running instead of keeping a second opinion.
+starts a run: ``/api/workflow/execute`` is the route and :func:`engine.run.begin_run` is the one
+start path, and the panel asks ``state`` who is running instead of keeping a second opinion.
 
 The log reads share :func:`_log_filters` on purpose — the JSON page and the ``.log.txt``
 download must answer the same ``wf``/``level``/``q`` question, because the download is

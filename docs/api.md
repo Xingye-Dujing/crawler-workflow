@@ -13,14 +13,14 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/login` | POST | 表单 `username` / `password` / `next` / `csrf`（页面内一次性令牌）：成功写会话并 302 到 `next`（只接受本站路径）；失败 401 并重绘页面，无会话写入 |
 | `/logout` | POST | 清会话并 302 到 `/login`；服务端**吊销**该会话（重放旧 Cookie 无效）；需要会话 CSRF 头；GET 不到达处理函数 |
 | `/api/account/me` | GET | 当前账号 `{user_id, username, role, must_change_password}` |
-| `/api/account/password` | POST | `{current_password, new_password}`：本人改密，吊销其它会话，清 `must_change_password` |
-| `/api/accounts` | GET | 账号列表（管理员；不含密码或哈希） |
+| `/api/account/password` | POST | `{current_password, new_password}`：本人改密，吊销其它会话，清 `must_change_password`；`current_password` 猜错与登录共用失败窗口，超了就 429 |
+| `/api/accounts` | GET | 账号列表（管理员；不含密码或哈希；时刻同时给数值与服务端读法 `created_local`/`last_login_local`，面板只显示后者） |
 | `/api/accounts` | POST | `{username, password, role}` 创建账号（管理员；新账号首次登录须改密） |
 | `/api/accounts/<id>/password` | POST | `{password, must_change}` 重置密码（管理员；吊销该账号全部会话） |
 | `/api/accounts/<id>/status` | POST | `{status: active|disabled}` 启用/禁用（管理员；禁用即吊销会话，有运行中任务时 409） |
 | `/api/accounts/<id>/logout` | POST | 强制下线（管理员；该账号没有运行中的任务时同时释放它的库句柄与缓存） |
-| `/api/accounts/<id>` | DELETE | `{confirm_username}` 删除账号（管理员；先授权再动目标的数据，运行中或有登录窗口时 409；数据目录移入 `users/.trash/`，最后一个管理员不可删除；移动失败答 JSON 而非网页） |
-| `/api/accounts/audit` | GET | 最近审计（管理员，`limit` ≤ 500） |
+| `/api/accounts/<id>` | DELETE | `{confirm_username}` 删除账号（管理员；先授权再动目标的数据，**先吊销该账号会话**再释放库句柄与移目录——否则窗口里的请求会重建一棵没人认领的 `data/users/<id>/`；运行中或有登录窗口时 409；数据目录移入 `users/.trash/`，最后一个管理员不可删除；移动失败答 JSON 并**报出目录此刻真的在哪里**，补偿搬回也可能失败） |
+| `/api/accounts/audit` | GET | 最近审计（管理员，`limit` ≤ 500；每条带服务端时区的 `ts_local`） |
 
 未登录时：`/api/*` 一律 401（`{ok:false, error}` 且带 `X-Auth-Required: 1`，前端据此跳登录页），其余路径 302 到
 `/login?next=<原地址>`。会话是签名的非持久 Cookie（`cixi_session`，HttpOnly / SameSite=Lax，`CRAWLER_HTTPS=1`
@@ -39,7 +39,7 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/workflow/rename` | POST | 重命名工作流文件（`{name, new_name}`）：同时改写文件内的 name 与数据集里对旧名的引用；目标名已存在 409、旧名不存在 404、新旧同名 400、在跑的那份被改名 409，绝不覆盖已有文件 |
 | `/api/workflow/delete` | POST | 删除工作流 |
 | `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，宁可立刻 400 也不悄悄变成一次从零重爬 |
-| `/api/workflow/rerun-node` | POST | 重跑**一个节点及其下游**：定向擦除该子树的存储结果，再用同一 `resume_run_id` 重启运行——上游已存的行被复用，只有被点名的子树重新算 |
+| `/api/workflow/rerun-node` | POST | 重跑**一个节点及其下游**：把要擦的子树随 payload 交给运行本体，**抢到槽位之后**才定向擦除（被别的运行抢走时这次按下什么都不会丢），再用同一 `resume_run_id` 重启——上游已存的行被复用，只有被点名的子树重新算 |
 | `/api/workflow/diagnostics` | POST | 对工作流做只读诊断（校验/环/悬空连线等），不写运行 |
 | `/api/workflow/stop` | POST | 停止执行：浏览器在后台关、请求立即返回；`browsers` 是这次交出去关掉的浏览器数，`records` 是本请求已就地改判为 `stopping` 的运行行 |
 | `/api/workflow/status` | GET | 执行状态（含 `queue` 等待列表；`stopping`/`settling` 说明"已叫停但结论还没写"）。带 `run_ids`（本次尝试打开的全部记录 id）与 `node_states`（`{node_id:{status,row_count,error,run_id}}`），画布据此给节点画状态 |

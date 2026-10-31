@@ -134,8 +134,9 @@ export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 export CRAWLER_HTTPS=1                                  # 反向代理已终止 TLS 时（会话 Cookie 标记 Secure）
 ```
 
-**账号模型**：账号、服务端会话与审计日志在 `data/accounts.db`（密码用 scrypt 加盐哈希，库里只存会话 token 的
-sha256）。初始管理员只在账号表为空时由环境变量创建；表里已有账号时这些变量被忽略，不会重置任何密码。
+**账号模型**：账号、服务端会话与审计日志在 `data/accounts.db`（密码用 scrypt 加盐哈希；库里只存**会话 id** 的
+sha256，CSRF token 原样存——页面每次重载都要从 `/api/config` 取回它，而少了 HttpOnly 的会话 id 它对窃取者无用）。
+初始管理员只在账号表为空时由环境变量创建；表里已有账号时这些变量被忽略，不会重置任何密码。
 之后只能由管理员在顶栏「账号」面板里创建/重置密码/启用禁用/强制下线/删除账号（`/api/accounts`）。管理员创建或
 重置的账号带 `must_change_password`：登录后除改密接口外全站 API 返回 403（带 `X-Password-Change-Required`），
 前端弹出改密对话框。

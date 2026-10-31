@@ -79,8 +79,37 @@ order.length = 0;
 dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Tab', shiftKey: true, target: first });
 report.shiftTabAtFirstFocused = order[order.length - 1];
 
-// Escape still dismisses (the pre-existing path): the overlay closes and the promise resolves.
+/* Escape still dismisses (the pre-existing path): the overlay closes and the promise resolves. */
 dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Escape', target: doc.body });
 report.dismissedByEsc = !overlay.classList.contains('open');
+
+/* ── ONE shell, one pending answer ───────────────────────────────────────────
+   harness_accounts.mjs STUBS showDialog, so the forced-password reopen guard
+   (Accounts._pwOpen, reset only in the .then) never meets the real shell there.
+   What is pinned here is the shell's own contract, which is where the deadlock
+   was created. */
+const firstDialog = vm.runInContext('showDialog({ message: "第一个", cancelValue: "gone", buttons: [{label:"A",value:"a"}] })', sandbox);
+const secondDialog = vm.runInContext('showDialog({ message: "第二个", cancelValue: "erased", buttons: [{label:"B",value:"b"}] })', sandbox);
+report.replacedMessage = doc.getElementById('dialog-message').textContent;
+report.replacedButtons = doc.getElementById('dialog-actions').querySelectorAll('button').length;
+
+/* The mandatory dialog cannot be displaced: a newcomer is answered at once with its own
+   non-answer rather than erasing the debt off the screen. */
+const forced = vm.runInContext('showDialog({ message: "必须改密", dismissable: false, cancelValue: "no", buttons: [{label:"S",value:"save"}] })', sandbox);
+const intruder = vm.runInContext('showDialog({ message: "命名工作流", input: true, cancelValue: "blocked" })', sandbox);
+
+report.intruderAnswered = await intruder;
+report.forcedStillOnScreen = doc.getElementById('dialog-message').textContent === '必须改密';
+
+/* Answering the mandatory dialog frees the shell for the next one. */
+doc.getElementById('dialog-actions').querySelectorAll('button')[0].click();
+report.forcedSettled = await forced;
+const third = vm.runInContext('showDialog({ message: "之后", buttons: [{label:"C",value:"c"}] })', sandbox);
+report.shellFreeAgain = doc.getElementById('dialog-message').textContent === '之后';
+doc.getElementById('dialog-actions').querySelectorAll('button')[0].click();
+
+/* Neither superseded call is left hanging: their promises settle with their own non-answer, which
+   is what lets a reopen guard (Accounts._pwOpen) reset and the debt be offered again. */
+report.superseded = [await firstDialog, await secondDialog, await third];
 
 process.stdout.write(JSON.stringify(report));

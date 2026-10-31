@@ -47,11 +47,27 @@ STATUSES = ('active', 'disabled')
 #: A whole machine may fail a few logins (a stale tab, a typo); a script pays for the rest.
 IP_WINDOW_SECONDS = 600
 IP_FAILURE_LIMIT = 20
+#: How many address+name windows the process remembers at all — see :meth:`_IpThrottle._bound`.
+MAX_WINDOWS = 4096
 
 #: Rewrite ``last_seen_at`` at most this often: one UPDATE per request would turn every static
 #: asset into a database write. A CEILING, never the answer for a short idle window — see
 #: :func:`_touch_interval_seconds`.
 TOUCH_INTERVAL_SECONDS = 60
+
+
+def _local_text(moment) -> str:
+    """One epoch, read in the SERVER's zone, as the sentence the panel shows.
+
+    '' for a moment that never happened (an account that never signed in) — the browser owns the WORD
+    for that (``accounts.never``), because a missing value is data and a label is translation."""
+    try:
+        value = float(moment or 0)
+    except (TypeError, ValueError):
+        return ''
+    if value <= 0:
+        return ''
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(value))
 
 
 def _touch_interval_seconds(idle_seconds: int) -> int:
@@ -100,6 +116,12 @@ class _IpThrottle:
             self._hits.pop(key, None)
         return hits
 
+    def _sweep(self, now: float) -> None:
+        """Drop every window whose hits all aged out. Caller holds the lock."""
+        stale = [key for key, hits in self._hits.items() if not any(now - ts < IP_WINDOW_SECONDS for ts in hits)]
+        for key in stale:
+            self._hits.pop(key, None)
+
     def blocked(self, ip: str, username: str = '') -> bool:
         with self._lock:
             return len(self._prune(self._key(ip, username), time.time())) >= IP_FAILURE_LIMIT
@@ -111,6 +133,26 @@ class _IpThrottle:
             hits = self._prune(key, now)
             hits.append(now)
             self._hits[key] = hits
+            self._bound(now)
+
+    def _bound(self, now: float) -> None:
+        """Keep the window dictionary bounded by a size, not by how polite the traffic is.
+
+        ``_prune`` only ever cleans the key a login just touched, so a stranger typing a thousand
+        random usernames leaves a thousand entries that nothing revisits: memory grows with the
+        attack and every later login pays for a longer scan. Aged-out windows go first; if a live
+        spray still exceeds the cap, the OLDEST are dropped. Losing an hour-old window for a name
+        nobody typed again costs nothing — the per-account ``failed_attempts`` lock, which is the
+        real gate, lives in the database and is not affected.
+        """
+        if len(self._hits) <= MAX_WINDOWS:
+            return
+        self._sweep(now)
+        if len(self._hits) <= MAX_WINDOWS:
+            return
+        oldest = sorted(self._hits.items(), key=lambda item: item[1][-1] if item[1] else 0)
+        for key, _hits in oldest[: len(self._hits) - MAX_WINDOWS]:
+            self._hits.pop(key, None)
 
     def clear(self, ip: str, username: str = '') -> None:
         """Forget this address's windows. With no name given, every name it tried."""
@@ -215,9 +257,10 @@ class AccountService:
         # registered username from an unregistered one, and a locked row also skipped the hashing,
         # so the timing said the same thing.
         if not security.verify_password(password, row['password_hash']):
-            failures = int(row['failed_attempts'] or 0) + 1
+            failures = self.store.bump_failure(row['user_id'], now)
             locked_until = now + security.lock_seconds(failures) if security.lock_seconds(failures) else 0
-            self.store.record_failure(row['user_id'], failures, locked_until, now)
+            if locked_until:
+                self.store.set_locked_until(row['user_id'], locked_until, failures)
             _throttle.record(ip, row['username'])
             self._audit(
                 EVENT_LOGIN_FAIL,
@@ -300,12 +343,24 @@ class AccountService:
             return
         self._audit(EVENT_LOGOUT, user_id=account.user_id, username=account.username, ip=ip)
 
-    def change_password(self, account, current_password, new_password, token) -> None:
+    def change_password(self, account, current_password, new_password, token, ip: str = '') -> dict:
+        """Spend the password debt (or answer a voluntary change).
+
+        The current password gets the same window as a login attempt. Without one, anyone holding a
+        live session — a shared unlocked browser, a same-origin script — could guess it without
+        limit, and every guess costs this server a scrypt run: an unauthenticated-by-usability
+        denial of service on the one endpoint that also proves the password.
+        """
         row = self.store.get_user(account.user_id)
         if row is None:
             raise AccountError('accounts.notFound')
+        window = f'change:{row["user_id"]}'
+        if _throttle.blocked(ip, window):
+            raise AccountError('accounts.tooManyAttempts')
         if not security.verify_password(current_password, row['password_hash']):
+            _throttle.record(ip, window)
             raise AccountError('accounts.currentPasswordWrong')
+        _throttle.clear(ip, window)
         password = security.validate_password(new_password, row['username'])
         if password == str(current_password or ''):
             raise AccountError('accounts.passwordUnchanged')
@@ -438,8 +493,12 @@ class AccountService:
         refuses to rename a directory holding an open database), so it must first know it is
         ALLOWED to — otherwise a refusal (a wrong confirmation, a non-admin) would arrive after
         the handles were already pulled out from under a live writer.
+
+        The answer is :meth:`public`, never the row: a probe that returns a ``users`` row carries
+        ``password_hash`` out of the service, and this is the only delete-path value a route could
+        ever echo. The route discards it today — that is one line of luck, not a rule.
         """
-        return self._deletion_target(actor, user_id, confirm_username)
+        return self.public(self._deletion_target(actor, user_id, confirm_username))
 
     def _deletion_target(self, actor, user_id: str, confirm_username: str) -> dict:
         self._require_admin(actor)
@@ -478,13 +537,24 @@ class AccountService:
 
     def list_audit(self, actor, limit: int = 200) -> list:
         self._require_admin(actor)
-        return self.store.list_audit(limit)
+        rows = self.store.list_audit(limit)
+        # Same rule as the account table: the moment is rendered where it was recorded, not where
+        # the page happens to be open.
+        for row in rows:
+            row['ts_local'] = _local_text(row.get('ts'))
+        return rows
 
     # ─── shape helpers ───
 
     @staticmethod
     def public(row) -> dict:
-        """The only account shape a route may serialise. No hash, no IP."""
+        """The only account shape a route may serialise. No hash, no IP.
+
+        Every moment ships twice: the number (a client that needs to sort) and the server's own
+        reading of it (``*_local``). The panel renders the second — a browser formatting an epoch
+        prints the VIEWER's zone, so an administrator on UTC+8 and the audit line in the server log
+        disagree by eight hours about when someone signed in. ``scheduling`` already answers this way
+        with ``next_run_local``/``last_run_local``."""
         return {
             'user_id': row['user_id'],
             'username': row['username'],
@@ -492,7 +562,9 @@ class AccountService:
             'status': row['status'],
             'must_change_password': bool(row['must_change_password']),
             'created_at': float(row['created_at'] or 0),
+            'created_local': _local_text(row['created_at']),
             'last_login_at': float(row['last_login_at']) if row['last_login_at'] is not None else None,
+            'last_login_local': _local_text(row['last_login_at']),
         }
 
     # ─── internals ───
@@ -582,10 +654,19 @@ def get_account_service() -> AccountService:
 
 
 def reset_service(service: AccountService = None) -> None:
-    """Replace (or clear) the process singleton — the seam tests and the app fixture use."""
+    """Replace (or clear) the process singleton — the seam tests and the app fixture use.
+
+    The replaced service's database handle is closed on the way out. Dropping the object is not
+    dropping the connection: ``AccountsStore`` holds one SQLite handle for its lifetime, so every
+    test that logged in left a live ``accounts.db`` connection (and its ``-wal``/``-shm``) behind,
+    which on Windows is also the directory that cannot be deleted.
+    """
     global _SERVICE
     with _SERVICE_LOCK:
-        _SERVICE = service
+        previous, _SERVICE = _SERVICE, service
+    if previous is not None and previous is not service:
+        with contextlib.suppress(Exception):
+            previous.store.close()
 
 
 #: Addresses that can only ever reach this machine.

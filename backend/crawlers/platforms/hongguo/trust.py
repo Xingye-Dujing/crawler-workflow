@@ -24,6 +24,7 @@ import os
 import subprocess
 import sys
 
+from core import procs
 from runtime import paths
 
 logger = logging.getLogger(__name__)
@@ -204,6 +205,7 @@ def install(der: bytes, timeout: float = 20.0) -> bool:
             capture_output=True,
             timeout=timeout,
             check=False,
+            **procs.popen_kwargs(),
         )
         return done.returncode == 0
     except (OSError, subprocess.SubprocessError):

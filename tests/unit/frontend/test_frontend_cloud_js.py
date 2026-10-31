@@ -244,7 +244,21 @@ class TestTheExpiredSession:
             'navigatedTo': '/login',
         }, booted['logout']
 
+    def test_a_refused_logout_rereads_the_token_and_asks_again_instead_of_navigating(self, booted):
+        """The button is not allowed to lie about ending the session.
+
+        A sign-out refused on a stale CSRF token (a password change rotates the session, and the page
+        holds the token it read at boot) used to navigate anyway: the login page sees a live session
+        and bounces straight back to the canvas, so the user reads 「退出没反应」 while the cookie keeps
+        working. The page now re-reads ``/api/config`` for the current token and retries once; only
+        an accepted answer navigates."""
+        retried = booted['logoutRetried']
+        assert [item['url'] for item in retried['requests']] == ['/logout', '/api/config', '/logout'], retried
+        assert retried['csrf'] == 'fresh-token', retried
+        assert retried['navigatedTo'] == '/login', 'the retry is what ends the session'
+
     def test_an_ordinary_response_is_left_alone(self, booted):
+        assert booted['authRedirect']['afterOk'] is None, booted['authRedirect']
         assert booted['authRedirect']['afterOk'] is None, booted['authRedirect']
 
     def test_an_auth_401_returns_to_the_login_with_the_address(self, booted):

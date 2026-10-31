@@ -29,6 +29,29 @@ def d():
     return json.loads(proc.stdout)
 
 
+class TestOneShellOnePendingAnswer:
+    """A second ``showDialog`` may not leave the first promise unsettled, and may not steal a
+    mandatory dialog's screen. Reproduced on the REAL shell because ``harness_accounts.mjs`` stubs
+    ``showDialog`` — so the forced-password reopen guard, which resets in the promise's ``.then``,
+    never met the code that used to strand it: once stranded, every later 403 returned early and the
+    password debt could not be paid on that page at all."""
+
+    def test_the_newcomer_paints_over_a_dismissable_dialog(self, d):
+        assert d['replacedMessage'] == '第二个', 'the second dialog never reached the screen'
+        assert d['replacedButtons'] == 1, 'the replaced dialog left its buttons standing'
+
+    def test_a_replaced_dialog_is_answered_not_abandoned(self, d):
+        assert d['superseded'] == ['gone', 'erased', 'c'], d['superseded']
+
+    def test_a_mandatory_dialog_holds_the_shell(self, d):
+        assert d['forcedStillOnScreen'] is True, 'the password debt was painted over'
+        assert d['intruderAnswered'] == 'blocked', 'the displaced caller was left hanging'
+
+    def test_answering_the_mandatory_dialog_frees_the_shell(self, d):
+        assert d['forcedSettled'] == 'save'
+        assert d['shellFreeAgain'] is True, 'the shell stayed locked after the debt was paid'
+
+
 class TestDialogA11y:
     def test_the_dialog_is_a_modal_for_screen_readers(self, d):
         assert d['open'] is True

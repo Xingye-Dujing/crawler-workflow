@@ -1,9 +1,11 @@
-"""Single-node rerun (feature 12): wipe one node's subtree, then resume the SAME run so the
+"""Single-node rerun (feature 12): prune one node's subtree, then resume the SAME run so the
 engine re-executes exactly that subtree and reuses every kept upstream row.
 
 The real engine is never run here — ``begin_run`` is monkeypatched — so these tests pin the
-endpoint's OWN logic: the downstream closure, the row invalidation against the store, the
-delegate-with-``resume_run_id`` hand-off, and the named refusals."""
+endpoint's OWN logic: the downstream closure, the named refusals, and the hand-off (a resume of that
+same run, carrying the subtree to erase). The erase itself belongs to the claimed worker, which is
+what :class:`TestTheWipeFollowsTheClaim` pins; ``store.invalidate_nodes`` is exercised directly there.
+"""
 
 import pytest
 
@@ -87,6 +89,60 @@ class TestInvalidateNodes:
         assert store.claim_item('item:node-n1', 'KEEP-ME', 'rerun1') is False, 'a kept node lost its dedupe'
 
 
+class TestTheWipeFollowsTheClaim:
+    """The erase belongs to the run that owns the slot, never to the request that asked for it.
+
+    The route used to delete the subtree and only THEN call ``begin_run``. Anything that won the
+    claim in that gap — a scheduled fire, the queue draining another account's run, a second 运行
+    press — answered this press with a refusal AFTER its rows and the 「已采集」 claims bought with them
+    were gone. Pressing again was then refused forever (「该节点没有可重跑的结果」), and the only way
+    back was 继续, which re-crawls the platform and re-pays for rows the user had in hand."""
+
+    def test_a_rerun_that_lost_the_slot_keeps_every_row(self, client, app_module, monkeypatch):
+        store = app_module.get_run_store()
+        _seed_completed_run(store, app_module)
+        assert store.claim_item('item:node-n2', 'ITEM-A', 'rerun1') is True
+
+        def refused(_data, _lang):
+            return {'status': 409, 'body': {'ok': False, 'error': 'someone else owns the slot'}}
+
+        monkeypatch.setattr(_run_module(), 'begin_run', refused)
+        response = client.post(
+            '/api/workflow/rerun-node',
+            json={'workflow': _workflow(), 'workflow_name': 'wf', 'node_id': 'n2'},
+        )
+        assert response.status_code == 409
+        assert store.get_node_status('rerun1', 'n2') == NODE_DONE, 'a refused rerun erased anyway'
+        assert store.claim_item('item:node-n2', 'ITEM-A', 'rerun1') is False, 'a refused rerun released its claims'
+
+    def test_the_worker_erases_only_the_subtree_its_own_run_named(self, client, app_module):
+        from engine.run import _invalidate_rerun_nodes, _rerun_request
+
+        store = app_module.get_run_store()
+        _seed_completed_run(store, app_module)
+        rerun = _rerun_request({'rerun_invalidate': {'run_id': 'rerun1', 'node_ids': ['n2', 'n3']}}, 'rerun1')
+        assert rerun == {'run_id': 'rerun1', 'node_ids': ['n2', 'n3']}
+
+        assert _invalidate_rerun_nodes(store, 'another-run', rerun) == []
+        assert store.get_node_status('rerun1', 'n2') == NODE_DONE, 'a wipe for a different run id ran anyway'
+
+        assert _invalidate_rerun_nodes(store, 'rerun1', rerun) == ['n2', 'n3']
+        assert store.get_node_status('rerun1', 'n2') is None
+        assert store.get_node_status('rerun1', 'n3') is None
+        # Upstream kept: the whole point is that only the pressed subtree is re-run.
+        assert store.get_node_status('rerun1', 'n1') == NODE_DONE
+
+    def test_a_payload_naming_a_different_run_is_not_a_wipe_order(self):
+        """A mirrored entry restored after a restart, or a hand-made payload, must not be allowed to
+        name some other run's rows."""
+        from engine.run import _rerun_request
+
+        assert _rerun_request({'rerun_invalidate': {'run_id': 'stale', 'node_ids': ['n2']}}, 'rerun1') is None
+        assert _rerun_request({'rerun_invalidate': {'run_id': 'rerun1', 'node_ids': []}}, 'rerun1') is None
+        assert _rerun_request({'rerun_invalidate': 'not-a-dict'}, 'rerun1') is None
+        assert _rerun_request({}, 'rerun1') is None
+
+
 class TestRerunEndpoint:
     def test_rerunning_a_middle_node_wipes_it_and_its_downstream(self, client, app_module, fake_begin):
         store = app_module.get_run_store()
@@ -100,13 +156,19 @@ class TestRerunEndpoint:
         assert body['ok'] is True
         # The closure is exactly {n2, n3}; the kept upstream n1 is not touched.
         assert sorted(body['invalidated']) == ['n2', 'n3']
-        assert store.get_node_status('rerun1', 'n2') is None
-        assert store.get_node_status('rerun1', 'n1') == NODE_DONE
         # Delegation went through the ordinary start path AS a resume of that same run.
         assert len(fake_begin) == 1
         sent_data, _lang = fake_begin[0]
         assert sent_data['resume_run_id'] == 'rerun1'
         assert sent_data['node_id'] == 'n2'
+        # The request DOES NOT WIPE. The subtree travels in the payload and the worker erases it
+        # once the slot is genuinely its own — see :class:`TestTheWipeFollowsTheClaim`.
+        # ``node_ids`` is compared as a SET on purpose: the closure is a graph walk, and its order is
+        # not a contract (the assertion above reads it sorted for the same reason).
+        assert sent_data['rerun_invalidate']['run_id'] == 'rerun1'
+        assert set(sent_data['rerun_invalidate']['node_ids']) == {'n2', 'n3'}
+        assert store.get_node_status('rerun1', 'n2') == NODE_DONE
+        assert store.get_node_status('rerun1', 'n1') == NODE_DONE
 
     def test_an_unknown_node_is_refused_by_name(self, client, app_module, fake_begin):
         store = app_module.get_run_store()
@@ -155,10 +217,11 @@ class TestRerunEndpoint:
         assert fake_begin == []
 
     def test_rerunning_a_node_of_a_live_run_is_refused_and_keeps_every_row(self, client, app_module, fake_begin):
-        """The wipe runs BEFORE ``begin_run`` can serialize against a live worker, so a
-        ``重跑节点`` on a finished node of a still-running run would delete that run's rows
-        and release its dedupe claims mid-flight — the very loss ``继续`` from ``stopping`` is
-        excluded to prevent. It must refuse by name and leave the rows (and the run) intact."""
+        """A run that is still executing is not a rerun target.
+
+        Its subtree is the record a live worker is writing: erasing it would drop rows and release
+        the 「已采集」 claims out from under that thread, and the 继续 it leaves behind re-crawls work
+        that had already landed. The refusal is by name, and nothing is touched."""
         store = app_module.get_run_store()
         wf = _workflow()
         fp = workflow_fingerprint(effective_workflow(wf))
@@ -179,9 +242,11 @@ class TestRerunEndpoint:
         assert store.claim_item('item:node-n2', 'ITEM-A', 'live1') is False, 'a live run lost its dedupe claim'
 
     def test_another_live_run_is_refused_before_the_wipe_keeps_the_rows(self, client, app_module, fake_begin):
-        """The wipe runs before the start path serializes. If some other run is live,
-        deleting this subtree now would leave a hole visible until that run ends (or
-        forever, if the rerun is then refused) — so the busy check comes first."""
+        """A rerun is never parked, so a busy slot answers this press by name.
+
+        Queueing it would erase the subtree at drain time — minutes later, on a canvas the user has
+        since moved on. The data itself is safe either way now that the erase happens inside the
+        claimed worker; this refusal is about not deleting someone's results behind their back."""
         store = app_module.get_run_store()
         _seed_completed_run(store, app_module)
         app_module.execution_state['running'] = True

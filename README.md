@@ -55,8 +55,10 @@ cd backend && python app.py          # 访问 http://127.0.0.1:5000（端口 POR
 `CRAWLER_AUTH_PASSWORD` 仍可作为引导密码）与自己的 `SECRET_KEY`，否则按名拒绝启动。账号存 `data/accounts.db`
 （密码 scrypt 哈希、服务端会话、CSRF、失败锁定），**每个账号的数据完全隔离**：工作流、数据集、运行记录、
 爬取 Cookie、导出都在 `data/users/<账号 id>/` 下；管理员在顶栏账号面板里创建/重置/禁用/强制下线/删除账号
-（删除是移入 `data/users/.trash/`，不会当场抹掉）。账号之间的运行也互不可见：状态/停止/进程/统计只答自己那次
-运行，被拒绝的启动（例如没选模型）不会接管槽位。没开账号时把 `HOST` 设成非本机地址（如 `0.0.0.0`）会**按名
+（删除是移入 `data/users/.trash/`，不会当场抹掉；面板里的时间与审计时刻由服务端下发，「待改密」的账号会标出来）。
+账号之间的运行也互不可见：状态/停止/进程/统计只答自己那次运行，被拒绝的启动（例如没选模型）不会接管槽位，
+「重跑节点」要删的历史行只在抢到槽位之后才删；排队后确定再也起不来的请求会被明确丢弃并在控制台说明原因，
+不会一直挡在队首。没开账号时把 `HOST` 设成非本机地址（如 `0.0.0.0`）会**按名
 拒绝启动**——那等于把已保存的登录态、数据集与「用你的账号发起采集」开放给整个局域网。旧单账号的数据根用
 `python tools/migrate_accounts.py --user admin --apply` 迁到管理员名下（先备份、默认 dry-run、校验后原目录改名保留）。
 关闭本地模型、首次改密对话框与账号面板细节见 [`docs/config.md`](docs/config.md)。
@@ -191,5 +193,6 @@ crawler_workflow/
 ## 许可与备份
 
 MIT，见 [`LICENSE`](LICENSE)。`data/` 不在 git 里（只有 `data/workflows/` 例外），所以远端之外还需要还原点：
-`tools/backup.py` 生成 git bundle + 数据归档（默认不含 Cookie），远端同时推 `crawler-github` 与 `gitee`。
+`tools/backup.py` 生成 git bundle + 数据归档（覆盖系统 `data/` 与**每个账号** `data/users/<id>/` 的库与工作流；
+默认不含 Cookie），远端同时推 `crawler-github` 与 `gitee`。
 用法与恢复步骤见 [`docs/development.md`](docs/development.md#备份与恢复)。

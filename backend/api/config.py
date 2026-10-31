@@ -3,7 +3,7 @@
 Server facts the browser must be told rather than guess (default model, headless, worker cap, and
 whether this is a cloud host), plus the friendly-name view of the fine-tuned model registry. Both
 depend only on ``config.Config`` and the standard library — no run state, no stores — so this
-cluster splits out cleanly. ``/api/capabilities`` deliberately stays in ``app.py`` for now: it
+cluster splits out cleanly. ``/api/capabilities`` is its own Blueprint (``api/capabilities.py``): it
 extends the crawl matrix with ``sessions.cookies``'s live account list. Paths unchanged.
 """
 

@@ -12,7 +12,7 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-from core.config import Config
+from runtime import paths
 
 if TYPE_CHECKING:
     from services.runs.store import RunStore
@@ -67,7 +67,7 @@ class BaseMixin:
     )
 
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or Config.RUNS_DB
+        self.db_path = db_path or paths.active().runs_db
         os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)

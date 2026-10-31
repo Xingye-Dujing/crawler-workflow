@@ -334,6 +334,17 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   article would share a key and all but the first would be dropped) — which left them on the whole-row hash carrying
   volatile `楼层`, which a fresh harness renumbers from 1. A comment is now keyed by (`平台`, `评论ID`). Changing the function
   rotates existing keys, so a saved comment node re-files its set exactly once.
+- **An atomic node's result is one transaction.** `replace_rows` committed the `DELETE` first, then built the payload and
+  committed the `INSERT` in a second one. A process killed between them — or one row that refused to serialise — left
+  the node with no rows and no `finish_node`, so `settle_nodes` read zero and the record said a table that HAD been
+  produced had produced nothing: the crawl was paid for and reported as empty. The payload is built before anything is
+  deleted and both writes share one commit; the abort rolls back, because no other write in this store needs a rollback
+  and an open transaction would be committed by the NEXT write on the same connection, far from its cause.
+- **The console's line list and its total are one pair, and a claim swaps them as one.** `/api/workflow/status` reads
+  `logs` with `_log_total` under `_completed_lock`; the new claim replaced them key by key OUTSIDE that lock, so a poll
+  landing in the gap got the previous run's tail with the new run's total of zero — the browser's delta cursor repeats
+  or skips lines after a reload, which is the invariant `test_console_buffer.py` exists to hold. `reset_console_state`
+  now takes the same lock (proved by parking the lock in the test and watching the reset block on it).
 
 ## Console, messages and i18n
 
@@ -658,6 +669,18 @@ produced this list; every entry was a real defect on at least one platform, not 
   check compares the two languages to *each other*. Now the executable name comes from `machine.chrome_executable_name()`
   (reading the same `CHROME_PATH_NAMES` the probe uses) and the platform token from `NAVIGATOR_PLATFORMS`. Deleting
   `i18n.py` from `WINDOWS_TABLES` is what makes it stick (`test_each_exempted_file_actually_holds_a_windows_artifact`).
+- **A general exemption is not a licence for the one rule the file broke.** `hongguo/harvest.py` is on the Windows-table
+  list because it genuinely talks to the certificate store and finds the player window through `ctypes.windll`; that
+  said nothing about the inline `taskkill /F /T /PID` sitting in its `close()`, nor about four spawn sites
+  (`charts/pdf.py`, the harvest proxy and player, `trust.py`, and `core/procs` itself) starting a console-subsystem
+  child with no `creationflags`. On a packaged server, which has no console of its own, each PDF compile, each harvest
+  and each reaped browser flashed a black window. Two gates now own the rules: every `subprocess.run/Popen` site in
+  `backend/` must pass `procs.popen_kwargs()` (AST-scanned, with a positive control), and `taskkill` may appear in
+  code in `core/procs.py` alone.
+- **`sentiment.resolve_bert_model` anchors on the project root, and that is not the data root.** An audit read the
+  `BASE_DIR` joins as a missed scope. They are a different family of model: the registry stores `ml_train/models/<name>`
+  — the training workspace, which lives next to the checkout and is never under `CRAWLER_DATA_ROOT` — while
+  `ml_base.MODEL_DIR` (`Config.DATA_DIR/models`) holds the sklearn joblib files. Two homes, two owners, one knob each.
 - **What this box cannot prove.** No Linux runtime here (no docker/WSL, user's decision), so these landed as code +
   platform-independent tests. **Starting on Linux/macOS is an unverified surface**: a real-container crawl, a `fandol`
   compile, the snap/app-bundle Chrome lookups are reasoned and tested by substitution. The Linux packages are in README/
@@ -980,6 +1003,15 @@ the evidence here.
   promise never resolved (the `_pwOpen` guard then blocked every retry) — every API stayed 403 with no visible way out.
   The notice is now suppressed while `Auth.mustChange`, and a successful change reloads the page so the refused
   panels fetch again.
+- **That accident was the shell's, not the boot sequence's, and it was still reachable.** Suppressing one dialog at boot
+  left every OTHER pair free to collide: an administrator resetting someone's password makes the next 403 reopen the
+  forced form — from inside the fetch interceptor, at any moment, while the user is naming a workflow or confirming a
+  delete. The replaced dialog's buttons were erased (its promise never settled, so `_pwOpen` stayed `true` and the debt
+  could not be paid on that page), and its Esc/backdrop listeners were never unbound, so a keypress dismissed whichever
+  dialog was on screen. `showDialog` now registers how to settle itself: a newcomer answers the pending dialog with ITS
+  `cancelValue` and unbinds it, and a `dismissable: false` dialog cannot be displaced at all (the newcomer resolves
+  immediately). Pinned in `harness_dialog_a11y.mjs`, because `harness_accounts.mjs` stubs `showDialog` — the panel's own
+  tests could never have seen this.
 
 A second audit (same day, whole-project) found the following, each pinned by a test that FAILS without its fix:
 
@@ -1051,3 +1083,64 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   the system store globals but left `_USER_STORES` — SQLite handles on the previous test's tmp files, which Windows
   refuses to delete while open. It now releases every user slot in its teardown, and account-scope assertions compare
   against the accounts that test owns.
+- **The failed-attempt counter was a lost update, so the lock never arrived.** `authenticate` read
+  `row['failed_attempts']`, added one in Python and wrote the total back. Five concurrent wrong passwords read the same
+  row and wrote the same 1: a scripted burst against one account left it at 「1 failure」 and
+  「连续 5 次锁 15 分钟」 — the promise `docs/config.md` publishes — never armed. Measured directly against the store:
+  the old shape kept 1 of 5 guesses, `UPDATE … failed_attempts = failed_attempts + 1` keeps 5. `set_locked_until`
+  re-checks the count it was computed from, because a correct login can zero it between the two writes and arming
+  anyway would refuse the person who just proved the password.
+- **The change-password endpoint verified a secret with no window at all.** `accounts.currentPasswordWrong` was raised
+  and forgotten: no count, no delay, no refusal. Anyone holding a live session — a shared unlocked browser, any
+  same-origin script — could guess 「当前密码」 without limit while this server paid one scrypt run per guess. It shares
+  the login window now, keyed `address|change:<user_id>`, cleared on success.
+- **A failed-login window nobody revisits is a memory leak an attacker drives.** `_prune` only ever cleaned the key a
+  login just touched, so a stranger spraying random usernames left one permanent entry per try, and every later login
+  scanned a longer dictionary under one lock. The window is bounded by size; what it drops is the OLDEST abandoned
+  entry, and the real gate (the per-account lock) lives in the database untouched.
+- **A drained request still owes its caller the queue id it was given.** When the hand-off lost the slot, `begin_run`
+  re-parked the payload as a NEW entry at the TAIL: the panel kept the old `queue_id` in its 取消 button (so cancelling
+  answered `removed: false` for a request that was still there) and the longest-waiting canvas moved behind the newer
+  ones. The drain now hands the parked entry its caller's `id` and `queued_at` and puts it back at the front.
+- **A refusal the queue cannot fix must be discarded, not re-parked.** The drain re-tried *every* non-200 answer, but
+  `begin_run`'s permanent refusals (an un-walkable canvas, a corrupt reusable group, an unknown mode or provider, a
+  transport this host does not speak, a missing key/model) are all 400s — and `put_back` inserts at the FRONT and
+  returns, so one unstartable entry starved every request behind it, survived the restart in the mirror, and never
+  reached the browser that was told 「已排队」. Those refusals carry `drop: true`, the same seam the purged-继续 refusal
+  already used.
+- **A second Stop could re-pin 「正在停止」 over a finished run.** The stop route proves liveness and writes its flags
+  under `execute_lock`; the worker cleared `stopping` at the TOP of its `finally` and then spent seconds settling, so a
+  press inside that window (a double click is enough) re-armed the flag with no owner left to clear it: the panel
+  polled forever, and `stop_requested()` handed that stale stop to every later crawl, which answered 「用户停止了我」.
+  `stopping` now leaves with the thread handle, in one `execute_lock` section. Reproduced by parking the worker in its
+  own settlement — `test_a_stop_landing_during_the_settlement_does_not_repin_the_flag` is red without the fix.
+- **A rerun's erase belongs to the run that owns the slot.** `重跑节点` deleted the subtree's rows and released its
+  「已采集」 claims BEFORE calling `begin_run`, so any claim that won the gap (a scheduled fire, the drain, another
+  account's press) answered with a refusal after the data was gone — and the second press was then refused by
+  「该节点没有可重跑的结果」 forever, leaving 继续 (a re-crawl at the platform's price) as the only way back. The payload
+  carries the intent and the worker performs it after the claim; the request itself now touches nothing.
+- **A store default that names the system tree is a promise the next caller gets to make.** Four stores still defaulted
+  their database to `Config.RUNS_DB`/`DATASETS_DB`/`BIBLIO_DB`/`WORKFLOW_HISTORY_DB`. The scoped registry passes an
+  explicit path, so nothing leaked — but a bare construction inside another account's request would have opened the
+  checkout-level tree silently. They resolve `paths.active()` like `WorkflowManager` does, and
+  `tests/unit/gates/test_account_paths_resolve_at_call.py` fails any account-level `Config.*` read outside
+  `runtime/paths.py`.
+- **The registry must not archive itself into a lie.** `tools/backup.py` enumerated only `data/`'s top level, so after
+  the accounts landed it archived `settings.json`, `accounts.db` and `lexicon.db` and NOT one run, dataset, saved
+  canvas or cookie jar — while printing a file count that read like a successful restore point. It walks every account
+  tree now (skipping `users/.trash/`), and it checkpoints each SQLite file before copying it: a `.db` alone is not that
+  database while a `-wal` holds committed rows, which is why the newest rows of an old backup were the ones missing.
+- **Replacing the singleton leaked its connection.** `reset_service()` assigned a new service and dropped the old, whose
+  `AccountsStore` keeps one SQLite handle for its lifetime — one leaked handle (plus `-wal`/`-shm`) per login test, on a
+  platform where an open handle is also a directory nothing can delete. The replaced store is closed on the way out.
+- **Half a delete must say where the tree went.** `delete_user` moves the tree, drops the row, and on a refused drop
+  moves it back — under `contextlib.suppress(OSError)`. When the rename back fails (Windows, a profile a browser holds)
+  the response still promised 「数据仍在原处」, sending the operator to the one directory the data is not in. The refusal
+  now checks the filesystem and names the location it found.
+- **Deleting an account left its sessions alive across the move.** The row outlives `release_user()` by the length of
+  `shutil.move`, and a request in that window still resolved — rebuilding the user's stores, whose `ensure()` mints a
+  fresh empty `data/users/<id>/` that the move never saw; the row is deleted right after, so that tree is never
+  trashed and its handles never closed. `force_logout` runs first now, inside the same `execute_lock` section.
+- **An admin's probe may not hand back a `users` row.** `check_deletable` returned the raw `SELECT *` result —
+  `password_hash` included — against the file's own first sentence. The route discards the value today, which is one
+  line of luck rather than a rule, so it answers `public()` like every other shape a route may serialise.

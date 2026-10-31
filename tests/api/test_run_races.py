@@ -186,8 +186,40 @@ class TestQueueHandOff:
         parked = run_queue.queue_snapshot()
         assert len(parked) == 1, [item['id'] for item in parked]
         assert parked[0]['workflow_name'] == 'loser'
+        # The re-park keeps the identity the caller was given: the panel holds this id in its
+        # 取消 button, and a fresh one means the request the user is looking at cannot be cancelled.
+        assert parked[0]['id'] == 'q1', 'the drained request lost the queue id its caller holds'
+        assert parked[0]['queued_at'] == 0.0, 'a drained request restarted its own wait clock'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'loser' in blob and ('queue' in blob.lower() or '排队' in blob), blob
+
+    def test_a_re_parked_request_waits_ahead_of_the_requests_behind_it(self, app_module, monkeypatch):
+        """Losing the slot must not cost a waiting user their place in line.
+
+        ``begin_run`` parks the payload at the TAIL, so a request that had been waiting longest
+        ends up behind the ones that arrived after it — and the panel's queue position, its
+        「第 N 位」 and the next drain's order all disagree with what the user was told."""
+
+        def entry(queue_id, name, waited):
+            return {
+                'id': queue_id,
+                'workflow_name': name,
+                'nodes': 1,
+                'queued_at': waited,
+                'data': {
+                    'workflow_name': name,
+                    'workflow': {
+                        'nodes': [{'id': 'node-1', 'type': 'source', 'params': {'platform': 'weibo'}}],
+                        'connections': [],
+                    },
+                },
+                'lang': 'en',
+            }
+
+        self._seed(app_module, [entry('q1', 'loser', 0.0), entry('q2', 'later', 1.0)])
+        monkeypatch.setattr(_run_module(), 'begin_run', run_queue.enqueue_run)
+        _run_module().start_next_queued()
+        assert [item['id'] for item in _RUN_QUEUE] == ['q1', 'q2'], 'the drained request queued behind the newer one'
 
     def test_a_request_refused_at_the_hand_off_waits_at_the_front_again(self, app_module, monkeypatch):
         """Neither started nor re-parked (the queue filled up in between, say): the request the
@@ -202,6 +234,32 @@ class TestQueueHandOff:
         monkeypatch.setattr(_run_module(), 'begin_run', lambda data, lang: full)
         _run_module().start_next_queued()
         assert [item['id'] for item in _RUN_QUEUE] == ['q1'], 'the refusal dropped or re-ordered the request'
+
+    def test_a_refusal_a_later_run_cannot_fix_is_marked_for_the_queue(self, app_module, monkeypatch):
+        """Every PERMANENT refusal says ``drop``: the drain's discard branch is worth nothing otherwise.
+
+        A parked payload that can never start is re-tried after every run — and because a refused
+        drain puts it back at the FRONT and returns, it starves every request behind it, survives a
+        restart in the mirror, and never tells the browser the reason it was told 「已排队」 for."""
+        from core.config import Config
+
+        from engine.run import begin_run, cloud_refusal_response
+
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        cases = [
+            # A canvas the engine cannot walk at all.
+            {'workflow': {'nodes': 'not-a-list', 'connections': []}, 'workflow_name': 'broken'},
+            # A mode or a provider no step implements — a guess here would write a record that lies.
+            {'workflow': {'nodes': [], 'connections': [], 'settings': {'mode': 'sideways'}}},
+            {'workflow': {'nodes': [], 'connections': []}, 'llm': {'provider': 'nowhere'}},
+        ]
+        for data in cases:
+            answer = begin_run(dict(data), 'en')
+            assert answer['status'] == 400, answer
+            assert answer.get('drop') is True, f'a permanent refusal would wait for every future run: {answer}'
+        # A transport this host does not speak is the same class of refusal.
+        monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+        assert cloud_refusal_response('ollama').get('drop') is True
 
     def test_a_request_that_can_never_start_is_discarded_not_requeued(self, client, app_module, monkeypatch):
         """The 继续 whose run was purged while it waited is refused with 'drop'."""
@@ -280,6 +338,38 @@ class TestBusyClaimUsesThreadLiveness:
             holder['release'].set()
             thread.join(10)
             app_module.execution_state['thread'] = None
+
+    def test_a_stop_landing_during_the_settlement_does_not_repin_the_flag(self, client, app_module, paste, monkeypatch):
+        """The stop flag is handed back WITH the thread handle, inside the claim lock.
+
+        Reproduced by parking the worker in its own settlement (closing the record takes seconds in
+        real life — a long run of housekeeping, a flush, a reap): ``running`` is already false and
+        the thread is still alive, so a 停止 press legitimately marks the records stopping. It used
+        to be the last write: the worker cleared ``stopping`` at the TOP of its ``finally``, before
+        this press, so the flag stood on a run that had already published its verdict — the panel
+        pinned to 「正在停止…」, and ``stop_requested()`` handed that stale stop to every crawl that
+        came after it."""
+        from engine import run as run_module
+
+        entered = threading.Event()
+        proceed = threading.Event()
+        real_close = run_module.close_run
+
+        def park_inside_settlement(*args, **kwargs):
+            entered.set()
+            proceed.wait(10)
+            return real_close(*args, **kwargs)
+
+        monkeypatch.setattr(run_module, 'close_run', park_inside_settlement)
+        workflow, name = _upload_flow(client, paste, 'stop-during-settlement')
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
+        assert started.status_code == 200, started.get_json()
+        assert entered.wait(10), 'the run never reached its settlement'
+
+        assert client.post('/api/workflow/stop').status_code == 200
+        proceed.set()
+        assert _wait(app_module), 'the run never finished'
+        assert app_module.execution_state['stopping'] is False, 'a stop during settlement stayed pinned'
 
     def test_a_dead_thread_does_not_hold_the_slot(self, client, app_module, paste):
         """A thread that died without clearing its handle (an interpreter-level

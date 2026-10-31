@@ -27,6 +27,7 @@ ZH = {
     'accounts.roleInvalid': '未知的角色：只能是 admin 或 user',
     'accounts.statusInvalid': '未知的状态：只能是 active 或 disabled',
     'accounts.storageFailed': '存储操作失败（{err}）：这次账号操作没有完成，已有数据仍在原处，请查看服务端日志后重试',
+    'accounts.storageMoved': '存储操作失败（{err}）：账号没有被删除，但它的数据此刻在 {path}，请先到那里把它找回来',
     'accounts.tooManyAttempts': '来自这个地址的登录失败次数过多，请稍后再试',
     'accounts.usernameInvalid': '用户名需要 3–32 个字符，只能包含字母、数字、下划线、点和短横线',
     'accounts.usernameTaken': '用户名「{user}」已被占用',
@@ -67,6 +68,10 @@ EN = {
     'accounts.storageFailed': (
         'The storage operation failed ({err}); this account operation did not complete and no data '
         'left its place — check the server log and try again'
+    ),
+    'accounts.storageMoved': (
+        'The storage operation failed ({err}); the account was not deleted, but its data now sits at '
+        '{path} — recover it from there before trying again'
     ),
     'accounts.tooManyAttempts': 'Too many failed sign-ins from this address; try again later',
     'accounts.usernameInvalid': 'A username is 3–32 characters: letters, digits, underscore, dot or dash',

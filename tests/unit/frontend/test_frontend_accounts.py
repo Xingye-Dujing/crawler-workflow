@@ -55,6 +55,33 @@ class TestAPasswordFieldIsNotAutofilled:
             assert "type: 'password'" in line, f'{field} is not declared as a password field: {line}'
 
 
+class TestAMomentIsNotFormattedInTheBrowser:
+    """The panel shows the server's reading of a moment, never its own.
+
+    ``new Date(epoch).toLocaleString()`` prints the VISITOR's zone and the visitor's idea of a
+    readable date, so an administrator on UTC+8 and ``accounts.db``'s own audit row disagreed by
+    eight hours about when someone signed in — and the panel kept a second opinion about time, which
+    is the rule every other panel already follows (``schedules.js`` renders ``next_run_local``).
+    """
+
+    def test_the_panel_holds_no_date_formatter(self):
+        accounts = js_text('accounts.js')
+        for banned in ('toLocaleString', 'new Date(', 'getTime()'):
+            assert banned not in accounts, f'the accounts panel formats a moment itself: {banned}'
+
+    def test_the_panel_renders_what_the_server_sent(self):
+        accounts = js_text('accounts.js')
+        assert 'last_login_local' in accounts, 'the sign-in column does not read the server answer'
+        assert 'ts_local' in accounts, 'the audit column does not read the server answer'
+
+    def test_a_debt_shows_in_the_registry(self):
+        """An administrator who resets a password must be able to see WHO still owes the change —
+        ``accounts.resetPrompt`` promises exactly that, and a table without it cannot be audited."""
+        accounts = js_text('accounts.js')
+        assert 'must_change_password' in accounts, 'the registry hides the password debt'
+        assert "I18n.t('accounts.needsChange')" in accounts, 'the debt has no word of its own'
+
+
 class TestThePanelUsesTheSharedDesignTokens:
     CSS = ROOT / 'backend' / 'static' / 'css' / 'accounts.css'
 

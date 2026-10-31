@@ -1,15 +1,17 @@
 """``/api/workflow/*``: the canvas door — saved files, the waiting list, and the live console.
 
-Twelve routes. The saved-canvas cluster writes and reads ``data/workflows`` through the store
+Fourteen routes. The saved-canvas cluster writes and reads ``data/workflows`` through the store
 singleton and keeps a reloaded canvas pointing at the datasets its upload nodes name; the queue
 reads are the panel's view of what is parked; the stop/status/processes cluster is what the
 console, the node badges and the thread inspector read while a run is in flight.
 
-Two things are deliberately not here. ``/api/workflow/execute`` and ``/api/workflow/rerun-node``
-still live in ``app.py`` because starting a run is the orchestration's own work, and
-``start_next_queued`` stays for the same reason — the queue drains by calling *that* function.
-Nothing in this module imports ``app``: the run's state comes from :mod:`state`, its records
-from :mod:`services.runs`, and the stop verdict is written by the settlement module that owns it.
+Starting a run is deliberately not here either. ``/api/workflow/execute`` and
+``/api/workflow/rerun-node`` are this module's routes, but both hand the decision to
+:func:`engine.run.begin_run` — the ONE start path, because the queue drains by calling that same
+function and a second, weaker door would bypass single-run ownership. ``start_next_queued`` lives
+there for the same reason. Nothing in this module imports ``app``: the run's state comes from
+:mod:`state`, its records from :mod:`services.runs`, and the stop verdict is written by the
+settlement module that owns it.
 """
 
 import ctypes
@@ -702,10 +704,9 @@ def workflow_rerun_node():
             return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
         run_id = candidates[0]['run_id']
 
-    # A run that is still executing is not a rerun target. The wipe below deletes this run's stored
-    # rows and releases its dedupe claims BEFORE ``begin_run`` can serialize against the live
-    # worker (``invalidate_nodes`` runs first, so the single-run queue cannot help); a 继续 would
-    # then re-crawl and re-pay a thread that is still writing. Refuse by name, keeping the rows.
+    # A run that is still executing is not a rerun target: erasing its subtree would pull the rows
+    # out from under a thread that is still writing them, and the 继续 it leaves behind re-crawls and
+    # re-pays work that had already landed. Refuse by name, keeping the rows.
     target_run = store.get_run(run_id)
     if target_run is None:
         return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
@@ -718,20 +719,23 @@ def workflow_rerun_node():
     status = store.get_node_status(run_id, node_id)
     if status not in (NODE_DONE, NODE_RESTORED):
         return jsonify({'ok': False, 'error': t('api.rerunNoRows', node=node_label(target, node_id))}), 409
-    # Another run may still be writing. The wipe below deletes this subtree's rows
-    # BEFORE the start path can serialize, so refusing here is what keeps those rows
-    # from disappearing under a rerun that then has to wait (or is refused) anyway.
+    # A rerun is never parked, so a slot that is busy now refuses this press rather than queueing a
+    # wipe for later: by the time a queued rerun drained, the canvas the user pressed on has moved
+    # on and the rows it deletes belong to a decision nobody is watching. (The claim itself is what
+    # protects the data — the erase now happens inside the worker, never here.)
     live_thread = execution_state.get('thread')
     if execution_state.get('running') or (live_thread is not None and live_thread.is_alive()):
         return jsonify({'ok': False, 'error': t('api.rerunBusy')}), 409
 
     invalidated = downstream_closure(effective, node_id)
-    store.invalidate_nodes(run_id, invalidated)
 
-    # Replay through the ordinary start path as a resume of the very run we just pruned.
-    # Never park it: the wipe above already deleted this subtree's rows, and a queued
-    # rerun would leave that hole visible until some other run finishes.
+    # Replay through the ordinary start path as a resume of that very run.
+    # Never park it: a queued rerun would wipe its subtree at drain time, minutes later, when the
+    # canvas the user is looking at has moved on — so a busy server refuses this press by name.
+    # The erase itself is NOT done here: it travels in the payload and the worker performs it once
+    # the slot is genuinely ours (see :func:`engine.run._rerun_request`).
     data['resume_run_id'] = run_id
+    data['rerun_invalidate'] = {'run_id': run_id, 'node_ids': list(invalidated)}
     data['queue'] = False
     answer = run_engine.begin_run(data, request.headers.get('X-Lang') or '')
     body = dict(answer['body'])

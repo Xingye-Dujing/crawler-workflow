@@ -129,6 +129,26 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
     }
 
 
+def keep_waiting_as(entry: QueueEntry, parked_id: str) -> None:
+    """Give a re-parked drain attempt its caller's identity and its place at the front.
+
+    The hand-off loses the slot to a live press and ``begin_run`` parks it again — as a NEW entry,
+    with a fresh id at the TAIL. The browser is still holding the id it was given when it pressed
+    运行, so its 取消 would never match, and a request that had waited longest would queue behind
+    requests that arrived after it. The answer names the entry it just appended, so this finds it by
+    that id and gives it back the waited position and the id the caller already has.
+    """
+    with queue_lock:
+        index = next((i for i, item in enumerate(_RUN_QUEUE) if item['id'] == parked_id), None)
+        if index is None:
+            return
+        parked = _RUN_QUEUE.pop(index)
+        parked['id'] = entry['id']
+        parked['queued_at'] = entry['queued_at']
+        _RUN_QUEUE.insert(0, parked)
+    mirror_queue()
+
+
 def queue_snapshot() -> list:
     """The waiting requests of THIS account, oldest first — without their payloads."""
     owner = _owner_id()
@@ -319,6 +339,7 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
             # path already parked it again (``begin_run`` → ``enqueue_run`` appends a fresh
             # entry). Pushing this one back as well would run the same canvas TWICE — and the
             # duplicate would survive a restart, because both entries are mirrored.
+            keep_waiting_as(entry, str(body.get('queue_id') or ''))
             return
         if answer.get('status') == 200 and body.get('ok'):
             if _console_is_for(entry):

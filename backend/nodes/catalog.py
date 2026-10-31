@@ -6,15 +6,15 @@ whose last branch was the only thing noticing a type with no executor), and ``ca
 own ``_VALID_NODE_TYPES`` plus a labels map. Adding a type meant editing all three and hoping none
 was forgotten; a contract test comparing them did not exist.
 
-This is the backend half of the plugin seam (the frontend still renders its own catalogue until
-Phase 2 of the 2026-10 refactor): one ``NodePlugin`` per type declares what the type is for,
-which shape it carries downstream, and whether its console lines are quiet. The engine derives its
-sets from here, and the executor table in ``app.py`` is pinned against it by a test, so a new type
-cannot be half-registered.
+This is the backend half of the plugin seam: one ``NodePlugin`` per type declares what the type is
+for, which shape it carries downstream, and whether its console lines are quiet. The engine derives
+its sets from here, and the executor registry (``nodes/registry.py``) is pinned against the same
+catalogue by a contract test, so a new type cannot be half-registered. The browser renders the
+server's answer too (:func:`api.node_types.node_types` → ``static/js/node-types.js``) rather than
+keeping a second list that can only be edited in parallel.
 
-The plugin's **behaviour** still lives in ``app.py`` today. Phase 2 of the plan moves each executor
-body into ``backend/nodes/executors/<type>.py`` behind the same ``(node, call)`` signature; the
-catalogue and the registry stay the same then, which is why this step is worth landing first.
+Each plugin's **behaviour** lives beside its declaration: one module per type under
+``backend/nodes/executors/``, behind the same ``(node, call)`` signature the registry calls.
 """
 
 from __future__ import annotations

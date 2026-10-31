@@ -221,6 +221,38 @@ class TestConsoleReset:
     workflow API assertion three files later.
     """
 
+    def test_the_reset_takes_the_lock_the_status_endpoint_reads_under(self, console):
+        """The line list and its total change as ONE step, or a poll sees the old tail at total 0.
+
+        ``/api/workflow/status`` takes ``_completed_lock`` to read ``logs`` together with
+        ``_log_total``; a claim that swapped the keys one at a time let a poll land between them and
+        hand back the previous run's 5000 lines with the new run's total of zero — the browser's
+        delta cursor then repeats or skips lines after a reload, which is the invariant this whole
+        file holds. Blocking on the lock is how a test proves the swap is inside it."""
+        import threading
+
+        from runtime.state import _completed_lock
+
+        app, state = console
+        app.add_log('上一轮的一行')
+        assert _completed_lock.acquire(blocking=False), 'the console lock was already held'
+        done = threading.Event()
+
+        def _reset():
+            reset_console_state()
+            done.set()
+
+        worker = threading.Thread(target=_reset, daemon=True)
+        worker.start()
+        try:
+            assert not done.wait(0.25), 'reset_console_state replaced the console outside the lock'
+        finally:
+            _completed_lock.release()
+        assert done.wait(5), 'the reset never finished once the lock was handed over'
+        worker.join(5)
+        assert state['logs'] == []
+        assert state['_log_total'] == 0
+
     def test_every_line_and_counter_returns_to_its_between_runs_value(self, console):
         app, state = console
         app.add_log('共享的一行')

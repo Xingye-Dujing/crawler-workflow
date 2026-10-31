@@ -52,7 +52,6 @@ def cloud(client, monkeypatch):
     # local owner's directory, so the signed-in account gets the same jars or every crawl would be
     # refused by validation before it starts.
     import glob
-    import os
     import shutil
 
     from runtime import paths

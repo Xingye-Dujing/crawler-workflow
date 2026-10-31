@@ -40,6 +40,7 @@ import zlib
 import pandas as pd
 from core.config import Config
 from core.refs import sanitize_filename
+from runtime import paths
 
 from i18n import t
 
@@ -86,7 +87,7 @@ class DatasetStore:
     """SQLite-backed table storage for files dropped into a workflow."""
 
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or Config.DATASETS_DB
+        self.db_path = db_path or paths.active().datasets_db
         os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)

@@ -136,11 +136,37 @@ class AccountsStore:
             (password_hash, int(bool(must_change_password)), now, now, user_id),
         )
 
-    def record_failure(self, user_id: str, failures: int, locked_until: float, now: float) -> None:
-        self._write(
-            'UPDATE users SET failed_attempts = ?, locked_until = ?, updated_at = ? WHERE user_id = ?',
-            (int(failures), float(locked_until), now, user_id),
-        )
+    def bump_failure(self, user_id: str, now: float) -> int:
+        """Add one failed attempt in the database and answer with the NEW total.
+
+        The count must not be read, incremented and written back: N concurrent wrong passwords all
+        read the same value, so a scripted attack against one account advanced the counter by one no
+        matter how many tries it made, and ``locked_until`` never arrived. The document promise of
+        「连续 5 次锁 15 分钟」 is only true if the addition happens inside the row.
+        """
+        with self._lock:
+            self._conn.execute(
+                'UPDATE users SET failed_attempts = failed_attempts + 1, updated_at = ? WHERE user_id = ?',
+                (now, user_id),
+            )
+            row = self._conn.execute('SELECT failed_attempts FROM users WHERE user_id = ?', (user_id,)).fetchone()
+            self._conn.commit()
+        return int(row['failed_attempts']) if row is not None else 0
+
+    def set_locked_until(self, user_id: str, locked_until: float, failures: int) -> bool:
+        """Arm the lock for the row STILL at ``failures``; answer whether it was armed.
+
+        The guard is what keeps a lock out of the owner's face: if a correct login zeroed the
+        counter between :meth:`bump_failure` and this write, the row no longer matches and nothing
+        gets locked — the alternative is refusing the person who just proved the password.
+        """
+        with self._lock:
+            cur = self._conn.execute(
+                'UPDATE users SET locked_until = ? WHERE user_id = ? AND failed_attempts = ?',
+                (float(locked_until), user_id, int(failures)),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
 
     def record_login(self, user_id: str, now: float, ip: str) -> None:
         self._write(

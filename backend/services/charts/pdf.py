@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import tempfile
 
-from core import machine
+from core import machine, procs
 from runtime.settings import get_setting
 
 from i18n import t
@@ -130,13 +130,16 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
         # ``check=False`` on purpose: xelatex's non-zero exit is this function's own ``error``
         # answer (with the log tail), which the node reports and the run survives. Raising here
         # would replace a stated refusal with a traceback out of the worker thread. The return
-        # code is read below, together with "did a PDF actually appear".
+        # code is read below, together with "did a PDF actually appear". ``popen_kwargs`` is the
+        # Windows half of "no black window flashes for every compile" — the packaged server has no
+        # console of its own, and xelatex is a console program.
         result = subprocess.run(
             [xelatex, '-interaction=batchmode', '-halt-on-error', '-output-directory', work, 'main.tex'],
             cwd=work,
             capture_output=True,
             timeout=120,
             check=False,
+            **procs.popen_kwargs(),
         )
     except (subprocess.SubprocessError, OSError) as e:
         shutil.rmtree(work, ignore_errors=True)

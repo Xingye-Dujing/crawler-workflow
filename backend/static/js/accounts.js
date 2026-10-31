@@ -113,6 +113,15 @@ const Accounts = {
         this.load();
     },
 
+    /* A language switch re-stamps the static page; this table, its headers and its audit lines are
+       built from cached rows here, so an open panel would otherwise keep the old words until it is
+       reopened. The audit refetches (a row's event word comes from the catalogue, not the server). */
+    onLanguageChange() {
+        if (!this.overlay) return;
+        this.render('');
+        this.loadAudit();
+    },
+
     load() {
         fetch('/api/accounts')
             .then((response) => response.json())
@@ -144,17 +153,30 @@ const Accounts = {
         this.users.forEach((user) => {
             const disabled = user.status === 'disabled';
             const self = Auth.user && user.username === Auth.user.username;
+            /* A row whose id is not the shape the server mints gets no buttons: the action handlers
+               below interpolate it into an inline `onclick`, which is TWO grammars (a JS literal
+               inside an HTML attribute), and `esc` is the escape for the wrong one — it turns `'`
+               into `&#39;`, which the parser hands back as a bare quote. The id comes from
+               `services.accounts` (`u_` plus twelve hex characters), so anything else is a defect
+               worth showing as a plain row rather than a callable one. */
+            const callable = /^u_[0-9a-f]{12}$/.test(String(user.user_id || ''));
             html += '<tr>' +
                 '<td>' + this.esc(user.username) + '</td>' +
                 '<td>' + this.esc(user.role === 'admin' ? I18n.t('accounts.roleAdmin') : I18n.t('accounts.roleUser')) + '</td>' +
-                '<td>' + this.esc(disabled ? I18n.t('accounts.disabled') : I18n.t('accounts.active')) + '</td>' +
-                '<td>' + this.esc(this.when(user.last_login_at)) + '</td>' +
+                '<td>' + this.esc(disabled ? I18n.t('accounts.disabled') : I18n.t('accounts.active')) +
+                (user.must_change_password ? ' · ' + this.esc(I18n.t('accounts.needsChange')) : '') + '</td>' +
+                // The moment is rendered where it was recorded: a browser formatting an epoch prints
+                // the VIEWER's zone, so the panel and the server log would disagree by hours about
+                // when someone signed in. The server ships `*_local` for exactly this.
+                '<td>' + this.esc(user.last_login_local || I18n.t('accounts.never')) + '</td>' +
                 '<td class="accounts-actions">' +
-                '<button class="menu-btn" type="button" onclick="Accounts.reset(\'' + this.esc(user.user_id) + '\')">' + this.esc(I18n.t('accounts.reset')) + '</button>' +
-                '<button class="menu-btn" type="button" onclick="Accounts.forceLogout(\'' + this.esc(user.user_id) + '\')">' + this.esc(I18n.t('accounts.forceLogout')) + '</button>' +
-                (self ? '' : '<button class="menu-btn" type="button" onclick="Accounts.toggle(\'' + this.esc(user.user_id) + '\')">' +
-                    this.esc(disabled ? I18n.t('accounts.enable') : I18n.t('accounts.disable')) + '</button>' +
-                    '<button class="menu-btn" type="button" onclick="Accounts.remove(\'' + this.esc(user.user_id) + '\')">' + this.esc(I18n.t('accounts.delete')) + '</button>') +
+                (callable ?
+                    '<button class="menu-btn" type="button" onclick="Accounts.reset(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.reset')) + '</button>' +
+                    '<button class="menu-btn" type="button" onclick="Accounts.forceLogout(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.forceLogout')) + '</button>' +
+                    (self ? '' : '<button class="menu-btn" type="button" onclick="Accounts.toggle(\'' + user.user_id + '\')">' +
+                        this.esc(disabled ? I18n.t('accounts.enable') : I18n.t('accounts.disable')) + '</button>' +
+                        '<button class="menu-btn" type="button" onclick="Accounts.remove(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.delete')) + '</button>')
+                    : '') +
                 '</td></tr>';
         });
         html += '</tbody></table>';
@@ -262,24 +284,36 @@ const Accounts = {
     },
 
     loadAudit() {
+        const out = () => document.getElementById('accounts-audit-rows');
         fetch('/api/accounts/audit?limit=100')
             .then((response) => response.json())
             .then((body) => {
-                const out = document.getElementById('accounts-audit-rows');
-                if (!out || !body || !body.ok) return;
-                const rows = body.entries || [];
-                if (!rows.length) {
-                    out.innerHTML = '<p class="accounts-empty">' + this.esc(I18n.t('accounts.auditEmpty')) + '</p>';
+                const rowsEl = out();
+                if (!rowsEl) return;
+                if (!body || !body.ok) {
+                    // A refresh that says nothing is read as 「the same list is still current」: the
+                    // operator acts on the entries that are no longer the truth.
+                    rowsEl.innerHTML = '<p class="accounts-error">' + this.esc((body && body.error) || I18n.t('accounts.failed')) + '</p>';
                     return;
                 }
-                out.innerHTML = '<table class="accounts-table"><tbody>' + rows.map((row) => {
+                const rows = body.entries || [];
+                if (!rows.length) {
+                    rowsEl.innerHTML = '<p class="accounts-empty">' + this.esc(I18n.t('accounts.auditEmpty')) + '</p>';
+                    return;
+                }
+                rowsEl.innerHTML = '<table class="accounts-table"><tbody>' + rows.map((row) => {
                     const label = I18n.t('accounts.event.' + row.event);
-                    return '<tr><td>' + this.esc(this.when(row.ts)) + '</td><td>' +
+                    return '<tr><td>' + this.esc(row.ts_local || '') + '</td><td>' +
                         this.esc(row.username || '') + '</td><td>' +
                         this.esc(label === 'accounts.event.' + row.event ? row.event : label) + '</td></tr>';
                 }).join('') + '</tbody></table>';
             })
-            .catch(() => { });
+            .catch(() => {
+                const rowsEl = out();
+                if (rowsEl) {
+                    rowsEl.innerHTML = '<p class="accounts-error">' + this.esc(I18n.t('accounts.failed')) + '</p>';
+                }
+            });
     },
 
     post(url, payload) {
@@ -289,12 +323,6 @@ const Accounts = {
             body: JSON.stringify(payload || {}),
         }).then((response) => response.json().then((body) => response.ok && !!body.ok))
             .catch(() => false);
-    },
-
-    when(ts) {
-        if (!ts) return I18n.t('accounts.never');
-        const date = new Date(Number(ts) * 1000);
-        return isNaN(date.getTime()) ? I18n.t('accounts.never') : date.toLocaleString();
     },
 
     esc(value) {

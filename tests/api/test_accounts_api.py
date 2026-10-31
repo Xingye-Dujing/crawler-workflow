@@ -135,6 +135,37 @@ class TestTheRegistryNeverCarriesACredential:
         assert PASSWORD not in text
 
 
+class TestAMomentShipsFromTheServer:
+    """Every moment leaves as both a number and the server's own reading of it.
+
+    The panel renders the second one: a browser formatting an epoch prints the VIEWER's zone, so an
+    administrator on UTC+8 and the audit row in ``accounts.db`` disagreed by hours about when someone
+    signed in — the same reason ``schedules`` already ships ``next_run_local``.
+    """
+
+    _TEXT = re.compile(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}')
+
+    def test_the_account_row_carries_a_server_local_time(self, admin_client):
+        rows = admin_client.get('/api/accounts').get_json()['accounts']
+        admin = next(row for row in rows if row['username'] == 'admin')
+        assert admin['last_login_at'] > 0, admin
+        assert self._TEXT.fullmatch(admin['last_login_local']), admin
+
+    def test_a_moment_that_never_happened_is_blank_not_zero(self, admin_client):
+        created = _create(admin_client, 'alice').get_json()['user']
+        rows = admin_client.get('/api/accounts').get_json()['accounts']
+        row = next(item for item in rows if item['user_id'] == created['user_id'])
+        # The WORD for 「从未」 belongs to the panel; a missing moment is data, not a translation.
+        assert row['last_login_local'] == '', row
+
+    def test_the_audit_rows_carry_a_server_local_time(self, admin_client):
+        _create(admin_client, 'alice')
+        entries = admin_client.get('/api/accounts/audit?limit=5').get_json()['entries']
+        assert entries
+        for row in entries:
+            assert self._TEXT.fullmatch(row['ts_local']), row
+
+
 class TestAccountLifecycle:
     def test_disable_ends_live_sessions_and_blocks_login(self, admin_client):
         bob = _create(admin_client, 'bob').get_json()['user']
@@ -264,6 +295,87 @@ class TestAccountLifecycle:
             execution_state['user_id'] = ''
             execution_state['run_id'] = ''
         assert releases == [bob['user_id']], 'a force logout closed a live run’s stores'
+
+    def test_a_force_logout_closes_the_scope_inside_the_claim_lock(self, admin_client, monkeypatch):
+        """「No run is live」 must be proved inside ``execute_lock`` — the lock ``begin_run`` claims under.
+
+        Probing and closing were two separate steps here, so a run could start in the gap and keep a
+        ``RunStore`` this route had just closed: the worker dies on ``Cannot operate on a closed
+        database`` halfway through a record. The test asks the REAL lock, from the thread that holds
+        it: a ``threading.Lock`` is not reentrant, so a non-blocking acquire failing is the proof."""
+        from api import accounts as accounts_api
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        held = []
+
+        def spy(user_id):
+            acquired = accounts_api.execute_lock.acquire(blocking=False)
+            if acquired:
+                accounts_api.execute_lock.release()
+            held.append(not acquired)
+            return user_id
+
+        monkeypatch.setattr(accounts_api.stores, 'release_user', spy)
+        assert _post(admin_client, f'/api/accounts/{bob["user_id"]}/logout').status_code == 200
+        assert held == [True], 'the stores closed outside the lock a claim takes'
+
+    def test_a_delete_revokes_the_sessions_before_it_moves_the_tree(self, admin_client, monkeypatch):
+        """A victim whose session still resolves during the move re-creates the tree being moved.
+
+        The row outlives ``release_user`` by the length of ``shutil.move``: a request in that window
+        rebuilt the user's stores, and building them calls ``ensure()`` — a FRESH empty
+        ``data/users/<id>/`` the move knows nothing about. The row is deleted right after, so that
+        directory is never trashed and its databases are never closed."""
+        from api import accounts as accounts_api
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        _settle_password(_login(_new_client(admin_client), 'bob', PASSWORD))
+        live_at_release = []
+
+        def spy(user_id):
+            rows = accounts_service.get_account_service().store._all(
+                'SELECT sid_hash FROM sessions WHERE user_id = ? AND revoked_at IS NULL', (user_id,)
+            )
+            live_at_release.append(len(rows))
+
+        monkeypatch.setattr(accounts_api.stores, 'release_user', spy)
+        response = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+        assert response.status_code == 200, response.get_json()
+        assert live_at_release == [0], 'a live session could still rebuild the tree mid-move'
+
+    def test_a_delete_that_cannot_move_the_data_back_names_where_it_went(self, admin_client, monkeypatch):
+        """The compensation itself can fail, and then 「数据仍在原处」 is a lie with a direction.
+
+        ``delete_user`` moves the tree, drops the row, and on a refused drop moves it back. A
+        Windows rename can fail on a profile a browser still holds — leaving the data in
+        ``users/.trash/`` while the account row stays. The refusal has to say where the tree ACTUALLY
+        is, or the operator looks in the one directory it is not in."""
+        import shutil
+        import sqlite3
+
+        from services.accounts.store import AccountsStore
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        real_move = shutil.move
+        moves = []
+
+        def move_then_refuse(source, destination):
+            moves.append((source, destination))
+            if len(moves) > 1:
+                raise OSError(13, 'Permission denied')
+            return real_move(source, destination)
+
+        def refuse_drop(_self, user_id):
+            raise sqlite3.OperationalError(f'database is locked: {user_id}')
+
+        monkeypatch.setattr(accounts_service.shutil, 'move', move_then_refuse)
+        monkeypatch.setattr(AccountsStore, 'delete_user', refuse_drop)
+
+        response = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+        assert response.status_code == 500, response.get_json()
+        error = response.get_json()['error']
+        assert '.trash' in error, error
+        assert bob['user_id'] in error, error
 
     def test_delete_refuses_while_that_accounts_cookie_window_is_open(self, admin_client):
         """The account's Chrome profile is in use; moving its tree would fail (and strand it)."""

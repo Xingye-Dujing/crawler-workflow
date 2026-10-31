@@ -29,8 +29,11 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   Linux box finds; CJK font stack and ctex font set in `services/charts/visualizer.py`/`tikz.py`. Overrides:
   `CHROME_BIN`/`CHROME_PATH`, `CIXI_NODE_BIN`/`NODE_BIN`, `CIXI_CATBUS_CLI`/`CATBUS_CLI`/`CATBUS_HOME`. Never inline a
   `Program Files` path, an `.exe` name or `taskkill` anywhere else.
-- **OS-only `Popen` keywords live in `utils/procs`**: `windowsHide` is not a keyword (`TypeError`); the answer is
-  `creationflags=CREATE_NO_WINDOW` via `procs.popen_kwargs()`, tested on all three. A piped **child** writes the ANSI
+- **OS-only `Popen` keywords live in `core/procs`**: `windowsHide` is not a keyword (`TypeError`); the answer is
+  `creationflags=CREATE_NO_WINDOW` via `procs.popen_kwargs()`, tested on all three. Every spawn site in `backend/`
+  passes it — `tests/unit/crawlers/test_platform_rules.py` scans the AST and refuses a console-subsystem child started
+  without it, because a packaged server has no console and each PDF, each harvest proxy and each reaped browser
+  otherwise flashes a black window. A piped **child** writes the ANSI
   code page: cross in bytes, decode UTF-8 by hand, pass params on stdin, never argv.
 - **Platform-independent tests are the proof**: no drive-letter data, no `.exe`-pinned refusal, no
   `sys.platform='win32'` patch faking a gate the product reads (patch both sides or assert the refusal), no timezone
@@ -117,8 +120,13 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   `restoreState` leaves the camera alone; `addNode` randomizes only a non-finite x/y (0 is a position).
 - **One page boot must not be a single point of failure:** a throw in the one `DOMContentLoaded` body skips every later
   step, so boot steps go through `boot(name, fn)`.
-- **There is ONE dialog shell:** a second `showDialog` replaces the first (its promise never settles). A forced dialog
-  (the password debt) must suppress every other boot dialog, and its success reloads the page.
+- **There is ONE dialog shell, and it holds ONE pending answer:** a second `showDialog` paints over the first, so the
+  shell registers how to settle the pending dialog and answers it with its own `cancelValue` before painting (an
+  unsettled promise strands the caller's cleanup forever — the forced password dialog's reopen guard reset only in
+  `.then`, so the debt became unpayable on that page). A `dismissable: false` dialog is never displaced: the newcomer
+  is answered at once with its own non-answer. Its success reloads the page. Pinned in
+  `tests/frontend/harness_dialog_a11y.mjs` — `harness_accounts.mjs` stubs `showDialog`, so the panel test alone proves
+  nothing here.
 - **A dialog with an input is answered by the input:** leave `value:` off `showDialog` input dialogs.
 
 ### Measurement and live assertions
@@ -155,17 +163,34 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   the sink is ARMED, never from whichever thread printed the 200th line — and status/stop/process/stats/live
   previews/report/console answer another account with `foreign_run`/nothing only. **A refused claim owns nothing**: the
   claim stamps `run_id`/`user_id`/ambient before its last payload refusal, so a refusal hands all of it back.
+  **A durable mutation follows the claim**: 重跑节点 deletes a node's stored rows and releases its dedupe claims, so the
+  erase travels in the payload and the worker performs it once the slot is its own — erasing in the request left the
+  rows gone when a fire/drain won the gap, and the retry was then refused for having no rows (only 继续, at the
+  platform's price, could bring them back). `tests/unit/gates/test_account_paths_resolve_at_call.py` fails any
+  account-level `Config.*` path read outside `runtime/paths.py`.
 - **Authorize BEFORE touching the target.** An admin-only probe answers with the target's run id, and
   `stores.release_user()` closes that account's open databases: both must come after `_require_admin`, and "no run is
-  live" is proved inside `execute_lock` (the lock the claim takes) or a run starts between the guard and the move. A
-  thread list is a machine fact, so the process panel in accounts mode lists and accepts only the caller's own run
-  threads — the scheduler and another account's cookie window are nobody's kill button.
+  live" is proved inside `execute_lock` (the lock the claim takes) or a run starts between the guard and the move — that
+  includes 强制下线, whose release used to sit outside the lock. Deleting an account also **revokes its sessions before
+  the tree moves**: the row outlives `release_user` by the length of the `shutil.move`, and a request that still
+  resolves in that window rebuilds the user's stores, whose `ensure()` mints a fresh empty `data/users/<id>/` the move
+  never saw — untrashed, unclosed, ownerless. A thread list is a machine fact, so the process panel in accounts mode
+  lists and accepts only the caller's own run threads — the scheduler and another account's cookie window are nobody's
+  kill button.
 - **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the start path — the queue drains
   by calling *that*, never a weaker one; `queue:false` keeps the 400 for fail-fast callers. The worker's `finally`
-  clears `execution_state['thread']` **first** (the claim checks thread liveness). Queues are in-memory
+  clears `execution_state['thread']` **first** (the claim checks thread liveness), and `stopping` leaves **with it, in
+  one `execute_lock` section** — the stop route proves liveness and writes its flags under that same lock, so clearing
+  `stopping` at the top of the unwinding let a second 停止 re-pin it on a run that had already answered, and
+  `stop_requested()` then handed that stale stop to every later crawl. Queues are in-memory
   (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行. A drain answer
   of `queued:true` means the entry is **already parked** — pushing the original back too runs one canvas twice and the
-  duplicate is mirrored. Boot restores the mirror without OPENING a store for an account that has no `runs.db`, and
+  duplicate is mirrored; the drain then hands the parked entry its caller's `id` and its place at the front, because the
+  panel is holding that id as its 取消 button. **A refusal the queue cannot fix says so:** permanent refusals (an
+  un-walkable canvas, a corrupt reusable group, an unknown mode/provider, a transport this host does not speak, a 继续
+  whose record was purged) carry `drop:true`, and the drain discards them — a `put_back` at the FRONT plus `return`
+  means one unstartable request starves every entry behind it, survives the restart in the mirror, and never tells the
+  browser why. Boot restores the mirror without OPENING a store for an account that has no `runs.db`, and
   drains what it restored (those users were told 已排队).
 - **A test that calls an executor function directly must leave the app quiet:** `clean_globals` *fails* a leaked
   `execution_state['running']`.
@@ -284,6 +309,10 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   *task's* zone), the trigger sentence, `runnable`/`why_not` and the clock status all come from the server; a status
   token becomes a catalogue word — an unknown token shows as itself. Never format a moment in the browser, never
   invent a neighbouring word; `tests/unit/frontend/test_frontend_schedules.py` drives the real `schedules.js`.
+  The rule is per-MOMENT, not per-panel: the account registry and its audit rows shipped raw epochs and
+  `new Date(ts*1000).toLocaleString()` formatted the VIEWER's zone, so an administrator on UTC+8 read a 「登录成功」 eight
+  hours away from the audit line in `accounts.db` — the same accident, twice, in a panel nobody re-read. `public()` and
+  the audit rows therefore carry `*_local`, and `test_frontend_accounts.py` refuses a date formatter in `accounts.js`.
   **A new dock belongs in `DOCKED_PANELS` *and* in the dock matrix** (`tests/frontend/harness_panels.mjs`, enforced by
   `TestTheDock`/`test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel`).
 
@@ -346,6 +375,15 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
 - **A wrong password answers one sentence.** Verification runs BEFORE the lock and the status check: 「登录失败次数过多」
   or 「该账号已被禁用」 in answer to a wrong password is a username oracle (and skipping the hash said it by timing). The
   failure window is keyed `address|username` — a per-address window is a per-server lockout behind the documented proxy.
+- **The failed-attempt counter is added IN THE ROW** (`UPDATE … failed_attempts = failed_attempts + 1`, read back, then
+  arm `locked_until` guarded on that same count). Read-modify-write made a burst of five concurrent guesses count as
+  ONE attempt, so the documented 「连续 5 次锁 15 分钟」 never arrived — measured: the old shape kept 1 of 5, the new one
+  keeps 5. The guard is what keeps the lock off the owner's face when a correct login zeroed the counter in between.
+- **Every guess at a secret shares the window**, including 改密's `current_password`: an endpoint that verifies a password
+  with no window lets anyone holding a live session try it without limit, and each try costs a scrypt run (unbounded
+  requests are then unbounded CPU). The in-memory window is also **bounded by size**, not by politeness — pruning only
+  the key a login just touched left one permanent entry per abandoned username, which is a memory leak an attacker
+  drives.
 - **Token comparisons are on bytes:** `hmac.compare_digest` raises `TypeError` on a non-ASCII `str`, and WSGI hands back
   a header latin-1-decoded and a form field UTF-8-decoded, so a text compare of a client token is an attacker-paced 500
   (`security.token_matches`). A `next` value is rejected for control characters too: a `\n` is legal in a path and
@@ -354,7 +392,12 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   (`public_bind_refusal`) — `cloud` is not the only way a stranger can reach the port.
 - **A storage failure answers in the envelope the panel parses** (`{ok, error}`, never HTML), and account deletion moves
   the tree and drops the row as one guarded step with a compensating move-back: half a deletion leaves an account that
-  logs in over data nobody can find.
+  logs in over data nobody can find. The move-back can itself fail (Windows refuses a directory a browser still holds),
+  so a failed delete reports **where the tree actually is**, checked on disk, instead of a promised 「仍在原处」 — the
+  operator otherwise searches the one place the data is not.
+- **Replacing the process singleton closes the store it replaced.** `AccountsStore` holds one SQLite handle for its
+  lifetime; dropping the object dropped the connection, and on Windows a live connection is also a directory nothing
+  can delete. Same reason `tests/conftest.py` releases every user slot.
 - **A password field says so:** `type:'password'` plus the dialog shell's `autocomplete` default — without a directive
   the browser offers to save the credential and to refill 「当前密码」 with it.
 

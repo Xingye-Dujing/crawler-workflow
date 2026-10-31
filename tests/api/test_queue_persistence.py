@@ -101,8 +101,12 @@ class TestQueueDurability:
     def test_a_drained_request_that_was_parked_again_is_not_duplicated(self):
         """A lost race hands the entry back; a start path that ALREADY re-parked it must not
         also get the original pushed back. Two entries for one button press means the canvas is
-        crawled (and paid for) twice, and both entries survive the restart."""
-        run_queue.enqueue_run(_data('mine'), 'en')
+        crawled (and paid for) twice, and both entries survive the restart.
+
+        And the ONE entry that stays keeps the id the caller was given: the panel holds that id in its
+        取消 button, so a re-park under a fresh id is a request the user can no longer cancel, waiting
+        behind the canvases that arrived after it."""
+        first = run_queue.enqueue_run(_data('mine'), 'en')['body']['queue_id']
         parked = {
             'id': 'fresh',
             'workflow_name': 'fresh',
@@ -123,7 +127,7 @@ class TestQueueDurability:
             return {'status': 200, 'body': {'ok': True, 'queued': True, 'queue_id': 'fresh'}}
 
         run_queue.drain_queue(start_but_lose_the_race)
-        assert [e['id'] for e in _RUN_QUEUE] == ['fresh'], 'the same request is queued twice'
+        assert [e['id'] for e in _RUN_QUEUE] == [first], 'the same request is queued twice'
         _empty_queue()
         run_queue.load_pending_queue()
-        assert [e['id'] for e in _RUN_QUEUE] == ['fresh'], 'the duplicate reached the disk mirror'
+        assert [e['id'] for e in _RUN_QUEUE] == [first], 'the duplicate reached the disk mirror'

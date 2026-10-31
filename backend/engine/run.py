@@ -412,8 +412,11 @@ def start_next_queued() -> None:
 
 
 def cloud_refusal_response(provider: str) -> dict:
-    """The 400 body for :func:`_local_transport_refusal`, shaped per caller."""
-    return {'status': 400, 'body': {'ok': False, 'error': _local_transport_refusal(provider)}}
+    """The 400 body for :func:`_local_transport_refusal`, shaped per caller.
+
+    ``drop`` because a transport this host cannot speak is not something a later run fixes: a parked
+    entry would be re-tried after every finish and would starve every entry behind it."""
+    return {'status': 400, 'body': {'ok': False, 'error': _local_transport_refusal(provider)}, 'drop': True}
 
 
 def _wf_display_name(wf_engine, wf_idx: int) -> str:
@@ -714,7 +717,39 @@ def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock
         account_context.unbind(account_token)
 
 
-def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None):
+def _rerun_request(data: dict, run_id: str):
+    """The subtree a 「重跑节点」 pressed to redo, or ``None``.
+
+    The route computes the closure but must NOT erase it: the wipe deletes stored rows and releases
+    this run's dedupe claims, and a run that then lost the slot would leave the rows gone, the
+    rerun never run, and a second press refused because the node has no rows any more. The payload
+    therefore carries the intent, and the worker performs it once the slot is actually ours.
+    """
+    raw = data.get('rerun_invalidate')
+    if not isinstance(raw, dict):
+        return None
+    if str(raw.get('run_id') or '').strip() != str(run_id):
+        # A mirrored entry restored after a restart, or a stale payload: never erase a run that
+        # this request did not name.
+        return None
+    node_ids = [str(node) for node in (raw.get('node_ids') or ()) if str(node or '')]
+    return {'run_id': run_id, 'node_ids': node_ids} if node_ids else None
+
+
+def _invalidate_rerun_nodes(store, run_id: str, rerun) -> list:
+    """Erase the rerun's subtree now that this run owns the slot; answer the ids it removed.
+
+    No console line here: :meth:`invalidate_nodes` already reports how many 「已采集」 claims it
+    handed back, and a second sentence about the same wipe is the noise AGENTS refuses."""
+    if not rerun or str(rerun.get('run_id') or '') != str(run_id):
+        return []
+    store.invalidate_nodes(run_id, rerun['node_ids'])
+    return list(rerun['node_ids'])
+
+
+def _run_worker(
+    workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None, rerun=None
+):
     # The run thread starts here, not in a request handler — inherit the
     # language the UI asked for, or every line below would come out in the
     # server default.
@@ -745,6 +780,10 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
     created: list = []
     try:
         store = get_run_store()
+        # A rerun's erase happens HERE, after the slot is ours — not in the request that queued it.
+        # Everything below reads node statuses to decide what to reuse, so the pruned subtree has to
+        # be gone before that read or the rerun would adopt the rows it just deleted.
+        _invalidate_rerun_nodes(store, run_id, rerun)
         # Structure identity is taken on the effective graph, so it agrees with the key
         # the resume banner matches on (:func:`effective_workflow`) — disabling a node and
         # re-enabling it returns to the same identity, and a disabled node is absent from
@@ -1013,11 +1052,11 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
             execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
     finally:
         execution_state['running'] = False
-        # The stop is answered as of this line, not "sometime after": `stopping`
-        # is what `stop_requested()` reads, and leaving it set for a settled run
-        # would make the next helper that calls an executor function directly
-        # refuse to work over a run that finished two hours ago.
-        execution_state['stopping'] = False
+        # `stopping` is NOT cleared here. It goes in the final section below, together with the
+        # thread handle: the stop route proves "a run is live" and writes its flags under
+        # ``execute_lock``, and settling the record takes seconds. Clearing here let a second Stop
+        # press re-pin 「正在停止」 over a run that had already answered, and ``stop_requested()``
+        # then handed that stale flag to every later crawl.
         # Whatever is left claiming to be running was killed, not finished;
         # the rows it published are what the next attempt resumes from. With
         # no context the store never opened at all, so there is no run row to
@@ -1051,10 +1090,15 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
         set_log_sink(None)
         # Forget the owner too: a batch that outlives its run must not be filed under it later.
         run_log_writer.disarm()
-        # Release the handle this thread was recognised by, then let the
-        # queue have the slot. Both before anything else in this finally can
-        # be reordered: start_next_queued checks liveness through it.
-        execution_state['thread'] = None
+        # Release the handle this thread was recognised by, then let the queue have the slot. Both
+        # before anything else in this finally can be reordered: ``start_next_queued`` checks
+        # liveness through it. The stop flag leaves WITH it, inside the claim lock — the stop route
+        # proves a run is live and writes its flags under this same lock, so a second 停止 pressed
+        # while this thread was still settling cannot re-pin 「正在停止」 onto a run that has already
+        # published its verdict, and ``stop_requested()`` never hands a stale stop to the next crawl.
+        with execute_lock:
+            execution_state['stopping'] = False
+            execution_state['thread'] = None
         # Drop this thread's identity BEFORE the queue hands the slot on: the next request is
         # started under its own owner, never under this run's.
         account_context.unbind(account_token)
@@ -1117,20 +1161,27 @@ def begin_run(data: dict, lang_header: str) -> dict:
 
     Answers ``{'status': int, 'body': dict}`` instead of a Flask response,
     because the caller is not always a request.
+
+    A refusal may carry ``'drop': True``: that is the start path telling the queue this payload can
+    never start — a canvas the engine cannot walk, a corrupt reusable group, an unknown mode or
+    provider, a transport this host does not speak, a 继续 pointing at a purged record. Re-parking
+    one of those is not patience: the drain puts the entry back at the FRONT and returns, so one
+    unstartable request starves every request behind it, forever, and survives a restart in the
+    mirror. A transient refusal (「另一个运行正在进行」) deliberately has no ``drop``.
     """
     shape_error = workflow_shape_error(data)
     if shape_error:
         # Refused before the slot is claimed: a payload the engine cannot walk
         # must not become a failed run record, let alone a queued one that dies
         # in a thread nobody is watching.
-        return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
+        return {'status': 400, 'body': {'ok': False, 'error': shape_error}, 'drop': True}
     # A saved workflow keeps a reusable node as ONE group (so reopening can render it);
     # a run needs its children. The browser already expands on Run, but a scheduled fire
     # starts from the file and every queued request must see the same graph, so the
     # expansion happens here — before the claim, the mode/fingerprint and the queue.
     workflow, reusable_error = expand_reusable_workflow(data.get('workflow') or {})
     if reusable_error:
-        return {'status': 400, 'body': {'ok': False, 'error': reusable_error}}
+        return {'status': 400, 'body': {'ok': False, 'error': reusable_error}, 'drop': True}
     data = {**data, 'workflow': workflow}
     # The run shape is asked BEFORE the claim too, and it raises rather than answering
     # "parallel" to a token it does not know: the mode decides both how many records this run
@@ -1141,7 +1192,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
         run_mode(((data.get('workflow') or {}).get('settings')) or {})
         llm_provider(data.get('llm') or {})
     except UnknownOperationError as e:
-        return {'status': 400, 'body': {'ok': False, 'error': str(e)}}
+        return {'status': 400, 'body': {'ok': False, 'error': str(e)}, 'drop': True}
     resume_error = resume_refusal(data)
     if resume_error:
         # 'drop' tells the queue this entry can never start, so it is discarded
@@ -1203,6 +1254,8 @@ def begin_run(data: dict, lang_header: str) -> dict:
             # same cursor, accumulating instead of duplicated.
             resume_run_id = str(data.get('resume_run_id') or '').strip()
             run_id = resume_run_id or uuid.uuid4().hex[:12]
+            # Read after the id exists: a rerun names the run whose subtree it wants redone.
+            rerun = _rerun_request(data, run_id)
             execution_state['run_id'] = run_id
             # Which account owns the one shared slot. The status/stop/process endpoints compare
             # this with the request's account; the worker below re-binds the same identity, so
@@ -1286,11 +1339,11 @@ def begin_run(data: dict, lang_header: str) -> dict:
                     return cloud_refusal_response(llm['provider'])
                 if llm['provider'] == 'openrouter':
                     if not llm['api_key']:
-                        return {'status': 400, 'body': {'ok': False, 'error': t('api.needApiKey')}}
+                        return {'status': 400, 'body': {'ok': False, 'error': t('api.needApiKey')}, 'drop': True}
                     if not llm['model']:
-                        return {'status': 400, 'body': {'ok': False, 'error': t('api.needModel')}}
+                        return {'status': 400, 'body': {'ok': False, 'error': t('api.needModel')}, 'drop': True}
                 elif not llm['model']:
-                    return {'status': 400, 'body': {'ok': False, 'error': t('api.needOllamaModel')}}
+                    return {'status': 400, 'body': {'ok': False, 'error': t('api.needOllamaModel')}, 'drop': True}
 
             cancel_event = threading.Event()
             execution_state['cancel_event'] = cancel_event
@@ -1341,7 +1394,18 @@ def begin_run(data: dict, lang_header: str) -> dict:
     try:
         execution_state['thread'] = threading.Thread(
             target=_run_worker,
-            args=(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, _owner),
+            args=(
+                workflow,
+                mode,
+                headless,
+                use_profile,
+                run_id,
+                resume_run_id,
+                workflow_name,
+                max_workers,
+                _owner,
+                rerun,
+            ),
             daemon=True,
             name='run',
         )

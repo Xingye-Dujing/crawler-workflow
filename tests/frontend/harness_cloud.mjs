@@ -253,15 +253,42 @@ out.turnsBack = { flag: CloudMode.on, dataCloud: doc.documentElement.dataset.clo
 
 /* ── the way out, and the expired-session redirect ─────────────────────── */
 navigatedTo = null;
-let logoutRequest = null;
+let logoutRequests = [];
 const configFetch = sandbox.fetch;
+/* A real Response carries `ok`, not only a status: the page has to READ the answer before it
+   navigates, and a stub that answers every call as if it were accepted would hide that. */
 sandbox.fetch = (url, init) => {
-    logoutRequest = { url: String(url), method: (init && init.method) || 'GET' };
-    return Promise.resolve({ status: 200, json: () => Promise.resolve({}) });
+    logoutRequests.push({ url: String(url), method: (init && init.method) || 'GET' });
+    return Promise.resolve({ status: 200, ok: true, json: () => Promise.resolve({}) });
 };
-sandbox.logout();
-await flush();
-out.logout = { request: logoutRequest, navigatedTo };
+await sandbox.logout();
+out.logout = { request: logoutRequests[0], navigatedTo };
+
+/* A refused sign-out must NOT navigate. 「/login」 over a live session bounces straight back to the
+   canvas, so the button reads as broken while the cookie keeps working. The page re-reads
+   /api/config for the session's current CSRF token and asks once more. */
+navigatedTo = null;
+logoutRequests = [];
+let csrfSeen = null;
+sandbox.fetch = (url, init) => {
+    const text = String(url);
+    logoutRequests.push({ url: text, method: (init && init.method) || 'GET' });
+    if (text === '/api/config') {
+        return Promise.resolve({
+            status: 200, ok: true, json: () => Promise.resolve({ auth: { csrf_token: 'fresh-token' } }),
+        });
+    }
+    if (text === '/logout') {
+        csrfSeen = (init && init.headers && init.headers['X-CSRF-Token']) || null;
+        const accepted = csrfSeen === 'fresh-token';
+        return Promise.resolve({
+            status: accepted ? 200 : 403, ok: accepted, json: () => Promise.resolve({ ok: accepted }),
+        });
+    }
+    return Promise.resolve({ status: 404, ok: false, json: () => Promise.resolve({}) });
+};
+await sandbox.logout();
+out.logoutRetried = { requests: logoutRequests, csrf: csrfSeen, navigatedTo };
 sandbox.fetch = configFetch;
 
 navigatedTo = null;

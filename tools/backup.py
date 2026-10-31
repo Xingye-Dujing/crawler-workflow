@@ -11,13 +11,17 @@ A push protects the branch, not the two things this checkout can lose:
 What goes into a backup (all optional items are skipped when absent):
 
 * ``repo.bundle`` — every ref, restorable with ``git clone repo.bundle``;
-* ``data.zip`` — ``data/workflows/``, ``data/reusable_nodes/``, the SQLite stores (``*.db``),
-  ``settings.json`` and ``model_registry.json``;
+* ``data.zip`` — the machine's ``settings.json`` and ``model_registry.json``, and for BOTH the
+  system tree and every account tree (``data/users/<user_id>/``): ``workflows/``,
+  ``reusable_nodes/`` and the SQLite stores (``*.db``). Each database's write-ahead log is merged
+  into the file before it is read, and when a running server holds the write lock the ``-wal``
+  travels with it — a copy of ``x.db`` alone is not a copy of the database;
 * ``manifest.json`` — when, from which commit, whether the worktree was dirty, and every member.
 
 **Cookies are excluded by default.** They are live account credentials in plain JSON; a backup
 file gets copied to USB sticks and cloud drives. Pass ``--with-cookies`` only for a backup that
-stays on this machine, and treat the resulting zip as a password.
+stays on this machine, and treat the resulting zip as a password. It then covers every account's
+``cookies/`` as well as the local owner's.
 
 Usage (from the repository root):
 
@@ -32,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import subprocess
 import zipfile
 from datetime import datetime
@@ -45,28 +50,90 @@ DEFAULT_DATA = REPO_ROOT / 'data'
 DATA_DIRS = ('workflows', 'reusable_nodes')
 #: Single files worth keeping: settings hold machine paths, the registry names the fine-tuned models.
 DATA_FILES = ('settings.json', 'model_registry.json')
-#: ``*.db`` are the durable stores; their ``-wal``/``-shm`` siblings are scratch.
+#: ``*.db`` are the durable stores. Their ``-wal`` sibling is NOT scratch: committed transactions can
+#: still be living there, so a copy of the main file alone loses the newest rows (see
+#: :func:`_database`).
 DATA_DB_GLOB = '*.db'
 #: Live account credentials — excluded unless the caller asks.
 COOKIES_DIR = 'cookies'
+#: Every account's own tree of the same shape lives under this directory.
+ACCOUNTS_DIR = 'users'
+#: A deleted account's tree, set aside for the operator to recover or purge deliberately. It is not
+#: this backup's subject, and archiving it would double the file for a decision already made.
+SKIP_DIRS = ('.trash',)
+#: SQLite's side files: ``-wal`` carries what has not been merged yet, ``-shm`` is its index.
+SQLITE_SUFFIXES = ('-wal', '-shm')
 
 
 # ─── What a backup contains ────────────────────────────────────
 
 
+def _scope_roots(data_root: Path) -> list[Path]:
+    """The system tree and every account tree.
+
+    A multi-account install keeps its RUNTIME state in ``data/users/<user_id>/``: each account's
+    ``runs.db``/``datasets.db``/``history.db``/``workflow_history.db``/``biblio.db``, its saved
+    canvases, its reusable nodes and its cookie jars. Enumerating only ``data/``'s top level — which
+    is what this tool did before the accounts landed — therefore backs up the machine's settings and
+    NOT one byte of the work the docstring promises to protect, and reports success while doing it.
+    """
+    roots = [data_root]
+    users = data_root / ACCOUNTS_DIR
+    if users.is_dir():
+        roots.extend(sorted(path for path in users.iterdir() if path.is_dir() and path.name not in SKIP_DIRS))
+    return roots
+
+
+def _database(path: Path) -> list[Path]:
+    """One SQLite file plus whatever its write-ahead log still holds back.
+
+    ``x.db`` alone is NOT the database: transactions already committed can still be sitting in
+    ``x.db-wal``, so copying the main file alone drops the newest rows — exactly the accounts a
+    registry backup exists to keep. The WAL is merged into the file first (the same move
+    ``tools/migrate_accounts.py`` makes); when a live server holds the write lock the merge cannot
+    run, and the side files travel with the database instead.
+    """
+    _checkpoint(path)
+    chosen = [path]
+    for suffix in SQLITE_SUFFIXES:
+        peer = path.with_name(path.name + suffix)
+        if peer.is_file():
+            chosen.append(peer)
+    return chosen
+
+
+def _checkpoint(path: Path) -> None:
+    """Fold a database's WAL into the main file, best effort (a busy server is not a failure)."""
+    try:
+        connection = sqlite3.connect(str(path), timeout=1.0)
+        try:
+            connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return
+
+
 def select_data(data_root: Path, with_cookies: bool = False) -> list[Path]:
     """Every existing member of the backup, in a stable order, rooted at *data_root*."""
     chosen: list[Path] = []
-    for name in DATA_DIRS:
-        directory = data_root / name
-        if directory.is_dir():
-            chosen.extend(sorted(path for path in directory.rglob('*') if path.is_file()))
-    for pattern in (*DATA_FILES, DATA_DB_GLOB):
-        chosen.extend(sorted(path for path in data_root.glob(pattern) if path.is_file()))
-    if with_cookies:
-        jar_dir = data_root / COOKIES_DIR
-        if jar_dir.is_dir():
-            chosen.extend(sorted(path for path in jar_dir.rglob('*') if path.is_file()))
+    data_root = Path(data_root)
+    for index, scope in enumerate(_scope_roots(data_root)):
+        for name in DATA_DIRS:
+            directory = scope / name
+            if directory.is_dir():
+                chosen.extend(sorted(path for path in directory.rglob('*') if path.is_file()))
+        chosen.extend(sorted(item for path in scope.glob(DATA_DB_GLOB) if path.is_file() for item in _database(path)))
+        if index == 0:
+            # Machine-level single files; an account tree holds none of them.
+            for name in DATA_FILES:
+                singleton = scope / name
+                if singleton.is_file():
+                    chosen.append(singleton)
+        if with_cookies:
+            jar_dir = scope / COOKIES_DIR
+            if jar_dir.is_dir():
+                chosen.extend(sorted(path for path in jar_dir.rglob('*') if path.is_file()))
     return chosen
 
 
@@ -163,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         '--with-cookies',
         action='store_true',
-        help='include data/cookies (live account credentials in plain JSON — keep that backup offline)',
+        help='include every cookies/ jar (live account credentials in plain JSON — keep that backup offline)',
     )
     args = parser.parse_args(argv)
     manifest = create_backup(Path(args.out), Path(args.data), REPO_ROOT, with_cookies=args.with_cookies)

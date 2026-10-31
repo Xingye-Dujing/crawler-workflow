@@ -7,14 +7,15 @@ manages accounts, not other people's datasets.
 """
 
 import logging
+import os
 import sqlite3
 
 from flask import Blueprint, jsonify, request
-from runtime import stores
+from runtime import paths, stores
 from runtime.state import _RUN_QUEUE, execute_lock, execution_state
 from sessions.routes import _COOKIE_JOB
 
-from api.auth import current_sid, current_user
+from api.auth import client_ip, current_sid, current_user
 from api.http import _bad_body, _json_body
 from i18n import t
 from services.accounts.errors import AccountError
@@ -52,6 +53,35 @@ def _fail_storage(exc: Exception):
     English literal here would be an untranslated line nobody asked for."""
     logger.exception(t('accounts.storageFailed', err=type(exc).__name__))
     return jsonify({'ok': False, 'error': t('accounts.storageFailed', err=type(exc).__name__)}), 500
+
+
+def _where_is_the_tree(user_id: str) -> str:
+    """Where this account's data directory actually lives, checked rather than promised."""
+    in_place = paths.user_root(user_id)
+    if os.path.isdir(in_place):
+        return in_place
+    trash = paths.trash_root()
+    if os.path.isdir(trash):
+        moved = sorted(name for name in os.listdir(trash) if name.startswith(f'{user_id}-'))
+        if moved:
+            return os.path.join(trash, moved[-1])
+    return in_place
+
+
+def _fail_deletion(exc: Exception, user_id: str):
+    """A failed delete that reports where the data IS, not where it ought to be.
+
+    ``delete_user`` moves the tree first and drops the row second; when the row refuses, it moves
+    the tree back — and that compensation can itself fail (Windows refuses a directory a browser
+    still holds, a full disk refuses the rename). Answering 「数据仍在原处」 over a tree sitting in
+    ``users/.trash/`` sends the operator to the one place the data is not.
+    """
+    location = _where_is_the_tree(user_id)
+    if location == paths.user_root(user_id):
+        return _fail_storage(exc)
+    logger.exception(t('accounts.storageMoved', err=type(exc).__name__, path=location))
+    message = t('accounts.storageMoved', err=type(exc).__name__, path=location)
+    return jsonify({'ok': False, 'error': message}), 500
 
 
 def _busy_run(user_id: str) -> str:
@@ -116,6 +146,7 @@ def account_password():
             payload.get('current_password'),
             payload.get('new_password'),
             current_sid(),
+            client_ip(),
         )
     except AccountError as exc:
         return _fail(exc)
@@ -206,12 +237,18 @@ def accounts_force_logout(user_id: str):
         return _bad_body()
     try:
         user = get_account_service().force_logout(current_user(), user_id)
+        # "Cut this account off now" also means drop what it holds open — unless a run of its own
+        # is still writing through those stores, in which case releasing them would break the run.
+        # The proof and the release are ONE step inside ``execute_lock``: ``begin_run`` claims under
+        # this same lock, so a run cannot start in the gap and keep a ``RunStore`` that was just
+        # closed — a worker dies on ``Cannot operate on a closed database`` mid-record.
+        with execute_lock:
+            if not _busy_run(user_id):
+                stores.release_user(user_id)
     except AccountError as exc:
         return _fail(exc)
-    # "Cut this account off now" also means drop what it holds open — unless a run of its own is
-    # still writing through those stores, in which case releasing them would break the run.
-    if not _busy_run(user_id):
-        stores.release_user(user_id)
+    except (OSError, sqlite3.Error) as exc:
+        return _fail_storage(exc)
     return jsonify({'ok': True, 'user': user})
 
 
@@ -231,6 +268,13 @@ def accounts_delete(user_id: str):
             # live writer's database — and a refusal can arrive (wrong confirmation, a caller who
             # is not an administrator, the last active admin).
             service.check_deletable(actor, user_id, confirm)
+            # Cut the account's sessions before the tree is touched, not after: the row outlives
+            # ``release_user`` by the length of the move, and a request that arrives in that window
+            # still resolves. It would rebuild the user's stores and ``ensure()`` a FRESH empty
+            # ``data/users/<id>/`` — which the move has no idea about, the row is deleted right
+            # after, and nobody ever trashes or closes it again. Revoked first, that request has no
+            # session and the window is gone.
+            service.force_logout(actor, user_id)
             _guard_idle(user_id, cookie_job=True)
             # Close this account's SQLite handles BEFORE the tree is moved. Windows refuses to
             # rename a directory that still holds an open database (and its -wal/-shm), so a
@@ -243,7 +287,7 @@ def accounts_delete(user_id: str):
     except (OSError, sqlite3.Error) as exc:
         # ``shutil.move`` fails on a profile a browser still holds, a full disk, a locked file:
         # every caller here parses JSON, so an HTML 500 would read as a broken panel.
-        return _fail_storage(exc)
+        return _fail_deletion(exc, user_id)
     return jsonify({'ok': True, 'user': user})
 
 

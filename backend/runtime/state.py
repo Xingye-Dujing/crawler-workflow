@@ -396,5 +396,11 @@ def reset_console_state() -> None:
     and still write narration into the very buffer the next test asserts on. When
     that reset was inline, one crawl-matrix test leaked 25 lines three files
     downstream, where they read as a run nobody had started.
+
+    The swap happens inside ``_completed_lock``: the status endpoint reads the line list and its
+    total as one pair under that lock, and a new claim replacing them one key at a time let a poll
+    in the gap answer the OLD tail with the NEW total of zero — a delta cursor that repeats or
+    skips lines after a reload, which is the invariant ``test_console_buffer.py`` holds.
     """
-    execution_state.update(_console_baseline())
+    with _completed_lock:
+        execution_state.update(_console_baseline())

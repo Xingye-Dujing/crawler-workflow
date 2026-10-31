@@ -244,6 +244,11 @@ function setLang(nextLang) {
     /* The bibliometrics dock prints its run/node pickers, the shape of the stored table and the
        paging line from here, so nothing `I18n.apply()` re-stamps reaches them. */
     if (typeof biblioWorkspace !== 'undefined') biblioWorkspace.onLanguageChange();
+    /* The account registry table and its audit lines are painted from cached rows, and the top-bar
+       chip reads 「当前登录：alice」 from a JS template with a variable — `data-i18n-title` cannot
+       re-stamp either, because `I18n.apply()` carries no variables. Repaint both. */
+    if (typeof Accounts !== 'undefined') Accounts.onLanguageChange();
+    if (typeof Auth !== 'undefined' && Auth.apply) Auth.apply();
     /* A reusable node's inside preview is JS-painted (title, meta, slot labels,
        statuses), so an open preview would otherwise keep the old language. */
     if (typeof ReusableNodes !== 'undefined' && ReusableNodes.repaintPreview) ReusableNodes.repaintPreview();
@@ -412,6 +417,16 @@ function processesPoll() {
     }, 1000);
 }
 
+/* ONE shell, one pending answer. Every dialog paints into the same ``#dialog-overlay``, so a second
+   ``showDialog`` erased the first one's buttons and fields while its promise stayed UNSETTLED: the
+   operation the user was mid-way through vanished without a line, and the forced password dialog —
+   whose reopen guard lives in ``Accounts._pwOpen``, reset only in that promise's ``.then`` — could
+   then never be shown again on that page, leaving every request refused and the debt unpayable until
+   a manual reload. A dialog therefore registers how to settle itself, and a newcomer answers the
+   pending one with ITS cancel value first (unbinding its listeners) — unless the pending dialog is
+   mandatory, which no later dialog may displace. */
+var _pendingDialog = null;
+
 /* Custom Dialog - replaces browser prompt() */
 function showDialog(opts) {
     return new Promise(function (_resolve) {
@@ -440,6 +455,7 @@ function showDialog(opts) {
         var showClose = opts.showClose === true && dismissable;
         var cancelValue = opts.cancelValue !== undefined ? opts.cancelValue : null;
         var dismissed = false;
+        var handle = null;
         var closeBtn = null;
         var trap = null;
         function onBackdrop(e) {
@@ -454,6 +470,7 @@ function showDialog(opts) {
         function resolve(value) {
             if (dismissed) return;
             dismissed = true;
+            if (_pendingDialog === handle) _pendingDialog = null;
             overlay.classList.remove('open');
             overlay.removeEventListener('click', onBackdrop);
             document.removeEventListener('keydown', onEsc);
@@ -461,6 +478,23 @@ function showDialog(opts) {
             if (closeBtn && closeBtn.parentNode) closeBtn.parentNode.removeChild(closeBtn);
             _resolve(value);
         }
+
+        if (_pendingDialog) {
+            if (_pendingDialog.mandatory) {
+                // The debt keeps the shell. The newcomer is answered at once with its own non-answer,
+                // so its caller's continuation runs instead of waiting on a dialog that never painted
+                // — and the panel that asked can say so, rather than hanging on a silent promise.
+                _resolve(cancelValue);
+                return;
+            }
+            // Superseded: the caller of the dialog being replaced is handed its own non-answer and
+            // its listeners come off, so a later Esc cannot dismiss THIS one by accident.
+            var waiting = _pendingDialog;
+            _pendingDialog = null;
+            waiting.settle(waiting.cancelValue);
+        }
+        handle = { settle: resolve, cancelValue: cancelValue, mandatory: !dismissable };
+        _pendingDialog = handle;
 
         msgEl.textContent = opts.message || '';
         actionsEl.innerHTML = '';

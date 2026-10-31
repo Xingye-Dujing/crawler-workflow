@@ -659,6 +659,48 @@ class TestLifecycle:
 
 
 class TestRows:
+    def test_a_result_that_cannot_be_written_keeps_the_rows_it_replaced(self, store):
+        """``replace_rows`` is ONE transaction, and an aborted one is wound back.
+
+        The DELETE and the INSERT used to be two commits with the payload built in between, so a
+        process killed in that gap — or an insert that refused (a full disk, a row that would not
+        serialise) — left the node with no rows and no ``finish_node``. ``settle_nodes`` then read
+        zero, and the record said a table that had been produced had produced nothing: the paid-for
+        crawl was reported as an empty node. A rollback belongs here even though no other write in
+        this store needs one: an open transaction would be committed by the NEXT write on the same
+        connection, far from its cause."""
+        import sqlite3
+
+        class _RefusingInsert:
+            def __init__(self, inner):
+                self.inner = inner
+
+            def execute(self, sql, params=()):
+                return self.inner.execute(sql, params)
+
+            def executemany(self, _sql, _payload):
+                raise sqlite3.OperationalError('disk I/O error')
+
+            def commit(self):
+                self.inner.commit()
+
+            def rollback(self):
+                self.inner.rollback()
+
+        store.replace_rows('r1', 'n1', [{'标题': 'a'}, {'标题': 'b'}])
+        inner = store._conn
+        store._conn = _RefusingInsert(inner)
+        try:
+            with pytest.raises(sqlite3.OperationalError):
+                store.replace_rows('r1', 'n1', [{'标题': 'c'}])
+        finally:
+            store._conn = inner
+        assert [row['标题'] for row in store.load_rows('r1', 'n1')] == ['a', 'b'], 'the delete survived its insert'
+
+        # The next successful write replaces the node — and commits nothing of the aborted one.
+        store.replace_rows('r1', 'n1', [{'标题': 'd'}])
+        assert [row['标题'] for row in store.load_rows('r1', 'n1')] == ['d']
+
     def test_append_dedupes_within_batch(self, store, sample_rows):
         _start(store)
         kept, dropped = store.append_rows('r1', 'n1', sample_rows)

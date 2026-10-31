@@ -5,9 +5,11 @@ no extra package, salted per password and parameter-tagged in the stored string)
 module ever logs, returns or formats a password or a hash — a caller only ever gets ``True/False``
 or a new hash to store.
 
-Session ids and CSRF tokens are random, and only their SHA-256 is stored in ``accounts.db``:
-a leaked database file therefore does not hand out live cookies. (It does hold every other secret
-this tool owns; that is what file permissions and backups are for.)
+Session ids and CSRF tokens are both random. Only the SESSION ID is stored as a SHA-256: a leaked
+``accounts.db`` therefore cannot hand out a live cookie. The CSRF token is stored as it is issued,
+because the page has to be handed that exact value on every reload (``/api/config``) — and it buys
+nothing for a thief: without the HttpOnly session id it authenticates nothing, and a script that
+could read it from ``/api/config`` already has the cookie that carries it.
 """
 
 import hashlib
