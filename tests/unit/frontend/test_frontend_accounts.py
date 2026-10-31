@@ -33,6 +33,32 @@ def _headers(call):
     return {str(key).lower(): value for key, value in (call.get('headers') or {}).items()}
 
 
+class TestThePanelUsesTheSharedDesignTokens:
+    CSS = ROOT / 'backend' / 'static' / 'css' / 'accounts.css'
+
+    def test_no_page_local_palette(self):
+        """The new account surfaces read base.css's tokens, not a second colour scheme."""
+        css = self.CSS.read_text(encoding='utf-8')
+        assert 'var(--ink)' in css and 'var(--radius)' in css
+        assert 'var(--font)' in css
+        assert '#fff' not in css and '#212429' not in css and 'rgba(' not in css
+
+    def test_the_panel_sits_below_the_generic_dialog(self):
+        """#dialog-overlay is 9999; a reset/delete dialog must paint ABOVE the registry."""
+        css = self.CSS.read_text(encoding='utf-8')
+        assert 'z-index: 9000' in css
+
+
+class TestAWriteWaitsForTheAccountAnswer:
+    def test_a_boot_write_is_held_until_the_config_arrives(self, booted):
+        """The orphan sweep and the resumable probe POST at boot; before this they raced
+        ``/api/config`` and reached the server without a CSRF token (two 403s in real Chrome)."""
+        boot = booted['bootWrite']
+        assert boot['beforeAuth'] == 0, 'a write must not leave before the token is known'
+        assert boot['request']['method'] == 'POST'
+        assert _headers(boot['request'])['x-csrf-token'] == 'csrf-boot'
+
+
 class TestTheCsrfToken:
     def test_a_mutating_request_echoes_the_session_token(self, booted):
         posted = booted['csrf']['posted']
@@ -79,6 +105,21 @@ class TestWhoSeesTheRegistry:
         assert panel['overlay'] is True
         assert 'alice' in panel['html'] and 'boss' in panel['html']
         assert 'scrypt' not in panel['html'] and 'password_hash' not in panel['html']
+
+
+class TestTheForcedChangeOwnsTheDialogShell:
+    def test_the_first_entry_notice_does_not_replace_the_change_form(self, booted):
+        """One dialog shell: the privacy notice used to overwrite the forced form, so the user
+        dismissed that notice and every API stayed 403 with no way to change the password."""
+        forced = booted['forcedBoot']
+        assert forced['privacyShown'] is False
+        assert forced['dialogs'], 'the forced change must still open'
+        assert forced['dialogs'][0]['fields'] == ['acc-current', 'acc-new', 'acc-confirm']
+        assert all('privacy' not in str(dialog['message']).lower() for dialog in forced['dialogs'])
+
+    def test_the_notice_returns_once_the_debt_is_gone(self, booted):
+        after = booted['afterDebt']
+        assert after['privacyShown'] is True
 
 
 class TestTheRegistryActions:

@@ -20,8 +20,11 @@
 
 - Python 3.11+（代码使用 `zip(..., strict=True)`）
 - Chrome（Selenium 驱动）。Linux 装 `chromium` + `chromium-driver`（或 `google-chrome-stable`），macOS
-  装 Chrome 的 `.app`；程序按当前系统查找，也认 `CHROME_PATH` / `CHROME_BIN`。**chromedriver 不随项目
-  分发**（驱动与 Chrome 大版本一对一绑定），Selenium 首次采集时自动取匹配版本（需联网）。
+  装 Chrome 的 `.app`；程序按当前系统查找，也认 `CHROME_PATH` / `CHROME_BIN`。**必须使用本机已安装的
+  Chrome 与本机匹配的 chromedriver**：本项目不做“缺驱动就联网下载”，开发、设备层测试与验证一律显式指向
+  本机这两个文件（`CIXI_DRIVER_PATH` 或设置面板「驱动路径」，Windows 常见位置是
+  `C:\Program Files\Google\Chrome\Application\{chrome.exe,chromedriver.exe}`）。驱动与 Chrome 大版本
+  必须一致，版本不符按名拒绝，绝不静默换一个下载来的驱动顶上。
 - [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一）；云端 `CRAWLER_CLOUD=1` 只留 OpenRouter
 - `xelatex`：仅「编译 PDF / 论文成稿」需要（Windows MiKTeX，Linux `texlive-xetex texlive-lang-chinese`，
   macOS MacTeX）。没有它 LaTeX 源照出、PDF 按名拒绝。

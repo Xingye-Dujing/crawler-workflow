@@ -54,6 +54,7 @@ ZH = {
     'api.exportNotFound': '导出文件不存在（或不允许下载）：{name}',
     'api.fieldTypeInvalid': '字段 {name} 类型不正确',
     'api.foreignOriginRefused': '本站只服务本机浏览器：这个请求来自「{origin}」，未鉴权又握着真实账号，故拒绝',
+    'api.originRefusedLog': ('拒绝跨站来源：{method} {path} host={host} origin={origin} referer={referer}'),
     'api.historyNoRunId': '没有指定运行 ID，未删除任何执行历史',
     'api.killDone': '线程「{name}」已结束',
     'api.killFailedGeneric': '结束线程失败',
@@ -239,6 +240,7 @@ EN = {
         'This server answers the local browser only: the request came from "{origin}" '
         'and is refused — the API is unauthenticated and holds real accounts'
     ),
+    'api.originRefusedLog': ('refused foreign origin: {method} {path} host={host} origin={origin} referer={referer}'),
     'api.historyNoRunId': 'no run id given, so no execution history was deleted',
     'api.killDone': 'thread "{name}" terminated',
     'api.killFailedGeneric': 'failed to kill thread',

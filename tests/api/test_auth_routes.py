@@ -76,6 +76,16 @@ class TestWithoutASession:
         assert 'name="username"' in body and 'type="password"' in body
         assert 'auth.required' not in body, 'the page must show a sentence, not a catalogue key'
 
+    def test_the_page_lets_the_browser_report_its_origin(self, client, auth_on):
+        """``no-referrer`` made Chromium send ``Origin: null`` on the login POST.
+
+        Measured in real Chrome 148: the document origin is ``http://127.0.0.1:PORT``, but the
+        form submission carried ``Origin: null`` and no Referer, so the app's own foreign-origin
+        guard refused every real login while curl and the test client passed. ``same-origin``
+        keeps the cross-site referrer suppressed and lets a same-origin POST name itself.
+        """
+        assert client.get('/login').headers['Referrer-Policy'] == 'same-origin'
+
     def test_the_login_page_speaks_the_language_of_the_browser_that_asked(self, client, auth_on):
         response = client.get(
             '/login', environ_overrides={'HTTP_X_LANG': ''}, headers={'Accept-Language': 'zh-CN,zh;q=0.9'}
@@ -113,6 +123,24 @@ class TestLoggingIn:
         response = client.post('/login', data={'username': 'admin', 'password': PASSWORD, 'next': '/'})
         assert response.status_code == 401
         assert client.get('/api/config').status_code == 401
+
+    def test_a_second_get_does_not_break_the_rendered_form_token(self, client, auth_on):
+        """Chrome fetches ``/login?next=/favicon.ico`` right after the document.
+
+        That second GET used to mint a new session token after the page had rendered the old one,
+        so a real browser's submit was refused while curl and the test client passed. The token is
+        minted once and reused until the POST consumes it.
+        """
+        page = client.get('/login?lang=en').get_data(as_text=True)
+        first = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        client.get('/login?next=%2Ffavicon.ico')
+        second_page = client.get('/login?lang=en').get_data(as_text=True)
+        assert re.search(r'name="csrf" value="([^"]+)"', second_page).group(1) == first
+        response = client.post(
+            '/login',
+            data={'username': 'admin', 'password': PASSWORD, 'next': '/', 'csrf': first},
+        )
+        assert response.status_code == 302, response.get_data(as_text=True)
 
     def test_the_next_address_is_honoured(self, client, auth_on):
         response = _login(client, next_url='/api/config')

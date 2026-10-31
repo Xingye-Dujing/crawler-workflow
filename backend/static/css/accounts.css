@@ -1,95 +1,109 @@
-/* Account registry: the signed-in user's chip opens this panel (administrators only get the
-   table; everyone gets the change-password dialog). Colours follow the dialog's light/dark pair. */
+/* Account registry — the signed-in user's panel, drawn from the SAME tokens as base.css:
+   paper/ink pair, Literata, hairline borders, the one --radius corner and the inset-underline
+   "primary" used by the menu. No page-local palette, no card shadow of its own, and it sits
+   BELOW #dialog-overlay (9999) so the reset/delete/change dialogs open above it. */
 
 .accounts-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, .45);
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
 }
 
 .accounts-panel {
-    width: min(900px, calc(100vw - 32px));
-    max-height: calc(100vh - 64px);
-    overflow: auto;
-    padding: 18px 20px 22px;
-    border-radius: 12px;
-    background: #fff;
-    color: #1c1e21;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
-}
-
-@media (prefers-color-scheme: dark) {
-    .accounts-panel {
-        background: #212429;
-        color: #e8eaed;
-        border: 1px solid #2e3238;
-    }
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .accounts-head,
 .accounts-audit-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 2px;
 }
 
 .accounts-title {
-    font-size: 17px;
-    font-weight: 650;
+  font-family: var(--font);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .accounts-me {
-    font-size: 13px;
-    opacity: .7;
-    margin-right: auto;
+  margin-right: auto;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.7px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
 }
 
 .accounts-create {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
 }
 
 .accounts-create .settings-input {
-    flex: 1 1 150px;
+  flex: 1 1 150px;
 }
 
 .accounts-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font);
+  font-size: 12px;
 }
 
-.accounts-table th,
+.accounts-table th {
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.7px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--ink);
+}
+
 .accounts-table td {
-    padding: 6px 8px;
-    text-align: left;
-    border-bottom: 1px solid rgba(128, 128, 128, .25);
+  padding: 7px 8px;
+  vertical-align: middle;
 }
 
 .accounts-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .accounts-error,
 .accounts-empty {
-    font-size: 13px;
-    opacity: .8;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .accounts-audit {
-    margin-top: 18px;
+  margin-top: 20px;
 }
 
 .accounts-audit-head span {
-    font-weight: 600;
-    margin-right: auto;
+  margin-right: auto;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
 }

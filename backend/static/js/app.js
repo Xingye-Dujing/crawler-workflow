@@ -12,6 +12,19 @@ const Auth = {
     token: '',
     user: null,
     mustChange: false,
+    /* Resolves once /api/config has told the page whether this host has accounts. Mutating
+       boot calls (the orphan sweep's POST, the resumable probe) used to run before that answer,
+       so they carried no X-CSRF-Token and the server refused them — real Chrome showed two
+       lonely 403s on every boot while every test client passed. */
+    ready: null,
+    _readyResolve: null,
+
+    markReady() {
+        if (!this._readyResolve) return;
+        const resolve = this._readyResolve;
+        this._readyResolve = null;
+        resolve();
+    },
 
     set(auth) {
         const data = auth || {};
@@ -19,6 +32,7 @@ const Auth = {
         this.user = data.user && data.user.username ? data.user : null;
         this.mustChange = !!data.must_change_password;
         this.apply();
+        this.markReady();
         if (this.mustChange && typeof Accounts !== 'undefined' && Accounts.openPasswordDialog) {
             Accounts.openPasswordDialog(true);
         }
@@ -34,6 +48,14 @@ const Auth = {
         }
     },
 };
+
+Auth.ready = new Promise((resolve) => { Auth._readyResolve = resolve; });
+/* A server that never answers /api/config must not park every write forever: after this bound
+   the page sends anyway and the server has the final word. */
+if (typeof setTimeout === 'function') {
+    const authTimer = setTimeout(() => Auth.markReady(), 3000);
+    if (authTimer && typeof authTimer.unref === 'function') authTimer.unref();
+}
 
 /* Console i18n: every request carries the UI language as X-Lang, so the log
    lines the server streams into the console (crawl progress, LLM batches,
@@ -53,10 +75,18 @@ const Auth = {
             if (!opts.headers.has('X-Lang')) opts.headers.set('X-Lang', lang);
             const method = String(opts.method || (input && input.method) || 'GET').toUpperCase();
             const safeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
-            if (!safeMethod && Auth.token && !opts.headers.has('X-CSRF-Token')) {
-                opts.headers.set('X-CSRF-Token', Auth.token);
+            const send = () => {
+                if (!safeMethod && Auth.token && !opts.headers.has('X-CSRF-Token')) {
+                    opts.headers.set('X-CSRF-Token', Auth.token);
+                }
+                return nativeFetch(input, opts).then(redirectIfAuthRequired).then(handlePasswordChangeRequired);
+            };
+            /* Wait for the account answer before the first write: a token that has not arrived
+               yet is not "no token needed". Reads are never delayed. */
+            if (!safeMethod && !Auth.token && !opts.headers.has('X-CSRF-Token')) {
+                return Auth.ready.then(send);
             }
-            return nativeFetch(input, opts).then(redirectIfAuthRequired).then(handlePasswordChangeRequired);
+            return send();
         } catch (e) {
             return nativeFetch(input, init);
         }
@@ -408,8 +438,11 @@ const CloudMode = {
            「本地 Ollama」 on a server that has none. */
         if (typeof LLMSettings !== 'undefined' && LLMSettings.applyToPanel) LLMSettings.applyToPanel();
         /* And say, once, what this kind of host keeps on its own disk. The flag landing
-           is the moment the page knows it is standing in front of a stranger. */
-        if (this.on && typeof PrivacyNotice !== 'undefined') PrivacyNotice.maybeShow();
+           is the moment the page knows it is standing in front of a stranger. Suppressed
+           while a password change is owed: both dialogs share the ONE dialog shell, and the
+           privacy notice used to overwrite the forced change form — the user dismissed it and
+           every later API call stayed 403. The notice shows on the next load, after the change. */
+        if (this.on && !Auth.mustChange && typeof PrivacyNotice !== 'undefined') PrivacyNotice.maybeShow();
     },
 
     apply() {

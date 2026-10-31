@@ -952,3 +952,15 @@ the evidence here.
 - **The test harness needs its own registry per test.** `accounts_mode()` treats an existing `accounts.db` as "this
   installation has accounts", so one test's login would switch the mode on (and authenticate-fail) every later test;
   `clean_globals` points `Config.ACCOUNTS_DB` at a fresh file and resets the service/throttle before yielding.
+- **A real browser found two login bugs that curl and `test_client` could not.** Chromium 148 sent `Origin: null` on
+  the form POST while the login response carried `Referrer-Policy: no-referrer` — the app's own foreign-origin guard
+  then refused every real login; the policy is now `same-origin`. It also fetches `GET /login?next=/favicon.ico`
+  immediately after the document, and the one-shot CSRF token used to be re-minted on every GET, so the favicon
+  request replaced the session token after the page had rendered the old one; `_login_csrf()` now reuses an existing
+  token and only the POST consumes it. Both bugs passed `curl` (no Origin, no favicon). Measure login flows in the
+  installed Chrome before calling them fixed.
+- **There is ONE dialog shell, so two boot dialogs replace each other.** On a cloud first entry the privacy notice and
+  the forced password-change form both called `showDialog`; the notice landed last, the change form vanished, and its
+  promise never resolved (the `_pwOpen` guard then blocked every retry) — every API stayed 403 with no visible way out.
+  The notice is now suppressed while `Auth.mustChange`, and a successful change reloads the page so the refused
+  panels fetch again.

@@ -68,41 +68,88 @@ _LOGIN_PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>@@TITLE@@ · 采析绘</title>
+<script>
+(function () {
+  /* The login page is served before /css is reachable, so the design tokens live here. The
+     stored theme choice (Settings → 主题, same localStorage key app.js writes) still wins;
+     "auto" falls back to the OS scheme, which is also how the rest of the app resolves it. */
+  var choice = 'auto';
+  try {
+    var stored = JSON.parse(localStorage.getItem('crawler_settings') || '{}');
+    choice = (stored && stored.theme) || 'auto';
+  } catch (e) { /* a broken draft is not this page's problem */ }
+  var dark = choice === 'dark' || (choice !== 'light' && window.matchMedia
+    && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+})();
+</script>
 <style>
-  :root { color-scheme: light dark; }
+  /* Mirrors css/base.css: paper ground, #1a1a1a ink (never black), Literata throughout,
+     hairline borders and the app's single 2px corner. No blue, no filled primary button —
+     "primary" is the inset ink underline the menu uses. */
+  :root {
+    color-scheme: light dark;
+    --bg: #fff; --paper: #fff; --text: #1a1a1a;
+    --text-dim: rgba(26, 26, 26, .55); --text-faint: rgba(26, 26, 26, .38);
+    --line: rgba(26, 26, 26, .15); --ink: #1a1a1a;
+    --hover: rgba(26, 26, 26, .06); --hover-strong: rgba(26, 26, 26, .12);
+    --err: #a85454; --radius: 2px;
+    --font: "Literata", "Georgia", "Times New Roman", "Songti SC", "SimSun", "宋体", serif;
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161b; --paper: #1c2027; --text: #e7e5df;
+    --text-dim: rgba(231, 229, 223, .55); --text-faint: rgba(231, 229, 223, .38);
+    --line: rgba(231, 229, 223, .18); --ink: #e7e5df;
+    --hover: rgba(231, 229, 223, .08); --hover-strong: rgba(231, 229, 223, .16);
+    --err: #cf7a7a;
+  }
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
-    background: #f4f5f7; color: #1c1e21;
+    background: var(--bg); color: var(--text); font: 15px/1.6 var(--font);
   }
-  @media (prefers-color-scheme: dark) { body { background: #16181c; color: #e8eaed; } }
   form {
-    width: min(340px, calc(100vw - 32px)); padding: 28px 26px 24px; border-radius: 12px;
-    background: #fff; box-shadow: 0 8px 30px rgba(0, 0, 0, .08);
+    width: min(360px, calc(100vw - 32px)); padding: 26px 26px 24px;
+    background: var(--paper); border: 1px solid var(--ink); border-radius: var(--radius);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
   }
-  @media (prefers-color-scheme: dark) { form { background: #212429; box-shadow: none; border: 1px solid #2e3238; } }
-  h1 { margin: 0 0 6px; font-size: 19px; font-weight: 650; }
-  p.hint { margin: 0 0 18px; font-size: 13px; opacity: .72; }
-  label { display: block; margin: 0 0 12px; font-size: 13px; }
+  :root[data-theme="dark"] form { box-shadow: 0 10px 28px rgba(0, 0, 0, .55); }
+  p.brand {
+    margin: 0 0 18px; font-size: 9px; letter-spacing: 2.4px; text-transform: uppercase;
+    color: var(--text-faint); font-weight: 500; white-space: nowrap;
+  }
+  h1 { margin: 0 0 6px; font-size: 21px; font-weight: 600; letter-spacing: .2px; }
+  p.hint { margin: 0 0 20px; font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+  label {
+    display: block; margin: 0 0 14px; font-size: 9px; letter-spacing: 1.7px;
+    text-transform: uppercase; color: var(--text-faint); font-weight: 500;
+  }
   input {
-    display: block; width: 100%; box-sizing: border-box; margin-top: 5px; padding: 8px 10px;
-    border: 1px solid #c9ccd1; border-radius: 7px; font: inherit; background: transparent; color: inherit;
+    display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 7px 9px;
+    border: 1px solid var(--line); border-radius: var(--radius); background: transparent;
+    color: var(--text); font: 13px/1.4 var(--font); outline: none; transition: border-color .15s;
   }
-  @media (prefers-color-scheme: dark) { input { border-color: #3a3f46; } }
+  input:focus { border-color: var(--ink); }
   button {
-    width: 100%; margin-top: 6px; padding: 9px 10px; border: 0; border-radius: 7px; cursor: pointer;
-    font: inherit; font-weight: 600; background: #2f6fed; color: #fff;
+    width: 100%; margin-top: 8px; padding: 9px 10px; border: 1px solid var(--ink);
+    border-radius: var(--radius); cursor: pointer; background: var(--hover); color: var(--text);
+    font: 600 12px var(--font); letter-spacing: .6px; box-shadow: inset 0 -2px 0 var(--text);
+    transition: background .15s;
   }
-  button:hover { background: #2a63d4; }
+  button:hover { background: var(--hover-strong); }
   p.err {
-    margin: 0 0 14px; padding: 8px 10px; border-radius: 7px; font-size: 13px;
-    background: #fdecec; color: #a12a2a;
+    margin: 0 0 14px; padding: 8px 10px; border: 1px solid var(--err);
+    border-radius: var(--radius); font-size: 12px; color: var(--err); background: transparent;
   }
-  @media (prefers-color-scheme: dark) { p.err { background: #3a2325; color: #f0a8a8; } }
+  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--text);
+    -webkit-box-shadow: 0 0 0 1000px var(--paper) inset;
+    caret-color: var(--text);
+  }
 </style>
 </head>
 <body>
 <form method="post" action="/login">
+  <p class="brand">采析绘 · CRAWLER WORKFLOW</p>
   <h1>@@TITLE@@</h1>
   <p class="hint">@@HINT@@</p>
   @@ERROR@@
@@ -274,9 +321,18 @@ def _page(nxt: str, error: str, user: str = '', csrf: str = '') -> str:
 
 
 def _login_csrf() -> str:
-    """The form's one-shot token, minted on GET and consumed by the matching POST."""
-    token = secrets.token_urlsafe(24)
-    session['login_csrf'] = token
+    """The form's one-shot token: minted once, reused until a POST consumes it.
+
+    It must NOT be regenerated on every GET. A browser follows the document with an automatic
+    ``GET /login?next=/favicon.ico`` (Chromium does exactly this), so minting per request replaced
+    the session's token after the page had already rendered the previous one — every real Chrome
+    login then failed with 「CSRF 令牌错误」 while curl and the test client passed. Rotation happens
+    where it belongs: the POST pops the token, and a refusal renders a fresh page with a fresh one.
+    """
+    token = str(session.get('login_csrf') or '')
+    if not token:
+        token = secrets.token_urlsafe(24)
+        session['login_csrf'] = token
     return token
 
 
@@ -324,7 +380,7 @@ def login():
         body,
         status=401 if error else 200,
         mimetype='text/html',
-        headers={'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer'},
+        headers={'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin'},
     )
 
 

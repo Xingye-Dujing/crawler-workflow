@@ -23,8 +23,8 @@
 | `CRAWLER_CLOUD` | 云端部署形状（`1`/`true`/`yes`/`on`）：隐藏 Ollama 与「无头」设置、所有抓取强制无头、拒绝「浏览器生成」。命令行 `python app.py cloud` 是同一件事，它在 import 之前把这个变量抬起来 | 关闭 |
 | `FLASK_DEBUG` | 调试模式（含热重载与自动打开浏览器，调试器可执行任意代码，勿在他人可达的机器上开启） | 关闭 |
 | `MAX_UPLOAD_MB` | 单个请求体上限（过大时返回 413 JSON，而非把整机内存吃光） | `64` |
-| `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。按系统查的第二条路（Windows 查安装根、Linux 查 `/usr/bin/chromium` 等与 `PATH`、macOS 查 bundle）；容器里通常是 `CHROME_BIN=/usr/bin/chromium`。设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上** | 空 |
-| `CIXI_DRIVER_PATH` | chromedriver 路径的部署侧写法（等价于设置面板的「驱动路径」，空=让 Selenium Manager 取匹配版本） | 空 |
+| `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。按系统查的第二条路（Windows 查安装根、Linux 查 `/usr/bin/chromium` 等与 `PATH`、macOS 查 bundle）；容器里通常是 `CHROME_BIN=/usr/bin/chromium`。**本项目要求使用本机已安装的 Chrome**；设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上** | 空 |
+| `CIXI_DRIVER_PATH` | chromedriver 路径（等价于设置面板的「驱动路径」）。**必须指向本机已安装、与大版本匹配的驱动**；本仓库不做自动下载，驱动缺失/版本不符按名拒绝 | 空 |
 | `CIXI_NODE_BIN` / `NODE_BIN` | 第二采集后端（CatBus）用的 Node 运行时，按系统查表；版本按 CatBus `engines` 核对，太旧按名拒绝 | 空 |
 | `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个直接指名文件或可执行包装；`CATBUS_HOME` 指源码检出根；都没设就按 npm 全局前缀找。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码：启动时检查 `stdout/stderr` 能不能写汉字，不能就改 UTF-8 并打印一行；能写就只把 `errors` 设成 `replace`，**不改编码**（强扭成 UTF-8 反而把正常窗口弄成乱码） | — |

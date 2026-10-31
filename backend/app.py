@@ -152,6 +152,20 @@ def _reject_foreign_origin():
     """
     origin = request.headers.get('Origin') or request.headers.get('Referer')
     if origin and not _origin_is_local(origin, request.host):
+        # One attributed line for the operator: which call, from which origin, addressed to which
+        # Host. A literal "null" origin is not a host — it comes from a sandboxed iframe, file://,
+        # a WebView, an extension, or a proxy/tunnel that rewrote the header — and without this
+        # line the refusal names only the value, not the request that carried it.
+        logger.warning(
+            t(
+                'api.originRefusedLog',
+                method=request.method,
+                path=request.path,
+                host=request.host,
+                origin=request.headers.get('Origin'),
+                referer=request.headers.get('Referer'),
+            )
+        )
         return jsonify({'ok': False, 'error': t('api.foreignOriginRefused', origin=origin)}), 403
 
 

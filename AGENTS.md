@@ -117,6 +117,8 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   `restoreState` leaves the camera alone; `addNode` randomizes only a non-finite x/y (0 is a position).
 - **One page boot must not be a single point of failure:** a throw in the one `DOMContentLoaded` body skips every later
   step, so boot steps go through `boot(name, fn)`.
+- **There is ONE dialog shell:** a second `showDialog` replaces the first (its promise never settles). A forced dialog
+  (the password debt) must suppress every other boot dialog, and its success reloads the page.
 - **A dialog with an input is answered by the input:** leave `value:` off `showDialog` input dialogs.
 
 ### Measurement and live assertions
@@ -365,5 +367,7 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
 - **New packages**: install into `.venv/` AND declare in `requirements.txt` in the same change, caches in `.gitignore`.
 - **Device paths**: crawling, LLM transports, checkpoint/resume or UI touched → also `-m "integration or live_ollama"`
   and `-m live_quick` (Chrome + Ollama and one real crawl per platform exist here — check port 5000 is free first),
-  then `/smoke-verify`.
+  then `/smoke-verify`. **Use this machine's Chrome and its matching chromedriver** (`CIXI_DRIVER_PATH` / the
+  settings panel; on Windows both live in `C:\Program Files\Google\Chrome\Application`); never let Selenium
+  Manager download a driver for a verification run.
 - **Commit last**, with a Chinese type prefix.

@@ -62,6 +62,12 @@ const Accounts = {
                     if (response.ok && body.ok) {
                         Auth.mustChange = false;
                         showToast(I18n.t('accounts.passwordSaved'));
+                        /* Reload so every panel that was refused while the debt stood is fetched
+                           again under the new session state. Without this the page keeps its
+                           half-loaded state (node types, workflow, runs) until a manual refresh. */
+                        if (typeof location !== 'undefined' && typeof location.reload === 'function') {
+                            location.reload();
+                        }
                         return;
                     }
                     /* Deliberately no value echoed back: the refusal names what is wrong
@@ -97,7 +103,7 @@ const Accounts = {
             '      <option value="user">' + this.esc(I18n.t('accounts.roleUser')) + '</option>' +
             '      <option value="admin">' + this.esc(I18n.t('accounts.roleAdmin')) + '</option>' +
             '    </select>' +
-            '    <button class="menu-btn" type="button" onclick="Accounts.create()">' + this.esc(I18n.t('accounts.create')) + '</button>' +
+            '    <button class="menu-btn toggle-on" type="button" onclick="Accounts.create()">' + this.esc(I18n.t('accounts.create')) + '</button>' +
             '  </div>' +
             '  <div class="accounts-list" id="accounts-list">' + this.esc(I18n.t('accounts.loading')) + '</div>' +
             '  <div class="accounts-audit" id="accounts-audit"></div>' +
@@ -158,7 +164,8 @@ const Accounts = {
             audit.innerHTML = '<div class="accounts-audit-head">' +
                 '<span>' + this.esc(I18n.t('accounts.audit')) + '</span>' +
                 '<button class="menu-btn" type="button" onclick="Accounts.loadAudit()">' + this.esc(I18n.t('accounts.refresh')) + '</button>' +
-                '</div><div id="accounts-audit-rows">' + (auditHtml || '') + '</div>';
+                '</div><div id="accounts-audit-rows"></div>';
+            this.loadAudit();
         }
     },
 

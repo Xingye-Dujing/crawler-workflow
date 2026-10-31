@@ -14,6 +14,13 @@ import { sourceOf } from './companions.mjs';
 
 const src = sourceOf(...process.argv.slice(2));
 const sandbox = { ...baseSandbox() };
+/* A captured timer, not an auto-firing one: the page's "config never came" fallback must be
+   observable, otherwise the boot-write gate looks resolved and the race cannot be measured. */
+const timers = [];
+sandbox.setTimeout = (fn, ms) => {
+    timers.push({ fn, ms });
+    return { unref() {} };
+};
 /* The browser globals app.js's fetch patch uses. The DOM stub carries no Headers/Request, and a
    missing one would send the patch down its own catch branch — the harness would then "prove"
    that no CSRF header is added. */
@@ -87,16 +94,26 @@ sandbox.showToast = (msg) => { toasts.push(String(msg)); };
 
 vm.runInContext(
     `${src}
-     ;globalThis.__acc = { Auth, Accounts };`,
+     ;globalThis.__acc = { Auth, Accounts, CloudMode, PrivacyNotice };`,
     sandbox,
 );
-const { Auth, Accounts } = sandbox.__acc;
+const { Auth, Accounts, CloudMode, PrivacyNotice } = sandbox.__acc;
 const doc = sandbox.document;
 const flush = async () => {
     for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
 };
 
 const out = {};
+
+/* ── a boot-time write waits for the account answer ─────────────────────── */
+calls.length = 0;
+const bootWrite = sandbox.fetch('/api/data/clear', { method: 'POST' });
+await flush();
+const beforeAuth = calls.length;
+Auth.set({ csrf_token: 'csrf-boot', user: { username: 'boss', role: 'admin' }, must_change_password: false });
+await bootWrite;
+await flush();
+out.bootWrite = { beforeAuth, request: calls[0] };
 
 /* ── the CSRF header rides every mutating fetch, and only those ─────────── */
 Auth.set({ csrf_token: 'csrf-1', user: { username: 'boss', role: 'admin' }, must_change_password: false });
@@ -215,6 +232,28 @@ await flush();
 out.deleted = {
     request: calls.slice(),
     toasts: toasts.slice(),
+};
+
+/* ── a forced change must not be overwritten by the first-entry notice ──── */
+dialogs.length = 0;
+PrivacyNotice.reset();
+Auth.set({ csrf_token: 'csrf-2', user: { username: 'boss', role: 'admin' }, must_change_password: true });
+await flush();
+CloudMode.set(true, true, { csrf_token: 'csrf-2', user: { username: 'boss', role: 'admin' }, must_change_password: true });
+await flush();
+out.forcedBoot = {
+    privacyShown: PrivacyNotice.shown,
+    dialogs: dialogs.slice(),
+};
+
+/* The notice is not disabled for ever: once the debt is gone it shows again. */
+dialogs.length = 0;
+PrivacyNotice.reset();
+CloudMode.set(true, true, { csrf_token: 'csrf-3', user: { username: 'boss', role: 'admin' }, must_change_password: false });
+await flush();
+out.afterDebt = {
+    privacyShown: PrivacyNotice.shown,
+    dialogs: dialogs.slice(),
 };
 
 process.stdout.write(JSON.stringify(out));
