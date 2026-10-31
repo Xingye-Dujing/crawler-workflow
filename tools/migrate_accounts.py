@@ -80,6 +80,37 @@ def _lookup_user(accounts_db: Path, username: str) -> str:
     return str(row['user_id'])
 
 
+def _is_occupied(path: Path) -> bool:
+    """A destination counts as occupied when it holds a FILE or a NON-EMPTY directory.
+
+    Creating the account already makes its tree (``runtime.paths.DataPaths.ensure`` creates
+    ``workflows/``, ``cookies/`` … as empty directories), so "exists" alone would make every
+    migration refuse. An empty directory is the shape the account was born with, and merging into
+    it is exactly what the copy does.
+    """
+    if not path.exists():
+        return False
+    if path.is_file():
+        return True
+    return any(path.iterdir())
+
+
+def _companions(source: Path) -> list:
+    """The WAL/index files SQLite may hold beside a database.
+
+    A copy of ``x.db`` alone is not the database: committed transactions can still live in
+    ``x.db-wal``. They are moved with the main file (and the main file is checkpointed first), or
+    a migration would silently drop the newest rows of a store.
+    """
+    if source.suffix != '.db':
+        return []
+    return [
+        peer
+        for peer in (source.with_name(source.name + '-wal'), source.with_name(source.name + '-shm'))
+        if peer.exists()
+    ]
+
+
 def plan(data_root: Path, username: str) -> dict:
     """What a run WOULD move, and where to. Refuses an ambiguous destination."""
     data_root = Path(data_root)
@@ -91,10 +122,11 @@ def plan(data_root: Path, username: str) -> dict:
         source = data_root / name
         if not source.exists():
             continue
-        destination = target / name
-        if destination.exists():
-            occupied.append(str(destination))
-        moves.append((str(source), str(destination)))
+        for item in [source] + _companions(source):
+            destination = target / item.name
+            if _is_occupied(destination):
+                occupied.append(str(destination))
+            moves.append((str(item), str(destination)))
     if occupied:
         raise MigrationError('the administrator already has data at: ' + ', '.join(occupied))
     return {'user_id': user_id, 'target': str(target), 'moves': moves}
@@ -134,6 +166,18 @@ def _integrity(path: Path) -> None:
         raise MigrationError(f'{path.name} failed PRAGMA integrity_check: {answer[0] if answer else "no answer"}')
 
 
+def _checkpoint(path: Path) -> None:
+    """Merge a database's WAL into the main file, so the copy is the whole database."""
+    try:
+        conn = sqlite3.connect(str(path))
+        try:
+            conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        raise MigrationError(f'{path.name} could not be checkpointed: {exc}') from exc
+
+
 def migrate(data_root: Path, username: str, apply: bool = False) -> dict:
     """Copy the legacy tree into the account, verify it, then set the originals aside."""
     data_root = Path(data_root)
@@ -147,9 +191,15 @@ def migrate(data_root: Path, username: str, apply: bool = False) -> dict:
     for source_text, destination_text in answer['moves']:
         source = Path(source_text)
         destination = Path(destination_text)
+        if not source.exists():
+            # A WAL companion can disappear while its database is checkpointed — the merge is
+            # what we wanted, and there is nothing left to copy.
+            continue
         if source.is_dir():
-            shutil.copytree(source, destination)
+            shutil.copytree(source, destination, dirs_exist_ok=True)
         else:
+            if source.suffix == '.db':
+                _checkpoint(source)
             shutil.copy2(source, destination)
         _verify(source, destination)
         if source.suffix == '.db':
@@ -157,7 +207,8 @@ def migrate(data_root: Path, username: str, apply: bool = False) -> dict:
     os.makedirs(moved_aside, exist_ok=True)
     for source_text, _destination in answer['moves']:
         source = Path(source_text)
-        shutil.move(str(source), str(moved_aside / source.name))
+        if source.exists():
+            shutil.move(str(source), str(moved_aside / source.name))
     answer['applied'] = True
     answer['moved_aside'] = str(moved_aside)
     return answer

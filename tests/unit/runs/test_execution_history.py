@@ -193,6 +193,9 @@ class TestTheFileMayBeDeleted:
         assert history.list_workflow_names() == []
 
     def test_a_deleted_database_still_accepts_writes(self, history):
+        # The file is created on the first write (construction no longer opens it), so make one
+        # write, delete what it created, and prove the next write recreates the schema.
+        history.record_many([_row('r0', 'wf', 'n1', 'rows', '', 1.0, '2024-01-01T00:00:00')])
         os.remove(history.db_path)
         history.record_many([_row('r2', 'wf', 'n1', 'rows', '', 7.0, '2024-01-02T00:00:00')])
         assert len(history.list_runs()) == 1

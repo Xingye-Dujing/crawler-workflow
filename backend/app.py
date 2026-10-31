@@ -590,8 +590,20 @@ def start_background_services() -> None:
     if accounts_mode():
         get_account_service().bootstrap()
     # Retention is applied on its own, not only when somebody remembers to
-    # click: startup is the other moment nothing is writing.
-    housekeep(force=True)
+    # click: startup is the other moment nothing is writing. In accounts mode it runs once per
+    # account, inside that account's context — a bare system-scope sweep would CREATE an empty
+    # ``data/runs.db`` at the root and silently re-introduce the tree migration just moved away.
+    if accounts_mode():
+        from runtime import account_context
+        from runtime.account_context import Account
+
+        for row in get_account_service().store.list_users():
+            if row['status'] != 'active':
+                continue
+            with account_context.use(Account(row['user_id'], row['username'], row['role'])):
+                housekeep(force=True)
+    else:
+        housekeep(force=True)
     # A restart must not silently drop the requests the user already parked.
     restored = load_pending_queue()
     if restored:

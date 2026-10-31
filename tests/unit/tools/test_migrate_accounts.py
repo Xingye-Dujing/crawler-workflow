@@ -84,6 +84,35 @@ def test_apply_copies_verifies_and_sets_the_original_aside(tmp_path):
     assert (root / 'accounts.db').is_file()
 
 
+def test_an_empty_directory_from_account_creation_is_not_occupied(tmp_path):
+    """Creating the account makes empty workflows/cookies dirs; adoption must still work."""
+    root = tmp_path / 'data'
+    _legacy_tree(root)
+    user_id = _registry(root)
+    target = root / 'users' / user_id
+    (target / 'workflows').mkdir(parents=True)
+    (target / 'cookies').mkdir()
+    answer = migration.migrate(root, 'admin', apply=True)
+    assert answer['applied'] is True
+    assert (target / 'workflows' / 'a.json').is_file()
+    assert (target / 'cookies' / 'zhihu_cookies.json').is_file()
+
+
+def test_a_wal_companion_is_planned_and_never_left_behind(tmp_path):
+    """A database's -wal/-shm travel with it; a checkpointed-away companion is not an error."""
+    root = tmp_path / 'data'
+    _legacy_tree(root)
+    user_id = _registry(root)
+    (root / 'runs.db-wal').write_bytes(b'')
+    planned = migration.plan(root, 'admin')
+    names = {Path(src).name for src, _dst in planned['moves']}
+    assert {'runs.db', 'runs.db-wal'} <= names
+    migration.migrate(root, 'admin', apply=True)
+    assert not (root / 'runs.db-wal').exists()
+    target = root / 'users' / user_id
+    assert (target / 'runs.db').is_file()
+
+
 def test_an_occupied_destination_is_refused(tmp_path):
     root = tmp_path / 'data'
     _legacy_tree(root)

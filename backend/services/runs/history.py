@@ -43,7 +43,9 @@ class ExecutionHistoryService:
         """
         self._db_source = db_path or (lambda: os.path.join(Config.DATA_DIR, 'history.db'))
         os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
-        self._ensure_table()
+        # The schema is NOT created here: ``_conn`` creates it on every connection. Doing it at
+        # construction opened the system ``data/history.db`` merely by importing the app — which,
+        # on an accounts host, re-created a root-level database the migration had just moved away.
 
     @property
     def db_path(self) -> str:
@@ -69,12 +71,6 @@ class ExecutionHistoryService:
         conn = sqlite3.connect(self.db_path)
         self._create_schema(conn)
         return conn
-
-    def _ensure_table(self):
-        conn = sqlite3.connect(self.db_path)
-        self._create_schema(conn)
-        conn.commit()
-        conn.close()
 
     def _create_schema(self, conn):
         """Create the table and indexes on *conn* — the caller keeps ownership.
