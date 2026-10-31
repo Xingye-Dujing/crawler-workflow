@@ -55,7 +55,9 @@ cd backend && python app.py          # 访问 http://127.0.0.1:5000（端口 POR
 `CRAWLER_AUTH_PASSWORD` 仍可作为引导密码）与自己的 `SECRET_KEY`，否则按名拒绝启动。账号存 `data/accounts.db`
 （密码 scrypt 哈希、服务端会话、CSRF、失败锁定），**每个账号的数据完全隔离**：工作流、数据集、运行记录、
 爬取 Cookie、导出都在 `data/users/<账号 id>/` 下；管理员在顶栏账号面板里创建/重置/禁用/强制下线/删除账号
-（删除是移入 `data/users/.trash/`，不会当场抹掉）。旧单账号的数据根用
+（删除是移入 `data/users/.trash/`，不会当场抹掉）。账号之间的运行也互不可见：状态/停止/进程/统计只答自己那次
+运行，被拒绝的启动（例如没选模型）不会接管槽位。没开账号时把 `HOST` 设成非本机地址（如 `0.0.0.0`）会**按名
+拒绝启动**——那等于把已保存的登录态、数据集与「用你的账号发起采集」开放给整个局域网。旧单账号的数据根用
 `python tools/migrate_accounts.py --user admin --apply` 迁到管理员名下（先备份、默认 dry-run、校验后原目录改名保留）。
 关闭本地模型、首次改密对话框与账号面板细节见 [`docs/config.md`](docs/config.md)。
 给不装 Python 的人（仅 Windows）：`desktop/` 用 PyInstaller onedir 打包出 `CaiXiHui.exe`（`-Installer` 再出

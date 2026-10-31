@@ -598,6 +598,11 @@ def client(app_module, data_root, request):
         stores._LEXICON_STORE = None
         stores._BIBLIO_STORE = None
         stores._WORKFLOW_HISTORY_STORE = None
+        # Per-account slots too: they hold SQLite handles on this test's tmp files, and Windows
+        # will not delete a directory while one is open. Releasing them here is also what keeps
+        # 「a store opened in one test cannot be seen by the next」 true for account scoping.
+        for _user_id in list(stores.user_slots()):
+            stores.release_user(_user_id)
 
 
 def _restore_state(state: dict, backup: dict) -> None:

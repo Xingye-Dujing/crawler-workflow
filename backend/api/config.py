@@ -8,10 +8,10 @@ extends the crawl matrix with ``sessions.cookies``'s live account list. Paths un
 """
 
 import json
-import os
 
 from core.config import Config
 from flask import Blueprint, jsonify
+from runtime import paths
 from runtime.account_context import current as current_account
 
 from services.accounts.service import accounts_mode
@@ -63,7 +63,7 @@ def read_model_registry() -> list:
     name the panel shows and the model a default bert run actually loads can never disagree. A
     missing/malformed file is an empty list, never an error.
     """
-    path = os.path.join(Config.DATA_DIR, 'model_registry.json')
+    path = paths.model_registry_json()
     try:
         with open(path, encoding='utf-8') as fh:
             data = json.load(fh)

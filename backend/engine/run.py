@@ -52,6 +52,7 @@ from runtime.state import (
     ambient,
     execute_lock,
     execution_state,
+    forget_ambient,
     reset_console_state,
     set_ambient,
     set_log_sink,
@@ -1048,6 +1049,8 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
         # every ``add_log`` up to and including the verdict has already been buffered.
         run_log_writer.flush()
         set_log_sink(None)
+        # Forget the owner too: a batch that outlives its run must not be filed under it later.
+        run_log_writer.disarm()
         # Release the handle this thread was recognised by, then let the
         # queue have the slot. Both before anything else in this finally can
         # be reordered: start_next_queued checks liveness through it.
@@ -1056,6 +1059,52 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
         # started under its own owner, never under this run's.
         account_context.unbind(account_token)
         start_next_queued()
+
+
+#: Marks an ``execution_state`` key the previous claim never wrote (``run_id``/``resume`` are
+#: absent until a run actually claims them), so a refusal can hand the key back instead of
+#: leaving a ``None`` the readers would then have to tolerate.
+_ABSENT = object()
+
+#: What a claim writes BEFORE its last payload refusals (the LLM transport and key/model checks
+#: below the run id). A refusal that leaves these stamped hands the previous owner's console,
+#: results and canvas identity to the caller that did not start a run — and marks the true owner
+#: a foreign one.
+_CLAIM_STAMP_KEYS = (
+    'run_id',
+    'user_id',
+    'username',
+    'resume',
+    'workflow_labels',
+    'skipped_workflow_labels',
+    'lang',
+    'llm',
+)
+
+
+def _claim_stamp() -> dict:
+    """A restoreable copy of the ownership keys a claim is about to write."""
+    return {key: execution_state.get(key, _ABSENT) for key in _CLAIM_STAMP_KEYS}
+
+
+def _restore_claim_stamp(stamp: dict, ambient_before: dict) -> None:
+    """Give back every stamp a refused claim touched, so a loser owns nothing."""
+    for key, value in stamp.items():
+        if value is _ABSENT:
+            execution_state.pop(key, None)
+        else:
+            execution_state[key] = value
+    if ambient_before:
+        set_ambient(ambient_before.get('workflow_name') or '', ambient_before.get('fingerprint') or '')
+        return
+    # The caller held no canvas identity before this claim, so it must hold none after: writing
+    # an empty pair would leave a key where no key belonged (and the local owner has no such
+    # choice — its identity IS the two globals).
+    account = account_context.current()
+    if account is None:
+        set_ambient('', '')
+    else:
+        forget_ambient(account.user_id)
 
 
 def begin_run(data: dict, lang_header: str) -> dict:
@@ -1117,6 +1166,8 @@ def begin_run(data: dict, lang_header: str) -> dict:
         # through while this one is still validating.
         execution_state['running'] = True
         started = False
+        _stamp_before = _claim_stamp()
+        _ambient_before = ambient()
         try:
             workflow = data.get('workflow', {})
             settings = workflow.get('settings', {})
@@ -1253,7 +1304,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
             # sink is this run's writer, and the worker's ``finally`` flushes and disarms it.
             # A run therefore owns every line it prints and no message logged outside a run
             # (a later cookie/preview ``add_log``) can bleed into a finished record's log.
-            run_log_writer.reset()
+            run_log_writer.arm(_owner)
             set_log_sink(run_log_writer.push)
             # Node ids THIS attempt visited. The run record outlives the canvas:
             # nodes deleted between attempts keep their stored status, so any
@@ -1276,6 +1327,11 @@ def begin_run(data: dict, lang_header: str) -> dict:
                 # A rejection (already-configured checks, malformed body) gives
                 # the claim back — the guard must not lock out every later Run.
                 execution_state['running'] = False
+                # …and gives back what it stamped while validating, too: the run id, the owner
+                # and the canvas identity a refusal never earned. Without this, account B whose
+                # canvas needs a model it has not configured becomes the owner of A's finished
+                # run, reads A's console and results, and A is told its own run is foreign.
+                _restore_claim_stamp(_stamp_before, _ambient_before)
 
     # Named 'run' so the process-monitor's kill guard (see ``kill_process``) actually
     # matches: it refuses to inject SystemExit into ('MainThread', 'run'), but an
@@ -1298,7 +1354,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
         # Disarm first: this run opened no record, so its start failure belongs to the
         # live console and the file log only — writing it to the durable per-run log
         # would orphan rows under a run id no record will ever list.
-        run_log_writer.reset()
+        run_log_writer.disarm()
         set_log_sink(None)
         execution_state['thread'] = None
         execution_state['running'] = False

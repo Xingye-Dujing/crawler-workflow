@@ -650,7 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     if (_bootSteps.length) {
-        showToast(I18n.t('boot.partial').replace('{steps}', _bootSteps.length));
+        // Through t(key, vars), never a hand .replace: the placeholder gate walks the call
+        // sites that pass a vars object, so a raw replace of a key that later gains a second
+        // slot would silently print 「{something}」 at the user.
+        showToast(I18n.t('boot.partial', { steps: _bootSteps.length }));
     }
 });
 

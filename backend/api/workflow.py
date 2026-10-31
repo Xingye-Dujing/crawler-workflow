@@ -43,6 +43,7 @@ from engine.plan import downstream_closure
 from engine.workflow import effective_workflow
 from i18n import get_lang, set_lang, t
 from services import lock_store
+from services.accounts.service import accounts_mode
 from services.ingest.lifecycle import close_login_browser as _close_login_browser
 from services.runs.queue import (
     QUEUE_MAX,
@@ -543,6 +544,39 @@ def workflow_status():
     )
 
 
+def _ownable_thread(target) -> bool:
+    """Whether this caller may see (and try to end) *target*.
+
+    A thread list is a MACHINE fact, not an account one: on a shared host the same process holds
+    the scheduler whose death stops every account's 定时任务, and another account's cookie-capture
+    window whose death strands its login. ``run_is_foreign()`` answers only who claimed the run
+    slot, so it cannot be the whole gate — the owner of the last run would otherwise be allowed to
+    inject ``SystemExit`` into any thread in the process by its ident.
+    """
+    if not accounts_mode():
+        # The local single-user install owns this machine; the panel keeps its full answer.
+        return True
+    if target is None:
+        return False
+    name = str(target.name or '')
+    # The run worker (protected by name below) and its own pool: the threads this account started.
+    return name == 'run' or name.startswith('ThreadPoolExecutor')
+
+
+def _visible_threads() -> list:
+    """Every thread (local install) or only this account's run threads (shared host)."""
+    threads = [thread for thread in threading.enumerate() if _ownable_thread(thread)]
+    return [
+        {
+            'name': thread.name,
+            'daemon': thread.daemon,
+            'alive': thread.is_alive(),
+            'ident': thread.ident,
+        }
+        for thread in threads
+    ]
+
+
 @bp.route('/api/workflow/processes', methods=['GET'])
 def workflow_processes():
     """Return info about active threads/processes for the monitoring panel."""
@@ -550,16 +584,7 @@ def workflow_processes():
         return jsonify(
             {'running': False, 'threads': [], 'executor_pool_alive': False, 'active_crawlers': 0, 'foreign_run': True}
         )
-    threads = []
-    for thread in threading.enumerate():
-        threads.append(
-            {
-                'name': thread.name,
-                'daemon': thread.daemon,
-                'alive': thread.is_alive(),
-                'ident': thread.ident,
-            }
-        )
+    threads = _visible_threads()
 
     executor_alive = (
         execution_state['executor'] is not None and getattr(execution_state['executor'], '_pool', None) is not None
@@ -599,6 +624,12 @@ def kill_process():
 
     if target.name in ('MainThread', 'run'):
         return jsonify({'ok': False, 'error': t('api.killProtected', name=target.name)}), 403
+
+    # On a shared host a thread ident is not a permission: the process also holds the scheduler
+    # (killing it silently stops EVERY account's 定时任务) and another account's cookie-capture
+    # window. Refuse by name rather than acting on a thread this caller never started.
+    if not _ownable_thread(target):
+        return jsonify({'ok': False, 'error': t('api.killNotYours', name=target.name)}), 403
 
     # A live run's crawls execute on the executor's pool threads (parallel mode), not
     # on 'run'. Killing one injects SystemExit between acquiring a browser and

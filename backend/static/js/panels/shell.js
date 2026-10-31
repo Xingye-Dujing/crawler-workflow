@@ -542,6 +542,12 @@ function showDialog(opts) {
                     box.className = 'settings-input';
                     box.type = f.type || 'number';
                     box.id = f.id;
+                    /* A password box without a directive is an invitation: the browser offers to
+                       SAVE the account's current password against this origin and to fill it back
+                       into 「当前密码」 later — which is exactly the credential the panel then POSTs.
+                       「new-password」 says "a fresh value, do not store, do not offer", and a field
+                       that means otherwise can still override it. */
+                    box.autocomplete = f.autocomplete || (f.type === 'password' ? 'new-password' : 'off');
                     if (f.value !== undefined) box.value = f.value;
                     if (f.min !== undefined) box.min = f.min;
                     if (f.max !== undefined) box.max = f.max;

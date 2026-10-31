@@ -13,6 +13,7 @@ run start uses; they are only looked up from here.
 
 import time
 
+from runtime import account_context
 from runtime.state import _completed_lock, _push_log, execution_state
 from runtime.stores import get_run_store
 
@@ -62,6 +63,17 @@ class RunLogWriter:
     def __init__(self):
         self._buf: list = []
         self._buf_run_id: str | None = None
+        #: The account whose run these lines belong to. Resolved at ARM time by the claim (which
+        #: runs bound) rather than at flush time by whoever happened to print the 200th line:
+        #: the pool threads and the Stop reapers start with NO account context, so resolving it
+        #: per flush filed an account's console batch in the checkout-level ``data/runs.db`` and
+        #: left a hole in the durable log the account's own page reads back.
+        self._account = None
+
+    def arm(self, account) -> None:
+        """Open this run's window: remember its owner, and start from an empty batch."""
+        self._account = account
+        self.reset()
 
     def reset(self) -> None:
         """Drop any leftover batch without writing it (a new run, or an armed re-entry).
@@ -73,6 +85,11 @@ class RunLogWriter:
         with _completed_lock:
             self._buf = []
             self._buf_run_id = None
+
+    def disarm(self) -> None:
+        """Close this run's window: the sink is off, so no owner may be remembered for it."""
+        self._account = None
+        self.reset()
 
     def push(self, parts, wf_idx, level) -> None:
         # Runs while the caller holds ``_completed_lock`` (see ``state._push_log``); every
@@ -100,7 +117,8 @@ class RunLogWriter:
         rid = self._buf_run_id
         batch = self._buf
         try:
-            get_run_store().append_log(rid, batch)
+            with account_context.use(self._account):
+                get_run_store().append_log(rid, batch)
             self._buf = []
         except Exception:
             # Keep the batch for a later flush; bound it if the store stays down. No logging

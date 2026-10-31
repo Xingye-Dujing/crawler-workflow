@@ -97,3 +97,33 @@ class TestQueueDurability:
         second = run_queue.enqueue_run(_data('b'), 'en')
         assert second['status'] == 409
         assert '1' in second['body']['error'], second
+
+    def test_a_drained_request_that_was_parked_again_is_not_duplicated(self):
+        """A lost race hands the entry back; a start path that ALREADY re-parked it must not
+        also get the original pushed back. Two entries for one button press means the canvas is
+        crawled (and paid for) twice, and both entries survive the restart."""
+        run_queue.enqueue_run(_data('mine'), 'en')
+        parked = {
+            'id': 'fresh',
+            'workflow_name': 'fresh',
+            'nodes': 1,
+            'data': _data('fresh'),
+            'lang': 'en',
+            'queued_at': '2026-01-01T00:00:01',
+            'user_id': '',
+            'username': '',
+        }
+
+        def start_but_lose_the_race(_data_, _lang):
+            # What ``begin_run`` does when another run holds the slot: it queues the payload
+            # itself (mirror included, exactly as ``enqueue_run`` does) and answers ``queued``.
+            with run_queue.queue_lock:
+                _RUN_QUEUE.append(parked)
+            run_queue.mirror_queue()
+            return {'status': 200, 'body': {'ok': True, 'queued': True, 'queue_id': 'fresh'}}
+
+        run_queue.drain_queue(start_but_lose_the_race)
+        assert [e['id'] for e in _RUN_QUEUE] == ['fresh'], 'the same request is queued twice'
+        _empty_queue()
+        run_queue.load_pending_queue()
+        assert [e['id'] for e in _RUN_QUEUE] == ['fresh'], 'the duplicate reached the disk mirror'

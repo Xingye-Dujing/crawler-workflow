@@ -146,3 +146,33 @@ def test_a_parallel_workflow_thread_runs_as_the_runs_owner(monkeypatch):
     finally:
         state.execution_state['lang'] = previous_lang
     assert seen == [ALICE.user_id]
+
+
+def test_the_durable_console_follows_the_run_owner_not_the_printing_thread(monkeypatch):
+    """A pool thread that prints the 200th console line has NO account context; the flush must
+    still land in the owner's ``runs.db``. Resolving the store per flush wrote an account's batch
+    into the checkout-level tree and left a hole in its own durable log."""
+    from engine import run_logs
+
+    class _Sink:
+        def __init__(self):
+            self.scopes = []
+
+        def append_log(self, run_id, rows):
+            self.scopes.append(account_context.scope_key())
+            return len(rows)
+
+    sink = _Sink()
+    monkeypatch.setattr(run_logs, 'get_run_store', lambda: sink)
+    previous_run_id = state.execution_state.get('run_id')
+    state.execution_state['run_id'] = 'owned-run'
+    try:
+        writer = run_logs.RunLogWriter()
+        writer.arm(ALICE)
+        account_context.clear()  # what an unbound LLM pool thread / Stop reaper looks like
+        writer.push(['a line printed by nobody’s context'], 0, 'error')
+        writer.flush()
+        assert sink.scopes and set(sink.scopes) == {ALICE.user_id}, sink.scopes
+    finally:
+        state.execution_state['run_id'] = previous_run_id
+        account_context.clear()

@@ -150,12 +150,23 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   `accounts.db`, `settings.json`, `lexicon.db`, `models/` and `logs/` stay system-level. Never cache a path in a module
   constant or a store default (so a bare `WorkflowManager()` resolves the caller's folder too). The single run slot is
   owner-scoped: queue entries carry `user_id`, the worker/drain/clock bind that account (`account_context`), **every
-  thread they start (parallel pool, preflight probes, cookie jobs) re-binds it**, and status/stop/process/stats/live
-  previews/report/console answer another account with `foreign_run`/nothing only.
+  thread they start (parallel pool, preflight probes, cookie jobs) re-binds it** — a thread inherits NO context (proved
+  on 3.11 for `Thread` and `ThreadPoolExecutor` alike), and the durable per-run console takes its owner from the moment
+  the sink is ARMED, never from whichever thread printed the 200th line — and status/stop/process/stats/live
+  previews/report/console answer another account with `foreign_run`/nothing only. **A refused claim owns nothing**: the
+  claim stamps `run_id`/`user_id`/ambient before its last payload refusal, so a refusal hands all of it back.
+- **Authorize BEFORE touching the target.** An admin-only probe answers with the target's run id, and
+  `stores.release_user()` closes that account's open databases: both must come after `_require_admin`, and "no run is
+  live" is proved inside `execute_lock` (the lock the claim takes) or a run starts between the guard and the move. A
+  thread list is a machine fact, so the process panel in accounts mode lists and accepts only the caller's own run
+  threads — the scheduler and another account's cookie window are nobody's kill button.
 - **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the start path — the queue drains
   by calling *that*, never a weaker one; `queue:false` keeps the 400 for fail-fast callers. The worker's `finally`
   clears `execution_state['thread']` **first** (the claim checks thread liveness). Queues are in-memory
-  (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行.
+  (`tests/conftest.py` clears `_RUN_QUEUE`); the Execute button is never disabled, it relabels 排队运行. A drain answer
+  of `queued:true` means the entry is **already parked** — pushing the original back too runs one canvas twice and the
+  duplicate is mirrored. Boot restores the mirror without OPENING a store for an account that has no `runs.db`, and
+  drains what it restored (those users were told 已排队).
 - **A test that calls an executor function directly must leave the app quiet:** `clean_globals` *fails* a leaked
   `execution_state['running']`.
 - **A run helper needing no claim state lives at module scope; a captured name is a parameter.** Ten were lifted out of
@@ -329,6 +340,23 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
   through that fold; the candidate list and a new node's preselection are both `CookieManager.accounts_in_order`.
 - **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both browser catalogue
   sides, and the `AppSettings` wiring.
+
+### Login accounts and the gate
+
+- **A wrong password answers one sentence.** Verification runs BEFORE the lock and the status check: 「登录失败次数过多」
+  or 「该账号已被禁用」 in answer to a wrong password is a username oracle (and skipping the hash said it by timing). The
+  failure window is keyed `address|username` — a per-address window is a per-server lockout behind the documented proxy.
+- **Token comparisons are on bytes:** `hmac.compare_digest` raises `TypeError` on a non-ASCII `str`, and WSGI hands back
+  a header latin-1-decoded and a form field UTF-8-decoded, so a text compare of a client token is an attacker-paced 500
+  (`security.token_matches`). A `next` value is rejected for control characters too: a `\n` is legal in a path and
+  illegal in a header, and `redirect()` would raise **after** the session was created.
+- **The gate exists only while the registry does,** so a non-loopback `HOST` with no accounts refuses to boot by name
+  (`public_bind_refusal`) — `cloud` is not the only way a stranger can reach the port.
+- **A storage failure answers in the envelope the panel parses** (`{ok, error}`, never HTML), and account deletion moves
+  the tree and drops the row as one guarded step with a compensating move-back: half a deletion leaves an account that
+  logs in over data nobody can find.
+- **A password field says so:** `type:'password'` plus the dialog shell's `autocomplete` default — without a directive
+  the browser offers to save the credential and to refill 「当前密码」 with it.
 
 ## Style and commits
 

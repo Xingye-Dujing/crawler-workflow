@@ -126,3 +126,42 @@ def test_the_canvas_identity_is_scoped_per_account(two_accounts):
     state.forget_ambient(alice.user_id)
     with account_context.use(alice):
         assert state.ambient() == {}
+
+
+def test_the_boot_queue_reload_never_opens_a_tree_that_has_nothing(two_accounts, monkeypatch):
+    """``load_pending_queue`` runs at boot. Reading an account's mirror must not CREATE its
+    ``runs.db`` (the stores are lazy on purpose) and must not leave a connection open for every
+    account that ever existed — both are the boot policy ``app.start_background_services`` states."""
+    from services.runs import queue as run_queue
+
+    alice, bob = two_accounts
+    monkeypatch.setattr(run_queue, '_owner_scopes', lambda: [alice, bob])
+    touched = {alice.user_id, bob.user_id}
+    try:
+        assert run_queue.load_pending_queue() == 0
+        assert not os.path.exists(paths.for_user(alice.user_id).runs_db), 'boot created Alice’s ledger'
+        assert touched & set(stores.user_slots()) == set(), 'boot kept a store handle open'
+
+        # Bob really does have a mirror: it is read, restored, and his store closed again.
+        entry = {
+            'id': 'b1',
+            'workflow_name': 'bob',
+            'nodes': 1,
+            'data': {},
+            'lang': 'en',
+            'queued_at': '2026-01-01T00:00:00',
+            'user_id': bob.user_id,
+            'username': 'bob',
+        }
+        with account_context.use(bob):
+            stores.get_run_store().save_queue([entry])
+        with run_queue.queue_lock:
+            run_queue._RUN_QUEUE.clear()
+        assert run_queue.load_pending_queue() == 1
+        assert [item['workflow_name'] for item in run_queue._RUN_QUEUE] == ['bob']
+        assert bob.user_id not in stores.user_slots(), 'the boot read left Bob’s store open'
+        assert not os.path.exists(paths.for_user(alice.user_id).runs_db), 'Alice’s tree was opened too'
+    finally:
+        with run_queue.queue_lock:
+            run_queue._RUN_QUEUE.clear()
+        run_queue._MIRRORED_OWNERS.clear()

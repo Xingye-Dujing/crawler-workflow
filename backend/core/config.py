@@ -22,6 +22,22 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 DATA_ROOT = os.environ.get('CRAWLER_DATA_ROOT') or BASE_DIR
 
 
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    """An integer read from the environment, falling back to the default.
+
+    A deployment value is typed by a person into a unit file or a shell: a bare ``int()`` made
+    ``CRAWLER_SESSION_IDLE_MINUTES=abc`` abort the boot with ``ValueError: invalid literal for
+    int()`` — a traceback that names no variable and no remedy, which is the shape every other
+    operator-facing number here avoids (``api/http._safe_int``). The default is the safer answer:
+    the session still expires, and the server still serves.
+    """
+    try:
+        value = int(str(os.environ.get(name) or '').strip())
+    except ValueError:
+        return default
+    return max(minimum, min(value, maximum))
+
+
 class Config:
     #: chromedriver to launch with. Blank means "let Selenium Manager fetch the one that matches
     # the installed Chrome", which is the answer that works on every machine: this used to be the
@@ -48,13 +64,6 @@ class Config:
     #: *before* importing this module, because a class attribute is read once at import time.
     CLOUD_MODE = str(os.environ.get('CRAWLER_CLOUD') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
-    #: Login for a shared host. A password turns on the login page and the session gate
-    #: (``api/auth.py``); an empty password means no login, which is the local single-user
-    #: default. Cloud mode REQUIRES one — app.py refuses to start without it, by name, because
-    #: a public URL with no authentication exposes every saved cookie, dataset, run record and
-    #: the ability to start crawls on the owner's accounts.
-    AUTH_USER = os.environ.get('CRAWLER_AUTH_USER') or 'admin'
-    AUTH_PASSWORD = os.environ.get('CRAWLER_AUTH_PASSWORD') or ''
     #: Set to 1 when the page is actually reached over HTTPS (a proxy terminates TLS), so the
     #: session cookie is marked Secure. Left off on a plain-HTTP local/LAN run, where a Secure
     #: cookie is never sent back and the login would silently not stick.
@@ -69,10 +78,17 @@ class Config:
     #: from the environment — otherwise a stale variable would be a silent password reset.
     ADMIN_USER = os.environ.get('CRAWLER_ADMIN_USER') or os.environ.get('CRAWLER_AUTH_USER') or 'admin'
     ADMIN_PASSWORD = os.environ.get('CRAWLER_ADMIN_PASSWORD') or os.environ.get('CRAWLER_AUTH_PASSWORD') or ''
+    #: How many reverse proxies stand in front of this process (0 = never read
+    #: ``X-Forwarded-For``). A deployment behind one proxy sets 1: ``remote_addr`` is then the
+    #: proxy for EVERY visitor, so the audit log names the wrong machine and the failed-login
+    #: window is shared by the whole server. Trusting the header without that much notice would
+    #: let any client invent its own address, so the default reads nothing.
+    TRUST_PROXY_DEPTH = _env_int('CRAWLER_TRUST_PROXY_DEPTH', 0, minimum=0, maximum=8)
     #: Server-side session lifetime. Idle is the shorter bound (a walk-away ends the session),
-    #: absolute the longest one (a session is never renewed forever).
-    SESSION_IDLE_MINUTES = int(os.environ.get('CRAWLER_SESSION_IDLE_MINUTES') or 120)
-    SESSION_MAX_HOURS = int(os.environ.get('CRAWLER_SESSION_MAX_HOURS') or 24)
+    #: absolute the longest one (a session is never renewed forever). Parsed through ``_env_int``:
+    #: a typo here must not abort the boot with a traceback that names neither variable nor fix.
+    SESSION_IDLE_MINUTES = _env_int('CRAWLER_SESSION_IDLE_MINUTES', 120, minimum=1, maximum=24 * 60)
+    SESSION_MAX_HOURS = _env_int('CRAWLER_SESSION_MAX_HOURS', 24, minimum=1, maximum=30 * 24)
 
     # Paths
     DATA_DIR = os.path.join(DATA_ROOT, 'data')

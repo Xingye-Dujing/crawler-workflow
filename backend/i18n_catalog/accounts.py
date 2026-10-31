@@ -26,6 +26,7 @@ ZH = {
     'accounts.passwordUnchanged': '新密码不能与当前密码相同',
     'accounts.roleInvalid': '未知的角色：只能是 admin 或 user',
     'accounts.statusInvalid': '未知的状态：只能是 active 或 disabled',
+    'accounts.storageFailed': '存储操作失败（{err}）：这次账号操作没有完成，已有数据仍在原处，请查看服务端日志后重试',
     'accounts.tooManyAttempts': '来自这个地址的登录失败次数过多，请稍后再试',
     'accounts.usernameInvalid': '用户名需要 3–32 个字符，只能包含字母、数字、下划线、点和短横线',
     'accounts.usernameTaken': '用户名「{user}」已被占用',
@@ -63,6 +64,10 @@ EN = {
     'accounts.passwordUnchanged': 'The new password must differ from the current one',
     'accounts.roleInvalid': 'Unknown role: only admin or user',
     'accounts.statusInvalid': 'Unknown status: only active or disabled',
+    'accounts.storageFailed': (
+        'The storage operation failed ({err}); this account operation did not complete and no data '
+        'left its place — check the server log and try again'
+    ),
     'accounts.tooManyAttempts': 'Too many failed sign-ins from this address; try again later',
     'accounts.usernameInvalid': 'A username is 3–32 characters: letters, digits, underscore, dot or dash',
     'accounts.usernameTaken': 'The username "{user}" is already taken',

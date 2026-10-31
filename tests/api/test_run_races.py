@@ -156,17 +156,52 @@ class TestQueueHandOff:
         with run_queue.queue_lock:
             _RUN_QUEUE[:] = []
 
-    def test_a_request_that_lost_the_slot_waits_at_the_front_again(self, client, app_module, monkeypatch):
-        entry = {'id': 'q1', 'workflow_name': 'loser', 'nodes': 1, 'queued_at': 0.0, 'data': {}, 'lang': 'en'}
+    def test_a_request_that_lost_the_slot_waits_again_without_doubling(self, client, app_module, monkeypatch):
+        entry = {
+            'id': 'q1',
+            'workflow_name': 'loser',
+            'nodes': 1,
+            'queued_at': 0.0,
+            'data': {
+                'workflow_name': 'loser',
+                'workflow': {
+                    'nodes': [{'id': 'node-1', 'type': 'source', 'params': {'platform': 'weibo'}}],
+                    'connections': [],
+                },
+            },
+            'lang': 'en',
+        }
         self._seed(app_module, [entry])
+
         # The slot is gone by the time the hand-off asks for it: another request
-        # (a manual Run press) claimed it in between.
-        lost = {'status': 200, 'body': {'ok': True, 'queued': True}}
-        monkeypatch.setattr(_run_module(), 'begin_run', lambda data, lang: lost)
+        # (a manual Run press) claimed it in between. ``begin_run`` answers the way it really
+        # does in that case — it PARKS the payload itself (``enqueue_run`` appends and mirrors)
+        # and reports ``queued``. A hand-off that then also pushed the original back would run
+        # this canvas twice, and both copies would survive a restart.
+        def lost_the_race(data, lang):
+            return run_queue.enqueue_run(data, lang)
+
+        monkeypatch.setattr(_run_module(), 'begin_run', lost_the_race)
         _run_module().start_next_queued()
-        assert [item['id'] for item in run_queue.queue_snapshot()] == ['q1'], 'the request is kept, at the front'
+        parked = run_queue.queue_snapshot()
+        assert len(parked) == 1, [item['id'] for item in parked]
+        assert parked[0]['workflow_name'] == 'loser'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'loser' in blob and ('queue' in blob.lower() or '排队' in blob), blob
+
+    def test_a_request_refused_at_the_hand_off_waits_at_the_front_again(self, app_module, monkeypatch):
+        """Neither started nor re-parked (the queue filled up in between, say): the request the
+        user already made is put back at the FRONT, not dropped and not sent to the tail."""
+        self._seed(
+            app_module,
+            [
+                {'id': 'q1', 'workflow_name': 'kept', 'nodes': 1, 'queued_at': 0.0, 'data': {}, 'lang': 'en'},
+            ],
+        )
+        full = {'status': 409, 'body': {'ok': False, 'error': '队列已满'}}
+        monkeypatch.setattr(_run_module(), 'begin_run', lambda data, lang: full)
+        _run_module().start_next_queued()
+        assert [item['id'] for item in _RUN_QUEUE] == ['q1'], 'the refusal dropped or re-ordered the request'
 
     def test_a_request_that_can_never_start_is_discarded_not_requeued(self, client, app_module, monkeypatch):
         """The 继续 whose run was purged while it waited is refused with 'drop'."""

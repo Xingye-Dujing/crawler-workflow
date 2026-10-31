@@ -177,10 +177,18 @@ def _no_store_ui_assets(resp):
     yesterday's index.html and every fix shipped since runs invisibly. The
     /js/ and /css/ entries keep the promise explicit rather than inherited:
     this is a local single-user tool, one revalidation per asset costs
-    nothing, a stale script costs a wrong diagnosis."""
+    nothing, a stale script costs a wrong diagnosis.
+
+    The two framing headers go on EVERY response, not only on the login page. The login page
+    carried them because it owns a form; the app page owns the run console, the cookie panel and
+    the ability to press 运行, and a page that can be put in a foreign frame can be clicked in
+    one. SameSite=Lax already withholds the cookie from a cross-site iframe — this is the second
+    of the three layers, not the load-bearing one."""
     path = request.path
     if path == '/' or path == '/index.html' or path.startswith('/js/') or path.startswith('/css/'):
         resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Referrer-Policy', 'same-origin')
     return resp
 
 
@@ -632,6 +640,12 @@ def start_background_services() -> None:
     restored = load_pending_queue()
     if restored:
         logger.info(t('run.queue_restored', n=restored))
+        # …and it must not merely list them either. Each page was told 「已排队」, so the restored
+        # requests go through the one start path — an idle slot starts the oldest immediately,
+        # a busy one leaves them parked for that run's own hand-off.
+        from engine.run import start_next_queued
+
+        start_next_queued()
     clock.start()
 
 
@@ -643,6 +657,12 @@ if __name__ == '__main__':
     # module twice — and is opt-in via FLASK_DEBUG.
     port = _safe_int(os.environ.get('PORT'), 5000, minimum=1, maximum=65535)
     host = str(os.environ.get('HOST') or '127.0.0.1')
+    # A bind outside this machine with NO accounts is a public server without a gate: the gate
+    # only exists when the registry does (``accounts_mode()``), and the ``cloud`` switch is not
+    # the only way to reach one — a container default, a typo in a unit file, a phone test.
+    _bind_refusal = web_auth.public_bind_refusal(host)
+    if _bind_refusal:
+        raise SystemExit(_bind_refusal)
     debug = _debug_enabled()
     # A wildcard bind is not a URL to visit, so the browser gets the loopback.
     browse_host = '127.0.0.1' if host in ('0.0.0.0', '::') else host

@@ -8,6 +8,7 @@ Session lifetime is read from ``Config`` at call time (``CRAWLER_SESSION_IDLE_MI
 ``CRAWLER_SESSION_MAX_HOURS``) so a test can shorten it without a restart.
 """
 
+import contextlib
 import logging
 import math
 import os
@@ -48,8 +49,20 @@ IP_WINDOW_SECONDS = 600
 IP_FAILURE_LIMIT = 20
 
 #: Rewrite ``last_seen_at`` at most this often: one UPDATE per request would turn every static
-#: asset into a database write.
+#: asset into a database write. A CEILING, never the answer for a short idle window — see
+#: :func:`_touch_interval_seconds`.
 TOUCH_INTERVAL_SECONDS = 60
+
+
+def _touch_interval_seconds(idle_seconds: int) -> int:
+    """How often a live session may refresh ``last_seen_at`` for this idle window.
+
+    The idle test compares against ``last_seen_at``, which only advances on a touch: with a fixed
+    60 s floor and ``CRAWLER_SESSION_IDLE_MINUTES=1`` the two thresholds collide, and someone
+    actively typing is revoked anyway (the touch lands at the same moment the expiry is measured).
+    A third of the window keeps the proof of life strictly inside it.
+    """
+    return max(1, min(TOUCH_INTERVAL_SECONDS, int(idle_seconds) // 3))
 
 
 def accounts_mode() -> bool:
@@ -63,34 +76,51 @@ def accounts_mode() -> bool:
 
 
 class _IpThrottle:
-    """In-memory failed-login window per client address. Reset by a successful login."""
+    """In-memory failed-login window, keyed by address AND the name it was typing.
+
+    The address alone is the wrong grain: behind the documented reverse proxy every visitor
+    shares one ``remote_addr``, so twenty mistyped passwords (or one attacker spraying them)
+    locked the whole server out for the window — an availability hole a stranger could open at
+    will. A wrong name costs its own window; a successful login clears the pair.
+    """
 
     def __init__(self):
         self._lock = threading.Lock()
         self._hits: dict[str, list[float]] = {}
 
-    def _prune(self, ip: str, now: float) -> list:
-        hits = [ts for ts in self._hits.get(ip, []) if now - ts < IP_WINDOW_SECONDS]
+    @staticmethod
+    def _key(ip: str, username: str) -> str:
+        return f'{str(ip or "")}|{str(username or "").strip().lower()}'
+
+    def _prune(self, key: str, now: float) -> list:
+        hits = [ts for ts in self._hits.get(key, []) if now - ts < IP_WINDOW_SECONDS]
         if hits:
-            self._hits[ip] = hits
+            self._hits[key] = hits
         else:
-            self._hits.pop(ip, None)
+            self._hits.pop(key, None)
         return hits
 
-    def blocked(self, ip: str) -> bool:
+    def blocked(self, ip: str, username: str = '') -> bool:
         with self._lock:
-            return len(self._prune(str(ip or ''), time.time())) >= IP_FAILURE_LIMIT
+            return len(self._prune(self._key(ip, username), time.time())) >= IP_FAILURE_LIMIT
 
-    def record(self, ip: str) -> None:
+    def record(self, ip: str, username: str = '') -> None:
         with self._lock:
             now = time.time()
-            hits = self._prune(str(ip or ''), now)
+            key = self._key(ip, username)
+            hits = self._prune(key, now)
             hits.append(now)
-            self._hits[str(ip or '')] = hits
+            self._hits[key] = hits
 
-    def clear(self, ip: str) -> None:
+    def clear(self, ip: str, username: str = '') -> None:
+        """Forget this address's windows. With no name given, every name it tried."""
         with self._lock:
-            self._hits.pop(str(ip or ''), None)
+            prefix = f'{str(ip or "")}|'
+            if not username:
+                for key in [key for key in self._hits if key.startswith(prefix)]:
+                    self._hits.pop(key, None)
+                return
+            self._hits.pop(self._key(ip, username), None)
 
 
 _throttle = _IpThrottle()
@@ -163,21 +193,40 @@ class AccountService:
         ip = str(ip or '')
         name = str(username or '').strip()
         password_text = str(password or '')
-        if _throttle.blocked(ip):
+        if _throttle.blocked(ip, name):
             self._audit(EVENT_LOGIN_FAIL, username=name, ip=ip, detail='ip-throttled', now=now)
             raise AccountError('accounts.tooManyAttempts')
         if len(password_text) > security.MAX_PASSWORD_LENGTH:
             # A multi-megabyte "password" still costs a scrypt run if handed to the verifier.
             # It can never be a valid credential, so refuse it at the same rate as a wrong one.
             security.burn_unknown_password('')
-            _throttle.record(ip)
+            _throttle.record(ip, name)
             self._audit(EVENT_LOGIN_FAIL, username=name, ip=ip, detail='oversized-password', now=now)
             raise AccountError('auth.badCredentials')
         row = self.store.get_user_by_username(name)
         if row is None:
             security.burn_unknown_password(password)
-            _throttle.record(ip)
+            _throttle.record(ip, name)
             self._audit(EVENT_LOGIN_FAIL, username=name, ip=ip, detail='unknown-user', now=now)
+            raise AccountError('auth.badCredentials')
+        # The password is verified FIRST, whatever the row says about a lock or a status. That
+        # ordering is what keeps the promise the docs make — 「统一文案（不区分用户名是否存在）」:
+        # answering 「登录失败次数过多」 before the check let anyone with a wrong password tell a
+        # registered username from an unregistered one, and a locked row also skipped the hashing,
+        # so the timing said the same thing.
+        if not security.verify_password(password, row['password_hash']):
+            failures = int(row['failed_attempts'] or 0) + 1
+            locked_until = now + security.lock_seconds(failures) if security.lock_seconds(failures) else 0
+            self.store.record_failure(row['user_id'], failures, locked_until, now)
+            _throttle.record(ip, row['username'])
+            self._audit(
+                EVENT_LOGIN_FAIL,
+                user_id=row['user_id'],
+                username=row['username'],
+                ip=ip,
+                detail='locked' if locked_until else 'bad-password',
+                now=now,
+            )
             raise AccountError('auth.badCredentials')
         if float(row['locked_until'] or 0) > now:
             minutes = max(1, math.ceil((float(row['locked_until']) - now) / 60))
@@ -190,22 +239,6 @@ class AccountService:
                 now=now,
             )
             raise AccountError('accounts.lockedOut', minutes=minutes)
-        if not security.verify_password(password, row['password_hash']):
-            failures = int(row['failed_attempts'] or 0) + 1
-            locked_until = now + security.lock_seconds(failures) if security.lock_seconds(failures) else 0
-            self.store.record_failure(row['user_id'], failures, locked_until, now)
-            _throttle.record(ip)
-            self._audit(
-                EVENT_LOGIN_FAIL,
-                user_id=row['user_id'],
-                username=row['username'],
-                ip=ip,
-                detail='bad-password',
-                now=now,
-            )
-            if locked_until:
-                raise AccountError('accounts.lockedOut', minutes=math.ceil(security.lock_seconds(failures) / 60))
-            raise AccountError('auth.badCredentials')
         if row['status'] != 'active':
             self._audit(
                 EVENT_LOGIN_FAIL, user_id=row['user_id'], username=row['username'], ip=ip, detail='disabled', now=now
@@ -252,7 +285,7 @@ class AccountService:
         if row['status'] != 'active':
             self.store.revoke_user_sessions(row['user_id'], now)
             return None
-        if now - float(row['last_seen_at'] or 0) >= TOUCH_INTERVAL_SECONDS:
+        if now - float(row['last_seen_at'] or 0) >= _touch_interval_seconds(idle_seconds):
             self.store.touch_session(sid_hash, now)
         return self._account(row, row['csrf_token'], must_change=bool(row['must_change_password']))
 
@@ -281,7 +314,10 @@ class AccountService:
         )
         self.store.revoke_user_sessions(row['user_id'], time.time(), keep_sid_hash=security.token_hash(token))
         self._audit(EVENT_PASSWORD_CHANGE, user_id=row['user_id'], username=row['username'])
-        return self.public(self.store.get_user(row['user_id']))
+        result = self.public(row)
+        # What the write above did to the row: the debt is spent, and nothing else changed.
+        result['must_change_password'] = False
+        return result
 
     # ─── administration ───
 
@@ -304,24 +340,29 @@ class AccountService:
         return account
 
     def reset_password(self, actor, user_id: str, password, must_change: bool = True) -> dict:
-        self._require_admin(actor)
-        row = self.store.get_user(user_id)
-        if row is None:
-            raise AccountError('accounts.notFound')
-        new_password = security.validate_password(password, row['username'])
-        now = time.time()
-        self.store.update_password(
-            row['user_id'], security.hash_password(new_password), must_change_password=bool(must_change), now=now
-        )
-        self.store.revoke_user_sessions(row['user_id'], now)
-        self._audit(
-            EVENT_ACCOUNT_RESET,
-            user_id=row['user_id'],
-            username=row['username'],
-            actor=actor,
-            detail='must-change' if must_change else '',
-        )
-        return self.public(self.store.get_user(row['user_id']))
+        with self._write_lock:
+            self._require_admin(actor)
+            row = self.store.get_user(user_id)
+            if row is None:
+                raise AccountError('accounts.notFound')
+            new_password = security.validate_password(password, row['username'])
+            now = time.time()
+            self.store.update_password(
+                row['user_id'], security.hash_password(new_password), must_change_password=bool(must_change), now=now
+            )
+            self.store.revoke_user_sessions(row['user_id'], now)
+            self._audit(
+                EVENT_ACCOUNT_RESET,
+                user_id=row['user_id'],
+                username=row['username'],
+                actor=actor,
+                detail='must-change' if must_change else '',
+            )
+            # Described from the row in hand: a concurrent delete would make a fresh read ``None``
+            # and turn an operation that succeeded into a TypeError.
+            result = self.public(row)
+            result['must_change_password'] = bool(must_change)
+            return result
 
     def set_status(self, actor, user_id: str, status: str) -> dict:
         if status not in STATUSES:
@@ -350,7 +391,9 @@ class AccountService:
                 username=row['username'],
                 actor=actor,
             )
-        return self.public(self.store.get_user(user_id))
+            result = self.public(row)
+            result['status'] = status
+            return result
 
     def force_logout(self, actor, user_id: str) -> dict:
         self._require_admin(actor)
@@ -365,35 +408,67 @@ class AccountService:
         """Remove the account and MOVE its data tree into ``users/.trash/``.
 
         Deletion never destroys crawl results in place: the tree is moved, the audit rows stay,
-        and an operator can recover or purge it deliberately.
+        and an operator can recover or purge it deliberately. The row and the tree move together:
+        a registry row that survives its own deletion would leave an account that still logs in
+        over a tree that is gone, so a failed move is undone before the refusal is raised.
         """
         with self._write_lock:
-            self._require_admin(actor)
-            row = self.store.get_user(user_id)
-            if row is None:
-                raise AccountError('accounts.notFound')
-            if row['user_id'] == actor.user_id:
-                raise AccountError('accounts.cannotDeleteSelf')
-            if str(confirm_username or '').strip().lower() != str(row['username']).lower():
-                raise AccountError('accounts.confirmMismatch')
-            if (
-                row['role'] == 'admin'
-                and row['status'] == 'active'
-                and self.store.count_active_admins(excluding=row['user_id']) == 0
-            ):
-                raise AccountError('accounts.lastAdmin')
+            row = self._deletion_target(actor, user_id, confirm_username)
             trashed = self.trash_data(row['user_id'])
-            self.store.delete_user(row['user_id'])
+            try:
+                self.store.delete_user(row['user_id'])
+            except Exception:
+                # Put the tree back where the account can still find it, then let the caller
+                # report the failure: half a deletion is the one outcome nobody can read.
+                if trashed:
+                    with contextlib.suppress(OSError):
+                        shutil.move(trashed, paths.user_root(row['user_id']))
+                raise
             self._audit(
                 EVENT_ACCOUNT_DELETE, user_id=row['user_id'], username=row['username'], actor=actor, detail=trashed
             )
-        result = self.public(row)
-        result['trashed_to'] = trashed
-        return result
+            result = self.public(row)
+            result['trashed_to'] = trashed
+            return result
+
+    def check_deletable(self, actor, user_id: str, confirm_username: str) -> dict:
+        """The delete rules, WITHOUT deleting anything.
+
+        The route has to close the account's SQLite handles before the tree can move (Windows
+        refuses to rename a directory holding an open database), so it must first know it is
+        ALLOWED to — otherwise a refusal (a wrong confirmation, a non-admin) would arrive after
+        the handles were already pulled out from under a live writer.
+        """
+        return self._deletion_target(actor, user_id, confirm_username)
+
+    def _deletion_target(self, actor, user_id: str, confirm_username: str) -> dict:
+        self._require_admin(actor)
+        row = self.store.get_user(user_id)
+        if row is None:
+            raise AccountError('accounts.notFound')
+        if row['user_id'] == actor.user_id:
+            raise AccountError('accounts.cannotDeleteSelf')
+        if str(confirm_username or '').strip().lower() != str(row['username']).lower():
+            raise AccountError('accounts.confirmMismatch')
+        if (
+            row['role'] == 'admin'
+            and row['status'] == 'active'
+            and self.store.count_active_admins(excluding=row['user_id']) == 0
+        ):
+            raise AccountError('accounts.lastAdmin')
+        return row
+
+    def assert_admin(self, actor) -> None:
+        """The public door for a route that wants to authorize BEFORE it probes another account.
+
+        ``_guard_idle`` answers with a run id — somebody else's fact — so it may only run once the
+        caller is proved to be an enabled administrator.
+        """
+        self._require_admin(actor)
 
     def trash_data(self, user_id: str) -> str:
         """Move one account's tree into ``users/.trash/<id>-<timestamp>`` (best effort)."""
-        source = os.path.join(paths.users_root(), user_id)
+        source = paths.user_root(user_id)
         if not os.path.isdir(source):
             return ''
         os.makedirs(paths.trash_root(), exist_ok=True)
@@ -511,6 +586,25 @@ def reset_service(service: AccountService = None) -> None:
     global _SERVICE
     with _SERVICE_LOCK:
         _SERVICE = service
+
+
+#: Addresses that can only ever reach this machine.
+_LOOPBACK_HOSTS = ('127.0.0.1', '::1', 'localhost')
+
+
+def public_bind_refusal(host: str) -> str | None:
+    """Refuse a bind outside this machine when nothing gates it, or ``None`` when it is safe.
+
+    :func:`startup_error` can only see the DECLARED shape (``cloud``, a bootstrap password, an
+    existing ``accounts.db``); the observable one is the socket. Without a registry the gate
+    answers ``None`` for every request, so ``HOST=0.0.0.0`` publishes every saved crawl cookie,
+    dataset and run record — and the ability to start a crawl on the owner's accounts — to anyone
+    who can route to the port. A container default or a typo in a unit file must not be enough.
+    """
+    text = str(host or '').strip()
+    if not text or text in _LOOPBACK_HOSTS or accounts_mode():
+        return None
+    return t('auth.publicBindNeedsAccounts', host=text)
 
 
 def startup_error() -> str | None:

@@ -63,6 +63,7 @@ ZH = {
     'api.killLiveWorker': '这是正在运行的采集线程，请点「停止」而不是强杀它',
     'api.killNoIdent': '没有给出线程 ID',
     'api.killNotAlive': '该线程已不存活',
+    'api.killNotYours': '这台服务器上这个线程不属于你的运行，不能结束：{name}',
     'api.killNotFound': '找不到该线程',
     'api.killProtected': '不能结束受保护的线程：{name}',
     'api.lineageMissing': '没有这个累积数据集：{name}',
@@ -125,6 +126,12 @@ ZH = {
     ),
     'auth.loginTitle': '登录',
     'auth.password': '密码',
+    'auth.publicBindNeedsAccounts': (
+        '这台服务器绑定了非本机地址（HOST={host}），但没有任何账号：登录门禁不会启用，'
+        '局域网内任何人都能读取已保存的登录态、数据集与运行记录，也能用你的账号发起采集。'
+        '请设置 CRAWLER_ADMIN_PASSWORD（或旧变量 CRAWLER_AUTH_PASSWORD）开启账号登录，'
+        '或改用本机地址（默认 127.0.0.1）'
+    ),
     'auth.required': '需要先登录',
     'auth.signIn': '登录',
     'auth.username': '账号',
@@ -250,6 +257,7 @@ EN = {
     'api.killLiveWorker': 'this is a live crawl worker; use Stop rather than killing it',
     'api.killNoIdent': 'missing thread ident',
     'api.killNotAlive': 'thread is not alive',
+    'api.killNotYours': 'on a shared host that thread does not belong to your run and cannot be ended: {name}',
     'api.killNotFound': 'thread not found',
     'api.killProtected': 'cannot kill protected thread: {name}',
     'api.lineageMissing': 'No cumulative dataset with that name: {name}',
@@ -334,6 +342,13 @@ EN = {
     ),
     'auth.loginTitle': 'Sign in',
     'auth.password': 'Password',
+    'auth.publicBindNeedsAccounts': (
+        'This server is bound to a non-loopback address (HOST={host}) but has no accounts, so the '
+        'login gate stays off: anyone who can route to the port can read the saved crawl sessions, '
+        'datasets and run records and start crawls with your accounts. Set CRAWLER_ADMIN_PASSWORD '
+        '(the old CRAWLER_AUTH_PASSWORD also works) to turn accounts on, or bind a loopback '
+        'address (the default is 127.0.0.1)'
+    ),
     'auth.required': 'Sign in first',
     'auth.signIn': 'Sign in',
     'auth.username': 'Username',

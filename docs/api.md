@@ -18,8 +18,8 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/accounts` | POST | `{username, password, role}` 创建账号（管理员；新账号首次登录须改密） |
 | `/api/accounts/<id>/password` | POST | `{password, must_change}` 重置密码（管理员；吊销该账号全部会话） |
 | `/api/accounts/<id>/status` | POST | `{status: active|disabled}` 启用/禁用（管理员；禁用即吊销会话，有运行中任务时 409） |
-| `/api/accounts/<id>/logout` | POST | 强制下线（管理员） |
-| `/api/accounts/<id>` | DELETE | `{confirm_username}` 删除账号（管理员；数据目录移入 `users/.trash/`，最后一个管理员不可删除） |
+| `/api/accounts/<id>/logout` | POST | 强制下线（管理员；该账号没有运行中的任务时同时释放它的库句柄与缓存） |
+| `/api/accounts/<id>` | DELETE | `{confirm_username}` 删除账号（管理员；先授权再动目标的数据，运行中或有登录窗口时 409；数据目录移入 `users/.trash/`，最后一个管理员不可删除；移动失败答 JSON 而非网页） |
 | `/api/accounts/audit` | GET | 最近审计（管理员，`limit` ≤ 500） |
 
 未登录时：`/api/*` 一律 401（`{ok:false, error}` 且带 `X-Auth-Required: 1`，前端据此跳登录页），其余路径 302 到
@@ -46,8 +46,8 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/workflow/queue` | GET | 列出排队中的请求 |
 | `/api/workflow/queue/cancel` | POST | 按 `id` 取消一个排队请求（绝不触碰正在跑的运行） |
 | `/api/workflow/queue/clear` | POST | 清空队列 |
-| `/api/workflow/processes` | GET | 列出执行器/浏览器子进程 |
-| `/api/workflow/processes/kill` | POST | 强杀残留进程 |
+| `/api/workflow/processes` | GET | 列出本次运行的线程与浏览器子进程（账号模式下只列**自己这次运行**的线程，别人的与机器级的不列出） |
+| `/api/workflow/processes/kill` | POST | 强杀残留线程（账号模式下只允许属于自己运行的线程，其余按名 403；定时器线程与他人登录窗口不可杀） |
 | `/api/node-types` | GET | 服务端节点类型目录（`type` 等，供画布校验/种子；由 `nodes/catalog` 单一声明导出） |
 
 ### 画布历史与项目包

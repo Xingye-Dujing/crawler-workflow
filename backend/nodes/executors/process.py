@@ -11,13 +11,12 @@ table (one row per original row × model), the shape the 模型对比 charts rea
 degrades to a general mode — a comparison with fewer models is a different question.
 """
 
-import json
 import os
 
 import pandas as pd
 from api.config import default_model_path_for
+from api.config import read_model_registry as _model_registry
 from api.http import _safe_float, _safe_int
-from core.config import Config
 from core.refs import as_bool
 from core.refs import split_columns as _split_columns
 from runtime.state import add_log
@@ -66,23 +65,11 @@ BERT_RESULT_COLUMNS = {
 }
 
 
-def _model_registry():
-    """The registered models as a list, or [] when absent/broken — the same graceful
-    reading `/api/models` uses, so a name lookup can never crash a run."""
-    path = os.path.join(Config.DATA_DIR, 'model_registry.json')
-    try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
-        return data if isinstance(data, list) else []
-    except (OSError, ValueError):
-        return []
-
-
 def _registry_name(model_path):
     """Friendly NAME for a model path (registry reverse-lookup), else its folder name.
     The 模型 column a comparison chart groups by is a word the user chose, not a path."""
     for m in _model_registry():
-        if isinstance(m, dict) and str(m.get('path', '')).strip() == model_path:
+        if str(m.get('path', '')).strip() == model_path:
             return str(m.get('name') or '').strip() or os.path.basename(model_path)
     return os.path.basename(model_path)
 

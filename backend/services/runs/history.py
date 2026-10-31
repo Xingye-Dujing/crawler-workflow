@@ -21,7 +21,7 @@ import time
 import uuid
 
 import pandas as pd
-from core.config import Config
+from runtime import paths
 
 from i18n import t
 from services.analysis.stats import StatsService
@@ -40,9 +40,13 @@ class ExecutionHistoryService:
         (``runtime.state`` passes ``lambda: runtime.paths.active().history_db``). Every method
         resolves it on use, so handing the same object out by import still names one service
         while the file underneath is the current scope's.
+
+        With no argument the scope is resolved the same way — never from a ``Config`` constant
+        captured at construction: a bare ``ExecutionHistoryService()`` on an accounts host would
+        otherwise settle per-run metrics into the checkout-level ``data/history.db`` that the
+        migration moved away, and the panel would chart another scope's numbers.
         """
-        self._db_source = db_path or (lambda: os.path.join(Config.DATA_DIR, 'history.db'))
-        os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
+        self._db_source = db_path or (lambda: paths.active().history_db)
         # The schema is NOT created here: ``_conn`` creates it on every connection. Doing it at
         # construction opened the system ``data/history.db`` merely by importing the app — which,
         # on an accounts host, re-created a root-level database the migration had just moved away.
@@ -58,6 +62,9 @@ class ExecutionHistoryService:
     def _conn(self):
         """A connection with the schema present.
 
+        The directory is made here rather than at construction because the path is not known
+        until a scope speaks: importing this module must not create anybody's ``data/`` tree.
+
         The table is created *per connection* rather than once at import, because
         ``history.db`` is a file a user is entitled to delete: cleaning ``data/``
         is a normal thing to do, and a test suite that recycles temp directories
@@ -68,6 +75,7 @@ class ExecutionHistoryService:
         still be missing at import time. ``CREATE TABLE IF NOT EXISTS`` on an
         existing schema is cheap and idempotent.
         """
+        os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         self._create_schema(conn)
         return conn

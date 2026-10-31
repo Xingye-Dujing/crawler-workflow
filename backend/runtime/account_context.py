@@ -8,8 +8,15 @@ the dataset cache — asks :func:`current`.
 
 Why ``ContextVar`` and not Flask's ``g``: the run worker and the scheduler clock are plain threads
 that never see a request, and a cache or a store must not be able to import Flask to answer "which
-account is this". A context variable is copied into the threads those helpers start and is reset by
-``token`` in ``finally``, so an exception cannot leave a context behind.
+account is this". The variable is reset by ``token`` in ``finally``, so an exception cannot leave a
+context behind.
+
+The threads do NOT inherit it. ``threading.Thread`` and ``ThreadPoolExecutor`` both start a body
+with the default (``None``) — verified on this box's CPython 3.11 — so whoever starts a thread or
+submits to a pool re-binds the account inside that body. That is what
+``sessions.preflight._probe_scoped``, ``services.runs.queue._save_owner_mirror`` and
+``engine.run._run_workflow_wrapper`` do; a new pool that calls :func:`runtime.paths.active`
+without one silently writes the local owner's tree.
 
 ``None`` is meaningful: no account bound means the local, login-free owner — the checkout-level
 ``data/`` tree, exactly how the app behaved before accounts existed.

@@ -152,6 +152,34 @@ class TestLoggingIn:
         response = _login(client, next_url=next_url)
         assert response.headers['Location'] == '/'
 
+    @pytest.mark.parametrize('next_url', ['/a\nb', '/a\r\nX-Injected: 1', '/a\x00b', '/a\x01b'])
+    def test_a_next_that_could_forge_a_header_is_ignored(self, client, auth_on, next_url):
+        """A control character is legal in a URL path and ILLEGAL in a response header, so
+        ``redirect()`` raises: the login answered an HTTP 500 — after the session was created and
+        audited, which reads to the user as 「密码被忽略」."""
+        response = _login(client, next_url=next_url)
+        assert response.status_code == 302, response.get_data(as_text=True)
+        assert response.headers['Location'] == '/'
+
+    def test_a_non_ascii_form_token_is_refused_not_a_server_error(self, client, auth_on):
+        """``hmac.compare_digest`` refuses non-ASCII text, and a form field arrives decoded — so a
+        token typed as 「café」 raised ``TypeError`` inside the view."""
+        client.get('/login?lang=en')  # mints the one-shot token the POST will be checked against
+        response = client.post(
+            '/login',
+            data={'username': 'admin', 'password': PASSWORD, 'next': '/', 'csrf': 'caf\u00e9'},
+        )
+        assert response.status_code == 401, response.status_code
+        assert 'CSRF' in response.get_data(as_text=True)
+
+    def test_a_non_ascii_csrf_header_is_refused_not_a_server_error(self, client, auth_on):
+        """A header value is decoded latin-1 by WSGI, so any non-ASCII token is a non-ASCII ``str``
+        handed to the comparison: every write would 500 on request, unauthenticated."""
+        _login(client)
+        response = client.post('/api/workflow/stop', headers={'X-CSRF-Token': 'caf\u00e9'})
+        assert response.status_code == 403, response.get_data(as_text=True)
+        assert 'CSRF' in response.get_json()['error']
+
     def test_logout_is_post_only(self, client, auth_on):
         """A cross-site image or link must not be able to end someone's session. A GET reaches no
         logout handler — either the route's 405 or the static catch-all's 404, depending on how
@@ -172,6 +200,37 @@ class TestLoggingIn:
         _login(client)
         assert client.post('/logout').status_code == 403
         assert client.get('/api/config').status_code == 200
+
+    def _login_with_a_chain(self, client, chain):
+        """A sign-in from a FRESH browser (the app's session is per client) with the given chain.
+
+        Reusing the logged-in client would not ask the question again: ``GET /login`` answers a
+        session that already exists with a redirect, and there is no form to read the token from.
+        """
+        visitor = client.application.test_client()
+        visitor.environ_base['HTTP_X_LANG'] = 'en'
+        page = visitor.get('/login')
+        match = re.search(r'name="csrf" value="([^"]+)"', page.get_data(as_text=True))
+        assert match, page.get_data(as_text=True)[:400]
+        visitor.post(
+            '/login',
+            data={'username': 'admin', 'password': PASSWORD, 'next': '/', 'csrf': match.group(1)},
+            headers={'X-Forwarded-For': chain} if chain else {},
+        )
+        rows = visitor.get('/api/accounts/audit').get_json()['entries']
+        return next(row['ip'] for row in rows if row['event'] == 'login_ok')
+
+    def test_a_proxy_header_is_believed_only_when_the_operator_declares_the_depth(self, client, auth_on, monkeypatch):
+        """``remote_addr`` behind a proxy is the PROXY for every visitor: the audit could not say
+        who logged in, and one shared failure window let any attacker lock the whole server out.
+        Trusting the header without that much notice would let any client invent its own address,
+        so the default reads nothing."""
+        monkeypatch.setattr(Config, 'TRUST_PROXY_DEPTH', 0)
+        assert self._login_with_a_chain(client, '203.0.113.7, 10.0.0.2') == '127.0.0.1'
+        monkeypatch.setattr(Config, 'TRUST_PROXY_DEPTH', 1)
+        assert self._login_with_a_chain(client, '203.0.113.7, 10.0.0.2') == '203.0.113.7'
+        # Fewer hops than declared: the chain does not support its own claim.
+        assert self._login_with_a_chain(client, '203.0.113.9') == '127.0.0.1'
 
     def test_logout_revokes_a_copied_cookie(self, client, auth_on):
         """Clearing only the browser's copy leaves a live session row; the server must revoke it,

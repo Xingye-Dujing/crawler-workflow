@@ -6,9 +6,10 @@ state is one small JSON file under the data root, keyed by panel and entry, beca
 lock is a UI intent, not a property of the artefact (an export file or a run row has no
 notion of being locked; the user's decision lives here and can be thrown away safely).
 
-The path is computed from ``Config.DATA_DIR`` at every call rather than bound at import,
-so the test isolation (which redirects ``Config.DATA_DIR`` before ``app`` is imported)
-lands locks in the throwaway root automatically — no per-module path override needed.
+The path is resolved at every call (``runtime.paths.active()``), never bound at import: a lock
+protects one account's export from that account's own sweep, and the test isolation redirects the
+root before ``app`` is imported — a frozen path would let one account's 「别删这条导出」 guard
+another's row.
 """
 
 import json

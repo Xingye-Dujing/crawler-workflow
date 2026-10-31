@@ -96,13 +96,17 @@ def _is_occupied(path: Path) -> bool:
 
 
 def _companions(source: Path) -> list:
-    """The WAL/index files SQLite may hold beside a database.
+    """The WAL/index files SQLite may hold beside one of THIS tool's databases.
 
     A copy of ``x.db`` alone is not the database: committed transactions can still live in
     ``x.db-wal``. They are moved with the main file (and the main file is checkpointed first), or
     a migration would silently drop the newest rows of a store.
+
+    The list is the tool's own (:data:`SQLITE_FILES`), not a ``.db`` suffix test: a stranger
+    database that happens to sit in ``data/`` must not have its side files dragged along by a
+    migration that never promised to understand it.
     """
-    if source.suffix != '.db':
+    if source.name not in SQLITE_FILES:
         return []
     return [
         peer

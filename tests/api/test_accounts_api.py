@@ -2,9 +2,11 @@
 
 import os
 import re
+import threading
 
 import pytest
 from core.config import Config
+from runtime.account_context import Account
 from runtime.state import execution_state
 
 from services.accounts import service as accounts_service
@@ -51,6 +53,11 @@ def _csrf(client):
 
 def _post(client, path, payload=None):
     return client.post(path, json=payload or {}, headers={'X-CSRF-Token': _csrf(client)})
+
+
+def _me(client) -> dict:
+    """The signed-in account as the server describes it."""
+    return client.get('/api/account/me').get_json()['user']
 
 
 def _delete(client, path, payload=None):
@@ -178,6 +185,86 @@ class TestAccountLifecycle:
         assert response.status_code == 200, response.get_json()
         assert events[:2] == [('release', bob['user_id']), ('delete', bob['user_id'])]
 
+    def test_a_refused_delete_never_closes_another_accounts_stores(self, admin_client, monkeypatch):
+        """The order used to be: close the handles, then find out whether this was allowed. A
+        wrong confirmation answered 400, and a caller who is not an administrator answered 403 —
+        both AFTER pulling the account's open databases out from under it."""
+        from api import accounts as accounts_api
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        _create(admin_client, 'mallory')
+        mallory = _settle_password(_login(_new_client(admin_client), 'mallory', PASSWORD))
+        releases = []
+        monkeypatch.setattr(accounts_api.stores, 'release_user', releases.append)
+
+        wrong = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'nobody'})
+        assert wrong.status_code == 400, wrong.get_json()
+        assert releases == [], 'a refused delete closed Bob’s stores'
+
+        refused = _delete(mallory, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+        assert refused.status_code == 403, refused.get_json()
+        assert releases == [], 'a non-admin closed Bob’s stores without deleting anything'
+
+    def test_the_busy_probe_is_answered_only_to_an_administrator(self, admin_client):
+        """「这个账号还有运行中的任务（<run id>）」 names another account's run — so the
+        administrator check must come before the probe, not after it."""
+        bob = _create(admin_client, 'bob').get_json()['user']
+        _create(admin_client, 'mallory')
+        mallory = _settle_password(_login(_new_client(admin_client), 'mallory', PASSWORD))
+        execution_state['running'] = True
+        execution_state['user_id'] = bob['user_id']
+        execution_state['run_id'] = 'bobs-secret-run'
+        try:
+            refused = _post(mallory, f'/api/accounts/{bob["user_id"]}/status', {'status': 'disabled'})
+            assert refused.status_code == 403, refused.get_json()
+            assert 'bobs-secret-run' not in refused.get_data(as_text=True), 'the probe leaked the run id'
+            # The administrator still gets the guard, named.
+            guarded = _post(admin_client, f'/api/accounts/{bob["user_id"]}/status', {'status': 'disabled'})
+            assert guarded.status_code == 409, guarded.get_json()
+            assert 'bobs-secret-run' in guarded.get_json()['error']
+        finally:
+            execution_state['running'] = False
+            execution_state['user_id'] = ''
+            execution_state['run_id'] = ''
+
+    def test_a_move_that_fails_is_named_in_json_and_deletes_nothing(self, admin_client, monkeypatch):
+        """A profile a browser still holds makes ``shutil.move`` refuse on Windows; every caller
+        of this panel parses JSON, and the account must not be half-deleted."""
+        import shutil as shutil_module
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+
+        def boom(*_args, **_kwargs):
+            raise PermissionError('the file is being used by another process')
+
+        monkeypatch.setattr(shutil_module, 'move', boom)
+        response = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+        assert response.status_code == 500, response.get_json()
+        assert response.is_json, 'a storage failure answered with an HTML page'
+        assert 'PermissionError' in response.get_json()['error']
+        assert os.path.isdir(os.path.join(Config.DATA_DIR, 'users', bob['user_id'])), 'the tree moved anyway'
+        assert bob['user_id'] in [row['user_id'] for row in admin_client.get('/api/accounts').get_json()['accounts']]
+
+    def test_force_logout_releases_the_scope_only_when_no_run_is_writing(self, admin_client, monkeypatch):
+        from api import accounts as accounts_api
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        releases = []
+        monkeypatch.setattr(accounts_api.stores, 'release_user', releases.append)
+        assert _post(admin_client, f'/api/accounts/{bob["user_id"]}/logout').status_code == 200
+        assert releases == [bob['user_id']]
+
+        execution_state['running'] = True
+        execution_state['user_id'] = bob['user_id']
+        execution_state['run_id'] = 'bobs-run'
+        try:
+            assert _post(admin_client, f'/api/accounts/{bob["user_id"]}/logout').status_code == 200
+        finally:
+            execution_state['running'] = False
+            execution_state['user_id'] = ''
+            execution_state['run_id'] = ''
+        assert releases == [bob['user_id']], 'a force logout closed a live run’s stores'
+
     def test_delete_refuses_while_that_accounts_cookie_window_is_open(self, admin_client):
         """The account's Chrome profile is in use; moving its tree would fail (and strand it)."""
         from sessions.routes import _COOKIE_JOB
@@ -303,6 +390,79 @@ class TestAnotherAccountsRunIsNotYours:
         finally:
             _COOKIE_JOB.clear()
             _COOKIE_JOB.update(previous)
+
+    def test_a_refused_claim_does_not_take_over_the_slot(self, admin_client, monkeypatch):
+        """The LLM-requirement refusals come AFTER the run id and the owner are stamped. A loser
+        must hand both back: otherwise its own console poll answers with the previous owner's
+        lines and results, and the true owner is told its run is foreign."""
+        from runtime import account_context
+        from runtime.state import ambient, set_ambient
+
+        admin_id = _me(admin_client)['user_id']
+        _create(admin_client, 'alice')
+        alice = _settle_password(_login(_new_client(admin_client), 'alice', PASSWORD))
+        monkeypatch.setattr('engine.run.workflow_needs_llm', lambda _workflow: True)
+
+        execution_state['user_id'] = admin_id
+        execution_state['username'] = 'admin'
+        execution_state['run_id'] = 'admins-finished-run'
+        execution_state['results'] = {'node-1': [{'text': 'admin’s own row'}]}
+        execution_state['workflow_labels'] = ['admin’s canvas']
+        with account_context.use(Account(admin_id, 'admin', 'admin')):
+            set_ambient('admin’s canvas', 'admin-fingerprint')
+            own_status = admin_client.get('/api/workflow/status').get_json()
+        assert own_status.get('foreign_run') is not True and own_status['results'], 'the owner lost its own run'
+
+        refused = _post(
+            alice,
+            '/api/workflow/execute',
+            {
+                'workflow': {'nodes': [{'id': 'node-1', 'type': 'source'}], 'connections': []},
+                'workflow_name': 'alice’s canvas',
+                'llm': {'provider': 'ollama', 'model': ''},
+            },
+        )
+        assert refused.status_code == 400, refused.get_json()
+
+        assert execution_state['user_id'] == admin_id, 'a refused claim re-stamped the slot owner'
+        assert execution_state['run_id'] == 'admins-finished-run', 'a refused claim stamped a run id'
+        assert execution_state['workflow_labels'] == ['admin’s canvas']
+        alice_id = _me(alice)['user_id']
+        with account_context.use(Account(alice_id, 'alice', 'user')):
+            assert ambient() == {}, 'a refused claim re-keyed the loser’s canvas identity'
+        with account_context.use(Account(admin_id, 'admin', 'admin')):
+            assert ambient()['workflow_name'] == 'admin’s canvas', 'the refusal clobbered the owner’s canvas'
+        # The loser sees an idle slot, and the owner still sees its own console.
+        assert alice.get('/api/workflow/status').get_json()['foreign_run'] is True
+        with account_context.use(Account(admin_id, 'admin', 'admin')):
+            after = admin_client.get('/api/workflow/status').get_json()
+        assert after['results'] and not after.get('foreign_run')
+
+    def test_the_process_panel_sees_only_your_own_run_threads(self, admin_client):
+        """A thread list is a MACHINE fact. On a shared host it also holds the scheduler (killing
+        it stops every account's 定时任务) and another account's cookie-capture window, so the
+        panel must neither list them nor accept their idents."""
+        admin_id = _me(admin_client)['user_id']
+        keeper = threading.Event()
+        stranger = threading.Thread(target=keeper.wait, name='cookie-login-window', daemon=True)
+        stranger.start()
+        execution_state['running'] = True
+        execution_state['user_id'] = admin_id
+        try:
+            listed = admin_client.get('/api/workflow/processes').get_json()
+            names = [row['name'] for row in listed['threads']]
+            idents = [row['ident'] for row in listed['threads']]
+            assert 'cookie-login-window' not in names, names
+            assert stranger.ident not in idents, idents
+            assert all(name == 'run' or name.startswith('ThreadPoolExecutor') for name in names), names
+            killed = _post(admin_client, '/api/workflow/processes/kill', {'ident': stranger.ident})
+            assert killed.status_code == 403, killed.get_json()
+            assert 'cookie-login-window' in killed.get_json()['error']
+            assert stranger.is_alive(), 'the refusal still injected SystemExit into the thread'
+        finally:
+            keeper.set()
+            execution_state['running'] = False
+            execution_state['user_id'] = ''
 
     def test_status_stop_processes_and_kill_refuse_a_foreign_run(self, admin_client):
         execution_state['user_id'] = 'u_0123456789ab'

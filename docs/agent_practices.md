@@ -980,3 +980,74 @@ the evidence here.
   promise never resolved (the `_pwOpen` guard then blocked every retry) — every API stayed 403 with no visible way out.
   The notice is now suppressed while `Auth.mustChange`, and a successful change reloads the page so the refused
   panels fetch again.
+
+A second audit (same day, whole-project) found the following, each pinned by a test that FAILS without its fix:
+
+- **A refused claim owns nothing.** `begin_run` stamps `run_id`, `user_id`, `username` and the ambient canvas BEFORE
+  its last payload refusals (missing model, transport unavailable), and the `finally` that gives the slot back reset
+  only `running`. Measured: account B, whose canvas needs a model it never configured, pressed 运行 next to account A's
+  finished run — B's `/api/workflow/status` then shipped **A's** console, workflow names and in-memory chart results,
+  while A was told its own run was `foreign_run`. The claim now snapshots what it writes and hands it back
+  (`_claim_stamp` / `_restore_claim_stamp`), including `forget_ambient` when the caller held no canvas before.
+- **No thread inherits a `ContextVar` — measured, not assumed.** `runtime/account_context.py` claimed a context
+  variable "is copied into the threads those helpers start". On this box's CPython 3.11 a `threading.Thread` body AND
+  a `ThreadPoolExecutor.submit` callable both read the default (`None`) while the parent reads the bound value. The
+  sentence was the licence for the bug class the layer exists to prevent, so it now says the opposite and names the
+  three places that re-bind. Same root cause, second symptom: `RunLogWriter._drain` resolved `get_run_store()` on
+  whichever thread happened to print the 200th console line (an OpenRouter retry warning, a Stop reaper) — an account's
+  console batch went into the checkout-level `data/runs.db` and left a hole in its own durable log. The writer now
+  captures the owner when the sink is ARMED (`arm(account)`, run by the bound claim) and writes inside that context.
+- **Authorize before you touch the target.** The delete route called `stores.release_user()` — closing the victim's
+  SQLite handles — *before* the service checked the caller was an administrator, and called it AGAIN in the
+  `except AccountError` branch, so a refusal 「这个账号还有运行中的任务」 arrived after the guard had destroyed the run
+  it was protecting, and a `user`-role session could do it to any id. The status route probed the same way and leaked
+  the target's run id to a non-admin in its 409. The routes now call `check_deletable` / `assert_admin` first.
+- **"No run is live" is proved against a state that must be pinned.** The guard reads `execution_state` without
+  `execute_lock`, while `begin_run` claims under it: a queue drain or a second tab could start a run between the
+  guard and the release/move. Disable and delete now hold `execute_lock` across guard → release → move, the same lock
+  the claim takes.
+- **One drained request must become one entry.** When the drained entry lost the race, `begin_run` had already
+  re-parked it (`enqueue_run` appends AND mirrors) and `drain_queue` then pushed the original back as well: the same
+  canvas crawled twice, paid for twice, and both entries survived the restart because the duplicate was mirrored.
+  `queued: true` now means "already parked — do nothing".
+- **Boot work creates nothing it did not need.** `load_pending_queue()` asked every active account for its queue
+  mirror, and the lazy store answers by `ensure()`-ing the tree and CONNECTING — so a first boot with 30 accounts that
+  never ran created 30 `runs.db` (+`-wal`/`-shm`), ran `promote_stale_runs` on each, and held 30 handles for the
+  process life, undoing the policy the function 14 lines above it in `app.py` states. It now reads only a tree that
+  already holds a `runs.db` and releases the slot in a `finally`. Related, and the honest half of the same promise: a
+  restored queue is now drained, because each of those users was told 「已排队」.
+- **`hmac.compare_digest` refuses non-ASCII text, and a client-supplied token is text.** WSGI hands back a header
+  decoded latin-1 and a form field decoded UTF-8, so `X-CSRF-Token: café` raised `TypeError` inside `before_request` —
+  an unauthenticated, attacker-paced HTTP 500 on every write, plus a traceback line pushed into the shared console.
+  The comparison now happens on bytes (`security.token_matches`), which is what the two callers share.
+- **A newline is legal in a URL path and illegal in a response header.** `safe_next` filtered scheme/host/backslash but
+  not control characters, so `/login?next=/a%0Ab` reached `redirect()` raw and raised — on the SUCCESS path the session
+  was already created and audited, and the user got an Internal Server Error instead of the page. `safe_next` now
+  refuses anything below 0x20.
+- **A lockout refusal is a fact about the account, so it may not answer a wrong password.** The locked branch ran
+  BEFORE the verifier (and skipped the hashing), so five attempts with any password turned 「登录失败次数过多」 into a
+  username oracle — contradicting the sentence `docs/config.md` had published and the reason `burn_unknown_password`
+  exists. The password is verified first; only a correct one is told the account is locked.
+- **A per-address failure window behind a proxy is a per-server lockout.** Twenty mistyped passwords (by anyone, or by
+  one script) locked out every visitor for the window, because `remote_addr` is the proxy. The window is keyed
+  `address|username` now, which still costs a guesser per name and clears on a successful login.
+- **A thread list is a machine fact, so `run_is_foreign()` cannot be its only gate.** `/api/workflow/processes` named
+  every thread with its ident and the kill door accepted any of them: the account that last claimed the slot could
+  stop `crawler-scheduler` (silently ending EVERY account's 定时任务 until a restart) or inject `SystemExit` into
+  another account's cookie-capture window mid-login. Accounts mode lists and accepts only the caller's own run threads
+  and refuses the rest by name; the local install keeps the full panel.
+- **A storage failure answers in the envelope the panel parses.** `shutil.move` refuses a Chrome profile a browser
+  still holds on Windows, and the accounts routes caught only `AccountError` — an admin got an HTML 500 where the JS
+  expects `{ok, error}`. They catch `(OSError, sqlite3.Error)` and name the failure; deletion also moves the tree and
+  deletes the row as one guarded step, with a compensating move-back, so neither "account alive, data gone" nor a
+  phantom row survives it.
+- **The idle timeout must be measured with the touch that keeps it alive.** `last_seen_at` advanced only every 60 s,
+  so with `CRAWLER_SESSION_IDLE_MINUTES=1` an actively typing session was revoked: the touch and the expiry compared
+  against the same stale field. The touch interval is derived from the window (`min(60, idle/3)`).
+- **A boot refusal must watch the socket, not only the flags.** `startup_error` sees the DECLARED shape (`cloud`, a
+  bootstrap password, an existing `accounts.db`); `HOST=0.0.0.0` with none of those is an open server, because the gate
+  returns early when there is no registry. `public_bind_refusal` refuses a non-loopback bind with no accounts, by name.
+- **`reset_service()` alone does not isolate a test: per-account slots are process state.** The `client` fixture reset
+  the system store globals but left `_USER_STORES` — SQLite handles on the previous test's tmp files, which Windows
+  refuses to delete while open. It now releases every user slot in its teardown, and account-scope assertions compare
+  against the accounts that test owns.

@@ -18,15 +18,16 @@ front — stays here.
 """
 
 import logging
+import os
 import threading
 import time
 import uuid
 from collections.abc import Callable
 
-from runtime import account_context
+from runtime import account_context, paths
 from runtime.account_context import Account
 from runtime.state import _RUN_QUEUE, QueueEntry, add_log, run_owner
-from runtime.stores import get_run_store
+from runtime.stores import get_run_store, release_user
 
 from i18n import t
 from services.runs.payload import workflow_shape_error
@@ -218,18 +219,29 @@ def load_pending_queue() -> int:
 
     Only fills an empty queue: a process that already has live in-memory entries (a test
     harness, or a re-entrant boot) must not have them clobbered by an older disk snapshot.
+    Each account's store is closed again straight after its read — boot work must not leave a
+    handle (and a ``runs.db`` file) behind for every account that ever existed.
     Returns how many requests came back."""
     with queue_lock:
         if _RUN_QUEUE:
             return 0
     restored_requests = []
     for account in _owner_scopes():
+        user_id = account.user_id if account is not None else ''
+        # An account that has never run has no mirror to read, and asking for one would CREATE
+        # its empty ``runs.db`` (the stores are lazy on purpose) and hold the handle open until
+        # shutdown — a leak that grows with the account count. Same rule as the boot housekeep.
+        if user_id and not os.path.isfile(paths.for_user(user_id).runs_db):
+            continue
         with account_context.use(account):
             try:
                 rows = get_run_store().load_queue()
             except Exception:
                 logger.exception(t('run.queueLoadFailed'))
                 continue
+            finally:
+                if user_id:
+                    release_user(user_id)
         for row in rows:
             row.setdefault('user_id', account.user_id if account is not None else '')
             row.setdefault('username', account.username if account is not None else '')
@@ -302,7 +314,13 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
             if _console_is_for(entry):
                 add_log(t('run.queue_broken', name=name, err=body.get('error', '')))
             continue
-        if answer.get('status') == 200 and body.get('ok') and not body.get('queued'):
+        if answer.get('status') == 200 and body.get('ok') and body.get('queued'):
+            # Someone else claimed the slot while this entry was being started, and the start
+            # path already parked it again (``begin_run`` → ``enqueue_run`` appends a fresh
+            # entry). Pushing this one back as well would run the same canvas TWICE — and the
+            # duplicate would survive a restart, because both entries are mirrored.
+            return
+        if answer.get('status') == 200 and body.get('ok'):
             if _console_is_for(entry):
                 add_log(t('run.queue_started', name=name, rid=body.get('run_id', '')))
             return

@@ -24,18 +24,20 @@ This module is the ONLY place that imports ``flask.session`` (``tests/api/test_p
 pins that): every other module asks :func:`current_user` / :func:`current_sid`.
 """
 
-import hmac
 import html
 import secrets
 import time
 from urllib.parse import quote, urlsplit
 
+from core.config import Config
 from flask import Blueprint, Response, jsonify, redirect, request, session
 from runtime import account_context
 
 from i18n import get_lang, normalize, set_lang, t
+from services.accounts import security
 from services.accounts.errors import AccountError
 from services.accounts.service import accounts_mode, get_account_service
+from services.accounts.service import public_bind_refusal as _public_bind_refusal
 from services.accounts.service import startup_error as _accounts_startup_error
 
 bp = Blueprint('auth', __name__)
@@ -181,6 +183,15 @@ def startup_error() -> str | None:
     return _accounts_startup_error()
 
 
+def public_bind_refusal(host: str) -> str | None:
+    """The named refusal for a bind this machine is not the only one that can reach.
+
+    The gate exists only while the registry does, so ``HOST=0.0.0.0`` without accounts is an
+    open server whatever the ``cloud`` switch says; ``app.py`` asks this before it binds.
+    """
+    return _public_bind_refusal(host)
+
+
 # ─── Identity accessors (the only way out of ``flask.session``) ───
 
 
@@ -199,6 +210,27 @@ def is_admin() -> bool:
     return bool(account is not None and account.is_admin)
 
 
+def client_ip() -> str:
+    """Who the request really came from, as far as this deployment is allowed to claim.
+
+    Behind the reverse proxy ``docs/config.md`` describes, ``remote_addr`` is the PROXY for every
+    visitor — so the audit log could not answer "who", and a failure window keyed on it was a
+    whole-server lockout. ``CRAWLER_TRUST_PROXY_DEPTH`` (0 = never trust the header, the default)
+    says how many proxies stand in front of this process, and the client is the address that many
+    hops from the RIGHT of ``X-Forwarded-For``: the leftmost entry is whatever the first client
+    typed, and only the hops this operator declared are removed.
+    """
+    remote = str(request.remote_addr or '')
+    depth = max(0, int(Config.TRUST_PROXY_DEPTH or 0))
+    if not depth:
+        return remote
+    forwarded = [part.strip() for part in str(request.headers.get('X-Forwarded-For') or '').split(',') if part.strip()]
+    if len(forwarded) < depth + 1:
+        # Fewer hops than declared: the chain does not say what it claims, so say nothing.
+        return remote
+    return forwarded[-(depth + 1)]
+
+
 # ─── Credentials and the gate ──────────────────────────────────
 
 
@@ -206,10 +238,14 @@ def safe_next(target) -> str:
     """Only a path on THIS server may be a post-login destination.
 
     ``//evil.example`` parses as a host, and ``/\\\\evil`` is read as a path by some clients — both
-    would turn the login form into an open redirect.
+    would turn the login form into an open redirect. Control characters go further: a ``\\n`` is
+    legal in a URL path but illegal in a response header, so ``redirect()`` raises — the login
+    would answer an HTTP 500 AFTER the session had already been created and audited.
     """
     text = str(target or '').strip()
     if not text.startswith('/') or text.startswith('//') or '\\' in text:
+        return DEFAULT_NEXT
+    if any(ord(char) < 0x20 or char == '\x7f' for char in text):
         return DEFAULT_NEXT
     parts = urlsplit(text)
     if parts.scheme or parts.netloc:
@@ -235,7 +271,7 @@ def resolve_session():
 
 def csrf_ok(account) -> bool:
     given = str(request.headers.get('X-CSRF-Token') or '')
-    return bool(given) and hmac.compare_digest(given, str(getattr(account, 'csrf_token', '') or ''))
+    return security.token_matches(given, str(getattr(account, 'csrf_token', '') or ''))
 
 
 def _bind(account) -> None:
@@ -349,7 +385,7 @@ def login():
         user = str(request.form.get('username') or '')
         expected = str(session.pop('login_csrf', '') or '')
         given = str(request.form.get('csrf') or '')
-        if not expected or not hmac.compare_digest(given, expected):
+        if not expected or not security.token_matches(given, expected):
             time.sleep(FAILED_ATTEMPT_DELAY)
             error = t('accounts.csrfRequired')
         else:
@@ -357,7 +393,7 @@ def login():
                 ticket = get_account_service().authenticate(
                     user,
                     request.form.get('password'),
-                    ip=request.remote_addr or '',
+                    ip=client_ip(),
                     user_agent=request.user_agent.string,
                 )
             except AccountError as exc:
@@ -396,6 +432,6 @@ def logout():
         get_account_service().logout(token)
     account = current_user()
     if account is not None:
-        get_account_service().audit_logout(account, request.remote_addr or '')
+        get_account_service().audit_logout(account, client_ip())
     session.clear()
     return redirect('/login' if auth_enabled() else DEFAULT_NEXT)

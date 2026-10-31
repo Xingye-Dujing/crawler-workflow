@@ -81,17 +81,34 @@ def test_the_database_never_stores_the_session_token(service):
 
 def test_wrong_password_locks_after_five_attempts(service):
     _bootstrap(service)
-    for _ in range(4):
+    for _ in range(5):
         with pytest.raises(AccountError) as exc:
             _login(service, password='wrong-password')
+        # The lock never announces itself to a WRONG password: 「登录失败次数过多」 is a fact about
+        # the account existing, and the lock is doing its job either way.
         assert exc.value.key == 'auth.badCredentials'
-    with pytest.raises(AccountError) as exc:
-        _login(service, password='wrong-password')
-    assert exc.value.key == 'accounts.lockedOut'
-    # Even the right password is refused while the lock stands.
+    row = service.store.get_user_by_username('admin')
+    assert float(row['locked_until']) > time.time(), 'the fifth failure did not lock the account'
+    # Even the right password is refused while the lock stands — and only now does it say why.
     with pytest.raises(AccountError) as exc:
         _login(service)
     assert exc.value.key == 'accounts.lockedOut'
+
+
+def test_a_locked_name_does_not_answer_differently_to_a_wrong_one(service):
+    """The lockout refusal sits behind the password check on purpose. Answering it first made the
+    public login form enumerate usernames: five attempts on 「admin」 return 「请 15 分钟后再试」
+    while five attempts on a name nobody registered return the generic refusal."""
+    _bootstrap(service)
+    for _ in range(6):
+        with pytest.raises(AccountError):
+            _login(service, username='admin', password='wrong-password')
+    keys = []
+    for username in ('admin', 'nobody-at-all'):
+        with pytest.raises(AccountError) as exc:
+            _login(service, username=username, password='wrong-password')
+        keys.append(exc.value.key)
+    assert keys == ['auth.badCredentials', 'auth.badCredentials'], keys
 
 
 def test_unknown_username_answers_the_same_refusal(service):

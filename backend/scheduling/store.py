@@ -2,12 +2,13 @@
 
 A schedule is a UI intent, like a lock, not a property of the canvas it runs. The workflow file
 goes on saying whatever it says; "every day at 08:00, this canvas, and last night it was refused"
-lives here. One small JSON file under the data root (runtime state: gitignored, beside
-``settings.json`` and ``locks.json``), written atomically and guarded by one lock.
+lives here. One small JSON file (runtime state: gitignored), written atomically and guarded by one
+lock.
 
-The path is computed from ``Config.DATA_DIR`` on every call rather than bound at import, so the
-test isolation (which redirects it before ``app`` is imported) lands schedules in the throwaway
-root automatically — the same rule ``lock_store`` follows.
+The path is resolved at every call (``runtime.paths.active()``), never bound at import: whose
+``schedules.json`` it is follows the account the clock is speaking for. ``settings.json`` stays at
+the system root because it describes the machine; a schedule describes a person, so it moves with
+them — the same rule ``lock_store`` follows.
 
 What a task's own history is NOT: an input. ``last_run``, ``missed`` and ``history`` are the
 record of what the server did, so a request that carries them is ignored rather than believed.

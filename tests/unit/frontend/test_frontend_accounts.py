@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from frontend_catalogue import with_catalogue
 from node_runner import run_node
+from static_assets import js_text
 
 pytestmark = pytest.mark.unit
 
@@ -31,6 +32,27 @@ def booted():
 
 def _headers(call):
     return {str(key).lower(): value for key, value in (call.get('headers') or {}).items()}
+
+
+class TestAPasswordFieldIsNotAutofilled:
+    """A dialog that types a credential must tell the browser to keep its hands off it.
+
+    Without a directive the browser offers to SAVE the account's password against this origin and
+    to fill it back into 「当前密码」 on the next visit — the very value the panel then posts, so an
+    unattended autofill turns a wrong-password refusal into a silent change.
+    """
+
+    def test_the_dialog_shell_carries_the_directive(self):
+        shell = js_text('panels/shell.js')
+        assert 'box.autocomplete =' in shell, 'showDialog builds its inputs without an autocomplete'
+        assert "'new-password'" in shell, 'a password field must not be offered a stored value'
+
+    def test_every_credential_field_is_a_password_field(self):
+        """The shell's default fires on ``type:'password'``, so the fields have to say what they are."""
+        accounts = js_text('accounts.js')
+        for field in ('acc-current', 'acc-new', 'acc-confirm', 'acc-reset-password'):
+            line = next((row for row in accounts.splitlines() if f"id: '{field}'" in row), '')
+            assert "type: 'password'" in line, f'{field} is not declared as a password field: {line}'
 
 
 class TestThePanelUsesTheSharedDesignTokens:
