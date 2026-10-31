@@ -13,9 +13,9 @@ Paths and behaviour are unchanged.
 
 import os
 
-from core.config import Config
 from core.refs import as_bool
 from flask import Blueprint, jsonify, request
+from runtime import paths
 from runtime.state import _results_snapshot, add_log, execution_state
 from runtime.stores import get_run_store
 from runtime.transport import _local_transport_refusal
@@ -135,7 +135,7 @@ def report_generate():
                 conclusion = ''
 
     workflow_name = meta.get('workflow_name') or 'workflow'
-    report = ReportService(Config.EXPORT_DIR)
+    report = ReportService(paths.active().export_dir)
     name = (title or '').strip() or workflow_name
     markup = report.build(
         (title or '').strip() or t('report.default_title', name=workflow_name),
@@ -169,7 +169,7 @@ def report_view():
     from services.exports.browser import resolve_report_path
 
     name = request.args.get('name', '')
-    path = resolve_report_path(Config.EXPORT_DIR, name)
+    path = resolve_report_path(paths.active().export_dir, name)
     if not path:
         return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
     response = send_file(path, mimetype='text/html', download_name=os.path.basename(path))
@@ -202,17 +202,17 @@ def report_latex():
     title = str(data.get('title') or '').strip()[:120]
     from services.reports import paper
 
-    result = paper.generate(run_id, title=title, store=get_run_store(), export_dir=Config.EXPORT_DIR)
+    result = paper.generate(run_id, title=title, store=get_run_store(), export_dir=paths.active().export_dir)
     # The source is registered even when the compiler refused: it is the artifact the reader can
     # act on (paste into their own paper, or run xelatex by hand), and the refusal above would
     # otherwise leave nothing behind but a log line.
     produced_tex = str(result.get('tex_file') or '')
     if produced_tex:
-        get_run_store().record_file(run_id, '', os.path.join(Config.EXPORT_DIR, produced_tex), 'latex_doc')
+        get_run_store().record_file(run_id, '', os.path.join(paths.active().export_dir, produced_tex), 'latex_doc')
     if result.get('error'):
         add_log(t('run.reportLatexFailed', err=result['error']))
         return jsonify({'ok': False, 'error': result['error'], 'tex': produced_tex or None}), 400
-    get_run_store().record_file(run_id, '', os.path.join(Config.EXPORT_DIR, result['pdf_file']), 'report_pdf')
+    get_run_store().record_file(run_id, '', os.path.join(paths.active().export_dir, result['pdf_file']), 'report_pdf')
     add_log(t('run.reportLatexSaved', name=result['pdf_file'], figures=result['figures'], tables=result['tables']))
     return jsonify(
         {
@@ -238,7 +238,7 @@ def report_studio_images():
 
     rows = [
         {'name': row['name'], 'size': row['size'], 'mtime': row['mtime']}
-        for row in list_exports(Config.EXPORT_DIR)
+        for row in list_exports(paths.active().export_dir)
         if os.path.splitext(row['name'])[1].lower() in INLINE_IMAGE_EXT
     ]
     return jsonify({'ok': True, 'images': rows})

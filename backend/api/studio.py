@@ -15,10 +15,10 @@ import re
 import uuid
 
 import pandas as pd
-from core.config import Config
 from core.refs import json_safe_records as _json_safe_records
 from core.refs import sanitize_filename
 from flask import Blueprint, jsonify
+from runtime import paths
 from runtime.state import _results_snapshot, execution_state
 from runtime.stores import _load_dataset, get_run_store
 
@@ -408,9 +408,9 @@ def studio_save_vector():
     name = data.get('name') or 'studio-chart'
     name = re.sub(r'\.(svg|xml)$', '', str(name), flags=re.IGNORECASE)
     filename = sanitize_filename(f'{name}-{uuid.uuid4().hex[:8]}.svg')
-    filepath = os.path.join(Config.EXPORT_DIR, filename)
+    filepath = os.path.join(paths.active().export_dir, filename)
     try:
-        os.makedirs(Config.EXPORT_DIR, exist_ok=True)
+        os.makedirs(paths.active().export_dir, exist_ok=True)
         with open(filepath, 'w', encoding='utf-8') as handle:
             handle.write(markup)
     except OSError as e:
@@ -449,18 +449,18 @@ def studio_save_pdf():
         return jsonify({'ok': False, 'error': t('api.pdfUnregistered', name=name)}), 400
     if row.get('kind') != 'latex':
         return jsonify({'ok': False, 'error': t('api.pdfWrongKind', kind=row.get('kind') or '')}), 400
-    figure = os.path.join(Config.EXPORT_DIR, name)
+    figure = os.path.join(paths.active().export_dir, name)
     if not os.path.isfile(figure):
         return jsonify({'ok': False, 'error': t('api.pdfMissingFile', name=name)}), 400
 
     docs = [_read_text(figure)]
     store = get_run_store()
     for sibling in store.files_for_run(row['run_id'], row.get('node_id') or None, 'latex_table'):
-        path = os.path.join(Config.EXPORT_DIR, sibling['name'])
+        path = os.path.join(paths.active().export_dir, sibling['name'])
         if os.path.isfile(path):
             docs.append(_read_text(path))
     out_name = re.sub(r'\.txt$', '', name, flags=re.IGNORECASE) + '.pdf'
-    out, staged = pdf.compile_pdf(pdf.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    out, staged = pdf.compile_pdf(pdf.compose_tex(docs), out_name, paths.active().export_dir)
     if 'error' in out:
         return jsonify({'ok': False, 'error': out['error']}), 500
     store.record_file(row['run_id'], str(row.get('node_id') or ''), staged, 'pdf')
@@ -504,9 +504,9 @@ def studio_save_image():
     name = data.get('name') or 'studio-chart'
     name = re.sub(r'\.(png|jpe?g|webp)$', '', str(name), flags=re.IGNORECASE)
     filename = sanitize_filename(f'{name}-{uuid.uuid4().hex[:8]}.{ext}')
-    filepath = os.path.join(Config.EXPORT_DIR, filename)
+    filepath = os.path.join(paths.active().export_dir, filename)
     try:
-        os.makedirs(Config.EXPORT_DIR, exist_ok=True)
+        os.makedirs(paths.active().export_dir, exist_ok=True)
         with open(filepath, 'wb') as fh:
             fh.write(payload)
     except OSError as e:

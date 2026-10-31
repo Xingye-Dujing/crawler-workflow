@@ -24,6 +24,7 @@ from api.http import _bad_body, _json_body, _safe_int
 from core.config import Config
 from core.refs import as_bool, flag_or_none
 from flask import Blueprint, jsonify
+from runtime import paths
 from runtime.state import add_log, cookie_manager, execution_state
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
@@ -248,7 +249,7 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
                 # The plant is one page load on that site, and a headless Chrome now carries the
                 # desktop fingerprint (#148) so every platform — douyin and X included — serves it.
                 headless=True,
-                cookie_dir=Config.COOKIE_DIR,
+                cookie_dir=paths.active().cookie_dir,
                 use_profile=True,
                 refresh_cookies=True,
                 account=account,
@@ -375,7 +376,7 @@ def rename_cookie_account():
         return jsonify({'ok': False, 'error': t('api.cookieRenameTaken')}), 409
     if account == to:
         return jsonify({'ok': False, 'error': t('api.cookieRenameSameName')}), 400
-    manager = CookieManager(Config.COOKIE_DIR)
+    manager = CookieManager(paths.active().cookie_dir)
     if not manager.exists(platform, account):
         return jsonify({'ok': False, 'error': t('api.cookieRenameNoSource')}), 404
     try:
@@ -580,7 +581,9 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
         # default blocks images to save seconds per navigation, and the QR code a
         # user must scan is an ``<img>`` — with the blocker on, the panel opened a
         # window that could not be completed at all.
-        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True, account=account)
+        crawler = get_crawler(
+            platform, headless=False, cookie_dir=paths.active().cookie_dir, for_login=True, account=account
+        )
         url = entry_url or crawler.login_url
         if not url:
             raise ValueError(t('api.unsupportedPlatform', platform=platform))
@@ -797,7 +800,9 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         # sent there by an expired cookie: the probe lands on the login page, whose QR
         # code is an ``<img>``. Blocked, the diagnosis 「cookie 已失效，去登录」 pointed at
         # a window where logging in was impossible.
-        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True, account=account)
+        crawler = get_crawler(
+            platform, headless=False, cookie_dir=paths.active().cookie_dir, for_login=True, account=account
+        )
         facts = crawler.diagnose(url)
         facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
         lines = _verify_lines(platform, facts)
@@ -953,7 +958,7 @@ def get_browser_profiles():
         # The ONE filename rule, from CookieManager — splicing ``{platform}_cookies.json`` here
         # was a second spelling of where a login lives, and it can only ever name the default
         # account: the panel would say 「no cookie」 about an account whose file it never looked at.
-        saved = CookieManager(Config.COOKIE_DIR).path_for(platform, '')
+        saved = CookieManager(paths.active().cookie_dir).path_for(platform, '')
         rows['profiles'].append(
             profiles.status(
                 platform,

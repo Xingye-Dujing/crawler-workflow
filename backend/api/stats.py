@@ -7,7 +7,7 @@ are unchanged; the app-level ``before_request`` / CORS still wrap them.
 """
 
 from flask import Blueprint, jsonify
-from runtime.state import _results_snapshot
+from runtime.state import _results_snapshot, run_is_foreign
 
 from services import StatsService
 
@@ -16,6 +16,8 @@ bp = Blueprint('stats', __name__)
 
 @bp.route('/api/stats/emotion', methods=['GET'])
 def emotion_stats():
+    if run_is_foreign():
+        return jsonify({'ok': True, 'stats': StatsService.emotion_distribution([])})
     all_data = []
     # The snapshot is the point: these routes can be polled *during* a run, and iterating
     # the live results dict while the worker publishes the next node aborted the request.
@@ -29,6 +31,8 @@ def emotion_stats():
 
 @bp.route('/api/stats/tendency', methods=['GET'])
 def tendency_stats():
+    if run_is_foreign():
+        return jsonify({'ok': True, 'stats': StatsService.tendency_distribution([])})
     all_data = []
     for _nid, data in _results_snapshot().items():
         if isinstance(data, list):
@@ -40,6 +44,8 @@ def tendency_stats():
 
 @bp.route('/api/stats/summary', methods=['GET'])
 def platform_summary():
+    if run_is_foreign():
+        return jsonify({'ok': True, 'summary': {}})
     summary = {}
     for nid, data in _results_snapshot().items():
         if isinstance(data, list) and data:

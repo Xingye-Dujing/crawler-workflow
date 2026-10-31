@@ -13,6 +13,7 @@ import os
 import time
 
 import pytest
+from core.config import Config
 
 import i18n
 from crawlers.commenting.protocol import DEAD, OK
@@ -413,7 +414,7 @@ class TestRefusals:
         import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(sys, 'platform', 'win32')  # the gate is a Windows-desktop question
-        monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
         monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: True)
         monkeypatch.setattr(harvest_module.importlib.util, 'find_spec', lambda name: None)
         harness, _said = _harness(tmp_path, capture_lines=[])
@@ -435,7 +436,7 @@ class TestRefusals:
 
         for other in ('linux', 'darwin'):
             monkeypatch.setattr(sys, 'platform', other)
-            monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
+            monkeypatch.setattr(Config, 'CLOUD_MODE', False)
             # Every package present: the refusal is about the machine, not about what is installed.
             monkeypatch.setattr(harvest_module.importlib.util, 'find_spec', lambda name: object())
             harness, _said = _harness(tmp_path, capture_lines=[])
@@ -448,10 +449,8 @@ class TestRefusals:
         # Same box, different job: a server has no desktop to drive even when its OS is Windows.
         import sys
 
-        import crawlers.platforms.hongguo.harvest as harvest_module
-
         monkeypatch.setattr(sys, 'platform', 'win32')
-        monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', True)
+        monkeypatch.setattr(Config, 'CLOUD_MODE', True)
         harness, _said = _harness(tmp_path, capture_lines=[])
         del harness._ensure_stack
         with pytest.raises(ValueError) as caught:
@@ -464,7 +463,7 @@ class TestRefusals:
         import crawlers.platforms.hongguo.harvest as harvest_module
 
         monkeypatch.setattr(sys, 'platform', 'win32')
-        monkeypatch.setattr(harvest_module.Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
         monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
         monkeypatch.setattr(
             harvest_module.importlib.util, 'find_spec', lambda name: None if name == 'mitmproxy' else object()

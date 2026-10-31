@@ -37,6 +37,7 @@ import threading
 import time
 
 from core.config import Config
+from runtime import paths
 from runtime.settings import get_setting
 
 from sessions.cookies import ACCOUNT_RE, CookieManager
@@ -181,7 +182,7 @@ def is_busy(path: str) -> bool:
 def root_dir() -> str:
     """Where the per-platform directories live (settings can move it)."""
     configured = str(get_setting('browser_profile_dir') or '').strip()
-    return configured or Config.BROWSER_PROFILE_DIR
+    return configured or paths.active().profile_dir
 
 
 def rename_account(platform: str, account: str, to: str) -> bool:

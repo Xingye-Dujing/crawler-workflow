@@ -8,6 +8,7 @@ Keys are sorted; the two tables in here must hold the same set (``tests/unit/i18
 
 ZH = {
     'api.alreadyRunning': '已有工作流正在运行，请先停止或等它跑完',
+    'api.foreignRun': '当前的运行属于另一个账号，不能查看或停止它',
     'api.badAccount': '账号名不合法：{account}（字母、数字、下划线或连字符，1-24 个；统一按小写保存）',
     'api.badRequest': '请求格式不对：{what}',
     'api.biblioDecode': '无法解码文件 {name}（已尝试 UTF-8 与 GB18030）',
@@ -115,10 +116,6 @@ ZH = {
     'api.workflowRenamed': '工作流已重命名：{old} → {new}',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
     'auth.badCredentials': '账号或密码不正确',
-    'auth.cloudNeedsPassword': (
-        'cloud 模式必须设置登录密码，否则任何人都能访问这台服务器：请在启动前设置 '
-        'CRAWLER_AUTH_PASSWORD（账号默认 admin，可用 CRAWLER_AUTH_USER 改名）'
-    ),
     'auth.loginHint': '这台服务器上保存着采集登录态、数据集与运行记录，登录后才能访问。',
     'auth.loginNeedsSecretKey': (
         '启用登录后必须设置 SECRET_KEY（现在还是仓库里的默认值）：会话 Cookie 用它签名，'
@@ -180,6 +177,7 @@ ZH = {
 
 EN = {
     'api.alreadyRunning': 'A workflow is already running — stop it or wait for it to finish',
+    'api.foreignRun': 'The current run belongs to another account; it cannot be inspected or stopped here',
     'api.badAccount': (
         'Invalid account name: {account} (letters, digits, _ and -, 1-24 of them; case does not '
         'make a second account — names are stored lowercase)'
@@ -325,10 +323,6 @@ EN = {
     'api.workflowRenamed': 'Workflow renamed: {old} → {new}',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
     'auth.badCredentials': 'Wrong username or password',
-    'auth.cloudNeedsPassword': (
-        'Cloud mode needs a login password, or anyone with the address can use this server: set '
-        'CRAWLER_AUTH_PASSWORD before starting (the username is admin unless CRAWLER_AUTH_USER names another)'
-    ),
     'auth.loginHint': 'This server keeps crawl sessions, datasets and run records — sign in to continue.',
     'auth.loginNeedsSecretKey': (
         'A login requires its own SECRET_KEY (this server is still using the repository default): the '

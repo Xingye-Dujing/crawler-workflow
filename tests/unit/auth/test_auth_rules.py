@@ -7,6 +7,7 @@ therefore before any request exists.
 
 import pytest
 from api import auth
+from core.config import Config
 
 pytestmark = pytest.mark.unit
 
@@ -34,61 +35,58 @@ class TestSafeNext:
         assert auth.safe_next(target) == '/'
 
 
-class TestCredentials:
-    def test_both_halves_must_match(self, monkeypatch):
-        monkeypatch.setattr(auth.Config, 'AUTH_USER', 'admin')
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', 'correct horse')
-        assert auth.check_credentials('admin', 'correct horse') is True
-        assert auth.check_credentials('admin', 'wrong') is False
-        assert auth.check_credentials('root', 'correct horse') is False
-        assert auth.check_credentials('', '') is False
+class TestAccountsMode:
+    def test_a_password_turns_the_login_on(self, monkeypatch):
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'correct horse battery')
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        assert auth.auth_enabled() is True
 
-    def test_no_password_means_no_login_at_all(self, monkeypatch):
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', '')
+    def test_no_password_and_no_registry_means_no_login(self, monkeypatch):
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
         assert auth.auth_enabled() is False
-        assert auth.check_credentials('', '') is False
 
 
 class TestStartupRefusal:
     """Cloud mode is the only shape that reaches strangers, so it is the only one that refuses."""
 
     def test_a_local_run_needs_no_password_or_key(self, monkeypatch):
-        monkeypatch.setattr(auth.Config, 'CLOUD_MODE', False)
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', '')
-        monkeypatch.setattr(auth.Config, 'SECRET_KEY', auth.Config.DEFAULT_SECRET_KEY)
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
+        monkeypatch.setattr(Config, 'SECRET_KEY', Config.DEFAULT_SECRET_KEY)
         assert auth.startup_error() is None
 
-    def test_a_cloud_run_without_a_password_refuses_by_naming_the_variable(self, monkeypatch):
-        monkeypatch.setattr(auth.Config, 'CLOUD_MODE', True)
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', '')
-        monkeypatch.setattr(auth.Config, 'SECRET_KEY', 'a-real-key')
+    def test_a_cloud_run_without_a_bootstrap_password_refuses_by_naming_it(self, monkeypatch):
+        monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
+        monkeypatch.setattr(Config, 'SECRET_KEY', 'a-real-key')
         message = auth.startup_error()
-        assert message and 'CRAWLER_AUTH_PASSWORD' in message, message
+        assert message and 'CRAWLER_ADMIN_PASSWORD' in message, message
 
     def test_a_cloud_run_with_the_published_key_refuses(self, monkeypatch):
         """The session cookie is signed with this key, so a known one is a login anyone can mint."""
-        monkeypatch.setattr(auth.Config, 'CLOUD_MODE', True)
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', 'correct horse')
-        monkeypatch.setattr(auth.Config, 'SECRET_KEY', auth.Config.DEFAULT_SECRET_KEY)
+        monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'correct horse battery')
+        monkeypatch.setattr(Config, 'SECRET_KEY', Config.DEFAULT_SECRET_KEY)
         message = auth.startup_error()
         assert message and 'SECRET_KEY' in message, message
 
     def test_a_local_login_with_the_published_key_refuses_too(self, monkeypatch):
         """The published key is unsafe wherever sessions are used, not only on a cloud host."""
-        monkeypatch.setattr(auth.Config, 'CLOUD_MODE', False)
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', 'correct horse')
-        monkeypatch.setattr(auth.Config, 'SECRET_KEY', auth.Config.DEFAULT_SECRET_KEY)
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'correct horse battery')
+        monkeypatch.setattr(Config, 'SECRET_KEY', Config.DEFAULT_SECRET_KEY)
         message = auth.startup_error()
         assert message and 'SECRET_KEY' in message, message
 
     def test_a_local_login_with_its_own_key_is_allowed(self, monkeypatch):
-        monkeypatch.setattr(auth.Config, 'CLOUD_MODE', False)
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', 'correct horse')
-        monkeypatch.setattr(auth.Config, 'SECRET_KEY', 'a-real-key')
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'correct horse battery')
+        monkeypatch.setattr(Config, 'SECRET_KEY', 'a-real-key')
         assert auth.startup_error() is None
 
     def test_a_cloud_run_with_both_set_is_allowed(self, monkeypatch):
-        monkeypatch.setattr(auth.Config, 'CLOUD_MODE', True)
-        monkeypatch.setattr(auth.Config, 'AUTH_PASSWORD', 'correct horse')
-        monkeypatch.setattr(auth.Config, 'SECRET_KEY', 'a-real-key')
+        monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'correct horse battery')
+        monkeypatch.setattr(Config, 'SECRET_KEY', 'a-real-key')
         assert auth.startup_error() is None

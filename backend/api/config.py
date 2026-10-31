@@ -12,12 +12,16 @@ import os
 
 from core.config import Config
 from flask import Blueprint, jsonify
+from runtime.account_context import current as current_account
+
+from services.accounts.service import accounts_mode
 
 bp = Blueprint('config', __name__)
 
 
 @bp.route('/api/config', methods=['GET'])
 def get_config():
+    account = current_account()
     return jsonify(
         {
             'ollama_model': Config.OLLAMA_MODEL,
@@ -30,7 +34,16 @@ def get_config():
             'cloud_mode': Config.CLOUD_MODE,
             # Whether this host asks for a login. The page shows 退出登录 only when it does, and
             # keeps the button out of a desktop session that has no session to end.
-            'auth_required': bool(str(Config.AUTH_PASSWORD or '').strip()),
+            'auth_required': accounts_mode(),
+            # The signed-in account's own view: identity for the top bar, the one CSRF token every
+            # mutating fetch must echo, and whether the change-password dialog is mandatory. A
+            # password or a hash never appears here.
+            'auth': {
+                'enabled': accounts_mode(),
+                'must_change_password': bool(account.must_change_password) if account is not None else False,
+                'csrf_token': str(account.csrf_token or '') if account is not None else '',
+                'user': ({'username': account.username, 'role': account.role} if account is not None else None),
+            },
         },
     )
 

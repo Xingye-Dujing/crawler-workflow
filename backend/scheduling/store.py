@@ -21,8 +21,8 @@ import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from core.config import Config
 from core.refs import as_bool
+from runtime import paths
 
 from i18n import normalize as normalize_lang
 from i18n import t
@@ -58,7 +58,7 @@ INTERVAL_MAX = 10080
 
 
 def _path() -> str:
-    return os.path.join(Config.DATA_DIR, 'schedules.json')
+    return paths.active().schedules_json
 
 
 def _load() -> list:

@@ -15,7 +15,7 @@ import json
 import os
 import threading
 
-from core.config import Config
+from runtime import paths
 
 _lock = threading.Lock()
 
@@ -28,7 +28,7 @@ PANELS = ('exports', 'runs', 'workflows')
 
 
 def _path() -> str:
-    return os.path.join(Config.DATA_DIR, 'locks.json')
+    return paths.active().locks_json
 
 
 def _load() -> dict:

@@ -25,6 +25,7 @@ from runtime.state import (
     _results_snapshot,
     execute_lock,
     execution_state,
+    run_is_foreign,
 )
 from runtime.stores import (
     _apply_dataset_meta,
@@ -214,11 +215,12 @@ def load_workflow():
     name = _request_workflow_name(request.args.get('name'))
     if name is None:
         return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
-    if execution_state['running']:
+    if execution_state['running'] and not run_is_foreign():
         # Loading overwrites the live run's ambient name and fingerprint (below),
         # so a second tab opening a file mid-run would re-key the record of a
         # crawl that is still writing rows. The panel asks first; this is the
-        # loud line that holds even when it does not.
+        # loud line that holds even when it does not. Another account's run is not
+        # this canvas's record, so it does not block the load.
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
     workflow = get_workflow_manager().load(name)
     if not workflow:
@@ -253,7 +255,7 @@ def rename_workflow():
         return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
     if old == new:
         return jsonify({'ok': False, 'error': t('api.workflowNameSame')}), 400
-    if execution_state['running'] and str(execution_state.get('workflow_name') or '') == old:
+    if execution_state['running'] and not run_is_foreign() and str(execution_state.get('workflow_name') or '') == old:
         # Renaming the canvas that is mid-run would re-key the record it is
         # writing; the panel refuses first, this holds the line regardless.
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
@@ -329,6 +331,11 @@ def stop_workflow():
     # and every state write below are therefore one atomic decision.
     with execute_lock:
         thread = execution_state.get('thread')
+        if run_is_foreign():
+            # The slot belongs to another account. Answering as if a stop had been honoured would
+            # set ``stopping``/``running`` on a run this caller does not own — killing someone
+            # else's crawl from a panel that is not theirs.
+            return jsonify({'ok': False, 'error': t('api.foreignRun')}), 409
         if not execution_state['running'] and not (thread is not None and thread.is_alive()):
             # Nothing is running and nothing is unwinding. Answering as if a stop had been
             # honoured would leave `stopping` standing with no run behind it — and
@@ -398,6 +405,33 @@ def stop_workflow():
 
 @bp.route('/api/workflow/status', methods=['GET'])
 def workflow_status():
+    if run_is_foreign():
+        # Another account's run is neither this page's console nor its results. The answer is an
+        # idle console plus the flag, so the page can keep polling without ever reading a line
+        # that belongs to someone else.
+        return jsonify(
+            {
+                'running': False,
+                'stopping': False,
+                'settling': False,
+                'logs': [],
+                'log_total': 0,
+                'workflows': [],
+                'mode': 'serial',
+                'results': [],
+                'run_ids': [],
+                'node_states': {},
+                'total_nodes': 0,
+                'completed_nodes': 0,
+                'skipped_nodes': 0,
+                'failed_nodes': 0,
+                'outcome': '',
+                'chart_results': {},
+                'cookie_expired': False,
+                'queue': queue_snapshot(),
+                'foreign_run': True,
+            }
+        )
     # One atomic snapshot of every console buffer. The tail and its total must be
     # read together (and under the same lock the writers hold): a concurrent
     # _push_log that advanced ``_log_total`` between reading the tail and the total
@@ -509,6 +543,10 @@ def workflow_status():
 @bp.route('/api/workflow/processes', methods=['GET'])
 def workflow_processes():
     """Return info about active threads/processes for the monitoring panel."""
+    if run_is_foreign():
+        return jsonify(
+            {'running': False, 'threads': [], 'executor_pool_alive': False, 'active_crawlers': 0, 'foreign_run': True}
+        )
     threads = []
     for thread in threading.enumerate():
         threads.append(
@@ -536,6 +574,10 @@ def workflow_processes():
 @bp.route('/api/workflow/processes/kill', methods=['POST'])
 def kill_process():
     """Force-kill a thread by its ident. MainThread and 'run' thread are protected."""
+    if run_is_foreign():
+        # The thread list belongs to another account's run; an ident typed from this page must not
+        # be able to kill someone else's worker.
+        return jsonify({'ok': False, 'error': t('api.foreignRun')}), 403
     data = _json_body()
     if data is None:
         return _bad_body()

@@ -12,9 +12,9 @@ check in ``state.any_run_live``. Paths and behaviour are unchanged.
 import logging
 import os
 
-from core.config import Config
 from core.refs import sanitize_filename
 from flask import Blueprint, jsonify, request
+from runtime import paths
 from runtime.state import any_run_live
 from runtime.stores import get_run_store
 
@@ -50,7 +50,7 @@ def _delete_export_names(names) -> dict:
         if lock_store.is_locked('exports', clean):
             counts['skipped_locked'] += 1
             continue
-        if delete_export_file(Config.EXPORT_DIR, clean):
+        if delete_export_file(paths.active().export_dir, clean):
             counts['removed'] += 1
         else:
             counts['missing'] += 1
@@ -81,7 +81,7 @@ def export_dataset():
     fmt = raw_format.strip() if isinstance(raw_format, str) else ''
     fmt = fmt or DataExporter.infer_format(filename)
     filename = DataExporter.normalize_filename(filename, fmt)
-    filepath = os.path.join(Config.EXPORT_DIR, filename)
+    filepath = os.path.join(paths.active().export_dir, filename)
     try:
         text_column = data.get('text_column')
         result = DataExporter.save(
@@ -105,9 +105,9 @@ def exports_list():
     from services.exports.browser import export_usage, list_exports
 
     limit = _safe_int(request.args.get('limit'), 200, minimum=1, maximum=500)
-    rows = list_exports(Config.EXPORT_DIR, limit=limit)
-    usage = export_usage(Config.EXPORT_DIR)
-    return jsonify({'ok': True, 'exports': rows, 'directory': Config.EXPORT_DIR, **usage})
+    rows = list_exports(paths.active().export_dir, limit=limit)
+    usage = export_usage(paths.active().export_dir)
+    return jsonify({'ok': True, 'exports': rows, 'directory': paths.active().export_dir, **usage})
 
 
 @bp.route('/api/exports/download', methods=['GET'])
@@ -122,7 +122,7 @@ def exports_download():
 
     from services.exports.browser import resolve_download_path
 
-    path = resolve_download_path(Config.EXPORT_DIR, request.args.get('name', ''))
+    path = resolve_download_path(paths.active().export_dir, request.args.get('name', ''))
     if not path:
         return jsonify({'ok': False, 'error': t('api.exportNotFound', name=request.args.get('name', ''))}), 404
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
@@ -141,7 +141,7 @@ def exports_delete():
         return _bad_param('name')
     if lock_store.is_locked('exports', name.strip()):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
-    gone = delete_export_file(Config.EXPORT_DIR, name)
+    gone = delete_export_file(paths.active().export_dir, name)
     if gone:
         lock_store.drop('exports', name.strip())
         get_run_store().forget_file(name.strip())
@@ -176,16 +176,16 @@ def exports_clear():
     # pretending, and cannot spin.
     while True:
         before = removed
-        for row in list_exports(Config.EXPORT_DIR):
+        for row in list_exports(paths.active().export_dir):
             if lock_store.is_locked('exports', row['name']):
                 # A locked artefact outlives 清空 — the user pinned it on purpose.
                 continue
-            if delete_export_file(Config.EXPORT_DIR, row['name']):
+            if delete_export_file(paths.active().export_dir, row['name']):
                 removed += 1
                 get_run_store().forget_file(row['name'])
         if removed == before:
             break
-    left = len(list_exports(Config.EXPORT_DIR))
+    left = len(list_exports(paths.active().export_dir))
     logger.warning(t('exports.cleared', n=removed))
     return jsonify({'ok': True, 'removed': removed, 'left': left})
 
@@ -288,7 +288,7 @@ def exports_clear_name():
     name = data.get('name')
     if not isinstance(name, str) or not name.strip():
         return _bad_param('name')
-    batch = part_batch_names(Config.EXPORT_DIR, name)
+    batch = part_batch_names(paths.active().export_dir, name)
     if batch is None:
         return jsonify({'ok': False, 'error': t('exports.notAPart', name=os.path.basename(name.strip()))}), 400
     result = _delete_export_names(batch)

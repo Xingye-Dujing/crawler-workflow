@@ -207,7 +207,7 @@ class TestBrokenFiles:
         assert get_template('r-000000000000') is None
 
     def test_the_store_is_a_directory_of_plain_json(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(reusable.Config, 'REUSABLE_DIR', str(tmp_path / 'reusable_nodes'))
+        monkeypatch.setattr(Config, 'REUSABLE_DIR', str(tmp_path / 'reusable_nodes'))
         saved = save_template(fragment())
         path = tmp_path / 'reusable_nodes' / f'{saved["id"]}.json'
         payload = json.loads(path.read_text(encoding='utf-8'))

@@ -42,6 +42,7 @@ from nodes import registry as node_registry
 from nodes.catalog import QUIET_NODE_TYPES
 from nodes.context import NodeCall
 from nodes.labels import node_label
+from runtime import account_context
 from runtime.settings import get_setting
 from runtime.state import (
     _completed_lock,
@@ -705,11 +706,15 @@ def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock
         _wf_local.name = ''
 
 
-def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers):
+def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None):
     # The run thread starts here, not in a request handler — inherit the
     # language the UI asked for, or every line below would come out in the
     # server default.
     set_lang(execution_state.get('lang'))
+    # Same reason for the identity: a worker thread inherits no context. Binding it here makes
+    # every ``get_run_store()`` / path lookup below the owning account's, and the ``finally``
+    # restores the thread's previous (empty) context before the slot is handed on.
+    account_token = account_context.bind(account)
     sys.stdout = LogTee(sys.__stdout__)
     # Everything below is recorded against one run row, so whatever leaves
     # this thread early — Stop, an exception, the process dying — leaves
@@ -1040,6 +1045,9 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
         # queue have the slot. Both before anything else in this finally can
         # be reordered: start_next_queued checks liveness through it.
         execution_state['thread'] = None
+        # Drop this thread's identity BEFORE the queue hands the slot on: the next request is
+        # started under its own owner, never under this run's.
+        account_context.unbind(account_token)
         start_next_queued()
 
 
@@ -1138,6 +1146,12 @@ def begin_run(data: dict, lang_header: str) -> dict:
             resume_run_id = str(data.get('resume_run_id') or '').strip()
             run_id = resume_run_id or uuid.uuid4().hex[:12]
             execution_state['run_id'] = run_id
+            # Which account owns the one shared slot. The status/stop/process endpoints compare
+            # this with the request's account; the worker below re-binds the same identity, so
+            # every store it opens is that account's.
+            _owner = account_context.current()
+            execution_state['user_id'] = _owner.user_id if _owner is not None else ''
+            execution_state['username'] = _owner.username if _owner is not None else ''
             execution_state['resume'] = bool(resume_run_id)
             workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
             # A name node on the canvas overrides whatever the browser sent: its label
@@ -1264,7 +1278,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
     try:
         execution_state['thread'] = threading.Thread(
             target=_run_worker,
-            args=(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers),
+            args=(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, _owner),
             daemon=True,
             name='run',
         )

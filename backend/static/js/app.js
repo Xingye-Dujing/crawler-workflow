@@ -4,10 +4,42 @@
    loaded right after this file, so the page still evaluates one order and this boot body still runs
    after every module it names exists. */
 
+/* The signed-in account, as the SERVER described it in /api/config. The token is the session's
+   CSRF token: every mutating fetch echoes it in ``X-CSRF-Token`` (the patch below does that once,
+   for call sites added later too). A password or a hash never arrives here — the server never
+   sends one — and this object never stores a password typed by the user. */
+const Auth = {
+    token: '',
+    user: null,
+    mustChange: false,
+
+    set(auth) {
+        const data = auth || {};
+        this.token = String(data.csrf_token || '');
+        this.user = data.user && data.user.username ? data.user : null;
+        this.mustChange = !!data.must_change_password;
+        this.apply();
+        if (this.mustChange && typeof Accounts !== 'undefined' && Accounts.openPasswordDialog) {
+            Accounts.openPasswordDialog(true);
+        }
+    },
+
+    apply() {
+        const chip = document.getElementById('btn-account');
+        if (!chip) return;
+        chip.hidden = !this.user;
+        chip.textContent = this.user ? this.user.username : '';
+        if (this.user && typeof I18n !== 'undefined') {
+            chip.title = I18n.t('accounts.signedInAs', { user: this.user.username });
+        }
+    },
+};
+
 /* Console i18n: every request carries the UI language as X-Lang, so the log
    lines the server streams into the console (crawl progress, LLM batches,
    errors) come back in the language being read. Patching fetch once covers
-   every call site, including the ones added later. */
+   every call site, including the ones added later. A mutating request also
+   echoes the session's CSRF token once the page has it. */
 (function () {
     const nativeFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
@@ -19,7 +51,12 @@
             const opts = Object.assign({}, init || {});
             opts.headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined) || undefined);
             if (!opts.headers.has('X-Lang')) opts.headers.set('X-Lang', lang);
-            return nativeFetch(input, opts).then(redirectIfAuthRequired);
+            const method = String(opts.method || (input && input.method) || 'GET').toUpperCase();
+            const safeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+            if (!safeMethod && Auth.token && !opts.headers.has('X-CSRF-Token')) {
+                opts.headers.set('X-CSRF-Token', Auth.token);
+            }
+            return nativeFetch(input, opts).then(redirectIfAuthRequired).then(handlePasswordChangeRequired);
         } catch (e) {
             return nativeFetch(input, init);
         }
@@ -34,6 +71,18 @@ function redirectIfAuthRequired(response) {
     const marker = response.headers && response.headers.get && response.headers.get('X-Auth-Required');
     if (!marker || typeof location === 'undefined' || typeof location.assign !== 'function') return response;
     location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+    return response;
+}
+
+/* A 403 that carries X-Password-Change-Required means the account is still working off an
+   administrator-issued password. The server refuses everything but the change dialog; the page
+   says so once instead of leaving every panel mysteriously empty. */
+function handlePasswordChangeRequired(response) {
+    if (!response || response.status !== 403) return response;
+    const marker = response.headers && response.headers.get && response.headers.get('X-Password-Change-Required');
+    if (!marker) return response;
+    Auth.mustChange = true;
+    if (typeof Accounts !== 'undefined' && Accounts.openPasswordDialog) Accounts.openPasswordDialog(true);
     return response;
 }
 
@@ -349,9 +398,10 @@ const CloudMode = {
     /* Fed by the one /api/config read the page already makes at boot
        (``LLMSettings.loadDefaults``) — this module does not fetch, because a second
        request for the same payload would be a second answer to keep in sync. */
-    set(flag, authRequired) {
+    set(flag, authRequired, auth) {
         this.on = !!flag;
         this.authRequired = !!authRequired;
+        if (auth) Auth.set(auth);
         this.apply();
         /* The panel is filled from localStorage, which may name a transport this
            host cannot serve. Re-apply it from the truth instead of leaving a selected
@@ -368,6 +418,7 @@ const CloudMode = {
            session to end must not offer to end it. */
         const out = document.getElementById('btn-logout');
         if (out) out.hidden = !this.authRequired;
+        Auth.apply();
         if (this.on) {
             /* The transport is taken OUT of the select, not merely styled away: a hidden
                <option> is still a value the element can be asked for (keyboard, a stale

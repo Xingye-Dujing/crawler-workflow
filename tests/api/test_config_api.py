@@ -28,9 +28,11 @@ from runtime.state import cookie_manager
 from sessions import profiles
 from sessions.cookies import CookieManager
 
+from services.accounts.service import accounts_mode
+
 pytestmark = pytest.mark.api
 
-CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers', 'cloud_mode', 'auth_required'}
+CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers', 'cloud_mode', 'auth_required', 'auth'}
 # The cookie panel's platform set is the manager's own list — mirroring it here
 # would only ever record the last time someone forgot the other side.
 COOKIE_PLATFORMS = set(CookieManager.PLATFORMS)
@@ -48,7 +50,7 @@ class TestConfigEndpoint:
         assert body['default_headless'] is Config.DEFAULT_HEADLESS
         assert body['max_workers'] == Config.DEFAULT_MAX_WORKERS
         assert body['cloud_mode'] is Config.CLOUD_MODE, 'the whole Ollama/headless UI hiding reads this flag'
-        assert body['auth_required'] is bool(str(Config.AUTH_PASSWORD or '').strip()), (
+        assert body['auth_required'] is accounts_mode(), (
             'the 退出登录 entry is shown from this flag, never from a page-side guess'
         )
 
@@ -60,7 +62,13 @@ class TestConfigEndpoint:
             'default_headless': True,
             'max_workers': 9,
             'cloud_mode': Config.CLOUD_MODE,
-            'auth_required': bool(str(Config.AUTH_PASSWORD or '').strip()),
+            'auth_required': accounts_mode(),
+            'auth': {
+                'enabled': accounts_mode(),
+                'must_change_password': False,
+                'csrf_token': '',
+                'user': None,
+            },
         }
 
     def test_config_is_read_only(self, client):

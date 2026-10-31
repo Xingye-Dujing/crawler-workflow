@@ -11,8 +11,8 @@ import contextlib
 import os
 
 import pandas as pd
-from core.config import Config
 from core.refs import as_bool, sanitize_filename
+from runtime import paths
 from runtime.state import _wf_local, add_log
 
 from i18n import t
@@ -127,7 +127,7 @@ def pdf_filename(params: dict) -> str:
     base = os.path.splitext(sanitize_filename(params.get('filename', 'export.pdf')))[0]
     name = f'{base}.pdf'
     if as_bool(params.get('filename_timestamp')):
-        name = DataExporter.stamp_filename(name, Config.EXPORT_DIR)
+        name = DataExporter.stamp_filename(name, paths.active().export_dir)
     return name
 
 
@@ -155,12 +155,12 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
     filename = pdf_filename(params)
     if staged_pdf:
         # The compile node already produced this (staged in EXPORT_DIR); finalize it under the user's name.
-        staged = os.path.join(Config.EXPORT_DIR, staged_pdf)
+        staged = os.path.join(paths.active().export_dir, staged_pdf)
         try:
-            os.replace(staged, os.path.join(Config.EXPORT_DIR, filename))
+            os.replace(staged, os.path.join(paths.active().export_dir, filename))
         except OSError as e:
             return {'error': t('api.compilePdfFailed', err=e)}
-        size = os.path.getsize(os.path.join(Config.EXPORT_DIR, filename))
+        size = os.path.getsize(os.path.join(paths.active().export_dir, filename))
         add_log(t('run.compileSaved', name=filename, size=size))
         record_file(ctx, str(node.get('id') or ''), filename, 'pdf')
         # The compile node recorded the staged name; the rename made that file this one, so drop
@@ -171,7 +171,7 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
         return {'pdf_file': filename, 'pdf_bytes': size}
     if not docs:
         return {'error': t('wf.compile_no_source')}
-    out, name = pdf.compile_pdf(pdf.compose_tex(docs), filename, Config.EXPORT_DIR)
+    out, name = pdf.compile_pdf(pdf.compose_tex(docs), filename, paths.active().export_dir)
     if 'error' in out:
         return out
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
@@ -258,8 +258,8 @@ def execute_output_node(
             else:
                 filename = DataExporter.tagged_filename(filename, tag)
         if as_bool(params.get('filename_timestamp')):
-            filename = DataExporter.stamp_filename(filename, Config.EXPORT_DIR)
-        filepath = os.path.join(Config.EXPORT_DIR, filename)
+            filename = DataExporter.stamp_filename(filename, paths.active().export_dir)
+        filepath = os.path.join(paths.active().export_dir, filename)
         try:
             DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
         except UnsupportedFormatError as e:

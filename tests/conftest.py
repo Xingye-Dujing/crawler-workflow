@@ -109,6 +109,10 @@ def _isolate_paths() -> Path:
     Config.LEXICON_DB = str(root / 'data' / 'lexicon.db')
     Config.BIBLIO_DB = str(root / 'data' / 'biblio.db')
     Config.WORKFLOW_HISTORY_DB = str(root / 'data' / 'workflow_history.db')
+    # The account registry is system-level state: a test that logs in must never create users or
+    # sessions in the operator's real accounts.db (and the isolation guard must be able to see
+    # it if it did).
+    Config.ACCOUNTS_DB = str(root / 'data' / 'accounts.db')
 
     from runtime import settings
 
@@ -119,6 +123,9 @@ def _isolate_paths() -> Path:
 
 
 ISOLATED_ROOT = _isolate_paths()
+#: Names the per-test account registry file; a counter (not the test name) because pytest node ids
+#: are not filename-safe on every platform.
+ACCOUNT_SEQ = count()
 
 
 def _prune_isolated_roots() -> None:
@@ -357,6 +364,18 @@ def clean_globals(request):
     honest — hundreds of cascading failures had no cause in them otherwise.
     """
     stdout_backup = sys.stdout
+    # One account registry per test. `accounts_mode()` treats an existing accounts.db as "this
+    # install has accounts", so a test that logged in would otherwise switch the mode on for every
+    # later test in the process (and write the file into the shared throwaway root).
+    from core.config import Config as _Config
+
+    accounts_dir = ISOLATED_ROOT / 'accounts'
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    _Config.ACCOUNTS_DB = str(accounts_dir / f'accounts-{next(ACCOUNT_SEQ)}.db')
+    acc = sys.modules.get('services.accounts.service')
+    if acc is not None:
+        acc.reset_service()
+        acc.reset_throttle()
     i18n = sys.modules.get('i18n')
     lang_backup = i18n.get_lang() if i18n is not None else None
     app = sys.modules.get('app')
@@ -394,6 +413,16 @@ def clean_globals(request):
     ss = sys.modules.get('runtime.settings')
     if ss is not None:
         ss._values = None
+    # The account service caches a SQLite handle and the failed-login window caches hits; both
+    # outlive a test on purpose, so both are put back to a fresh state here. The identity context
+    # is cleared too — a test that bound an account without a request has no teardown to do it.
+    acc = sys.modules.get('services.accounts.service')
+    if acc is not None:
+        acc.reset_service()
+        acc.reset_throttle()
+    ctx = sys.modules.get('runtime.account_context')
+    if ctx is not None:
+        ctx.clear()
     # The pre-run cookie gate caches a verdict for a few minutes — deliberately, and
     # across threads. Left alone, one test's 「expired」 would answer the next test's
     # request without any probe having run in it, which is exactly the kind of

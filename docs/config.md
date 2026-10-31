@@ -11,8 +11,11 @@
 | `OLLAMA_MODEL` | Ollama 模型名 | `qwen3.5:9b` |
 | `OLLAMA_HOST` | Ollama 服务地址 | `http://localhost:11434` |
 | `SECRET_KEY` | Flask 会话密钥（登录 Cookie 用它签名） | `crawler-workflow-secret-key`；**cloud 模式必须另设**，否则拒绝启动 |
-| `CRAWLER_AUTH_USER` | 登录账号 | `admin` |
-| `CRAWLER_AUTH_PASSWORD` | 登录密码；设置后启用登录页与全站会话门；**cloud 模式必须设置** | 空（不启用登录，本机自用的默认） |
+| `CRAWLER_ADMIN_USER` | 首次启动创建的初始管理员用户名（回退 `CRAWLER_AUTH_USER`） | `admin` |
+| `CRAWLER_ADMIN_PASSWORD` | 首次启动（账号表为空时）用来创建初始管理员的密码；**cloud 必须设置**。已有账号时该变量被忽略，不会重置任何密码。回退 `CRAWLER_AUTH_PASSWORD` | 空 |
+| `CRAWLER_AUTH_USER` / `CRAWLER_AUTH_PASSWORD` | 旧版单密码登录变量，仍作为初始管理员的引导值 | 空 |
+| `CRAWLER_SESSION_IDLE_MINUTES` | 会话空闲超时（分钟），超时即吊销 | `120` |
+| `CRAWLER_SESSION_MAX_HOURS` | 会话绝对有效期（小时） | `24` |
 | `CRAWLER_HTTPS` | 页面实际经 HTTPS 访问（反向代理终止 TLS）时设 `1`：会话 Cookie 标记 `Secure` | 关闭 |
 | `PORT` | 服务端口 | `5000` |
 | `HOST` | 监听地址（默认只监听本机，局域网内其他机器访问需设为 `0.0.0.0`） | `127.0.0.1` |
@@ -122,20 +125,38 @@ cd backend
 python app.py cloud          # 等价：python app.py --cloud，或 CRAWLER_CLOUD=1 python app.py
 ```
 
-**云端必须先配好登录，否则拒绝启动**（`api/auth.py::startup_error` 按名指出缺哪一项）：
+**云端必须先配好初始管理员与密钥，否则拒绝启动**（`services.accounts.service.startup_error` 按名指出缺哪一项）：
 
 ```bash
-export CRAWLER_AUTH_PASSWORD='一长串只有你知道的密码'   # 必须；账号默认 admin，可用 CRAWLER_AUTH_USER 改名
+export CRAWLER_ADMIN_PASSWORD='一长串只有你知道的密码'   # 必须（首次建管理员）；用户名默认 admin，可用 CRAWLER_ADMIN_USER 改名
 export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 export CRAWLER_HTTPS=1                                  # 反向代理已终止 TLS 时（会话 Cookie 标记 Secure）
 ```
 
-设置密码后，`/`、全部 `/api/*`、静态资源都要求登录：页面跳 `/login`，接口答 401（带 `X-Auth-Required`
-响应头，前端据此跳回登录页），登录成功是一枚签名会话 Cookie（`cixi_session`，HttpOnly、SameSite=Lax、
-非持久——关浏览器即退出）。顶栏出现「退出登录」（POST `/logout`，服务端同时吊销该会话 id，重放旧 Cookie
-无效）。Cookie 里只放一枚随机 id；改密码会让已发出的会话立即失效，服务重启需要重新登录。只要启用了登录（cloud 模式，
-或本机设了 `CRAWLER_AUTH_PASSWORD`），仓库默认的 `SECRET_KEY` 都会被按名拒绝——密钥公开等于会话可伪造。
-登录失败固定等 0.3 秒；没有锁定计数，公网部署请在反向代理再加一层限速。
+**账号模型**：账号、服务端会话与审计日志在 `data/accounts.db`（密码用 scrypt 加盐哈希，库里只存会话 token 的
+sha256）。初始管理员只在账号表为空时由环境变量创建；表里已有账号时这些变量被忽略，不会重置任何密码。
+之后只能由管理员在顶栏「账号」面板里创建/重置密码/启用禁用/强制下线/删除账号（`/api/accounts`）。管理员创建或
+重置的账号带 `must_change_password`：登录后除改密接口外全站 API 返回 403（带 `X-Password-Change-Required`），
+前端弹出改密对话框。
+
+**数据隔离**：每个账号拥有 `data/users/<user_id>/`（工作流、数据集、runs/datasets/biblio/workflow_history/history
+库、Cookie、Chrome profile、导出、检查点、reusable 模板、locks/schedules）；`accounts.db`、`settings.json`、
+`lexicon.db`、`models/`、`logs/` 是系统级共享。删除账号时整个目录移入 `data/users/.trash/<id>-<时间戳>/`，
+不会当场删除；最后一个启用的管理员不能被禁用或删除，有运行中/排队任务的账号也不能。旧的单账号数据根用
+`python tools/migrate_accounts.py --user admin --apply` 迁入管理员账号（默认 dry-run，先复制校验，再把原目录改名到
+`data/.migrated-*`；执行前停掉服务并先做备份）。
+
+**会话与门禁**：设置账号后，`/`、全部 `/api/*`、静态资源都要求登录：页面跳 `/login`，接口答 401（带
+`X-Auth-Required`，前端据此跳回登录页）。Cookie 为签名后的随机会话 id（`cixi_session`，HttpOnly、SameSite=Lax、
+非持久——关浏览器即退出、`CRAWLER_HTTPS=1` 时 Secure），服务端表里只存它的哈希；空闲/绝对超时、退出登录、改密、
+管理员禁用或强制下线都会吊销会话（服务重启不再踢人）。所有写请求必须带会话 CSRF token（前端 fetch 补丁自动加
+`X-CSRF-Token`），登录表单另有一枚一次性 token。登录失败：连续 5 次锁 15 分钟，指数递增至 60 分钟，另有按 IP 的
+失败窗口与统一文案（不区分用户名是否存在）；公网部署仍建议在反向代理再加一层限速。只要启用了账号（cloud 模式，
+或本机设了 `CRAWLER_*_PASSWORD`），仓库默认的 `SECRET_KEY` 都会被按名拒绝——密钥公开等于会话可伪造。
+
+**运行与定时任务**：全站仍只有一个运行槽、一个队列、一个定时器；不同账号串行排队（`并行 ×N` 只描述画布内
+工作流）。运行记录归属于启动它的账号：状态/停止/进程/统计端点对其它账号只返回空结果加 `foreign_run`，
+队列与定时任务按账号列出、按账号的 `schedules.json` 读取，排队任务在拥有者上下文里启动。
 
 服务端与前端**同时**换到"服务器形状"——旗标是服务器的事实，不是页面的猜测：`/api/config` 把 `cloud_mode`
 报给前端，前端据此收掉那些"问这台机器要一台它没有的东西"的控件：

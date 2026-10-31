@@ -17,28 +17,31 @@ rebinding.
 import threading
 import time
 
-from core.config import Config
 from sessions.cookies import CookieManager
 
+from runtime import paths
 from services.runs.history import ExecutionHistoryService
 
-#: 执行历史 service: one process-wide instance that opens ``data/history.db`` at import (the path
-#: is whatever ``Config`` held when ``app`` — which imports this first — was loaded; the test
-#: harness redirects it to a throwaway root before importing). Moved out of ``app.py`` so a
-#: Blueprint can read it without importing the whole Flask module (a cycle).
-history_service = ExecutionHistoryService()
+#: 执行历史 service: one process-wide instance whose DATABASE follows the signed-in account
+#: (``lambda`` resolved per call — see ``services/runs/history.py``). The object stays the same
+#: one every module imported, which is what keeps ``from runtime.state import history_service``
+#: meaningful; without an account bound it answers the local owner's ``data/history.db``.
+history_service = ExecutionHistoryService(lambda: paths.active().history_db)
 
-#: Cookie store: one process-wide instance over ``Config.COOKIE_DIR``. Moved out of ``app.py`` so
-#: the ``/api/capabilities`` Blueprint can extend the matrix with the live account list without
-#: importing the whole Flask module. A store object is only ever used, never rebound (the test
-#: harness redirects its directory before import), so every module that imports this name — the
-#: cookie routes in ``sessions/routes.py``, the tests that drive them — holds one jar.
-cookie_manager = CookieManager(Config.COOKIE_DIR)
+#: Cookie store: one process-wide instance whose DIRECTORY follows the signed-in account
+#: (``lambda`` resolved per call). No account bound → the local owner's ``Config.COOKIE_DIR``,
+#: exactly the single-user behaviour every existing caller and test expects.
+cookie_manager = CookieManager(lambda: paths.active().cookie_dir)
 
 #: Mutable per-process run state: one run in flight, its console buffer, its outcome counters
 #: and the LLM transport. Read ``stopping`` (not ``not running``) for a Stop — see app.stop_requested.
 execution_state: dict = {
     'running': False,
+    #: Which account owns the run in flight (``''`` = the local owner). The single slot is shared
+    #: by every account, so this is what stops one account from reading or stopping another's
+    #: console, results, browsers or parked requests.
+    'user_id': '',
+    'username': '',
     'executor': None,
     'thread': None,
     'results': {},
@@ -125,8 +128,23 @@ execute_lock = threading.Lock()
 
 #: Read-through cache of loaded datasets. The store is the source of truth, so anything
 #: registered days ago still resolves even after this empties; entries are inserted, popped
-#: and `.clear()`-ed in place.
+#: and `.clear()`-ed in place. Keys are ``(scope, dataset_id)``: dataset ids are content hashes,
+#: so two accounts that upload identical bytes get the same id — a cache keyed by the id alone
+#: would hand one account the other's frame.
 _dataset_cache: dict = {}
+
+
+def dataset_cache_key(dataset_id) -> tuple:
+    """The one spelling of a cache key: which scope, which content id."""
+    from runtime.account_context import scope_key
+
+    return (scope_key(), str(dataset_id))
+
+
+def drop_cached_dataset(dataset_id) -> None:
+    """Evict ONE dataset from the current scope's cache (a delete/rename)."""
+    _dataset_cache.pop(dataset_cache_key(dataset_id), None)
+
 
 #: Guards every reader and writer of ``execution_state`` (the console buffers and ``results``).
 #: A Lock is only ever acquired, never rebound, so ``app.py`` imports it back and its many
@@ -167,6 +185,23 @@ def any_run_live() -> bool:
     to compare, so it asks the one live-run definition above.
     """
     return bool(live_run_ids())
+
+
+def run_owner() -> str:
+    """The account id of the run in flight (``''`` = the local owner)."""
+    return str(execution_state.get('user_id') or '')
+
+
+def run_is_foreign() -> bool:
+    """Whether the run in flight belongs to another account than the caller.
+
+    A finished run keeps its owner until the next claim; that is deliberate — the console a
+    user comes back to is their own, and an account that never ran anything must see idle.
+    """
+    from runtime import account_context
+
+    account = account_context.current()
+    return (account.user_id if account is not None else '') != run_owner()
 
 
 def stop_requested() -> bool:

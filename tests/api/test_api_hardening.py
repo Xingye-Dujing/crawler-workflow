@@ -42,6 +42,11 @@ RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 # Every POST handler that reads a field belongs here — `TestBodyPolicy` below
 # fails if this list and app.py drift apart.
 BODY_ROUTES = [
+    '/api/account/password',
+    '/api/accounts',
+    '/api/accounts/<user_id>/logout',
+    '/api/accounts/<user_id>/password',
+    '/api/accounts/<user_id>/status',
     '/api/analysis/run',
     '/api/analysis/train',
     '/api/biblio/project',

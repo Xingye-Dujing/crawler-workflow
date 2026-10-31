@@ -100,9 +100,30 @@ class CookieManager:
         """
         return '' if cls.is_default(account) else cls.key(account)
 
-    def __init__(self, cookie_dir: str):
-        self.cookie_dir = cookie_dir
-        os.makedirs(cookie_dir, exist_ok=True)
+    def __init__(self, cookie_dir):
+        """*cookie_dir* is a directory or a zero-argument callable returning one.
+
+        The callable form is what lets the ONE process-wide jar follow the signed-in account:
+        ``runtime.state`` hands it ``runtime.paths.active().cookie_dir``, resolved per call, so
+        an account's cookies live in its own tree without any caller changing (a plain string
+        keeps the local owner's behaviour and every existing test unchanged).
+        """
+        self._cookie_source = cookie_dir
+        self._ensure_dir()
+
+    @property
+    def cookie_dir(self) -> str:
+        path = self._cookie_source() if callable(self._cookie_source) else str(self._cookie_source)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    @cookie_dir.setter
+    def cookie_dir(self, path) -> None:
+        # Kept so a test or a launcher that rebinds the directory on a jar still works.
+        self._cookie_source = path
+
+    def _ensure_dir(self) -> None:
+        os.makedirs(self.cookie_dir, exist_ok=True)
 
     @classmethod
     def is_supported(cls, platform: str) -> bool:

@@ -4,13 +4,19 @@ The gate is a single app-level ``before_request`` (``app._require_login`` → ``
 the matrix that matters is "API answered 401 / page redirected / login itself reachable", not one
 test per route: a per-route list would go stale the next time a Blueprint is added.
 
-The login is enabled per test by patching ``Config.AUTH_PASSWORD``, because that is the switch the
-product reads at request time (the same class attribute the startup refusal consults).
+Accounts are enabled per test by pointing ``Config.ADMIN_PASSWORD`` at a bootstrap password and
+letting the service create the first administrator in the test's own ``accounts.db`` (the shared
+conftest gives every test a fresh path).
 """
+
+import re
 
 import pytest
 from api import auth
 from core.config import Config
+from runtime.account_context import Account
+
+from services.accounts import service as accounts_service
 
 pytestmark = pytest.mark.api
 
@@ -19,13 +25,30 @@ PASSWORD = 'correct horse battery'
 
 @pytest.fixture
 def auth_on(monkeypatch):
-    monkeypatch.setattr(Config, 'AUTH_USER', 'admin')
-    monkeypatch.setattr(Config, 'AUTH_PASSWORD', PASSWORD)
-    return auth
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(Config, 'ADMIN_USER', 'admin')
+    monkeypatch.setattr(Config, 'ADMIN_PASSWORD', PASSWORD)
+    monkeypatch.setattr(Config, 'SESSION_IDLE_MINUTES', 120)
+    monkeypatch.setattr(Config, 'SESSION_MAX_HOURS', 24)
+    accounts_service.reset_service()
+    accounts_service.reset_throttle()
+    accounts_service.get_account_service().bootstrap()
+    yield auth
+    accounts_service.reset_service()
 
 
 def _login(client, password=PASSWORD, user='admin', next_url='/'):
-    return client.post('/login', data={'username': user, 'password': password, 'next': next_url})
+    page = client.get('/login?lang=en')
+    match = re.search(r'name="csrf" value="([^"]+)"', page.get_data(as_text=True))
+    assert match, 'the login form must carry its one-shot CSRF token'
+    return client.post(
+        '/login',
+        data={'username': user, 'password': password, 'next': next_url, 'csrf': match.group(1)},
+    )
+
+
+def _csrf(client) -> str:
+    return client.get('/api/config').get_json()['auth']['csrf_token']
 
 
 class TestWithoutASession:
@@ -71,7 +94,10 @@ class TestLoggingIn:
         assert response.headers['Location'] == '/'
         config = client.get('/api/config')
         assert config.status_code == 200
-        assert config.get_json()['auth_required'] is True
+        payload = config.get_json()
+        assert payload['auth_required'] is True
+        assert payload['auth']['user'] == {'username': 'admin', 'role': 'admin'}
+        assert payload['auth']['csrf_token']
 
     def test_a_wrong_password_is_refused_and_sets_no_session(self, client, auth_on):
         response = _login(client, password='wrong')
@@ -81,6 +107,11 @@ class TestLoggingIn:
 
     def test_a_wrong_username_is_refused(self, client, auth_on):
         assert _login(client, user='root').status_code == 401
+        assert client.get('/api/config').status_code == 401
+
+    def test_a_post_without_the_form_token_is_refused(self, client, auth_on):
+        response = client.post('/login', data={'username': 'admin', 'password': PASSWORD, 'next': '/'})
+        assert response.status_code == 401
         assert client.get('/api/config').status_code == 401
 
     def test_the_next_address_is_honoured(self, client, auth_on):
@@ -103,43 +134,76 @@ class TestLoggingIn:
 
     def test_logout_ends_the_session(self, client, auth_on):
         _login(client)
+        token = _csrf(client)
         assert client.get('/api/config').status_code == 200
-        response = client.post('/logout')
+        response = client.post('/logout', headers={'X-CSRF-Token': token})
         assert response.status_code == 302 and response.headers['Location'] == '/login'
         assert client.get('/api/config').status_code == 401
 
+    def test_a_mutating_call_without_the_csrf_token_is_refused(self, client, auth_on):
+        _login(client)
+        assert client.post('/logout').status_code == 403
+        assert client.get('/api/config').status_code == 200
+
     def test_logout_revokes_a_copied_cookie(self, client, auth_on):
-        """Clearing only the browser's copy leaves a signed cookie that still opens the app; the
-        server must close the id, or a stolen cookie outlives the logout."""
+        """Clearing only the browser's copy leaves a live session row; the server must revoke it,
+        or a stolen cookie outlives the logout."""
         _login(client)
         copied = client.get_cookie('cixi_session').value
-        client.post('/logout')
+        client.post('/logout', headers={'X-CSRF-Token': _csrf(client)})
         client.set_cookie('cixi_session', copied)
         assert client.get('/api/config').status_code == 401
 
-    def test_a_session_cannot_be_replayed_after_the_password_changes(self, client, auth_on, monkeypatch):
-        """A signed cookie outlives the process, so the credential is stamped into it: changing the
-        password revokes every session already handed out."""
+    def test_changing_the_password_revokes_other_sessions(self, client, auth_on):
+        """The current session survives; every other session of the account is revoked."""
         _login(client)
+        other = client.application.test_client()
+        other.environ_base['HTTP_X_LANG'] = 'en'
+        _login(other)
+        assert other.get('/api/config').status_code == 200
+        response = client.post(
+            '/api/account/password',
+            json={'current_password': PASSWORD, 'new_password': 'a brand new password'},
+            headers={'X-CSRF-Token': _csrf(client)},
+        )
+        assert response.status_code == 200, response.get_json()
         assert client.get('/api/config').status_code == 200
-        monkeypatch.setattr(Config, 'AUTH_PASSWORD', 'a new password')
-        assert client.get('/api/config').status_code == 401
+        assert other.get('/api/config').status_code == 401
+
+
+class TestAForcedPasswordChange:
+    def test_every_api_is_refused_until_the_password_changes(self, client, auth_on):
+        svc = accounts_service.get_account_service()
+        row = svc.store.get_user_by_username('admin')
+        svc.reset_password(Account(row['user_id'], 'admin', 'admin'), row['user_id'], PASSWORD, True)
+        _login(client)
+        blocked = client.get('/api/data/datasets')
+        assert blocked.status_code == 403
+        assert blocked.headers['X-Password-Change-Required'] == '1'
+        assert client.get('/api/config').status_code == 200
+        changed = client.post(
+            '/api/account/password',
+            json={'current_password': PASSWORD, 'new_password': 'a brand new password'},
+            headers={'X-CSRF-Token': _csrf(client)},
+        )
+        assert changed.status_code == 200, changed.get_json()
+        assert client.get('/api/data/datasets').status_code == 200
 
 
 class TestWithoutAPassword:
     """The local single-user default: no login page, no gate, no change from before."""
 
     def test_nothing_is_gated(self, client, monkeypatch):
-        monkeypatch.setattr(Config, 'AUTH_PASSWORD', '')
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
         assert client.get('/api/config').status_code == 200
         assert client.get('/').status_code == 200
 
     def test_the_login_page_sends_you_home(self, client, monkeypatch):
-        monkeypatch.setattr(Config, 'AUTH_PASSWORD', '')
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
         response = client.get('/login')
         assert response.status_code == 302 and response.headers['Location'] == '/'
 
     def test_logout_is_a_no_op(self, client, monkeypatch):
-        monkeypatch.setattr(Config, 'AUTH_PASSWORD', '')
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
         response = client.post('/logout')
         assert response.status_code == 302 and response.headers['Location'] == '/'

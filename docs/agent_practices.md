@@ -920,3 +920,35 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
 - **A docstring is input to other tests.** Adding ``from app import app`` to a `desktop_entry.py` comment broke a
   source-*order* contract (a `str.index()` position comparison), because the comment sat earlier in the file — product order
   was still right, so the comment was reworded rather than the test weakened.
+
+## Multi-account and data scopes
+
+The cloud host used to be one mutable owner. Multi-account hosting (2026-10-31) put every account's work in
+`data/users/<user_id>/` and left machine-level state at the root; the rules are in AGENTS.md 「An account's tree…」,
+the evidence here.
+
+- **`Config` paths are frozen at import.** The old tree worked because nothing ever moved; the per-account tree needs a
+  live answer, so `runtime/paths.py` reads `Config` on every `system()` call (the test harness repoints those attributes
+  mid-run) and `for_user()` is a pure join under a shape-checked server-minted id — a username never becomes a path.
+  The 87 `Config.<path>` call sites moved to `paths.active()`; import-time captures (settings, the cookie jar, the
+  history service) were turned into providers rather than factories, so every module that imported the single object
+  keeps holding the *same* one.
+- **A content-addressed dataset id is not a cache key for a person.** Two accounts uploading identical bytes get the
+  same `dataset_id`; the read-through cache keyed on the id alone answered one account with the other's frame.
+  `_dataset_cache` keys are `(scope, dataset_id)` and a delete evicts only the current scope.
+- **A worker thread inherits no identity.** `begin_run` records the claimant in `execution_state['user_id']` and passes
+  the account to `_run_worker`, which binds it before opening stores; the queue drain binds each entry's owner and the
+  scheduler reads each account's `schedules.json` inside that account's context. Without this the run's `runs.db`,
+  exports and cookies land in the local owner's tree while the panel says the account ran.
+- **The queue mirror must not be one file for everyone.** Mirroring the whole in-memory queue through the active
+  account's store both leaked another account's workflow names and restored them under the wrong owner; the mirror is
+  now written per owner, and an entry whose account was deleted/disabled is dropped by name at drain time.
+- **Sessions are rows, not a signed claim.** The cookie carries a random token; the table stores only its sha256 plus a
+  CSRF token and an absolute/idle expiry. That is what makes logout/disable/reset/force-logout really revoke a replayed
+  cookie; restart no longer signs everyone out. A password reset keeps only the current session, and every mutating
+  request must echo `X-CSRF-Token` (the fetch patch adds it once). The login form has its own one-shot token.
+- **An account with a debt may only change the password.** `must_change_password` is enforced in the gate (403 +
+  `X-Password-Change-Required`) instead of relying on a dialog the page might not show.
+- **The test harness needs its own registry per test.** `accounts_mode()` treats an existing `accounts.db` as "this
+  installation has accounts", so one test's login would switch the mode on (and authenticate-fail) every later test;
+  `clean_globals` points `Config.ACCOUNTS_DB` at a fresh file and resets the service/throttle before yielding.

@@ -17,7 +17,7 @@ import pandas as pd
 from core.refs import as_bool
 from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify, request
-from runtime.state import _dataset_cache, any_run_live
+from runtime.state import _dataset_cache, any_run_live, drop_cached_dataset
 from runtime.stores import _load_dataset, _register_dataset, get_dataset_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
@@ -207,7 +207,7 @@ def dataset_delete(dataset_id: str):
     if lineage:
         store.reset_lineage(lineage['name'])
     removed = store.delete(dataset_id)
-    _dataset_cache.pop(dataset_id, None)
+    drop_cached_dataset(dataset_id)
     if not removed:
         return jsonify({'ok': False, 'error': t('api.datasetMissing', did=dataset_id)}), 404
     return jsonify({'ok': True, 'dataset_id': dataset_id})

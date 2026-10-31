@@ -418,8 +418,9 @@ class TestCookieVerify:
         finally:
             hold.set()
         assert _await_phase(client, 'verified')
+        _await_job_idle(client)
         # The buttons never resolved the probe, so the job finished on its own.
-        assert job['made'][0].closed is True
+        assert job['made'][0].closed is True, (len(job['made']), [getattr(c, 'closed', None) for c in job['made']])
 
     def test_a_crashing_probe_settles_as_error_not_a_hanging_dialog(self, client, job, app_module, monkeypatch):
         cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
@@ -480,6 +481,23 @@ class TestCookieVerify:
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 409
         client.post('/api/cookies/generate/cancel')
         assert _await_idle(client)
+
+
+def _await_job_idle(client, timeout=6.0):
+    """Wait until the job has finished CLEANING UP as well as reporting a phase.
+
+    ``phase`` is written before the ``finally`` closes the browser, so a test that asserts
+    "the browser was closed" straight after the phase is racing that cleanup. ``active`` is
+    cleared at the end of the same ``finally`` — it is the honest "nothing is still holding a
+    window" signal.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        body = client.get('/api/cookies/generate/status').get_json()
+        if not body.get('active'):
+            return body
+        time.sleep(0.05)
+    raise AssertionError('the cookie job never went idle')
 
 
 def _await_phase(client, phase, timeout=6.0):

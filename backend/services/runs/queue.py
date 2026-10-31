@@ -23,6 +23,8 @@ import time
 import uuid
 from collections.abc import Callable
 
+from runtime import account_context
+from runtime.account_context import Account
 from runtime.state import _RUN_QUEUE, QueueEntry, add_log
 from runtime.stores import get_run_store
 
@@ -36,6 +38,36 @@ logger = logging.getLogger(__name__)
 QUEUE_MAX = 8
 
 queue_lock = threading.Lock()
+#: Serialises the read-snapshot/write-mirror pair, so two queue events cannot land their disk
+#: snapshots out of order (the older, shorter one arriving last would drop the next entry).
+_mirror_lock = threading.Lock()
+#: Owners whose mirror has been written at least once; a queue that empties must also write an
+#: empty mirror for its owner, or the restart would resurrect requests the user cancelled.
+_MIRRORED_OWNERS: set = set()
+
+
+def _owner_id() -> str:
+    """The account this thread speaks for, spelled the way an entry stores it ('' = owner)."""
+    account = account_context.current()
+    return account.user_id if account is not None else ''
+
+
+def _account_for(entry: QueueEntry):
+    """The live account behind a queued entry, or ``None``.
+
+    ``None`` for the local owner. A named entry whose account was deleted or disabled cannot be
+    started (its tree may have moved); the drain drops it with a console line instead of writing a
+    run into a directory nobody owns any more.
+    """
+    user_id = str(entry.get('user_id') or '')
+    if not user_id:
+        return None
+    from services.accounts.service import get_account_service
+
+    row = get_account_service().store.get_user(user_id)
+    if row is None or row['status'] != 'active':
+        return None
+    return Account(row['user_id'], row['username'], row['role'])
 
 
 def enqueue_run(data: dict, lang_header: str) -> dict:
@@ -61,6 +93,10 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
             'data': data,
             'lang': lang_header or '',
             'queued_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+            # The queue is shared by every account; this is what lets the drain start the request
+            # under its own owner and what keeps one account from cancelling another's entry.
+            'user_id': _owner_id(),
+            'username': getattr(account_context.current(), 'username', ''),
         }
         _RUN_QUEUE.append(entry)
         position = len(_RUN_QUEUE)
@@ -82,16 +118,22 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
 
 
 def queue_snapshot() -> list:
-    """The waiting requests, oldest first — without their payloads."""
+    """The waiting requests of THIS account, oldest first — without their payloads."""
+    owner = _owner_id()
     with queue_lock:
-        return [{key: entry[key] for key in ('id', 'workflow_name', 'nodes', 'queued_at')} for entry in _RUN_QUEUE]
+        return [
+            {key: entry[key] for key in ('id', 'workflow_name', 'nodes', 'queued_at')}
+            for entry in _RUN_QUEUE
+            if str(entry.get('user_id') or '') == owner
+        ]
 
 
 def cancel_queued(queue_id: str) -> bool:
-    """Drop one waiting request by its queue id. True when it is gone."""
+    """Drop one waiting request of THIS account by its queue id. True when it is gone."""
+    owner = _owner_id()
     with queue_lock:
         for position, entry in enumerate(_RUN_QUEUE):
-            if entry['id'] == queue_id:
+            if entry['id'] == queue_id and str(entry.get('user_id') or '') == owner:
                 del _RUN_QUEUE[position]
                 break
         else:
@@ -101,30 +143,67 @@ def cancel_queued(queue_id: str) -> bool:
 
 
 def clear_queue() -> int:
+    """Empty THIS account's waiting requests. Other accounts keep theirs."""
+    owner = _owner_id()
     with queue_lock:
-        count = len(_RUN_QUEUE)
-        del _RUN_QUEUE[:]
+        keep = [entry for entry in _RUN_QUEUE if str(entry.get('user_id') or '') != owner]
+        count = len(_RUN_QUEUE) - len(keep)
+        _RUN_QUEUE[:] = keep
     mirror_queue()
     return count
 
 
-def mirror_queue() -> None:
-    """Write the current in-memory queue to ``runs.db`` so a restart does not lose it.
+def _save_owner_mirror(user_id: str, entries: list) -> None:
+    """Write one account's queue slice into that account's own ``runs.db``."""
+    account = None
+    if user_id:
+        from services.accounts.service import get_account_service
 
-    The snapshot AND the write are one critical section. Read-then-write outside the lock let
-    two concurrent mirrors land in either order: the older, shorter snapshot could arrive last
-    and leave the disk mirror one entry short, so a request the user was told 「已排队（第 2
-    位）」 silently vanished on the next restart — the exact thing this mirror exists to prevent.
+        row = get_account_service().store.get_user(user_id)
+        if row is None:
+            return
+        account = Account(row['user_id'], row['username'], row['role'])
+    with account_context.use(account):
+        get_run_store().save_queue(list(entries))
+
+
+def mirror_queue() -> None:
+    """Write each account's waiting requests to its own ``runs.db`` so a restart does not lose them.
+
+    The in-memory queue is shared; the mirror is not. Writing the whole queue into whichever
+    account happened to be active would both leak another account's workflow names into that
+    database and restore them under the wrong owner.
     """
     try:
-        with queue_lock:
-            get_run_store().save_queue(list(_RUN_QUEUE))
+        with _mirror_lock:
+            with queue_lock:
+                groups: dict[str, list] = {}
+                for entry in _RUN_QUEUE:
+                    groups.setdefault(str(entry.get('user_id') or ''), []).append(entry)
+                owners = sorted(set(groups) | _MIRRORED_OWNERS)
+                snapshot = {owner: list(groups.get(owner, [])) for owner in owners}
+            for owner, entries in snapshot.items():
+                _save_owner_mirror(owner, entries)
+            with queue_lock:
+                _MIRRORED_OWNERS.clear()
+                _MIRRORED_OWNERS.update(groups)
     except Exception:
         logger.exception(t('run.queueMirrorFailed'))
 
 
+def _owner_scopes() -> list:
+    """Every account whose queue mirror should be restored (``None`` = the local owner)."""
+    from services.accounts.service import accounts_mode, get_account_service
+
+    if not accounts_mode():
+        return [None]
+    rows = get_account_service().store.list_users()
+    scopes = [Account(row['user_id'], row['username'], row['role']) for row in rows if row['status'] == 'active']
+    return scopes or [None]
+
+
 def load_pending_queue() -> int:
-    """Re-populate ``_RUN_QUEUE`` from the mirror after a restart (called at boot).
+    """Re-populate ``_RUN_QUEUE`` from every account's mirror after a restart (called at boot).
 
     Only fills an empty queue: a process that already has live in-memory entries (a test
     harness, or a re-entrant boot) must not have them clobbered by an older disk snapshot.
@@ -132,12 +211,22 @@ def load_pending_queue() -> int:
     with queue_lock:
         if _RUN_QUEUE:
             return 0
-        try:
-            restored_requests = get_run_store().load_queue()
-        except Exception:
-            logger.exception(t('run.queueLoadFailed'))
-            return 0
+    restored_requests = []
+    for account in _owner_scopes():
+        with account_context.use(account):
+            try:
+                rows = get_run_store().load_queue()
+            except Exception:
+                logger.exception(t('run.queueLoadFailed'))
+                continue
+        for row in rows:
+            row.setdefault('user_id', account.user_id if account is not None else '')
+            row.setdefault('username', account.username if account is not None else '')
+            restored_requests.append(row)
+    restored_requests.sort(key=lambda row: str(row.get('queued_at') or ''))
+    with queue_lock:
         _RUN_QUEUE.extend(restored_requests)
+        _MIRRORED_OWNERS.update(str(row.get('user_id') or '') for row in restored_requests)
     return len(restored_requests)
 
 
@@ -176,8 +265,15 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
         if entry is None:
             return
         name = entry['workflow_name'] or entry['id']
+        account = _account_for(entry)
+        if entry.get('user_id') and account is None:
+            # The owner was deleted or disabled while this request waited. Its data tree may have
+            # moved, so the request is dropped BY NAME instead of writing into a stranger's tree.
+            logger.warning(t('run.queueOwnerGone', name=name, user=str(entry.get('user_id') or '')))
+            continue
         try:
-            answer = start_run(entry['data'], entry['lang'])
+            with account_context.use(account):
+                answer = start_run(entry['data'], entry['lang'])
         except Exception as e:  # a broken request must not strand the ones behind it
             logger.exception(t('run.queueStartFailed'))
             add_log(t('run.queue_broken', name=name, err=e))

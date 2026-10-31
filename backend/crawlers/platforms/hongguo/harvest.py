@@ -38,8 +38,8 @@ import uuid
 import requests
 from capabilities import requirements
 from core import machine
-from core.config import Config
 from core.refs import as_bool
+from runtime import paths
 from runtime.settings import get_setting
 
 from crawlers.commenting.protocol import DEAD, OK
@@ -122,7 +122,7 @@ class HongguoCommentHarness:
         self._abort = abort or (lambda: False)
         self.ui = ui or PlayerUI(self._log, self._abort)
         self._capture = capture_path or os.path.join(
-            Config.HARVEST_DIR, f'capture-{time.strftime("%Y%m%d-%H%M%S")}-{uuid.uuid4().hex[:6]}.jsonl'
+            paths.active().harvest_dir, f'capture-{time.strftime("%Y%m%d-%H%M%S")}-{uuid.uuid4().hex[:6]}.jsonl'
         )
         self._offset = 0
         self._pending = []
@@ -775,7 +775,7 @@ class HongguoCommentHarness:
         self._stack_up = True
 
     def _start_proxy(self, mitmdump, port):
-        os.makedirs(Config.HARVEST_DIR, exist_ok=True)
+        os.makedirs(paths.active().harvest_dir, exist_ok=True)
         with open(self._capture, 'a', encoding='utf-8'):
             pass
         env = dict(os.environ, CIXI_HG_OUT=self._capture)

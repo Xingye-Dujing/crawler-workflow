@@ -1,47 +1,66 @@
-"""Login for a shared (cloud) host: one password, a signed session cookie, and a request gate.
+"""Login for a shared (cloud) host: accounts in ``data/accounts.db``, a signed session cookie and
+a request gate.
 
 The server is a local single-user tool by design, so the login exists for the one shape that is
 not local: ``python app.py cloud`` puts the same state — saved crawl sessions, every dataset, the
-run ledger — behind a public address. Without a login a stranger holding that address could read
-all of it and could start crawls on the owner's accounts.
-
-Why a session cookie rather than HTTP Basic: the page needs a visible way out (the 退出登录 button
-in the top menu), and a Basic credential cannot be forgotten by the page — the browser re-sends it
-until it is closed. The session is non-permanent on purpose: closing the browser ends it, which is
-the right default for a shared host.
+run ledger — behind a public address. Accounts isolate that state: each one owns
+``data/users/<user_id>/`` (``runtime/paths.py``) and the gate is what binds the identity every
+lower layer asks for (``runtime/account_context.py``).
 
 Named refusals, never guesses:
 
-* no password configured → no login at all (the local default). Cloud mode is the exception:
-  ``app.py`` refuses to start without one, because a public server that quietly serves everyone is
-  the exact bug this module exists to prevent.
-* cloud mode also refuses the built-in ``SECRET_KEY``: the session cookie is signed with it, and a
-  published key lets anyone mint a logged-in session.
+* no account registry and no password → no login at all (the local default).
+* cloud mode refuses to start without a way to seed the first administrator, and always refuses
+  the built-in ``SECRET_KEY`` (``services.accounts.service.startup_error``).
 * a missing or expired session answers 401 to ``/api/*`` (with ``X-Auth-Required: 1``, so the page
   can tell this 401 from a node refusal) and a redirect to ``/login`` for a page.
+* a session that still owes a password change may read the shell and change the password, and is
+  refused (403 + ``X-Password-Change-Required``) everywhere else.
+* a mutating API call must carry the session's CSRF token in ``X-CSRF-Token``; the login form
+  carries its own one-shot token, so a foreign page can neither act as a signed-in user nor sign
+  someone into an account the caller controls.
+
+This module is the ONLY place that imports ``flask.session`` (``tests/api/test_privacy_leaks.py``
+pins that): every other module asks :func:`current_user` / :func:`current_sid`.
 """
 
-import hashlib
 import hmac
 import html
 import secrets
-import threading
 import time
 from urllib.parse import quote, urlsplit
 
-from core.config import Config
 from flask import Blueprint, Response, jsonify, redirect, request, session
+from runtime import account_context
 
 from i18n import get_lang, normalize, set_lang, t
+from services.accounts.errors import AccountError
+from services.accounts.service import accounts_mode, get_account_service
+from services.accounts.service import startup_error as _accounts_startup_error
 
 bp = Blueprint('auth', __name__)
 
 #: Where a request goes after login when it named no (safe) destination.
 DEFAULT_NEXT = '/'
 
-#: A failed attempt waits this long. Not a lockout — just enough that an online guesser pays for
-#: each try at the same rate a slow network would impose anyway on a shared server.
+#: A failed attempt waits this long. The account registry's own lockout counts attempts; this
+#: delay merely makes an online guesser pay the same rate a slow network would impose anyway.
 FAILED_ATTEMPT_DELAY = 0.3
+
+#: Methods that change state by definition; they must carry the CSRF token.
+_MUTATING = frozenset({'POST', 'PUT', 'PATCH', 'DELETE'})
+
+#: What a session that still owes a password change may reach: the shell it needs to render the
+#: dialog, and the endpoint that ends the debt.
+_MUST_CHANGE_ALLOWED = frozenset(
+    {
+        '/login',
+        '/logout',
+        '/api/account/me',
+        '/api/account/password',
+        '/api/config',
+    }
+)
 
 _LOGIN_PAGE = """<!doctype html>
 <html lang="@@LANG@@">
@@ -88,6 +107,7 @@ _LOGIN_PAGE = """<!doctype html>
   <p class="hint">@@HINT@@</p>
   @@ERROR@@
   <input type="hidden" name="next" value="@@NEXT@@">
+  <input type="hidden" name="csrf" value="@@CSRF@@">
   <label>@@USER_LABEL@@
     <input name="username" autocomplete="username" required autofocus value="@@USER_VALUE@@">
   </label>
@@ -105,43 +125,34 @@ _LOGIN_PAGE = """<!doctype html>
 
 
 def auth_enabled() -> bool:
-    """Whether this process asks for a login. A password is the only switch, read at request time."""
-    return bool(str(Config.AUTH_PASSWORD or '').strip())
+    """Whether this process asks for a login. The account registry is the switch."""
+    return accounts_mode()
 
 
 def startup_error() -> str | None:
-    """The named refusal ``app.py`` raises at import time, or ``None`` when the shape is safe.
+    """The named refusal ``app.py`` raises at import time, or ``None`` when the shape is safe."""
+    return _accounts_startup_error()
 
-    Cloud mode is the only shape that reaches strangers, so it is the only one that requires a
-    login. Any host that DOES have a login — cloud or a LAN box with a password — must sign its
-    session cookie with a key of its own: the shipped default is public, and a published key lets
-    anyone mint a logged-in session.
-    """
-    if not Config.CLOUD_MODE:
-        if auth_enabled() and Config.SECRET_KEY == Config.DEFAULT_SECRET_KEY:
-            return t('auth.loginNeedsSecretKey')
-        return None
-    if not auth_enabled():
-        return t('auth.cloudNeedsPassword')
-    if Config.SECRET_KEY == Config.DEFAULT_SECRET_KEY:
-        return t('auth.loginNeedsSecretKey')
-    return None
+
+# ─── Identity accessors (the only way out of ``flask.session``) ───
+
+
+def current_user():
+    """The account bound to this request/worker, or ``None`` for the local owner."""
+    return account_context.current()
+
+
+def current_sid() -> str:
+    """The raw session token from the signed cookie (needed to keep it on a password change)."""
+    return str(session.get('sid') or '')
+
+
+def is_admin() -> bool:
+    account = current_user()
+    return bool(account is not None and account.is_admin)
 
 
 # ─── Credentials and the gate ──────────────────────────────────
-
-
-def _same(left, right) -> bool:
-    return hmac.compare_digest(str(left).encode('utf-8'), str(right).encode('utf-8'))
-
-
-def check_credentials(user, password) -> bool:
-    """Both halves compared every time — a short circuit on the username would say which was right."""
-    if not auth_enabled():
-        return False
-    user_ok = _same(user or '', Config.AUTH_USER or '')
-    password_ok = _same(password or '', Config.AUTH_PASSWORD or '')
-    return user_ok and password_ok
 
 
 def safe_next(target) -> str:
@@ -160,80 +171,74 @@ def safe_next(target) -> str:
 
 
 def session_ok() -> bool:
-    """A live login for the credentials the server holds NOW.
-
-    The cookie carries a random session id, not a claim; whether that id is still open is this
-    process's answer. Two consequences are the point of doing it this way:
-
-    * **logout really ends the login.** A signed cookie alone cannot be taken back — replaying it
-      after 退出登录 would still open the app, which is what a copied cookie is.
-    * **a password change revokes every session already handed out**: the id's stamp no longer
-      matches the credential in force.
-
-    The registry lives in this process (a local single-user server has one), so a restart signs
-    everyone out — the cost of not adding a session table to ``runs.db`` for one login.
-    """
-    return session.get('auth') is True and _SESSIONS.valid(session.get('sid'))
+    """Whether the cookie names a live server-side session."""
+    return resolve_session() is not None
 
 
-def _credential_stamp() -> str:
-    key = str(Config.SECRET_KEY or '').encode('utf-8')
-    message = f'{Config.AUTH_USER or ""}\0{Config.AUTH_PASSWORD or ""}'.encode()
-    return hmac.new(key, message, hashlib.sha256).hexdigest()
+def resolve_session():
+    """The account behind the cookie's session id, or ``None`` (and the stale cookie is dropped)."""
+    token = current_sid()
+    if not token:
+        return None
+    account = get_account_service().resolve(token)
+    if account is None:
+        session.pop('sid', None)
+    return account
 
 
-class _SessionRegistry:
-    """Open session ids, in insertion order, each stamped with the credential that opened it."""
-
-    #: A cap nobody reaches by hand; it exists so a script cannot grow the dict forever.
-    LIMIT = 1000
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._open: dict[str, str] = {}
-
-    def _prune(self, stamp: str) -> None:
-        """Drop ids opened under another credential, and the oldest beyond the cap. Caller holds the lock."""
-        for sid in [key for key, value in self._open.items() if value != stamp]:
-            del self._open[sid]
-        while len(self._open) > self.LIMIT:
-            del self._open[next(iter(self._open))]
-
-    def open(self) -> str:
-        stamp = _credential_stamp()
-        sid = secrets.token_urlsafe(32)
-        with self._lock:
-            self._prune(stamp)
-            self._open[sid] = stamp
-        return sid
-
-    def valid(self, sid) -> bool:
-        stamp = _credential_stamp()
-        with self._lock:
-            return self._open.get(str(sid or '')) == stamp
-
-    def close(self, sid) -> None:
-        with self._lock:
-            self._open.pop(str(sid or ''), None)
+def csrf_ok(account) -> bool:
+    given = str(request.headers.get('X-CSRF-Token') or '')
+    return bool(given) and hmac.compare_digest(given, str(getattr(account, 'csrf_token', '') or ''))
 
 
-_SESSIONS = _SessionRegistry()
+def _bind(account) -> None:
+    """Publish the identity for this request and remember the token that restores the previous."""
+    request.environ['cixi_account'] = account
+    request.environ['cixi_account_reset'] = account_context.bind(account)
+
+
+def teardown(_exc=None) -> None:
+    """Undo :func:`_bind` on every exit path (``app.teardown_request`` calls this)."""
+    token = (request.environ or {}).pop('cixi_account_reset', None)
+    if token is not None:
+        account_context.unbind(token)
+    (request.environ or {}).pop('cixi_account', None)
 
 
 def gate():
     """The ``before_request`` answer: ``None`` to continue, or the refusal response."""
-    if not auth_enabled() or session_ok() or request.endpoint == 'auth.login':
+    if not auth_enabled() or request.endpoint == 'auth.login':
         return None
-    if request.path.startswith('/api/'):
-        response = jsonify({'ok': False, 'error': t('auth.required')})
-        response.status_code = 401
-    else:
-        # A page keeps its address so the login lands back where it was asked for.
-        target = request.full_path.rstrip('?') if request.method == 'GET' else DEFAULT_NEXT
-        response = redirect('/login?next=' + quote(safe_next(target), safe=''))
-    response.headers['X-Auth-Required'] = '1'
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+    account = resolve_session()
+    if account is None:
+        if request.path.startswith('/api/'):
+            response = jsonify({'ok': False, 'error': t('auth.required')})
+            response.status_code = 401
+        else:
+            # A page keeps its address so the login lands back where it was asked for.
+            target = request.full_path.rstrip('?') if request.method == 'GET' else DEFAULT_NEXT
+            response = redirect('/login?next=' + quote(safe_next(target), safe=''))
+        response.headers['X-Auth-Required'] = '1'
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    _bind(account)
+    if account.must_change_password and request.path.startswith('/api/') and request.path not in _MUST_CHANGE_ALLOWED:
+        response = jsonify({'ok': False, 'error': t('accounts.mustChangePassword')})
+        response.status_code = 403
+        response.headers['X-Password-Change-Required'] = '1'
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    if request.method in _MUTATING and _csrf_required_path(request.path) and not csrf_ok(account):
+        response = jsonify({'ok': False, 'error': t('accounts.csrfRequired')})
+        response.status_code = 403
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    return None
+
+
+def _csrf_required_path(path: str) -> bool:
+    """Every API write, plus logout (a cross-site form must not end the session)."""
+    return str(path or '').startswith('/api/') or str(path or '') == '/logout'
 
 
 # ─── Routes ────────────────────────────────────────────────────
@@ -246,7 +251,7 @@ def _request_lang() -> str:
     return normalize(request.accept_languages.best_match(('zh', 'en')))
 
 
-def _page(nxt: str, error: str, user: str = '') -> str:
+def _page(nxt: str, error: str, user: str = '', csrf: str = '') -> str:
     def escape(value) -> str:
         return html.escape(str(value or ''), quote=True)
 
@@ -258,6 +263,7 @@ def _page(nxt: str, error: str, user: str = '') -> str:
         '@@PASSWORD_LABEL@@': escape(t('auth.password')),
         '@@SIGN_IN@@': escape(t('auth.signIn')),
         '@@NEXT@@': escape(nxt),
+        '@@CSRF@@': escape(csrf),
         '@@USER_VALUE@@': escape(user),
         '@@ERROR@@': f'<p class="err">{escape(error)}</p>' if error else '',
     }
@@ -265,6 +271,13 @@ def _page(nxt: str, error: str, user: str = '') -> str:
     for token, value in fields.items():
         body = body.replace(token, value)
     return body
+
+
+def _login_csrf() -> str:
+    """The form's one-shot token, minted on GET and consumed by the matching POST."""
+    token = secrets.token_urlsafe(24)
+    session['login_csrf'] = token
+    return token
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -278,20 +291,33 @@ def login():
     user = ''
     if request.method == 'POST':
         user = str(request.form.get('username') or '')
-        if check_credentials(user, request.form.get('password')):
-            # A new session id for the new privilege, so a cookie planted before logging in is
-            # not the one that carries the login.
-            _SESSIONS.close(session.get('sid'))
-            session.clear()
-            session['auth'] = True
-            session['sid'] = _SESSIONS.open()
-            return redirect(nxt)
-        time.sleep(FAILED_ATTEMPT_DELAY)
-        error = t('auth.badCredentials')
+        expected = str(session.pop('login_csrf', '') or '')
+        given = str(request.form.get('csrf') or '')
+        if not expected or not hmac.compare_digest(given, expected):
+            time.sleep(FAILED_ATTEMPT_DELAY)
+            error = t('accounts.csrfRequired')
+        else:
+            try:
+                ticket = get_account_service().authenticate(
+                    user,
+                    request.form.get('password'),
+                    ip=request.remote_addr or '',
+                    user_agent=request.user_agent.string,
+                )
+            except AccountError as exc:
+                time.sleep(FAILED_ATTEMPT_DELAY)
+                error = t(exc.key, **exc.params)
+            else:
+                # A new session id for the new privilege, so a cookie planted before logging in is
+                # not the one that carries the login.
+                session.clear()
+                session['sid'] = ticket.token
+                return redirect(nxt)
+    csrf = _login_csrf()
     previous = get_lang()
     try:
         set_lang(_request_lang())
-        body = _page(nxt, error, user)
+        body = _page(nxt, error, user, csrf)
     finally:
         set_lang(previous)
     return Response(
@@ -306,9 +332,14 @@ def login():
 def logout():
     """POST only: a cross-site image or link must not be able to end someone's session.
 
-    The id is closed on the server, so the cookie stops working even if a copy of it is replayed —
-    clearing only the browser's copy would leave a signed cookie that still opens the app.
+    The session row is revoked on the server, so a copy of the cookie stops working even if it is
+    replayed — clearing only the browser's copy would leave a live session behind.
     """
-    _SESSIONS.close(session.get('sid'))
+    token = current_sid()
+    if token:
+        get_account_service().logout(token)
+    account = current_user()
+    if account is not None:
+        get_account_service().audit_logout(account, request.remote_addr or '')
     session.clear()
     return redirect('/login' if auth_enabled() else DEFAULT_NEXT)

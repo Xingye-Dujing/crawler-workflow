@@ -8,12 +8,14 @@ repo keeps paying for is a run that quietly does the other thing and reports suc
 """
 
 import os
+import re
 
 import pytest
 from core.config import Config
 from sessions import routes, template
 
 from analyzers.llm_client import LLMClient
+from services.accounts import service as accounts_service
 
 pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 
@@ -30,9 +32,57 @@ def _forward_executor_seams(monkeypatch):
 
 
 @pytest.fixture
-def cloud(monkeypatch):
-    """This process is a cloud host for the duration of one test."""
+def cloud(client, monkeypatch):
+    """This process is a cloud host for the duration of one test — and the client is signed in.
+
+    A cloud host requires accounts (``services.accounts.service.accounts_mode``), so every request
+    a cloud case makes must carry a session. The bootstrap password is the same env switch a real
+    first boot reads, and the registry lives in this test's own ``accounts.db``.
+    """
     monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+    monkeypatch.setattr(Config, 'ADMIN_USER', 'admin')
+    monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'correct horse battery')
+    # Bootstrap BEFORE the cloud flag is raised: the cloud shape marks a seeded admin as owing a
+    # password change, and these cases are about the cloud REFUSALS, not that dialog.
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    accounts_service.reset_service()
+    accounts_service.reset_throttle()
+    accounts_service.get_account_service().bootstrap()
+    # Cookies are per account now (``runtime/paths.py``): the module's ``seeded_logins`` seeds the
+    # local owner's directory, so the signed-in account gets the same jars or every crawl would be
+    # refused by validation before it starts.
+    import glob
+    import os
+    import shutil
+
+    from runtime import paths
+
+    admin = accounts_service.get_account_service().store.get_user_by_username('admin')
+    target = paths.for_user(admin['user_id']).cookie_dir
+    os.makedirs(target, exist_ok=True)
+    for jar in glob.glob(os.path.join(Config.COOKIE_DIR, '*_cookies.json')):
+        shutil.copy2(jar, target)
+    monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+    page = client.get('/login?lang=en')
+    token = re.search(r'name="csrf" value="([^"]+)"', page.get_data(as_text=True)).group(1)
+    response = client.post(
+        '/login',
+        data={'username': 'admin', 'password': 'correct horse battery', 'next': '/', 'csrf': token},
+    )
+    assert response.status_code == 302, response.get_data(as_text=True)
+    csrf = client.get('/api/config').get_json()['auth']['csrf_token']
+    original_open = client.open
+
+    def _open_with_csrf(*args, **kwargs):
+        method = str(kwargs.get('method') or 'GET').upper()
+        if method not in ('GET', 'HEAD', 'OPTIONS'):
+            headers = dict(kwargs.get('headers') or {})
+            headers.setdefault('X-CSRF-Token', csrf)
+            kwargs['headers'] = headers
+        return original_open(*args, **kwargs)
+
+    client.open = _open_with_csrf
+    return client
 
 
 @pytest.fixture
@@ -201,7 +251,18 @@ class TestEverythingRunsHeadless:
         ).get_json()
         assert body.get('ok'), body
         assert run_finished(app_module), 'the run never settled'
-        run = app_module.get_run_store().get_run(body['run_id'])
+        # The run row lives in the signed-in account's own store; reading it needs that identity
+        # bound outside a request, exactly as the worker binds it.
+        from runtime import account_context
+        from runtime.account_context import Account
+
+        owner = accounts_service.get_account_service().store.get_user_by_username('admin')
+        from runtime.state import execution_state
+
+        assert execution_state['user_id'] == owner['user_id'], execution_state
+        with account_context.use(Account(owner['user_id'], owner['username'], owner['role'])):
+            run = app_module.get_run_store().get_run(body['run_id'])
+        assert run is not None, 'the run row must live in the account that started it'
         # The column is an INTEGER (0/1), and the console's chip reads it as a bool: the
         # point of the assertion is which of the two the record holds.
         assert bool(run['headless']) is True, 'the record says what this host can actually do'

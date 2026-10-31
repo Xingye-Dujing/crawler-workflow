@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="/css/workspace.css" />
     <link rel="stylesheet" href="/css/dialog.css" />
     <link rel="stylesheet" href="/css/overlays.css" />
+    <link rel="stylesheet" href="/css/accounts.css" />
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
   </head>
   <body class="bg-grid">
@@ -203,6 +204,15 @@
           data-i18n="btn.cookies"
         >
           Cookies
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-account"
+          onclick="Accounts.open()"
+          hidden
+        >
+          账号
         </button>
         <!-- Shown only on a host that asks for a login (/api/config.auth_required); a desktop
              session has no session to end, so the entry stays out of the bar. -->
@@ -2369,6 +2379,7 @@
     <script src="/js/i18n/crawl.js"></script>
     <script src="/js/i18n/checks.js"></script>
     <script src="/js/i18n/misc.js"></script>
+    <script src="/js/i18n/accounts.js"></script>
     <script src="/js/app.js"></script>
     <!-- The three sections app.js no longer needs to hold: the LLM transport settings, the
          machine-local settings plus the browser-profile row, and the panels-as-windows behaviour
@@ -2381,5 +2392,6 @@
          Style menu's preference and the i18n catalogue are already defined. -->
     <script src="/js/reusable.js"></script>
     <script src="/js/schedules.js"></script>
+    <script src="/js/accounts.js"></script>
   </body>
 </html>

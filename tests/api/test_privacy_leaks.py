@@ -245,7 +245,7 @@ class TestSessionsAreNotASecretInTheDefaultBoot:
     def test_a_login_signed_with_the_published_key_refuses_to_start(self, monkeypatch):
         from api import auth
 
-        monkeypatch.setattr(Config, 'AUTH_PASSWORD', 'a password')
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', 'a password')
         monkeypatch.setattr(Config, 'SECRET_KEY', Config.DEFAULT_SECRET_KEY)
         message = auth.startup_error()
         assert message and 'SECRET_KEY' in message, message

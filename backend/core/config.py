@@ -60,6 +60,20 @@ class Config:
     #: cookie is never sent back and the login would silently not stick.
     HTTPS_ONLY = str(os.environ.get('CRAWLER_HTTPS') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
+    #: The multi-account registry (``services/accounts``): users, server-side sessions and the
+    #: audit log. System-level, not inside any account's data folder — a session must outlive the
+    #: account's own tree (a deleted account is moved to ``users/.trash/``, its audit rows stay).
+    #: Its mere existence puts a local install into accounts mode; cloud mode requires it.
+    #: The bootstrap administrator, read ONLY when the users table is empty (cloud first boot or
+    #: a local install that just turned a password on). An existing admin is never overwritten
+    #: from the environment — otherwise a stale variable would be a silent password reset.
+    ADMIN_USER = os.environ.get('CRAWLER_ADMIN_USER') or os.environ.get('CRAWLER_AUTH_USER') or 'admin'
+    ADMIN_PASSWORD = os.environ.get('CRAWLER_ADMIN_PASSWORD') or os.environ.get('CRAWLER_AUTH_PASSWORD') or ''
+    #: Server-side session lifetime. Idle is the shorter bound (a walk-away ends the session),
+    #: absolute the longest one (a session is never renewed forever).
+    SESSION_IDLE_MINUTES = int(os.environ.get('CRAWLER_SESSION_IDLE_MINUTES') or 120)
+    SESSION_MAX_HOURS = int(os.environ.get('CRAWLER_SESSION_MAX_HOURS') or 24)
+
     # Paths
     DATA_DIR = os.path.join(DATA_ROOT, 'data')
     COOKIE_DIR = os.path.join(DATA_DIR, 'cookies')
@@ -107,6 +121,10 @@ class Config:
     # baseline pointer that the second auto-layout strategy reads. Curated state, so it lives
     # outside ``runs.db`` and retention never sweeps it.
     WORKFLOW_HISTORY_DB = os.path.join(DATA_DIR, 'workflow_history.db')
+    # The multi-account registry: users, sessions, audit log. System-level (never inside an
+    # account's own folder) because a deleted account's audit rows and the admin's own sessions
+    # must survive the account tree moving to ``users/.trash/``.
+    ACCOUNTS_DB = os.path.join(DATA_DIR, 'accounts.db')
     # Reusable-node templates: authored workflow fragments, one JSON file each. They are
     # user work (like WORKFLOW_DIR), not runtime state, so they live in a visible directory
     # and are copied/backed up with the data root.

@@ -9,9 +9,9 @@ record shape, so any ``biblio`` node downstream needs no remapping.
 import contextlib
 
 import pandas as pd
-from core.config import Config
 from core.refs import as_bool
 from core.refs import json_safe_records as _json_safe_records
+from runtime import paths
 from runtime.state import add_log
 
 from i18n import t
@@ -57,7 +57,7 @@ def execute_fuse_node(node: dict, _current_input: list, upstream: list = None, c
     )
     if as_bool(params.get('export_files'), False):
         try:
-            path = fuse.export_records(result['rows'], Config.EXPORT_DIR, f'{label}-{node.get("id") or "fuse"}')
+            path = fuse.export_records(result['rows'], paths.active().export_dir, f'{label}-{node.get("id") or "fuse"}')
         except Exception as exc:
             raise ValueError(t('biblio.export_failed', err=exc)) from exc
         if ctx and ctx.get('store') and ctx.get('run_id'):

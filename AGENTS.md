@@ -143,6 +143,11 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
 - **One server per data root, by design** (local single-user tool). `promote_stale_runs()` kills a same-`data/` rival's
   live run; `CRAWLER_DATA_ROOT` gives a process its own `data/`+`logs/` (`/smoke-verify` and the UI tier use it).
   Without it, **ask before booting a second server, and never kill a process on 5000.**
+- **An account's tree is `data/users/<user_id>/`, resolved at CALL time** (`runtime.paths.active()`): stores, exports,
+  cookies, profiles, checkpoint/harvest, reusable nodes, locks and schedules follow the signed-in account;
+  `accounts.db`, `settings.json`, `lexicon.db`, `models/` and `logs/` stay system-level. Never cache a path in a module
+  constant or a store default. The single run slot is owner-scoped: queue entries carry `user_id`, the worker/drain/clock
+  bind that account (`account_context`), and status/stop/process/stats answer another account with `foreign_run` only.
 - **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the start path — the queue drains
   by calling *that*, never a weaker one; `queue:false` keeps the 400 for fail-fast callers. The worker's `finally`
   clears `execution_state['thread']` **first** (the claim checks thread liveness). Queues are in-memory
@@ -270,7 +275,7 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
 ## Console, messages and i18n
 
 - UI text zh/en via `backend/i18n.py`, merging `backend/i18n_catalog/<domain>.py` (one module per domain:
-  `crawl`/`collect`/`cookie`/`sched`/`run`/`analysis`/`biblio`/`charts`/`api`/`settings`): every new user-facing
+  `crawl`/`collect`/`cookie`/`sched`/`run`/`analysis`/`biblio`/`charts`/`api`/`settings`/`accounts`): every new user-facing
   string goes to **its own domain, in both languages**, and to the browser catalogue
   (`backend/static/js/i18n/<domain>.js`, merged by `app.js`). A key declared in two domains is refused at import/load;
   a domain file missing from `MODULES` is a failed test.

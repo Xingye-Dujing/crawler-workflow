@@ -24,7 +24,7 @@ import threading
 import time
 import uuid
 
-from core.config import Config
+from runtime import paths
 
 from i18n import t
 
@@ -56,7 +56,7 @@ def _now() -> str:
 
 
 def _path(template_id: str) -> str:
-    return os.path.join(Config.REUSABLE_DIR, f'{template_id}.json')
+    return os.path.join(paths.active().reusable_dir, f'{template_id}.json')
 
 
 def _number(value):
@@ -218,7 +218,7 @@ def _summary(payload: dict) -> dict:
 
 
 def _write_payload(payload: dict) -> None:
-    os.makedirs(Config.REUSABLE_DIR, exist_ok=True)
+    os.makedirs(paths.active().reusable_dir, exist_ok=True)
     target = _path(str(payload['id']))
     tmp = target + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
@@ -227,7 +227,7 @@ def _write_payload(payload: dict) -> None:
 
 
 def list_templates() -> list:
-    directory = Config.REUSABLE_DIR
+    directory = paths.active().reusable_dir
     if not os.path.isdir(directory):
         return []
     out = []

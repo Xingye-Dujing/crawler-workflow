@@ -16,6 +16,7 @@ import time
 
 import pandas as pd
 import pytest
+from core.config import Config
 from core.refs import flag_or_none
 from run_wait import run_finished
 
@@ -620,7 +621,7 @@ class TestWindowedFilenames:
     ROWS = [{'正文': 'a'}, {'正文': 'b'}]
 
     def _save(self, output_plugin, tmp_path, monkeypatch, **params):
-        monkeypatch.setattr(output_plugin.Config, 'EXPORT_DIR', str(tmp_path))
+        monkeypatch.setattr(Config, 'EXPORT_DIR', str(tmp_path))
         node = _node('node-9', 'output', {'operation': 'save', 'format': 'csv', **params}, 'save')
         return output_plugin.execute_output_node(node, list(self.ROWS))
 

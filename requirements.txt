@@ -4,6 +4,10 @@
 # installs whatever today's index serves. Keep every line pinned, and bump deliberately
 # (`tests/unit/gates/test_requirements_pinned.py` refuses an unpinned line).
 flask==3.1.0
+# Directly imported by backend/services/accounts/security.py for password hashing (scrypt) and
+# hash verification. It arrives transitively with Flask, but a resolver change must not be able to
+# take the account registry's credential checks with it.
+werkzeug==3.1.8
 flask-cors==6.0.5
 requests==2.34.2
 # Directly imported by backend/test_dead_driver.py (Retry). Declared rather than leaned on:

@@ -12,7 +12,7 @@ ledger so 智能清除 can find it).
 
 import contextlib
 
-from core.config import Config
+from runtime import paths
 from runtime.state import add_log
 
 from i18n import t
@@ -38,7 +38,7 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
     if not docs:
         return {'error': t('wf.compile_no_source')}
     out_name = f'compile-{node.get("id")}.pdf'
-    out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, paths.active().export_dir)
     if 'error' in out:
         # Fold the reason into the returned error so run_node_durable's single wf.node_failed
         # line carries it; a separate add_log was the duplicate line for one failure.

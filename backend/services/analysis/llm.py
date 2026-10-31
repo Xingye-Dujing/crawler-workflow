@@ -13,8 +13,8 @@ address, all of which change what an answer means.
 
 import os
 
-from core.config import Config
 from core.refs import as_bool
+from runtime import paths
 from runtime.state import _completed_lock, add_log, execution_state
 
 from analyzers.llm_client import LLMClient
@@ -67,7 +67,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
 
         stem = safe_stem(f'{execution_state.get("workflow_name") or "llm"}-{node_id}')
         lfmt = 'json' if str((node.get('params') or {}).get('format') or 'csv') == 'json' else 'csv'
-        live_writer = SnapshotWriter(Config.EXPORT_DIR, stem, lfmt)
+        live_writer = SnapshotWriter(paths.active().export_dir, stem, lfmt)
         add_log(t('run.live_export', file=os.path.basename(live_writer.path)))
         # The live file has one fixed name from the moment it is made, so it is registered once
         # here rather than on every batch's rewrite — it is a run artifact and 智能清除 must find it.
@@ -94,7 +94,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         'workers': (cfg.get('workers') or 3) if provider == 'openrouter' else 1,
         'publish': publish,
         'cancel_event': execution_state.get('cancel_event'),
-        'checkpoint_dir': Config.LLM_CHECKPOINT_DIR,
+        'checkpoint_dir': paths.active().checkpoint_dir,
     }
     if ctx is not None:
         # Only the store is lent — see the docstring on why the row runner

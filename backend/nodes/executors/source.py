@@ -19,7 +19,7 @@ import capabilities.registry as capabilities
 from api.http import _safe_int
 from core.config import Config
 from core.refs import as_bool, comment_platforms, split_urls
-from runtime import gate
+from runtime import gate, paths
 from runtime.state import _wf_local, add_log, execution_state, stop_requested
 
 from crawlers import get_crawler, is_crawlable
@@ -309,7 +309,7 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         crawler = get_crawler(
             platform,
             headless=headless,
-            cookie_dir=Config.COOKIE_DIR,
+            cookie_dir=paths.active().cookie_dir,
             use_profile=(ctx or {}).get('use_profile'),
             # `stop_requested`, not "no run is in flight": this predicate is what makes the
             # crawl end at its next row, and an idle server (a test calling the executor
@@ -383,7 +383,7 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
             # to the record) — but only when 「保留分片」 is on: with keep_parts off the writer
             # deletes them the moment the merge succeeds, so there is nothing for 智能清除 to find.
             writer = PartWriter(
-                Config.EXPORT_DIR,
+                paths.active().export_dir,
                 stem,
                 pfmt,
                 part_size,

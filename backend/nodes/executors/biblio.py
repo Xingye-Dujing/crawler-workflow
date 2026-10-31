@@ -8,9 +8,9 @@ node, registered in the run→files ledger when a run context is present.
 import contextlib
 
 import pandas as pd
-from core.config import Config
 from core.refs import as_bool
 from core.refs import json_safe_records as _json_safe_records
+from runtime import paths
 from runtime.state import add_log
 from runtime.stores import _load_dataset
 
@@ -120,7 +120,7 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
 
     if as_bool(params.get('export_files'), True):
         try:
-            files = metrics.export_result(result, Config.EXPORT_DIR, f'{label}-{node.get("id") or "biblio"}')
+            files = metrics.export_result(result, paths.active().export_dir, f'{label}-{node.get("id") or "biblio"}')
         except Exception as exc:
             raise ValueError(t('biblio.export_failed', err=exc)) from exc
         if ctx and ctx.get('store') and ctx.get('run_id'):
@@ -166,7 +166,7 @@ def _watch_capture(node: dict, ctx: dict | None, params: dict, rows: list, shape
         entity_type=entity,
         shape=shape,
         biblio=get_biblio_store(),
-        export_dir=Config.EXPORT_DIR,
+        export_dir=paths.active().export_dir,
         stamp=str((run_record or {}).get('started_at') or ''),
     )
 

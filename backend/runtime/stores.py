@@ -17,12 +17,14 @@ shadowing global in ``app`` and detach the two — which is why every store-obje
 ``stores``, never ``app``.
 """
 
+import contextlib
 import threading
 
 import pandas as pd
 from core.config import Config
 
-from runtime.state import _dataset_cache
+from runtime import account_context, paths
+from runtime.state import _dataset_cache, dataset_cache_key
 from services.analysis.lexicon_store import LexiconStore
 from services.biblio.store import BiblioStore
 from services.datasets.store import SOURCE_UPLOAD, DatasetStore
@@ -30,6 +32,117 @@ from services.runs.housekeeping import Housekeeping
 from services.runs.store import RunStore
 from services.workflows.history import WorkflowHistoryStore
 from services.workflows.manager import WorkflowManager
+
+# ─── Per-account scopes ────────────────────────────────────────
+#
+# The system-scope slots below predate accounts and are deliberately kept as the test harness's
+# injection seam (``conftest`` writes ``stores._RUN_STORE`` / ``_DATASET_STORE`` … and a test that
+# patches ``app.get_run_store`` still intercepts the bare call). An account gets its own slot in
+# this registry instead, because its stores point at ``data/users/<id>/`` and must never be shared
+# with the local owner or with another account. Slots are created on first use and closed only by
+# ``release_user`` (account deletion/disable) — never by an LRU, which could close a store a live
+# run worker is still writing through.
+
+
+class _UserStores:
+    """One account's store objects, opened lazily and guarded by this slot's lock."""
+
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+        self._lock = threading.RLock()
+        self._run = None
+        self._dataset = None
+        self._biblio = None
+        self._workflow_history = None
+        self._workflow_manager = None
+        self._housekeeper = None
+
+    def run_store(self) -> RunStore:
+        with self._lock:
+            if self._run is None:
+                self._run = RunStore(paths.for_user(self.user_id).ensure().runs_db)
+        return self._run
+
+    def dataset_store(self) -> DatasetStore:
+        with self._lock:
+            if self._dataset is None:
+                self._dataset = DatasetStore(paths.for_user(self.user_id).ensure().datasets_db)
+        return self._dataset
+
+    def biblio_store(self) -> BiblioStore:
+        with self._lock:
+            if self._biblio is None:
+                self._biblio = BiblioStore(paths.for_user(self.user_id).ensure().biblio_db)
+        return self._biblio
+
+    def workflow_history_store(self) -> WorkflowHistoryStore:
+        with self._lock:
+            if self._workflow_history is None:
+                self._workflow_history = WorkflowHistoryStore(paths.for_user(self.user_id).ensure().workflow_history_db)
+        return self._workflow_history
+
+    def workflow_manager(self) -> WorkflowManager:
+        with self._lock:
+            if self._workflow_manager is None:
+                self._workflow_manager = WorkflowManager(paths.for_user(self.user_id).ensure().workflow_dir)
+        return self._workflow_manager
+
+    def housekeeper(self) -> Housekeeping:
+        with self._lock:
+            if self._housekeeper is None:
+                self._housekeeper = Housekeeping(
+                    self.run_store(),
+                    self.dataset_store(),
+                    interval_seconds=max(0, int(Config.HOUSEKEEPING_INTERVAL_MINUTES)) * 60,
+                )
+        return self._housekeeper
+
+    def close(self) -> None:
+        with self._lock:
+            for store in (self._run, self._dataset, self._biblio, self._workflow_history):
+                if store is not None:
+                    with contextlib.suppress(Exception):
+                        store.close()
+            self._run = None
+            self._dataset = None
+            self._biblio = None
+            self._workflow_history = None
+            self._workflow_manager = None
+            self._housekeeper = None
+
+
+_USER_STORES: dict[str, _UserStores] = {}
+_USER_STORES_LOCK = threading.RLock()
+
+
+def _user_slot() -> _UserStores | None:
+    """The slot of the account this thread speaks for, or ``None`` for the local owner."""
+    account = account_context.current()
+    if account is None:
+        return None
+    with _USER_STORES_LOCK:
+        slot = _USER_STORES.get(account.user_id)
+        if slot is None:
+            slot = _UserStores(account.user_id)
+            _USER_STORES[account.user_id] = slot
+        return slot
+
+
+def release_user(user_id: str) -> None:
+    """Close and forget one account's stores. The caller must have proved no run is live."""
+    with _USER_STORES_LOCK:
+        slot = _USER_STORES.pop(str(user_id or ''), None)
+    if slot is not None:
+        slot.close()
+    for key in [key for key in _dataset_cache if key[0] == str(user_id or '')]:
+        _dataset_cache.pop(key, None)
+
+
+def user_slots() -> dict:
+    """A snapshot of the open per-account slots (diagnostics and tests)."""
+    with _USER_STORES_LOCK:
+        return dict(_USER_STORES)
+
 
 # ─── Durable run state ──────────────────────────────────────────
 
@@ -45,6 +158,9 @@ def get_run_store() -> RunStore:
     merely imports app.py would otherwise pay for opening a connection and
     running recovery on every start.
     """
+    slot = _user_slot()
+    if slot is not None:
+        return slot.run_store()
     global _RUN_STORE
     if _RUN_STORE is None:
         with _RUN_STORE_LOCK:
@@ -64,6 +180,9 @@ def get_housekeeper() -> Housekeeping:
     Lazy for the same reason the stores are: it holds a handle on both, and
     merely importing this module must not open a database.
     """
+    slot = _user_slot()
+    if slot is not None:
+        return slot.housekeeper()
     global _HOUSEKEEPER
     if _HOUSEKEEPER is None:
         with _HOUSEKEEPER_LOCK:
@@ -87,6 +206,9 @@ _DATASET_LOCK = threading.Lock()
 
 def get_dataset_store() -> DatasetStore:
     """The single SQLite store behind persisted files, opened on first use."""
+    slot = _user_slot()
+    if slot is not None:
+        return slot.dataset_store()
     global _DATASET_STORE
     if _DATASET_STORE is None:
         with _DATASET_LOCK:
@@ -121,6 +243,9 @@ _BIBLIO_LOCK = threading.Lock()
 
 def get_biblio_store() -> BiblioStore:
     """The single store behind the bibliometrics workspace, opened on first use."""
+    slot = _user_slot()
+    if slot is not None:
+        return slot.biblio_store()
     global _BIBLIO_STORE
     if _BIBLIO_STORE is None:
         with _BIBLIO_LOCK:
@@ -138,6 +263,9 @@ _WORKFLOW_HISTORY_LOCK = threading.Lock()
 
 def get_workflow_history_store() -> WorkflowHistoryStore:
     """The single store behind canvas history, opened on first use."""
+    slot = _user_slot()
+    if slot is not None:
+        return slot.workflow_history_store()
     global _WORKFLOW_HISTORY_STORE
     if _WORKFLOW_HISTORY_STORE is None:
         with _WORKFLOW_HISTORY_LOCK:
@@ -156,7 +284,10 @@ _WORKFLOW_MANAGER_LOCK = threading.Lock()
 
 
 def get_workflow_manager() -> WorkflowManager:
-    """The single reader/writer of ``data/workflows``, opened on first use."""
+    """The single reader/writer of the current scope's workflow directory."""
+    slot = _user_slot()
+    if slot is not None:
+        return slot.workflow_manager()
     global _WORKFLOW_MANAGER
     if _WORKFLOW_MANAGER is None:
         with _WORKFLOW_MANAGER_LOCK:
@@ -172,8 +303,9 @@ _DATASET_CACHE_MAX = 24
 
 def _cache_dataset(dataset_id: str, df: pd.DataFrame):
     """Remember a frame for a while. Bounded, because the store is not."""
+    key = dataset_cache_key(dataset_id)
     with _DATASET_LOCK:
-        _dataset_cache[dataset_id] = df
+        _dataset_cache[key] = df
         while len(_dataset_cache) > _DATASET_CACHE_MAX:
             _dataset_cache.pop(next(iter(_dataset_cache)), None)
 
@@ -191,7 +323,7 @@ def _register_dataset(df: pd.DataFrame, name: str = 'dataset', source: str = SOU
 
 def _load_dataset(dataset_id: str) -> pd.DataFrame | None:
     """A persisted frame by id, or None. Cache first, then the database."""
-    cached = _dataset_cache.get(dataset_id)
+    cached = _dataset_cache.get(dataset_cache_key(dataset_id))
     if cached is not None:
         return cached
     df = get_dataset_store().get(dataset_id)

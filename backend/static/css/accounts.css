@@ -1,0 +1,95 @@
+/* Account registry: the signed-in user's chip opens this panel (administrators only get the
+   table; everyone gets the change-password dialog). Colours follow the dialog's light/dark pair. */
+
+.accounts-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .45);
+}
+
+.accounts-panel {
+    width: min(900px, calc(100vw - 32px));
+    max-height: calc(100vh - 64px);
+    overflow: auto;
+    padding: 18px 20px 22px;
+    border-radius: 12px;
+    background: #fff;
+    color: #1c1e21;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+
+@media (prefers-color-scheme: dark) {
+    .accounts-panel {
+        background: #212429;
+        color: #e8eaed;
+        border: 1px solid #2e3238;
+    }
+}
+
+.accounts-head,
+.accounts-audit-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.accounts-title {
+    font-size: 17px;
+    font-weight: 650;
+}
+
+.accounts-me {
+    font-size: 13px;
+    opacity: .7;
+    margin-right: auto;
+}
+
+.accounts-create {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.accounts-create .settings-input {
+    flex: 1 1 150px;
+}
+
+.accounts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.accounts-table th,
+.accounts-table td {
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid rgba(128, 128, 128, .25);
+}
+
+.accounts-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.accounts-error,
+.accounts-empty {
+    font-size: 13px;
+    opacity: .8;
+}
+
+.accounts-audit {
+    margin-top: 18px;
+}
+
+.accounts-audit-head span {
+    font-weight: 600;
+    margin-right: auto;
+}

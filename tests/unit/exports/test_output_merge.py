@@ -13,6 +13,7 @@ which fabricates empty cells and produces a file that looks complete.
 
 import pandas as pd
 import pytest
+from core.config import Config
 
 pytestmark = pytest.mark.unit
 
@@ -59,7 +60,7 @@ class TestMergingUpstreamTables:
         assert len(rows) == 3, 'a downstream node must see both tables'
 
     def test_the_exported_file_holds_the_merged_rows(self, exec_, tmp_path, monkeypatch):
-        monkeypatch.setattr(exec_.Config, 'EXPORT_DIR', str(tmp_path))
+        monkeypatch.setattr(Config, 'EXPORT_DIR', str(tmp_path))
         node = _save_node()
         exec_.execute_output_node(node, list(A), upstream=[('node-1', list(A)), ('node-2', list(B))])
         written = pd.read_csv(tmp_path / 'merged.csv')

@@ -4,10 +4,10 @@ import logging
 from collections import defaultdict, deque
 
 import capabilities.registry as capabilities
-from core.config import Config
 from core.refs import as_bool, platform_for, split_urls
 from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
 from nodes.labels import node_label
+from runtime import paths
 from sessions import preflight
 from sessions.cookies import CookieManager
 
@@ -121,7 +121,7 @@ def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     if capabilities.is_catbus(params):
         return []
     account = str(params.get('account') or '').strip()
-    manager = CookieManager(Config.COOKIE_DIR)
+    manager = CookieManager(paths.active().cookie_dir)
     out = []
     for platform in dict.fromkeys(str(p or '').strip() for p in platforms if str(p or '').strip()):
         if not preflight.has_session_to_test(platform, account=account):

@@ -14,8 +14,8 @@ figure the node already drew and the run itself still succeed.
 import logging
 import os
 
-from core.config import Config
 from core.refs import as_bool, sanitize_filename
+from runtime import paths
 from runtime.state import add_log
 
 from i18n import t
@@ -32,8 +32,8 @@ def write_latex_export(base: str, content: str, suffix: str) -> str:
     text artifact is what the exports browser and download route already serve without a new type.
     """
     name = sanitize_filename(f'{base or "chart"}{suffix}.txt')
-    os.makedirs(Config.EXPORT_DIR, exist_ok=True)
-    with open(os.path.join(Config.EXPORT_DIR, name), 'w', encoding='utf-8') as handle:
+    os.makedirs(paths.active().export_dir, exist_ok=True)
+    with open(os.path.join(paths.active().export_dir, name), 'w', encoding='utf-8') as handle:
         handle.write(content)
     return name
 

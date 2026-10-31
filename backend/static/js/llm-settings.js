@@ -134,7 +134,7 @@ const LLMSettings = {
             /* The server states its own shape before anything else reads it: the AI panel
                is applied from localStorage right after this, and on a cloud host that
                stored value is allowed to name a transport with no daemon behind it. */
-            if (typeof CloudMode !== 'undefined') CloudMode.set(cfg && cfg.cloud_mode, cfg && cfg.auth_required);
+            if (typeof CloudMode !== 'undefined') CloudMode.set(cfg && cfg.cloud_mode, cfg && cfg.auth_required, cfg && cfg.auth);
             const input = document.getElementById('ai-ollama-model');
             if (input && cfg && cfg.ollama_model) input.placeholder = cfg.ollama_model;
         } catch (e) {

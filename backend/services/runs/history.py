@@ -33,10 +33,25 @@ class ExecutionHistoryService:
     """Records and queries per-run metrics: (run_id, workflow_name, node_id,
     node_type, metric, label, value, timestamp)."""
 
-    def __init__(self, db_path: str = None):
-        self.db_path = db_path or os.path.join(Config.DATA_DIR, 'history.db')
+    def __init__(self, db_path=None):
+        """*db_path* is a path or a zero-argument callable returning one.
+
+        The callable is how the single process-wide service follows the signed-in account
+        (``runtime.state`` passes ``lambda: runtime.paths.active().history_db``). Every method
+        resolves it on use, so handing the same object out by import still names one service
+        while the file underneath is the current scope's.
+        """
+        self._db_source = db_path or (lambda: os.path.join(Config.DATA_DIR, 'history.db'))
         os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
         self._ensure_table()
+
+    @property
+    def db_path(self) -> str:
+        return self._db_source() if callable(self._db_source) else str(self._db_source)
+
+    @db_path.setter
+    def db_path(self, path) -> None:
+        self._db_source = path
 
     def _conn(self):
         """A connection with the schema present.

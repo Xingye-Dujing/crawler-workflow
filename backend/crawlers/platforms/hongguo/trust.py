@@ -24,7 +24,7 @@ import os
 import subprocess
 import sys
 
-from core.config import Config
+from runtime import paths
 
 logger = logging.getLogger(__name__)
 
@@ -192,9 +192,9 @@ def install(der: bytes, timeout: float = 20.0) -> bool:
     """
     if sys.platform != 'win32':
         return False
-    script = os.path.join(Config.HARVEST_DIR, 'hg_ca_install_tmp.py')
+    script = os.path.join(paths.active().harvest_dir, 'hg_ca_install_tmp.py')
     try:
-        os.makedirs(Config.HARVEST_DIR, exist_ok=True)
+        os.makedirs(paths.active().harvest_dir, exist_ok=True)
         with open(script, 'wb') as handle:
             handle.write(_INSTALL_SNIPPET)
             handle.write(b'\n')

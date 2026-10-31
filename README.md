@@ -48,9 +48,13 @@ cd backend && python app.py          # 访问 http://127.0.0.1:5000（端口 POR
 `CRAWLER_DATA_ROOT=<目录>` 给它一份自己的 `data/`+`logs/`，两边互不干涉。
 
 **云端 / 桌面版**：放服务器给别人访问用 `python app.py cloud`（或 `CRAWLER_CLOUD=1`）——关掉本地模型界面、
-强制无头抓取、拒绝浏览器生成，并且**强制登录**：启动前必须设置 `CRAWLER_AUTH_PASSWORD` 与自己的
-`SECRET_KEY`，否则按名拒绝启动；设置后全站（页面、静态资源、`/api/*`）都要求登录，顶栏出现「退出登录」
-（开关、隐私边界、profile 模板规则见 [`docs/config.md`](docs/config.md)）。
+强制无头抓取、拒绝浏览器生成，并且**强制多账号登录**：首次启动必须设置 `CRAWLER_ADMIN_PASSWORD`（旧变量
+`CRAWLER_AUTH_PASSWORD` 仍可作为引导密码）与自己的 `SECRET_KEY`，否则按名拒绝启动。账号存 `data/accounts.db`
+（密码 scrypt 哈希、服务端会话、CSRF、失败锁定），**每个账号的数据完全隔离**：工作流、数据集、运行记录、
+爬取 Cookie、导出都在 `data/users/<账号 id>/` 下；管理员在顶栏账号面板里创建/重置/禁用/强制下线/删除账号
+（删除是移入 `data/users/.trash/`，不会当场抹掉）。旧单账号的数据根用
+`python tools/migrate_accounts.py --user admin --apply` 迁到管理员名下（先备份、默认 dry-run、校验后原目录改名保留）。
+关闭本地模型、首次改密对话框与账号面板细节见 [`docs/config.md`](docs/config.md)。
 给不装 Python 的人（仅 Windows）：`desktop/` 用 PyInstaller onedir 打包出 `CaiXiHui.exe`（`-Installer` 再出
 Inno 安装包），双击即启本地服务并开浏览器；数据默认在 `%APPDATA%\CaiXiHui`，exe 旁放空文件 `portable.txt`
 切便携模式。构建命令、体积边界、首启依赖自检与「为什么排除 onefile」见 [`desktop/README.md`](desktop/README.md)。

@@ -24,6 +24,8 @@ import threading
 from datetime import datetime
 
 from core.config import Config
+from runtime import account_context
+from runtime.account_context import Account
 
 from i18n import set_lang, t
 from scheduling import cron, store
@@ -77,6 +79,21 @@ def load_canvas(name) -> dict:
 # ─── Firing ───
 
 
+def _scopes() -> list:
+    """Every schedule owner the clock must look at (``None`` = the local owner).
+
+    ``schedules.json`` is per-account, so one clock reads each owner's file in that owner's
+    context — the same way a request would. A disabled account's timers do not fire.
+    """
+    from services.accounts.service import accounts_mode, get_account_service
+
+    if not accounts_mode():
+        return [None]
+    rows = get_account_service().store.list_users()
+    scopes = [Account(row['user_id'], row['username'], row['role']) for row in rows if row['status'] == 'active']
+    return scopes or [None]
+
+
 def tick(now: datetime = None) -> list:
     """Fire every task whose moment has arrived. One result per task fired.
 
@@ -87,13 +104,15 @@ def tick(now: datetime = None) -> list:
     now = now or cron.now()
     results = []
     with _lock:
-        for task in store.all_tasks():
-            if not task.get('enabled'):
-                continue
-            due = store.stamp(task.get('next_run'))
-            if due is None or due > now:
-                continue
-            results.append(_fire(task, now))
+        for account in _scopes():
+            with account_context.use(account):
+                for task in store.all_tasks():
+                    if not task.get('enabled'):
+                        continue
+                    due = store.stamp(task.get('next_run'))
+                    if due is None or due > now:
+                        continue
+                    results.append(_fire(task, now))
     _note_tick(now)
     return results
 
@@ -171,8 +190,10 @@ def start() -> bool:
     global _thread, _stop
     if is_running():
         return False
-    for name in store.note_missed():
-        logger.info(t('sched.missedLine', name=name))
+    for account in _scopes():
+        with account_context.use(account):
+            for name in store.note_missed():
+                logger.info(t('sched.missedLine', name=name))
     _stop = threading.Event()
     _thread = threading.Thread(target=_loop, name='crawler-scheduler', daemon=True)
     _thread.start()

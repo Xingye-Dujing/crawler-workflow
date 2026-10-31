@@ -16,8 +16,8 @@ import contextlib
 import capabilities.registry as capabilities
 import pandas as pd
 from api.http import _safe_int
-from core.config import Config
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
+from runtime import paths
 from runtime.state import add_log, execution_state, stop_requested
 
 from crawlers import crawler_class, get_crawler
@@ -211,7 +211,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # Same ledger contract as a source crawl: shards are recorded as they land, and only
             # when 「保留分片」 is on (with it off the merge deletes them, so there is nothing to clear).
             writers[stem] = PartWriter(
-                Config.EXPORT_DIR,
+                paths.active().export_dir,
                 stem,
                 fmt,
                 part_size,
@@ -288,7 +288,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         crawler = get_crawler(
                             kind,
                             headless=headless,
-                            cookie_dir=Config.COOKIE_DIR,
+                            cookie_dir=paths.active().cookie_dir,
                             use_profile=(ctx or {}).get('use_profile'),
                             abort=stop_requested,
                             # The node's chosen login walks its comments too: the comment rate

@@ -8,6 +8,7 @@ import time
 from urllib.parse import urlsplit
 
 from api import auth as web_auth
+from api.accounts import bp as accounts_bp
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
 from api.capabilities import bp as capabilities_bp
@@ -303,10 +304,17 @@ def _require_login():
     """Refuse an unauthenticated request before any route can answer it.
 
     Runs after the language pin (the 401's sentence is translated) and after the origin guard
-    (a foreign page stays a 403 whatever its session says). A no-op whenever no password is
-    configured, which is the local single-user default.
+    (a foreign page stays a 403 whatever its session says). A no-op whenever no accounts are
+    configured, which is the local single-user default. On success the gate binds the account to
+    this request; ``_clear_account_context`` unbinds it on every exit path.
     """
     return web_auth.gate()
+
+
+@app.teardown_request
+def _clear_account_context(_exc=None):
+    """Undo the identity the gate bound, including when the view raised."""
+    web_auth.teardown(_exc)
 
 
 # Uploaded, pasted and cleaned files live in the DatasetStore (data/datasets.db)
@@ -466,6 +474,8 @@ app.register_blueprint(node_types_bp)
 # The login page and 退出登录 (api/auth.py). The gate that refuses every other route lives in
 # ``_require_login`` above, so a route added later cannot forget it.
 app.register_blueprint(web_auth.bp)
+# Account management: the signed-in account's own view plus the admin's registry operations.
+app.register_blueprint(accounts_bp)
 app.register_blueprint(exports_bp)
 app.register_blueprint(data_bp)
 app.register_blueprint(diagnostics_bp)
@@ -572,6 +582,13 @@ def start_background_services() -> None:
     and the 定时任务 panel truthfully said 「调度线程没有运行——任务已保存，但到点不会执行」.
     Both entry points run this once, in the serving process (under the reloader, only the child).
     """
+    # The first administrator is seeded from the environment exactly once. A non-empty registry is
+    # left alone (a stale variable must not reset a password); with no accounts configured this is
+    # a no-op and the local owner's tree stays exactly as it was.
+    from services.accounts.service import accounts_mode, get_account_service
+
+    if accounts_mode():
+        get_account_service().bootstrap()
     # Retention is applied on its own, not only when somebody remembers to
     # click: startup is the other moment nothing is writing.
     housekeep(force=True)

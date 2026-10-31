@@ -37,6 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import capabilities.registry as capabilities
 from core.config import Config
+from runtime import paths
 
 from crawlers import crawler_class, is_crawlable
 from i18n import t
@@ -239,7 +240,7 @@ def has_session_to_test(platform: str, use_profile: bool = None, account: str = 
     Both halves are the *account's*: one account can hold a session while another has
     none, and asking the wrong one is how a valid login gets called missing.
     """
-    if CookieManager(Config.COOKIE_DIR).exists(platform, account):
+    if CookieManager(paths.active().cookie_dir).exists(platform, account):
         return True
     active = profiles.is_enabled() if use_profile is None else bool(use_profile)
     return bool(active and profiles.is_used(platform, account))
@@ -284,7 +285,7 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
         crawler = get_crawler(
             platform,
             headless=False,
-            cookie_dir=Config.COOKIE_DIR,
+            cookie_dir=paths.active().cookie_dir,
             for_login=True,
             use_profile=use_profile,
             account=account,
