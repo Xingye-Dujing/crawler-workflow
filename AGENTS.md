@@ -148,8 +148,10 @@ a cp936 console, a Windows-only font. Every change is judged on all three.
 - **An account's tree is `data/users/<user_id>/`, resolved at CALL time** (`runtime.paths.active()`): stores, exports,
   cookies, profiles, checkpoint/harvest, reusable nodes, locks and schedules follow the signed-in account;
   `accounts.db`, `settings.json`, `lexicon.db`, `models/` and `logs/` stay system-level. Never cache a path in a module
-  constant or a store default. The single run slot is owner-scoped: queue entries carry `user_id`, the worker/drain/clock
-  bind that account (`account_context`), and status/stop/process/stats answer another account with `foreign_run` only.
+  constant or a store default (so a bare `WorkflowManager()` resolves the caller's folder too). The single run slot is
+  owner-scoped: queue entries carry `user_id`, the worker/drain/clock bind that account (`account_context`), **every
+  thread they start (parallel pool, preflight probes, cookie jobs) re-binds it**, and status/stop/process/stats/live
+  previews/report/console answer another account with `foreign_run`/nothing only.
 - **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the start path — the queue drains
   by calling *that*, never a weaker one; `queue:false` keeps the 400 for fail-fast callers. The worker's `finally`
   clears `execution_state['thread']` **first** (the claim checks thread liveness). Queues are in-memory

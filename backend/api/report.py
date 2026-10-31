@@ -16,7 +16,7 @@ import os
 from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from runtime import paths
-from runtime.state import _results_snapshot, add_log, execution_state
+from runtime.state import _results_snapshot, add_log, ambient, execution_state, run_is_foreign
 from runtime.stores import get_run_store
 from runtime.transport import _local_transport_refusal
 
@@ -60,6 +60,11 @@ def _report_nodes(data: dict) -> tuple:
         }
         return nodes, meta
 
+    if run_is_foreign():
+        # Live results belong to the account that owns the run in flight; this caller has
+        # nothing of its own in memory to report on.
+        return [], {'workflow_name': '', 'run_id': '', 'status': 'in-memory'}
+
     titles = {}
     for entry in data.get('nodes') or []:
         if isinstance(entry, dict) and entry.get('id'):
@@ -69,8 +74,9 @@ def _report_nodes(data: dict) -> tuple:
         for nid, rows in sorted(_results_snapshot().items())
         if isinstance(rows, list)
     ]
+    identity = ambient()
     meta = {
-        'workflow_name': str(execution_state.get('workflow_name') or ''),
+        'workflow_name': str(identity.get('workflow_name') or ''),
         'run_id': str(execution_state.get('run_id') or ''),
         'status': 'in-memory',
     }
@@ -101,6 +107,10 @@ def report_generate():
     if nodes is None:
         return jsonify({'ok': False, 'error': meta}), 404
     if not any(node['rows'] for node in nodes):
+        if not str(data.get('run_id') or '').strip() and run_is_foreign():
+            # The "last run in this process" belongs to another account; saying "nothing
+            # to report" would be true for THIS caller, but naming why is more useful.
+            return jsonify({'ok': False, 'error': t('api.foreignRun')}), 409
         return jsonify({'ok': False, 'error': t('api.reportNoData')}), 400
 
     conclusion = ''

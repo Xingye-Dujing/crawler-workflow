@@ -18,7 +18,7 @@ import pandas as pd
 from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
 from runtime import paths
-from runtime.state import add_log, execution_state, stop_requested
+from runtime.state import add_log, ambient, execution_state, stop_requested
 
 from crawlers import crawler_class, get_crawler
 from crawlers.backends.catbus import CatbusCrawler
@@ -163,7 +163,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # the same overwrite. A comments mode declares no window today, so only the record
     # stamp ever lands here.
     parts = name_parts(params, (ctx or {}).get('export_stamp') or '')
-    stem_base = safe_stem(f'{execution_state.get("workflow_name") or "comments"}-{nid}{parts}')
+    stem_base = safe_stem(f'{ambient().get("workflow_name") or "comments"}-{nid}{parts}')
 
     row_sink = cursor_sink = None
     resumed_index = 0

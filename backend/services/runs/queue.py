@@ -25,7 +25,7 @@ from collections.abc import Callable
 
 from runtime import account_context
 from runtime.account_context import Account
-from runtime.state import _RUN_QUEUE, QueueEntry, add_log
+from runtime.state import _RUN_QUEUE, QueueEntry, add_log, run_owner
 from runtime.stores import get_run_store
 
 from i18n import t
@@ -70,6 +70,16 @@ def _account_for(entry: QueueEntry):
     return Account(row['user_id'], row['username'], row['role'])
 
 
+def _console_is_for(entry: QueueEntry) -> bool:
+    """Whether a line about *entry* may be printed into the run console.
+
+    The console shows the run that owns the slot. A queue event for another account (it was
+    parked behind A's run, or dropped because its owner was deleted) must not put that
+    workflow's name on A's screen — the owner's own page learns it from its response/panel.
+    """
+    return str(entry.get('user_id') or '') == run_owner()
+
+
 def enqueue_run(data: dict, lang_header: str) -> dict:
     """Park a request until the running one finishes.
 
@@ -103,7 +113,8 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
     # ``wf.unnamed`` renders 「未命名工作流{i}」 with the WORKFLOW's index on the canvas;
     # this is a queue POSITION, and feeding one into the other printed 「已排队（第 2
     # 位）：未命名工作流2」 where the 2 happened to be the depth of the queue.
-    add_log(t('run.queued', name=name or t('run.queuedUnnamed'), at=position))
+    if _console_is_for(entry):
+        add_log(t('run.queued', name=name or t('run.queuedUnnamed'), at=position))
     mirror_queue()
     return {
         'status': 200,
@@ -238,7 +249,8 @@ def put_back(entry: QueueEntry) -> None:
     """
     with queue_lock:
         _RUN_QUEUE.insert(0, entry)
-        add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
+        if _console_is_for(entry):
+            add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
     mirror_queue()
 
 
@@ -269,24 +281,30 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
         if entry.get('user_id') and account is None:
             # The owner was deleted or disabled while this request waited. Its data tree may have
             # moved, so the request is dropped BY NAME instead of writing into a stranger's tree.
-            logger.warning(t('run.queueOwnerGone', name=name, user=str(entry.get('user_id') or '')))
+            # The line names a workflow; bind the (gone) owner so the console guard keeps it out
+            # of whoever's run happens to be on screen — the file log still records it.
+            with account_context.use(Account(str(entry.get('user_id') or ''), '')):
+                logger.warning(t('run.queueOwnerGone', name=name, user=str(entry.get('user_id') or '')))
             continue
         try:
             with account_context.use(account):
                 answer = start_run(entry['data'], entry['lang'])
         except Exception as e:  # a broken request must not strand the ones behind it
             logger.exception(t('run.queueStartFailed'))
-            add_log(t('run.queue_broken', name=name, err=e))
+            if _console_is_for(entry):
+                add_log(t('run.queue_broken', name=name, err=e))
             continue
         body = answer.get('body') or {}
         if answer.get('drop'):
             # Refused at the moment of starting in a way a retry can never fix — the
             # record a 继续 pointed at has been purged while it waited. Without this
             # the entry would be pushed back and refused again after every run.
-            add_log(t('run.queue_broken', name=name, err=body.get('error', '')))
+            if _console_is_for(entry):
+                add_log(t('run.queue_broken', name=name, err=body.get('error', '')))
             continue
         if answer.get('status') == 200 and body.get('ok') and not body.get('queued'):
-            add_log(t('run.queue_started', name=name, rid=body.get('run_id', '')))
+            if _console_is_for(entry):
+                add_log(t('run.queue_started', name=name, rid=body.get('run_id', '')))
             return
         # Someone else took the slot in between (a manual Run press): put the
         # request back at the front rather than drop what the user already asked for.

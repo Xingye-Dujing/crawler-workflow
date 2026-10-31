@@ -19,7 +19,7 @@ from core.refs import json_safe_records as _json_safe_records
 from core.refs import sanitize_filename
 from flask import Blueprint, jsonify
 from runtime import paths
-from runtime.state import _results_snapshot, execution_state
+from runtime.state import _results_snapshot, execution_state, run_is_foreign
 from runtime.stores import _load_dataset, get_run_store
 
 from api.http import _bad_body, _json_body, _safe_int
@@ -65,6 +65,9 @@ def _first_tabular_result():
     """Return (node_id, DataFrame) for the first node that produced a tabular
     result, or (None, None). Used as a fallback so the Chart Studio still gets
     data when the user picked a node that has not produced output yet."""
+    if run_is_foreign():
+        # The live results dict is process-wide; a foreign run's rows are not this caller's.
+        return None, None
     for node_id, result in _results_snapshot().items():
         if isinstance(result, list) and result:
             return node_id, pd.DataFrame(result)
@@ -180,7 +183,7 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
     if not node_id:
         return False, 0, SRC_NO_UPSTREAM, []
     run_id = str(payload.get('run_id') or '').strip()
-    if not run_id:
+    if not run_id and not run_is_foreign():
         result = execution_state['results'].get(node_id)
         if isinstance(result, list):
             rows = len(result)

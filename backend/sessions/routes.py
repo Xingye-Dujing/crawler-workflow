@@ -24,7 +24,7 @@ from api.http import _bad_body, _json_body, _safe_int
 from core.config import Config
 from core.refs import as_bool, flag_or_none
 from flask import Blueprint, jsonify
-from runtime import paths
+from runtime import account_context, paths
 from runtime.state import add_log, cookie_manager, execution_state
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
@@ -532,6 +532,10 @@ def delete_profile():
 _COOKIE_JOB_LOCK = threading.Lock()
 _COOKIE_JOB = {
     'active': False,
+    # Which account started the job. The browser is machine-wide (one display, one profile at a
+    # time), but the job's facts and the "Done — I logged in" button belong to its owner: another
+    # account may neither read its probe results nor answer/cancel it.
+    'owner': '',
     # Which single-flight action owns the browser: a login (waits for the user
     # to press Done) or a verification (runs to completion by itself). The panel
     # shows its "Done — I logged in" button only for the first.
@@ -551,7 +555,20 @@ _COOKIE_JOB = {
 }
 
 
-def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', lang: str = '', account: str = ''):
+def _owner_id() -> str:
+    """The caller's account id (``''`` = the local owner), spelled like ``_COOKIE_JOB['owner']``."""
+    account = account_context.current()
+    return account.user_id if account is not None else ''
+
+
+def _job_is_mine() -> bool:
+    """Whether the live cookie job was started by this caller (a job nobody owns is the local one)."""
+    return str(_COOKIE_JOB.get('owner') or '') == _owner_id()
+
+
+def _cookie_login_worker(
+    platform: str, wait_seconds: int, entry_url: str = '', lang: str = '', account: str = '', owner=None
+):
     """Drive one login window from the request thread to its own daemon.
 
     ``set_lang`` is the first thing it does: thread-locals are not inherited, so
@@ -575,6 +592,9 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
     """
     job = _COOKIE_JOB
     crawler = None
+    # A daemon starts with no account context; bind the job's owner so every path this worker
+    # resolves (cookie dir, profile dir, export dir) is that account's.
+    owner_token = account_context.bind(owner)
     set_lang(lang)
     try:
         # ``for_login`` is the point of this window: a human reads it. The crawler
@@ -653,6 +673,7 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
         _close_login_browser(crawler)
         with _COOKIE_JOB_LOCK:
             job['active'] = False
+        account_context.unbind(owner_token)
 
 
 @bp.route('/api/cookies/generate', methods=['POST'])
@@ -695,20 +716,32 @@ def generate_cookies():
 
     with _COOKIE_JOB_LOCK:
         if _COOKIE_JOB['active']:
+            mine = _job_is_mine()
             return (
                 jsonify(
                     {
                         'ok': False,
                         'busy': True,
-                        'platform': _COOKIE_JOB['platform'],
-                        'account': _COOKIE_JOB['account'],
-                        'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform']),
+                        # The browser is machine-wide, but whose platform/account the live job
+                        # belongs to is that caller's business, not ours.
+                        'platform': _COOKIE_JOB['platform'] if mine else '',
+                        'account': _COOKIE_JOB['account'] if mine else '',
+                        'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform'])
+                        if mine
+                        else t('api.cookieBusyOther'),
                     }
                 ),
                 409,
             )
         _COOKIE_JOB.update(
-            active=True, kind='login', platform=platform, account=account, phase='starting', error='', count=0
+            active=True,
+            owner=_owner_id(),
+            kind='login',
+            platform=platform,
+            account=account,
+            phase='starting',
+            error='',
+            count=0,
         )
         _COOKIE_JOB['entry'] = ''
         _COOKIE_JOB['facts'] = {}
@@ -716,7 +749,9 @@ def generate_cookies():
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
     threading.Thread(
-        target=_cookie_login_worker, args=(platform, wait_seconds, entry_url, get_lang(), account), daemon=True
+        target=_cookie_login_worker,
+        args=(platform, wait_seconds, entry_url, get_lang(), account, account_context.current()),
+        daemon=True,
     ).start()
     payload = {'ok': True, 'message': t('cookie.started'), 'entry': entry_url or ''}
     if entry_rejected:
@@ -730,18 +765,21 @@ def generate_cookies():
 
 @bp.route('/api/cookies/generate/status', methods=['GET'])
 def cookie_generate_status():
+    # Another account owning the machine-wide window is reported as an idle panel rather than
+    # its platform, phase, probe facts or console lines.
+    owned = not (_COOKIE_JOB['active'] and not _job_is_mine())
     return jsonify(
         {
             'ok': True,
-            'active': _COOKIE_JOB['active'],
-            'kind': _COOKIE_JOB['kind'],
-            'platform': _COOKIE_JOB['platform'],
-            'phase': _COOKIE_JOB['phase'],
-            'error': _COOKIE_JOB['error'],
-            'count': _COOKIE_JOB['count'],
-            'entry': _COOKIE_JOB['entry'],
-            'facts': _COOKIE_JOB['facts'],
-            'lines': _COOKIE_JOB['lines'],
+            'active': _COOKIE_JOB['active'] if owned else False,
+            'kind': _COOKIE_JOB['kind'] if owned else '',
+            'platform': _COOKIE_JOB['platform'] if owned else '',
+            'phase': _COOKIE_JOB['phase'] if owned else '',
+            'error': _COOKIE_JOB['error'] if owned else '',
+            'count': _COOKIE_JOB['count'] if owned else 0,
+            'entry': _COOKIE_JOB['entry'] if owned else '',
+            'facts': _COOKIE_JOB['facts'] if owned else {},
+            'lines': _COOKIE_JOB['lines'] if owned else [],
         }
     )
 
@@ -776,7 +814,7 @@ def _verify_lines(platform: str, facts: dict) -> list:
     return lines
 
 
-def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str = ''):
+def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str = '', owner=None):
     """Probe the stored cookie against the live site and report what it unlocks.
 
     Visible by design: this machine's risk control treats a headless content
@@ -791,6 +829,8 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
     """
     job = _COOKIE_JOB
     crawler = None
+    # Same reason as the login worker: the cookie file this probe reads is the owner's.
+    owner_token = account_context.bind(owner)
     set_lang(lang)
     try:
         # Whatever this probe sees is newer than anything the pre-run gate cached, so
@@ -833,6 +873,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         _close_login_browser(crawler)
         with _COOKIE_JOB_LOCK:
             job['active'] = False
+        account_context.unbind(owner_token)
 
 
 @bp.route('/api/cookies/verify', methods=['POST'])
@@ -860,27 +901,41 @@ def verify_cookies():
 
     with _COOKIE_JOB_LOCK:
         if _COOKIE_JOB['active']:
+            mine = _job_is_mine()
             return (
                 jsonify(
                     {
                         'ok': False,
                         'busy': True,
-                        'platform': _COOKIE_JOB['platform'],
-                        'account': _COOKIE_JOB['account'],
-                        'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform']),
+                        'platform': _COOKIE_JOB['platform'] if mine else '',
+                        'account': _COOKIE_JOB['account'] if mine else '',
+                        'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform'])
+                        if mine
+                        else t('api.cookieBusyOther'),
                     }
                 ),
                 409,
             )
         _COOKIE_JOB.update(
-            active=True, kind='verify', platform=platform, account=account, phase='verifying', error='', count=0
+            active=True,
+            owner=_owner_id(),
+            kind='verify',
+            platform=platform,
+            account=account,
+            phase='verifying',
+            error='',
+            count=0,
         )
         _COOKIE_JOB['entry'] = ''
         _COOKIE_JOB['facts'] = {}
         _COOKIE_JOB['lines'] = []
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
-    threading.Thread(target=_cookie_verify_worker, args=(platform, target, get_lang(), account), daemon=True).start()
+    threading.Thread(
+        target=_cookie_verify_worker,
+        args=(platform, target, get_lang(), account, account_context.current()),
+        daemon=True,
+    ).start()
     return jsonify({'ok': True, 'message': t('cookie.verifying')}), 202
 
 
@@ -888,7 +943,7 @@ def verify_cookies():
 def cookie_generate_confirm():
     """'I finished logging in' — capture and save the cookies now."""
     with _COOKIE_JOB_LOCK:
-        if not _COOKIE_JOB['active'] or _COOKIE_JOB['kind'] != 'login':
+        if not _COOKIE_JOB['active'] or _COOKIE_JOB['kind'] != 'login' or not _job_is_mine():
             return jsonify({'ok': False, 'error': t('api.noCookieJob')}), 400
         _COOKIE_JOB['confirm'].set()
     return jsonify({'ok': True})
@@ -897,7 +952,7 @@ def cookie_generate_confirm():
 @bp.route('/api/cookies/generate/cancel', methods=['POST'])
 def cookie_generate_cancel():
     with _COOKIE_JOB_LOCK:
-        if not _COOKIE_JOB['active'] or _COOKIE_JOB['kind'] != 'login':
+        if not _COOKIE_JOB['active'] or _COOKIE_JOB['kind'] != 'login' or not _job_is_mine():
             return jsonify({'ok': False, 'error': t('api.noCookieJob')}), 400
         _COOKIE_JOB['cancel'].set()
     return jsonify({'ok': True})

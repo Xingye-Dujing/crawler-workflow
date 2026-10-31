@@ -15,7 +15,7 @@ import os
 
 from core.refs import as_bool
 from runtime import paths
-from runtime.state import _completed_lock, add_log, execution_state
+from runtime.state import _completed_lock, add_log, ambient, execution_state
 
 from analyzers.llm_client import LLMClient
 from i18n import t
@@ -65,7 +65,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     if as_bool((node.get('params') or {}).get('live_export')):
         from services.ingest.parts import SnapshotWriter, safe_stem
 
-        stem = safe_stem(f'{execution_state.get("workflow_name") or "llm"}-{node_id}')
+        stem = safe_stem(f'{ambient().get("workflow_name") or "llm"}-{node_id}')
         lfmt = 'json' if str((node.get('params') or {}).get('format') or 'csv') == 'json' else 'csv'
         live_writer = SnapshotWriter(paths.active().export_dir, stem, lfmt)
         add_log(t('run.live_export', file=os.path.basename(live_writer.path)))

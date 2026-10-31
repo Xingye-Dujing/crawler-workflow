@@ -78,6 +78,29 @@ class TestOnlyAnAdminManagesAccounts:
         assert 'administrator' in alice.get('/api/accounts').get_json()['error']
         assert _post(alice, '/api/accounts', {'username': 'mallory', 'password': PASSWORD}).status_code == 403
 
+    def test_machine_settings_can_only_be_written_by_an_admin(self, admin_client):
+        """settings.json is machine-level (driver/browser paths, timeouts); a regular account may
+        read the page but must not rewrite what every account runs against."""
+        created = _create(admin_client, 'alice')
+        assert created.status_code == 201, created.get_json()
+        alice = _settle_password(_login(_new_client(admin_client), 'alice', PASSWORD))
+        refused = _post(alice, '/api/settings', {'settings': {'page_load_timeout': 5}})
+        assert refused.status_code == 403
+        assert 'administrator' in refused.get_json()['error']
+        allowed = _post(admin_client, '/api/settings', {'settings': {}})
+        assert allowed.status_code == 200, allowed.get_json()
+
+    def test_an_oversized_password_is_refused_like_a_wrong_one(self, admin_client):
+        anonymous = _new_client(admin_client)
+        page = anonymous.get('/login?lang=en').get_data(as_text=True)
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        refused = anonymous.post(
+            '/login',
+            data={'username': 'admin', 'password': 'x' * 5000, 'next': '/', 'csrf': token},
+        )
+        assert refused.status_code == 401
+        assert 'wrong username or password' in refused.get_data(as_text=True).lower()
+
     def test_the_signed_in_account_can_see_itself(self, admin_client):
         body = admin_client.get('/api/account/me').get_json()
         assert body['user']['username'] == 'admin'
@@ -136,6 +159,40 @@ class TestAccountLifecycle:
         assert not os.path.exists(source)
         assert os.path.isdir(removed.get_json()['user']['trashed_to'])
 
+    def test_delete_closes_the_accounts_stores_before_moving_the_tree(self, admin_client, monkeypatch):
+        """Windows refuses to rename a directory whose SQLite files are still open."""
+        from api import accounts as accounts_api
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        service = accounts_service.get_account_service()
+        events = []
+        original_delete = service.delete_user
+        monkeypatch.setattr(accounts_api.stores, 'release_user', lambda user_id: events.append(('release', user_id)))
+
+        def spy(*args, **kwargs):
+            events.append(('delete', args[1]))
+            return original_delete(*args, **kwargs)
+
+        monkeypatch.setattr(service, 'delete_user', spy)
+        response = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+        assert response.status_code == 200, response.get_json()
+        assert events[:2] == [('release', bob['user_id']), ('delete', bob['user_id'])]
+
+    def test_delete_refuses_while_that_accounts_cookie_window_is_open(self, admin_client):
+        """The account's Chrome profile is in use; moving its tree would fail (and strand it)."""
+        from sessions.routes import _COOKIE_JOB
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        previous = dict(_COOKIE_JOB)
+        _COOKIE_JOB.update(active=True, owner=bob['user_id'], kind='login', platform='zhihu')
+        try:
+            response = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+            assert response.status_code == 409
+            assert os.path.isdir(os.path.join(Config.DATA_DIR, 'users', bob['user_id']))
+        finally:
+            _COOKIE_JOB.clear()
+            _COOKIE_JOB.update(previous)
+
     def test_a_mutating_call_without_the_csrf_token_is_refused(self, admin_client):
         response = admin_client.post('/api/accounts', json={'username': 'alice', 'password': PASSWORD})
         assert response.status_code == 403
@@ -173,6 +230,80 @@ class TestDataIsIsolated:
 
 
 class TestAnotherAccountsRunIsNotYours:
+    def test_live_results_are_never_previewed_or_reported(self, admin_client):
+        execution_state['user_id'] = 'u_0123456789ab'
+        execution_state['running'] = True
+        execution_state['run_id'] = 'foreign-run'
+        execution_state['results'] = {'node-1': [{'text': 'someone else’s row'}]}
+        try:
+            preview = _post(admin_client, '/api/data/preview', {'node_id': 'node-1'})
+            body = preview.get_json()
+            assert preview.status_code == 400
+            assert body.get('code') == 'no_run_data', 'the live results leaked into a preview'
+            assert 'someone else' not in preview.get_data(as_text=True)
+            # A report with no run id means "the last run in this process" — that run is not ours.
+            report = _post(admin_client, '/api/report/generate', {})
+            assert report.status_code == 409
+            # ...and the live status names no record we do not own.
+            status = admin_client.get('/api/runs/status').get_json()
+            assert status['running'] is False
+            assert status['run_id'] == ''
+            assert status.get('foreign_run') is True
+        finally:
+            execution_state['user_id'] = ''
+            execution_state['running'] = False
+            execution_state['run_id'] = ''
+            execution_state['results'] = {}
+
+    def test_a_stopped_run_still_settling_keeps_its_account_alive(self):
+        """Stop clears ``running`` while the worker is still settling; disabling/deleting the
+        account then would close its stores under a live writer."""
+        from api.accounts import _busy_run
+
+        class _Alive:
+            def is_alive(self):
+                return True
+
+        execution_state['running'] = False
+        execution_state['thread'] = _Alive()
+        execution_state['user_id'] = 'u_0123456789ab'
+        execution_state['run_id'] = 'settling-run'
+        try:
+            assert _busy_run('u_0123456789ab') == 'settling-run'
+            assert _busy_run('u_bbbbbbbbbbbb') == ''
+        finally:
+            execution_state['thread'] = None
+            execution_state['user_id'] = ''
+            execution_state['run_id'] = ''
+
+    def test_another_accounts_cookie_job_is_invisible_and_not_answerable(self, admin_client):
+        from sessions.routes import _COOKIE_JOB
+
+        previous = dict(_COOKIE_JOB)
+        _COOKIE_JOB.update(
+            active=True,
+            owner='u_0123456789ab',
+            kind='verify',
+            platform='zhihu',
+            account='',
+            phase='verified',
+            error='',
+            count=3,
+            entry='https://www.zhihu.com/secret',
+            facts={'login_wall': False, 'url': 'https://www.zhihu.com/secret'},
+            lines=['someone else’s diagnosis'],
+        )
+        try:
+            body = admin_client.get('/api/cookies/generate/status').get_json()
+            assert body['active'] is False
+            assert body['platform'] == '' and body['facts'] == {} and body['lines'] == []
+            assert body['entry'] == ''
+            assert _post(admin_client, '/api/cookies/generate/confirm').status_code == 400
+            assert _post(admin_client, '/api/cookies/generate/cancel').status_code == 400
+        finally:
+            _COOKIE_JOB.clear()
+            _COOKIE_JOB.update(previous)
+
     def test_status_stop_processes_and_kill_refuse_a_foreign_run(self, admin_client):
         execution_state['user_id'] = 'u_0123456789ab'
         execution_state['running'] = True

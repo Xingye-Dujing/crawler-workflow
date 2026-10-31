@@ -37,7 +37,7 @@ import threading
 import time
 
 from core.config import Config
-from runtime import paths
+from runtime import account_context, paths
 from runtime.settings import get_setting
 
 from sessions.cookies import ACCOUNT_RE, CookieManager
@@ -180,9 +180,17 @@ def is_busy(path: str) -> bool:
 
 
 def root_dir() -> str:
-    """Where the per-platform directories live (settings can move it)."""
+    """Where the per-platform directories live (settings can move it).
+
+    A configured machine-level root gets one directory per account inside it: a Chrome profile
+    holds the login itself, so two accounts sharing ``<root>/zhihu/default`` would crawl as each
+    other. The local owner (no account bound) keeps the configured path exactly as before.
+    """
     configured = str(get_setting('browser_profile_dir') or '').strip()
-    return configured or paths.active().profile_dir
+    if not configured:
+        return paths.active().profile_dir
+    account = account_context.current()
+    return os.path.join(configured, account.user_id) if account is not None else configured
 
 
 def rename_account(platform: str, account: str, to: str) -> bool:
@@ -471,7 +479,15 @@ def _store_row_count(path: str, table: str) -> int:
 
 
 def template_dir() -> str:
-    return os.path.join(root_dir(), TEMPLATE_NAME)
+    """The pristine device directory.
+
+    A configured machine-level root keeps ONE template at its top (``<root>/_template``): the
+    template holds no login, and every account seeding from the same known-clean directory is
+    the feature. Without a configured root the account tree itself is the root, so the template
+    stays inside the signed-in account's own folder exactly as it did before.
+    """
+    configured = str(get_setting('browser_profile_dir') or '').strip()
+    return os.path.join(configured or paths.active().profile_dir, TEMPLATE_NAME)
 
 
 def template_exists() -> bool:

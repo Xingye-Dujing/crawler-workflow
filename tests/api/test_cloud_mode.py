@@ -172,16 +172,26 @@ class TestNoLocalModelOnASharedServer:
         listens on must never be what the user reads.
         """
         app_module.execution_state['results'] = {'node-1': [{'正文': '张先生在海边游泳'}]}
+        # An in-memory result set belongs to the account whose run produced it; the report route
+        # refuses another account's live rows, so this simulated run must name its owner.
+        admin = accounts_service.get_account_service().store.get_user_by_username('admin')
+        app_module.execution_state['user_id'] = admin['user_id']
+        try:
 
-        def never(self, prompt, max_retries=2):
-            raise AssertionError('a cloud boot must not dial a local daemon for a paragraph')
+            def never(self, prompt, max_retries=2):
+                raise AssertionError('a cloud boot must not dial a local daemon for a paragraph')
 
-        monkeypatch.setattr(LLMClient, 'chat', never)
-        response = client.post('/api/report/generate', json={'include_conclusion': True, 'llm': {'provider': 'ollama'}})
-        assert response.status_code == 200, response.get_json()
-        assert response.get_json()['ok'] is True
-        said = [line for line in app_module.execution_state['logs'] if 'ollama' in line.lower()]
-        assert len(said) == 1, f'the skipped transport was said {len(said)} times: {said}'
+            monkeypatch.setattr(LLMClient, 'chat', never)
+            response = client.post(
+                '/api/report/generate', json={'include_conclusion': True, 'llm': {'provider': 'ollama'}}
+            )
+            assert response.status_code == 200, response.get_json()
+            assert response.get_json()['ok'] is True
+            said = [line for line in app_module.execution_state['logs'] if 'ollama' in line.lower()]
+            assert len(said) == 1, f'the skipped transport was said {len(said)} times: {said}'
+        finally:
+            app_module.execution_state['user_id'] = ''
+            app_module.execution_state['results'] = {}
 
 
 class TestNoWindowToLogInto:

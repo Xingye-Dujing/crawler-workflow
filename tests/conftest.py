@@ -423,6 +423,11 @@ def clean_globals(request):
     ctx = sys.modules.get('runtime.account_context')
     if ctx is not None:
         ctx.clear()
+    # The canvas identity follows the bound account; a test that ran or loaded as a synthetic
+    # account must not leave that identity for the next test that reuses the same id.
+    run_state = sys.modules.get('runtime.state')
+    if run_state is not None:
+        run_state._AMBIENT.clear()
     # The pre-run cookie gate caches a verdict for a few minutes — deliberately, and
     # across threads. Left alone, one test's 「expired」 would answer the next test's
     # request without any probe having run in it, which is exactly the kind of

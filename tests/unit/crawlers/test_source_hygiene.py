@@ -92,10 +92,19 @@ class TestLoadWorkflowWritesStateOnce:
                     keys.append(sub.slice.value)
         return keys
 
-    def test_fingerprint_is_written_exactly_once(self, load_fn):
-        keys = self._state_keys_written(load_fn)
-        assert keys.count('fingerprint') == 1, keys
+    def _set_ambient_count(self, load_fn):
+        return sum(
+            1
+            for node in ast.walk(load_fn)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'set_ambient'
+        )
 
-    def test_workflow_name_is_written_exactly_once(self, load_fn):
+    def test_the_canvas_identity_is_stored_once_per_load(self, load_fn):
+        """The pair that used to be written twice now goes through the ACCOUNT-SCOPED setter.
+
+        A direct write here would re-key whichever account owns the process-wide fields; the
+        one call is what files this canvas under the caller's own identity.
+        """
         keys = self._state_keys_written(load_fn)
-        assert keys.count('workflow_name') == 1, keys
+        assert 'fingerprint' not in keys and 'workflow_name' not in keys, keys
+        assert self._set_ambient_count(load_fn) == 1, 'load_workflow must set the ambient identity exactly once'

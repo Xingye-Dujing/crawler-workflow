@@ -14,7 +14,7 @@ download must answer the same ``wf``/``level``/``q`` question, because the downl
 import logging
 
 from flask import Blueprint, Response, jsonify, request
-from runtime.state import execution_state, live_run_ids
+from runtime.state import execution_state, live_run_ids, run_is_foreign
 from runtime.stores import get_run_store
 
 from api.http import _bad_body, _json_body, _safe_int
@@ -134,6 +134,10 @@ def runs_list():
 def runs_status():
     """Live state of the run in flight (its id and how far it got), so a page
     reload mid-run can still offer to continue it afterwards."""
+    if run_is_foreign():
+        # The id belongs to another account's record; this page must not hold it, let alone
+        # offer to continue it. Same shape as an idle server plus the flag the panel reads.
+        return jsonify({'ok': True, 'running': False, 'run_id': '', 'resume': False, 'foreign_run': True})
     return jsonify(
         {
             'ok': True,

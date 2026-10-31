@@ -55,7 +55,7 @@
 | `same_platform_stagger` | 同平台错峰间隔（秒，默认 12，可填 0~600；0=不额外隔）。只对同时在跑的同平台采集生效，串行永远无缝 |
 | `ask_overseas_network` | 画布里有海外平台时，运行前先问一句「外网开了吗」（默认开） |
 | `use_browser_profile` | 是否为每个平台使用持久浏览器 Profile 目录（默认开；关闭=每次全新浏览器 + 种一份旧 Cookie 快照） |
-| `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`；填绝对路径可指向你自己为该工具建的目录 |
+| `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
 | `max_visible_browsers` / `max_headless_browsers` | 一次并行运行最多同时开几台浏览器，按本次是窗口 / 无头分别取（默认都取 `DEFAULT_MAX_WORKERS=4`；窗口比无头更费机器）。串行轮流，不受此限 |
 | `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；默认关，关掉时上一轮的行留到下次轮询覆盖，会看起来像继承了旧输出） |
 | `gentle_crawl` | 把采集的礼貌停顿按固定倍率拉长（只改节奏，不改指纹、不动页面到达预算；默认关）。刚被风控挑战过的会话宜退让，代价是墙钟时间变慢 |

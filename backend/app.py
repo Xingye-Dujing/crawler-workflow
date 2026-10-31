@@ -608,14 +608,24 @@ def start_background_services() -> None:
     # account, inside that account's context — a bare system-scope sweep would CREATE an empty
     # ``data/runs.db`` at the root and silently re-introduce the tree migration just moved away.
     if accounts_mode():
-        from runtime import account_context
+        from runtime import account_context, paths, stores
         from runtime.account_context import Account
 
         for row in get_account_service().store.list_users():
             if row['status'] != 'active':
                 continue
+            user_paths = paths.for_user(row['user_id'])
+            # Only accounts that already hold something need the sweep. Opening a store for
+            # every account would CREATE an empty runs.db for each one (the lazy design says
+            # they appear on first use), and keeping those connections open until shutdown is
+            # a leak that grows with the account count.
+            if not (os.path.isfile(user_paths.runs_db) or os.path.isfile(user_paths.datasets_db)):
+                continue
             with account_context.use(Account(row['user_id'], row['username'], row['role'])):
-                housekeep(force=True)
+                try:
+                    housekeep(force=True)
+                finally:
+                    stores.release_user(row['user_id'])
     else:
         housekeep(force=True)
     # A restart must not silently drop the requests the user already parked.

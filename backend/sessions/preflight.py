@@ -37,7 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import capabilities.registry as capabilities
 from core.config import Config
-from runtime import paths
+from runtime import account_context, paths
 
 from crawlers import crawler_class, is_crawlable
 from i18n import t
@@ -84,12 +84,16 @@ def invalidate(platform: str = None) -> None:
         if platform is None:
             _cache.clear()
         else:
-            for key in [k for k in _cache if k[0] == str(platform)]:
+            for key in [k for k in _cache if k[1] == str(platform)]:
                 _cache.pop(key, None)
 
 
 def _cache_key(platform: str, account: str = '') -> tuple:
     """The ONE key a verdict is stored under.
+
+    The scope comes first: two accounts can hold *different* sessions for the same platform and
+    the same account label, and a verdict is about one of those files. Keying by platform alone
+    let one account's 「已失效」 refuse the other's healthy run.
 
     ``entry_key``/``entry_of`` above already fold ``default`` onto the platform's own login,
     and :func:`entry_key`'s docstring names the cost of getting this wrong: two spellings of
@@ -98,7 +102,7 @@ def _cache_key(platform: str, account: str = '') -> tuple:
     preflight at Run read the blank one, so the 「已失效」 the user had just measured never
     blocked the run.
     """
-    return str(platform), CookieManager.path_segment(account)
+    return account_context.scope_key(), str(platform), CookieManager.path_segment(account)
 
 
 def cached(platform: str, account: str = '') -> dict | None:
@@ -468,9 +472,18 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
         return answers
     workers = max(1, min(len(pairs), int(Config.COOKIE_PREFLIGHT_MAX_PARALLEL)))
     pool = ThreadPoolExecutor(max_workers=workers)
+    # Each probe reads a cookie file and a profile through ``paths.active()``; a pool thread
+    # starts with no account context, so the scope has to travel with the work explicitly.
+    # Without this every probe read the checkout-level ``data/cookies`` instead of the caller's.
+    owner = account_context.current()
+
+    def _probe_scoped(platform: str, account: str, backend: str) -> dict:
+        with account_context.use(owner):
+            return probe(platform, use_profile=use_profile, fresh=fresh, account=account, backend=backend)
+
     try:
         futures = {
-            pool.submit(probe, platform, use_profile=use_profile, fresh=fresh, account=account, backend=backend): (
+            pool.submit(_probe_scoped, platform, account, backend): (
                 platform,
                 account,
                 backend,

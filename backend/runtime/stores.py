@@ -24,7 +24,7 @@ import pandas as pd
 from core.config import Config
 
 from runtime import account_context, paths
-from runtime.state import _dataset_cache, dataset_cache_key
+from runtime.state import _dataset_cache, dataset_cache_key, forget_ambient
 from services.analysis.lexicon_store import LexiconStore
 from services.biblio.store import BiblioStore
 from services.datasets.store import SOURCE_UPLOAD, DatasetStore
@@ -136,6 +136,7 @@ def release_user(user_id: str) -> None:
         slot.close()
     for key in [key for key in _dataset_cache if key[0] == str(user_id or '')]:
         _dataset_cache.pop(key, None)
+    forget_ambient(user_id)
 
 
 def user_slots() -> dict:

@@ -117,6 +117,10 @@ class AccountService:
     def __init__(self, store: AccountsStore = None):
         self._store = store
         self._store_lock = threading.Lock()
+        # Serialises the check-then-write admin rules (last active admin, username uniqueness).
+        # The store's lock covers one statement; these rules span a read and a write, and two
+        # administrators acting at the same moment used to be able to disable each other.
+        self._write_lock = threading.RLock()
 
     @property
     def store(self) -> AccountsStore:
@@ -158,9 +162,17 @@ class AccountService:
         now = time.time()
         ip = str(ip or '')
         name = str(username or '').strip()
+        password_text = str(password or '')
         if _throttle.blocked(ip):
             self._audit(EVENT_LOGIN_FAIL, username=name, ip=ip, detail='ip-throttled', now=now)
             raise AccountError('accounts.tooManyAttempts')
+        if len(password_text) > security.MAX_PASSWORD_LENGTH:
+            # A multi-megabyte "password" still costs a scrypt run if handed to the verifier.
+            # It can never be a valid credential, so refuse it at the same rate as a wrong one.
+            security.burn_unknown_password('')
+            _throttle.record(ip)
+            self._audit(EVENT_LOGIN_FAIL, username=name, ip=ip, detail='oversized-password', now=now)
+            raise AccountError('auth.badCredentials')
         row = self.store.get_user_by_username(name)
         if row is None:
             security.burn_unknown_password(password)
@@ -278,14 +290,17 @@ class AccountService:
         return [self.public(row) for row in self.store.list_users()]
 
     def create_user(self, actor, username, password, role: str = 'user') -> dict:
-        self._require_admin(actor)
-        if role not in ROLES:
-            raise AccountError('accounts.roleInvalid')
-        name = security.validate_username(username)
-        security.validate_password(password, name)
-        if self.store.get_user_by_username(name) is not None:
-            raise AccountError('accounts.usernameTaken', user=name)
-        account = self._create(name, password, role, must_change_password=True, event=EVENT_ACCOUNT_CREATE, actor=actor)
+        with self._write_lock:
+            self._require_admin(actor)
+            if role not in ROLES:
+                raise AccountError('accounts.roleInvalid')
+            name = security.validate_username(username)
+            security.validate_password(password, name)
+            if self.store.get_user_by_username(name) is not None:
+                raise AccountError('accounts.usernameTaken', user=name)
+            account = self._create(
+                name, password, role, must_change_password=True, event=EVENT_ACCOUNT_CREATE, actor=actor
+            )
         return account
 
     def reset_password(self, actor, user_id: str, password, must_change: bool = True) -> dict:
@@ -309,32 +324,33 @@ class AccountService:
         return self.public(self.store.get_user(row['user_id']))
 
     def set_status(self, actor, user_id: str, status: str) -> dict:
-        self._require_admin(actor)
         if status not in STATUSES:
             raise AccountError('accounts.statusInvalid')
-        row = self.store.get_user(user_id)
-        if row is None:
-            raise AccountError('accounts.notFound')
-        if status == 'disabled':
-            if row['user_id'] == actor.user_id:
-                raise AccountError('accounts.cannotDisableSelf')
-            if (
-                row['role'] == 'admin'
-                and row['status'] == 'active'
-                and self.store.count_active_admins(excluding=row['user_id']) == 0
-            ):
-                raise AccountError('accounts.lastAdmin')
-        now = time.time()
-        self.store.set_status(row['user_id'], status, now)
-        if status == 'disabled':
-            self.store.revoke_user_sessions(row['user_id'], now)
-        self._audit(
-            EVENT_ACCOUNT_ENABLE if status == 'active' else EVENT_ACCOUNT_DISABLE,
-            user_id=row['user_id'],
-            username=row['username'],
-            actor=actor,
-        )
-        return self.public(self.store.get_user(row['user_id']))
+        with self._write_lock:
+            self._require_admin(actor)
+            row = self.store.get_user(user_id)
+            if row is None:
+                raise AccountError('accounts.notFound')
+            if status == 'disabled':
+                if row['user_id'] == actor.user_id:
+                    raise AccountError('accounts.cannotDisableSelf')
+                if (
+                    row['role'] == 'admin'
+                    and row['status'] == 'active'
+                    and self.store.count_active_admins(excluding=row['user_id']) == 0
+                ):
+                    raise AccountError('accounts.lastAdmin')
+            now = time.time()
+            self.store.set_status(row['user_id'], status, now)
+            if status == 'disabled':
+                self.store.revoke_user_sessions(row['user_id'], now)
+            self._audit(
+                EVENT_ACCOUNT_ENABLE if status == 'active' else EVENT_ACCOUNT_DISABLE,
+                user_id=row['user_id'],
+                username=row['username'],
+                actor=actor,
+            )
+        return self.public(self.store.get_user(user_id))
 
     def force_logout(self, actor, user_id: str) -> dict:
         self._require_admin(actor)
@@ -351,23 +367,26 @@ class AccountService:
         Deletion never destroys crawl results in place: the tree is moved, the audit rows stay,
         and an operator can recover or purge it deliberately.
         """
-        self._require_admin(actor)
-        row = self.store.get_user(user_id)
-        if row is None:
-            raise AccountError('accounts.notFound')
-        if row['user_id'] == actor.user_id:
-            raise AccountError('accounts.cannotDeleteSelf')
-        if str(confirm_username or '').strip().lower() != str(row['username']).lower():
-            raise AccountError('accounts.confirmMismatch')
-        if (
-            row['role'] == 'admin'
-            and row['status'] == 'active'
-            and self.store.count_active_admins(excluding=row['user_id']) == 0
-        ):
-            raise AccountError('accounts.lastAdmin')
-        trashed = self.trash_data(row['user_id'])
-        self.store.delete_user(row['user_id'])
-        self._audit(EVENT_ACCOUNT_DELETE, user_id=row['user_id'], username=row['username'], actor=actor, detail=trashed)
+        with self._write_lock:
+            self._require_admin(actor)
+            row = self.store.get_user(user_id)
+            if row is None:
+                raise AccountError('accounts.notFound')
+            if row['user_id'] == actor.user_id:
+                raise AccountError('accounts.cannotDeleteSelf')
+            if str(confirm_username or '').strip().lower() != str(row['username']).lower():
+                raise AccountError('accounts.confirmMismatch')
+            if (
+                row['role'] == 'admin'
+                and row['status'] == 'active'
+                and self.store.count_active_admins(excluding=row['user_id']) == 0
+            ):
+                raise AccountError('accounts.lastAdmin')
+            trashed = self.trash_data(row['user_id'])
+            self.store.delete_user(row['user_id'])
+            self._audit(
+                EVENT_ACCOUNT_DELETE, user_id=row['user_id'], username=row['username'], actor=actor, detail=trashed
+            )
         result = self.public(row)
         result['trashed_to'] = trashed
         return result
@@ -448,18 +467,28 @@ class AccountService:
         entry_name = username or (actor.username if actor is not None else '')
         if actor is not None and user_id and actor.user_id != user_id:
             detail = (detail + ' ' if detail else '') + f'by={actor.username}'
+        # A login refusal carries whatever the form said; an oversized or newline-laden value
+        # must not become a multi-megabyte audit row or forge extra lines in a viewer.
         self.store.audit(
             event=event,
-            user_id=entry_user,
-            username=entry_name,
-            ip=ip,
-            detail=detail,
+            user_id=str(entry_user or '')[:64],
+            username=str(entry_name or '')[:64],
+            ip=str(ip or '')[:64],
+            detail=str(detail or '')[:300],
             now=now if now is not None else time.time(),
         )
 
-    @staticmethod
-    def _require_admin(actor) -> None:
+    def _require_admin(self, actor) -> None:
+        """The actor must still BE an enabled administrator in the registry.
+
+        The role on a bound session is a snapshot. Re-reading it inside (or just before) the
+        write is what stops two administrators disabling each other at the same moment — the
+        second one's bound identity was revoked a millisecond earlier.
+        """
         if actor is None or not getattr(actor, 'is_admin', False):
+            raise AccountError('accounts.adminRequired')
+        row = self.store.get_user(getattr(actor, 'user_id', ''))
+        if row is None or row['role'] != 'admin' or row['status'] != 'active':
             raise AccountError('accounts.adminRequired')
 
 

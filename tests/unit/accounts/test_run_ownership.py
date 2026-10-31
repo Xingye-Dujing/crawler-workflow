@@ -1,5 +1,7 @@
 """Who owns the one run slot: its context, its queue entries, and its scheduled fires."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import pytest
@@ -7,6 +9,7 @@ from runtime import account_context, state
 from runtime.account_context import Account
 from scheduling import clock
 
+from engine import run as run_engine
 from services.runs import queue
 
 ALICE = Account('u_aaaaaaaaaaaa', 'alice', 'user')
@@ -96,3 +99,50 @@ def test_the_clock_reads_each_accounts_schedule_in_its_own_context(monkeypatch):
         clock.set_run_starter(None)
     assert fired, 'the clock saw no due task'
     assert seen == [ALICE.user_id, BOB.user_id]
+
+
+def test_the_run_console_does_not_take_another_accounts_lines():
+    """The console belongs to the run slot's owner; a request from another account must not
+    print into it (or through its durable sink)."""
+    saved = (
+        list(state.execution_state['logs']),
+        state.execution_state['_log_total'],
+        dict(state.execution_state['_wf_logs']),
+        state.execution_state['user_id'],
+    )
+    try:
+        state.execution_state['logs'] = []
+        state.execution_state['_log_total'] = 0
+        state.execution_state['_wf_logs'] = {}
+        state.execution_state['user_id'] = BOB.user_id
+        with account_context.use(ALICE):
+            state.add_log('alice must not write Bob’s console')
+        assert state.execution_state['logs'] == []
+        with account_context.use(BOB):
+            state.add_log('bob’s own line')
+        assert any('bob’s own line' in line for line in state.execution_state['logs'])
+    finally:
+        state.execution_state['logs'] = saved[0]
+        state.execution_state['_log_total'] = saved[1]
+        state.execution_state['_wf_logs'] = saved[2]
+        state.execution_state['user_id'] = saved[3]
+
+
+def test_a_parallel_workflow_thread_runs_as_the_runs_owner(monkeypatch):
+    """A pool thread starts with no ContextVar — the wrapper binds the run's account, so its
+    exports and run store do not fall back to the checkout-level tree."""
+    seen = []
+
+    def fake_single(_engine, _idx, _ctx, _headless):
+        seen.append(account_context.scope_key())
+        return {}
+
+    monkeypatch.setattr(run_engine, '_run_single_workflow', fake_single)
+    previous_lang = state.execution_state.get('lang')
+    state.execution_state['lang'] = 'en'
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(run_engine._run_workflow_wrapper, object(), 0, {}, True, {}, threading.Lock(), ALICE).result()
+    finally:
+        state.execution_state['lang'] = previous_lang
+    assert seen == [ALICE.user_id]

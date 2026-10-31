@@ -9,10 +9,6 @@ that, and it is deliberately run *before* the moves start.
 One exclusion, a fact rather than an exemption: **deleted one-off probes** (`backend/test_*.py`), archived
 outside the repo on purpose — the docs cite them as the provenance of a number, not as code that should exist.
 
-`docs/archive/` is **not** scanned: it holds completed process records (the refactor ledger), and a path
-inside it may name a file that has since moved or been deleted. That is history, not a stale rule — see
-`docs/archive/README.md`.
-
 Anything else that goes missing is a regression, so a fabricated path is proven to be caught.
 """
 
@@ -130,14 +126,6 @@ class TestTheDocsPointAtRealFiles:
     def test_a_deleted_probe_stays_a_legal_citation(self):
         """The probe scripts were archived outside the repo; docs naming them record provenance."""
         assert unresolved('measured by `backend/test_weibo_recipe.py` on 2026-09-27', 'crawler_notes.md') == []
-
-    def test_the_archive_is_not_scanned_and_that_is_deliberate(self):
-        """Completed process records keep their old paths on purpose; scanning them would force a
-        rewrite of history every time a file moves. The corpus is checked so a future `glob('**/*.md')`
-        change cannot quietly pull the archive in."""
-        archived = sorted((REPO / 'docs' / 'archive').glob('*.md'))
-        assert archived, 'the archive directory vanished — README points at it'
-        assert all(path.parent.name != 'archive' for path in _doc_files()), 'the archive joined the scan'
 
     def test_an_excused_citation_is_still_a_citation(self):
         """A ledger nobody checks becomes a hiding place: an entry whose file is no longer cited

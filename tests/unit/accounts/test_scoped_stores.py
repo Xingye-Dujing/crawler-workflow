@@ -8,6 +8,8 @@ from core.config import Config
 from runtime import account_context, paths, state, stores
 from runtime.account_context import Account
 
+from services.workflows.manager import WorkflowManager
+
 
 @pytest.fixture
 def two_accounts(tmp_path, monkeypatch):
@@ -72,3 +74,55 @@ def test_release_user_forgets_the_slot(two_accounts):
     assert alice.user_id in stores.user_slots()
     stores.release_user(alice.user_id)
     assert alice.user_id not in stores.user_slots()
+
+
+def test_a_bare_workflow_manager_follows_the_bound_account(two_accounts):
+    """``WorkflowManager()`` is constructed bare by the schedules picker, project bundles and
+    provenance readers — it must resolve the caller's folder, not the checkout-level one."""
+    alice, bob = two_accounts
+    with account_context.use(alice):
+        assert WorkflowManager().workflow_dir == paths.for_user(alice.user_id).workflow_dir
+    with account_context.use(bob):
+        assert WorkflowManager().workflow_dir == paths.for_user(bob.user_id).workflow_dir
+    # The local owner keeps the legacy location.
+    assert WorkflowManager().workflow_dir == paths.system().workflow_dir
+
+
+def test_a_configured_profile_root_is_nested_per_account(two_accounts, monkeypatch, tmp_path):
+    """A Chrome profile IS the login; ``browser_profile_dir`` is only the root, so two accounts
+    must never share ``<root>/zhihu/default``."""
+    from sessions import profiles
+
+    alice, bob = two_accounts
+    root = str(tmp_path / 'profiles')
+    monkeypatch.setattr(profiles, 'get_setting', lambda key: root)
+    with account_context.use(alice):
+        assert profiles.root_dir() == os.path.join(root, alice.user_id)
+    with account_context.use(bob):
+        assert profiles.root_dir() == os.path.join(root, bob.user_id)
+    assert profiles.root_dir() == root, 'the local owner keeps the configured path unchanged'
+
+
+def test_the_canvas_identity_is_scoped_per_account(two_accounts):
+    alice, bob = two_accounts
+    state.execution_state['workflow_name'] = ''
+    state.execution_state['fingerprint'] = ''
+    with account_context.use(alice):
+        state.set_ambient('alice-wf', 'fp-a')
+        assert state.ambient() == {'workflow_name': 'alice-wf', 'fingerprint': 'fp-a'}
+    with account_context.use(bob):
+        assert state.ambient() == {}, 'Bob must not inherit the canvas Alice opened'
+        state.set_ambient('bob-wf', 'fp-b')
+    with account_context.use(alice):
+        assert state.ambient()['workflow_name'] == 'alice-wf'
+    # The local owner still reads the legacy globals (every single-user test depends on it).
+    previous = (state.execution_state['workflow_name'], state.execution_state['fingerprint'])
+    try:
+        state.set_ambient('owner-wf', 'fp-owner')
+        assert state.execution_state['workflow_name'] == 'owner-wf'
+        assert state.ambient() == {'workflow_name': 'owner-wf', 'fingerprint': 'fp-owner'}
+    finally:
+        state.execution_state['workflow_name'], state.execution_state['fingerprint'] = previous
+    state.forget_ambient(alice.user_id)
+    with account_context.use(alice):
+        assert state.ambient() == {}

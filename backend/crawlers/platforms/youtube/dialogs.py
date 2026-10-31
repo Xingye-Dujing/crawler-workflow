@@ -1,7 +1,7 @@
 """YouTube's EU consent sheet: 「在我们继续之前」, accepted — it blocks everything behind it.
 
-Declared here because the sheet is a property of the site. Nothing mounts it yet (D9 in
-docs/archive/refactor_plan_2026-10.md; wiring it changes real-site behaviour and needs its own live evidence).
+Declared here because the sheet is a property of the site. Nothing mounts it yet (a known gap recorded by
+the 2026-10 refactor; wiring it changes real-site behaviour and needs its own live evidence).
 """
 
 from crawlers.engine.popup import Prompt

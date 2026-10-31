@@ -60,8 +60,8 @@ treat `pytest -q` as the source of truth since the case count is parametrized. F
 hence `CRAWLER_REQUIRE_NODE=1`, which aborts the session instead). See `AGENTS.md` for the
 "nothing skipped" closure gate.
 
-The roadmap that produced this tree lives in [`archive/refactor_plan_2026-10.md`](archive/refactor_plan_2026-10.md)
-(the audit, target tree, layering rules, stage order, definition of done; completed 2026-10-29). This file
+The roadmap that produced this tree (the 2026-10 audit, target tree, layering rules, stage order and
+definition of done; completed 2026-10-29) was a temporary process record and has been removed. This file
 describes only **what is there today**.
 
 ## Refactor constraint that shapes every move (finding E)

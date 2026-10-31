@@ -10,7 +10,10 @@ so this cluster splits out cleanly. Paths unchanged; app-level ``before_request`
 from flask import Blueprint, jsonify
 from runtime.settings import all_settings, save_settings
 
+from api.auth import is_admin
 from api.http import _bad_body, _json_body
+from i18n import t
+from services.accounts.service import accounts_mode
 
 bp = Blueprint('settings', __name__)
 
@@ -22,6 +25,10 @@ def get_runtime_settings():
 
 @bp.route('/api/settings', methods=['POST'])
 def set_runtime_settings():
+    if accounts_mode() and not is_admin():
+        # ``settings.json`` is machine-level (driver/browser paths, timeouts, Ollama address), so
+        # on an accounts host only the administrator may rewrite what every account runs against.
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
     data = _json_body()
     if data is None:
         return _bad_body()

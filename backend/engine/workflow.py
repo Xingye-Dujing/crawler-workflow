@@ -85,9 +85,9 @@ def effective_workflow(workflow: dict) -> dict:
 
 #: The node-type sets come from the node catalogue (``nodes/catalog.py``): one declaration per type,
 #: with its row shape and console quietness. The executor table in ``app.py`` is pinned against the
-#: same catalogue by a contract test, so a type cannot be half-registered. See
-#: ``docs/archive/refactor_plan_2026-10.md`` for the plugin architecture (archived when the
-#: refactor completed; the tree it describes is what ``nodes/catalog.py`` declares today).
+#: same catalogue by a contract test, so a type cannot be half-registered. The plugin architecture
+#: was designed by the 2026-10 refactor (its process ledger has since been removed; the tree it
+#: describes is what ``nodes/catalog.py`` declares today).
 #
 # ``TABLE_NODE_TYPES`` is re-exported from the import above (the module-level names are kept because
 # tests and the executor read them), and so are ``PDF_SOURCE_NODE_TYPES`` and ``NODE_TYPES``.

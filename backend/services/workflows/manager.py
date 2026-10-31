@@ -2,8 +2,8 @@ import json
 import logging
 import os
 
-from core.config import Config
 from core.refs import sanitize_filename
+from runtime import paths
 
 from i18n import t
 
@@ -20,7 +20,10 @@ class WorkflowManager:
     DEFAULT_NAME = 'untitled'
 
     def __init__(self, workflow_dir: str = None):
-        self.workflow_dir = workflow_dir or Config.WORKFLOW_DIR
+        # Resolved at construction, not import: a bare ``WorkflowManager()`` (the schedules
+        # picker, project export/import, provenance reads) must see the signed-in account's
+        # canvas folder, not the checkout-level one. Callers that name a directory are unchanged.
+        self.workflow_dir = workflow_dir or paths.active().workflow_dir
         os.makedirs(self.workflow_dir, exist_ok=True)
 
     def clean_name(self, name: str) -> str:

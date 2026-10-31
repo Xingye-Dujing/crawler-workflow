@@ -167,7 +167,6 @@ crawler_workflow/
 | 文件 | 里面是什么 |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、大文件的耦合约束、接缝规则 |
-| [`docs/archive/refactor_plan_2026-10.md`](docs/archive/refactor_plan_2026-10.md) | **已归档**：2026-10 全项目结构审计与重构总纲（缺陷分类、目标目录树、分层规则、阶段账本与完成定义；重构已完成）。现行结构看上一行 |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | `workflow.js` 的**逐模块拆分方案** |
 | [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限 |
 | [`docs/analysis.md`](docs/analysis.md) | AI 分析 · 数据处理 · 可视化 的完整细节 |

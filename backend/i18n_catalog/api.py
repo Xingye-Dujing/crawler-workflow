@@ -31,6 +31,7 @@ ZH = {
     'api.compilePdfNoFont': 'LaTeX 找不到字体 {font}：{remedy}',
     'api.compilePdfNoPackage': 'LaTeX 缺宏包 {package}.sty：{remedy}',
     'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
+    'api.cookieBusyOther': '另一个账号正在使用登录窗口，请稍后再试',
     'api.cookieRenameBadName': '新名字不合法：字母、数字、下划线或连字符，1-24 个（统一按小写保存）',
     'api.cookieRenameBusy': '这个账号的浏览器正在被占用，请等当前采集结束后再改名',
     'api.cookieRenameDefault': '默认账号不能改名：它的浏览器目录就是该平台目录本身，其它账号都装在里面',
@@ -205,6 +206,7 @@ EN = {
     'api.compilePdfNoFont': 'LaTeX cannot find the font {font}: {remedy}',
     'api.compilePdfNoPackage': 'LaTeX is missing the package {package}.sty: {remedy}',
     'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',
+    'api.cookieBusyOther': 'Another account is using the login window; try again later',
     'api.cookieRenameBadName': (
         'Invalid new name: letters, digits, _ and -, 1-24 of them (case does not make a second '
         'account — names are stored lowercase)'

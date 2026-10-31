@@ -20,7 +20,7 @@ from api.http import _safe_int
 from core.config import Config
 from core.refs import as_bool, comment_platforms, split_urls
 from runtime import gate, paths
-from runtime.state import _wf_local, add_log, execution_state, stop_requested
+from runtime.state import _wf_local, add_log, ambient, execution_state, stop_requested
 
 from crawlers import get_crawler, is_crawlable
 from crawlers.backends.catbus import CatbusCrawler
@@ -378,7 +378,7 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         if part_size > 0:
             from services.ingest.parts import PartWriter, safe_stem
 
-            stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}{parts}')
+            stem = safe_stem(f'{ambient().get("workflow_name") or platform}-src-{nid}{parts}')
             # Record each shard as it lands (so an interrupted run's parts are still attributed
             # to the record) — but only when 「保留分片」 is on: with keep_parts off the writer
             # deletes them the moment the merge succeeds, so there is nothing for 智能清除 to find.

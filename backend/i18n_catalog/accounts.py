@@ -10,6 +10,7 @@ ZH = {
         '还没有任何账号：cloud 模式首次启动必须设置 CRAWLER_ADMIN_PASSWORD'
         '（旧变量 CRAWLER_AUTH_PASSWORD 仍可用）来创建初始管理员'
     ),
+    'accounts.cookieJobBusy': '这个账号还有进行中的登录/验证窗口，请先完成或取消后再删除',
     'accounts.cannotDeleteSelf': '不能删除当前登录的账号',
     'accounts.cannotDisableSelf': '不能禁用当前登录的账号',
     'accounts.confirmMismatch': '确认用户名不一致，没有做任何修改',
@@ -43,6 +44,9 @@ EN = {
     'accounts.bootstrapNeeded': (
         'There are no accounts yet: the first cloud boot must set CRAWLER_ADMIN_PASSWORD'
         ' (the old CRAWLER_AUTH_PASSWORD still works) to create the initial administrator'
+    ),
+    'accounts.cookieJobBusy': (
+        'This account still has a login/verify window open; finish or cancel it before deleting'
     ),
     'accounts.cannotDeleteSelf': 'You cannot delete the account you are signed in with',
     'accounts.cannotDisableSelf': 'You cannot disable the account you are signed in with',

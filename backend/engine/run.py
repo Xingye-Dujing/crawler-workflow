@@ -49,9 +49,11 @@ from runtime.state import (
     _results_snapshot,
     _wf_local,
     add_log,
+    ambient,
     execute_lock,
     execution_state,
     reset_console_state,
+    set_ambient,
     set_log_sink,
     stop_requested,
 )
@@ -428,7 +430,7 @@ def _wf_display_name(wf_engine, wf_idx: int) -> str:
     named = component_name(wf_engine)
     if named:
         return named
-    fallback = str(execution_state.get('workflow_name') or '').strip() or t('wf.unnamed', i=wf_idx + 1)
+    fallback = str(ambient().get('workflow_name') or '').strip() or t('wf.unnamed', i=wf_idx + 1)
     return (
         t('wf.component_indexed', name=fallback, i=wf_idx + 1, n=execution_state.get('wf_count') or 1)
         if (execution_state.get('wf_count') or 1) > 1
@@ -684,7 +686,11 @@ def _component_run(
     )
 
 
-def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock):
+def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock, account=None):
+    # Pool threads inherit neither the starter's thread-local nor the account context. Binding
+    # the run's own account here is what keeps a parallel workflow's exports, run store, cookie
+    # directory and previews inside that account instead of falling back to the system scope.
+    account_token = account_context.bind(account)
     # Pool threads do not inherit the starter's thread-local.
     set_lang(execution_state.get('lang'))
     try:
@@ -704,6 +710,7 @@ def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock
         # teardown included — under that one workflow's tab.
         _wf_local.idx = None
         _wf_local.name = ''
+        account_context.unbind(account_token)
 
 
 def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None):
@@ -900,7 +907,7 @@ def _run_worker(workflow, mode, headless, use_profile, run_id, resume_run_id, wo
 
             pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
             futures = [
-                pool.submit(_run_workflow_wrapper, se, i, ctx, headless, all_results, wf_lock)
+                pool.submit(_run_workflow_wrapper, se, i, ctx, headless, all_results, wf_lock, account)
                 for i, se in enumerate(sub_engines)
             ]
             # Wait for all to finish (respecting stop)
@@ -1193,9 +1200,9 @@ def begin_run(data: dict, lang_header: str) -> dict:
             execution_state['skipped_workflow_labels'] = [lab for lab in full_labels if lab not in labels]
             # Recorded so a preview can find this workflow's rows in the store once the
             # live results are gone (a refresh, a restart) rather than guessing from a
-            # node id alone — "node-2" exists in every workflow.
-            execution_state['workflow_name'] = workflow_name
-            execution_state['fingerprint'] = workflow_fingerprint(effective)
+            # node id alone — "node-2" exists in every workflow. The identity is the
+            # caller's own: another account's canvas must never re-key this run.
+            set_ambient(workflow_name, workflow_fingerprint(effective))
 
             # AI transport chosen in the settings panel: 'ollama' (local daemon) or
             # 'openrouter' (API). The key only ever lives in the browser's

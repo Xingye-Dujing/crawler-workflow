@@ -23,9 +23,11 @@ from runtime.state import (
     LOG_KEEP,
     _completed_lock,
     _results_snapshot,
+    ambient,
     execute_lock,
     execution_state,
     run_is_foreign,
+    set_ambient,
 )
 from runtime.stores import (
     _apply_dataset_meta,
@@ -228,8 +230,9 @@ def load_workflow():
     # Reconnect the nodes with their files *before* the canvas draws them, so
     # the workflow it returns is the runnable one.
     datasets = _restore_workflow_datasets(name, workflow)
-    execution_state['workflow_name'] = str(workflow.get('name') or name or '')
-    execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
+    # The identity is this caller's own: the same field names, scoped per account, so a second
+    # account opening a canvas cannot re-key the run another one is still writing.
+    set_ambient(str(workflow.get('name') or name or ''), workflow_fingerprint(effective_workflow(workflow)))
     return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
 
 
@@ -255,7 +258,7 @@ def rename_workflow():
         return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
     if old == new:
         return jsonify({'ok': False, 'error': t('api.workflowNameSame')}), 400
-    if execution_state['running'] and not run_is_foreign() and str(execution_state.get('workflow_name') or '') == old:
+    if execution_state['running'] and not run_is_foreign() and str(ambient().get('workflow_name') or '') == old:
         # Renaming the canvas that is mid-run would re-key the record it is
         # writing; the panel refuses first, this holds the line regardless.
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409

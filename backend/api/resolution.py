@@ -11,7 +11,7 @@ nothing here reads an ``app``-only global, and there are no monkeypatch seams on
 
 import pandas as pd
 from flask import jsonify
-from runtime.state import execution_state
+from runtime.state import ambient, execution_state, run_is_foreign
 from runtime.stores import _load_dataset, get_run_store
 
 from i18n import t
@@ -73,11 +73,12 @@ def _durable_node_rows(node_id: str, workflow_name: str = '', run_id: str = '') 
         if not parts or parts == [requested]:
             return []
         return store.latest_rows(node_id, workflow_name=requested, workflow_names=parts)[1]
-    fingerprint = execution_state.get('fingerprint') or ''
-    ambient = execution_state.get('workflow_name') or ''
-    if not fingerprint and not ambient:
+    identity = ambient()
+    fingerprint = identity.get('fingerprint') or ''
+    ambient_name = identity.get('workflow_name') or ''
+    if not fingerprint and not ambient_name:
         return []
-    return store.latest_rows(node_id, fingerprint=fingerprint, workflow_name=ambient)[1]
+    return store.latest_rows(node_id, fingerprint=fingerprint, workflow_name=ambient_name)[1]
 
 
 def _resolve_dataframe(payload: dict) -> pd.DataFrame:
@@ -101,7 +102,10 @@ def _resolve_dataframe(payload: dict) -> pd.DataFrame:
             if get_run_store().get_run(run_id) is None:
                 raise KeyError(t('api.runNotFound', rid=run_id))
         else:
-            result = execution_state['results'].get(node_id)
+            # Live rows belong to the account that owns the run in flight. Another account's
+            # node ids repeat on every canvas (``node-2``), so answering here would serve
+            # someone else's table under this caller's node name.
+            result = None if run_is_foreign() else execution_state['results'].get(node_id)
             if isinstance(result, list):
                 return pd.DataFrame(result)
         # Nothing live (or a pinned run): use the rows this node filed away, which

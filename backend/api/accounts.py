@@ -9,6 +9,7 @@ manages accounts, not other people's datasets.
 from flask import Blueprint, jsonify, request
 from runtime import stores
 from runtime.state import _RUN_QUEUE, execution_state
+from sessions.routes import _COOKIE_JOB
 
 from api.auth import current_sid, current_user
 from api.http import _bad_body, _json_body
@@ -25,6 +26,7 @@ _STATUS = {
     'accounts.cannotDisableSelf': 409,
     'accounts.cannotDeleteSelf': 409,
     'accounts.accountBusy': 409,
+    'accounts.cookieJobBusy': 409,
     'accounts.usernameTaken': 409,
     'accounts.tooManyAttempts': 429,
 }
@@ -36,12 +38,16 @@ def _fail(exc: AccountError):
 
 
 def _busy_run(user_id: str) -> str:
-    """The run id this account owns right now (in flight or parked), or ``''``.
+    """The run id this account owns right now (in flight, settling or parked), or ``''``.
 
     A run's worker writes through the account's stores; deleting or disabling that account while
-    it is alive would pull the database out from under it.
+    it is alive would pull the database out from under it. ``running`` goes false the moment Stop
+    is pressed, but the worker keeps settling for tens of seconds — the thread is therefore part
+    of the liveness test, exactly as ``begin_run`` asks it.
     """
-    if execution_state.get('running') and str(execution_state.get('user_id') or '') == str(user_id):
+    thread = execution_state.get('thread')
+    live = bool(execution_state.get('running') or (thread is not None and thread.is_alive()))
+    if live and str(execution_state.get('user_id') or '') == str(user_id):
         return str(execution_state.get('run_id') or 'current')
     for entry in list(_RUN_QUEUE):
         if str(entry.get('user_id') or '') == str(user_id):
@@ -49,10 +55,14 @@ def _busy_run(user_id: str) -> str:
     return ''
 
 
-def _guard_idle(user_id: str) -> None:
+def _guard_idle(user_id: str, *, cookie_job: bool = False) -> None:
     busy = _busy_run(user_id)
     if busy:
         raise AccountError('accounts.accountBusy', run=busy)
+    # A login/verify window holds that account's Chrome profile. Moving the tree under a live
+    # browser fails on Windows (the profile files are open) and strands the capture.
+    if cookie_job and _COOKIE_JOB.get('active') and str(_COOKIE_JOB.get('owner') or '') == str(user_id):
+        raise AccountError('accounts.cookieJobBusy')
 
 
 @bp.route('/api/account/me', methods=['GET'])
@@ -172,15 +182,20 @@ def accounts_delete(user_id: str):
     if payload is None:
         return _bad_body()
     try:
-        _guard_idle(user_id)
+        _guard_idle(user_id, cookie_job=True)
+        # Close this account's SQLite handles BEFORE the tree is moved. Windows refuses to
+        # rename a directory that still holds an open database (and its -wal/-shm), so a
+        # delete that released them afterwards could fail on exactly the platform this tool
+        # is developed on. Releasing first is harmless: a refused delete reopens lazily.
+        stores.release_user(user_id)
         user = get_account_service().delete_user(
             current_user(),
             user_id,
             str(payload.get('confirm_username') or ''),
         )
     except AccountError as exc:
+        stores.release_user(user_id)
         return _fail(exc)
-    stores.release_user(user_id)
     return jsonify({'ok': True, 'user': user})
 
 

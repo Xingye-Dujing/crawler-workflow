@@ -6,10 +6,10 @@ Read the matching section before rewriting, doubting, or "simplifying away" a ru
 a broken feature, a silently-skipped green tier, a blank page). **Grep by the bolded rule title** — the same anchor
 `AGENTS.md` uses; every bolded title survives on purpose.
 
-Dedup with the other docs: the refactor **ledger** is `docs/archive/refactor_plan_2026-10.md` (archived when
-the refactor completed); **crawler imperatives** live only in
-`docs/crawler_rules.md` (linked, never copied here). A whole-project refactor (Stages 0–11) is complete; this file
-records why each rule exists, not the migration narration.
+Dedup with the other docs: **crawler imperatives** live only in
+`docs/crawler_rules.md` (linked, never copied here). A whole-project refactor (Stages 0–11) is complete; its
+process ledger was a temporary archive and has been removed, so this file records why each rule exists, not the
+migration narration.
 
 ## Commands / deps — why the model-degradation rules exist
 
@@ -939,7 +939,23 @@ the evidence here.
 - **A worker thread inherits no identity.** `begin_run` records the claimant in `execution_state['user_id']` and passes
   the account to `_run_worker`, which binds it before opening stores; the queue drain binds each entry's owner and the
   scheduler reads each account's `schedules.json` inside that account's context. Without this the run's `runs.db`,
-  exports and cookies land in the local owner's tree while the panel says the account ran.
+  exports and cookies land in the local owner's tree while the panel says the account ran. **Every thread a run or a
+  request starts is part of this rule:** the parallel-workflow pool, `preflight.check()`'s probe pool and the two
+  cookie-job workers bind the caller's account explicitly — a fresh thread starts with no `ContextVar`, and the first
+  audit found all three opening the checkout-level `data/` tree.
+- **The console and the canvas identity belong to the account that owns the slot.** `execution_state['logs']` is
+  process-wide, so `_push_log` drops a line whose bound caller is not the run owner, and queue narration is printed
+  only for that owner. `workflow_name`/`fingerprint` moved to `state.set_ambient()`/`ambient()` (`_AMBIENT[user_id]`):
+  a second account loading a canvas used to re-key the first account's in-flight run, and a preview without a
+  `workflow_name` could read the other account's last canvas. Live `execution_state['results']` is likewise served
+  only when `run_is_foreign()` is false — `resolution`/Chart-Studio/report are the customers.
+- **A bare `WorkflowManager()` resolves the caller's folder.** The schedules picker, project bundles and the
+  provenance readers construct it without an argument; defaulting to `Config.WORKFLOW_DIR` sent every account to the
+  checkout-level canvas folder (one account could schedule, export, or quote another's saved workflow). Its default is
+  now `paths.active().workflow_dir`; the per-account stores still pass an explicit directory.
+- **A custom `browser_profile_dir` is a machine-level ROOT, not one shared device.** A Chrome profile holds the login,
+  so under a configured root each account lives in `<root>/<user_id>/`, while the login-free `_template` stays once at
+  `<root>/_template` (the cloud seeding path expects exactly that shared template).
 - **The queue mirror must not be one file for everyone.** Mirroring the whole in-memory queue through the active
   account's store both leaked another account's workflow names and restored them under the wrong owner; the mirror is
   now written per owner, and an entry whose account was deleted/disabled is dropped by name at drain time.

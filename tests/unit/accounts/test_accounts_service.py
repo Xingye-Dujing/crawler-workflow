@@ -1,6 +1,7 @@
 """The account registry's rules: bootstrap, login, sessions, lockout and administration."""
 
 import os
+import threading
 import time
 
 import pytest
@@ -162,6 +163,38 @@ def test_the_last_active_admin_cannot_be_disabled_or_deleted(service):
     with pytest.raises(AccountError) as exc:
         service.delete_user(actor, admin.user_id, 'admin')
     assert exc.value.key == 'accounts.cannotDeleteSelf'
+
+
+def test_two_admins_cannot_disable_each_other_at_the_same_moment(service):
+    """The last-admin rule is a check-then-write; the write lock plus a fresh actor check keeps
+    two simultaneous requests from leaving the registry with no enabled administrator."""
+    _bootstrap(service)
+    first = _admin(service)
+    second_row = service.create_user(first, 'root2', PASSWORD, role='admin')
+    second = service.authenticate('root2', PASSWORD).account
+    barrier = threading.Barrier(2)
+    answers = []
+
+    def act(actor, target):
+        barrier.wait()
+        try:
+            service.set_status(actor, target, 'disabled')
+        except AccountError as exc:
+            answers.append(exc.key)
+        else:
+            answers.append('ok')
+
+    threads = [
+        threading.Thread(target=act, args=(first, second_row['user_id'])),
+        threading.Thread(target=act, args=(second, first.user_id)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(5)
+    assert answers.count('ok') == 1, answers
+    assert answers.count('accounts.adminRequired') == 1, answers
+    assert service.store.count_active_admins() == 1
 
 
 def test_delete_moves_the_tree_to_the_trash(service):

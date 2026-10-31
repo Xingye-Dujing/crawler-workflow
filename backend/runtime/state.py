@@ -19,7 +19,7 @@ import time
 
 from sessions.cookies import CookieManager
 
-from runtime import paths
+from runtime import account_context, paths
 from services.runs.history import ExecutionHistoryService
 
 #: 执行历史 service: one process-wide instance whose DATABASE follows the signed-in account
@@ -136,9 +136,7 @@ _dataset_cache: dict = {}
 
 def dataset_cache_key(dataset_id) -> tuple:
     """The one spelling of a cache key: which scope, which content id."""
-    from runtime.account_context import scope_key
-
-    return (scope_key(), str(dataset_id))
+    return (account_context.scope_key(), str(dataset_id))
 
 
 def drop_cached_dataset(dataset_id) -> None:
@@ -192,13 +190,55 @@ def run_owner() -> str:
     return str(execution_state.get('user_id') or '')
 
 
+# ─── Ambient canvas identity (which workflow this caller last opened/ran) ───
+#
+# ``workflow_name`` and ``fingerprint`` used to be one pair in ``execution_state``. That is a
+# process-wide answer, and on a multi-account host it is the WRONG answer: account B opening a
+# canvas would re-key account A's in-flight run, and A's "preview with no name" would read
+# whatever B last loaded. The pair therefore follows the bound account; the local owner (no
+# account context) keeps the legacy globals so every existing test and single-user install sees
+# exactly the old value.
+
+#: ``{user_id: {'workflow_name': …, 'fingerprint': …}}`` — never the username (it can change).
+_AMBIENT: dict[str, dict] = {}
+
+
+def set_ambient(workflow_name, fingerprint: str = '') -> None:
+    """Record which canvas this caller is holding (the run start and a saved-canvas load)."""
+
+    name = str(workflow_name or '')
+    fp = str(fingerprint or '')
+    account = account_context.current()
+    if account is None:
+        execution_state['workflow_name'] = name
+        execution_state['fingerprint'] = fp
+        return
+    _AMBIENT[account.user_id] = {'workflow_name': name, 'fingerprint': fp}
+
+
+def ambient() -> dict:
+    """The canvas identity the CURRENT caller may use for unnamed previews/reports."""
+
+    account = account_context.current()
+    if account is not None:
+        return dict(_AMBIENT.get(account.user_id) or {})
+    return {
+        'workflow_name': str(execution_state.get('workflow_name') or ''),
+        'fingerprint': str(execution_state.get('fingerprint') or ''),
+    }
+
+
+def forget_ambient(user_id: str) -> None:
+    """Drop one account's canvas identity (account deletion / store release)."""
+    _AMBIENT.pop(str(user_id or ''), None)
+
+
 def run_is_foreign() -> bool:
     """Whether the run in flight belongs to another account than the caller.
 
     A finished run keeps its owner until the next claim; that is deliberate — the console a
     user comes back to is their own, and an account that never ran anything must see idle.
     """
-    from runtime import account_context
 
     account = account_context.current()
     return (account.user_id if account is not None else '') != run_owner()
@@ -265,7 +305,6 @@ LOG_KEEP = 5000
 
 def _push_log(line: str, wf_idx: int = None, level: str = None):
     """Append one console line, keeping the buffer bounded.
-
     ``_log_total`` counts every line ever produced, not the number retained: the
     status endpoint ships only the tail, so without a running total the browser
     cannot work out the delta and the console silently freezes at 200 lines.
@@ -285,6 +324,15 @@ def _push_log(line: str, wf_idx: int = None, level: str = None):
     idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
     parts = [part for part in line.splitlines() if part.strip()]
     if not parts:
+        return
+    # The console belongs to the account that owns the slot. A request from another account
+    # (a cookie save, a report, a refusal) must not print into — or write through the durable
+    # sink of — a run that is not its own. Callers with no identity are run/queue/scheduler
+    # internals and keep writing; the queue guards its own foreign entries by owner.
+
+    caller = account_context.current()
+    owner = str(execution_state.get('user_id') or '')
+    if caller is not None and owner and owner != caller.user_id:
         return
     # _completed_lock now guards every reader of the console buffers (status
     # endpoint snapshots them), so the writers hold it too.
