@@ -21,12 +21,21 @@ _CST = timezone(timedelta(hours=8))
 
 
 def _stamp(value) -> str:
-    """Unix seconds → the platform's Beijing-time datetime; blank when absent."""
+    """Unix seconds → the platform's Beijing-time datetime; blank when absent or unusable."""
     try:
         seconds = int(value or 0)
     except (TypeError, ValueError):
         return ''
-    return datetime.fromtimestamp(seconds, tz=_CST).strftime('%Y-%m-%d %H:%M:%S') if seconds else ''
+    if seconds <= 0:
+        # Zero is "absent"; a negative stamp would render as a 1970 reading that never happened.
+        return ''
+    try:
+        # See ``commenting.protocol._stamp``: a millisecond stamp raises ``OSError`` and an
+        # out-of-range one ``OverflowError`` — neither is the ``ValueError`` the parse guard
+        # was written for, so both used to escape a row builder and fail the whole node.
+        return datetime.fromtimestamp(seconds, tz=_CST).strftime('%Y-%m-%d %H:%M:%S')
+    except (OSError, OverflowError, ValueError):
+        return ''
 
 
 def _as_int(value) -> int:

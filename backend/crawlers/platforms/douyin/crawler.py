@@ -13,7 +13,7 @@ from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import PageNotArrivedError
 from crawlers.core.video import VideoCrawler
 from crawlers.engine import feed
-from crawlers.engine.counters import parse_count
+from crawlers.engine.counters import has_count, parse_count
 from crawlers.platforms.douyin import dialogs, rows
 from crawlers.platforms.douyin.overlay import DouyinOverlayMixin
 from i18n import t
@@ -547,7 +547,11 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
         with contextlib.suppress(Exception):
             element = self.driver.find_element('css selector', self.WORK_COUNT)
             text = str(self._node_text(element) or '').strip()
-        return parse_count(text) if text else -1
+        # "No element" is not the only way the count can be missing: the label can render
+        # as 作品 / 暂无作品, or the digits can sit in an un-rendered child. ``parse_count``
+        # answers 0 for any text without a number, and 0 is a *claim* — the empty-grid path
+        # below then files 「作者没发过作品」 as a licensed end. A digit is the admission test.
+        return parse_count(text) if has_count(text) else -1
 
     def _scroll_profile(self) -> bool:
         """Take the grid's own scroller to its bottom and wait for the next batch.

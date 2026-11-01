@@ -236,7 +236,13 @@ class TestTheWalk:
         assert crawler.collected() == 1
         assert crawler.walk_counts.get('refused') == 1
         assert crawler.end_reason == UNDER_TARGET
-        assert crawler.position == {}
+        # The cursor DOES move past this page, and that is the fix, not an oversight: a row
+        # without an export key can never be exported, so re-walking the page would re-pay
+        # for it and still drop it. Counting it in ``rows_expected`` used to make
+        # ``selected >= rows_expected`` false forever, which pinned 继续 to page 1 and
+        # re-exported the whole batch on every run. The refusal is still convicted (above)
+        # and the shortfall is still named (UNDER_TARGET).
+        assert crawler.position == {'page': 1, 'done': 1}
 
     def test_a_stuck_next_page_does_not_license_the_short_table(self, monkeypatch):
         crawler = _bare(monkeypatch)

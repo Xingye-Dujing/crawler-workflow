@@ -107,7 +107,10 @@ def to_int(value, default: int = 0) -> int:
         return int(value)
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # ``int(float('inf'))`` is the third one, and it is reachable: ``json.loads`` turns
+        # ``Infinity`` / ``1e999`` into a float inf, so a dirty counter field became a
+        # crash inside a row builder instead of the fallback this function promises.
         # ``"1.2万"`` arrives as a string far too often for a caller to pre-parse.
         parsed = parse_count(value)
         return parsed if parsed else default

@@ -147,7 +147,11 @@ class WechatCrawler(Crawler):
         user wanted (did this one come through?) could not be found.
         """
         logger.debug(t('crawl.wechat.navigating'))
-        self.driver.get(url)
+        # ``open(judge=False)``: the timeout is absorbed here (a still-building document is
+        # not a refusal) and the dialog is dismissed, while the arrival verdict stays with
+        # this method's own ``#activity-name`` poll below. A bare ``driver.get`` threw the
+        # timeout out of the caller's loop, so one slow link ended the whole batch.
+        self.open(url, judge=False)
 
         logger.debug(t('crawl.wechat.wait_title'))
         try:

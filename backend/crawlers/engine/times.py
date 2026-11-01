@@ -30,7 +30,12 @@ Read the two precisions apart, they are not the same claim:
 """
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+#: The zone every one of these sites displays in. Pinned rather than inherited from the
+#: host: the same module answers 「3小时前」 on a developer's UTC+8 laptop and on a UTC
+#: container, and those two must not produce stamps eight hours apart.
+_CST = timezone(timedelta(hours=8))
 
 #: The one absolute shape these APIs emit, as ``strptime`` directives.
 #: ``%a``/``%b`` are matched against the process's ``LC_TIME`` catalogue, and nothing in this program
@@ -102,7 +107,12 @@ def relative_to_absolute(value, now: datetime = None, fmt: str = READABLE) -> st
     text = str(value or '').strip()
     if not text:
         return ''
-    moment = now or datetime.now()
+    # A site's relative wording is relative to BEIJING wall clock, not to the clock of
+    # whatever machine the crawler happens to run on. ``datetime.now()`` here made every
+    # 「3小时前」 land eight hours off under a UTC container, while the absolute forms
+    # (``commenting.protocol``/``core.video``) already pinned +08:00. A caller that passes
+    # ``now`` keeps it — that is how the tests drive this — and is responsible for its zone.
+    moment = now or datetime.now(_CST)
     if _CN_NOW.match(text):
         return moment.replace(second=0, microsecond=0).strftime(fmt)
     day = _CN_DAY.match(text)
@@ -151,7 +161,14 @@ def absolute(value, now: datetime = None, fmt: str = READABLE) -> str:
     found = CJK_ABSOLUTE.search(text)
     if found:
         year, month, day, hour, minute = found.groups()
-        return datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0)).strftime(fmt)
+        # The pattern admits 1–2 digits per field, so ``2025年00月00日``, ``2024年02月30日``
+        # and ``24:00`` all match. ``datetime()`` raises on those, and the caller (a row
+        # builder with no handler) used to lose the whole node to one bad cell. The
+        # contract here is "unrecognised comes back unchanged", so answer that.
+        try:
+            return datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0)).strftime(fmt)
+        except ValueError:
+            return text
     relative = relative_to_absolute(text, now=now, fmt=fmt)
     return relative or text
 

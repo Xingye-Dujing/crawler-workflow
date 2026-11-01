@@ -954,3 +954,43 @@ class TestEngineAndIdentity:
             'https://weibo.com/1/abc',
         )
         assert item_key(rows[0]) != item_key(rows[1])
+
+
+class TestTheCountsWrittenIntoTheRow:
+    """Numbers a reader trusts without checking: 楼层 and 点赞数.
+
+    Both were silently wrong in ways no shape check could see — a repeated floor is still
+    an int, and ``1.2万`` read as 1 is still plausible — so they are pinned here.
+    """
+
+    def test_xhs_floor_continues_across_scroll_rounds(self):
+        first = xhs_comments.parse_xhs_comments(
+            [('u', '甲', '第一屏', '3小时前', 0), ('u', '乙', '第一屏', '3小时前', 0)]
+        )
+        second = xhs_comments.parse_xhs_comments([('u', '丙', '第二屏', '3小时前', 0)], floor=len(first))
+        assert [row['楼层'] for row in first + second] == [1, 2, 3]
+
+    def test_xhs_like_count_honours_the_ten_thousand_unit(self):
+        class _Session:
+            def safe_text(self, element):
+                return element.text
+
+        class _Root:
+            def __init__(self, text):
+                self._text = text
+
+            def find_elements(self, _by, _selector):
+                return [El(self._text)]
+
+        assert xhs_comments._first_number(_Session(), _Root('1.2万'), '.like .count') == 12000
+        assert xhs_comments._first_number(_Session(), _Root('3,204'), '.like .count') == 3204
+        assert xhs_comments._first_number(_Session(), _Root('赞'), '.like .count') == 0
+
+    def test_a_millisecond_stamp_is_blank_not_a_crash(self):
+        """13-digit stamps answer ``OSError``, which the old ``except ValueError`` missed."""
+        from crawlers.commenting.protocol import _stamp
+
+        assert _stamp(1700000000000) == ''
+        assert _stamp(-1) == ''
+        assert _stamp(10**20) == ''
+        assert _stamp(1700000000) == '2023-11-15 06:13:20'

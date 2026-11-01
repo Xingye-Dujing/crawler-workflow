@@ -1,17 +1,22 @@
 """xiaohongshu comments: the DOM-walker tuple adapter and the panel walk that feeds it."""
 
 import contextlib
-import re
 
 from crawlers.commenting.protocol import BLOCKED, OK
 from crawlers.commenting.walks import register
 from crawlers.engine import times
+from crawlers.engine.counters import parse_count
 from crawlers.engine.wall import looks_blocked
 from i18n import t
 
 
-def parse_xhs_comments(items) -> list:
-    """Takes [(author, text, date, likes)] tuples scraped by the DOM walker."""
+def parse_xhs_comments(items, floor: int = 0) -> list:
+    """Takes [(author, text, date, likes)] tuples scraped by the DOM walker.
+
+    ``floor`` is how many rows the panel already yielded: the walk reads the panel in
+    screens, and numbering each screen from 1 gave the second screen the same 楼层 as
+    the first (a table with two rows numbered 1 belongs to no honest reading).
+    """
     return [
         {
             '平台': 'xiaohongshu',
@@ -24,7 +29,7 @@ def parse_xhs_comments(items) -> list:
             # silently loses every recent comment. Unrecognised text is kept as it came.
             '评论时间': times.absolute(date),
             '点赞数': likes,
-            '楼层': idx,
+            '楼层': floor + idx,
         }
         for idx, (url, author, text, date, likes) in enumerate(items, 1)
     ]
@@ -58,7 +63,7 @@ def walk(session, url: str, limit: int) -> tuple:
                 continue
             seen.add(key)
             found.append((url, author, text, date, likes))
-        rows.extend(parse_xhs_comments(found))
+        rows.extend(parse_xhs_comments(found, floor=len(rows)))
         if session.may_stop() or not found or (limit and len(rows) >= limit):
             break
         _scroll_panel(session)
@@ -80,9 +85,14 @@ def _first_text(session, root, selector) -> str:
 
 
 def _first_number(session, root, selector) -> int:
-    text = _first_text(session, root, selector)
-    m = re.search(r'\d+', text or '')
-    return int(m.group()) if m else 0
+    """A rendered counter cell → int, honouring 万/亿/K/M.
+
+    ``re.search(r'\\d+')`` read ``1.2万`` as **1**: a four-orders-of-magnitude error on
+    exactly the comments a summary quotes, and silent because 1 is a plausible count.
+    The shared parser already knows these units; the only thing to keep from the old
+    shape is that an unparseable cell stays 0 rather than raising.
+    """
+    return parse_count(_first_text(session, root, selector))
 
 
 def _scroll_panel(session):

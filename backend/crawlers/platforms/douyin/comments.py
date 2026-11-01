@@ -26,6 +26,9 @@ from i18n import stop_reason_label, t
 # name, the text itself, nor a number.
 _DOUYIN_WHEN_RE = re.compile(r'^(?:刚刚|\d+\s*(?:分钟|小时|天|周|月|年)前|\d{4}-\d{1,2}-\d{1,2})(?:·.+)?$')
 _DOUYIN_SUBS_RE = re.compile(r'展开\s*(\d+)\s*条回复')
+#: A cell that is nothing but a count: ``12`` / ``1.2万`` / ``1.2w`` / ``3,204`` / ``99+``.
+#: Anchored on purpose — a comment that merely mentions a number is not its like count.
+_BARE_COUNT_RE = re.compile(r'^\s*\d[\d,.]*\s*(?:万|亿|[wWkK])?\+?\s*$')
 
 
 def douyin_comment_fields(text: str) -> tuple:
@@ -58,8 +61,11 @@ def douyin_comment_fields(text: str) -> tuple:
         if match and not subs:
             subs = int(match.group(1))
             continue
-        if line.isdigit() and not likes:
-            likes = int(line)
+        # A like count is not always bare digits: past 10k the panel renders 1.2万 / 1.2w.
+        # ``isdigit()`` rejected those and the line was then ignored entirely, so the most
+        # liked comments — the ones a summary leans on — were filed as 0 likes.
+        if not likes and _BARE_COUNT_RE.match(line):
+            likes = parse_count(line)
     if anchor is not None:
         when, _, region = lines[anchor].partition('·')
         when, region = when.strip(), region.strip()

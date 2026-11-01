@@ -9,7 +9,7 @@ protocol, honors ``HTTPS_PROXY`` from its environment, and does not pin TLS beyo
 the Windows user root store (all three facts in ``docs/crawler_notes.md`` 红果短剧).
 So the player is the signer and this module only:
 
-1. starts ``mitmdump`` with :mod:`crawlers.harvest_addon` (narrow filter → JSONL),
+1. starts ``mitmdump`` with :mod:`crawlers.platforms.hongguo.addon` (narrow filter → JSONL),
 2. starts the player WITH the proxy env (refusing by name if an un-proxied player
    is already running — that window belongs to the user and is never killed),
 3. drives the player through UI Automation — the driver itself is
@@ -53,7 +53,7 @@ from i18n import t
 
 logger = logging.getLogger(__name__)
 
-_ADDON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'harvest_addon.py')
+_ADDON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'addon.py')
 #: The web detail page, rebuilt from a bare ``series_id`` so the title can be read from it
 #: (``crawlers.platforms.hongguo.crawler.BASE`` is the same host; the harvest does not import that crawler).
 _DETAIL_BASE = 'https://hongguoduanju.com/detail'

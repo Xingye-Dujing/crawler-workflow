@@ -102,13 +102,20 @@ class CnkiCrawler(Crawler):
 
         resume_page = max(1, as_index(resume.get('page'), 1))
         page = 1
-        if resume_page > 1 and not self._advance_to(resume_page):
-            # The pager could not be driven back to the stored page. Restart the
-            # walk instead of pretending the cursor was honoured: the ledger drops
-            # the overlap, so the cost is requests, never duplicate rows.
-            resume_page = 1
-        else:
-            page = resume_page
+        if resume_page > 1:
+            if self._advance_to(resume_page):
+                page = resume_page
+            else:
+                # ``_advance_to`` clicks 下一页 in a loop, so it can fail on the Nth click —
+                # the browser then sits on an UNKNOWN page while this counter would reset to
+                # 1. Re-open the search so the count and the browser agree: otherwise the
+                # cursor recorded at the end names a page or two behind what was read, and
+                # the next 继续 restarts further back for no reason.
+                if not self._open_search(keyword):
+                    raise PageNotArrivedError(
+                        t('crawl.cnki.noPage'), verdict=self.verdict(), gave_up=self.pending_waits
+                    )
+                page = 1
         # A selection can outlive a previous crawl in the same profile; every run
         # owns a clean batch before its first 全选.
         self._clear_selection()
@@ -152,7 +159,10 @@ class CnkiCrawler(Crawler):
             refused += max(0, (previous + len(ids)) - count)
             batch_selected = count
             batch_pages.append(page)
-            batch_rows += len(rows)
+            # Only rows that carry an export key can come back from the export; counting the
+            # un-keyable ones here made ``selected >= rows_expected`` false forever, so the
+            # cursor never advanced and 继续 re-exported the same pages every run.
+            batch_rows += len(ids)
             logger.info(t('crawl.cnki.selectPage', page=page, n=len(rows), selected=count))
             if target_count and batch_selected >= target_count:
                 break

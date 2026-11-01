@@ -61,7 +61,18 @@ def _stamp(value) -> str:
         seconds = int(value or 0)
     except (TypeError, ValueError):
         return ''
-    return datetime.fromtimestamp(seconds, tz=_CST).strftime('%Y-%m-%d %H:%M:%S') if seconds else ''
+    if seconds <= 0:
+        # Zero is the documented "absent", and a negative unix stamp in a comment cell is
+        # junk (a 1970-01-01 07:59 row is a fabricated reading, not a time).
+        return ''
+    try:
+        # The conversion is the part that raises: a 13-digit millisecond stamp (common on
+        # these APIs) answers ``OSError: [Errno 22]``, not ``ValueError``, and an out-of-range
+        # one answers ``OverflowError``. Guarding only ``int()`` let one dirty timestamp take
+        # down the whole source node from inside a row builder.
+        return datetime.fromtimestamp(seconds, tz=_CST).strftime('%Y-%m-%d %H:%M:%S')
+    except (OSError, OverflowError, ValueError):
+        return ''
 
 
 def _query_value(url: str, name: str) -> str:

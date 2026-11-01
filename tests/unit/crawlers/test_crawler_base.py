@@ -299,16 +299,40 @@ class TestNavigation:
 
 
 class TestStreamingPlumbing:
-    def test_a_broken_sink_keeps_the_row_and_the_crawl(self):
-        """Persistence is best-effort: the row still travels downstream."""
+    def test_a_broken_sink_costs_the_row_not_the_crawl(self):
+        """Persistence is best-effort for the WALK, but the row is not 'kept'.
+
+        ``kept`` drives the target count, ``collected()``, the watermark candidate and the
+        run's own report. Answering True for a row the sink refused made the table short by
+        a row nobody counted, and the cursor moved past it — so the next incremental run
+        could never come back for it.
+        """
         crawler = bare(PlantDriver())
 
         def hostile(_item):
             raise OSError('disk full')
 
         crawler.set_sink(hostile)
-        assert crawler.emit({'链接': 'u'}) is True
+        assert crawler.emit({'链接': 'u'}) is False
+        assert crawler.collected() == 0
+        assert crawler.sink_failures == 1
+
+    def test_the_crawl_continues_after_a_refused_row(self):
+        """The next row is still offered: one poisoned write is not a dead sink."""
+        crawler = bare(PlantDriver())
+        answers = iter([OSError('disk full'), True])
+
+        def flaky(_item):
+            answer = next(answers)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        crawler.set_sink(flaky)
+        assert crawler.emit({'链接': 'a'}) is False
+        assert crawler.emit({'链接': 'b'}) is True
         assert crawler.collected() == 1
+        assert crawler.sink_failures == 1
 
     def test_an_item_the_sink_already_had_is_not_counted_twice(self):
         crawler = bare(PlantDriver())
@@ -515,9 +539,12 @@ BARE_NAVIGATIONS = {
     'backend/crawlers/platforms/xiaohongshu/comments.py': 1,
     'backend/crawlers/platforms/youtube/comments.py': 1,
     'backend/crawlers/platforms/zhihu/comments.py': 1,
-    'backend/crawlers/platforms/wechat/crawler.py': 1,
-    'backend/crawlers/platforms/zhihu/crawler.py': 2,
 }
+# wechat and zhihu's article/search entries left this table on 2026-11-01: both drove a bare
+# ``driver.get``, so one page-load timeout escaped the caller's loop and ended the whole batch
+# (wechat stopped cold at the first slow link; zhihu's node failed with a traceback instead of
+# reporting 'this page did not arrive'). They call ``open`` now — wechat with ``judge=False``,
+# because it takes the arrival verdict from its own ``#activity-name`` poll.
 # weibo left this table on 2026-09-28: its search walk navigated through the bare
 # ``driver.get`` the redirect-facade docstring excuses ("wait for the bounce"), which also threw
 # away the settled-flag and the dialog dismissal. It now calls ``open(judge=False)`` — the flag is

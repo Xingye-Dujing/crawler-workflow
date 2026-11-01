@@ -265,7 +265,8 @@ ZH = {
     # ── 断点续跑与去重（爬虫侧） ──────────────────────────────
     'crawl.resume_have': '断点续跑：已采集 {n} 条，接着往下采而不是重来',
     'crawl.riskBlocked': '风控拦截：{platform} 的 {where} 返回了安全验证而非内容（会话未必失效，稍后重试）',
-    'crawl.sink_failed': '增量落盘失败（这条仍然在本次结果里，但可能没进库）：{err}',
+    'crawl.sink_failed': '增量落盘失败，这一行没有入库（已跳过，不计数；本次结果会少这一行）：{err}',
+    'crawl.cursor_failed': '断点位置没能保存（继续时会从更早的位置重放）：{err}',
     'crawl.stopReason.empty_page': '某一页是空的',
     'crawl.stopReason.end': '已到列表末尾',
     'crawl.stopReason.fetch_failed': '列表接口取数失败',
@@ -749,7 +750,8 @@ EN = {
     # ── resume and dedupe (crawler side) ────────────────────────
     'crawl.resume_have': 'Resuming: {n} item(s) already collected, continuing instead of starting over',
     'crawl.riskBlocked': 'Risk control: {platform} answered {where} with a security check instead of content',
-    'crawl.sink_failed': 'Incremental save failed (this row is still in the results, but may not be stored): {err}',
+    'crawl.sink_failed': 'Incremental save failed; this row did not reach the table (skipped, not counted): {err}',
+    'crawl.cursor_failed': 'The resume position could not be saved (继续 will replay from an earlier point): {err}',
     'crawl.stopReason.empty_page': 'a page came back empty',
     'crawl.stopReason.end': 'reached the end of the list',
     'crawl.stopReason.fetch_failed': 'the list request failed',

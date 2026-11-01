@@ -187,6 +187,11 @@ class Crawler(ABC):
         self._cursor_sink = None
         self._collected = []
         self._cursor = {}
+        #: Rows the sink REFUSED to store because it raised. A count, not a boolean:
+        #: the executor reads it to withhold the增量 watermark (a boundary recorded
+        #: from a row that never reached the table would make the next run skip the
+        #: gap for good) and to say in the console that the table is short.
+        self.sink_failures = 0
         #: A durable boundary from the last completed run of this source node. The
         #: per-run cursor is not it: a new run has a new id, so without this the
         #: walk starts at the top of the list again. Only platforms with a stable
@@ -250,10 +255,12 @@ class Crawler(ABC):
         self._profile_lock = browser.claim_profile(self.profile_dir, self._abort)
         try:
             self._create_driver()
-        except Exception:
+        except BaseException:
             # A browser that never came up must not leave the profile claimed: the
             # next run of this platform would wait out the timeout on a directory
-            # nobody is using.
+            # nobody is using. ``BaseException`` on purpose — ``CrawlerStopped`` is
+            # one, and a Stop landing while the driver was being built used to skip
+            # this release and leave the profile locked for the next run.
             self._release_profile()
             raise
 
@@ -319,10 +326,15 @@ class Crawler(ABC):
         try:
             kept = self._sink(item)
         except Exception as e:
-            # Persistence is best-effort: a broken sink must never abort the
-            # crawl, and the item still travels in this run's results.
-            logger.warning(t('crawl.sink_failed', err=e))
-            kept = True
+            # A broken sink must not abort the crawl (one poisoned row is not a
+            # reason to lose the rest), but it must not be counted as kept either.
+            # "kept" drives the target count, ``collected()``, the watermark
+            # candidate and the run's own report — claiming True here made the
+            # table short by a row nobody counted, and the boundary moved past
+            # that row so a later run could never come back for it.
+            self.sink_failures += 1
+            logger.error(t('crawl.sink_failed', err=e))
+            kept = False
         if kept:
             self._collected.append(item)
         return kept
@@ -366,8 +378,14 @@ class Crawler(ABC):
         rather than replacing it, so a caller only passes what changed."""
         self._cursor.update(position)
         if self._cursor_sink is not None:
-            with contextlib.suppress(Exception):
+            try:
                 self._cursor_sink(dict(self._cursor))
+            except Exception as e:
+                # Silently swallowing this left the in-memory cursor ahead of the
+                # stored one, so 继续 replayed a screen that looked already done
+                # with nothing anywhere saying why. Still non-fatal (the next
+                # position may well persist), but now visible.
+                logger.warning(t('crawl.cursor_failed', err=e))
 
     @property
     def position(self) -> dict:

@@ -55,6 +55,7 @@ def bare(driver, **attrs):
     crawler._watermark_candidate = ''
     crawler._sink = None
     crawler._cursor_sink = None
+    crawler.sink_failures = 0
     for key, value in attrs.items():
         setattr(crawler, key, value)
     return crawler

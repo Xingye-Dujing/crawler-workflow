@@ -121,11 +121,11 @@ def _assert_post_rows(rows, *, minimum: int, source: str = 'search') -> None:
 def _assert_comment_rows(rows, *, minimum: int) -> None:
     """Comment rows carry the columns the adapter writes, non-empty content, integer 点赞数.
 
-    Deliberately NOT a 楼层 monotonicity/uniqueness check here: the xhs comment walk re-enumerates
-    楼层 from 1 every scroll round (comments.py:274 calls ``parse_xhs_comments`` per round), so
-    repeated 楼层 is the current product shape, not an over-collect — cross-round comment ROWS are
-    de-duped by (评论者, 评论内容). That renumbering is logged as a candidate product gap (#6), not
-    asserted green or red by this flagship cell.
+    楼层 is asserted strictly here: the walk reads the panel a screen at a time and used to
+    re-enumerate each screen from 1, so a 40-comment note carried two rows numbered 1 (and the
+    downstream "top comment by floor" readings were meaningless). ``parse_xhs_comments`` now
+    takes the rows already read as ``floor``; a regression shows up as a repeated or skipped
+    number rather than as a silently wrong column.
     """
     assert len(rows) >= minimum, f'expected {minimum} comment rows, got {len(rows)}'
     for row in rows:
@@ -133,6 +133,9 @@ def _assert_comment_rows(rows, *, minimum: int) -> None:
         assert not missing, f'a comment column the adapter promises is absent: {missing}'
         assert str(row.get('评论内容') or '').strip(), f'an empty comment row: {row}'
         assert isinstance(row.get('点赞数'), int), f'点赞数 is not a number: {row.get("点赞数")!r}'
+    floors = [row.get('楼层') for row in rows]
+    assert all(isinstance(floor, int) and floor >= 1 for floor in floors), f'楼层 is not a positive int: {floors[:20]}'
+    assert floors == sorted(set(floors)), f'楼层 repeats or goes backwards: {floors[:20]}'
 
 
 def _output_stems(workflow: dict) -> dict:

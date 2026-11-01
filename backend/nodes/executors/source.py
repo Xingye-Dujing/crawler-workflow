@@ -537,9 +537,15 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
             else ''
         )
         raise ValueError(t('run.underTargetShort', platform=platform, have=len(rows), want=target_count, walk=walk))
+    failures = int(getattr(crawler, 'sink_failures', 0) or 0)
+    if failures:
+        # The crawl itself survived (one poisoned row must not lose the rest), but the table
+        # is short by exactly this many rows and the user has to hear it from the node, not
+        # from a diff against the site tomorrow.
+        add_log(t('run.sinkFailures', n=failures, have=len(rows)))
     if watermark_scope:
         candidate = str(getattr(crawler, '_watermark_candidate', '') or '')
-        if candidate:
+        if candidate and not failures:
             # The column the boundary belongs to is the crawl's own answer: 哔哩哔哩's browser walk
             # keys on BV号, while the second backend keys on whichever column its manifest declares
             # as that cell's identity. Stored as data next to the value, so a boundary is never
@@ -547,6 +553,11 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
             column = str(getattr(crawler, 'watermark_column', '') or '') or 'BV号'
             ctx['store'].save_watermark(watermark_scope, platform, column, candidate, ctx['run_id'])
             add_log(t('run.watermarkSaved', boundary=candidate, n=max(0, int(crawler.collected()) - seed_count)))
+        elif candidate:
+            # A boundary recorded from a run whose sink dropped rows would make the next
+            # incremental run stop BEFORE the gap: the missing rows could never come back.
+            # Keeping the previous boundary costs a re-scan and loses nothing.
+            add_log(t('run.watermarkWithheld', n=failures))
         elif getattr(crawler, 'watermark', ''):
             add_log(t('run.watermarkNoNew', boundary=crawler.watermark))
     return rows

@@ -193,7 +193,11 @@ class ZhihuCrawler(Crawler):
         url = f'https://www.zhihu.com/search?q={encoded}&type=content'
         logger.info(t('crawl.zhihu.start', kw=keyword, n=target_count))
         logger.info(t('crawl.zhihu.url', url=url))
-        self.driver.get(url)
+        # ``open`` rather than a bare ``driver.get``: a page-load timeout is not fatal
+        # (the document keeps building and the poll below decides readiness), and the
+        # first-run dialog has to be dismissed or the next click is intercepted. A bare
+        # get threw the timeout straight out of ``search()`` and took the node with it.
+        self.open(url)
         self.wait_for_element(self.CARD_SELECTOR)
         self.check_login_wall(url)
         if self.login_wall:
@@ -827,7 +831,9 @@ class ZhihuCrawler(Crawler):
         return ''
 
     def get_detail(self, url: str) -> dict | None:
-        self.driver.get(url)
+        # Same reason as ``search``: one slow article must answer "this one did not load",
+        # not end the batch with a traceback.
+        self.open(url)
         if not self.wait_for_element('.ContentItem-title, .QuestionHeader-title'):
             return None
         return {

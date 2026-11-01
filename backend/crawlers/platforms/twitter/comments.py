@@ -96,7 +96,13 @@ def walk(session, url: str, limit: int) -> tuple:
         if not parsed:
             return None
         row = parsed[0]
-        return None if row['评论ID'] in seen else row
+        if row['评论ID'] in seen:
+            return None
+        # ``parse_twitter_replies`` numbers within the list it is handed, and this walk
+        # hands it ONE card at a time — so every reply came back as 楼层 1. The floor is a
+        # property of the panel, not of the batch: number it here, in keep order.
+        row['楼层'] = len(rows) + 1
+        return row
 
     def keep(row):
         seen.add(row['评论ID'])

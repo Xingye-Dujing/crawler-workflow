@@ -709,7 +709,13 @@ class WeiboCrawler(Crawler):
         publish_time = times.absolute(self._node_text(anchors[0]))
         post_link = self._abs_url(anchors[0].get_attribute('href') or '').split('?')[0]
         whole = self._text_of(card, '.from') or publish_time
-        source = whole.replace(publish_time, ' ').strip(' \n\u00a0')
+        # Strip the DATE THE PAGE WROTE, not its normalised form. ``publish_time`` is
+        # ``2022-01-27 00:59`` while the cell holds ``2022年01月27日 00:59`` (or 「3小时前」),
+        # so replacing one with the other never matched and the 发布来源 column ended up
+        # carrying the timestamp: 「2022年01月27日 00:59  iPhone客户端」 under a column that
+        # is read as the client name.
+        raw_time = self._node_text(anchors[0])
+        source = (whole.replace(raw_time, ' ') if raw_time else whole).strip(' \n\u00a0')
         for prefix in ('来自', 'From', 'from'):
             source = source.replace(prefix, ' ').strip()
         source = re.sub(r'\s+', ' ', source)

@@ -319,12 +319,14 @@ ZH = {
     # The funnel clause only when the crawler reported counts; a convicted short without
     # them omits it, rather than printing a fake measurement of zeros.
     'run.underTargetWalk': '（走查：扫 {scanned}、留 {kept}、拒 {refused}）',
+    'run.sinkFailures': '有 {n} 行没能写入结果表（落盘失败），当前结果只有 {have} 行——请检查磁盘与数据库后重跑',
     'run.wallRetry': ('{platform} 在第一条数据之前就被弹到登录页，这更像同一账号被两次并发搜索撞了：{n} 秒后重试一次'),
     'run.watermarkFirst': '跨运行水位：这是第一次运行，完成后保存边界',
     'run.watermarkLoaded': '跨运行水位：从上次完成的边界 {boundary} 开始，遇到它即停止',
     'run.watermarkNoNew': '已到上次的边界 {boundary}，本次没有更新的条目',
     'run.watermarkNoScope': '跨运行水位需要运行上下文里的节点指纹；直接调用执行器时不能启用',
     'run.watermarkSaved': '跨运行水位已更新：{boundary}（本次新采 {n} 条）',
+    'run.watermarkWithheld': '本次有 {n} 行没能落盘，跨运行水位保持不变（下次会从上次边界重扫，这段空隙不会丢）',
     'run.watermarkUnsupported': '跨运行水位只支持哔哩哔哩作者投稿（当前平台/模式：{platform} / {mode}）',
     'upload.loaded': '已载入上传文件 {name}：{n} 行',
     # ── upload node ───────────────────────────────────────────
@@ -736,6 +738,10 @@ EN = {
     # The funnel clause only when the crawler reported counts; a convicted short without them
     # omits it rather than printing a fake measurement of zeros.
     'run.underTargetWalk': ' (walk: scanned {scanned}, kept {kept}, refused {refused})',
+    'run.sinkFailures': (
+        '{n} row(s) never reached the result table (save failed); this run holds {have} rows — '
+        'check disk and database, then run it again'
+    ),
     'run.wallRetry': (
         '{platform} was bounced to its login page before its first row, which reads as two concurrent '
         'searches from one account colliding: retrying once in {n}s'
@@ -749,6 +755,10 @@ EN = {
         'A cross-run watermark needs the node fingerprint from a run context; a direct executor call cannot enable it'
     ),
     'run.watermarkSaved': 'Cross-run watermark updated: {boundary} ({n} new rows this run)',
+    'run.watermarkWithheld': (
+        '{n} row(s) could not be stored this run, so the cross-run watermark is unchanged '
+        '(the next run re-scans from the previous boundary, so the gap is not lost)'
+    ),
     'run.watermarkUnsupported': (
         'Cross-run watermark supports only Bilibili author uploads (this platform/mode: {platform} / {mode})'
     ),
