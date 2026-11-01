@@ -513,10 +513,10 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
         upstream_of.setdefault(conn['to'], []).append(conn['from'])
 
     for level in levels:
-        if not execution_state['running']:
+        if _stopping():
             break
         for nid in level:
-            if not execution_state['running']:
+            if _stopping():
                 break
             node = wf_engine.nodes[nid]
             label = node_label(node, nid)
@@ -604,6 +604,25 @@ def _continue_record(name: str, resumable: list, resuming: bool) -> dict:
         if str(candidate.get('workflow_name') or '') == name:
             return dict(candidate)
     return {}
+
+
+def _stopping() -> bool:
+    """Whether this run has been asked to end, from either of the two places that say so.
+
+    ``execution_state['running']`` is the wall flag the Stop route clears. The run's own
+    handle (``execution_state['executor']``) is what ``/api/workflow/stop`` sets, and it used
+    to be write-only: nothing read it, so the object looked wired while the loop only ever
+    watched the wall flag. Both are asked here — a stop is a stop whichever door it came in.
+
+    Neither can interrupt a node that is already mid-flight (a page load, a BERT batch); that
+    is what the crawlers' ``may_stop`` and the analyzers' ``cancel_event`` are for, and the
+    Stop route also closes live crawlers directly. What this guarantees is that no FURTHER
+    node starts.
+    """
+    if not execution_state['running']:
+        return True
+    handle = execution_state.get('executor')
+    return bool(handle is not None and getattr(handle, 'stop_requested', False))
 
 
 def _close_component_record(sub_ctx: dict, ctx: dict, store) -> None:

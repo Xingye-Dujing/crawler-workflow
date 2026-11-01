@@ -350,12 +350,20 @@ def _push_log(line: str, wf_idx: int = None, level: str = None):
             if len(buf) > LOG_KEEP:
                 del buf[:-LOG_KEEP]
             execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + len(parts)
-        # Write-through to the durable per-run log, taken off the SAME ``parts`` the
-        # buffers just consumed. It is a side effect appended after every existing
-        # mutation, so a sink that raises cannot corrupt the totals: the live console
-        # and the refresh-reattach are already fully updated before this runs.
-        if _log_sink is not None:
-            _log_sink(list(parts), idx, level)
+    # Write-through to the durable per-run log, taken off the SAME ``parts`` the
+    # buffers just consumed. It is a side effect appended after every existing
+    # mutation, so a sink that raises cannot corrupt the totals: the live console
+    # and the refresh-reattach are already fully updated before this runs.
+    #
+    # It runs OUTSIDE the lock, and that is the point: the sink writes to SQLite, and opening
+    # that store can itself emit a log line (``promote_stale_runs`` warns for every run it
+    # closes) — which comes back through the root handler into this very function, on the
+    # SAME thread, against a plain (non-reentrant) Lock. One flush during a run whose store
+    # needed re-opening therefore deadlocked the run thread, the status endpoint and every
+    # other thread that logged. Holding the lock across the write also blocked every status
+    # poll behind a disk commit.
+    if _log_sink is not None:
+        _log_sink(list(parts), idx, level)
 
 
 def add_log(msg: str, wf_idx: int = None, level: str = 'info'):

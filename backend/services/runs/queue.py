@@ -185,6 +185,24 @@ def clear_queue() -> int:
     return count
 
 
+def _redacted(entry: dict) -> dict:
+    """The entry as it may be WRITTEN TO DISK: the same request, minus the LLM API key.
+
+    The key has to stay in the in-memory queue — a run that starts minutes later from this
+    payload is the only thing that will ever present it — but the mirror is a row in
+    ``runs.db`` that outlives the browser session, is copied by any backup of ``data/`` and
+    survives a crash. ``run.py`` promises the key never leaves ``localStorage``; persisting it
+    in the ledger broke that promise and turned a queued request into a stored credential.
+    """
+    data = entry.get('data')
+    if not isinstance(data, dict):
+        return entry
+    llm = data.get('llm')
+    if not isinstance(llm, dict) or not llm.get('api_key'):
+        return entry
+    return {**entry, 'data': {**data, 'llm': {k: v for k, v in llm.items() if k != 'api_key'}}}
+
+
 def _save_owner_mirror(user_id: str, entries: list) -> None:
     """Write one account's queue slice into that account's own ``runs.db``."""
     account = None
@@ -196,7 +214,7 @@ def _save_owner_mirror(user_id: str, entries: list) -> None:
             return
         account = Account(row['user_id'], row['username'], row['role'])
     with account_context.use(account):
-        get_run_store().save_queue(list(entries))
+        get_run_store().save_queue([_redacted(entry) for entry in entries])
 
 
 def mirror_queue() -> None:

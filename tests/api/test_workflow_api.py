@@ -326,7 +326,7 @@ class TestWorkflowExecute:
         body = client.get('/api/workflow/processes').get_json()
         assert body['running'] is False
         assert body['active_crawlers'] == 0
-        assert body['executor_pool_alive'] is False
+        assert body['stop_requested'] is False
         names = {thread['name'] for thread in body['threads']}
         assert 'MainThread' in names
         assert {'name', 'daemon', 'alive', 'ident'} <= set(body['threads'][0])

@@ -26,6 +26,33 @@ _SIGKILL = getattr(signal, 'SIGKILL', signal.SIGTERM)
 _WINDOWS_REAP = ('taskkill', '/F', '/T', '/PID')
 
 
+def _decode(raw: bytes) -> str:
+    """A tool's own error text, in the encoding that console actually uses.
+
+    Windows writes these in the process's ANSI code page (cp936 on a Chinese install), so
+    decoding as UTF-8 — which is what the old line did — turned the message into a run of
+    ``\ufffd``. The fallback keeps it readable instead of inventing replacement characters.
+    """
+    for codec in ('utf-8', _console_codec()):
+        try:
+            return raw.decode(codec).strip()
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('utf-8', 'replace').strip()
+
+
+def _console_codec() -> str:
+    """The code page this machine's console tools write in (UTF-8 off Windows)."""
+    if not machine.is_windows():
+        return 'utf-8'
+    try:
+        import locale
+
+        return locale.getpreferredencoding(False) or 'cp1252'
+    except Exception:
+        return 'cp1252'
+
+
 def reap_command(pid: int, system: str | None = None) -> list[str]:
     """The command that stops ``pid`` and its children on this OS — POSIX returns none, see below."""
     if machine.is_windows(system):
@@ -96,10 +123,14 @@ def reap_process(pid: int, system: str | None = None, proc_root: str = '/proc') 
         except (OSError, subprocess.SubprocessError) as exc:
             return False, str(exc)
         if result.returncode != 0:
-            tail = (result.stderr or result.stdout or b'').decode('utf-8', 'replace').strip()
-            # A process that already exited is not a failure to stop: the caller only wants the tree gone.
-            if tail and 'not found' in tail.lower():
+            # ``taskkill`` exits 128 when the process it was asked to kill is not running — on
+            # EVERY Windows language. Matching the English words ``not found`` in the output
+            # meant a Chinese Windows reported 「没有找到进程」 as a FAILED reap: the console
+            # printed 「浏览器没能关掉」 for a browser that had already closed, and the user
+            # went looking for a zombie that did not exist.
+            if result.returncode == 128:
                 return True, ''
+            tail = _decode(result.stderr or result.stdout or b'')
             return False, tail or f'taskkill exit code {result.returncode}'
         return True, ''
     children = child_pids(proc_root, pid)

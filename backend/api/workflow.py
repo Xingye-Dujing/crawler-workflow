@@ -584,18 +584,21 @@ def workflow_processes():
     """Return info about active threads/processes for the monitoring panel."""
     if run_is_foreign():
         return jsonify(
-            {'running': False, 'threads': [], 'executor_pool_alive': False, 'active_crawlers': 0, 'foreign_run': True}
+            {'running': False, 'threads': [], 'stop_requested': False, 'active_crawlers': 0, 'foreign_run': True}
         )
     threads = _visible_threads()
 
-    executor_alive = (
-        execution_state['executor'] is not None and getattr(execution_state['executor'], '_pool', None) is not None
+    # Not a pool: the run's stop handle. It used to read ``_pool``, an attribute of the
+    # node-level ``TaskExecutor`` that was never constructed — so the panel's 「进程池」 row
+    # answered 否 for every run that ever existed while implying one could be alive.
+    stop_asked = bool(
+        execution_state['executor'] is not None and getattr(execution_state['executor'], 'stop_requested', False)
     )
     return jsonify(
         {
             'running': execution_state['running'],
             'threads': threads,
-            'executor_pool_alive': executor_alive,
+            'stop_requested': stop_asked,
             'active_crawlers': len(execution_state['active_crawlers']),
         }
     )

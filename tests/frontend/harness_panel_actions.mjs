@@ -1051,7 +1051,7 @@ answer = {
         { name: 'selenium-idle', alive: false, daemon: true, ident: 4 },
     ],
     active_crawlers: 2,
-    executor_pool_alive: true,
+    stop_requested: false,
 };
 requests.length = 0;
 pa.processesPoll();

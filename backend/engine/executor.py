@@ -1,95 +1,50 @@
-"""Task scheduler with thread pool support."""
+"""The per-run stop handle the 停止 button reaches for.
 
-import logging
+One object, one job: it remembers that the user asked THIS run to end, and the run's own
+loops ask it. It is not a thread pool and never was one in practice — ``execute``,
+``run_parallel`` and ``run_serial`` were built to run the nodes of one workflow level
+concurrently and were never called (the level loop in :meth:`engine.run._run_single_workflow`
+is serial; what a ``parallel`` run actually runs concurrently is its WORKFLOWS, one thread
+each, in ``engine.run``). Three methods and a ``ThreadPoolExecutor`` therefore sat there
+claiming a capability the product does not have, and the one thing the Stop route does —
+``execution_state['executor'].stop()`` — wrote to an event no loop ever read, so pressing
+停止 during a long BERT/classify/export node answered ``ok`` while that node ran on.
+
+Deleting the pool is not a feature loss: it was unreachable. What is restored is the part
+that was supposed to work — the handle is now consulted by the run loop, and
+``/api/workflow/processes`` reports it instead of reporting a pool that never existed.
+"""
+
+from __future__ import annotations
+
 import threading
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
-
-from i18n import t
-
-logger = logging.getLogger(__name__)
 
 
 class TaskExecutor:
-    """Executes workflow tasks with configurable parallel/serial mode."""
+    """The stop signal for one run. Created by ``engine.run``; read by the run's loops."""
 
     def __init__(self, max_workers: int = 4, mode: str = 'parallel'):
+        # Kept for the record (and because ``engine.run`` passes them): the width of the
+        # WORKFLOW-level pool, and the mode that pool answers. Neither belongs to this object's
+        # job any more, and they are not used to spawn anything here.
         self.max_workers = max_workers
         self.mode = mode
         self._stop_event = threading.Event()
-        self._pool = None
-        self._futures = []
 
-    def run_serial(self, tasks: list[Callable]) -> list[Any]:
-        results = []
-        for task in tasks:
-            if self._stop_event.is_set():
-                break
-            try:
-                results.append(task())
-            except Exception as e:
-                logger.error(t('executor.task_failed', err=e))
-                results.append(None)
-        return results
-
-    def run_parallel(self, tasks: list[Callable]) -> list[Any]:
-        results = []
-        # Local, not `self._pool`: stop() runs on the request thread and used to
-        # assign `self._pool = None` here, which made this method's own cleanup
-        # raise AttributeError on the thread that was still waiting for results.
-        pool = ThreadPoolExecutor(max_workers=self.max_workers)
-        self._pool = pool
-        futures = [pool.submit(t) for t in tasks]
-        self._futures = futures
-        try:
-            for fut in as_completed(futures):
-                if self._stop_event.is_set():
-                    break
-                try:
-                    results.append(fut.result())
-                except Exception as e:
-                    logger.error(t('executor.task_failed', err=e))
-                    results.append(None)
-        finally:
-            # WAIT. The comment that used to justify `wait=False` was "threads exit
-            # naturally once the driver is closed" — true, and beside the point:
-            # the caller of this level is the run's own thread, and the moment it
-            # returns the run reaches its `finally`, releases the one-at-a-time slot
-            # and hands the queue the NEXT run. A task still inside a node at that
-            # instant keeps writing into `execution_state` — the console, the node
-            # counters, `results` — which by then describes a different run. So this
-            # level is over when its threads are over; `/api/workflow/stop` closes
-            # the live crawlers, so what is being waited on is a page load, not a
-            # whole crawl.
-            pool.shutdown(wait=True, cancel_futures=True)
-            if self._pool is pool:
-                self._pool = None
-                self._futures = []
-        return results
-
-    def execute(self, task_groups: list[list[Callable]]) -> list[Any]:
-        """Execute tasks by level groups. Each level may run in parallel."""
-        all_results = []
-        for group in task_groups:
-            results = self.run_parallel(group) if self.mode == 'parallel' and len(group) > 1 else self.run_serial(group)
-            all_results.extend(results)
-        return all_results
+    @property
+    def stop_requested(self) -> bool:
+        """Whether 停止 has been pressed for this run."""
+        return self._stop_event.is_set()
 
     def stop(self):
-        """Ask the level to end; do not dismantle it.
+        """Ask the run to end at its next checkpoint.
 
-        Cancelling futures is all this may do from the request thread. The shutdown
-        belongs to ``run_parallel``, which is the thread that reads the results and
-        the one that must not move on while tasks are still running — shutting down
-        (or nulling the handle) from here is what let the run thread walk away from
-        its own worker threads.
+        Called from the request thread. It must not dismantle anything: the run's own thread
+        owns its state, and a Stop that nulled handles under it is how a run used to walk away
+        from work that was still writing into the console.
         """
         self._stop_event.set()
-        for fut in self._futures:
-            fut.cancel()
 
     def reset(self):
+        """A new run gets a clean handle."""
         self._stop_event.clear()
-        self._futures = []
-        self._pool = None

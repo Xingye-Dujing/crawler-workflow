@@ -14,6 +14,7 @@ dataset), so keeping them separate avoids mixing concerns and avoids
 which assumes a different run context than `app.py` uses.
 """
 
+import contextlib
 import logging
 import os
 import sqlite3
@@ -76,9 +77,29 @@ class ExecutionHistoryService:
         existing schema is cheap and idempotent.
         """
         os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        # ``timeout`` rather than the 5-second default: this file is written by the run thread
+        # while the history panel reads it, and the default turned that overlap into
+        # ``database is locked`` — which, with the old bare ``close()``, also leaked a handle.
+        conn = sqlite3.connect(self.db_path, timeout=10.0)
         self._create_schema(conn)
         return conn
+
+    @contextlib.contextmanager
+    def open(self):
+        """A connection that is closed on EVERY exit path, including an exception.
+
+        Each method used to end with a bare ``conn.close()``, so any failure between
+        ``_conn()`` and that line — a locked database, a bad parameter, a pandas error —
+        left the connection and its file handle open for the life of the process. A run that
+        records metrics while a reader is scrolling the history panel is the normal case,
+        and every collision there leaked one more.
+        """
+        conn = self._conn()
+        try:
+            yield conn
+        finally:
+            with contextlib.suppress(Exception):
+                conn.close()
 
     def _create_schema(self, conn):
         """Create the table and indexes on *conn* — the caller keeps ownership.
@@ -120,43 +141,39 @@ class ExecutionHistoryService:
         """
         if not rows:
             return
-        conn = self._conn()
-        conn.executemany(
-            'INSERT INTO execution_history '
-            '(run_id, workflow_name, node_id, node_type, metric, label, value, timestamp) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            rows,
-        )
-        conn.commit()
-        conn.close()
+        with self.open() as conn:
+            conn.executemany(
+                'INSERT INTO execution_history '
+                '(run_id, workflow_name, node_id, node_type, metric, label, value, timestamp) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                rows,
+            )
+            conn.commit()
         logger.info(t('history.recorded', n=len(rows), wf=log_label or rows[0][1] or ''))
 
     def list_runs(self, limit: int = 50) -> pd.DataFrame:
-        conn = self._conn()
-        df = pd.read_sql(
-            'SELECT run_id, workflow_name, MIN(timestamp) AS started_at, COUNT(*) AS metric_count '
-            'FROM execution_history GROUP BY run_id, workflow_name '
-            'ORDER BY started_at DESC LIMIT ?',
-            conn,
-            params=(limit,),
-        )
-        conn.close()
+        with self.open() as conn:
+            df = pd.read_sql(
+                'SELECT run_id, workflow_name, MIN(timestamp) AS started_at, COUNT(*) AS metric_count '
+                'FROM execution_history GROUP BY run_id, workflow_name '
+                'ORDER BY started_at DESC LIMIT ?',
+                conn,
+                params=(limit,),
+            )
         return df
 
     def list_workflow_names(self) -> list:
-        conn = self._conn()
-        cur = conn.execute(
-            'SELECT DISTINCT workflow_name FROM execution_history '
-            'WHERE workflow_name IS NOT NULL ORDER BY workflow_name'
-        )
-        names = [row[0] for row in cur.fetchall()]
-        conn.close()
+        with self.open() as conn:
+            cur = conn.execute(
+                'SELECT DISTINCT workflow_name FROM execution_history '
+                'WHERE workflow_name IS NOT NULL ORDER BY workflow_name'
+            )
+            names = [row[0] for row in cur.fetchall()]
         return names
 
     def series(
         self, workflow_name: str = None, metric: str = None, node_id: str = None, limit: int = 2000
     ) -> pd.DataFrame:
-        conn = self._conn()
         sql = 'SELECT * FROM execution_history WHERE 1=1'
         params = []
         if workflow_name:
@@ -170,8 +187,8 @@ class ExecutionHistoryService:
             params.append(node_id)
         sql += ' ORDER BY timestamp ASC LIMIT ?'
         params.append(limit)
-        df = pd.read_sql(sql, conn, params=params)
-        conn.close()
+        with self.open() as conn:
+            df = pd.read_sql(sql, conn, params=params)
         # Reads written before the recorder started deduplicating can hold the
         # same point twice (an output node re-recording its process's
         # distribution). Dropping exact duplicates at read time cleans those
@@ -183,10 +200,9 @@ class ExecutionHistoryService:
         return df
 
     def clear(self):
-        conn = self._conn()
-        conn.execute('DELETE FROM execution_history')
-        conn.commit()
-        conn.close()
+        with self.open() as conn:
+            conn.execute('DELETE FROM execution_history')
+            conn.commit()
 
     def delete_run(self, run_id: str) -> int:
         """Drop one run's recorded metrics; returns how many rows went.
@@ -196,10 +212,9 @@ class ExecutionHistoryService:
         that matches nothing must be reported as such — a row already aged out
         by the retention policy is not a successful deletion.
         """
-        conn = self._conn()
-        cur = conn.execute('DELETE FROM execution_history WHERE run_id = ?', (str(run_id),))
-        conn.commit()
-        conn.close()
+        with self.open() as conn:
+            cur = conn.execute('DELETE FROM execution_history WHERE run_id = ?', (str(run_id),))
+            conn.commit()
         logger.info(t('history.run_deleted', rid=run_id, n=cur.rowcount))
         return int(cur.rowcount or 0)
 
@@ -217,10 +232,9 @@ class ExecutionHistoryService:
         if not days or days <= 0:
             return 0
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - days * 86400))
-        conn = self._conn()
-        cur = conn.execute('DELETE FROM execution_history WHERE timestamp < ?', (cutoff,))
-        conn.commit()
-        conn.close()
+        with self.open() as conn:
+            cur = conn.execute('DELETE FROM execution_history WHERE timestamp < ?', (cutoff,))
+            conn.commit()
         return int(cur.rowcount or 0)
 
 

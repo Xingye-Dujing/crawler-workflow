@@ -335,7 +335,7 @@ function processesPoll() {
             html += '<div class="proc-summary">' + runningText +
                 '<span>' + I18n.t('processes.threads') + ': <b>' + data.threads.length + '</b></span>' +
                 '<span>' + I18n.t('processes.crawlers') + ': <b>' + data.active_crawlers + '</b></span>' +
-                '<span>' + I18n.t('processes.pool') + ': <b>' + (data.executor_pool_alive ? I18n.t('processes.yes') : I18n.t('processes.no')) + '</b></span>' +
+                '<span>' + I18n.t('processes.pool') + ': <b>' + (data.stop_requested ? I18n.t('processes.yes') : I18n.t('processes.no')) + '</b></span>' +
                 '</div>';
 
             /* Thread table */
@@ -389,7 +389,7 @@ function processesPoll() {
                 html += '<div class="proc-summary">' + runningText +
                     '<span>' + I18n.t('processes.threads') + ': <b>' + data.threads.length + '</b></span>' +
                     '<span>' + I18n.t('processes.crawlers') + ': <b>' + data.active_crawlers + '</b></span>' +
-                    '<span>' + I18n.t('processes.pool') + ': <b>' + (data.executor_pool_alive ? I18n.t('processes.yes') : I18n.t('processes.no')) + '</b></span>' +
+                    '<span>' + I18n.t('processes.pool') + ': <b>' + (data.stop_requested ? I18n.t('processes.yes') : I18n.t('processes.no')) + '</b></span>' +
                     '</div>';
                 html += '<table class="proc-table"><tr>' +
                     '<th>' + I18n.t('processes.name') + '</th>' +

@@ -35,7 +35,13 @@ def workflow_diagnostics():
     # Validate on the SAME effective graph a run would use: a disabled node (or one
     # starved by a disabled upstream) is not on the canvas, so it must not be judged.
     effective = effective_workflow(workflow)
-    eff_nodes = {n['id']: n for n in effective.get('nodes', [])}
+    # ``n['id']`` used to be assumed: a node object the browser sends without an id survives
+    # ``effective_workflow`` (which only reads it with ``.get``) and then crashed this route
+    # with a bare ``KeyError: 'id'`` — an HTML 500 the frontend cannot parse, so the whole
+    # column badge silently disappeared. The run path already refuses such a node by name
+    # (``services/runs/payload.workflow_shape_error``); the diagnostics route only reads, and a
+    # node it cannot address is one it cannot diagnose, so it is left out rather than fatal.
+    eff_nodes = {str(n['id']): n for n in effective.get('nodes', []) if isinstance(n, dict) and n.get('id')}
     eff_connections = effective.get('connections', [])
     columns = compute_columns(eff_nodes, eff_connections)
     reads = referenced_columns(eff_nodes)

@@ -16,6 +16,7 @@ import os
 from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from runtime import paths
+from runtime.settings import get_setting
 from runtime.state import _results_snapshot, add_log, ambient, execution_state, run_is_foreign
 from runtime.stores import get_run_store
 from runtime.transport import _local_transport_refusal
@@ -136,7 +137,14 @@ def report_generate():
                     # A report request is its own call: it must not inherit the stop
                     # flag of a run that ended (or is running) in this process.
                     cancel_event=None,
-                    host=(str(cfg.get('ollama_host') or '') if provider == 'ollama' else ''),
+                    # The host is the machine's own setting, never the request's: a caller
+                    # that could name an address made the SERVER issue the request, and the
+                    # reply (an error string, or the generated paragraph) came back into the
+                    # console and the report. That is server-side request forgery with a
+                    # partial echo — an internal port scanner aimed from inside the network.
+                    # A report is written about a run this host can already reach; it inherits
+                    # the same Ollama address a run would (``analyzers.llm_client``).
+                    host=(get_setting('ollama_host') if provider == 'ollama' else ''),
                 )
                 conclusion = client.chat(build_conclusion_prompt(summarize(nodes), normalize(data.get('lang'))))
             except Exception as e:

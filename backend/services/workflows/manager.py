@@ -41,8 +41,18 @@ class WorkflowManager:
         # execution history, and a reloaded canvas has to know its own name.
         payload = dict(workflow or {})
         payload['name'] = clean
-        with open(path, 'w', encoding='utf-8') as f:
+        # Written through a temp file and then MOVED, the way every other durable store in this
+        # project does (``reusable``, ``lock_store``, ``scheduling/store``) — and the way this one
+        # now has to. ``open(path, 'w')`` truncates first and streams the JSON in pieces, so a
+        # crash, a full disk, a ``Ctrl+C`` or an antivirus holding the file left HALF a canvas on
+        # disk; ``load`` answers ``None`` for that, the UI opens an empty canvas, and the next
+        # save overwrites the remainder. That is the user's own drawing, and there is no copy.
+        tmp = f'{path}.tmp-{os.getpid()}'
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
         logger.info(t('store.workflow_saved', path=path))
         return path
 
@@ -169,8 +179,14 @@ class WorkflowManager:
             # name for it); keep the bytes, fix the inner name only if parseable.
             payload = None
         if payload is not None:
-            with open(dst, 'w', encoding='utf-8') as f:
+            # Same atomicity as ``save``: a rename that failed half-way used to leave neither
+            # name readable. The new file is complete before the old one is removed.
+            tmp = f'{dst}.tmp-{os.getpid()}'
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, dst)
             os.remove(src)
         else:
             os.replace(src, dst)
