@@ -234,9 +234,9 @@ def test_the_panel_script_loads_after_the_two_files_it_borrows_from():
     """``schedules.js`` calls ``fetchJSON``/``showDialog``/``closeDockedPanels``/``attrJsArg`` and
     reads ``I18n`` — all declared by the files before it, so the order is the contract."""
     html = _html()
-    after = html.index('/js/schedules.js')
-    assert html.index('/js/workflow.js') < after
-    assert html.index('/js/app.js') < after
+    after = html.index('js/schedules.js')
+    assert html.index('js/workflow.js') < after
+    assert html.index('js/app.js') < after
 
 
 def test_the_dock_list_holds_it_and_the_stylesheet_sizes_it():

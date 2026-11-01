@@ -718,7 +718,17 @@ export function baseSandbox() {
     sandbox.devicePixelRatio = 1;
     sandbox.addEventListener = (type, fn) => (handlers.window[type] ||= []).push(fn);
     sandbox.removeEventListener = () => {};
-    sandbox.location = { href: 'http://localhost:5000/', origin: 'http://localhost:5000' };
+    sandbox.location = { href: 'http://localhost:5000/', pathname: '/', search: '', origin: 'http://localhost:5000' };
+    /* index.html's first inline <script> defines the subpath helpers before any module
+       boots; the harness mirrors the same formula off `location.pathname`, so this
+       root-path sandbox gets the identity and a harness that rewrites `pathname` to
+       `/crawler/…` gets the prefix — the same decision the shipped page makes. */
+    sandbox.__CRAWLER_BASE__ = '';
+    sandbox.__cu = function (p) {
+        const path = this && this.location && this.location.pathname;
+        const base = typeof path === 'string' && path.indexOf('/crawler') === 0 ? '/crawler' : '';
+        return base + p;
+    };
     sandbox.navigator = { clipboard: { writeText: () => Promise.resolve() }, userAgent: 'node-harness' };
     sandbox.echarts = {
         init: () => ({ setOption() {}, resize() {}, on() {}, dispose() {}, showLoading() {}, hideLoading() {} }),

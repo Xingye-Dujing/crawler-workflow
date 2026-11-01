@@ -68,7 +68,7 @@ class TestTheDock:
         # The workspace moved to panels/biblio.js (Stage 8); the page must still load it, which is
         # what makes the toggler reachable from the toolbar and the status dock.
         assert 'function toggleBiblioPanel()' in _js('panels/biblio.js')
-        assert 'src="/js/panels/biblio.js"' in (STATIC / 'index.html').read_text(encoding='utf-8')
+        assert 'src="js/panels/biblio.js"' in (STATIC / 'index.html').read_text(encoding='utf-8')
 
     def test_the_stylesheet_docks_sizes_and_scrolls_it(self):
         css = css_text()

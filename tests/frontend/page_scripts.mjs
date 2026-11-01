@@ -34,8 +34,11 @@ export const CATALOGUE_DIR = 'i18n';
 /** The `/js/*.js` names index.html loads, in page order (vendor bundles excluded). */
 export function pageScriptNames(indexHtml = INDEX_HTML) {
     const markup = readFileSync(indexHtml, 'utf8');
-    const names = Array.from(markup.matchAll(/<script\b[^>]*\bsrc="\/js\/([^"]+)"/g), (m) => m[1]);
-    if (!names.length) throw new Error(`no <script src="/js/…"> found in ${indexHtml}`);
+    /* The workbench ships page-relative sources (`src="js/…"` — a subpath deployment
+       resolves them against its own prefix); the root-absolute form is accepted too so
+       an older page or a desktop build with `/js/…` still loads. */
+    const names = Array.from(markup.matchAll(/<script\b[^>]*\bsrc="(?:\/)?js\/([^"]+)"/g), (m) => m[1]);
+    if (!names.length) throw new Error(`no <script src="js/…"> found in ${indexHtml}`);
     return names;
 }
 

@@ -88,7 +88,7 @@ def _script_files() -> list:
     several of these files read each other's bindings at load, so the order is
     taken from `index.html` rather than kept as a copy here.
     """
-    files = [re.sub(r'^/js/', '', src) for src in ATTR_BODY.findall(_page_text()) if '/js/' in src]
+    files = [re.sub(r'^/?(?:js)/', '', src) for src in ATTR_BODY.findall(_page_text()) if re.match(r'^/?(?:js)/', src)]
     return files
 
 

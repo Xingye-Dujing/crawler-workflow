@@ -81,15 +81,20 @@ class TestThePageAsksNothingOffThisMachine:
         offenders = re.findall(r'(?:src|href)="(https?://[^"]+)"', html)
         assert offenders == [], f'the page still loads {offenders[0]} from off-box'
 
-    def test_every_root_relative_asset_in_index_html_exists(self):
+    def test_every_asset_referenced_in_index_html_exists(self):
         html = (STATIC / 'index.html').read_text(encoding='utf-8')
-        for path in re.findall(r'(?:src|href)="/([^"]+)"', html):
-            assert (STATIC / path).is_file(), f'index.html references /{path}, which is not shipped'
+        for path in re.findall(r'(?:src|href)="([^"]+)"', html):
+            # Root-relative (`/js/…`) resolves against the host; page-relative (`js/…`,
+            # how the page ships since the /crawler subpath deployment) against the page
+            # URL. Both spellings must land inside the shipped static tree.
+            if not re.match(r'^(?:/)?(?:js|css|vendor)/', path) and not path.endswith('.ico'):
+                continue
+            assert (STATIC / path.lstrip('/')).is_file(), f'index.html references {path}, which is not shipped'
 
     def test_the_three_chart_bundles_are_loaded_from_the_app_itself(self):
         html = (STATIC / 'index.html').read_text(encoding='utf-8')
         for name in ('echarts.min.js', 'echarts-gl.min.js', 'echarts-wordcloud.min.js'):
-            assert f'src="/vendor/{name}"' in html, f'{name} is not served from /vendor'
+            assert f'src="vendor/{name}"' in html, f'{name} is not served from /vendor'
 
     def test_the_ui_face_is_declared_locally_and_named_by_the_stylesheet(self):
         css = css_text()

@@ -35,7 +35,7 @@ IDREF_ATTRS = ('for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'a
 #: The scripts that must exist regardless of the markup sweep (the sweep's own floor).
 REQUIRED_SCRIPTS = {'canvas.js', 'workflow.js', 'app.js', 'theme-boot.js'}
 
-_SCRIPT_SRC = re.compile(r'^/js/(.+)$')
+_SCRIPT_SRC = re.compile(r'^/?(?:js)/(.+)$')
 
 
 class _Sweep(HTMLParser):
@@ -204,11 +204,16 @@ class TestTheStudioPageIsADocument:
 
 
 class TestThePageLoadsItsScripts:
-    def test_the_page_carries_no_inline_script(self, sweep):
+    def test_the_page_carries_no_inline_script_beyond_the_subpath_boot(self, sweep):
         """The pre-paint theme block used to be the one inline script. It lives in
         ``js/theme-boot.js`` now: a strict Content-Security-Policy can ban inline
-        scripts, and an inline block is the one product file no linter checks."""
-        assert not sweep.inline_scripts, f'inline script bodies are back: {sweep.inline_scripts}'
+        scripts, and an inline block is the one product file no linter checks. The one
+        exception is the subpath bootstrap the /crawler reverse-proxy needs — four lines
+        that read the page's own address, and must run before the first module."""
+        strangers = [body for _pos, body in sweep.inline_scripts if '__CRAWLER_BASE__' not in body]
+        assert not strangers, f'inline script bodies are back: {strangers}'
+        boots = [body for _pos, body in sweep.inline_scripts if '__CRAWLER_BASE__' in body]
+        assert len(boots) == 1, f'the subpath bootstrap must be exactly one inline script: {boots}'
 
     def test_each_module_is_listed_exactly_once(self, sweep):
         """A module loaded twice re-declares its top-level ``const`` bindings, which is a
@@ -225,7 +230,9 @@ class TestThePageLoadsItsScripts:
                 missing.append(f'/js/{match.group(1)} at line {pos[0]}')
         assert not missing, f'index.html loads scripts that are not on disk: {missing}'
         loaded = {
-            _SCRIPT_SRC.match(attrs['src']).group(1) for attrs, _pos in sweep.scripts if _SCRIPT_SRC.match(attrs['src'])
+            _SCRIPT_SRC.match(attrs['src']).group(1)
+            for attrs, _pos in sweep.scripts
+            if attrs.get('src') and _SCRIPT_SRC.match(attrs['src'])
         }
         assert loaded >= REQUIRED_SCRIPTS, f'the page stopped loading: {sorted(REQUIRED_SCRIPTS - loaded)}'
 
@@ -235,12 +242,12 @@ class TestThePageLoadsItsScripts:
         js_scripts = [(attrs, pos) for attrs, pos in sweep.scripts if _SCRIPT_SRC.match(attrs.get('src') or '')]
         assert js_scripts, 'the page loads no module at all'
         first_attrs, _first_pos = js_scripts[0]
-        assert first_attrs.get('src') == '/js/theme-boot.js', f'the first module is {first_attrs.get("src")}'
+        assert first_attrs.get('src') == 'js/theme-boot.js', f'the first module is {first_attrs.get("src")}'
         assert 'defer' not in first_attrs and 'async' not in first_attrs, (
             'a deferred bootstrap runs after the light default is already on screen'
         )
         html = INDEX.read_text(encoding='utf-8')
-        assert html.index('/js/theme-boot.js') < html.index('id="menu-trigger"'), (
+        assert html.index('js/theme-boot.js') < html.index('id="menu-trigger"'), (
             'the bootstrap must run before the visible chrome is parsed'
         )
 
@@ -251,7 +258,7 @@ class TestThePageLoadsItsStylesheets:
     every sheet on disk is loaded, no sheet twice, and no page reaches for a file that is not there."""
 
     CSS_DIR = STATIC / 'css'
-    _CSS_HREF = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/css/([^"]+)"')
+    _CSS_HREF = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/?(?:css)/([^"]+)"')
 
     def _hrefs(self, page: Path) -> list[str]:
         return self._CSS_HREF.findall(page.read_text(encoding='utf-8'))
@@ -310,10 +317,12 @@ class TestTheStudioPageLoadsItsFiles:
         loaded = {
             _SCRIPT_SRC.match(attrs['src']).group(1)
             for attrs, _pos in studio_sweep.scripts
-            if _SCRIPT_SRC.match(attrs['src'])
+            if attrs.get('src') and _SCRIPT_SRC.match(attrs['src'])
         }
         workbench = {
-            _SCRIPT_SRC.match(attrs['src']).group(1) for attrs, _pos in sweep.scripts if _SCRIPT_SRC.match(attrs['src'])
+            _SCRIPT_SRC.match(attrs['src']).group(1)
+            for attrs, _pos in sweep.scripts
+            if attrs.get('src') and _SCRIPT_SRC.match(attrs['src'])
         }
         assert 'zenviz-page.js' in loaded, f'the studio page app is not loaded: {sorted(loaded)}'
         assert 'zenviz-page.js' not in workbench, 'the studio page app leaked onto the workbench page'

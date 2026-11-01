@@ -245,7 +245,7 @@ class TestContracts:
             'reusable-auto-layout',
         ):
             assert f'id="{element_id}"' in page, element_id
-        assert '<script src="/js/reusable.js"></script>' in page
+        assert '<script src="js/reusable.js"></script>' in page
         assert 'ReusableNodes.createFromSelection()' in page or 'ReusableNodes' in page
 
     def test_the_style_menu_carries_the_expand_layout_preference(self):

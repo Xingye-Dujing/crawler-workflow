@@ -128,7 +128,7 @@ def test_the_page_loads_the_catalogue_before_the_canvas():
     """The canvas reads the payload when it has answered; a page that never loads the module
     would silently run on the fallback forever."""
     html = (ROOT / 'backend' / 'static' / 'index.html').read_text(encoding='utf-8')
-    assert '/js/node-types.js' in html
-    assert html.index('/js/workflow.js') < html.index('/js/node-types.js') < html.index('/js/app.js')
+    assert 'js/node-types.js' in html
+    assert html.index('js/workflow.js') < html.index('js/node-types.js') < html.index('js/app.js')
     boot = (JS / 'app.js').read_text(encoding='utf-8')
     assert boot.index("boot('nodeTypes'") < boot.index("boot('canvas'")

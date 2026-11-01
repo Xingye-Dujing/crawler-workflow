@@ -65,8 +65,13 @@ if (typeof setTimeout === 'function') {
 (function () {
     const nativeFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
+        /* A /api/… string is site-root absolute, which under the /crawler reverse proxy
+           lands on a neighbour. The page's own bootstrap (index.html) decided the prefix
+           from the address bar — root deploy: '', subpath: '/crawler' — so the rewrite
+           borrows that verdict instead of hardcoding one: a hardcoded '/crawler' would
+           break the root deployment the same way the bare '/api/…' broke the subpath. */
         if (typeof input === 'string' && input.indexOf('/api/') === 0) {
-            input = '/crawler' + input;
+            input = (window.__CRAWLER_BASE__ || '') + input;
         }
         let lang = 'zh';
         try {

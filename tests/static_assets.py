@@ -20,8 +20,8 @@ STUDIO = STATIC / 'zenviz.html'
 CSS_DIR = STATIC / 'css'
 JS_DIR = STATIC / 'js'
 
-_STYLESHEET = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/css/([^"]+)"')
-_SCRIPT = re.compile(r'<script\b[^>]*\bsrc="/js/([^"]+)"')
+_STYLESHEET = re.compile(r'<link\b[^>]*\brel="stylesheet"[^>]*\bhref="/?(?:css)/([^"]+)"')
+_SCRIPT = re.compile(r'<script\b[^>]*\bsrc="/?(?:js)/([^"]+)"')
 
 
 def page_js(page: Path = INDEX) -> list[Path]:

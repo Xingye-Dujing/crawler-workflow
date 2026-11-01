@@ -25,7 +25,7 @@ INDEX = STATIC / 'index.html'
 STUDIO = STATIC / 'zenviz.html'
 JS_DIR = STATIC / 'js'
 
-PAGE_SCRIPT = re.compile(r'<script\b[^>]*\bsrc="(/js/[^"]+)"')
+PAGE_SCRIPT = re.compile(r'<script\b[^>]*\bsrc="((?:/)?js/[^"]+)"')
 # One nesting level of parentheses is all a ``run_node(...)`` call needs to be read whole; if the
 # call ever grows past that, the floor below stops reporting a scan that quietly matches nothing.
 _RUN_NODE_CALL = re.compile(r'run_node\((?:[^()]|\([^()]*\))*\)')
@@ -38,7 +38,7 @@ def _page_scripts(page: Path) -> list[str]:
     a subdirectory module missing from disk while the loader found it, and the two would disagree
     about which files the page ships.
     """
-    return [src.removeprefix('/js/') for src in PAGE_SCRIPT.findall(page.read_text(encoding='utf-8'))]
+    return [re.sub(r'^/?(?:js)/', '', src) for src in PAGE_SCRIPT.findall(page.read_text(encoding='utf-8'))]
 
 
 class TestThePageListsItsOwnModules:
