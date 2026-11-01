@@ -169,35 +169,45 @@ function sourcePanelHtml(nodeId, p) {
     if (offeredModes.length > 1) {
         /* One mode is not a choice: WeChat offers a single form, and a select
            with one option only makes the panel look unfinished. */
-        var modeOptions = offeredModes.map(function (m) {
-            /* A mode this machine or engine cannot run stays in the list and says why, rather
-               than disappearing: a node restored from another canvas has that mode STORED, and
-               an option that is simply absent would show the engine's first mode instead — the
-               panel lying about what the run would do. Disabled + named is the honest shape. */
-            var runnable = Capabilities.runnable(m) && Capabilities.cellRunnable(m, backend);
-            var why = runnable ? '' : Capabilities.modeRefusal(platform, m, backend);
-            return {
+        /* Cloud hiding, in one place: a mode this MACHINE cannot run (the server's own
+           verdict, payload.machine) gets no option at all — the hongguo comment harvest
+           needs a Windows desktop EXE, so a cloud host must not even see the entry. A
+           node restored with such a mode STORED still shows it below, disabled and named,
+           so the panel never paints another function over what is written. Engine-cell
+           trouble is different: it stays visible-disabled with its reason, because that
+           is repairable here rather than a wrong machine. */
+        var modeOptions = [];
+        offeredModes.forEach(function (m) {
+            if (!Capabilities.runnable(m)) return;
+            var runnable = Capabilities.cellRunnable(m, backend);
+            modeOptions.push({
                 value: m.key,
                 labelKey: m.labelKey,
                 disabled: !runnable,
-                labelSuffix: runnable ? '' : '（' + why + '）',
-            };
+                labelSuffix: runnable ? '' : '（' + Capabilities.modeRefusal(platform, m, backend) + '）',
+            });
         });
         if (
             wantedMode &&
-            !offeredModes.some(function (m) {
-                return m.key === wantedMode;
+            !modeOptions.some(function (o) {
+                return o.value === wantedMode;
             })
         ) {
-            /* The stored function is not in this engine's list at all (an old canvas, or a cell
-               CatBus dropped). Keep it visible and named: removing it would paint a different
+            /* The stored function is either not in this engine's list at all (an old canvas, or a cell
+               CatBus dropped) or the machine cannot run it (a cloud host holding a desktop node). Keep
+               it visible and named with its own refusal: removing it would paint a different
                function as if it were the one written, which is the mismatch this panel exists to
                prevent. The run refuses the stored key by name until the user picks another. */
+            var storedMode = null;
+            for (var i = 0; i < offeredModes.length; i++) {
+                if (offeredModes[i].key === wantedMode) storedMode = offeredModes[i];
+            }
+            var storedWhy = (storedMode && Capabilities.modeRefusal(platform, storedMode, backend)) || I18n.t('settings.backendNoCell');
             modeOptions.unshift({
                 value: wantedMode,
                 labelKey: '',
                 disabled: true,
-                labelSuffix: '（' + I18n.t('settings.backendNoCell') + '）',
+                labelSuffix: '（' + storedWhy + '）',
             });
         }
         html += sourceSelectHtml(

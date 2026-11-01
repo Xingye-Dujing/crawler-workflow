@@ -118,8 +118,9 @@ class TestTheChromeIsMarked:
 
     def test_the_controls_a_cloud_host_cannot_serve_are_marked(self):
         html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
-        # The login-browser button and the Ollama address field carry the marker class…
-        for needle in ('cookies.generate', 'set-ollamahost'):
+        # The login-browser button, the Ollama address field and the window-size field carry
+        # the marker class — the last one because a cloud host has no desktop window to size.
+        for needle in ('cookies.generate', 'set-ollamahost', 'set-window'):
             site = html.index(needle)
             assert 'cloud-hide' in html[site - 260 : site + 20], f'{needle} is not marked for a cloud boot'
         # …and the headless switch is NOT, because TopMenu.sync() rewrites that button's

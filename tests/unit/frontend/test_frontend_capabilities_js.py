@@ -597,10 +597,13 @@ class TestAModeThisMachineCannotRun:
     """The server says which modes its machine can honour; the page has to act on that.
 
     红果评论 drives a desktop player behind a proxy, so a Linux server and a Mac cannot run it and a
-    cloud host cannot either. The node's own executor refuses, but a user should not pay a run start
-    for an answer the page already had — hence a greyed option that stays in the list (the node STORES
-    that mode, and dropping the option would paint the platform's first mode instead), a pre-run
-    refusal, and the desktop-only settings rows taken out by the flag on ``<html>``.
+    cloud host cannot either. The node's own executor refuses, and the panel hides the entry from
+    every select: a mode the machine cannot honour is not offered at all — a greyed option is
+    still a visible entry point, and cloud must show none. The one exception is a node that has
+    the mode STORED (restored from a desktop canvas): its select keeps the stored key, disabled
+    and named, because an absent option would paint the platform's first mode over what is
+    written — the panel lying about what the run would do. The desktop-only settings rows are
+    taken out by the flag on ``<html>``.
     """
 
     @pytest.fixture(scope='module')
@@ -652,10 +655,16 @@ class TestAModeThisMachineCannotRun:
         assert match, html[:400]
         return match.group(0)
 
-    def test_the_unreachable_mode_is_still_listed_and_disabled(self, verdicts):
+    def test_the_stored_mode_is_still_listed_and_disabled(self, verdicts):
+        """The node STORES comments, so its own select keeps the key — disabled and named."""
         assert 'disabled' in self._harvest_option(verdicts['server']['html'])
         assert 'disabled' not in self._harvest_option(verdicts['desktop']['html'])
         assert 'disabled' not in self._harvest_option(verdicts['noanswer']['html'])
+
+    def test_a_node_that_does_not_store_the_mode_is_never_offered_it(self, verdicts):
+        """The cloud hiding is the point: a select on a machine without the requirement shows
+        no harvest option at all, so there is no entry point left to reach — not even greyed."""
+        assert '<option value="comments"' not in verdicts['board']['html'], verdicts['board']['html'][:400]
 
     def test_the_disabled_option_says_why_in_a_catalogue_word(self, verdicts):
         # The harness's I18n stub returns the KEY it was asked for, so this reads which word shows AND
@@ -669,8 +678,9 @@ class TestAModeThisMachineCannotRun:
         assert 'validate.modeUnavailable' not in verdicts['noanswer']['errors']
 
     def test_a_mode_without_a_requirement_is_never_collateral_damage(self, verdicts):
-        # The harvest option stays greyed here (the node is on the board mode, but the machine still
-        # cannot run comments); what must be untouched is the mode the node actually holds.
+        # The harvest option is hidden entirely on this machine (the node is on the board
+        # mode, and comments is not offered); what must be untouched is the mode the node
+        # actually holds — hot stays enabled and named.
         assert verdicts['board']['errors'] == []
         board = re.search(r'<option value="hot"[^>]*>', verdicts['board']['html'])
         assert board and 'disabled' not in board.group(0), board
