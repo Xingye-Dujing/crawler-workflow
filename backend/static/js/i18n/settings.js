@@ -338,6 +338,8 @@
         'set.note':
             'Machine-local settings. Saved to data/settings.json on the server ' +
             'and applied from the next execution — no restart needed.',
+        'set.readOnlyNote':
+            'Only an administrator may change these — your account can read them, not edit them.',
         'settings.aggressionHint': 'Judges how VIOLENT the speech is, not how negative: abuse, personal attack, privacy disclosure (人肉/开盒) and rumour framing, in three levels — none / mild / severe. Columns: aggression, aggression_score, aggression_hits (which pattern fired, so you can check the verdict rather than trust the number). The word-list mode is a RECALL device, not a classifier: an attack phrased in words the list does not hold is missed, and nothing here can measure that miss rate — the lists are in the repository so their limits are visible. Severe is weighted toward doxxing on purpose, because that is the step that turns online abuse into real-world harm. Combine with 分组聚合 on a phase column to get the paper\'s "violent speech per phase" curve.',
         'settings.botAuthorColumn': 'Author column',
         'settings.botTimeColumn': 'Time column',
@@ -762,6 +764,7 @@
         'set.note':
             '这些是本机相关设置。保存后写入服务器 ' +
             'data/settings.json，下次执行即生效，无需重启服务。',
+        'set.readOnlyNote': '这些设置只有管理员可以修改，你当前只能查看。',
         'settings.aggressionHint': '判的是言论有多**暴力**，不是有多负面：谩骂、人身攻击、隐私披露（人肉/开盒）、造谣转述四类特征，分三档 none / mild / severe。产出三列：aggression、aggression_score、aggression_hits（命中了什么词，让你能核对结论而不必信一个数）。词库模式是**召回器不是判定器**：换了说法的攻击它就看不见，而这一点在这里无法度量——词表就放在代码里，让你看得见它有多不全。severe 特意偏向隐私披露，因为那是把线上辱骂变成现实伤害的那一步。与「分组聚合」按阶段列汇总，就得到论文那条"各阶段暴力言论占比"曲线。',
         'settings.botAuthorColumn': '作者列',
         'settings.botTimeColumn': '时间列',

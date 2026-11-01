@@ -462,6 +462,13 @@ body.style-menu-open #top-menu {
   font-size: 10px;
   color: var(--text-dim);
 }
+/* Shown only when the signed-in account may read the settings but not change them: it has to
+   read as a state, not as another footnote, or the disabled fields look like a bug. */
+.set-readonly-note {
+  margin-top: 4px !important;
+  color: var(--cixi-warn, #b7791f);
+  font-weight: 600;
+}
 /* Local Ollama address — read-only here; the value lives in 设置. */
 .ai-host {
   flex: 1 1 auto;

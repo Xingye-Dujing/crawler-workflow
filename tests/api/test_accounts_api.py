@@ -599,3 +599,95 @@ class TestAnotherAccountsRunIsNotYours:
             execution_state['user_id'] = ''
             execution_state['running'] = False
             execution_state['logs'] = []
+
+
+#: The settings keys that name a file on the machine itself. A plain account has no use for
+#: them — they are a fingerprint of the host and a map of what to aim at — so it reads them
+#: blanked while still seeing the values its own runs live under.
+HOST_PATH_KEYS = (
+    'driver_path',
+    'browser_binary',
+    'latex_binary',
+    'catbus_cli',
+    'catbus_node',
+    'browser_profile_dir',
+    'hongguo_player_path',
+    'mitmdump_path',
+)
+
+
+def _as_plain_user(admin_client):
+    """A second, ordinary account on the same host, logged in on its own client."""
+    created = _create(admin_client, 'bob', role='user')
+    assert created.status_code in (200, 201), created.get_json()
+    other = _new_client(admin_client)
+    _login(other, 'bob')
+    # The account owes a password change on its first login, and that gate answers before any
+    # route it is not on the allow-list for — spend it, or every assertion below proves the
+    # gate instead of the permission it was written for.
+    return _settle_password(other)
+
+
+class TestMachineSettingsAreReadWriteForAdminsOnly:
+    """``data/settings.json`` is one file for every account: a driver path, the Ollama
+    address, the browser every crawl opens. One account may not move another's.
+
+    The write had been gated this way since accounts existed; what was missing is that a
+    plain account could still READ every host path, and that nothing told the panel the
+    fields were locked — so a user typed into one and met a 403 at save time.
+    """
+
+    def test_a_plain_account_reads_the_values_but_not_the_host_paths(self, admin_client):
+        bob = _as_plain_user(admin_client)
+        body = bob.get('/api/settings').get_json()
+        assert body['ok'] is True
+        assert body['read_only'] is True, 'the panel has to be told, not left to find out on save'
+        for key in HOST_PATH_KEYS:
+            assert body['settings'].get(key, 'sentinel') == '', f'{key} leaked the host layout'
+        # The values that describe how its OWN runs behave stay readable.
+        assert 'page_load_timeout' in body['settings']
+        assert 'element_timeout' in body['settings']
+
+    def test_a_plain_account_cannot_write_them(self, admin_client):
+        bob = _as_plain_user(admin_client)
+        response = _post(bob, '/api/settings', {'settings': {'page_load_timeout': 5}})
+        assert response.status_code == 403
+        assert 'admin' in response.get_json()['error'].lower()
+
+    def test_an_admin_sees_everything_and_may_write(self, admin_client):
+        body = admin_client.get('/api/settings').get_json()
+        assert body['read_only'] is False
+        for key in HOST_PATH_KEYS:
+            assert key in body['settings']
+        saved = _post(admin_client, '/api/settings', {'settings': {'element_timeout': 15}})
+        assert saved.status_code == 200, saved.get_json()
+
+    def test_a_local_install_with_no_accounts_stays_editable(self, client, monkeypatch):
+        """The single-user default: there is nobody to protect the settings FROM."""
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'ADMIN_USER', '')
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
+        accounts_service.reset_service()
+        body = client.get('/api/settings').get_json()
+        assert body['read_only'] is False
+        assert _post(client, '/api/settings', {'settings': {'element_timeout': 15}}).status_code == 200
+
+
+class TestTheLexiconsAreAMachineLevelWrite:
+    """The lexicon store is a singleton with no per-account slot, and every write reloads
+    jieba for the whole process — so one account's stopword changes what every other
+    account's next tokenisation produces."""
+
+    def test_a_plain_account_may_read_but_not_edit(self, admin_client):
+        bob = _as_plain_user(admin_client)
+        assert bob.get('/api/lexicon').get_json()['ok'] is True
+        added = _post(bob, '/api/lexicon', {'kind': 'stopword', 'terms': ['测试']})
+        assert added.status_code == 403
+        cleared = _delete(bob, '/api/lexicon', {'kind': 'userdict', 'clear': True})
+        assert cleared.status_code == 403
+
+    def test_an_admin_may_edit(self, admin_client):
+        added = _post(admin_client, '/api/lexicon', {'kind': 'stopword', 'terms': ['测试']})
+        assert added.status_code == 200, added.get_json()
+        removed = _delete(admin_client, '/api/lexicon', {'kind': 'stopword', 'term': '测试'})
+        assert removed.status_code == 200, removed.get_json()

@@ -248,6 +248,28 @@ class TestServerSettingsPanel:
     def test_a_save_that_warned_shows_the_warning(self, st):
         assert any('驱动版本偏旧' in toast for toast in st['app_settings']['warned']), st['app_settings']['warned']
 
+    def test_a_read_only_account_gets_dead_fields_and_the_reason(self, st):
+        """These settings are one file for every account, so only an admin may change them.
+        The server refuses the write; the panel's job is that the user is never tempted."""
+        read_only = st['app_settings']['read_only']
+        assert read_only['flag'] is True
+        assert read_only['fieldsDisabled'] is True
+        assert read_only['checkboxDisabled'] is True, 'a readonly checkbox still toggles on click'
+        assert read_only['saveDisabled'] is True
+        assert read_only['noteShown'] is True, 'a dead field with no explanation reads as a bug'
+
+    def test_a_read_only_account_sends_no_write(self, st):
+        saved = st['app_settings']['read_only_save']
+        assert saved['requested'] == 0
+        assert saved['toasts'], 'silence would read as "saved"'
+
+    def test_an_administrator_gets_the_fields_back(self, st):
+        admin = st['app_settings']['admin']
+        assert admin['flag'] is True, 'the administrator is not read-only'
+        assert admin['fieldsEnabled'] is True
+        assert admin['saveEnabled'] is True
+        assert admin['noteHidden'] is True
+
 
 class TestFloatingConversion:
     def test_a_class_anchored_panel_is_pinned_to_its_computed_box(self, st):

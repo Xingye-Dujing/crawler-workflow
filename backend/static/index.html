@@ -2326,6 +2326,16 @@
           这些是本机相关设置。保存后写入服务器
           data/settings.json，下次执行即生效，无需重启服务。
         </div>
+        <!-- Read-only for anyone but an administrator: the server refuses the write, so the
+             panel says so up front instead of letting a user fill a field in and meet a 403. -->
+        <div
+          class="ai-hint-note set-readonly-note"
+          id="set-readonly-note"
+          data-i18n="set.readOnlyNote"
+          hidden
+        >
+          这些设置只有管理员可以修改，你当前只能查看。
+        </div>
       </div>
     </div>
 

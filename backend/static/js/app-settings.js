@@ -39,6 +39,10 @@ const AppSettings = {
     _values: null,
     _draft: {},
     _pulled: false,
+    /* Whether this account may change these values. The server is the one that decides
+       (`/api/settings` answers `read_only`); the panel only mirrors it so a field is
+       visibly dead rather than a trap that fails at save time. */
+    readOnly: false,
 
     async pull(force) {
         if (this._pulled && !force) return;
@@ -48,6 +52,7 @@ const AppSettings = {
             if (result.ok) {
                 this._values = result.settings || {};
                 this._draft = {};
+                this.readOnly = result.read_only === true;
                 this._pulled = true;
                 this.applyToPanel();
             }
@@ -65,13 +70,26 @@ const AppSettings = {
             // do nothing and the panel would show a stale box.
             if (el.type === 'checkbox') el.checked = !!v[key];
             else el.value = v[key] !== undefined && v[key] !== null ? v[key] : '';
+            // Disabled, not readOnly: a `readonly` text field still looks editable, and a
+            // `readonly` checkbox still toggles on click in more than one browser.
+            el.disabled = this.readOnly;
         });
+        const saveBtn = document.getElementById('set-save-btn');
+        if (saveBtn) saveBtn.disabled = this.readOnly;
+        const note = document.getElementById('set-readonly-note');
+        if (note) note.hidden = !this.readOnly;
         /* The AI panel shows the Ollama address read-only, and it is fetched
            asynchronously — mirror it now that the values have arrived. */
         if (window.LLMSettings) LLMSettings.renderOllamaHost();
     },
 
     async save() {
+        // The server refuses this anyway; refusing here is what keeps the user from typing a
+        // whole field and meeting a 403 with no explanation of which door was locked.
+        if (this.readOnly) {
+            showToast(I18n.t('toast.setReadOnly'));
+            return;
+        }
         if (!Object.keys(this._draft).length) {
             showToast(I18n.t('toast.setNoChange'));
             return;

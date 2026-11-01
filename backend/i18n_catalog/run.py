@@ -71,7 +71,6 @@ ZH = {
     'engine.visualize_no_x': '节点 {nid}：可视化节点缺少 X 字段',
     'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与「重新采集」不能同时开启',
     'engine.watermarkUnsupported': '节点 {nid}：跨运行水位只支持哔哩哔哩作者投稿',
-    'executor.task_failed': '任务失败：{err}',
     'housekeeping.datasetStoreFailed': '孤立文件自动清理失败（不影响本次运行）',
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
@@ -475,7 +474,6 @@ EN = {
     'engine.visualize_no_x': 'Node {nid}: visualize node is missing the x field',
     'engine.watermarkRecrawl': 'Node {nid}: cross-run watermark and re-crawl cannot both be on',
     'engine.watermarkUnsupported': 'Node {nid}: cross-run watermark supports only Bilibili author uploads',
-    'executor.task_failed': 'Task failed: {err}',
     'housekeeping.datasetStoreFailed': 'Automatic orphan-file cleanup failed (the run itself is unaffected)',
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (

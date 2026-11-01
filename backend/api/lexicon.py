@@ -13,8 +13,10 @@ from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from runtime.stores import get_lexicon_store
 
+from api.auth import is_admin
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import t
+from services.accounts.service import accounts_mode
 from services.analysis.lexicon import reload_userdict
 from services.analysis.lexicon_store import KINDS
 
@@ -33,8 +35,25 @@ def list_lexicon():
     return jsonify({'ok': True, 'entries': store.list(kind or None, limit=limit), 'counts': store.counts()})
 
 
+def _write_refusal():
+    """Why this caller may not edit the lexicons.
+
+    The store is a SINGLETON on this machine (``runtime.stores.get_lexicon_store``) — there is
+    no per-account slot — and every write reloads jieba for the whole process. So an ordinary
+    account adding a stopword (or clearing the user dictionary) silently changes what every
+    OTHER account's next tokenisation, word cloud and topic analysis produce. That is the same
+    machine-level write ``/api/settings`` guards, and it gets the same door.
+    """
+    if accounts_mode() and not is_admin():
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    return None
+
+
 @bp.route('/api/lexicon', methods=['POST'])
 def add_lexicon():
+    refusal = _write_refusal()
+    if refusal is not None:
+        return refusal
     body = _json_body()
     if body is None:
         return _bad_body()
@@ -54,6 +73,9 @@ def add_lexicon():
 
 @bp.route('/api/lexicon', methods=['DELETE'])
 def delete_lexicon():
+    refusal = _write_refusal()
+    if refusal is not None:
+        return refusal
     body = _json_body()
     if body is None:
         return _bad_body()
