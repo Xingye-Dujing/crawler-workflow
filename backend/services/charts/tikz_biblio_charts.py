@@ -16,10 +16,11 @@ from services.charts.contracts import (
 from services.charts.visualizer import ChartConfigError, _localize_label
 
 from .tikz_preamble import (
+    _cat_axis_y,
+    _cat_ref,
     _esc,
     _fold_label,
     _num,
-    _sym,
 )
 
 
@@ -97,11 +98,14 @@ class BiblioChartMixin:
             raise ChartConfigError(t('chart.biblio_no_years'))
         max_frequency = max((entry[3] for _, entries in ordered for entry in entries), default=1.0) or 1.0
         body = []
-        for index, (name, entries) in enumerate(ordered):
+        for index, (_name, entries) in enumerate(ordered):
             color = cls._biblio_color(index)
             firsts = [entry[0] for entry in entries]
             lasts = [entry[1] for entry in entries]
-            category_key = _esc(name).replace(' ', '~')
+            # The cluster's own SLOT, not its name: a cluster label is a model's phrasing and
+            # can carry a comma or a brace, both of which used to land inside an
+            # ``axis cs:(<year>,<label>)`` pair (see ``_cat_ref``).
+            category_key = _cat_ref(index + 1)
             body.append(
                 f'\\draw[black!18,line width=1pt] (axis cs:{min(firsts)},{category_key}) -- '
                 f'(axis cs:{max(lasts)},{category_key});'
@@ -119,9 +123,9 @@ class BiblioChartMixin:
                     f' {{{_esc(entry_name)}}};'
                 )
         return (
-            '\\begin{tikzpicture}\\begin{axis}[cixi,symbolic y coords={'
-            + _sym(categories)
-            + '},ytick=data,y=0.95cm,xmin='
+            '\\begin{tikzpicture}\\begin{axis}[cixi,'
+            + _cat_axis_y(categories)
+            + ',y=0.95cm,xmin='
             + str(min(years) - 1)
             + ',xmax='
             + str(max(years) + 1)
@@ -151,20 +155,21 @@ class BiblioChartMixin:
         body = []
         for index, (name, start, end, strength) in enumerate(items):
             color = cls._biblio_color(index % 10)
+            slot = _cat_ref(index + 1)
             body.append(
                 f'\\draw[{color},fill={color}!65,rounded corners=1pt] (axis cs:{start},'
-                f'{_esc(name).replace(" ", "~")}) rectangle (axis cs:{end + 1},'
-                f'{_esc(name).replace(" ", "~")});'
+                f'{slot}) rectangle (axis cs:{end + 1},'
+                f'{slot});'
                 f'\\node[lblbox,anchor=west,font=\\scriptsize] at (axis cs:{start},'
-                f'{_esc(name).replace(" ", "~")}) {{{_esc(name)}}};'
+                f'{slot}) {{{_esc(name)}}};'
                 f'\\node[font=\\scriptsize,anchor=east] at (axis cs:{end + 1},'
-                f'{_esc(name).replace(" ", "~")}) {{B={_num(strength)}}};'
+                f'{slot}) {{B={_num(strength)}}};'
             )
         height = f'{1 + len(items) * 1.15:.2f}cm'
         return (
             '\\begin{tikzpicture}\\begin{axis}[axis y line=none,axis x line=none,y=-1.15cm,'
-            'symbolic y coords={' + _sym(categories) + '},ytick=data,'
-            'yticklabel style={font=\\scriptsize},'
+            + _cat_axis_y(categories, extra='yticklabel style={font=\\scriptsize}')
+            + ','
             f'xmin={min(years) - 1},xmax={max(years) + 2},xlabel={{年份}},width=16cm,height='
             + height
             + ']\n'
@@ -191,21 +196,22 @@ class BiblioChartMixin:
         categories = [display(iso, 'zh') or iso for iso, _value, _names in regions]
         body = []
         color = cls._biblio_color(0)
-        for iso, value, _names in regions:
-            label = _esc(display(iso, 'zh') or iso).replace(' ', '~')
+        for index, (_iso, value, _names) in enumerate(regions):
+            slot = _cat_ref(index + 1)
             width = round(value / top * 12.0, 3)
             body.append(
-                f'\\draw[{color},fill={color}!55,rounded corners=1pt] (axis cs:0,{label}) rectangle '
-                f'(axis cs:{width},{label});'
-                f'\\node[font=\\scriptsize,anchor=west] at (axis cs:{round(width + 0.15, 3)},{label}) '
+                f'\\draw[{color},fill={color}!55,rounded corners=1pt] (axis cs:0,{slot}) rectangle '
+                f'(axis cs:{width},{slot});'
+                f'\\node[font=\\scriptsize,anchor=west] at (axis cs:{round(width + 0.15, 3)},{slot}) '
                 f'{{{_num(value)} · {round(value / total * 100, 1)}\\%}};'
             )
         height = f'{1 + len(regions) * 1.1:.2f}cm'
         note = _esc(t('chart.biblio_geo_note'))
         return (
             '\\begin{tikzpicture}\\begin{axis}[axis y line=none,axis x line=bottom,y=-1.1cm,'
-            'symbolic y coords={' + _sym(categories) + '},ytick=data,xmin=0,xmax=15,'
-            'yticklabel style={font=\\scriptsize,align=right},xlabel={频次},width=16cm,height='
+            + _cat_axis_y(categories, extra='yticklabel style={font=\\scriptsize,align=right}')
+            + ',xmin=0,xmax=15,'
+            'xlabel={频次},width=16cm,height='
             + height
             + f']\n{chr(10).join(body)}\n\\end{{axis}}'
             + '\\node[font=\\scriptsize,text=gray,anchor=north west,align=left] at (current axis.south west) '
@@ -359,7 +365,9 @@ class BiblioChartMixin:
         polarity = set(labels) == set(POLARITY_LABELS)
         items = cls._overlay_ranked(items, polarity)[:OVERLAY_ROW_LIMIT]
         names = [name for name, _counts in items]
-        coords = {name: _esc(name).replace(' ', '~') for name in names}
+        # A node's name is a paper title or an author list — it goes in yticklabels, never in
+        # a coordinate tuple (see ``_cat_ref``).
+        coords = {name: _cat_ref(index + 1) for index, name in enumerate(names)}
         body = []
         colors = {'negative': 'cB', 'neutral': 'cNeutral', 'positive': 'cC'}
         for index, label in enumerate(labels):
@@ -375,9 +383,11 @@ class BiblioChartMixin:
             body.append(f'\\addlegendentry{{{_esc(_localize_label(label))}}}')
         return (
             '\\begin{tikzpicture}\\begin{axis}[cixi,xbar stacked,xmin=0,xmax=100,'
-            'width=15cm,height=' + f'{1.1 + len(items) * 0.62:.2f}' + 'cm,'
-            'symbolic y coords={' + _sym(names) + '},ytick=data,y dir=reverse,'
-            'yticklabel style={font=\\scriptsize},xmajorgrids=true,ymajorgrids=false,'
+            'width=15cm,height='
+            + f'{1.1 + len(items) * 0.62:.2f}'
+            + 'cm,'
+            + _cat_axis_y(names, extra='yticklabel style={font=\\scriptsize}')
+            + ',y dir=reverse,xmajorgrids=true,ymajorgrids=false,'
             'xlabel={占比（\\%）},'
             'legend style={font=\\scriptsize,draw=none,at={(0.5,1.02)},anchor=south,legend columns='
             + str(max(1, len(labels)))

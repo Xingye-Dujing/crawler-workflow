@@ -84,6 +84,7 @@ ZH = {
     'chart.col.weights': '权重',
     'chart.col.within_freq': '主题内词频',
     'chart.count': '数量',
+    'chart.pie_negative': '饼图画不出来：以下分类的聚合值是负数（{names}）——占比不能有负值，请换用柱状图或先过滤',
     'chart.noCjkFont': (
         '本机字体里没有能显示汉字的字体（已找过：{checked}）：'
         'Matplotlib 出的 PNG 里中文会是方框——{remedy}'
@@ -193,6 +194,10 @@ EN = {
     'chart.col.weights': 'Weight',
     'chart.col.within_freq': 'Within-topic frequency',
     'chart.count': 'count',
+    'chart.pie_negative': (
+        'The pie cannot be drawn: these categories aggregate to a negative value ({names}) — a share '
+        'cannot be negative, so use a bar chart or filter the rows first'
+    ),
     'chart.noCjkFont': (
         'No installed font carries Chinese glyphs (looked for: {checked}): Chinese labels in Matplotlib PNG '
         'output will draw as boxes — {remedy} (ECharts figures use browser fonts and LaTeX figures use ctex, '

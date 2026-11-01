@@ -151,7 +151,13 @@ def _esc(value) -> str:
     """Make a label safe for LaTeX text. Chinese passes through (ctex); TeX's ten specials are escaped."""
     out = []
     for ch in str(value):
-        if ch in '\\&%#_{}$':
+        if ch == '\\':
+            # ``\\`` is TeX's line break, NOT a literal backslash — writing it into
+            # ``\node{…}`` or an xticklabel is ``There's no line here to end`` (and a
+            # backslash is a normal character in the titles, DOIs and paths a crawl brings
+            # back). The literal form is the macro below.
+            out.append('\\textbackslash{}')
+        elif ch in '&%#_{}$':
             out.append('\\' + ch)
         elif ch == '~':
             out.append('\\textasciitilde{}')
@@ -181,9 +187,34 @@ def _num(value) -> str:
     return f'{f:g}'
 
 
-def _sym(labels) -> str:
-    """A pgfplots ``symbolic coords`` set: comma-separated, each label escaped and spaces made robust."""
-    return ','.join(_esc(label).replace(' ', '~') for label in labels)
+def _cat_ref(index: int) -> str:
+    """The coordinate token for the category at ``index`` (1-based).
+
+    A category NAME is data — a paper title, an institution, a region — and it used to be
+    pasted straight into ``coordinates {(<label>,<value>)}``. Two consequences, both seen on
+    real exports: a label containing a comma turned a 2-tuple into a 3-tuple
+    (``University of California, Berkeley`` → ``(University, California, 4)``, and pgfplots
+    answers ``the number of symbolic coords…`` by failing to compile the whole document), and
+    a label containing ``}`` closed the coordinate group early, which is enough to inject any
+    pgfplots/TeX content — including ``\\input{<a local file>}``, which xelatex honours while
+    it refuses ``\\write18``. The plot therefore addresses its own generated slots, and the
+    text a reader sees travels in ``xticklabels``/``yticklabels``, escaped and braced.
+    """
+    return f'c{max(1, int(index))}'
+
+
+def _cat_keys(count: int) -> str:
+    """Every category slot, comma-separated: ``c1,c2,c3``."""
+    return ','.join(_cat_ref(i) for i in range(1, max(0, int(count)) + 1))
+
+
+def _cat_labels(labels) -> str:
+    """The reader-facing text for those slots, one brace group per label.
+
+    Braced on purpose: pgfplots splits a tick-label list on commas, so ``{{A, B}}`` is the
+    single label ``A, B`` while ``{A, B}`` would be two labels for one slot.
+    """
+    return ','.join('{' + _esc(label).replace(' ', '~') + '}' for label in labels)
 
 
 def _fold_label(text, width=7) -> str:
@@ -209,7 +240,21 @@ def _cat_axis(labels, xlabel='') -> str:
         else 'xticklabel style={font=\\scriptsize},'
     )
     name = f',xlabel={{{_esc(xlabel)}}}' if xlabel else ''
-    return f'symbolic x coords={{{_sym(labels)}}},xtick=data,{rotate}enlargelimits=0.15{name}'
+    return (
+        f'symbolic x coords={{{_cat_keys(len(labels))}}},xtick=data,'
+        f'xticklabels={{{_cat_labels(labels)}}},{rotate}enlargelimits=0.15{name}'
+    )
+
+
+def _cat_axis_y(labels, extra='') -> str:
+    """The same rule for a horizontal bar chart's category axis.
+
+    Reads the labels into ``yticklabels`` so the coordinate slots stay generated tokens — the
+    biblio charts draw into ``axis cs:(<number>,<category>)`` and used to paste the escaped
+    label in there, where a comma in an institution name is the same failure as on the x axis.
+    """
+    tail = f',{extra}' if extra else ''
+    return f'symbolic y coords={{{_cat_keys(len(labels))}}},ytick=data,yticklabels={{{_cat_labels(labels)}}}{tail}'
 
 
 def _label_key(chart_type, title) -> str:

@@ -440,3 +440,68 @@ class TestTheConcentricFigure:
         out = L.to_latex_table(_biblio(), 'concentric', title='表 X')
         assert '2020' in out and '2021' in out
         assert '甲' in out, 'the ring row names its most frequent nodes'
+
+
+class TestCategoryNamesNeverReachACoordinate:
+    """The category name is DATA: a paper title, an institution, a region.
+
+    It used to be pasted into ``coordinates {(<label>,<value>)}``, where a comma turned a 2-tuple
+    into a 3-tuple (``University of California, Berkeley`` broke every such figure) and a ``}``
+    closed the group early — enough to inject ``\\input{<a local file>}``, which xelatex honours
+    while it refuses ``\\write18``. The figure now addresses generated slots and the text travels
+    in ``xticklabels``, escaped.
+    """
+
+    HOSTILE = 'x}\\input{/etc/passwd}\\addplot coordinates{(y'
+
+    def test_a_comma_in_a_category_stays_a_two_tuple(self):
+        df = pd.DataFrame({'g': ['University of California, Berkeley', 'MIT'], 'v': [4.0, 9.0]})
+        out = L.to_latex_document(df, 'bar', x='g', y='v')
+        assert 'symbolic x coords={c1,c2}' in out
+        assert 'coordinates {(c1,4) (c2,9)}' in out, 'a comma in the label broke the tuple'
+        assert 'xticklabels={{University~of~California,~Berkeley},{MIT}}' in out
+
+    def test_a_brace_in_a_category_cannot_open_a_new_command(self):
+        df = pd.DataFrame({'g': [self.HOSTILE, 'ok'], 'v': [3.0, 4.0]})
+        out = L.to_latex_document(df, 'bar', x='g', y='v')
+        assert 'coordinates {(c1,3) (c2,4)}' in out
+        # The payload survives ONLY as escaped text inside the tick label, never as a command.
+        assert '\\input{' not in out, 'the data opened a TeX command'
+        assert '\\textbackslash{}input' in out
+
+    def test_a_backslash_is_written_as_a_literal_not_a_line_break(self):
+        r"""``\\`` is TeX's newline, so ``C:/data`` used to break every label it appeared in."""
+        # built with chr(92) so this file survives a shell that eats backslashes
+        df = pd.DataFrame({'g': ['C:' + chr(92) + 'data' + chr(92) + 'a.csv'], 'v': [1.0]})
+        out = L.to_latex_document(df, 'bar', x='g', y='v')
+        assert '\\textbackslash{}' in out
+        assert 'coordinates {(c1,1)}' in out
+
+    def test_a_paired_bar_chart_uses_slots_on_its_category_axis(self):
+        df = pd.DataFrame({'术语': ['机器学习, 监督', '聚类'], '总频次': [30.0, 10.0], '主题内': [12.0, 5.0]})
+        out = L.to_latex_document(df, 'topic_terms', x='术语', y='总频次', y2='主题内')
+        assert 'symbolic y coords={c1,c2}' in out
+        assert 'yticklabels={{机器学习,~监督},{聚类}}' in out
+
+    def test_a_missing_aggregate_is_dropped_not_drawn_at_zero(self):
+        """An empty group is a missing measurement; a bar at 0 is a claim about one.
+
+        ``agg='mean'`` over a group whose every value is blank IS nan (``sum`` legitimately
+        answers 0, which is why this names the aggregation).
+        """
+        df = pd.DataFrame({'g': ['甲', '乙'], 'v': [None, 4.0]})
+        out = L.to_latex_document(df, 'bar', x='g', y='v', agg='mean')
+        assert 'coordinates {(c2,4)}' in out
+        assert '(c1,0)' not in out
+
+    def test_a_negative_share_is_refused_not_drawn_backwards(self):
+        df = pd.DataFrame({'g': ['甲', '乙'], 'v': [-3.0, 5.0]})
+        with pytest.raises(ChartConfigError) as caught:
+            L.to_latex_document(df, 'pie', x='g', y='v')
+        assert '甲' in str(caught.value), 'the refusal names the offending category'
+
+    def test_a_flat_box_gets_a_window_instead_of_a_zero_range(self):
+        """Every row identical → ``ymin == ymax`` → pgfplots divides by a zero range."""
+        df = pd.DataFrame({'g': ['甲', '甲', '乙'], 'v': [2.0, 2.0, 2.0]})
+        out = L.to_latex_document(df, 'box', x='g', y='v')
+        assert 'ymin=1.9,ymax=2.1' in out

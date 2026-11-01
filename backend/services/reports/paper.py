@@ -341,6 +341,11 @@ def generate(run_id: str, *, title: str, store, export_dir: str) -> dict:
         slot.setdefault('name', str(entry.get('name') or ''))
     nodes = list(run.get('nodes') or [])
     titles = {str(node.get('node_id')): str(node.get('title') or node.get('node_id') or '') for node in nodes}
+    # Deliberately NOT sorted: figure and table numbers have to follow the order the run produced
+    # them, or 正文's 「图 1 支撑论点 A」 names a different figure than the preview the user just
+    # looked at — and a Chinese caption sorts by code point, which is a near-random order.
+    # ``by_node`` is an insertion-ordered dict filled from the run's own filing order below, so
+    # iterating it IS the run order.
     entries = []
     for node_id, slot in by_node.items():
         caption = titles.get(node_id) or node_id
@@ -351,7 +356,6 @@ def generate(run_id: str, *, title: str, store, export_dir: str) -> dict:
                 'caption': caption,
             }
         )
-    entries.sort(key=lambda item: item['caption'])
     # A chart node that ran but filed nothing is not a gap in the paper — it is a gap the paper names.
     filed = {str(node_id) for node_id, slot in by_node.items() if slot.get('figure') or slot.get('table')}
     missing = [

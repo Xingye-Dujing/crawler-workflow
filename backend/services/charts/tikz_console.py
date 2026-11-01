@@ -31,10 +31,12 @@ from .tikz_preamble import (
     GRAPH_BOX_CM,
     GRAPH_LINE_CM,
     _cat_axis,
+    _cat_keys,
+    _cat_labels,
+    _cat_ref,
     _esc,
     _fold_label,
     _num,
-    _sym,
 )
 
 
@@ -52,7 +54,14 @@ class ConsoleFigureMixin:
         if not x:
             raise ChartConfigError(f'{chart_type} LaTeX requires a category field (x)')
         labels, values = VisualizationService.aggregate(df, x, y, agg)
-        marks = ' '.join(f'({lab},{_num(v)})' for lab, v in zip(labels, values, strict=True))
+        # Slots, not names: ``_cat_ref`` explains why (a comma in a category broke the tuple, a
+        # brace in one could inject TeX). A non-finite aggregate is DROPPED rather than written
+        # as 0 — an empty group is a missing measurement, and a bar at zero is a claim.
+        marks = ' '.join(
+            f'({_cat_ref(i)},{_num(v)})'
+            for i, (_lab, v) in enumerate(zip(labels, values, strict=True), 1)
+            if math.isfinite(v)
+        )
         if chart_type == 'bar':
             # Reference fig-3: a solid bar wearing its own value on top, a width that narrows as categories crowd.
             width = '0.62cm' if len(labels) <= 6 else '0.4cm' if len(labels) <= 12 else '0.25cm'
@@ -74,8 +83,8 @@ class ConsoleFigureMixin:
             raise ChartConfigError('dual_line LaTeX requires a category field (x) and a second value field (y2)')
         labels, left = VisualizationService.aggregate(df, x, y, agg)
         _, right = VisualizationService.aggregate(df, x, y2, agg2 or 'mean')
-        pts_l = ' '.join(f'({lab},{_num(v)})' for lab, v in zip(labels, left, strict=True))
-        pts_r = ' '.join(f'({lab},{_num(v)})' for lab, v in zip(labels, right, strict=True))
+        pts_l = ' '.join(f'({_cat_ref(i)},{_num(v)})' for i, v in enumerate(left, 1) if math.isfinite(v))
+        pts_r = ' '.join(f'({_cat_ref(i)},{_num(v)})' for i, v in enumerate(right, 1) if math.isfinite(v))
         ln = _esc(_localize_label(y) if y else t('chart.count'))
         rn = _esc(_localize_label(y2))
         sym = _cat_axis(labels, '')
@@ -114,8 +123,8 @@ class ConsoleFigureMixin:
         plots = []
         for idx, field in enumerate(fields):
             pts = ' '.join(
-                f'({lab},{_num(round(cols[field][i] / totals[i] * 100, 2) if totals[i] else 0)})'
-                for i, lab in enumerate(labels)
+                f'({_cat_ref(i + 1)},{_num(round(cols[field][i] / totals[i] * 100, 2) if totals[i] else 0)})'
+                for i in range(len(labels))
             )
             color = _CYCLE_NAMES[idx % len(_CYCLE_NAMES)]
             name = _esc(_localize_label(field))
@@ -171,6 +180,13 @@ class ConsoleFigureMixin:
             raise ChartConfigError('box LaTeX needs a category field (x) with a numeric (y), or one numeric (x)')
         lo_all = min(s[0] for _, s in groups)
         hi_all = max(s[4] for _, s in groups)
+        if hi_all <= lo_all:
+            # Every row the same (a rating column that is uniformly 5, a counter that is
+            # uniformly 0): ``ymin == ymax`` makes pgfplots divide by a zero range and the whole
+            # document dies on ``Dimension too large``. Give the flat line a window instead of
+            # asking for a scale with no height.
+            pad = abs(hi_all) * 0.05 or 1.0
+            lo_all, hi_all = lo_all - pad, hi_all + pad
         # pgfplots has no boxplot in core, so the five-number summary is drawn by hand — whiskers,
         # box, median — which is exactly the paper convention and compiles with nothing exotic.
         draws = []
@@ -185,7 +201,7 @@ class ConsoleFigureMixin:
                 f'\\draw[line width=1.1pt,color=cD] (axis cs:{i - 0.25},{med}) -- (axis cs:{i + 0.25},{med});'
             )
         cat = 'xtick={' + ','.join(str(i) for i in range(1, len(groups) + 1)) + '}'
-        cats_labels = 'xticklabels={' + _sym([g[0] for g in groups]) + '}'
+        cats_labels = 'xticklabels={' + _cat_labels([g[0] for g in groups]) + '}'
         ylab = _esc(_localize_label(y) if y else t('chart.count'))
         return (
             '\\begin{axis}[cixi,width=10cm,height=6.2cm,ymin='
@@ -211,6 +227,12 @@ class ConsoleFigureMixin:
             raise ChartConfigError('pie LaTeX requires a category field (x)')
         labels, values = VisualizationService.aggregate(df, x, y, agg)
         vals = [float(v) if _finite([v]) else 0.0 for v in values]
+        # A pie cannot show a negative share: with one it drew a reversed arc
+        # (``arc (0.00:-540.00:…)``) and labelled it ``-150\%`` — a number in the legend that
+        # reads as a real distribution. Refuse by name instead of drawing it.
+        if any(v < 0 for v in vals):
+            negative = ', '.join(str(lab) for lab, v in zip(labels, vals, strict=True) if v < 0)[:120]
+            raise ChartConfigError(t('chart.pie_negative', names=negative))
         total = sum(vals) or 1.0
         draws, angle = [], 0.0
         n = len(labels)
@@ -248,8 +270,10 @@ class ConsoleFigureMixin:
         cells = []
         for j, row in enumerate(matrix):  # rows = y categories, drawn top-down
             for i, value in enumerate(row):
+                # Clamped to 0…1: a negative value produced ``fill=cA!-55``, which xelatex
+                # answers with ``Illegal mix`` and the whole document fails to compile.
                 frac = (float(value) / vmax) if _finite([value]) else 0.0
-                shade = int(frac * 92)
+                shade = int(max(0.0, min(1.0, frac)) * 92)
                 # The cell text flips to white only where the cA wash is deep enough to need it.
                 text = 'white' if shade >= 55 else 'black'
                 cells.append(
@@ -301,7 +325,7 @@ class ConsoleFigureMixin:
             r = 3.0
             size = sizes[i]
             if biggest and pd.notna(size):
-                r = max(3.0, 8.0 * math.sqrt(float(size) / biggest))
+                r = max(3.0, 8.0 * math.sqrt(max(0.0, float(size) / biggest)))
             shape = (
                 f'\\draw[fill=cA!28,draw=cA,line width=0.6pt] (axis cs:{_num(a)},{_num(b)}) circle[radius={r:.1f}pt];'
             )
@@ -333,14 +357,18 @@ class ConsoleFigureMixin:
         overall = pd.to_numeric(df[y], errors='coerce').tolist()
         within = pd.to_numeric(df[y2], errors='coerce').tolist()
         y_disp, y2_disp = _esc(_localize_label(y)), _esc(_localize_label(y2))
-        pts_o = ' '.join(f'({_num(v)},{_esc(t_).replace(" ", "~")})' for t_, v in zip(terms, overall, strict=True))
-        pts_w = ' '.join(f'({_num(v)},{_esc(t_).replace(" ", "~")})' for t_, v in zip(terms, within, strict=True))
+        # Terms are keywords crawled from the corpus: they go in yticklabels, and the bars
+        # address generated slots — a term containing a comma or a brace used to break the
+        # coordinate tuple (see ``_cat_ref``).
+        pts_o = ' '.join(f'({_num(v)},{_cat_ref(i)})' for i, v in enumerate(overall, 1) if math.isfinite(v))
+        pts_w = ' '.join(f'({_num(v)},{_cat_ref(i)})' for i, v in enumerate(within, 1) if math.isfinite(v))
         # Reference fig-5: slim paired bars, and a legend swatch drawn as a thin rectangle so it matches the bars
         # instead of a fat default line marker.
         return (
             f'\\begin{{axis}}[cixi,xbar,enlargelimits=0.15,bar width=0.13cm,bar shift=0.17cm,'
             f'legend image code/.code={{\\draw[#1] (0cm,-0.09cm) rectangle (0.5cm,0.09cm);}},'
-            f'symbolic y coords={{{_sym(terms)}}},ytick=data,'
+            f'symbolic y coords={{{_cat_keys(len(terms))}}},ytick=data,'
+            f'yticklabels={{{_cat_labels(terms)}}},'
             f'yticklabel style={{font=\\scriptsize,text width=2.4cm,align=right}},'
             f'width=11cm,height={max(6, len(terms) * 0.4):.0f}cm,'
             f'xlabel={{{_esc(t("chart.count"))}}},ylabel={{{_esc(_localize_label(x))}}}]\n'
@@ -388,7 +416,7 @@ class ConsoleFigureMixin:
             if sy is None or ty is None:
                 continue
             col = left_color.get(lk['source'], 'cA')
-            w = max(0.8, 3.4 * math.sqrt(lk['value'] / biggest_link))
+            w = max(0.8, 3.4 * math.sqrt(max(0.0, lk['value'] / biggest_link)))
             out.append(
                 f'\\draw[{col}!55,line width={w:.2f}pt,opacity=0.4] '
                 f'(0.35,{sy:.2f}) .. controls (4,{sy:.2f}) and (4,{ty:.2f}) .. (8,{ty:.2f});'
@@ -494,7 +522,7 @@ class ConsoleFigureMixin:
         spots = {}
         for name in names:
             x, y = pos[name]
-            r = 0.14 + 0.5 * math.sqrt(inc.get(name, 0.0) / max_inc)
+            r = 0.14 + 0.5 * math.sqrt(max(0.0, inc.get(name, 0.0) / max_inc))
             norm = math.hypot(x, y) or 1.0
             ux, uy = x / norm, y / norm
             spots[name] = (x, y, r, x + ux * (r + 0.22), y + uy * (r + 0.22), 'east' if ux >= 0 else 'west')
@@ -511,7 +539,7 @@ class ConsoleFigureMixin:
         held = cls._fit_labels(_candidates(), scale)
         out = [f'\\coordinate (n{i}) at ({x:.2f},{y:.2f});' for i, (x, y) in enumerate(pos.values())]
         for lk in links:
-            w = max(0.3, 4.0 * math.sqrt(lk['value'] / biggest_link))
+            w = max(0.3, 4.0 * math.sqrt(max(0.0, lk['value'] / biggest_link)))
             a = idx[lk['source']]
             b = idx[lk['target']]
             out.append(f'\\draw[black!12,line width={w:.2f}pt] (n{a}) -- (n{b});')
@@ -581,8 +609,11 @@ class ConsoleFigureMixin:
             lon, lat = coord
             px = (lon - _CHINA_LON0) / (_CHINA_LON1 - _CHINA_LON0) * 16.0
             py = (lat - _CHINA_LAT0) / (_CHINA_LAT1 - _CHINA_LAT0) * 12.0
-            r = 0.14 + 0.7 * math.sqrt(v / vmax)
-            shade = int(30 + (v / vmax) * 65)
+            # A negative or over-running measurement is clamped, not fed to ``math.sqrt``
+            # (``ValueError: math domain error`` used to become a bare ``latex_error`` the user
+            # could not act on) nor past 100 into a colour mix (``Illegal mix``).
+            r = 0.14 + 0.7 * math.sqrt(max(0.0, min(1.0, v / vmax)))
+            shade = int(30 + max(0.0, min(1.0, v / vmax)) * 65)
             dot = f'\\draw[fill=cA!{shade},draw=cA,line width=0.6pt] ({px:.2f},{py:.2f}) circle ({r:.2f});'
             tag = f'\\node[lblbox,anchor=south] at ({px:.2f},{py + r + 0.05:.2f}) {{{_esc(label)}}};'
             bubbles.append(dot + tag)
