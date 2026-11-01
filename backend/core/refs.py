@@ -82,9 +82,36 @@ def comment_platforms() -> tuple[str, ...]:
     return tuple(platform for platform, _marks in _COMMENT_DOMAINS)
 
 
+#: A token that is itself a link. A comma is legal inside one — ``?ids=1,2,3``, a path segment,
+#: a query the site built — so splitting a pasted blob on commas cut a single real link into
+#: three, two of which then answered 「不支持的链接」 or, worse, were silently dropped.
+#: Whitespace and newlines remain separators; they cannot occur inside a URL.
+_URLISH = re.compile(r'^\s*(?:https?://|www\.)', re.IGNORECASE)
+
+
 def split_urls(value) -> list[str]:
-    """Textareas arrive as one blob: accept a real list, or comma/newline separated text."""
-    raw = value if isinstance(value, (list, tuple)) else str(value or '').replace(',', '\n').split('\n')
+    """Textareas arrive as one blob: accept a real list, or newline/whitespace separated text.
+
+    Commas separate ONLY when the blob is not made of links: a list of keywords or ids typed on
+    one line still reads as a list, while a pasted address keeps every character it was given.
+    """
+    if isinstance(value, (list, tuple)):
+        raw = list(value)
+    else:
+        raw = []
+        # Whitespace and newlines are always separators: neither can occur inside a URL.
+        for token in str(value or '').split():
+            if _URLISH.match(token):
+                # Inside a link, a comma is only a separator when the NEXT thing is another link
+                # (a pasted "url,url" line); otherwise it belongs to the address (``?ids=1,2,3``).
+                # A trailing one is always punctuation: "https://b/2, https://c/3" split on the
+                # space leaves the comma behind, and an address ending in a comma is not the
+                # address the user pasted.
+                parts = re.split(r',\s*(?=https?://|www\.)', token, flags=re.IGNORECASE)
+                raw.extend(part.rstrip(',，、') for part in parts)
+            else:
+                # Not a link: a keyword/id list typed on one line, where commas really do separate.
+                raw.extend(part for part in re.split(r'[,，、]+', token))
     return [str(u).strip() for u in raw if str(u).strip()]
 
 

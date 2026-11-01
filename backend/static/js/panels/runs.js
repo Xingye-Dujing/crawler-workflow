@@ -112,7 +112,7 @@ function consoleTabsHtml(result, activeTab) {
         if (result.running) dotClass = 'tab-dot-run';
         else dotClass = 'tab-dot-done';
         html += '<div class="console-tab' + (activeTab === wf.id ? ' active' : '') + '" data-wf="' + wf.id +
-            '" onclick="switchWfTab(' + wf.id + ')">' +
+            '" onclick="switchWfTab(' + attrJsArg(wf.id) + ')">' +
             '<span class="tab-dot ' + dotClass + '"></span>' + escapeHtml(wf.name || ('#' + (wf.id + 1))) + '</div>';
     });
     return html;
@@ -381,7 +381,7 @@ var runsManager = {
                 '<td>' + escapeHtml(String(entry.nodes || 0)) + '</td>' +
                 '<td class="runs-mgr-time">' + escapeHtml(entry.queued_at || '') + '</td>' +
                 '<td class="runs-mgr-ops"><button class="runs-mgr-btn del" onclick="runsManager.cancelQueued(\'' +
-                entry.id + '\')">' + I18n.t('runsMgr.queueCancel') + '</button></td>' +
+                attrJsArg(entry.id) + '\')">' + I18n.t('runsMgr.queueCancel') + '</button></td>' +
                 '</tr>';
         }).join('');
         return '<div class="runs-mgr-empty">' +
@@ -515,30 +515,33 @@ var runsManager = {
             if (runsManager._tab === 'workflow') {
                 ops +=
                     '<button class="runs-mgr-btn' + (isLoaded ? ' loaded' : '') +
-                    '" onclick="runsManager.loadRun(\'' + r.run_id + '\')">' +
+                    '" onclick="runsManager.loadRun(\'' + attrJsArg(r.run_id) + '\')">' +
                     I18n.t(isLoaded ? 'runsMgr.reloadResult' : 'runsMgr.loadResult') +
                     '</button>';
             }
             if (resumable) {
-                ops += '<button class="runs-mgr-btn" onclick="runsManager.continueRun(\'' + r.run_id + '\')">' + I18n.t('runsMgr.resume') + '</button>';
-                ops += '<button class="runs-mgr-btn" onclick="runsManager.restart(\'' + r.run_id + '\')">' + I18n.t('runsMgr.restart') + '</button>';
+                ops += '<button class="runs-mgr-btn" onclick="runsManager.continueRun(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('runsMgr.resume') + '</button>';
+                ops += '<button class="runs-mgr-btn" onclick="runsManager.restart(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('runsMgr.restart') + '</button>';
             }
             if (runsManager._tab === 'workflow' && runs.length > 1) {
-                ops += '<button class="runs-mgr-btn" onclick="runsManager.compare(\'' + r.run_id + '\')">' +
+                ops += '<button class="runs-mgr-btn" onclick="runsManager.compare(\'' + attrJsArg(r.run_id) + '\')">' +
                     I18n.t('runsMgr.compare') + '</button>';
             }
-            ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + r.run_id + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
-            ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\')">' + I18n.t('runsMgr.detail') + '</button>';
+            ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + attrJsArg(r.run_id) + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('runsMgr.detail') + '</button>';
             ops += lockButtonHtml('runs', r.run_id);
             /* The stored tables are what a report needs, so a run from last week
-               is reportable from here. Only the run id travels into the handler:
-               a workflow name is user text, and a quote in it would close this
-               attribute and start a new one. */
-            ops += '<button class="runs-mgr-btn" onclick="runsManager.report(\'' + r.run_id + '\')">' + I18n.t('runsMgr.report') + '</button>';
+               is reportable from here. Only the run id travels into the handler — and it
+               goes through attrJsArg, the one escaper that knows an argument sitting
+               inside a double-quoted onclick has to satisfy the JS literal first and the
+               attribute second. The id is server-minted today, but the escaping is what
+               keeps that an implementation detail rather than the thing standing between
+               a stored row and markup. */
+            ops += '<button class="runs-mgr-btn" onclick="runsManager.report(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('runsMgr.report') + '</button>';
             /* The console survives in the durable per-run log (run_store.run_log), so a run's
                full output is readable here long after the live tail rolled over or a reload
-               cleared it. Only the run id travels into the handler — a name is user text. */
-            ops += '<button class="runs-mgr-btn" onclick="runLogViewer.open(\'' + r.run_id + '\')">' + I18n.t('runLog.view') + '</button>';
+               cleared it. Only the run id travels into the handler, escaped (attrJsArg). */
+            ops += '<button class="runs-mgr-btn" onclick="runLogViewer.open(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('runLog.view') + '</button>';
             var tags = runsManager.tags(r).map(function (text) {
                 return '<span class="runs-mgr-tag">' + escapeHtml(text) + '</span>';
             }).join('');

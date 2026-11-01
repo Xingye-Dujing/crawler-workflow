@@ -161,7 +161,12 @@ class PartWriter:
         columns = list(self._columns)
         for part in self._parts:
             if self.fmt == 'csv':
-                with contextlib.suppress(OSError):
+                # Not OSError alone: an empty shard raises ``EmptyDataError`` and a broken
+                # quote or a mixed encoding raises ``ParserError`` / ``UnicodeDecodeError`` —
+                # all ValueError, which is the family the JSON branch below was already
+                # suppressing. With OSError only, one half-written shard from a previous crash
+                # (kept on disk on purpose, so a 继续 can pick it up) failed the WHOLE export.
+                with contextlib.suppress(OSError, ValueError):
                     frame = pd.read_csv(part, dtype=str, keep_default_na=False)
                     for col in frame.columns:
                         if col not in columns:

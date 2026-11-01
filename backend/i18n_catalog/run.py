@@ -271,6 +271,7 @@ ZH = {
     'run.queueStartFailed': '排队的运行无法启动',
     'run.queueOwnerGone': '排队的工作流 {name} 属于已删除或已禁用的账号（{user}），已跳过',
     'run.queue_broken': '队列里的 {name} 无法启动，已跳过并继续下一个：{err}',
+    'run.queueGiveUp': '队列里的 {name} 连续 {n} 次都没能启动，已停止重试并移出队列（请检查画布/数据集后重新运行）',
     'run.queue_restored': '重启后恢复了 {n} 个待运行任务',
     'run.queue_started': '队列接续：{name} 开始运行（{rid}）',
     'run.queue_waited': '队列接续失败（已有运行在跑），{name} 重新排队',
@@ -686,6 +687,10 @@ EN = {
     'run.queueStartFailed': 'a queued run could not be started',
     'run.queueOwnerGone': 'the queued workflow {name} belongs to a deleted or disabled account ({user}); skipped',
     'run.queue_broken': 'the queued request {name} could not start; skipped, the next one continues: {err}',
+    'run.queueGiveUp': (
+        'The queued request {name} failed to start {n} times in a row, so it has been dropped from '
+        'the queue (check the canvas/datasets and run it again)'
+    ),
     'run.queue_restored': 'Restored {n} waiting run(s) after a restart',
     'run.queue_started': 'Queue: {name} started ({rid})',
     'run.queue_waited': 'Queue could not start {name} (a run is active), it waits again',

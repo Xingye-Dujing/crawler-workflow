@@ -215,8 +215,15 @@ def close_run(ctx: dict, outcome: str):
     with _completed_lock:
         attempted = set(execution_state['attempted_nodes'])
     for run_id in records if records is not None else [ctx['run_id']]:
+        # Two separate guards, not one: ``settle_nodes`` commits once per unfinished node and is
+        # the likelier of the two to fail, and it used to take ``finish_run`` down with it — the
+        # record then stayed at 运行中, the 继续 banner never appeared, and the console said
+        # 「记录写入失败」 with a cause that pointed at the wrong call.
         try:
             ctx['store'].settle_nodes(run_id)
+        except Exception as e:
+            add_log(t('run.recordWriteFailed', rid=run_id, err=e))
+        try:
             ctx['store'].finish_run(run_id, outcome, attempted=attempted)
         except Exception as e:
             add_log(t('run.recordWriteFailed', rid=run_id, err=e))

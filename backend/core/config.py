@@ -20,6 +20,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 #: Unset, everything is at the checkout root: ``data/`` and ``logs/`` beside ``backend/``, wherever
 #: the process was started from.
 DATA_ROOT = os.environ.get('CRAWLER_DATA_ROOT') or BASE_DIR
+# Normalized before anything joins onto it. A deployment writes the value into a unit file,
+# where ``~/crawler-data`` is the natural thing to type and ``./data`` is the natural shorthand —
+# and neither used to be expanded: ``~`` stayed a literal one-character directory name (so the
+# runs, cookies and exports landed in ``./~/data`` next to whatever the service was started from)
+# and a relative value stayed relative to the process CWD, which a systemd unit and a manual
+# ``python app.py`` do not share. Both produced the same symptom later: 「数据不见了」.
+DATA_ROOT = os.path.abspath(os.path.expanduser(str(DATA_ROOT)))
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:

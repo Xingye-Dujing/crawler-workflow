@@ -161,6 +161,7 @@ ZH = {
     'ds.purged': '已清理 {days} 天未使用且无工作流引用的文件：{n} 个',
     'ds.rebound': '按文件名重新接上数据集 {name}（{did}）——工作流可以直接跑了',
     'ds.too_many_rows': '文件共 {n} 行，超过数据集上限 {limit} 行，无法保存',
+    'ds.duplicate_columns': '表里有重复的列名：{names}——同名列会被静默覆盖，请先改名再保存',
     # ── analysis / services ───────────────────────────────────
     'export.done': '已导出 {n} 行至 {path}（{fmt}）',
     'export.parquet_engine_missing': '导出 Parquet 需要列式引擎 pyarrow，请先安装：pip install pyarrow',
@@ -380,6 +381,10 @@ EN = {
     'ds.purged': 'Removed {n} file(s) unused for {days} days and referenced by no workflow',
     'ds.rebound': 'Re-attached dataset {name} ({did}) by file name — the workflow can run as-is',
     'ds.too_many_rows': 'the file has {n} rows, over the dataset limit of {limit} — it cannot be stored',
+    'ds.duplicate_columns': (
+        'This table has duplicate column names: {names} — one of them would be overwritten '
+        'silently, so rename it before saving'
+    ),
     # ── analysis / services ───────────────────────────────────
     'export.done': 'Exported {n} rows to {path} ({fmt})',
     'export.parquet_engine_missing': 'Parquet export needs the pyarrow engine — install it: pip install pyarrow',

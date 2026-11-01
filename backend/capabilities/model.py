@@ -21,7 +21,11 @@ def _int(raw, default, minimum=None, maximum=None) -> int:
     """
     try:
         value = int(float(str(raw).strip()))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # ``int(float('inf'))`` is the third one, and ``<input type=number>`` happily accepts
+        # ``1e400`` / ``Infinity``: a dirty number typed into 采集条数 crashed the source node
+        # with ``OverflowError: cannot convert float infinity to integer`` instead of being
+        # clamped to the range this matrix already owns.
         return default if isinstance(default, int) else 0
     if minimum is not None:
         value = max(minimum, value)

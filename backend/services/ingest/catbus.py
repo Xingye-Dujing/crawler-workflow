@@ -385,6 +385,10 @@ class _Call:
     timed_out: bool = False
     stopped: bool = False
     spawn_error: str = ''
+    #: The budget THIS call was given. The refusal has to quote the number it actually waited,
+    #: not the 900 s default: a 30 s ``--version`` probe that timed out used to be reported as
+    #  「超时 900 秒」, which sends the user to look at the network instead of at Node.
+    budget: float = 0.0
 
 
 def _reap(proc: subprocess.Popen) -> None:
@@ -420,6 +424,7 @@ def _call(
     """
     out = _Call()
     deadline = RUN_TIMEOUT if timeout is None else float(timeout)
+    out.budget = deadline
     try:
         with subprocess.Popen(
             argv,
@@ -525,7 +530,7 @@ def _reason_of(call: _Call) -> str:
     if call.spawn_error:
         return call.spawn_error
     if call.timed_out:
-        return t('catbus.timeout', seconds=int(RUN_TIMEOUT))
+        return t('catbus.timeout', seconds=int(call.budget or RUN_TIMEOUT))
     text = (call.stderr or call.stdout or '').strip().splitlines()
     return text[-1][:200] if text else f'exit={call.code}'
 

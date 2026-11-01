@@ -205,6 +205,14 @@ class DatasetStore:
             )
         records = safe_records(df)
         columns = [str(c) for c in df.columns]
+        # Two columns with the same label are not a table this store can keep. pandas answers
+        # ``to_dict('records')`` for such a frame by DROPPING the earlier ones — silently, with
+        # only a UserWarning — so the records lose a column while ``columns`` still lists both.
+        # Read back, both labels then carry the SECOND column's values: a table that looks whole
+        # and is wrong, and whose content hash matches a genuinely different file.
+        repeated = sorted({name for name in columns if columns.count(name) > 1})
+        if repeated:
+            raise ValueError(t('ds.duplicate_columns', names='、'.join(repeated[:6])))
         wanted_id = dataset_id or content_id(records) or _random_id()
         payload = self._encode(records)
         stamp = self.now()
