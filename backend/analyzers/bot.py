@@ -26,6 +26,7 @@ import logging
 import pandas as pd
 
 from i18n import t
+from services.analysis.kernels import _to_datetime
 from services.datasets.dedupe import hamming, normalize_text, simhash64
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,11 @@ class BotLikelihoodAnalyzer:
         # never reordered (a shuffled output would break the merge-order/SimHash invariants).
         texts = [normalize_text(str(v)) for v in work[text_column].tolist()]
         authors = [str(a or '').strip() for a in work[author_column].tolist()]
-        times = pd.to_datetime(work[time_column], errors='coerce')
+        # The project's own parser, not ``pd.to_datetime``: our crawlers write
+        # ``2022年01月27日 00:59``, which pandas answers with NaT for the WHOLE column — every
+        # ``times`` was then empty, so the burst signal was permanently 0 and bot_score silently
+        # became "duplicate ratio alone", with the evidence column saying nothing had been found.
+        times = _to_datetime(work[time_column])
         hashes = [simhash64(tx) if tx else None for tx in texts]
 
         dup_partner = [False] * len(work)

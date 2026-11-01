@@ -292,6 +292,13 @@ def resolve_bert_model(name: str) -> str:
     return raw  # assume an HF hub id; the pipeline refuses by name if it cannot load it
 
 
+#: The words a trained head spells its classes with. Three-class models are the norm in this
+#: project's own trainer, so ``neutral`` has to be a real branch, not a fall-through.
+_NEUTRAL_WORDS = ('neutral', '中性', '中立')
+_POSITIVE_WORDS = ('pos', 'positive', '正面', '积极', 'good', '支持')
+_NEGATIVE_WORDS = ('neg', 'negative', '负面', '消极', 'bad', '批评')
+
+
 def _signed_polarity(answer: dict) -> float:
     """One pipeline answer as a polarity probability, or a refusal.
 
@@ -299,12 +306,18 @@ def _signed_polarity(answer: dict) -> float:
     polarity probability, so the confidence is signed by the label it came with. A model
     that says 负面 0.93 is a text 0.07 positive, and that is the one number the
     thresholds mean anything against.
+
+    A neutral label answers the MIDDLE, not its confidence: ``中性 0.90`` is not "90% positive",
+    it is 0.5 — and without this branch a three-class model aborted the whole column the first
+    time it was right about a neutral row.
     """
     name = str(answer.get('label') or '').lower()
     score = float(answer.get('score') or 0.0)
-    if any(word in name for word in ('pos', '正面', '积极', 'good', '支持')):
+    if any(word in name for word in _NEUTRAL_WORDS):
+        return 0.5
+    if any(word in name for word in _POSITIVE_WORDS):
         return score
-    if any(word in name for word in ('neg', '负面', '消极', 'bad', '批评')):
+    if any(word in name for word in _NEGATIVE_WORDS):
         return 1.0 - score
     raise PolarityError(t('sentiment.bert_bad_label', label=answer.get('label')))
 
@@ -575,13 +588,13 @@ Analyze strictly and output only the required plain string."""
             # Refused, not manufactured — see the same guard in emotion.py. The caller's neutral is
             # still the right WORD for a real prediction (a leaked 'Neutral' from the emotion label
             # set would be a class these charts have never seen); it is no longer an ANSWER when
-            # there is no model behind it.
+            # there is no model behind it, and it never was when the model merely BROKE — writing
+            # neutral/0.5 for every row there gave a finished-looking column that measured nothing.
             from analyzers.ml_base import ModelNotTrainedError
 
             if isinstance(e, ModelNotTrainedError):
                 raise
-            logger.error(t('sentiment.ml_failed', err=e))
-            predictions = [('neutral', 0.5)] * len(texts)
+            raise ModelNotTrainedError(t('sentiment.ml_failed', err=e)) from e
         for idx, (label, score) in zip(indices, predictions, strict=False):
             df.at[idx, 'sentiment'] = str(label).strip().lower()
             df.at[idx, 'score'] = score

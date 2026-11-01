@@ -199,13 +199,16 @@ Analyze strictly and output only the required plain string."""
         except Exception as e:
             # A model there is nothing to load from is REFUSED, not answered with a column of
             # invented Neutral: the node would otherwise settle DONE over a table that measured
-            # nothing, and the study's charts cannot tell a manufactured class from a predicted one.
+            # nothing, and the study's charts cannot tell a manufactured class from a predicted
+            # one. That contract was written here years before the code agreed to it — the
+            # fallback below used to write Neutral/0.5 for EVERY exception, not just for the
+            # "no model" one, so a corrupted pickle or a version mismatch produced a table that
+            # read as "everyone is neutral". Both shapes are now a refusal, by name.
             from analyzers.ml_base import ModelNotTrainedError
 
             if isinstance(e, ModelNotTrainedError):
                 raise
-            logger.error(t('ml.emotion_failed', err=e))
-            predictions = [('Neutral', 0.5)] * len(texts)
+            raise ModelNotTrainedError(t('ml.emotion_failed', err=e)) from e
         for idx, (label, score) in zip(process_indices, predictions, strict=False):
             df.at[idx, 'emotion'] = label
             df.at[idx, 'confidence'] = score

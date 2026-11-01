@@ -172,3 +172,44 @@ class TestPrompt:
         assert families == {'abuse', 'attack', 'privacy', 'rumour'}
         for name in families:
             assert name in prompt
+
+
+class TestAWordListMayNotClaimWhatItCannotSee:
+    """The privacy family once matched EVERY comment containing 小/区/市/路/元.
+
+    ``[省市县区街道路巷小区栋单元室门牌]`` is a single-character class, and one privacy hit is
+    already past ``SEVERE_AT``, so 「今天路很堵」「100元」「这个小学生」 all came back ``severe``
+    with ``privacy:路``. These are the lines that pinned it down; a word list must stay able to
+    say "no", or the corpora it ranks become meaningless.
+    """
+
+    @pytest.mark.parametrize(
+        'text',
+        [
+            '这个小学生太可怜了',
+            '我们小区的物业该管管了',
+            '今天路很堵',
+            '这款屏幕单元不超过一百元',
+            '分配不均才是问题',
+            '元芳你怎么看',
+            '他是这个城市的建设者',
+        ],
+    )
+    def test_ordinary_sentences_come_back_none(self, text):
+        assert level(text) == 'none', f'{text} fired: {AggressionAnalyzer.score_text(text)[2]}'
+
+    @pytest.mark.parametrize(
+        'text',
+        [
+            '他住在朝阳区建国路88号',
+            '12栋1801室',
+            '身份证11010119900307123X',
+            '有本事来3号楼找我',
+        ],
+    )
+    def test_a_real_address_shape_still_fires(self, text):
+        assert AggressionAnalyzer.score_text(text)[1] >= aggression_module.WEIGHTS['privacy']
+
+    def test_the_explanation_names_what_matched(self):
+        """A level the user cannot audit is a level the user has to trust."""
+        assert 'privacy' in AggressionAnalyzer.score_text('他住在朝阳区建国路88号')[2][0]

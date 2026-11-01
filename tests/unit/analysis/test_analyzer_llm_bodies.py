@@ -34,6 +34,7 @@ from analyzers.clustering import TextCluster
 from analyzers.emotion import EmotionAnalyzer
 from analyzers.keyword import KeywordExtractor
 from analyzers.llm_client import LLMClient, LLMError
+from analyzers.ml_base import ModelNotTrainedError
 from analyzers.tendency import TendencyAnalyzer
 from i18n import t
 
@@ -326,21 +327,37 @@ class TestEmotionMlMode:
         assert result['emotion'].tolist() == ['', '', '']
         assert result['confidence'].isna().all()
 
-    def test_a_failing_prediction_falls_back_to_neutral_half_confidence(self, emotion, monkeypatch, caplog):
-        """The real default is ('Neutral', 0.5) — read off the ``fail_value``
-        branch, not guessed: an unparseable or failed answer reports Neutral at
-        0.5, the confidence a chart reads as "no signal", rather than a blank hole
-        in the table."""
+    def test_a_failing_prediction_is_refused_not_written_as_neutral(self, emotion, monkeypatch, caplog):
+        """It used to answer ('Neutral', 0.5) for EVERY exception — the docstring two lines
+        below the guard said REFUSED, and the code did the opposite. So a corrupted pickle or
+        a version mismatch settled a node DONE over a table that read 「everyone is neutral」,
+        and the study's distribution chart could not tell that from a measurement.
+
+        A model that cannot predict is a refusal now: no column is written at all, and the
+        node fails with the reason named.
+        """
 
         def boom(texts):
             raise RuntimeError('no model trained')
 
         monkeypatch.setattr(emotion, '_ml_predict', boom)
         frame = pd.DataFrame({'正文': ['三亚的海非常蓝', '海口的海南粉很鲜美', '   ', '博鳌小镇很安静']})
-        result = emotion._analyze_ml(frame, '正文')
-        assert result['emotion'].tolist() == ['Neutral', 'Neutral', '', 'Neutral']
-        assert result['confidence'].tolist() == [0.5, 0.5, None, 0.5]
-        assert t('ml.emotion_failed', err='no model trained') in caplog.text
+        with pytest.raises(ModelNotTrainedError) as caught:
+            emotion._analyze_ml(frame, '正文')
+        assert 'no model trained' in str(caught.value)
+        # The columns exist (declared before the prediction) but carry NOTHING: a blank cell
+        # is a row the reader can see was not judged, while 'Neutral'/0.5 was a verdict.
+        assert frame['emotion'].tolist() == ['', '', '', '']
+        assert frame['confidence'].isna().all()
+
+    def test_an_untrained_model_still_refuses_by_its_own_name(self, emotion, monkeypatch):
+        """The one case that was always a refusal: it must stay the same exception type, so a
+        caller that distinguishes 「nothing to load」 from 「the load broke」 can keep doing so."""
+        monkeypatch.setattr(
+            emotion, '_ml_predict', lambda texts: (_ for _ in ()).throw(ModelNotTrainedError('no model'))
+        )
+        with pytest.raises(ModelNotTrainedError, match='no model'):
+            emotion._analyze_ml(one_row_frame(), '正文')
 
     def test_predictions_land_on_the_non_blank_rows_in_index_order(self, emotion, monkeypatch):
         seen = {}
@@ -392,15 +409,20 @@ class TestTendencyMlMode:
         assert result is frame
         assert list(result.columns) == ['标题']  # emotion.py would have grown two here
 
-    def test_a_failing_prediction_falls_back_to_objective_statement(self, tendency, monkeypatch):
+    def test_a_failing_prediction_is_refused_not_written_as_objective(self, tendency, monkeypatch):
+        """See the same guard in emotion.py: a broken model must not ship a table that reads
+        as a measured 立场分布. No column is written; the node fails with the reason named."""
+
         def boom(texts):
             raise RuntimeError('no model trained')
 
         monkeypatch.setattr(tendency, '_ml_predict', boom)
         frame = pd.DataFrame({'正文': ['三亚的海非常蓝', '   ', '海口的海南粉很鲜美']})
-        result = tendency._analyze_ml(frame, '正文')
-        assert result['tendency'].tolist() == ['Objective Statement', '', 'Objective Statement']
-        assert result['tendency_confidence'].tolist() == [0.5, None, 0.5]
+        with pytest.raises(ModelNotTrainedError) as caught:
+            tendency._analyze_ml(frame, '正文')
+        assert 'no model trained' in str(caught.value)
+        assert frame['tendency'].tolist() == ['', '', '']
+        assert frame['tendency_confidence'].isna().all()
 
     def test_the_confidence_column_is_named_after_the_operation(self, tendency, monkeypatch):
         """'tendency_confidence', not 'confidence' — a tendency node and an

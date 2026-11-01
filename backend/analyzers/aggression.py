@@ -62,16 +62,28 @@ ABUSE = (
 )
 ATTACK = (
     r'(你|他|她|它|这|那)[们]?算(什么|哪个|哪门子)',
-    r'有脸|配(上|做|当)?|也配|什么(学历|出身)|生个[孩子]|基因(有问题|缺陷)',
+    # ``配(上|做|当)?`` made the bare character 配 a hit, so 分配不均 came back as an attack. The
+    # optional groups have to be required: an insult says 也配 / 不配 / 配不上, never a lone 配.
+    r'有脸|也配|不配|配(?:上|做|当|得上|不上)|什么(学历|出身)|生个[孩子]|基因(有问题|缺陷)',
     r'(一家|全家|父母|爹妈|母亲|父亲|家人)(都|全)?(是|有|没|活该|该死)',
     r'(活该|该|早就该)(死|凉|滚|被封|被骂)|自作自受|不是人',
 )
 # Privacy disclosure: an identifiable contact handle, an address, or an explicit doxxing verb.
+#
+# The address branch used to be ``[省市县区街道路巷小区栋单元室门牌]`` — a single-character class,
+# so ANY comment containing 小/区/市/路/元/单/牌 filed a privacy hit, and one such hit is already
+# past ``SEVERE_AT``. Measured: 「今天路很堵」「这个小学生」「100元」「元芳你怎么看」 all came back
+# ``severe`` with the explanation ``privacy:路``. A privacy shape has to be a SHAPE — either the
+# administrative path down to a number, or a numbered building position.
 PRIVACY = (
     r'1[3-9]\d{9}',
     r'\d{17}[\dXx]|\d{15}',
     r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b',
-    r'(\d{1,5}号楼?|[省市县区街道路巷小区栋单元室门牌])',
+    # 省/市/县 → 区/路/街 → 号: the chain a real address is written as. One token alone is not one.
+    r'[\u4e00-\u9fa5]{2,8}(?:省|市|县|区)[\u4e00-\u9fa5]{0,10}(?:路|街|街道|巷|大道|新村|花园|小区)'
+    r'[\d零一二三四五六七八九十百]{0,6}(?:号|号楼)?',
+    # 3号楼 / 12栋1801室 / 5单元702 — a numbered position inside a building.
+    r'\d{1,4}(?:号楼|号院|栋|幢|单元|门牌)[\d室]{0,5}',
     r'人肉(搜索)?|扒(了)?(出来|出?来|光)|开盒|曝光(其|他的|她的)?(信息|住址|单位|学校|电话|身份)',
     r'(家庭住址|工作单位|就职|学籍|学校(是|在)|身份证(号)?|手机号?(码)?|户籍)(在|是|为|[:：])',
 )

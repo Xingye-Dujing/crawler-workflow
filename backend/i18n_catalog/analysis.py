@@ -270,7 +270,7 @@ ZH = {
     'lex.userdictReadFailed': '读取用户词库失败，分词器保持不变。',
     'ml.bad_model_name': '模型名「{name}」不合法：必须是单个路径安全的组件，不含分隔符',
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
-    'ml.emotion_failed': 'ML 情感预测失败：{err}——回退为 Neutral',
+    'ml.emotion_failed': 'ML 情感预测失败：{err}（不写任何结果，节点按失败处理——不会给出一列虚构的 Neutral）',
     'ml.missing_col': 'DataFrame 缺少必需的列“{col}”。跳过分析。',
     'ml.model_untrained_refused': (
         '「{name}」模型尚未训练，也没有可加载的已保存模型 —— 拒绝作答，而不是给每行编一个中性结果'
@@ -279,7 +279,9 @@ ZH = {
     'ml.no_rows': '没有需要处理的行（目标列为空）。',
     'ml.no_training_rows': '没有可用的训练数据：所有行的文本或标签都是空的',
     'ml.tendency_done': '[ML] 倾向性分析完成，共处理 {n} 行，模式: ML',
-    'ml.tendency_failed': 'ML 倾向性预测失败：{err}——回退为 Objective Statement',
+    'ml.tendency_failed': (
+        'ML 倾向性预测失败：{err}（不写任何结果，节点按失败处理——不会给出一列虚构的 Objective Statement）'
+    ),
     'ner.dropped': '实体识别：{n} 条模型答案未在原文中出现，已丢弃（不记录推测出的实体）',
     'net.blocked': '。诊断：本机出网正常，但该平台的主机连不上，可能是站点故障或本地拦截',
     'net.offline': '。诊断：本机当前连不上任何外网（两个对照主机都不通），请先恢复网络再跑',
@@ -298,7 +300,7 @@ ZH = {
     'sentiment.bert_no_onnx': '这个 BERT 模型目录里没有可加载的 ONNX 图：{path}',
     'sentiment.bert_onnx_inputs': '这个 ONNX 图的输入不是本程序约定的四路，实测：{found}',
     'sentiment.bert_session_dropped': '为控制内存已释放更早加载的 BERT 模型：{model}（后面再用到会重新加载）',
-    'sentiment.ml_failed': 'ML 情感极性预测失败：{err}——回退为 neutral',
+    'sentiment.ml_failed': 'ML 情感极性预测失败：{err}（不写任何结果，节点按失败处理——不会给出一列虚构的 neutral）',
     'sentiment.packRemedyFrozen': (
         '桌面版的 BERT 模型是一个单独的压缩包：把 CaiXiHui-bert-models-win64.zip 解压到程序目录下的 '
         'bert_models\\，再重启程序'
@@ -673,7 +675,9 @@ EN = {
     'lex.userdictReadFailed': 'Could not read the user lexicon; leaving the tokenizer untouched.',
     'ml.bad_model_name': 'Model name "{name}" is invalid: must be one path-safe component, no separators',
     'ml.emotion_done': '[ML] Emotion classification done, {n} rows, mode: ML',
-    'ml.emotion_failed': 'ML emotion prediction failed: {err} — falling back to Neutral',
+    'ml.emotion_failed': (
+        'ML emotion prediction failed: {err} — nothing is written and the node fails (no column of invented Neutral)'
+    ),
     'ml.missing_col': 'DataFrame is missing the required column "{col}". Skipping analysis.',
     'ml.model_untrained_refused': (
         '"{name}" has no trained model and nothing saved to load — refusing to answer '
@@ -683,7 +687,10 @@ EN = {
     'ml.no_rows': 'Nothing to process (the target column is empty).',
     'ml.no_training_rows': 'No training data: every row has an empty text or label',
     'ml.tendency_done': '[ML] Tendency analysis done, {n} rows, mode: ML',
-    'ml.tendency_failed': 'ML tendency prediction failed: {err} — falling back to Objective Statement',
+    'ml.tendency_failed': (
+        'ML tendency prediction failed: {err} — nothing is written and the node fails '
+        '(no invented Objective Statement column)'
+    ),
     'ner.dropped': 'NER: dropped {n} model answer(s) that do not appear in the source text (nothing is guessed)',
     'net.blocked': (
         '. Diagnosis: this machine routes normally but the platform host itself does not answer, '
@@ -714,7 +721,10 @@ EN = {
     'sentiment.bert_no_onnx': 'no loadable ONNX graph in that BERT model folder: {path}',
     'sentiment.bert_onnx_inputs': 'this ONNX graph does not expose the four inputs this path expects; found: {found}',
     'sentiment.bert_session_dropped': 'released an earlier BERT model to bound memory: {model} (it reloads if needed)',
-    'sentiment.ml_failed': 'ML sentiment polarity prediction failed: {err} — falling back to neutral',
+    'sentiment.ml_failed': (
+        'ML sentiment polarity prediction failed: {err} — nothing is written and the node fails '
+        '(no invented neutral column)'
+    ),
     'sentiment.packRemedyFrozen': (
         'the desktop build gets its BERT models from a separate archive: unpack '
         'CaiXiHui-bert-models-win64.zip into a bert_models\\ folder beside the exe and restart'

@@ -759,25 +759,29 @@ class TestEveryFilterOperator:
     @pytest.mark.parametrize(
         ('op, bound, expected'),
         [
-            ('eq', '3', []),
-            ('ne', '3', [3, 5, 1]),
+            ('eq', '3', [3]),
+            ('ne', '3', [5, 1]),
             ('gt', '3', [5]),
             ('gte', '3', [3, 5]),
             ('lt', '3', [1]),
             ('lte', '3', [3, 1]),
             ('contains', '3', [3]),
             ('not_contains', '3', [5, 1]),
-            ('in', '3, 5', []),
-            ('not_in', '3', [3, 5, 1]),
+            ('in', '3, 5', [3, 5]),
+            ('not_in', '3', [5, 1]),
             ('is_null', None, []),
             ('not_null', None, [3, 5, 1]),
         ],
     )
     def test_a_real_integer_column_answers_the_measured_row_set(self, op, bound, expected):
-        """The trap this pins: ``gt``/``lt`` coerce the bound to a number and the
-        column too, but ``eq`` and ``in`` compare the *text* against integers, so
-        序号 等于 3 finds nothing while 序号 大于 3 finds rows. Only ``contains``
-        stringifies the column.
+        """The trap this pins is gone, and the measurements with it: ``eq``/``in`` used to
+        compare the panel's TEXT bound against integers, so 序号 等于 3 found nothing while
+        序号 大于 3 found rows — a filter the user could see matching in the preview came back
+        as an empty table, reported DONE, and starved every node below it.
+
+        Both sides are now compared in the column's own type (and as text), so the four
+        literal operators agree with each other and with ``contains``. ``gt``/``lt`` coerce
+        only the bound, which is why a text column still answers [] for them.
         """
         assert D.filter_rows(SWEEP, 'n', op, bound)['n'].tolist() == expected
 

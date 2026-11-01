@@ -2060,16 +2060,21 @@ FILTER_TABLE = [
 
 FILTER_SWEEP = {
     # case name -> (column, op, value, rows left), measured on FILTER_TABLE
-    'number_eq': ('序号', 'eq', '3', 0),
-    'number_ne': ('序号', 'ne', '3', 5),
+    # The four literal comparisons are measured AFTER the fix that made them agree with each
+    # other: the panel's 值 box is text, and ``eq``/``in`` compared it against an integer
+    # column, so 序号 等于 3 answered no rows while 序号 大于 3 answered some. A filter the
+    # user could see matching in the preview came back empty and settled DONE, starving every
+    # node below it.
+    'number_eq': ('序号', 'eq', '3', 1),
+    'number_ne': ('序号', 'ne', '3', 4),
     'number_gt': ('序号', 'gt', '3', 2),
     'number_gte': ('序号', 'gte', '3', 3),
     'number_lt': ('序号', 'lt', '3', 1),
     'number_lte': ('序号', 'lte', '3', 2),
     'number_contains': ('序号', 'contains', '3', 1),
     'number_not_contains': ('序号', 'not_contains', '3', 4),
-    'number_in': ('序号', 'in', '3, 5', 0),
-    'number_not_in': ('序号', 'not_in', '3, 5', 5),
+    'number_in': ('序号', 'in', '3, 5', 2),
+    'number_not_in': ('序号', 'not_in', '3, 5', 3),
     'number_is_null': ('序号', 'is_null', '', 1),
     'number_not_null': ('序号', 'not_null', '', 4),
     'text_eq': ('城市', 'eq', '北京', 2),
