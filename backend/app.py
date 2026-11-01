@@ -49,6 +49,7 @@ from runtime.state import (
 )
 from scheduling import clock
 from sessions.routes import bp as sessions_bp
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from engine import run_schedule
 from engine.logger import setup_logger
@@ -185,8 +186,14 @@ def _no_store_ui_assets(resp):
     one. SameSite=Lax already withholds the cookie from a cross-site iframe — this is the second
     of the three layers, not the load-bearing one."""
     path = request.path
-    if path == '/' or path == '/index.html' or path.startswith('/js/') or path.startswith('/css/'):
-        resp.headers['Cache-Control'] = 'no-cache'
+    if (
+        path == '/'
+        or path == '/index.html'
+        or path.startswith('/js/')
+        or path.startswith('/css/')
+        or path.startswith('/api/')
+    ):
+        resp.headers['Cache-Control'] = 'no-store'
     resp.headers.setdefault('X-Frame-Options', 'DENY')
     resp.headers.setdefault('Referrer-Policy', 'same-origin')
     return resp
@@ -648,6 +655,8 @@ def start_background_services() -> None:
         start_next_queued()
     clock.start()
 
+
+app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
 
 if __name__ == '__main__':
     # Local by default: this server drives a browser, holds crawl cookies and can

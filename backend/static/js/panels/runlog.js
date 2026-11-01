@@ -98,7 +98,7 @@ var runLogViewer = {
 
     download: function () {
         var params = this._qs();
-        window.location.href = '/api/runs/' + encodeURIComponent(this._runId) + '/log.txt?' + params.join('&');
+        window.location.href = window.__cu('/api/runs/' + encodeURIComponent(this._runId) + '/log.txt?' + params.join('&'));
     },
 
     _noteWorkflows: function (rows) {

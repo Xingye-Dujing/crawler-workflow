@@ -87,7 +87,7 @@ var chartStudio = {
     _mount() {
         if (this._mounted) return;
         var frame = document.getElementById('studio-frame');
-        frame.src = '/zenviz.html?embed=1';
+        frame.src = window.__cu('/zenviz.html?embed=1');
         this._mounted = true;
         this._setStatus(I18n.t('studio.booting'));
 

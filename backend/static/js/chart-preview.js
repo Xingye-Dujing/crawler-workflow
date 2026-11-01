@@ -948,7 +948,7 @@ async function saveChartPdf() {
         var result = await resp.json();
         if (!result.ok) throw new Error(result.error || 'request failed');
         showToast(I18n.t('studio.saved').replace('{path}', result.filename));
-        window.location.href = '/api/exports/download?name=' + encodeURIComponent(result.filename);
+        window.location.href = window.__cu('/api/exports/download?name=' + encodeURIComponent(result.filename));
         return result.filename;
     } catch (e) {
         showToast(I18n.t('studio.saveFailed') + ': ' + e.message);
@@ -959,7 +959,7 @@ async function saveChartPdf() {
 function downloadLatexFile(kind) {
     var name = kind === 'tab' ? _lastLatexTableFile : _lastLatexFile;
     if (name) {
-        window.location.href = '/api/exports/download?name=' + encodeURIComponent(name);
+        window.location.href = window.__cu('/api/exports/download?name=' + encodeURIComponent(name));
         return;
     }
     var text = kind === 'tab' ? _lastLatexTable : _lastLatex;

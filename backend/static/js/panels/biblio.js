@@ -413,7 +413,7 @@ var biblioWorkspace = {
                 '<div class="biblio-files">',
                 (node.files && node.files.length)
                     ? node.files.map(function (f) {
-                        return '<a href="/api/exports/download?name=' + encodeURIComponent(f.name) + '">' +
+                        return '<a href="' + window.__cu('/api/exports/download?name=' + encodeURIComponent(f.name)) + '">' +
                             escapeHtml(f.name) + '</a>';
                     }).join('')
                     : '<span class="biblio-note">' + escapeHtml(I18n.t('biblioWs.noFiles')) + '</span>',

@@ -65,6 +65,9 @@ if (typeof setTimeout === 'function') {
 (function () {
     const nativeFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
+        if (typeof input === 'string' && input.indexOf('/api/') === 0) {
+            input = '/crawler' + input;
+        }
         let lang = 'zh';
         try {
             lang = (typeof I18n !== 'undefined' && I18n.lang) || document.body.dataset.lang || 'zh';
@@ -100,7 +103,7 @@ function redirectIfAuthRequired(response) {
     if (!response || response.status !== 401) return response;
     const marker = response.headers && response.headers.get && response.headers.get('X-Auth-Required');
     if (!marker || typeof location === 'undefined' || typeof location.assign !== 'function') return response;
-    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+    location.assign(window.__cu('/login?next=' + encodeURIComponent(location.pathname + location.search)));
     return response;
 }
 
@@ -132,17 +135,17 @@ function _retryLogout() {
             const token = body && body.auth && body.auth.csrf_token;
             if (!token) return false;
             Auth.token = token;
-            return fetch('/logout', { method: 'POST', headers: { 'X-CSRF-Token': token } })
+            return fetch(window.__cu('/logout'), { method: 'POST', headers: { 'X-CSRF-Token': token } })
                 .then((again) => !!again.ok, () => false);
         }, () => false);
 }
 
 function logout() {
-    return fetch('/logout', { method: 'POST' })
+    return fetch(window.__cu('/logout'), { method: 'POST' })
         .then((response) => (response.ok ? true : _retryLogout()), () => _retryLogout())
         .then((ended) => {
             if (ended) {
-                if (typeof location !== 'undefined' && typeof location.assign === 'function') location.assign('/login');
+                if (typeof location !== 'undefined' && typeof location.assign === 'function') location.assign(window.__cu('/login'));
                 return;
             }
             showToast(I18n.t('accounts.logoutRefused'));

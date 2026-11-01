@@ -91,7 +91,7 @@ var TopMenu = {
             LLMSettings.applyToPanel();
             LLMSettings.loadDefaults();
         }
-        if (window.AppSettings) AppSettings.pull();
+        if (window.AppSettings) AppSettings.pull(true);
     },
 
     /* Used by RunState / setLang / setBg so the bar stays truthful. */

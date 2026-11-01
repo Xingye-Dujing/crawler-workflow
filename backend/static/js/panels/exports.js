@@ -144,7 +144,7 @@ var exportsManager = {
     download(name) {
         var frame = document.createElement('iframe');
         frame.style.display = 'none';
-        frame.src = '/api/exports/download?name=' + encodeURIComponent(name);
+        frame.src = window.__cu('/api/exports/download?name=' + encodeURIComponent(name));
         document.body.appendChild(frame);
         setTimeout(function () { document.body.removeChild(frame); }, 60000);
     },
@@ -153,7 +153,7 @@ var exportsManager = {
         /* The report is text crawled from other people's pages, so it is served
            by a route that sends a Content-Security-Policy with no script in it —
            which is also why this is not the download button. */
-        window.open('/api/report/view?name=' + encodeURIComponent(name), '_blank');
+        window.open(window.__cu('/api/report/view?name=' + encodeURIComponent(name)), '_blank');
     },
 
     /* One click, one HTML file — with the sections, row cap and Chart-Studio
@@ -271,7 +271,7 @@ var exportsManager = {
             if (!result.ok) throw new Error(result.error || 'report failed');
             showToast(I18n.t('exportsMgr.reportLatexDone') + ': ' + result.name, 20000);
             this.refresh();
-            window.open('/api/exports/download?name=' + encodeURIComponent(result.name), '_blank');
+            window.open(window.__cu('/api/exports/download?name=' + encodeURIComponent(result.name)), '_blank');
         } catch (e) {
             showToast(I18n.t('exportsMgr.reportLatexFailed') + ': ' + (e.message || e), 20000);
         }

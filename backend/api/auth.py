@@ -150,7 +150,7 @@ _LOGIN_PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-<form method="post" action="/login">
+<form method="post" action="login">
   <p class="brand">采析绘 · CRAWLER WORKFLOW</p>
   <h1>@@TITLE@@</h1>
   <p class="hint">@@HINT@@</p>
@@ -300,7 +300,8 @@ def gate():
         else:
             # A page keeps its address so the login lands back where it was asked for.
             target = request.full_path.rstrip('?') if request.method == 'GET' else DEFAULT_NEXT
-            response = redirect('/login?next=' + quote(safe_next(target), safe=''))
+            _prefix = request.script_root or ''
+            response = redirect(_prefix + '/login?next=' + quote(safe_next(_prefix + target), safe=''))
         response.headers['X-Auth-Required'] = '1'
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -377,6 +378,8 @@ def login():
     if not auth_enabled():
         return redirect(DEFAULT_NEXT)
     nxt = safe_next(request.values.get('next'))
+    if nxt == DEFAULT_NEXT and request.script_root:
+        nxt = request.script_root + '/'
     if session_ok():
         return redirect(nxt)
     error = ''
@@ -434,4 +437,4 @@ def logout():
     if account is not None:
         get_account_service().audit_logout(account, client_ip())
     session.clear()
-    return redirect('/login' if auth_enabled() else DEFAULT_NEXT)
+    return redirect((request.script_root or '') + '/login' if auth_enabled() else DEFAULT_NEXT)

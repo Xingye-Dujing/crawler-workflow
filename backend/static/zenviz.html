@@ -7,20 +7,20 @@
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
     <title>可视化图表</title>
-    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+    <link rel="icon" href="icon.ico" type="image/x-icon" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&display=swap"
+      href="vendor/fonts/literata.css"
       rel="stylesheet"
     />
-    <script src="https://cdn.jsdmirror.com/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/apexcharts@7.4.0/dist/apexcharts.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/echarts@6.1.0/dist/echarts.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdmirror.com/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
+    <script src="vendor/zv/chart.umd.min.js"></script>
+    <script src="vendor/zv/apexcharts.min.js"></script>
+    <script src="vendor/zv/echarts.min.js"></script>
+    <script src="vendor/zv/xlsx.full.min.js"></script>
+    <script src="vendor/zv/html2canvas.min.js"></script>
+    <script src="vendor/zv/jspdf.umd.min.js"></script>
     <!-- One stylesheet per page: the studio's 1,920-line block moved to a file so it is
          reviewable and a strict CSP can ban inline styles. Kept in the same position. -->
-    <link rel="stylesheet" href="/css/zenviz.css" />
+    <link rel="stylesheet" href="css/zenviz.css" />
   </head>
   <body class="body-grid">
     <div id="splash" aria-label="ZENVIZ启动页">
@@ -212,7 +212,7 @@
     </div>
 
     <!-- The page app lives in a file (node --check, CSP); still one IIFE, still first. -->
-    <script src="/js/zenviz-page.js"></script>
-    <script src="/js/zenviz-bridge.js"></script>
+    <script src="js/zenviz-page.js"></script>
+    <script src="js/zenviz-bridge.js"></script>
   </body>
 </html>
