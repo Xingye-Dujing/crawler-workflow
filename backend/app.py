@@ -184,16 +184,17 @@ def _no_store_ui_assets(resp):
     carried them because it owns a form; the app page owns the run console, the cookie panel and
     the ability to press 运行, and a page that can be put in a foreign frame can be clicked in
     one. SameSite=Lax already withholds the cookie from a cross-site iframe — this is the second
-    of the three layers, not the load-bearing one."""
+    of the three layers, not the load-bearing one.
+
+    Boot assets answer ``no-cache`` (store, but revalidate every navigation) while ``/api/``
+    answers ``no-store``: the settings panel round-trips form values a stale 200 would
+    resurrect, yet the document and scripts are served files revalidation already covers —
+    ``no-store`` there would refetch the whole bundle on every navigation for nothing."""
     path = request.path
-    if (
-        path == '/'
-        or path == '/index.html'
-        or path.startswith('/js/')
-        or path.startswith('/css/')
-        or path.startswith('/api/')
-    ):
+    if path.startswith('/api/'):
         resp.headers['Cache-Control'] = 'no-store'
+    elif path == '/' or path == '/index.html' or path.startswith('/js/') or path.startswith('/css/'):
+        resp.headers['Cache-Control'] = 'no-cache'
     resp.headers.setdefault('X-Frame-Options', 'DENY')
     resp.headers.setdefault('Referrer-Policy', 'same-origin')
     return resp
@@ -656,7 +657,13 @@ def start_background_services() -> None:
     clock.start()
 
 
-app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
+# Only the SCRIPT NAME prefix is the proxy's to tell us (the reverse-proxy deployment in
+# docs/config.md). Every other forwarded header is zeroed EXPLICITLY: werkzeug 3.1's defaults
+# are ``x_for=1, x_proto=1``, so a bare ``ProxyFix(..., x_prefix=1)`` silently trusted one hop
+# of ``X-Forwarded-For`` — any client could then forge its audit address and walk out of the
+# per-IP failure window. Trusting X-Forwarded-For is the OPERATOR's declared decision, made
+# once in ``auth.client_ip`` via ``CRAWLER_TRUST_PROXY_DEPTH``, and nowhere else.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=0, x_host=0, x_port=0, x_prefix=1)
 
 if __name__ == '__main__':
     # Local by default: this server drives a browser, holds crawl cookies and can
