@@ -291,16 +291,38 @@ def load_pending_queue() -> int:
     return len(restored_requests)
 
 
+#: How many times one request may be handed back to the front before the queue stops believing
+#: it will ever start. A refusal the drain cannot fix (a canvas the engine cannot walk, a missing
+#: dataset, an unknown mode) is supposed to arrive with ``drop: True`` and never reach here — but
+#: that flag has to be set at EVERY refusal site to hold, and one that is not turns this into a
+#: livelock: the entry goes back to index 0, so every finished run tries it again, forever, and
+#: every request behind it (including other accounts') waits for a drain that never gets past it.
+#: The count is what makes the failure bounded and named instead of silent and permanent.
+PUT_BACK_LIMIT = 3
+
+
 def put_back(entry: QueueEntry) -> None:
     """Hand a request back to the front: someone else took the slot in between.
 
     A request the user already pressed Run for is never dropped because of a race — it waits
-    for the next drain instead, which is what 「继续等待」 means in the console line.
+    for the next drain instead, which is what 「继续等待」 means in the console line. What it is
+    NOT is an unlimited promise: see :data:`PUT_BACK_LIMIT`.
     """
+    tries = int(entry.get('put_backs') or 0) + 1
+    name = entry['workflow_name'] or entry['id']
+    if tries > PUT_BACK_LIMIT:
+        # Dropped with the reason, never silently: the user pressed 运行 and is owed a line
+        # saying it did not start. Kept in the console the entry belongs to.
+        if _console_is_for(entry):
+            add_log(t('run.queueGiveUp', name=name, n=PUT_BACK_LIMIT))
+        logger.warning(t('run.queueGiveUp', name=name, n=PUT_BACK_LIMIT))
+        mirror_queue()
+        return
+    entry['put_backs'] = tries
     with queue_lock:
         _RUN_QUEUE.insert(0, entry)
         if _console_is_for(entry):
-            add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
+            add_log(t('run.queue_waited', name=name))
     mirror_queue()
 
 

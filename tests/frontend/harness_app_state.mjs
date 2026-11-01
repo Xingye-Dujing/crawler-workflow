@@ -341,6 +341,49 @@ async function appSettings() {
     onSettingInput('page_load_timeout', '20');
     await AppSettings.save();
     results.warned = toasts.slice();
+    /* ── read-only: an account that may look but not touch ─────────────
+       The server owns this decision (`read_only` in the GET answer) and refuses the
+       POST anyway; what the panel owes the user is that the fields LOOK dead and the
+       reason is on screen, instead of a field they can fill and a 403 at save. */
+    AppSettings._pulled = false;
+    settingsAnswer = {
+        ok: true,
+        settings: { driver_path: 'D:\\chromedriver.exe', page_load_timeout: 40, cookie_preflight_before_run: true },
+        read_only: true,
+        warnings: [],
+    };
+    await AppSettings.pull(true);
+    const readOnlyNote = doc.getElementById('set-readonly-note');
+    results.read_only = {
+        flag: AppSettings.readOnly === true,
+        fieldsDisabled: doc.getElementById('set-driver').disabled === true,
+        /* A `readonly` checkbox still toggles on click in more than one browser, so the
+           panel has to disable it outright. */
+        checkboxDisabled: doc.getElementById('set-cookie-preflight').disabled === true,
+        saveDisabled: doc.getElementById('set-save-btn').disabled === true,
+        noteShown: readOnlyNote.hidden === false,
+    };
+    requests.length = 0;
+    toasts.length = 0;
+    onSettingInput('driver_path', 'C:\\evil.exe');
+    await AppSettings.save();
+    results.read_only_save = { requested: requests.length, toasts: toasts.slice() };
+    /* ── and an administrator gets the fields back ─────────────────── */
+    AppSettings._pulled = false;
+    AppSettings._draft = {};
+    settingsAnswer = {
+        ok: true,
+        settings: { driver_path: 'D:\\chromedriver.exe', page_load_timeout: 40, cookie_preflight_before_run: true },
+        read_only: false,
+        warnings: [],
+    };
+    await AppSettings.pull(true);
+    results.admin = {
+        flag: AppSettings.readOnly === false,
+        fieldsEnabled: doc.getElementById('set-driver').disabled === false,
+        saveEnabled: doc.getElementById('set-save-btn').disabled === false,
+        noteHidden: readOnlyNote.hidden === true,
+    };
     return results;
 }
 
