@@ -30,6 +30,8 @@ logs/
 backend/test_*.py
 .qoder/settings.local.json
 .qoder/sessions/
+# WorkBuddy session workspace (local memory notes only, never source).
+.workbuddy/
 .coverage
 htmlcov/
 
