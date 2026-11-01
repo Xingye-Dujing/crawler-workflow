@@ -19,9 +19,11 @@ from analyzers import (
     build_training_data,
     get_classifier,
 )
+from api.auth import is_admin
 from api.http import _bad_body, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
+from services.accounts.service import accounts_mode
 from services.analysis.pipeline import DataAnalysisService
 from services.datasets.store import SOURCE_ANALYSIS
 
@@ -86,12 +88,29 @@ def run_analysis():
     )
 
 
+def _train_refusal():
+    """Why this caller may not fit a model.
+
+    A fit lands in ``MODEL_DIR`` — a MACHINE-level directory, no per-account slot — and
+    every account's next ``mode='ml'`` run ``joblib.load``s the same file. So an ordinary
+    account training a classifier silently rewrites what every OTHER account's next
+    sentiment/emotion/tendency step computes from. That is the same machine-level write
+    ``/api/settings`` and ``/api/lexicon`` guard, and it gets the same door.
+    """
+    if accounts_mode() and not is_admin():
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    return None
+
+
 @bp.route('/api/analysis/train', methods=['POST'])
 def train_ml_model():
     """Train a traditional ML classifier (emotion or tendency) from existing
     LLM-labeled data. Uses the text and label columns specified to fit a
     TF-IDF + LogisticRegression pipeline, then saves the model to disk so
     subsequent runs can use ``mode='ml'`` for fast batch inference."""
+    refusal = _train_refusal()
+    if refusal is not None:
+        return refusal
     data = _json_body()
     if data is None:
         return _bad_body()

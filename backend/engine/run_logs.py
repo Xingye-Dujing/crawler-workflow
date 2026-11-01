@@ -6,15 +6,16 @@ disarmed; what they do with a line is a separate answer, and AGENTS keeps its co
 this file. Nothing here decides run policy: :class:`RunLogWriter` only mirrors what
 ``runtime.state._push_log`` already accepted, and :class:`LogTee` only catches stray ``print()``.
 
-Because the writer resolves ``get_run_store`` and ``_completed_lock`` in THIS module, that is the
-module a test patches — ``engine.run_logs``, not ``engine.run``. The names are the same objects the
+Because the writer resolves ``get_run_store`` in THIS module, that is the module a test
+patches — ``engine.run_logs``, not ``engine.run``. The names are the same objects the
 run start uses; they are only looked up from here.
 """
 
+import threading
 import time
 
 from runtime import account_context
-from runtime.state import _completed_lock, _push_log, execution_state
+from runtime.state import _push_log, execution_state
 from runtime.stores import get_run_store
 
 
@@ -47,10 +48,15 @@ class RunLogWriter:
     Installed as ``state``'s log sink only for the window a run is in flight (armed in
     ``begin_run``, disarmed in the worker's ``finally``), so a message logged outside any
     run never reaches it — otherwise a later cookie/preview ``add_log`` would append to a
-    completed record's log. The sink runs *inside* ``_push_log`` while it holds
-    ``_completed_lock``, so ``push`` may only touch in-memory state cheaply; it accumulates
-    lines and hands the batch to SQLite every ``FLUSH_EVERY`` lines or the moment one is an
-    error (so a crash leaves the tail it printed, not a whole run's worth unwritten).
+    completed record's log. The sink runs *outside* ``_push_log``'s ``_completed_lock``
+    (state.py takes it off the lock on purpose: the drain writes SQLite, and opening a
+    store can itself log, which would re-enter a plain Lock and deadlock the run thread),
+    so the writer serializes its OWN buffer with its own lock. ``_completed_lock`` is
+    only ever taken before ``self._lock`` (a flush caller may hold it); no path here takes
+    ``self._lock`` and then asks for ``_completed_lock``, so the two cannot invert. It
+    accumulates lines and hands the batch to SQLite every ``FLUSH_EVERY`` lines or the
+    moment one is an error (so a crash leaves the tail it printed, not a whole run's
+    worth unwritten).
 
     It must never write the console back (no ``add_log``/``logger`` on failure — the log
     handler forwards here, so a failure log would recurse). A store error keeps the batch for
@@ -61,6 +67,7 @@ class RunLogWriter:
     HARD_CAP = 2000
 
     def __init__(self):
+        self._lock = threading.Lock()
         self._buf: list = []
         self._buf_run_id: str | None = None
         #: The account whose run these lines belong to. Resolved at ARM time by the claim (which
@@ -78,11 +85,11 @@ class RunLogWriter:
     def reset(self) -> None:
         """Drop any leftover batch without writing it (a new run, or an armed re-entry).
 
-        Takes ``_completed_lock`` for the whole swap (the same way ``flush`` does): ``push``
-        runs under that lock, so replacing ``_buf`` without it let a concurrent push append
-        into the list ``reset`` had just swapped out — the durable log of a stopped run lost
-        its tail. Neither caller holds the lock, so acquiring it here cannot self-deadlock."""
-        with _completed_lock:
+        Takes the writer's own lock for the whole swap (the same way ``flush`` does):
+        ``push`` runs OUTSIDE ``_completed_lock`` (see the class docstring), so replacing
+        ``_buf`` without it let a concurrent push append into the list ``reset`` had just
+        swapped out — the durable log of a stopped run lost its tail."""
+        with self._lock:
             self._buf = []
             self._buf_run_id = None
 
@@ -92,25 +99,30 @@ class RunLogWriter:
         self.reset()
 
     def push(self, parts, wf_idx, level) -> None:
-        # Runs while the caller holds ``_completed_lock`` (see ``state._push_log``); every
-        # mutation below is therefore serialized with every other console writer.
-        rid = str(execution_state.get('run_id') or '')
-        if not rid:
-            return
-        if rid != self._buf_run_id and self._buf:
-            # Serial split: the previous component's record is closed — flush its lines under
-            # ITS id before switching, or they would be re-filed onto the next workflow.
-            self._drain()
-        self._buf_run_id = rid
-        stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
-        name = str((execution_state.get('_wf_names') or {}).get(wf_idx, '')) if wf_idx is not None else ''
-        lvl = level or 'info'
-        for line in parts:
-            self._buf.append((stamp, wf_idx, name, lvl, line))
-        if lvl == 'error' or len(self._buf) >= self.FLUSH_EVERY:
-            self._drain()
+        # Called from ``state._push_log`` OUTSIDE ``_completed_lock`` — parallel pool threads,
+        # the run thread and request threads all land here concurrently, so every mutation
+        # below serializes on the writer's own lock (the console lock cannot: the sink is
+        # deliberately taken off it so a SQLite flush can never re-enter it).
+        with self._lock:
+            rid = str(execution_state.get('run_id') or '')
+            if not rid:
+                return
+            if rid != self._buf_run_id and self._buf:
+                # Serial split: the previous component's record is closed — flush its lines under
+                # ITS id before switching, or they would be re-filed onto the next workflow.
+                self._drain()
+            self._buf_run_id = rid
+            stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
+            name = str((execution_state.get('_wf_names') or {}).get(wf_idx, '')) if wf_idx is not None else ''
+            lvl = level or 'info'
+            for line in parts:
+                self._buf.append((stamp, wf_idx, name, lvl, line))
+            if lvl == 'error' or len(self._buf) >= self.FLUSH_EVERY:
+                self._drain()
 
     def _drain(self) -> None:
+        # Caller holds ``self._lock``: the captured batch cannot gain a line between the
+        # store write and the swap, and two drains can never take the same batch.
         if not self._buf or not self._buf_run_id:
             self._buf = []
             return
@@ -126,7 +138,11 @@ class RunLogWriter:
             self._buf = batch if len(batch) <= self.HARD_CAP else batch[-self.FLUSH_EVERY :]
 
     def flush(self) -> None:
-        with _completed_lock:
+        # Only the writer's own lock: the drain touches SQLite, and holding
+        # ``_completed_lock`` across that write is the exact re-entry deadlock state.py
+        # takes the sink off the lock to avoid. Callers that hold ``_completed_lock``
+        # (settlement) keep the ordering ``_completed_lock`` → ``self._lock`` one-way.
+        with self._lock:
             self._drain()
 
 

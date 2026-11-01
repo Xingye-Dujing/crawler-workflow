@@ -746,6 +746,42 @@ class TestMlTraining:
         assert response.status_code == 400
         assert 'pos' in response.get_json()['error']
 
+    def test_an_ordinary_account_may_not_overwrite_the_shared_model_dir(self, client, paste, tmp_path, monkeypatch):
+        """A fit lands in the MACHINE-level ``MODEL_DIR`` — every account's next
+        ``mode='ml'`` run loads the same ``.pkl`` — so an ordinary account training one
+        rewrites what every OTHER account computes from. Same machine-level write
+        ``/api/settings`` and ``/api/lexicon`` guard, same 403 (and no file written)."""
+        import api.analysis as analysis_module
+
+        from analyzers import ml_base
+
+        monkeypatch.setattr(ml_base, 'MODEL_DIR', str(tmp_path))
+        monkeypatch.setattr(analysis_module, 'accounts_mode', lambda: True)
+        monkeypatch.setattr(analysis_module, 'is_admin', lambda: False)
+        dataset_id = paste(_labeled_records(), name='poison.csv')
+        response = client.post(
+            '/api/analysis/train',
+            json={'dataset_id': dataset_id, 'model_type': 'emotion', 'text_column': 'text', 'label_column': 'label'},
+        )
+        assert response.status_code == 403
+        assert list(tmp_path.glob('*.pkl')) == [], 'a refused train must never reach the model dir'
+
+    def test_the_admin_still_trains_in_accounts_mode(self, client, paste, monkeypatch):
+        """The gate exists for ordinary accounts only: an admin's request passes it and
+        lands on the route's own validation (a bogus ``model_type`` is named there —
+        reaching THAT answer proves the 403 door opened for him)."""
+        import api.analysis as analysis_module
+
+        monkeypatch.setattr(analysis_module, 'accounts_mode', lambda: True)
+        monkeypatch.setattr(analysis_module, 'is_admin', lambda: True)
+        dataset_id = paste(_labeled_records(), name='admin.csv')
+        response = client.post(
+            '/api/analysis/train',
+            json={'dataset_id': dataset_id, 'model_type': '../../evil', 'text_column': 'text', 'label_column': 'label'},
+        )
+        assert response.status_code == 400
+        assert 'model_type' in response.get_json()['error']
+
 
 class TestPanelParamsReachTheOperator:
     """The Settings panel stores flat strings; the normalizer is the only bridge

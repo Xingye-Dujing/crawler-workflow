@@ -19,6 +19,7 @@ from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
 from runtime import paths
 from runtime.state import add_log, ambient, execution_state, stop_requested
+from selenium.common.exceptions import WebDriverException
 
 from crawlers import crawler_class, get_crawler
 from crawlers.backends.catbus import CatbusCrawler
@@ -325,7 +326,21 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # ``core.refs._COMMENT_DOMAINS`` without writing its walk is still a refusal, just one
             # the walker states itself.
             skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
-            rows, status = session.walk(kind, url, limit)
+            try:
+                rows, status = session.walk(kind, url, limit)
+            except WebDriverException as e:
+                # One slow navigation used to take the whole node with it: the walk's bare
+                # ``driver.get`` throws its timeout straight through, and a batch where link
+                # 3 hung lost links 4..10 entirely. A browser-level fault on ONE link is
+                # named, counted the same way a dead link is (so the summary line and the
+                # unproven cursor gate — 继续 replays from the first hole — both see it),
+                # and the remaining links are still walked. Semantic refusals (no adapter,
+                # a locked store) and a dead or stopped browser (``CrawlerStopped`` is a
+                # ``BaseException``) still raise.
+                add_log(t('comment.linkFailed', url=url, err=e))
+                counts[DEAD] = counts.get(DEAD, 0) + 1
+                unproven.append(idx)
+                continue
             counts[status] = counts.get(status, 0) + 1
             if (
                 status != OK

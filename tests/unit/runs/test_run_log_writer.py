@@ -141,15 +141,16 @@ class TestFlushCadence:
         w.flush()
         assert store.batches == [], 'a new run must not inherit the previous buffer'
 
-    def test_reset_takes_the_console_lock(self, writer, monkeypatch):
-        """reset() swaps ``_buf`` while push() appends to it under ``_completed_lock``.
+    def test_reset_takes_the_writer_lock(self, writer, monkeypatch):
+        """reset() swaps ``_buf`` under the writer's OWN lock, the one push() runs under.
 
-        Doing the swap outside the lock let a concurrent push append into the list reset had
-        just replaced, so a stopped run's durable console lost its tail. reset() must acquire
-        the same lock flush() uses."""
+        The sink is deliberately called OUTSIDE ``_completed_lock`` (state.py takes it off
+        the console lock so a SQLite flush can never re-enter a plain Lock), so the console
+        lock serializes nothing here — reset() swapping without the writer's lock let a
+        concurrent push append into the list reset had just replaced, and a stopped run's
+        durable console lost its tail."""
 
         _module, w, _store, _state = writer
-        import engine.run_logs
 
         class _Probe:
             def __init__(self):
@@ -163,9 +164,35 @@ class TestFlushCadence:
                 return False
 
         probe = _Probe()
-        monkeypatch.setattr(engine.run_logs, '_completed_lock', probe)
+        monkeypatch.setattr(w, '_lock', probe)
         w.reset()
-        assert probe.n == 1, 'reset must serialize with push under _completed_lock'
+        assert probe.n == 1, 'reset must serialize with push under the writer lock'
+
+    def test_parallel_pushes_lose_no_line(self, writer):
+        """push() runs OUTSIDE ``_completed_lock``, so parallel writers (pool threads, the
+        run thread, requests) race here on their own. Without the writer lock a thread in
+        ``_drain`` could swap ``_buf`` while another was appending — a line printed by the
+        console vanishing from the durable log (or one batch written twice). Every line
+        pushed by N threads must come out exactly once."""
+        import threading
+
+        _module, w, store, state = writer
+        _set_run(state, 'rX')
+        threads, per_thread = 8, 60
+
+        def worker(k):
+            for i in range(per_thread):
+                w.push([f't{k} l{i}'], 0, 'info')
+
+        runners = [threading.Thread(target=worker, args=(k,)) for k in range(threads)]
+        for runner in runners:
+            runner.start()
+        for runner in runners:
+            runner.join()
+        w.flush()
+        lines = [r[4] for _rid, rows in store.batches for r in rows]
+        assert len(lines) == threads * per_thread, 'a lost line is a durable-log hole'
+        assert len(set(lines)) == len(lines), 'a duplicated batch is a durable-log lie'
 
 
 class TestStoreFailure:

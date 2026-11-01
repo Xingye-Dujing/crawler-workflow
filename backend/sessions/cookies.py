@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import time
 
 from i18n import t
@@ -267,8 +268,24 @@ class CookieManager:
     def save(self, platform: str, cookies: list, account: str = ''):
         account = str(account or '').strip()
         path = self.path_for(platform, account)
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(cookies, f, ensure_ascii=False, indent=2)
+        # Atomic replace, not an in-place ``open('w')``: a reader (a crawler seeding its
+        # session) racing this write could otherwise read a TRUNCATED file, which ``load``
+        # folds into 「no cookies」 — an anonymous crawl that latches nothing and reports
+        # success. A crash mid-write used to destroy the login for good. The temp file is
+        # uniquely named (two concurrent saves of one account must not hand each other's
+        # half-written bytes to ``os.replace``) and lives in the SAME directory, because
+        # ``os.replace`` is only atomic within one filesystem.
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=f'.{os.path.basename(path)}.', suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(cookies, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
         # The account belongs in the sentence: with one platform holding several logins, a line
         # that says only 「已保存 微博 的 Cookie」 leaves the user unable to tell which login he
         # just overwrote — and the console is the only record of the write.

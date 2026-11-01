@@ -56,6 +56,7 @@ ZH = {
         '[抖音评论] {url}：站点写着 {declared} 条，本表 {rows} 条 + 子回复 {nested} 条（还差 {gap} 条未采到）'
         ' —— 本次收尾原因是「{reason}」，所以差额不是「这条视频就这么多」'
     ),
+    'comment.linkFailed': '这条链接的页面加载失败，已跳过（其余链接继续）：{url}（{err}）',
     'comment.need_both': '节点 {nid}：按评论时间筛选必须同时给出开始和结束时间（半个区间无法界定范围）',
     'comment.noAdapter': '{platform} 还没有评论抓取实现，该链接无法处理：{url}',
     # The supported list is generated from the comment router's own domain table,
@@ -251,6 +252,7 @@ EN = {
         'replies ({gap} still not collected) — this walk ended because: {reason}, so the gap is not a claim '
         'that the thread is that short'
     ),
+    'comment.linkFailed': 'this link failed to load and was skipped (the rest continue): {url} ({err})',
     'comment.need_both': (
         'Node {nid}: filtering comments by time needs BOTH a start and an end (a half range cannot bound the window)'
     ),

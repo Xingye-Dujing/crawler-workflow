@@ -457,3 +457,84 @@ def test_a_comment_block_that_named_nothing_keeps_the_cookie_verdict(app_module,
     message = _drive_comment_block(app_module, monkeypatch, _FakeCommentCrawler(risk=False, wall=False))
     assert 'COOKIE' in message or 'cookie' in message.lower(), message
     assert app_module.execution_state['cookie_expired'] is True, 'a cookie block must still raise the toast flag'
+
+
+# ─── the comment node's per-link isolation: one slow navigation is one dead link, not a dead node ───
+
+
+class _RecordingSession:
+    """Stand-in for CommentSession: a chosen link raises a browser-level fault, the rest answer."""
+
+    instances: list = []
+    boom: str | None = None
+    fault: Exception | None = None
+
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+        self._owner = owner
+        self.walked = []
+        _RecordingSession.instances.append(self)
+
+    def walk(self, platform, url, limit):
+        self.walked.append(url)
+        if url == _RecordingSession.boom:
+            raise _RecordingSession.fault
+        return [{'评论ID': url, '评论内容': 'x'}], _protocol.OK
+
+
+def _three_link_node():
+    node = _comment_node()
+    node['params']['urls'] = (
+        'https://www.douyin.com/video/7000000000000000001\n'
+        'https://www.douyin.com/video/7000000000000000002\n'
+        'https://www.douyin.com/video/7000000000000000003'
+    )
+    return node
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_one_slow_link_is_skipped_and_the_rest_are_still_walked(app_module, monkeypatch):
+    """A batch where link 1 hung used to lose links 2..3 with it — the bare ``driver.get``
+    inside the walk threw its timeout through the loop and the node settled FAILED over
+    links nobody tried. A browser-level fault on ONE link is now a named, counted dead
+    link: the node returns the rows it did collect and the remaining links are walked."""
+    from nodes.executors import comment as comment_exec
+    from selenium.common.exceptions import TimeoutException
+
+    _RecordingSession.instances = []
+    _RecordingSession.boom = 'https://www.douyin.com/video/7000000000000000001'
+    _RecordingSession.fault = TimeoutException('page load timed out')
+    lines: list[str] = []
+    monkeypatch.setitem(app_module.execution_state, 'running', True)
+    monkeypatch.setattr(comment_exec, 'get_crawler', lambda *a, **k: _FakeCommentCrawler())
+    monkeypatch.setattr(comment_exec, 'add_log', lambda m, **k: lines.append(str(m)))
+    monkeypatch.setattr(_comments, 'CommentSession', _RecordingSession)
+    rows = comment_exec.execute_comment_node(_three_link_node(), headless=True, ctx=None)
+    assert [r['评论ID'] for r in rows] == [
+        'https://www.douyin.com/video/7000000000000000002',
+        'https://www.douyin.com/video/7000000000000000003',
+    ], 'the links after the slow one must still be walked'
+    assert _RecordingSession.instances[0].walked == [
+        'https://www.douyin.com/video/7000000000000000001',
+        'https://www.douyin.com/video/7000000000000000002',
+        'https://www.douyin.com/video/7000000000000000003',
+    ]
+    failed = [line for line in lines if '7000000000000000001' in line]
+    assert failed and 'timed out' in failed[0], f'the failure must be named with its reason, got: {failed}'
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_a_semantic_refusal_still_takes_the_node_down(app_module, monkeypatch):
+    """The isolation is for the BROWSER's faults only: a refusal the walk raises on purpose
+    (no adapter for the platform, a locked store) is the node's answer and must keep
+    raising — folding it into per-link noise would turn a named refusal into ten."""
+    from nodes.executors import comment as comment_exec
+
+    _RecordingSession.instances = []
+    _RecordingSession.boom = 'https://www.douyin.com/video/7000000000000000001'
+    _RecordingSession.fault = ValueError('no such adapter')
+    monkeypatch.setitem(app_module.execution_state, 'running', True)
+    monkeypatch.setattr(comment_exec, 'get_crawler', lambda *a, **k: _FakeCommentCrawler())
+    monkeypatch.setattr(comment_exec, 'add_log', lambda m, **k: None)
+    monkeypatch.setattr(_comments, 'CommentSession', _RecordingSession)
+    with pytest.raises(ValueError, match='no such adapter'):
+        comment_exec.execute_comment_node(_three_link_node(), headless=True, ctx=None)

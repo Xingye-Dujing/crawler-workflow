@@ -120,6 +120,30 @@ class TestRoundTrip:
         manager.save('zhihu', [])
         assert manager.load('zhihu') == []
 
+    def test_a_failed_save_leaves_the_previous_login_intact(self, manager, monkeypatch):
+        """A save is an ``os.replace`` of a fully-written temp file, never an in-place
+        truncate. A crash (or a mid-write error) between the two must leave the PREVIOUS
+        login on disk — a half-written file here reads back as 「no cookies」 and sends the
+        next crawl out anonymous, and a lost cookie file costs the user a fresh scan."""
+        manager.save('zhihu', COOKIES)
+        seen = {}
+
+        def _boom(fd, mode, **kwargs):
+            seen['opened'] = True
+            raise OSError('disk full mid-write')
+
+        monkeypatch.setattr(os, 'fdopen', _boom)
+        with pytest.raises(OSError):
+            manager.save('zhihu', [{'name': 'new', 'value': 'v'}])
+        assert seen['opened'], 'the save must have reached its write step'
+        assert manager.load('zhihu') == COOKIES, 'a failed save destroyed the login it was replacing'
+
+    def test_a_completed_save_leaves_no_temp_file_behind(self, manager):
+        manager.save('zhihu', COOKIES)
+        leftovers = [n for n in os.listdir(manager.cookie_dir) if n.endswith('.tmp')]
+        assert leftovers == [], f'stray temp files pollute the cookie dir: {leftovers}'
+        assert manager.load('zhihu') == COOKIES
+
     def test_the_directory_is_created_on_construction(self, tmp_path):
         target = tmp_path / 'deep' / 'cookies'
         CookieManager(str(target))
