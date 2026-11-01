@@ -281,9 +281,17 @@ function switchWfTab(wfId) {
 }
 
 /* Kill a process by calling the API */
+var _procCanControl = true; /* the server's own verdict, from the last poll's can_control */
+
 function killProcess(btn) {
     var ident = parseInt(btn.dataset.ident);
     if (!ident) return;
+    if (_procCanControl === false) {
+        /* The button should not even be there; the server 403s anyway. This is the
+           polite half: say why instead of showing a refusal nobody can act on. */
+        showToast(I18n.t('toast.adminOnly'));
+        return;
+    }
     fetch('/api/workflow/processes/kill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -325,6 +333,7 @@ function processesPoll() {
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (!panel.classList.contains('open')) return;
+            _procCanControl = data.can_control !== false;
             var out = document.getElementById('processes-output');
             var html = '';
 
@@ -338,12 +347,12 @@ function processesPoll() {
                 '<span>' + I18n.t('processes.pool') + ': <b>' + (data.stop_requested ? I18n.t('processes.yes') : I18n.t('processes.no')) + '</b></span>' +
                 '</div>';
 
-            /* Thread table */
+            /* Thread table — the kill column exists only for a caller the server says may drive it */
             html += '<table class="proc-table"><tr>' +
                 '<th>' + I18n.t('processes.name') + '</th>' +
                 '<th>' + I18n.t('processes.type') + '</th>' +
                 '<th>' + I18n.t('processes.status') + '</th>' +
-                '<th>' + I18n.t('processes.kill') + '</th>' +
+                (_procCanControl ? '<th>' + I18n.t('processes.kill') + '</th>' : '') +
                 '</tr>';
             data.threads.forEach(function (t) {
                 var typeClass = '';
@@ -352,7 +361,7 @@ function processesPoll() {
                 else if (t.name.startsWith('ThreadPoolExecutor')) { typeLabel = '<span class="proc-tag proc-tag-pool">pool</span>'; }
                 else if (t.name === 'run') { typeLabel = '<span class="proc-tag proc-tag-run">run</span>'; }
                 else { typeLabel = t.daemon ? '<span class="proc-tag proc-tag-daemon">daemon</span>' : ''; }
-                var canKill = t.name !== 'MainThread' && t.name !== 'run' && t.alive;
+                var canKill = _procCanControl && t.name !== 'MainThread' && t.name !== 'run' && t.alive;
                 html += '<tr>' +
                     '<td>' + escapeHtml(t.name) + '</td>' +
                     '<td>' + typeLabel + '</td>' +
@@ -381,6 +390,7 @@ function processesPoll() {
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!document.getElementById('processes-panel').classList.contains('open')) return;
+                _procCanControl = data.can_control !== false;
                 var out = document.getElementById('processes-output');
                 var html = '';
                 var runningText = data.running
@@ -395,7 +405,7 @@ function processesPoll() {
                     '<th>' + I18n.t('processes.name') + '</th>' +
                     '<th>' + I18n.t('processes.type') + '</th>' +
                     '<th>' + I18n.t('processes.status') + '</th>' +
-                    '<th>' + I18n.t('processes.kill') + '</th>' +
+                    (_procCanControl ? '<th>' + I18n.t('processes.kill') + '</th>' : '') +
                     '</tr>';
                 data.threads.forEach(function (t) {
                     var typeLabel = '';
@@ -403,7 +413,7 @@ function processesPoll() {
                     else if (t.name.startsWith('ThreadPoolExecutor')) { typeLabel = '<span class="proc-tag proc-tag-pool">pool</span>'; }
                     else if (t.name === 'run') { typeLabel = '<span class="proc-tag proc-tag-run">run</span>'; }
                     else { typeLabel = t.daemon ? '<span class="proc-tag proc-tag-daemon">daemon</span>' : ''; }
-                    var canKill = t.name !== 'MainThread' && t.name !== 'run' && t.alive;
+                    var canKill = _procCanControl && t.name !== 'MainThread' && t.name !== 'run' && t.alive;
                     html += '<tr>' +
                         '<td>' + escapeHtml(t.name) + '</td>' +
                         '<td>' + typeLabel + '</td>' +

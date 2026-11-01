@@ -691,3 +691,76 @@ class TestTheLexiconsAreAMachineLevelWrite:
         assert added.status_code == 200, added.get_json()
         removed = _delete(admin_client, '/api/lexicon', {'kind': 'stopword', 'term': '测试'})
         assert removed.status_code == 200, removed.get_json()
+
+
+class TestTheProcessPanelIsWatchOnlyForPlainAccounts:
+    """The thread list stays readable for everyone — 只能查看 — but the kill is a
+    system-level operation: it injects ``SystemExit`` into a thread of THIS process,
+    which also holds the scheduler and every account's worker. So the panel answers
+    with the caller's verdict (``can_control``) and the kill refuses a plain account,
+    the same shape the settings panel's ``read_only`` uses."""
+
+    def test_the_panel_tells_the_page_who_may_drive_it(self, admin_client):
+        bob = _as_plain_user(admin_client)
+        assert bob.get('/api/workflow/processes').get_json()['can_control'] is False
+        assert admin_client.get('/api/workflow/processes').get_json()['can_control'] is True
+
+    def test_a_plain_account_cannot_kill_but_may_still_watch(self, admin_client):
+        bob = _as_plain_user(admin_client)
+        # Give the slot to bob, so the refusal below is the ADMIN one and not the
+        # foreign-run guard that answers an account with no claim on the slot.
+        execution_state['running'] = True
+        execution_state['user_id'] = _me(bob)['user_id']
+        try:
+            refused = _post(bob, '/api/workflow/processes/kill', {'ident': 1})
+            assert refused.status_code == 403, refused.get_json()
+            assert 'admin' in refused.get_json()['error'].lower()
+            # The read side stays open: the panel still answers, view-only.
+            watched = bob.get('/api/workflow/processes').get_json()
+            assert watched['can_control'] is False and watched.get('foreign_run') is not True
+        finally:
+            execution_state['running'] = False
+            execution_state['user_id'] = ''
+
+    def test_an_admin_keeps_the_kill(self, admin_client):
+        # Own the slot, so the request passes the foreign-run guard and reaches the ident checks.
+        execution_state['running'] = True
+        execution_state['user_id'] = _me(admin_client)['user_id']
+        try:
+            refused_shape = _post(admin_client, '/api/workflow/processes/kill', {'ident': 1})
+            # The admin gate does not fire: a dead ident reaches the not-found answer by name.
+            assert refused_shape.status_code == 404, refused_shape.get_json()
+        finally:
+            execution_state['running'] = False
+            execution_state['user_id'] = ''
+
+    def test_a_host_without_accounts_keeps_the_kill_for_its_single_user(self, client, monkeypatch):
+        """The single-user default: there is nobody to protect the process FROM."""
+        monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+        monkeypatch.setattr(Config, 'ADMIN_USER', '')
+        monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
+        accounts_service.reset_service()
+        assert client.get('/api/workflow/processes').get_json()['can_control'] is True
+        response = _post(client, '/api/workflow/processes/kill', {'ident': 1})
+        assert response.status_code == 404, response.get_json()
+
+
+class TestTheProfileTemplateIsAnOperatorAction:
+    """The template is the SHARED ancestor of every account's browser profile, and
+    rebuilding it launches a real Chrome on the host. That is an operator's move —
+    the same class of machine-level write as settings.json — so with accounts on
+    the machine it answers to the admin."""
+
+    def test_a_plain_account_cannot_rebuild_the_shared_template(self, admin_client):
+        bob = _as_plain_user(admin_client)
+        refused = _post(bob, '/api/browser/profiles/template', {'force': False})
+        assert refused.status_code == 403, refused.get_json()
+        assert 'admin' in refused.get_json()['error'].lower()
+
+    def test_an_admin_may_rebuild_it(self, admin_client, monkeypatch):
+        import sessions.routes as routes
+
+        monkeypatch.setattr(routes, 'ensure_profile_template', lambda force=False: {'ok': True, 'stubbed': True})
+        response = _post(admin_client, '/api/browser/profiles/template', {'force': False})
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()['stubbed'] is True

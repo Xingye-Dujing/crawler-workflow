@@ -20,12 +20,14 @@ import threading
 import time
 
 import capabilities.registry as capabilities
+from api.auth import is_admin
 from api.http import _bad_body, _json_body, _safe_int
 from core.config import Config
 from core.refs import as_bool, flag_or_none
 from flask import Blueprint, jsonify
 from runtime import account_context, paths
 from runtime.state import add_log, cookie_manager, execution_state
+from services.accounts.service import accounts_mode
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
 from i18n import get_lang, set_lang, t
@@ -966,8 +968,13 @@ def build_profile_template():
     used to create one by logging in is not offered there. The cookie-save path calls
     the same function by itself (see :func:`template.ensure_profile_template`), so this
     route exists for an operator who wants to rebuild it now — and for a machine where
-    no cookie has been pasted yet.
+    no cookie has been pasted yet. An operator's route: the template is the SHARED
+    ancestor of every account's profile, and building it launches a real Chrome on the
+    host, so with accounts on the machine it answers to the admin, like the settings
+    and lexicon writes. Without accounts the single user is the operator.
     """
+    if accounts_mode() and not is_admin():
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
     body = _json_body()
     if body is None:
         return _bad_body()

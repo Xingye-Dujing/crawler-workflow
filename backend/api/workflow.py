@@ -40,6 +40,7 @@ from runtime.stores import (
 )
 
 from api.http import _bad_body, _bad_param, _json_body, _optional_int
+from api.auth import is_admin
 from engine import run as run_engine
 from engine.plan import downstream_closure
 from engine.workflow import effective_workflow
@@ -581,10 +582,22 @@ def _visible_threads() -> list:
 
 @bp.route('/api/workflow/processes', methods=['GET'])
 def workflow_processes():
-    """Return info about active threads/processes for the monitoring panel."""
+    """Return info about active threads/processes for the monitoring panel.
+
+    Reading the panel is every account's right; driving it is not. ``can_control`` is the
+    server's own verdict (the same rule the settings panel is told via ``read_only``), so
+    the page hides the kill buttons without having to guess a role from a response code.
+    """
     if run_is_foreign():
         return jsonify(
-            {'running': False, 'threads': [], 'stop_requested': False, 'active_crawlers': 0, 'foreign_run': True}
+            {
+                'running': False,
+                'threads': [],
+                'stop_requested': False,
+                'active_crawlers': 0,
+                'foreign_run': True,
+                'can_control': _may_control(),
+            }
         )
     threads = _visible_threads()
 
@@ -600,8 +613,20 @@ def workflow_processes():
             'threads': threads,
             'stop_requested': stop_asked,
             'active_crawlers': len(execution_state['active_crawlers']),
+            'can_control': _may_control(),
         }
     )
+
+
+def _may_control() -> bool:
+    """Whether the caller may operate the process panel (kill). Reading stays open.
+
+    Without accounts there is nothing to restrict — the single-user install is the machine's
+    owner by definition. With accounts, system-level thread control is the operator's job:
+    a kill injects ``SystemExit`` into a thread the caller did not start, and the thread list
+    is a machine fact, not an account fact.
+    """
+    return not accounts_mode() or is_admin()
 
 
 @bp.route('/api/workflow/processes/kill', methods=['POST'])
@@ -611,6 +636,13 @@ def kill_process():
         # The thread list belongs to another account's run; an ident typed from this page must not
         # be able to kill someone else's worker.
         return jsonify({'ok': False, 'error': t('api.foreignRun')}), 403
+    if not _may_control():
+        # The panel only SHOWS a plain account what its own run is doing; the kill is a
+        # system-level operation on a shared host (the scheduler, the cookie windows and
+        # every account's worker threads live in this process), so the answer is the same
+        # one the settings and lexicon writes give. The hidden button is cosmetic only —
+        # this 403 is the permission.
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
     data = _json_body()
     if data is None:
         return _bad_body()
