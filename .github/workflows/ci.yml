@@ -33,9 +33,14 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      # Node-24 majors on purpose. checkout v4 / setup-python v5 target Node 20, which the
+      # runner already forces onto Node 24 — an annotation on every job — and which GitHub will
+      # one day refuse to start at all. Nothing this workflow uses changed across v5..v7
+      # (no submodules, no LFS, no `pip-install` input, no token pushed from CI), so the bump is
+      # a version change only; the proof is a real run, never this comment.
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -127,9 +132,9 @@ jobs:
       CRAWLER_REQUIRE_BROWSER: '1'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
