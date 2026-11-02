@@ -17,7 +17,7 @@ the user can actually mean, and they are not two names for one thing:
 **真排队** (:func:`strict`, the setting 同平台排队采集) — one platform's crawl holds the
 turn until it has *finished*, so nothing else of that platform runs at the same moment.
 That is the only promise a persistent profile can keep anyway (one directory, one
-browser), and taking it seriously means the per-run 「用不用 Profile」 question has no
+browser), and taking it seriously means the per-run “用不用 Profile” question has no
 choice left to ask: the queue is decided for the whole program.
 
 **错峰** (with the switch off) — starts are spaced by 同平台错峰间隔 seconds and nothing
@@ -89,7 +89,7 @@ def _lane(platform: str, account: str = '') -> str:
     account = str(account or '').strip()
     # ``default`` is that same login's NAME and ``''`` its historical spelling; the rule above
     # says the default account owns the bare platform lane, so both spellings must land there.
-    # Splicing the raw name made 「微博 + default」 a SECOND lane beside 「微博 + blank」, and a
+    # Splicing the raw name made “微博 + default” a SECOND lane beside “微博 + blank”, and a
     # serial_only platform can be paged twice at once across two lanes — the very wall this gate
     # exists to remove. CookieManager.path_segment is the one fold (:meth:`CookieManager.key`).
     segment = CookieManager.path_segment(account)

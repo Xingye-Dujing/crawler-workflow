@@ -224,8 +224,8 @@ Analyze strictly and output only the required plain string."""
         Refuses BY NAME exactly like the sentiment node's bert path: a missing
         ``torch``/``transformers`` stack or a blank model name raises rather than quietly
         running the LLM or sklearn classifier behind a column this node said a transformer
-        produced. A row that fails is left BLANK, not stamped ``Neutral`` — 「没有判断」 and
-        「判断为中性」 are different statements, and only the first is honest about a row the
+        produced. A row that fails is left BLANK, not stamped ``Neutral`` — “没有判断” and
+        “判断为中性” are different statements, and only the first is honest about a row the
         model never answered.
 
         The whole column goes through in ``self.batch_size`` chunks; the pipeline applies

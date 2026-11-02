@@ -72,7 +72,7 @@ ATTACK = (
 #
 # The address branch used to be ``[省市县区街道路巷小区栋单元室门牌]`` — a single-character class,
 # so ANY comment containing 小/区/市/路/元/单/牌 filed a privacy hit, and one such hit is already
-# past ``SEVERE_AT``. Measured: 「今天路很堵」「这个小学生」「100元」「元芳你怎么看」 all came back
+# past ``SEVERE_AT``. Measured: “今天路很堵”“这个小学生”“100元”“元芳你怎么看” all came back
 # ``severe`` with the explanation ``privacy:路``. A privacy shape has to be a SHAPE — either the
 # administrative path down to a number, or a numbered building position.
 PRIVACY = (
@@ -90,7 +90,7 @@ PRIVACY = (
 # Rumour framing: asserts a fact while attributing it to nobody. Deliberately WITHOUT the
 # debunking vocabulary (造谣/辟谣/不实/假的): those words appear far more often in comments
 # ACCUSING someone of rumour-mongering than in comments spreading one, and reading
-# 「别听他造谣，警方已经辟谣了」 as violent speech would put a correction on the study's
+# “别听他造谣，警方已经辟谣了” as violent speech would put a correction on the study's
 # rumour curve. A missed rumour-spreader is the honest cost of that choice, and it is stated
 # here rather than hidden in a score.
 RUMOUR = (
@@ -205,7 +205,7 @@ class AggressionAnalyzer:
             '你是网络暴力言论判定员。判断下面这条中文评论是否属于网络暴力言论，并给出等级与类型。\n'
             '等级：none（无暴力）、mild（轻微攻击）、severe（严重：辱骂、人身攻击、人肉/隐私泄露、造谣）。\n'
             '类型只能从这些里选：abuse（谩骂）、attack（人身攻击）、privacy（隐私披露/人肉）、rumour（造谣转述）、none。\n'
-            '只输出一行，格式为「等级|类型」，不要解释、不要引号。\n'
+            '只输出一行，格式为“等级|类型”，不要解释、不要引号。\n'
             f'评论：{text}'
         )
 
@@ -213,7 +213,7 @@ class AggressionAnalyzer:
     def parse_answer(answer) -> tuple:
         """The model's line as ``(level, hits)``, with anything unrecognisable read as no verdict.
 
-        A local model returns 「严重」 for ``severe``, a stray ``` in the level slot, or a whole
+        A local model returns “严重” for ``severe``, a stray ``` in the level slot, or a whole
         sentence. The first field is matched against the level words (in both languages) and the
         rest is kept as the type list, so a reader can see what the model actually said rather
         than a coerced value.

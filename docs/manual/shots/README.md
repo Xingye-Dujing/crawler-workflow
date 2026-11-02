@@ -33,7 +33,7 @@
 ```
 
 `chart` / `fullscreen` / `dashboard` / `datapreview` / `history` 会先调用 `hydrate_results`，把这张画布最新一次
-存下来的运行载入页面，面板才有真实的行和图，不会只剩一句「先跑一次」。
+存下来的运行载入页面，面板才有真实的行和图，不会只剩一句“先跑一次”。
 
 输出落在 `docs/manual/img/<out>.png`，两倍像素，浅色主题，画布已经自动排布并适应过。
 

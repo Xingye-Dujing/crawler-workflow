@@ -25,7 +25,7 @@ def suggest_stages(
     something a table can answer, and it answers it as a PROPOSAL — the rows out of this
     step are windows to consider and the console holds the ``edges``/``labels`` text that
     pastes into :meth:`bin_time`. Nothing is applied, because a boundary this step
-    invented is a boundary the researcher did not take, and 「官方通报」 is not in the
+    invented is a boundary the researcher did not take, and “官方通报” is not in the
     post counts.
 
     Three rules make the paste safe. The last edge is the day AFTER the final window,

@@ -28,14 +28,14 @@ def topic_flow(
     图 15 is a diagram of row labels. The raw ids stay in ``source_topic``/``target_topic``.
 
     表 1 says what each phase was about; it does not say how one phase's subject BECAME the
-    next one's. That is the paper's other structural claim (「外卖黑盒→外卖空包」 is one subject
+    next one's. That is the paper's other structural claim (“外卖黑盒→外卖空包” is one subject
     mutating, not two subjects), and the only way to read it from a per-phase model is to
     compare the topics of adjacent phases with each other.
 
     The comparison is the Jensen-Shannon divergence of the two word DISTRIBUTIONS, taken
     from the ``word:weight`` cell :meth:`topic_by_stage` writes, turned into a similarity by
     ``1 / (1 + d)``. The distributions rather than the word lists, because two topics can
-    share 「外卖」 and mean different things by how hard they lean on it; where the lists are
+    share “外卖” and mean different things by how hard they lean on it; where the lists are
     all that is left, :meth:`topic_timeline` is the step to use.
 
     Adjacent phases only, and deliberately so: comparing 发酵期 with 衰退期 would draw an

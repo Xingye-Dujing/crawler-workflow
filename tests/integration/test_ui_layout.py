@@ -604,7 +604,7 @@ def test_a_stopping_record_says_stopping_and_offers_nothing(app_url, driver, lan
             found: true,
             label: chip ? chip.textContent : null,
             cls: chip ? chip.className : null,
-            // A cut-off word is a different word: 「正在停止」 printed as 「正在停…」
+            // A cut-off word is a different word: “正在停止” printed as “正在停…”
             // is the one state the user needs to read correctly.
             clipped: chip ? chip.scrollWidth - chip.clientWidth > 1 : null,
             handlers: Array.from(row.querySelectorAll('.runs-mgr-btn')).map((b) => b.textContent),
@@ -1315,7 +1315,7 @@ def test_a_hostile_workflow_name_stays_text_and_inside_its_attribute(app_url, dr
 def test_a_dialog_never_asks_the_browser_to_overflow_it(app_url, driver, lang):
     """Measured inside the page, not read off the stylesheet.
 
-    The 「用不用 Profile」 buttons carried whole sentences and `.menu-btn` is
+    The “用不用 Profile” buttons carried whole sentences and `.menu-btn` is
     ``white-space: nowrap``, so the row could neither shrink nor wrap and the label ran
     out of the box — which the user read as truncated text. Every property that fixes
     this can be present in the CSS and still lose in the browser, so the only assertion
@@ -2055,7 +2055,7 @@ def test_a_wire_between_far_apart_nodes_is_painted_not_clipped(app_url, driver):
     """The nodes are `<div>`s, so dragging one past the finite #canvas-inner kept it
     visible; the wires all live in ONE `<svg>` sized 100% of that box, and an `<svg>`
     root clips to its own viewport by UA default. Past x=10000 the curve simply did not
-    exist on screen — the user's report was 「连线到一定范围就不渲染了」, and
+    exist on screen — the user's report was “连线到一定范围就不渲染了”, and
     `#svg-layer { overflow: visible }` is what removes that bound.
 
     A bounding rect CANNOT see this bug: a clipped path reports its full layout box while
@@ -2354,11 +2354,11 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
       yesterday's platform; this case reads the **label**, and starts somewhere else so a no-op
       cannot pass by accident;
     * every word and cell in the dock is built by JavaScript from catalogue keys, so a selector
-      that no longer exists (the deleted 「打开」 button, the profile-state cells) is only caught
+      that no longer exists (the deleted “打开” button, the profile-state cells) is only caught
       by querying the real table.
 
     Pinned here: the dock renders one row per (platform, account) addressed by that login's key,
-    the default row offers a rename that is visibly refused rather than absent, 「打开」 and the
+    the default row offers a rename that is visibly refused rather than absent, “打开” and the
     profile cells are gone, the dock shuts the other bottom panel, and the account box's
     candidates are a dropdown that exists only while the box is in use.
     """
@@ -2395,7 +2395,7 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
             }
             // ``fetchJSON`` reads the BODY AS TEXT and parses it (it must answer a non-JSON
             // reply without throwing), so a stub that only hands back ``json()`` is answered
-            // with 「HTTP undefined」 — the shape this case needed to be written against.
+            // with "HTTP undefined" — the shape this case needed to be written against.
             const body = JSON.stringify(payload);
             return Promise.resolve({
                 json: () => Promise.resolve(payload),
@@ -2455,7 +2455,7 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
             workAccount: workRow.querySelector('.cookie-cell-account').textContent,
             defaultOps: opsOf(defaultRow),
             workOps: opsOf(workRow),
-            // 「打开」 is gone; the profile cells the user deleted must not have come back.
+            // “打开” is gone; the profile cells the user deleted must not have come back.
             openButtons: document.querySelectorAll('#cookies-mgr-body .cookie-row-actions').length,
             stateCells: document.querySelectorAll('#cookies-mgr-body .cookie-row-state').length,
             meta: Array.prototype.slice
@@ -2476,10 +2476,10 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
     # Each row names its own login; the default one is spoken as a word, a typed one verbatim.
     assert report['defaultAccount'] == report['defaultAccountWord'], report
     assert report['workAccount'] == 'work', report
-    # Rename + delete + 「删除 Profile」, in that order, for a row that HAS a profile directory.
+    # Rename + delete + “删除 Profile”, in that order, for a row that HAS a profile directory.
     # Both the rename and the profile-delete are visibly refused on the default row (disabled with
-    # a reason) rather than offered as a control that cannot do the thing (user: 「哪有同一个东西不同
-    # 规范的」 — 默认账号 owns no folder to move, and its browser data is the platform root that nests
+    # a reason) rather than offered as a control that cannot do the thing (user: “哪有同一个东西不同
+    # 规范的” — 默认账号 owns no folder to move, and its browser data is the platform root that nests
     # every named account, so a delete there would over-reach). A named account gets all three live.
     assert [o['label'] for o in report['workOps']] == [
         report['renameWord'],
@@ -2497,7 +2497,7 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
     assert (
         report['defaultOps'][2]['disabled'] is True and report['defaultOps'][2]['title'] == report['profileRefuseWord']
     ), report['defaultOps']
-    assert report['openButtons'] == 0, f'the 「打开」 button came back: {report}'
+    assert report['openButtons'] == 0, f'the “打开” button came back: {report}'
     assert report['stateCells'] == 0, f'a profile-state cell came back: {report}'
     assert not any(('profile' in m.lower() or '关窗口' in m or '失效' in m) for m in report['meta']), report
 
@@ -2505,7 +2505,7 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
         """
         // Land the panel on zhihu so the two zhihu logins are what the box offers, and type a
         // name into the box directly — the candidate dropdown is narrowed by TYPING, not by any
-        // row action (the deleted 「打开」 used to be what left `work` here).
+        // row action (the deleted “打开” used to be what left `work` here).
         openCookieDialog('zhihu');
         const input = document.getElementById('cookie-account');
         input.value = 'work';
@@ -2601,7 +2601,7 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
         };
         // A canvas the page owns, empty like a first visit (the shared profile's restore would
         // paint yesterday's nodes) — then two connected nodes, the head disabled through its own
-        // power button so the head is 「已禁用」 and the child 「无有效输入」.
+        // power button so the head is “已禁用” and the child “无有效输入”.
         document.body.dataset.lang = 'zh';
         I18n.apply();
         localStorage.removeItem('crawler_canvas');
@@ -2682,7 +2682,7 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
 
 
 def test_the_report_rows_field_wears_the_same_skin_as_the_text_field(app_url, driver):
-    """The report dialog's 「行数」 number box (``#rpt-rows``) must read as a site input, not OS
+    """The report dialog's “行数” number box (``#rpt-rows``) must read as a site input, not OS
     chrome, sitting beside a text field that already wore the house class.
 
     ``showDialog`` built every ``field`` row as a bare ``<input>`` while its text ``input`` and the

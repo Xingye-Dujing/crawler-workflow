@@ -17,7 +17,7 @@
      usually in Beijing, and a moment this file formatted would be the browser's
      zone wearing the server's name;
    * whether the clock is running — `status.running` says so, and the panel prints
-     it, because 「保存了但没人执行」 and 「保存了并在执行」 otherwise look alike;
+     it, because “保存了但没人执行” and “保存了并在执行” otherwise look alike;
    * what a status word reads as — the server sends a token, this file maps it to
      a catalogue word, and an unknown token is shown AS ITSELF.
 
@@ -129,7 +129,7 @@ var schedulesManager = {
             '</tbody></table>';
     },
 
-    /* The operator's line: which box this is, what it calls 「现在」, and whether
+    /* The operator's line: which box this is, what it calls “现在”, and whether
        the clock is actually running. */
     _statusLine() {
         var s = this._status || {};

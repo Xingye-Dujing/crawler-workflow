@@ -154,7 +154,7 @@ class TestTheDiscoveryVerdict:
         monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '')
         monkeypatch.setattr(bridge, '_call', answer())
         info = bridge.probe(force=True)
-        assert info.reason_key == 'catbus.noCli', '「装了 Node」 and 「装了 CatBus」 are two separate facts'
+        assert info.reason_key == 'catbus.noCli', '“装了 Node” and “装了 CatBus” are two separate facts'
 
     def test_an_old_runtime_is_refused_before_it_fails_obscurely(self, monkeypatch):
         seen = []
@@ -203,7 +203,7 @@ class TestTheDiscoveryVerdict:
         assert info.entry == '/opt/catbus/cli.js'
 
     def test_an_empty_field_hands_the_environment_to_discovery(self, monkeypatch):
-        """「留空=自动」 means the env default and then the per-OS tables, not 「nothing configured」."""
+        """“留空=自动” means the env default and then the per-OS tables, not “nothing configured”."""
         asked = []
         monkeypatch.setattr(settings, 'get_setting', lambda key: '')
         monkeypatch.setattr(Config, 'CATBUS_NODE', '')
@@ -476,7 +476,7 @@ class TestPreflightAsksCatBusAlone:
     def test_a_machine_without_the_backend_cannot_be_asked(self, monkeypatch):
         monkeypatch.setattr(bridge, 'probe', lambda force=False: a_probe(available=False, reason_key='catbus.noCli'))
         out = bridge.preflight('bilibili')
-        assert out['verdict'] == 'unverifiable', '「cannot ask」 is not 「not logged in」'
+        assert out['verdict'] == 'unverifiable', '"cannot ask" is not "not logged in"'
         assert 'CatBus' in out['message']
 
     def test_a_spawn_that_failed_is_unverifiable_not_expired(self, monkeypatch):

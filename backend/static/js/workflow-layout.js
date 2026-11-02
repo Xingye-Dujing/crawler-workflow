@@ -49,7 +49,7 @@ var LayoutStrategy = {
         if (select) select.value = layout.strategy === 'baseline' ? 'baseline' : 'algorithm';
         /* The style menu's select is themed by CustomSelect: setting the native value
            updates the control but not the visible trigger, so the menu would say
-           「算法排布」 while the saved strategy is 「按历史基准」. */
+           “算法排布” while the saved strategy is “按历史基准”. */
         if (typeof CustomSelect !== 'undefined' && CustomSelect.refreshAll) CustomSelect.refreshAll();
         var hint = document.getElementById('layout-baseline-hint');
         if (!hint) return;

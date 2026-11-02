@@ -44,7 +44,7 @@ def douyin_comment_fields(text: str) -> tuple:
     ``lines[1]`` unconditionally, which filed ``1天前·北京`` as the comment when the
     author line had absorbed it — a row whose 评论内容 is a timestamp is a lie in the
     column the user reads — and it dropped every line after the first on a comment
-    that wraps, so a two-line comment lost its second line (「不漏采」 is the whole
+    that wraps, so a two-line comment lost its second line (“不漏采” is the whole
     point of this table). Lines between the author and the anchor are therefore the
     text, joined; a number standing there is part of what someone wrote, not the
     like count, which only ever sits below the anchor.
@@ -80,7 +80,7 @@ def parse_douyin_threads(threads: dict, url: str) -> tuple:
     their replies (so a reply's 父楼层 can point back at its parent's number), exactly like zhihu's.
 
     A parent's **子回复数** is the number of reply rows we actually landed (the user's "实际子行数"),
-    falling back to the site's declared 「展开N条回复」 when the thread could not be opened. ``nested`` is
+    falling back to the site's declared “展开N条回复” when the thread could not be opened. ``nested`` is
     the sum of ``declared − captured`` over every parent — the replies the denominator counts but this
     walk never reached — so the ``comment.dyShort`` gap stays honest whether or not the threads opened,
     and reply rows (now real rows) are never double-counted against it.
@@ -134,10 +134,10 @@ def parse_douyin_threads(threads: dict, url: str) -> tuple:
 
 #: douyin's reply expander is a real ``button`` whose ONLY reliable opener is a native click — a
 #: synthetic ``.click()`` does not move React's delegated handler (measured on the real profile).
-#: The opener is matched by its 「展开N条回复」 TEXT, not the class alone: after a real expand the same
-#: slot reads 「收起」, so the text is both the proof it opened and the guard against a re-click that
+#: The opener is matched by its “展开N条回复” TEXT, not the class alone: after a real expand the same
+#: slot reads “收起”, so the text is both the proof it opened and the guard against a re-click that
 #: would collapse it again. Each thread is stamped ``data-dy-tried`` so it is attempted ONCE — a comment
-#: that is deleted/hidden only pops 「评论已删除 / 不可见」 and never renders, so retrying it would hang the
+#: that is deleted/hidden only pops “评论已删除 / 不可见” and never renders, so retrying it would hang the
 #: walk; it is skipped for good and its parent keeps the site's declared count.
 _EXPAND_RE = re.compile(r'展开\s*\d+\s*条回复')
 
@@ -172,9 +172,9 @@ _MARK_JS = r"""
     return true;
     """
 
-#: True only if some 「展开N条回复」 belongs to a comment-item NOT yet tried. The walk keeps going while an
+#: True only if some “展开N条回复” belongs to a comment-item NOT yet tried. The walk keeps going while an
 #: untried thread remains but STOPS once every thread has been tried — even a thread that will not open —
-#: otherwise one stubborn 「展开」 that never flips would block the exit forever.
+#: otherwise one stubborn “展开” that never flips would block the exit forever.
 _UNTRIED_JS = r"""
     var re = /展开\s*\d+\s*条回复/;
     var btns = document.querySelectorAll('button');
@@ -187,7 +187,7 @@ _UNTRIED_JS = r"""
     return false;
     """
 
-#: A failed 「展开N条回复」 pops a semi-ui toast/modal (评论已删除 / 该评论不可见) — a comment that is gone
+#: A failed “展开N条回复” pops a semi-ui toast/modal (评论已删除 / 该评论不可见) — a comment that is gone
 #: or hidden on the web frontend, which is genuinely UNCRAWLABLE and must be skipped, not retried (the
 #: ``data-dy-tried`` mark already guarantees one try, no retry). This only clears the popup so it can't
 #: cover the panel; it never re-clicks. Douyin ships semi-ui (``.semi-modal``/``.semi-toast`` — the same
@@ -219,14 +219,14 @@ def walk(session, url: str, limit: int) -> tuple:
     becoming 56 — while ``window.scrollTo`` does nothing at all. The panel's
     request carries ``a_bogus``/``msToken``, so there is no endpoint to call.
 
-    「展开N条回复」 threads ARE expanded and their replies are filed as their own rows
+    “展开N条回复” threads ARE expanded and their replies are filed as their own rows
     (``父楼层`` = the parent's floor). Measured on the real profile
     (``backend/test_douyin_subreply_probe.py``): a *native* ``ActionChains`` click on the
     actual ``button...comment-reply-expand-btn`` opens the thread (~1 s async), and the
     replies render inline as ``.replyContainer`` children of the same comment-item. A synthetic
     ``.click()`` does NOT (React's delegated handler ignores it) — so this click is a real one,
-    not a dispatched event, and the opener is matched by its 「展开N条回复」 text (after a real
-    expand it reads 「收起」, which both proves the open and stops a re-click from collapsing it).
+    not a dispatched event, and the opener is matched by its “展开N条回复” text (after a real
+    expand it reads “收起”, which both proves the open and stops a re-click from collapsing it).
     The walk re-reads the mounted items each round and dedups by (author, body, time), because
     douyin virtualises the list: an item scrolled past is unmounted, so a single final read
     would silently lose it.
@@ -239,12 +239,12 @@ def walk(session, url: str, limit: int) -> tuple:
     mounted = _wait_for_panel(session)
     if looks_blocked(session.body_head()):
         # A security-check body is 风控, not a dead session: latch it on the owning
-        # crawler so the node reports 「退避重试」, never 「重新保存 Cookie」 for a session
+        # crawler so the node reports “退避重试”, never “重新保存 Cookie” for a session
         # that may be perfectly fine.
         session.mark_risk_blocked()
         return [], BLOCKED
     reported = session.node_text('[data-e2e="feed-comment-icon"]')
-    # The substitution test runs **before** the panel branch, not inside the 「没挂载」 arm: measured
+    # The substitution test runs **before** the panel branch, not inside the “没挂载” arm: measured
     # 2026-09-28, the address can move to another video while the substitute's own panel mounts
     # happily, and a check that only fires on a failed mount would then walk the substitute's thread
     # and file every one of its comments under the link the user pasted. Same accident the detail
@@ -254,10 +254,10 @@ def walk(session, url: str, limit: int) -> tuple:
     if shown and shown != video_id(target):
         # The site served **another video**. Measured 2026-09-28, three visits to an id that cannot
         # exist: the address left ``/video/7000000000000000001`` for ``/jingxuan?modal_id=<other id>``
-        # — a different substitute on every visit, and once the page printed 「你要观看的视频不存在」
+        # — a different substitute on every visit, and once the page printed “你要观看的视频不存在”
         # for a moment before bouncing, so the plate is not a reliable read while the address is.
-        # The old shape called this BLOCKED and logged 「该视频计有 1214 条评论」 — a figure belonging
-        # to the substitute — which the node then reported as 「登录态疑似失效：COOKIE 可能过期」 for a
+        # The old shape called this BLOCKED and logged “该视频计有 1214 条评论” — a figure belonging
+        # to the substitute — which the node then reported as “登录态疑似失效：COOKIE 可能过期” for a
         # batch whose next link crawled its comments one line later. A link the site cannot serve is
         # DEAD: that row is lost, the session is not accused, and nobody's counts are filed under
         # the address the user pasted.
@@ -285,7 +285,7 @@ def walk(session, url: str, limit: int) -> tuple:
     # No round budget. The loop used to be ``for _round in range(40)``, which decided the size of a
     # thread: measured 2026-09-28 on a video whose own counter reads 3388, the walk stopped at 406 rows
     # because its fortieth screen came and went, and returned ``OK`` as though the thread were finished.
-    # 「怎么采不满」 is exactly this shape, so what ends a douyin panel walk is the panel itself — a
+    # “怎么采不满” is exactly this shape, so what ends a douyin panel walk is the panel itself — a
     # screen that grows no further, or the user's 停止 / his 评论条数.
     #
     # The walk re-reads every MOUNTED comment each round (one JS round trip, not one per element),
@@ -342,11 +342,11 @@ def walk(session, url: str, limit: int) -> tuple:
         session.log(t('comment.dyNoPanel', url=target))
         return [], BLOCKED
     declared = parse_count(reported)
-    # ``nested`` is the UNCOLLECTED reply count (each parent's declared 「展开N条回复」 minus the
+    # ``nested`` is the UNCOLLECTED reply count (each parent's declared “展开N条回复” minus the
     # replies this walk actually opened and filed). Reply rows already sit in ``len(rows)``, so the
     # only thing still owed to the denominator is what could not be expanded. The gap therefore says
-    # 「the site counted this many and the table + unexpandable replies still fall short」 — never
-    # 「这条视频就这么多」 when it is not, and the exit reason keeps a user 停止 off the site's head.
+    # "the site counted this many and the table + unexpandable replies still fall short" — never
+    # “这条视频就这么多” when it is not, and the exit reason keeps a user 停止 off the site's head.
     if declared and len(rows) + nested < declared and not (limit and len(rows) >= limit):
         session.log(
             t(
@@ -363,7 +363,7 @@ def walk(session, url: str, limit: int) -> tuple:
 
 
 def _expand_reply_threads(session) -> int:
-    """Open every not-yet-tried 「展开N条回复」 thread once with a real (ActionChains) click.
+    """Open every not-yet-tried “展开N条回复” thread once with a real (ActionChains) click.
 
     Clicks are batched and a single settle follows the round (not a per-opener wait): the reply request
     is signed and lands ~1 s after the click (user-measured), so one wait for the whole batch is what
@@ -381,7 +381,7 @@ def _expand_reply_threads(session) -> int:
             clicked += 1
     if clicked:
         session.nap(1.3)  # one settle for all the signed reply requests this round issued
-        # A failed thread pops 「评论已删除 / 不可见」 — clear it so it can't block the rest of the panel.
+        # A failed thread pops “评论已删除 / 不可见” — clear it so it can't block the rest of the panel.
         _dismiss_popup(session)
     return clicked
 
@@ -397,8 +397,8 @@ def _dismiss_popup(session) -> None:
 
 def _has_collapsed_opener(session) -> bool:
     """A thread NOT yet tried is still on the panel → the walk has more to open. Once every thread
-    has been tried (opened, or failed-and-skipped) this is False, so a stubborn 「展开」 that only
-    pops 「评论已删除」 cannot hang the walk — it is tried once and then skipped for good."""
+    has been tried (opened, or failed-and-skipped) this is False, so a stubborn “展开” that only
+    pops “评论已删除” cannot hang the walk — it is tried once and then skipped for good."""
     return bool(session.driver.execute_script(_UNTRIED_JS))
 
 

@@ -124,7 +124,7 @@ def get_crawler(
     # ``weibo@default_cookies.json``, a name ``path_for`` never produces and ``account_files``
     # refuses even to list, so every default-account crawl looked at a file that cannot exist:
     # ``file_stamp('')`` blanked the profile's cookie stamp, permanently killing the deferred
-    # re-plant, and with 「本次不用 Profile」 the crawl ran anonymous without saying so.
+    # re-plant, and with “本次不用 Profile” the crawl ran anonymous without saying so.
     segment = CookieManager.path_segment(account)
     stem = f'{platform}@{segment}' if segment else str(platform)
     saved = f'{cookie_dir}/{stem}_cookies.json' if cookie_dir else ''

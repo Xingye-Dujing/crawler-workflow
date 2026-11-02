@@ -811,7 +811,7 @@ class TestTheUpxPassReportsWhatItActuallyDid:
         forwarder.write_bytes(b'MZ' + b'x' * 500)
         # The question here is what a DECLINE does to the verdict, so the case has to state that UPX
         # exists: `main` resolves it through ``shutil.which``, and on a machine without it (a CI
-        # runner) the refusal that follows is 「not on PATH」 — a different named failure that also
+        # runner) the refusal that follows is "not on PATH" — a different named failure that also
         # returns 1, so the assertion below was passing only on boxes that happened to have upx.
         monkeypatch.setattr(compressor.shutil, 'which', lambda name: str(tmp_path / 'upx') if name == 'upx' else None)
         monkeypatch.setattr(compressor, '_run', refuse)
@@ -1153,8 +1153,8 @@ def test_the_launcher_starts_the_clock_the_serving_process_needs():
     """``python app.py`` starts the scheduler inside its ``__main__``; the frozen entry imports the
     module and runs Flask itself, so ``__main__`` never ran there.
 
-    Measured on the built exe: the 定时任务 panel said 「调度线程没有运行——任务已保存，但到点不会
-    执行」 because no tick thread existed. The launcher must therefore call the same shared starter,
+    Measured on the built exe: the 定时任务 panel said “调度线程没有运行——任务已保存，但到点不会
+    执行” because no tick thread existed. The launcher must therefore call the same shared starter,
     once, before it starts serving.
     """
     source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')

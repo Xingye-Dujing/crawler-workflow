@@ -244,7 +244,7 @@ def _source_label(records, columns, parsed: dict, pid, position: int) -> tuple[s
     """Where this table's source name comes from, and the column that may override it per row.
 
     A column that already carries it wins (a crawled table knows its own 平台 per row), then the
-    line written for this parent, then the parent's node id. Nothing here invents 「文献」 for a
+    line written for this parent, then the parent's node id. Nothing here invents “文献” for a
     table that never said so.
     """
     source_column = _candidates(columns, parsed['source_columns'])

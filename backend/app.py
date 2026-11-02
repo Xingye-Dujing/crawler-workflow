@@ -404,7 +404,7 @@ def __getattr__(name):
         # prints, while the modules that print (``engine.run``, the source executor) resolve the
         # name in their own namespace and forward it here at CALL time (``tests/executor_seams.py``
         # and the autouse fixture in ``tests/api/conftest.py``). Nothing in this file logs any
-        # more, so answering from ``state`` keeps 「patch app.add_log」 meaning one thing instead of
+        # more, so answering from ``state`` keeps "patch app.add_log" meaning one thing instead of
         # leaving each test to guess which module the line is printed from.
         from runtime import state
 
@@ -580,7 +580,7 @@ def _open_browser(url: str):
 
         # ``open()`` returns False when there is no browser to hand the URL to — it does not raise.
         # A machine that never registered a browser would otherwise watch the console go quiet after
-        # the 「服务已启动」 line, which is the exact silence this project keeps being asked to remove.
+        # the “服务已启动” line, which is the exact silence this project keeps being asked to remove.
         if not webbrowser.open(url):
             logger.warning(t('misc.browserNotFound', url=url))
     except Exception as e:
@@ -609,7 +609,7 @@ def start_background_services() -> None:
 
     Extracted from ``__main__`` because the frozen launcher imports this module and calls Flask
     itself: ``__main__`` never ran there, so the packaged app served requests with no tick thread
-    and the 定时任务 panel truthfully said 「调度线程没有运行——任务已保存，但到点不会执行」.
+    and the 定时任务 panel truthfully said “调度线程没有运行——任务已保存，但到点不会执行”.
     Both entry points run this once, in the serving process (under the reloader, only the child).
     """
     # The first administrator is seeded from the environment exactly once. A non-empty registry is
@@ -648,7 +648,7 @@ def start_background_services() -> None:
     restored = load_pending_queue()
     if restored:
         logger.info(t('run.queue_restored', n=restored))
-        # …and it must not merely list them either. Each page was told 「已排队」, so the restored
+        # …and it must not merely list them either. Each page was told “已排队”, so the restored
         # requests go through the one start path — an idle slot starts the oldest immediately,
         # a busy one leaves them parked for that run's own hand-off.
         from engine.run import start_next_queued

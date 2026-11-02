@@ -73,7 +73,7 @@ class TestCloudBoot:
     def test_a_stored_local_transport_becomes_the_one_that_can_run(self, booted):
         cloud = booted['cloud']
         assert cloud['active'] == 'openrouter', cloud
-        # The run body is the fact that matters: a body still naming 「ollama」 would be
+        # The run body is the fact that matters: a body still naming "ollama" would be
         # refused by the server, and the user would see a refusal about a control they
         # were never shown.
         assert cloud['payloadProvider'] == 'openrouter', cloud
@@ -82,7 +82,7 @@ class TestCloudBoot:
         """Both halves at once: the OpenRouter key goes, and the Ollama tag does not.
 
         Normalising the transport without re-reading the model would have sent the local
-        tag 「q:1」 to OpenRouter — a request that fails somewhere else's API with a
+        tag "q:1" to OpenRouter — a request that fails somewhere else's API with a
         message about a model id nobody typed there.
         """
         cloud = booted['cloud']
@@ -155,8 +155,8 @@ class TestTheFirstEntryNotice:
     """What a stranger on a shared server is told, and what their answer means."""
 
     def test_a_desktop_boot_never_shows_it(self, booted):
-        """The person in front of a desktop IS the machine's owner; 「your cookies live on
-        this disk」 is not news to them, and a dialog that appears where it explains nothing
+        """The person in front of a desktop IS the machine's owner; "your cookies live on
+        this disk" is not news to them, and a dialog that appears where it explains nothing
         trains the user to dismiss the one that matters."""
         assert booted['desktop']['dialogs'] == [], booted['desktop']
 
@@ -168,7 +168,7 @@ class TestTheFirstEntryNotice:
         # track translations, while a raw `privacy.*` on screen is the defect.
         for label in dialogs[0]['labels']:
             assert label and not label.startswith('privacy.'), f'the button printed a key: {label}'
-        # The button values are the contract: 「不再提醒」 is the only one that writes an ack,
+        # The button values are the contract: “不再提醒” is the only one that writes an ack,
         # and the ordinary close resolves null. A `value` on the close button would make
         # dismissing the notice silently mean "never ask me again".
         assert dialogs[0]['values'] == ['never', 'null'], dialogs
@@ -250,7 +250,7 @@ class TestTheExpiredSession:
 
         A sign-out refused on a stale CSRF token (a password change rotates the session, and the page
         holds the token it read at boot) used to navigate anyway: the login page sees a live session
-        and bounces straight back to the canvas, so the user reads 「退出没反应」 while the cookie keeps
+        and bounces straight back to the canvas, so the user reads “退出没反应” while the cookie keeps
         working. The page now re-reads ``/api/config`` for the current token and retries once; only
         an accepted answer navigates."""
         retried = booted['logoutRetried']

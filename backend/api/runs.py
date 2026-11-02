@@ -8,7 +8,7 @@ start path, and the panel asks ``state`` who is running instead of keeping a sec
 
 The log reads share :func:`_log_filters` on purpose — the JSON page and the ``.log.txt``
 download must answer the same ``wf``/``level``/``q`` question, because the download is
-「所见即所存」.
+“所见即所存”.
 """
 
 import logging
@@ -262,13 +262,13 @@ def _log_filters(req):
     """The shared ``wf``/``level``/``q`` query parameters for both log reads.
 
     ``wf`` is a per-workflow tab (a parallel run's console splits by tab); an empty value
-    means 「全部」 and filters on nothing. Kept in one place so the JSON page and the .txt
-    download answer the exact same question — the download is 「所见即所存」.
+    means “全部” and filters on nothing. Kept in one place so the JSON page and the .txt
+    download answer the exact same question — the download is “所见即所存”.
     """
     wf_raw = str(req.args.get('wf') or '').strip()
     # ``wf`` is a tab ORDINAL (0..N-1). A negative value is not a tab that exists; filtering on
-    # it matched nothing and left the viewer showing 「无内容」 for a run that has lines. Read an
-    # impossible index as the 「全部」 tab (no filter) rather than a filter that empties the panel.
+    # it matched nothing and left the viewer showing “无内容” for a run that has lines. Read an
+    # impossible index as the “全部” tab (no filter) rather than a filter that empties the panel.
     wf_idx = int(wf_raw) if wf_raw.isdigit() else None
     level = str(req.args.get('level') or '').strip().lower()
     level = level if level in ('info', 'warning', 'error') else None
@@ -280,7 +280,7 @@ def _log_filters(req):
 def runs_log_page(run_id: str):
     """One page of a run's persisted console, oldest→newest, for the after-the-fact viewer.
 
-    ``before`` walks 「加载更早」 (the smallest seq already shown); ``level``/``wf``/``q``
+    ``before`` walks “加载更早” (the smallest seq already shown); ``level``/``wf``/``q``
     narrow it. This reads ONLY the durable ``run_log`` table — it never touches
     ``execution_state`` and cannot affect the live console or the refresh-reattach.
     """
@@ -298,12 +298,12 @@ def runs_log_page(run_id: str):
 @bp.route('/api/runs/<run_id>/log.txt', methods=['GET'])
 def runs_log_download(run_id: str):
     """The whole persisted console as a downloadable ``.txt`` — with the viewer's filters, so
-    a download reproduces exactly what the panel shows (「所见即所存」)."""
+    a download reproduces exactly what the panel shows (“所见即所存”)."""
     store = get_run_store()
     if store.get_run(run_id) is None:
         return t('api.runNotFound', rid=run_id), 404, {'Content-Type': 'text/plain; charset=utf-8'}
     wf_idx, level, q = _log_filters(request)
-    # ``read_log`` walks backward (「加载更早」 hands back its smallest seq). So the download
+    # ``read_log`` walks backward (“加载更早” hands back its smallest seq). So the download
     # reads the newest page, then each strictly-older page, collecting blocks; the oldest
     # page is collected LAST, and flattening the blocks in reverse gives the whole filtered
     # console ascending in one pass (a repeated list prepend here would be quadratic).

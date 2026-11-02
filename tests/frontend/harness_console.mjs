@@ -486,8 +486,8 @@ out.reconnectTwice = {
 
 /* ── 11b. two OVERLAPPING reconnects are one replay ────────────────────────
    The sequential case above is caught by the timer, which exists by then. Before it does,
-   the page boot and a 「立即执行」 fire both reach the read of the tail: each fetched, each
-   opened the panel and each announced 「已重新连接控制台」 for the same run. */
+   the page boot and a “立即执行” fire both reach the read of the tail: each fetched, each
+   opened the panel and each announced “已重新连接控制台” for the same run. */
 wf._stopPoll();
 freshPage();
 let openGate;

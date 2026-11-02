@@ -191,7 +191,7 @@ function setLang(nextLang) {
     });
     /* The 已禁用/无输入 badge is worded by ``applyDisabledVisuals``, which per-node
        ``updateNodeDisplay`` never touches — so a language switch re-stamped the title, the
-       summary and the tooltips and left 「DISABLED」 sitting on the corner of a node that
+       summary and the tooltips and left "DISABLED" sitting on the corner of a node that
        had just turned Chinese. One call, because the state is computed for the whole canvas
        at once and asking per node would recompute the same answer N times. */
     canvas.applyDisabledVisuals();
@@ -237,7 +237,7 @@ function setLang(nextLang) {
     /* The Style menu's baseline hint is painted by JS from the last layout read, so a
        language switch must re-stamp it rather than leave one English line in a Chinese menu. */
     if (typeof LayoutStrategy !== 'undefined') LayoutStrategy._paint();
-    /* The scheduled-task dock is JS-rendered like those, and its table says 「下次运行」 in the
+    /* The scheduled-task dock is JS-rendered like those, and its table says “下次运行” in the
        task's own zone — a row left in the old language would be the one word in the panel that
        did not switch. */
     if (typeof schedulesManager !== 'undefined') schedulesManager.onLanguageChange();
@@ -245,7 +245,7 @@ function setLang(nextLang) {
        paging line from here, so nothing `I18n.apply()` re-stamps reaches them. */
     if (typeof biblioWorkspace !== 'undefined') biblioWorkspace.onLanguageChange();
     /* The account registry table and its audit lines are painted from cached rows, and the top-bar
-       chip reads 「当前登录：alice」 from a JS template with a variable — `data-i18n-title` cannot
+       chip reads “当前登录：alice” from a JS template with a variable — `data-i18n-title` cannot
        re-stamp either, because `I18n.apply()` carries no variables. Repaint both. */
     if (typeof Accounts !== 'undefined') Accounts.onLanguageChange();
     if (typeof Auth !== 'undefined' && Auth.apply) Auth.apply();
@@ -588,8 +588,8 @@ function showDialog(opts) {
                     box.id = f.id;
                     /* A password box without a directive is an invitation: the browser offers to
                        SAVE the account's current password against this origin and to fill it back
-                       into 「当前密码」 later — which is exactly the credential the panel then POSTs.
-                       「new-password」 says "a fresh value, do not store, do not offer", and a field
+                       into “当前密码” later — which is exactly the credential the panel then POSTs.
+                       "new-password" says "a fresh value, do not store, do not offer", and a field
                        that means otherwise can still override it. */
                     box.autocomplete = f.autocomplete || (f.type === 'password' ? 'new-password' : 'off');
                     if (f.value !== undefined) box.value = f.value;

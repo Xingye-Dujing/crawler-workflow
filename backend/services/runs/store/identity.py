@@ -44,7 +44,7 @@ NODE_FAILED = 'failed'
 NODE_SKIPPED = 'skipped'
 NODE_RESTORED = 'restored'
 
-# What 「可续跑」 means to a query. `stopping` is deliberately absent: that run is
+# What “可续跑” means to a query. `stopping` is deliberately absent: that run is
 # still unwinding, and offering it invites 重新开始 to discard the rows a live thread
 # is writing. The panel sees it anyway — it lists everything.
 RESUMABLE_RUN_STATUS = (RUN_INTERRUPTED, RUN_FAILED, RUN_RUNNING)
@@ -161,7 +161,7 @@ def item_key(item) -> str:
 # surviving nodes' own data fingerprint free of the switch.
 #
 # The output-shape switches joined for the SAME class of reason, and one measurement made the
-# cost concrete: a 700-row crawl interrupted, the user ticks 「保留分片」 (or flips 格式 csv→json)
+# cost concrete: a 700-row crawl interrupted, the user ticks “保留分片” (or flips 格式 csv→json)
 # in the panel and presses 继续 — and because these keys were in the fingerprint, the node's
 # paid-for rows were DELETED and its cursor NULLed, so the walk re-opened every link and spent
 # the account again for a table that already existed. None of them chooses DATA (the keyword, the
@@ -210,7 +210,7 @@ def stable_params(params) -> dict:
     different crawl — its cursor and dedupe scope must not claim the old one's.
 
     A BLANK model is dropped for the same reason: blank IS 跟随全局 (the run's
-    global model), so reopening a node panel and picking 「跟随全局」 must not
+    global model), so reopening a node panel and picking “跟随全局” must not
     re-key the node's paid LLM rows. A NAMED model stays in the hash: it selects
     a different model, and per the design that makes it a different answer — its
     cached answers and children's dedupe scope must not claim the old model's.

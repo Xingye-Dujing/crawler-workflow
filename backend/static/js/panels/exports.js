@@ -96,7 +96,7 @@ var exportsManager = {
             if (/\.part\d+\./.test(row.name)) {
                 /* A batched crawl leaves ``{stem}.part{NNN}{ext}`` shards. 删除 clears ONE file;
                    this clears the WHOLE batch the clicked shard belongs to — the server keeps the
-                   merged ``{stem}.csv``, other stems/extensions and 「固定」pinned files. */
+                   merged ``{stem}.csv``, other stems/extensions and “固定”pinned files. */
                 ops += '<button class="runs-mgr-btn del" onclick="exportsManager.clearPartsByName(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.clearParts') + '</button>';
             }
             ops += lockButtonHtml('exports', row.name);
@@ -300,7 +300,7 @@ var exportsManager = {
         this.refresh();
     },
 
-    /* 依据名字「清除该批分片」 — the clicked shard's whole batch in one go. Destructive, so it
+    /* 依据名字“清除该批分片” — the clicked shard's whole batch in one go. Destructive, so it
        asks first and names what survives (the merged file + 固定); the server does the batch
        lookup by name and deletes each through the same per-name resolver as 删除, refuses without
        confirm and while a run is writing here. */
@@ -357,7 +357,7 @@ var exportsManager = {
     /* 智能清除 — two scoped, LEDGER-driven bulk deletes. Unlike 清空 (the whole folder), these
        act on the files ONE run wrote, or ONE source node of ONE run left behind as shards — read
        back from the run→files ledger the server keeps, never guessed from a filename. Both keep
-       「固定」(pinned) files and are refused while any run is live; the server runs them through
+       “固定”(pinned) files and are refused while any run is live; the server runs them through
        the same per-name resolver as the single delete, so a ledger row can never become a path
        reaching outside data/exports. */
     async _ledger() {
@@ -438,7 +438,7 @@ var exportsManager = {
         var runId = answer.fields && answer.fields['scp-run'];
         var entry = ledger.filter((r) => r.run_id === runId)[0];
         if (!entry) return;
-        // Only nodes that actually LEFT shards (kind 'part') are offered: with 「保留分片」 off the
+        // Only nodes that actually LEFT shards (kind 'part') are offered: with “保留分片” off the
         // merge already deleted them, so a run with none says so out loud rather than showing a dead
         // list or silently deleting nothing.
         var partNodes = {};

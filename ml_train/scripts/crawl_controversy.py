@@ -112,7 +112,7 @@ def crawl_keyword(keyword, posts, per_post, open_n, stamp, start_time='', end_ti
         os.remove(f)
 
     print(
-        f'--- Stage 1: crawl {posts} posts for 「{keyword}」 window={start_time or "-"}..{end_time or "-"} ---',
+        f'--- Stage 1: crawl {posts} posts for "{keyword}" window={start_time or "-"}..{end_time or "-"} ---',
         flush=True,
     )
     execute(

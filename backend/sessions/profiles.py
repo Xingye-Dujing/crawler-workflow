@@ -198,7 +198,7 @@ def rename_account(platform: str, account: str, to: str) -> bool:
 
     The cookie file and the profile are one account seen from two sides: renaming only the
     file would leave the new label pointing at a device that does not exist, and the first
-    crawl with it would silently open a brand-new browser and report 「已登录」 about a
+    crawl with it would silently open a brand-new browser and report “已登录” about a
     session that is not there. So a rename moves both, or neither — and both refusals here
     are the same ones the cookie side makes, checked before anything is touched:
 
@@ -244,7 +244,7 @@ def delete(platform: str, account: str = '') -> str:
       leaves the process writing into a path that no longer resolves (and on Windows the open
       handle makes the walk fail partway, half-deleting the device);
     * a missing directory is ``'absent'``, not a silent success, so the handler can say
-      「没有可删除的 profile」 rather than 「已删除」 about a device that was never there.
+      “没有可删除的 profile” rather than “已删除” about a device that was never there.
 
     The used/imported marker lives inside the directory, so it is gone with the tree —
     ``is_used``/``status`` read the deletion with no extra bookkeeping.
@@ -303,7 +303,7 @@ def profile_dir_for(platform: str, enabled: bool = None, account: str = '') -> s
 
     When **this call** is the one that brought the directory into the world, it is seeded
     from the pristine template first (see :func:`seed_new_profile`) — which is how a new
-    account on a cloud server gets a device without anyone pressing 「浏览器生成」。The
+    account on a cloud server gets a device without anyone pressing “浏览器生成”。The
     ``exist_ok=False`` below is what makes "I created it" answerable: with
     ``exist_ok=True`` a directory two threads found at once looks identical to one this
     thread just made, and seeding the loser's directory would race the winner's browser.
@@ -330,7 +330,7 @@ def marker_path(platform: str, account: str = '') -> str:
 
 # ─── The pristine template ─────────────────────────────────────
 #
-# On a cloud deploy there is no 「浏览器生成」 button: nobody is standing at a screen to
+# On a cloud deploy there is no “浏览器生成” button: nobody is standing at a screen to
 # log into a window, so the only way an account gets a device directory is the program
 # making one. Chrome builds a user-data-dir from nothing when it is pointed at one, so a
 # brand-new directory already works — what the template adds is a *known* start: one
@@ -408,8 +408,8 @@ UNSAFE_PREFIXES = ('LOCK', 'LOG', 'old_', 'Singleton', 'running', 'Crashpad')
 def _is_unsafe(name: str) -> bool:
     """Whether one directory entry must never cross from the template into an account.
 
-    Our own marker goes with them: a profile that inherits 「this device already holds a
-    planted session」 would skip the import that gives it its cookie (#28's
+    Our own marker goes with them: a profile that inherits "this device already holds a
+    planted session" would skip the import that gives it its cookie (#28's
     import-once rule reads this marker), which is a login silently missing on a server
     where nobody can open a window to fix it.
     """
@@ -528,7 +528,7 @@ def find_session_material(path: str = '') -> list:
 def verify_pristine(path: str = '') -> str:
     """'' when *path* holds no session material, otherwise what it holds.
 
-    The answer is a reason to show a person, never a silent no: 「模板脏了」 with the file
+    The answer is a reason to show a person, never a silent no: “模板脏了” with the file
     names is actionable, and the alternative — seeding a new account from a directory
     that someone logged into — is how one account's session ends up in another's device.
     """
@@ -689,7 +689,7 @@ def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '', a
 def remember_cookie(platform: str, cookie_path: str, account: str = '') -> None:
     """Record that this file IS the profile's own session, without claiming a plant.
 
-    The panel's 「把 Cookie 更新进 Profile」 hint answers one question: *did a different file go in
+    The panel's “把 Cookie 更新进 Profile” hint answers one question: *did a different file go in
     last time?* A cookie captured **out of this very profile** (the panel's 浏览器生成 path logs in
     inside the profile browser and reads its jar) is not a different file — the profile already
     holds it. Leaving the old stamp there would advertise a button whose only effect is to

@@ -126,7 +126,7 @@ class Mode:
     navigation — the document is the one already loaded), and ``'page_per_row'``
     opens one whole page per row. The panel's note and the comment engine's window
     decision read this field instead of each holding its own opinion — which is
-    what the AGENTS rule 「a visible window must be doing something visible」 needs
+    what the AGENTS rule "a visible window must be doing something visible" needs
     to be code rather than prose.
     """
 

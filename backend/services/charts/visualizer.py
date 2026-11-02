@@ -323,7 +323,7 @@ class VisualizationService(OptionMixin):
         work['_yc'] = work[y].astype(str)
         if value_field:
             # A value field named but absent is refused by name, not silently replaced by a row
-            # count — a heatmap the user asked to aggregate by 「分值」 that quietly showed 条数 lies.
+            # count — a heatmap the user asked to aggregate by “分值” that quietly showed 条数 lies.
             VisualizationService.require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
             grouped = work.groupby(['_yc', '_xc'], sort=False)['_v'].agg(agg)

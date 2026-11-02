@@ -280,7 +280,7 @@ def _cookie_restore(directory: str, snapshot: dict) -> None:
 
     Both halves matter. Deleting only the additions would let one test's save answer
     another test's precondition, and restoring only the removals would let one test's
-    「delete this login」 leak forward as a missing cookie.
+    "delete this login" leak forward as a missing cookie.
     """
     if not os.path.isdir(directory):
         return
@@ -429,7 +429,7 @@ def clean_globals(request):
     if run_state is not None:
         run_state._AMBIENT.clear()
     # The pre-run cookie gate caches a verdict for a few minutes — deliberately, and
-    # across threads. Left alone, one test's 「expired」 would answer the next test's
+    # across threads. Left alone, one test's "expired" would answer the next test's
     # request without any probe having run in it, which is exactly the kind of
     # passing-without-measuring this suite refuses.
     gate = sys.modules.get('sessions.preflight')
@@ -600,7 +600,7 @@ def client(app_module, data_root, request):
         stores._WORKFLOW_HISTORY_STORE = None
         # Per-account slots too: they hold SQLite handles on this test's tmp files, and Windows
         # will not delete a directory while one is open. Releasing them here is also what keeps
-        # 「a store opened in one test cannot be seen by the next」 true for account scoping.
+        # "a store opened in one test cannot be seen by the next" true for account scoping.
         for _user_id in list(stores.user_slots()):
             stores.release_user(_user_id)
 

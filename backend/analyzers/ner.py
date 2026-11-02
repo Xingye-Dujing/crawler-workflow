@@ -110,13 +110,13 @@ def answer_pair(line: str):
     put whole sentences in the entity table. A label outside the known
     vocabulary is dropped for the same reason: guessing at it invents data.
     """
-    text = _ANSWER_BULLET_RE.sub('', str(line or '')).strip().strip('`*」』】)')
+    text = _ANSWER_BULLET_RE.sub('', str(line or '')).strip().strip('`*"”’】)')
     if not text or text.upper().strip('.。,，;；') in _EMPTY_ANSWERS:
         return None
     for sep in _ANSWER_SEPARATORS:
         if sep in text:
             entity, _, tail = text.rpartition(sep)
-            entity = entity.strip().strip('`*"」』】')
+            entity = entity.strip().strip('`*"”’】')
             return entity, _label_of(tail)
     # Models trained on Chinese annotation formats write 张伟（人名）, which has
     # no separator at all — the category is bracketed onto the end.

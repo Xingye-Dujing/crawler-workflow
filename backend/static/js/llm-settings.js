@@ -55,7 +55,7 @@ const LLMSettings = {
            backend (which treats every non-OpenRouter provider as Ollama).
 
            On a cloud host the same normalization runs the other way, and for the same
-           reason: there is no local daemon here, so a stored 「ollama」 — one that came
+           reason: there is no local daemon here, so a stored "ollama" — one that came
            from a desktop profile, or from before the flag was set — must not stay the
            active transport. The server refuses that transport by name anyway; this is
            what makes the panel ask for the key it actually needs. */

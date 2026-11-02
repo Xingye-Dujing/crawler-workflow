@@ -12,7 +12,7 @@ const stats = {
            offline tool. With no `echarts` the old code threw right here — and that
            one throw skipped CustomSelect.init, Capabilities.load,
            dataNodes.reconcileDatasets, the autosave interval and resumeBar.refresh:
-           every 数据源 node then showed 「无法获取平台能力」 and the 断点续跑 banner never
+           every 数据源 node then showed “无法获取平台能力” and the 断点续跑 banner never
            appeared, with nothing on screen saying a chart library was the cause.
            Same lesson Settings.load already documents. */
         if (typeof echarts === 'undefined') {

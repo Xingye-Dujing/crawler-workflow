@@ -3,21 +3,21 @@
 Mirrors ``tests/live_site/test_live_zhihu_workflow.py`` cell-for-cell where the shapes exist, and
 substitutes the two weibo-only axes §7 records: **``serial_only``** (every weibo crawl takes 真排队
 whatever the 排队/错峰 switch says, because the site bounces one account firing several deep requests at
-once) and the **time-window** parameter, which is what 「采不满」 actually looks like on this platform —
+once) and the **time-window** parameter, which is what “采不满” actually looks like on this platform —
 one hourly URL per window, thousands of windows in a week's range.
 
 **What this round's measurements changed about the assertions** (``docs/crawler_notes.md`` 微博第 0 步;
 §6 U10-U12 / U19 / U31-U33). Three of them are not background, they are cells:
 
 * **A4** — an empty window must yield **zero** rows. Measured: a window that matches nothing still prints
-  「抱歉，未找到相关结果」 *beside five unrelated posts* under the same ``#pl_feedlist_index``, with no
+  “抱歉，未找到相关结果” *beside five unrelated posts* under the same ``#pl_feedlist_index``, with no
   attribute or container that separates them, and the old card-first ordering filed those five as keyword
   hits. That is not a short crawl; it is a table of content the user never asked for.
 * **A5** — an hourly window has **a pager**: page 1 gave 9 cards, page 2 gave 6 with no mid in common,
   while ``.page-info`` prints nothing there. ``_may_page`` used to refuse paging inside a window on the
   theory that an hour is narrow — that silently dropped ~40% of every window, the largest under-collection
   this round found here.
-* **A3** — D9's promise, asserted positively: 「目标先满、窗口未轮完即收工」 is normal, so the walk may pay
+* **A3** — D9's promise, asserted positively: “目标先满、窗口未轮完即收工” is normal, so the walk may pay
   for the windows it needed and **none** of the ones after it.
 
 **How a short crawl is judged** is the harness's ``classify_verdict``: FULL (the number arrived),
@@ -39,8 +39,8 @@ that crawl *through the app* (every A/B/C/D/E/G cell below) are the run being me
 measured, plus the crawler's own polite pause); a comment crawl is one ``statuses/show`` plus ~20 rows per
 ``buildComments`` page, so D4 — which asks for **all** of the largest thread the shared search found — is
 the deepest walk here at ``declared / 20`` navigations (a 749-comment thread is ~37). A4's one-day range is
-the expensive posts cell by construction (24 hourly windows, all empty, ~2-4 min) because proving 「an empty
-window stores nothing」 needs a whole empty range. Nothing here asks for a week. Run it in batches, on the
+the expensive posts cell by construction (24 hourly windows, all empty, ~2-4 min) because proving "an empty
+window stores nothing" needs a whole empty range. Nothing here asks for a week. Run it in batches, on the
 domestic network, never unattended::
 
     # -k matches SUBSTRINGS of the test name, so ``-k "A or C"`` — which reads like "groups A and C" —
@@ -85,8 +85,8 @@ PLATFORM = 'weibo'
 #: weibo's own honest terminal lines, on top of the ones every platform shares. Keys, not sentences:
 #: a reworded message keeps matching, a renamed one fails visibly instead of turning a pass into a red.
 #:
-#: **Nothing generic is on this list**, and §5 is why. Its posts/author row licenses 「真 no_more（列表
-#: 末尾标记在场）」 — the *site's own* marker, which on this platform is the 「未找到相关结果」 plate and a
+#: **Nothing generic is on this list**, and §5 is why. Its posts/author row licenses “真 no_more（列表
+#: 末尾标记在场）” — the *site's own* marker, which on this platform is the “未找到相关结果” plate and a
 #: page that rendered no cards. The closing lines (``crawl.weibo.walk_done``, ``crawl.weibo.authorDone``)
 #: and their ``{reason}`` slot (``crawl.stopReason.end`` / ``no_new`` / ``no_cards`` / ``empty_page``) are
 #: deliberately absent, because each is printed by our code as a *summary of its own loop*:
@@ -96,7 +96,7 @@ PLATFORM = 'weibo'
 #: ``crawl.stopReason.unreachable`` is absent for the opposite reason: AGENTS is explicit that a browser
 #: which never fetched a page is not a refusal by the site, so it may not excuse a shortfall either.
 WEIBO_LEGIT_EXITS = harness.SHARED_EXITS + (
-    'crawl.weibo.no_result',  # the site printed its own 「未找到相关结果」 plate
+    'crawl.weibo.no_result',  # the site printed its own “未找到相关结果” plate
     'crawl.weibo.page_empty',  # a page that really rendered no cards (see :meth:`_harvest`'s pair)
     'crawl.weibo.hotCapped',  # the board is the site's size, not our ceiling
     'crawl.weibo.hotRefused',  # the board endpoint refused; loud, so never a silent zero
@@ -123,7 +123,7 @@ AUTHOR_REFUSALS = (
 #: is one of these grades SILENT_SHORT, with the line quoted into the audit row: the message is the bug.
 #:
 #: Both were reworded on 2026-09-28 after measurement, and both stay here *because* they are about us:
-#: ``page_timeout`` used to print 「页面加载超时，可能无内容」 — a claim about the window's content that the
+#: ``page_timeout`` used to print “页面加载超时，可能无内容” — a claim about the window's content that the
 #: code cannot see; it now reports the seconds it waited and whether the navigation settled, which is
 #: honest and still proves nothing about what the hour held. ``page_gave_up`` is this browser's own
 #: breaker ("two pages delivered nothing, I will not spend a third budget"), which is a statement about
@@ -134,12 +134,12 @@ WEIBO_LIES = (
 )
 
 #: A comment crawl's honest endings — comment words only. The search lines above must not leak in: a
-#: feed canvas puts a search node and a comment node in ONE workflow, and 「该时间段无搜索结果」 is nobody's
+#: feed canvas puts a search node and a comment node in ONE workflow, and “该时间段无搜索结果” is nobody's
 #: excuse for a comment table that stored nothing and said nothing.
 #:
 #: Two keys that look like they belong here are left out, and §5's warning about dead whitelist entries is
 #: the reason: ``crawl_weibo`` holds no wall verdict, so it can only ever return ``OK`` or ``DEAD``, and
-#: 「评论已关闭」 is the bilibili/X/YouTube adapters' sentence. A weibo thread that really does answer with
+#: “评论已关闭” is the bilibili/X/YouTube adapters' sentence. A weibo thread that really does answer with
 #: a closed-comment body therefore arrives as an unnamed short table — red, correctly, and §6 gets the row.
 COMMENT_EXITS = harness.SHARED_EXITS + (
     'comment.weiboShowFailed',  # statuses/show answered nothing: dead cookie or limited
@@ -225,7 +225,7 @@ KEYWORDS = {
     'A3': '人工智能 应用',
     'A5': '演唱会',
     # Evergreen and volume-stable: A6 asks for exactly 25 rows over one day, and a keyword whose supply
-    # depends on the news cycle (高考 was the first pick) makes 「the site had them」 the thing that fails.
+    # depends on the news cycle (高考 was the first pick) makes “the site had them” the thing that fails.
     'A6': '旅游',
     'E1': '机器人',
     'G': ('新能源', '储能'),
@@ -252,8 +252,8 @@ STOP_DEADLINE = 1200.0
 WINDOW_PAGING_TARGET = 14
 
 #: The widest first screen this platform has been measured serving one hourly window (9 cards, page 2
-#: added 6 with no mid in common). A5 leans on it: it is the only fact that turns 「14 行」 into
-#: 「page 2 was opened」, and a cell that assumed it silently would be the kind of internally
+#: added 6 with no mid in common). A5 leans on it: it is the only fact that turns “14 行” into
+#: "page 2 was opened", and a cell that assumed it silently would be the kind of internally
 #: consistent short table this campaign keeps finding.
 MEASURED_FIRST_SCREEN_CARDS = 9
 
@@ -261,7 +261,7 @@ MEASURED_FIRST_SCREEN_CARDS = 9
 #: need post links), and the comment counts it must beat to be usable as a comment target.
 #:
 #: The shared search's own target (the ``weibo_windowed`` fixture crawls 三亚 over a week for the cells that
-#: need post links). ``PROBE_MIN_COMMENTS`` is only 「有评论可读」 — D1 needs two such threads and picks the
+#: need post links). ``PROBE_MIN_COMMENTS`` is only “有评论可读” — D1 needs two such threads and picks the
 #: two richest, while D3/D4/D5 take the single richest one via :func:`_richest_link` and scale their asks to
 #: what it reports. Any *threshold* here would be a number the site is not obliged to fit, which is the
 #: mistake each of those two drafts has already paid for with a live re-run.
@@ -449,7 +449,7 @@ def _assert_comment_rows(rows, *, minimum: int) -> None:
     assert len(rows) >= minimum, f'expected {minimum} comment rows, got {len(rows)}'
     # ``楼层`` is a whole-*thread* number (measured: a 30-comment thread's top-level rows carry floors
     # 1..30), so uniqueness is a property *inside one article*. D1 and D2 store two and four threads in
-    # one table, where two rows called 「1」 is the site numbering two different posts — and the failure
+    # one table, where two rows called "1" is the site numbering two different posts — and the failure
     # text would have accused the adapter of the exact per-page-index defect this round removed.
     by_thread: dict = {}
     for row in rows:
@@ -586,7 +586,7 @@ def test_a2_headless_search_is_full_or_names_the_refusal(client, app_module, mon
 
     It is the account that gets bounced here, not the window shape (docs 微博的墙是间歇风控): a named wall
     or risk page is the site's answer and lands as NAMED_SHORT/WARN. An empty with no reason is the silent
-    one and stays red — that is the shape the user reads as 「又没采满」.
+    one and stays red — that is the shape the user reads as “又没采满”.
     """
     harness.real_jar(monkeypatch)
     with LiveRun(
@@ -651,8 +651,8 @@ def test_a3_recent_range_stops_when_full_and_pays_for_no_further_window(client, 
 def test_a4_an_empty_window_stores_nothing_not_five_foreign_posts(client, app_module, monkeypatch):
     """A4 — the contamination cell (U31): a plate beside foreign cards means **zero** rows.
 
-    Measured with a keyword that appears nowhere on the site: the page prints 「抱歉，未找到相关结果」
-    *together with* five ``.card-wrap`` posts carrying a real ``.name`` and a 「35分钟前」-style timestamp
+    Measured with a keyword that appears nowhere on the site: the page prints “抱歉，未找到相关结果”
+    *together with* five ``.card-wrap`` posts carrying a real ``.name`` and a “35分钟前”-style timestamp
     outside the asked hour, hung on the same ``#pl_feedlist_index`` chain as a genuine result — no
     container, attribute or card type separates them, so the plate is the only judge available. The old
     card-first ordering stored those five as keyword hits, which is worse than an empty table: nothing in
@@ -675,11 +675,11 @@ def test_a4_an_empty_window_stores_nothing_not_five_foreign_posts(client, app_mo
         rows = run.preview('node-1')
         named = harness.names_key(run.rec.text, 'crawl.weibo.no_result')
         # Built before the assert because a contaminating row is only recognisable by what it *says* — the
-        # author and the first characters of its body — and a failure that prints 「None / …」 hides the
+        # author and the first characters of its body — and a failure that prints "None / …" hides the
         # evidence this cell exists to show. The column is 发布者 (``_scrape_card``), not 发布.
         sample = [f'{row.get("发布者")} / {str(row.get("正文") or "")[:24]}' for row in rows[:4]]
         assert not rows, (
-            f'an empty keyword filed {len(rows)} rows while the site printed 「未找到相关结果」'
+            f'an empty keyword filed {len(rows)} rows while the site printed “未找到相关结果”'
             f'{" and the plate was read" if named else " but it was never read"}: {sample}'
         )
         assert named, f'a range with no matches ended without saying so: {run.rec.lines[-8:]}'
@@ -745,8 +745,8 @@ def test_a6_the_ask_is_a_ceiling_and_the_walk_lands_on_it_exactly(client, app_mo
 
     What the reachable promise is worth, then, is exactness: 25 asked on a keyword with supply means 25
     rows — not 24 (a ceiling the walk undershoots, which is 漏采) and not 60 (rows filed after the ask was
-    met, which is the 多采 half of 「完全符合要求」). And the closing line must name *the ceiling* as its
-    reason and carry the ask in its own ``{target}`` slot: 「已到列表末尾」 on a crawl the user cut short at
+    met, which is the 多采 half of “完全符合要求”). And the closing line must name *the ceiling* as its
+    reason and carry the ask in its own ``{target}`` slot: “已到列表末尾” on a crawl the user cut short at
     25 is the same lie this round removed from the timeout line, one level up.
     """
     harness.real_jar(monkeypatch)
@@ -794,7 +794,7 @@ def test_b1_author_mode_files_this_uid_or_refuses_by_name(client, app_module, mo
     (``docs/crawler_notes.md``). So this cell cannot demand rows; it demands the half that is always owed.
     An author walk that stores nothing must have *raised*, the console must name which refusal it met, and
     the node must settle ``failed``. The shape it convicts is the one the red line was written against: a
-    zero-row table that reports 完成 and reads to the user as 「这个号没发过微博」.
+    zero-row table that reports 完成 and reads to the user as “这个号没发过微博”.
 
     One failure, one line: ``wf.node_failed`` is the attributed console line, so a refusal that printed
     itself three times is a finding, not a style point.
@@ -1019,7 +1019,7 @@ def test_d2_a_wired_comments_node_crawls_the_links_its_parent_found(client, app_
 
     One connected canvas is ONE workflow, so both nodes are graded on the same transcript — and the
     whitewash this still allows is closed by the exit lists, not by slicing: the comment half is graded
-    with :data:`COMMENT_EXITS`, which holds no search line, so 「该时间段无搜索结果」 printed by the parent
+    with :data:`COMMENT_EXITS`, which holds no search line, so “该时间段无搜索结果” printed by the parent
     cannot excuse a comment node that stored nothing.
 
     The ask is **computed from the parent table after the run**, not invented here: ``comment_limit=3`` per
@@ -1127,13 +1127,13 @@ def test_d3_headless_comments_match_the_windowed_shape(client, app_module, monke
 
 
 def test_d4_no_limit_names_the_gap_the_site_printed(client, app_module, monkeypatch, weibo_windowed):
-    """D4 — 「采集全部评论」 is graded against the thread's own number, and the gap must be named (U33).
+    """D4 — “采集全部评论” is graded against the thread's own number, and the gap must be named (U33).
 
     Measured: ``buildComments`` cursor-dies at 22 rows for a thread whose envelope says
     ``total_number: 30``, and the eight absent floors are its nested replies — no request shape this
     session tried returns them as a list, and only one preview child per parent is in hand at all. So the
     product's promise here is not "get them all", it is "**say** the site counted more than you got".
-    ``trendsText`` printing 「已加载全部评论」 on exactly that crawl is why the line reads ``total_number``
+    ``trendsText`` printing “已加载全部评论” on exactly that crawl is why the line reads ``total_number``
     and never the sentence.
 
     On a thread small enough that the cursor does reach its end, the same cell asserts the **other** side:
@@ -1177,7 +1177,7 @@ def test_d5_an_ask_of_five_is_not_reported_as_a_shortfall(client, app_module, mo
     """D5 — the line that blames the thread for the user's own number is a bug, not a report.
 
     评论上限 5 on a 749-comment post is the user's ask, not 744 missing comments: printing
-    「站点写着 749 条…差额是楼中楼」 there is the same class of lie this round was fixing, and the live
+    “站点写着 749 条…差额是楼中楼” there is the same class of lie this round was fixing, and the live
     tier drives exactly this shape (a small per-article limit). So the cell requires *silence*.
     """
     harness.real_jar(monkeypatch)
@@ -1214,7 +1214,7 @@ def test_e1_stop_inside_a_window_then_continue_re_enters_it(client, app_module, 
     ``url_index`` back and restarts the per-window card/page cursors on every entry. Marking a window
     done before entering was harmless while a window was one rendered page; now that an hourly window is
     up to ten pages deep (A5), a kill mid-window let the resume skip the pages it had never reached —
-    silent 漏采 that the closing line then reported as 「已到列表末尾」.
+    silent 漏采 that the closing line then reported as “已到列表末尾”.
 
     So the proof this cell demands is not "the number went up", which a re-crawl of a *later* window
     would also satisfy. It is that 继续 opens **the same hourly URL** 停止 was inside: the last window the
@@ -1290,7 +1290,7 @@ def test_e1_stop_inside_a_window_then_continue_re_enters_it(client, app_module, 
         )
         # The address is necessary and not sufficient, and this is the half U36 was written for. Before
         # that fix the resume re-opened the right window, re-harvested page 1, saw nothing new (every row
-        # was already in the ledger), printed 「某一页是空的」 and left — so the pages deeper than the kill,
+        # was already in the ledger), printed “某一页是空的” and left — so the pages deeper than the kill,
         # the only ones still owing rows, went unfetched while the console read as an exhausted window.
         # The proof is therefore about *depth*: a page beyond the one 停止 was on, or the ask filled.
         pages = harness.numbers_from(again.rec.lines, 'crawl.weibo.page_crawling', 'i')
@@ -1315,7 +1315,7 @@ def _audit_component(run, case_id: str, label: str, record: dict, node_id: str, 
     """One component's own row: its verdict, its count, its transcript slice.
 
     A two-component run is two findings. Rolling them into the case row would let 乙's silence hide behind
-    甲's honest 「该时间段无搜索结果」, which is the exact shape :meth:`RunDriver.component_verdict` exists
+    甲's honest “该时间段无搜索结果”, which is the exact shape :meth:`RunDriver.component_verdict` exists
     to refuse — and the artifact would then carry one line for two crawls nobody can match to a table.
     """
     answer = run.component_verdict(label, record, node_id, target=target, mode=mode)
@@ -1338,7 +1338,7 @@ def test_g1_a_parallel_weibo_canvas_is_forced_into_the_queue(client, app_module,
     ``forced_serial = serial_only_of(platform) and not get_setting('same_platform_queue')``, so with the
     queue on — its shipped default — weibo waits anyway and says so with ``run.platformQueued``. That line
     proves the *user's* switch worked. Only with it off does the console have to answer the real question,
-    「did the matrix outrank the switch?」, and ``run.serialForced`` is the only line that can say so.
+    "did the matrix outrank the switch?", and ``run.serialForced`` is the only line that can say so.
 
     Then both tables have to arrive: a queue that quietly loses the second workflow looks exactly like a
     short crawl, which is the complaint this whole pass is about. What this cell does **not** re-prove is
@@ -1455,8 +1455,8 @@ def _acceptance_copy(**post_params) -> dict:
     other stores none and so would walk unbounded. Running either as written is not a harder test: the
     walk stops at its target and pays for none of the rest, so the long range exercises nothing a two-day
     one does not, at a cost the user did not agree to per pass. D9 decided that, and the assertion runs the
-    other way — the copy proves 「目标先满、剩余窗口零付费」 for each search leg (H1). Every ``posts`` node is
-    narrowed here, so a 「无时间范围」 leg he adds later is budgeted the same way the moment it appears.
+    other way — the copy proves “目标先满、剩余窗口零付费” for each search leg (H1). Every ``posts`` node is
+    narrowed here, so a “无时间范围” leg he adds later is budgeted the same way the moment it appears.
     The file is never rewritten (D5): the variant is what the test wanted, the file is what he wrote.
     """
     opened = copy.deepcopy(accept.workflow_file(ACCEPTANCE_FILE))
@@ -1482,7 +1482,7 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
     pretending a disabled leg ran.
 
     The component count is read out of the file, never hard-coded: he has been editing this canvas (he
-    added a second 文章 search 「无时间范围」 and switched the other legs off), and a pinned 「four」 would go
+    added a second 文章 search “无时间范围” and switched the other legs off), and a pinned “four” would go
     red on a legitimate edit while saying nothing about the one shape this case argues — a search walk
     that stops early. The guard is that a switched-on search leg is present, and D9 is asserted of every
     switched-on search leg. Each component gets its own record, console slice, audit row and exported
@@ -1490,7 +1490,7 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
 
     And the claim D9 turned into an assertion: each search component fills its stored 50, and the walk's
     own closing line shows it stopped **before** the range ran out, with no per-window navigation after
-    the ceiling. 「剩余窗口零付费」 is what makes a narrow table and an early stop distinguishable in the
+    the ceiling. “剩余窗口零付费” is what makes a narrow table and an early stop distinguishable in the
     console, which is the whole complaint this round started from.
     """
     harness.real_jar(monkeypatch)
@@ -1549,7 +1549,7 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
                 'a disabled leg must not run, pay, or appear'
             )
         accept.assert_canvas_exports(running, accept.new_exports(exported_before), records)
-        # The rows are the shape the canvas mode promises (AGENTS' 「并行是一条记录，串行一 workflow 一行」).
+        # The rows are the shape the canvas mode promises (AGENTS' “并行是一条记录，串行一 workflow 一行”).
         # This file is 并行 today, but the mode is read off the row, so a canvas he flips to 串行 passes on a
         # run whose every switched-on leg graded honestly instead of reddening at a pinned parallel count.
         accept.assert_record_shape(run, records, running)
@@ -1573,7 +1573,7 @@ def test_h2_the_shipped_canvas_completes_in_series(client, app_module, monkeypat
     (G1/G2 convict any switch that tries to unlock it). So H2 asks the question that is still open: when
     the canvas itself says 串行, does each component still open **its own record**, under its own name,
     with its own rows and its own console slice? A merged or mis-named record is a reporting bug the user
-    reads as 「跑丢了」, and it is the shape 串行 ×N chips exist to describe.
+    reads as “跑丢了”, and it is the shape 串行 ×N chips exist to describe.
     """
     harness.real_jar(monkeypatch)
     end = date.today() - timedelta(days=1)

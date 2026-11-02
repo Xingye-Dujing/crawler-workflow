@@ -73,7 +73,7 @@ def _fail_deletion(exc: Exception, user_id: str):
 
     ``delete_user`` moves the tree first and drops the row second; when the row refuses, it moves
     the tree back — and that compensation can itself fail (Windows refuses a directory a browser
-    still holds, a full disk refuses the rename). Answering 「数据仍在原处」 over a tree sitting in
+    still holds, a full disk refuses the rename). Answering “数据仍在原处” over a tree sitting in
     ``users/.trash/`` sends the operator to the one place the data is not.
     """
     location = _where_is_the_tree(user_id)

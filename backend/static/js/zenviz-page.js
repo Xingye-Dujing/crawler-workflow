@@ -7520,7 +7520,7 @@
           syncCurrentEnginePropertyStore();
           savePersistedState();
           setStatus(
-            `${engineInfo[state.engine].short} ·「${chartNames[state.type]}」属性已重置`,
+            `${engineInfo[state.engine].short} ·“${chartNames[state.type]}”属性已重置`,
           );
         }
 
@@ -8356,10 +8356,10 @@
             if (!Number.isInteger(x) || x < 0 || x >= d.headers.length)
               errors.push(`${chartRoleLabel(type, "x-col")}选择无效`);
             else if (rule.x === "numeric" && !xs.isNumeric)
-              errors.push(`「${xs.name}」必须为数值列`);
+              errors.push(`“${xs.name}”必须为数值列`);
             else if (rule.x === "category" && !xs.hasAnyValue)
               errors.push(
-                `「${xs.name}」没有可用的${chartRoleLabel(type, "x-col")}`,
+                `“${xs.name}”没有可用的${chartRoleLabel(type, "x-col")}`,
               );
           }
           if (rule.target) {
@@ -8373,29 +8373,29 @@
             )
               errors.push("去向列选择无效，必须与来源列不同");
             else if (!ts.hasAnyValue)
-              errors.push(`「${ts.name}」没有可用的去向数据`);
+              errors.push(`“${ts.name}”没有可用的去向数据`);
             if (!errors.length && getFlowRows().length === 0)
               errors.push("没有有效的来源 → 去向 → 权重记录，请检查三列数据");
           }
           const ys = state.yCols;
           if (ys.length < rule.minY || ys.length > rule.maxY)
             errors.push(
-              `「${chartNames[type] || type}」需要 ${rule.minY === rule.maxY ? `恰好 ${rule.minY}` : `${rule.minY}–${rule.maxY}`} 个数值列，当前为 ${ys.length} 个`,
+              `“${chartNames[type] || type}”需要 ${rule.minY === rule.maxY ? `恰好 ${rule.minY}` : `${rule.minY}–${rule.maxY}`} 个数值列，当前为 ${ys.length} 个`,
             );
           ys.forEach((idx) => {
             const stats = columnStats(idx);
             if (!stats.isNumeric)
-              errors.push(`「${stats.name}」不是纯数值列，不能作为数值列使用`);
+              errors.push(`“${stats.name}”不是纯数值列，不能作为数值列使用`);
             if (rule.completeY && !stats.isCompleteNumeric)
               errors.push(
-                `「${stats.name}」存在空白或非数值内容，当前「${chartNames[type] || type}」要求完整数值列`,
+                `“${stats.name}”存在空白或非数值内容，当前“${chartNames[type] || type}”要求完整数值列`,
               );
             if (rule.positiveY && stats.isNumeric) {
               const vals = d.rows.map((r) => numeric(r?.[idx]));
               if (vals.some((v) => v !== null && v < 0))
-                errors.push(`「${stats.name}」不能包含负数`);
+                errors.push(`“${stats.name}”不能包含负数`);
               if (!vals.some((v) => v !== null && v > 0))
-                errors.push(`「${stats.name}」必须至少包含一个大于 0 的值`);
+                errors.push(`“${stats.name}”必须至少包含一个大于 0 的值`);
             }
             if (
               rule.nonNegativeY &&
@@ -8405,7 +8405,7 @@
                 return v !== null && v < 0;
               })
             )
-              errors.push(`「${stats.name}」不能包含负数`);
+              errors.push(`“${stats.name}”不能包含负数`);
           });
           if (rule.nonNegativeError && ys.length === 2) {
             const errCol = ys[1];
@@ -8416,7 +8416,7 @@
               })
             )
               errors.push(
-                `「${columnStats(errCol).name}」作为误差列时不能包含负数`,
+                `“${columnStats(errCol).name}”作为误差列时不能包含负数`,
               );
           }
           if (type === "pie" && ys.length === 1) {
@@ -8499,7 +8499,7 @@
           if (!mount) return;
           $("#zen-svg").style.display = "none";
           mount.style.display = "block";
-          mount.innerHTML = `<div class="render-error"><strong>当前数据不能绘制「${escapeHtml(chartNames[state.type] || state.type)}」</strong><span>${escapeHtml(message || "请选择符合条件的 X 列和数值列。")}</span><span>打开“编辑数据”调整列选择，选择器会自动限制可用列。</span></div>`;
+          mount.innerHTML = `<div class="render-error"><strong>当前数据不能绘制“${escapeHtml(chartNames[state.type] || state.type)}”</strong><span>${escapeHtml(message || "请选择符合条件的 X 列和数值列。")}</span><span>打开“编辑数据”调整列选择，选择器会自动限制可用列。</span></div>`;
         }
         function rowsToSeries() {
           normalizeDataSelection();
@@ -8534,13 +8534,13 @@
             const stats = columnStats(next);
             if (rule.x === "numeric" && !stats.isNumeric) {
               toast(
-                `「${stats.name}」不是纯数值列，当前图表的第一列必须为数值 X 轴`,
+                `“${stats.name}”不是纯数值列，当前图表的第一列必须为数值 X 轴`,
               );
               syncDataColumnSelects();
               return false;
             }
             if (rule.x === "category" && !stats.hasAnyValue) {
-              toast(`「${stats.name}」没有可用的分类数据`);
+              toast(`“${stats.name}”没有可用的分类数据`);
               syncDataColumnSelects();
               return false;
             }
@@ -8565,7 +8565,7 @@
               return false;
             const stats = columnStats(next);
             if (!stats.hasAnyValue) {
-              toast(`「${stats.name}」没有可用的去向数据`);
+              toast(`“${stats.name}”没有可用的去向数据`);
               syncDataColumnSelects();
               return false;
             }
@@ -8596,7 +8596,7 @@
             }
             const stats = columnStats(next);
             if (!stats.isNumeric) {
-              toast(`「${stats.name}」不是纯数值列`);
+              toast(`“${stats.name}”不是纯数值列`);
               syncDataColumnSelects();
               return false;
             }
@@ -8618,18 +8618,18 @@
                 idx === state.targetCol
               ) {
                 toast(
-                  `「${columnStats(idx).name}」当前承担其它数据角色，不能同时作为数值列`,
+                  `“${columnStats(idx).name}”当前承担其它数据角色，不能同时作为数值列`,
                 );
                 continue;
               }
               const stats = columnStats(idx);
               if (!stats.isNumeric) {
-                toast(`「${stats.name}」不是纯数值列，不能作为数值列`);
+                toast(`“${stats.name}”不是纯数值列，不能作为数值列`);
                 continue;
               }
               if (valid.length >= rule.maxY) {
                 toast(
-                  `「${chartNames[state.type] || state.type}」最多选择 ${rule.maxY} 个数值列`,
+                  `“${chartNames[state.type] || state.type}”最多选择 ${rule.maxY} 个数值列`,
                 );
                 break;
               }
@@ -8826,12 +8826,12 @@
               `<small>${escapeHtml(m?.desc || "")}${supported ? "" : " · 当前引擎不可用"}</small>`;
             b.title = supported
               ? ""
-              : `${engineInfo[state.engine].short} 不支持「${chartNames[t]}」`;
+              : `${engineInfo[state.engine].short} 不支持“${chartNames[t]}”`;
             b.onclick = () =>
               supported
                 ? selectType(t)
                 : setStatus(
-                    `${engineInfo[state.engine].short} 不支持「${chartNames[t]}」 · 请切换引擎`,
+                    `${engineInfo[state.engine].short} 不支持“${chartNames[t]}” · 请切换引擎`,
                     "warn",
                   );
             host.appendChild(b);
@@ -8898,12 +8898,12 @@
           loadDataSelectionStore(id, state.type);
           if (state.type !== oldType) {
             setStatus(
-              `${engineInfo[id].short} 已切换 · 「${chartNames[oldType]}」不可用，已改为「${chartNames[state.type]}」`,
+              `${engineInfo[id].short} 已切换 · “${chartNames[oldType]}”不可用，已改为“${chartNames[state.type]}”`,
               "warn",
             );
           } else {
             setStatus(
-              `绘图引擎 · ${engineInfo[id].short} · 「${chartNames[state.type]}」`,
+              `绘图引擎 · ${engineInfo[id].short} · “${chartNames[state.type]}”`,
             );
           }
 
@@ -8919,7 +8919,7 @@
         function selectType(t) {
           if (!typeSupported(t)) {
             setStatus(
-              `${engineInfo[state.engine].short} 不支持「${chartNames[t]}」 · 请先切换引擎`,
+              `${engineInfo[state.engine].short} 不支持“${chartNames[t]}” · 请先切换引擎`,
               "warn",
             );
             return;
@@ -8940,7 +8940,7 @@
           normalizeDataSelection();
           if (previousYCount > state.yCols.length) {
             toast(
-              `「${chartNames[t]}」最多使用 ${rule.maxY} 个数值列，已自动保留前 ${rule.maxY} 个`,
+              `“${chartNames[t]}”最多使用 ${rule.maxY} 个数值列，已自动保留前 ${rule.maxY} 个`,
             );
           }
           syncDataColumnSelects();

@@ -291,7 +291,7 @@ const Accounts = {
                 const rowsEl = out();
                 if (!rowsEl) return;
                 if (!body || !body.ok) {
-                    // A refresh that says nothing is read as 「the same list is still current」: the
+                    // A refresh that says nothing is read as "the same list is still current": the
                     // operator acts on the entries that are no longer the truth.
                     rowsEl.innerHTML = '<p class="accounts-error">' + this.esc((body && body.error) || I18n.t('accounts.failed')) + '</p>';
                     return;

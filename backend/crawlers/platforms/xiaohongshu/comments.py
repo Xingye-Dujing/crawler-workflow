@@ -39,7 +39,7 @@ def parse_xhs_comments(items, floor: int = 0) -> list:
 #: OUR budget, not the site's end, so when it runs out on a panel that is STILL mounting comments
 #: the walk says so by name — the same shape the zhihu walk uses (``PANEL_ROUNDS`` +
 #: ``comment.zhihuPanelCapped``) and the bug douyin's "no round budget" fix removed: a fixed number
-#: that ends the walk quietly makes 「怎么采不满」 look like 「这条笔记就这么多评论」.
+#: that ends the walk quietly makes “怎么采不满” look like “这条笔记就这么多评论”.
 SCROLL_ROUNDS = 12
 
 

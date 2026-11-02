@@ -70,7 +70,7 @@ class TestWashText:
         """Measured on a real 10k-row weibo export: 23–29% of rows carried the card's own
         展开/收起 control inside 正文, spelled ``收起d``. The old pattern hard-coded the
         letter ``c``, so it matched none of them; and its standalone ``全文`` alternative ate
-        only the tail of 「展开全文」, leaving a bare 「展开」 that reads like a word — worse
+        only the tail of “展开全文”, leaving a bare “展开” that reads like a word — worse
         than no match at all.
         """
         assert ContentCleaner.wash_text(raw) == expected
@@ -138,7 +138,7 @@ class TestRegexMode:
         assert out.at[1, 'action'] == '保留'
 
     def test_a_blank_row_stays_blank_rather_than_being_called_deleted(self):
-        """「没有内容可判」 and 「判定为删除」 are different statements, and the model path
+        """“没有内容可判” and “判定为删除” are different statements, and the model path
         draws the same line."""
         out = ContentCleaner().clean_dataframe(frame('', None), mode='regex')
         assert list(out['action']) == ['', '']

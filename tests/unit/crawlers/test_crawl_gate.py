@@ -238,7 +238,7 @@ class TestStrictQueue:
         thread.join(5)
 
     def test_a_default_named_account_shares_the_blank_lane(self, monkeypatch, isolated):
-        """「default」 is the platform's own login's NAME and 「''」 is its historical spelling.
+        """ "default" is the platform's own login's NAME and "''" is its historical spelling.
         Before the fold they were two lanes, so a serial_only platform — whose measured wall is
         one session paging itself twice — could be walked in on by one account under two names."""
         _settings(monkeypatch, queue=True)

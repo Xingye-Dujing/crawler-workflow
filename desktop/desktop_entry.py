@@ -439,7 +439,7 @@ def dependency_report(app_dir_path, *, env=None) -> dict:
 
     Every probe is the backend's own. This used to keep a second list of Chrome install paths, a
     second MiKTeX scan, and a hardcoded 127.0.0.1:11434 — that last one told a user who pointed
-    「设置 → Ollama 地址」 at another machine that no daemon was running, one line before the app
+    “设置 → Ollama 地址” at another machine that no daemon was running, one line before the app
     answered from it. Two answers to the same machine-level question is the defect; the launcher
     runs this on a background thread once the application module has been imported, so asking the
     modules that own the answer costs nothing on the bind path.

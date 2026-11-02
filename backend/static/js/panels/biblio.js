@@ -19,7 +19,7 @@ function toggleBiblioPanel() {
 
 /* The header word for a stored column name. Computed key, so a column this build has no word
    for keeps the name it has on disk — the table is a view of durable rows, and inventing a
-   heading (or printing 「biblio.col.节点」) would describe a column that does not exist. */
+   heading (or printing “biblio.col.节点”) would describe a column that does not exist. */
 function biblioColumnWord(column) {
     var name = String(column === null || column === undefined ? '' : column);
     var key = 'biblio.col.' + name;
@@ -343,7 +343,7 @@ var biblioWorkspace = {
 
     _shapeWord(shape) {
         // Read off the one list the panel and the settings select already share — a second
-        // literal copy is how a shipped shape ends up labelled 「输出形态未知」.
+        // literal copy is how a shipped shape ends up labelled “输出形态未知”.
         var s = String(shape || '');
         return BIBLIO_OUTPUT_SHAPES.indexOf(s) >= 0 ? I18n.t('biblioWs.shape.' + s) : I18n.t('biblioWs.shapeUnknown');
     },

@@ -38,7 +38,7 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/workflow/list` | GET | 列出所有已保存工作流，每个文件一条对象（`name`/`nodes`/`labels`/`size`/`mtime`/`broken`）；读不开的文件也占一行并带 `broken`，好让用户能删掉它 |
 | `/api/workflow/rename` | POST | 重命名工作流文件（`{name, new_name}`）：同时改写文件内的 name 与数据集里对旧名的引用；目标名已存在 409、旧名不存在 404、新旧同名 400、在跑的那份被改名 409，绝不覆盖已有文件 |
 | `/api/workflow/delete` | POST | 删除工作流 |
-| `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，宁可立刻 400 也不悄悄变成一次从零重爬 |
+| `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。“继续”一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，宁可立刻 400 也不悄悄变成一次从零重爬 |
 | `/api/workflow/rerun-node` | POST | 重跑**一个节点及其下游**：把要擦的子树随 payload 交给运行本体，**抢到槽位之后**才定向擦除（被别的运行抢走时这次按下什么都不会丢），再用同一 `resume_run_id` 重启——上游已存的行被复用，只有被点名的子树重新算 |
 | `/api/workflow/diagnostics` | POST | 对工作流做只读诊断（校验/环/悬空连线等），不写运行 |
 | `/api/workflow/stop` | POST | 停止执行：浏览器在后台关、请求立即返回；`browsers` 是这次交出去关掉的浏览器数，`records` 是本请求已就地改判为 `stopping` 的运行行 |
@@ -82,8 +82,8 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 |------|------|------|
 | `/api/runs/compare` | GET | `?a=&b=&node=&key=&limit=` 对比两次运行：`{a,b,same_workflow,same_shape,nodes,node,diff,key_used}`；运行/节点不存在 404 或 400 具名拒绝；单节点超过 200000 行拒绝对比 |
 | `/api/runs/resumable` | POST | 查询指定工作流最近一次可续跑的中断运行（读之前先顺手判定本进程遗留的"运行中/正在停止"行） |
-| `/api/runs/for-workflow` | POST | 运行记录「当前工作流」页签数据源：`{workflow, limit?}`，按与「继续」相同的结构指纹列出该画布的运行（含已完成/运行中，新→旧），每条带 `nodes`/`resumable`/`rows_kept`/`duration_seconds` |
-| `/api/runs/list` | GET | 分页列出运行记录（每条带 `workflow_name`、`wf_count`、`mode`、`headless`、`duration_seconds` 等，面板据此打「并行/串行 ×N」「无头/窗口」「运行时长」标）；这次读取同时是本进程遗留记录的修复时机 |
+| `/api/runs/for-workflow` | POST | 运行记录“当前工作流”页签数据源：`{workflow, limit?}`，按与“继续”相同的结构指纹列出该画布的运行（含已完成/运行中，新→旧），每条带 `nodes`/`resumable`/`rows_kept`/`duration_seconds` |
+| `/api/runs/list` | GET | 分页列出运行记录（每条带 `workflow_name`、`wf_count`、`mode`、`headless`、`duration_seconds` 等，面板据此打“并行/串行 ×N”“无头/窗口”“运行时长”标）；这次读取同时是本进程遗留记录的修复时机 |
 | `/api/runs/status` | GET | 单条运行的节点级状态 |
 | `/api/runs/stats` | GET | 全局运行统计 |
 | `/api/runs/purge` | POST | 按保留策略清理旧运行（中断的最后清理；`purge` 同时交回被裁剪运行的"已采集"认领） |
@@ -133,10 +133,10 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/exports/download` | GET | 按**文件名**下载某个导出文件（越界名→404，脚本类扩展名→404） |
 | `/api/exports/delete` | POST | 删除单个导出文件（不接受路径、前缀或递归） |
 | `/api/exports/clear` | POST | 清空导出目录，**必须带 `{"confirm": true}`**：只逐个删面板列出的名字，反复清到某一轮什么也没删掉为止；有运行在跑时 409 整体拒绝 |
-| `/api/exports/clear-run` | POST | 按**一次运行**清除其全部文件，必须 `{"run_id","confirm":true}`：只删台账登记的名字，「固定」条目跳过；有运行在跑时 409；只删磁盘产物，不动 `runs.db` |
+| `/api/exports/clear-run` | POST | 按**一次运行**清除其全部文件，必须 `{"run_id","confirm":true}`：只删台账登记的名字，“固定”条目跳过；有运行在跑时 409；只删磁盘产物，不动 `runs.db` |
 | `/api/exports/clear-run-parts` | POST | 按一次运行 × 一个数据源节点只清除其分片（`kind='part'`），保留合并文件；作用域锁在 `(run_id,node_id,'part')` |
-| `/api/exports/clear-name` | POST | 按**名字**清除某一批分片：传入某个 `{stem}.partNNN{ext}`，删同名同扩展的全部分片，保留合并文件与「固定」条目；传入的不是分片→400 |
-| `/api/exports/ledger` | GET | 列出**写过导出文件**的每一次运行及其文件清单——「智能清除」选择器的数据源，读 `runs.db` 的运行→文件台账而非目录扫描 |
+| `/api/exports/clear-name` | POST | 按**名字**清除某一批分片：传入某个 `{stem}.partNNN{ext}`，删同名同扩展的全部分片，保留合并文件与“固定”条目；传入的不是分片→400 |
+| `/api/exports/ledger` | GET | 列出**写过导出文件**的每一次运行及其文件清单——“智能清除”选择器的数据源，读 `runs.db` 的运行→文件台账而非目录扫描 |
 
 ### 文献计量（biblio）
 
@@ -149,7 +149,7 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/biblio/snapshot` `/delete` | POST | 把某运行某节点的全部已存行捕获进项目（不是当前那一页）；参数从已保存画布读并用节点指纹核对；非 `biblio` 节点 400、无已存行 400、项目/运行不存在 404，都指名 |
 | `/api/biblio/runs` | GET | 文献计量工作区数据源：倒序列出含 `biblio` 节点的运行，每条带该运行里的节点与其登记产物；判定在服务端读 `node_runs.node_type` |
 | `/api/biblio/table` | GET | 分页读回某运行某节点的已存表（`run_id`+`node_id`+`offset`/`limit`）；`shape` 由列本身判读；运行不存在→404、节点不在→404、非 biblio→400、无已存行→200 带 `note` |
-| `/api/biblio/sources` | GET | 「数据来源」浮层内容：每个可读来源含官网链接、扩展名、可带字段与服务端翻好的导出指引；只读（POST→405） |
+| `/api/biblio/sources` | GET | “数据来源”浮层内容：每个可读来源含官网链接、扩展名、可带字段与服务端翻好的导出指引；只读（POST→405） |
 
 ### 报告 / 论文成稿
 
@@ -218,4 +218,4 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/schedules/save` | POST | 新建或按 `id` 原地更新一个任务；时间表达原样存，保存期与触发期用同一条规则——需要模型的画布具名拒绝（400），画布不存在/时间写不通/cron 永不触发/时区不认识都各自点名拒绝 |
 | `/api/schedules/delete` | POST | 删除一个任务（没有此 id 回 404） |
 | `/api/schedules/toggle` | POST | 开关一个任务：关掉即清空 `next_run`，重开当场重算 |
-| `/api/schedules/run` | POST | 「立即执行」：立刻跑一次并记账，即使任务被关掉；服务正忙时和别处一样排队 |
+| `/api/schedules/run` | POST | “立即执行”：立刻跑一次并记账，即使任务被关掉；服务正忙时和别处一样排队 |

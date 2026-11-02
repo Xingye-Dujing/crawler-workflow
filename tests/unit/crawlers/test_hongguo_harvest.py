@@ -357,8 +357,8 @@ class TestRefusals:
         ``_ensure_stack`` refuses a missing mitmproxy/uiautomation by name before it looks for the
         player, and both packages are Windows-only optional dependencies — so on a CI runner (and on
         Linux/macOS) the sentence a player-refusal test reads is about mitmproxy, not the player. The
-        case was passing only on the box that had them: AGENTS' 「no test may pass just because of the
-        machine it ran on」.
+        case was passing only on the box that had them: AGENTS' "no test may pass just because of the
+        machine it ran on".
         """
         import importlib.util
 
@@ -381,7 +381,7 @@ class TestRefusals:
     def test_a_machine_without_the_stack_is_refused_for_the_stack_and_not_the_player(self, tmp_path, monkeypatch):
         """The refusal CI actually hit: the reason has to name what is really missing, in order.
 
-        Both sentences are true refusals, and a node that reported 「找不到播放器」 on a Linux server
+        Both sentences are true refusals, and a node that reported “找不到播放器” on a Linux server
         would send the user hunting a desktop app the mode can never run there. This is the case that
         makes the machine-dependent failure above a *pinned* behaviour rather than an accident.
         """
@@ -404,7 +404,7 @@ class TestRefusals:
         )
 
     def test_the_desktop_build_names_the_build_that_can_run_this_node(self, tmp_path, monkeypatch):
-        """「pip install mitmproxy」 is not a thing anybody can do inside an exe.
+        """ "pip install mitmproxy" is not a thing anybody can do inside an exe.
 
         The stack gate is the same code in both builds; only the remedy differs — and the wrong
         remedy sends a desktop user looking for a terminal and a Python that are not there.
@@ -575,9 +575,9 @@ class TestFeedingByName:
         assert hit is not None
         assert harness._current_book == '9999999999999999999'
         # Asserted on the ID, not on a key: the 错剧 guard is the ONLY line in this walk that
-        # prints a book id, so 「no line names this book」 is the same claim as 「the guard did
-        # not fire」. Matching the literal key inside LOCALIZED text could never fail — the
-        # rendered sentence is 「收到的评论页属于 … 」 and contains no such word, so the old
+        # prints a book id, so "no line names this book" is the same claim as "the guard did
+        # not fire". Matching the literal key inside LOCALIZED text could never fail — the
+        # rendered sentence is “收到的评论页属于 … ” and contains no such word, so the old
         # assertion passed with the guard deleted.
         assert not any('9999999999999999999' in line for line in said), said
 
@@ -617,7 +617,7 @@ class TestTreeColdError:
         """A probe that momentarily finds 推荐 is not the tree answering the search.
 
         Both attempts raised :class:`TreeColdError`, and the old code fell out of the loop
-        as ``'notfound'`` — printing 「搜不到这部剧」 and sending the user to look for a drama
+        as ``'notfound'`` — printing “搜不到这部剧” and sending the user to look for a drama
         that was never the problem. The rule: a tree that never wakes is its OWN refusal.
         """
         ui = _FakeUI(cold_times=5, wakes=True)
@@ -694,7 +694,7 @@ class TestReplyDenominator:
 
     The walk clicks 展开 once per thread and never pages a child list, so a thread the site
     counts at 200 children can come home with 20 while every COMMENT group is exactly full —
-    which is precisely the license 「site_end」 must not be given.
+    which is precisely the license "site_end" must not be given.
     """
 
     def _child(self, *, total, cids):
@@ -734,7 +734,7 @@ class TestCountedEndings:
 
     Each of these used to answer ``([], DEAD)`` and nothing more: no ``_mark_short``, no
     ``skipped_targets`` — so a five-drama feed whose third drama a player popup blocked
-    settled 「正常」 over four, and one drama fed with no traffic at all settled DONE on an
+    settled “正常” over four, and one drama fed with no traffic at all settled DONE on an
     EMPTY table. The doctrine the skip path adopted says a hole is named, and these were
     siblings of it left uncounted.
     """
@@ -748,7 +748,7 @@ class TestCountedEndings:
         assert harness.end_reason == UNDER_TARGET
 
     def test_a_bare_series_id_is_promoted_to_the_page_that_names_it(self, tmp_path):
-        # The advertised 「a bare series_id」 input used to be handed to the web reader as a
+        # The advertised "a bare series_id" input used to be handed to the web reader as a
         # URL, which answers with no title — so the supported shape was unreachable by
         # construction and refused every time.
         asked = []
@@ -776,7 +776,7 @@ class TestOneLinePerGap:
     def test_a_stalled_episode_is_named_once(self, tmp_path):
         """The stall that ended the thread and the end-of-drama check describe ONE gap.
 
-        Both fire on the same group with the same numbers, and 「一条故障一行」 is the rule:
+        Both fire on the same group with the same numbers, and “一条故障一行” is the rule:
         the second line reads as a second problem the user then goes looking for.
         """
         page1 = _record(entries=[_entry('7001', '主评论', 1792313924)], total=5, has_more=True, as_dict=True)
@@ -837,7 +837,7 @@ class TestSwitchesAreRead:
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=lines, params={'include_replies': 'false'})
         rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 1
-        assert ui.expands == 0, "「包含子回复」 says off; bool('false') is True and clicked every thread open"
+        assert ui.expands == 0, "“包含子回复” says off; bool('false') is True and clicked every thread open"
 
     def test_a_drama_cut_by_the_limit_does_not_convict_the_rest(self, tmp_path):
         """评论上限 is a request, not a failure — and it is not a shortfall either."""
@@ -866,7 +866,7 @@ class TestStopInterruptsTheWaiting:
 
     def test_an_open_drama_does_not_swallow_stop_as_a_miss(self):
         # ``open_drama`` ends in a bare ``except Exception: return False``, which is exactly
-        # how a Stop became 「搜不到这部剧」 and then a named skipped drama in the tail refusal.
+        # how a Stop became “搜不到这部剧” and then a named skipped drama in the tail refusal.
         ui = PlayerUI(log=lambda _m: None, abort=lambda: True)
         ui.window = lambda: None
         with pytest.raises(CrawlerStopped):
@@ -896,7 +896,7 @@ class TestBoardSwitcherIsOpenedFirst:
         """One tab named like a board satisfies the same pattern as the whole list.
 
         Trusting that read first returned a one-name list, the switcher never opened, and
-        every drama on another board was refused as 「搜不到这部剧」 — the miss this walk
+        every drama on another board was refused as “搜不到这部剧” — the miss this walk
         exists to fix, reimposed by its own shortcut.
         """
         state = {'switcher_open': False}
@@ -1179,7 +1179,7 @@ class TestScreenFacts:
     def test_a_switch_that_stops_landing_counts_the_drama_as_unfinished(self, tmp_path):
         # ↓ failing is invisible to shortfall: the never-reached episodes print no site total, so
         # with episode 1 full the table can satisfy len(rows) >= target_total and the node would
-        # settle 「正常」 over a 1-of-3 walk. The failed switch must name the hole itself.
+        # settle “正常” over a 1-of-3 walk. The failed switch must name the hole itself.
         ui = _FakeUI()
         ui.next_episode = lambda: False
         harness, _said = _harness(
@@ -1194,8 +1194,8 @@ class TestScreenFacts:
         assert harness.end_reason == UNDER_TARGET
 
     def test_the_screen_may_name_the_base_title_without_the_season_suffix(self, tmp_path):
-        # Measured on the real player: a walk asked for 「聚宝仙盆之杂灵根才是真BOSS第十四季」
-        # read the header as 「聚宝仙盆之杂灵根才是真BOSS」. Equality would false-refuse a drama
+        # Measured on the real player: a walk asked for “聚宝仙盆之杂灵根才是真BOSS第十四季”
+        # read the header as “聚宝仙盆之杂灵根才是真BOSS”. Equality would false-refuse a drama
         # that opened correctly, which is the opposite of why this check exists.
         long_ui = _FakeUI(screen_title='聚宝仙盆之杂灵根才是真BOSS')
         harness, said = _harness(tmp_path, ui=long_ui, capture_lines=[_record()])

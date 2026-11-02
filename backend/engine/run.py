@@ -536,7 +536,7 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
             if node.get('type') == 'output' and upstream:
                 _platform_of = {}
                 # The same graph reach the merge needs to NAME its parents: its refusals and
-                # its 「已合并」 line quote the parent, and a bare `node-2` in a message about
+                # its “已合并” line quote the parent, and a bare `node-2` in a message about
                 # which WIRE to cut is the one thing the console rule exists to stop.
                 _labels_of = {}
                 for _pid, _res in upstream:
@@ -744,7 +744,7 @@ def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock
 
 
 def _rerun_request(data: dict, run_id: str):
-    """The subtree a 「重跑节点」 pressed to redo, or ``None``.
+    """The subtree a “重跑节点” pressed to redo, or ``None``.
 
     The route computes the closure but must NOT erase it: the wipe deletes stored rows and releases
     this run's dedupe claims, and a run that then lost the slot would leave the rows gone, the
@@ -765,7 +765,7 @@ def _rerun_request(data: dict, run_id: str):
 def _invalidate_rerun_nodes(store, run_id: str, rerun) -> list:
     """Erase the rerun's subtree now that this run owns the slot; answer the ids it removed.
 
-    No console line here: :meth:`invalidate_nodes` already reports how many 「已采集」 claims it
+    No console line here: :meth:`invalidate_nodes` already reports how many “已采集” claims it
     handed back, and a second sentence about the same wipe is the noise AGENTS refuses."""
     if not rerun or str(rerun.get('run_id') or '') != str(run_id):
         return []
@@ -940,7 +940,7 @@ def _run_worker(
                 # Tagged with its OWN index: this line is printed before
                 # _run_single_workflow sets the thread-local, so it used to be
                 # filed under the *previous* component's tab — workflow A's
-                # console announcing 「开始执行工作流「B」」.
+                # console announcing “开始执行工作流“B””.
                 add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)), wf_idx=wf_idx)
                 try:
                     results = _run_single_workflow(se, wf_idx, sub_ctx, headless)
@@ -1081,7 +1081,7 @@ def _run_worker(
         # `stopping` is NOT cleared here. It goes in the final section below, together with the
         # thread handle: the stop route proves "a run is live" and writes its flags under
         # ``execute_lock``, and settling the record takes seconds. Clearing here let a second Stop
-        # press re-pin 「正在停止」 over a run that had already answered, and ``stop_requested()``
+        # press re-pin “正在停止” over a run that had already answered, and ``stop_requested()``
         # then handed that stale flag to every later crawl.
         # Whatever is left claiming to be running was killed, not finished;
         # the rows it published are what the next attempt resumes from. With
@@ -1120,7 +1120,7 @@ def _run_worker(
         # before anything else in this finally can be reordered: ``start_next_queued`` checks
         # liveness through it. The stop flag leaves WITH it, inside the claim lock — the stop route
         # proves a run is live and writes its flags under this same lock, so a second 停止 pressed
-        # while this thread was still settling cannot re-pin 「正在停止」 onto a run that has already
+        # while this thread was still settling cannot re-pin “正在停止” onto a run that has already
         # published its verdict, and ``stop_requested()`` never hands a stale stop to the next crawl.
         with execute_lock:
             execution_state['stopping'] = False
@@ -1193,7 +1193,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
     provider, a transport this host does not speak, a 继续 pointing at a purged record. Re-parking
     one of those is not patience: the drain puts the entry back at the FRONT and returns, so one
     unstartable request starves every request behind it, forever, and survives a restart in the
-    mirror. A transient refusal (「另一个运行正在进行」) deliberately has no ``drop``.
+    mirror. A transient refusal (“另一个运行正在进行”) deliberately has no ``drop``.
     """
     shape_error = workflow_shape_error(data)
     if shape_error:
@@ -1252,7 +1252,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
             # A cloud host has no display, so headless is not a preference here — the
             # browser would never come up. The panel hides the switch (it is told the
             # server's shape by /api/config), but the run record is written from THIS
-            # value, and a record that said 「窗口」 for a crawl that could only have run
+            # value, and a record that said “窗口” for a crawl that could only have run
             # headless would be a chip describing a run that never happened.
             headless = True if Config.CLOUD_MODE else as_bool(settings.get('headless'), True)
             # A parallel run holds at most one browser per concurrently-running workflow,
@@ -1269,7 +1269,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
             # the stored setting decides. Absence must not read as False: a browser
             # that sends nothing would otherwise switch profiles off for everyone.
             # Read through the repo's own tri-state reader: ``bool(raw)`` answered True to the
-            # text 'false' — a draft that says 「不用 Profile」 in a hand-edited file would have
+            # text 'false' — a draft that says “不用 Profile” in a hand-edited file would have
             # been crawled WITH one, which is the device a wall is measured against.
             use_profile = flag_or_none(settings.get('use_profile'))
             # Recorded with the run so the history panel can group by workflow rather

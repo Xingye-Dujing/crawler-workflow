@@ -1183,7 +1183,7 @@ out.history_rows = {
 fresh();
 route('/api/history/runs', HISTORY_RUNS);
 route('/api/history/series', { ok: true, rows: [] });
-answers.dialog = false; // 「取消」
+answers.dialog = false; // “取消”
 await pa.historyPanel.deleteRun('r-del');
 out.history_declined = { requested: requests.length, toasts: toasts.slice() };
 

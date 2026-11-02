@@ -47,11 +47,11 @@ class ContentCleaner:
     # Two measured facts shape this pattern, and the first one is why the old spelling
     # missed most of the corpus: weibo appends ONE ASCII letter to the word, and it is not
     # always 'c' — a real 10k-row export measured '收起d' on 23–29% of its rows while the
-    # pattern hard-coded 'c'. The second is that the site writes 「展开全文」, and the old
-    # standalone '全文' alternative merely ate that tail and left a bare 「展开」 behind —
+    # pattern hard-coded 'c'. The second is that the site writes “展开全文”, and the old
+    # standalone '全文' alternative merely ate that tail and left a bare “展开” behind —
     # a leftover that reads like a word, which is worse than not matching at all.
     #
-    # The trailing boundary is what keeps prose: 「请展开说说」 and 「展开讨论」 are text, not
+    # The trailing boundary is what keeps prose: “请展开说说” and “展开讨论” are text, not
     # controls, so the marker only goes where a sentence cannot follow it. Same distinction
     # `engine/times.py` makes for relative labels — recognise the shape, never the bare word.
     _EXPAND_PAT = re.compile(r'(?:展开|收起)(?:全文|[A-Za-z])?(?=$|[\s，。！？、,.!?;；:：~～|])')
@@ -66,7 +66,7 @@ class ContentCleaner:
     _SPACE_PAT = re.compile(r'\s+')
 
     #: Shorter than this after washing is not a review of anything. Counted in characters
-    #: and deliberately low: a real Weibo comment can be 「绝了」 and still be an opinion.
+    #: and deliberately low: a real Weibo comment can be “绝了” and still be an opinion.
     MIN_KEPT_CHARS = 2
 
     @classmethod

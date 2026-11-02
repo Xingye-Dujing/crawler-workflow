@@ -259,7 +259,7 @@ class ZhihuCrawler(Crawler):
             if cursor['total'] > before:
                 stuck = 0
             else:
-                # Nothing mounted this round — which is NOT the same fact as 「the list is over」,
+                # Nothing mounted this round — which is NOT the same fact as "the list is over",
                 # and conflating them is how a search comes back short. The bodies this crawl opens
                 # make the document taller, and ``scroll_down`` lands its round with a jump to the
                 # bottom: on a tall page that jump flies past the intersection observers that would
@@ -270,7 +270,7 @@ class ZhihuCrawler(Crawler):
                     stuck += 1
                     if stuck >= self.STUCK_ROUNDS:
                         # The only give-up this loop may claim, naming what it actually observed:
-                        # {n} really is STUCK_ROUNDS by now, and 「没有更多了」 was never seen — so
+                        # {n} really is STUCK_ROUNDS by now, and “没有更多了” was never seen — so
                         # this line reports a walk that stopped, not a list that ended.
                         logger.info(t('crawl.zhihu.stuck', n=stuck))
                         ended = 'under'
@@ -297,7 +297,7 @@ class ZhihuCrawler(Crawler):
             elif expand['short']:
                 logger.info(t('crawl.zhihu.bodies_short', n=expand['short']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
-        # U1: the walk already separates how it stopped. ``site_end`` is the 「没有更多了」 marker — the
+        # U1: the walk already separates how it stopped. ``site_end`` is the “没有更多了” marker — the
         # site's own word, so the short is licensed. ``under`` is the STUCK_ROUNDS give-up WITH no marker:
         # it names a walk that stopped, NOT a list that ended, and zhihu's soft throttle mimics it
         # exactly (this is the platform whose throttle was measured to serve a thin day), so it is
@@ -327,7 +327,7 @@ class ZhihuCrawler(Crawler):
 
         Columns follow what the payload really fills (see docs/crawler_notes.md):
         标题 / 链接 / 热度 / 回答数 / 关注数 / 摘要. NOT 作者 (all 30 rows carry the
-        literal 「用户」 — a column of one repeated word is noise the user reads as data)
+        literal “用户” — a column of one repeated word is noise the user reads as data)
         and NOT 评论数 (0 in all 30, which would report "no comments" for a question
         with hundreds). The link is rewritten from ``api.zhihu.com/questions/<id>``,
         which the payload hands out, to the page a person can open.
@@ -402,7 +402,7 @@ class ZhihuCrawler(Crawler):
     def author(self, author: str, target_count: int = 50, **_kwargs):
         """One account's answers and articles, read from their own profile tabs.
 
-        Both tabs are walked, answers first: 「作品」 for zhihu means the 回答 and the
+        Both tabs are walked, answers first: “作品” for zhihu means the 回答 and the
         文章 an account wrote, and an account that only ever answered (or only ever
         wrote articles) still gets a complete list rather than a false half.
 
@@ -422,7 +422,7 @@ class ZhihuCrawler(Crawler):
                 break
             self._walk_profile_tab(token, tab, target_count)
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
-        # U1: profile tabs publish no 「没有更多」 footer (measured, see docs), so a walk that stops
+        # U1: profile tabs publish no “没有更多” footer (measured, see docs), so a walk that stops
         # growing on a tab is NOT provably the site running out — the thin author (23 answers) and the
         # throttle-stalled deep author (661 answers) both look identical at the DOM. But the profile page
         # DOES publish its own totals in ``<meta itemprop="zhihu:answerCount">`` / ``zhihu:articlesCount``
@@ -458,8 +458,8 @@ class ZhihuCrawler(Crawler):
             if value.isdigit():
                 found.append(int(value))
             else:
-                # A value that isn't digits is 「未提供」, not 0; refuse to sum a fabricated zero into a
-                # denominator the user will judge 「采得不足」 against.
+                # A value that isn't digits is “未提供”, not 0; refuse to sum a fabricated zero into a
+                # denominator the user will judge “采得不足” against.
                 return -1
         if not found or len(found) != len(props):
             return -1
@@ -520,7 +520,7 @@ class ZhihuCrawler(Crawler):
         meta = zhihu_item_meta(card.get_attribute('data-zop') or '')
         # ``data-zop`` is the site's own tracking payload: it names the author, the
         # kind and the id, which is more than the visible markup gives — a profile
-        # row has no 「作者名：」 prefix inside its text, so ``_get_author`` comes back
+        # row has no “作者名：” prefix inside its text, so ``_get_author`` comes back
         # empty for every row of exactly the page where the author is known.
         if meta.get('authorName'):
             item['作者'] = meta['authorName']
@@ -829,7 +829,7 @@ class ZhihuCrawler(Crawler):
 
     def _get_publish_time(self, card):
         # 2026 layout moved the date from .ContentItem-time to .SearchItem-time. The cell is
-        # the site's own wording: 「发布于 2022-01-24」, 「编辑于 3 天前」, and for a card whose
+        # the site's own wording: “发布于 2022-01-24”, “编辑于 3 天前”, and for a card whose
         # extractor lands on the wrong node, something that is not a time at all — so it goes
         # through the closed-set resolver, which answers an absolute stamp for what it
         # recognises and hands back the text unchanged for what it does not.

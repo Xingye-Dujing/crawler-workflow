@@ -630,7 +630,7 @@ class TestPayloadShape:
 
 
 class TestCollectionKind:
-    """`collects` is the matrix's answer to 「what does a visible window show」.
+    """`collects` is the matrix's answer to "what does a visible window show".
 
     It drives the panel's note wording (and is exported to the browser), so the values stay pinned
     against measurement. It is no longer an execution gate: since #148 a headless Chrome carries a

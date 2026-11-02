@@ -68,8 +68,8 @@ def clean_jar(app_module):
 
     Both halves matter, in opposite directions: ``Config.COOKIE_DIR`` and
     ``Config.BROWSER_PROFILE_DIR`` are session-scoped tmp paths, so a file one test
-    saved (or a profile marker it wrote) is still there for the next — and 「没有
-    Cookie 可测」, 「profile 里有会话」 and 「测了，失效」 are three different verdicts.
+    saved (or a profile marker it wrote) is still there for the next — and “没有
+    Cookie 可测”, “profile 里有会话” and “测了，失效” are three different verdicts.
     A test that wants one of them says so; nothing here may inherit one by luck.
     """
     for platform in CookieManager.PLATFORMS:
@@ -141,7 +141,7 @@ class TestVerdicts:
 
     def test_instagram_holds_a_cookie_but_cannot_be_crawled(self, probes):
         """Capture-only platforms are in the cookie registry and not the crawl
-        matrix, so the honest answer is 「not crawlable」 — which blocks nothing,
+        matrix, so the honest answer is "not crawlable" — which blocks nothing,
         because validation already refused the node before this ran."""
         verdict = preflight.probe('instagram')
         assert verdict['state'] == preflight.NOT_CRAWLABLE
@@ -166,7 +166,7 @@ class TestVerdicts:
     def test_a_used_profile_is_worth_probing_though_the_file_is_gone(self, probes, monkeypatch, app_module):
         """The consequence of deleting a cookie file (#111) and of a profile that
         imports once: a live session can exist with no snapshot beside it. Answering
-        「没有 Cookie」 there would refuse a run that was about to work."""
+        “没有 Cookie” there would refuse a run that was about to work."""
         cookie_manager.delete('weibo')
         _use_profile(monkeypatch, True)
         profiles.mark_used('weibo', imported=False)
@@ -194,7 +194,7 @@ class TestVerdicts:
 
     def test_a_page_the_browser_wrote_says_nothing_about_the_cookie(self):
         """The inversion this guards: an error document answers neither wall flag, so the
-        fall-through used to be 可用 — and a 「可用」 is *cached*, so one dead DNS entry
+        fall-through used to be 可用 — and a “可用” is *cached*, so one dead DNS entry
         would keep licensing runs that were never checked. 'unreachable' outranks even a
         login flag, because a session that was not transmitted cannot have been refused.
         """
@@ -210,8 +210,8 @@ class TestCache:
         assert probe_zhihu.platforms == ['zhihu'], 'two presses of one button bought two Chromes'
 
     def test_a_reused_verdict_says_it_was_reused(self, probe_zhihu):
-        """The distinction is the whole honesty of the answer: 「3 分钟前验证过」 and
-        「刚验证过」 are different claims about the same verdict."""
+        """The distinction is the whole honesty of the answer: “3 分钟前验证过” and
+        “刚验证过” are different claims about the same verdict."""
         preflight.probe('zhihu')
         second = preflight.probe('zhihu')
         assert second['cached'] is True
@@ -235,7 +235,7 @@ class TestCache:
     def test_the_default_login_shares_its_verdict_across_both_spellings(self, probe_zhihu):
         """One login, one cache slot. The candidate list and a new node's preselection hand the
         default account its NAME, while an old canvas leaves it blank; the panel's 验证 recorded
-        「default」 and the gate at Run read the blank one, so the 「已失效」 the user had just
+        “default” and the gate at Run read the blank one, so the “已失效” the user had just
         measured did not block the run — and the same session bought a second Chrome."""
         preflight.record('zhihu', {'login_wall': True})
         verdict = preflight.probe('zhihu')
@@ -252,7 +252,7 @@ class TestCache:
     def test_saving_a_cookie_drops_the_verdict_it_could_only_invalidate(
         self, client, probes, with_cookie, app_module, profiles_off
     ):
-        """The dangerous direction of the bug: the cached answer was 「失效」, the user
+        """The dangerous direction of the bug: the cached answer was “失效”, the user
         has now pasted a fresh cookie, and a gate quoting the old verdict would refuse
         the run they just fixed."""
         with_cookie('zhihu')
@@ -272,8 +272,8 @@ class TestCache:
 
     def test_a_manual_verification_refreshes_the_gate(self, client, app_module, monkeypatch):
         """验证 Cookie and the pre-run gate ask the same question of the same browser.
-        A user who just watched the panel answer 「已失效」 must not then pay for a
-        second probe to be told the same thing — and a cached 「可用」 must not survive
+        A user who just watched the panel answer “已失效” must not then pay for a
+        second probe to be told the same thing — and a cached “可用” must not survive
         the check that contradicted it."""
         cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         preflight.record('zhihu', {'login_wall': False})
@@ -368,7 +368,7 @@ class TestParallelAndDeadline:
         """The pool width is a real ceiling, so more platforms than workers means later probes
         run in a second wave. The old shared ``deadline`` gave each awaited future only the time
         LEFT before that one deadline — so once the first wave used it up, every later platform
-        was answered UNKNOWN (「无法核对」, non-blocking) WITHOUT EVER BEING PROBED, silently
+        was answered UNKNOWN (“无法核对”, non-blocking) WITHOUT EVER BEING PROBED, silently
         un-guarding the run. Each future must get the full timeout from when we wait on it.
 
         Pinned deterministically by spying on ``Future.result``'s ``timeout`` argument rather than
@@ -396,8 +396,8 @@ class TestParallelAndDeadline:
         assert {answers[p]['state'] for p in ('zhihu', 'weibo', 'douyin')} == {'valid'}
 
     def test_a_probe_that_outruns_the_deadline_is_still_answered(self, monkeypatch, with_cookie):
-        """The key must be present or the browser reads 「no answer」 as 「no opinion
-        needed」; and the platform must not be able to hold the press of 执行 open."""
+        """The key must be present or the browser reads "no answer" as "no opinion
+        needed"; and the platform must not be able to hold the press of 执行 open."""
         with_cookie('zhihu')
         hold = threading.Event()
 
@@ -529,7 +529,7 @@ class TestRoute:
         assert probes.platforms == ['bilibili']
 
     def test_unclear_platforms_are_listed_apart_from_blocked_ones(self, client, probes, with_cookie):
-        """Two different next steps, so two different lists: one is 「go log in」, the
+        """Two different next steps, so two different lists: one is "go log in", the
         other is nothing at all."""
         with_cookie('zhihu')
         with_cookie('weibo')
@@ -706,7 +706,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
         assert 'Cookie' not in text, 'the advice names the login the crawl actually reads'
 
     def test_a_backend_this_machine_cannot_ask_never_blocks_a_run(self, monkeypatch):
-        """「问不到」 is not 「没登录」, the same rule the timeout and captcha branches follow."""
+        """“问不到” is not “没登录”, the same rule the timeout and captcha branches follow."""
         monkeypatch.setattr(
             catbus,
             'preflight',
@@ -726,7 +726,7 @@ class TestTheSecondBackendIsAskedItsOwnQuestion:
         """Two backends, one platform, one account name — and no shared verdict.
 
         The browser path caches because a probe costs a Chrome; the adapter path does not cache
-        because a five-minute-old 「没登录」 would block a run the user just fixed in a terminal. What
+        because a five-minute-old “没登录” would block a run the user just fixed in a terminal. What
         must not happen either way is one system's answer clearing the other's gate.
         """
         with_cookie('zhihu')

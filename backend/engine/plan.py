@@ -32,7 +32,7 @@ def run_mode(settings: dict) -> str:
     ``mode == 'serial'`` was the old test, so every other token ran PARALLEL while the browser
     asked the same question the safe way round (`workflow.js`: ``mode !== 'parallel'`` means
     serial). A draft whose settings said anything else therefore started two same-platform
-    crawls at once while the panel believed it was running one, and the 「本次不用 Profile」
+    crawls at once while the panel believed it was running one, and the “本次不用 Profile”
     question — which is what keeps two crawls off one browser profile — never fired. That is
     the measured login-wall collision, decided by a string comparison nobody validated.
     """
@@ -108,7 +108,7 @@ def workflow_needs_llm(workflow: dict) -> bool:
 
     Read off the EFFECTIVE graph, not the drawn one. A switched-off node is not on the canvas
     (the engine's own rule, which validate/naming/fingerprint/execution all obey), and this is
-    a COST question: walking the raw nodes refused 「请选择模型」 for a run that would call no
+    a COST question: walking the raw nodes refused “请选择模型” for a run that would call no
     model at all, and refused a scheduled canvas — forever, at save time and again at every
     fire — over a node the user had deliberately turned off.
     """

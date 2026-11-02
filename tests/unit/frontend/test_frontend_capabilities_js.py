@@ -229,7 +229,7 @@ class TestPanelReadsWhatTheNodeHolds:
     @pytest.mark.parametrize(
         ('node_type', 'params', 'value'),
         [
-            # A mode the analyzer refuses by name must not be painted as 「大模型」.
+            # A mode the analyzer refuses by name must not be painted as “大模型”.
             ('process', {'operation': 'emotion', 'mode': 'ML'}, 'ML'),
             # A chart type the renderer has no case for must not be painted as 柱状图.
             ('visualize', {'chart_type': 'violin', 'x_field': '城市'}, 'violin'),
@@ -714,7 +714,7 @@ class TestTheCrawlBackendOption:
     """采集方式: the matrix declares the select, the server's ``backends`` map decides the option.
 
     A cell CatBus does not offer — or a machine with no Node under it — is greyed and named. It is
-    never removed: a canvas that STORES 「catbus」 would otherwise be shown 「selenium」 while the
+    never removed: a canvas that STORES "catbus" would otherwise be shown "selenium" while the
     button started the other crawl, which is the one thing a generated panel may not do. Which
     account field the form asks is the same answer seen from the other side: a CatBus node has no
     Selenium login to pick.

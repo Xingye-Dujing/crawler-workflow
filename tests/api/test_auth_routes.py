@@ -156,14 +156,14 @@ class TestLoggingIn:
     def test_a_next_that_could_forge_a_header_is_ignored(self, client, auth_on, next_url):
         """A control character is legal in a URL path and ILLEGAL in a response header, so
         ``redirect()`` raises: the login answered an HTTP 500 — after the session was created and
-        audited, which reads to the user as 「密码被忽略」."""
+        audited, which reads to the user as “密码被忽略”."""
         response = _login(client, next_url=next_url)
         assert response.status_code == 302, response.get_data(as_text=True)
         assert response.headers['Location'] == '/'
 
     def test_a_non_ascii_form_token_is_refused_not_a_server_error(self, client, auth_on):
         """``hmac.compare_digest`` refuses non-ASCII text, and a form field arrives decoded — so a
-        token typed as 「café」 raised ``TypeError`` inside the view."""
+        token typed as "café" raised ``TypeError`` inside the view."""
         client.get('/login?lang=en')  # mints the one-shot token the POST will be checked against
         response = client.post(
             '/login',

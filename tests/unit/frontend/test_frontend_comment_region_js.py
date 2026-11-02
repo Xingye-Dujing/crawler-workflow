@@ -1,11 +1,11 @@
 """The comment-region pre-run notice gate — ``_hasCommentCrawl`` / ``_confirmCommentRegionBeforeRun``.
 
-Some platforms/videos publish no IP region in comments, so the 「评论地区」 column can come
+Some platforms/videos publish no IP region in comments, so the “评论地区” column can come
 back blank; the app warns once before a run that crawls comments so that blank is not read as
 a bug. This drives the two workflow.js methods directly (not the full ``execute()``, which would
 also raise the profile/serial dialogs and blur what is asserted): it must interrupt only a canvas
-that really crawls comments — a dedicated 「评论」 node or a source switched to comments mode —
-and stay silent for a plain search canvas; pressing 「知道了」 lets the run through, while
+that really crawls comments — a dedicated “评论” node or a source switched to comments mode —
+and stay silent for a plain search canvas; pressing “知道了” lets the run through, while
 dismissing the notice does not.
 
 The dialog wording is compared against the sandbox's own ``I18n.t(...)`` for those keys, never a
@@ -64,7 +64,7 @@ class TestCommentRegionGate:
     def test_a_comment_node_interrupts_once_before_the_run(self, report):
         r = case(report, 'comment-node-fires')
         assert r['hasComment'] is True
-        assert r['confirm'] is True, '「知道了」 presses the only button → the run proceeds'
+        assert r['confirm'] is True, '“知道了” presses the only button → the run proceeds'
         assert len(r['dialogs']) == 1, 'the notice fired exactly once'
         # The dialog text is the catalog's own notice, not a pasted string: it resolves and matches.
         assert r['noticeText'] and r['noticeText'] != 'dialog.commentRegionNotice', 'the i18n key is missing'

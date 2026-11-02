@@ -187,7 +187,7 @@ class TestAuthorWalk:
         assert rows and driver.visited[0] == 'https://www.zhihu.com/people/zshu-83/answers'
 
     def test_the_author_name_comes_from_the_rows_own_payload(self, make_crawler):
-        """A profile row has no 「作者名：」 prefix in its text, so the search reader's
+        """A profile row has no “作者名：” prefix in its text, so the search reader's
         author rule returns nothing here — the row's own tracking payload is the only
         place the name is data rather than markup."""
         crawler = make_crawler(FakeDriver({'answers': [answer_row()], 'posts': []}))
@@ -225,7 +225,7 @@ class TestAuthorWalk:
 
     def test_a_walk_short_of_the_authors_own_total_is_convicted(self, make_crawler):
         # The author published 661 answers + 47 articles (per the profile's own <meta> tags); the walk
-        # stalled at one row with no 「没有更多」 marker. Without the total this is the thin/deep ambiguity
+        # stalled at one row with no “没有更多” marker. Without the total this is the thin/deep ambiguity
         # #6 warns about — WITH it, the site itself says there are 708 posts and we held 1, so convict.
         driver = FakeDriver(
             {'answers': [answer_row()], 'posts': []},
@@ -259,7 +259,7 @@ class TestAuthorWalk:
         assert crawler.end_reason is None, 'a missing denominator is refused, never guessed as 0'
 
     def test_a_stop_cut_short_is_not_reconvicted_as_under_target(self, make_crawler):
-        # 停止 is its own bucket (the executor counts it in ``stopped_node_ids``, not 「采得不足」). A
+        # 停止 is its own bucket (the executor counts it in ``stopped_node_ids``, not “采得不足”). A
         # user-pressed Stop flows through walk_feed (no raise, unlike a wall/风控 which _walk_profile_tab
         # refuses at the tab start), so the guard must see may_stop and leave the walk unjudged.
         driver = FakeDriver(

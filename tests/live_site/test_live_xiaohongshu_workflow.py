@@ -8,7 +8,7 @@ lives here:
 * **vocabulary** — which lines are an honest site answer for a recycling grid. xiaohongshu's grid
   publishes NO total and NO end-of-list marker the code can read, so the product files no attested
   end: a posts walk that stops growing below the ask is convicted ``UNDER_TARGET`` (the node fails
-  with 「采得不足」 and stays resumable), not excused by any console sentence. So the posts leg is
+  with “采得不足” and stays resumable), not excused by any console sentence. So the posts leg is
   graded on ``SHARED_EXITS`` ALONE — a broad keyword at 50 that comes back short with no named wall
   is exactly the silent under-collect this tier exists to catch, and it now stays red.
 * **shape checks** — 笔记ID is the dedupe/resume identity, so a post row without one, or the same
@@ -77,8 +77,8 @@ def _vocabulary(mode: str, headless: bool) -> tuple[tuple, tuple]:
     The POSTS leg is graded on ``SHARED_EXITS`` ALONE. xiaohongshu's grid publishes no total and
     no end-of-list sentence the code can read, so the walk files no site-attested end — a posts
     crawl that stops below its ask is convicted ``UNDER_TARGET`` by the product (the node fails
-    with 「采得不足」) rather than excused by a 「无更多内容」 line. There used to be such a line
-    (``crawl.xhs.exhausted``) whitelisted here; the walk now keys on 笔记ID growth, 「exhausted」
+    with “采得不足”) rather than excused by a “无更多内容” line. There used to be such a line
+    (``crawl.xhs.exhausted``) whitelisted here; the walk now keys on 笔记ID growth, “exhausted”
     could not tell a real bottom from a late-answering page, so it was deleted from both the
     product and this whitelist. A shortfall naming nothing is the silent under-collect this tier
     exists to catch, and it stays red.
@@ -187,7 +187,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     ) as run:
 
         def _grade(part, record, console):
-            """Per-component verdict with the B1 guard: a 「无更多内容」 over an EMPTY posts table is
+            """Per-component verdict with the B1 guard: a “无更多内容” over an EMPTY posts table is
             a walk that gave up, not a bottom, so it may not excuse 0 rows."""
             kept_here = harness.stored_rows(record, part['source'])
             exits, liars = _vocabulary(part['mode'], run.headless)

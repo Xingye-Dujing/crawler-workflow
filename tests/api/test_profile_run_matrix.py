@@ -163,7 +163,7 @@ class TestSamePlatformParallel:
         assert all(node['row_count'] == len(PAGE) for node in nodes.values()), nodes
 
     def test_the_queue_orders_one_platform_even_without_profiles(self, client, app_module, matrix):
-        """「本次不用 Profile」buys a new device, not a second conversation.
+        """“本次不用 Profile”buys a new device, not a second conversation.
 
         The two collisions are different events: two throwaway browsers can start
         together and still be answered a login wall, because the *account* behind

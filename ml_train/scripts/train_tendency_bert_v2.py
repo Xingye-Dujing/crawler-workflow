@@ -2,9 +2,9 @@
 class-weighted loss, and an honest human-labelled holdout. This file does NOT replace or import
 ``train_tendency_bert_v1.py``; the old Chinese-RoBERTa track stays exactly as it was, writes to its own
 ``models/tendency_stance_v1/``, and stays selectable. This one writes to ``models/tendency_stance_v2_cyberbully/``
-(「网暴模型」, registered for the 「已注册模型」 dropdown).
-The two are chosen at deploy time from the tendency node's 「已注册模型」 dropdown, or by pasting
-its ``ml_train/models/…`` path into 「bert 模型名」 — the analyzer takes a path, so nothing in backend/ changes.
+(“网暴模型”, registered for the “已注册模型” dropdown).
+The two are chosen at deploy time from the tendency node's “已注册模型” dropdown, or by pasting
+its ``ml_train/models/…`` path into “bert 模型名” — the analyzer takes a path, so nothing in backend/ changes.
 
 Why a separate track (the three decisions this encodes):
   ① modern *Chinese* encoder instead of ``hfl/chinese-roberta-wwm-ext`` (2019). Default is
@@ -431,7 +431,7 @@ def main():
     tokenizer.save_pretrained(args.out)
     print(f'saved HF model -> {args.out}')
     print(
-        'Register its ml_train/models/… path (name 「网暴模型」) so the 「已注册模型」 dropdown lists it; the old models/tendency_stance_v1 stays intact.'
+        'Register its ml_train/models/… path (name “网暴模型”) so the “已注册模型” dropdown lists it; the old models/tendency_stance_v1 stays intact.'
     )
 
 

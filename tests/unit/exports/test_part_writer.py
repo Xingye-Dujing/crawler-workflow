@@ -103,7 +103,7 @@ class TestStem:
         assert safe_stem('中文名.csv') == '中文名'
 
     def test_an_internal_dot_is_not_treated_as_an_extension(self):
-        """The stem is a storage key. A workflow named 「v2.0调研」 (a legal dot) used to have
+        """The stem is a storage key. A workflow named “v2.0调研” (a legal dot) used to have
         ``os.path.splitext`` cut at that dot, dropping ``-src-2…`` entirely so two source nodes
         collided on one stem and overwrote each other's parts. Only a REAL trailing export
         extension may be removed."""

@@ -126,7 +126,7 @@ def _profiles_rows(enabled=True, template=None):
         )
     payload = {'ok': True, 'enabled': enabled, 'root': '/tmp', 'profiles': rows}
     # ``None`` is the OLDER payload, not a statement about the template: a server that never
-    # answered the question must not be rendered as 「模板缺失」.
+    # answered the question must not be rendered as “模板缺失”.
     if template is not None:
         payload['template'] = template
     return payload
@@ -438,7 +438,7 @@ class TestTemplateLine:
         assert 'none yet' in said['tpl-missing'] and 'rebuilt' in said['tpl-dirty'], said
 
     def test_a_missing_template_promises_a_browser_rather_than_a_failure(self, ui):
-        """It really is generated on demand, so 「缺失」 must not read as something broken."""
+        """It really is generated on demand, so “缺失” must not read as something broken."""
         assert 'create' in self._template_row(ui['tpl-missing'])['state']
 
     def test_profiles_off_has_nothing_to_say_about_a_device_nothing_will_use(self, ui):
@@ -446,7 +446,7 @@ class TestTemplateLine:
         assert len(ui['tpl-off']['rows']) == len(PLATFORMS)
 
     def test_a_payload_that_never_answered_adds_no_claim(self, ui):
-        """The older server and 「there is no template」 are different facts."""
+        """The older server and "there is no template" are different facts."""
         assert self._template_row(ui['off-flagged']) is None
         assert len(ui['off-flagged']['rows']) == len(PLATFORMS)
 

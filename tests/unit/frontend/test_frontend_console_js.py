@@ -189,7 +189,7 @@ class TestClearConsoleBeforeRun:
 
 
 class TestConsoleReconnect:
-    """A refreshed page takes the console back up — 「页面一刷新，控制台信息就丢失了」.
+    """A refreshed page takes the console back up — “页面一刷新，控制台信息就丢失了”.
 
     Nothing used to start the poll except the Run button, so F5 mid-run left an empty box
     over a crawl that was still writing. The server holds the lines (LOG_KEEP of them) and
@@ -218,7 +218,7 @@ class TestConsoleReconnect:
 
     def test_a_run_that_finished_while_the_page_was_closed_is_shown_not_re_announced(self, console):
         """The buffer outlives the run and is only cleared by the NEXT one claiming the
-        slot, so 「刚才那次跑了什么」 is still answerable after a refresh. But the finish
+        slot, so “刚才那次跑了什么” is still answerable after a refresh. But the finish
         line — its toast, its resume offer — belongs to the tab that watched it end:
         reprinting it would offer a resume on every reload."""
         done = console['reconnectFinished']
@@ -252,8 +252,8 @@ class TestConsoleReconnect:
     def test_two_overlapping_reconnects_are_one_replay(self, console):
         """The sequential case is refused by the timer the first reconnect installed; two
         calls that overlap have no such guard yet, and each of them used to read the tail,
-        open the panel and shout 「已重新连接控制台」 for the same run — the boot step and a
-        「立即执行」 fire are the two callers that exist."""
+        open the panel and shout “已重新连接控制台” for the same run — the boot step and a
+        “立即执行” fire are the two callers that exist."""
         overlapped = console['reconnectOverlapped']
         assert overlapped['asked'] == 1, f'the tail was fetched {overlapped["asked"]} times for one replay'
         assert overlapped['shared'] is True, 'the second caller was handed its own promise, not the running one'

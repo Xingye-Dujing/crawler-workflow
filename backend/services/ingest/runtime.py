@@ -51,7 +51,7 @@ def source_stream(ctx: dict, nid: str, scope: str, label: str = ''):
         # kept=0,dropped>0 is a genuine ledger dedupe ("already collected"); kept=0,dropped=0 is
         # the STORAGE CAP (the row was never tried against the ledger, the store hit its limit and
         # already logged run.row_limit once). Tallied only the first: the console/advice says 开启
-        # 「重新采集」 to release the claim, but a capped row has no claim to release — that advice
+        # “重新采集” to release the claim, but a capped row has no claim to release — that advice
         # re-crawls into the same cap. And return True on a cap, so the pager does not read "the
         # site carried nothing new" from a local disk limit and print it as the site's own funnel.
         if not kept and dropped:

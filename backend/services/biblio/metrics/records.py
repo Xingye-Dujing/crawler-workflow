@@ -301,7 +301,7 @@ def _term_entities(row: dict, columns: dict) -> list[str]:
 def _label_value(value) -> str:
     """One upstream label cell as a graph-ready string, or '' for "no label".
 
-    A missing cell is '' — 「没有判断」 is not a category, and the text ``nan`` must never become a
+    A missing cell is '' — “没有判断” is not a category, and the text ``nan`` must never become a
     label called nan. An integral float (a cluster id that survived a CSV round trip as ``2.0``)
     loses its ``.0``, so the same document does not land in two categories across a resume.
     """

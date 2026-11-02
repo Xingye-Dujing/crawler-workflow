@@ -1,6 +1,6 @@
 """The browser catalogue is under test too, not only ``backend/i18n.py``.
 
-AGENTS: 「A missing `t()` keyword is a printed bug, not a crash」. The Python half has walked
+AGENTS: "A missing `t()` keyword is a printed bug, not a crash". The Python half has walked
 every call site with ``ast`` for a while; the JS half had no check at all, and two defects
 shipped because of it (both measured on screen 2026-09-28):
 
@@ -207,7 +207,7 @@ class TestJsCallSitePlaceholders:
         # What may not regress is that the dialog is told WHICH session is about to go.
         assert 'var who = entryLabels([{ platform: platform, account: account }]);' in source, (
             'the delete dialog stopped naming the ACCOUNT whose file is about to go — one platform '
-            'holds several logins, and 「删除 知乎 的 Cookie 文件」 while the box says `work` describes '
+            'holds several logins, and “删除 知乎 的 Cookie 文件” while the box says `work` describes '
             'a file this request does not touch'
         )
         assert "I18n.t('dialog.cookieDelete', { platform: who })" in source, (
@@ -220,7 +220,7 @@ class TestCatalogueShape:
     """Two ways a catalogue can be wrong that a parity scan cannot see.
 
     Both were found while writing the account list: the browser catalogue was missing the
-    key the server sends for 「默认账号2」 (so the panel would have printed
+    key the server sends for “默认账号2” (so the panel would have printed
     `cookies.accountDefaultNumbered` on screen), and one pre-existing key was simply
     written twice in each language.
     """
@@ -339,7 +339,7 @@ class TestJsNodeTypeWords:
     ``nodeType.<type>`` is assembled at the call site, so both existing scans are blind to it from
     the wrong side — the reachability audit walks keys that ARE defined (a missing one is invisible
     to it by construction) and the parity audit only compares the two languages, which can both be
-    missing. The settings header and the run-detail card then print the identifier: 「nodeType.fuse」
+    missing. The settings header and the run-detail card then print the identifier: "nodeType.fuse"
     was on screen for a whole commit after the fusion node shipped (measured 2026-10-24)."""
 
     def test_every_engine_node_type_is_named_in_both_languages(self):
@@ -417,7 +417,7 @@ class TestJsBiblioColumnWords:
     """…and the same for a stored column name, whose header word is computed too.
 
     ``biblio.col.<column>`` is built at the call site, so a column the server can emit but the
-    browser cannot name reads as an identifier in the workspace table — 「map」 in the middle of a
+    browser cannot name reads as an identifier in the workspace table — "map" in the middle of a
     Chinese table (the user's report, 2026-10-24). A column with no word is still shown as itself
     rather than as a key, but that fallback must never be what a SHIPPED column relies on."""
 

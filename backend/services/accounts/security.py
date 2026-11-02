@@ -96,7 +96,7 @@ def token_matches(given, expected) -> bool:
     """A constant-time comparison that survives whatever the client actually sent.
 
     ``hmac.compare_digest`` REFUSES a non-ASCII ``str``, and a client-supplied token is one: WSGI
-    hands back a header decoded latin-1, a form field decoded UTF-8. So 「café」 in the CSRF header
+    hands back a header decoded latin-1, a form field decoded UTF-8. So "café" in the CSRF header
     turned a refusal into an uncaught ``TypeError`` — an attacker-owned 500 on every write. The
     bytes are what the comparison is about.
     """

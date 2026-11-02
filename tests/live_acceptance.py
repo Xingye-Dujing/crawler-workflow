@@ -56,7 +56,7 @@ def comment_ask(*, limit: int, urls: list) -> int:
     """What a comment node was actually asked for, as a row count.
 
     ``comment_limit`` is per article, so the ask is the product — never 1. An open-ended walk
-    (``comment_limit: 0``, 「采集全部评论」) has no row budget the user wrote down, so the only number
+    (``comment_limit: 0``, “采集全部评论”) has no row budget the user wrote down, so the only number
     it can be graded against is one row per panel it was told to open.
     """
     return (limit or 0) * len(urls) if limit else max(1, len(urls))
@@ -223,7 +223,7 @@ def audit_components(run, *, records: dict, case_id: str, found: list, grade) ->
 
     A four-component run is four verdicts: rolling them into one number is how a half-empty crawl
     gets presented as a success, and grading them against the *whole* console is how one component's
-    honest 「没有更多了」 whitewashes another component's silence. Returns the silent ones, the rows
+    honest “没有更多了” whitewashes another component's silence. Returns the silent ones, the rows
     kept, the asks added up, and each component's own verdict — the last is what the summary row is
     derived from, so an index line can never read FULL over a run whose components did not.
     """
@@ -266,7 +266,7 @@ def audit_components(run, *, records: dict, case_id: str, found: list, grade) ->
 def assert_record_shape(run, records: dict, parts: list) -> None:
     """The run's rows are the shape the canvas mode promises — never a shape pinned to one mode.
 
-    AGENTS states the invariant (「并行是一条记录；串行是一 workflow 一行」); this is the only place that
+    AGENTS states the invariant (“并行是一条记录；串行是一 workflow 一行”); this is the only place that
     turns it into an assertion, so a canvas he flips 串行/并行 cannot redden a case whose every leg graded
     honestly. A hard-coded ``wf_count == N`` read the parallel shape into a serial run and failed at the
     reporting line while the crawl itself had delivered: the mode is read off the row, never remembered
@@ -397,7 +397,7 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
         count, _header = csv_row_count(mine[0])
         assert count == kept, f'{mine[0].name} holds {count} rows while the store holds {kept} for {part["label"]}'
         if part['mode'] == 'comments' and part['urls'] and part.get('per_article'):
-            # §3-C's 「文件数 == 文章数」: only when 每篇一个文件 is ACTUALLY switched on. An off comments
+            # §3-C's “文件数 == 文章数”: only when 每篇一个文件 is ACTUALLY switched on. An off comments
             # output writes one file named by its stem, and demanding ``len(urls)`` per-article files there
             # would convict a canvas the user never asked to split.
             per_article = [path for path in fresh if f'-{part["source"]}-' in path.name]

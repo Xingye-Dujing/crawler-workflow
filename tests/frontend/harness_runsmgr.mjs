@@ -176,7 +176,7 @@ const tagCases = {
     singleParallel: manager.tags({ mode: 'parallel', wf_count: 1, headless: 1 }),
     singleSerial: manager.tags({ mode: 'serial', wf_count: 1, headless: 0 }),
     /* forced_visible is retired (#148): nothing ever forces a window into a headless run, so a
-       legacy row that still carries the flag must read the same as a clean one — 「无头」. The flag
+       legacy row that still carries the flag must read the same as a clean one — “无头”. The flag
        is now inert on both a headless and a window run. */
     headlessForcedWindow: manager.tags({ mode: 'serial', wf_count: 1, headless: 1, forced_visible: 1 }),
     headlessClean: manager.tags({ mode: 'serial', wf_count: 1, headless: 1, forced_visible: 0 }),

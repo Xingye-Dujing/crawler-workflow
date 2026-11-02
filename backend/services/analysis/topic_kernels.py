@@ -385,7 +385,7 @@ def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd
             # An unused topic is the MODEL's answer, not the user's mistake (the same rule
             # 分阶段 LDA files a zero-doc row for). KMeans has no centroid to describe an empty
             # cluster, so there is no row to emit — but the run must say which topic it left out
-            # and that the requested count was not what came back, rather than print 「{n} 个主题」
+            # and that the requested count was not what came back, rather than print “{n} 个主题”
             # over the gap it just skipped.
             empty_clusters.append(f'Topic-{cluster + 1}')
             continue
@@ -621,21 +621,21 @@ def _fallback_topic_label(weights_str, words_str, topn: int = 6) -> str:
 def _label_from(answer) -> str:
     """The model's phrase as ONE cell: first non-empty line, decoration off, capped.
 
-    A small local model wraps the phrase in quotes, in 【】, or prefixes it with 「概括：」 even
+    A small local model wraps the phrase in quotes, in 【】, or prefixes it with “概括：” even
     when the prompt says not to. The cell goes straight into an exported table, so that is
     taken off here rather than in every reader's spreadsheet; the cap is what keeps one
     rambling answer from turning a 概括 column into a paragraph. An answer that leaves nothing
     returns ``''``, which the caller refuses instead of filing as a blank.
     """
     for line in str(answer or '').splitlines():
-        phrase = line.strip().strip('"“”\'`「」 ').strip()
+        phrase = line.strip().strip('"“”\'` ').strip()
         for prefix in ('主题概括', '概括', 'Summary', 'summary', 'Label', 'label'):
             if phrase.startswith(prefix):
                 phrase = phrase[len(prefix) :].lstrip('：: ').strip()
         phrase = phrase.strip('【】《》').strip('：:　').strip()
         # An answer with no letter, digit or ideograph in it is not a label: punctuation only
         # is what a small model returns when it has nothing to say, and filing it as a summary
-        # would put 「。」 in the column the paper's findings are read from.
+        # would put "。" in the column the paper's findings are read from.
         if phrase and any(char.isalnum() for char in phrase):
             return phrase[:60]
     return ''

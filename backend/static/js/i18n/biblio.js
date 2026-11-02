@@ -18,7 +18,7 @@
         'fuse.ui.sourceColumns': 'Source columns (a column naming the platform)',
         'fuse.ui.sourceLabels': 'Source names per parent',
         'fuse.ui.sourceLabelsPlaceholder': 'node-1 = 文献\nnode-3 = 微博',
-        'fuse.ui.sourceLabelsHint': 'One line per upstream node that carries no source column of its own: <node id> = <source name>. The name is written into every row that parent contributes, and a parent that says nothing is filed under its node id — never guessed as 「文献」.',
+        'fuse.ui.sourceLabelsHint': 'One line per upstream node that carries no source column of its own: <node id> = <source name>. The name is written into every row that parent contributes, and a parent that says nothing is filed under its node id — never guessed as “文献”.',
         'fuse.ui.keepUndated': 'Keep rows with no parseable year',
         'fuse.ui.exportFiles': 'Export the fused record table (CSV)',
         'fuse.ui.summary': 'Cross-source fusion',
@@ -147,7 +147,7 @@
         /* One word per column a Bibliometrics node can emit — the header of the workspace
            table. The KEY is the stored column name (what the CSV/GraphML on disk says) and the
            value is the word this interface shows, so a Chinese-named column reads as itself in
-           zh and as English in en, and 「map」 stops being an identifier in a Chinese table.
+           zh and as English in en, and "map" stops being an identifier in a Chinese table.
            `biblio.col.` is a computed root: a column with no entry here keeps its stored name
            rather than printing the key. */
         'biblio.col.节点': 'Node',
@@ -295,7 +295,7 @@
         'fuse.ui.sourceColumns': '来源候选列（表内标明平台的列）',
         'fuse.ui.sourceLabels': '为上游节点指定来源名',
         'fuse.ui.sourceLabelsPlaceholder': 'node-1 = 文献\nnode-3 = 微博',
-        'fuse.ui.sourceLabelsHint': '每行一个没有自带来源列的上游节点：<节点 id> = <来源名>。该名字会写进这个节点贡献的每一行；什么都没写的节点按其 id 登记，绝不替它猜一个「文献」。',
+        'fuse.ui.sourceLabelsHint': '每行一个没有自带来源列的上游节点：<节点 id> = <来源名>。该名字会写进这个节点贡献的每一行；什么都没写的节点按其 id 登记，绝不替它猜一个“文献”。',
         'fuse.ui.keepUndated': '保留解析不出年份的行',
         'fuse.ui.exportFiles': '导出融合后的记录表（CSV）',
         'fuse.ui.summary': '跨源融合',
@@ -326,7 +326,7 @@
         'biblio.ui.referenceColumn': '参考文献列',
         'biblio.ui.tcColumn': '被引次数列',
         'biblio.ui.usageColumn': '使用次数列',
-        'biblio.ui.columnsHint': '任何表都能接：爬取数据里的「话题/用户名/发布时间」也可以映射进来。实体列留空表示按实体类型使用 关键词/作者/作者单位/…；引文/耦合类模式需要参考文献列。',
+        'biblio.ui.columnsHint': '任何表都能接：爬取数据里的“话题/用户名/发布时间”也可以映射进来。实体列留空表示按实体类型使用 关键词/作者/作者单位/…；引文/耦合类模式需要参考文献列。',
         'biblio.ui.timeStart': '起始年（空 = 数据范围）',
         'biblio.ui.timeEnd': '结束年（空 = 数据范围）',
         'biblio.ui.sliceYears': '时间切片宽度（年）',
@@ -356,7 +356,7 @@
         'biblio.ui.counting': '计数方式',
         'biblio.counting.full': '整次计数（每次相遇记 1）',
         'biblio.counting.fractional': '分数计数（每篇文档只给 1 份信用）',
-        'biblio.ui.countingHint': '分数计数把每篇文档的 1 份信用均摊给它承载的连边对，于是引用 150 条的文章不再压过引用 12 条的文章。表里的「次数」仍是两者真实相遇的次数，只有连边强度被重新归一。耦合类节点没有这个选项：那类图里两篇施引文献本身就是连边的两端。',
+        'biblio.ui.countingHint': '分数计数把每篇文档的 1 份信用均摊给它承载的连边对，于是引用 150 条的文章不再压过引用 12 条的文章。表里的“次数”仍是两者真实相遇的次数，只有连边强度被重新归一。耦合类节点没有这个选项：那类图里两篇施引文献本身就是连边的两端。',
         'biblio.ui.maxLinks': '每节点最大连边',
         'biblio.ui.lrf': '连边保留因子',
         'biblio.ui.pruning': '剪枝',
@@ -413,7 +413,7 @@
         'biblio.ui.correctionHint': '别名与排除在建图前生效，并参与节点指纹；续跑不会悄悄复用未校正的图。',
         'biblio.ui.clusterLabels': '人工簇标签',
         'biblio.ui.clusterLabelsPlaceholder': '#0 = 数字政府研究\n#1 = 数据制度',
-        'biblio.ui.clusterLabelsHint': '每行「#簇号 = 标签」，优先于 LLR/LSI/MI/TF-IDF 的结果，并计入节点指纹；指到本次运行不存在的簇会在控制台点名，不会静默丢弃。',
+        'biblio.ui.clusterLabelsHint': '每行“#簇号 = 标签”，优先于 LLR/LSI/MI/TF-IDF 的结果，并计入节点指纹；指到本次运行不存在的簇会在控制台点名，不会静默丢弃。',
         'biblio.ui.outputShape': '输出形态',
         'biblio.shape.nodes': '节点表（一行一个节点）',
         'biblio.shape.edges': '边表',
@@ -474,7 +474,7 @@
         'biblio.ui.watchProject': '监测项目',
         'biblio.ui.watchBaseline': '基准快照',
         'biblio.ui.watchLabel': '本次捕获名',
-        'biblio.ui.watchHint': '填了项目名，本次图谱就会存进该项目并与上一次捕获对比：新增/消失的节点与连边、新簇、新突现逐条列出，另存一份变化表 CSV；把这张画布交给顶栏「定时任务」按周期跑，就是领域监测。项目不存在时自动新建。',
+        'biblio.ui.watchHint': '填了项目名，本次图谱就会存进该项目并与上一次捕获对比：新增/消失的节点与连边、新簇、新突现逐条列出，另存一份变化表 CSV；把这张画布交给顶栏“定时任务”按周期跑，就是领域监测。项目不存在时自动新建。',
         'biblio.ui.exportHint': '文件写入导出目录，并登记到本次运行。',
         'biblio.ui.section.network': '网络',
         'biblio.ui.section.cluster': '聚类',
@@ -512,7 +512,7 @@
         'biblioWs.createProject': '新建',
         'biblioWs.snapshotLabel': '快照标签',
         'biblioWs.capture': '存为快照',
-        'biblioWs.captureDone': '已存快照「{label}」',
+        'biblioWs.captureDone': '已存快照“{label}”',
         'biblioWs.captureNeedsNode': '先选择一次运行里的文献计量节点',
         'biblioWs.captureNeedsProject': '先选择或新建一个项目',
         'biblioWs.project_needs_name': '项目需要一个名字',

@@ -136,7 +136,7 @@ class FakeDriver:
         # what the video/search fixtures hold (an error page's own words, for instance).
         self.body = body
         # What the RESULT list's body says (the video page's own body is ``video_body``). The list's
-        # end-of-line sentence 「暂时没有更多了」 decides whether a walk that stops short is the site out
+        # end-of-line sentence “暂时没有更多了” decides whether a walk that stops short is the site out
         # of supply or our scroll failing, so a case has to be able to state it — and ``body`` cannot
         # carry it, because that overrides every page including the detail one.
         self.list_body = list_body
@@ -181,7 +181,7 @@ class FakeDriver:
         # The page's own ``<title>``, which is where douyin announces the captcha
         # interstitial — no URL pattern says it.
         self.title = title
-        # Is the 「保存登录信息」 mask up? It still mounts a few seconds after the
+        # Is the “保存登录信息” mask up? It still mounts a few seconds after the
         # page, and dismissal is the cheap case the crawler must handle.
         self.dialog = dialog
         self.dismissals = 0
@@ -285,8 +285,8 @@ class FakeDriver:
     def _douyin_readings(self):
         """What the panel JS returns: each mounted item as {own, replies}.
 
-        ``own`` keeps the 「展开N条回复」 label while the thread is collapsed (so the parent row reads its
-        declared count) and swaps it for 「收起」 once expanded; ``replies`` are non-empty only after the
+        ``own`` keeps the “展开N条回复” label while the thread is collapsed (so the parent row reads its
+        declared count) and swaps it for “收起” once expanded; ``replies`` are non-empty only after the
         native click expanded that item — which is how the fake proves the product reads replies it opened.
         """
         out = []
@@ -540,7 +540,7 @@ class TestPureHelpers:
     def test_a_wrapped_comment_keeps_every_line_and_its_own_numbers(self):
         """A comment that wraps is one comment, not a first line plus a lost tail.
 
-        The text used to be ``lines[1]``, so the second line of a wrapped comment disappeared (「不漏采」
+        The text used to be ``lines[1]``, so the second line of a wrapped comment disappeared (“不漏采”
         is the whole purpose of this table) and a number the commenter typed on its own line was read as
         点赞数 by the bare-digit rule — a figure under a plausible column name that nobody on the page
         ever claimed was a like count.
@@ -552,7 +552,7 @@ class TestPureHelpers:
         assert (author, when, region, likes, subs) == ('路人', '1天前', '广东', 7, 0)
 
     def test_a_timestamp_is_never_filed_as_the_comment_text(self):
-        """The block shape that used to write 「1天前·北京」 into 评论内容: the time line is the anchor.
+        """The block shape that used to write “1天前·北京” into 评论内容: the time line is the anchor.
 
         An author whose name renders empty collapses its line (the docstring's own case), and index-based
         reading then shifted every field up one — the row kept a plausible 楼层 while its text column held
@@ -656,7 +656,7 @@ class TestVideoDetail:
         """The 2026-09-28 half of the same measurement: a *named* blank row is still a blank row.
 
         Live cell A1 filed ``7687166416143123826`` with no 标题, no 正文, no 发布时间 and four zero
-        counters, and counted it as 「当前有效数据: 7 条」 — the page was still hydrating, the author reader
+        counters, and counted it as “当前有效数据: 7 条” — the page was still hydrating, the author reader
         had picked up a recommendation-rail account, and the old guard accepted any row carrying an author
         **or** a date. Probing that same address seconds later returned a caption, an author and a date, so
         the blank was a race, and a race must cost a retry, not a row of the user's target.
@@ -689,9 +689,9 @@ class TestVideoDetail:
         """A per-row wall is named as a wall, and it does not latch ``login_wall``.
 
         Measured 2026-09-28: 15 of 39 detail pages on one keyword were 图文 posts the site answers with
-        「验证码中间页」, while the video pages around them round-trip fine. Saying 「没有渲染出数据» about that
+        “验证码中间页”, while the video pages around them round-trip fine. Saying “没有渲染出数据” about that
         points the repair at the parser; latching the session flag about it would settle the whole node as
-        「COOKIE 可能过期」. Both are wrong, and this row is the difference.
+        “COOKIE 可能过期”. Both are wrong, and this row is the difference.
         """
         crawler, _driver = make_crawler(cards=[ID], title='验证码中间页', video_body='')
         assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None, 'a captcha plate is not a row'
@@ -750,7 +750,7 @@ class TestAuthorProfile:
 
         The old :meth:`DouyinCrawler._scroll_profile` took one jump and, when the count did not move,
         returned False — so ``_harvest_pool`` drained and the author walk stopped at its first screen
-        (measured: 20 rows of a 145-work profile, no 「暂时没有更多了」, a silent shortfall). The fix
+        (measured: 20 rows of a 145-work profile, no “暂时没有更多了”, a silent shortfall). The fix
         re-approaches the bottom within the budget; this fixture makes the FIRST container jump a
         no-op (``grid_void_jumps=1``) and the SECOND reveal the next batch, so the walk reaching both
         ids is the proof. A single-approach walker would land on ``[ID]`` only.
@@ -791,7 +791,7 @@ class TestAuthorProfile:
     ):
         """The live-exposed gap: the grid arrived and paged, but NO overlay opened → 0 rows. That is a
         failed read, not the site running out — convict it (``UNDER_TARGET``, resumable) rather than
-        let the list's 「没有更多了」 license an empty as ``site_end`` / settle 完成."""
+        let the list's “没有更多了” license an empty as ``site_end`` / settle 完成."""
         crawler, _driver = make_crawler(cards=[])
         self._author_shape(crawler, monkeypatch, modal_deferred=12, list_end=True, seeded_rows=[])
         rows = crawler.author(SEC, target_count=12)
@@ -1001,7 +1001,7 @@ class TestComments:
         assert rows[1]['评论内容'] == '子回复' and rows[1]['评论地区'] == '上海'
 
     def test_a_failed_expand_is_tried_once_then_skipped_not_retried(self, make_crawler, monkeypatch):
-        """A thread that only pops 「评论已删除 / 不可见」 is uncrawlable — tried ONCE, never re-clicked.
+        """A thread that only pops “评论已删除 / 不可见” is uncrawlable — tried ONCE, never re-clicked.
 
         The opener's click does not render replies (``_expandable=False``), the way a deleted/hidden
         comment behaves live. The walk must file only the parent (with its declared 子回复数), not hang or
@@ -1117,7 +1117,7 @@ class TestComments:
         """The gap is said with the site's own denominator, and the nested replies are not stolen from it.
 
         Measured 2026-09-28: 3388 declared, 406 rows, Σ子回复数 1062 — so a completion test that compared
-        rows with 3388 would cry 「还差 2982 条」 on a walk that had read every top-level comment the panel
+        rows with 3388 would cry “还差 2982 条” on a walk that had read every top-level comment the panel
         gives. The line therefore reports all four figures and compares against ``declared - nested``.
         """
         screens = [[El('路人1\n第一条\n1天前·北京\n0'), El('路人2\n第二条\n1天前·上海\n3\n展开3条回复')]]
@@ -1127,7 +1127,7 @@ class TestComments:
         rows, _status = session.walk('douyin', f'https://www.douyin.com/video/{ID}', 0)
         assert len(rows) == 2 and rows[1]['子回复数'] == 3
         # The scroll that grew nothing ended this walk (single screen, so the panel never grew), and the
-        # line says so: a gap without its exit reason reads as 「the site has no more」 either way.
+        # line says so: a gap without its exit reason reads as "the site has no more" either way.
         assert t(
             'comment.dyShort',
             url=f'https://www.douyin.com/video/{ID}',
@@ -1192,9 +1192,9 @@ class TestComments:
 
         Measured 2026-09-28 on ``7000000000000000001`` (three visits): the browser left
         ``/video/7000000000000000001`` for ``/jingxuan?modal_id=…``, a different substitute each time, and
-        the panel never mounted. The old read logged 「该视频计有 1214 条评论」 — the *substitute's* counter —
+        the panel never mounted. The old read logged “该视频计有 1214 条评论” — the *substitute's* counter —
         as BLOCKED, and the node then accused the user's cookie of expiring in the same run that crawled the
-        next link's eight comments. The address is the stable half of that measurement: the 「视频不存在」
+        next link's eight comments. The address is the stable half of that measurement: the “视频不存在”
         plate appeared on one visit out of three, so it is not what the product may key on.
         """
         asked = 'https://www.douyin.com/video/7000000000000000001'
@@ -1217,7 +1217,7 @@ class TestComments:
         assert rows == [] and status == BLOCKED, f'no panel and no substitution is a wall: {status!r}'
 
     def test_a_substitution_is_refused_before_the_panel_is_walked(self, make_crawler):
-        """The address test runs ahead of the mount branch, not inside the 「没挂载」 arm.
+        """The address test runs ahead of the mount branch, not inside the “没挂载” arm.
 
         The first version of the fix only fired when the panel failed to mount, so a substituted page that
         mounted its own panel happily was still walked — and every comment of the stranger's video would
@@ -1465,7 +1465,7 @@ class TestSlowNetworkIsNotBlamedOnTheSite:
 
     Measured on a real run and confirmed by the user watching the window: on a bad
     connection douyin's pages simply do not arrive inside ``page_load_timeout``, and
-    before this distinction existed the run answered 「只可能是被拦截或页面出错」 —
+    before this distinction existed the run answered “只可能是被拦截或页面出错” —
     sending the user to re-save a cookie that was fine, or to blame a site that was
     merely slow. ``Crawler.open`` already knew the difference; both douyin call sites
     were throwing the answer away.
@@ -1518,7 +1518,7 @@ class TestTheBrowserRefusedThePage:
         message = str(err.value)
         assert 'ERR_NAME_NOT_RESOLVED' in message, message
         # The two sentences this one must not be confused with: the exclusivity claim
-        # (「只可能是被拦截…」) belongs to a page that arrived and stayed empty, and a
+        # (“只可能是被拦截…”) belongs to a page that arrived and stayed empty, and a
         # cookie is not in question when the site never saw the request.
         assert '只可能是' not in message, message
         assert 'Cookie' not in message and '登录' not in message, message

@@ -1463,7 +1463,7 @@ class TestSuggestStages:
         maximum on the shoulder between them — and when the floor was then tested against the
         RAW value at that position, the shoulder failed it and the whole burst disappeared.
         On the event that is the flagship of this project, that left one peak in the 76-day
-        curve and the step answered 「曲线只有一段」 next to a secondary 587-row burst on 02-16.
+        curve and the step answered “曲线只有一段” next to a secondary 587-row burst on 02-16.
         A summit is now a RUN of days clearing the floor, so this curve cuts into two windows
         and the second one still carries its own tallest day (8 rows on 05-10).
         """
@@ -1834,7 +1834,7 @@ class TestTopicLabel:
         assert caplog.text.count('TopicⅠ-2') == 1, 'one failure, one line'
 
     def test_an_answer_of_punctuation_is_a_failure_not_an_empty_cell(self):
-        client = self._Client(answer='「」。')
+        client = self._Client(answer='""。')
         with pytest.raises(UnknownOperationError, match='TopicⅠ-1'):
             D.topic_label(self._topics(), llm=client)
 
@@ -1854,7 +1854,7 @@ class TestTopicLabel:
         assert out.at[0, '主题概括'] == '对事件细节的追问', 'the topics the model answered keep that answer'
 
     def test_fallback_labels_a_punctuation_answer_from_its_words(self):
-        out = D.topic_label(self._topics(), llm=self._Client(answer='「」。'), on_fail='fallback')
+        out = D.topic_label(self._topics(), llm=self._Client(answer='""。'), on_fail='fallback')
         assert (out['主题概括'] != '').all() and all('·' in v for v in out['主题概括'])
 
     def test_fallback_does_not_ask_the_model_any_fewer_times(self):
@@ -2501,7 +2501,7 @@ class TestTopicMethodAuto:
         assert not out.empty, 'auto staged step produced nothing on a torch-less machine'
 
     def test_auto_falls_back_for_the_discovery_step_too(self, monkeypatch):
-        """The literal 「新建画布主题步」. An untouched topic_model defaults to auto, and on a
+        """The literal “新建画布主题步”. An untouched topic_model defaults to auto, and on a
         machine with no torch/sentence-transformers that default must return a real LDA table —
         the optional encoder can never block the generic path. Only an EXPLICIT embedding choice
         refuses (see the next test), because a model the user named is not silently swapped."""
@@ -3430,7 +3430,7 @@ class TestSentimentEvolution:
     def test_volume_pct_is_the_heat_the_paper_reads_against_intensity(self):
         # 发酵期 349 and 爆发期 7624 rows: the shares are over the rows that reached a
         # period, so they add up to 100 and the 爆发期 bar is the tall one — which is the
-        # half of 「热度与情感强度成反比」 that is not about sentiment at all.
+        # half of “热度与情感强度成反比” that is not about sentiment at all.
         out = D.sentiment_evolution(self._frame({'发酵期': (349, 0, 0), '爆发期': (7624, 0, 0)}), 'period')
         assert out.at[0, 'volume_pct'] == pytest.approx(4.38, abs=0.01)
         assert out['volume_pct'].sum() == pytest.approx(100.0, abs=0.02)

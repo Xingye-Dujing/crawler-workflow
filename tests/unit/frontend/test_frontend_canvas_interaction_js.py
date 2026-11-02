@@ -323,7 +323,7 @@ class TestCameraAnimation:
 
 
 class TestNewWorkflow:
-    """「新建」 is a fresh canvas, not the old one with its nodes deleted: the outline sidebar
+    """“新建” is a fresh canvas, not the old one with its nodes deleted: the outline sidebar
     must empty immediately (it is otherwise rebuilt only at saveState, which a bare 新建 never
     runs) and the camera must reset to 100% instead of inheriting the last zoom/pan."""
 
@@ -590,7 +590,7 @@ class TestPaletteKeyboardAdd:
         assert p['emptyTypeNull'] is True, 'an empty palette type must be a no-op, not a node'
 
     def test_a_disabled_type_cannot_be_added_from_the_library(self, ix):
-        """「禁用此类型」 hid the context-menu action, but the palette had no check — a disabled
+        """“禁用此类型” hid the context-menu action, but the palette had no check — a disabled
         type came straight back on a click, so one rule was asked twice with different answers."""
         p = ix['palette_keyboard']
         assert p['disabledAddNull'] is True, 'a disabled type still added a node'
@@ -874,7 +874,7 @@ class TestContextMenu:
         assert ix['context_menu']['fold_action']['nodes'] == 1
 
     def test_a_folded_node_offers_the_other_half_of_the_action(self, ix):
-        """The row changes its mind with the node: a menu that keeps saying 「折叠」
+        """The row changes its mind with the node: a menu that keeps saying “折叠”
         after the node is folded offers an action that does nothing visible, which
         reads as a broken item rather than as a toggle."""
         got = ix['context_menu']['on_folded']

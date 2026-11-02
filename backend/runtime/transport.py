@@ -12,7 +12,7 @@ from i18n import t
 
 
 def _local_transport_refusal(provider: str) -> str:
-    """Why a cloud host answers 「没有这种传输」, or '' when the choice is one it can honor.
+    """Why a cloud host answers “没有这种传输”, or '' when the choice is one it can honor.
 
     The flag is the server's (`python app.py cloud`), because the panel only hides the
     Ollama controls — a request still arrives from a saved workflow, an old tab, or a

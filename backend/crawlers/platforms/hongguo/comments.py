@@ -16,7 +16,7 @@ capture kept from a real player session):
   each element ``{Common:{…}, reply_id, reply_to_comment_id, expand, stat}`` — a CAPITALISED
   body key, its own id field, no ``data_list`` at all, and the parent comment in ``data.comment``.
 
-Reading only ``data_list`` from a reply page yields nothing, which is how 「包含子回复」 sat in
+Reading only ``data_list`` from a reply page yields nothing, which is how “包含子回复” sat in
 the settings panel for a day while every one of the 53 expansion clicks a real walk made
 answered zero rows. :func:`hg_comment_rows` therefore normalises the reply element into the
 ``comment/list`` shape and keeps ONE row builder — a second parser would drift.
@@ -106,7 +106,7 @@ def _one_comment(
 ) -> dict | None:
     """One ``data_list`` entry → a comment row; ``None`` when it is not one.
 
-    A danmaku-guide row is the feed's own prompt (「发送弹幕…」), not a comment: it carries
+    A danmaku-guide row is the feed's own prompt (“发送弹幕…”), not a comment: it carries
     an activity block and ``create_timestamp == 0``. Dropping it is the difference
     between a comment table and a table that claims the site's prompts are opinions.
 
@@ -176,7 +176,7 @@ def _reply_entry(element):
     common = element.get('Common')
     if not isinstance(common, dict):
         # A payload that capitalises nothing (a shape change) is refused here loudly — the
-        # element drops out as 「not a comment」 rather than becoming a blank row.
+        # element drops out as "not a comment" rather than becoming a blank row.
         return None
     return {
         'comment': {

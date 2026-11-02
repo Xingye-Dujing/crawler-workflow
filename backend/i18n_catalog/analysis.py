@@ -6,7 +6,7 @@ Keys are sorted; the two tables in here must hold the same set (``tests/unit/i18
 """
 
 ZH = {
-    'accumulate.done': '累积数据集「{name}」：新增 {added} 行，当前共 {total} 行（版本 {version}）',
+    'accumulate.done': '累积数据集“{name}”：新增 {added} 行，当前共 {total} 行（版本 {version}）',
     'aggression.lexicon_done': (
         '网暴言论识别（词库）：{rows} 行中 {violent} 行含暴力言论，其中 {severe} 行为严重'
         '（漏报无法度量：词表之外的说法看不见）'
@@ -19,13 +19,13 @@ ZH = {
     'analysis.alert_none_log': '预警检查了 {checked} 期：连续 {streak} 期、幅度阈值 {swing}，一条都没触发',
     'analysis.alert_reason': '连续 {streak} 期变化 {moves}；强度斜率 {intensity}；本期热度 {volume}（{held}）',
     'analysis.alert_rows': '预警至少要比连续期数多一行：需要 {least} 行，只有 {rows} 行',
-    'analysis.alert_skipped': '「{col}」有 {n} 行解析不出日期，它们不参与预警判断',
+    'analysis.alert_skipped': '“{col}”有 {n} 行解析不出日期，它们不参与预警判断',
     'analysis.alert_streak': '连续期数至少是 1，收到 {value}',
-    'analysis.alert_threshold': '「{name}」阈值必须大于 0，收到 {value}',
-    'analysis.bad_option': '「{op}」的「{param}」没有「{value}」这个选项（可用：{allowed}）',
+    'analysis.alert_threshold': '“{name}”阈值必须大于 0，收到 {value}',
+    'analysis.bad_option': '“{op}”的“{param}”没有“{value}”这个选项（可用：{allowed}）',
     'analysis.bert_fallback': '{op} 的 bert 不可用（{reason}），本次改用 {used} 产出结果（非 bert）',
     'analysis.bin_failed': '列 {col} 分箱失败：{err}',
-    'analysis.bot_col_missing': '水军可能性需要「{col}」列，表里没有',
+    'analysis.bot_col_missing': '水军可能性需要“{col}”列，表里没有',
     'analysis.bot_done': '水军可能性：{rows} 行里 {flagged} 行被标为可疑（来自 {authors} 个作者）',
     'analysis.bot_evidence_burst': '发帖突发：某10分钟窗内达 {peak} 条（各作者峰值中位 {median}）',
     'analysis.bot_evidence_dup': '与他人文本高度雷同（{ratio}）',
@@ -55,7 +55,7 @@ ZH = {
     'analysis.coherence_row': 'n_topics={topics}  coherence={coherence}  perplexity={perplexity}',
     'analysis.coherence_sampled': '主题数扫描只抽 {used} 篇文本（共 {total} 篇可用），换个样本数字会变',
     'analysis.col_missing': '未找到列“{col}”',
-    'analysis.compare_agg': '{op}：未知聚合「{agg}」，数值列只支持 sum 或 mean（列名按聚合命名，名实必须相符）',
+    'analysis.compare_agg': '{op}：未知聚合“{agg}”，数值列只支持 sum 或 mean（列名按聚合命名，名实必须相符）',
     'analysis.compare_done': '跨平台对比：{platforms} 个平台（数值列 {value}）',
     'analysis.compare_unmeasured': '{col} 在平台 {platforms} 没有可用的数值，结果留空而不是记 0',
     'analysis.cooccur_count': '共现次数阈值至少是 1，收到 {value}',
@@ -65,29 +65,29 @@ ZH = {
     'analysis.cooccur_words': '只选出 {found} 个候选词，凑不出一对共现（要求前 {topn} 个）',
     'analysis.dedupe_distance': '近重复去重支持的距离是 0–{max} 位，收到 {value}，已拒绝（不做全量两两比对）',
     'analysis.dedupe_similar': (
-        '近重复去重：在「{column}」上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
+        '近重复去重：在“{column}”上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
     ),
     'analysis.evolution_done': (
-        '情感演化：按「period」聚合出 {n} 个时段（{periods}），情感指数 =(积极−消极)/总数 ∈ [-1, 1]'
+        '情感演化：按“period”聚合出 {n} 个时段（{periods}），情感指数 =(积极−消极)/总数 ∈ [-1, 1]'
     ),
     # The intensity curve is only honest if the periods it could not score say so: a blank
     # in an exported table is invisible, and 0.5 would print as "measured, and neutral".
-    'analysis.evolution_unscored': '「{col}」在时段「{periods}」里一行分数都没有，这些时段的情感强度留空',
+    'analysis.evolution_unscored': '“{col}”在时段“{periods}”里一行分数都没有，这些时段的情感强度留空',
     'analysis.flow_done': '主题流向：{stages} 个阶段之间得到 {edges} 条边（阈值 {value}，实测最高 {best}）',
     'analysis.flow_no_edges': ('没有一条主题流向达到阈值 {value}：实测最相似的一对是 {best}，把阈值调到它以下再来'),
-    'analysis.flow_similarity': '「流向相似度阈值」要在 0 到 1 之间，收到 {value}',
-    'analysis.flow_stage_empty': '阶段「{stage}」里没有主题行（先检查「{col}」）',
+    'analysis.flow_similarity': '“流向相似度阈值”要在 0 到 1 之间，收到 {value}',
+    'analysis.flow_stage_empty': '阶段“{stage}”里没有主题行（先检查“{col}”）',
     'analysis.flow_stages': '主题流向至少要 2 个相邻阶段，现在只有 {stages} 个',
-    'analysis.flow_weights': '{topic}（阶段「{stage}」）的「{col}」里没有可用的词权重，无法算分布差异',
-    'analysis.forecast_dates': '「{col}」不是能解析成日期的时段列（一个日期都没有）：阶段名没法外推',
+    'analysis.flow_weights': '{topic}（阶段“{stage}”）的“{col}”里没有可用的词权重，无法算分布差异',
+    'analysis.forecast_dates': '“{col}”不是能解析成日期的时段列（一个日期都没有）：阶段名没法外推',
     'analysis.forecast_done': '{method} 外推：{rows} 期观测，往后 {horizon} 步，间隔 {gap} 天（末期 {last}）',
-    'analysis.forecast_duplicate': '「{col}」里有同一天出现两行：{days}（两行会被当成趋势的两步）',
+    'analysis.forecast_duplicate': '“{col}”里有同一天出现两行：{days}（两行会被当成趋势的两步）',
     # ── 往前看：曲线外推与二次爆发预警 ──
     'analysis.forecast_horizon': '外推步数至少是 1，收到 {value}（0 步只是把最后一格再抄一遍）',
     'analysis.forecast_rows': '外推至少要 {least} 期观测，这一列只有 {rows} 期同时给出时间与数值',
     'analysis.forecast_season': '季节类方法的周期长度至少 2 期，收到 {value}',
     'analysis.forecast_season_rows': '季节方法观测不足：至少要 {season} 期，本列只有 {rows} 期',
-    'analysis.forecast_smooth': '平滑系数「{name}」要在 0 与 1 之间（不含两端），收到 {value}',
+    'analysis.forecast_smooth': '平滑系数“{name}”要在 0 与 1 之间（不含两端），收到 {value}',
     'analysis.forecast_uneven': '时段间隔不齐：{rows} 期里有 {steps} 步不是 {gap} 天，未来格按 {gap} 天间隔标注',
     'analysis.forecast_window': '移动平均的窗口至少 2 期才能平均，收到 {value}',
     'analysis.forecast_window_rows': '窗口 {window} 期至少要留一期来预测，这一列只有 {rows} 期',
@@ -103,33 +103,33 @@ ZH = {
     'analysis.label_done': '主题概括：{n} 个主题已写出（模型 {model}）',
     'analysis.label_empty': '{topic} 的主题概括是空的（模型只回了标点）',
     'analysis.label_failed': '{topic} 的主题概括失败：{err}',
-    'analysis.label_fallback': '主题「{topic}」未获模型概括，已按其权重词回退标注（{reason}）',
+    'analysis.label_fallback': '主题“{topic}”未获模型概括，已按其权重词回退标注（{reason}）',
     'analysis.label_fallback_all': '{n} 个主题无模型可用，全部按权重词回退标注',
     # 主题概括：一行一次模型调用，所以失败要说清是哪个主题，停手也要说清还剩几个没问。
-    'analysis.label_no_llm': '「{op}」没有拿到模型客户端：只有画布上的运行才带模型',
-    'analysis.label_no_words': '{topic} 的「{col}」是空的，没有特征词就没有可概括的东西',
+    'analysis.label_no_llm': '“{op}”没有拿到模型客户端：只有画布上的运行才带模型',
+    'analysis.label_no_words': '{topic} 的“{col}”是空的，没有特征词就没有可概括的东西',
     'analysis.label_prompt': (
         '你是舆情分析研究员。下面是某网络暴力事件在一个阶段里一个主题的特征词与代表文本。'
         '请用不超过 15 个汉字概括这个主题在说什么；只输出概括本身，不要解释、不要引号。\n'
         '阶段：{stage}\n主题编号：{topic}\n特征词：{words}\n代表文本：{samples}'
     ),
     'analysis.label_too_many': '主题概括要逐主题问模型：{rows} 行超过了上限 {limit}，请先把主题表缩小',
-    'analysis.multi_models_run': '多模型对比：本次用 {n} 个模型跑「{op}」：{models}',
-    'analysis.need_multi_models': '「{op}」的 bert 模式要多模型对比至少需 2 个模型（当前 {n} 个）',
+    'analysis.multi_models_run': '多模型对比：本次用 {n} 个模型跑“{op}”：{models}',
+    'analysis.need_multi_models': '“{op}”的 bert 模式要多模型对比至少需 2 个模型（当前 {n} 个）',
     # A count the step reads as an integer. The panel cannot send junk here (the normalizer drops
     # an unreadable box to the default), but a hand-written workflow file and /api/analysis/run
     # both reach the service, where int('abc') would otherwise surface as an opaque node failure.
-    'analysis.need_number': '「{op}」的「{param}」要是一个整数，收到「{value}」',
+    'analysis.need_number': '“{op}”的“{param}”要是一个整数，收到“{value}”',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
     # storage names on purpose: they are what the caller of /api/analysis/run wrote,
     # and what the Settings panel stores in the node's JSON, so a person fixing a
     # hand-written pipeline can match them against the file they edited.
-    'analysis.need_param': '「{op}」缺少「{param}」，请先填写',
-    'analysis.rename_blank': '「{op}」：这些列的新名字是空的，请填写：{cols}',
+    'analysis.need_param': '“{op}”缺少“{param}”，请先填写',
+    'analysis.rename_blank': '“{op}”：这些列的新名字是空的，请填写：{cols}',
     'analysis.reply_graph_done': '回复传播图：{edges} 条边、{nodes} 个节点',
     'analysis.reply_graph_no_edges': (
-        '回复传播图找不到可关联的回复：请确认「评论者」「楼层」「父楼层」三列存在，'
-        '且确有回复行的「父楼层」能对上某条顶层评论的「楼层」'
+        '回复传播图找不到可关联的回复：请确认“评论者”“楼层”“父楼层”三列存在，'
+        '且确有回复行的“父楼层”能对上某条顶层评论的“楼层”'
     ),
     'analysis.review_cancelled': '已停止：还有 {n} 个簇没问模型，它们的综述标为未处理',
     'analysis.review_done': '簇综述：{n} 个簇已写出（模型 {model}）',
@@ -150,17 +150,17 @@ ZH = {
         '\n'
         '{facts}'
     ),
-    'analysis.stage_blank': '「{col}」有 {n} 行没有阶段（时间戳没解析出来），它们不进任何主题模型',
-    # 分阶段主题模型。每一句都点名是哪个阶段、哪个主题，因为「某个阶段没跑出来」在一堆
+    'analysis.stage_blank': '“{col}”有 {n} 行没有阶段（时间戳没解析出来），它们不进任何主题模型',
+    # 分阶段主题模型。每一句都点名是哪个阶段、哪个主题，因为“某个阶段没跑出来”在一堆
     # TopicⅠ-1 … TopicⅤ-4 里是查不出来的。
     'analysis.stage_order': (
-        '「{col}」这一列已经看不出阶段先后（跨节点会退化成普通文本）。把「按时间划分阶段」与它放在同一条'
-        '流水线，或填「阶段排序列」指向一个时间列'
+        '“{col}”这一列已经看不出阶段先后（跨节点会退化成普通文本）。把“按时间划分阶段”与它放在同一条'
+        '流水线，或填“阶段排序列”指向一个时间列'
     ),
-    'analysis.stage_order_col': '「{op}」的「阶段排序列」在表里不存在：{col}',
-    'analysis.stage_order_unparsed': '「{col}」里排不出这些阶段的先后（没有任何可解析的时间）：{stages}',
+    'analysis.stage_order_col': '“{op}”的“阶段排序列”在表里不存在：{col}',
+    'analysis.stage_order_unparsed': '“{col}”里排不出这些阶段的先后（没有任何可解析的时间）：{stages}',
     'analysis.stage_order_unranked': (
-        '「{col}」里没有这些阶段的序号（要的是数字：划分阶段 的阶段序号，或 分阶段 LDA 的 stage_order）：{stages}'
+        '“{col}”里没有这些阶段的序号（要的是数字：划分阶段 的阶段序号，或 分阶段 LDA 的 stage_order）：{stages}'
     ),
     'analysis.stages_basis_first': '自曲线首日 {day} 起',
     'analysis.stages_basis_valley': '自谷底 {valley} 的次日起',
@@ -168,55 +168,54 @@ ZH = {
     'analysis.stages_edges': '建议边界 edges（左闭右开，末位是最后一天+1）：{edges}',
     'analysis.stages_folded': '曲线上的峰多于 {kept} 个，只保留最高的 {kept} 个（折掉了 {dropped} 个）',
     'analysis.stages_folded_windows': (
-        '{n} 个窗口短于「最短窗口」{days} 天，已并入相邻较长的窗口（一天冲上来的不算一个阶段）'
+        '{n} 个窗口短于“最短窗口”{days} 天，已并入相邻较长的窗口（一天冲上来的不算一个阶段）'
     ),
     'analysis.stages_labels': '建议阶段名 labels（与 edges 一一对应，仅占位，可改名）：{labels}',
     'analysis.stages_no_peak': (
         '发文量曲线里找不到 {ratio} 倍于日常（中位数 {floor} 行/日）的转折峰，'
         '这一列撑不起阶段划分——曲线只有一段，就不要切成多段'
     ),
-    'analysis.stages_ratio': '「峰倍率」至少要是 1（高于平常的一天才算峰），收到 {value}',
+    'analysis.stages_ratio': '“峰倍率”至少要是 1（高于平常的一天才算峰），收到 {value}',
     # A boundary PROPOSAL: this step rewrites no row and does not decide when the event
     # turned — that needs the dates the researcher knows (the notice, the apology, the
     # filing), which are not in the post counts.
     'analysis.stages_sparse': '这一列只有 {days} 天有记录，切不出阶段（至少需要 {least} 天）',
-    'analysis.step_col_missing': '「{op}」：表里没有名为「{col}」的列',
-    'analysis.step_cols_missing': '「{op}」：表里没有这些列：{cols}',
+    'analysis.step_col_missing': '“{op}”：表里没有名为“{col}”的列',
+    'analysis.step_cols_missing': '“{op}”：表里没有这些列：{cols}',
     'analysis.time_bin_edges': '时间分段里有无法解析成日期的边界：{edges}',
-    'analysis.time_bin_labels': '时间分段需要「边界数 = 阶段名数 + 1」，现在是 {edges} 个边界、{labels} 个名称',
+    'analysis.time_bin_labels': '时间分段需要“边界数 = 阶段名数 + 1”，现在是 {edges} 个边界、{labels} 个名称',
     'analysis.time_bin_order': '{op} 的边界必须按时间从早到晚排列',
     'analysis.time_binned': '{col} 划分完成：{detail}',
     'analysis.time_unparsed': (
-        '「{col}」有 {n} 行不是可解析的时间（站点只给了相对标签，如「09月26日 21:00」），已留空而不是猜一个年份'
+        '“{col}”有 {n} 行不是可解析的时间（站点只给了相对标签，如“09月26日 21:00”），已留空而不是猜一个年份'
     ),
-    'analysis.timeline_blank': '「{col}」有 {n} 行不属于任何阶段，它们不进生命周期',
+    'analysis.timeline_blank': '“{col}”有 {n} 行不属于任何阶段，它们不进生命周期',
     'analysis.timeline_done': (
         '主题生命周期：{topics} 个主题（{stages} 个阶段），{multi} 个跨多阶段、{secondary} 个判为次生舆情'
         '（词重合阈值 {value}）'
     ),
-    'analysis.timeline_overlap': '「同主题词重合度」要在 0 到 1 之间，收到 {value}',
-    'analysis.timeline_partial': '「{col}」有 {n} 行不是数值，它们在峰值里按 0 计',
+    'analysis.timeline_overlap': '“同主题词重合度”要在 0 到 1 之间，收到 {value}',
+    'analysis.timeline_partial': '“{col}”有 {n} 行不是数值，它们在峰值里按 0 计',
     'analysis.timeline_secondary': '次生舆情：{topic} 的阶段路径 {path}',
-    'analysis.timeline_size': '「{col}」里一个数值都没有，峰值无从测量（留空不等于峰为 0）',
+    'analysis.timeline_size': '“{col}”里一个数值都没有，峰值无从测量（留空不等于峰为 0）',
     # ── 阶段之后的读数：主题生命周期、跨阶段流向、主题数扫描、共词 ──
     # Each refusal names the number it measured, so the fix is a choice with a figure in front
     # of it rather than a guess at what the step wanted.
-    'analysis.timeline_stages': '主题生命周期至少要 2 个阶段才谈得上「先后」，现在只有 {stages} 个',
-    'analysis.timeline_words': '阶段「{stage}」的 {topic} 在「{col}」里没有特征词，无法跨阶段追踪它',
+    'analysis.timeline_stages': '主题生命周期至少要 2 个阶段才谈得上“先后”，现在只有 {stages} 个',
+    'analysis.timeline_words': '阶段“{stage}”的 {topic} 在“{col}”里没有特征词，无法跨阶段追踪它',
     'analysis.topic_count': 'LDA 主题数至少要 2，收到 {value}（1 个主题只是"整段文本"）',
     'analysis.topic_done': (
         'LDA 主题模型：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}（数值越低拟合越好，但过小意味着在记原文）'
     ),
     'analysis.topic_embed_done': '嵌入主题：{model}，{n} 个主题，{rows} 行文本',
-    'analysis.topic_embed_failed': '句向量模型「{model}」加载或运行失败：{err}',
+    'analysis.topic_embed_failed': '句向量模型“{model}”加载或运行失败：{err}',
     'analysis.topic_embed_unavailable': '嵌入主题方法缺少可选依赖：{packages}（不回退到 LDA，请安装或改用 LDA）',
     'analysis.topic_empty_cluster': (
-        '嵌入主题「{topic}」没有分到任何文本：这是模型的答复，不是画布的错——'
-        '主题数 {n} 是请求值，模型实际只切出 {got} 个'
+        '嵌入主题“{topic}”没有分到任何文本：这是模型的答复，不是画布的错——主题数 {n} 是请求值，模型实际只切出 {got} 个'
     ),
     'analysis.topic_features': 'LDA 无法从这一列抽到特征词（可能整列都是标点或停用词）：{err}',
     'analysis.topic_lambda': 'λ 要在 0 到 1 之间（0=只看相对溢出，1=只看主题内概率），收到 {value}',
-    # 主题可视化（pyLDAvis 那两张图的数据面）。λ 是「按主题自身概率」还是「按相对全库的溢出」
+    # 主题可视化（pyLDAvis 那两张图的数据面）。λ 是“按主题自身概率”还是“按相对全库的溢出”
     # 排序，同一模型会给出两份不同的词表，所以用了哪个值必须随表一起说出来。
     'analysis.topic_map_done': (
         '主题距离图：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}'
@@ -231,17 +230,17 @@ ZH = {
     'analysis.topic_stage_counts': (
         '每阶段主题数要与阶段一一对应：{stages} 个阶段，收到 {counts}（只填一个数字表示各阶段同数）'
     ),
-    'analysis.topic_stage_done': '阶段「{stage}」：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}',
-    'analysis.topic_stage_empty': '阶段「{stage}」一行都没有，无法为它建模（先检查「{col}」的边界）',
-    'analysis.topic_stage_features': '阶段「{stage}」抽不到特征词：{err}',
-    'analysis.topic_stage_number': '每阶段主题数只能是整数，收到「{value}」',
+    'analysis.topic_stage_done': '阶段“{stage}”：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}',
+    'analysis.topic_stage_empty': '阶段“{stage}”一行都没有，无法为它建模（先检查“{col}”的边界）',
+    'analysis.topic_stage_features': '阶段“{stage}”抽不到特征词：{err}',
+    'analysis.topic_stage_number': '每阶段主题数只能是整数，收到“{value}”',
     'analysis.topic_stage_rows': (
-        '阶段「{stage}」只有 {rows} 篇可用文本，撑不起 {topics} 个主题（LDA 至少要有和主题数一样多的文本）'
+        '阶段“{stage}”只有 {rows} 篇可用文本，撑不起 {topics} 个主题（LDA 至少要有和主题数一样多的文本）'
     ),
     'analysis.topic_stage_topic_words': '{topic}（{stage}）: {words}',
-    'analysis.topic_stage_unused': '阶段「{stage}」的 {topic} 没有分到任何文本（doc_n=0），特征词改用该主题的词分布',
+    'analysis.topic_stage_unused': '阶段“{stage}”的 {topic} 没有分到任何文本（doc_n=0），特征词改用该主题的词分布',
     'analysis.topic_stage_words': (
-        '阶段「{stage}」的 {topic} 一个特征词都选不出来（没有文本归到这个主题，请调小该阶段的主题数）'
+        '阶段“{stage}”的 {topic} 一个特征词都选不出来（没有文本归到这个主题，请调小该阶段的主题数）'
     ),
     'analysis.type_convert_failed': '列 {col} 转换为 {dtype} 失败：{err}',
     'anomaly.done': '异常检测：{n}/{total} 行被标记（contamination={c:.2f}）',
@@ -252,7 +251,7 @@ ZH = {
     'anomaly.no_usable_columns': '异常检测：你指定的列都不是数值列（{columns}）',
     'anomaly.too_few': '行数过少（{n} < {min}），异常检测无法给出结论',
     'clean.regex_done': '正则清洗：保留 {kept} 行、判定删除 {dropped} 行（未做主题相关性判断，那需要 llm 模式）',
-    'clean.unknown_mode': '清洗节点没有名为「{mode}」的模式（可用：regex、llm）',
+    'clean.unknown_mode': '清洗节点没有名为“{mode}”的模式（可用：regex、llm）',
     'cluster.dbscan': 'DBSCAN 发现 {n} 个簇 + {noise} 个噪声点',
     'cluster.done': '聚类完成：{rows} 行分为 {clusters} 簇（轮廓系数={score:.3f}）',
     'cluster.no_features': '文本无法分词（可能只有符号），已跳过聚类：{err}',
@@ -262,22 +261,22 @@ ZH = {
     'corr.undefined_pairs': '相关性分析：以下列对算不出相关系数（可能是常数列或样本不足），未列入结果：{pairs}',
     'corr.need_cols': '相关性分析至少需要 2 个数值列',
     'corr.no_usable_columns': '相关性分析：你指定的列都不是数值列（{columns}）',
-    'emotion.bert_bad_label': 'BERT 模型回了一个不认识的情绪标签「{label}」，无法归入这六类',
+    'emotion.bert_bad_label': 'BERT 模型回了一个不认识的情绪标签“{label}”，无法归入这六类',
     'emotion.bert_done': '[BERT] 情绪分类完成，{n} 行，失败 {failed} 行',
     'emotion.bert_failed': 'BERT 情绪判断失败：{err}',
     'emotion.bert_loaded': 'BERT 情绪模型已加载：{model}（{runtime}/{precision}，跑在 {device}，逐批）',
     'emotion.bert_missing': 'BERT 模式需要本机安装 {need}——当前环境没有，也不会改用别的方法代替',
-    'emotion.bert_no_model': 'BERT 模式还需要在「模型」里填一个情绪分类模型名（本地目录或仓库名），空着无法判断',
+    'emotion.bert_no_model': 'BERT 模式还需要在“模型”里填一个情绪分类模型名（本地目录或仓库名），空着无法判断',
     'lex.needTerms': '请至少提供一个词。',
     'lex.unknownKind': '未知的词库类型：{kind}',
     'lex.userdictLoadFailed': '加载 jieba 用户词典失败。',
     'lex.userdictReadFailed': '读取用户词库失败，分词器保持不变。',
-    'ml.bad_model_name': '模型名「{name}」不合法：必须是单个路径安全的组件，不含分隔符',
+    'ml.bad_model_name': '模型名“{name}”不合法：必须是单个路径安全的组件，不含分隔符',
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
     'ml.emotion_failed': 'ML 情感预测失败：{err}（不写任何结果，节点按失败处理——不会给出一列虚构的 Neutral）',
     'ml.missing_col': 'DataFrame 缺少必需的列“{col}”。跳过分析。',
     'ml.model_untrained_refused': (
-        '「{name}」模型尚未训练，也没有可加载的已保存模型 —— 拒绝作答，而不是给每行编一个中性结果'
+        '“{name}”模型尚未训练，也没有可加载的已保存模型 —— 拒绝作答，而不是给每行编一个中性结果'
     ),
     'ml.need_two_labels': '训练至少需要 2 个不同的标签，当前只有：{label}',
     'ml.no_rows': '没有需要处理的行（目标列为空）。',
@@ -293,13 +292,13 @@ ZH = {
     'net.slow': '。诊断：两侧网络都能连通，因此没有依据判断这一页为什么没到；可以再跑一次，或按停止结束',
     'net.speed': '（实测下载约 {speed} kB/s）',
     'sentiment.bad_thresholds': '正向阈值 {pos} 不得低于负向阈值 {neg}，那样每一行都会同时满足两边',
-    'sentiment.bert_bad_label': 'BERT 模型回了一个不认识的标签「{label}」，无法归入正面/负面/中性',
+    'sentiment.bert_bad_label': 'BERT 模型回了一个不认识的标签“{label}”，无法归入正面/负面/中性',
     'sentiment.bert_failed': 'BERT 判断失败：{err}',
     'sentiment.bert_loaded': 'BERT 情感模型已加载：{model}（{runtime}/{precision}，跑在 {device}，逐批）',
     'sentiment.bert_missing': 'BERT 模式需要本机安装 {need}——当前环境没有，也不会改用别的方法代替',
     'sentiment.bert_need_runtime': 'torch+transformers 或 onnxruntime+tokenizers',
     'sentiment.bert_no_labels': '这个 BERT 模型目录没有 id2label 标签表，输出读不成类别：{path}',
-    'sentiment.bert_no_model': 'BERT 模式还需要在「模型」里填一个情感模型名（本地目录或仓库名），空着无法判断',
+    'sentiment.bert_no_model': 'BERT 模式还需要在“模型”里填一个情感模型名（本地目录或仓库名），空着无法判断',
     'sentiment.bert_no_model_dir': '没有找到 BERT 模型目录：{path}。{remedy}',
     'sentiment.bert_no_onnx': '这个 BERT 模型目录里没有可加载的 ONNX 图：{path}',
     'sentiment.bert_onnx_inputs': '这个 ONNX 图的输入不是本程序约定的四路，实测：{found}',
@@ -311,15 +310,15 @@ ZH = {
     ),
     'sentiment.packRemedySource': (
         '源码版需要先用 ml_train/scripts/export_onnx_bert.py 从训练好的权重导出 ONNX 目录，'
-        '或在节点的「模型」里填一个已存在的目录名'
+        '或在节点的“模型”里填一个已存在的目录名'
     ),
     # ── 情感极性（snownlp / bert / ml / llm）───────────────────────────
     # A row that fails to read stays blank, so the failure line has to say the count:
-    # 「判断为中性」 and 「没判断出来」 are different statements about the text.
+    # “判断为中性” and “没判断出来” are different statements about the text.
     'sentiment.scored': '情感极性（{mode}）：已判断 {n} 行',
     'sentiment.scored_failed': '情感极性：{n} 行读取失败，留空（不是中性）',
     'sentiment.snownlp_failed': 'SnowNLP 判断失败：{err}',
-    'sentiment.unknown_mode': '使用了未知的情感极性模式「{mode}」',
+    'sentiment.unknown_mode': '使用了未知的情感极性模式“{mode}”',
     'sig.degenerate': '显著性检验：{method} 无法计算（组数或组内样本不足、方差为零），不给假 p 值',
     'sig.done': '显著性检验（{method}）：{n_groups} 组、共 {n} 行，统计量={statistic}，p={p}',
     'sig.group_column_missing': '显著性检验：分组列“{col}”不在表里',
@@ -331,12 +330,12 @@ ZH = {
     'sig.unknown_method': '显著性检验：未知方法“{method}”',
     'sig.value_column_missing': '显著性检验：数值列“{col}”不在表里',
     'sig.value_not_numeric': '显著性检验：数值列“{col}”整列都无法转成数字',
-    'tendency.bert_bad_label': 'BERT 模型回了一个不认识的倾向标签「{label}」，无法归入这六类',
+    'tendency.bert_bad_label': 'BERT 模型回了一个不认识的倾向标签“{label}”，无法归入这六类',
     'tendency.bert_done': '[BERT] 倾向分类完成，{n} 行，失败 {failed} 行',
     'tendency.bert_failed': 'BERT 倾向判断失败：{err}',
     'tendency.bert_loaded': 'BERT 倾向模型已加载：{model}（{runtime}/{precision}，跑在 {device}，逐批）',
     'tendency.bert_missing': 'BERT 模式需要本机安装 {need}——当前环境没有，也不会改用别的方法代替',
-    'tendency.bert_no_model': 'BERT 模式还需要在「模型」里填一个倾向分类模型名（本地目录或仓库名），空着无法判断',
+    'tendency.bert_no_model': 'BERT 模式还需要在“模型”里填一个倾向分类模型名（本地目录或仓库名），空着无法判断',
 }
 
 EN = {

@@ -55,10 +55,10 @@ def merge_upstream_tables(
     A parent with ZERO rows is not a refusal — an empty batch is a real answer, and it is
     reported so the row counts still add up to what was written.
 
-    ``label_of`` turns a parent's id into the console's 「title #id」 the way every other
+    ``label_of`` turns a parent's id into the console's "title #id" the way every other
     message in this file does (``node_label``), defaulting to the bare id for a direct
     caller with no graph in scope: these sentences name THE PARENT — the wire the user has
-    to go cut — and 「上游 node-2」 sends them counting boxes to work out which one that was.
+    to go cut — and “上游 node-2” sends them counting boxes to work out which one that was.
     """
     name_parent = label_of if callable(label_of) else (str)
     tables = []
@@ -109,8 +109,8 @@ def merge_upstream_tables(
     merged = pd.concat([frame for _pid, frame in frames], ignore_index=True, sort=False)
     # One fragment per upstream table, each built by ``t()`` — the row-count word (行 / rows)
     # belongs to the language catalogue, not to a sentence pasted into the console. Joining with
-    # a catalogued separator keeps 中文 the 「、」 list it reads as and English a comma list; a
-    # 「」-joined literal once leaked 「…40 行」 into the ENGLISH console line.
+    # a catalogued separator keeps 中文 the “、” list it reads as and English a comma list; a
+    # “”-joined literal once leaked “…40 行” into the ENGLISH console line.
     detail = t('wf.merge_detail_sep').join(
         t('wf.merge_table_detail', name=name_parent(pid), n=len(frame)) for pid, frame in frames
     )
@@ -122,7 +122,7 @@ def pdf_filename(params: dict) -> str:
     """The final PDF file name from an output node's params: sanitized, extension forced to ``.pdf``.
 
     Deliberately NOT ``DataExporter.normalize_filename`` — that re-applies a *tabular* extension from its
-    whitelist and would turn 「report.pdf」 into 「report.csv」. A PDF's name is its own contract.
+    whitelist and would turn "report.pdf" into "report.csv". A PDF's name is its own contract.
     """
     base = os.path.splitext(sanitize_filename(params.get('filename', 'export.pdf')))[0]
     name = f'{base}.pdf'
@@ -244,7 +244,7 @@ def execute_output_node(
             # Which stretch of the calendar this table covers is a fact about the CRAWL,
             # and a save node is handed only rows — so the window is whatever this run's
             # crawl nodes recorded (``note_window``). Zero of them and two different ones
-            # are both refusals stated by name: a file called 「January」 that holds March
+            # are both refusals stated by name: a file called "January" that holds March
             # is worse than a file that was never written, and the name is the thing being
             # chosen here.
             tag, refusal = window_for_save(getattr(_wf_local, 'idx', None))

@@ -115,7 +115,7 @@ def test_a_silent_short_is_refused_by_name_and_not_settled_done(app_module, monk
 
 
 def test_a_short_without_counts_omits_the_funnel(app_module, monkeypatch):
-    """No walk_counts means no parenthetical — never a fake 「扫0留0拒0」 presented as a measurement."""
+    """No walk_counts means no parenthetical — never a fake “扫0留0拒0” presented as a measurement."""
     with pytest.raises(ValueError) as err:
         _run(app_module, monkeypatch, _StubCrawler(_ROWS, UNDER_TARGET))
     message = str(err.value)
@@ -165,7 +165,7 @@ def test_a_risk_short_is_named_as_risk_control_not_a_silent_done(app_module, mon
 
 def test_risk_control_outranks_the_under_target_wording(app_module, monkeypatch):
     """When BOTH signals could fire, the actionable one wins: a risk short reports 风控 (back
-    off), not 「采得不足」 (which would invite the exact immediate re-run this repo forbids)."""
+    off), not “采得不足” (which would invite the exact immediate re-run this repo forbids)."""
     with pytest.raises(ValueError) as err:
         _run(app_module, monkeypatch, _StubCrawler(_ROWS, UNDER_TARGET, risk=True))
     assert str(err.value) == t('run.riskControlled', platform='zhihu')

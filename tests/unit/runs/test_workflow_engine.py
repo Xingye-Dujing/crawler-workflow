@@ -372,7 +372,7 @@ class TestValidate:
         """Zero nodes has no cycle, no missing field and nothing to report.
 
         Validation therefore said nothing, the worker found 0 workflows, ran none, and
-        the run closed as ``completed`` with 「0/0 个节点完成」 and a 已完成 toast —
+        the run closed as ``completed`` with “0/0 个节点完成” and a 已完成 toast —
         the exact phrasing a refused definition is pinned (elsewhere in this file) never
         to use. The browser gates this canvas; the backend must too, because a
         hand-edited file reaches it directly.
@@ -382,7 +382,7 @@ class TestValidate:
     def test_a_mode_the_platform_does_not_offer_is_named_as_such(self, en):
         """The matrix lookup falls back to the platform's first mode so old canvases
         still render — which used to mean a node asking for a mode that never existed
-        was validated as a keyword search. The user then read 「缺少关键词」 for a
+        was validated as a keyword search. The user then read “缺少关键词” for a
         field the panel never showed them, or worse, the wrong crawl ran.
 
         The made-up key is deliberate: a real mode another platform owns (``author``

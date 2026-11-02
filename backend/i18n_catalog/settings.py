@@ -9,15 +9,15 @@ Keys are sorted; the two tables in here must hold the same set (``tests/unit/i18
 ZH = {
     'deps.systemFont.darwin': 'macOS 自带苹方/宋体；若仍缺请装 Noto Sans CJK 后重启程序',
     'deps.systemFont.linux': '请安装中文字体（Debian/Ubuntu：apt-get install fonts-noto-cjk）后重启程序',
-    # ── 「缺什么、在这台机器上怎么补」的按系统分支 ──────────────────────────
+    # ── “缺什么、在这台机器上怎么补”的按系统分支 ──────────────────────────
     # 一条补救说明在三套系统上说的是三件事：Windows 补字体功能、Linux 装发行包、macOS 用系统自带。
     # 键名由 core.machine.remedy_key 拼出，所以全清单（前缀 × 平台）由
     # tests/unit/foundation/test_missing_dependency_messages.py 从取值那头逐个查在不在。
-    'deps.systemFont.win32': '请安装仿宋/黑体等中文字体（英文版 Windows 要在「可选功能」里补中文简体字体）后重启程序',
+    'deps.systemFont.win32': '请安装仿宋/黑体等中文字体（英文版 Windows 要在“可选功能”里补中文简体字体）后重启程序',
     'deps.texFont.darwin': '非 Windows 上纸质图改用 ctex 的 macnew 字体集（系统自带宋体/黑体）',
     'deps.texFont.linux': '非 Windows 上纸质图改用 ctex 自带的 fandol 中文字体集，需要 texlive-lang-chinese',
     'deps.texFont.win32': (
-        '纸质图用 ctex + 仿宋（FangSong），需要系统装有该字体（英文版 Windows 要补「中文（简体）」字体功能）'
+        '纸质图用 ctex + 仿宋（FangSong），需要系统装有该字体（英文版 Windows 要补“中文（简体）”字体功能）'
     ),
     'deps.texPackage.darwin': 'MacTeX 下用 sudo tlmgr install 该包，或在 TeX Live Utility 里安装',
     'deps.texPackage.linux': (
@@ -25,14 +25,14 @@ ZH = {
         '或 tlmgr install 该包'
     ),
     'deps.texPackage.win32': (
-        '用 MiKTeX 控制台（或 miktex packages install）补上，或在 MiKTeX 设置里允许「联网自动安装缺失包」后重试'
+        '用 MiKTeX 控制台（或 miktex packages install）补上，或在 MiKTeX 设置里允许“联网自动安装缺失包”后重试'
     ),
-    'deps.xelatex.darwin': '找不到 xelatex，无法编译 PDF：请安装 MacTeX（含 xelatex），或在「设置」里指定路径',
+    'deps.xelatex.darwin': '找不到 xelatex，无法编译 PDF：请安装 MacTeX（含 xelatex），或在“设置”里指定路径',
     'deps.xelatex.linux': (
         '找不到 xelatex，无法编译 PDF：请安装 TeX Live 的 xelatex'
-        '（Debian/Ubuntu：apt-get install texlive-xetex），或在「设置」里指定路径'
+        '（Debian/Ubuntu：apt-get install texlive-xetex），或在“设置”里指定路径'
     ),
-    'deps.xelatex.win32': '找不到 xelatex，无法编译 PDF：请安装 MiKTeX，或在「设置」里指定编译程序路径',
+    'deps.xelatex.win32': '找不到 xelatex，无法编译 PDF：请安装 MiKTeX，或在“设置”里指定编译程序路径',
     'field.account': '登录账号',
     'field.author': '作者',
     'field.backend': '采集方式',

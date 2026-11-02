@@ -5,7 +5,7 @@
 
 ```
 ml_train/
-├── models/     已训练的 HuggingFace 模型目录（部署用；节点「已注册模型」下拉 / bert 路径指向这里）
+├── models/     已训练的 HuggingFace 模型目录（部署用；节点“已注册模型”下拉 / bert 路径指向这里）
 ├── datasets/   训练语料与标注数据（csv / 原始数据集）
 ├── scripts/    训练 / 蒸馏 / 爬取 / 评估 / 扫描 脚本
 ├── logs/       每次运行的日志与脚本产出的对比/调参 md（证据留档）
@@ -16,7 +16,7 @@ ml_train/
 
 | 目录 | 节点·用途 | 标签集 | 训练来源脚本 | 关键指标 |
 |------|-----------|--------|--------------|----------|
-| `tendency_stance_v2_cyberbully` | tendency「网暴模型」（**推荐**） | 六类传播立场（含空格/斜杠，见各目录 config.json 的 id2label） | `scripts/train_tendency_bert_v2.py` | macro-F1 ≈0.69，Controversy ≈0.50（详见 `docs/tendency_model_comparison.md`） |
+| `tendency_stance_v2_cyberbully` | tendency“网暴模型”（**推荐**） | 六类传播立场（含空格/斜杠，见各目录 config.json 的 id2label） | `scripts/train_tendency_bert_v2.py` | macro-F1 ≈0.69，Controversy ≈0.50（详见 `docs/tendency_model_comparison.md`） |
 | `tendency_stance_v1` | tendency（蒸馏基线，对照） | 同上六类 | `scripts/train_tendency_bert_v1.py` | acc 0.731 / macro-F1 0.681 |
 | `emotion_ewect_six` | emotion 六类情绪 | Anger/Fear/Joy/Neutral/Sadness/Surprise | `scripts/train_emotion_bert.py` | acc 0.811 / macro-F1 0.792（留出） |
 | `sentiment_weibosenti_bin` | sentiment 极性二分类 | negative / positive（中性交给阈值） | `scripts/train_sentiment_bert.py` | 见该目录 README |
@@ -28,7 +28,7 @@ ml_train/
 
 后端已加模型注册表。把要用的模型登记进 **`data/model_registry.json`**（每条形如
 `{"name": "网暴模型…", "path": "ml_train/models/tendency_stance_v2_cyberbully", "desc": "…"}`），
-`GET /api/models` 会把它送出；情感/倾向/情绪节点的 **bert 模式**因此多出一个「已注册模型」下拉，
+`GET /api/models` 会把它送出；情感/倾向/情绪节点的 **bert 模式**因此多出一个“已注册模型”下拉，
 **按名字选**即可（选项 value 是该模型的路径），下面仍保留原始路径输入框。
 
 - 路径一律写**相对仓库根**的形式（`ml_train/models/<目录>`），后端按仓库根解析 → 换机器/换检出目录不失效。
@@ -56,7 +56,7 @@ ml_train/
 ## scripts/ —— 脚本（用 `.venv`，仓库根下运行）
 
 **训练（需可选 torch/transformers，见 requirements-optional.txt）**
-- `train_tendency_bert_v2.py` ★ 产出「网暴模型」；`train_tendency_bert_v1.py` 蒸馏基线
+- `train_tendency_bert_v2.py` ★ 产出“网暴模型”；`train_tendency_bert_v1.py` 蒸馏基线
 - `train_emotion_bert.py` 情绪六类；`train_sentiment_bert.py` 极性二分类
 - `train_sklearn_ml.py` 情感/情绪的 sklearn（词袋）模型（原 `train_and_eval.py`）
 

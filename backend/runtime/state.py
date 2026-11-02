@@ -88,7 +88,7 @@ execution_state: dict = {
     '_wf_names': {},  # {wf_idx: the workflow's user-facing name} for console lines
     # {wf_idx: [(start, end)]} of the time windows a crawl node in this workflow was
     # asked to walk. A save node cannot see the crawl it sits downstream of — it gets a
-    # table — so this is how 「文件名带时间范围」 can say which window the table is.
+    # table — so this is how “文件名带时间范围” can say which window the table is.
     '_time_windows': {},
     '_mode': 'serial',
     'llm': None,  # AI transport config from the settings panel (see /api/workflow/execute)
@@ -153,7 +153,7 @@ _completed_lock = threading.Lock()
 
 
 def live_run_ids() -> list:
-    """Every run id a live thread may still be writing — ONE definition of 「活着」.
+    """Every run id a live thread may still be writing — ONE definition of “活着”.
 
     ``execution_state['running']`` is cleared at the TOP of 停止 while the worker keeps
     settling, still holds its browsers and still writes rows for tens of seconds. A route
@@ -178,7 +178,7 @@ def any_run_live() -> bool:
     """Whether SOME run's worker thread could still be writing anything.
 
     The bulk-clear routes used to ask ``execution_state['running']`` alone — which 停止 clears
-    while the worker is mid-settle, so 「清空」 during those tens of seconds deleted the part
+    while the worker is mid-settle, so “清空” during those tens of seconds deleted the part
     files a streaming node was still merging into the export folder. A bulk wipe has no run id
     to compare, so it asks the one live-run definition above.
     """

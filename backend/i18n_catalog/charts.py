@@ -10,13 +10,13 @@ ZH = {
     'chart.axis.pc1': '第一主坐标',
     'chart.axis.pc2': '第二主坐标',
     'chart.biblio_activity': '年度活动',
-    'chart.biblio_bad_json': '「{col}」不是合法 JSON：请让上游文献计量节点重新生成结果',
+    'chart.biblio_bad_json': '“{col}”不是合法 JSON：请让上游文献计量节点重新生成结果',
     'chart.biblio_burst': '突现区间',
     'chart.biblio_category_map': '学科网络',
     'chart.biblio_duration': '持续年数',
     'chart.biblio_geo': '国家/地区',
     'chart.biblio_geo_merged': '并入其他区域 {n} 处：{detail}',
-    'chart.biblio_geo_none': '地理图画不出来：{names} 等名称都不在世界底图里（请检查「节点」列是否为国家/地区名）',
+    'chart.biblio_geo_none': '地理图画不出来：{names} 等名称都不在世界底图里（请检查“节点”列是否为国家/地区名）',
     'chart.biblio_geo_note': '纸质图按发文量排序画出前若干国家/地区（世界地图的几何不进 LaTeX），全部数值见三线表',
     'chart.biblio_geo_unknown': '底图无此区域 {n} 个：{names}',
     'chart.biblio_journal_map': '期刊网络',
@@ -31,11 +31,9 @@ ZH = {
     'chart.biblio_no_links': '知识图谱没有连接：请检查“连接”列或降低筛选阈值',
     'chart.biblio_no_nodes': '文献计量图没有可画的节点',
     'chart.biblio_no_sentiment': (
-        '这张表没有「情感分布」列：请在上游接入情感/情绪/倾向步骤，并在文献计量节点填写「情感/情绪列」'
+        '这张表没有“情感分布”列：请在上游接入情感/情绪/倾向步骤，并在文献计量节点填写“情感/情绪列”'
     ),
-    'chart.biblio_no_topics': (
-        '这张表没有「话题分布」列：请在上游接入文本聚类/话题步骤，并在文献计量节点填写「话题列」'
-    ),
+    'chart.biblio_no_topics': ('这张表没有“话题分布”列：请在上游接入文本聚类/话题步骤，并在文献计量节点填写“话题列”'),
     'chart.biblio_no_variation': '没有结构变异可画：请在上游节点开启 variation 并调整变异量阈值 variation_min',
     'chart.biblio_no_years': '文献计量图没有可用的年份：请检查首年/末年或年份序列',
     'chart.biblio_nodes': '节点',

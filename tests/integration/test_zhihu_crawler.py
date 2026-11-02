@@ -414,9 +414,9 @@ class TestZhihuSearch:
             f'STUCK_ROUNDS={ZhihuCrawler.STUCK_ROUNDS} declares {passes} scroll passes'
         )
         # …and the ceiling really is the declared one, named with the patience it spent.
-        # The loop used to end on its FIRST flat round while logging 「未增长 (1/3)」 on its
+        # The loop used to end on its FIRST flat round while logging “未增长 (1/3)” on its
         # way out: the number in that sentence and the number the walk honoured were two
-        # different numbers, and 「采到 1 条」 was indistinguishable from a slow machine.
+        # different numbers, and “采到 1 条” was indistinguishable from a slow machine.
         assert i18n.t('crawl.zhihu.stuck', n=ZhihuCrawler.STUCK_ROUNDS) in _lines(caplog)
 
     def test_a_search_that_fills_its_target_files_no_end_reason(self, make_crawler):
@@ -427,7 +427,7 @@ class TestZhihuSearch:
         assert crawler.end_reason is None, 'a walk that met the ask has no shortfall to judge'
 
     def test_the_more_marker_ends_the_walk_as_a_licensed_site_end(self, make_crawler):
-        # The 「没有更多了」 plate is the site's own word that the list is over: short of the ask is
+        # The “没有更多了” plate is the site's own word that the list is over: short of the ask is
         # legal, settled clean — and now NAMED, with the funnel the under-target gate would want.
         cards = [_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)] * 2
         crawler, _ = make_crawler(cards, no_more='亲，没有更多了~')
@@ -437,7 +437,7 @@ class TestZhihuSearch:
         assert {'scanned', 'kept', 'refused'} <= set(crawler.walk_counts), crawler.walk_counts
 
     def test_a_stuck_walk_with_no_more_marker_is_convicted_under_target(self, make_crawler):
-        # The mirror image of the marker case: STUCK_ROUNDS give-up, 「没有更多了」 never shown — a walk
+        # The mirror image of the marker case: STUCK_ROUNDS give-up, “没有更多了” never shown — a walk
         # that stopped, not a list that ended (zhihu's throttle mimics it), so it must be convicted and
         # resumable, NOT left end_reason=None to settle clean.
         crawler, _ = make_crawler([_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)], no_more=None)
@@ -448,7 +448,7 @@ class TestZhihuSearch:
         )
 
     def test_a_risk_latched_shortfall_is_not_reported_as_under_target(self, make_crawler):
-        # 风控 is its own bucket: the executor refuses it as 「退避重试」 upstream. Convicting it here as
+        # 风控 is its own bucket: the executor refuses it as “退避重试” upstream. Convicting it here as
         # 采得不足 would double-label one run and hide the back-off the user must see. A search that
         # latched 风控 and then gave up (``under``) must therefore stay ``end_reason=None``, not convict.
         crawler, _ = make_crawler([_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)], no_more=None)
@@ -464,7 +464,7 @@ class TestZhihuSearch:
         takes while its own pagination is still in flight. The walk used to spend one
         flat round (scroll, wait, harvest, one confirming scroll) and then end, so a
         keyword that would have answered six rows came back with two. Nothing in the
-        console could tell 「这个关键词只这么多」 from 「这台机器刚才慢」, which is the
+        console could tell “这个关键词只这么多” from “这台机器刚才慢”, which is the
         under-collection the user reports on every platform.
         """
         crawler, driver = make_crawler(
@@ -482,7 +482,7 @@ class TestZhihuSearch:
         assert driver.scrolls > ZhihuCrawler.SCROLL_STEPS, 'it got there by scrolling past a flat round'
 
     def test_a_tall_page_is_not_read_as_the_end_of_the_list(self, make_crawler):
-        """The 「展开全文 makes the page too tall to scroll」 misjudgement, pinned.
+        """The “展开全文 makes the page too tall to scroll” misjudgement, pinned.
 
         展开全文 opens bodies in place, so the document grows by thousands of pixels while the card
         count holds still — and :meth:`Crawler.scroll_down` ends its round with a jump to the
@@ -502,7 +502,7 @@ class TestZhihuSearch:
         rows = crawler.search('三亚', target_count=8, full_body=False)
         assert len(rows) == 8, (
             f'the walk called the list over at {len(rows)} rows on a page that was still growing '
-            'taller; 「没有更多了」 was never printed either'
+            'taller; “没有更多了” was never printed either'
         )
         assert driver.scrolls >= 20, 'it had to keep scrolling past the tall page to get there'
 
@@ -791,7 +791,7 @@ class FakeBoardDriver:
 
 def _hot_row(question='2086444635463705931', title='网民吐槽美团抽成太多', heat='398 万热度', author='用户'):
     """One board entry, shaped by the measured answer: the author object carries the
-    literal 「用户」 for every row and 评论数 is 0 for every row."""
+    literal “用户” for every row and 评论数 is 0 for every row."""
     return {
         'type': 'hot_list_feed',
         'detail_text': heat,
@@ -833,7 +833,7 @@ def make_board(monkeypatch):
 
 class TestZhihuHotBoard:
     def test_the_board_drops_the_two_columns_that_are_not_data(self, make_board):
-        """Measured on all 30 rows: 作者 is the literal 「用户」 and 评论数 is 0. A column
+        """Measured on all 30 rows: 作者 is the literal “用户” and 评论数 is 0. A column
         of one repeated word, or of a number the payload never varies, is read by the
         user as content — so neither is emitted, and the columns that ARE filled stay."""
         second = _hot_row(question='2', title='第二个问题', heat='238 万热度')

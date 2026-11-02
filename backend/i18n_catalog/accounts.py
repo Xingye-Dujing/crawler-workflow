@@ -4,7 +4,7 @@ ZH = {
     'accounts.accountBusy': '这个账号还有运行中的任务（{run}），请先等待或停止后再禁用或删除',
     'accounts.accountDisabled': '该账号已被禁用，请联系管理员',
     'accounts.adminRequired': '只有管理员可以执行这个操作',
-    'accounts.bootstrapCreated': '已创建初始管理员账号「{user}」，请登录后修改密码',
+    'accounts.bootstrapCreated': '已创建初始管理员账号“{user}”，请登录后修改密码',
     'accounts.bootstrapEnvIgnored': '账号库已有账号，环境变量里的引导密码被忽略（不会重置任何密码）',
     'accounts.bootstrapNeeded': (
         '还没有任何账号：cloud 模式首次启动必须设置 CRAWLER_ADMIN_PASSWORD'
@@ -30,7 +30,7 @@ ZH = {
     'accounts.storageMoved': '存储操作失败（{err}）：账号没有被删除，但它的数据此刻在 {path}，请先到那里把它找回来',
     'accounts.tooManyAttempts': '来自这个地址的登录失败次数过多，请稍后再试',
     'accounts.usernameInvalid': '用户名需要 3–32 个字符，只能包含字母、数字、下划线、点和短横线',
-    'accounts.usernameTaken': '用户名「{user}」已被占用',
+    'accounts.usernameTaken': '用户名“{user}”已被占用',
 }
 
 EN = {

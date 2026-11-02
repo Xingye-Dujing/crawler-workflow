@@ -76,7 +76,7 @@ CATBUS_FIELD_TEMPLATES = {
 
 #: CatBus 模式键 → 面板词。共享模式复用 Selenium 的词；独有模式各有自己的名字。
 #: 拼出来的键是审计盲区（可达性扫描只问它看得见的键），所以这里逐个写全，并有契约测试
-#: 用真实清单的每个模式键核对「有名字」。
+#: 用真实清单的每个模式键核对“有名字”。
 CATBUS_MODE_LABELS = {
     'posts': 'settings.collectPosts',
     'author': 'settings.collectAuthor',
@@ -124,7 +124,7 @@ CATBUS_MODE_LABELS = {
 
 #: 只有 CatBus 能爬、采析绘没有 Selenium 版的平台，以及它们的词。
 #: 平台是否真的出现、有哪些功能仍由适配器清单决定；这里只负责在清单不可用时也能
-#: 把面板上的这一行画出来并说明「引擎不可用」，而不是让已保存的画布变成一个不存在的平台。
+#: 把面板上的这一行画出来并说明“引擎不可用”，而不是让已保存的画布变成一个不存在的平台。
 CATBUS_ONLY_PLATFORMS = {
     'kuaishou': 'platform.kuaishou',
     'tiktok': 'platform.tiktok',

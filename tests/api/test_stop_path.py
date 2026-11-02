@@ -331,7 +331,7 @@ class TestTheRecordFlipsWithTheRequest:
 
 class TestStoppedIsNotFailure:
     def test_a_run_the_user_ended_blames_nothing_on_the_workflow(self, client, app_module, monkeypatch):
-        """The finish line used to read 「1 个失败」 for the node 停止 cut short.
+        """The finish line used to read “1 个失败” for the node 停止 cut short.
 
         A stopped node settles `partial` (its rows stand), and `partial` is what the
         failure count is built from — so the stop needs its own counter or the user is

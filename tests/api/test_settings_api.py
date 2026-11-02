@@ -254,7 +254,7 @@ class TestSettingsWrite:
 
         empty = client.post('/api/settings', json={'driver_path': '   '}).get_json()
         # The default IS blank now (it used to be a hardcoded Program Files path that almost nothing
-        # installs), so 「clear the field」 is a remedy and not a loop back into a missing file.
+        # installs), so "clear the field" is a remedy and not a loop back into a missing file.
         assert Config.DRIVER_PATH == ''
         assert empty['settings']['driver_path'] == ''
         assert 'Driver path was empty' in empty['warnings'][0]
@@ -292,7 +292,7 @@ class TestTheSecondBackendPaths:
         assert 'catbus_cli' in body['warnings'][0], 'two boxes share a panel; the warning says which'
 
     def test_a_folder_in_the_node_box_is_refused_in_words(self, client, tmp_path):
-        """``catbus_node`` is a program, and a directory would fail as 「no Node」 — the wrong sentence."""
+        """``catbus_node`` is a program, and a directory would fail as "no Node" — the wrong sentence."""
         folder = tmp_path / 'v24'
         folder.mkdir()
         body = client.post('/api/settings', json={'catbus_node': str(folder)}).get_json()
@@ -302,7 +302,7 @@ class TestTheSecondBackendPaths:
 
     @pytest.mark.parametrize('key', ['catbus_cli', 'catbus_node'])
     def test_saving_a_path_asks_the_machine_again(self, client, monkeypatch, key):
-        """A cached 「本机没有 CatBus」 would otherwise grey out the option the user just fixed."""
+        """A cached “本机没有 CatBus” would otherwise grey out the option the user just fixed."""
         from services.ingest import catbus
 
         asked = []

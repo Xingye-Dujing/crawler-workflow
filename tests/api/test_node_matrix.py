@@ -1004,7 +1004,7 @@ class TestTokenizeNodeModes:
 
     def test_a_padded_shape_still_produces_that_shape(self, client, app_module, paste):
         """Stripped before the check and before the branch, so what is judged is what
-        runs — and the 「已完成」 line names the mode that actually produced the file.
+        runs — and the “已完成” line names the mode that actually produced the file.
         """
         _run, status, rows = self._run(client, app_module, paste, {'output_mode': ' words_only '})
         assert status['status'] == 'done', status.get('error')

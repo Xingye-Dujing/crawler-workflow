@@ -84,7 +84,7 @@ class NodesMixin:
         ``component``/``component_name`` say which workflow of the canvas the node was
         executed in. They are refreshed on every visit rather than kept from the first:
         rewiring the canvas between attempts moves nodes between components, and a record
-        that still said 「热门榜」 for a node the user had since connected to 周排行榜
+        that still said “热门榜” for a node the user had since connected to 周排行榜
         would be a wrong claim in a plausible column.
         """
         stamp = self.now()

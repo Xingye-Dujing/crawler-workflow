@@ -23,8 +23,8 @@ nothing was said). The approved strictness:
 
 **A named reason is only an excuse when the reason is true.** ``docs/live_test_plan.md`` §5
 keeps a second list beside the whitelist — the lines that *say* something and lie (Z6's
-「未加载新内容」 after one non-growing check, Z3's one-word-for-three-causes 「为空或被拦截」,
-Z16's 「这个标签页没有作品」 on a slowly rendered tab). Those are :data:`ZHIHU_LIES` here and are
+“未加载新内容” after one non-growing check, Z3's one-word-for-three-causes “为空或被拦截”,
+Z16's “这个标签页没有作品” on a slowly rendered tab). Those are :data:`ZHIHU_LIES` here and are
 handed to the grader as ``bug_lines``, so a crawl that came up short naming only one of them
 grades SILENT_SHORT and goes red: the message is the bug, and a whitelist that licensed it
 would retire the only signal that says so.
@@ -91,7 +91,7 @@ ACCEPTANCE_FILE = REPO_ROOT / 'data' / 'workflows' / '测试：知乎.json'
 #:
 #: Deliberately absent: ``crawl.zhihu.finished`` and ``crawl.zhihu.target_reached``. Both are
 #: printed by a walk that reached its number, so letting one into a whitelist lets a crawl
-#: certify its own FULL — 「说了」 is only evidence when what it says explains a shortfall.
+#: certify its own FULL — “说了” is only evidence when what it says explains a shortfall.
 ZHIHU_LEGIT_EXITS = harness.SHARED_EXITS + (
     'crawl.zhihu.no_more',
     'crawl.zhihu.hotCapped',
@@ -99,7 +99,7 @@ ZHIHU_LEGIT_EXITS = harness.SHARED_EXITS + (
     'crawl.zhihu.hotRefused',
 )
 
-#: The lines the approved plan files under 「说了但说谎」 (``docs/live_test_plan.md`` §5's
+#: The lines the approved plan files under “说了但说谎” (``docs/live_test_plan.md`` §5's
 #: closing note, §6's Z3/Z6/Z16): each reports a site answer while really reporting a walk
 #: that gave up. Never exits. A short crawl whose only reason is one of these is graded as the
 #: silent one it still is, with the liar quoted into the audit row — the message is the bug,
@@ -119,7 +119,7 @@ ZHIHU_LIES = (
 )
 
 #: An author walk that drains a tab holding fewer items than were asked for says so per tab,
-#: with the count and the reason it stopped. That line — not 「这个标签页没有作品」, which Z16
+#: with the count and the reason it stopped. That line — not “这个标签页没有作品”, which Z16
 #: measures as a slow-render lie — is the honest short-supply exit for the mode.
 AUTHOR_EXITS = ZHIHU_LEGIT_EXITS + ('crawl.zhihu.authorTabDone',)
 
@@ -140,8 +140,8 @@ COMMENT_EXITS = harness.SHARED_EXITS + (
 )
 
 #: The walls a *headless* crawl may answer with. AGENTS records that zhihu throttles a headless
-#: session day-by-day (risk 40362) and that 「0 行」 is then a legitimate outcome; the raised
-#: 「为空或被拦截」 refusal is that throttle in its loud form, so it belongs here and only here —
+#: session day-by-day (risk 40362) and that “0 行” is then a legitimate outcome; the raised
+#: “为空或被拦截” refusal is that throttle in its loud form, so it belongs here and only here —
 #: in a windowed case the same line is Z3 and may not excuse anything.
 HEADLESS_REFUSALS = ('crawl.riskBlocked', 'crawl.loginWall', 'crawl.zhihu.emptyOrBlocked')
 
@@ -470,7 +470,7 @@ def test_a2_twenty_rows_cost_more_screens_but_still_arrive(client, app_module, m
 
 def test_a3_forty_rows_prove_the_scroll_loop_and_nothing_else(client, app_module, monkeypatch):
     """A3 — the multi-screen proof. Past one screen of ~20 cards, and the console must show a
-    walk that kept growing: 「未加载新内容」 as the ending here means the scroll stopped working."""
+    walk that kept growing: “未加载新内容” as the ending here means the scroll stopped working."""
     harness.real_jar(monkeypatch)
     with LiveRun(
         client,
@@ -486,7 +486,7 @@ def test_a3_forty_rows_prove_the_scroll_loop_and_nothing_else(client, app_module
         assert answer['verdict'] == harness.FULL, f'{DEEP_TARGET} rows is two screens of a rich keyword: {answer}'
         assert run.rows() == DEEP_TARGET
         assert harness.names_key(run.rec.text, 'crawl.zhihu.target_reached'), 'the target line is the evidence'
-        # FULL does not excuse the liars: a walk that reached 40 while printing 「未加载新内容」
+        # FULL does not excuse the liars: a walk that reached 40 while printing “未加载新内容”
         # once and then growing again says the growth check is wrong, and that is Z6.
         for stalled in ZHIHU_LIES:
             assert not harness.names_key(run.rec.text, stalled), f'the walk named {stalled} on the way to its target'
@@ -500,7 +500,7 @@ def test_a4_headless_search_is_full_or_names_the_refusal(client, app_module, mon
     wall it met; a silent shortfall stays a red, and a WARN is still written down.
 
     The rule is graded by the *verdict*, not by a three-word vocabulary: this mode's own
-    honest endings include the walk saying 「没有更多了」 (zhihu answers a throttled session by
+    honest endings include the walk saying “没有更多了” (zhihu answers a throttled session by
     falling through to a scroll loop that finds nothing, ``crawlers/platforms/zhihu/crawler.py``). Refusing
     everything but three named walls would red a documented outcome — and ``crawl.riskBlocked``
     on a login-wall retry is an ``add_log``, not a raised refusal, so the old shape red-flagged
@@ -522,7 +522,7 @@ def test_a4_headless_search_is_full_or_names_the_refusal(client, app_module, mon
 
 
 def test_a5_excerpt_mode_never_clicks_and_says_so(client, app_module, monkeypatch):
-    """A5 — 「展开全文」 off is a different crawl, and it must be visible twice over: the line
+    """A5 — “展开全文” off is a different crawl, and it must be visible twice over: the line
     that announces it, and a 正文 column that stays the length of an excerpt.
 
     ``EXCERPT_CEILING`` is the outer bound only. The *page-relative* half of that promise — a
@@ -552,9 +552,9 @@ def test_a5_excerpt_mode_never_clicks_and_says_so(client, app_module, monkeypatc
 
 
 def test_a6_a_thin_keyword_must_end_by_saying_it_is_thin(client, app_module, monkeypatch):
-    """A6 — the other half of the same coin: under target is fine when the site said 「没有
-    更多了」. Not when it said nothing, and not when the only thing it said was the line §6
-    measures as a false one (Z6's 「未加载新内容」 after a single non-growing check).
+    """A6 — the other half of the same coin: under target is fine when the site said “没有
+    更多了”. Not when it said nothing, and not when the only thing it said was the line §6
+    measures as a false one (Z6's “未加载新内容” after a single non-growing check).
 
     The ask is deliberately past anything this keyword can answer (measured twice on this tier:
     20 rows filled it, and 60 did too). Asking past the supply is the only way to reach the exit
@@ -575,15 +575,15 @@ def test_a6_a_thin_keyword_must_end_by_saying_it_is_thin(client, app_module, mon
 
 
 def test_a7_collecting_the_same_thing_twice_is_refused_by_name(client, app_module, monkeypatch):
-    """A7 — the incremental ledger with 「重新采集」 deliberately left off.
+    """A7 — the incremental ledger with “重新采集” deliberately left off.
 
     Two asks from one node, and the second may not store what the first already filed — and if the
-    ledger cut the table down, it must say so, because 「the site had nothing more」 and 「we
-    already had it」 look identical in a table that did not grow.
+    ledger cut the table down, it must say so, because "the site had nothing more" and "we
+    already had it" look identical in a table that did not grow.
 
     The BOARD, not a keyword, is what makes that provable. This cell first asked twice about one
     keyword and the second run delivered five rows nobody had seen: measured, zhihu rotates the
-    cards it serves a query, so 「the same ask」 is not 「the same items」, and a ledger test cannot
+    cards it serves a query, so "the same ask" is not "the same items", and a ledger test cannot
     be built on a supply that moves underneath it. The hot board is one fetch of a ranked list
     that holds its 30 questions for minutes (C1/C2 measure exactly that), so a repeat visit is
     genuinely the same item set the ledger has to refuse.
@@ -637,10 +637,10 @@ def test_b1_an_authors_own_list_is_collected_or_named_short(client, app_module, 
     exactly like a broken parser, so discovery is what makes this case mean anything.
 
     Supply rather than code is what can make 10 rows unreachable, and the honest line for it is
-    the per-tab report 「这个标签页收完」 (``crawl.zhihu.authorTabDone``), which carries the count
+    the per-tab report “这个标签页收完” (``crawl.zhihu.authorTabDone``), which carries the count
     and the reason it stopped. ``crawl.zhihu.authorTabEmpty`` is not: the plan lists it as Z16 —
     a slowly rendered tab reported as "this person never published" — so naming *that* instead of
-    delivering is red here, by the same rule that keeps 「未加载新内容」 out of the whitelist.
+    delivering is red here, by the same rule that keeps “未加载新内容” out of the whitelist.
 
     The tier's ``live_crawler`` fixture is taken *lazily*, after the cookie assert, because that
     fixture skips when the jar is empty and this file promises no skips: an author case that
@@ -694,8 +694,8 @@ def test_b2_headless_author_works_after_the_disguise(client, app_module, monkeyp
 def _assert_hot_rows(rows, *, minimum: int) -> None:
     """The board's own seven columns, and none of the ones its payload only fills with noise.
 
-    「作者」 and 「评论数」 are deliberately absent from ``_hot_row``: all 30 rows carry the
-    literal 「用户」 and a zero there, so a column of them is a lie a user reads as data.
+    “作者” and “评论数” are deliberately absent from ``_hot_row``: all 30 rows carry the
+    literal “用户” and a zero there, so a column of them is a lie a user reads as data.
     """
     assert len(rows) >= minimum, f'expected {minimum} board rows, got {len(rows)}'
     for row in rows:
@@ -745,8 +745,8 @@ def test_c3_headless_board_in_english_is_a_plain_fetch(client, app_module, monke
     """C3 — hot reads JSON from inside one loaded document, so the throttle that costs a
     headless *search* its rows has no part to play here: FULL, and no WARN is on offer.
 
-    This is also the matrix's English leg (``docs/live_test_plan.md`` §4: 「lang:zh 为主、至少
-    一条 en 对照」). It is the right case to pay for it with: one fetch, no scroll, no expansion,
+    This is also the matrix's English leg (``docs/live_test_plan.md`` §4: “lang:zh 为主、至少
+    一条 en 对照”). It is the right case to pay for it with: one fetch, no scroll, no expansion,
     and every assertion in this tier resolves its console lines through :mod:`i18n` in *both*
     languages — so a run narrated in English exercises exactly the path a pasted sentence would
     have broken, and the worker's thread-local ``set_lang`` has to have actually worked for the
@@ -783,7 +783,7 @@ def _comment_ask(*, limit: int, urls: list) -> int:
     """What a comment node was actually asked for, as a row count.
 
     ``comment_limit`` is per article, so the ask is the product — never 1. An open-ended walk
-    (``comment_limit: 0``, 「采集全部评论」) has no row budget the user wrote down, so the only
+    (``comment_limit: 0``, “采集全部评论”) has no row budget the user wrote down, so the only
     number it can be graded against is one row per panel it was told to open.
     """
     return (limit or 0) * len(urls) if limit else max(1, len(urls))
@@ -795,7 +795,7 @@ def _comment_verdict(run, *, node_id: str, urls: list, limit: int, console=None,
     ``comment_limit`` is *per article*, so the ask is ``limit × links`` — grading it as 1 (the
     "at least one row arrived" reading) records a 2-of-40 crawl as FULL and puts 1 in the
     artifact's ``target`` column, which is the weakened assertion this tier was told not to
-    write. ``limit == 0`` is 「采集全部评论」 and has no row budget at all, so the only target it
+    write. ``limit == 0`` is “采集全部评论” and has no row budget at all, so the only target it
     can be held to is the total its own per-article lines reported — recorded with the verdict
     so the artifact says what was measured.
 
@@ -807,7 +807,7 @@ def _comment_verdict(run, *, node_id: str, urls: list, limit: int, console=None,
     text = run.rec.text if console is None else console
     reported = harness.numbers_from(run.rec.lines, 'comment.article', 'n')
     assert len(reported) == len(urls), (
-        f'{len(urls)} links were asked for and {len(reported)} printed their own 「评论：…」 line: '
+        f'{len(urls)} links were asked for and {len(reported)} printed their own “评论：…” line: '
         f'{reported}. An article the node walked past without reporting is a silent skip.'
     )
     # A caller that already resolved WHICH record holds this node hands the count in: reading it
@@ -836,7 +836,7 @@ def _assert_comment_rows(rows, *, minimum: int, console: str = '') -> None:
     Two of this cell's assertions used to rest on a wrong reading of the site: 评论时间 was called
     a structural blank and 点赞数 a structural zero, when in fact the product never looked
     (``crawlers/platforms/zhihu/comments.py`` wrote both constants) and the panel does carry a time —
-    「14 小时前」 on a recent comment, 「2019-08-15」 on an old one. So a table where NOT ONE row
+    “14 小时前” on a recent comment, “2019-08-15” on an old one. So a table where NOT ONE row
     names a moment is now read as the dead column it is, not as a site answer.
 
     An empty 评论者 is different: measured on one panel, 2 of 12 items answer only at an ancestor
@@ -967,9 +967,9 @@ def test_d3_headless_comments_match_the_windowed_shape(client, app_module, monke
 
 
 def test_d4_no_limit_means_the_whole_panel_and_the_sum_still_ties(client, app_module, monkeypatch):
-    """D4 — ``comment_limit: 0`` is 「采集全部评论」, so the promise is now checked against the
+    """D4 — ``comment_limit: 0`` is “采集全部评论”, so the promise is now checked against the
     site's own number and not only against itself: what the summary counted is what the store
-    holds, and the panel's 「N 条评论」 opener is what the walk must have come away with.
+    holds, and the panel's “N 条评论” opener is what the walk must have come away with.
 
     That external denominator is the whole point of this cell after the paging measurement
     (``backend/test_zhihu_comment_structure.py``): an unlimited walk used to file **12 rows of a
@@ -988,7 +988,7 @@ def test_d4_no_limit_means_the_whole_panel_and_the_sum_still_ties(client, app_mo
         assert stored == _done_total(run.rec), 'an unlimited walk must still agree with itself'
         assert run.rec.counts_key('comment.article') == 1, 'one link, one article line'
         left_short = [line for line in run.rec.lines if harness.names_key(line, 'comment.zhihuPanelShort')]
-        assert not left_short, f'「采集全部评论」 left panels short of the numbers printed on the page: {left_short}'
+        assert not left_short, f'“采集全部评论” left panels short of the numbers printed on the page: {left_short}'
         _assert_comment_rows(run.preview('node-1'), minimum=1, console=run.rec.text)
         answer = _comment_verdict(run, node_id='node-1', urls=[pairs[0][0]], limit=0)
         # The artifact's ask column is the figure a reader can check the table against — the
@@ -1110,7 +1110,7 @@ def _one_closed_one_walking(run: LiveRun) -> bool:
 
     The moment E3 presses 停止 in, and stated as a *shape* rather than as a node id because
     真排队 hands the platform's turn to whichever thread reached it first: waiting for
-    「node-1 is done」 would be a bet on that order. Lose the bet and the button is pressed while
+    "node-1 is done" would be a bet on that order. Lose the bet and the button is pressed while
     the sibling still waits inside ``gate.hold``, where a Stop is answered by
     ``run.queueAbandoned`` and settles a *second* node as stopped — a different fact from the one
     this case is about, and one ``assert_l3`` rightly refuses.
@@ -1139,10 +1139,10 @@ def test_e3_a_parallel_run_cut_short_convicts_one_walk_and_hands_the_lane_back(c
     whole E group runs on.
 
     The lane claim is measured, not assumed: 真排队 is pinned on for this case (restored on the
-    way out, the way G1 pins it off) because the promise is 「a crawl holds the turn until it
-    finishes」 and the crawl here did NOT finish. The cheapest real crawl the matrix has — 热榜,
+    way out, the way G1 pins it off) because the promise is "a crawl holds the turn until it
+    finishes" and the crawl here did NOT finish. The cheapest real crawl the matrix has — 热榜,
     one page and one in-page fetch — is then asked for the platform again: a turn the Stop failed
-    to release answers it with 「等待采集时段」, with ``run.platformGateTimeout``, or with a stall.
+    to release answers it with “等待采集时段”, with ``run.platformGateTimeout``, or with a stall.
     Overlap itself is G1's claim on this same canvas shape; E3's is what a stop leaves behind.
     """
     harness.real_jar(monkeypatch)
@@ -1273,7 +1273,7 @@ def test_e4_a_stop_between_articles_keeps_the_panels_that_reported(client, app_m
 
     What this case cannot choose is *which* panel the button found open: the walk is minutes long
     and 停止 is asynchronous, so with three links and a press one second after the first panel
-    reported, 「between articles」 is honestly measured as the last panel never having reported —
+    reported, "between articles" is honestly measured as the last panel never having reported —
     asserted below — not as a chosen index.
     """
     harness.real_jar(monkeypatch)
@@ -1356,7 +1356,7 @@ def test_e4_a_stop_between_articles_keeps_the_panels_that_reported(client, app_m
         assert added, f'继续 opened no panel at all:\n{again.rec.text[-1500:]}'
         # The cursor records *position*, so a panel the stopped run finished can be opened again
         # — and must then add nothing. That is the dedupe ledger doing its job, and it is the only
-        # honest reading of 「the first panel is not paid for twice」: the table grew by exactly
+        # honest reading of "the first panel is not paid for twice": the table grew by exactly
         # what this attempt reported as new, and every asked link appears in one of the two
         # transcripts' own per-article lines.
         assert total == kept + sum(added), f'{kept} kept + {sum(added)} reported new, but the store holds {total}'
@@ -1375,7 +1375,7 @@ def test_e4_a_stop_between_articles_keeps_the_panels_that_reported(client, app_m
         rows = again.preview('node-1')
         # Both transcripts count as the naming evidence: this table is the merge of two walks, and
         # the blank the resumed run inherits was spoken about by the run that crawled it. Measured
-        # on the second pass — the stopped run printed 「本轮 30 条里有 2 条…没有作者链接」, the
+        # on the second pass — the stopped run printed “本轮 30 条里有 2 条…没有作者链接”, the
         # 继续 run carried those two rows and printed nothing, because it never opened that panel.
         _assert_comment_rows(rows, minimum=1, console=f'{run.rec.text}\n{again.rec.text}')
         sources = {str(row.get('文章URL') or '') for row in rows}
@@ -1541,7 +1541,7 @@ def test_e6_a_session_that_dies_mid_crawl_resumes_the_table_it_left(client, app_
         # §6's 归因 table reads the row and the transcript together, and neither of them can say
         # on its own that this death was injected: the wall flag latches *after* the walk returns,
         # so no wall line is ever printed, and the helper narrowed the walk's own ask, so the
-        # transcript announces 「目标获取 3 条」 under a record that filed an ask of
+        # transcript announces “目标获取 3 条” under a record that filed an ask of
         # :data:`E6_TARGET`. Both facts go into the row, or a reader chases a phantom throttle and
         # a number that disagrees with the store.
         answer['reasons'] = [
@@ -1570,7 +1570,7 @@ def test_e6_a_session_that_dies_mid_crawl_resumes_the_table_it_left(client, app_
             f'F2: a resume opened on a fresh session must not inherit the dead one: {again.status}'
         )
         assert harness.names_key(again.rec.text, 'run.resume_crawl'), 'the executor hands back the kept rows'
-        # 「重新采集」 means the same thing here as in any source crawl: it is refused on a 继续,
+        # “重新采集” means the same thing here as in any source crawl: it is refused on a 继续,
         # because on this path the dedupe ledger *is* the resume machinery — releasing it would
         # let the walk re-collect the rows the wall had already paid for.
         assert not harness.names_key(again.rec.text, 'run.recrawl'), (
@@ -1578,7 +1578,7 @@ def test_e6_a_session_that_dies_mid_crawl_resumes_the_table_it_left(client, app_
         )
         have = harness.numbers_from(again.rec.lines, 'crawl.resume_have', 'n')
         assert have and have[0] == kept, f'the walk started from {have[:1]}, not the {kept} rows already paid for'
-        # The ledger, not the page, is what says 「not re-read」: ``crawl.zhihu.processed`` carries
+        # The ledger, not the page, is what says "not re-read": ``crawl.zhihu.processed`` carries
         # the crawler's own running count of rows in hand, so a resumed walk that re-emitted from
         # one would show it here. Card *order* is the site's to change and is not asserted.
         emitted = harness.numbers_from(again.rec.lines, 'crawl.zhihu.processed', 'n')
@@ -1603,12 +1603,12 @@ def test_e7_a_resume_node_adopts_a_stored_table_instead_of_crawling_it_again(cli
 
     Five rules, all paid for by ONE donor crawl and then measured on canvases that never open a
     browser: an explicit pick is adopted and named (``resume.loaded``, with the donor node's own
-    「标题 #id」 label, which only the *record's* title column can supply, because that node is
+    “标题 #id” label, which only the *record's* title column can supply, because that node is
     not on this canvas); a pick that names a node the run never had falls back to the fullest
     node rather than answering empty; a canvas with no run to read says ``resume.no_run``; a run
     picked whose every node holds nothing says ``resume.empty`` and names both the run and the
-    node it looked for; and the last of those is then resumed once, which is where 「a stored
-    result with zero rows is never reused」 lives — restoring the nothing would report a node that
+    node it looked for; and the last of those is then resumed once, which is where "a stored
+    result with zero rows is never reused" lives — restoring the nothing would report a node that
     produced no table as one that had already been computed.
     """
     harness.real_jar(monkeypatch)
@@ -1666,7 +1666,7 @@ def test_e7_a_resume_node_adopts_a_stored_table_instead_of_crawling_it_again(cli
         target=E7_ROWS,
     ) as fullest:
         fullest.wait()
-        # The pick named a node this run never had. 「Empty」 would be a plausible-looking answer
+        # The pick named a node this run never had. "Empty" would be a plausible-looking answer
         # and a wrong one: the reuse rule is that the fullest node of that run is adopted.
         assert not harness.names_key(fullest.rec.text, 'resume.empty'), (
             'a pick with no rows was answered as an empty table instead of the fullest node: '
@@ -1690,7 +1690,7 @@ def test_e7_a_resume_node_adopts_a_stored_table_instead_of_crawling_it_again(cli
         assert answer['verdict'] == harness.NAMED_SHORT and 'resume.no_run' in answer['reasons'], answer
         norun.finish(answer=answer, target=1)
 
-    # The empty answer names its pick 「标题 #id」, and the title it prints is the one THAT run
+    # The empty answer names its pick “标题 #id”, and the title it prints is the one THAT run
     # stored, so the label is read off the canvas whose record is being read rather than copied
     # from the builder's own default title.
     empty_label = f'{next(node["title"] for node in norun_canvas["nodes"] if node["id"] == "node-1")} #node-1'
@@ -1705,7 +1705,7 @@ def test_e7_a_resume_node_adopts_a_stored_table_instead_of_crawling_it_again(cli
         picked.wait()
         # The run *exists* and was picked by id; every node inside it holds nothing. That is the
         # other empty answer, and it has to name the run and the node it looked for, or a user
-        # reading 「no rows」 cannot tell a picked-but-empty record from a typo'd id.
+        # reading "no rows" cannot tell a picked-but-empty record from a typo'd id.
         assert harness.mentions(picked.rec.text, 'resume.empty', rid=norun.run_id, nid=empty_label), (
             f'the empty adoption did not name what it found empty: {picked.rec.text[-1200:]}'
         )
@@ -1755,7 +1755,7 @@ def test_f1_the_preflight_probe_answers_for_zhihu_and_says_it_is_not_dead(monkey
     profile parks the next crawl for ``PROFILE_LOCK_TIMEOUT``.
 
     Risk control answering the probe is a legitimate outcome — a headless probe zhihu
-    bounces has told us nothing about the session, and 「无法核对」 never blocks a run. What
+    bounces has told us nothing about the session, and “无法核对” never blocks a run. What
     is refused here is therefore exactly one answer: ``expired``, plus the missing session
     the probe was supposed to look at.
     """
@@ -1860,7 +1860,7 @@ def test_g1_parallel_with_the_queue_off_really_overlaps(client, app_module, monk
     overlap off the *crawler's* own lines — both walks had begun before either ended — because
     the node-executing line is printed before the platform's turn is taken and so proves
     nothing. The negative half asserts the lane stayed out of the way: had the queue been on,
-    the console would say 「等待采集时段」 and the run would be a serial one wearing a parallel
+    the console would say “等待采集时段” and the run would be a serial one wearing a parallel
     label.
     """
     harness.real_jar(monkeypatch)
@@ -1957,10 +1957,10 @@ def test_g3_parallel_on_one_real_profile_serializes_and_finishes(client, app_mod
     — never gets asked anything. So the rate-limit queue is turned off exactly as in G1, which
     leaves the *only* serialization left standing between two browsers and one directory:
     ``profiles.acquire_profile``, chromedriver's
-    「failed to write prefs file」 answer to a second session in the same place.
+    "failed to write prefs file" answer to a second session in the same place.
 
-    What a green therefore has to show is the wait itself: 「已排队 N 秒：这个 profile 同时只能
-    开一个浏览器」 naming this platform's own directory, and no stuck-profile refusal under it.
+    What a green therefore has to show is the wait itself: “已排队 N 秒：这个 profile 同时只能
+    开一个浏览器” naming this platform's own directory, and no stuck-profile refusal under it.
     A ``ProfileUnavailableError`` here is a serialization bug in this file rather than weather,
     so the timeout stays generous instead of excusing the wait.
     """
@@ -2018,7 +2018,7 @@ def _components(workflow: dict) -> list:
     ``{'label', 'source', 'mode', 'ask', 'on'}``: ``label`` is the name node's label (what the
     run is filed under), ``on`` is whether the component still has all of its 启用 switches, and
     ``ask`` is the node's own number — the *user's* ask, whatever the site does with it. A
-    comments node asks per article (``comment_limit``, and 0 means 「采集全部评论」 with no row
+    comments node asks per article (``comment_limit``, and 0 means “采集全部评论” with no row
     budget at all), so its ``ask`` is the product of the limit and its links and one row per link
     when the limit is open-ended: see :func:`_comment_ask`.
 
@@ -2133,7 +2133,7 @@ def _records_by_node(client, parts) -> dict:
     ENABLED name node, falling back to the canvas's own name when that node is switched off — the
     product's documented precedence. Measured on the shipped canvas: three of its four components
     have their name node off, so three rows carry the identical 名称 and a name→record map hands
-    two of them the wrong row (H2 first failed as 「run … has no node 'node-12'」 while reading the
+    two of them the wrong row (H2 first failed as "run … has no node 'node-12'" while reading the
     hot component's record). Node identity cannot collide: a component's source node exists in
     exactly one record of the run, which is what this resolves by.
     """
@@ -2179,7 +2179,7 @@ def _audit_components(run, *, records: dict, case_id: str, parts: list) -> tuple
 
     A four-component run is four verdicts: rolling them into one number is how a half-empty
     crawl gets presented as a success, and grading them against the *whole* console is how one
-    component's honest 「没有更多了」 whitewashes another component's silence. Returns the
+    component's honest “没有更多了” whitewashes another component's silence. Returns the
     silent ones, the rows kept, the asks added up, and each component's own verdict — the last
     of these is what the summary row is derived from, so an index line can never read FULL
     over a run whose components did not.
@@ -2460,8 +2460,8 @@ def test_h3_the_whole_shipped_canvas_in_parallel_headless(client, app_module, mo
 #: * it must sit BELOW the life of one walk. Measured: a windowed 正文 search delivers 10 rows in
 #:   ~10 s and 40 rows in ~24 s (``scratchpad/live_audit/20260927-223207/verdicts.csv``), so at
 #:   the 40 s first drafted here — and at the 12 s default G1 and G3 also tripped on — the first
-#:   crawl FINISHES before its sibling is allowed to start, and 「错峰 spaces departures, not
-#:   lives」 has nothing left to overlap. S1 therefore asks for a walk big enough to outlive the
+#:   crawl FINISHES before its sibling is allowed to start, and “错峰 spaces departures, not
+#:   lives” has nothing left to overlap. S1 therefore asks for a walk big enough to outlive the
 #:   gap (``S1_TARGET``) and keeps the gap the smaller of the two.
 S1_STAGGER = 20
 

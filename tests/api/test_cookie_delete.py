@@ -2,7 +2,7 @@
 
 The file a platform's crawl is planted from is one of two places a session can live,
 and this endpoint only ever touches one of them. Every test here exists because the
-plausible reading of 「删除 Cookie」 is "I am logged out now" — which is true of a
+plausible reading of “删除 Cookie” is "I am logged out now" — which is true of a
 throwaway browser and false of a profile that has already logged in inside itself
 (``sessions.profiles`` imports the file once and never plants it again).
 """
@@ -37,7 +37,7 @@ def clean_jar(app_module):
     """No inherited cookie file and no inherited profile history.
 
     Both dirs are session-scoped tmp paths, so a marker another test wrote would make
-    「profile 里还留着会话」 true for reasons this test never set up.
+    “profile 里还留着会话” true for reasons this test never set up.
     """
     for platform in CookieManager.PLATFORMS:
         with contextlib.suppress(FileNotFoundError):
@@ -51,8 +51,8 @@ def saved(app_module):
     """Put a cookie file on disk for the DEFAULT account, on a clean platform.
 
     The suite shares one cookie dir, and a sibling module mints 默认账号2 through the panel's
-    save on purpose — a named account left behind would make 「delete the default, the platform
-    now has nothing」 false for reasons that have nothing to do with this test. Status answers
+    save on purpose — a named account left behind would make "delete the default, the platform
+    now has nothing" false for reasons that have nothing to do with this test. Status answers
     per platform as "any account has a login", so the precondition has to be *no* account.
     """
 
@@ -74,7 +74,7 @@ class TestDelete:
         assert cookie_manager.load('weibo') == []
 
     def test_the_other_platforms_keep_their_cookies(self, client, app_module, saved):
-        """One row of the panel, one platform: a 「清空」 that the button never claimed
+        """One row of the panel, one platform: a “清空” that the button never claimed
         to be would destroy every session the user has."""
         saved('zhihu')
         saved('weibo')
@@ -89,7 +89,7 @@ class TestDelete:
         assert '../x' in response.get_json()['error'], 'the refusal has to name what it refused'
 
     def test_deleting_nothing_is_answered_as_nothing_rather_than_a_fake_success(self, client, app_module):
-        """The panel could show 「已删除」 over a file that was never there, and the
+        """The panel could show “已删除” over a file that was never there, and the
         user would believe a stale snapshot had been replaced."""
         cookie_manager.delete('douyin')
         response = client.post('/api/cookies/delete', json={'platform': 'douyin'})
@@ -108,7 +108,7 @@ class TestDelete:
 
     def test_the_profile_caveat_is_the_only_extra_line_a_deletion_may_add(self, client, app_module, saved):
         """A second line has to carry a fact the first cannot, not repeat it: the
-        service already logs 「已删除」, so the endpoint's own line is the caveat about
+        service already logs “已删除”, so the endpoint's own line is the caveat about
         the profile or nothing."""
         saved('youtube')
         profiles.mark_used('youtube', imported=False)
@@ -120,7 +120,7 @@ class TestDelete:
 
     def test_one_line_for_one_save_too(self, client, app_module, profiles_off):
         """The same pair shipped in the save path years ago: the service logs the
-        success and the handler narrated it again, so 「已保存」 printed twice for one
+        success and the handler narrated it again, so “已保存” printed twice for one
         paste of one JSON blob."""
         app_module.execution_state['logs'] = []
         body = {'platform': 'zhihu', 'cookies': [{'name': 'z_c0', 'value': 'x'}]}

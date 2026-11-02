@@ -271,7 +271,7 @@ class TestFingerprints:
     def test_an_output_shape_switch_does_not_rekey_a_paid_crawl(self):
         """分片/格式/时间戳… describe how the file is spelled, not what is collected.
 
-        A 700-row crawl interrupted, the user ticked 「保留分片」 and pressed 继续 — because the
+        A 700-row crawl interrupted, the user ticked “保留分片” and pressed 继续 — because the
         switch was inside the fingerprint, the node's durable rows were dropped and its cursor
         NULLed, so the walk re-opened every link and spent the account again for a table that
         already existed. The export is re-rendered from the kept ``node_rows`` anyway, so leaving
@@ -320,7 +320,7 @@ class TestFingerprints:
         assert node_fingerprint(plain) == node_fingerprint(blank) == node_fingerprint(spaced)
         named = _node(params={'keyword': '三亚', 'account': 'work'})
         assert node_fingerprint(named) != node_fingerprint(plain)
-        # 「default」 is that same login spelled as a NAME — which is what the candidate list
+        # "default" is that same login spelled as a NAME — which is what the candidate list
         # and a new node's preselection hand out. Kept in the hash, one session owned two
         # fingerprints and 继续 could not find the rows it had already paid for.
         by_name = _node(params={'keyword': '三亚', 'account': 'default'})
@@ -330,7 +330,7 @@ class TestFingerprints:
     def test_a_blank_model_hashed_the_same_as_no_model_at_all(self):
         """A BLANK 模型 IS 跟随全局 — the run's single global model, exactly what an
         LLM node used before per-node models existed. So absence and '' must hash
-        alike, or merely reopening a node panel and picking 「跟随全局」 (which stamps
+        alike, or merely reopening a node panel and picking “跟随全局” (which stamps
         '' into params) would re-key every paid LLM row and the children's dedupe
         scope of an old canvas.
 
@@ -525,7 +525,7 @@ class TestLifecycle:
     def test_a_resume_resets_node_done_so_the_progress_never_lies(self, store):
         """``node_done`` is written only at finish/settle, so a resume that refreshed ``node_total``
         but left ``node_done`` would render the PREVIOUS attempt's 3/N for a run that has produced
-        nothing yet this time — the same 「4/3」 the finish path refuses. A re-described run must
+        nothing yet this time — the same "4/3" the finish path refuses. A re-described run must
         start its done-count at 0."""
         store.start_run('r1', 'wf', 'fp-a', node_total=5)
         for nid in ('n1', 'n2', 'n3'):
@@ -572,7 +572,7 @@ class TestLifecycle:
         # Neither a starved node, nor one that died, nor one that only half
         # delivered is "done" — and the console already refuses to count them
         # (``completed_nodes``), so the record and the console now print one answer
-        # instead of 「1/4」 and 「4/4 个节点完成」 for the same run. A restored node
+        # instead of “1/4” and “4/4 个节点完成” for the same run. A restored node
         # does count: its rows are in hand, which is the only test that matters.
         assert run['node_done'] == 2
         assert run['status'] == RUN_FAILED
@@ -581,7 +581,7 @@ class TestLifecycle:
         """A ``继续`` after a finished node was removed from the canvas must not report
         that ghost as done: its ``node_runs`` row survives (the record keeps deleted
         nodes) but it was never attempted this pass, so an ``n/N`` over all rows reads
-        past ``node_total`` — the panel's 「4/3」. Scoping to the visited set fixes it."""
+        past ``node_total`` — the panel's "4/3". Scoping to the visited set fixes it."""
         _start(store)
         store.begin_node('r1', 'keep', 'source')
         store.finish_node('r1', 'keep', NODE_DONE)
@@ -768,7 +768,7 @@ class TestRows:
     def test_a_capped_append_is_not_reported_as_a_ledger_dedupe(self, store, sample_rows, monkeypatch):
         # row_sink tells cap from 已采集 by the dropped count: a cap leaves dropped=0 (the row was
         # never tried against the ledger), a real already-collected skip sets dropped>0. Tallied
-        # wrong, the console says 「此前已采集」 and advises 「重新采集」 — which releases claims the
+        # wrong, the console says “此前已采集” and advises “重新采集” — which releases claims the
         # disk cap never made and re-crawls into the same cap.
         monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 1)
         _start(store)
@@ -998,7 +998,7 @@ class TestPurgeAndStats:
         outlived the data when the run that made it was aged out or trimmed by the
         per-workflow cap: the next crawl of the same signature quietly returned fewer
         rows than the user asked for — a gap with no visible shape, and no way back
-        except 「重新采集」. A *manual* run deletion still keeps its claims (see
+        except “重新采集”. A *manual* run deletion still keeps its claims (see
         ``test_delete_run_keeps_item_claims``): there the user removed a record while
         knowing the crawl was already paid for; here the storage decided for them.
         """
@@ -1277,7 +1277,7 @@ class TestRunLog:
         assert got['has_more'] is False
 
     def test_has_more_and_before_seq_walk_older_without_gaps(self, store):
-        """「加载更早」 hands back the smallest seq it saw as the next ``before_seq``.
+        """“加载更早” hands back the smallest seq it saw as the next ``before_seq``.
 
         Fetching the newest page then paging backward must reproduce the whole log in
         order with neither a repeated line nor a dropped one — the limit is what makes
@@ -1320,7 +1320,7 @@ class TestRunLog:
         store.append_log('r1', [_log_row("has 'quote' and 100%"), _log_row('1000 行')])
         assert [r['line'] for r in store.read_log('r1', q="quote' and 100%")['rows']] == ["has 'quote' and 100%"]
         assert store.read_log('r1', q="') OR 1=1 --")['rows'] == []
-        # LIKE would read the trailing ``%`` as "anything after 100" and wrongly return 「1000 行」;
+        # LIKE would read the trailing ``%`` as "anything after 100" and wrongly return “1000 行”;
         # a substring test returns only the line that literally holds ``100%``.
         assert [r['line'] for r in store.read_log('r1', q='100%')['rows']] == ["has 'quote' and 100%"]
 

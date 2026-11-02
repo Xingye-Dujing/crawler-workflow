@@ -1,6 +1,6 @@
 /* Runs the comment-region pre-run notice gate (workflow.js) under node, in isolation.
 
-The gate must fire ONLY when the effective canvas actually crawls comments (a 「评论」
+The gate must fire ONLY when the effective canvas actually crawls comments (a “评论”
 node, or a source node switched to comments mode), must stay silent otherwise (so a
 search-only canvas is never interrupted), and must not fire for a comment node that is
 disabled or starved by a disabled upstream. Driving `execute()` end-to-end would also

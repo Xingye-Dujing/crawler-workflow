@@ -142,7 +142,7 @@ def test_one_drama_two_episodes_harvest_real_comments():
         assert str(row['剧名']).strip(), f'a harvested row carries no drama name: {row}'
         assert 1 <= int(row['集序号']) <= 2, f'episode index outside the walk: {row}'
         assert str(row['分集ID']).strip(), f'a comment row names no episode thread: {row}'
-    # The number that answers 「did ↓ advance WITHIN the drama after the drawer closed」: the
+    # The number that answers "did ↓ advance WITHIN the drama after the drawer closed": the
     # episodes that actually landed vs the ones the walk asked for. Printed so the next single
     # run reports it instead of needing a human eye on the window.
     landed = sorted({int(row['集序号']) for row in rows})

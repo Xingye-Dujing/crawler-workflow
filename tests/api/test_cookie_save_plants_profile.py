@@ -5,7 +5,7 @@ overwriting a live session with an older snapshot is the measured harm (weibo re
 SUB/SUBP on the first logged-in load). That rule protects a crawl from the app, not the
 user from themselves — and the panel had left the other half unattended: paste a fresh
 cookie and the browser that would actually crawl with it never read it again, unless the
-user noticed and pressed 「把 Cookie 更新进 Profile」.
+user noticed and pressed “把 Cookie 更新进 Profile”.
 
 A paste is not an older snapshot; it is the newest session there is. So the save path now
 does the transfer itself, and what is left to test is what it says when it *cannot* do it
@@ -74,7 +74,7 @@ def _save(client, platform='weibo', account='', cookies=None):
 
 
 class TestTheSecondUnnamedLogin:
-    """A blank name is 「a login with no name yet」, so a second one is a NEW login (#R2).
+    """A blank name is "a login with no name yet", so a second one is a NEW login (#R2).
 
     Two logins of one platform carry the same cookie names, and the value that would tell them
     apart is the one that rotates (weibo's SUB), so nothing in the paste says "this is the same
@@ -173,7 +173,7 @@ class TestThePlantItself:
 
     def test_a_plant_of_session_cookies_says_part_of_it_will_not_last(self, client, factory, monkeypatch, app_module):
         """Measured on a real Chrome: a cookie with no expiry is never written to the
-        profile store, so it dies with the window opened to plant it. 「已更新」 alone would
+        profile store, so it dies with the window opened to plant it. “已更新” alone would
         promise a transfer that partly did not happen."""
         factory()
         monkeypatch.setattr(cookie_manager, 'session_only_count', lambda platform, account='': 2)

@@ -8,17 +8,17 @@ The rules this pins:
   (the user is already inside "refresh the cookie and carry on");
 * the platforms asked about are the ones this canvas crawls — a source node's own
   platform, and for a comment node the domain of every link, deduped in node order;
-* 「已失效」 refuses the run: no ``/api/workflow/execute`` leaves the page, the dialog
+* “已失效” refuses the run: no ``/api/workflow/execute`` leaves the page, the dialog
   names the platform and quotes the server's own sentence, and it offers no
-  「我确定，照样跑」 — that button is the hole this feature exists to close;
-* 「无法核对」 does *not* refuse: risk control, a timeout or a profile held by a live
+  “我确定，照样跑” — that button is the hole this feature exists to close;
+* “无法核对” does *not* refuse: risk control, a timeout or a profile held by a live
   crawl says nothing about the session, and blocking there would send the user to
   re-log in a cookie that is fine;
 * a gate that could not run says so and lets the run start, rather than inventing a
   failure the site never reported;
 * the block dialog opens the Cookie panel on the broken platform only when the user
   asked for it, and never closes a panel that was already open;
-* with 自动验证 off nothing is asked at all — the old 「执行前确认 Cookie」 fallback
+* with 自动验证 off nothing is asked at all — the old “执行前确认 Cookie” fallback
   was deleted, an off switch means off;
 * the per-run profile answer travels to the check, so the probe tests the browser the
   run will use — and absence stays absence rather than becoming a global "off".
@@ -71,7 +71,7 @@ def _source(node_id, platform, mode=None, account=None, **extra):
         params['account'] = account
     # A mode whose required field is not the keyword (wechat takes 文章链接) can still be
     # overridden through ``urls``/``extra`` the way the panel would fill it, so the canvas
-    # validates rather than reporting 「the gate let it through」 about a run the canvas had
+    # validates rather than reporting "the gate let it through" about a run the canvas had
     # already rejected.
     params.update(extra)
     return {
@@ -115,14 +115,14 @@ def _chain(index, platform, kind='source', urls=None, mode=None, account=None, *
     """One complete workflow: a crawler node wired into an output node.
 
     A crawler with nothing downstream is refused by ``validate()`` before the gate is
-    ever reached, so a scenario built that way would report 「the gate let it run」 for
+    ever reached, so a scenario built that way would report "the gate let it run" for
     a run the canvas had already rejected — an assertion that passes on its own
     absence.
     """
     src_id, out_id = f'w{index}-s', f'w{index}-o'
     # ``urls`` means two different things by node kind: the Comment node's link list, and a
     # source node whose mode takes links instead of a keyword (wechat). Feeding it only to
-    # the Comment branch is how a wechat canvas validated as 「文章链接不能为空」 in a scenario
+    # the Comment branch is how a wechat canvas validated as “文章链接不能为空” in a scenario
     # that meant to test a cookie gate.
     if kind == 'source':
         src = _source(src_id, platform, mode, account, **({'urls': urls} if urls else {}), **extra)
@@ -417,8 +417,8 @@ SCENARIOS = [
         'preflight': CLEAN,
     },
     {
-        # An overseas platform asks on its own: the question is 「is the VPN up」, not
-        # 「does this canvas mix networks」 — measured 2026-09-26, a domestic platform
+        # An overseas platform asks on its own: the question is "is the VPN up", not
+        # "does this canvas mix networks" — measured 2026-09-26, a domestic platform
         # crawls fine from an overseas exit, so the domestic half is nobody's problem.
         'id': 'overseas-alone-asks',
         'settings': AUTO,
@@ -458,7 +458,7 @@ SCENARIOS = [
     },
     {
         # A platform the matrix says nothing about is left out rather than guessed at:
-        # 「it might be overseas」 is not a fact to interrupt a run with.
+        # "it might be overseas" is not a fact to interrupt a run with.
         'id': 'overseas-without-a-region',
         'settings': AUTO,
         'matrix': _matrix_without_region('youtube'),
@@ -484,7 +484,7 @@ SCENARIOS = [
     {
         # 微信 is crawled from article links and has never had a cookie row (it is not in
         # ``CookieManager.PLATFORMS``), so the status map has no key for it at all — which is
-        # exactly what a second cookie check inside ``execute()`` read as 「missing」 and made
+        # exactly what a second cookie check inside ``execute()`` read as "missing" and made
         # this platform impossible to start. No session is asked, the run starts.
         'id': 'wechat-has-no-session-to-be-asked-about',
         'settings': AUTO,
@@ -506,7 +506,7 @@ SCENARIOS = [
     {
         # A CatBus crawl has a login too — its own. The entry must travel with the backend and
         # with the CatBus account, or the server would probe the Selenium session this node never
-        # reads and answer 「没有 Cookie」 about a crawl that never opens one.
+        # reads and answer “没有 Cookie” about a crawl that never opens one.
         'id': 'catbus-asks-its-own-session',
         'settings': AUTO,
         **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb', account='selenium-login')),
@@ -638,7 +638,7 @@ class TestHardBlock:
     def test_canceling_the_dialog_blocks_exactly_as_hard(self, gate):
         case = gate['cancel-still-blocks']
         assert case['ran'] is False
-        assert case['cookiePanelOpen'] is False, '「取消」 means "not now", not "show me the panel"'
+        assert case['cookiePanelOpen'] is False, '“取消” means "not now", not "show me the panel"'
 
     def test_going_to_update_lands_on_the_broken_platform(self, gate):
         """The panel opens on whoever was last picked otherwise, and a user hunting
@@ -687,12 +687,12 @@ class TestNoAnswerIsNotAnAnswer:
             joined = '\n'.join(case['toasts'])
             assert 'Zhihu' in joined, f'{scenario} must say which platforms went unchecked'
             assert 'zhihu' not in joined, f'{scenario} printed the storage key at the user'
-            assert 'not a pass' in joined or '不是「有效」' in joined, f'{scenario} must not imply a pass'
+            assert 'not a pass' in joined or '不是“有效”' in joined, f'{scenario} must not imply a pass'
 
 
 class TestTheCheckOffMeansOff:
     def test_with_both_switches_off_nothing_is_asked_at_all(self, gate):
-        """The old 「执行前确认 Cookie」 prompt used to sit on this branch and ask the
+        """The old “执行前确认 Cookie” prompt used to sit on this branch and ask the
         user to guess; an off switch now genuinely asks and blocks nothing."""
         case = gate['both-off']
         assert case['asked'] is False
@@ -844,7 +844,7 @@ class TestOverseasNetworkAsk:
     def test_a_domestic_canvas_is_never_asked(self, gate):
         """The profile notice still fires (douyin is a platform a throwaway browser
         fails on) — what must not fire is the routing question, whose two buttons are
-        「已开」 plus a cancel and nothing else."""
+        “已开” plus a cancel and nothing else."""
         case = gate['domestic-only-silent']
         asked_about_networks = [dialog for dialog in case['dialogs'] if dialog['values'] == ['go', 'null']]
         assert asked_about_networks == [], f'two domestic crawls are not a routing question: {case["dialogs"]}'
@@ -896,7 +896,7 @@ class TestTheSecondBackendAtTheGate:
         assert case['ran'] is False, 'a cell the engine cannot crawl must not reach the start path'
 
     def test_a_dead_catbus_login_still_refuses_but_offers_no_cookie_panel(self, gate):
-        """Hard block, different remedy: 「去更新 Cookie」 would send the user to a session the run never reads."""
+        """Hard block, different remedy: “去更新 Cookie” would send the user to a session the run never reads."""
         case = gate['catbus-wall-offers-no-cookie-panel']
         assert case['ran'] is False, 'the refusal is as hard as the browser one'
         dialog = case['dialogs'][-1]

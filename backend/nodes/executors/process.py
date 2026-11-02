@@ -427,8 +427,8 @@ def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
         return df.to_dict('records')
 
     # An unknown operation is a broken node, not an empty table. Returning [] here
-    # settled it DONE: the run went green, every downstream node complained 「上游没有
-    # 数据」 about itself, and the single sentence explaining why carried no node name
+    # settled it DONE: the run went green, every downstream node complained “上游没有
+    # 数据” about itself, and the single sentence explaining why carried no node name
     # at all — so the user was sent to diagnose the healthy boxes. Raising hands the
     # reason to the executor, which fails THIS node and prints it with its label.
     raise ValueError(t('wf.unknown_process_op', op=op or '(empty)'))

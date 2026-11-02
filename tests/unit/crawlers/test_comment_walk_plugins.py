@@ -87,7 +87,7 @@ class TestTheWalkTable:
 
 class TestTheDispatch:
     def test_the_session_names_the_platform_when_no_walk_exists(self, monkeypatch):
-        """An unregistered platform raises: a table that answers 「no comments」 for a site nobody
+        """An unregistered platform raises: a table that answers "no comments" for a site nobody
         wrote is the outcome this dispatch must never produce (AGENTS: 具名拒绝, never ``[]``)."""
         monkeypatch.setattr(walks, '_WALKS', {})
         monkeypatch.setattr(walks, '_BUILTINS_LOADED', True)

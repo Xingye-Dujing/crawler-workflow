@@ -19,11 +19,11 @@ ZH = {
     'api.biblioNotRecognized': '无法把 {name} 识别为任何已支持的文献导出格式',
     'api.bodyNotObject': '请求体必须是 JSON 对象',
     'api.cloudNoLocalModel': (
-        '这台服务器没有本地模型可连（「{provider}」需要宿主自己跑一个 Ollama 守护进程）：'
-        '云端部署只支持 OpenRouter，请在「设置 → AI」里改选 OpenRouter 并填入模型与 API Key'
+        '这台服务器没有本地模型可连（“{provider}”需要宿主自己跑一个 Ollama 守护进程）：'
+        '云端部署只支持 OpenRouter，请在“设置 → AI”里改选 OpenRouter 并填入模型与 API Key'
     ),
     'api.cloudNoLoginWindow': (
-        '这台服务器没有可以登录的窗口：请在「Cookie」面板里粘贴 Cookies JSON 保存，'
+        '这台服务器没有可以登录的窗口：请在“Cookie”面板里粘贴 Cookies JSON 保存，'
         '系统会在保存时替该账号建好 Profile 并种进去'
     ),
     'api.columnMissing': '数据里没有这一列：{column}',
@@ -42,25 +42,25 @@ ZH = {
     'api.cookieRenameTaken': '这个名字已经有另一份登录了，换一个个别的名字',
     'api.cookiesRequired': 'Cookies 数据不能为空',
     'api.datasetInLineage': (
-        '这份文件是累积数据集「{name}」的当前版本；删除会让累积历史断开（强制删除会同时重置该累积集）'
+        '这份文件是累积数据集“{name}”的当前版本；删除会让累积历史断开（强制删除会同时重置该累积集）'
     ),
     'api.datasetInUse': '这些已保存的工作流仍在引用该文件，删除后它们会变成空数据源：{workflows}',
     'api.datasetMissing': '没有这个已保存的数据集：{did}',
     'api.datasetNameInvalid': '这个名称不能用作数据集名（去掉路径字符后为空）：{name}',
     'api.datasetTooBig': '文件太大没法存：{err}',
-    'api.diffKeyMissing': '对比键「{name}」不是两份表都有的列，无法据此匹配行',
-    'api.diffKeyNotUnique': '对比键「{name}」在某份表里有重复值，无法唯一对应每一行',
+    'api.diffKeyMissing': '对比键“{name}”不是两份表都有的列，无法据此匹配行',
+    'api.diffKeyNotUnique': '对比键“{name}”在某份表里有重复值，无法唯一对应每一行',
     'api.diffTwoSources': '对比需要两个数据源（"a" 与 "b"），每个是 dataset_id 或 node_id+workflow_name 或内联 data',
-    'api.excelMultiSheet': '工作簿「{name}」有多个非空工作表（{sheets}），一次只能导入一张表，请先拆成单个表再上传',
+    'api.excelMultiSheet': '工作簿“{name}”有多个非空工作表（{sheets}），一次只能导入一张表，请先拆成单个表再上传',
     'api.exportNotFound': '导出文件不存在（或不允许下载）：{name}',
     'api.fieldTypeInvalid': '字段 {name} 类型不正确',
-    'api.foreignOriginRefused': '本站只服务本机浏览器：这个请求来自「{origin}」，未鉴权又握着真实账号，故拒绝',
+    'api.foreignOriginRefused': '本站只服务本机浏览器：这个请求来自“{origin}”，未鉴权又握着真实账号，故拒绝',
     'api.originRefusedLog': ('拒绝跨站来源：{method} {path} host={host} origin={origin} referer={referer}'),
     'api.historyNoRunId': '没有指定运行 ID，未删除任何执行历史',
-    'api.killDone': '线程「{name}」已结束',
+    'api.killDone': '线程“{name}”已结束',
     'api.killFailedGeneric': '结束线程失败',
     'api.killInvalidId': '无效的线程 ID',
-    'api.killLiveWorker': '这是正在运行的采集线程，请点「停止」而不是强杀它',
+    'api.killLiveWorker': '这是正在运行的采集线程，请点“停止”而不是强杀它',
     'api.killNoIdent': '没有给出线程 ID',
     'api.killNotAlive': '该线程已不存活',
     'api.killNotYours': '这台服务器上这个线程不属于你的运行，不能结束：{name}',
@@ -94,14 +94,14 @@ ZH = {
     'api.reportNoData': '没有可写入报告的数据：请先运行一次工作流，或选择一条运行记录',
     'api.rerunBusy': '另一个运行仍在进行中：重跑会先删掉这部分已存结果，请等它跑完再重试',
     'api.rerunFingerprintMismatch': '画布与所选运行记录不是同一份工作流，无法复用其结果，请从运行详情重跑该节点',
-    'api.rerunNoNode': '当前画布里没有节点「{node}」，无从重跑',
-    'api.rerunNoRows': '节点「{node}」在上次运行里没有可用的完成结果，无从重跑',
+    'api.rerunNoNode': '当前画布里没有节点“{node}”，无从重跑',
+    'api.rerunNoRows': '节点“{node}”在上次运行里没有可用的完成结果，无从重跑',
     'api.rerunNoRun': '找不到这个工作流已保存的运行结果，无法从该节点重跑（请先运行一次）',
     'api.rerunRunLive': '该运行仍在进行中（或正在停止），不能重跑它的节点——请等它跑完或先停止它',
-    'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用「重新运行」',
+    'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用“重新运行”',
     'api.runLogTruncated': '（日志过长，仅下载前 {n} 行）',
     'api.runNotFound': '找不到运行记录：{rid}',
-    'api.runSettingOption': '画布设置里的「{setting}」没有「{value}」这个取值（可用：{allowed}）',
+    'api.runSettingOption': '画布设置里的“{setting}”没有“{value}”这个取值（可用：{allowed}）',
     'api.stepsMustBeObjects': 'steps 必须是对象列表，每项含 "op" 与可选 "params"',
     'api.svgNotSvg': 'SVG 保存被拒：内容不是以 <svg 开头或缺少 xmlns 声明',
     'api.svgRefused': 'SVG 保存被拒：图中含有 {found}，这类标记可能带脚本或外部引用',
@@ -112,7 +112,7 @@ ZH = {
     'api.workflowMissing': '没有这个已保存的工作流：{name}',
     'api.workflowNameRequired': '缺少有效的工作流名称',
     'api.workflowNameSame': '新旧名字是同一个文件，没有可重命名的东西',
-    'api.workflowNameTaken': '已有同名工作流「{name}」，重命名会覆盖它，请换一个名字',
+    'api.workflowNameTaken': '已有同名工作流“{name}”，重命名会覆盖它，请换一个名字',
     'api.workflowNodeNoId': (
         '画布上有一个节点没有 id，无法运行（id 是节点的存储键）——请重新拖入该节点，或修复工作流文件'
     ),
@@ -139,7 +139,7 @@ ZH = {
     'compare.runMissing': '没有这次运行：{rid}',
     'compare.sameRun': '不能拿一次运行和它自己对比',
     'compare.tooManyRows': '节点 {node} 的数据超过 {max} 行，无法对比',
-    'data.mergeColumns': '数据集「{name}」的列与第一份不一致：多出 {extra}；缺少 {missing}',
+    'data.mergeColumns': '数据集“{name}”的列与第一份不一致：多出 {extra}；缺少 {missing}',
     'data.mergeMissing': '要合并的数据集不存在：{id}',
     'data.mergeNameRequired': '合并结果需要一个名字',
     'data.mergeNameTooLong': '合并结果的名字超过 {n} 个字符',
@@ -148,14 +148,14 @@ ZH = {
     'ds.clearBusy': '正在运行的那次可能正在读取这些数据集，请先停止或等它跑完再清空',
     'ds.cleared': '已清空全部已保存文件：{n} 个',
     'ds.corrupt': '数据集 {did} 读不出来（记录已损坏），请重新上传',
-    'ds.lineage_columns': '累积数据集「{name}」的列与已有版本不一致：多出 {extra}；缺少 {missing}',
-    'ds.lineage_current_missing': '累积数据集「{name}」的当前版本 {id} 不存在',
+    'ds.lineage_columns': '累积数据集“{name}”的列与已有版本不一致：多出 {extra}；缺少 {missing}',
+    'ds.lineage_current_missing': '累积数据集“{name}”的当前版本 {id} 不存在',
     'ds.lineage_identity': '未知的去重方式：{value}（只能是整行或指定列）',
     'ds.lineage_key_missing': '去重列不在表中：{cols}',
     'ds.lineage_keys_required': '按列去重时必须填写去重列',
     'ds.lineage_missing_dataset': '导入累积数据集时找不到数据集 {id}',
     'ds.lineage_name_required': '累积数据集需要一个名字',
-    'ds.lineage_too_large': '累积数据集「{name}」将达 {n} 行，超过上限 {max}',
+    'ds.lineage_too_large': '累积数据集“{name}”将达 {n} 行，超过上限 {max}',
     'ds.missing': '工作流引用的上传文件已不在库中：{name}',
     'ds.purge_result': '清理孤立文件 {n} 个，保留 {kept} 个仍在使用的文件',
     'ds.purged': '已清理 {days} 天未使用且无工作流引用的文件：{n} 个',
@@ -166,18 +166,18 @@ ZH = {
     'export.done': '已导出 {n} 行至 {path}（{fmt}）',
     'export.formula_escaped': '导出时给 {n} 个以 = + - @ 开头的文本单元格加了前导单引号，避免被 Excel 当成公式执行',
     'export.parquet_engine_missing': '导出 Parquet 需要列式引擎 pyarrow，请先安装：pip install pyarrow',
-    'export.window_ignored': '节点 {nid}：结果文件照常生成，仅「文件名追加时间范围」被忽略——{reason}',
+    'export.window_ignored': '节点 {nid}：结果文件照常生成，仅“文件名追加时间范围”被忽略——{reason}',
     'export.window_many': '文件名要求带时间范围，但这条链路上有 {n} 个不同的时间窗，一个文件说不清它装的是哪一段',
-    # 「文件名带时间范围」 asks the save node to print a window it cannot see: the crawl
+    # “文件名带时间范围” asks the save node to print a window it cannot see: the crawl
     # states it, this node receives a table. Both answers name the reason instead of
     # inventing a range, because a file labelled with the wrong month is worse than one
     # that was never written.
     'export.window_none': '文件名要求带时间范围，但这条链路上没有任何采集节点声明开始/结束时间',
     'exports.clearBusy': '正在运行的那次会把分片文件写进导出目录，请先停止或等它跑完再清空',
     'exports.cleared': '已清空导出目录：删除 {n} 个文件',
-    'exports.notAPart': '「{name}」不是分片文件（形如 名称.part000.csv），无法按名字清除它这一批',
+    'exports.notAPart': '“{name}”不是分片文件（形如 名称.part000.csv），无法按名字清除它这一批',
     'history.cleared': '执行历史已清空',
-    'history.recorded': '「{wf}」已记录 {n} 条历史指标',
+    'history.recorded': '“{wf}”已记录 {n} 条历史指标',
     'history.run_deleted': '执行历史：删除运行 {rid} 的 {n} 条记录',
     'lock.badKey': '锁定请求缺少有效的面板或条目名',
     'lock.refuse': '这一项已被锁定，请先解锁再删除/清空它',
@@ -399,7 +399,7 @@ EN = {
     'export.window_none': 'the filename wants a time range, but no crawl here set a start/end time',
     'exports.clearBusy': 'A live run is writing part files into the export folder — stop it or wait before clearing',
     'exports.cleared': 'Export folder cleared: {n} file(s) removed',
-    'exports.notAPart': '「{name}」 is not a shard file, so there is no batch to clear',
+    'exports.notAPart': '"{name}" is not a shard file, so there is no batch to clear',
     'history.cleared': 'Execution history cleared',
     'history.recorded': 'Recorded {n} history metric(s) for "{wf}"',
     'history.run_deleted': 'Execution history: deleted {n} row(s) of run {rid}',

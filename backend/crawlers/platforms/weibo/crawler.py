@@ -120,7 +120,7 @@ class WeiboCrawler(Crawler):
                 continue
             if self.collected() >= target:
                 # Debug, not console: the fact itself was announced where the target was *crossed*
-                # (``_harvest``), and ``walk_done`` names 「达到目标条数」 as its reason, so a second INFO
+                # (``_harvest``), and ``walk_done`` names “达到目标条数” as its reason, so a second INFO
                 # line here is the same sentence on the way out. Measured on the live resume: one
                 # 50-row walk printed it three times (here, in the page loop, and in ``_harvest``).
                 logger.debug(t('crawl.weibo.target_reached', n=target))
@@ -157,8 +157,8 @@ class WeiboCrawler(Crawler):
                 # Every further window would meet the same answer. This used to test `login_wall`
                 # alone, which meant a session answered by risk control — or a browser whose network
                 # died, giving a document the browser wrote for itself — kept walking thousands of
-                # remaining windows at one navigation each while the closing line called it 「已到列表
-                # 末尾」. A refusal of any kind is the reason the walk stopped, and it is the reason
+                # remaining windows at one navigation each while the closing line called it “已到列表
+                # 末尾”. A refusal of any kind is the reason the walk stopped, and it is the reason
                 # the user needs to hear.
                 break
 
@@ -275,14 +275,14 @@ class WeiboCrawler(Crawler):
 
         A device the site has never seen is not served the home page. Measured 2026-09-28 with no cookie
         file at all (``backend/test_weibo_hot_anon.py``): ``weibo.com/`` answers
-        ``passport.weibo.com/visitor/visitor`` (title 「Sina Visitor System」), that hop takes **0.69 s**, and
+        ``passport.weibo.com/visitor/visitor`` (title "Sina Visitor System"), that hop takes **0.69 s**, and
         it lands on ``weibo.com/newlogin`` — from which ``ajax/side/hotSearch`` replies ``ok=1`` with the
-        board, still with no cookie. So the matrix's 「热搜 needs no session」 is true and was always true;
+        board, still with no cookie. So the matrix's “热搜 needs no session” is true and was always true;
         what was missing is that the request must be issued **after** the hop.
 
         It used to be issued immediately, from the passport origin, where a same-origin fetch to
         ``weibo.com/ajax`` is refused by the browser itself (``TypeError: Failed to fetch``). The console
-        then printed 「微博热搜接口没有给出榜单（返回 empty）」 — a sentence about an endpoint that was never reached,
+        then printed “微博热搜接口没有给出榜单（返回 empty）” — a sentence about an endpoint that was never reached,
         and the failure looked like the site withholding a board rather than like this browser standing in
         the wrong doorway. AGENTS' rule is the reason for the separate line: only what the code can see may
         be named, and the frame is what it can see.
@@ -388,7 +388,7 @@ class WeiboCrawler(Crawler):
         logger.info(t('crawl.weibo.authorDone', n=self.collected(), reason=stop_reason_label(walk.stopped_reason)))
         # U1 migration: name how the author walk ended so the executor can judge a shortfall.
         # weibo's mymblog ``_extract`` never hands back ``next=None``, so a real end surfaces as a
-        # page that came back EMPTY (``empty_page``) — that IS the server saying 「no more」, an
+        # page that came back EMPTY (``empty_page``) — that IS the server saying "no more", an
         # attested end, so the short is licensed (it settles clean, exactly as before; the migration
         # only adds the honest label + the funnel). Anything that stopped short WITHOUT that signal —
         # a cursor that kept replaying already-seen posts (``no_new``) or a page that died mid-walk
@@ -400,7 +400,7 @@ class WeiboCrawler(Crawler):
             scanned = walk.fresh + walk.repeats
             if walk.stopped_reason in ('end', 'empty_page'):
                 # A page came back empty: the server said this account has nothing deeper. Zero rows
-                # is 「没发过」 ('empty'); some rows then the empty page is 「到底了」 ('site_end').
+                # is “没发过” ('empty'); some rows then the empty page is “到底了” ('site_end').
                 self.note_end(
                     'empty' if self.collected() == 0 else 'site_end',
                     scanned=scanned,
@@ -535,7 +535,7 @@ class WeiboCrawler(Crawler):
             for page_num in range(2, total_pages + 1):
                 if self.collected() >= target:
                     # Unwinding again: ``_harvest`` is where a target gets crossed and where the console
-                    # says so, and the window's closing line names 「达到目标条数」 as its reason.
+                    # says so, and the window's closing line names “达到目标条数” as its reason.
                     logger.debug(t('crawl.weibo.target_reached', n=target))
                     cut_short = True
                     break
@@ -579,7 +579,7 @@ class WeiboCrawler(Crawler):
         - the "no result" plate → a genuine empty window, False. This is checked
           FIRST because measured 2026-09-28 a window that matches nothing still
           renders **five posts under the same ``#pl_feedlist_index``** (the site's
-          recommendations: 超话/演唱会 rows carrying a ``.name`` and a 「35分钟前」
+          recommendations: 超话/演唱会 rows carrying a ``.name`` and a “35分钟前”
           timestamp outside the asked hour). The card-first order harvested those
           five as keyword hits, so a search could hand back a table of content that
           never matched the keyword; there is no container or attribute that tells
@@ -654,7 +654,7 @@ class WeiboCrawler(Crawler):
         and on a 继续 that is false by construction: the resume re-enters the interrupted window at page 1,
         every card there is already in the ledger, and the loop quit after the first such page — so the
         pages deeper than the one 停止 died on were never fetched. That is the silent 漏采 this walk exists
-        to prevent, and it looked like a complete crawl because 「某一页是空的」 was printed for a page that
+        to prevent, and it looked like a complete crawl because “某一页是空的” was printed for a page that
         was full.
         """
         cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
@@ -740,9 +740,9 @@ class WeiboCrawler(Crawler):
         post_link = self._abs_url(anchors[0].get_attribute('href') or '').split('?')[0]
         whole = self._text_of(card, '.from') or publish_time
         # Strip the DATE THE PAGE WROTE, not its normalised form. ``publish_time`` is
-        # ``2022-01-27 00:59`` while the cell holds ``2022年01月27日 00:59`` (or 「3小时前」),
+        # ``2022-01-27 00:59`` while the cell holds ``2022年01月27日 00:59`` (or “3小时前”),
         # so replacing one with the other never matched and the 发布来源 column ended up
-        # carrying the timestamp: 「2022年01月27日 00:59  iPhone客户端」 under a column that
+        # carrying the timestamp: “2022年01月27日 00:59  iPhone客户端” under a column that
         # is read as the client name.
         raw_time = self._node_text(anchors[0])
         source = (whole.replace(raw_time, ' ') if raw_time else whole).strip(' \n\u00a0')

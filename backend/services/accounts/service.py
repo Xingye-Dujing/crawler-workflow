@@ -252,8 +252,8 @@ class AccountService:
             self._audit(EVENT_LOGIN_FAIL, username=name, ip=ip, detail='unknown-user', now=now)
             raise AccountError('auth.badCredentials')
         # The password is verified FIRST, whatever the row says about a lock or a status. That
-        # ordering is what keeps the promise the docs make — 「统一文案（不区分用户名是否存在）」:
-        # answering 「登录失败次数过多」 before the check let anyone with a wrong password tell a
+        # ordering is what keeps the promise the docs make — “统一文案（不区分用户名是否存在）”:
+        # answering “登录失败次数过多” before the check let anyone with a wrong password tell a
         # registered username from an unregistered one, and a locked row also skipped the hashing,
         # so the timing said the same thing.
         if not security.verify_password(password, row['password_hash']):

@@ -89,7 +89,7 @@ class TestNaming:
         assert result['sources'][0]['source'] == '微博'
 
     def test_a_parent_that_says_nothing_is_filed_under_its_id_never_as_literature(self):
-        """Guessing 「文献」 for an unlabelled table would put a claim about provenance in the
+        """Guessing “文献” for an unlabelled table would put a claim about provenance in the
         graph that nobody made."""
         rows = [{'话题': '数字治理;基层治理', '年份': 2022}, {'话题': '基层治理;风险沟通', '年份': 2023}]
         result = _fuse([('node-7', rows)])

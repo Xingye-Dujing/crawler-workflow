@@ -41,7 +41,7 @@ def topic_by_stage(
     One model over the whole corpus cannot produce it. A pooled LDA spends its topics on
     whichever phase supplied most of the text (爆发期 and 二次爆发期 are 7624 and 8029 of the
     paper's 19326 rows), so 发酵期's 349 rows either get no topic of their own or share one
-    with a phase three weeks later — and 「谣言、暴力、刘某、发布、捞、细节、谩骂」 would stop
+    with a phase three weeks later — and “谣言、暴力、刘某、发布、捞、细节、谩骂” would stop
     being a description of the first week. So the corpus is split by the 阶段 column
     :meth:`bin_time` wrote, modelled stage by stage, and numbered Ⅰ-1 … Ⅴ-4 by lifecycle
     position, which is exactly how 表 1 reads.

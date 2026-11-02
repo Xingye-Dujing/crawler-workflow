@@ -1,6 +1,6 @@
 """Real Chrome: a planted cookie really does live in the profile, and a re-plant really replaces it (#108).
 
-The panel's 「把 Cookie 更新进 Profile」 rests on two claims that no offline test can make:
+The panel's “把 Cookie 更新进 Profile” rests on two claims that no offline test can make:
 
 1. ``driver.add_cookie`` on a page whose host matches the cookie's domain writes into the
    **profile directory**, so the next browser built on that directory sees it — this is why
@@ -193,7 +193,7 @@ class TestAPlantedCookieBelongsToTheProfile:
             again.close()
 
     def test_a_cookie_without_an_expiry_is_planted_and_then_lost(self, local_server, tmp_path):
-        """The limit of what 「更新进 Profile」 can promise, measured rather than assumed.
+        """The limit of what “更新进 Profile” can promise, measured rather than assumed.
 
         Chrome writes persistent cookies to the profile store and keeps session cookies in
         memory, so an imported session cookie is live in the window that planted it and gone

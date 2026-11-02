@@ -232,7 +232,7 @@ Analyze strictly and output only the required plain string."""
         ``torch``/``transformers`` stack or a blank model name raises rather than quietly
         running the LLM or sklearn classifier behind a column this node said a transformer
         produced. A row that fails is left BLANK, not stamped ``Objective Statement`` —
-        「没有判断」 and 「判断为客观陈述」 are different statements, and only the first is honest
+        “没有判断” and “判断为客观陈述” are different statements, and only the first is honest
         about a row the model never answered.
         """
         df['tendency'] = ''

@@ -40,7 +40,7 @@ _ML_MODEL_TYPES = (
 )
 
 #: The column each classifier's own operation writes its labels into, so training from
-#: 「这一列就是答案」 does not have to be spelled out at every call site — and a fourth
+#: “这一列就是答案” does not have to be spelled out at every call site — and a fourth
 #: model type added without a row here answers the first model's column, which the
 #: frontend would then have to be trusted not to be wrong about.
 _ML_LABEL_COLUMNS = {'emotion': 'emotion', 'tendency': 'tendency', 'sentiment': 'sentiment'}

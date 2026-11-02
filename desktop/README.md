@@ -4,7 +4,7 @@
 > 里面的 Windows 事实——`%APPDATA%` 数据根、命名互斥量、`MessageBoxW`、`chrome.exe` 安装根、cp936 控制台、
 > PowerShell 脚本——**都不属于 `backend/`**：源码版要在 Linux 云服与 macOS 上跑，`backend/` 里出现任何
 > Windows 专属路径或命令都要按当前系统分支（`core/machine.py` 的那些表），并按 AGENTS 的
-> 「Cross-platform」一节办。打包版只按 Windows 验收。
+> “Cross-platform”一节办。打包版只按 Windows 验收。
 
 这不是单文件 exe，而是一个可压缩分发的**文件夹**：`dist/CaiXiHui/CaiXiHui.exe` 是入口，
 旁边是运行时和只读资源。双击 exe 会启动本地 Flask 服务（只绑定 `127.0.0.1`）并打开浏览器；
@@ -68,7 +68,7 @@ Python/VC 运行时（`python311.dll`、`vcruntime*`、`msvcp140`、`ucrtbase`�
 并按需考虑代码签名；只要原始字节就用 `-NoUpx`。
 
 UPX 的代价与"启动快"直接冲突（每个 PE 在载入时要在内存里解压），所以体积与启动时间必须一起量：
-同机同数据根、只差 UPX 开关，各测一次双击到 `/api/config` 返回 200 的毫秒数（见下面「验证构建」）。
+同机同数据根、只差 UPX 开关，各测一次双击到 `/api/config` 返回 200 的毫秒数（见下面“验证构建”）。
 
 如果依赖安装阶段在**非交互终端/后台任务**里停住而没有任何报错，先在同一台机器用交互式
 PowerShell 执行 `desktop\.venv-build\Scripts\python.exe -m pip install --no-build-isolation -r desktop\requirements-runtime.txt`
@@ -101,19 +101,19 @@ Inno 直接拒绝编译）。拆开算：UPX 压 **268** 个二进制，`226.5 �
 > **这一节只按 Windows 验收。** `desktop/` 是本项目唯一故意只服务 Windows 的树；三平台分支本身
 > （Chrome/xelatex 按系统查、中文字体栈与 ctex 字体集、进程清理、文件名字节上限、控制台编码、
 > 桌面专属能力按名拒绝）在 `backend/` 里由**平台无关测试**覆盖，见 `docs/agent_practices.md`
-> 「Cross-platform」一节与 `tests/unit/crawlers/test_platform_rules.py`。**Linux/macOS 上的真实启动没跑过**
+> “Cross-platform”一节与 `tests/unit/crawlers/test_platform_rules.py`。**Linux/macOS 上的真实启动没跑过**
 > （本机无 Linux 运行时），那是要在服务器上补的一次实测，不是已通过。
 
 **启动实测**（隔离数据根，`CIXI_NO_BROWSER=1` + exe 从终端跑，量到 `/api/config` 返回 200）：
 本轮构建 **1547 ms**（上一轮 1863 / 1647 首启/再启，再前 1562，最早 3423 ms）。
 UPX 是"载入时在每个进程内存里解压"，
 理论上会拖慢启动，所以这两个数字必须和体积一起看；实测被自检挪后 + 少加载一整套 sklearn 的收益盖过，
-相对最早的 301.4 MB / 3423 ms，**体积约 −44%、启动约 −55%**。换机器时这两条都要按下面「验证构建」
+相对最早的 301.4 MB / 3423 ms，**体积约 −44%、启动约 −55%**。换机器时这两条都要按下面“验证构建”
 第 5、8 步重测（启动用同一隔离根，图标要和源图逐像素比——外壳读不出我们的图时会回落到默认图标并且照样 32×32）。
 
 pandas/numpy/scipy/scikit-learn/matplotlib/snownlp/jieba 是包体的主要部分。以下能力被有意排除，以换取可接受的分发体积：
 
-- **BERT 模型**：不放模型包时那三个节点按设计降级并打印实际方法；放法见下面「BERT 模型包」。
+- **BERT 模型**：不放模型包时那三个节点按设计降级并打印实际方法；放法见下面“BERT 模型包”。
 - **pyarrow / Parquet 导出**：按名拒绝，其它导出格式正常。
 - **红果短剧评论采集**：需要 mitmproxy + uiautomation，按名拒绝；其它平台不受影响。
 - **Ollama 与模型**：不在包内。运行中的 Ollama 会被启动自检识别；不装时仍可上传/清洗/分析/
@@ -177,12 +177,12 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 
 **定时任务在打包版里一样会到点执行**：`python app.py` 在它的 `__main__` 里启动调度时钟，而打包启动器是
 `import app` 后自己跑 Flask——所以启动器现在调用同一个 `app.start_background_services()`（保留策略 + 排队恢复 +
-时钟）。此前 EXE 里那三件都不做，定时任务面板会如实报「调度线程没有运行」。实测：`clock_running=true`，
+时钟）。此前 EXE 里那三件都不做，定时任务面板会如实报“调度线程没有运行”。实测：`clock_running=true`，
 1 分钟 interval 任务自己跑出一次 completed 运行，日志里有 `[监测]` 建档行。
 
 **`.xls`（老式 OLE2 Excel）靠包内的 `xlrd` 才读得动**：`openpyxl` 只处理 `.xlsx`，而 WoS 的 Excel 按钮
 给的就是 `.xls`。`xlrd` 在 `580fb15` 才写进 `desktop/requirements-runtime.txt`，所以**在那之前构建的交付包
-读不了 `.xls`**（上传会得到一句 400「解析失败：缺引擎」，不是 500）；2026-10-25 之后的构建已经带上它——
+读不了 `.xls`**（上传会得到一句 400“解析失败：缺引擎”，不是 500）；2026-10-25 之后的构建已经带上它——
 重建产物实测用真实 `WOS.xls` 上传得到 30 条记录。`.xlsx` 不受影响。
 
 `drivers/chromedriver.exe` 不会在构建时下载，因为正确版本取决于**最终用户**的 Chrome；如果要
@@ -232,12 +232,12 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 - 便携模式：在 `CaiXiHui.exe` 同目录放一个空的 `portable.txt`，数据根改为 exe 所在文件夹。
   适合 U 盘或不想写 AppData 的用户；请确保该文件夹可写。
 - 环境变量 `CRAWLER_DATA_ROOT` 仍可覆盖（测试/高级部署）——**但它不参与下面的回退**：这个变量表达的
-  是「我要一份隔离的数据」，写不进去就按名拒绝启动。悄悄改用共享的 AppData 根会让一次冒烟运行把用户
+  是“我要一份隔离的数据”，写不进去就按名拒绝启动。悄悄改用共享的 AppData 根会让一次冒烟运行把用户
   正在跑的运行判为过期并结算掉。
 - **写不进去时会自动换**，顺序是：`portable.txt`（exe 目录）→ **已经装着 `data/` 的那个目录** →
   `%APPDATA%\CaiXiHui` → `%LOCALAPPDATA%\CaiXiHui` → exe 所在文件夹。
   换位置一定在控制台点名被拒的目录和系统给的原因，绝不静默搬家——否则用户找不到自己的数据。
-  「已有 `data/` 者优先」是让回退**留在原地**：只生效一次的回退，会在被拦的目录某天又能写时
+  “已有 `data/` 者优先”是让回退**留在原地**：只生效一次的回退，会在被拦的目录某天又能写时
   把用户带回一个空画布。杀软/受控文件夹访问拦掉 Roaming 写入是真实场景，不是假设。
 - 同一数据根只允许一个实例（互斥量名带该数据根的哈希）：重复双击会直接打开已有窗口，而不是启动第二个
   服务器；**不同数据根可以各开一份**——装在 `%APPDATA%` 的那份与 U 盘里的便携份互不阻挡（此前互斥量名
@@ -257,7 +257,7 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
   `UnicodeEncodeError`，把打印排在前面等于让报告在最该出东西的地方断掉。打印本身也走
   `_print_safe`（失败时退回写字节流，绝不拿同一个坏流重试）；
 - 弹窗里只放短句，traceback 只进控制台与日志文件（Windows 消息框不能滚动长文本）；
-- 弹窗自己弹不出来时（无窗口站、服务会话）会在控制台说明「弹窗没能显示」，不静默吞掉；
+- 弹窗自己弹不出来时（无窗口站、服务会话）会在控制台说明“弹窗没能显示”，不静默吞掉；
 - 首次示例文件/模型复制失败不会阻止启动，只点名说明。
 
 ## 受限终端里构建（本仓库实测）
@@ -285,7 +285,7 @@ desktop\.venv-build\Scripts\python.exe -m pip install --no-cache-dir --no-build-
    同一数据根），两个数字都要写进发布说明——只报体积就是拿启动换 KPI；
 6. **放了模型包就跑一次三个 bert 节点**（情感/情绪/倾向），确认控制台打印的是
    `runtime=onnx precision=fp16`，且降级那条线仍然可用：把模型包临时改名，同一节点应打印它降级到了
-   ml/snownlp——两句话都要看见，才算「打包版真跑 BERT」和「没模型也不骗人」都成立；
+   ml/snownlp——两句话都要看见，才算“打包版真跑 BERT”和“没模型也不骗人”都成立；
 7. 瘦身分发物里的死数据文件确实没被读到：`snownlp` 的**情感回退**在裁掉 py2 marshal 与训练语料之后
    仍要能出分（`sentiment.marshal.3` 才是 Python 3 读的那份）；
 8. **确认外壳真读得出**我们**的图标**：PyInstaller 拷无效图标时不报错（它照样打印 `Copying icon to EXE`），

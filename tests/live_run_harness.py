@@ -31,7 +31,7 @@ already refused elsewhere in the suite:
 * **A case that dies must kill its run.** :func:`abort_run` is what :class:`LiveRun.__exit__`
   calls when an assertion failed mid-crawl. A leaked worker holds the platform's lane and the
   profile directory for the *next* case, and keeps narrating into the *next* case's console —
-  which can hand a stranger's 「没有更多了」 to a verdict and grade a real under-collection as
+  which can hand a stranger's “没有更多了” to a verdict and grade a real under-collection as
   legitimate. That is a false green in the one tier that exists to catch false greens.
 
 ``app`` is never imported at module level: collection beats every fixture, and ``app.py``
@@ -165,7 +165,7 @@ def no_jar(monkeypatch, root) -> str:
     :func:`real_jar`'s mirror, needing the same two patches for the same reason — the crawler resolves
     ``Config.COOKIE_DIR`` when it is built, while the code that decides *whether* to run reads the
     directory frozen into ``state.cookie_manager`` at import. Withholding both is what lets a case claim
-    「this mode asked for no login and still produced rows」 instead of claiming it while a saved session
+    "this mode asked for no login and still produced rows" instead of claiming it while a saved session
     rides along in the browser. Pair it with an explicit ``use_profile=False``, because a *profile* keeps
     its own session no matter what the cookie directory holds.
     """
@@ -839,7 +839,7 @@ def abort_run(client, module, rec, budget: float = 600.0, run_id: str = '') -> d
       errors for a reason that belongs to a different test;
     * and it keeps *writing into the shared console*, whose lines the next case folds into
       its own transcript — which can convict an innocent case of a stranger's failure, or, the
-      damaging direction, hand a stranger's 「没有更多了」 to a verdict and grade a real
+      damaging direction, hand a stranger's “没有更多了” to a verdict and grade a real
       under-collection as named-and-therefore-legitimate.
 
     So this is not cleanup, it is containment. 停止 is asked first (the same request the user's
@@ -1038,7 +1038,7 @@ def classify_verdict(target: int, rows_kept: int, console: str, exits=SHARED_EXI
     """How a crawl that fell short behaved — and the only verdict that is ever a bug.
 
     ``FULL`` is arithmetic. Everything below it is *reading the console*: a site that says
-    「没有更多了」, hits its own board cap, answers with risk control, meets a login wall,
+    “没有更多了”, hits its own board cap, answers with risk control, meets a login wall,
     refuses an already-collected re-crawl, or is cut short by 停止 has told the user what
     happened, and its crawl is entitled to be short. A crawl that keeps fewer rows and
     prints no such sentence is the silent under-report this tier exists to catch.
@@ -1049,9 +1049,9 @@ def classify_verdict(target: int, rows_kept: int, console: str, exits=SHARED_EXI
     canvas can produce and a single-component one cannot.
 
     *bug_lines* is the other half of the whitelist's discipline. Some sentences in the
-    catalogue name a reason that is not true — the plan's 「说了但说谎」 list
+    catalogue name a reason that is not true — the plan's “说了但说谎” list
     (``docs/live_test_plan.md`` §5, items Z3/Z6/Z16): a scroll loop that gave up on its first
-    non-growing check reporting 「确认到底了」, an empty tab reporting 「这个作者没发过」 when the
+    non-growing check reporting “确认到底了”, an empty tab reporting “这个作者没发过” when the
     page simply rendered slowly. Those lines may not license a shortfall, so a console that
     names only one of them answers SILENT_SHORT with the liar quoted in ``reasons``.
 

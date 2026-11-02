@@ -46,7 +46,7 @@ _PACKAGES_TAIL = (
 #:
 #: 仿宋 (FangSong) is what the reference paper this look is copied from is set in, and it is a Windows
 #: font: TeX Live ships no FangSong and macOS does not either, so asking for it by name on those machines
-#: is a compile that dies with 「The font "FangSong" cannot be found」. Off Windows the ask becomes a
+#: is a compile that dies with "The font "FangSong" cannot be found". Off Windows the ask becomes a
 #: Chinese text that EXISTS on that system (fandol comes with ``texlive-lang-chinese``, macnew uses the
 #: system Songti/Heiti). The family differs — that difference is said here and in the emitted comment,
 #: not hidden by a document that will not compile.

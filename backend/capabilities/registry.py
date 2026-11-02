@@ -158,7 +158,7 @@ def engines_for(platform: str) -> tuple[dict, ...]:
             }
         )
     # Every platform carries the CatBus entry, even one the adapter does not list: the engine is a
-    # first-class choice, and 「CatBus 不提供这个平台」 is an answer the panel can show. Hiding the
+    # first-class choice, and “CatBus 不提供这个平台” is an answer the panel can show. Hiding the
     # engine would make a saved CatBus node look like it had chosen Selenium.
     available, reason_key = engine_state(platform, BACKEND_CATBUS)
     entry = _catbus_platforms().get(platform) or {}
@@ -266,8 +266,8 @@ def capability(platform: str) -> Capability | None:
     return _BY_PLATFORM.get(str(platform or ''))
 
 
-#: The two egress networks a crawl can be run from. Names, not booleans: 「国内」 and
-#: 「海外」 are the user's own words for them, and a platform is in exactly one.
+#: The two egress networks a crawl can be run from. Names, not booleans: “国内” and
+#: “海外” are the user's own words for them, and a platform is in exactly one.
 REGIONS = ('cn', 'overseas')
 
 
@@ -364,7 +364,7 @@ def mode_for(platform: str, mode_key: str, backend: str = BACKEND_SELENIUM) -> M
 
     When the adapter itself is unavailable, the browser declaration is used as the *shape* so
     validation can reach :func:`catbus_run_errors` and name the engine's reason — reporting
-    「unknown platform」 for a node whose only problem is an uninstalled adapter would send the user
+    "unknown platform" for a node whose only problem is an uninstalled adapter would send the user
     looking for the wrong thing.
     """
     backend = str(backend or BACKEND_SELENIUM).strip().lower()
@@ -399,7 +399,7 @@ def requested_mode_key(node: dict) -> str:
     that platform is concerned) still renders and runs. That is the wrong answer for
     validation wherever the platform *does* offer a choice: on a two-mode platform,
     substituting its first mode for a mode it never had either runs a different
-    crawl than the one that was asked for or reports 「缺少关键词」 about a field the
+    crawl than the one that was asked for or reports “缺少关键词” about a field the
     panel never showed the user.
     """
     node = node or {}

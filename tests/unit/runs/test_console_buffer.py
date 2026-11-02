@@ -364,7 +364,7 @@ class TestConsoleReset:
             app.add_log(f'甲 {i}', wf_idx=0)
         assert len(state['_wf_logs'][0]) == LOG_KEEP
         assert state['_wf_log_total'][0] == produced
-        # The same line belongs to 「全部」 too, and losing that pairing is how a tab
+        # The same line belongs to “全部” too, and losing that pairing is how a tab
         # ends up showing rows the shared view has already forgotten.
         assert state['_log_total'] == produced
 

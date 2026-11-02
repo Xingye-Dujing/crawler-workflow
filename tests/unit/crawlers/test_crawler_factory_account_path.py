@@ -7,7 +7,7 @@ file. The factory built its own ``<platform>@<account>`` name instead, so a defa
 crawl read ``weibo@default_cookies.json``: a file ``path_for`` never writes and
 ``account_files`` refuses even to list. ``file_stamp`` of a path that cannot exist is ``''``,
 which blanked the profile's cookie stamp and permanently disarmed the deferred re-plant, and a
-「本次不用 Profile」 crawl then loaded no session at all and said nothing.
+“本次不用 Profile” crawl then loaded no session at all and said nothing.
 
 No browser is bought here: the class lookup is stubbed and the factory's decisions are read off
 the object it was handed.
@@ -48,7 +48,7 @@ def stub_factory(monkeypatch):
 def test_the_default_login_is_one_file_under_either_spelling(stub_factory, account):
     """``default`` and blank are the same session, so they must be the same FILE. The factory
     used to splice ``weibo@default_cookies.json`` for the named spelling — a path no writer
-    produces, which read as 「no cookie」 and silently crawled anonymous."""
+    produces, which read as "no cookie" and silently crawled anonymous."""
     made = crawlers.get_crawler('weibo', cookie_dir='C:/jar', account=account)
     assert made.cookie_path == 'C:/jar/weibo_cookies.json', made.cookie_path
 
@@ -65,6 +65,6 @@ def test_a_named_account_keeps_its_own_file_and_the_factory_agrees_with_the_mana
 def test_the_platform_that_holds_no_session_still_builds_no_cookie_file(stub_factory):
     """WeChat is not in CookieManager.PLATFORMS (its bodies need no login), so folding through
     the manager's validating path builder would refuse a crawl that has never wanted a cookie.
-    The fold must not turn 「no session」 into an exception."""
+    The fold must not turn "no session" into an exception."""
     made = crawlers.get_crawler('wechat', cookie_dir='C:/jar', account='default')
     assert made.cookie_path == 'C:/jar/wechat_cookies.json'

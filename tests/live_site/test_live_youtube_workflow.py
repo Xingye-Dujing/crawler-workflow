@@ -159,7 +159,7 @@ AUTHOR_HANDLE = 'NASA'
 #: the zoo" (jawdz, 20 years up, tens of millions of comments). Chosen over a music video because the
 #: current exit can be served a geo/playback block on VEVO content (measured live 2026-09-29 on the
 #: flagship's own Shape-of-You link: the watch page loaded fine, innertube ready, but the body printed
-#: 「该视频无法再播放」 and the comment walk honestly answered ``comment.commentsClosed`` — a real site
+#: “该视频无法再播放” and the comment walk honestly answered ``comment.commentsClosed`` — a real site
 #: answer that would have failed D1 for the video's sake, not the crawl's). This one has no licensing
 #: story and no region wall, so a short answer here can only be the cursor, not the day.
 COMMENT_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw'

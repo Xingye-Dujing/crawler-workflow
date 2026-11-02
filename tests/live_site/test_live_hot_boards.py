@@ -12,7 +12,7 @@ reshuffle hourly). What must not vary is the shape:
 * **heat is a real number,** not a rounded 万 label and not a zero filling a column the
   answer cannot fill;
 * **the columns are the ones the answer fills.** Zhihu's payload carries an author that
-  is the literal 「用户」 on every row and a 评论数 that is 0 on every row, so those
+  is the literal “用户” on every row and a 评论数 that is 0 on every row, so those
   columns are asserted ABSENT — their presence would mean someone re-added a lie;
 * **a refusal is named.** A session zhihu holds at the sign-in page must raise, not
   return an empty table that reads as "nothing is hot today".

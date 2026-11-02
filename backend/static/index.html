@@ -1609,7 +1609,7 @@
           </button>
           <!-- Destructive, and it asks first: the confirmation says what a cookie
                file is NOT (a live profile keeps its own login), because the
-               plausible reading of 「删除 Cookie」 is "I am logged out now". -->
+               plausible reading of “删除 Cookie” is "I am logged out now". -->
           <button
             class="menu-btn"
             onclick="deleteCookie()"
@@ -1617,7 +1617,7 @@
           >
             Delete saved Cookie
           </button>
-          <!-- The device counterpart of 「删除 Cookie」: same destructive-asks-first rule, and it
+          <!-- The device counterpart of “删除 Cookie”: same destructive-asks-first rule, and it
                names what a cookie-delete cannot — a live profile keeps its own session, so signing
                that device out is THIS button. Refused for 默认账号 (its data is the platform folder). -->
           <button
@@ -1627,7 +1627,7 @@
           >
             Delete saved Profile
           </button>
-          <!-- No 「把 Cookie 更新进 Profile」 button: saving one already plants it into that
+          <!-- No “把 Cookie 更新进 Profile” button: saving one already plants it into that
                account's own browser, and the one case that cannot happen on the spot (the
                profile is held by a running crawl) is said by the save reply itself.
                And no standing paragraph explaining what a Profile is (this was
@@ -1973,7 +1973,7 @@
           结果分批保存：中途出错或停止时，已得到的结果不会丢失；修复后重新执行会从断点续跑。
         </div>
         <div class="ai-hint-note ai-only-ollama" data-i18n="ai.ollamaNote">
-          Ollama：模型名必须是本地已拉取的名称（可点“刷新”读取）；服务地址在「设置」面板修改。两个供应商的模型各自独立保存，互不影响。
+          Ollama：模型名必须是本地已拉取的名称（可点“刷新”读取）；服务地址在“设置”面板修改。两个供应商的模型各自独立保存，互不影响。
         </div>
         <div class="ai-hint-note ai-only-openrouter" data-i18n="ai.keyNote">
           API Key 仅保存在本浏览器 Local Storage，不会写入服务器文件。
@@ -2187,7 +2187,7 @@
               id="set-harvest-ca"
               onchange="onSettingInput('harvest_auto_install_ca', this.checked)"
             />
-            <span data-i18n="set.harvestCAInline">红果评论收割需要 mitmproxy 根证书进入当前用户「受信任的根」；关闭后节点只打印手动命令、不碰证书库</span>
+            <span data-i18n="set.harvestCAInline">红果评论收割需要 mitmproxy 根证书进入当前用户“受信任的根”；关闭后节点只打印手动命令、不碰证书库</span>
           </label>
         </span>
       </div>

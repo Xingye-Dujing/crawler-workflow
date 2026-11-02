@@ -90,7 +90,7 @@ def watch(
     label = str(params.get('watch_label') or '').strip() or stamp or run_id
     # The watch's own boxes are not settings that produced this graph — they say where the capture
     # is filed and what it is called. Filed beside the real parameters, every capture would differ
-    # from its baseline by its own name, and 「参数变了」 would stop meaning anything.
+    # from its baseline by its own name, and “参数变了” would stop meaning anything.
     graph_params = {key: value for key, value in params.items() if not str(key).startswith('watch_')}
     snapshot = biblio.add_snapshot(
         project_id=project_id,

@@ -95,8 +95,8 @@ class TestTheAdapterAnswers:
         """CatBus' login is its own; the question must not read or write our cookie directory.
 
         The check is the directory: ``Config.COOKIE_DIR`` is pointed at an empty temp dir, so any
-        answer that came from a Selenium cookie would arrive as 「没有 Cookie」 instead of the
-        adapter's own 「未登录」.
+        answer that came from a Selenium cookie would arrive as “没有 Cookie” instead of the
+        adapter's own “未登录”.
         """
         from core.config import Config
 

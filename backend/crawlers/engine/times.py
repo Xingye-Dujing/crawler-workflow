@@ -33,7 +33,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 #: The zone every one of these sites displays in. Pinned rather than inherited from the
-#: host: the same module answers 「3小时前」 on a developer's UTC+8 laptop and on a UTC
+#: host: the same module answers “3小时前” on a developer's UTC+8 laptop and on a UTC
 #: container, and those two must not produce stamps eight hours apart.
 _CST = timezone(timedelta(hours=8))
 
@@ -109,7 +109,7 @@ def relative_to_absolute(value, now: datetime = None, fmt: str = READABLE) -> st
         return ''
     # A site's relative wording is relative to BEIJING wall clock, not to the clock of
     # whatever machine the crawler happens to run on. ``datetime.now()`` here made every
-    # 「3小时前」 land eight hours off under a UTC container, while the absolute forms
+    # “3小时前” land eight hours off under a UTC container, while the absolute forms
     # (``commenting.protocol``/``core.video``) already pinned +08:00. A caller that passes
     # ``now`` keeps it — that is how the tests drive this — and is responsible for its zone.
     moment = now or datetime.now(_CST)

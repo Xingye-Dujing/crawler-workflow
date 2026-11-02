@@ -38,7 +38,7 @@ class TestAPasswordFieldIsNotAutofilled:
     """A dialog that types a credential must tell the browser to keep its hands off it.
 
     Without a directive the browser offers to SAVE the account's password against this origin and
-    to fill it back into 「当前密码」 on the next visit — the very value the panel then posts, so an
+    to fill it back into “当前密码” on the next visit — the very value the panel then posts, so an
     unattended autofill turns a wrong-password refusal into a silent change.
     """
 

@@ -85,7 +85,7 @@ def refresh_for_planting(platform: str) -> bool:
     This is the panel's own question, asked with the panel's own answer
     (:func:`sessions.template.needs_refresh`): "it was planted, and the file has been saved since".
     The tier borrows it rather than keeping a rule of its own so that a cookie the user re-took
-    reaches the test profile exactly the way the 「把 Cookie 更新进 Profile」 button makes it reach
+    reaches the test profile exactly the way the “把 Cookie 更新进 Profile” button makes it reach
     theirs — once, from the file that is current now. A profile that has never been used answers
     ``False``: its first crawl imports the file by itself.
     """

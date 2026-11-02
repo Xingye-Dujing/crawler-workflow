@@ -2,7 +2,7 @@
 
 `capabilities.registry.CAPABILITIES` is the only answer to "what can this platform collect", and 24
 pairs ride on it. Until now every fake crawler in the suite defined ``search`` and nothing else, so
-the six 「某作者的作品」 modes and the 热榜 mode had never been *dispatched* anywhere: a node that
+the six “某作者的作品” modes and the 热榜 mode had never been *dispatched* anywhere: a node that
 called ``search()`` with the author dropped, or lost ``board=``, or sent the creator's handle under
 a keyword key, would have passed the whole fast tier — the rows it fakes come back either way, and
 an author crawl mistaken for a keyword crawl is a different answer with the same shape.
@@ -312,7 +312,7 @@ def test_a_mode_reaches_the_handler_the_matrix_names(app_module, recorder, platf
 
 @pytest.mark.parametrize('platform,mode_key', _pairs(handlers={'comments'}))
 def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkeypatch, platform, mode_key):
-    """「采集内容=评论」 is a different engine, not a crawler method.
+    """“采集内容=评论” is a different engine, not a crawler method.
 
     The node must hand its pasted links to the comment engine and yield what comes
     back: a comments mode that quietly fell through to the platform's article crawl
@@ -403,7 +403,7 @@ def test_a_drama_the_client_would_not_open_is_named_at_the_end(app_module, recor
     """A skipped drama is refused by name, and the rows that DID harvest stay.
 
     The client's boards answer to a ranking of their own, so a feed of several dramas can
-    legitimately open all but one. 「新增 N 条（正常）」 over the missing one was the bug:
+    legitimately open all but one. “新增 N 条（正常）” over the missing one was the bug:
     the node settled DONE on a table with a hole in it. Reading ``skipped_targets`` BY
     ATTRIBUTE keeps this gate dormant for every platform whose adapter has no such list.
     """
@@ -447,7 +447,7 @@ def test_a_row_total_that_masks_a_short_episode_is_still_refused(app_module, rec
     """The gate reads the harness's own missing count, not just rows-vs-total.
 
     A comment table carries reply rows that no episode's printed ``total`` includes, so
-    「kept at least as many rows as the site counted」 can be literally true while an episode
+    "kept at least as many rows as the site counted" can be literally true while an episode
     came home with 20 of its 698. That is the difference between a short table and a node
     that settles DONE, and a false license here is the bug this repo already refused twice.
     """
@@ -486,7 +486,7 @@ def test_a_row_total_that_masks_a_short_episode_is_still_refused(app_module, rec
     message = str(caught.value)
     assert '520' in message, f'the refusal quotes what the table holds: {message}'
     # The denominator is the rows in hand PLUS the gap the harness named. Printing the site's
-    # own per-episode total here would read 「采到 20/1 条就停了」 — a sentence that convicts
+    # own per-episode total here would read “采到 20/1 条就停了” — a sentence that convicts
     # the node with arithmetic nobody can audit, and the 500-comment hole never appears.
     assert '20/520' in message, f'the refusal must print have/want as one auditable fraction: {message}'
     assert '20/1 ' not in message and '20/1\n' not in message, message
@@ -511,7 +511,7 @@ def test_a_fed_drama_name_reaches_the_harness_not_the_domain_router(app_module, 
 
 
 def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, recorder, monkeypatch, tmp_path):
-    """「继续」 must be able to pay what the skip refusal promises — which a pre-written cursor could not.
+    """“继续” must be able to pay what the skip refusal promises — which a pre-written cursor could not.
 
     The position used to be recorded *before* each target, so a full pass left it at
     ``len(urls)-1``: resuming a feed that skipped drama 2 of 3 re-walked the LAST drama only, a
@@ -595,7 +595,7 @@ def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key)
     """A handler the runtime cannot reach is a refusal at crawl time, not a fallback.
 
     Two names to look up, because a mode points at one of two places: a non-comment
-    handler is a METHOD ON THE CRAWLER CLASS, while 「评论」 is a WALK IN THE REGISTRY
+    handler is a METHOD ON THE CRAWLER CLASS, while “评论” is a WALK IN THE REGISTRY
     (``crawlers.commenting.walks``, one entry per platform package). The second half matters
     more than the first: `core.refs.platform_for` routes a link by domain, so a platform
     added there — or to the matrix — without writing its reader used to hand every
@@ -716,7 +716,7 @@ def test_the_option_the_user_picked_is_the_option_the_crawler_gets(
 
     bilibili's 周排行榜 (``board='ranking'``) therefore never reached the executor
     anywhere in the fast tier: a dispatch that defaulting-rewrote the field, or read
-    the field off the mode instead of the node, would have sent 「(popular)」。 The
+    the field off the mode instead of the node, would have sent "(popular)"。 The
     measured fact is that the two boards are different questions from the site — one
     is 热门, one is 排行榜 — so losing the choice is losing the crawl.
     """
@@ -1238,7 +1238,7 @@ def test_a_comment_node_that_raises_still_publishes_its_part_files(app_module, r
 
     The executor merged its PartWriters AFTER the ``try/finally``, so anything that escaped the
     walk — a refused adapter, a harness that would not start, a locked runs.db in the sink — lost
-    the merged file too, and with 「保留分片」 off those shards were never individually recorded,
+    the merged file too, and with “保留分片” off those shards were never individually recorded,
     so 智能清除-by-record could not find them: orphaned files in the export folder. The source
     crawl closes the same hole by merging in every handler; the comment path must too."""
     from services.runs.store import RunStore
@@ -1274,7 +1274,7 @@ def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monk
 
     The source-crawl path already prints ``run.dedupe_skipped`` / ``..._all_skipped`` on a re-run (the
     ``_execute_source_node`` tail reads ``ctx['skipped_seen'][nid]``). The comment path has the SAME ledger
-    (``_source_stream``'s row_sink refuses an item_key it already owns) but printed only 「共 0 条评论」 —
+    (``_source_stream``'s row_sink refuses an item_key it already owns) but printed only “共 0 条评论” —
     a silent zero that reads exactly like a thread with no comments. Measured live 2026-09-29 on YouTube:
     the second run of one video's comments filed nothing and named nothing. Two runs against one store,
     the same comment id: the first pass must file it, the second must grow both narration lines.

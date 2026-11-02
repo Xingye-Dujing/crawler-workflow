@@ -4,7 +4,7 @@ The export endpoint answers a session, and a fresh device is sent to the slider
 (`/verify/home`), so this case skips without a saved CNKI cookie exactly as the
 other session platforms do. It pins what a unit test cannot: 全选 selects only the
 current page, the site accumulates the selection across pages, and the final
-「导出题录文件」 download parses into the importer's normalized table.
+“导出题录文件” download parses into the importer's normalized table.
 
 Target 25 is deliberately just past one page (20 rows): it forces a second page
 and therefore proves the accumulation and the single export.

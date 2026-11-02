@@ -46,7 +46,7 @@ def _strip_prose(text: str) -> str:
 
     Counting the fences per line and toggling is the whole trick — a line holding two of them (a
     one-line docstring) leaves the state where it found it, which is what a docstring on one line
-    means. A trailing hash-comment is a note about the code, so 「no global taskkill」 in one cannot
+    means. A trailing hash-comment is a note about the code, so "no global taskkill" in one cannot
     read as a call to it."""
     kept = []
     inside = False

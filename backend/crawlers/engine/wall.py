@@ -111,7 +111,7 @@ CAPTCHA_TITLES = ('验证码', '安全验证', '滑动验证')
 #: Schemes the browser owns, not the site. A crawl that ends up here after
 #: ``driver.get`` never reached the page it asked for: measured 2026-09-25 on an
 #: over-throttled xiaohongshu session, a VISIBLE window stayed on ``chrome://new-tab-page``
-#: (its body read 「新标签页 / 自定义 Chrome」, no wall text), so the classifier saw
+#: (its body read “新标签页 / 自定义 Chrome”, no wall text), so the classifier saw
 #: 'ok' and the search filed an empty grid as if the keyword had no results. No site
 #: can redirect into these schemes, so arriving here is purely a navigation that did
 #: not happen — a refusal to back off from, never a "found nothing".

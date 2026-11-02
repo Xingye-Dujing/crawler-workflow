@@ -43,8 +43,8 @@ def _site_now() -> datetime:
     ``datetime.now()`` is the clock of the MACHINE — UTC on the CI runner, UTC+8 on this
     box — while "2 days ago" names the site's own zone, which ``crawlers.engine.times``
     pins to +08:00. Asking the host's clock made one fixture resolve eight hours apart
-    and pass on this box only: AGENTS' 「no test may pass just because of the machine it
-    ran on」. The zone is taken from the product rather than spelled again here, so the
+    and pass on this box only: AGENTS' "no test may pass just because of the machine it
+    ran on". The zone is taken from the product rather than spelled again here, so the
     two can never drift apart.
     """
     return datetime.now(times._CST).replace(tzinfo=None)

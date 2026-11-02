@@ -76,7 +76,7 @@ class FakeWeiboDriver:
         self._wall_from_get = wall_from_get
         self._gets = 0
         self.visited = []
-        # Measured 2026-09-28: inside a ``timescope`` window the site prints no 「共N页」 plate
+        # Measured 2026-09-28: inside a ``timescope`` window the site prints no “共N页” plate
         # (``page_info='empty'``) while its pager links are still there (``page_links``) — the shape
         # ``_get_total_pages``' href fallback exists for, and the shape ``_may_page`` used to refuse
         # to consult at all.
@@ -113,7 +113,7 @@ class FakeWeiboDriver:
             if not self._cards or self._page_info == 'absent':
                 raise NoSuchElementException(selector)
             if self._page_info == 'empty':
-                # The measured timescope shape: the node IS on the page and its text carries no 「共N页」
+                # The measured timescope shape: the node IS on the page and its text carries no “共N页”
                 # (scratchpad/weibo_structure.json → window.pageInfo=""), which is a different branch of
                 # ``_get_total_pages`` than "no node at all" — model the wrong one and a regression back
                 # to "one page" would still read green.
@@ -294,7 +294,7 @@ class TestPagingWalk:
 
         Measured 2026-09-28 on one hourly ``timescope`` URL: page 1 rendered 9 cards, page 2 rendered
         6 more with **no mid in common**, and the only reason the old code never asked was
-        ``_may_page``'s assumption. Such a window prints no 「共N页」 text either, so the depth has to
+        ``_may_page``'s assumption. Such a window prints no “共N页” text either, so the depth has to
         come from the pager anchors — which is what ``page_info='empty'`` plus ``page_links`` models.
         """
         window = FEED.replace('Refer=g', 'timescope=custom%3A2026-09-26-20%3A2026-09-26-21&Refer=g')
@@ -310,7 +310,7 @@ class TestPagingWalk:
         A resume re-enters the hourly window 停止 died in, and every card on the pages *before* the kill is
         already in the ledger. The loop broke the moment ``collected()`` stood still, so the pages deeper
         than the kill — the only ones still owing rows — were never fetched, and the console printed
-        「某一页是空的」 about a page that was full. Stopping on the *site's* emptiness (no cards rendered)
+        “某一页是空的” about a page that was full. Stopping on the *site's* emptiness (no cards rendered)
         is the discriminator; nothing-new is a fact about this run's ledger, never about the window.
 
         The cost is stated rather than hidden: a pager whose every page repeats the previous one is now
@@ -347,8 +347,8 @@ class TestPagingWalk:
 
         ``author()`` has always closed with ``rows / target / reason``; ``search()`` printed a line per
         window and returned, so a date-range crawl that stopped at window 12 of 6432 — wall, target, or
-        the end of the list, the user cannot tell which — left the console holding only 「第 12/6432
-        个链接完成」. The closing line is what makes 「采满了」 and 「没采满」 different sentences.
+        the end of the list, the user cannot tell which — left the console holding only “第 12/6432
+        个链接完成”. The closing line is what makes “采满了” and “没采满” different sentences.
         """
         import i18n
 
@@ -361,14 +361,14 @@ class TestPagingWalk:
             in said
         ), said
         # One fact, one console line. The walk crossed its target inside a page, and three loops noticed
-        # it on the way out — the live resume printed 「已达到目标数量」 three times for one stop. Only the
+        # it on the way out — the live resume printed “已达到目标数量” three times for one stop. Only the
         # crossing point may say it at INFO now, and this shape (target met mid-window, two loops unwinding)
         # is exactly the one that used to double up.
         reached = [line for line in said if i18n.t('crawl.weibo.target_reached', n=2) in line]
         assert len(reached) <= 1, f'one stop printed {len(reached)} console lines: {reached}'
 
     def test_a_window_met_by_a_wall_reports_the_wall_as_the_reason(self, make_walker, caplog):
-        """The reason slot must name the refusal, not leave 「target」 to be inferred from a short table."""
+        """The reason slot must name the refusal, not leave "target" to be inferred from a short table."""
         import i18n
 
         crawler, _driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=50, wall_from_get=2)
@@ -396,7 +396,7 @@ class TestPagingWalk:
 
     def test_a_wall_shortfall_is_not_licensed_as_site_end(self, make_walker):
         # The mirror case: the walk stopped on a REFUSAL, so ``reason`` is 'wall', not 'end', and nothing
-        # is filed here — the wall is settled in its own upstream bucket, never relabeled 「采满了/到底了」.
+        # is filed here — the wall is settled in its own upstream bucket, never relabeled “采满了/到底了”.
         crawler, _driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=50, wall_from_get=2)
         crawler.search(keyword='三亚', target_count=0)
         assert crawler.end_reason is None, 'a wall short is named by the wall gate upstream, not licensed as site_end'
@@ -414,7 +414,7 @@ class TestPagingWalk:
     def test_a_page_that_shows_neither_is_reported_as_that_and_not_as_emptiness(self, make_crawler, caplog):
         """The line may only say what the code saw (U11's second half).
 
-        The old wording was 「页面加载超时，可能无内容」 — a guess about the window's content, printed by
+        The old wording was “页面加载超时，可能无内容” — a guess about the window's content, printed by
         code that cannot see the window at all: it saw a load that produced no cards and no plate. On a
         slow network that sentence tells the user the hour was empty, which is the one thing they cannot
         un-see in the table. The replacement carries the seconds actually waited and whether the
@@ -484,7 +484,7 @@ class TestTheWindowWalkStopsOnAnyRefusal:
 
     The loop used to break on ``login_wall`` alone. Risk control and a browser that fetched nothing at
     all set *other* flags — so a session answered 风控 at window 13 of 6432 kept navigating windows, and
-    the summary called that 「已到列表末尾」. Three different answers, three different reasons, and the
+    the summary called that “已到列表末尾”. Three different answers, three different reasons, and the
     user reads which one happened.
     """
 
@@ -780,8 +780,8 @@ class TestWeiboAuthorWalk:
         assert crawler.end_reason is None, 'a walk that met the ask files nothing — there is no shortfall to judge'
 
     def test_an_account_that_ends_on_an_empty_page_is_attested_site_end(self, make_author):
-        # page 2 is beyond the map → an empty list, which is the server saying 「no more」. Rows landed,
-        # so this is 「到底了」 (site_end), settled clean — exactly what the run did before the migration;
+        # page 2 is beyond the map → an empty list, which is the server saying "no more". Rows landed,
+        # so this is “到底了” (site_end), settled clean — exactly what the run did before the migration;
         # the migration only adds the honest label + the funnel so the panel can show it.
         pages = {1: [_mymblog_item(str(1000 + i), '6302837173') for i in range(10)]}
         crawler, _driver = make_author(pages)
@@ -793,7 +793,7 @@ class TestWeiboAuthorWalk:
     def test_an_account_with_nothing_to_show_is_a_licensed_empty_not_a_shortfall(self, make_author):
         crawler, _driver = make_author({})
         assert crawler.author('6302837173', target_count=5) == []
-        assert crawler.end_reason == 'empty', '0 rows because the server said so is 「没发过」, settled clean'
+        assert crawler.end_reason == 'empty', '0 rows because the server said so is “没发过”, settled clean'
 
     def test_a_replaying_cursor_is_convicted_not_licensed(self, make_author):
         # The endpoint keeps handing back a page of items the cursor has ALL already seen, with a live
@@ -940,7 +940,7 @@ class TestWeiboHotBoard:
 
         ``weibo.com/`` redirects to ``passport.weibo.com/visitor/visitor``, and a same-origin fetch to
         ``weibo.com/ajax`` issued from *there* is refused by the browser itself (``TypeError: Failed to
-        fetch``). The old code called that 「微博热搜接口没有给出榜单（返回 empty）」 — a verdict on an endpoint
+        fetch``). The old code called that “微博热搜接口没有给出榜单（返回 empty）” — a verdict on an endpoint
         that was never reached, which made a working anonymous mode look like a site refusal and sent the
         user to re-save a cookie he never needed. So the refusal now names the doorway it is standing in,
         and — the part that matters for the next person who reads this — **no board is asked for at all**.
@@ -956,7 +956,7 @@ class TestWeiboHotBoard:
         """The other half of U38: the hop finishes on its own in 0.69 s, and then the request goes out.
 
         ``weibo.com/newlogin`` is a weibo.com frame, and measured with **no cookie file at all** it answers
-        ``ok=1`` carrying the whole ``realtime`` list — so 「this mode needs no session」 stayed true the
+        ``ok=1`` carrying the whole ``realtime`` list — so "this mode needs no session" stayed true the
         entire time; what was missing was waiting for the frame the request has to leave from.
         """
         crawler, driver = make_board(_board([_hot_item(), _hot_item(word='第二条')]), visitor_frames=[VISITOR, LANDED])

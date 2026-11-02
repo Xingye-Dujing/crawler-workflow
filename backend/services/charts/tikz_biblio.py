@@ -153,13 +153,13 @@ class BiblioFigureMixin:
             + (
                 # A share is only as meaningful as its denominator, and the denominator is the
                 # decision a reader cannot recover from the figure: it excludes documents with no
-                # judgement (「没有判断」 is not 中性), and both the figure and the table are excerpts.
+                # judgement (“没有判断” is not 中性), and both the figure and the table are excerpts.
                 '\\medskip\\par{\\footnotesize\\textbf{情感叠加公式：}'
                 r'节点 $v$ 的标签 $l$ 篇数 $n_{v,l}$ 为提及该节点的文档中标签为 $l$ 的篇数，'
                 r"占比 $p_{v,l}=n_{v,l}/\sum_{l'}n_{v,l'}$；没有标签的文档不计入分母（不当作中性）。"
                 f'图取前 {OVERLAY_ROW_LIMIT} 个节点、'
                 f'表取前 {OVERLAY_TABLE_LIMIT} 个，'
-                r'完整分布见节点表的「情感分布」列与 CSV 导出。'
+                r'完整分布见节点表的“情感分布”列与 CSV 导出。'
                 '}\n'
                 if chart_type == 'sentiment_overlay'
                 else ''
@@ -172,7 +172,7 @@ class BiblioFigureMixin:
                 r"占比 $p_{v,t}=n_{v,t}/\sum_{t'}n_{v,t'}$；"
                 f'图取前 {OVERLAY_TOPIC_LIMIT} 个话题与前 {OVERLAY_ROW_LIMIT} 个节点，'
                 f'表取前 {OVERLAY_TOPIC_LIMIT} 个话题与前 {OVERLAY_TABLE_LIMIT} 个节点，'
-                r'完整分布见「话题分布」列与 CSV 导出。'
+                r'完整分布见“话题分布”列与 CSV 导出。'
                 '}\n'
                 if chart_type == 'topic_overlay'
                 else ''

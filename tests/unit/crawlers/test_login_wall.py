@@ -58,7 +58,7 @@ OPEN = [
     ('https://x.com/foo/status/123', 'Post 回复 转发', False),
     ('https://www.instagram.com/p/Cg123/', 'Comments', False),
     ('https://www.youtube.com/watch?v=abcdefg', 'Comments', False),
-    ('https://www.zhihu.com/question/1/answer/2', '这篇回答提到「请先登录」一次', False),
+    ('https://www.zhihu.com/question/1/answer/2', '这篇回答提到“请先登录”一次', False),
     # One marker mention in an article body is not a wall: the detector needs two
     # distinct prompts, and only from the top of the page.
     ('https://weibo.com/1/2', '登录后查看全部内容', False),
@@ -138,7 +138,7 @@ class TestRiskControlIsNotALoginProblem:
 
     def test_a_browser_still_on_its_own_page_never_arrived(self):
         """Measured 2026-09-25 on xiaohongshu: a throttled VISIBLE window stayed on
-        ``chrome://new-tab-page`` (body 「新标签页 / 自定义 Chrome」, no wall wording),
+        ``chrome://new-tab-page`` (body “新标签页 / 自定义 Chrome”, no wall wording),
         the classifier read 'ok', and the search filed an empty grid as if the keyword
         had no notes. No site can redirect into these schemes — being here IS the
         navigation failure, and a failure must be named, never tabled as a result.

@@ -7,7 +7,7 @@ Two measured cases, both costing wall-clock time on every single run:
   search button (``ElementClickInterceptedException`` was observed), and the page
   only drops it after ~5 s. Clicking 是 is therefore both faster and more reliable
   than waiting.
-* **Instagram** asks 打开通知 with two buttons, 「打开」 and 「以后再说」 — the
+* **Instagram** asks 打开通知 with two buttons, “打开” and “以后再说” — the
   second is the "no" the user asked for, and it must be the one clicked: 打开
   hands the browser a native permission prompt that has no dismissible DOM.
 
@@ -49,7 +49,7 @@ for (const spec of want) {
             if (spec.forbid.includes(label)) continue;
             // div/span are candidates too: douyin's dialog is built out of them,
             // and the exact-text test is what keeps the row that reads
-            // 「取消\\n保存」 from being clicked when 「保存」 was asked for.
+            // “取消\\n保存” from being clicked when “保存” was asked for.
             for (const b of box.querySelectorAll('button, [role="button"], a, div, span')) {
                 const t = (b.innerText || b.getAttribute('aria-label') || '').trim();
                 if (t !== label || !visible(b)) continue;

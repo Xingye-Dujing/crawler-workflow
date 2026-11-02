@@ -144,8 +144,8 @@ def _next_cron(task: dict, after: datetime) -> datetime | None:
 def trigger_cron(trigger: dict) -> str:
     """The five-field expression a preset means, or the expression itself; '' for an interval.
 
-    Presets expand here rather than at save time so the file keeps the user's own choice (「每天
-    08:00」) and still has exactly one arithmetic behind it.
+    Presets expand here rather than at save time so the file keeps the user's own choice (“每天
+    08:00”) and still has exactly one arithmetic behind it.
     """
     kind = (trigger or {}).get('kind')
     if kind == 'daily':

@@ -94,8 +94,8 @@ class TestTheWipeFollowsTheClaim:
 
     The route used to delete the subtree and only THEN call ``begin_run``. Anything that won the
     claim in that gap — a scheduled fire, the queue draining another account's run, a second 运行
-    press — answered this press with a refusal AFTER its rows and the 「已采集」 claims bought with them
-    were gone. Pressing again was then refused forever (「该节点没有可重跑的结果」), and the only way
+    press — answered this press with a refusal AFTER its rows and the “已采集” claims bought with them
+    were gone. Pressing again was then refused forever (“该节点没有可重跑的结果”), and the only way
     back was 继续, which re-crawls the platform and re-pays for rows the user had in hand."""
 
     def test_a_rerun_that_lost_the_slot_keeps_every_row(self, client, app_module, monkeypatch):
@@ -220,7 +220,7 @@ class TestRerunEndpoint:
         """A run that is still executing is not a rerun target.
 
         Its subtree is the record a live worker is writing: erasing it would drop rows and release
-        the 「已采集」 claims out from under that thread, and the 继续 it leaves behind re-crawls work
+        the “已采集” claims out from under that thread, and the 继续 it leaves behind re-crawls work
         that had already landed. The refusal is by name, and nothing is touched."""
         store = app_module.get_run_store()
         wf = _workflow()

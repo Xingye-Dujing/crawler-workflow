@@ -178,7 +178,7 @@ class BaseMixin:
                 );
                 -- Which files a run wrote into the export folder. The export listing is a flat
                 -- scan of the directory and carries no run identity (and shard names only embed
-                -- the record when 「分片带记录时间戳」 is on, which defaults off), so without this
+                -- the record when “分片带记录时间戳” is on, which defaults off), so without this
                 -- table "clear everything one run produced" cannot be answered at all. ``node_id``
                 -- scopes the 分片-of-one-node clear; it is '' for run-level files (report, manual
                 -- save). ``(run_id, name)`` is the key so a live snapshot rewritten every batch

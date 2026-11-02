@@ -111,7 +111,7 @@ def _block(body: str, *, table: bool, caption: str, label: str) -> str:
 
     ``[H]`` (float package) — a float that is not allowed to move. A plain ``figure``/``table`` lets TeX
     carry the item past the section the reader is in, and the first compile produced a page holding
-    nothing but the heading 「图表」 while the pictures drifted away. ``[H]`` keeps the reading order
+    nothing but the heading “图表” while the pictures drifted away. ``[H]`` keeps the reading order
     图 1, 表 1, 图 2, 表 2 exactly as built; a too-tall item is cut into page-sized blocks first, since
     ``[H]`` refuses to move and would otherwise run past the bottom of the sheet.
 
@@ -342,7 +342,7 @@ def generate(run_id: str, *, title: str, store, export_dir: str) -> dict:
     nodes = list(run.get('nodes') or [])
     titles = {str(node.get('node_id')): str(node.get('title') or node.get('node_id') or '') for node in nodes}
     # Deliberately NOT sorted: figure and table numbers have to follow the order the run produced
-    # them, or 正文's 「图 1 支撑论点 A」 names a different figure than the preview the user just
+    # them, or 正文's “图 1 支撑论点 A” names a different figure than the preview the user just
     # looked at — and a Chinese caption sorts by code point, which is a near-random order.
     # ``by_node`` is an insertion-ordered dict filled from the run's own filing order below, so
     # iterating it IS the run order.

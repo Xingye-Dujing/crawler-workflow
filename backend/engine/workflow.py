@@ -166,7 +166,7 @@ class WorkflowEngine:
         # node that is not there — a hand-edited file, a payload from another
         # version of the canvas — used to enter the in-degree table anyway, which
         # made the ordering place more ids than there are nodes and raise
-        # 「工作流存在环，以下节点无法排序：」 with an *empty* node list: the user was
+        # “工作流存在环，以下节点无法排序：” with an *empty* node list: the user was
         # told to hunt a loop that did not exist, in a sentence whose own slot was
         # blank. The honest report is the missing endpoint, and ``validate`` says it.
         for conn in self.connections:
@@ -365,7 +365,7 @@ class WorkflowEngine:
         if capabilities.is_catbus(params):
             # The adapter's own availability for THIS cell, before the run is paid for. Validation and
             # the executor ask the same bridge; the refusal is the adapter's reason, never a generic
-            # 「CatBus cannot crawl」 invented here.
+            # "CatBus cannot crawl" invented here.
             for detail in capabilities.catbus_run_errors(platform, mode.key):
                 errors.append(t('engine.source_catbus', nid=label, detail=detail))
         feed = capabilities.feed_of(mode)
@@ -430,7 +430,7 @@ class WorkflowEngine:
 
         if not self.nodes:
             # An empty canvas has no cycle, no missing parameter and no node to
-            # report — and used to "complete": 「发现 0 条工作流」, 0/0 nodes,
+            # report — and used to "complete": “发现 0 条工作流”, 0/0 nodes,
             # outcome completed, toast 已完成. A run of nothing is not a success;
             # the browser's own gate says so, and the backend must too.
             add(None, 'engine.empty_canvas', t('engine.empty_canvas'))

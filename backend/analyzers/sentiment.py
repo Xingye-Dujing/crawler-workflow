@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 #: a fourth spelling from a model would read as a real category with one row in it.
 LABELS = ('positive', 'negative', 'neutral')
 
-#: Every mode, and the only ones that answer the question 「这条文本是正面的吗」 with a
+#: Every mode, and the only ones that answer the question “这条文本是正面的吗” with a
 #: probability the thresholds can be applied to. ``ml`` and ``llm`` answer with a label
 #: they were trained or prompted to choose, and re-deciding it from a number the reader
 #: cannot interpret would be a second opinion about the model's own answer.
@@ -463,8 +463,8 @@ class SentimentAnalyzer:
     ) -> pd.DataFrame:
         """Apply one polarity reader down a column, and write the two result columns.
 
-        A row that fails to read is left BLANK, not answered 中性: 「没有判断」 and
-        「判断为中性」 are different statements, and the second one is a claim about the
+        A row that fails to read is left BLANK, not answered 中性: “没有判断” and
+        “判断为中性” are different statements, and the second one is a claim about the
         text that nothing in fact established. ``failure_key`` is the catalogue KEY and
         not a finished sentence, because the reason has to be interpolated into it — a
         rendered string handed in here printed the template back with a literal ``{err}``

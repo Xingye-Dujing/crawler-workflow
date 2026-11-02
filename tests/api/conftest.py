@@ -35,7 +35,7 @@ def profiles_off(monkeypatch):
     Saving IS the update now: ``/api/cookies/save`` opens a headless browser to carry the
     pasted session into that account's own directory. The fast tier has no browser to give
     it, and that attempt was reaching past the socket block — pytest-socket reported it as
-    a warning while the plant swallowed the failure and answered 「种入失败」. A test that is
+    a warning while the plant swallowed the failure and answered “种入失败”. A test that is
     about something else (what was saved, which verdict the cache dropped) therefore was
     reading an answer from a machine state it never declared. Switching the feature off is
     a real setting, so the reply such a test asserts is the reply that machine gives.

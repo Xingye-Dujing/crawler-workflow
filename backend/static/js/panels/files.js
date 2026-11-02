@@ -6,7 +6,7 @@
  * this panel's business and stayed in ``workflow.js``.
  */
 
-/* The workflow-file manager (task #115). The menu 「打开」 only ever had a file
+/* The workflow-file manager (task #115). The menu “打开” only ever had a file
    picker; this lists what is saved and lets the user 打开 / 重命名 / 删除 without
    guessing which stems exist. It reuses the runs/dataset panels' delegated-button +
    escaping shape, not a second invention. */
@@ -788,7 +788,7 @@ var wfFiles = {
             body: JSON.stringify({ name: name }),
         });
         /* A locked workflow is refused with HTTP 409 whose body already carries the
-           friendly 「这一项已被锁定…」 reason; surfacing result.error (as rename does)
+           friendly “这一项已被锁定…” reason; surfacing result.error (as rename does)
            tells the user WHY it failed, instead of a bare generic 删除失败 toast. */
         showToast(result && result.ok ? I18n.t('wfMgr.removeDone') : ((result && result.error) || I18n.t('wfMgr.removeFailed')));
         if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();

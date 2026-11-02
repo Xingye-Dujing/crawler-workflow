@@ -223,7 +223,7 @@ class TestFactoryPolicy:
     def test_an_explicit_refresh_replants_into_a_used_profile(self, profiles_on, fake_crawler, tmp_path):
         """#108, the one door through which a used profile is given the file again.
 
-        Without it the panel's 「保存 Cookie」 writes a file that the crawling browser
+        Without it the panel's “保存 Cookie” writes a file that the crawling browser
         will never read again, and a re-taken session buys nothing.
         """
         cookie_dir = tmp_path / 'cookies'

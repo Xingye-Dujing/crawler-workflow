@@ -119,7 +119,7 @@ function refreshCookieStatus(updateSummary) {
            character typed would make the panel ask the server eight file listings per
            name. `updateSummary === false` still refreshes rows + the account renderers,
            but leaves the #cookie-status sentence the caller just wrote (a save/plant note)
-           standing — used right after 保存 so the account line stops saying 「还没有保存过」
+           standing — used right after 保存 so the account line stops saying “还没有保存过”
            while that note says it is saved. */
         cookieRows = result.rows || [];
         var lines = [];
@@ -157,7 +157,7 @@ function refreshCookieStatus(updateSummary) {
 
 function cookieRowFor(platform, account) {
     /* The row for exactly this pair, or null when nothing is saved under it.
-       Matched on the account KEY and never on the label: 「默认账号」 is how one account is
+       Matched on the account KEY and never on the label: “默认账号” is how one account is
        worded, and a label match would also answer for a login the user happened to name
        that. Both spellings of the default fold to the same key, so a row written before
        multi-account and one named ``default`` are found by either. */
@@ -209,8 +209,8 @@ function renderCookieAccountStatus() {
 
 /* The profile sentence is gone (user, 2026-09-28): an account, its cookie file and its
    browser directory are one thing now — saving a cookie plants it into that account's own
-   profile by itself — so 「它的浏览器里就是这份 Cookie」 described a state the panel is
-   responsible for, not one the user can act on. Same for 「其中 N 条关窗口即失效」: since
+   profile by itself — so “它的浏览器里就是这份 Cookie” described a state the panel is
+   responsible for, not one the user can act on. Same for “其中 N 条关窗口即失效”: since
    #148 every crawl runs in a headless browser that carries a desktop fingerprint, and a
    session cookie's lifetime is not a fact anybody chooses. What stays readable is the one
    case that is still the user's to know about: a cookie re-saved while its profile was
@@ -293,7 +293,7 @@ function openCookieDialog(platform, account) {
                option text (the native control is kept at 1px and opacity 0), and it re-reads
                itself only on a pick or a refresh. Setting ``value`` alone lands the answer
                for every button below while the user still sees the platform they came in
-               with — which is how 「打开」 in the saved-logins list read as doing nothing. */
+               with — which is how “打开” in the saved-logins list read as doing nothing. */
             if (window.CustomSelect) CustomSelect.refreshAll();
         }
     }
@@ -363,14 +363,14 @@ function saveCookieConfig() {
                     document.getElementById('cookie-json').value = '';
                     /* The reply says what happened to the browser that crawls with this login —
                        planted, or deferred because that account's profile is held right now.
-                       Showing only my own 「已保存」 toast hides the half the user acts on, and the
+                       Showing only my own “已保存” toast hides the half the user acts on, and the
                        status refresh must not run first either: it answers asynchronously and
                        would overwrite this sentence a moment later. */
                     var statusEl = document.getElementById('cookie-status');
                     if (result.profile_note && statusEl) {
                         statusEl.textContent = result.message || '';
                         /* The cookie is on disk now, so refresh the cached rows — the per-account
-                           line reads them, and without this it keeps claiming 「还没有保存过 Cookie」
+                           line reads them, and without this it keeps claiming “还没有保存过 Cookie”
                            while the summary right above says it is saved (the contradiction the user
                            hit after a save-into-profile). updateSummary=false keeps THIS planted
                            message: the refresh only re-reads rows + repaints the two account renderers. */
@@ -398,7 +398,7 @@ async function deleteCookie(platform, account) {
        The confirmation has to be honest about what a file is: since a browser profile
        imports it once and is never re-planted, a platform that has logged in inside its own
        profile keeps that session, and deleting the snapshot does not sign it out. Saying
-       「已删除，等于退出登录」 here would send the user to re-log in a session that is still
+       “已删除，等于退出登录” here would send the user to re-log in a session that is still
        live — the response's own profile_holds line says which of the two just happened. */
     var statusEl = document.getElementById('cookie-status');
     var named = platform !== undefined && platform !== null && platform !== '';
@@ -409,7 +409,7 @@ async function deleteCookie(platform, account) {
        `.replace('{platform}', …)`, which fills the first occurrence only — so the user read a
        literal `{platform}` in the middle of a Chinese sentence, next to a raw `zhihu` key.
        And the dialog has to name the SESSION it is about to delete: one platform holds
-       several logins, and 「删除 知乎 的 Cookie 文件」 while the account box says `work`
+       several logins, and “删除 知乎 的 Cookie 文件” while the account box says `work`
        describes a file this request does not touch. */
     var who = entryLabels([{ platform: platform, account: account }]);
     var answer = await showDialog({
@@ -437,12 +437,12 @@ async function deleteCookie(platform, account) {
 
 async function deleteCookieProfile(platform, account) {
     /* Throw away one account's browser PROFILE directory — the device itself, not the cookie
-       file. The two are independent on purpose: 「删除 Cookie」 removes only the snapshot a
+       file. The two are independent on purpose: “删除 Cookie” removes only the snapshot a
        throwaway browser is planted from, and a platform crawled inside its own profile keeps
        its live session in that profile, so retiring the device needs this separate action.
 
        Called with nothing it speaks for the dialog's own selection (platform dropdown + account
-       box) exactly like ``deleteCookie``, so the Cookie dialog's 「删除已存 Profile」 button reuses
+       box) exactly like ``deleteCookie``, so the Cookie dialog's “删除已存 Profile” button reuses
        it; a management row calls it WITH its row, because the clicked login is a different one
        than whatever is typed in the box.
 
@@ -542,7 +542,7 @@ function cookieEntryUrl() {
     return el ? String(el.value || '').trim() : '';
 }
 
-/* One account, one name, one rule (user, 2026-09-28: 「哪有同一个东西不同规范的」). The default
+/* One account, one name, one rule (user, 2026-09-28: “哪有同一个东西不同规范的”). The default
    login is named ``default`` like any other account; the empty string is only its historical
    spelling, and it is folded HERE, at the one place the box is read, so no other code path has
    to know that the same account was once addressed by leaving a field blank. A name typed with
@@ -614,7 +614,7 @@ function renderCookieAccounts(show) {
        It stays a hand-built popup rather than the browser's own because the value it carries
        is the empty string: a <datalist> prints the VALUE, so the default account could only
        ever have appeared as a blank row, and a blank row is not a candidate anybody can
-       decide to trust. Nothing saved, nothing shown — offering 「默认账号」 for a file that
+       decide to trust. Nothing saved, nothing shown — offering “默认账号” for a file that
        does not exist is how a node ends up naming a login this machine cannot produce. */
     var menu = cookieCandMenu();
     var input = document.getElementById('cookie-account');
@@ -696,7 +696,7 @@ function cookieRowCells(row) {
     td.className = 'runs-mgr-ops';
     var ops = [{ label: 'cookies.renameOne', cls: 'cookie-mini runs-mgr-btn', go: function () { renameCookieAccount(row.platform, row.account); } }];
     if (cookieAccountKey(row.account) === COOKIE_DEFAULT_ACCOUNT) {
-        /* 「重命名」 is offered for the other accounts only, and the reason is the directory
+        /* “重命名” is offered for the other accounts only, and the reason is the directory
            layout rather than the name: 默认账号 owns no folder of its own — it IS
            ``<root>/<platform>``, the directory every other account of that platform is nested
            in. Naming it would move them with it. The row says that instead of offering a
@@ -709,7 +709,7 @@ function cookieRowCells(row) {
         };
     }
     ops.push({ label: 'cookies.deleteOne', cls: 'cookie-mini runs-mgr-btn del', go: function () { deleteCookie(row.platform, row.account); } });
-    /* 「删除 Profile」 only where there IS a profile directory to remove. The default account's
+    /* “删除 Profile” only where there IS a profile directory to remove. The default account's
        row shows it greyed, not hidden — its browser data is the platform root that nests every
        named account, so the delete would over-reach; the tooltip says why, the same structural
        reason rename disables the default. A named account gets a working device-retire. */
@@ -770,7 +770,7 @@ function renderCookieManager() {
     cookieRows.forEach(function (row) {
         var built = cookieRowCells(row);
         var tr = document.createElement('tr');
-        /* The row carries its own account key: 「this row's delete/rename means THIS login」 has
+        /* The row carries its own account key: "this row's delete/rename means THIS login" has
            to be readable off the row it was clicked on, not inferred from what the dialog box
            happens to hold, and a test that presses the button must be able to say which row it
            pressed. */
@@ -849,7 +849,7 @@ var cookiesManager = {
 
     onLanguageChange() {
         /* Every word in this table is built by JS from a catalogue key — the platform name,
-           the account's word, 「时间未知」, the two buttons — so ``I18n.apply()`` never reaches
+           the account's word, “时间未知”, the two buttons — so ``I18n.apply()`` never reaches
            any of it, and the panel kept speaking the old language after a switch. Repainted
            from the rows already in hand: a language change is not new information about the
            disk, and asking the server for it would make the switch cost a directory listing. */
@@ -862,7 +862,7 @@ function cookiePlatform() {
     return el ? String(el.value || '') : '';
 }
 
-/* No 「把 Cookie 更新进 Profile」 button any more: saving a cookie now plants it into that
+/* No “把 Cookie 更新进 Profile” button any more: saving a cookie now plants it into that
    account's own profile by itself (``app.py::_plant_saved_cookie_into_profile``), which is what
    the paste already meant. The one case the browser cannot take on the spot — its profile is
    held by a running crawl — is answered by the save message and by ``needs_refresh``, so the

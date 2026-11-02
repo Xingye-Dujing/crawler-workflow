@@ -223,7 +223,7 @@ const BrowserProfiles = {
            any other way: the directory every NEW account is cloned from is made by the
            program, on the server, and nobody clicked anything to create it. A payload
            without the field says nothing — an older server that never answered the
-           question is not evidence that the answer is 「缺失」. */
+           question is not evidence that the answer is “缺失”. */
         if (this.data.enabled && this.data.template && typeof this.data.template.exists === 'boolean') {
             box.appendChild(BrowserProfiles._noteRow(BrowserProfiles._templateState(this.data.template), 'template'));
         }

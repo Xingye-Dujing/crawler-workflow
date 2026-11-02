@@ -198,7 +198,7 @@ class TestQueueHandOff:
 
         ``begin_run`` parks the payload at the TAIL, so a request that had been waiting longest
         ends up behind the ones that arrived after it — and the panel's queue position, its
-        「第 N 位」 and the next drain's order all disagree with what the user was told."""
+        “第 N 位” and the next drain's order all disagree with what the user was told."""
 
         def entry(queue_id, name, waited):
             return {
@@ -240,7 +240,7 @@ class TestQueueHandOff:
 
         A parked payload that can never start is re-tried after every run — and because a refused
         drain puts it back at the FRONT and returns, it starves every request behind it, survives a
-        restart in the mirror, and never tells the browser the reason it was told 「已排队」 for."""
+        restart in the mirror, and never tells the browser the reason it was told “已排队” for."""
         from core.config import Config
 
         from engine.run import begin_run, cloud_refusal_response
@@ -347,7 +347,7 @@ class TestBusyClaimUsesThreadLiveness:
         the thread is still alive, so a 停止 press legitimately marks the records stopping. It used
         to be the last write: the worker cleared ``stopping`` at the TOP of its ``finally``, before
         this press, so the flag stood on a run that had already published its verdict — the panel
-        pinned to 「正在停止…」, and ``stop_requested()`` handed that stale stop to every crawl that
+        pinned to “正在停止…”, and ``stop_requested()`` handed that stale stop to every crawl that
         came after it."""
         from engine import run as run_module
 
@@ -750,7 +750,7 @@ class TestContinueAfterAnEdit:
         """``runs.db`` remembers every node a run ever had; the canvas does not.
 
         The failed count was read from the whole record, so once a node had died,
-        deleting it and pressing 继续 produced 「2/2 个节点完成，1 个失败」 over a run
+        deleting it and pressing 继续 produced “2/2 个节点完成，1 个失败” over a run
         where every remaining node finished — and because a broken count is what
         marks the run failed, the record stayed resumable forever, offering a
         continue that could never clear it.

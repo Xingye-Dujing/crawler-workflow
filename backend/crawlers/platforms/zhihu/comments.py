@@ -6,8 +6,8 @@ This file owns both halves: :data:`PANEL_JS` measures a live comment panel and
 Two columns are here because a measurement said what the panel does and does not hold
 (``backend/test_zhihu_comment_dom.py``, two real panels, 22 items):
 
-* **评论时间** is on the page — relative for recent comments (「14 小时前」), absolute for old ones
-  (「2019-08-15」) — so it is read. It used to be written as ``''`` without looking, and the relative
+* **评论时间** is on the page — relative for recent comments (“14 小时前”), absolute for old ones
+  ("2019-08-15") — so it is read. It used to be written as ``''`` without looking, and the relative
   half then sat in the column as the site's own words: a time series over it loses exactly the
   comments a live event is about, so both shapes go through ``engine.times.absolute`` here.
 * **点赞数** is not reachable as a button, an ``aria-label`` or a bare number anywhere in an item's
@@ -33,10 +33,10 @@ def parse_zhihu_comments(url: str, items) -> list:
     another comment's header would name the wrong person, and a wrong name is worse than none.
 
     ``parent`` is the index (in the same read) of the comment this one replies to, or -1. Measured:
-    nested replies do not exist in the DOM until 「展开其中 N 条回复」 is clicked, and on one answer
+    nested replies do not exist in the DOM until “展开其中 N 条回复” is clicked, and on one answer
     the items whose author sat outside their own subtree were exactly those — so the column both
-    keeps a thread readable and tells a future reader whether a blank author means 「anonymous」 or
-    「a reply, whose header lives one wrapper deeper」.
+    keeps a thread readable and tells a future reader whether a blank author means "anonymous" or
+    "a reply, whose header lives one wrapper deeper".
     """
     rows = []
     index = 0
@@ -123,7 +123,7 @@ return (function () {
 """
 
 #: Scroll the panel's OWN box to its bottom. Measured (``backend/test_zhihu_comment_structure.py``):
-#: zhihu has no 「更多」 control on a comment panel at all — the list is lazy-filled by the
+#: zhihu has no “更多” control on a comment panel at all — the list is lazy-filled by the
 #: container (class ``css-34podr``, whose ``scrollHeight`` grew 1302 → 12733 on one answer), and
 #: scrolling the WINDOW changes nothing (12 items before, 12 after). So this, not a button hunt,
 #: is what feeds the list. Returns how far the box moved, which is the caller's evidence that a
@@ -158,8 +158,8 @@ return (function () {
 PANEL_ROUNDS = 60
 QUIET_ROUNDS = 3
 
-#: The nested-reply opener's own words: 「展开其中 2 条回复」 / 「查看 3 条回复」 / 「全部回复」.
-#: The count and the wording between the verb and 回复 both vary (「其中」 is in one of them), so
+#: The nested-reply opener's own words: “展开其中 2 条回复” / “查看 3 条回复” / “全部回复”.
+#: The count and the wording between the verb and 回复 both vary (“其中” is in one of them), so
 #: the match is on the verb-plus-回复 shape rather than an exact phrase. Every one of these is a
 #: bucket of comments that does not exist in the DOM until clicked (measured: +5 and +29 rows on
 #: two answers), so an un-clicked expander is 漏采 by construction.
@@ -181,7 +181,7 @@ def walk(session, url: str, limit: int) -> tuple:
         if not match:
             continue
         # The button's own number is carried into the walk: it is the figure the user can read
-        # off the page, so it is the only honest denominator for 「did we get them all」.
+        # off the page, so it is the only honest denominator for "did we get them all".
         declared = int(match.group(1))
         with contextlib.suppress(Exception):
             session.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', btn)
@@ -200,7 +200,7 @@ def walk(session, url: str, limit: int) -> tuple:
 
 
 def _click_reply_threads(session) -> int:
-    """Open every visible 「N 条回复」 thread, so nested comments exist to be read."""
+    """Open every visible “N 条回复” thread, so nested comments exist to be read."""
     clicked = 0
     for el in list(session.driver.find_elements('css selector', 'button, a')):
         text = session.safe_text(el)
@@ -253,7 +253,7 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
         session.log(t('comment.zhihuPanelCapped', n=PANEL_ROUNDS, rows=len(collected)))
     if declared and len(collected) < declared:
         # The site's own number is the denominator the user reads off the page; anything short
-        # of it is said out loud, because 「the panel had 12」 and 「we stopped at 12 of 261」 are
+        # of it is said out loud, because "the panel had 12" and "we stopped at 12 of 261" are
         # two different reports and only one of them is checkable.
         session.log(t('comment.zhihuPanelShort', declared=declared, rows=len(collected)))
     return collected

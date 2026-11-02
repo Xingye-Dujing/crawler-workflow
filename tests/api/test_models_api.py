@@ -1,7 +1,7 @@
 """GET /api/models — the registry the bert-mode picker names its models from.
 
 The registry is a runtime file (``data/model_registry.json``) the operator keeps by
-hand; the endpoint's whole job is to hand the browser friendly NAMES (「网暴模型」) so a
+hand; the endpoint's whole job is to hand the browser friendly NAMES (“网暴模型”) so a
 node does not have to be configured with a raw path. Two invariants drive every case:
 
 * A missing, non-list or half-written registry is an EMPTY list, never an error —

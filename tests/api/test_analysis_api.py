@@ -682,7 +682,7 @@ class TestMlTraining:
 
         One row is enough to prove it, because of the ORDER the route checks in: a refused
         ``model_type`` and a missing column both answer before the row-count floor. Getting
-        「至少要 10 行标注」 back means the name was accepted AND 正文/sentiment were found.
+        “至少要 10 行标注” back means the name was accepted AND 正文/sentiment were found.
         """
         dataset_id = paste([{'正文': 'x', 'sentiment': 'positive'}], name='one.csv')
         body = client.post('/api/analysis/train', json={'dataset_id': dataset_id, 'model_type': 'sentiment'}).get_json()

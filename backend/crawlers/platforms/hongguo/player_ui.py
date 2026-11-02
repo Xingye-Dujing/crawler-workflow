@@ -83,7 +83,7 @@ class PlayerUI:
 
     def _check_stopped(self):
         """Raise, never return None: a Stop that reads as a timeout would be filed as
-        「这部剧搜不到」 and the node would name a drama the user simply stopped on."""
+        “这部剧搜不到” and the node would name a drama the user simply stopped on."""
         if self._stopped():
             raise CrawlerStopped(t('crawl.stopped'))
 
@@ -307,18 +307,18 @@ class PlayerUI:
                         return True
                     # Re-activate before scrolling: the board's own re-render can drop the window
                     # from the foreground, and a wheel on a non-foreground window scrolls nothing
-                    # (the 「滚动几次又不动」 the user saw — until a manual click foregrounded it).
+                    # (the “滚动几次又不动” the user saw — until a manual click foregrounded it).
                     self._activate()
                     self._ensure_library().WheelDown(wheelTimes=3, interval=0.12)
                     time.sleep(2.0)
             return False
         except CrawlerStopped:
             # 停止 is not a search that failed. Swallowed here it would file the drama the
-            # user stopped on under 「搜不到这部剧」 and name it in the skip refusal.
+            # user stopped on under “搜不到这部剧” and name it in the skip refusal.
             raise
         except TreeColdError:
             # A tree that froze mid-walk is an environment fact, not a search miss — it must
-            # reach _open_drama's re-wake, not be flattened into the False below (「搜不到这部剧」).
+            # reach _open_drama's re-wake, not be flattened into the False below (“搜不到这部剧”).
             raise
         except Exception as exc:
             logger.debug('hongguo harvest: open_drama failed: %s', exc)
@@ -335,7 +335,7 @@ class PlayerUI:
         page is only a fallback. One tab named like a board — or the selected board printed
         without its ▾ — matches the very pattern that recognises the whole list, so trusting
         that read first returned a one-name list, the switcher never opened, and every drama
-        sitting on another board was refused as 「搜不到这部剧」: the miss this walk exists to
+        sitting on another board was refused as “搜不到这部剧”: the miss this walk exists to
         fix, reimposed by its own shortcut.
         """
         labels = []
@@ -346,7 +346,7 @@ class PlayerUI:
         return labels or self._visible_boards() or list(_FALLBACK_BOARDS)
 
     def _board_toggle(self):
-        """The leaderboard's own 「总榜 ▾」 switcher button, or ``None``."""
+        """The leaderboard's own “总榜 ▾” switcher button, or ``None``."""
         return self._find_until('榜 ▾', 'ButtonControl', seconds=8) or self._find_until(
             '剧 ▾', 'ButtonControl', seconds=3
         )
@@ -440,7 +440,7 @@ class PlayerUI:
         (:func:`screen_names`), never by equality: equality here would false-refuse a correctly
         opened drama.
 
-        The empty answer means 「the tree did not say」 — a cold tree holds NO controls at all
+        The empty answer means "the tree did not say" — a cold tree holds NO controls at all
         (measured: 453 controls after warming, 0 before), OR the page carries more than one
         ``@``-prefixed text (a 弹幕 or a reply that opens with ``@昵称``, which tree order puts
         BEFORE the header) — and either way there is no single answer, so the caller gets silence
@@ -479,7 +479,7 @@ class PlayerUI:
                 return False
             # Foreground first: the {Down} only switches episodes on a window that actually has
             # input focus (measured 2026-10-20 — with the player not foreground, the key was
-            # silently dropped and the walk re-read the SAME episode, exactly the 「没变化」 symptom).
+            # silently dropped and the walk re-read the SAME episode, exactly the “没变化” symptom).
             self._activate()
             with contextlib.suppress(Exception):
                 win.SetFocus()
@@ -582,7 +582,7 @@ class PlayerUI:
             return False
 
     def expand_replies(self, max_clicks: int = 40) -> int:
-        """Expand EVERY 「展开…回复」 the drawer currently shows; returns how many it clicked.
+        """Expand EVERY “展开…回复” the drawer currently shows; returns how many it clicked.
 
         One click per episode was reply-blind by design: a drawer with 30 threads and
         children under six of them yielded six expansions, and the table then claimed the

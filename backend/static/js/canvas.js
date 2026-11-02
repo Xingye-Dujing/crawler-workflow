@@ -934,7 +934,7 @@ const canvas = {
        The guard used to name INPUT and SELECT, so every multi-line field in the app —
        the 推文链接 box of a WeChat source, the 表达式 of a 列计算, the paste field of the
        Cookie dialog — was unprotected: Backspace at the end of a URL deleted the
-       SELECTED NODE (toast 「节点已删除」, panel closed) instead of one character, and
+       SELECTED NODE (toast “节点已删除”, panel closed) instead of one character, and
        typing an `f` (a URL, `pdf`, `if`) was swallowed by the fold shortcut. A node is
        cheap to create and expensive to lose mid-edit, so the exclusion is by what the
        element IS (a text editor of any kind) rather than by its tag name.
@@ -949,7 +949,7 @@ const canvas = {
     },
 
     /* A confirm dialog whose focus sits on a BUTTON is not a typing target, yet it is a
-       modal: with 「删除运行」 open, a Backspace deleted the node BEHIND the dialog and a
+       modal: with “删除运行” open, a Backspace deleted the node BEHIND the dialog and a
        fold/pan key fired unseen. The canvas may not act on a shortcut while a dialog owns
        the screen — the same #dialog-overlay guard menu.js already honours. Null-safe because
        the harness DOM may not carry the overlay at all. */
@@ -978,7 +978,7 @@ const canvas = {
        the live region. */
     /* One definition of "this type is switched off on the canvas". The context menu hides a
        disabled node's action with the same list; the palette used to have no check at all, so a
-       「禁用此类型」 node could be added straight back by clicking the left-hand library — one
+       “禁用此类型” node could be added straight back by clicking the left-hand library — one
        rule asked twice, and the palette was the weaker door. */
     isTypeDisabled(type) {
         return (this.disabledTypes || []).indexOf(type) >= 0;
@@ -1845,7 +1845,7 @@ const canvas = {
         if (this.selectedNode === id) this.selectedNode = null;
         this.selectedNodes = this.selectedNodes.filter(nid => nid !== id);
         /* The keyboard link origin lives only in this field, not on any box: leaving it set
-           to a deleted node let the next 「l」 write a wire FROM a node that no longer exists —
+           to a deleted node let the next "l" write a wire FROM a node that no longer exists —
            invisible on the canvas, nowhere to single-delete, yet it entered getState and the
            backend's dangling_connection check then refused the WHOLE run over a wire the user
            could not see. */

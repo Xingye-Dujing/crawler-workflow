@@ -4,7 +4,7 @@ The panel writes through four endpoints and the clock reads the same file, so th
 both halves of the feature. What is pinned here is its own contract, not the HTTP surface:
 
 * a task round-trips, and its id — the key its own history is filed under — survives an edit;
-* what the user WROTE is what is stored (「每天 08:00」 stays a preset, never silently rewritten
+* what the user WROTE is what is stored (“每天 08:00” stays a preset, never silently rewritten
   into the cron string it means), while the moment it fires next is computed in the task's OWN
   zone;
 * a rule that can never fire is refused while the user is looking at the form, not at 03:00;
@@ -243,12 +243,12 @@ class TestOneEvent:
 
     def test_a_refusal_is_recorded_like_any_other_outcome(self):
         task = _save()
-        after = store.record_event(task['id'], 'refused', note='找不到画布「红果短剧」', at=NOW)
+        after = store.record_event(task['id'], 'refused', note='找不到画布“红果短剧”', at=NOW)
         assert after['last_run'] == {
             'at': NOW.isoformat(),
             'status': 'refused',
             'run_id': '',
-            'note': '找不到画布「红果短剧」',
+            'note': '找不到画布“红果短剧”',
         }
 
     def test_the_history_keeps_the_last_twenty_newest_first(self):

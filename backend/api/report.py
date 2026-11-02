@@ -123,7 +123,7 @@ def report_generate():
         refusal = _local_transport_refusal(provider)
         if refusal:
             # Named rather than attempted. A connection error against a port nothing
-            # listens on would be logged as 「结论生成失败」 and send the user to retry a
+            # listens on would be logged as “结论生成失败” and send the user to retry a
             # paragraph this host can never write; the report itself still ships, because
             # the deliverable was never the paragraph.
             add_log(refusal)
@@ -209,7 +209,7 @@ def report_latex():
     section that states the parameters the run actually used.
 
     The request carries a ``run_id`` and a title, nothing else — the sources are read out of the
-    run's own file ledger, the same rule the chart panel's 「编译为 PDF」 button follows. Re-rendering
+    run's own file ledger, the same rule the chart panel's “编译为 PDF” button follows. Re-rendering
     charts here would let the paper's figure and the preview's figure disagree, and accepting LaTeX
     from the browser would hand ``xelatex`` a document chosen by the page.
     """

@@ -323,7 +323,7 @@ class TestCookieEndpoints:
         """The fact the panel could not get before: profiles are per ACCOUNT.
 
         ``/api/browser/profiles`` answers one row per platform against the DEFAULT file, so
-        「这个 profile 里还是旧的那份 Cookie」 was read off the wrong device whenever the
+        “这个 profile 里还是旧的那份 Cookie” was read off the wrong device whenever the
         login had a name. Each row now carries its own account's directory.
         """
 
@@ -345,7 +345,7 @@ class TestCookieEndpoints:
         assert rows['work']['needs_refresh'] is True, rows['work']
 
     def test_no_login_saved_answers_with_no_rows_at_all(self, client):
-        """Empty, not a table of zeros: the panel shows 「还没有任何已保存的登录」 because that
+        """Empty, not a table of zeros: the panel shows “还没有任何已保存的登录” because that
         is the answer, and a row per platform with nothing in it would read as eight
         logins that are each somehow missing."""
         assert client.get('/api/cookies/status').get_json()['rows'] == []
@@ -470,7 +470,7 @@ class TestRenameAccount:
         assert cookie_manager.exists('zhihu', 'work') is False
         assert cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
         # So did the device, with its contents — an account renamed onto a name with no browser
-        # would open a brand-new one and claim 「已登录」 about a session that is not there.
+        # would open a brand-new one and claim “已登录” about a session that is not there.
         assert not os.path.isdir(device)
         assert os.path.isfile(os.path.join(profiles.platform_dir('zhihu', 'office'), 'Default', 'state'))
         assert 'moved together' in body['message'], body['message']
@@ -482,7 +482,7 @@ class TestRenameAccount:
     def test_an_account_with_no_device_moves_only_the_file(
         self, client, app_module, profiles_off, tmp_path, monkeypatch
     ):
-        """No 「一起搬过去了」 about a device that does not exist: which of the two sentences is
+        """No “一起搬过去了” about a device that does not exist: which of the two sentences is
         returned is decided by what actually moved, not by a guess."""
         self._point(monkeypatch, tmp_path)
         self._login(client, 'zhihu', 'solo')
@@ -504,7 +504,7 @@ class TestRenameAccount:
         assert cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
 
     def test_a_hyphen_is_a_legal_name_for_both_sides(self, client, app_module, profiles_off, tmp_path, monkeypatch):
-        """(user, 2026-09-28: 「为什么大写字母和-不被允许，没有理由也要允许」) — the character rule is
+        """(user, 2026-09-28: “为什么大写字母和-不被允许，没有理由也要允许”) — the character rule is
         letters, digits, ``_`` and ``-``, and the default account obeys it like any other."""
         self._point(monkeypatch, tmp_path)
         self._login(client, 'zhihu', 'my_login')

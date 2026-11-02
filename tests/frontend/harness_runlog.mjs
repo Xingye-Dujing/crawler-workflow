@@ -6,10 +6,10 @@
 
    - opening pulls a page of the persisted log and renders it oldest→newest, escaping every
      line (a saved traceback is data, never markup);
-   - the three filters (level / workflow / search) go into the fetch URL, and 「加载更早」
+   - the three filters (level / workflow / search) go into the fetch URL, and “加载更早”
      walks backward from the smallest seq already shown;
-   - 「下载 .txt」 points the browser at the SAME filtered download endpoint;
-   - the run-records row grew a 「查看运行日志」 button that carries only the run id (a
+   - “下载 .txt” points the browser at the SAME filtered download endpoint;
+   - the run-records row grew a “查看运行日志” button that carries only the run id (a
      workflow name is user text — a quote in it must not be able to close the handler).
 
    Usage: node harness_runlog.mjs <workflow.js>
@@ -136,7 +136,7 @@ dispatchOn(viewer._dom.search, 'keydown', { key: 'Enter' });
 await new Promise((r) => setImmediate(r));
 out.qGet = captured.gets.slice(beforeQ).find((u) => u.indexOf('q=%E4%B8%89%E4%BA%9A') >= 0) || '';
 
-// ── 「加载更早」 walks back from the smallest seq already shown ──
+// ── “加载更早” walks back from the smallest seq already shown ──
 const beforeOlder = captured.gets.length;
 viewer._rows = PAGE.rows.slice();
 viewer._oldestSeq = 2;

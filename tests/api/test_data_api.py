@@ -109,7 +109,7 @@ class TestUpload:
         assert body['row_count'] == 2
 
     def test_a_multi_sheet_workbook_is_refused_not_quietly_imported_from_one(self, client):
-        """``read_excel`` defaults to sheet 0, which imported only 「Jan」 of a Jan/Feb/Mar
+        """``read_excel`` defaults to sheet 0, which imported only "Jan" of a Jan/Feb/Mar
         workbook and reported its rows and columns as the whole file. A sheet choice is a choice
         of data, so it is refused by name rather than guessed."""
         response = _upload(client, 'months.xlsx', _multi_xlsx_bytes())
@@ -396,7 +396,7 @@ class TestClear:
     def test_an_orphan_sweep_that_took_nothing_prints_nothing(self, client, caplog):
         """One line per PAGE LOAD, not per event: the app boot fires this sweep every time a
         tab opens (app.js), so an unconditional sentence here is console noise by construction.
-        Measured on the CI runner, where it put eighty 「清理孤立文件 0 个」 rows into the run
+        Measured on the CI runner, where it put eighty “清理孤立文件 0 个” rows into the run
         console and buried the console test's own three lines under them. The automatic sweep
         (`services/runs/housekeeping.py`) already keeps to silence when nothing went."""
         from i18n import t

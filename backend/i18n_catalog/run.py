@@ -16,10 +16,10 @@ ZH = {
     'engine.biblio_multi_input': '{nid} 有 {n} 个上游连接：文献计量只接受一个输入，请只保留一条连线',
     'engine.biblio_no_input': '{nid} 需要且只接受一个上游数据表（文献导入节点）',
     'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
-    'engine.compile_bad_parent': '节点 {nid}：编译节点只能接收可视化节点的 LaTeX，上游「{up}」不是可视化节点',
+    'engine.compile_bad_parent': '节点 {nid}：编译节点只能接收可视化节点的 LaTeX，上游“{up}”不是可视化节点',
     'engine.compile_no_upstream': '节点 {nid}：编译节点没有上游连线（需要连接可视化节点）',
     'engine.compile_source_both_off': (
-        '节点 {nid}：上游可视化「{up}」的 LaTeX 图与三线表复选框都没勾选，编译节点无内容可编'
+        '节点 {nid}：上游可视化“{up}”的 LaTeX 图与三线表复选框都没勾选，编译节点无内容可编'
     ),
     'engine.cycle': '工作流存在环，以下节点无法排序：{nodes}',
     # A wire whose end is not on the canvas is not a cycle. Reporting it as one
@@ -42,34 +42,34 @@ ZH = {
     'engine.output_pdf_only_pdfable': '节点 {nid}：PDF 输出的上游必须是可视化节点或编译节点',
     'engine.output_pdf_two_sources': '节点 {nid}：PDF 输出不能同时接可视化节点与编译节点（二选一）',
     'engine.process_no_op': '节点 {nid}：处理节点没有选择操作',
-    'engine.source_bad_backend': '节点 {nid}：采集方式「{backend}」不存在，请改用 Selenium 或 CatBus',
-    'engine.source_bad_option': '节点 {nid}：「{field}」没有「{value}」这个选项，请在该节点的下拉里改选一个',
+    'engine.source_bad_backend': '节点 {nid}：采集方式“{backend}”不存在，请改用 Selenium 或 CatBus',
+    'engine.source_bad_option': '节点 {nid}：“{field}”没有“{value}”这个选项，请在该节点的下拉里改选一个',
     'engine.source_catbus': '节点 {nid}：CatBus 引擎无法采集这一项：{detail}',
-    'engine.source_feed_no_column': '节点 {nid}：已连接上游表格，但没有填写「{field}」要逐行读取的列名',
-    'engine.source_feed_no_input': ('节点 {nid}：填写了上游列名，但该节点没有连接任何数据表（标注用的「名称」线不算）'),
+    'engine.source_feed_no_column': '节点 {nid}：已连接上游表格，但没有填写“{field}”要逐行读取的列名',
+    'engine.source_feed_no_input': ('节点 {nid}：填写了上游列名，但该节点没有连接任何数据表（标注用的“名称”线不算）'),
     # Feeding a link mode from an upstream table column: the wire is allowed only where
     # the matrix declares a feed (Field.fed_by), and every mismatch is refused BY NAME —
     # a wired-but-unfed crawl would silently re-crawl the pasted list the user thinks
     # they replaced, and a fed crawl with no wire would read a table that is not there.
     'engine.source_feed_no_mode': (
-        '节点 {nid}：这种采集内容不接受上游表格，逐行喂送只支持「链接列表」类表单，请断开这条连线或改选采集内容'
+        '节点 {nid}：这种采集内容不接受上游表格，逐行喂送只支持“链接列表”类表单，请断开这条连线或改选采集内容'
     ),
     'engine.source_link_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
-    'engine.source_missing': '节点 {nid}：必填项「{field}」还没有填写',
+    'engine.source_missing': '节点 {nid}：必填项“{field}”还没有填写',
     'engine.source_needs_machine': '节点 {nid}：这台机器跑不了这种采集（{reason}），请换采集内容或在能跑的机器上运行',
     'engine.source_no_cookie_account': (
-        '节点 {nid}：{platform} 的账号「{account}」没有可用的 Cookie——请先到 Cookie 面板为该账号保存一份，'
+        '节点 {nid}：{platform} 的账号“{account}”没有可用的 Cookie——请先到 Cookie 面板为该账号保存一份，'
         '或在该节点改用已有 Cookie 的账号（不会借用别的账号登录，也不会静默少采）'
     ),
     'engine.source_no_platform': '节点 {nid}：数据源节点没有选择平台',
-    'engine.source_unknown_mode': '节点 {nid}：{platform} 没有这种采集内容，请在该节点的「采集内容」里改选一种',
+    'engine.source_unknown_mode': '节点 {nid}：{platform} 没有这种采集内容，请在该节点的“采集内容”里改选一种',
     'engine.source_unknown_platform': '节点 {nid}：{platform} 还没有可用的采集实现，请改用已支持的平台',
     'engine.tokenize_no_column': '节点 {nid}：分词节点缺少文本列',
-    'engine.unknown_node_type': '节点 {nid}：未知的节点类型「{type}」，工作流引擎无法执行它',
+    'engine.unknown_node_type': '节点 {nid}：未知的节点类型“{type}”，工作流引擎无法执行它',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     'engine.visualize_no_chart': '节点 {nid}：可视化节点没有选择图表类型',
     'engine.visualize_no_x': '节点 {nid}：可视化节点缺少 X 字段',
-    'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与「重新采集」不能同时开启',
+    'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与“重新采集”不能同时开启',
     'engine.watermarkUnsupported': '节点 {nid}：跨运行水位只支持哔哩哔哩作者投稿',
     'housekeeping.datasetStoreFailed': '孤立文件自动清理失败（不影响本次运行）',
     # ── 自动清理（housekeeping） ──────────────────────────────
@@ -114,7 +114,7 @@ ZH = {
     'project.noWorkflowInBundle': '项目包里没有工作流',
     'project.templateInvalid': '可复用模板无法导入：{name}',
     'project.templateMissing': '引用的可复用模板不存在，已跳过：{id}',
-    'project.templateRefMissing': '工作流「{name}」引用的模板不在项目包里：{id}（实例自带的快照仍然可用）',
+    'project.templateRefMissing': '工作流“{name}”引用的模板不在项目包里：{id}（实例自带的快照仍然可用）',
     'project.tooLarge': '项目包解压后超过 {mb} MB',
     'project.tooMany': '项目包里的 {section} 过多（上限 {max}）',
     'project.tooManyEntries': '项目包条目过多（上限 {max}）',
@@ -135,14 +135,14 @@ ZH = {
     'report.generated': '生成时间',
     'report.latex_no_run': '找不到这次运行（{rid}），无法合成成稿。',
     'report.latex_no_sources': '这次运行没有登记任何 LaTeX 图源或三线表，无法合成成稿：'
-    '请在可视化节点勾选「生成 LaTeX」后重跑。',
+    '请在可视化节点勾选“生成 LaTeX”后重跑。',
     'report.method_analysis': '{title}：分析步骤 {ops}。',
     'report.method_biblio': '{title}：以{entity}为分析单元。参数（本系统内部枚举名，与运行记录及导出表一致）：{body}。',
     'report.method_counts': '共 {figures} 张图、{tables} 张三线表；每张图与其表格来自同一次运行登记的同一份行表。',
     'report.method_fuse': '{title}：把多张上游表折叠为一份规范记录表（角色按候选列顺序尝试）。',
     'report.method_no_canvas': '本次运行没有可读取的已保存画布，因此下表只给出运行编号与时间窗，不给参数；'
     '需要方法段落请先保存画布再运行。',
-    'report.method_provenance': '本稿由工作流「{workflow}」的一次运行自动合成，运行编号 {run_id}。',
+    'report.method_provenance': '本稿由工作流“{workflow}”的一次运行自动合成，运行编号 {run_id}。',
     'report.method_section': '方法',
     'report.method_source': '{title}：采集 {platform} 的 {collect}，目标 {target} 条。',
     'report.method_unverified': '以下节点的参数无法与运行记录的指纹核对（画布已改动或文件已不在）：{names}。',
@@ -158,7 +158,7 @@ ZH = {
     'report.table_continued': '（续）',
     'report.table_suffix': '（三线表）',
     'report.tables': '数据表',
-    'resume.empty': '续跑节点：运行 {rid} 中「{nid}」没有可读取的数据行',
+    'resume.empty': '续跑节点：运行 {rid} 中“{nid}”没有可读取的数据行',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'resume.no_run': '续跑节点：没有选择运行记录，也没找到可续跑的记录',
     'resume.unpicked': '未指定节点',
@@ -173,22 +173,22 @@ ZH = {
     'reusable.badNodeType': '节点 {id} 的类型不能放进可复用节点：{type}',
     'reusable.badOutput': '输出槽指向一个不存在的节点：{id}',
     'reusable.badOutputs': '模板的输出槽列表无法理解',
-    'reusable.badTemplate': '可复用节点「{name}」的模板无法展开（节点类型或连线不被接受）',
+    'reusable.badTemplate': '可复用节点“{name}”的模板无法展开（节点类型或连线不被接受）',
     'reusable.corrupt': '可复用模板 {id} 的内容已损坏',
     'reusable.cycle': '模板里存在环，无法按顺序执行',
     'reusable.descriptionTooLong': '模板说明超过 {n} 个字符',
     'reusable.full': '可复用模板已达上限（{max} 个），请先删除旧模板',
     'reusable.invalid': '可复用节点模板的内容无法理解',
     'reusable.missing': '没有这个可复用模板：{id}',
-    'reusable.missingInputs': '可复用节点「{name}」需要 {n} 个输入，当前只接了 {wired} 个',
+    'reusable.missingInputs': '可复用节点“{name}”需要 {n} 个输入，当前只接了 {wired} 个',
     'reusable.nameRequired': '可复用节点需要一个名字',
-    'reusable.nameTaken': '已有同名可复用模板「{name}」',
+    'reusable.nameTaken': '已有同名可复用模板“{name}”',
     'reusable.nameTooLong': '模板名称超过 {n} 个字符',
     'reusable.noNodes': '可复用节点里至少要有一个节点',
-    'reusable.noTemplateForRun': '可复用节点「{name}」没有可运行的模板',
+    'reusable.noTemplateForRun': '可复用节点“{name}”没有可运行的模板',
     'reusable.oneOutput': '可复用节点必须恰好有一个输出节点（现在有 {n} 个）',
     'reusable.outputHasNext': '输出节点 {id} 还有后续节点，请选择真正的末端节点',
-    'reusable.tooManyInputs': '可复用节点「{name}」的外部连线比输入槽多',
+    'reusable.tooManyInputs': '可复用节点“{name}”的外部连线比输入槽多',
     'reusable.tooManyNodes': '一个可复用节点最多包含 {n} 个节点',
     'run.browserReapFailed': (
         '停止超时后仍未终止这个浏览器进程（PID {pid}）：{err}——它的窗口配置目录会一直被占着，'
@@ -199,10 +199,10 @@ ZH = {
     'run.browserStuck': (
         '警告：{platform} 的浏览器关不掉（读不到它的进程号），它可能仍然开着，并会占用该平台目录最多 {seconds} 秒'
     ),
-    'run.claims_released': '重跑节点：已归还 {n} 条「已采集」认领（运行 {rid}），这些条目会重新采',
+    'run.claims_released': '重跑节点：已归还 {n} 条“已采集”认领（运行 {rid}），这些条目会重新采',
     # Two bulk deletions, each naming what it destroyed. The claims figure is not decoration:
     # 清空运行记录 also hands back the "已采集" ledger, so the next crawl really will re-fetch
-    # what an earlier one collected — a user who reads 「清空了 3 条」 and then watches the same
+    # what an earlier one collected — a user who reads “清空了 3 条” and then watches the same
     # workflow crawl twice as much needs this line to know why.
     'run.cleared': '已清空运行记录：{runs} 条，并交回 {claims} 条"已采集"认领（这些条目下次会重新爬）',
     # Named because a feed of ten dramas that opened six is not a completed comment crawl;
@@ -210,7 +210,7 @@ ZH = {
     # what 继续 still owes.
     'run.commentsSkipped': (
         '{platform} 有 {n} 部剧没有采完（没能进入播放器，或播放流中途切到了别的剧）：{names}——'
-        '其余剧的行已保留；点「继续」会回到第一部未采完的剧起重走'
+        '其余剧的行已保留；点“继续”会回到第一部未采完的剧起重走'
         '（已入库的评论按 评论ID 去重，不会重复入库）'
     ),
     'run.compileFailed': 'LaTeX 编译失败：{err}',
@@ -226,9 +226,9 @@ ZH = {
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
     'run.dedupe_all_skipped': (
         '本节点的结果此前已全部采集，本次没有新数据传给下游；'
-        '要重抓请在采集节点开启「重新采集」，要用旧数据请从运行记录导出或用断点续跑（Resume）节点续接'
+        '要重抓请在采集节点开启“重新采集”，要用旧数据请从运行记录导出或用断点续跑（Resume）节点续接'
     ),
-    'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
+    'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启“重新采集”）',
     'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
     'run.finished': '运行结束（{done}/{total} 个节点完成）',
     'run.finished.failed': '，{n} 个失败',
@@ -237,14 +237,14 @@ ZH = {
     # zeroes, while a run that starved or lost a node cannot be mistaken for one.
     'run.finished.skipped': '，{n} 个跳过',
     'run.finished.stopped': '，{n} 个被停止',
-    'run.heavy_result': '内存提示：节点「{nid}」产出 {n} 行，运行结束前每个节点的这份结果都留在内存里',
+    'run.heavy_result': '内存提示：节点“{nid}”产出 {n} 行，运行结束前每个节点的这份结果都留在内存里',
     'run.interrupted_by_dead_worker': '执行线程已不在，记录自动判定为中断',
     'run.interrupted_by_restart': '服务重启时被打断',
     'run.live_export': '实时导出：{file}（每处理完一批刷新一次，运行结束后保留）',
     'run.live_export_failed': '实时导出写入失败：{err}',
-    'run.nodeStopped': '节点 {nid} 已按「停止」结束：本次保留 {n} 行',
+    'run.nodeStopped': '节点 {nid} 已按“停止”结束：本次保留 {n} 行',
     'run.notCrawlable': (
-        '「{label}」所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
+        '“{label}”所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
         '因此不能作为数据源运行——请改用已支持的平台，或等该平台的抓取落地'
     ),
     # A page that never arrived, said once with the one thing the crawler cannot know:
@@ -264,7 +264,7 @@ ZH = {
     ),
     'run.profileOff': '本次执行不使用浏览器 Profile：每次都是全新设备（为让同平台的工作流真并行），Cookie 快照照常导入',
     'run.progress_file': '分批导出：{file}（{rows} 行，共 {parts} 个分批文件）',
-    'run.promoted': '发现 {n} 条上次没跑完的记录，已标记为「可续跑」',
+    'run.promoted': '发现 {n} 条上次没跑完的记录，已标记为“可续跑”',
     'run.queueAbandoned': '{platform} 的排队等待已取消（本次运行已停止）',
     'run.queueLoadFailed': '重启读取待运行队列镜像失败（本轮从空队列开始）',
     'run.queueMirrorFailed': '写入待运行队列镜像失败（内存队列仍是权威，不受影响）',
@@ -277,7 +277,7 @@ ZH = {
     'run.queue_waited': '队列接续失败（已有运行在跑），{name} 重新排队',
     'run.queued': '已排队（第 {at} 位）：{name}',
     'run.queuedUnnamed': '未命名工作流',
-    'run.reconciled': '发现 {n} 条线程已结束却没写下结论的记录，已判定为「已中断」',
+    'run.reconciled': '发现 {n} 条线程已结束却没写下结论的记录，已判定为“已中断”',
     'run.recordWriteFailed': '记录 {rid} 的结论没能写进数据库（{err}）：运行记录会在下次刷新时自动补上判定',
     'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
     'run.rejected': '未运行：工作流有 {n} 处问题，见上方提示',
@@ -294,7 +294,7 @@ ZH = {
     # is not a login problem, and tells the user to wait (继续 later), never to re-save.
     'run.riskControlled': (
         '{platform} 被安全验证（风控）拦下，本次未能采满——这不是登录态失效，请勿立刻重跑（立即再撞只会加重风控）。'
-        '已采集的数据全部保留；可先开启 设置→慢速采集，稍后用「继续」从断点补采'
+        '已采集的数据全部保留；可先开启 设置→慢速采集，稍后用“继续”从断点补采'
     ),
     # ── 断点续跑（durable run state） ────────────────────────
     'run.row_limit': '节点 {nid} 已达到保存上限 {limit} 行，超出部分不再落库',
@@ -313,8 +313,8 @@ ZH = {
     # The walk funnel rides on the line because "refused N of M" is what separates "the
     # site had no more" from "our scraper dropped what it got" (§6's silent-under-collect).
     'run.underTargetShort': (
-        '{platform} 采到 {have}/{want} 条就停了，却没说站点自己到底了——这不是「采完了」。'
-        '已保留 {have} 行，可点「继续」从断点补剩下的{walk}'
+        '{platform} 采到 {have}/{want} 条就停了，却没说站点自己到底了——这不是“采完了”。'
+        '已保留 {have} 行，可点“继续”从断点补剩下的{walk}'
     ),
     # The funnel clause only when the crawler reported counts; a convicted short without
     # them omits it, rather than printing a fake measurement of zeros.
@@ -334,15 +334,15 @@ ZH = {
     'upload.stale': '已上传的数据集失效（服务可能重启过），请重新上传文件',
     # The labelling step needs a model: without one the step refuses instead of leaving the
     # column blank and settling the node DONE on work that did not happen.
-    'wf.analysis_llm_no_model': '「主题概括」需要模型，但这条运行没有配置模型（设置 → 模型 / 节点模型）',
+    'wf.analysis_llm_no_model': '“主题概括”需要模型，但这条运行没有配置模型（设置 → 模型 / 节点模型）',
     # These refusals are printed by the executor as the node's own failure
-    # (「节点 X 执行失败：…」), so they state the reason only — a second
-    # 「分词失败：」/「可视化失败：」 inside them repeats the wrapper, and the node
+    # (“节点 X 执行失败：…”), so they state the reason only — a second
+    # “分词失败：”/“可视化失败：” inside them repeats the wrapper, and the node
     # used to be logged twice: once here without a name, once attributed.
     'wf.analysis_step': '[分析] {op}：{before} → {after} 行',
     'wf.analysis_step_nochange': '（无变化）',
     'wf.analysis_step_removed': '（-{removed}）',
-    'wf.analysis_steps_shape': '「steps」必须是步骤列表（每个一步一个对象），收到的是一个对象',
+    'wf.analysis_steps_shape': '“steps”必须是步骤列表（每个一步一个对象），收到的是一个对象',
     'wf.browser_opened': '已打开浏览器用于 {platform} 登录（{url}），等待 {n} 秒完成登录…',
     'wf.compile_no_source': '编译节点没有可编译的 LaTeX 来源（上游可视化节点既未产出图也未产出表）',
     'wf.component_indexed': '{name}（第 {i}/{n} 条）',
@@ -358,14 +358,13 @@ ZH = {
     'wf.found': '发现 {n} 条工作流',
     'wf.join_no_right_table': '合并表需要两条上游连线：第一条是左表，第二条是右表',
     'wf.merge_columns': (
-        '节点 {nid} 合并上游表时列名不一致，对比「{up}」：多出 [{extra}]、缺少 [{missing}]。'
+        '节点 {nid} 合并上游表时列名不一致，对比“{up}”：多出 [{extra}]、缺少 [{missing}]。'
         '不做外连接合并——那会凭空补出空值，让文件看起来完整'
     ),
     'wf.merge_detail_sep': '、',
     'wf.merge_done': '节点 {nid} 合并 {tables} 张上游表 → {n} 行（{detail}）',
     'wf.merge_not_tabular': (
-        '节点 {nid} 的上游「{up}」不产出表格（是图表配置或错误应答），无法合并——请断开这条连线，'
-        '或改接一个产出表格的节点'
+        '节点 {nid} 的上游“{up}”不产出表格（是图表配置或错误应答），无法合并——请断开这条连线，或改接一个产出表格的节点'
     ),
     'wf.merge_table_detail': '{name} {n} 行',
     'wf.multi_input': (
@@ -374,17 +373,17 @@ ZH = {
     ),
     'wf.node_completed': '[{wf}] 节点 {nid} 完成（{done}/{total}）',
     'wf.node_failed': '[{wf}] 节点 {nid} 执行失败：{err}',
-    'wf.starting': '开始执行工作流「{name}」',
+    'wf.starting': '开始执行工作流“{name}”',
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
     'wf.tokenize_no_col': '列“{col}”不在 {cols} 中',
     'wf.tokenize_no_column': '未配置要分词的文本列',
     'wf.tokenize_no_input': '没有上游数据，请连接数据源或文件上传节点',
-    'wf.unknown_process_op': '使用了未知操作「{op}」',
+    'wf.unknown_process_op': '使用了未知操作“{op}”',
     'wf.unnamed': '未命名工作流{i}',
     'wf.validation_error': '校验错误：{err}',
     'wf.visualize_done': '[可视化] 已渲染 {chart} 图表（{engine}），共 {n} 行',
     'wf.visualize_no_input': '没有上游数据，请连接数据源或文件上传节点',
-    'wf.wf_exception': '工作流「{wf}」执行失败，完整堆栈见服务端日志',
+    'wf.wf_exception': '工作流“{wf}”执行失败，完整堆栈见服务端日志',
     'wfHistory.badStrategy': '未知的自动排布策略：{strategy}',
     'wfHistory.baselineRequired': '按历史基准排布需要先指定一个快照',
     'wfHistory.corrupt': '画布快照 {id} 的内容已损坏，无法恢复',
@@ -773,7 +772,7 @@ EN = {
         'the 主题概括 step needs a model, and this run has none (Settings → model, or the node model box)'
     ),
     # Stated as the reason only: the executor prints these as the node's own
-    # failure (「Node X failed: …」), so a "Tokenize failed:" prefix inside them
+    # failure ("Node X failed: …"), so a "Tokenize failed:" prefix inside them
     # repeats the wrapper, and the pair used to print the same sentence twice —
     # once here with no node named, once attributed.
     'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows',

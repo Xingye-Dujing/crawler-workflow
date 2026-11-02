@@ -84,7 +84,7 @@ def comment_platforms() -> tuple[str, ...]:
 
 #: A token that is itself a link. A comma is legal inside one — ``?ids=1,2,3``, a path segment,
 #: a query the site built — so splitting a pasted blob on commas cut a single real link into
-#: three, two of which then answered 「不支持的链接」 or, worse, were silently dropped.
+#: three, two of which then answered “不支持的链接” or, worse, were silently dropped.
 #: Whitespace and newlines remain separators; they cannot occur inside a URL.
 _URLISH = re.compile(r'^\s*(?:https?://|www\.)', re.IGNORECASE)
 
@@ -267,7 +267,7 @@ def sanitize_filename(name: str, *, truncate: bool = True) -> str:
 def window_tag(start, end) -> str:
     """A crawl's declared time window as a filename component: ``_20260101_to_20260315``.
 
-    A table of posts collected 「按时间」 is otherwise indistinguishable, on disk, from
+    A table of posts collected “按时间” is otherwise indistinguishable, on disk, from
     the one collected last month for a different month — the window existed only in the
     node's own form. Anything that is not a complete, parseable pair answers ``''``:
     a one-sided window is a request the crawler refuses at run time

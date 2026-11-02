@@ -730,7 +730,7 @@ def test_the_prompt_spec_reaches_the_page_as_data():
     popup.dismiss(driver, (instagram_dialogs.NOTIFICATIONS,))
     spec = driver.payloads[0][0]
     assert spec['markers'] and '以后再说' in spec['choose']
-    assert '打开' in spec['forbid'], '「打开」 opens a native permission prompt no DOM click can close'
+    assert '打开' in spec['forbid'], '“打开” opens a native permission prompt no DOM click can close'
 
 
 def test_the_instagram_answer_is_the_no_and_not_the_yes():
@@ -740,7 +740,7 @@ def test_the_instagram_answer_is_the_no_and_not_the_yes():
 
 
 def test_the_douyin_dialog_is_declined_never_accepted():
-    """Measured wording: 「是否保存登录信息超过5天」 with 「保存」/「取消」.
+    """Measured wording: “是否保存登录信息超过5天” with “保存”/“取消”.
 
     保存 is on the forbidden list on purpose: the user reports it walks into a
     phone-verification step, so the crawler declines instead of taking the

@@ -1,4 +1,4 @@
-"""Instagram's notification ask: 「打开通知」, answered 以后再说.
+"""Instagram's notification ask: “打开通知”, answered 以后再说.
 
 Declared here for the same reason douyin's trust-login prompt is: the dialog's wording is a
 property of the site. Nothing mounts it yet (the platform is cookie-capture only in this app),
@@ -7,7 +7,7 @@ which is a known gap recorded by the 2026-10 refactor rather than papered over.
 
 from crawlers.engine.popup import Prompt
 
-#: 「以后再说」 is the "no". 「打开」 is refused because it opens a *browser-level* permission
+#: “以后再说” is the "no". “打开” is refused because it opens a *browser-level* permission
 #: dialog no DOM click can close.
 NOTIFICATIONS = Prompt(
     key='instagram_notifications',

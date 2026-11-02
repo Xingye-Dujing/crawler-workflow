@@ -78,7 +78,7 @@ class CommentSession:
         The refusal is named, never empty: the caller used to do ``getattr(session, 'crawl_' +
         platform)`` and had to remember to check the result, and an unlisted link then walked as
         whatever adapter the fallback guessed. A platform with no registered walk raises, because a
-        table that answers 「该站点没有评论」 for a site nobody wrote is the worst possible outcome of a
+        table that answers “该站点没有评论” for a site nobody wrote is the worst possible outcome of a
         routing mistake (AGENTS: 具名拒绝).
         """
         walker = walks.walk_for(platform)

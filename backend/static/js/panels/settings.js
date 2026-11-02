@@ -1111,7 +1111,7 @@ function onOutputFormatChange(nodeId, fmt) {
  * argument is the node's own ``operation``, which toWorkflowJSON also carries:
  * the backend reads that one first, so this has to as well. */
 function llmModeLabel() {
-    /* Which transport the 「大模型」 option names. Guarded on the BINDING, not on
+    /* Which transport the “大模型” option names. Guarded on the BINDING, not on
        `window.CloudMode`: app.js declares it at top level, so it is a global lexical
        binding that never appears on window, and `if (window.X)` would read as "no flag"
        forever — which is the mistake this repo already documents once. */

@@ -45,7 +45,7 @@ def execute_resume_node(node: dict, ctx: dict):
 
         ``node_label`` cannot help here: that node lives in another run's record, not on this canvas.
         But a bare ``node-2`` is just as unreadable, and the row it is about to hand over carries the
-        title its own run stored — so the same 「标题 #id」 form is available, and a run of a dozen
+        title its own run stored — so the same “标题 #id” form is available, and a run of a dozen
         nodes can be told apart.
         """
         if not nid:

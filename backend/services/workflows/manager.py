@@ -77,7 +77,7 @@ class WorkflowManager:
         A run record stores a node's fingerprint but not its settings — the canvas file does. When
         the recomputed fingerprint matches the recorded one the parameters are the run's; when it
         does not (the canvas was rewired, or the file is gone) the caller is told so it can say
-        「未核对」 rather than filing a plausible-looking guess as provenance.
+        “未核对” rather than filing a plausible-looking guess as provenance.
 
         Shared by the snapshot capture (``api/biblio``) and the LaTeX report: two readers of "what
         produced these rows" is how one of them starts disagreeing with the run. The report asks per
@@ -118,7 +118,7 @@ class WorkflowManager:
         """One object per saved file: what the management panel draws.
 
         The list used to be bare stems, which forced the panel to fetch each file
-        to say anything useful (and the old 「打开」 picker could not show what a
+        to say anything useful (and the old “打开” picker could not show what a
         name would overwrite). A corrupt file is STILL a row — with ``broken`` set —
         because the panel must be able to delete the file the loader refuses to open;
         dropping it here would strand it invisible on disk.

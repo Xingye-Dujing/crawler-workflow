@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class ModelNotTrainedError(ValueError):
-    """No model to predict with. Distinct so a caller can tell 「nothing to load」 apart from
-    「the load broke」, and raised instead of the answer being manufactured."""
+    """No model to predict with. Distinct so a caller can tell "nothing to load" apart from
+    "the load broke", and raised instead of the answer being manufactured."""
 
 
 # Derived from ``Config.DATA_DIR`` rather than from this file's location: the test harness

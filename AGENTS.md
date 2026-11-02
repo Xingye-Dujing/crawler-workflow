@@ -197,7 +197,7 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   column come from the adapter's `capabilities` manifest — **never copied into a Python table** — and every failure names
   the missing part (no Node / no adapter / Node too old / unreadable manifest / no such cell / no CatBus login) instead of
   an empty table a node settles DONE on. Its login gate is keyed apart (`bilibili@work#catbus`) and never cached as a
-  cookie verdict. Why/evidence: `docs/crawler_rules.md` → 「第二采集后端」; `docs/agent_practices.md` → "The second crawl
+  cookie verdict. Why/evidence: `docs/crawler_rules.md` → “第二采集后端”; `docs/agent_practices.md` → "The second crawl
   backend (CatBus)".
 - **A node id is a storage key — never re-mint one on restore.** Records, cursors, LLM caches and `workflow_fingerprint`
   key on it. `canvas.addNode(...,nodeId)` + `reserveId` keep `nextId` past it; both restore paths pass file ids through
@@ -219,7 +219,7 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   `settle_nodes` (status *and* row_count from the rows) — 已存行数 and 续跑's "adopt the fullest node" read that column.
 - **One definition of "completed":** `runs.node_done` and `completed_nodes` agree — skipped/failed/partial are not done,
   `restored` is; counts taken **after** settling over `attempted_nodes`; a node 停止 counts in `stopped_node_ids`, never
-  as 「1 个失败」.
+  as “1 个失败”.
 - **A resumed run re-describes itself:** `start_run`'s conflict update refreshes
   `workflow_name`/`workflow_fingerprint`/`mode`/`headless`/`lang` (not `started_at`), or the chips lie and rows go
   unfindable.
@@ -304,7 +304,7 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 
 - Run-gating lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run` probes each canvas
   platform **whose mode needs a session** (`Mode.needs_session`; weibo 热搜 is anonymous, wechat has no session to want); a
-  login wall **refuses** (no "run anyway"), 「无法核对」 (timeout/captcha/busy) **never blocks**. Off/resume/crawl-free
+  login wall **refuses** (no "run anyway"), “无法核对” (timeout/captcha/busy) **never blocks**. Off/resume/crawl-free
   canvas asks nothing; a cookie write drops the cached verdict. **`execute()` asks no cookie question of its own.**
 - One account = one `data/cookies/<platform>@<account>.json` **and** one `chrome_profile/<platform>/<account>`.
   `_account_session_errors` refuses when `has_session_to_test` finds neither — **blank IS an account (默认账号), not a
@@ -317,9 +317,9 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 
 ### Login accounts and the gate
 
-- **A wrong password answers one sentence.** Verification runs BEFORE the lock and status check (「登录失败次数过多」/「该账号已被禁用」 for a wrong password is a username oracle). The failure window is keyed `address|username`.
+- **A wrong password answers one sentence.** Verification runs BEFORE the lock and status check (“登录失败次数过多”/“该账号已被禁用” for a wrong password is a username oracle). The failure window is keyed `address|username`.
 - **The failed-attempt counter is added IN THE ROW** (`UPDATE … failed_attempts = failed_attempts + 1`, read back, arm
-  `locked_until` guarded on that count). Read-modify-write made a burst count as ONE, so 「连续 5 次锁 15 分钟」 never
+  `locked_until` guarded on that count). Read-modify-write made a burst count as ONE, so “连续 5 次锁 15 分钟” never
   arrived.
 - **Every guess at a secret shares the window**, including 改密's `current_password`: verifying without a window lets a
   live session try it without limit, each costing a scrypt run. The window is **bounded by size** — pruning only the
@@ -336,11 +336,14 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **Replacing the process singleton closes the store it replaced** — `AccountsStore` holds one SQLite handle for its
   lifetime; on Windows a live connection also locks its dir. `tests/conftest.py` releases every user slot.
 - **A password field says so:** `type:'password'` plus the dialog shell's `autocomplete` default — without a directive the
-  browser offers to save the credential and refill 「当前密码」.
+  browser offers to save the credential and refill “当前密码”.
 
 ## Style and commits
 
 - Comments and docstrings in **English** (README/commits Chinese). Explain "why".
+- **引号用各语言自己的**: 中文 “ ”（内层 ‘ ’），英文 `" "`（内层 `' '`），**不用角括号 U+300C/U+300D/U+300E/U+300F**。
+  代码里的 `'…'` 是 Python 字符串定界符，与这条无关。`tests/unit/gates/test_quote_style.py` 拒绝它们（第三方语料、
+  模型卡、SHA-256 钉住的 vendor 字节除外）。
 - Section dividers: `# ─── Name ───`.
 - Ruff: line-length 120, **single quotes**, indent 4, modern typing (`str | None`), py311. Findings **genuinely fixed**:
   never `# noqa`, never `# ruff: noqa`, never `per-file-ignores` or a rule exemption in `ruff.toml`.

@@ -454,7 +454,7 @@ var runsManager = {
         /* 无头 / 窗口 says exactly what ran: a headless Chrome now carries a desktop
            fingerprint (#148), so nothing ever forces a real window into a run the user
            asked to keep headless. The record's requested value IS what ran, and no
-           mixed 「无头→窗口」 chip is needed. */
+           mixed “无头→窗口” chip is needed. */
         out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
         /* Which workflows the record deliberately did NOT run. The console said it once
            at the time; a record read back last week has to carry the same answer, or a

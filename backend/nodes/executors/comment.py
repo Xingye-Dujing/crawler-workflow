@@ -142,7 +142,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         if not want:
             # Which mode takes plain names is a per-platform fact, so a mixed-input comment
             # node cannot route a 剧名 at all. Said as the reason it was refused, not filed
-            # under a count of 「unsupported links」 the user then hunts through real links.
+            # under a count of "unsupported links" the user then hunts through real links.
             named = [u for u in dropped if not capabilities.is_url_cell(u)]
             if named:
                 add_log(t('comment.unsupportedNames', n=len(named)))
@@ -192,7 +192,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     counts = {OK: 0, BLOCKED: 0, DEAD: 0}
     # Inputs the node did NOT prove complete, in order. This is what decides whether the
     # cursor may advance (see the write below), and it is the reason the tail refusals can
-    # promise 「继续」: a cursor written *before* the walk rested at ``len(urls)-1`` after a
+    # promise “继续”: a cursor written *before* the walk rested at ``len(urls)-1`` after a
     # full pass, so resuming a node that skipped four dramas re-walked the LAST drama only,
     # a fresh harness reported no skips at all, and the node settled DONE over the hole.
     unproven: list[int] = []
@@ -210,7 +210,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
         if stem not in writers:
             # Same ledger contract as a source crawl: shards are recorded as they land, and only
-            # when 「保留分片」 is on (with it off the merge deletes them, so there is nothing to clear).
+            # when “保留分片” is on (with it off the merge deletes them, so there is nothing to clear).
             writers[stem] = PartWriter(
                 paths.active().export_dir,
                 stem,
@@ -226,7 +226,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
 
         Called once on the success path (a real merge error then fails the node like any other),
         and best-effort on the exception path — so a comment crawl that dies mid-walk still ships
-        the shards it produced instead of leaving them orphaned (「保留分片」 off means they were
+        the shards it produced instead of leaving them orphaned (“保留分片” off means they were
         never individually recorded, so 智能清除-by-record cannot find them). The source crawl
         closes this exact hole in every one of its handlers."""
         finished = [writer.finish() for writer in writers.values()]
@@ -438,7 +438,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # ``row_sink``, which tallies each refused item into ``ctx['skipped_seen'][nid]``. Reading that one tally
     # (never re-deriving it) keeps a single definition with the source path, and it already excludes what this
     # run genuinely stored. Measured live 2026-09-29: a repeat of one video's comments filed nothing, printed
-    # 「共 0 条评论」 and named nothing — indistinguishable from a thread that has no comments. Skipped on a
+    # “共 0 条评论” and named nothing — indistinguishable from a thread that has no comments. Skipped on a
     # resume (there the ledger IS the resume machinery and the result is prefilled); a wall is left to raise
     # its own single line, so a run that both skipped and was blocked is not silenced.
     skipped = (ctx.get('skipped_seen') or {}).get(nid) if ctx is not None else None
@@ -468,7 +468,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # Read BY ATTRIBUTE, exactly like the gate below: a browser adapter never grows
             # this list, so the check stays dormant for every platform but the ones that
             # declare a harness. A feed of ten dramas that opened six is not a finished
-            # crawl, and 「新增 749 条（正常）」 was the sentence the run ended with.
+            # crawl, and “新增 749 条（正常）” was the sentence the run ended with.
             raise ValueError(t('run.commentsSkipped', platform=kind, n=len(missing), names='、'.join(missing)))
     for kind, (owner, _session) in sessions.items():
         if getattr(owner, 'end_reason', None) != UNDER_TARGET:
@@ -486,7 +486,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             continue
         # The denominator the console must print: with a named gap it is the rows in hand
         # PLUS that gap, never the site's own total alone — a crawl holding 520 rows over an
-        # episode 500 short would otherwise read 「采到 520/1 条就停了」, convicting itself with
+        # episode 500 short would otherwise read “采到 520/1 条就停了”, convicting itself with
         # arithmetic nobody can audit.
         want = len(rows_out) + short_by if short_by else want_total
         counts = getattr(owner, 'walk_counts', {}) or {}

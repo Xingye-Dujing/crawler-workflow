@@ -56,7 +56,7 @@ def _overlay_stats(
     """{node: dominant label + per-label document counts} for one mapped label column.
 
     A document labels every entity it mentions once, so ``counts`` is a count of DOCUMENTS. A
-    document whose cell is blank contributes to none: 「没有判断」 is not a category, and folding
+    document whose cell is blank contributes to none: “没有判断” is not a category, and folding
     it into the neutral one would change the share the figure claims. Ties on the dominant label
     break by label text, so two runs over the same table name the same winner.
     """

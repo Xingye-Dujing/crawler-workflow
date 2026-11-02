@@ -534,8 +534,8 @@ class LogMixin:
         if q:
             # A SUBSTRING test, not a LIKE pattern: the search box takes what the user typed, and
             # LIKE would read their ``%``/``_`` as wildcards — filtering ``100%`` then matched every
-            # 「1000 行」 line too, and the .txt download (which re-uses these filters and promises
-            # 「所见即所存」) exported rows the user never asked to see. ``instr`` compares bytes.
+            # “1000 行” line too, and the .txt download (which re-uses these filters and promises
+            # “所见即所存”) exported rows the user never asked to see. ``instr`` compares bytes.
             where.append('instr(line, ?) > 0')
             params.append(q)
         if before_seq is not None:

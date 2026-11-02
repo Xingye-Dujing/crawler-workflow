@@ -72,7 +72,7 @@ class TestLevels:
     def test_a_debunking_comment_is_not_counted_as_rumour(self):
         """The false positive this device deliberately refuses: 造谣/辟谣 appear far more often in
         comments ACCUSING someone of rumour-mongering than in comments spreading one, so reading
-        「别听他造谣，警方已经辟谣了」 as violence would put a correction on the rumour curve."""
+        “别听他造谣，警方已经辟谣了” as violence would put a correction on the rumour curve."""
         assert level('别听他造谣，警方已经辟谣了') == 'none'
 
     def test_a_miss_is_silent_and_says_so(self):
@@ -178,7 +178,7 @@ class TestAWordListMayNotClaimWhatItCannotSee:
     """The privacy family once matched EVERY comment containing 小/区/市/路/元.
 
     ``[省市县区街道路巷小区栋单元室门牌]`` is a single-character class, and one privacy hit is
-    already past ``SEVERE_AT``, so 「今天路很堵」「100元」「这个小学生」 all came back ``severe``
+    already past ``SEVERE_AT``, so “今天路很堵”“100元”“这个小学生” all came back ``severe``
     with ``privacy:路``. These are the lines that pinned it down; a word list must stay able to
     say "no", or the corpora it ranks become meaningless.
     """

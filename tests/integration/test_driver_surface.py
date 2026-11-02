@@ -1,6 +1,6 @@
 """Real Chrome: does the automation switch reach the browser, and can we even tell?
 
-The user asked why every window the driver opens shows 「Chrome 正受到自动测试软件的控制」.
+The user asked why every window the driver opens shows “Chrome 正受到自动测试软件的控制”.
 That banner is drawn because **chromedriver itself** adds ``--enable-automation`` to the
 Chrome command line, and ``excludeSwitches`` is how a session asks for it to be left out
 — by the switch's real name. The option in ``crawlers/core/browser.py`` said ``'automation'``,

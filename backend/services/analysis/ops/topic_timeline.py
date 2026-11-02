@@ -22,7 +22,7 @@ def topic_timeline(
 ) -> pd.DataFrame:
     """When each subject appeared, and which ones were 次生舆情.
 
-    表 1 is one snapshot per phase. It cannot say that 「外卖空包」 only became a subject
+    表 1 is one snapshot per phase. It cannot say that “外卖空包” only became a subject
     after the first week — that is a statement about rows in DIFFERENT phases, and the
     paper makes it: the 次生舆情 (the secondary flare-up of a case, off a subject the
     first week never had) is one of its findings.

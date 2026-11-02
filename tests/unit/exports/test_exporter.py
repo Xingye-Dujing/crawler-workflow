@@ -203,7 +203,7 @@ class TestNormalizeFilename:
 
 
 class TestStampFilename:
-    """The shape of 「文件名追加本次运行时间」: every run keeps its own file.
+    """The shape of “文件名追加本次运行时间”: every run keeps its own file.
 
     ``normalize_filename`` decides the suffix, this decides that a suffix the
     export panel can read survives the rename, and that the name it returns is

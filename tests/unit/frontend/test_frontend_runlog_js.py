@@ -3,7 +3,7 @@
 The live console only ships a 200-line tail and is wiped when the next run starts, so the
 after-the-fact viewer reads the persisted ``run_log`` instead. This harness drives the shipped
 ``runLogViewer`` against a recorded fetch and asserts the parts a user depends on — that a
-line is escaped, that the filters ride into the request, that 「加载更早」 walks backward,
+line is escaped, that the filters ride into the request, that “加载更早” walks backward,
 that the download names the same endpoint, and that the row button carries only the id.
 
 Skipped when node is not on PATH, like every other frontend harness.
@@ -57,7 +57,7 @@ class TestFilters:
         assert 'level=error' in ix['levelGet']
 
     def test_workflow_tabs_are_discovered_from_the_loaded_rows(self, ix):
-        # 「全部」 (empty) plus the two workflows the first page mentioned.
+        # “全部” (empty) plus the two workflows the first page mentioned.
         assert ix['wfOptions'] == ['', '0', '1']
 
     def test_the_workflow_filter_reaches_the_request(self, ix):

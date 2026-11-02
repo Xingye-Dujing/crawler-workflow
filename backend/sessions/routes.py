@@ -56,7 +56,7 @@ def cookie_status():
     """What the panel is allowed to know about saved logins: which accounts exist, and how fresh.
 
     ``cookies[platform]`` used to be ``cookie_manager.exists(platform)`` — the BLANK account's
-    file only. A user who keeps every login under a name therefore saw 「没有 Cookie」 for a
+    file only. A user who keeps every login under a name therefore saw “没有 Cookie” for a
     platform he crawls with daily, and the status line could not answer the question he was
     actually asking, which is about the account in the box.
 
@@ -100,7 +100,7 @@ def cookie_status():
     return jsonify(
         {
             'ok': True,
-            # 「this platform has a login somewhere」 — not "the blank file exists".
+            # "this platform has a login somewhere" — not "the blank file exists".
             'cookies': {platform: bool(names) for platform, names in accounts.items()},
             'accounts': accounts,
             'rows': rows,
@@ -164,7 +164,7 @@ def preflight_cookies():
     # Each entry is a platform string (the shape before accounts existed, still
     # accepted) or a {platform, account[, backend]} pair. Only the PLATFORM is knowledge-checked —
     # an account is a filename segment the store validates, and a name nobody saved is
-    # answered 「no cookie」 by the probe, not refused at the door. ``check`` normalizes
+    # answered "no cookie" by the probe, not refused at the door. ``check`` normalizes
     # the same way, so the door and the probe never agree to disagree about what an entry is.
     #
     # The knowledge door is a COOKIE-STORE question, so it is not asked of an entry that will not
@@ -180,7 +180,7 @@ def preflight_cookies():
         # unrecognised name is refused whole instead of being filtered out quietly — a
         # silent drop reads as "checked and fine" for the platform nobody checked.
         # A name a *crawler* knows but the cookie store does not (WeChat) passes: the
-        # gate answers it 「不需要登录」 without opening anything.
+        # gate answers it “不需要登录” without opening anything.
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=refused[0])}), 400
     use_profile = flag_or_none(data.get('use_profile'))
     fresh = flag_or_none(data.get('fresh')) is True
@@ -194,7 +194,7 @@ def preflight_cookies():
             'ok': True,
             'results': results,
             # Split server-side so the browser cannot invent its own reading of a
-            # state it does not know: 「拦下来」 and 「没核得上」 are different answers.
+            # state it does not know: “拦下来” and “没核得上” are different answers.
             'blocked': blocked,
             'unclear': unclear,
             'probed': any(v['probed'] for v in results.values()),
@@ -220,7 +220,7 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     ``None`` means nothing to do and nothing to say: profiles are switched off, and then every
     crawl is planted from the file in a throwaway browser, so buying one to change nothing would
     cost a browser and claim a thing that did not happen. Anything else gets a sentence, because
-    「保存成功」 and 「这次没能进到 Profile」 look identical from a paste box otherwise.
+    “保存成功” and “这次没能进到 Profile” look identical from a paste box otherwise.
 
     A profile that has never been opened is *created and planted now*, not left for the first
     crawl: one cookie, one profile, and a login sitting in a file its own browser has never read
@@ -231,7 +231,7 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     it is the one thing that has to precede a new account, and this is the one moment the
     user is present to ask for a device. It costs one extra blank browser — once per
     server, never again while the template stands — and on a machine with no
-    「浏览器生成」 button that browser is how the directory gets made at all.
+    “浏览器生成” button that browser is how the directory gets made at all.
     """
     if not profiles.is_enabled():
         return None
@@ -268,7 +268,7 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     # The profile now holds a different session than the one the last probe looked at.
     preflight.invalidate(platform)
     # Measured on a real Chrome: a cookie without an expiry is not written to the profile store
-    # at all, so it dies with the window that was opened to plant it. Saying only 「已更新」 would
+    # at all, so it dies with the window that was opened to plant it. Saying only “已更新” would
     # promise a transfer that partly did not happen.
     fading = cookie_manager.session_only_count(platform, account)
     message = t('cookie.refresh.done', platform=platform, n=planted)
@@ -301,7 +301,7 @@ def save_cookies():
             add_log(t('cookie.droppedForeign', platform=platform, n=dropped))
         if not kept:
             return jsonify({'ok': False, 'error': t('cookie.allForeign', platform=platform)}), 400
-        # 留空 = 「一个还没起名字的登录」：第一份是默认账号，第二份是默认账号2, never an overwrite.
+        # 留空 = “一个还没起名字的登录”：第一份是默认账号，第二份是默认账号2, never an overwrite.
         # A second blank paste cannot be told apart from re-pasting the first one (two logins of one
         # platform carry the same cookie *names*, and the value that would tell them apart is the one
         # that rotates), so the only reading that cannot destroy a paid-for login is "this is a new
@@ -318,7 +318,7 @@ def save_cookies():
         # One cookie, one profile: the browser that will crawl with this login takes the
         # new file in now, instead of the user pressing a second button to say so.
         planted = _plant_saved_cookie_into_profile(platform, account)
-        # 「已保存」 is not the whole answer any more: a blank name can have become 默认账号2, and
+        # “已保存” is not the whole answer any more: a blank name can have become 默认账号2, and
         # the panel has to say which login it just wrote — otherwise the user cannot tell whether
         # the account he meant is the one that changed.
         message = t('cookie.savedAccount', platform=platform, account=cookie_manager.label_of(account))
@@ -336,7 +336,7 @@ def save_cookies():
         # One line for one failure. ``LogBufferHandler`` forwards every logger call to
         # the console (its ``format`` is the message alone, so the traceback still goes
         # only to the log file) — the ``add_log`` beside it printed the same sentence a
-        # second time, and the console showed 「保存 Cookie 失败」 twice in a row.
+        # second time, and the console showed “保存 Cookie 失败” twice in a row.
         # The reason travels as a catalogue parameter, the way every other console-level
         # logger call here speaks: no interpolation in the code (pylint W1201/W1203) and no
         # bare ``'%s'`` template for the untranslated-text guard to read as English prose.
@@ -349,7 +349,7 @@ def rename_cookie_account():
     """Give a saved login a new label — its cookie file AND that account's browser directory.
 
     Each refusal names what it refused, because the alternative is a panel that says
-    「已重命名」 about a session still filed under the old name. The blank account is refused
+    “已重命名” about a session still filed under the old name. The blank account is refused
     structurally: 默认账号 owns no directory of its own (it IS the platform's), so naming it
     would move the parent of every other account of that platform — and since the user is told
     an account and its profile are one thing, the two halves move together or nothing moves.
@@ -358,7 +358,7 @@ def rename_cookie_account():
     if body is None:
         return _bad_body()
     platform = str(body.get('platform') or '').strip()
-    # Folded through the manager's own key, so 「the default account」 has ONE meaning here:
+    # Folded through the manager's own key, so "the default account" has ONE meaning here:
     # a blank from an old caller and the name ``default`` are the same login, and the checks
     # below cannot be stepped around by spelling it the other way.
     account = CookieManager.key(body.get('account'))
@@ -391,7 +391,7 @@ def rename_cookie_account():
         return jsonify({'ok': False, 'error': _rename_refusal(e)}), 409
     except OSError as e:
         return jsonify({'ok': False, 'error': t('api.cookieRenameFailed', err=str(e)[:160])}), 500
-    # A rename changes which file answers 「does this account have a login」, so a cached
+    # A rename changes which file answers "does this account have a login", so a cached
     # verdict about the old name is now a statement about a file that is not there.
     preflight.invalidate(platform)
     return jsonify(
@@ -401,7 +401,7 @@ def rename_cookie_account():
             'account': to,
             'profile_moved': profile_moved,
             # Which of the two sentences, by what actually moved: an account whose browser was
-            # never opened has no directory to take along, and 「一起搬过去了」 would be a claim
+            # never opened has no directory to take along, and “一起搬过去了” would be a claim
             # about a device that does not exist.
             'message': t(
                 'cookie.renamed' if profile_moved else 'cookie.renamedFileOnly',
@@ -417,7 +417,7 @@ def _rename_refusal(error: ValueError) -> str:
     """Say which refusal happened, because the three want three different actions.
 
     Waiting for a crawl, choosing another name and finding the file gone are not one
-    「失败」 — and the ValueError text is this module's own (see ``CookieManager.rename`` and
+    “失败” — and the ValueError text is this module's own (see ``CookieManager.rename`` and
     ``profiles.rename_account``), so matching it is matching code, not a site.
     """
     text = str(error)
@@ -439,7 +439,7 @@ def delete_cookies():
     A platform profile that has logged in keeps its own session in
     ``data/chrome_profile/<platform>``, and deleting the snapshot does not sign that
     device out (see :mod:`sessions.profiles`, where the file is imported once and
-    never planted again). Saying 「已删除，已退出登录」 would send the user to re-login
+    never planted again). Saying “已删除，已退出登录” would send the user to re-login
     over a session that is still live, and hide the case that genuinely needs a
     profile reset.
     """
@@ -454,7 +454,7 @@ def delete_cookies():
         return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
     if not cookie_manager.exists(platform, account):
         # Not a silent success: the panel asked to remove something that is not
-        # there, and 「已删除」 would leave the user believing a stale file was replaced.
+        # there, and “已删除” would leave the user believing a stale file was replaced.
         return jsonify({'ok': False, 'error': t('cookie.delete.none', platform=platform)}), 404
     try:
         cookie_manager.delete(platform, account)
@@ -486,7 +486,7 @@ def delete_profile():
 
     Every refusal names itself, and the **default** account is refused structurally (the panel
     disables it too): its browser data is the platform root that nests every named account, so
-    「delete」 there would silently wipe them all — the same reason ``rename_cookie_account``
+    "delete" there would silently wipe them all — the same reason ``rename_cookie_account``
     refuses to rename it. A live browser holding the directory is refused so a running crawl is
     never pulled out from under.
     """
@@ -514,7 +514,7 @@ def delete_profile():
         return jsonify({'ok': False, 'error': str(e)}), 500
     if result == 'absent':
         # Not a silent success: the panel asked to remove a device that is not there, and
-        # 「已删除」 would report a reset that did not happen.
+        # “已删除” would report a reset that did not happen.
         return jsonify({'ok': False, 'error': t('cookie.profileDelete.none', platform=platform, account=account)}), 404
     # The device that held a live session is gone, so a cached "does this account have a login"
     # verdict about that profile is now a statement about a browser that no longer exists.
@@ -654,7 +654,7 @@ def _cookie_login_worker(
             return
         cookie_manager.save(platform, cookies, account)
         # This jar was read OUT OF the platform's own profile browser, so the profile is not behind
-        # the file: without this line the panel would go on offering 「把 Cookie 更新进 Profile」,
+        # the file: without this line the panel would go on offering “把 Cookie 更新进 Profile”,
         # a button that here would overwrite a live session with a copy of itself. Only when a
         # profile really exists — a run that chose 本次不用 Profile has no live session to spare.
         if profiles.is_enabled() and profiles.is_used(platform, account):
@@ -669,7 +669,7 @@ def _cookie_login_worker(
         job['phase'] = 'error'
         job['error'] = str(e)[:300]
         # One line, one reason: the logger call already reaches the console (see the
-        # cookie-save handler above), so the extra add_log said 「生成 Cookie 失败」 twice.
+        # cookie-save handler above), so the extra add_log said “生成 Cookie 失败” twice.
         logger.exception(t('misc.cookie_gen_failed', err=str(e)[:120]))
     finally:
         _close_login_browser(crawler)
@@ -797,7 +797,7 @@ def _verify_lines(platform: str, facts: dict) -> list:
     state = preflight.classify_probe(facts)
     lines = [t('cookie.verify.checkedUrl', url=str(facts.get('url') or ''))]
     if facts.get('unreachable'):
-        # Before the three states below, and as its own line: 「无法核对」 is true but
+        # Before the three states below, and as its own line: “无法核对” is true but
         # useless here, because what could not be checked was not the cookie — the page
         # the browser was asked to open never arrived.
         lines.append(t('cookie.verify.unreachable', platform=platform))
@@ -840,7 +840,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         preflight.invalidate(platform)
         # ``for_login`` because this window is shown to a person, and a person can be
         # sent there by an expired cookie: the probe lands on the login page, whose QR
-        # code is an ``<img>``. Blocked, the diagnosis 「cookie 已失效，去登录」 pointed at
+        # code is an ``<img>``. Blocked, the diagnosis “cookie 已失效，去登录” pointed at
         # a window where logging in was impossible.
         crawler = get_crawler(
             platform, headless=False, cookie_dir=paths.active().cookie_dir, for_login=True, account=account
@@ -863,7 +863,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         for line in lines:
             add_log(line)
     except Exception as e:
-        # A VERIFICATION failure, so it must not be announced as 「生成 Cookie 失败」 —
+        # A VERIFICATION failure, so it must not be announced as “生成 Cookie 失败” —
         # the user asked no cookie to be generated here, and the line beside it already
         # said 验证失败. One attributed line carries the reason; the logger call is what
         # reaches the console (and the traceback reaches the log file).
@@ -1019,7 +1019,7 @@ def get_browser_profiles():
             continue
         # The ONE filename rule, from CookieManager — splicing ``{platform}_cookies.json`` here
         # was a second spelling of where a login lives, and it can only ever name the default
-        # account: the panel would say 「no cookie」 about an account whose file it never looked at.
+        # account: the panel would say "no cookie" about an account whose file it never looked at.
         saved = CookieManager(paths.active().cookie_dir).path_for(platform, '')
         rows['profiles'].append(
             profiles.status(

@@ -147,7 +147,7 @@ def page_not_arrived(platform: str, exc: PageNotArrivedError) -> ValueError:
 
     The crawler's own sentence is about a page ("no cards after N seconds at this
     address"); this adds the only fact that sentence cannot carry, which is whether the
-    machine running it can reach anything at all. The node label and the 「执行失败」 frame
+    machine running it can reach anything at all. The node label and the “执行失败” frame
     come from the executor, so nothing is said twice.
 
     No advice is appended when the page already explained itself — a login wall, a captcha
@@ -366,9 +366,9 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         part_size = _safe_int(params.get('part_size'), 0, minimum=0)
         keep_parts = as_bool(params.get('keep_parts'))
         pfmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
-        # A crawl 「按时间」 writes a table for a stated stretch of the calendar, and on
+        # A crawl “按时间” writes a table for a stated stretch of the calendar, and on
         # disk that fact used to exist nowhere but the node's own form: the file for
-        # January and the file for March were both 「微博-src-node-2.csv」, so the second
+        # January and the file for March were both “微博-src-node-2.csv”, so the second
         # one silently replaced the first and nobody could tell afterwards which month
         # they were reading. The window goes into the name of the parts AND of the file
         # they merge into, because those two are the same stem.
@@ -380,7 +380,7 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
 
             stem = safe_stem(f'{ambient().get("workflow_name") or platform}-src-{nid}{parts}')
             # Record each shard as it lands (so an interrupted run's parts are still attributed
-            # to the record) — but only when 「保留分片」 is on: with keep_parts off the writer
+            # to the record) — but only when “保留分片” is on: with keep_parts off the writer
             # deletes them the moment the merge succeeds, so there is nothing for 智能清除 to find.
             writer = PartWriter(
                 paths.active().export_dir,
@@ -571,7 +571,7 @@ def run(node: dict, call: NodeCall):
     # crawl ran the pasted list nobody asked for.
     # ``stop_requested()``, never ``not running``: its own docstring spells out why — a caller that
     # reaches this function without a claim in place has no run to be "not running", and inferring
-    # 「the user pressed 停止」 from that abandoned the queue for every such call instead of holding
+    # “the user pressed 停止” from that abandoned the queue for every such call instead of holding
     # the lane.
     with gate.hold(platform, log=add_log, abort=stop_requested, account=account):
         return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)

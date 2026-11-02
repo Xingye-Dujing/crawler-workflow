@@ -22,10 +22,10 @@ DEAD = 'dead'
 
 
 def as_count(value) -> int:
-    """A count the site may send as a number, as digits, or as 「1.2万」 text.
+    """A count the site may send as a number, as digits, or as “1.2万” text.
 
     ``parse_count`` is the engine's one answer for the last shape, so a denominator read from a payload
-    goes through it rather than through a second ``int(...)`` that would raise on 「赞」 and be caught,
+    goes through it rather than through a second ``int(...)`` that would raise on “赞” and be caught,
     hiding the fact that the page never gave a number.
     """
     if isinstance(value, (int, float)):

@@ -29,7 +29,7 @@ def topic_salience(
     at all is decided by the relevance weighting of Sievert & Shirley (2014):
     ``λ·log p(w|t) + (1−λ)·log(p(w|t)/p(w))``. λ=1 ranks by the topic's own probability, so
     a common word can win; λ=0 ranks by over-representation, so rare-but-diagnostic words
-    surface and a topic of nothing but 「的」 becomes impossible to read. The paper's figure
+    surface and a topic of nothing but “的” becomes impossible to read. The paper's figure
     has a slider for this; here it is a parameter, and the number used is printed with the
     rows because two λs give two different answers from one model.
     """

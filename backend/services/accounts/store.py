@@ -142,7 +142,7 @@ class AccountsStore:
         The count must not be read, incremented and written back: N concurrent wrong passwords all
         read the same value, so a scripted attack against one account advanced the counter by one no
         matter how many tries it made, and ``locked_until`` never arrived. The document promise of
-        「连续 5 次锁 15 分钟」 is only true if the addition happens inside the row.
+        “连续 5 次锁 15 分钟” is only true if the addition happens inside the row.
         """
         with self._lock:
             self._conn.execute(

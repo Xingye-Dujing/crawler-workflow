@@ -148,7 +148,7 @@ class TestCookieJob:
         assert job['made'][0].closed is True
 
     def test_a_generated_cookie_leaves_the_profile_looking_up_to_date(self, client, job, app_module, monkeypatch):
-        """The 「把 Cookie 更新进 Profile」 hint must NOT appear after a 浏览器生成.
+        """The “把 Cookie 更新进 Profile” hint must NOT appear after a 浏览器生成.
 
         That login happens INSIDE the platform's profile browser, so the saved file is a copy of
         what the profile already holds — and the button, if pressed, would overwrite a live
@@ -434,7 +434,7 @@ class TestCookieVerify:
         assert 'chromedriver' in client.get('/api/cookies/generate/status').get_json()['error']
         # One console line, and the right sentence: this was a VERIFICATION, which the
         # user never asked to generate anything for, and the reason used to be printed
-        # twice — once as 「生成 Cookie 失败」 and once as 验证失败.
+        # twice — once as “生成 Cookie 失败” and once as 验证失败.
         announced = [line for line in app_module.execution_state['logs'] if 'chromedriver' in line]
         assert len(announced) == 1, f'one crash was announced {len(announced)} times: {announced}'
         assert 'Verification failed' in announced[0], announced[0]
@@ -445,7 +445,7 @@ class TestCookieVerify:
 
         ``LogBufferHandler`` forwards every ``logger.*`` call into the console, which is
         what the file gets its traceback from — the ``add_log`` beside the
-        ``logger.exception`` therefore repeated 「保存 Cookie 失败」 verbatim, and a user
+        ``logger.exception`` therefore repeated “保存 Cookie 失败” verbatim, and a user
         reading two identical failures reasonably assumes two things broke.
         """
 

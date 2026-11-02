@@ -602,7 +602,7 @@ def workflow_processes():
     threads = _visible_threads()
 
     # Not a pool: the run's stop handle. It used to read ``_pool``, an attribute of the
-    # node-level ``TaskExecutor`` that was never constructed — so the panel's 「进程池」 row
+    # node-level ``TaskExecutor`` that was never constructed — so the panel's “进程池” row
     # answered 否 for every run that ever existed while implying one could be alive.
     stop_asked = bool(
         execution_state['executor'] is not None and getattr(execution_state['executor'], 'stop_requested', False)

@@ -158,7 +158,7 @@ class TestRefusalsFailTheNode:
 
     Three of these used to answer ``[]`` after logging the reason. The node settled
     DONE, the run went green, the export wrote a header and nothing else, and every
-    downstream node then complained 「上游没有数据」 *about itself* — while the one
+    downstream node then complained “上游没有数据” *about itself* — while the one
     sentence that explained the situation named no node at all. The user is sent to
     diagnose the healthy boxes.
     """
@@ -521,7 +521,7 @@ class TestMergePlatformStamp:
         assert '微博第二批 #node-2' in str(columns.value), str(columns.value)
 
     def test_the_merge_line_in_the_console_names_every_parent_it_joined(self, output_plugin, monkeypatch):
-        """The 「已合并」 line is the receipt that says WHICH tables went in; bare ids make it a
+        """The “已合并” line is the receipt that says WHICH tables went in; bare ids make it a
         receipt the user cannot check against the canvas."""
         lines = []
         monkeypatch.setattr(output_plugin, 'add_log', lambda msg, **kw: lines.append(msg))
@@ -536,7 +536,7 @@ class TestMergePlatformStamp:
 
 
 class TestStampedOutputFilenames:
-    """「文件名追加本次运行时间」 — a workflow that runs daily keeps every result.
+    """“文件名追加本次运行时间” — a workflow that runs daily keeps every result.
 
     The value is decided where the file is written, never stored on the node, so
     these tests check the export directory and the STORED fingerprint: the two
@@ -606,7 +606,7 @@ class TestStampedOutputFilenames:
 
 @pytest.mark.usefixtures('clean_globals')
 class TestWindowedFilenames:
-    """「文件名带时间范围」 and 「分片文件名加创建时间」 — the two components a crawl appends.
+    """“文件名带时间范围” and “分片文件名加创建时间” — the two components a crawl appends.
 
     The window is a fact about the CRAWL and a save node is handed only rows, so the range
     travels through the run: ``note_window`` records it where the crawl states it,
@@ -723,7 +723,7 @@ class TestWindowedFilenames:
 
 
 class TestSentimentNode:
-    """「情感极性」 end to end: a real SnowNLP pass through the executor into a CSV.
+    """“情感极性” end to end: a real SnowNLP pass through the executor into a CSV.
 
     No model download, no GPU and no LLM call, so this is the tier where the whole chain
     is honest — the node runs, the two columns land in the stored rows and in the file,
@@ -861,7 +861,7 @@ class TestRunShapeIsReadNotCompared:
     def test_the_two_named_shapes_are_read_and_anything_else_is_refused_by_name(self, app_module):
         assert plan.run_mode({'mode': 'serial'}) == 'serial'
         assert plan.run_mode({'mode': 'parallel'}) == 'parallel'
-        # The spelling is not the meaning: a UI that wrote 「Serial」 meant serial, and the old
+        # The spelling is not the meaning: a UI that wrote "Serial" meant serial, and the old
         # equality test ran it parallel while the panel believed the opposite.
         assert plan.run_mode({'mode': ' Serial '}) == 'serial'
         # A blank states nothing, which is the declared default — not a refusal.
@@ -920,7 +920,7 @@ class TestRunShapeIsReadNotCompared:
         assert 'parallel' in answer['body']['error'], 'the refusal must say what the legal names are'
 
     def test_the_profile_switch_is_read_so_the_text_false_means_off(self, app_module):
-        """``bool('false')`` is True. A hand-edited draft saying 「不用 Profile」 would have been
+        """``bool('false')`` is True. A hand-edited draft saying “不用 Profile” would have been
         crawled WITH one — the device the measured login wall is about. Absence still stays
         absence, because a browser that sends nothing must not switch the setting off."""
         assert flag_or_none('false') is False

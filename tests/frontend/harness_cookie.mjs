@@ -136,7 +136,7 @@ const out = {};
 
 /* Every dialog the panel raised, with the values its buttons carry. A dialog WITH an
    input is answered by the real showDialog as `b.value !== undefined ? b.value :
-   inputEl.value`, so the shape of the spec is part of what is under test: a 「删除」
+   inputEl.value`, so the shape of the spec is part of what is under test: a “删除”
    button that shipped a `value:` on an input dialog would replace what the user
    typed. Here it is what tells a refusal from a confirmation. */
 const dialogs = [];
@@ -290,7 +290,7 @@ out.deleteConfirmed = {
     capabilitiesRefetched: sandbox.__fetches.slice(beforeFetchDel).includes('/api/capabilities'),
 };
 
-/* ── 6b. the dialog's 「删除已存 Profile」 speaks for its OWN selection ─────── */
+/* ── 6b. the dialog's “删除已存 Profile” speaks for its OWN selection ─────── */
 for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
 sandbox.cookieJob.active = false;
 sandbox.__toasts.length = 0;
@@ -375,7 +375,7 @@ out.savedStatus = doc.getElementById('cookie-status').textContent;
    The paste is the newest session there is, so the browser that crawls with this
    account has to receive it without the user having to notice anything — and the one
    case that cannot happen on the spot (that profile is held by a running crawl) has to
-   be VISIBLE, because a bare 「已保存」 would hide exactly the half the user acts on. */
+   be VISIBLE, because a bare “已保存” would hide exactly the half the user acts on. */
 for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
 sandbox.cookieJob.active = false;
 setPlatform('weibo');
@@ -567,7 +567,7 @@ const platformOf = (row) => {
 };
 const buttonsOf = (row) => {
     const td = row.querySelector('.runs-mgr-ops');
-    /* Both the label and whether it is dead: the default row still SHOWS 「重命名」 and refuses
+    /* Both the label and whether it is dead: the default row still SHOWS “重命名” and refuses
        when pressed, and a report of the labels alone cannot tell that apart from a row whose
        rename works. */
     return td
@@ -633,7 +633,7 @@ out.afterCandidateClick = {
     toast: sandbox.__toasts.slice(),
 };
 /* The default login now has a NAME that shows in the box, so a pick of it is visible the same
-   way any other pick is — this is the assertion that keeps 「它也要填值」 from regressing. The
+   way any other pick is — this is the assertion that keeps “它也要填值” from regressing. The
    box is cleared first: typing `work` filters the popup down to that one login, and a scenario
    that looked for the default chip while a filter was active would only prove the filter. */
 sandbox.__toasts.length = 0;
@@ -730,7 +730,7 @@ out.openedOnUnknownPlatform = {
     box: doc.getElementById('cookie-account').value,
 };
 
-/* ── 「重命名」 in the saved-logins table ────────────────────────
+/* ── “重命名” in the saved-logins table ────────────────────────
    A rename is the one row action that can point at the WRONG login (a delete that used the
    panel's own selection would simply destroy a different session), so the name the user
    clicked is what must be sent, and the answer must say what moved. The default row offers no

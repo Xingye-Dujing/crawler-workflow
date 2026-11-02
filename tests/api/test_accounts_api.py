@@ -155,7 +155,7 @@ class TestAMomentShipsFromTheServer:
         created = _create(admin_client, 'alice').get_json()['user']
         rows = admin_client.get('/api/accounts').get_json()['accounts']
         row = next(item for item in rows if item['user_id'] == created['user_id'])
-        # The WORD for 「从未」 belongs to the panel; a missing moment is data, not a translation.
+        # The WORD for “从未” belongs to the panel; a missing moment is data, not a translation.
         assert row['last_login_local'] == '', row
 
     def test_the_audit_rows_carry_a_server_local_time(self, admin_client):
@@ -237,7 +237,7 @@ class TestAccountLifecycle:
         assert releases == [], 'a non-admin closed Bob’s stores without deleting anything'
 
     def test_the_busy_probe_is_answered_only_to_an_administrator(self, admin_client):
-        """「这个账号还有运行中的任务（<run id>）」 names another account's run — so the
+        """“这个账号还有运行中的任务（<run id>）” names another account's run — so the
         administrator check must come before the probe, not after it."""
         bob = _create(admin_client, 'bob').get_json()['user']
         _create(admin_client, 'mallory')
@@ -297,7 +297,7 @@ class TestAccountLifecycle:
         assert releases == [bob['user_id']], 'a force logout closed a live run’s stores'
 
     def test_a_force_logout_closes_the_scope_inside_the_claim_lock(self, admin_client, monkeypatch):
-        """「No run is live」 must be proved inside ``execute_lock`` — the lock ``begin_run`` claims under.
+        """ "No run is live" must be proved inside ``execute_lock`` — the lock ``begin_run`` claims under.
 
         Probing and closing were two separate steps here, so a run could start in the gap and keep a
         ``RunStore`` this route had just closed: the worker dies on ``Cannot operate on a closed
@@ -344,7 +344,7 @@ class TestAccountLifecycle:
         assert live_at_release == [0], 'a live session could still rebuild the tree mid-move'
 
     def test_a_delete_that_cannot_move_the_data_back_names_where_it_went(self, admin_client, monkeypatch):
-        """The compensation itself can fail, and then 「数据仍在原处」 is a lie with a direction.
+        """The compensation itself can fail, and then “数据仍在原处” is a lie with a direction.
 
         ``delete_user`` moves the tree, drops the row, and on a refused drop moves it back. A
         Windows rename can fail on a profile a browser still holds — leaving the data in

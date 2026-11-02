@@ -25,7 +25,7 @@ DATA_ROOT = os.environ.get('CRAWLER_DATA_ROOT') or BASE_DIR
 # and neither used to be expanded: ``~`` stayed a literal one-character directory name (so the
 # runs, cookies and exports landed in ``./~/data`` next to whatever the service was started from)
 # and a relative value stayed relative to the process CWD, which a systemd unit and a manual
-# ``python app.py`` do not share. Both produced the same symptom later: 「数据不见了」.
+# ``python app.py`` do not share. Both produced the same symptom later: “数据不见了”.
 DATA_ROOT = os.path.abspath(os.path.expanduser(str(DATA_ROOT)))
 
 
@@ -63,7 +63,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or DEFAULT_SECRET_KEY
 
     #: Cloud deployment switch. On a public server there is no local model to talk to, no
-    #: display to open a window on, and no browser to click 「生成 Cookie」 with — and the user
+    #: display to open a window on, and no browser to click “生成 Cookie” with — and the user
     #: in front of the page is a stranger, not the machine's owner. So one flag decides all of
     #: it: the Ollama UI, the headless setting (forced headless), the cookie-generating button,
     #: and the first-entry privacy notice that says what is stored where.
@@ -248,7 +248,7 @@ class Config:
     #: a cold launch that never commits its first navigation re-drives it up to
     #: ``Crawler.NAV_RETRY`` extra times before judging (see ``crawler_rules.md``); the
     #: driver's own ceiling (the ``page_load_timeout`` setting, 40 s by default) applies
-    #: *inside* this one. A probe whose loads cannot all fit answers 「无法核对」 — which
+    #: *inside* this one. A probe whose loads cannot all fit answers “无法核对” — which
     #: never blocks a run — rather than caching a verdict off a page that was never shown.
     COOKIE_PREFLIGHT_TIMEOUT = 45
 

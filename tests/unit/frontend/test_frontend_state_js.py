@@ -78,7 +78,7 @@ def state(tmp_path_factory):
             # Integer-looking ids: `Object.keys` answers those FIRST rather than in
             # insertion order, so a connection resolved by array slot landed on the
             # node that happened to sit at that index (measured before the fix:
-            # 「1 → node-2」 came back as 「1 → 3」). Identity is the only key.
+            # "1 → node-2" came back as "1 → 3"). Identity is the only key.
             'id': 'restore_integer_like_ids',
             'restore': {
                 'nodes': {
@@ -877,7 +877,7 @@ class TestFileLifecycle:
         assert life['load_without_settings']['runState'] == []
 
     def test_opening_a_file_looks_through_the_camera_it_was_saved_with(self, life):
-        """「保存时的视角跟读取得到的视角不一样」 was the complaint: the file knew
+        """“保存时的视角跟读取得到的视角不一样” was the complaint: the file knew
         where its author had been looking — the loader just never read it back.
         And the draft re-saved after the open must hold THAT camera, not the one
         the previous canvas had."""
@@ -886,7 +886,7 @@ class TestFileLifecycle:
         assert r['draftView'] == r['view'], 'the next refresh owes the same viewpoint'
 
     def test_a_file_whose_ids_read_as_integers_opens_without_rewiring(self, life):
-        """「打开」 accepts a hand-edited file, and its ids need not look like node-7:
+        """“打开” accepts a hand-edited file, and its ids need not look like node-7:
         mapping a connection through the node array's slot rather than its key pointed
         the wire at another node entirely, with no refusal and nothing on screen."""
         r = life['load_integer_like_ids']

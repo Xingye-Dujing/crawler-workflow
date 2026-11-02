@@ -199,7 +199,7 @@ class TestSmartClear:
     These act on the run→files ledger, not a directory scan: a run's files are what the ledger
     says they are. The tests seed a run's files through the real store (the same singleton the
     route reads), create them on disk in the temp export dir, then assert what a clear removes,
-    what it keeps (a 「固定」 file; the merged file under a shards-only clear; the OTHER node's
+    what it keeps (a “固定” file; the merged file under a shards-only clear; the OTHER node's
     shards), and that the ledger tracks reality afterwards.
     """
 
@@ -255,7 +255,7 @@ class TestSmartClear:
         finally:
             lock_store.set_locked('exports', 'a.csv', False)
         assert body['removed'] == 1 and body['skipped_locked'] == 1
-        assert os.path.exists(os.path.join(export_dir, 'a.csv')), '「固定」 outlives a clear'
+        assert os.path.exists(os.path.join(export_dir, 'a.csv')), '“固定” outlives a clear'
         assert not os.path.exists(os.path.join(export_dir, 'b.csv'))
         # The skipped file is still in the ledger (it exists); the removed one is forgotten.
         assert {f['name'] for f in store.files_for_run('r1')} == {'a.csv'}
@@ -328,7 +328,7 @@ class TestSmartClear:
 class TestClearName:
     """``/api/exports/clear-name`` removes one shard BATCH by name (the panel's per-shard button).
     The whole value is in what it refuses to touch: the merged file, other stems, other extensions
-    and 「固定」pinned shards survive, and a non-shard name / a missing confirm / a live run are each refused."""
+    and “固定”pinned shards survive, and a non-shard name / a missing confirm / a live run are each refused."""
 
     def _seed_shards(self, export_dir):
         for name in ['a.part000.csv', 'a.part001.csv', 'a.csv', 'b.part000.csv', 'a.part000.json']:
@@ -368,7 +368,7 @@ class TestClearName:
 
     def test_the_post_stop_window_still_refuses_a_bulk_clear(self, client, app_module, export_dir):
         """停止 clears ``running`` at its TOP, but the worker keeps merging part files for tens
-        of seconds. Asking only the flag let 「清空」 delete the shards mid-merge; the bulk clear
+        of seconds. Asking only the flag let “清空” delete the shards mid-merge; the bulk clear
         must ask the SAME live-run line the run-record routes do — a live thread is busy."""
 
         class _AliveThread:
@@ -393,6 +393,6 @@ class TestClearName:
             assert body['removed'] == 1 and body['skipped_locked'] == 1, body
             assert os.path.exists(os.path.join(export_dir, 'a.part001.csv')), 'a 固定 shard outlives the batch clear'
         finally:
-            # Release the pin: the lock store is process-wide, and a left-behind 「固定」 entry
+            # Release the pin: the lock store is process-wide, and a left-behind “固定” entry
             # would make a later test that asserts the exact lock set see a key it never added.
             client.post('/api/locks', json={'panel': 'exports', 'key': 'a.part001.csv', 'locked': False})

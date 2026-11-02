@@ -1,4 +1,4 @@
-"""YouTube's EU consent sheet: 「在我们继续之前」, accepted — it blocks everything behind it.
+"""YouTube's EU consent sheet: “在我们继续之前”, accepted — it blocks everything behind it.
 
 Declared here because the sheet is a property of the site. Nothing mounts it yet (a known gap recorded by
 the 2026-10 refactor; wiring it changes real-site behaviour and needs its own live evidence).

@@ -1503,10 +1503,10 @@ def _settled(app_module, run_id, nid='node-1'):
 
 
 class TestSourceAuthorMode:
-    """「采集内容=某作者的作品」 run through the real endpoint.
+    """“采集内容=某作者的作品” run through the real endpoint.
 
     An author node carries an address and no keyword, so it is the source mode
-    validation could most plausibly refuse — 「缺少关键词」 about a field its panel
+    validation could most plausibly refuse — “缺少关键词” about a field its panel
     never showed — and the one the executor could most plausibly route wrongly,
     because ``mode_for`` answers a missing ``collect`` with the platform's FIRST
     mode, which on every author platform is the keyword search. Both halves are
@@ -1540,7 +1540,7 @@ class TestSourceAuthorMode:
 
 
 class TestSourceHotMode:
-    """「采集内容=热榜」 run through the real endpoint.
+    """“采集内容=热榜” run through the real endpoint.
 
     A board asks for nothing at all — no keyword, no creator, sometimes no cookie —
     so it is the mode most easily lost twice over: validation refusing a crawl with
@@ -1879,7 +1879,7 @@ class TestACommentNodeHonoursHeadless:
     """No crawl path overrides the run's 无头 choice any more (#148).
 
     A source node stopped doing so when the disguise landed; the comment engine was the last
-    holdout — it forced a visible window for *scrolled* panels, logged a 「无头→窗口」 switch line and
+    holdout — it forced a visible window for *scrolled* panels, logged a “无头→窗口” switch line and
     set ``forced_visible``. A headless Chrome now carries a desktop fingerprint and a scrolled panel
     was measured serving the same rows headless (zhihu comments 5/5, real profile, 2026-09-26), so
     the comment node passes 无头 straight through: it builds the crawler exactly as asked, announces

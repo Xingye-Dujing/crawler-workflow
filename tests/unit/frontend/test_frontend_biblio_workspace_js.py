@@ -139,7 +139,7 @@ class TestServerAnswersAreNotInvented:
     def test_a_newly_shipped_shape_gets_its_word_without_a_second_list(self, placed):
         """`variation` was added to the server without touching the panel's own literal copy of
         the known shapes, and the copy is what decided whether the chip said 结构变异表 or
-        「输出形态未知」. The panel now reads the same list the settings select does."""
+        “输出形态未知”. The panel now reads the same list the settings select does."""
         assert placed['shape']['variation'] is True
 
     def test_a_refusal_keeps_the_servers_words_and_paints_no_table(self, placed):
@@ -158,7 +158,7 @@ class TestServerAnswersAreNotInvented:
 class TestPagingAndFiltering:
     def test_the_paging_line_describes_the_whole_table(self, placed):
         case = placed['paging']
-        assert case['line'] is True, '「第 1–200 行 / 共 500 行」 is the server total, not the page size'
+        assert case['line'] is True, '“第 1–200 行 / 共 500 行” is the server total, not the page size'
         assert case['prevDisabledAtFirst'] is True
         assert case['prevEnabledAfter'] is True
         assert 'offset=200' in case['nextUrl'] and 'limit=200' in case['nextUrl']
@@ -248,7 +248,7 @@ class TestColumnHeaders:
         assert placed['headers']['agreed'] == [True] * len(placed['headers']['pairs']), placed['headers']
 
     def test_a_column_this_build_has_no_word_for_keeps_its_stored_name(self, placed):
-        """Inventing a heading, or printing 「biblio.col.cluster_id」, both describe a column the
+        """Inventing a heading, or printing "biblio.col.cluster_id", both describe a column the
         export does not have."""
         assert placed['headers']['unknownKept'] is True
 

@@ -7,7 +7,7 @@ but WeChat has the **fewest moving parts of any platform** — which is itself t
   发布地区 / 是否原创 / 正文 / 正文图片数 / 链接 and **nothing else** — no 评论数/点赞数/转发数/阅读数,
   because those come from a per-article credential WeChat mints only for a recognised client session
   (``crawler_notes.md`` / ``crawler_rules.md``: a real browser gets ``show_comment=0`` and an HTML
-  「请在微信客户端打开链接」 from the comment endpoint). So A1 asserts the eight columns are present **and
+  “请在微信客户端打开链接” from the comment endpoint). So A1 asserts the eight columns are present **and
   the interaction columns are absent** — a 评论数 column here would be an invented zero, which is the
   worst kind of false data this project refuses.
 * **No target semantics: the links ARE the budget.** ``posts`` has no ``target_count`` field; the row

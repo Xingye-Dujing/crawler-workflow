@@ -489,8 +489,8 @@ class TestUnderTargetWiring:
     stopped growing below the ask must be CONVICTED (``end_reason == UNDER_TARGET``) rather than
     left ``None`` — which the executor lets settle clean (the not-yet-migrated behaviour this
     migrates away from). But a run the user STOPPED, or one a wall/风控 answered, is settled
-    upstream and must NOT be filed ``UNDER_TARGET`` here: that would report 「采得不足」 over
-    「你按了停止」 or 风控, the exact mislabels the plan forbids.
+    upstream and must NOT be filed ``UNDER_TARGET`` here: that would report “采得不足” over
+    “你按了停止” or 风控, the exact mislabels the plan forbids.
     """
 
     def _short_feed(self, make_crawler, monkeypatch, notes, page=8):
@@ -524,7 +524,7 @@ class TestUnderTargetWiring:
         crawler = self._short_feed(make_crawler, monkeypatch, notes)
         crawler.may_stop = lambda: True
         crawler.search('三亚', target_count=50)
-        assert crawler.end_reason is None, 'a 停止 cut short is its own bucket, never 「采得不足」'
+        assert crawler.end_reason is None, 'a 停止 cut short is its own bucket, never “采得不足”'
 
     def test_a_risk_block_is_not_reported_as_under_target(self, make_crawler, monkeypatch):
         notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 6)]

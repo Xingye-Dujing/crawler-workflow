@@ -61,7 +61,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: ``crawl.bili.blocked`` is B站's own risk/session answer (a non-zero, non-404 ``code``); the plan whitelists
 #: a risk block (§5), and leaving it out graded an honest site refusal SILENT — a C2 run caught exactly that
 #: after a burst tripped 风控 (``code=-352``). ``crawl.bili.finished`` / ``authorDone`` stay **absent** — the
-#: code certifying its own walk (「自己给自己发满分」), so a shortfall whose only line is one of those is SILENT.
+#: code certifying its own walk (“自己给自己发满分”), so a shortfall whose only line is one of those is SILENT.
 BILI_LEGIT_EXITS = harness.SHARED_EXITS + (
     'crawl.bili.no_more',  # two pages in a row held nothing new: the pager ran out, said with its page number
     'crawl.bili.authorNoVideos',  # the space rendered no uploads at all
@@ -350,7 +350,7 @@ def test_a2_a_headless_search_is_full_or_named(client, app_module, monkeypatch):
 def test_a3_the_target_is_a_ceiling_the_walk_lands_on_exactly(client, app_module, monkeypatch):
     """A3 — 5 asked, 5 stored; rows filed after the ask is met are 多采 and each costs a ``view`` call.
 
-    The pager advances only when a page is not yet exhausted, so the other half of 「完全符合要求」 here is
+    The pager advances only when a page is not yet exhausted, so the other half of “完全符合要求” here is
     that a 5-row ask does not walk a second page: ``crawl.bili.url`` is printed once (page 1), never twice.
     """
     harness.real_jar(monkeypatch)

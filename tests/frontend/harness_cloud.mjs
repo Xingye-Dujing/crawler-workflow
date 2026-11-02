@@ -6,9 +6,9 @@
  *
  *   · the transport is taken OUT of the provider select — a hidden <option> is still a
  *     value the element can be asked for, and this host cannot serve it;
- *   · a stored 「ollama」 in localStorage is normalised to the transport that can run,
+ *   · a stored "ollama" in localStorage is normalised to the transport that can run,
  *     because the run body is built from the same object;
- *   · the 「本地 Ollama」 half of the process node's mode label is not shown, since a
+ *   · the “本地 Ollama” half of the process node's mode label is not shown, since a
  *     word naming a transport with no daemon behind it is a lie in two languages;
  *   · the flag arrives asynchronously, so everything above has to be re-applied when it
  *     lands rather than only at the first paint.
@@ -157,7 +157,7 @@ sandbox.localStorage.setItem(
     })
 );
 /* The panel is filled from localStorage BEFORE the flag lands — that is the real order,
-   applyToPanel runs at boot and /api/config answers a tick later — so a stored 「ollama」
+   applyToPanel runs at boot and /api/config answers a tick later — so a stored "ollama"
    is the selected transport when the flag arrives. Everything below is measured AFTER
    that, because "correct only on a fresh load" is not what a booted page does. */
 LLMSettings.applyToPanel();
@@ -192,7 +192,7 @@ CloudMode.set(true, false);
 out.loginHost.hidesWhenNotRequired = doc.getElementById('btn-logout').hidden;
 authAnswer = false;
 
-/* ── the notice: asked once, and 「不再提醒」 means this browser ───────── */
+/* ── the notice: asked once, and “不再提醒” means this browser ───────── */
 const NOTICE_KEY = 'crawler_privacy_ack';
 
 dialogs.length = 0;
@@ -208,8 +208,8 @@ CloudMode.set(true);
 await flush();
 out.firstVisit = {
     dialogs: dialogs.slice(),
-    /* 「知道了」 is the ordinary close: it dismisses this visit and promises nothing about
-       the next one. Only 「不再提醒」 writes the ack. */
+    /* “知道了” is the ordinary close: it dismisses this visit and promises nothing about
+       the next one. Only “不再提醒” writes the ack. */
     afterGotIt: sandbox.localStorage.getItem(NOTICE_KEY),
 };
 
@@ -264,7 +264,7 @@ sandbox.fetch = (url, init) => {
 await sandbox.logout();
 out.logout = { request: logoutRequests[0], navigatedTo };
 
-/* A refused sign-out must NOT navigate. 「/login」 over a live session bounces straight back to the
+/* A refused sign-out must NOT navigate. "/login" over a live session bounces straight back to the
    canvas, so the button reads as broken while the cookie keeps working. The page re-reads
    /api/config for the session's current CSRF token and asks once more. */
 navigatedTo = null;

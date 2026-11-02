@@ -32,7 +32,7 @@ bp = Blueprint('exports', __name__)
 def _delete_export_names(names) -> dict:
     """Delete a set of export files by name, one at a time, and keep the run ledger honest.
 
-    Locked (「固定」) files are SKIPPED, never removed — the same rule ``/clear`` and ``/delete``
+    Locked (“固定”) files are SKIPPED, never removed — the same rule ``/clear`` and ``/delete``
     already honour, so a pinned artefact outlives every bulk clear. A name already gone from disk
     counts as ``missing`` but still drops its ledger row, because the whole point of the ledger is
     to describe files that exist; a row pointing at nothing would make 智能清除 promise to delete
@@ -219,7 +219,7 @@ def _smart_clear_guards(data):
 
 @bp.route('/api/exports/clear-run', methods=['POST'])
 def exports_clear_run():
-    """Remove every file one run wrote, by that run's ledger — 智能清除「按运行」.
+    """Remove every file one run wrote, by that run's ledger — 智能清除“按运行”.
 
     Deletes exactly the recorded names (through the browser's resolver, skipping 固定 files); the
     run record and its checkpointed ROWS are untouched — this clears disk artefacts, not history.
@@ -242,7 +242,7 @@ def exports_clear_run():
 
 @bp.route('/api/exports/clear-run-parts', methods=['POST'])
 def exports_clear_run_parts():
-    """Remove only one source node's shards from one run, keeping the merged file — 智能清除「按节点」.
+    """Remove only one source node's shards from one run, keeping the merged file — 智能清除“按节点”.
 
     Scoped to ``(run_id, node_id, kind='part')`` so it can never touch a different run, a different
     node, or the merged/live result the run still needs. This is the routine cleanup after a
@@ -270,11 +270,11 @@ def exports_clear_run_parts():
 
 @bp.route('/api/exports/clear-name', methods=['POST'])
 def exports_clear_name():
-    """Remove one BATCH of shard files by name — 依据名字「清除该批分片」.
+    """Remove one BATCH of shard files by name — 依据名字“清除该批分片”.
 
     The panel clicks one part file; this deletes every ``{stem}.part{NNN}{ext}`` sharing its stem
     and extension, and ONLY those: the merged ``{stem}{ext}``, other stems, other extensions and
-    「固定」(pinned) files are kept. It is name-scoped (no run/node ledger needed) so it works from
+    “固定”(pinned) files are kept. It is name-scoped (no run/node ledger needed) so it works from
     the flat listing, but every deletion still goes through the export browser's per-name resolver
     (no second bulk path that could drift), and it is refused while any run is live and without an
     explicit confirm — the same guards as the other bulk clears. A name that is not a shard is

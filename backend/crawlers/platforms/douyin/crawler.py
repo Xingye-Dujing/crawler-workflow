@@ -33,7 +33,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
     #: / the slide never painted), after their bounded retries were used up. Named at the end of the
     #: walk so a shortfall is a stated fact, never a silent 完成.
     _modal_deferred = 0
-    #: Whether the list page published its own end-of-list marker (「暂时没有更多了」). A class
+    #: Whether the list page published its own end-of-list marker (“暂时没有更多了”). A class
     #: default so a read before ``author`` (which resets it per crawl) says "the site never said
     #: so" rather than raising AttributeError: only a site-attested drain may license a shortfall.
     _list_end_attested = False
@@ -42,7 +42,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
     #: blank rather than an AttributeError — blank, never a fabricated 0.
     _profile_totals = ('', '')
 
-    #: The 「保存登录信息超过5天」 mask covers the search button (measured: the
+    #: The “保存登录信息超过5天” mask covers the search button (measured: the
     #: click is intercepted by ``.trust-login-dialog-mask``). Only 取消 is ever
     #: pressed: the user reports that 保存 leads to a phone-verification step, so
     #: declining is both the safe answer and the one that keeps the session alone.
@@ -130,10 +130,10 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.4
 
-    #: What the result list writes when it is done. Measured 2026-09-28 with 最新发布 chosen on 「IU」:
+    #: What the result list writes when it is done. Measured 2026-09-28 with 最新发布 chosen on “IU”:
     #: the page carries 14 cards, the window scroll stops changing anything, and at the foot of the list
-    #: sits 「暂时没有更多了」 — the site's own end-of-list sentence, twice in the document. Without reading
-    #: it, a walk that ended at 14 of 50 said only 「搜索完成，共获取 14 条」, and a short table caused by
+    #: sits “暂时没有更多了” — the site's own end-of-list sentence, twice in the document. Without reading
+    #: it, a walk that ended at 14 of 50 said only “搜索完成，共获取 14 条”, and a short table caused by
     #: the site is indistinguishable in the console from one caused by our scroll loop (which is the exact
     #: complaint this round exists to answer).
     LIST_END_MARKS = ('暂时没有更多了', '没有更多了')
@@ -173,8 +173,8 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 return self.results()
             # A page that did not answer MAY have been refused by a captcha that mounted
             # during the wait; latch it before the refusal travels so the executor names
-            # 风控 rather than 「这一页没到位」. An unreachable browser-error page leaves
-            # ``_is_walled`` false, so its own 「浏览器自己拒绝了」 line still stands.
+            # 风控 rather than “这一页没到位”. An unreachable browser-error page leaves
+            # ``_is_walled`` false, so its own “浏览器自己拒绝了” line still stands.
             self._latch_risk_if_walled()
             # Anything else is a page that did not answer: quoting the site is the
             # only way the user can tell a wall from a quiet zero.
@@ -239,7 +239,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 self.note_end('site_end')
         if self._modal_deferred:
             # Said once, and about a count: N cards this run could not open is the difference between
-            # 「采完了」 and 「采到一半遮罩点不开」, and only the first is a site fact.
+            # “采完了” and “采到一半遮罩点不开”, and only the first is a site fact.
             logger.info(t('crawl.dy.modalDeferred', n=self._modal_deferred, total=target_count))
         return self.results()
 
@@ -394,7 +394,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 # be indistinguishable in the console. Measured 2026-09-28: right after an order is chosen
                 # the same address re-mounts its cards from scratch (~2.0 s for 最新发布, 0.1 s for the
                 # default that needs no click), so the walk's first round read 0 and counted itself as a
-                # screen: 「翻了 2 屏」 really meant 「一次换血空档 + 一屏内容」. Wait for the remount once
+                # screen: “翻了 2 屏” really meant “一次换血空档 + 一屏内容”. Wait for the remount once
                 # (bounded, 停止-aware) and do not spend a screen number on it. This waits on *read_ids*
                 # rather than on :meth:`_wait_for_page`: that helper is the search route's patient mount
                 # wait (``Config.PAGE_WAIT_TIMEOUT`` = 300 s, anchored on the search cards), so calling it
@@ -414,10 +414,10 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 break
             if not scroll():
                 # Two different endings, and only one of them is the site's. A list that wrote
-                # 「暂时没有更多了」 is done; a scroll that moved nothing while the marker is absent is
+                # “暂时没有更多了” is done; a scroll that moved nothing while the marker is absent is
                 # our read of the page (a slow batch, a box that is not the list's box). Record
                 # which, so ``author`` can license a site-attested drain but let the executor
-                # convict the un-attested one (U1). Measured 2026-09-28: 最新发布 on 「IU」 ends at 14
+                # convict the un-attested one (U1). Measured 2026-09-28: 最新发布 on “IU” ends at 14
                 # cards *with* the marker, so a 50-row ask there is a named shortfall, not a bug.
                 attested = self._list_says_end()
                 self._list_end_attested = attested
@@ -462,7 +462,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
 
         The captcha this site answers a throttled session with is visible only in the tab
         title — invisible to the shared classifier — so ``open`` never latched ``risk_blocked``
-        and a crawl that died on it used to read as a quiet zero (or a 「页面没到位」). Setting
+        and a crawl that died on it used to read as a quiet zero (or a “页面没到位”). Setting
         ``risk_blocked`` here routes it to ``run.riskControlled``. It is deliberately NOT
         ``login_wall``: re-saving a cookie that is actually fine is the advice this repo refuses.
         """
@@ -485,7 +485,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
     def _wait_for_text(self, marks, timeout: float = 20.0) -> bool:
         """Poll the rendered text for one of *marks* (bounded, clock-free).
 
-        Used by the video page, which answers 「视频数据加载中」 for several seconds
+        Used by the video page, which answers “视频数据加载中” for several seconds
         before the player and its counters exist. A captcha title ends the wait
         early: waiting out a wall costs the whole timeout and changes nothing.
         """
@@ -550,7 +550,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
         # "No element" is not the only way the count can be missing: the label can render
         # as 作品 / 暂无作品, or the digits can sit in an un-rendered child. ``parse_count``
         # answers 0 for any text without a number, and 0 is a *claim* — the empty-grid path
-        # below then files 「作者没发过作品」 as a licensed end. A digit is the admission test.
+        # below then files “作者没发过作品” as a licensed end. A digit is the admission test.
         return parse_count(text) if has_count(text) else -1
 
     def _scroll_profile(self) -> bool:
@@ -568,7 +568,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
         exactly what made a 145-work profile stop at its first screen of 20 (measured live,
         pass 20261001-010707). Only after the whole :data:`SCROLL_WAIT` budget of approaches has
         grown nothing does this say False, and the caller still asks the *site*
-        (:meth:`_list_says_end`) whether 「暂时没有更多了」 is really on screen before calling it
+        (:meth:`_list_says_end`) whether “暂时没有更多了” is really on screen before calling it
         ``site_end`` — a stalled read stays a named shortfall, never a quiet success.
         """
         before = len(set(self._grid_ids()))
@@ -646,13 +646,13 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
         if not self._wait_for_text(('发布时间',), timeout=20.0):
             self.check_login_wall(f'https://www.douyin.com/video/{aweme_id}')
             if self._is_walled() and not self.login_wall:
-                # One row's wall, said as a wall. Measured 2026-09-28: a search of 「旅行攻略」 opened 39
-                # detail pages and 15 came back 「验证码中间页」 — those ids are 图文 posts, whose route the
+                # One row's wall, said as a wall. Measured 2026-09-28: a search of “旅行攻略” opened 39
+                # detail pages and 15 came back “验证码中间页” — those ids are 图文 posts, whose route the
                 # site refuses for this browser while the video pages round it answer perfectly (the card
                 # itself always links ``/video/<id>``; the redirect to ``/note/<id>`` is what gives it away).
-                # 「没有渲染出数据」 was therefore a wrong sentence about a real event, and the wrong sentence
+                # “没有渲染出数据” was therefore a wrong sentence about a real event, and the wrong sentence
                 # invites the wrong repair. It is NOT the session either: latching ``login_wall`` here would
-                # hand the whole node to 「COOKIE 可能过期」 while the next card crawls fine, so the flag is
+                # hand the whole node to “COOKIE 可能过期” while the next card crawls fine, so the flag is
                 # read but not set, and the walk keeps going — this single video is refused, the crawl moves on.
                 logger.warning(t('crawl.dy.detailWalled', i=aweme_id))
                 return None
@@ -670,7 +670,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
             # on ``7664182466315794939`` (a 图文 id): the walk landed on ``/video/7029265830722489634`` — a
             # real, fully-published video that has nothing to do with the search — and every field on that
             # page (文案, 发布时间, the four counters, the author) belonged to somebody else's post. Filed
-            # anyway, the table would claim 「this is the video the list linked」 under a link that opens
+            # anyway, the table would claim "this is the video the list linked" under a link that opens
             # another one; the user watched that happen on screen before any test described it. Read after
             # the wait and before anything is taken from the page, so the address, the settled content and
             # this judgement are all about the same document. Refused by name with both ids: a missing row
@@ -695,7 +695,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
             # Identity is the caption or its date — **not** the author. Measured 2026-09-28 (live cell A1
             # and the probe behind it): a page still hydrating handed over an id, four zero counters and a
             # 作者 read off the recommendation rail, and this guard let it through because ``author`` was
-            # non-empty; the row was then counted as 「当前有效数据: 7 条」 and consumed a slot of the user's
+            # non-empty; the row was then counted as “当前有效数据: 7 条” and consumed a slot of the user's
             # target. An empty row is not data no matter whose name is on the page, and the walk says so
             # rather than the export having to explain the line afterwards.
             logger.warning(t('crawl.dy.detailNoIdentity', i=aweme_id))
@@ -706,7 +706,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
             '作者': author,
             # The creator's totals come from that one block and nowhere else on the page: measured, the
             # words 粉丝/获赞 also appear as bare nav labels with no figure beside them, so a 0 read from
-            # one of those would be a count saying 「这个账号没人关注」 — a wrong number under a plausible
+            # one of those would be a count saying “这个账号没人关注” — a wrong number under a plausible
             # column name, which is the same reason 播放数 was never added. Blank is therefore the answer
             # for "the page did not publish it", and :func:`crawlers.platforms.douyin.rows.author_from_related`
             # fills both when it did.
@@ -732,7 +732,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
           // The creator block, by its own name. A document-wide ``a[href*=\"/user/\"]`` scan is NOT that:
           // measured 2026-09-28 on a page still hydrating, the first bare sec_uid anchor with text on the
           // document belonged to the recommendation rail, so the row was stored with a stranger's shop
-          // account as its 作者 (「青小鲜三门青蟹 海鲜礼包」 on a video by 白水鉴心). The rail is rendered
+          // account as its 作者 (“青小鲜三门青蟹 海鲜礼包” on a video by 白水鉴心). The rail is rendered
           // before the header on a slow page, so the order that saves the caption's owner can also hand
           // over somebody else's name — and a wrong figure under a plausible column is the harm this
           // repo refuses elsewhere (see why there is no 播放数).

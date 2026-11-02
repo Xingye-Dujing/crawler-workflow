@@ -67,8 +67,8 @@ def load_userdict() -> None:
 
     The words LOADED last time are remembered, because ``jieba.load_userdict`` only ever ADDS:
     a term deleted in the panel stayed part of every segmentation until the process restarted,
-    contradicting this module's own promise that 「A write from the panel calls
-    :func:`reload_userdict` so the change is live for the next run without a restart」. Deleted
+    contradicting this module's own promise that "A write from the panel calls
+    :func:`reload_userdict` so the change is live for the next run without a restart". Deleted
     terms are taken back out with ``jieba.del_word`` (which restores the built-in cutting for
     that string) before the new set is loaded, so one lexicon has one live state.
 

@@ -3,7 +3,7 @@
  * Split out of ``workflow.js`` (Stage 8, 2026-10-28) byte for byte. The live console ships only its
  * last 200 lines and is wiped when the next run starts; this reads ONLY the persisted ``run_log``
  * table over ``/api/runs/<id>/log``, so it can never disturb the live console or the page-refresh
- * reattach. Filtering (level / workflow / search) is applied server-side and the 「下载 .txt」 link
+ * reattach. Filtering (level / workflow / search) is applied server-side and the “下载 .txt” link
  * sends the SAME parameters, so what you download is what you see.
  */
 
@@ -13,12 +13,12 @@
    readable long afterwards. This reads ONLY that durable table over /api/runs/<id>/log —
    it never touches execution_state, so it cannot disturb the live console or the
    page-refresh reattach. Filtering (level / workflow / search) is applied server-side and
-   the 「下载 .txt」 link sends the SAME parameters, so what you download is what you see. */
+   the “下载 .txt” link sends the SAME parameters, so what you download is what you see. */
 var runLogViewer = {
     PAGE: 500,
     _runId: '',
     _rows: [],          // ascending (oldest→newest) rows currently shown
-    _oldestSeq: null,   // smallest seq loaded — the 「加载更早」 cursor
+    _oldestSeq: null,   // smallest seq loaded — the “加载更早” cursor
     _hasMore: false,
     _levels: ['', 'info', 'warning', 'error'],
     _workflows: {},     // wf_idx -> wf_name, discovered from loaded rows (so the tab list grows as lines load)

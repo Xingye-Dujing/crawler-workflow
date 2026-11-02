@@ -65,7 +65,7 @@ I18N_USERS = sorted(path for path in JS_DIR.rglob('*.js') if path.parent.name !=
 
 _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*(?:,|\))""")
 # A call that passes variables used to be invisible here: the pattern demanded the closing paren
-# right after the key, so every 「{n}」「{platform}」 toast in the app was unaudited for existence.
+# right after the key, so every "{n}""{platform}" toast in the app was unaudited for existence.
 # ``_VAR_CALL`` is the same audit widened, and ``_SLOT`` feeds the fill check below.
 _VAR_CALL = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*,\s*\{([^{}]*)\}\s*\)""")
 _SLOT = re.compile(r'\{(\w+)\}')
@@ -247,7 +247,7 @@ class TestLlmGateParity:
         source of both, because either half drifting is silent in the other direction:
 
         a name only in the browser is an option that validates, runs, and then fails on
-        「未知操作」 after the user paid for the crawl above it; a name only in the backend
+        “未知操作” after the user paid for the crawl above it; a name only in the backend
         is a capability nobody can reach.
         """
         import ast
@@ -338,7 +338,7 @@ class TestLlmGateParity:
     def test_a_variable_call_fills_every_slot_it_is_handed(self):
         """``I18n.t('chart.replayYear', {year: 2019})`` names its key at the call site and fills
         it through ``I18n.fill``, which replaces what it is given and leaves the rest — so a
-        forgotten slot prints 「{n}」 inside a toast, and a key nobody defined prints the key.
+        forgotten slot prints "{n}" inside a toast, and a key nobody defined prints the key.
 
         Only single-line variable objects are read; a call whose vars span lines is skipped, and
         the count below fails if the pattern has stopped matching anything at all.
@@ -859,7 +859,7 @@ class TestChromeOfThePageItself:
         ``modelType === 'emotion' ? 'emotion' : 'tendency'`` — a second opinion about which
         column holds the labels, held in the one file that has never seen the table. It was
         harmless while two classifiers existed and became a wrong training set the moment a
-        third arrived: 「训练」 on a sentiment node would have fitted itself from the
+        third arrived: “训练” on a sentiment node would have fitted itself from the
         tendency column and reported ``ok``. The server answers from the same table that
         decides what ``mode='ml'`` loads, so the field is simply not sent."""
         js = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
@@ -913,9 +913,9 @@ class TestChromeOfThePageItself:
         the second caller that exists now, so the timer needs an owner rather than a local.
 
         The replay needs the same treatment for the same reason: the page boot and a
-        「立即执行」 fire can both ask before either has installed a timer, and the guard above
+        “立即执行” fire can both ask before either has installed a timer, and the guard above
         only becomes true at the END of the first one. Two overlapping replays fetch the tail
-        twice, open the panel twice and announce 「已重新连接控制台」 twice for one run.
+        twice, open the panel twice and announce “已重新连接控制台” twice for one run.
         """
         wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
         body = wf[wf.index('pollStatus: function') :]

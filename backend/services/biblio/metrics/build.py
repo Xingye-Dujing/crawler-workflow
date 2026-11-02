@@ -128,7 +128,7 @@ def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | No
                 'label': name,
                 'x': 150,
                 # Rounded because this column is also a table cell the workspace and the CSV
-                # show: 「97.36842105263159」 is a layout artifact, not a measurement.
+                # show: "97.36842105263159" is a layout artifact, not a measurement.
                 'y': round(50 + index * (900 / max(1, min(len(left_nodes), 120) - 1)), 2),
             }
         )

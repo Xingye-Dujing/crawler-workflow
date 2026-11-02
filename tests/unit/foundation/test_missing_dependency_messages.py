@@ -2,7 +2,7 @@
 
 These are the answers a user can act on: which Chrome path is wrong, which driver to fetch, which
 MiKTeX package is missing, which font to install, where to unpack the model pack, and what to put in
-「设置 → Ollama 地址」. Each case exists because the alternative was worse — an exception from a child
+“设置 → Ollama 地址”. Each case exists because the alternative was worse — an exception from a child
 process, a figure full of boxes, or a PDF that simply never appeared.
 """
 

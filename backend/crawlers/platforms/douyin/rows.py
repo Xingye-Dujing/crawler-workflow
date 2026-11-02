@@ -3,7 +3,7 @@
 The crawler answers "how do I get this answer" (open, wait, scroll, click the overlay). This module
 answers the other question, "what does this field say", and it is separable because every rule in it
 was measured on a *value*, not on an interaction: which id shape addresses a creator, why a ``0`` on
-the hot board is not the same statement as a blank, why a relative 「3天前」 may be filed from one cell
+the hot board is not the same statement as a blank, why a relative “3天前” may be filed from one cell
 and refused from another.
 
 Keeping it here is also what makes those rules testable without a driver —
@@ -95,7 +95,7 @@ def hot_row(item: dict, rank: int) -> dict | None:
 
 
 def clean_publish(value) -> str:
-    """「发布时间：2026-08-04 16:32」 → 「2026-08-04 16:32」, and a relative word resolved.
+    """“发布时间：2026-08-04 16:32” → “2026-08-04 16:32”, and a relative word resolved.
 
     This cell is labelled 发布时间 by the page itself, so its content IS a time — including
     the relative wording it uses for a very recent video, which ``times.absolute`` turns into

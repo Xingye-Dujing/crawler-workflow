@@ -3,7 +3,7 @@
 Same shape as ``test_live_bilibili_workflow.py``: cells grouped by §3's dimensions, every
 verdict graded on the console's own words, one audit row per crawl. The keyword-search mode
 was removed (its feed is shallow and lazily throttled, measured at 26 then 16 distinct ids for
-two keywords, neither reaching the site's own 「暂时没有更多了」), so this tier covers the three
+two keywords, neither reaching the site's own “暂时没有更多了”), so this tier covers the three
 douyin modes that page differently and work — **author**, **热榜**, **评论**.
 
 What is platform-specific here is the **cost model**: author mode is ``collects='modal_per_row'``
@@ -64,7 +64,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: anything.
 DOUYIN_LEGIT_EXITS = harness.SHARED_EXITS + (
     'crawl.dy.wall',  # 验证码中间页 met mid-walk: the site's own answer, named by douyin's title check
-    'crawl.dy.noMore',  # the list wrote its own 「暂时没有更多了」: the supply ended, said with its numbers
+    'crawl.dy.noMore',  # the list wrote its own “暂时没有更多了”: the supply ended, said with its numbers
     'crawl.dy.authorNoWorks',  # the profile publishes 0 posts
     'crawl.dy.authorNoCards',  # the grid published nothing at all
     'crawl.dy.hotCapped',  # the board is the site's size, not our ceiling
@@ -190,14 +190,14 @@ def _vocabulary(mode: str, headless: bool) -> tuple[tuple, tuple]:
                 # its cap only when the whole thread was collected — short-vs-supply prints ``comment.dyShort``
                 # beside it — so this line names a full read and can never whitewash a silent one. Measured
                 # live (20261001-005837): a 23-comment video under a comment_limit of 50 filled all 23 and
-                # closed with 「评论采集完成：1 个链接（正常 1、拦截 0、失效 0），共 23 条评论」.
+                # closed with “评论采集完成：1 个链接（正常 1、拦截 0、失效 0），共 23 条评论”.
                 'comment.dyNone',  # the video reports N comments and no list opened
                 'comment.dyNoPanel',  # the panel never rendered
                 'comment.dyGone',  # the address was answered with a different video: dead, not walled
                 'comment.dyShort',  # the panel ended short of the video's own count, with both numbers said
                 'comment.status.blocked',  # the panel met a wall
                 'comment.status.dead',  # the link is unreadable
-                # 「评论已关闭」 is bilibili/X/YouTube's sentence — no douyin path prints it, and a dead
+                # “评论已关闭” is bilibili/X/YouTube's sentence — no douyin path prints it, and a dead
                 # entry in a closed whitelist teaches the next reader that this case exists.
             ),
             (),
@@ -350,7 +350,7 @@ def test_b2_a_display_name_is_refused_because_it_addresses_nobody(client, app_mo
 
     Douyin addresses a creator by an opaque ``sec_uid`` only, and ``/user/<numeric>`` is not a route:
     guessing would open *somebody's* profile and report their posts as the ones the user asked for —
-    the douyin shape of 「不替用户挑一个看起来像的」. Refused before the browser is pointed anywhere.
+    the douyin shape of “不替用户挑一个看起来像的”. Refused before the browser is pointed anywhere.
     """
     harness.real_jar(monkeypatch)
     with LiveRun(
@@ -436,7 +436,7 @@ def test_d1_the_comment_panel_is_scrolled_and_every_row_is_a_real_comment(client
 
     ``a_bogus`` is why this mode is DOM-only (it cannot be fetched like weibo's ``buildComments``), so
     what the cell can prove is the walk: rows carry the 11 columns, 楼层 runs across the whole panel
-    rather than restarting per screen, 「展开N条回复」 threads are OPENED with a real click and their
+    rather than restarting per screen, “展开N条回复” threads are OPENED with a real click and their
     replies are filed as their own rows under ``父楼层``, and a parent's 子回复数 is the number of reply
     rows actually landed (falling back to the site's declared N when a thread could not be opened).
 
@@ -476,7 +476,7 @@ def test_d1_the_comment_panel_is_scrolled_and_every_row_is_a_real_comment(client
 def test_d2_a_panel_that_refused_is_named_per_link(client, app_module, monkeypatch):
     """D2 — two links where one is garbage: the dead one is named, the good one still crawls.
 
-    A per-article status is the difference between 「这篇没有评论」 and 「这个链接读不出来」, and a batch
+    A per-article status is the difference between “这篇没有评论” and “这个链接读不出来”, and a batch
     that swallows the second as the first is how a user loses half his rows without seeing it. The
     garbage address is deliberately well-formed enough to reach the panel (a bad id, not a typo), so
     what is under test is the *reporting*, not the URL parser.
@@ -508,8 +508,8 @@ def test_d2_a_panel_that_refused_is_named_per_link(client, app_module, monkeypat
         assert len(rows) == 8, f'the readable link filed {len(rows)} of its 8-row ask: {run.rec.lines[-8:]!r}'
         assert {str(row.get('文章URL') or '') for row in rows} == {COMMENT_URL}, rows[:2]
         # The half that makes this cell worth its crawling cost: an unreadable link must not put the
-        # session on trial. Measured before the fix, this same shape printed 「登录态疑似失效：COOKIE
-        # 可能过期」 for the whole node and settled it partial — in the run that had just delivered eight
+        # session on trial. Measured before the fix, this same shape printed “登录态疑似失效：COOKIE
+        # 可能过期” for the whole node and settled it partial — in the run that had just delivered eight
         # comments from the other link. A dead link costs its own row and nothing else.
         assert 'comment.status.dead' in named or 'comment.dyGone' in named, (
             f'the gone link was not reported as dead, so the batch will blame the cookie: {named} '
@@ -645,7 +645,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     which nodes are switched on (see below); no ask, keyword or link was touched.
 
     The leg COUNT is read out of the file, never hard-coded: he keeps editing this canvas, and a pinned
-    「three」 would go red on a legitimate edit while asserting nothing about the shapes this case actually
+    "three" would go red on a legitimate edit while asserting nothing about the shapes this case actually
     previews — the author overlay and the comment thread are graded by name, so the guard is that a leg of
     each of those modes is present.
 
@@ -700,7 +700,7 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
         )
         assert not silent, f'components under target with no honest reason named: {silent}'
         accept.assert_canvas_exports(found, accept.new_exports(exported_before), records)
-        # The rows are the shape the canvas mode promises (AGENTS' 「并行是一条记录，串行一 workflow 一行」).
+        # The rows are the shape the canvas mode promises (AGENTS' “并行是一条记录，串行一 workflow 一行”).
         # This canvas is 串行, so each leg opened its OWN row named by its own component; reading the mode
         # off the row (rather than asserting a parallel wf_count) is what lets a 串行 file pass on a run
         # whose three legs all graded honestly — a pinned ``wf_count == 3`` would redden it at the report.

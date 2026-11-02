@@ -1,6 +1,6 @@
 """``analyzers/sentiment.py`` — the polarity operation, four ways.
 
-The two operations beside this one answer 「哪种情绪」 and 「什么传播倾向」. SnowNLP and a
+The two operations beside this one answer “哪种情绪” and “什么传播倾向”. SnowNLP and a
 Chinese sentiment BERT answer one simpler question — is this text positive — so they got
 their own operation and their own three-value column instead of being squeezed into a five
 or six label set they cannot produce. What is pinned here is exactly that risk: a mode
@@ -165,7 +165,7 @@ class TestSnowNLPMode:
     def test_a_blank_row_stays_blank_rather_than_becoming_neutral(self, fake_snownlp):
         rows = SentimentAnalyzer(mode='snownlp').analyze_dataframe(frame(), '正文').to_dict('records')
         assert rows[3]['sentiment'] == '' and rows[3]['score'] is None, (
-            '「没判断」 and 「判断为中性」 are different claims about the text'
+            '“没判断” and “判断为中性” are different claims about the text'
         )
 
     def test_one_failing_row_does_not_end_the_column(self, monkeypatch):

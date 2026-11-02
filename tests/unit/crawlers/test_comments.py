@@ -96,7 +96,7 @@ class FakeDriver:
             if not self.panel_pages:
                 return []
             # The last page repeats: a panel that stopped changing is what the product's own
-            # dedupe and 「更多」 check have to notice, so the supply must not run out under them.
+            # dedupe and “更多” check have to notice, so the supply must not run out under them.
             return self.panel_pages.pop(0) if len(self.panel_pages) > 1 else self.panel_pages[0]
 
     def execute_async_script(self, script, *args):
@@ -309,7 +309,7 @@ class TestWeiboAdapter:
         Measured 2026-09-28 on a live post: the search card, ``statuses/show.comments_count`` and the
         page's ``total_number`` all said 30, the cursor walk returned 22, and the eight missing floors
         were its nested replies. The walk ended on ``max_id=0`` — a clean exhaustion — so only the
-        denominator can tell 「这些就是全部」 from 「还差 8 条」, and the user must not have to notice.
+        denominator can tell “这些就是全部” from “还差 8 条”, and the user must not have to notice.
         """
         said = []
         page1 = json.dumps({'data': [{'id': f'p1-{i}', 'text': 'x'} for i in range(20)], 'max_id': 99})
@@ -350,7 +350,7 @@ class TestWeiboAdapter:
         评论上限 2 on a thread that reports 3 comments and hands all 3 over on its first (and only) page:
         the loop breaks on ``max_id == 0`` before it ever reaches the limit branch, so ``ended`` stays
         ``'cursor'`` — and the old comparison was made against the **truncated** table, which produced
-        「站点写着 3 条，本表只有 2 条 —— 差额是楼中楼」. That sentence is about the site, printed because the
+        “站点写着 3 条，本表只有 2 条 —— 差额是楼中楼”. That sentence is about the site, printed because the
         user typed a smaller number, which is the exact opposite of the branch above it. The measurement is
         against what the walk *received*; if that already equals the thread's number, nothing is missing.
         """
@@ -483,7 +483,7 @@ class TestXhsAdapter:
         assert i18n.t('comment.xhsPanelCapped', url='https://www.xiaohongshu.com/explore/x', rows=6, rounds=3) in said
 
     def test_a_panel_that_empties_itself_before_the_budget_is_not_reported_as_capped(self):
-        """The two-sided half: a thread the SITE ran out of must NOT gain the capped line, or 「capped」
+        """The two-sided half: a thread the SITE ran out of must NOT gain the capped line, or "capped"
         stops meaning anything."""
         said = []
         driver = _GrowingXhsDriver(per_round=2, total=4)  # 2 rounds exhausts it, budget is 3
@@ -572,7 +572,7 @@ class TestZhihuAdapter:
         assert i18n.t('comment.zhihuNoAuthor', n=1, total=2) in said
 
     def test_the_panel_is_pumped_and_the_walk_follows_it(self):
-        """The regression the user named: 知乎 has no 「更多」 button, so button-hunting stops at 12.
+        """The regression the user named: 知乎 has no “更多” button, so button-hunting stops at 12.
 
         Measured (``backend/test_zhihu_comment_structure.py``): one answer declares 261 comments and
         the panel holds 12 until its OWN box is scrolled (then 36, and 41 after the reply threads).
@@ -591,7 +591,7 @@ class TestZhihuAdapter:
         assert any('scrollTop' in script for script in driver.scripts), 'the container must be scrolled'
 
     def test_nested_replies_are_opened_and_keep_their_parent(self):
-        """A reply does not exist in the DOM until 「展开其中 N 条回复」 is clicked. Not clicking it
+        """A reply does not exist in the DOM until “展开其中 N 条回复” is clicked. Not clicking it
         is 漏采 by construction, and losing which comment it belongs to makes the thread unreadable
         even when the text was taken."""
         opener = El('展开其中 2 条回复')
@@ -613,8 +613,8 @@ class TestZhihuAdapter:
         assert [row['父楼层'] for row in rows] == ['', 1], rows
 
     def test_a_shortfall_against_the_pages_own_number_is_said(self):
-        """The button says 261. If the walk files 3, the console must hold both numbers — 「面板就这些」
-        and 「我们只走到这些」 cannot be allowed to look alike in the export."""
+        """The button says 261. If the walk files 3, the console must hold both numbers — “面板就这些”
+        and “我们只走到这些” cannot be allowed to look alike in the export."""
         said = []
         driver = FakeDriver(
             body='正常',
@@ -804,7 +804,7 @@ class TestBilibiliAdapter:
         """The other half of the U54 line: rows == denominator is a real end, so NO shortfall is claimed.
 
         Without the ``len(rows) < declared`` guard this line would fire on every short-but-honest thread and
-        blame the user's own small number — the weibo 「收到的等于站点报的数就不说」 rule.
+        blame the user's own small number — the weibo “收到的等于站点报的数就不说” rule.
         """
         url = 'https://www.bilibili.com/video/BV1atCRYsE7x/'
         said = []

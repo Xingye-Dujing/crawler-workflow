@@ -1,4 +1,4 @@
-"""NoteExpress ``.net`` export — the format CNKI labels 「NoteExpress 下载」.
+"""NoteExpress ``.net`` export — the format CNKI labels “NoteExpress 下载”.
 
 Tagged like EndNote's ``.enw`` but with brace-quoted keys, one per line:
 

@@ -49,7 +49,7 @@ UNDER_TARGET = ''
 
 #: The ONLY ends that license a shortfall — each a fact the SITE attested, never our loop's
 #: summary of itself. Every member has an evidentiary bar (what the handler must have seen):
-#:   ``'site_end'`` — the page wrote its own end-of-list marker (e.g. 抖音「暂时没有更多了」;
+#:   ``'site_end'`` — the page wrote its own end-of-list marker (e.g. 抖音“暂时没有更多了”;
 #:                    a server cursor that returned "finished", not a round that added nothing).
 #:   ``'capped'``   — the site publishes exactly ONE list and this answer is its whole size
 #:                    (a hot board's fixed length), so more asks would only re-fetch it.
@@ -219,7 +219,7 @@ class Crawler(ABC):
         # document (``chrome-error://``). Neither of the two flags above: the site
         # never saw the request, so its session is not in question and nothing about
         # waiting would help. Read by the cookie pre-flight (an error page must never
-        # be cached as 「Cookie 可用」) and by the walks that would otherwise read the
+        # be cached as “Cookie 可用”) and by the walks that would otherwise read the
         # blank as "no results".
         self.unreachable = False
         #: Why this crawl stopped short, for the executor's under-target judge (U1). THREE
@@ -933,7 +933,7 @@ class Crawler(ABC):
         """The default "something arrived": text the *site* wrote, not text on screen.
 
         The distinction is why this is not simply "the body is non-empty" — measured, a
-        Chrome error document is full of text (「无法访问此网站」 and its own
+        Chrome error document is full of text (“无法访问此网站” and its own
         ``net::ERR_…`` token), and a wait that accepted that as content would report a
         network failure as a page that loaded.
         """

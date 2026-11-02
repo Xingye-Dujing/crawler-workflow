@@ -1,7 +1,7 @@
 """Ask each platform whether the session we hold still works — *before* the run.
 
-The Cookie panel used to answer this question by asking the user: 「COOKIE 是否已长
-时间未更新？」 on every run, which is a person guessing from memory about the one
+The Cookie panel used to answer this question by asking the user: “COOKIE 是否已长
+时间未更新？” on every run, which is a person guessing from memory about the one
 thing a browser can check for them. This module checks instead, so the panel can
 refuse a run that would die at a login wall an hour deep, and stay silent about a
 run that will not.
@@ -55,7 +55,7 @@ NO_LOGIN = 'nologin'
 NOT_CRAWLABLE = 'notcrawlable'
 
 #: The verdicts a run may not start on. Kept as one tuple because the endpoint and the
-#: browser both have to agree, and 「过期就不得执行」 is the user's decision, not a
+#: browser both have to agree, and “过期就不得执行” is the user's decision, not a
 #: detail to be rediscovered in two places.
 BLOCKING = (EXPIRED, NO_COOKIE)
 
@@ -93,13 +93,13 @@ def _cache_key(platform: str, account: str = '') -> tuple:
 
     The scope comes first: two accounts can hold *different* sessions for the same platform and
     the same account label, and a verdict is about one of those files. Keying by platform alone
-    let one account's 「已失效」 refuse the other's healthy run.
+    let one account's “已失效” refuse the other's healthy run.
 
     ``entry_key``/``entry_of`` above already fold ``default`` onto the platform's own login,
     and :func:`entry_key`'s docstring names the cost of getting this wrong: two spellings of
     one login landing in two cache slots is how a probe runs a browser twice and answers
-    「没有登录」 from the slot nobody filled. The panel's 验证 wrote the folded name while the
-    preflight at Run read the blank one, so the 「已失效」 the user had just measured never
+    “没有登录” from the slot nobody filled. The panel's 验证 wrote the folded name while the
+    preflight at Run read the blank one, so the “已失效” the user had just measured never
     blocked the run.
     """
     return account_context.scope_key(), str(platform), CookieManager.path_segment(account)
@@ -141,7 +141,7 @@ def classify_probe(facts: dict) -> str:
 
     ``unreachable`` is checked before even ``login_wall``, and this is the one place its
     cost is visible: verdicts are *cached*. A browser that wrote its own error page never
-    showed the site this session, so answering 「Cookie 可用」 here would park a claim about
+    showed the site this session, so answering “Cookie 可用” here would park a claim about
     a cookie in the path of every run that starts — with no probe behind it and no way for
     the user to see that nothing was tested.
     """
@@ -158,8 +158,8 @@ def record(platform: str, facts: dict, account: str = '') -> dict:
     """Cache a verdict somebody else already measured and reported.
 
     The panel's 验证 Cookie button asks this same question of the same browser, so a
-    user who just watched it answer 「已失效」 should not pay for a second probe to be
-    told so again — and a stale 「可用」 must not survive the check that contradicted it.
+    user who just watched it answer “已失效” should not pay for a second probe to be
+    told so again — and a stale “可用” must not survive the check that contradicted it.
     """
     account = CookieManager.key(account)
     verdict = _verdict(str(platform), classify_probe(facts), probed=True, account=account)
@@ -168,7 +168,7 @@ def record(platform: str, facts: dict, account: str = '') -> dict:
 
 
 #: One sentence per state, from the backend catalogue. An unmapped state falls back to
-#: the 「无法核对」 wording rather than raising: a verdict the browser cannot name must
+#: the “无法核对” wording rather than raising: a verdict the browser cannot name must
 #: not be the reason a run fails to start.
 _REASONS = {
     VALID: 'cookie.pre.valid',
@@ -194,7 +194,7 @@ def describe(verdict: dict) -> str:
     """
     platform = str(verdict.get('platform') or '')
     text = t(str(verdict.get('why_key') or _reason_key(str(verdict.get('state') or ''))), platform=platform)
-    # A named account is part of the fact: 「知乎 Cookie 已失效」 sent the user to refresh
+    # A named account is part of the fact: “知乎 Cookie 已失效” sent the user to refresh
     # the login that was never the dead one when the node had chosen a second account.
     account = str(verdict.get('account') or '')
     if account:
@@ -270,7 +270,7 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
     Normally a single page load; a cold launch whose first navigation never committed
     is re-driven a bounded few times by :meth:`Crawler.open` before it judges, so a
     parked ``chrome://`` tab is not cached as a false wall. Whatever does not fit the
-    deadline answers 「无法核对」, which never blocks a run.
+    deadline answers “无法核对”, which never blocks a run.
 
     Isolated as a function so the whole of ``check`` below — the cache, the deadline,
     the parallelism — is testable without a browser, while the crawler facts still
@@ -326,13 +326,13 @@ def probe(
     """The verdict for one (platform, account) of one backend, from cache when a recent one exists.
 
     The account is part of the question, not decoration: a second login that has
-    never been used answers 「no saved session」 while the first one is valid, and
+    never been used answers "no saved session" while the first one is valid, and
     merging the two verdicts under the platform alone would refuse runs over a
     session the node is not even using.
 
     ``backend`` routes the question, and it is the whole reason the gate can be honest about the
     second crawl backend: a node that crawls through CatBus has no Selenium cookie to die, and
-    「Cookie 已失效」 for it is advice about a session it will never read.
+    “Cookie 已失效” for it is advice about a session it will never read.
     """
     platform = str(platform or '')
     account = str(account or '').strip()
@@ -383,12 +383,12 @@ def _probe_catbus(platform: str, account: str = '') -> dict:
     reword.
 
     Not cached, unlike a browser verdict: the answer costs one short-lived Node process, and a
-    five-minute-old 「没登录」 is exactly the stale verdict that would block a run the user just
+    five-minute-old “没登录” is exactly the stale verdict that would block a run the user just
     fixed by logging in from a terminal.
     """
     answer = catbus.preflight(platform, account)
     if not answer.get('available') or str(answer.get('verdict') or '') == 'unverifiable':
-        # 「问不到」 is not 「没登录」: an unreachable question must not block the run (the same rule
+        # “问不到” is not “没登录”: an unreachable question must not block the run (the same rule
         # the timeout and captcha branches of the browser probe follow). An adapter that answered with
         # something unreadable is the same case, and the bridge says so with this verdict word.
         return _verdict(platform, UNKNOWN, detail=str(answer.get('message') or ''), account=account)
@@ -415,7 +415,7 @@ def entry_key(platform: str, account: str = '', backend: str = '') -> str:
 
     ``default`` is that same first account's NAME, so it keys identically: two spellings of
     one login landing in two cache slots is how a probe runs a browser twice and answers
-    「没有登录」 from the slot nobody filled.
+    “没有登录” from the slot nobody filled.
 
     The Selenium spelling is unchanged in every case, including with an account: the two backends
     keep separate logins under one name (a CatBus ``default`` and a cookie file ``default`` are two
@@ -493,7 +493,7 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
         # Each probe gets its OWN budget, measured from the moment we start waiting on it.
         # One shared deadline plus a capped pool starved every wave after the first: with more
         # platforms than ``COOKIE_PREFLIGHT_MAX_PARALLEL``, the later futures had not run yet when
-        # their turn came, ``remaining`` was already ~0, and they were answered UNKNOWN (「无法核对」,
+        # their turn came, ``remaining`` was already ~0, and they were answered UNKNOWN (“无法核对”,
         # which by design does NOT block a run) and then cancelled — so an expired cookie slipped
         # past the gate silently on exactly those platforms. Waiting the full timeout per future
         # still bounds the whole loop (a queued probe is awaited, so its wait includes its queue).

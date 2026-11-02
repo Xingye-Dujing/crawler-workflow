@@ -387,7 +387,7 @@ class _Call:
     spawn_error: str = ''
     #: The budget THIS call was given. The refusal has to quote the number it actually waited,
     #: not the 900 s default: a 30 s ``--version`` probe that timed out used to be reported as
-    #  「超时 900 秒」, which sends the user to look at the network instead of at Node.
+    #  “超时 900 秒”, which sends the user to look at the network instead of at Node.
     budget: float = 0.0
 
 
@@ -558,7 +558,7 @@ def preflight(platform: str, account: str = '') -> dict:
 
     The adapter's own verdict object is returned when it can be read; every other outcome is
     translated into the same shape with ``logged_in`` false and a message that names what is missing,
-    because a run gate that cannot tell 「not logged in」 from 「cannot ask」 must not block.
+    because a run gate that cannot tell "not logged in" from "cannot ask" must not block.
     """
     info = probe()
     if not info.available:

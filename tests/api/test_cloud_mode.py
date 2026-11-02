@@ -1,7 +1,7 @@
 """What ``python app.py cloud`` changes on the server side.
 
 The flag is the server's fact, not the page's: hiding the Ollama controls and the
-「无头」 switch is the visible half of a deployment that has no display and no local
+“无头” switch is the visible half of a deployment that has no display and no local
 daemon, and every request behind a hidden control still has to be answered here. Each
 case below therefore checks a refusal that NAMES what it refused — the failure mode this
 repo keeps paying for is a run that quietly does the other thing and reports success.
@@ -154,7 +154,7 @@ class TestNoLocalModelOnASharedServer:
         assert response.status_code == 200, response.get_json()
 
     def test_the_local_model_list_refuses_instead_of_dialing_a_port(self, client, cloud):
-        """A 502「connection refused」 reads as a broken button; this host has no button."""
+        """A 502"connection refused" reads as a broken button; this host has no button."""
         response = client.get('/api/llm/ollama/models')
         assert response.status_code == 400
         assert 'ollama' in response.get_json()['error']
@@ -166,7 +166,7 @@ class TestNoLocalModelOnASharedServer:
     def test_a_report_still_ships_and_says_which_paragraph_it_skipped(self, client, cloud, app_module, monkeypatch):
         """The conclusion is a note inside the deliverable, not the deliverable.
 
-        The existing failure path logs 「结论生成失败」 and carries on; on this host the
+        The existing failure path logs “结论生成失败” and carries on; on this host the
         honest line names the transport instead, and a connection error to a port nothing
         listens on must never be what the user reads.
         """
@@ -230,7 +230,7 @@ class TestEverythingRunsHeadless:
         """The chip on the record has to describe the run that happened.
 
         ``headless`` arrives from the canvas's own settings, so without this a cloud boot
-        would file 「窗口」 for a crawl that could only have run without one — and the
+        would file “窗口” for a crawl that could only have run without one — and the
         resume banner matches on that record.
         """
         from run_wait import run_finished
@@ -278,7 +278,7 @@ class TestEverythingRunsHeadless:
 
 
 class TestThePristineTemplateOnACloudBoot:
-    """Where a device directory comes from when nobody can press 「浏览器生成」.
+    """Where a device directory comes from when nobody can press “浏览器生成”.
 
     The launcher is the browser seam, so no Chrome is started here; the real one is the
     device tier's case (``tests/integration/test_profile_template.py``).
@@ -400,7 +400,7 @@ class TestThePristineTemplateOnACloudBoot:
         """The row is the panel's only way to see this, and the sentence has to be true.
 
         ``build_template`` destroys and rebuilds a dirty directory on its own, so nothing
-        breaks either way — what would break is the panel claiming 「干净」 about a
+        breaks either way — what would break is the panel claiming “干净” about a
         directory that holds somebody's login while it waits to be rebuilt.
         """
         import sqlite3

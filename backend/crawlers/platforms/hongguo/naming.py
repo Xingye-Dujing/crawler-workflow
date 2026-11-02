@@ -12,10 +12,10 @@ corrupted table, not a smaller one.
 import re
 
 #: A card name may legitimately differ from the requested one by a season suffix the
-#: other side does not print (「剧名」/「剧名 第二季」) — but never by containment in the
+#: other side does not print (“剧名”/“剧名 第二季”) — but never by containment in the
 #: middle, which is what put another drama's comments into this table.
 _MIN_TITLE_PREFIX = 4
-_TITLE_NOISE = re.compile(r'[\s《》「」『』【】()（）·、,，.。!！?？:：\-—]+')
+_TITLE_NOISE = re.compile(r'[\s《》“”‘’【】()（）·、,，.。!！?？:：\-—]+')
 #: A comment's OWN action button is literally ``回复`` (or ``回复 3``); it opens the
 #: composer and steals the keyboard focus the drawer scroll needs. Measured on a real
 #: run 2026-10-19: the old needle '回复' clicked one of those, the wheel then paged
@@ -26,7 +26,7 @@ _EXPAND_WORDS = ('展开', '查看', '更多')
 
 
 def is_expand_control(name) -> bool:
-    """Is this drawer control the 「展开 N 条回复」 link (and NOT a comment's 回复 button)?
+    """Is this drawer control the “展开 N 条回复” link (and NOT a comment's 回复 button)?
 
     Pure, and pinned by a table test, because the rule cost a whole episode's comments:
     a name must speak of 回复 AND promise MORE of them. ``回复``/``回复 3`` refuse, and so

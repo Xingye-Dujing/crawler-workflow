@@ -258,9 +258,9 @@ def local_zone_name() -> str:
     """What this machine calls its own zone, with its offset — the default for a task naming none.
 
     ``TZ`` first, because that is the honest answer on a cloud box and the one an operator sets
-    (a UTC box and a Beijing box need different answers for 「每天 08:00」); then whatever the OS
+    (a UTC box and a Beijing box need different answers for “每天 08:00”); then whatever the OS
     reports. The offset is appended because an abbreviation is not a location: ``CST`` is both
-    China and US Central, and the panel prints this line as the answer to 「留空 = 服务器本地」.
+    China and US Central, and the panel prints this line as the answer to “留空 = 服务器本地”.
     """
     name = str(os.environ.get('TZ') or '').strip() or (datetime.now().astimezone().tzname() or 'UTC')
     offset = datetime.now().astimezone().strftime('%z')

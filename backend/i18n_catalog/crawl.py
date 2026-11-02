@@ -40,7 +40,7 @@ ZH = {
     ),
     'crawl.chromeMissing': (
         '本机没有可用的 Chrome，采集打不开浏览器。安装 Chrome，'
-        '或在「设置 → 浏览器路径」里指向它（本系统的可执行名：{browser}）'
+        '或在“设置 → 浏览器路径”里指向它（本系统的可执行名：{browser}）'
     ),
     'crawl.cnki.emptyRecord': '[知网] 导出页有一条 RefWorks 记录没有题名，按导入器规则跳过',
     'crawl.cnki.downloadFailed': '[知网] 导出题录文件没有下载成功：{err}',
@@ -50,8 +50,8 @@ ZH = {
     'crawl.cnki.finished': '[知网] 检索结束，共导出 {n} 篇（目标 {total} 篇）',
     'crawl.cnki.loginNeeded': '[知网] 导出前需要登录：请在 Cookie 面板保存知网登录（或机构 IP 权限）后再试',
     'crawl.cnki.noExportIds': '[知网] 结果行没有导出键（页面结构可能变了）：拒绝交空表，请先更新选择器',
-    'crawl.cnki.noExportButton': '[知网] 导出页找不到「导出题录文件」按钮（{err}）',
-    'crawl.cnki.noExportMenu': '[知网] 结果页找不到「导出文献」菜单（{err}）：页面结构可能变了',
+    'crawl.cnki.noExportButton': '[知网] 导出页找不到“导出题录文件”按钮（{err}）',
+    'crawl.cnki.noExportMenu': '[知网] 结果页找不到“导出文献”菜单（{err}）：页面结构可能变了',
     'crawl.cnki.noExportWindow': '[知网] 点了导出但没有打开导出窗口（可能被浏览器拦截，或会话不被接受）',
     'crawl.cnki.noPage': '[知网] 检索结果页没有出现（页面可能仍在加载、被拦截，或站点改了布局）',
     'crawl.cnki.noResults': '[知网] 检索 "{kw}" 没有结果（站点自己写 0 条）',
@@ -62,7 +62,7 @@ ZH = {
     'crawl.cnki.start': '[知网] 开始检索 "{kw}"，目标 {n} 篇文献',
     'crawl.cnki.target_reached': '[知网] 已达到目标 {n} 篇，停止翻页',
     'crawl.cnki.verifyRequired': (
-        '[知网] 站点要求安全验证（滑块）：请在 Cookie 面板「浏览器生成」里完成验证并保存登录，然后重试'
+        '[知网] 站点要求安全验证（滑块）：请在 Cookie 面板“浏览器生成”里完成验证并保存登录，然后重试'
     ),
     'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
     # ── 爬虫内部的调试信息 ────────────────────────────────────
@@ -88,7 +88,7 @@ ZH = {
     ),
     'crawl.disguiseUnreadable': (
         '无头浏览器的伪装没有生效：读不到自己的 User-Agent（{err}）。'
-        '这次将以「裸无头」继续，部分站点会给出一张没有内容的空页'
+        '这次将以“裸无头”继续，部分站点会给出一张没有内容的空页'
     ),
     # Said by a session whose browser process was already reaped, so it must not claim a person did
     # anything: the same object answers a cookie window that was closed after its grace ran out.
@@ -103,7 +103,7 @@ ZH = {
     'crawl.dy.authorEmpty': '[抖音作者] 没有给出作者（粘贴 douyin.com/user/… 链接或那串 sec_uid）：{author}',
     'crawl.dy.authorNoCards': (
         '[抖音作者] 该作者主页始终没有渲染出作品列表，本次未采集。页面自报：{page}；地址：{url}。'
-        '主页自报作品数 {works} 条，所以这是被拦截或页面出错，不是「这个人没发过作品」'
+        '主页自报作品数 {works} 条，所以这是被拦截或页面出错，不是“这个人没发过作品”'
     ),
     'crawl.dy.authorNoWorks': '[抖音作者] 该作者的主页自报作品数为 0，本就没有可采集的内容',
     'crawl.dy.authorNotMounted': (
@@ -124,20 +124,20 @@ ZH = {
         ' —— 这一行不入库：宁可少一行，也不把别人的文案和计数挂在这个链接下'
     ),
     'crawl.dy.detailWalled': (
-        '[抖音] 视频 {i} 这一条被站点挡在「验证码中间页」（图文页在这台设备上就是这样，视频页不受影响）'
-        '，已跳过该行：它不是「站点没内容」，也不是登录态失效'
+        '[抖音] 视频 {i} 这一条被站点挡在“验证码中间页”（图文页在这台设备上就是这样，视频页不受影响）'
+        '，已跳过该行：它不是“站点没内容”，也不是登录态失效'
     ),
     'crawl.dy.hotCapped': '[抖音热榜] 榜单本次只有 {board} 条，已按实际条数收尾（榜单大小由网站决定）',
     'crawl.dy.hotDone': '[抖音热榜] 榜单采集结束，共 {n} 条（目标 {total} 条）',
     'crawl.dy.hotRefused': '[抖音热榜] 榜单接口没有给出榜单（返回 {answer}）',
     'crawl.dy.hotStart': '[抖音热榜] 开始采集热榜，目标 {n} 条（榜单一次给全，不逐条打开）',
     'crawl.dy.hotTarget': '[抖音热榜] 已采集到目标 {n} 条，不再读取榜单',
-    'crawl.dy.hotWall': '[抖音热榜] 打开榜单页时被挡在「验证码中间页」，本次未采集：请先在 Cookie 面板登录并保存抖音',
+    'crawl.dy.hotWall': '[抖音热榜] 打开榜单页时被挡在“验证码中间页”，本次未采集：请先在 Cookie 面板登录并保存抖音',
     'crawl.dy.modalDeferred': (
-        '[抖音] 有 {n} 条作品卡片的遮罩打不开、本轮跳过：这不是「没有更多了」，是读不到，稍后可重试'
+        '[抖音] 有 {n} 条作品卡片的遮罩打不开、本轮跳过：这不是“没有更多了”，是读不到，稍后可重试'
     ),
     'crawl.dy.noMore': (
-        '[抖音] 列表自己写了「暂时没有更多了」：翻了 {screens} 屏，最后一屏 {cards} 张卡片，'
+        '[抖音] 列表自己写了“暂时没有更多了”：翻了 {screens} 屏，最后一屏 {cards} 张卡片，'
         '这一轮的供给就到这儿（不是滚动没生效）'
     ),
     # The one refusal on this page that needs no waiting and no probing: the document is
@@ -147,8 +147,8 @@ ZH = {
     'crawl.dy.round': '[抖音] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
     'crawl.dy.target_reached': '[抖音] 已达到目标数量 {n} 条，停止',
     'crawl.dy.wall': (
-        '[抖音] 浏览器被挡在「验证码中间页」：抖音网页版对无头浏览器与频繁请求都会弹验证。'
-        '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
+        '[抖音] 浏览器被挡在“验证码中间页”：抖音网页版对无头浏览器与频繁请求都会弹验证。'
+        '请确认已在 Cookie 面板用“可见窗口”登录并保存，稍后再重试本关键词'
     ),
     'crawl.hg.boardAiDrama': 'AI剧热播榜',
     'crawl.hg.boardComicDrama': '漫剧热播榜',
@@ -164,7 +164,7 @@ ZH = {
     # A drama the client would not open steps aside and is named; only a run that never
     # reached what the site counted is a failure, and the node says so at the end.
     'crawl.hg.cmt.dramaSkipped': (
-        '[红果短剧] 界面树始终没有唤醒，本次跳过这部剧：{title}（点一下播放器窗口后「继续」可补采）'
+        '[红果短剧] 界面树始终没有唤醒，本次跳过这部剧：{title}（点一下播放器窗口后“继续”可补采）'
     ),
     'crawl.hg.cmt.episode': '[红果短剧] 第 {n}/{total} 集：{have} 条评论（站点报 {site_total} 条）',
     'crawl.hg.cmt.episodeShort': (
@@ -241,18 +241,18 @@ ZH = {
         '[红果短剧] 等待 {seconds} 秒后这一页仍没有榜单数据（页面上的数据键：{keys}）：{url}'
         '——可能是站点改版或网络没有把这一页送到'
     ),
-    'crawl.hg.noDetail': '[红果短剧] 该平台没有「按链接采集」的模式，也还没有测量过详情页读取（{url}）',
+    'crawl.hg.noDetail': '[红果短剧] 该平台没有“按链接采集”的模式，也还没有测量过详情页读取（{url}）',
     'crawl.hg.noFresh': '[红果短剧] 连续两页都没有新条目（第 {page} 页），翻页停住：按未采满处理',
     'crawl.hg.noPageRefused': '[红果短剧] 浏览器自己拒绝了这一页，因此不可能有榜单数据：{url}{detail}',
     'crawl.hg.page': '[红果短剧] 第 {page} 页：{n} 条（新 {fresh} 条，已收录 {done} 条）',
-    'crawl.hg.replay': '[红果短剧] 第 {page} 页的「下一页」指回了当前地址（{url}），翻页停住：按未采满处理',
+    'crawl.hg.replay': '[红果短剧] 第 {page} 页的“下一页”指回了当前地址（{url}），翻页停住：按未采满处理',
     'crawl.hg.searchUnsupported': '[红果短剧] 该站点只提供四个热播榜单，没有关键词搜索（收到关键词：{keyword}）',
     'crawl.hg.start': '[红果短剧] 开始采集{board}，目标 {n} 条（翻页只走站点自己给出的下一页地址）',
     'crawl.hg.target_reached': '[红果短剧] 已采集到目标 {n} 条，不再翻页',
     # Observation only — never a claim about what the crawl then did. This line is
     # written by ``check_login_wall``, which cannot know the caller's policy: weibo
     # and zhihu stop, while WeChat's batch skips that one article and carries on to
-    # the next. Saying 「已停止本次抓取」 there told the user their batch had ended.
+    # the next. Saying “已停止本次抓取” there told the user their batch had ended.
     # The stop, when it happens, is announced by the node refusing with
     # ``run.cookieExpired``, which also says what to do about it.
     'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页',
@@ -263,7 +263,7 @@ ZH = {
         '等待 profile 释放超时（{seconds} 秒）：{dir} —— 可能有浏览器没被关闭，请在进程面板结束残留的 Chrome 后重试'
     ),
     'crawl.profile_wait': '已排队 {seconds} 秒：这个 profile 同时只能开一个浏览器，{dir}',
-    'crawl.promptDismissed': '{label} 的首屏弹窗已自动点掉：「{button}」',
+    'crawl.promptDismissed': '{label} 的首屏弹窗已自动点掉：“{button}”',
     'crawl.promptUnmatched': '{label} 的首屏弹窗无法对应按钮（页面提供：{buttons}），本次可能需等待其自动消失',
     'crawl.redrive': '页面没落到站点（停在 {where}），重发一次导航',
     # ── 断点续跑与去重（爬虫侧） ──────────────────────────────
@@ -284,7 +284,7 @@ ZH = {
     'crawl.stopReason.target': '达到目标条数',
     'crawl.stopReason.unreachable': '浏览器根本没取到页面（网络或域名不可达，站点从未见到这个会话）',
     'crawl.stopReason.wall': '登录墙拦住了后面的窗口',
-    'crawl.stopped': '收到「停止」，本次抓取到此为止',
+    'crawl.stopped': '收到“停止”，本次抓取到此为止',
     # Neither of the two above: the browser wrote this page itself, so the site never saw
     # the request and the session is not the thing in question.
     'crawl.unreachable': '浏览器自己拒绝了这次访问：{platform} 的 {where}{detail}',
@@ -318,7 +318,7 @@ ZH = {
     'crawl.wechat.wait_title': '等待文章标题 (#activity-name) 加载',
     'crawl.weibo.accumulated': '当前累计数据: {n} 条',
     'crawl.weibo.authorDone': '作者作品采集结束：{n} 条（{reason}）',
-    'crawl.weibo.authorEmpty': '「{author}」不是微博作者地址：填 weibo.com/u/<UID> 主页链接或数字 UID',
+    'crawl.weibo.authorEmpty': '“{author}”不是微博作者地址：填 weibo.com/u/<UID> 主页链接或数字 UID',
     'crawl.weibo.authorMirror': (
         'UID {uid} 的答复第一行不属于该作者——接口给的是首页时间线而不是作者作品，拒绝张冠李戴'
     ),
@@ -337,7 +337,7 @@ ZH = {
     # Said when the request was never issuable: the browser was left on a frame that is not weibo.com, so
     # the same-origin fetch had no host to ask. Blaming the endpoint there would convict it of an answer
     # it never gave.
-    'crawl.weibo.hotNoHost': '微博热搜未采集：浏览器还停在「{where}」，没回到 weibo.com（访客引导未完成，'
+    'crawl.weibo.hotNoHost': '微博热搜未采集：浏览器还停在“{where}”，没回到 weibo.com（访客引导未完成，'
     '页面内请求发不出去；这是到场帧的问题，不是接口拒绝）',
     'crawl.weibo.hotRefused': '微博热搜接口没有给出榜单（返回 {answer}）',
     # 热搜: one answer is the whole board, so the three lines below are the only
@@ -361,11 +361,11 @@ ZH = {
     'crawl.weibo.page_empty': '  第 {i} 页无有效卡片，跳过',
     'crawl.weibo.page_gave_up': (
         '    这台浏览器已经有 {waits} 个搜索页一次内容都没交付：不再把整段预算花在新的窗口上'
-        '（这是「取不到页面」，不是「这个窗口没有内容」）'
+        '（这是“取不到页面”，不是“这个窗口没有内容”）'
     ),
     'crawl.weibo.page_loaded': '页面加载完成',
     'crawl.weibo.page_timeout': (
-        '    等了 {secs} 秒：这一页既没有给出卡片，也没有给出「无结果」牌（导航{settled}）'
+        '    等了 {secs} 秒：这一页既没有给出卡片，也没有给出“无结果”牌（导航{settled}）'
         '—— 这一句只说代码看得见的东西，不能据此断定窗口里没有内容'
     ),
     'crawl.weibo.pages_fail': '获取总页数失败: {err}',
@@ -378,13 +378,13 @@ ZH = {
     'crawl.weibo.waiting': '等待页面加载...',
     'crawl.weibo.walk_done': '微博搜索收尾：{n} 条（目标 {target}，窗口走到第 {walked}/{total} 个，原因：{reason}）',
     'crawl.x.authorEmpty': '[X] 没有填写作者（@handle 或主页链接）：{author}',
-    'crawl.x.authorStart': '[X] 作者「{author}」的推文，目标 {n} 条',
+    'crawl.x.authorStart': '[X] 作者“{author}”的推文，目标 {n} 条',
     'crawl.x.finished': '[X] 共保留 {n} 条（结束原因：{reason}）',
     'crawl.x.loadSlow': '[X] 页面未在预期时间内加载完，已按当前 DOM 继续：{url}',
     'crawl.x.no_cards': '[X] 时间线里一条推文都没有渲染出来（被拦截、关键词过窄或账号无推文）：{url}',
     # X（推特）只渲染一个虚拟列表：卡片数不增长而推文一直换血，所以它的日志说
-    # 「留住了多少」，不说「页面上有几张卡」。
-    'crawl.x.start': '[X] 关键词「{kw}」，目标 {n} 条（最新优先）',
+    # “留住了多少”，不说“页面上有几张卡”。
+    'crawl.x.start': '[X] 关键词“{kw}”，目标 {n} 条（最新优先）',
     'crawl.x.target_reached': '[X] 已达目标 {n} 条，停止滚动',
     'crawl.x.wall': '[X] 被拒绝访问（登录墙或 403）：{url}',
     'crawl.xhs.author': '[爬取详情] 作者: {author}',
@@ -417,7 +417,7 @@ ZH = {
     'crawl.yt.authorEmpty': '[YouTube] 没有填写作者（@handle、频道链接或 UC… ID）：{author}',
     'crawl.yt.authorNoVideos': '[YouTube] 该作者的视频页没有作品：{author}',
     'crawl.yt.authorNotFound': '[YouTube] 该地址不是频道主页，读不到频道 ID：{author}',
-    'crawl.yt.authorStart': '[YouTube] 作者「{author}」的作品，目标 {n} 条',
+    'crawl.yt.authorStart': '[YouTube] 作者“{author}”的作品，目标 {n} 条',
     'crawl.yt.badAnswer': '[YouTube] {endpoint} 返回 {status}，非 JSON',
     'crawl.yt.callFailed': '[YouTube] {endpoint} 接口调用失败',
     'crawl.yt.drained': '[YouTube] 接口不再给出下一页游标，列表已到末尾',
@@ -426,17 +426,17 @@ ZH = {
     # talk about rounds and answers, not about scrolling a list.
     'crawl.yt.noContext': '[YouTube] 页面未提供 innertube 配置（被拦截或结构已变）：{url}',
     'crawl.yt.noPage': '[YouTube] 第 {page} 轮没有返回条目，停止翻页',
-    'crawl.yt.noResults': '[YouTube] 关键词「{kw}」没有匹配的公开视频（或本次会话被限制）',
+    'crawl.yt.noResults': '[YouTube] 关键词“{kw}”没有匹配的公开视频（或本次会话被限制）',
     'crawl.yt.page': '[YouTube] 第 {page} 轮：{n} 条（{fresh} 条新增，已采 {done}）',
     'crawl.yt.processed': '[YouTube] 已存第 {i} 条：{title}',
     'crawl.yt.replay': '[YouTube] 第 {page} 轮没有新增，判定列表已耗尽',
-    'crawl.yt.searchStart': '[YouTube] 关键词「{kw}」，目标 {n} 条',
+    'crawl.yt.searchStart': '[YouTube] 关键词“{kw}”，目标 {n} 条',
     'crawl.yt.targetReached': '[YouTube] 已达目标 {n} 条，停止采集',
     'crawl.yt.wall': '[YouTube] 触发了人机验证页：{url}',
     'crawl.zhihu.authorEmpty': '[知乎] 没有填写作者（主页链接或 /people/ 后面的 id）：{author}',
-    'crawl.zhihu.authorStart': '[知乎] 采集作者「{author}」的回答与文章，目标 {n} 条',
-    'crawl.zhihu.authorTabDone': '[知乎] 「{tab}」标签页采集结束，累计 {n} 条（原因：{reason}）',
-    'crawl.zhihu.authorTabEmpty': '[知乎] 作者「{author}」的「{tab}」标签页没有内容（这类作品他确实没发过），跳过',
+    'crawl.zhihu.authorStart': '[知乎] 采集作者“{author}”的回答与文章，目标 {n} 条',
+    'crawl.zhihu.authorTabDone': '[知乎] “{tab}”标签页采集结束，累计 {n} 条（原因：{reason}）',
+    'crawl.zhihu.authorTabEmpty': '[知乎] 作者“{author}”的“{tab}”标签页没有内容（这类作品他确实没发过），跳过',
     'crawl.zhihu.bodies_short': '另有 {n} 条回答未能展开，其正文仍为搜索页摘要',
     'crawl.zhihu.duplicate': '跳过重复的第 {i} 条回答',
     'crawl.zhihu.emptyOrBlocked': (
@@ -445,7 +445,7 @@ ZH = {
     ),
     # One fact, one line: what the 正文 column actually holds. The search page only ever
     # carries an excerpt, so a crawl that did not expand has to say so once at the end.
-    'crawl.zhihu.excerpt_only': '未展开正文：本次所有正文都是搜索页摘要（可在数据源节点勾选「展开全文」）',
+    'crawl.zhihu.excerpt_only': '未展开正文：本次所有正文都是搜索页摘要（可在数据源节点勾选“展开全文”）',
     'crawl.zhihu.expand_stopped': '连续 {n} 次展开均无回应，本次剩余行改用搜索页摘要',
     'crawl.zhihu.fallbackSearch': '知乎深链搜索返回空壳，改用搜索框重新提交关键词',
     'crawl.zhihu.finished': '搜索完成，共获取 {n} 条有效结果（目标 {total} 条）',
@@ -467,7 +467,7 @@ ZH = {
     'crawl.zhihu.skipped': '第 {i} 条结果无有效内容，已跳过',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
-    'crawl.zhihu.stuck': '连续 {n} 轮滚动既无新卡片、页面也不再变高，且未出现「没有更多了」，停止滚动',
+    'crawl.zhihu.stuck': '连续 {n} 轮滚动既无新卡片、页面也不再变高，且未出现“没有更多了”，停止滚动',
     'crawl.zhihu.target_reached': '已达到目标数量 {n} 条，停止滚动',
     'crawl.zhihu.url': '搜索URL: {url}',
 }
@@ -829,7 +829,7 @@ EN = {
     'crawl.weibo.hotDone': 'Hot board finished: {n} rows (target {total})',
     # Said when the request was never issuable: the browser sat on a frame that is not weibo.com, so the
     # same-origin fetch had no host to ask. Blaming the endpoint there convicts it of an answer it never gave.
-    'crawl.weibo.hotNoHost': 'weibo hot board not collected: the browser was still on 「{where}」 and never '
+    'crawl.weibo.hotNoHost': 'weibo hot board not collected: the browser was still on "{where}" and never '
     'came back to weibo.com (the visitor bootstrap did not finish, so the in-page '
     'request had no host — an arrival-frame fact, not an endpoint refusal)',
     'crawl.weibo.hotRefused': 'The weibo hot-search endpoint gave no board (answered {answer})',

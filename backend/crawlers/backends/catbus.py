@@ -130,7 +130,7 @@ class CatbusCrawler(Crawler):
         The command is the mode: which arguments it takes, which columns it returns and whether it is
         paged all come from the manifest through the bridge. A non-paged cell (a single item's detail,
         a keyword board) declares no ``target_count``, so it is not measured against one — asking a
-        one-row answer to reach fifty and calling the gap 「采得不足」 would be a conviction for a
+        one-row answer to reach fifty and calling the gap “采得不足” would be a conviction for a
         promise the cell never made.
         """
         self._guard(mode_key)
@@ -201,7 +201,7 @@ class CatbusCrawler(Crawler):
         self.target_total = target_count
         if target_count and self.collected() < target_count:
             # Convicted, not excused: an adapter list that stopped growing is not proof the site ran
-            # out — a soft throttle looks exactly the same — so a short table says 「采得不足」 with the
+            # out — a soft throttle looks exactly the same — so a short table says “采得不足” with the
             # funnel instead of settling clean. The warnings are counted as refused because that is
             # what they are: cards the adapter asked for and did not bring back.
             self.note_end(UNDER_TARGET, scanned=counts['scanned'], kept=kept, refused=refused)
@@ -352,7 +352,7 @@ class CatbusCrawler(Crawler):
         if outcome.status in (OK, 'partial', 'dead'):
             return
         # 'blocked' (the whole list walled), 'error' and 'unavailable' all refuse. The advice is the
-        # adapter's own hint — 「catbus bilibili auth login」 — never 「重新保存 Cookie」.
+        # adapter's own hint — “catbus bilibili auth login” — never “重新保存 Cookie”.
         message = str(outcome.message or '') or f'exit={outcome.exit_code}'
         hint = f' — {outcome.hint}' if outcome.hint else ''
         where = f' [{url}]' if url else ''

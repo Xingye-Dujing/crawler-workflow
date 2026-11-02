@@ -249,7 +249,7 @@ class DataExporter:
 
     @staticmethod
     def localized_platform(df: pd.DataFrame) -> pd.DataFrame:
-        """Show the 「平台」 column as the word the user reads (抖音, not ``douyin``).
+        """Show the “平台” column as the word the user reads (抖音, not ``douyin``).
 
         The stored column is the raw key — the row's identity, used for dedupe and platform
         detection — and it stays that way in the database; this rewrites only the export frame,

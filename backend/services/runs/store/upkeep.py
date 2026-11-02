@@ -83,7 +83,7 @@ class UpkeepMixin:
             # collected", and a later crawl of the same signature honours it —
             # against rows that no longer exist. The user then gets fewer rows than
             # they asked for, from a table they cannot see the gap in, with no way
-            # back except 「重新采集」. An explicit run deletion keeps its claims (see
+            # back except “重新采集”. An explicit run deletion keeps its claims (see
             # ``delete_run``): there the user removed a record while knowing the
             # crawl was already paid for; here the storage decided for them.
             self.delete_run(run_id)

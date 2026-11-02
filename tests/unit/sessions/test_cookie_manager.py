@@ -123,7 +123,7 @@ class TestRoundTrip:
     def test_a_failed_save_leaves_the_previous_login_intact(self, manager, monkeypatch):
         """A save is an ``os.replace`` of a fully-written temp file, never an in-place
         truncate. A crash (or a mid-write error) between the two must leave the PREVIOUS
-        login on disk — a half-written file here reads back as 「no cookies」 and sends the
+        login on disk — a half-written file here reads back as "no cookies" and sends the
         next crawl out anonymous, and a lost cookie file costs the user a fresh scan."""
         manager.save('zhihu', COOKIES)
         seen = {}
@@ -202,7 +202,7 @@ class TestSessionOnlyCount:
 
     Measured against a real Chrome (``tests/integration/test_profile_cookie_plant.py``):
     a cookie planted without an expiry is written to memory, not to the profile store, so
-    the 「更新进 Profile」 answer has to count them — a transfer that partly evaporates is
+    the “更新进 Profile” answer has to count them — a transfer that partly evaporates is
     not a transfer.
     """
 
@@ -344,7 +344,7 @@ class TestAccounts:
         value that distinguishes them is the one that rotates), so the safe reading is "a new
         login" — overwriting would destroy a session the user paid for."""
         # A platform with no default login yet is offered the NAME of that slot, not a blank:
-        # the answer to 「哪个账号」 is always a name that fits the same rule as every other.
+        # the answer to “哪个账号” is always a name that fits the same rule as every other.
         assert manager.next_free_account('weibo') == CookieManager.DEFAULT_ACCOUNT
         manager.save('weibo', COOKIES)
         assert manager.next_free_account('weibo') == 'default2'
@@ -371,7 +371,7 @@ class TestAccounts:
         assert manager.exists('weibo', 'b') is True
 
     def test_deleting_says_which_login_went(self, manager, caplog):
-        """「已删除 微博 的 Cookie」 cannot answer 「哪个账号?」 once one platform holds several
+        """“已删除 微博 的 Cookie” cannot answer “哪个账号?” once one platform holds several
         logins — and this line describes a destructive act the user is reading back. Saving
         already names the account; deleting must not be the half that stays silent."""
         manager.save('weibo', COOKIES, 'work')

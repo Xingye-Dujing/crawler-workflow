@@ -189,9 +189,9 @@ def walk(session, url: str, limit: int) -> tuple:
     if not mid:
         return [], DEAD
     # The site's own denominator for this thread. Measured 2026-09-28 the three places that print it
-    # agree (the search card 「30」, ``statuses/show.comments_count``, the page's ``total_number``), so
+    # agree (the search card "30", ``statuses/show.comments_count``, the page's ``total_number``), so
     # a table that comes back shorter is knowable *while crawling* — which is the whole reason to read
-    # it. ``trendsText`` also says 「已加载全部评论」 on a 22-of-30 walk, so that sentence is not a
+    # it. ``trendsText`` also says “已加载全部评论” on a 22-of-30 walk, so that sentence is not a
     # verdict and is never consulted.
     declared = as_count(show.get('comments_count'))
     rows, seen, max_id, page, empty_rounds = [], set(), 0, 0, 0
@@ -239,7 +239,7 @@ def walk(session, url: str, limit: int) -> tuple:
     table = rows[:limit] if limit else rows
     # **The gap is measured against what the walk received, never against the truncated table** (U41,
     # caught by the live D5 cell). A thread that reports 3 comments, hands all 3 to the walker, and is
-    # then cut to 评论上限 2 used to print 「站点写着 3 条，本表只有 2 条 —— 差额是楼中楼」: the cursor
+    # then cut to 评论上限 2 used to print “站点写着 3 条，本表只有 2 条 —— 差额是楼中楼”: the cursor
     # died on the same page that crossed the limit, so ``ended`` stayed ``'cursor'`` and the sentence
     # blamed the site for the user's own number — the exact thing the branch above exists to prevent,
     # arriving by a path that branch does not see. ``len(rows)`` is the only number that answers
@@ -252,7 +252,7 @@ def walk(session, url: str, limit: int) -> tuple:
         # site's answer (the cursor ran out, and ``comment.weiboShort`` names the gap against its own
         # number) or the user's ask (``limit``); a request that died mid-thread is neither, and the
         # table it leaves behind is shorter than the thread with no line anywhere to point at. Naming
-        # it is also the difference between 「继续」 and a re-crawl: the cursor already holds the page
+        # it is also the difference between “继续” and a re-crawl: the cursor already holds the page
         # this walk reached.
         session.log(
             t(

@@ -54,7 +54,7 @@ ZH = {
     'comment.dyNone': '该视频计有 {n} 条评论，页面未展开评论列表：{url}',
     'comment.dyShort': (
         '[抖音评论] {url}：站点写着 {declared} 条，本表 {rows} 条 + 子回复 {nested} 条（还差 {gap} 条未采到）'
-        ' —— 本次收尾原因是「{reason}」，所以差额不是「这条视频就这么多」'
+        ' —— 本次收尾原因是“{reason}”，所以差额不是“这条视频就这么多”'
     ),
     'comment.linkFailed': '这条链接的页面加载失败，已跳过（其余链接继续）：{url}（{err}）',
     'comment.need_both': '节点 {nid}：按评论时间筛选必须同时给出开始和结束时间（半个区间无法界定范围）',
@@ -71,16 +71,16 @@ ZH = {
     'comment.status.ok': '正常',
     'comment.time_filtered': '节点 {nid}：按评论时间 {start} ~ {end} 筛选，保留 {kept} 条、丢弃 {dropped} 条',
     'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持：{platforms}）',
-    # Named because a count of dropped 「links」 sends the user hunting for a typo in a URL,
+    # Named because a count of dropped "links" sends the user hunting for a typo in a URL,
     # when what the node actually lacks is the platform that declared it takes plain names.
     'comment.unsupportedNames': '其中 {n} 行不是链接而是名称：按名称喂入需节点先选定平台'
-    '（红果短剧 的「评论」模式按剧名走播放器自己的榜单）',
+    '（红果短剧 的“评论”模式按剧名走播放器自己的榜单）',
     'comment.weiboFetchDied': (
         '[微博评论] 第 {page} 页评论接口取数失败，就此收尾：本次 {rows} 条'
         '（站点标注 {declared} 条，差额 {gap} 条未采到；游标停在失败的那一页，可继续）'
     ),
     'comment.weiboReplay': (
-        '[微博评论] 第 {page} 页没有交出新的一条（游标仍在动）：按「站点在重复同一批」收工，本次 {rows} 条'
+        '[微博评论] 第 {page} 页没有交出新的一条（游标仍在动）：按“站点在重复同一批”收工，本次 {rows} 条'
     ),
     'comment.weiboShort': (
         '[微博评论] 站点写着 {declared} 条，本表只有 {rows} 条（差 {gap} 条）'
@@ -95,21 +95,21 @@ ZH = {
     'comment.zhihuPanelCapped': '[知乎评论] 滚满 {n} 轮（含展开子回复）仍未走完，按轮次上限收工（本次 {rows} 条）',
     'comment.zhihuPanelShort': '[知乎评论] 页面写着 {declared} 条，本次取到 {rows} 条（差额未采到）',
     'comment.zhihuRound': '[知乎评论] 第 {r} 轮新增 {n} 条（累计 {total}）',
-    'source.BibTeX.missing': '字段随导出工具而异：缺作者的条目会被计入「跳过」并在控制台点名，不会被当成空记录',
+    'source.BibTeX.missing': '字段随导出工具而异：缺作者的条目会被计入“跳过”并在控制台点名，不会被当成空记录',
     'source.BibTeX.purpose': 'LaTeX 工作流的通用格式，Zotero 与 WoS 都能导出 .bib。',
-    'source.BibTeX.steps': '1. 在 Web of Science 的导出格式里选「BibTeX」，'
-    '或在 Zotero 里右键条目 →「导出条目」→ 格式选 BibTeX\n2. 上传 .bib',
+    'source.BibTeX.steps': '1. 在 Web of Science 的导出格式里选“BibTeX”，'
+    '或在 Zotero 里右键条目 →“导出条目”→ 格式选 BibTeX\n2. 上传 .bib',
     'source.CNKI.missing': '无参考文献列表 ⇒ 共被引、文献耦合、引文突现做不了\n'
-    '无被引次数 ⇒ 「总被引/H 指数」列不会出现，按被引筛选保持关闭',
+    '无被引次数 ⇒ “总被引/H 指数”列不会出现，按被引筛选保持关闭',
     # ── 文献来源导出指引（services/biblio/sources.py） ──────────────
-    # 每条只写「我们解析过的真实文件」能支持的话：缺什么就写缺什么，不猜站点还有别的按钮。
+    # 每条只写“我们解析过的真实文件”能支持的话：缺什么就写缺什么，不猜站点还有别的按钮。
     'source.CNKI.purpose': '中文文献共现网络的入口：关键词、作者、机构、期刊都能建图。'
     '知网导出不含参考文献与被引次数，因此引文类分析会在运行前点名拒绝，而不是画空图。',
     'source.CNKI.steps': '1. 在知网按主题/关键词检索，需要时用年限与来源收窄\n'
-    '2. 勾选结果条目，点「导出/参考文献」\n'
-    '3. 在导出页选「RefWorks」，得到 CNKI-<时间>-RefWorks.txt\n'
+    '2. 勾选结果条目，点“导出/参考文献”\n'
+    '3. 在导出页选“RefWorks”，得到 CNKI-<时间>-RefWorks.txt\n'
     '4. 把这份 .txt 直接上传；同一页的 NoteExpress、EndNote 两个按钮本应用也认',
-    'source.CSSCI.missing': '无【摘要】⇒ 聚类标签来源要选「关键词」；选「摘要」会按名拒绝\n'
+    'source.CSSCI.missing': '无【摘要】⇒ 聚类标签来源要选“关键词”；选“摘要”会按名拒绝\n'
     '无 DOI ⇒ 跨库合并只能按题名与作者匹配',
     'source.CSSCI.purpose': '中文社科文献的引文入口：CSSCI 导出带参考文献列表，所以共被引与文献耦合可用；'
     '它不带摘要与 DOI。',
@@ -126,16 +126,16 @@ ZH = {
     'source.Dimensions.purpose': 'Dimensions 的 Publication 导出（Export full record → CSV）：被引次数、学科分类、'
     '基金与 MeSH 主题词都在，一份常有数百条。',
     'source.Dimensions.steps': '1. 在 Dimensions 检索\n'
-    '2. 勾选结果 → Export → 选「Export full record」，File format 保持「CSV - Comma separated」\n'
-    '3. 不要选「Export for bibliometric mapping」——那是给 VOSviewer/CiteSpace 的网络文件，'
-    '本应用读的是记录表；也不要用「Export for reference manager → BibTeX」，'
+    '2. 勾选结果 → Export → 选“Export full record”，File format 保持“CSV - Comma separated”\n'
+    '3. 不要选“Export for bibliometric mapping”——那是给 VOSviewer/CiteSpace 的网络文件，'
+    '本应用读的是记录表；也不要用“Export for reference manager → BibTeX”，'
     '那种文件能按 BibTeX 读，但被引次数、学科与基金都不在里面\n'
     '4. 一次最多 500 条（All items - max 500 items per download），超出就分批导出或勾'
-    '「Send email when export is ready」——文件在 Export center 保留 30 天\n'
+    '“Send email when export is ready”——文件在 Export center 保留 30 天\n'
     '5. 上传 .csv——它的第一行是版权横幅而不是表头，导入会先跳过横幅再读列名',
     'source.EndNote.missing': '实测知网的 .enw 不含参考文献与被引次数',
-    'source.EndNote.purpose': '知网的「EndNote 下载」按钮或 EndNote/Zotero 都能产出 .enw。',
-    'source.EndNote.steps': '1. 知网导出页选「EndNote 下载」，或在文献管理软件里导出 .enw\n2. 上传 .enw',
+    'source.EndNote.purpose': '知网的“EndNote 下载”按钮或 EndNote/Zotero 都能产出 .enw。',
+    'source.EndNote.steps': '1. 知网导出页选“EndNote 下载”，或在文献管理软件里导出 .enw\n2. 上传 .enw',
     'source.Lens.missing': '实测这份导出的 References 列写的是 Lens 记录 ID（形如 002-341-399-981-03X），'
     '不是引文文本 ⇒ 共被引与文献耦合做不了，需要引文网络请用 WoS/Scopus/CSSCI\n'
     '没有任何作者单位或地址列 ⇒ 机构网络与国家网络做不了；'
@@ -151,17 +151,17 @@ ZH = {
     '3. 上传 .csv（表头里必须有 Lens ID 与 Citing Works Count 或 Fields of Study，'
     '否则识别不出这是学术集合）',
     'source.NoteExpress.missing': '与 RefWorks 版同样没有参考文献与被引次数',
-    'source.NoteExpress.purpose': '知网「NoteExpress 下载」按钮产出的 .net 文件，字段与 RefWorks 版一致。',
-    'source.NoteExpress.steps': '1. 知网导出页选「NoteExpress 下载」\n2. 上传得到的 .net 文件',
+    'source.NoteExpress.purpose': '知网“NoteExpress 下载”按钮产出的 .net 文件，字段与 RefWorks 版一致。',
+    'source.NoteExpress.steps': '1. 知网导出页选“NoteExpress 下载”\n2. 上传得到的 .net 文件',
     'source.PubMed.missing': '没有参考文献与被引次数 ⇒ 引文类分析不可用',
     'source.PubMed.purpose': 'PubMed 免机构授权，适合生物医学文献的关键词/作者/机构/国家共现网络。',
     'source.PubMed.steps': '1. 在 PubMed 检索\n'
-    '2. 勾选记录 →「Save」→ Format 选「Text（Medline）」，Create File 后得到 .txt 或 .nbib\n'
-    '3. 上传它；Format 选「CSV」得到的摘要文件也读，但它不含摘要与关键词，只适合当引用清单',
+    '2. 勾选记录 →“Save”→ Format 选“Text（Medline）”，Create File 后得到 .txt 或 .nbib\n'
+    '3. 上传它；Format 选“CSV”得到的摘要文件也读，但它不含摘要与关键词，只适合当引用清单',
     'source.RIS.missing': '实测 WoS 的 RIS 导出不含被引次数，单位里也不含国家 ⇒ 按被引筛选与国家网络不可用',
     'source.RIS.purpose': '通用引文交换格式，多数数据库与文献管理软件都能导出 .ris。',
-    'source.RIS.steps': '1. 在 Web of Science 里勾选记录 →「导出」→ 文件格式选「RIS File」\n'
-    '2. 或在 Zotero 里右键条目 →「导出条目」→ 格式选 RIS\n3. 上传 .ris',
+    'source.RIS.steps': '1. 在 Web of Science 里勾选记录 →“导出”→ 文件格式选“RIS File”\n'
+    '2. 或在 Zotero 里右键条目 →“导出条目”→ 格式选 RIS\n3. 上传 .ris',
     'source.Scopus.missing': 'Scopus 站点导出不提供 Subject area 与 usage 列（不是漏勾）⇒ '
     '学科共现与按使用次数筛选不可用；'
     '英文界面的列名会随版本变化（Citation count / Cited by、Article number / Art. No.），'
@@ -169,7 +169,7 @@ ZH = {
     'source.Scopus.purpose': 'Scopus 的 CSV 下载：带参考文献、被引次数与作者单位，机构网络与国家网络都能建；'
     '中文界面导出的中文表头同样能读。',
     'source.Scopus.steps': '1. 在 Scopus 检索\n'
-    '2. 勾选结果 →「下载」→ 格式选 CSV\n'
+    '2. 勾选结果 →“下载”→ 格式选 CSV\n'
     '3. 字段里务必勾上 References（参考文献）、Affiliations（作者单位）与 Cited by（施引文献）'
     '——单位列决定机构网络与国家网络能不能建\n'
     '4. 上传 .csv——中文界面会得到 文献标题/来源出版物名称/施引文献/'
@@ -177,16 +177,16 @@ ZH = {
     'source.WoS.missing': 'Excel 的 Cited References 列不可用：站点在 Excel 导出里不提供这一列'
     '（实测 30 条整列为空，只写 Cited Reference Count 这个数字）⇒ 用 Excel 时引文网络与引文突现做不了；'
     '关键词（14/30）、学科、基金、使用次数在 Excel 里都可用。'
-    '要引文分析请用「纯文本 + 全记录与引用的参考文献」（23/30 条带 CR）',
+    '要引文分析请用“纯文本 + 全记录与引用的参考文献”（23/30 条带 CR）',
     'source.WoS.purpose': '英文文献的完整入口：参考文献、被引次数、使用次数、学科与国家都在这份导出里，'
     '共被引/耦合与国家级合作网络都能建。',
     'source.WoS.steps': '1. 在 Web of Science 核心合集检索\n'
-    '2. 勾选记录 →「导出」，记录内容选到最完整的一档：「全记录与引用的参考文献」'
+    '2. 勾选记录 →“导出”，记录内容选到最完整的一档：“全记录与引用的参考文献”'
     '（Full Record and Cited References）\n'
-    '3. 文件格式首选「纯文本文件」，得到带 CR/TC/UT 标签的 .txt\n'
+    '3. 文件格式首选“纯文本文件”，得到带 CR/TC/UT 标签的 .txt\n'
     '4. 上传 .txt；Excel（.xls/.xlsx）、RIS、BibTeX 也认——注意 Excel 里**没有 Cited References 列**'
     '（站点不提供），引文分析要用纯文本',
-    'source.feed_column_missing': '节点 {nid}：上游表格没有名为「{col}」的列',
+    'source.feed_column_missing': '节点 {nid}：上游表格没有名为“{col}”的列',
     'source.feed_skipped': '上游喂送：跳过 {n} 个空单元格（没有可读的链接）',
 }
 
@@ -265,7 +265,7 @@ EN = {
     'comment.status.ok': 'ok',
     'comment.time_filtered': 'Node {nid}: filtered comments by time {start} ~ {end}: kept {kept}, dropped {dropped}',
     'comment.unsupported': 'comment node ignored {n} unsupported link(s) (supported: {platforms})',
-    # Named because a count of dropped 「links」 sends the user hunting for a typo in a URL,
+    # Named because a count of dropped "links" sends the user hunting for a typo in a URL,
     # when what the node actually lacks is the platform that declared it takes plain names.
     'comment.unsupportedNames': (
         '{n} of them are names rather than links: feeding names needs the node to name its platform first '

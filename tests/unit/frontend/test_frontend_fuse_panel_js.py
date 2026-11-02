@@ -3,7 +3,7 @@
 The Python-side tests (`tests/unit/biblio/test_biblio_fuse.py`, `tests/api/test_fuse_api.py`) prove the
 fold, the refusals and the run. They cannot see the panel at all, and the panel had two defects
 that only the rendered markup shows: the type header printed the computed catalogue key
-「nodeType.fuse」 because no browser word existed, and the node listed no output columns even
+"nodeType.fuse" because no browser word existed, and the node listed no output columns even
 though the server answers for them — so a user could not see what the node would hand downstream.
 
 See tests/frontend/harness_fuse_panel.mjs.

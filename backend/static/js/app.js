@@ -127,7 +127,7 @@ function handlePasswordChangeRequired(response) {
 /* End this browser's login (the top bar's 退出登录 entry). A POST, because a cross-site link or
    image must not be able to end someone's session; the server answers with a redirect to the
    login page either way, so the navigation below is the one thing left to do — AFTER the server
-   agrees. Navigating on a refused POST sends the user to 「/login」 over a session that is still
+   agrees. Navigating on a refused POST sends the user to "/login" over a session that is still
    alive, and that page answers by bouncing them straight back to the canvas: the sign-out button
    looks broken and the cookie keeps working. */
 function _retryLogout() {
@@ -465,7 +465,7 @@ const CloudMode = {
         this.apply();
         /* The panel is filled from localStorage, which may name a transport this
            host cannot serve. Re-apply it from the truth instead of leaving a selected
-           「本地 Ollama」 on a server that has none. */
+           “本地 Ollama” on a server that has none. */
         if (typeof LLMSettings !== 'undefined' && LLMSettings.applyToPanel) LLMSettings.applyToPanel();
         /* And say, once, what this kind of host keeps on its own disk. The flag landing
            is the moment the page knows it is standing in front of a stranger. Suppressed
@@ -540,7 +540,7 @@ const PrivacyNotice = {
         }
     },
 
-    /* Test seam and a genuine product need: 「我在本机重新看看这条说明」 is how a user
+    /* Test seam and a genuine product need: “我在本机重新看看这条说明” is how a user
        unsends an ack they clicked in passing. */
     reset() {
         try {
@@ -682,7 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (_bootSteps.length) {
         // Through t(key, vars), never a hand .replace: the placeholder gate walks the call
         // sites that pass a vars object, so a raw replace of a key that later gains a second
-        // slot would silently print 「{something}」 at the user.
+        // slot would silently print "{something}" at the user.
         showToast(I18n.t('boot.partial', { steps: _bootSteps.length }));
     }
 });

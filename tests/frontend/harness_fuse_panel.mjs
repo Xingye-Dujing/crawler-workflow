@@ -5,7 +5,7 @@
  *
  *   · the header resolves `nodeType.<type>` — a COMPUTED key, so neither the call-site scan nor
  *     the dead-key scan can see the missing half. The shipped page printed the identifier
- *     「nodeType.fuse」 for a whole commit (measured on screen 2026-10-24), and an unknown type
+ *     "nodeType.fuse" for a whole commit (measured on screen 2026-10-24), and an unknown type
  *     from a newer build must now read as the type itself rather than as a key;
  *   · the panel lists the columns the node will emit only when the server can see them: a fuse
  *     node has a fixed contract, so omitting it from the producer list hides lineage the

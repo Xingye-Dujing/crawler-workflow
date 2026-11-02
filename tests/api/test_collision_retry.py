@@ -118,7 +118,7 @@ def test_a_stopped_run_does_not_start_another_crawl(app_module, running):
 
 
 def test_an_empty_answer_with_no_wall_is_the_crawls_own(app_module, running):
-    """「这个关键词就是没东西」is a result, not a refusal — retrying it would double
+    """“这个关键词就是没东西”is a result, not a refusal — retrying it would double
     every genuinely empty crawl."""
     crawler = _Crawler(rows_first=(), wall=False)
     rows = _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')

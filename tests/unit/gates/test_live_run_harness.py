@@ -264,7 +264,7 @@ class TestClassifyVerdict:
 
     def test_an_exit_outside_the_graders_vocabulary_is_not_an_exit(self):
         """A platform's own refusal must be handed over explicitly. Grading every
-        platform against zhihu's message names would call a bilibili 「页数走完」 a silent
+        platform against zhihu's message names would call a bilibili “页数走完” a silent
         shortfall — or, the other way round, accept zhihu's word for someone else's."""
         answer = harness.classify_verdict(10, 1, self._console(_NAMED_LINE))
         assert answer['verdict'] == harness.SILENT_SHORT, "the shared default must not know zhihu's vocabulary"
@@ -285,8 +285,8 @@ class TestClassifyVerdict:
 
     def test_a_line_the_plan_measures_as_a_lying_one_does_not_excuse_a_shortfall(self):
         """``docs/live_test_plan.md`` §5 keeps a second list beside the whitelist: sentences that
-        report a site answer while reporting a walk that gave up (Z6's 「未加载新内容」, Z3's
-        「为空或被拦截」). Admitted as exits they license the exact silent under-collection the
+        report a site answer while reporting a walk that gave up (Z6's “未加载新内容”, Z3's
+        “为空或被拦截”). Admitted as exits they license the exact silent under-collection the
         tier exists to catch, so the grader is handed them as ``bug_lines`` instead."""
         liar = i18n.t('crawl.zhihu.stuck', n=1)
         answer = harness.classify_verdict(
@@ -300,7 +300,7 @@ class TestClassifyVerdict:
         assert 'crawl.zhihu.stuck' in answer['reasons'][0], 'the row has to quote the liar it convicted'
 
     def test_a_honest_exit_beside_a_lying_one_still_explains_the_shortfall(self):
-        """The liar is not a ban on the whole console: a walk that said 「没有更多了」 and also
+        """The liar is not a ban on the whole console: a walk that said “没有更多了” and also
         printed a 虚报 line on the way is still a named short — with both keys in the row."""
         answer = harness.classify_verdict(
             40,

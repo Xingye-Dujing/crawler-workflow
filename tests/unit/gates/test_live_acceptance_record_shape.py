@@ -1,7 +1,7 @@
 """The run-row shape rule, tested in the fast tier where it needs no browser.
 
-:func:`live_acceptance.assert_record_shape` turns AGENTS' invariant (「并行是一条记录；串行是一 workflow
-一行」) into an assertion, so it is graded against both shapes and against the way a shape breaks. A live
+:func:`live_acceptance.assert_record_shape` turns AGENTS' invariant (“并行是一条记录；串行是一 workflow
+一行”) into an assertion, so it is graded against both shapes and against the way a shape breaks. A live
 H1 that hard-coded the parallel ``wf_count == N`` went red on the user's **串行** canvas even though all
 three legs had crawled honestly — the reporting line, not the crawl, failed. The whole point of reading
 the mode off the row is that a canvas he flips 串行/并行 must not redden a run that did its work, and that
@@ -61,7 +61,7 @@ def test_serial_leg_filed_under_another_component_name_is_caught():
     parts = [_part('作者', 'node-10', 'author'), _part('评论', 'node-17', 'comments')]
     records = {
         '作者': {'mode': 'serial', 'wf_count': 1, 'workflow_name': '作者'},
-        # The comment leg's row carries the author's name — the 「列表对不上」 shape.
+        # The comment leg's row carries the author's name — the “列表对不上” shape.
         '评论': {'mode': 'serial', 'wf_count': 1, 'workflow_name': '作者'},
     }
     run = _Run({'mode': 'serial'})

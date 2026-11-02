@@ -642,7 +642,7 @@ const workflow = {
     },
 
     _hasCommentCrawl() {
-        /* A comment crawl is either a dedicated 「评论」 node or a source node switched to
+        /* A comment crawl is either a dedicated “评论” node or a source node switched to
            the comments mode. Only nodes the run will actually reach count — a disabled one
            crawls nothing, so it must not raise a notice about a column it will never fill. */
         var alive = {};
@@ -658,9 +658,9 @@ const workflow = {
     },
 
     async _confirmCommentRegionBeforeRun() {
-        /* Some platforms/videos do not publish an IP region in their comments, so the 「评论地区」
+        /* Some platforms/videos do not publish an IP region in their comments, so the “评论地区”
            column can legitimately come back blank — a measured site fact, not a broken crawl (douyin
-           especially: two comment sections, one shows 「·湖南」, the next shows nothing). Users read
+           especially: two comment sections, one shows “·湖南”, the next shows nothing). Users read
            the blank as a bug, so say once, before the run, what the column's emptiness means. */
         if (!this._hasCommentCrawl()) return true;
         var choice = await showDialog({
@@ -720,7 +720,7 @@ const workflow = {
              inside "refresh the cookie and carry on", and asking again is cruelty;
            · 自动验证 on → ask the *sites* (``_preflightCookies``), which is a fact, and
              a platform that answers with a login page refuses the run;
-           · off → proceed unanswered. The old 「执行前确认 Cookie」 prompt that stood here
+           · off → proceed unanswered. The old “执行前确认 Cookie” prompt that stood here
              was a guess about a session, and the user asked for it gone: with the real
              check switched off, nothing is asked and nothing blocks.
 
@@ -738,7 +738,7 @@ const workflow = {
     async _preflightCookies(entries, profileChoice) {
         /* Ask each (platform, account) this run will use whether it still lets us in —
            and refuse to start when one says it does not. There is deliberately no
-           「我确定，照样跑」 button: the point of measuring instead of guessing is that a
+           “我确定，照样跑” button: the point of measuring instead of guessing is that a
            run past a login wall costs the user an hour and a half-finished dataset they
            then have to reason about.
 
@@ -792,12 +792,12 @@ const workflow = {
             var verdict = results[key] || {};
             /* Server-rendered wording: the sentences live next to the crawler that
                decided them, so the panel cannot hold a second opinion about what
-               「已失效」 meant on the page the probe actually looked at. */
+               “已失效” meant on the page the probe actually looked at. */
             return '· ' + (verdict.text || key);
         });
         /* The remedy depends on which tool holds the dead login. A Selenium verdict points at the
            cookie panel; a CatBus one must NOT — its login lives in CatBus' own account files, and the
-           server already put 「catbus <平台> auth login」 in the text. Opening a cookie dialog for it
+           server already put “catbus <平台> auth login” in the text. Opening a cookie dialog for it
            would send the user to re-save a session this crawl never reads, so the button is only
            offered when every refused entry belongs to the browser. */
         var browserOnly = blocked.every(function (key) {
@@ -815,7 +815,7 @@ const workflow = {
                   ]
                 : [{ label: I18n.t('dialog.close'), value: null, primary: true }],
         });
-        /* Both answers stop the run — that is the hard block. Only 「去更新 Cookie」 opens the panel:
+        /* Both answers stop the run — that is the hard block. Only “去更新 Cookie” opens the panel:
            closing the dialog with 取消 and finding a panel the user did not ask for is the difference
            between refusing and nagging. */
         if (browserOnly && choice === 'update') {
@@ -838,7 +838,7 @@ const workflow = {
         if (typeof ReusableNodes !== 'undefined' && ReusableNodes.errors) {
             validationErrors = validationErrors.concat(ReusableNodes.errors());
         }
-        /* NO cookie check here. This used to ask /api/cookies/status and push 「缺少 Cookie」 for
+        /* NO cookie check here. This used to ask /api/cookies/status and push “缺少 Cookie” for
            every source node whose platform was not in its `cookies` map — a second, weaker opinion
            about the same question the run gate already answers, and wrong in three ways measured on
            the user's own canvas: that map is keyed by platform and answers only for the DEFAULT
@@ -848,7 +848,7 @@ const workflow = {
            a disabled node blocked the press. `validate()` owns the shape (the matrix refuses a stored
            account that has no file, BY NAME), and `_cookieGateBeforeRun` owns the question of whether
            the login still works, per (platform, account) — AGENTS: the frontend holds no second
-           opinion about a crawl, and 「无法核对」 never blocks. */
+           opinion about a crawl, and “无法核对” never blocks. */
         if (validationErrors.length > 0) {
             /* ONE toast for one press of the button. `#toast` is a single element whose
                text is replaced, so the loop that used to run over these errors left the
@@ -873,7 +873,7 @@ const workflow = {
            would only discover it an hour deep. */
         if (!(await this._confirmProfileBeforeRun())) return;
         /* Said before the fork question and the cookie probes: on a platform the site
-           forces to one-at-a-time, 「本次不用 = 真并行」 is not on offer, and a run the
+           forces to one-at-a-time, “本次不用 = 真并行” is not on offer, and a run the
            user cancels here should not have paid for the questions behind it. */
         if (!(await this._confirmSerialPlatformsBeforeRun())) return;
         /* Parallel + a platform two workflows both want is the one case where
@@ -886,7 +886,7 @@ const workflow = {
            different networks, and neither one serves both — say so before paying for
            the cookie probes below. */
         if (!(await this._confirmOverseasBeforeRun())) return;
-        /* A comment crawl can come back with a blank 「评论地区」 because the *site* does not
+        /* A comment crawl can come back with a blank “评论地区” because the *site* does not
            publish an IP region for that video — say so once before the run, so the empty column
            is not mistaken for a failure. Silent when the canvas has no comment node. */
         if (!(await this._confirmCommentRegionBeforeRun())) return;
@@ -1023,10 +1023,10 @@ const workflow = {
 
     reconnectConsole() {
         /* One replay at a time, and shareable by whoever asks. Two doors call this: the page
-           boot, and a 「立即执行」 fire that really started. Each of them used to run its own
+           boot, and a “立即执行” fire that really started. Each of them used to run its own
            read of the tail, because the guard against a second reader (``_pollTimer``) is only
            installed at the END of the first one — so both fetched, both opened the panel, and
-           both shouted 「已重新连接控制台」 for the same run. Keeping the promise is also the
+           both shouted “已重新连接控制台” for the same run. Keeping the promise is also the
            only way a caller can wait for a replay it did not start: a test (or a panel) that is
            about to clear the console box has no other way to learn the server's history is
            still on its way in. */
@@ -1044,7 +1044,7 @@ const workflow = {
            and — if the work is still going — takes the stream up again.
 
            A run that finished while the page was closed is shown too. The buffer is not
-           cleared until the NEXT run claims it, so 「刚才那次跑了什么」 is still answerable,
+           cleared until the NEXT run claims it, so “刚才那次跑了什么” is still answerable,
            and answering it is the point of keeping the lines at all. */
         if (this._pollTimer) return;
         var result;
@@ -1333,10 +1333,10 @@ const workflow = {
    The branch this replaces knew three shapes — comments→links, wechat→links,
    everything else→keyword — which is the `if platform == '…'` second opinion
    AGENTS.md forbids, and it was not hypothetical: four platforms offer
-   「某作者的作品」 (which asks for a creator, not a keyword) and 哔哩哔哩 offers
+   “某作者的作品” (which asks for a creator, not a keyword) and 哔哩哔哩 offers
    热榜 (which asks for nothing at all). Both were declared in the matrix, rendered
    in the panel, executable by the backend — and unreachable from the UI, because
-   a filled-in author or board node was refused 「缺少关键词」 and no request ever
+   a filled-in author or board node was refused “缺少关键词” and no request ever
    left the page. Same payload, one source: `/api/capabilities`. */
 function sourceNodeErrors(node, label, hasDataInput) {
     var params = node.params || {};
@@ -1463,7 +1463,7 @@ function sourceNodeErrors(node, label, hasDataInput) {
    leading blank option keeps "no registered model picked" an honest state: without it
    a stored-but-blank path would visually land on option #0, which is a model the user
    never selected. A stored path that is not a registered one still shows itself —
-   selectOptionTags appends it as 「不是可选项」, never reverting to the first model. */
+   selectOptionTags appends it as “不是可选项”, never reverting to the first model. */
 function _bertModelsSelected(p) {
     /* The chosen model paths, de-duplicated, from the comma-joined bert_models param —
        mirrored off the backend's bert_model_list so the checkbox echo and the run agree. */
@@ -1761,7 +1761,7 @@ function platformLabels(list) {
 /* One pre-run gate entry: which login, of which system, for which platform.
 
    ``backend`` travels with it because the server routes the question by that field
-   (``cookie_preflight.entry_of``), and a CatBus 「default」 and a cookie file named 「default」 are two
+   (``cookie_preflight.entry_of``), and a CatBus "default" and a cookie file named "default" are two
    accounts on two systems. The account that names the session differs by backend, and the node's own
    form holds both, so this picks the one the run will actually read instead of asking both systems
    about one name. */
@@ -1780,7 +1780,7 @@ function sessionEntry(p, platform) {
    of its own crawls are served to a logged-in session (weibo's 热搜 answers anyone, 微信 wants no
    session at all), and the CatBus manifest knows which of ITS cells need an account of their own.
    Asking the wrong one is not harmless — an anonymous browser crawl refused for a missing cookie, or
-   a CatBus crawl that never needed a login blocked by 「Cookie 已失效」 for a cookie it never reads. */
+   a CatBus crawl that never needed a login blocked by “Cookie 已失效” for a cookie it never reads. */
 function sessionAsked(p, platform, modeKey) {
     if (String(p.backend || '') === 'catbus') {
         /* A cell the backend cannot crawl at all is refused by name when the walk starts, so there is
@@ -1891,7 +1891,7 @@ function profileCollisions(nodes, connections) {
 /* The word for a node type. The key is computed, so the i18n audit cannot see the missing
    half: a type this build's catalogue does not name (a canvas stored by a newer version, or a
    node type added here and forgotten there) would otherwise print the identifier
-   「nodeType.fuse」 in the panel header. The raw type is the honest fallback — it is what the
+   "nodeType.fuse" in the panel header. The raw type is the honest fallback — it is what the
    file says, and it never claims to be a translation of something else. */
 function nodeTypeWord(type) {
     if (!type) return '';
@@ -2081,7 +2081,7 @@ function toggleDatasetPanel() {
     datasetManager.toggle();
 }
 
-/* Reached from both the status-bar button and the menu 「打开」. `wfFiles` is a
+/* Reached from both the status-bar button and the menu “打开”. `wfFiles` is a
    top-level `var`, so the inline handlers in its rendered table resolve it, but an
    explicit export costs nothing and keeps the panel reachable from app.js. */
 function toggleWorkflowsPanel() {

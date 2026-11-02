@@ -20,8 +20,8 @@ import re
 import pandas as pd
 
 # A trailing extension the user may have typed into a filename. ``os.path.splitext`` would cut at
-# the LAST dot of ANY name, so a workflow literally named 「v2.0调研」 (a dot is legal) turned the
-# composed stem 「v2.0调研-src-2_...」 into 「v2」 — the node id and window suffix fell off the end as
+# the LAST dot of ANY name, so a workflow literally named “v2.0调研” (a dot is legal) turned the
+# composed stem “v2.0调研-src-2_...” into “v2” — the node id and window suffix fell off the end as
 # a fake "extension", and two source nodes on that canvas then shared one stem: their part files
 # collided, the prefix-adoption merged one node's shards into the other, and the final files
 # overwrote each other. A stem is a storage key, so only a REAL export extension is ever removed.
@@ -239,7 +239,7 @@ def safe_stem(name: str) -> str:
     from core.refs import sanitize_filename
 
     stem = sanitize_filename(name) or 'export'
-    # Remove a trailing export extension the user typed (「data.csv」 → 「data」), but ONLY that:
+    # Remove a trailing export extension the user typed ("data.csv" → "data"), but ONLY that:
     # never an internal dot, which is the storage-key collision above.
     stem = _TRAILING_EXT.sub('', stem, count=1)
     return stem or 'export'

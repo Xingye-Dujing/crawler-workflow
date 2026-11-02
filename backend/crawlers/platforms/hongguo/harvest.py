@@ -141,14 +141,14 @@ class HongguoCommentHarness:
         self.walk_counts = {}
         #: Every drama the client would not open, in the order it refused them. The engine
         #: names them at the end of the node: a feed of ten dramas that harvested six is a
-        #: partial table, and 「1 个失败」 without the six names is not an explanation.
+        #: partial table, and “1 个失败” without the six names is not an explanation.
         self.skipped_targets: list[str] = []
         self._group_progress = {}
         self._groups_done = set()
         #: One entry per CHILD thread a click expanded, keyed by its parent 评论ID. A
         #: ``reply/list`` page prints its OWN ``total``, and a thread that reported 200
         #: children and answered 20 is a hole no comment group can see — so the reply pages
-        #: are counted in the same arithmetic that licenses 「site_end」.
+        #: are counted in the same arithmetic that licenses "site_end".
         self._reply_progress: dict[str, dict] = {}
         #: Threads the 评论上限 cut off on purpose. They are kept short by the user's own
         #: request, so they are excluded from the gap rather than convicting a node that did
@@ -200,7 +200,7 @@ class HongguoCommentHarness:
         if '://' in target or hg_series_id(target):
             series_id = hg_series_id(target)
             # A bare ``series_id`` is promoted to the link the site itself prints. Asking the
-            # page for 「7696063528179878937」 as a URL answers with no title, which used to
+            # page for "7696063528179878937" as a URL answers with no title, which used to
             # refuse the one input this docstring advertised as supported.
             article_url = target if '://' in target else f'{_DETAIL_BASE}?series_id={series_id}'
             title = self._title_for(article_url) if series_id else ''
@@ -247,7 +247,7 @@ class HongguoCommentHarness:
         wait_s = int(self.params.get('harvest_timeout') or 90)
         # Read, never compared: the panel stores this switch as a real boolean, but a hand
         # written or fed canvas can hold the TEXT 'false', which ``bool()`` reads as on — and
-        # 「包含子回复」 off would then still click every thread open.
+        # “包含子回复” off would then still click every thread open.
         with_replies = as_bool(self.params.get('include_replies'), True)
         self._log(
             t(
@@ -284,7 +284,7 @@ class HongguoCommentHarness:
                 self._log(t('crawl.hg.cmt.noTraffic', seconds=wait_s, title=title))
                 if not rows:
                     # Counted, not just logged: an uncountable ``([], DEAD)`` let a five-drama
-                    # feed whose third drama a popup blocked settle 「正常」 over four, and one
+                    # feed whose third drama a popup blocked settle “正常” over four, and one
                     # drama fed with no traffic at all settle DONE on an EMPTY table.
                     self._count_unfinished(title)
                     return [], DEAD
@@ -357,7 +357,7 @@ class HongguoCommentHarness:
                     licensed = False
                     # Counted, not just licensed-false: the episodes never reached print no site
                     # total, so shortfall stays 0 and the engine's row-vs-total gate would call a
-                    # 2-of-10 walk 「正常」 the moment any reply rows pushed the table over the
+                    # 2-of-10 walk “正常” the moment any reply rows pushed the table over the
                     # two harvested episodes' totals. Naming it here is the only thing that makes
                     # a key that stopped landing a refusal rather than a silent yield cut.
                     self._count_unfinished(title)
@@ -475,7 +475,7 @@ class HongguoCommentHarness:
                 cold = True
                 if self.ui.wait_content(seconds=_COLD_REWAKE_SECONDS) is None:
                     return 'cold'
-        # A tree that stayed cold through every attempt is named cold: 「搜不到这部剧」 would
+        # A tree that stayed cold through every attempt is named cold: “搜不到这部剧” would
         # blame the library for a renderer that never woke, and the user would go looking for a
         # drama that was never the problem.
         return 'cold' if cold else 'notfound'
@@ -752,7 +752,7 @@ class HongguoCommentHarness:
         if missing:
             if machine.is_frozen():
                 # The desktop build does not carry this stack (mitmproxy pulls a large tree, and the
-                # harvest drives a real desktop window). 「pip install mitmproxy」 is not a thing
+                # harvest drives a real desktop window). "pip install mitmproxy" is not a thing
                 # anybody can do inside an exe, so name the build that can run the node instead.
                 raise ValueError(t('crawl.hg.cmt.needsExtrasFrozen', names=' / '.join(missing)))
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing=' / '.join(missing)))

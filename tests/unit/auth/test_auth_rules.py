@@ -107,7 +107,7 @@ class TestTheTokenComparison:
         assert security.token_matches('a-token', 'a-token') is True
 
     def test_a_non_ascii_token_is_refused_rather_than_raising(self):
-        """A header value is decoded latin-1 and a form field UTF-8, so 「café」 reaches the
+        """A header value is decoded latin-1 and a form field UTF-8, so "café" reaches the
         comparison as text the stdlib will not compare: the CSRF check turned into an HTTP 500."""
         assert security.token_matches('caf\u00e9', 'another-token') is False
         assert security.token_matches('\u30c6\u30b9\u30c8', '\u30c6\u30b9\u30c8') is True
@@ -120,7 +120,7 @@ class TestTheTokenComparison:
 
 
 class TestThePublicBind:
-    """A bind outside this machine with no accounts is an open server, whatever 「cloud」 says."""
+    """A bind outside this machine with no accounts is an open server, whatever "cloud" says."""
 
     @pytest.fixture(autouse=True)
     def _no_registry(self, tmp_path, monkeypatch):

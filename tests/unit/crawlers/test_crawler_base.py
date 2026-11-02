@@ -497,7 +497,7 @@ class TestAWallMustSurviveBeingJudged:
         weibo's search walk needs exactly this. A passport page that *stays* on screen is, for every
         other platform, the wall; here the same frame is what the site shows a logged-in visitor for a
         moment on the way to the results, so the only honest judge is the poll that later finds cards,
-        a 「no result」 plate, or neither. The flag exists so that reasoning is one argument at one
+        a "no result" plate, or neither. The flag exists so that reasoning is one argument at one
         call site rather than a second navigation path that also drops the settled-flag.
         """
         crawler, driver = self._weibo([(self.PASSPORT, '')] * 8, monkeypatch)

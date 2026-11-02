@@ -257,9 +257,9 @@
         'ai.model': '模型',
         'ai.localModels': '本地模型',
         'ai.ollamaHost': '服务地址',
-        'ai.ollamaHostNote': 'Ollama 服务地址在「设置」面板修改',
+        'ai.ollamaHostNote': 'Ollama 服务地址在“设置”面板修改',
         'ai.freeModels': '免费模型',
-        'ai.refreshModels': '— 点「刷新」获取列表 —',
+        'ai.refreshModels': '— 点“刷新”获取列表 —',
         'ai.refresh': '刷新',
         'ai.pickModel': '选择一个模型…',
         'ai.key': 'API Key',
@@ -276,7 +276,7 @@
             '结果分批保存：中途出错或停止时，已得到的结果不会丢失；修复后重新执行会自动从断点续跑。',
         'ai.keyNote': 'API Key 仅保存在本浏览器 Local Storage，不会写入服务器文件。',
         'ai.ollamaNote':
-            'Ollama：模型名必须是本地已拉取的名称（点「刷新」可读取）；服务地址在「设置」面板修改。' +
+            'Ollama：模型名必须是本地已拉取的名称（点“刷新”可读取）；服务地址在“设置”面板修改。' +
             '两种调用方式各自保存模型，互不影响。',
         'op.keyword': '关键词提取',
         'op.cluster': '文本聚类',

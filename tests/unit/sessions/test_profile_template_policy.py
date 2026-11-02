@@ -1,6 +1,6 @@
 """The pristine profile template: what it is allowed to contain, and where it may go.
 
-A cloud host has no 「浏览器生成」 button, so a device directory has to be made by the
+A cloud host has no “浏览器生成” button, so a device directory has to be made by the
 program. That is only safe while two things hold, and this file is the check on both:
 
 * the template holds **no session** — it is pristine because nothing was ever logged into
@@ -357,7 +357,7 @@ class TestStatusAnswers:
         assert profiles.template_exists() is True
         found = profiles.find_session_material()
         assert [os.path.normpath(hit.split(' (')[0]) for hit in found] == [os.path.join('Default', 'History')], found
-        # Where it is and how much is in it, because 「模板脏了」 alone tells nobody what to do.
+        # Where it is and how much is in it, because “模板脏了” alone tells nobody what to do.
         assert '2 rows' in found[0], found
 
     def test_a_marker_written_by_the_tool_is_not_a_session(self, rooted):

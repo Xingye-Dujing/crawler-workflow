@@ -534,7 +534,7 @@ class TestValidateGate:
     def test_a_platform_that_takes_names_flags_only_the_real_foreign_link(self, results):
         # Same rule as the backend's validate, asked of the same matrix payload: the
         # browser and the engine must not disagree about what one input line IS. The
-        # 「我在八零年代？第=集」 line is the one that used to disagree: both sides now spell
+        # “我在八零年代？第=集” line is the one that used to disagree: both sides now spell
         # the query test with an ASCII word class (capabilities.registry.is_url_cell).
         parsed = [_parse(m) for m in results['validate']['comments_names']]
         assert len(parsed) == 1
@@ -556,7 +556,7 @@ class TestValidateGate:
         assert fields['field'].startswith('field.') or fields['field'].startswith('settings.'), fields
 
     def test_an_author_mode_node_validates_without_a_keyword(self, results):
-        """「某作者的作品」 asks for a creator, never a keyword — and used to be refused for lacking one.
+        """“某作者的作品” asks for a creator, never a keyword — and used to be refused for lacking one.
 
         The message the user got named a field the panel had not even shown them, and
         no request left the page, so a mode shipped in the matrix, rendered in the
@@ -576,7 +576,7 @@ class TestValidateGate:
 
     def test_a_mode_the_platform_does_not_offer_is_refused_by_name(self, results):
         """小红书 has no author mode (its per-note token is not reliably reachable);
-        running its keyword search or saying 「缺少关键词」 there would each be a lie.
+        running its keyword search or saying “缺少关键词” there would each be a lie.
         The refusal must name the mode the platform never offered."""
         keys = [_parse(message)[0] for message in results['validate']['mode_the_platform_lacks']]
         assert keys == ['validate.sourceUnknownMode'], results['validate']['mode_the_platform_lacks']
@@ -784,7 +784,7 @@ class TestSettingsPanel:
         assert '<input type="checkbox" checked ' in results['settings']['panel_output_stamped']
 
     def test_the_time_range_checkbox_appears_only_when_an_upstream_set_a_window(self, results):
-        """「文件名带时间范围」 reaches ``filename_time_range``, and the backend now IGNORES
+        """“文件名带时间范围” reaches ``filename_time_range``, and the backend now IGNORES
         it (still writing the file) when there is no single honest window. The panel goes one
         step further: it does not OFFER the box at all unless an upstream collection node set
         both a start and an end — a checkbox with nothing honest to append is a choice the
@@ -1236,7 +1236,7 @@ class TestPanelEscaping:
 
     def test_the_panel_this_harness_cannot_render_escapes_where_it_is_written(self):
         """``renderResumeSettings`` fills itself from an awaited fetch, so the HTML
-        this file captures is the 「没有可续跑记录」 placeholder — the run/node selects
+        this file captures is the “没有可续跑记录” placeholder — the run/node selects
         and the row limit never appear. They take server data (a run id, a node id)
         into attributes, so they are pinned at the line that writes them instead.
         """
@@ -1346,7 +1346,7 @@ class TestRunRecordsPanel:
         # A serial record IS one workflow, so it names the mode even at ×1 (user directive).
         assert cases['singleSerial'] == ['SERIAL(1)', 'WINDOW'], cases['singleSerial']
         # forced_visible is a retired column (#148: nothing forces a window into a headless run),
-        # so it must be inert — a legacy row carrying the flag still reads 「无头」, never a mixed
+        # so it must be inert — a legacy row carrying the flag still reads “无头”, never a mixed
         # chip. If tags() ever relabels a headless request on this flag again, this goes red.
         assert cases['headlessForcedWindow'] == ['SERIAL(1)', 'HEADLESS'], cases['headlessForcedWindow']
         assert cases['headlessClean'] == ['SERIAL(1)', 'HEADLESS'], cases['headlessClean']

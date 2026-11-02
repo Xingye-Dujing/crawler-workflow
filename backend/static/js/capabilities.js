@@ -278,7 +278,7 @@ window.Capabilities = Capabilities;
    the settings panel instead of showing a Windows-only path setting on a Linux server.
 
    The verdict is the server's (``/api/capabilities`` → ``machine``) because only the process knows its
-   operating system and whether it is a cloud host — the same rule 「the panel holds no second opinion」
+   operating system and whether it is a cloud host — the same rule "the panel holds no second opinion"
    already applies to time, to cookie accounts and to a schedule's next fire. A missing verdict leaves
    the rows visible: hiding a setting on a byte that never arrived is how a panel loses a feature
    nobody asked it to drop. */
@@ -292,7 +292,7 @@ const Machine = {
 window.Machine = Machine;
 
 /* Registered fine-tuned models, fetched once at boot so the bert-mode picker can
-   offer them by friendly NAME (「网暴模型」) instead of making the user type a path.
+   offer them by friendly NAME (“网暴模型”) instead of making the user type a path.
    Same shape as Capabilities: a cold page starts the fetch before any node is
    opened, so the first bert settings panel shows the list, not a spinner. The list
    is OPTIONAL — a node always accepts a raw path, and a missing or malformed

@@ -118,7 +118,7 @@ def content_prefs(needs_images: bool) -> dict:
     window that merely *omits* the preference inherits the block from the device
     it shares with that crawl — and the login page it shows has no QR code to
     scan, because a QR code is an ``<img>``. Saying 允许 explicitly is what makes
-    「打开浏览器登录」 completable on a profile that has already crawled; the
+    “打开浏览器登录” completable on a profile that has already crawled; the
     block itself stays the crawl default, since it is the largest per-navigation
     saving a text-and-attribute crawler has (see ``needs_images``).
     """
@@ -162,7 +162,7 @@ def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -
     # These are names of switches CHROMEDRIVER adds to every Chrome it starts, and
     # a name it never adds buys nothing: this list said 'automation' since it was
     # written, so `--enable-automation` stayed in the command line and every
-    # visible crawl window carried the 「受自动测试软件的控制」 banner the option
+    # visible crawl window carried the “受自动测试软件的控制” banner the option
     # was supposed to remove (the user asked about it on 2026-09-25).
     opts.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
     # ``eager`` returns as soon as the DOM is parseable instead of waiting

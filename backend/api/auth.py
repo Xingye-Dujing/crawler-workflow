@@ -363,7 +363,7 @@ def _login_csrf() -> str:
     It must NOT be regenerated on every GET. A browser follows the document with an automatic
     ``GET /login?next=/favicon.ico`` (Chromium does exactly this), so minting per request replaced
     the session's token after the page had already rendered the previous one — every real Chrome
-    login then failed with 「CSRF 令牌错误」 while curl and the test client passed. Rotation happens
+    login then failed with “CSRF 令牌错误” while curl and the test client passed. Rotation happens
     where it belongs: the POST pops the token, and a refusal renders a fresh page with a fresh one.
     """
     token = str(session.get('login_csrf') or '')

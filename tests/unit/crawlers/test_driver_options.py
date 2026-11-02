@@ -96,7 +96,7 @@ def test_driver_options_per_mode(captured_options, headless):
 #: leave out. These are **names of generated switches**, not descriptions: a name
 #: chromedriver never adds is accepted silently and excludes nothing, which is
 #: exactly what `'automation'` did here — the real one is `enable-automation`, and
-#: without it every visible crawl window kept the 「受自动测试软件的控制」 banner.
+#: without it every visible crawl window kept the “受自动测试软件的控制” banner.
 #: The browser-side proof is in `tests/integration/test_browser_profile_launch.py`.
 EXCLUDED_SWITCHES = ['enable-logging', 'enable-automation']
 

@@ -6,14 +6,14 @@
  * is the server's answer, so what a browser test can actually catch is the panel inventing an
  * opinion anyway:
  *
- *   · an unknown shape must read as the catalogue's 「输出形态未知」, never as 节点表 — a wrong
+ *   · an unknown shape must read as the catalogue's “输出形态未知”, never as 节点表 — a wrong
  *     label states a fact the stored columns do not support;
  *   · a refusal is printed with the server's own words, and no table is painted for it:
  *     "that run has no such node" and "that node stored nothing" are different facts;
  *   · the paging line describes the WHOLE table while the rows are one page of it, and the
  *     Previous/Next buttons follow the stored offset rather than hope;
  *   · a filter that trims the page says how many rows it left, without rewriting the total;
- *   · 「在画布中定位」 on a node the canvas no longer holds says so — a button that does nothing
+ *   · “在画布中定位” on a node the canvas no longer holds says so — a button that does nothing
  *     reads as a broken app;
  *   · artefact links carry the name the server resolved, percent-encoded, because the browser
  *     never assembles a path.
@@ -238,7 +238,7 @@ const out = {};
         nodes: w.html().indexOf(w.x.I18n.t('biblioWs.shape.nodes')) >= 0,
         dual: w3.html().indexOf(w3.x.I18n.t('biblioWs.shape.dual_map')) >= 0,
         // The list of known shapes is read off BIBLIO_OUTPUT_SHAPES, not a copy: a shipped
-        // shape missing from a second literal list reads as 「输出形态未知」.
+        // shape missing from a second literal list reads as “输出形态未知”.
         variation: w4.html().indexOf(w4.x.I18n.t('biblioWs.shape.variation')) >= 0,
         unknown: w2.html().indexOf(w2.x.I18n.t('biblioWs.shapeUnknown')) >= 0,
         // A shape the server did not name must not be answered with a guessed word.
@@ -431,7 +431,7 @@ const out = {};
     empty.x.biblioWorkspace.render();
     out.diffQuiet = {
         saidSo: empty.html().indexOf(empty.x.I18n.t('biblioWs.diffNone')) >= 0,
-        // Counted by the heading element, not by its word: 「Nodes」 is also a table column
+        // Counted by the heading element, not by its word: "Nodes" is also a table column
         // header on this same panel, so a substring test would fail for the wrong reason.
         noHeadings: (empty.html().match(/class="sched-status"/g) || []).length === 0,
     };

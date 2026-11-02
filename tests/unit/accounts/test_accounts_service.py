@@ -85,7 +85,7 @@ def test_wrong_password_locks_after_five_attempts(service):
     for _ in range(5):
         with pytest.raises(AccountError) as exc:
             _login(service, password='wrong-password')
-        # The lock never announces itself to a WRONG password: 「登录失败次数过多」 is a fact about
+        # The lock never announces itself to a WRONG password: “登录失败次数过多” is a fact about
         # the account existing, and the lock is doing its job either way.
         assert exc.value.key == 'auth.badCredentials'
     row = service.store.get_user_by_username('admin')
@@ -98,7 +98,7 @@ def test_wrong_password_locks_after_five_attempts(service):
 
 def test_a_locked_name_does_not_answer_differently_to_a_wrong_one(service):
     """The lockout refusal sits behind the password check on purpose. Answering it first made the
-    public login form enumerate usernames: five attempts on 「admin」 return 「请 15 分钟后再试」
+    public login form enumerate usernames: five attempts on “admin” return “请 15 分钟后再试”
     while five attempts on a name nobody registered return the generic refusal."""
     _bootstrap(service)
     for _ in range(6):
@@ -125,7 +125,7 @@ def test_a_burst_of_wrong_passwords_locks_the_account_not_one_attempt(service, m
 
     Reading ``failed_attempts``, adding one and writing the total back is the classic lost update:
     a scripted burst of five concurrent guesses all read the same number, so the account ended the
-    attack at 「1 failure」 and 「连续 5 次锁 15 分钟」 — the whole point of the lock — never arrived.
+    attack at “1 failure” and “连续 5 次锁 15 分钟” — the whole point of the lock — never arrived.
     The barrier makes the burst real instead of hoping threads interleave: every thread has already
     read the row before any of them increments it.
     """
@@ -194,7 +194,7 @@ def test_a_wrong_current_password_is_refused_like_a_wrong_login(service, monkeyp
     """The change-password endpoint proved the old password with no window at all.
 
     Anyone holding a live session — a shared unlocked browser, any same-origin script — could guess
-    「当前密码」 without limit, and every guess costs this server a scrypt run: an unbounded request
+    “当前密码” without limit, and every guess costs this server a scrypt run: an unbounded request
     that is also unbounded CPU. The login window is the same guard, keyed to the account."""
     from services.accounts import service as accounts_service
 

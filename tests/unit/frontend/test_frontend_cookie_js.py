@@ -52,7 +52,7 @@ def _body(report, url):
 def _all_text(report):
     """Every string the harness brought back, in one haystack.
 
-    Used where the claim is 「this sentence is nowhere on the panel」: reading only the cell it
+    Used where the claim is "this sentence is nowhere on the panel": reading only the cell it
     used to be written into would miss it arriving by another route.
     """
     return json.dumps(report, ensure_ascii=False)
@@ -65,7 +65,7 @@ class TestGuide:
 
     def test_the_flow_is_fetched_once_and_then_served_from_cache(self, panel):
         """Two tables behind the guide — the per-platform steps and the profile state that
-        decides whether to advertise 「把 Cookie 更新进 Profile」 — and each is fetched once,
+        decides whether to advertise “把 Cookie 更新进 Profile” — and each is fetched once,
         including while both are still in flight (the guide repaints when either lands).
 
         ``report()`` accumulates every call the panel made, so the interesting half is
@@ -154,7 +154,7 @@ class TestVerify:
 
 
 class TestDeleteCookie:
-    """The panel's 「删除已存 Cookie」 button, one of the few places in this app where
+    """The panel's “删除已存 Cookie” button, one of the few places in this app where
     a click destroys something the user cannot rebuild without a real login."""
 
     def test_the_button_asks_before_it_sends_anything(self, panel):
@@ -175,7 +175,7 @@ class TestDeleteCookie:
         dialog = panel['deleteCancelled']['dialog']
         assert dialog['values'] == ['delete', 'null'], dialog
         # The confirmation names the login it will remove — platform AND account — because
-        # one platform now holds several sessions and 「删除知乎的 Cookie」 would not say which.
+        # one platform now holds several sessions and “删除知乎的 Cookie” would not say which.
         assert dialog['message'] == 'dialog.cookieDelete - platform.bilibili@default', dialog
         assert '{' not in dialog['message'], 'a slot reached the screen unfilled'
 
@@ -187,7 +187,7 @@ class TestDeleteCookie:
 
     def test_a_deletion_refreshes_the_status_line_it_just_changed(self, panel):
         """The panel shows which platforms hold a cookie; after a delete that answer
-        is stale, and a stale 「OK」 beside a removed file is a lie of the same shape as
+        is stale, and a stale "OK" beside a removed file is a lie of the same shape as
         the one the delete itself exists to correct."""
         urls = [item['url'] for item in panel['deleteConfirmed']['requests']]
         assert '/api/cookies/status' in urls, urls
@@ -221,7 +221,7 @@ class TestDeleteCookie:
 
 
 class TestDialogProfileDelete:
-    """The Cookie dialog's 「删除已存 Profile」 button reuses ``deleteCookieProfile()`` with no
+    """The Cookie dialog's “删除已存 Profile” button reuses ``deleteCookieProfile()`` with no
     arguments, so it must speak for the panel's OWN platform + account box (not a stale row),
     post exactly that device for retirement, and refuse the default account with no dialog/request."""
 
@@ -247,7 +247,7 @@ class TestSavePlantsItsOwnProfile:
     One cookie, one profile: the paste is the newest session there is, so the browser that
     crawls with that account takes it in on the spot — no second button, and no second
     request the app could get wrong. The one case the server cannot do immediately (that
-    profile is held) has to reach the screen, because 「已保存」 alone would hide it.
+    profile is held) has to reach the screen, because “已保存” alone would hide it.
     """
 
     def test_saving_asks_no_refresh_route_at_all(self, panel):
@@ -275,8 +275,8 @@ class TestSavePlantsItsOwnProfile:
         assert 'DEFERRED-PROFILE' in case['statusText'], 'the plant note must survive the refresh'
 
     def test_the_plant_refresh_updates_the_account_line_too(self, panel):
-        """The contradiction the user hit: after a save-into-profile the summary said 「已保存…21 条」
-        but the per-account line still read 「还没有保存过 Cookie」 — that branch wrote the plant note
+        """The contradiction the user hit: after a save-into-profile the summary said “已保存…21 条”
+        but the per-account line still read “还没有保存过 Cookie” — that branch wrote the plant note
         and skipped re-reading the rows the account line reads. The refresh (updateSummary=false)
         must now flip the account line to saved AND leave the plant note standing."""
         case = panel['savePlants']
@@ -337,7 +337,7 @@ class TestAccountCandidatesAndManager:
     One platform carries several logins, so the panel has to say WHICH ones exist, answer for
     the account currently typed without asking the server again per keystroke, and rename or
     delete the login a row NAMES rather than the one the box last held. Every account has a
-    name, the platform's own included (user, 2026-09-28: 「哪有同一个东西不同规范的」), so the
+    name, the platform's own included (user, 2026-09-28: “哪有同一个东西不同规范的”), so the
     box shows ``default`` instead of going blank.
     """
 
@@ -379,8 +379,8 @@ class TestAccountCandidatesAndManager:
         """The two sentences were deleted, and this is the pin that keeps them out.
 
         An account, its cookie file and its browser directory are one thing in this tool, and
-        since #148 every crawl runs headless behind a desktop fingerprint — so 「它的浏览器里
-        就是这份 Cookie」 and 「其中 N 条关窗口即失效」 described states the user neither
+        since #148 every crawl runs headless behind a desktop fingerprint — so “它的浏览器里
+        就是这份 Cookie” and “其中 N 条关窗口即失效” described states the user neither
         chooses nor can act on. The row's own cells are what would re-appear if the copy came
         back, so they are read, not assumed away.
         """
@@ -392,7 +392,7 @@ class TestAccountCandidatesAndManager:
             for button in row['buttons']:
                 # A cookie row may carry exactly the three actions, keyed — not free text. The
                 # removed profile-STATE chips (cookies.profileCurrent/Stale/Off/…) described a
-                # state the user cannot act on and stay banned; 「删除 Profile」 is different, it
+                # state the user cannot act on and stay banned; “删除 Profile” is different, it
                 # is a real action, and a stray un-keyed chip would still fail this line.
                 assert button['label'] in ('cookies.renameOne', 'cookies.deleteOne', 'cookies.deleteProfileOne'), row
                 assert '失效' not in button['label'], row
@@ -411,7 +411,7 @@ class TestAccountCandidatesAndManager:
         """A sentence nobody renders must not stay in the word list either — a dead key is
         how a removed feature gets resurrected by the next person who finds it.
 
-        The scan reads app.js AND every module split out of it: 「where the settings panel lives」
+        The scan reads app.js AND every module split out of it: "where the settings panel lives"
         has moved three times, and a file-name scan would report a key as gone the day the half that
         still prints it is cut into its own file.
         """
@@ -446,7 +446,7 @@ class TestAccountCandidatesAndManager:
         assert picked['box'] == 'default2' and 'cookies.accountStatusSaved - 4' in picked['line'], picked
 
     def test_the_default_login_is_offered_by_name_and_picks_by_name(self, panel):
-        """「它也要填值」 — the default account is a login like any other, so its candidate carries
+        """“它也要填值” — the default account is a login like any other, so its candidate carries
         ``default`` and clicking it lands that word in the box instead of a blank.
 
         The pick is reached through the chip's own listener: a popup whose buttons were never
@@ -471,11 +471,11 @@ class TestAccountCandidatesAndManager:
         assert case['toasts'] == ['RENAMED'], case
 
     def test_the_default_row_shows_a_rename_that_refuses_in_place(self, panel):
-        """The default row does not hide its rename — it shows 「重命名」 dead, with the reason as
+        """The default row does not hide its rename — it shows “重命名” dead, with the reason as
         the title and again when pressed.
 
         A silent absence is how a disabled control reads as broken; this is the same lesson the
-        「打开」 button taught (the refusal must be spoken), applied to a row that legitimately
+        “打开” button taught (the refusal must be spoken), applied to a row that legitimately
         cannot be renamed because its browser directory IS the platform's.
         """
         rename = panel['rowButtons']['defaultRow'][0]
@@ -488,7 +488,7 @@ class TestAccountCandidatesAndManager:
         assert refused['toasts'] == ['cookies.renameDefaultRefused'], refused
 
     def test_the_delete_profile_button_tracks_the_profile_and_the_account(self, panel):
-        """「删除 Profile」 appears exactly where it can do something, and is honest where it cannot.
+        """“删除 Profile” appears exactly where it can do something, and is honest where it cannot.
 
         A row with no profile directory has no device to retire, so it gets no button (not a dead
         one). A named account whose profile exists gets a live one. The 默认账号 row shows the
@@ -555,7 +555,7 @@ class TestAccountCandidatesAndManager:
         assert case['boxStill'] == 'default2', case
 
     def test_nothing_saved_offers_nothing(self, panel):
-        """An empty candidate area is the honest answer when no file exists; a 「默认账号」
+        """An empty candidate area is the honest answer when no file exists; a “默认账号”
         chip for a missing file is how a node ends up naming a login that is not here.
         The docked table shows a single note row, not a header over zero rows."""
         case = panel['nothingSaved']

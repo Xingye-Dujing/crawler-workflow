@@ -577,7 +577,7 @@ class TestRunLogEndpoints:
         assert [ln for ln in text.splitlines() if ln] == ['l0', 'l1', 'l2', 'l3', 'l4']
 
     def test_download_honours_the_same_filters_as_the_page(self, client, app_module):
-        """The download must reproduce 「所见」: whatever the viewer is showing is what saves."""
+        """The download must reproduce “所见”: whatever the viewer is showing is what saves."""
         store = app_module._RUN_STORE
         _seed(store, 'r1', status=RUN_COMPLETED)
         _seed_log(store, 'r1', [('a', 0, 'info'), ('登录墙', 0, 'error'), ('b', 1, 'info')])

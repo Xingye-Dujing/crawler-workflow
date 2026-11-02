@@ -50,7 +50,7 @@ def get_config():
 
 @bp.route('/api/models', methods=['GET'])
 def list_models():
-    """Registered fine-tuned models by friendly NAME, so the bert-mode picker can show 「网暴模型」
+    """Registered fine-tuned models by friendly NAME, so the bert-mode picker can show “网暴模型”
     instead of a bare path. A missing or malformed registry is an empty list, never an error — a
     node with no named models still accepts a path."""
     return jsonify({'ok': True, 'models': read_model_registry()})
@@ -88,7 +88,7 @@ def default_model_path_for(operation: str) -> str:
 
     This is what makes a default ``bert`` node actually mean bert: when a node names no model, the
     executor resolves the operation's registered default here (registry order is the operator's
-    preference — e.g. the 「推荐」 tendency model is listed first). ``''`` means "nothing to load",
+    preference — e.g. the “推荐” tendency model is listed first). ``''`` means "nothing to load",
     which the executor treats as bert-unavailable and degrades to the general mode with a printed line.
     """
     want = str(operation or '').strip()

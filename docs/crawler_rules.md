@@ -11,7 +11,7 @@
   paged *by* — a button, the window, or one element's own scroll box; whether nested content (replies to comments,
   merged cards) exists only behind an expander; which container actually holds the rows; and which columns the page
   really shows. A wrong page model does not fail loudly — it makes every downstream judgement agree with itself, so
-  summary, store and preview all concur on a table the page never offered (zhihu's comment panel: no 「更多」
+  summary, store and preview all concur on a table the page never offered (zhihu's comment panel: no “更多”
   control, lazy-fills by scrolling its own overlay, nested replies behind an expander nothing clicked — measured in
   `docs/crawler_notes.md`). **Ask the page for a denominator (its own printed count) and grade against that.**
 - **The crawl matrix (`backend/capabilities/` — `platforms/<id>.py` for the declarations, `registry.py` for the queries) is the only answer to "what can this platform collect".** It
@@ -35,7 +35,7 @@
   engine's window decision both read it). Two traps once guarded it: ~~a sticky header covering douyin's 筛选
   opener's centre, so `menu.hover` also fired enter events on the node (`ActionChains` alone missed it)~~ —
   **RETIRED**: douyin 搜索/筛选 was deleted 2026-09-30 and `engine/menu.py` no longer exists (see `docs/crawler_notes.md`
-  Douyin「已移除」section), so no hover-menu guard survives; do not re-add it; and a *stored*
+  Douyin“已移除”section), so no hover-menu guard survives; do not re-add it; and a *stored*
   profile preference still outlives the crawl, so 取/验证 Cookie and the pre-run probe write 允许 explicitly
   (`crawlers/core/browser.py::content_prefs`) or a window shows a QR-less login.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`, `engine.wall`
@@ -90,7 +90,7 @@
   overwriting a live profile with an old snapshot is the harm, not the fix. What changed (2026-09-28): **saving a
   cookie is itself the update**. A paste is the newest session there is, so `POST /api/cookies/save` plants it into
   that account's profile on the spot (`sessions/routes.py::_plant_saved_cookie_into_profile`, the only caller of
-  `get_crawler(refresh_cookies=True)`); the panel's 「把 Cookie 更新进 Profile」 button and
+  `get_crawler(refresh_cookies=True)`); the panel's “把 Cookie 更新进 Profile” button and
   `POST /api/cookies/refresh-profile` were deleted with it. When that browser is held, the save still succeeds, says
   so, and the next crawl of that account imports the newer file because `planting` also honours
   `sessions/profiles.py::needs_refresh` (file stamp newer than the marker's). **Never write the browser's live jar back to a
@@ -111,7 +111,7 @@
   under the same root.
 
 - **A relative timestamp is resolved at READ time, and only there.** The sites print
-  「3小时前」/「昨天 21:30」/「2 days ago」 for anything recent, and storing that wording is what
+  “3小时前”/“昨天 21:30”/“2 days ago” for anything recent, and storing that wording is what
   rots: the same cell means a different date tomorrow. Leaving it stored was the old answer
   (``normalise_rfc822`` returns what it cannot parse untouched) and it is honest and useless —
   a time series over it silently loses exactly the rows a live event is about, and 发布时间 is
@@ -151,7 +151,7 @@
 - **weibo**: never judge the wall from the URL right after `get()` (it flashes the passport page then bounces);
   `/ajax/statuses/mymblog` is a per-session edge 403 → refuse loudly, never an empty table
   (`backend/test_weibo_recipe.py` — 脚本已归档，数字即结论); the window scroll brings no new rows, and a search page serves *recommended*
-  posts inside the same `#pl_feedlist_index` even when it also prints 「抱歉，未找到相关结果」 (measured 2026-09-28).
+  posts inside the same `#pl_feedlist_index` even when it also prints “抱歉，未找到相关结果” (measured 2026-09-28).
 - **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit outcome —
   don't loosen the assertion; comments run in either shape (#148). **A search card is an excerpt**, so the body
   arrives only by clicking: allowed where the row's own link says `/answer/`, and 正文 is the only column replaced.
@@ -214,10 +214,10 @@
   错剧 guard cannot catch it on a name-fed walk); the board list is read AFTER the switcher is opened (one tab named
   like a board satisfies the same pattern as the whole list); 停止 is asked inside every UIA wait (`PlayerUI` holds the
   harness `abort`, `open_drama`'s `except Exception` re-raises `CrawlerStopped`) — else a cold tree burns minutes per
-  drama uninterruptibly and a mid-open Stop was filed 「搜不到这部剧」.
+  drama uninterruptibly and a mid-open Stop was filed “搜不到这部剧”.
   **Envelope drift (third live run, 2026-10-20):** `reply/list` is a DIFFERENT envelope — `data.comment_list_info` +
   `data.reply_list[]`, element body under a CAPITALISED `Common`, own id `reply_id`, parent in `data.comment`, and **no
-  `data_list` at all** — reading only `data_list` made every 「包含子回复」 run collect ZERO children (53 expansion clicks,
+  `data_list` at all** — reading only `data_list` made every “包含子回复” run collect ZERO children (53 expansion clicks,
   0 rows); normalise into the `comment/list` shape and keep ONE row builder. Which drama a page belongs to is asked of
   the **request** (`req_body.business_param.book_id`), never of the rows (another drama's pages print `expand.book_id ==
   "0"`; grading the payload let 30 stranger rows into the table). The gate covers reply pages too. The web `series_id`
@@ -227,8 +227,8 @@
   before harvesting** (`PlayerUI.screen_drama_title` → `_confirm_position`): the player prints `@剧名` in the header, the
   ONLY drawer-open screen fact (`N / M` episode counter is on the video page but **absent once the drawer is open**, so
   a `第N集` gate would refuse dramas being harvested correctly). The header answers at entry and after each
-  `next_episode`, read with two PROCEED-biased rules (a wrong 「drifted」 throws away a paid drama; a wrong 「keep
-  going」 is caught by the traffic gate): a single foreign read is **re-asked** before it is a verdict, and the match
+  `next_episode`, read with two PROCEED-biased rules (a wrong "drifted" throws away a paid drama; a wrong "keep
+  going" is caught by the traffic gate): a single foreign read is **re-asked** before it is a verdict, and the match
   is a prefix in EITHER direction at any length (header is BASE name, request may carry a season suffix). Not exactly
   one `@`-prefixed text means no answer (a 弹幕/reply opening with `@昵称` sits before the header in tree order); a tree
   that prints nothing confirms nothing and the traffic gate stays underneath. A `next_episode()` that fails to land is
@@ -306,7 +306,7 @@
   announces the merged file the user is told to open. So any component that changes between
   attempts of the SAME run silently orphanes those parts and restarts the numbering at 001
   beside them — the resume looks green and the merged table is only the tail. That is why the
-  optional 「创建时间」 component (`core.refs.export_stamp`) is read from the run RECORD's
+  optional “创建时间” component (`core.refs.export_stamp`) is read from the run RECORD's
   `started_at` plus its `run_id`, never from the clock at write time: `run_store.start_run`'s
   继续 conflict update deliberately does NOT refresh `started_at`, and `run_id` is what the
   resume keys on, so both are stable per record and different between records. A date-only
@@ -316,7 +316,7 @@
   Pinned: `tests/unit/foundation/test_utils.py::TestExportStamp`, `tests/api/test_nodes_execution.py::
   TestWindowedFilenames::test_the_stamp_a_resume_reuses_is_the_record_and_not_the_clock`.
 - **A filename component is a name being chosen, so an ambiguous one is refused by name.**
-  「文件名带时间范围」 asks the SAVE node to print a window it cannot see (it receives a table),
+  “文件名带时间范围” asks the SAVE node to print a window it cannot see (it receives a table),
   so the range travels through the run (`execution_state['_time_windows']`, keyed per workflow
   exactly like the console buffers, recorded where the crawl states it). Zero windows and two
   different windows both fail the node saying which, rather than naming a file after a stretch
@@ -326,7 +326,7 @@
 - **cnki (中国知网)**: **全选 selects only the current page**; the site accumulates the selection across pages in
   localStorage, so click 全选 on every page and export once at the end (per batch when the site's own 500-selection
   ceiling is reached). The export is `导出与分析 → 导出文献 → Refworks`, which opens `manage/export.html`; its on-screen
-  list is a **preview capped at 20** (measured: 40 selected → 20 `li`), so click 「导出题录文件」 and read the downloaded
+  list is a **preview capped at 20** (measured: 40 selected → 20 `li`), so click “导出题录文件” and read the downloaded
   `CNKI-…txt` — it writes a blank line between every field, and those blanks are stripped before the shared importer
   (`services.biblio.importer.parse_cnki`) sees the records. **Refworks is the format**: same 150-record batch measured
   RefWorks 16 columns (abstract/keywords/DOI/doctype/**language**) vs NoteExpress/EndNote 15 (no language) and a real
@@ -345,12 +345,12 @@
 - **一个采集模式能不能跑，问 `capabilities.registry.requirement_met(token)` 这一个问题，问四次。** 红果短剧的评论
   收割要驱动本机播放器进程 + 把 mitmproxy 的 CA 装进 Windows 系统证书库，所以它标了
   `requires='windows_desktop'`：① `/api/capabilities` 的 `machine` 字段给出**这台服务器**的判定；② 面板据此把
-  那一栏采集内容**列着但置灰**并在括号里写明原因（节点存的正是那个模式，不列出会让面板画成「第一个模式」，
+  那一栏采集内容**列着但置灰**并在括号里写明原因（节点存的正是那个模式，不列出会让面板画成“第一个模式”，
   那是面板在谎报这次运行会做什么）；③ `engine/workflow.py::validate` 在**运行之前**按名拒绝（`run.browserReapFailed`
-  那类「跑一半才知道不行」要花掉一个运行槽与上游的 LLM 额度）；④ 节点执行器 `_ensure_stack` 仍自己拒一次——
+  那类“跑一半才知道不行”要花掉一个运行槽与上游的 LLM 额度）；④ 节点执行器 `_ensure_stack` 仍自己拒一次——
   隐藏一个按钮从来不是权限。判定**缺失**时一律照常可见可用：因为一个字节没到就藏掉能用的功能是另一种 bug。
 - **窗口类要求在 cloud 模式下同样不满足**，哪怕操作系统是 Windows：没有可驱动的桌面不等于有桌面。
-  这条与「强制无头」「拒绝浏览器生成 Cookie」「拒绝本地 Ollama」是同一个 `CLOUD_MODE` 答案的不同面。
+  这条与“强制无头”“拒绝浏览器生成 Cookie”“拒绝本地 Ollama”是同一个 `CLOUD_MODE` 答案的不同面。
 
 ## 第二采集后端 / The second crawl backend (CatBus)
 
@@ -363,7 +363,7 @@
   节点会在空表上结算 DONE。后端切换也**不回退**：选了 CatBus 就不会"顺手"改用浏览器。
 - **后端是节点身份的一部分。** `services/runs/store/identity.py::stable_params` 把 `backend` 计入指纹，同时把
   `selenium`／缺省折叠掉（与 `account`、`model` 同一条先例）：折叠前所有既有画布的指纹会集体改变，
-  「继续」找不到自己付过钱的行，于是整库重采。CatBus 的行与 Selenium 的行因此永远分属两套去重账本、
+  “继续”找不到自己付过钱的行，于是整库重采。CatBus 的行与 Selenium 的行因此永远分属两套去重账本、
   两个水位作用域。
 - **两个后端的登录态是两套东西，问题就分开发问。** CatBus 只认 `params.catbus_account` 与自己
   `~/.catbus/` 里的账号文件，本项目的 `data/cookies/*.json` 既不读也不写（`CookieManager` 导出的 `expiry`
@@ -390,10 +390,10 @@
   也绝不把存了 CatBus 的节点画成 Selenium。运行前校验读同一份 `cells`，不可运行的一对不会买到一次运行；
   CatBus-only 模式走 `CatbusCrawler.catbus(mode_key=…)`，命令本身来自清单，不新增平台分支。
 - **没被适配器消费的数据条件按名拒绝。** 适配器保留未知参数是子进程边界的设计（它还被别的调用方复用），
-  但对节点来说那等于「填了时间窗却跑了一张没按时间过滤的表」。`catbus_bridge.declared_params` 给出每个功能
+  但对节点来说那等于“填了时间窗却跑了一张没按时间过滤的表”。`catbus_bridge.declared_params` 给出每个功能
   真正消费的参数；节点上填了不在其中、且不等于默认值的 `start_time`／`end_time`／`comment_preview`／`board`
   等条件时，`CatbusCrawler._unsupported_params` 在起子进程之前拒绝并点名。默认值不算用户的条件：
-  画布会给每个平台播种全部字段的默认值，把 `board=popular` 当成「要求榜单」会误伤所有非热榜模式。
+  画布会给每个平台播种全部字段的默认值，把 `board=popular` 当成“要求榜单”会误伤所有非热榜模式。
 - **进程边界写死 UTF-8 与进程树。** 参数经 stdin（`--params -`）而不是 argv：中文关键词走命令行会被 Windows
   控制台代码页改写，长链接列表还会撞命令行长度上限；stdout/stderr 按字节读回再显式 decode；
   子进程按 token 登记，停止与超时都走 `utils/procs`（Windows 的 `CREATE_NO_WINDOW` 只在 Windows 存在，

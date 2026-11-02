@@ -413,7 +413,7 @@ class TestPhaseTwoContracts:
         assert len(merged['edges']) == len(merged['rows']) - 1
         assert len(slices['edges']) >= len(merged['edges'])
         # The scope is named with the interface's own word, not the stored token: a Chinese
-        # console line reading 「MST 剪枝（slices）」 is half a sentence in two languages.
+        # console line reading “MST 剪枝（slices）” is half a sentence in two languages.
         assert any('MST' in note and t('biblio.pruning_scope.slices') in note for note in slices['notes'])
         assert any('MST' in note and t('biblio.pruning_scope.merged') in note for note in merged['notes'])
 

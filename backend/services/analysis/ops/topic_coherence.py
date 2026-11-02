@@ -23,7 +23,7 @@ def topic_coherence(
 ) -> pd.DataFrame:
     """Score a SWEEP of topic counts, for the decision the paper never explains.
 
-    「设定主题个数」 is a real choice and 表 1 gives no reason for 5/6/4/4/4. This step fits
+    “设定主题个数” is a real choice and 表 1 gives no reason for 5/6/4/4/4. This step fits
     the same model :meth:`topic_model` fits, once per count, and prints two numbers per
     count: the log perplexity (how well the model predicts held-out word counts — it keeps
     falling as the model memorises rows) and a word-coherence score (whether a topic's top

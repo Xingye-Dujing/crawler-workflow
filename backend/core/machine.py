@@ -23,7 +23,7 @@ def _path_shape(os_name: str) -> tuple:
     """The joiner and the ``PATH`` separator a GIVEN operating system uses.
 
     ``os.path`` would answer with the separator of the machine asking, which is right at run time and
-    wrong as a test: a Windows box asking 「what would a Linux box look for」 has to get Linux-shaped
+    wrong as a test: a Windows box asking "what would a Linux box look for" has to get Linux-shaped
     strings back, or every cloud candidate path is unverifiable from here.
     """
     if os_name == 'win32':
@@ -43,7 +43,7 @@ CHROME_WINDOWS_ROOTS = ('PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA')
 #: Absolute locations, per OS, that no environment variable names. The names are the package names
 # a user actually installed (``google-chrome-stable``, ``chromium-browser``), so a missing entry is a
 # fact about that machine and not a bug here — but so is a missing LIST: one list per OS is why a
-# cloud box with /usr/bin/chromium used to answer 「未找到 Chrome」 while the crawl worked on Windows.
+# cloud box with /usr/bin/chromium used to answer “未找到 Chrome” while the crawl worked on Windows.
 CHROME_PATHS = {
     'linux': (
         '/usr/bin/google-chrome',
@@ -119,7 +119,7 @@ def platform_name(system: str | None = None) -> str:
 def is_windows(system: str | None = None) -> bool:
     """Whether this machine can be asked for a window, a foreground app or a system certificate store.
 
-    One answer for every 「Windows 才有的能力」 gate, so a refusal and the UI that hides the entry
+    One answer for every “Windows 才有的能力” gate, so a refusal and the UI that hides the entry
     cannot disagree about which platform the user is on.
     """
     return platform_name(system) == 'win32'
@@ -129,7 +129,7 @@ def is_frozen() -> bool:
     """Whether this is the packaged desktop app rather than a source checkout.
 
     PyInstaller sets ``sys.frozen`` on the running bundle. The answer decides what a refusal is
-    allowed to tell the user to DO: 「pip install mitmproxy」 is an instruction in a checkout and
+    allowed to tell the user to DO: "pip install mitmproxy" is an instruction in a checkout and
     nonsense in an exe that has no pip and no interpreter anyone can write to.
     """
     return bool(getattr(sys, 'frozen', False))
@@ -170,7 +170,7 @@ def _is_executable(path: str) -> bool:
     """A file that exists — and, off Windows, is marked runnable.
 
     A Chrome found on ``PATH`` that is not executable would raise ``PermissionError`` from the
-    driver, which reads as 「Chrome 启动失败」 rather than the truth about the file's mode.
+    driver, which reads as “Chrome 启动失败” rather than the truth about the file's mode.
     """
     if not os.path.isfile(path):
         return False
@@ -203,7 +203,7 @@ def find_chrome(explicit: str = '', env: dict | None = None, system: str | None 
     return candidates[0] if candidates else ''
 
 
-#: The families of 「缺它怎么办」 answer, each with one catalogue key per OS. A remedy is a different
+#: The families of “缺它怎么办” answer, each with one catalogue key per OS. A remedy is a different
 # sentence on each platform (Windows adds a font feature, Linux installs a distro package, macOS often
 # already has the font), so the sentence is chosen here and written in ``i18n`` — and
 # ``tests/unit/foundation/test_missing_dependency_messages.py`` walks THIS list times every platform, because a
@@ -220,7 +220,7 @@ def remedy_key(prefix: str, system: str | None = None) -> str:
 def remedy(prefix: str, system: str | None = None) -> str:
     """What to install on THIS operating system, read from the bilingual catalogue.
 
-    Used inside a 「缺 X」 sentence: telling a Linux user to open the MiKTeX console, or a Windows user
+    Used inside a “缺 X” sentence: telling a Linux user to open the MiKTeX console, or a Windows user
     to ``apt-get install``, is a refusal nobody can act on — and the catalogue's parity check cannot see
     it, because both languages said the same Windows thing.
     """
@@ -486,8 +486,8 @@ def catbus_candidates(env: dict | None = None, system: str | None = None) -> lis
 def catbus_entry_at(path: str, system: str | None = None) -> str:
     """The adapter entry a hand-written path points at: a file as given, a checkout root resolved.
 
-    Both spellings are natural and both come from the settings panel: 「指到那个 cli.js」 and
-    「指到 CatBus 的目录」. A directory is the second one, so it gains the one suffix that makes it
+    Both spellings are natural and both come from the settings panel: “指到那个 cli.js” and
+    “指到 CatBus 的目录”. A directory is the second one, so it gains the one suffix that makes it
     the entry — which is also what ``CATBUS_HOME`` has always meant here. Joined with the TARGET's
     separator, so a Linux answer asked from this box still reads as a Linux path.
     """

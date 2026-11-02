@@ -251,7 +251,7 @@ class WorkflowHistoryStore:
 
         A pointer to a missing snapshot is reported as ``baseline_missing`` — the layout
         button can then refuse by name instead of quietly running the algorithm while the
-        settings still say 「按历史基准」.
+        settings still say “按历史基准”.
         """
         name = str(workflow_name or '').strip()
         rows = self._query('SELECT * FROM layout_baselines WHERE workflow_name = ?', (name,))

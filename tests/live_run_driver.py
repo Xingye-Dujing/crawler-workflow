@@ -41,7 +41,7 @@ class RunDriver:
 
     Subclasses set :attr:`PLATFORM`, :attr:`DEFAULT_TIMEOUT` and :meth:`vocabulary`; nothing else about
     the sequencing is platform-shaped. The recorder opens *before* the POST because the earliest lines —
-    the record the run was booked against, the validation errors, 「本次跳过」 — are exactly what a case
+    the record the run was booked against, the validation errors, “本次跳过” — are exactly what a case
     needs when something refused it. Leaving the ``with`` block early on a failed assertion still writes
     the audit row, still hands the root logger back, and — the part that protects the *other* cases —
     asks 停止 for a run that is still crawling.
@@ -146,8 +146,8 @@ class RunDriver:
         self.status = self.rec.drain()
         if str(self.status.get('outcome') or '') == 'rejected':
             # Validation refused this canvas, so the app returned before opening a record (``app.py``
-            # never creates a row for a rejected run). Reading one here would fail as 「no record for
-            # run …」 and report the product's refusal as a missing run — the sentence that convicts is
+            # never creates a row for a rejected run). Reading one here would fail as "no record for
+            # run …" and report the product's refusal as a missing run — the sentence that convicts is
             # the one the console already printed.
             refused = [
                 line
@@ -217,7 +217,7 @@ class RunDriver:
         The stop cases all cut a live crawl short and the request is the same one the user's button
         makes; a second copy of the guard is how one of them ends up asserting a different answer from
         the endpoint. ``records`` is the proof the Stop found a run to own — an idle server answers
-        「ok」 with nothing stopped, which is not evidence.
+        "ok" with nothing stopped, which is not evidence.
         """
         stopped = self.client.post('/api/workflow/stop').get_json()
         assert stopped.get('ok') and stopped.get('records'), f'停止 answered without taking a record: {stopped}'
@@ -233,8 +233,8 @@ class RunDriver:
         the run wrote.
 
         A run that reaches its verdict first is reported as the failed premise it is, rather than being
-        sat on for the whole deadline: 「there was nothing to stop」 is a different finding from 「the
-        crawl never started」, and both are different from a timeout.
+        sat on for the whole deadline: "there was nothing to stop" is a different finding from "the
+        crawl never started", and both are different from a timeout.
         """
         deadline = time.monotonic() + within
         while True:
@@ -313,7 +313,7 @@ class RunDriver:
         """This component's own verdict, graded against its own workflow's console.
 
         A reason named by a sibling is not this component's reason: graded on the whole transcript, a
-        0-row author walk is excused by the search beside it saying 「没有更多了」, and a multi-component
+        0-row author walk is excused by the search beside it saying “没有更多了”, and a multi-component
         run — the shape that can hide it — could never be told apart from one that said nothing.
         """
         exits, liars = self.vocabulary(mode, self.headless)
@@ -329,7 +329,7 @@ class RunDriver:
         """This workflow's own transcript, and a refusal when the console has none for it.
 
         Falling back to the whole console would be the false green these helpers exist to prevent:
-        graded on everybody's lines, a 0-row component is excused by a sibling's 「没有更多了」, and one
+        graded on everybody's lines, a 0-row component is excused by a sibling's “没有更多了”, and one
         component's 被停止 reads as another's — which is exactly what :meth:`component_verdict` and
         ``ConsoleRecorder.transcript_for`` warn the caller about. So a component the console never
         spoke about is reported as an attribution failure by name, not graded on evidence that belongs
@@ -502,7 +502,7 @@ class RunDriver:
                 # lane and the profile directory away from every later case, keeps its browser out of
                 # anyone's reach (the client teardown restores ``execution_state`` wholesale, handle
                 # included), and keeps narrating lines that the *next* case will fold into its own
-                # transcript — where a stranger's 「没有更多了」 can turn a real under-collection into a
+                # transcript — where a stranger's “没有更多了” can turn a real under-collection into a
                 # named, legitimate one. Containment therefore happens before the row is written: the
                 # row is where a leak gets reported, and a leak the next case inherits is the finding.
                 with contextlib.suppress(Exception):

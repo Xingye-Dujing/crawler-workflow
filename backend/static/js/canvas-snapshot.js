@@ -198,7 +198,7 @@ Object.assign(canvas, {
         /* The selection is view-only, so restoreState never rebuilds it: an undo that removed
            a node left its id in ``selectedNodes`` as a ghost. ``alignSelected`` then read
            ``el.style`` on a null box (TypeError), and Delete hit the ghost and still toasted
-           「节点已删除」 for a node that was already gone. Prune the selection to what survived,
+           “节点已删除” for a node that was already gone. Prune the selection to what survived,
            exactly as the delete paths do. */
         this.selectedNodes = this.selectedNodes.filter((id) => this.nodes[id]);
         if (this.selectedNode && !this.nodes[this.selectedNode]) this.selectedNode = null;

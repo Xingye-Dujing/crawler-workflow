@@ -5,9 +5,9 @@
  * still work, and what does the page do with the answer. Two settings choose the
  * branch (执行前自动验证 / 执行前确认), and every interesting failure here is
  * invisible to Python: a gate that asks about platforms the canvas never touches,
- * a 「无法核对」 treated as a dead cookie (which would refuse runs about to
+ * a “无法核对” treated as a dead cookie (which would refuse runs about to
  * succeed), a refusal that posts the run anyway, a block dialog that quietly
- * offers 「我确定，照样跑」 — the whole point of the feature is that it does not.
+ * offers “我确定，照样跑” — the whole point of the feature is that it does not.
  *
  * Each scenario gets a fresh world: AppSettings and Capabilities cache what they
  * fetched, so a shared sandbox would answer every case with the first payload it
@@ -51,7 +51,7 @@ function world(sc) {
     fixWindow(vm, sandbox);
     const routes = sandbox.__routes;
     routes['/api/settings'] = { ok: true, settings: sc.settings || {} };
-    /* A scenario can answer 「no cookie anywhere」; `execute()` used to refuse on that map
+    /* A scenario can answer "no cookie anywhere"; `execute()` used to refuse on that map
        (default account only), so the realistic answer has to be reachable to prove it no
        longer decides anything. */
     routes['/api/cookies/status'] = sc.status || ALL_COOKIES;

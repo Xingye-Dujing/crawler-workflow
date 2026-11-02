@@ -228,7 +228,7 @@ class TestTheOutcome:
 class TestThePanelSaysTheSameThing:
     def test_an_unreachable_probe_line_is_never_the_praise(self, app_module):
         """The panel's 验证 Cookie answers from the same facts, and its three old answers
-        had no shape for 'never tested' — 「无法核对」 was closest but says the wrong
+        had no shape for 'never tested' — “无法核对” was closest but says the wrong
         thing, because what could not be checked was not the cookie."""
         lines = routes._verify_lines('zhihu', {'url': 'https://www.zhihu.com/', 'unreachable': True})
         assert t('cookie.verify.unreachable', platform='zhihu') in lines

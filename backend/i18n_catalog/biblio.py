@@ -8,7 +8,7 @@ Keys are sorted; the two tables in here must hold the same set (``tests/unit/i18
 
 ZH = {
     'biblio.aliases_applied': '别名合并：{n} 个节点标签已按用户映射归一',
-    'biblio.bad_option': '{nid}：{param} 的值「{value}」无效（可选：{allowed}）',
+    'biblio.bad_option': '{nid}：{param} 的值“{value}”无效（可选：{allowed}）',
     'biblio.betweenness_sampled': '节点数 {n} 超过 2000，中介中心性使用 {k} 个源点采样',
     'biblio.build_done': '文献计量完成：{entity}，{nodes} 个节点 / {edges} 条边（{start}–{end}）',
     'biblio.burst_done': '突现检测：{nodes}/{total} 个节点有突现',
@@ -34,7 +34,7 @@ ZH = {
     'biblio.col.节点': '节点',
     'biblio.col.话题分布': '话题分布',
     'biblio.col.起始年': '起始年',
-    'biblio.column_missing': '文献计量需要「{col}」列（{entity}），当前表没有该列',
+    'biblio.column_missing': '文献计量需要“{col}”列（{entity}），当前表没有该列',
     'biblio.compare_needs_two': '对比需要两个不同的快照（基准与当前）',
     'biblio.counting_fractional': '分数计数：每篇文档把 1 份信用均分给它承载的实体，{docs} 篇文档参与折算',
     'biblio.counting_no_coupling': (
@@ -72,7 +72,7 @@ ZH = {
     'biblio.isolates_dropped': '{n} 个孤立节点在成图后没有连边，已从节点表移除',
     'biblio.label_fallback': '聚类标签方法 {asked} 没有可用文本，实际使用 {used}（已在运行摘要中如实标明）',
     'biblio.largest_component': '已保留最大连通分量：节点 {before} → {after}，其余分量已剪除',
-    'biblio.links_too_large': '节点「{node}」的连接 JSON 超过 {cap} 字节：请降低最大连边数',
+    'biblio.links_too_large': '节点“{node}”的连接 JSON 超过 {cap} 字节：请降低最大连边数',
     'biblio.mst_done': 'MST 剪枝（{scope}）：{before} → {after} 条边',
     'biblio.no_edges': '{start}–{end} 年没有共现边：请降低阈值、扩大时间范围或换一种实体类型',
     'biblio.no_edges_after_component': '保留最大连通分量后没有边：请关闭该选项或降低筛选阈值',
@@ -81,10 +81,10 @@ ZH = {
     'biblio.no_records': '没有可用文献记录：请确认年份列可解析',
     'biblio.no_records_in_range': '{start}–{end} 范围内没有文献记录',
     'biblio.overlay_no_labels': (
-        '「{col}」列没有任何标签（{n} 条记录全为空）：无法叠加，请先检查上游情感/情绪/话题步骤是否真的写出了这一列'
+        '“{col}”列没有任何标签（{n} 条记录全为空）：无法叠加，请先检查上游情感/情绪/话题步骤是否真的写出了这一列'
     ),
-    'biblio.overlay_no_nodes': '「{col}」有标签，但没有任何留下来的节点带标签，叠加列为空',
-    'biblio.overlay_partial': '「{col}」：{n}/{total} 条记录没有标签，未计入叠加（分母只含已标注文档）',
+    'biblio.overlay_no_nodes': '“{col}”有标签，但没有任何留下来的节点带标签，叠加列为空',
+    'biblio.overlay_partial': '“{col}”：{n}/{total} 条记录没有标签，未计入叠加（分母只含已标注文档）',
     'biblio.pfnet_depth_all': '不限',
     'biblio.pfnet_done': (
         'Pathfinder 剪枝（{scope}，r={r}，最长间接路径 {lmax} 跳，保留比例 {dmax}）：'
@@ -108,7 +108,7 @@ ZH = {
     'biblio.shape_needs_burst': '{nid}：输出形态 bursts 需要开启突现检测，请先开启或改回 nodes/edges',
     'biblio.shape_needs_cluster': '{nid}：输出形态 clusters 需要开启聚类，请先开启或改回 nodes/edges',
     'biblio.shape_needs_variation': '{nid}：输出形态 variation 需要开启结构变异检测，请先开启或改回其它形态',
-    'biblio.snapshot_done': '[文献计量] 已存快照「{label}」：{nodes} 个节点 / {edges} 条连边（参数已核对：{verified}）',
+    'biblio.snapshot_done': '[文献计量] 已存快照“{label}”：{nodes} 个节点 / {edges} 条连边（参数已核对：{verified}）',
     'biblio.snapshot_not_found': '找不到快照 {sid}：它可能已被删除',
     'biblio.time_range': '{nid}：时间范围无效：{start} > {end}',
     'biblio.too_many_edges': '边数 {n} 超过上限 {cap}：请收紧 TopN/最大连边数',
@@ -138,16 +138,16 @@ ZH = {
     'biblio.watch.node_removed': '节点消失',
     'biblio.watch.nothing': '无变化',
     'biblio.watch.param': '参数变化',
-    'biblio.watch_baseline_missing': '{nid}：监测项目里找不到基准「{label}」（现有：{known}）',
-    'biblio.watch_done': '[监测] 项目「{project}」：「{baseline}」→「{label}」，{detail}'
+    'biblio.watch_baseline_missing': '{nid}：监测项目里找不到基准“{label}”（现有：{known}）',
+    'biblio.watch_done': '[监测] 项目“{project}”：“{baseline}”→“{label}”，{detail}'
     '（每类最多列 {limit} 条，总数见括号）',
     'biblio.watch_empty': '{nid}：本次图谱没有任何节点或连边，无法建档监测（空表会让下次对比把全部实体报成消失）',
-    'biblio.watch_first_done': '[监测] 项目「{project}」已建档「{label}」：{nodes} 个节点 / {edges} 条连边；'
+    'biblio.watch_first_done': '[监测] 项目“{project}”已建档“{label}”：{nodes} 个节点 / {edges} 条连边；'
     '无更早的快照可比',
     'biblio.watch_needs_entity_table': '{nid}：监测需要一行一实体的输出形态，{shape} 的行不是实体表',
     'biblio.watch_needs_project': '{nid}：填了监测基准或捕获名却没填监测项目，请先写项目名或清空这两个框',
     'biblio.watch_params_differ': '[监测] 有 {n} 项参数与基准不同（{names}）——先排除是节点被改过，再读成领域变了',
-    'biblio.watch_project_created': '[监测] 项目「{name}」不存在，已新建（本次为该项目的第一个快照）',
+    'biblio.watch_project_created': '[监测] 项目“{name}”不存在，已新建（本次为该项目的第一个快照）',
     'biblio.watch_project_note': '由文献计量节点的跨 run 监测自动建档',
     'biblio.watch_shape_differs': '[监测] 基准是 {a} 形态、本次是 {b} 形态，两者的行数差不是领域的变化',
     'biblio.watch_unchanged': '[监测] 图谱与基准完全一致（{nodes} 个节点 / {edges} 条连边）：上游没有新数据时会这样',
@@ -161,8 +161,8 @@ ZH = {
     'fuse.needs_entity': '{nid}：跨源融合需要至少一个实体候选列（如 关键词,话题）',
     'fuse.no_entity_column': '{nid}：上游 {pid} 没有可作实体的列（试过：{wanted}）',
     'fuse.no_input': '{nid}：跨源融合需要至少一个输入表',
-    'fuse.no_rows': '{nid}：上游 {pid} 的「{column}」列没有提出任何实体',
-    'fuse.source_named': '[跨源融合] 来源「{source}」：{pid} 贡献 {rows} 条',
+    'fuse.no_rows': '{nid}：上游 {pid} 的“{column}”列没有提出任何实体',
+    'fuse.source_named': '[跨源融合] 来源“{source}”：{pid} 贡献 {rows} 条',
 }
 
 EN = {

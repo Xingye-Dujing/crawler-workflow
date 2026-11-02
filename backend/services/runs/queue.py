@@ -111,9 +111,9 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
         }
         _RUN_QUEUE.append(entry)
         position = len(_RUN_QUEUE)
-    # ``wf.unnamed`` renders 「未命名工作流{i}」 with the WORKFLOW's index on the canvas;
-    # this is a queue POSITION, and feeding one into the other printed 「已排队（第 2
-    # 位）：未命名工作流2」 where the 2 happened to be the depth of the queue.
+    # ``wf.unnamed`` renders “未命名工作流{i}” with the WORKFLOW's index on the canvas;
+    # this is a queue POSITION, and feeding one into the other printed “已排队（第 2
+    # 位）：未命名工作流2” where the 2 happened to be the depth of the queue.
     if _console_is_for(entry):
         add_log(t('run.queued', name=name or t('run.queuedUnnamed'), at=position))
     mirror_queue()
@@ -305,7 +305,7 @@ def put_back(entry: QueueEntry) -> None:
     """Hand a request back to the front: someone else took the slot in between.
 
     A request the user already pressed Run for is never dropped because of a race — it waits
-    for the next drain instead, which is what 「继续等待」 means in the console line. What it is
+    for the next drain instead, which is what “继续等待” means in the console line. What it is
     NOT is an unlimited promise: see :data:`PUT_BACK_LIMIT`.
     """
     tries = int(entry.get('put_backs') or 0) + 1

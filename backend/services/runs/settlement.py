@@ -5,7 +5,7 @@ a measurement, not by reading the code:
 
 * :func:`mark_records_stopping` — 停止 answered the user immediately, but the worker still owed
   every record a verdict and that debt measurably takes tens of seconds; a row reading 运行中
-  long after the button said 正在停止 is heard as 「停止没作用」.
+  long after the button said 正在停止 is heard as “停止没作用”.
 * :func:`settle_orphaned_records` — ``promote_stale_runs`` used to run only at startup, so a
   record whose thread died with the window stayed on 运行中 until a restart; measured, the
   restart was faster than 停止, which is how the gap surfaced.
@@ -218,7 +218,7 @@ def close_run(ctx: dict, outcome: str):
         # Two separate guards, not one: ``settle_nodes`` commits once per unfinished node and is
         # the likelier of the two to fail, and it used to take ``finish_run`` down with it — the
         # record then stayed at 运行中, the 继续 banner never appeared, and the console said
-        # 「记录写入失败」 with a cause that pointed at the wrong call.
+        # “记录写入失败” with a cause that pointed at the wrong call.
         try:
             ctx['store'].settle_nodes(run_id)
         except Exception as e:

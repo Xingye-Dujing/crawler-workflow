@@ -8,7 +8,7 @@ notion of being locked; the user's decision lives here and can be thrown away sa
 
 The path is resolved at every call (``runtime.paths.active()``), never bound at import: a lock
 protects one account's export from that account's own sweep, and the test isolation redirects the
-root before ``app`` is imported — a frozen path would let one account's 「别删这条导出」 guard
+root before ``app`` is imported — a frozen path would let one account's “别删这条导出” guard
 another's row.
 """
 

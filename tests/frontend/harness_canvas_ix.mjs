@@ -1528,7 +1528,7 @@ function paletteKeyboardScenario() {
     dispatchOn(pSrc, 'click', { target: pSrc });
     const afterClick = Object.keys(canvas.nodes).length;
     const emptyId = canvas.addNodeFromPalette('');
-    /* 「禁用此类型」 hides the context-menu action, but the left-hand library had no check at
+    /* “禁用此类型” hides the context-menu action, but the left-hand library had no check at
        all — so a disabled type could be added straight back by a click. One rule, asked once. */
     canvas.disabledTypes = ['output'];
     const beforeDisabled = Object.keys(canvas.nodes).length;
@@ -1815,7 +1815,7 @@ function keyboardConnectScenario() {
 }
 
 /* A modal confirm is not a typing target (its focus sits on a BUTTON), yet the canvas must not
-   act on a shortcut behind it: with a 「删除运行」 dialog open, Backspace deleted the node BEHIND
+   act on a shortcut behind it: with a “删除运行” dialog open, Backspace deleted the node BEHIND
    the dialog. And an undo that dropped a node left it in selectedNodes as a ghost — alignSelected
    then read el.style on a null box and threw. Both are self-contained (freshWorld+bound listeners). */
 function modalAndUndoSelectionScenario() {

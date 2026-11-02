@@ -129,7 +129,7 @@ class TestSourceModesStreamThroughTheLedger:
         ]
 
     def test_a_short_crawl_convicts_itself_with_the_funnel(self, session, monkeypatch):
-        """An adapter list that stopped growing is not proof the site ran out, so it says 「采得不足」.
+        """An adapter list that stopped growing is not proof the site ran out, so it says “采得不足”.
 
         The licence to be short belongs to a site-attested end (an end-of-list marker, a board's own
         size). CatBus reports neither, and ``note_end`` refuses a loop self-summary — so a short table
@@ -168,9 +168,9 @@ class TestRefusalsNameTheBackend:
         assert 'catbus bilibili auth login' in str(raised.value)
 
     def test_a_catbus_wall_never_latches_the_cookie_flags(self, session, monkeypatch):
-        """The rule this class rests on: ``login_wall`` means 「our cookie died」.
+        """The rule this class rests on: ``login_wall`` means "our cookie died".
 
-        The executor turns that flag into 「重新保存 Cookie」 and into ``cookie_expired`` — the run's
+        The executor turns that flag into “重新保存 Cookie” and into ``cookie_expired`` — the run's
         cookie toast. A node crawling through CatBus has no cookie in the path, so an auth failure
         reaches the user as the adapter's own command and the flags stay False.
         """
@@ -304,7 +304,7 @@ class TestCommentsWalkOneLinkAtATime:
         """``BLOCKED`` is the browser adapter's answer, and the engine's advice for it is a cookie.
 
         A CatBus login is not one, so the wall refuses with the adapter's own command rather than
-        feeding the 「Cookie 已失效」 path.
+        feeding the “Cookie 已失效” path.
         """
         monkeypatch.setattr(
             bridge,

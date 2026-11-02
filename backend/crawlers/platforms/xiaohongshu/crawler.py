@@ -197,7 +197,7 @@ class XiaohongshuCrawler(Crawler):
 
         Dedupe happens here, not in :meth:`_note_row`: ``walk_feed`` calls ``emit`` itself, so calling
         it inside the scrape would file every note twice. The store answers whether the row was kept,
-        which is what the 「采到一篇」 line reports.
+        which is what the “采到一篇” line reports.
         """
         kept = self.emit(row)
         if kept:

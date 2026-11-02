@@ -12,11 +12,11 @@ slider and signed-in session):
 * the pager's next link is ``.pages a`` with the text 下一页;
 * the export is the site's own flow, not the ``/dm8/API/GetExport`` endpoint
   (that one answers ``code=0 暂无数据``): clicking
-  「导出与分析 → 导出文献 → Refworks」 (an ``li`` whose
+  “导出与分析 → 导出文献 → Refworks” (an ``li`` whose
   ``a[exporttype="Refworks"]``) opens
   ``https://kns.cnki.net/dm8/manage/export.html?language=CHS&uniplatform=NZKPT``
   in a new window. Its on-screen list is a **preview** (measured: 40 selected
-  rows rendered as 20 ``li``), so the crawl clicks 「导出题录文件」 and reads the
+  rows rendered as 20 ``li``), so the crawl clicks “导出题录文件” and reads the
   downloaded ``CNKI-…txt`` — that file carries the whole selection. It writes a
   blank line between every field, which ``_split_refworks`` removes before the
   importer sees it;

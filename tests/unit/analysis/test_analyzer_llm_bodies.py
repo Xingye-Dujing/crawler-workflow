@@ -336,7 +336,7 @@ class TestEmotionMlMode:
     def test_a_failing_prediction_is_refused_not_written_as_neutral(self, emotion, monkeypatch, caplog):
         """It used to answer ('Neutral', 0.5) for EVERY exception — the docstring two lines
         below the guard said REFUSED, and the code did the opposite. So a corrupted pickle or
-        a version mismatch settled a node DONE over a table that read 「everyone is neutral」,
+        a version mismatch settled a node DONE over a table that read "everyone is neutral",
         and the study's distribution chart could not tell that from a measurement.
 
         A model that cannot predict is a refusal now: no column is written at all, and the
@@ -358,7 +358,7 @@ class TestEmotionMlMode:
 
     def test_an_untrained_model_still_refuses_by_its_own_name(self, emotion, monkeypatch):
         """The one case that was always a refusal: it must stay the same exception type, so a
-        caller that distinguishes 「nothing to load」 from 「the load broke」 can keep doing so."""
+        caller that distinguishes "nothing to load" from "the load broke" can keep doing so."""
         monkeypatch.setattr(
             emotion, '_ml_predict', lambda texts: (_ for _ in ()).throw(ModelNotTrainedError('no model'))
         )
@@ -742,7 +742,7 @@ class TestAggressionLlmMode:
         assert str(result.loc[0, 'aggression_hits']), 'the model is answered with its own words kept'
 
     def test_a_clean_verdict_is_not_relabelled_as_never_judged(self):
-        """「模型判定为不暴力」 and 「模型从没看到这一行」 are two different facts, and the runner
+        """“模型判定为不暴力” and “模型从没看到这一行” are two different facts, and the runner
         tells them apart by comparing the cell against ``blank[0]``. That sentinel used to be
         ``'none'`` — a level this analyzer's own parser legitimately ANSWERS for a clean comment —
         so every clean row was re-stamped 模型未判定 at a finished run, and counted into 未处理 at a

@@ -40,7 +40,7 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   venv: swapped order, `@staticmethod` and module-level fixtures all pass on 9.1.1 AND 9.2.0; only the old order breaks.
   Pinned: `tests/unit/gates/test_test_tiers.py::TestClassScopedFixturesAreVersionProof`. Other fixes: close file
   responses; never let a cookie-save open a **real Chrome inside the fast tier** (the plant swallowed a socket failure,
-  answered 「种入失败」, left a `UserWarning`); a no-browser test says so (`profiles_off`). Not ours, left visible:
+  answered “种入失败”, left a `UserWarning`); a no-browser test says so (`profiles_off`). Not ours, left visible:
   jieba 0.42.1 imports deprecated `pkg_resources`, and anyio's plugin warns about `CallSpec2` under 9.2.0.
 - **A stateful rule needs a stateless suite.** The suite shares ONE cookie directory, so `quiet_jar` snapshots/restores
   it per test — a login another test saved is a precondition this one never set up.
@@ -276,7 +276,7 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   (status *and* count from rows) — the panel's 已存行数 and 续跑's "adopt the fullest node" read that column.
 - **One definition of "completed":** counts are taken **after** settling over `attempted_nodes` (the record keeps nodes the
   canvas deleted); a node 停止 cut short counts in its own `stopped_node_ids` bucket — reporting the user's own button as
-  「1 个失败」 is a lie.
+  “1 个失败” is a lie.
 - **A resumed run re-describes itself:** left at first-attempt values the 并行/串行 and 无头/窗口 chips describe a run that
   never happened, and the stale name (the key every preview/chart/export probe uses) makes the kept rows unfindable.
 - **A phase column's order is not data, and a records round trip erases it.** `bin_time` writes an ORDERED categorical
@@ -375,7 +375,7 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   a traceback still goes only to the file), so `logger.exception(...)` **and** a matching `add_log` print twice. Keep the
   logger call for the file; let `wf.node_failed` be the single attributed console line.
 - **A line printed by a side effect that runs per PAGE LOAD is noise by construction.** App boot fires `POST
-  /api/data/clear` to sweep orphaned files, and that route logged 「清理孤立文件 0 个，保留 0 个…」 unconditionally — after
+  /api/data/clear` to sweep orphaned files, and that route logged “清理孤立文件 0 个，保留 0 个…” unconditionally — after
   ~80 page loads the console test's 3 stubbed lines were buried under eighty and the device tier failed on CI while
   passing here. The rule (from `services/runs/housekeeping.py`): **silence is the normal case, say something only when
   something went**; manual 清理 keeps its toast from the response. A test that opens a page is a writer of the console.
@@ -383,7 +383,7 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
 - **A job a page starts by itself must be awaitable, or it races everything after it.** `workflow.reconnectConsole()`
   reads `/api/workflow/status?tail=` during boot; a test that emptied `#console-output` then read it was reading the
   *server's* history. Two fixes: the method keeps its in-flight promise (`_reconnect`, released in `finally`) — which also
-  stops boot and a 「立即执行」 fire from each fetching/each opening/each shouting 「已重新连接控制台」 (`harness_console.mjs`
+  stops boot and a “立即执行” fire from each fetching/each opening/each shouting “已重新连接控制台” (`harness_console.mjs`
   measures `asked: 1`/`toasts: 1`; against a non-sharing gate reports `2`/`2`); and the tier gained
   `_settle_console_replay(driver)` called **before** any clear.
 - **Anything that chooses data, cost or a name is refused BY NAME, never guessed** (mode/`select`/missing column via
@@ -398,7 +398,7 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   2026-09 shape was a `/api/cookies/status` loop refusing on each platform's *default-account* boolean, which blocked a
   node on a saved named account and blocked wechat entirely. The probe is `cookie_preflight_before_run` per platform
   **whose mode needs a session** (`Mode.needs_session`; weibo 热搜 answers anonymously, wechat has no session to want);
-  a login wall **refuses** (no "run anyway"); 「无法核对」 (timeout/captcha/busy) **never blocks**.
+  a login wall **refuses** (no "run anyway"); “无法核对” (timeout/captcha/busy) **never blocks**.
   - **A named cookie and a named profile belong together:** one account = one `data/cookies/<platform>@<account>.json`
     *and* one `chrome_profile/<platform>/<account>`.
   - **A node's 账号 is a session question asked once:** `engine.workflow._account_session_errors` refuses when
@@ -431,8 +431,8 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   go through it. A scheduled canvas may not need a model at all (a cloud box has neither Ollama nor a person), so it is
   refused **while being chosen** in the picker's own label, not in a history row nobody reads.
 - **A missed moment is recorded, never replayed.** `note_missed()` runs once before the thread starts; `_reanchor()`
-  re-arms from *now*; **at most one missed event per restart** (`missed.count` accumulates across restarts — what 「错过 N
-  次」 reads). Accounting goes to the task's own `last_run`/`history` (20 entries); only a run that really started gets one
+  re-arms from *now*; **at most one missed event per restart** (`missed.count` accumulates across restarts — what “错过 N
+  次” reads). Accounting goes to the task's own `last_run`/`history` (20 entries); only a run that really started gets one
   console line, language pinned from the task (`set_lang` in `_fire`).
 - **The browser may not hold a second opinion about time or state.** `next_run_local`/`last_run_local` are rendered
   server-side in the *task's* zone, and the trigger sentence comes from the store's `describe_trigger`; a status token the
@@ -555,6 +555,23 @@ tier is its own invocation with an explicit `--rcfile`. `tests/unit/gates/test_l
   suites died `NameError`). Land use and import in the same edit; delete the old binding first; grep the symbol before
   believing the move.
 
+### 引号 / Quotation marks — one bracket system per language
+
+- **中文用 “ ”，英文用 `" "`，角括号（U+300C–U+300F）一律不用。** 这个仓库中英混排：中文 README 与英文
+  docstring 在同一文件里，i18n 目录的两种语言键值成对。两套引号并存时，“界面就是这么写的”“这是节点标题”“这是
+  一条路径”在标点上长成同一种形状，读者没法从标点判断这句话是在引用什么。统一到各语言自己的引号之后，句子才回到
+  它本来的语言里读。
+- **引号跟随句子所在的语言，而不是被引内容的字母表。** 英文句子里引一句中文原文，仍用中文引号（“…”、
+  “1 个失败”）；中文句子里引一个英文产品名，也仍用中文引号（“Ollama”）。只有整句都是英文时，才用英文引号。
+- **门禁**：`tests/unit/gates/test_quote_style.py` 扫 `backend/ tests/ docs/ desktop/ tools/ deploy/ .github/
+  .opencode/ ml_train/scripts` 与根目录文件，逐文件报首个行号。四处按事实豁免，不是为了让扫描变绿：
+  `backend/static/vendor`、`backend/static/geo`（SHA-256 钉住的第三方字节，改一个字符就废掉 pin，见
+  `test_vendored_assets`）、`ml_train/datasets`、`ml_train/models`（爬来的语料与第三方模型卡原文）、
+  `desktop/.venv-build`（打包 venv 的 site-packages）。
+- **一次性全仓替换（2303 对）只有四处要手工看**：两处 `.strip('…')` 的字符集合与一处标题正则的字符类，它们
+  本意是“去掉装饰字符”，换成新的引号集合（“”‘’）后语义不变；另一处是写坏的引号——闭合写成了 `»`，扫描按
+  配对找不到才被发现。**批量替换按括号配对做，不是按行做**，否则跨行引用会被拆成两个半句。
+
 ### A lint gate is only a gate if it linted everything
 
 - **只 lint 改动文件 = 没 lint.** Running pylint over just touched files let three *already committed* violations survive
@@ -612,10 +629,10 @@ tier is its own invocation with an explicit `--rcfile`. `tests/unit/gates/test_l
 
 Developed on Windows, deployed on a **Linux cloud server** (`CRAWLER_CLOUD=1`), macOS in scope. Three read-only audits
 produced this list; every entry was a real defect on at least one platform, not a style preference. Rules in AGENTS.md
-「Cross-platform」; evidence here.
+"Cross-platform"; evidence here.
 
 - **Chrome discovery was a Windows-only table.** `chrome_candidates` built `%PROGRAMFILES%…chrome.exe` and nothing else,
-  so a server with `/usr/bin/chromium` answered 「本机没有可用的 Chrome」; the Docker image worked **only** because it
+  so a server with `/usr/bin/chromium` answered “本机没有可用的 Chrome”; the Docker image worked **only** because it
   exports `CHROME_BIN`. Tables are now per-OS (`CHROME_PATHS`/`CHROME_PATH_NAMES`/`XELATEX_PATHS`/`CTEX_FONTSET` in
   `core/machine.py`), and a test asserts each is indexed by **exactly** the three platforms.
 - **Ask the target OS for its separators, not the host.** `Path('/Users/x')/'Applications'` renders backslashes on a
@@ -628,7 +645,7 @@ produced this list; every entry was a real defect on at least one platform, not 
   follow; hence `deps.<family>.<platform>` keys chosen by `core.machine.remedy` — a **computed** key, so the contract walks
   the value universe (`REMEDY_PREFIXES × REMEDY_PLATFORMS × both languages`).
 - **仿宋 (FangSong) is a Windows font.** Every paper figure asked `\setCJKmainfont{FangSong}`; on TeX Live the whole PDF
-  feature died 「The font "FangSong" cannot be found」. Off Windows the ctex line carries that OS's font set
+  feature died "The font "FangSong" cannot be found". Off Windows the ctex line carries that OS's font set
   (`fontset=fandol`/`macnew`) and no `\setCJK` line; the emitted comment names the family actually used. Windows keeps its
   three lines byte-for-byte (26/26 compiles).
 - **`taskkill` under `contextlib.suppress(Exception)` also swallowed the line that marked the session dead.** On Linux:
@@ -666,7 +683,7 @@ produced this list; every entry was a real defect on at least one platform, not 
   `taskkill`, `ctypes.windll`/`winreg`/`msvcrt`, quoted `.exe`), skips docstrings/trailing comments, and re-asserts every
   exempted file still holds an artifact. An allowlist entry that exempts nothing is a lie waiting to be read.
 - **A refusal sentence that names a Windows file is itself a Windows fact.** `crawl.chromeMissing` told every system to
-  point at 「它的 chrome.exe」 and `disguise_headless` sent `'platform': 'Win32'` — both survived because the zh/en parity
+  point at “它的 chrome.exe” and `disguise_headless` sent `'platform': 'Win32'` — both survived because the zh/en parity
   check compares the two languages to *each other*. Now the executable name comes from `machine.chrome_executable_name()`
   (reading the same `CHROME_PATH_NAMES` the probe uses) and the platform token from `NAVIGATOR_PLATFORMS`. Deleting
   `i18n.py` from `WINDOWS_TABLES` is what makes it stick (`test_each_exempted_file_actually_holds_a_windows_artifact`).
@@ -689,8 +706,8 @@ produced this list; every entry was a real defect on at least one platform, not 
 
 ## The second crawl backend (CatBus) — why the boundary is where it is
 
-The **imperatives** (the must-obey crawl rules) live only in `docs/crawler_rules.md` → 「第二采集后端 / The second crawl
-backend (CatBus)」; read that before touching CatBus. What is kept here is the *why-evidence* AGENTS points at:
+The **imperatives** (the must-obey crawl rules) live only in `docs/crawler_rules.md` → “第二采集后端 / The second crawl
+backend (CatBus)”; read that before touching CatBus. What is kept here is the *why-evidence* AGENTS points at:
 
 - **Why a subprocess, not a port.** CatBus is a Node program already speaking this app's row shape: one JSONL row per
   record on stdout, one summary envelope on last stderr line, exit codes classifying failure (1 unclassified / 2
@@ -828,7 +845,7 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
 - **"It compiled" ≠ "it fits the page" — and a standalone source can't tell you which.** Every figure is `standalone`, so
   TeX sizes paper to picture (a 46 cm ring became a 46 cm sheet, 22/22 PDFs "fine"); pasted into A4 it ran off the edge.
   Evidence is `grep -c Overfull` on the log plus reading rendered pages (first paper build: a page holding only the heading
-  「图表」; a table 2.6 cm past the bottom — both "successfully"). Three attempts, three failures.
+  “图表”; a table 2.6 cm past the bottom — both "successfully"). Three attempts, three failures.
 - **A layout whose size grows with the data is sized against the page, not the unit.** The ring radius is `0.46 × nodes`
   but the tikz unit stayed 1 cm; `GRAPH_BOX_CM` sets the coordinate scale after paying for labels (deliberately wide —
   under-estimating overflows). What it drops is printed ("已省略 N 个会互相遮盖的节点标签") — silent thinning is a figure
@@ -845,14 +862,14 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
   96 px (≈10 CJK chars); browser tier measures both overlays at 400 px in zh and en.
 - **The guide has to name the click, not the capability.** Dimensions writes a full-record CSV, a VOSviewer/CiteSpace
   network file and a BibTeX, and only the first is read; each source's steps say which to pick and avoid.
-- **An automated export must land on the same parser as the upload it replaces.** CNKI's 「导出/参考文献」 is the site's
+- **An automated export must land on the same parser as the upload it replaces.** CNKI's “导出/参考文献” is the site's
   own window (`manage/export.html`), and its on-screen list is only a 20-record preview — the full selection is the
-  `CNKI-…txt` behind 「导出题录文件」. So the crawler 全选s each page (the site accumulates), downloads the file, strips
+  `CNKI-…txt` behind “导出题录文件”. So the crawler 全选s each page (the site accumulates), downloads the file, strips
   the blank line CNKI writes between every field, and hands the records to `services.biblio.importer.parse_cnki` — one
   record shape, one `记录ID`, one set of "this format has no references" refusals. A second parser inside a crawler
   would let a crawled table and an uploaded file disagree about the same paper. **The public ``/dm8/API/GetExport``
   recipe is wrong for this version**: measured 2026-10-30 it answers `code=0 暂无数据` even logged in, while the menu →
-  `manage/export.html` → 「导出题录文件」 path returned all 40 selected records. The way in is the profile: a fresh
+  `manage/export.html` → “导出题录文件” path returned all 40 selected records. The way in is the profile: a fresh
   headless *and* a fresh visible Chrome both land on `/verify/home` (slider), so the cookie row is not optional
   (`docs/crawler_notes.md` → 中国知网). A download that never appears is carried into the console as a named refusal,
   never retried into a short table.
@@ -871,7 +888,7 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
   state once; `workflow.loadFromJSON(data,{history:'single'})` is the only snapshot-restore door.
 - **A layout baseline is positions keyed by the saved workflow name; a missing baseline is a named refusal.** It runs the
   algorithm first then overlays saved x/y for matching ids; lives in `layout_baselines`, cleared when its snapshot is
-  deleted. Falling back while the menu says 「按历史基准」 would make the menu lie.
+  deleted. Falling back while the menu says “按历史基准” would make the menu lie.
 - **An expanded group's stage needs its own width budget; only a real browser proves it.** The node width from stage+padding
   left the stage 2px wider than its border-box (SVG carried the stage's pixel width incl. 1px borders);
   `.reusable-stage-lines{width:100%;height:100%}` fixed overflow. Occlusion-vs-clipping (card under the fixed palette at
@@ -919,7 +936,7 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
   Taiwan or the nine-dash line is a factual defect in a paper figure — name which region ("lost 台湾省" beats "33 of 34"),
   keep the file byte-for-byte as served.
 - **Two answers to one machine-level question is the defect.** The launcher kept its own Chrome list, its own MiKTeX scan,
-  and a hardcoded `127.0.0.1:11434`, so a user who set 「设置→Ollama 地址」 read "Ollama 未检测到" one line before the app
+  and a hardcoded `127.0.0.1:11434`, so a user who set “设置→Ollama 地址” read "Ollama 未检测到" one line before the app
   answered from that daemon. Both call `core/machine.py` / `services/charts/pdf.find_xelatex()`.
 - **A default pointing at a nonexistent file is a wrong default.** `Config.DRIVER_PATH` was
   `C:\Program Files\Google\Chrome\Application\chromedriver.exe`; almost nothing installs there. Blank means "let Selenium
@@ -948,7 +965,7 @@ backend (CatBus)」; read that before touching CatBus. What is kept here is the 
 ## Multi-account and data scopes
 
 The cloud host used to be one mutable owner. Multi-account hosting (2026-10-31) put every account's work in
-`data/users/<user_id>/` and left machine-level state at the root; the rules are in AGENTS.md 「An account's tree…」,
+`data/users/<user_id>/` and left machine-level state at the root; the rules are in AGENTS.md "An account's tree…",
 the evidence here.
 
 - **`Config` paths are frozen at import.** The old tree worked because nothing ever moved; the per-account tree needs a
@@ -1032,7 +1049,7 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   captures the owner when the sink is ARMED (`arm(account)`, run by the bound claim) and writes inside that context.
 - **Authorize before you touch the target.** The delete route called `stores.release_user()` — closing the victim's
   SQLite handles — *before* the service checked the caller was an administrator, and called it AGAIN in the
-  `except AccountError` branch, so a refusal 「这个账号还有运行中的任务」 arrived after the guard had destroyed the run
+  `except AccountError` branch, so a refusal “这个账号还有运行中的任务” arrived after the guard had destroyed the run
   it was protecting, and a `user`-role session could do it to any id. The status route probed the same way and leaked
   the target's run id to a non-admin in its 409. The routes now call `check_deletable` / `assert_admin` first.
 - **"No run is live" is proved against a state that must be pinned.** The guard reads `execution_state` without
@@ -1048,7 +1065,7 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   never ran created 30 `runs.db` (+`-wal`/`-shm`), ran `promote_stale_runs` on each, and held 30 handles for the
   process life, undoing the policy the function 14 lines above it in `app.py` states. It now reads only a tree that
   already holds a `runs.db` and releases the slot in a `finally`. Related, and the honest half of the same promise: a
-  restored queue is now drained, because each of those users was told 「已排队」.
+  restored queue is now drained, because each of those users was told “已排队”.
 - **`hmac.compare_digest` refuses non-ASCII text, and a client-supplied token is text.** WSGI hands back a header
   decoded latin-1 and a form field decoded UTF-8, so `X-CSRF-Token: café` raised `TypeError` inside `before_request` —
   an unauthenticated, attacker-paced HTTP 500 on every write, plus a traceback line pushed into the shared console.
@@ -1058,7 +1075,7 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   was already created and audited, and the user got an Internal Server Error instead of the page. `safe_next` now
   refuses anything below 0x20.
 - **A lockout refusal is a fact about the account, so it may not answer a wrong password.** The locked branch ran
-  BEFORE the verifier (and skipped the hashing), so five attempts with any password turned 「登录失败次数过多」 into a
+  BEFORE the verifier (and skipped the hashing), so five attempts with any password turned “登录失败次数过多” into a
   username oracle — contradicting the sentence `docs/config.md` had published and the reason `burn_unknown_password`
   exists. The password is verified first; only a correct one is told the account is locked.
 - **A per-address failure window behind a proxy is a per-server lockout.** Twenty mistyped passwords (by anyone, or by
@@ -1086,14 +1103,14 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   against the accounts that test owns.
 - **The failed-attempt counter was a lost update, so the lock never arrived.** `authenticate` read
   `row['failed_attempts']`, added one in Python and wrote the total back. Five concurrent wrong passwords read the same
-  row and wrote the same 1: a scripted burst against one account left it at 「1 failure」 and
-  「连续 5 次锁 15 分钟」 — the promise `docs/config.md` publishes — never armed. Measured directly against the store:
+  row and wrote the same 1: a scripted burst against one account left it at "1 failure" and
+  “连续 5 次锁 15 分钟” — the promise `docs/config.md` publishes — never armed. Measured directly against the store:
   the old shape kept 1 of 5 guesses, `UPDATE … failed_attempts = failed_attempts + 1` keeps 5. `set_locked_until`
   re-checks the count it was computed from, because a correct login can zero it between the two writes and arming
   anyway would refuse the person who just proved the password.
 - **The change-password endpoint verified a secret with no window at all.** `accounts.currentPasswordWrong` was raised
   and forgotten: no count, no delay, no refusal. Anyone holding a live session — a shared unlocked browser, any
-  same-origin script — could guess 「当前密码」 without limit while this server paid one scrypt run per guess. It shares
+  same-origin script — could guess “当前密码” without limit while this server paid one scrypt run per guess. It shares
   the login window now, keyed `address|change:<user_id>`, cleared on success.
 - **A failed-login window nobody revisits is a memory leak an attacker drives.** `_prune` only ever cleaned the key a
   login just touched, so a stranger spraying random usernames left one permanent entry per try, and every later login
@@ -1107,18 +1124,18 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   `begin_run`'s permanent refusals (an un-walkable canvas, a corrupt reusable group, an unknown mode or provider, a
   transport this host does not speak, a missing key/model) are all 400s — and `put_back` inserts at the FRONT and
   returns, so one unstartable entry starved every request behind it, survived the restart in the mirror, and never
-  reached the browser that was told 「已排队」. Those refusals carry `drop: true`, the same seam the purged-继续 refusal
+  reached the browser that was told “已排队”. Those refusals carry `drop: true`, the same seam the purged-继续 refusal
   already used.
-- **A second Stop could re-pin 「正在停止」 over a finished run.** The stop route proves liveness and writes its flags
+- **A second Stop could re-pin “正在停止” over a finished run.** The stop route proves liveness and writes its flags
   under `execute_lock`; the worker cleared `stopping` at the TOP of its `finally` and then spent seconds settling, so a
   press inside that window (a double click is enough) re-armed the flag with no owner left to clear it: the panel
-  polled forever, and `stop_requested()` handed that stale stop to every later crawl, which answered 「用户停止了我」.
+  polled forever, and `stop_requested()` handed that stale stop to every later crawl, which answered “用户停止了我”.
   `stopping` now leaves with the thread handle, in one `execute_lock` section. Reproduced by parking the worker in its
   own settlement — `test_a_stop_landing_during_the_settlement_does_not_repin_the_flag` is red without the fix.
 - **A rerun's erase belongs to the run that owns the slot.** `重跑节点` deleted the subtree's rows and released its
-  「已采集」 claims BEFORE calling `begin_run`, so any claim that won the gap (a scheduled fire, the drain, another
+  “已采集” claims BEFORE calling `begin_run`, so any claim that won the gap (a scheduled fire, the drain, another
   account's press) answered with a refusal after the data was gone — and the second press was then refused by
-  「该节点没有可重跑的结果」 forever, leaving 继续 (a re-crawl at the platform's price) as the only way back. The payload
+  “该节点没有可重跑的结果” forever, leaving 继续 (a re-crawl at the platform's price) as the only way back. The payload
   carries the intent and the worker performs it after the claim; the request itself now touches nothing.
 - **A store default that names the system tree is a promise the next caller gets to make.** Four stores still defaulted
   their database to `Config.RUNS_DB`/`DATASETS_DB`/`BIBLIO_DB`/`WORKFLOW_HISTORY_DB`. The scoped registry passes an
@@ -1136,7 +1153,7 @@ A second audit (same day, whole-project) found the following, each pinned by a t
   platform where an open handle is also a directory nothing can delete. The replaced store is closed on the way out.
 - **Half a delete must say where the tree went.** `delete_user` moves the tree, drops the row, and on a refused drop
   moves it back — under `contextlib.suppress(OSError)`. When the rename back fails (Windows, a profile a browser holds)
-  the response still promised 「数据仍在原处」, sending the operator to the one directory the data is not in. The refusal
+  the response still promised “数据仍在原处”, sending the operator to the one directory the data is not in. The refusal
   now checks the filesystem and names the location it found.
 - **Deleting an account left its sessions alive across the move.** The row outlives `release_user()` by the length of
   `shutil.move`, and a request in that window still resolved — rebuilding the user's stores, whose `ensure()` mints a

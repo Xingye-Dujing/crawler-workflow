@@ -347,9 +347,9 @@ window.openCookieDialog = function (...args) {
        drag/resize off the first open, and it used to declare `function (platform)` and call
        `_origOpenCookie(platform)` — which silently dropped the SECOND argument the day the
        account landed there: the pre-run block and the saved-logins row both ask for
-       「this platform, this account」, and in a browser the wrapper is the function they get.
+       "this platform, this account", and in a browser the wrapper is the function they get.
        Measured in real Chrome (tests/integration/test_ui_layout.py): the panel opened on the
-       right platform and the account box stayed on whatever the user had typed, so 「打开」
+       right platform and the account box stayed on whatever the user had typed, so “打开”
        looked half-dead. Restating the parameter list is exactly how this breaks again, so
        the list is passed through untouched. */
     _origOpenCookie(...args);

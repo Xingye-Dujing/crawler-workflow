@@ -11,17 +11,17 @@ ZH = {
     'cookie.allForeign': '{platform} 的 Cookie 一条都没保存：粘贴的内容全属于其它站点，请粘贴该平台自身的 Cookie',
     'cookie.bilibili.purpose': '解锁 B 站搜索、视频详情与评论区；未登录时搜索会被折叠，评论只给前几条。',
     'cookie.bilibili.steps': (
-        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录哔哩哔哩（扫码或手机号）\n'
+        '1. 点“浏览器生成”，在弹出的 Chrome 窗口里登录哔哩哔哩（扫码或手机号）\n'
         '2. 打开任意视频并滚到评论区，能看到评论列表即可\n'
-        '3. 回到本面板点「已完成登录」'
+        '3. 回到本面板点“已完成登录”'
     ),
     'cookie.cnki.purpose': (
         '解锁知网检索与 RefWorks 导出；导出接口需要可用的登录态（或机构 IP 权限）。新设备常被要求完成一次滑块安全验证。'
     ),
     'cookie.cnki.steps': (
-        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里打开知网（如出现安全验证，请完成滑块）\n'
+        '1. 点“浏览器生成”，在弹出的 Chrome 窗口里打开知网（如出现安全验证，请完成滑块）\n'
         '2. 登录后随便检索一次，能看到结果列表即可\n'
-        '3. 回到本面板点「已完成登录」'
+        '3. 回到本面板点“已完成登录”'
     ),
     'cookie.delete.failed': '删除 Cookie 文件失败：{err}',
     'cookie.delete.none': '{platform} 没有已保存的 Cookie 可删除',
@@ -30,9 +30,9 @@ ZH = {
     'cookie.deletedAccount': '已删除 {platform}（账号：{account}）的 Cookie',
     'cookie.douyin.purpose': '解锁抖音网页版搜索、视频文案与评论区；未登录常常只给首屏且看不到评论。',
     'cookie.douyin.steps': (
-        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录抖音网页版（扫码或手机号）\n'
+        '1. 点“浏览器生成”，在弹出的 Chrome 窗口里登录抖音网页版（扫码或手机号）\n'
         '2. 打开任意视频，右侧能看到评论区即可\n'
-        '3. 回到本面板点「已完成登录」\n'
+        '3. 回到本面板点“已完成登录”\n'
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
     'cookie.droppedForeign': (
@@ -43,16 +43,16 @@ ZH = {
     ),
     'cookie.instagram.purpose': '解锁 Instagram 的博主帖子、标签页与评论；未登录时页面只给登录墙，接口也会拒绝。',
     'cookie.instagram.steps': (
-        '1. 点「浏览器生成」，在窗口里登录 instagram.com\n'
+        '1. 点“浏览器生成”，在窗口里登录 instagram.com\n'
         '2. 打开任意一个帖子页，能看到评论区即可\n'
-        '3. 回到本面板点「已完成登录」\n'
+        '3. 回到本面板点“已完成登录”\n'
         '提示：若登录被转到 Facebook，请等它回到 Instagram 之后再点保存。'
     ),
     'cookie.jobCancelled': '{platform} 登录已取消',
     'cookie.noCookies': '等待结束仍未获得 Cookie——若登录未完成，请重试',
     # 保存即更新：粘贴成功的这一刻就把这份 Cookie 送进它自己的 profile，不再要用户按第二个按钮
     # （原来那个 /api/cookies/refresh-profile 与它的四句拒绝一起删掉了）。只有一种情况当场做不到——
-    # 那个浏览器正被占用——而这句话必须说：「保存成功」与「这次没进到 profile」在粘贴框里长得一样。
+    # 那个浏览器正被占用——而这句话必须说：“保存成功”与“这次没进到 profile”在粘贴框里长得一样。
     'cookie.plant.deferred': (
         '{platform} 的浏览器正被占用（可能有抓取在跑），这次没能更新进 profile；Cookie 已保存，下一次抓取会自动带上它'
     ),
@@ -79,18 +79,18 @@ ZH = {
     'cookie.renamed': '已把 {platform} 的登录改名：{old} → {new}（Cookie 文件与浏览器目录一起搬）',
     'cookie.renamedFileOnly': '已把 {platform} 的登录改名：{old} → {new}（该账号还没开过浏览器，只动了文件）',
     'cookie.saved': '已保存 {platform} 的 Cookie',
-    # 一个平台可以多份登录：那句保存的话必须说出是**哪一份**，否则控制台里「已保存 微博 的 Cookie」
+    # 一个平台可以多份登录：那句保存的话必须说出是**哪一份**，否则控制台里“已保存 微博 的 Cookie”
     # 指的是哪一个账号无从判断（用户要的正是逐个 Cookie 管理）。{account} 由 CookieManager 先取好
     # 词（空白=默认账号、default2=默认账号2、自己起的名字原样），这里只负责成句。
     'cookie.savedAccount': '已保存 {platform} 的 Cookie（账号：{account}）',
-    'cookie.started': '已启动登录浏览器，请在弹出的窗口完成登录，然后点「已完成登录」',
+    'cookie.started': '已启动登录浏览器，请在弹出的窗口完成登录，然后点“已完成登录”',
     'cookie.twitter.purpose': (
         '解锁 X（推特）的搜索、用户时间线、推文正文与回复；未登录时这些页面基本只回一个登录引导页。'
     ),
     'cookie.twitter.steps': (
-        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录 x.com（账号密码或手机号+验证码）\n'
+        '1. 点“浏览器生成”，在弹出的 Chrome 窗口里登录 x.com（账号密码或手机号+验证码）\n'
         '2. 随便打开一条推文，确认回复区能加载出来（auth_token 与 ct0 两条 Cookie 缺一不可）\n'
-        '3. 回到本面板点「已完成登录」\n'
+        '3. 回到本面板点“已完成登录”\n'
         '提示：X 对新设备登录常会追加一次验证码，请在同一个窗口里做完再保存。'
     ),
     'cookie.verify.checkedUrl': '验证地址：{url}',
@@ -103,7 +103,7 @@ ZH = {
     'cookie.verify.ok': '{platform} 的 Cookie 可用',
     'cookie.verify.unclear': '{platform} 的验证没有结论：页面回的是验证码/风控，与 Cookie 是否有效无关',
     # The page never came from the site at all, so nothing about the cookie was tested —
-    # and 「可用」 here would be cached and reused by every later run.
+    # and “可用” here would be cached and reused by every later run.
     'cookie.verify.unreachable': '{platform} 无法验证：浏览器自己没能打开这个地址（本机网络或 DNS），未检验到 Cookie',
     'cookie.verifyFailed': '验证失败：{err}',
     'cookie.verifying': '正在用已保存的 Cookie 试探该平台…',
@@ -111,28 +111,28 @@ ZH = {
     '微博只认一份一直在用的会话：同账号并行翻页、或另开一个浏览器重放同一份 Cookie，都会被弹回登录页。'
     '所以抓取请始终用同一个 Profile，也不要同时跑两条微博。',
     'cookie.weibo.steps': (
-        '1. 点「浏览器生成」，在窗口里登录微博\n2. 手动搜一次关键词，能看到微博列表即可\n3. 回到本面板点「已完成登录」'
+        '1. 点“浏览器生成”，在窗口里登录微博\n2. 手动搜一次关键词，能看到微博列表即可\n3. 回到本面板点“已完成登录”'
     ),
     'cookie.windowClosed': '登录窗口被关闭，未捕获 Cookie；请重新发起登录',
     'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
     'cookie.xiaohongshu.steps': (
-        '1. 点「浏览器生成」，在窗口里登录小红书\n2. 打开任意一篇笔记，能看到评论区即可\n3. 回到本面板点「已完成登录」'
+        '1. 点“浏览器生成”，在窗口里登录小红书\n2. 打开任意一篇笔记，能看到评论区即可\n3. 回到本面板点“已完成登录”'
     ),
     'cookie.youtube.purpose': (
         '解锁 YouTube 的订阅、播放列表、历史记录与评论；未登录也能看公开视频，但这些页面常被限流或折叠。'
     ),
     'cookie.youtube.steps': (
-        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录 YouTube（Google 账号）\n'
+        '1. 点“浏览器生成”，在弹出的 Chrome 窗口里登录 YouTube（Google 账号）\n'
         '2. 回到 youtube.com 首页，确认右上角已是你的头像\n'
-        '3. 回到本面板点「已完成登录」——保存前浏览器会自动回到 YouTube 页面，'
+        '3. 回到本面板点“已完成登录”——保存前浏览器会自动回到 YouTube 页面，'
         'Google 账号自身的 Cookie 不会被写进本平台文件'
     ),
     # ── Cookie 用途与获取步骤（面板直接把这些讲给用户） ──────────
     'cookie.zhihu.purpose': '解锁知乎搜索结果与回答、评论正文；未登录时知乎常常只回一个登录引导页。',
     'cookie.zhihu.steps': (
-        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录知乎（扫码或手机号）\n'
+        '1. 点“浏览器生成”，在弹出的 Chrome 窗口里登录知乎（扫码或手机号）\n'
         '2. 随便翻一页，确认右上角已是你的头像\n'
-        '3. 回到本面板点「已完成登录」'
+        '3. 回到本面板点“已完成登录”'
     ),
     'cookies.accountDefault': '默认账号',
     'cookies.accountDefaultNumbered': '默认账号{n}',
@@ -194,7 +194,7 @@ EN = {
     # Saving IS the update now: the paste plants itself into that account's profile, and the
     # /api/cookies/refresh-profile route with its four refusal sentences went away with the
     # button. One case cannot be done on the spot — that browser is held — and it has to say so,
-    # because 「saved」 and 「saved but not in the profile」 look identical from a paste box.
+    # because "saved" and "saved but not in the profile" look identical from a paste box.
     'cookie.plant.deferred': (
         "{platform}'s browser is held by something else (a crawl may be running), so this cookie "
         'could not be planted into its profile yet — it is saved, and the next crawl will bring it in'
@@ -254,7 +254,7 @@ EN = {
     'cookie.verify.unclear': '{platform} could not be verified: the page answered with a captcha or risk '
     'control, which says nothing about whether the cookie is valid',
     # The page never came from the site at all, so nothing about the cookie was tested —
-    # and 「可用」 here would be cached and reused by every later run.
+    # and “可用” here would be cached and reused by every later run.
     'cookie.verify.unreachable': '{platform} could not be verified: the browser never opened this address '
     '(this machine\u2019s network or DNS), so the cookie was not tested',
     'cookie.verifyFailed': 'Verification failed: {err}',

@@ -107,7 +107,7 @@ class TestRunRecordActions:
 
     def test_a_refused_delete_surfaces_the_server_reason(self, pa):
         # The old code threw away the 409 body's reason and toasted a generic failure;
-        # the reason (e.g. 「已被锁定」) must reach the user, and it must not read as success.
+        # the reason (e.g. “已被锁定”) must reach the user, and it must not read as success.
         assert pa['remove_refused_by_server']['toasts'] == ['LOCK-REFUSED']
 
     def test_the_detail_row_fetches_once_and_lists_every_node(self, pa):
@@ -491,7 +491,7 @@ class TestClearAllButtons:
 
     def test_a_busy_export_folder_is_reported_rather_than_shown_as_emptied(self, pa):
         """The refusal is the case that matters most here: a running crawl writes into this
-        directory, and a toast saying 「已清空」 over files still being appended is a lie."""
+        directory, and a toast saying “已清空” over files still being appended is a lie."""
         assert any('正在运行' in line for line in pa['exports_clear_refused']['toasts'])
 
     def test_the_dataset_clear_sends_the_boolean_the_endpoint_reads(self, pa):
@@ -742,7 +742,7 @@ class TestWorkflowFilePanel:
     def test_a_locked_workflow_reports_the_lock_reason(self, pa):
         """The reported bug: deleting a locked workflow popped a bare generic failure
         (and the earlier code path treated it like any error) instead of the server's
-        「已被锁定」 reason. The 409 body's reason must reach the toast."""
+        “已被锁定” reason. The 409 body's reason must reach the toast."""
         got = pa['wf_remove_locked']
         assert got['requested'] >= 1, 'the delete was still attempted (the panel then re-lists)'
         assert got['toasts'] == ['LOCK-REFUSED'], 'the lock reason, not a generic/erroneous success'

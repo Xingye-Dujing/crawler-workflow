@@ -38,7 +38,7 @@ BACKEND = Path(__file__).resolve().parents[3] / 'backend'
 #: Where a Windows spelling is a legitimate fact about Windows: the per-OS tables, the process reaper
 # (whose Windows branch IS ``taskkill``), the harvest stack that only exists on a desktop, and the
 # download blocklist that refuses to hand out an executable. ``i18n.py`` used to be in this list
-# because a 「没有 Chrome」 sentence told the user to point 设置 at ``chrome.exe``; the name now comes
+# because a “没有 Chrome” sentence told the user to point 设置 at ``chrome.exe``; the name now comes
 # from :func:`core.machine.chrome_executable_name`, so the catalogue holds no Windows artifact
 # and the exemption would have been a lie — which is what
 # :meth:`TestTheRuleHasTeeth.test_each_exempted_file_actually_holds_a_windows_artifact` exists to catch.
@@ -90,8 +90,8 @@ def _code_lines(text: str) -> list[str]:
 
     Counting the module's own ``_DOC_TRIPLE`` per line and toggling is the whole trick; a line holding two
     of them (a one-line docstring) leaves the state where it found it, which is what a docstring on one
-    line means. A trailing hash-comment is prose about the code — an inline note saying 「never a global
-    taskkill」 must not read as a call to it.
+    line means. A trailing hash-comment is prose about the code — an inline note saying "never a global
+    taskkill" must not read as a call to it.
     """
     lines = []
     inside = False
@@ -272,7 +272,7 @@ class TestThePlatformTablesAreComplete:
         assert 'HeadlessChrome' not in override['userAgent'], 'the UA half is the reason this exists'
 
     def test_a_missing_chrome_is_named_by_the_executable_this_system_has(self, monkeypatch):
-        """The remedy inside a 「没有 Chrome」 sentence is the running OS's own file name.
+        """The remedy inside a “没有 Chrome” sentence is the running OS's own file name.
 
         Telling a Linux user to point 设置 at ``chrome.exe`` is a refusal nobody can act on, and the
         zh/en parity check cannot see it because both languages said the same Windows thing — the
@@ -346,7 +346,7 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
 
     A cloud server installs Node from a distro package and CatBus with npm into a prefix nobody
     exports; the desktop build ships neither. Both answers have to come from one table per OS, or
-    「没有 CatBus」 and 「CatBus 坏了」 become the same message.
+    “没有 CatBus” and “CatBus 坏了” become the same message.
     """
 
     def test_linux_offers_the_runtimes_a_server_actually_has(self):
@@ -407,7 +407,7 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
 
     def test_a_script_entry_is_read_not_run(self, tmp_path):
         """npm and git both install ``cli.js`` as mode 644, and demanding ``+x`` made the second
-        backend disappear on every POSIX box — silently, because 「no CatBus」 is a verdict, not an
+        backend disappear on every POSIX box — silently, because "no CatBus" is a verdict, not an
         error. A file Node *reads* only has to be readable; the rule is about what the file is."""
         script = tmp_path / 'cli.js'
         script.write_text('// catbus\n', encoding='utf-8')

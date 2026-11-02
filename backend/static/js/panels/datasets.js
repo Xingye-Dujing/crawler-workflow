@@ -284,7 +284,7 @@ var datasetManager = {
         /* No `value:` on the confirm button: showDialog answers a button with its own
            value when it has one, and only falls back to the input otherwise — so
            naming it 'ok' stored the literal string as the dataset's new label. The
-           user read 「已重命名」 and saw the row say `ok`; the id is a content hash, so
+           user read “已重命名” and saw the row say `ok`; the id is a content hash, so
            the file survived, the name did not. */
         var answer = await showDialog({
             message: I18n.t('datasetMgr.renamePrompt'),

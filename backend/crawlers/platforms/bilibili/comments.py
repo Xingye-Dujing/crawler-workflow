@@ -101,7 +101,7 @@ def bili_code_verdict(code) -> str:
     §6 U55 was exactly the wrong default — every non-``-404`` code sent to BLOCKED, so a bad BV (which
     answers ``-400``) convicted the whole session. The polarity is now: the *link* is accused only for a
     code that describes the video (gone/bad/hidden) or a transport failure (no JSON — a slow link, not a
-    refusal, per crawler_rules「慢不是拒绝」); the *session* is accused for a known risk/login code AND,
+    refusal, per crawler_rules“慢不是拒绝”); the *session* is accused for a known risk/login code AND,
     named, for any unrecognised code — so a new rate-limit code backs off instead of being silently
     guessed into "this video is fine" and pressing on against a flagged account.
     """

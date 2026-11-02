@@ -51,9 +51,9 @@ DEFAULTS = {
     'ollama_host': Config.OLLAMA_HOST,
     #: Check whether each platform's session still works *before* starting a run that
     # crawls it, and refuse to start when one is walled (``sessions.preflight``). Off
-    # asks nothing and blocks nothing — the old 「执行前确认 Cookie」 fallback is gone.
+    # asks nothing and blocks nothing — the old “执行前确认 Cookie” fallback is gone.
     # On costs one page load per platform (cached for a few minutes), and is what turns
-    # 「一小时后才发现 Cookie 早死了」 into a refusal that names the platform.
+    # “一小时后才发现 Cookie 早死了” into a refusal that names the platform.
     'cookie_preflight_before_run': True,
     #: Which network each platform is reachable from is a fact the crawl matrix owns
     #: (``Capability.region``); this only decides whether the user is ASKED about it. On: a
@@ -290,7 +290,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
             warnings.append(t('set.saveFailed', err=e))
         if {'catbus_cli', 'catbus_node'} & set(patch or {}):
             # The second backend caches what this machine can do (a capability probe costs one Node
-            # process), and a cached 「本机没有 CatBus」 would otherwise keep greyed out the option the
+            # process), and a cached “本机没有 CatBus” would otherwise keep greyed out the option the
             # user has just pointed at a path — for minutes, with no way to see why.
             from services.ingest import catbus
 

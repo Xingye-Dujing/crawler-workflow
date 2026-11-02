@@ -16,7 +16,7 @@ import subprocess
 
 from core import machine
 
-#: How POSIX says 「kill it now」. Windows' signal module has no ``SIGKILL`` at all (measured: an
+#: How POSIX says "kill it now". Windows' signal module has no ``SIGKILL`` at all (measured: an
 # ``AttributeError`` from the very line that was supposed to clean up a browser), which is exactly why
 # the Windows branch shells out to ``taskkill`` instead — and why the name is resolved once here rather
 # than written inline, so a test that asks for the Linux answer on a Windows box gets the Linux code path.
@@ -105,7 +105,7 @@ def reap_process(pid: int, system: str | None = None, proc_root: str = '/proc') 
 
     The second value is the operating system's sentence, never a translated one — the caller puts it
     inside an i18n message. And it is never silent: the caller writes the outcome to the run console,
-    because 「已终止」 over a browser that is still holding a profile is exactly the lie that costs the
+    because “已终止” over a browser that is still holding a profile is exactly the lie that costs the
     next run fifteen minutes of ``PROFILE_LOCK_TIMEOUT``.
     """
     if pid <= 0:
@@ -125,8 +125,8 @@ def reap_process(pid: int, system: str | None = None, proc_root: str = '/proc') 
         if result.returncode != 0:
             # ``taskkill`` exits 128 when the process it was asked to kill is not running — on
             # EVERY Windows language. Matching the English words ``not found`` in the output
-            # meant a Chinese Windows reported 「没有找到进程」 as a FAILED reap: the console
-            # printed 「浏览器没能关掉」 for a browser that had already closed, and the user
+            # meant a Chinese Windows reported “没有找到进程” as a FAILED reap: the console
+            # printed “浏览器没能关掉” for a browser that had already closed, and the user
             # went looking for a zombie that did not exist.
             if result.returncode == 128:
                 return True, ''

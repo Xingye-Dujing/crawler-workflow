@@ -65,7 +65,7 @@ class CookieManager:
     #: empty string is its historical spelling (every file, node parameter and workflow written
     #: before multi-account support left it blank), so both arrive here and one path leaves.
     #: :meth:`key` is the single place that folds them together; nothing else may test for
-    #: ``''`` to mean 「the default account」.
+    #: ``''`` to mean "the default account".
     DEFAULT_ACCOUNT = 'default'
 
     # The character rule is the module-level ``ACCOUNT_RE`` and this is that same object, not
@@ -195,7 +195,7 @@ class CookieManager:
 
         Two questions the sorted list cannot answer, both asked by the user:
 
-        * which login did this machine get first (「节点使用的账号默认都是第一个创建的账号」), and
+        * which login did this machine get first (“节点使用的账号默认都是第一个创建的账号”), and
         * does the platform have any cookie at all when the only one is a NAMED account
           (``exists(platform)`` is the default file, and a ``zhihu@work_cookies.json`` is not it).
 
@@ -234,10 +234,10 @@ class CookieManager:
     def next_free_account(self, platform: str) -> str:
         """The label to give a save that was asked to be the default while one already exists.
 
-        「如果有多个留空就需要默认账号后面自动加数字」: the default file is one file, and a second
+        “如果有多个留空就需要默认账号后面自动加数字”: the default file is one file, and a second
         unnamed save would otherwise overwrite the first login with no sentence saying so. The
         generated label is ASCII (``default2``, ``default3``…) because it enters a filename — the
-        *display* of it is 「默认账号2」, which is what the user reads (``account_label_key``).
+        *display* of it is “默认账号2”, which is what the user reads (``account_label_key``).
 
         A platform with no default login yet answers ``default`` — the name of that slot — so
         every account the panel lists is spelled the same way: a word that fits the rule.
@@ -270,7 +270,7 @@ class CookieManager:
         path = self.path_for(platform, account)
         # Atomic replace, not an in-place ``open('w')``: a reader (a crawler seeding its
         # session) racing this write could otherwise read a TRUNCATED file, which ``load``
-        # folds into 「no cookies」 — an anonymous crawl that latches nothing and reports
+        # folds into "no cookies" — an anonymous crawl that latches nothing and reports
         # success. A crash mid-write used to destroy the login for good. The temp file is
         # uniquely named (two concurrent saves of one account must not hand each other's
         # half-written bytes to ``os.replace``) and lives in the SAME directory, because
@@ -287,7 +287,7 @@ class CookieManager:
                 os.unlink(tmp)
             raise
         # The account belongs in the sentence: with one platform holding several logins, a line
-        # that says only 「已保存 微博 的 Cookie」 leaves the user unable to tell which login he
+        # that says only “已保存 微博 的 Cookie” leaves the user unable to tell which login he
         # just overwrote — and the console is the only record of the write.
         logger.info(t('cookie.savedAccount', platform=platform, account=self.label_of(account)))
 
@@ -343,7 +343,7 @@ class CookieManager:
         path = self.path_for(platform, account)
         if os.path.exists(path):
             os.remove(path)
-            # The account belongs here for the same reason it belongs in 「已保存」: with one
+            # The account belongs here for the same reason it belongs in “已保存”: with one
             # platform holding several logins, a line naming only the platform cannot say which
             # session just went away — and this one is a destructive act the user is reading back.
             logger.info(t('cookie.deletedAccount', platform=platform, account=self.label_of(account)))

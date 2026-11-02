@@ -139,7 +139,7 @@ def test_a_blank_chrome_leaves_a_directory_with_no_login_in_it(rooted):
     ``Login Data``, ``History``, ``Cookies`` and the rest are what a person's session
     looks like on disk. A generated template that holds none of them is safe to copy
     into every account made afterwards; one that held them would ship a login to
-    strangers, which is the harm the 「不要复制我的日常 Chrome」 rule exists to prevent.
+    strangers, which is the harm the “不要复制我的日常 Chrome” rule exists to prevent.
 
     This is also the measurement that moved the check from names to rows: a blank first
     run writes those names by itself, so the only honest question is how much is in them.
