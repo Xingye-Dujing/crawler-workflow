@@ -19,6 +19,15 @@ def join_tables(
         raise UnknownOperationError(t('analysis.join_no_right'))
     if not left_on or not right_on:
         raise UnknownOperationError(t('analysis.join_need_keys'))
+    # The gate checks this when the step comes through ``run_pipeline``; a direct call (the
+    # analysis node's own dispatch, a unit test) reaches pandas with whatever it was given,
+    # and ``how='lef'`` raises a KeyError naming a join method rather than the parameter.
+    from services.analysis.contracts import JOIN_HOW
+
+    if how not in JOIN_HOW:
+        raise UnknownOperationError(
+            t('analysis.bad_option', op='join_tables', param='how', value=how, allowed=', '.join(JOIN_HOW))
+        )
     missing = []
     if left_on not in df.columns:
         missing.append(f'{left_on} (left)')

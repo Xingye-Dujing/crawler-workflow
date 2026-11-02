@@ -565,6 +565,14 @@ class TestReshaping:
         message = str(excinfo.value)
         assert 'ghost (left)' in message and 'nope (right)' in message
 
+    def test_join_tables_refuses_a_join_kind_it_does_not_implement(self):
+        """A direct call skips the pipeline gate, and ``how='lef'`` used to reach pandas as a
+        KeyError naming a join method instead of the parameter the user mistyped."""
+        left = pd.DataFrame({'k': [1]})
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.join_tables(left, left, how='union', left_on='k', right_on='k')
+        assert 'how' in str(excinfo.value) and 'union' in str(excinfo.value)
+
     def test_column_calc_adds_the_derived_column(self):
         frame = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
         assert D.column_calc(frame, 'c', 'a + b')['c'].tolist() == [4, 6]
@@ -1309,6 +1317,16 @@ class TestSentimentEvolutionOrdering:
         with pytest.raises(UnknownOperationError, match='没有这列'):
             D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment', order_col='没有这列')
 
+    def test_a_time_column_with_one_missing_value_is_refused_not_a_pandas_crash(self):
+        """``astype('int64')`` raises on NaT, so one unparsed timestamp used to surface as a
+        raw pandas ValueError instead of the by-name refusal the step already promises."""
+        frame = self._phases()
+        frame['首日'] = pd.to_datetime([f'2022-01-{9 + position:02d}' for position in frame['阶段序号']])
+        frame.loc[frame['阶段'] == '衰退期', '首日'] = None
+        with pytest.raises(UnknownOperationError) as err:
+            D.sentiment_evolution(frame, '阶段', label_col='sentiment', order_col='首日')
+        assert '衰退期' in str(err.value)
+
     def test_days_need_no_order_column_because_the_name_already_sorts_in_time(self):
         frame = pd.DataFrame(
             {
@@ -2005,6 +2023,23 @@ class TestClusterLabel:
         with pytest.raises(UnknownOperationError, match='cluster'):
             D.cluster_label(frame, llm=self._Client())
 
+    def test_the_fallback_answer_is_marked_as_an_excerpt_not_a_summary(self):
+        """``on_fail='fallback'`` writes the cluster's first text. Unmarked, a report prints a
+        raw comment as the cluster's theme and nothing distinguishes it from a model answer."""
+
+        class _Broken:
+            label = 'ollama:stub'
+
+            def chat(self, prompt, max_retries=2):
+                from analyzers.llm_client import LLMError
+
+                raise LLMError('down')
+
+        out = D.cluster_label(self._docs(), llm=_Broken(), summary_col='摘要', on_fail='fallback')
+        from services.analysis.ops.cluster_label import FALLBACK_MARK
+
+        assert all(str(value).startswith(FALLBACK_MARK) for value in out['摘要']), out['摘要'].tolist()
+
     def test_a_missing_text_column_is_refused_by_name(self):
         frame = pd.DataFrame({'cluster': [0]})
         with pytest.raises(UnknownOperationError, match='正文'):
@@ -2153,6 +2188,16 @@ class TestComparePlatform:
         frame = pd.DataFrame({'情感': [1.0]})
         with pytest.raises(UnknownOperationError, match='platform'):
             D.compare_platform(frame)
+
+    def test_a_platform_with_no_numeric_value_is_left_empty_not_zero(self):
+        """0.0 made "no scores at all" read as a measured zero, which a bar chart draws as a
+        real finding at the bottom of the axis."""
+        frame = pd.DataFrame({'platform': ['weibo', 'weibo', 'zhihu'], '情感': [1.0, 3.0, None]})
+        out = D.compare_platform(frame, platform_col='platform', value_col='情感', agg='mean')
+        zhihu = out[out['platform'] == 'zhihu'].iloc[0]
+        assert pd.isna(zhihu['情感_mean']), zhihu
+        weibo = out[out['platform'] == 'weibo'].iloc[0]
+        assert abs(float(weibo['情感_mean']) - 2.0) < 1e-9
 
 
 class TestTopicModelEmbedding:

@@ -31,6 +31,7 @@ def compare_platform(
         raise UnknownOperationError(t('analysis.step_col_missing', op='compare_platform', col=platform_col))
     groups = df.groupby(platform_col, dropna=False)
     rows = []
+    unmeasured = []
     for name, sub in groups:
         row = {platform_col: ('' if name is None else str(name)), 'n': int(len(sub))}
         if value_col:
@@ -43,9 +44,18 @@ def compare_platform(
             if agg not in ('sum', 'mean'):
                 raise UnknownOperationError(t('analysis.compare_agg', op='compare_platform', agg=agg))
             series = pd.to_numeric(sub[value_col], errors='coerce').dropna()
-            value = float(series.sum() if agg == 'sum' else series.mean()) if len(series) else 0.0
-            row[f'{value_col}_{agg}'] = round(value, 6)
+            if len(series):
+                value = float(series.sum() if agg == 'sum' else series.mean())
+                row[f'{value_col}_{agg}'] = round(value, 6)
+            else:
+                # No numeric row in this platform's group: that is "not measured", never a
+                # measured zero. Writing 0.0 here made a platform with no scores look like a
+                # perfect 0 and sorted to the bottom of a bar chart as if it were a finding.
+                row[f'{value_col}_{agg}'] = None
+                unmeasured.append(str(row[platform_col]))
         rows.append(row)
     rows.sort(key=lambda r: r['n'], reverse=True)
+    if unmeasured:
+        logger.warning(t('analysis.compare_unmeasured', col=value_col, platforms='、'.join(unmeasured)))
     logger.info(t('analysis.compare_done', platforms=len(rows), value=value_col or '-'))
     return pd.DataFrame(rows)

@@ -11,6 +11,11 @@ from services.analysis.topic_kernels import _label_from
 
 logger = logging.getLogger(__name__)
 
+#: Prefix for the ``fallback`` answer — the cluster's first text instead of a model summary.
+#: Without it the fallback row is indistinguishable from a paragraph the model wrote, and a
+#: report prints a raw comment excerpt as if it were the cluster's theme.
+FALLBACK_MARK = '〔原文摘录〕'
+
 
 def cluster_label(
     df: pd.DataFrame,
@@ -84,7 +89,7 @@ def cluster_label(
                 answer = llm.chat(prompt)
             except LLMError as e:
                 if on_fail == 'fallback':
-                    answer = texts[0][:40]
+                    answer = FALLBACK_MARK + texts[0][:40]
                     logger.warning(t('analysis.cluster_failed', group=key, err=e))
                 elif on_fail != 'blank':
                     raise UnknownOperationError(t('analysis.cluster_failed', group=key, err=e)) from e
@@ -100,7 +105,7 @@ def cluster_label(
         summary = _label_from(answer)
         if not summary:
             if on_fail == 'fallback':
-                summary = texts[0][:40]
+                summary = FALLBACK_MARK + texts[0][:40]
             elif on_fail != 'blank':
                 raise UnknownOperationError(t('analysis.cluster_empty', group=key))
             else:

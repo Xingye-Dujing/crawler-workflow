@@ -9,6 +9,9 @@ from services.analysis.kernels import UnknownOperationError, _to_datetime
 
 logger = logging.getLogger(__name__)
 
+#: What pandas writes for a missing datetime when the column is converted to int64.
+_NAT_AS_INT64 = -(2**63)
+
 
 def sentiment_evolution(
     df: pd.DataFrame,
@@ -94,10 +97,19 @@ def sentiment_evolution(
             raise UnknownOperationError(t('analysis.step_col_missing', op='sentiment_evolution', col=order_col))
         # Numeric first (a 序号 column), then time (a 日期 column): the two ways this
         # project's own steps say "which phase came first".
-        ranks = pd.to_numeric(work[order_col], errors='coerce')
+        values = work[order_col]
+        ranks = pd.to_numeric(values, errors='coerce')
+        # A datetime column is "numeric" to pandas: to_numeric returns nanoseconds, and a
+        # missing timestamp (NaT) becomes INT64_MIN rather than NaN — so a period with no time
+        # sorted FIRST, silently, as the earliest phase. Mask that sentinel back to "no rank".
+        ranks = ranks.mask(ranks == _NAT_AS_INT64)
         if not ranks.notna().any():
-            ranks = _to_datetime(work[order_col]).astype('int64') / 1e9
-            ranks = ranks.where(ranks.notna() & (ranks > 0) & (ranks < 2**62))
+            parsed = _to_datetime(values)
+            # ``Series.astype('int64')`` raises on NaT, so the numpy view is used here; the
+            # sentinel it writes is turned into NaN by the ``where`` below.
+            stamps = parsed.to_numpy(dtype='datetime64[ns]').astype('int64', copy=False)
+            ranks = pd.Series(stamps / 1e9, index=work.index)
+        ranks = ranks.where(ranks.notna() & (ranks > 0) & (ranks < 2**62))
         work['_rank'] = ranks
         agg_map['_rank'] = ('_rank', 'min')
     grouped = work.groupby(column, dropna=True).agg(**agg_map)

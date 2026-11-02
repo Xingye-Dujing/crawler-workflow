@@ -57,6 +57,7 @@ ZH = {
     'analysis.col_missing': '未找到列“{col}”',
     'analysis.compare_agg': '{op}：未知聚合「{agg}」，数值列只支持 sum 或 mean（列名按聚合命名，名实必须相符）',
     'analysis.compare_done': '跨平台对比：{platforms} 个平台（数值列 {value}）',
+    'analysis.compare_unmeasured': '{col} 在平台 {platforms} 没有可用的数值，结果留空而不是记 0',
     'analysis.cooccur_count': '共现次数阈值至少是 1，收到 {value}',
     'analysis.cooccur_done': '共词网络：{words} 个候选词、{docs} 篇文本，{pairs} 对里 {edges} 对达到阈值 {floor}',
     'analysis.cooccur_empty': ('没有一对词共现达到阈值 {floor}：{pairs} 对里最高只有 {top} 次，请降低阈值或放宽候选词'),
@@ -400,6 +401,7 @@ EN = {
         '(its name declares the aggregate, so the label must match how it was computed)'
     ),
     'analysis.compare_done': 'cross-platform compare: {platforms} platforms (value column {value})',
+    'analysis.compare_unmeasured': '{col} has no numeric value for {platforms}; the cell stays empty rather than 0',
     'analysis.cooccur_count': 'the co-occurrence count threshold has to be at least 1, got {value}',
     'analysis.cooccur_done': (
         'co-occurrence network: {words} candidate words over {docs} texts, {edges} of {pairs} pairs at or above {floor}'
