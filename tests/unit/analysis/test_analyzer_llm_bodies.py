@@ -832,7 +832,6 @@ class TestJsonlCheckpointScope:
         """A clean run DELETES its checkpoint (the real outputs own the data now), so the
         resume scenario is the crashed one: row 0 answered, then the transport dies. The
         next run must ask only about the row the crash never reached."""
-        from analyzers.llm_client import LLMError
 
         class _DyingAfterOne(ScriptedClient):
             def __init__(self, **kw):
@@ -859,7 +858,6 @@ class TestJsonlCheckpointScope:
     def test_an_edited_prompt_starts_a_fresh_file_not_yesterdays_answers(self, tmp_path):
         """Editing the prompt builder must NOT let a crashed run's checkpoint answer the
         new question: the digest is part of the key, so the resumed run re-asks."""
-        from analyzers.llm_client import LLMError
 
         class _DyingAfterOne(ScriptedClient):
             def __init__(self, **kw):
@@ -884,7 +882,6 @@ class TestJsonlCheckpointScope:
     def test_a_different_truncation_cap_starts_a_fresh_file(self, tmp_path):
         """``max_chars`` decides what text the model actually reads, so another cap is
         another question: the checkpoint must not hand it the old cap's answers."""
-        from analyzers.llm_client import LLMError
 
         class _DyingAfterOne(ScriptedClient):
             def __init__(self, **kw):

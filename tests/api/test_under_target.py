@@ -477,7 +477,9 @@ class _RecordingSession:
     def walk(self, platform, url, limit):
         self.walked.append(url)
         if url == _RecordingSession.boom:
-            raise _RecordingSession.fault
+            # A boom URL configured with no fault is a broken fixture, not a browser fault:
+            # say so instead of raising None (a TypeError from inside the code under test).
+            raise _RecordingSession.fault or AssertionError('a boom URL was configured without a fault')
         return [{'评论ID': url, '评论内容': 'x'}], _protocol.OK
 
 

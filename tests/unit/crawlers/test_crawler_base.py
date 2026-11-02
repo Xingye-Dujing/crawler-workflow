@@ -591,7 +591,7 @@ class TestInitFailureTeardown:
 
         locks, released = [], []
         monkeypatch.setattr(browser_module, 'claim_profile', lambda directory, abort: locks.append(directory) or 'lock')
-        monkeypatch.setattr(browser_module, 'release_profile', lambda lock: released.append(lock))
+        monkeypatch.setattr(browser_module, 'release_profile', released.append)
         return _QuittingDriver, locks, released
 
     @staticmethod
@@ -627,7 +627,7 @@ class TestInitFailureTeardown:
 
         quitted = []
         monkeypatch.setattr(browser_module, 'claim_profile', lambda directory, abort: 'lock')
-        monkeypatch.setattr(browser_module, 'release_profile', lambda lock: quitted.append(lock))
+        monkeypatch.setattr(browser_module, 'release_profile', quitted.append)
 
         class _NoBrowser(Crawler):
             domain = 'douyin'
