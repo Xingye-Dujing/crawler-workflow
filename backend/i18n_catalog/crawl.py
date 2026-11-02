@@ -192,6 +192,10 @@ ZH = {
     'crawl.hg.cmt.noMitmdump': (
         '[红果短剧] 找不到 mitmdump（{detail}）——安装：pip install mitmproxy（见 requirements-optional.txt）'
     ),
+    'crawl.hg.cmt.portBusy': (
+        '[红果短剧] 127.0.0.1:{port} 已被占用：可能是上次崩溃留下的 mitmdump。请结束该进程后重试，'
+        '否则播放器流量会走旧进程，收割结果可能是空表'
+    ),
     'crawl.hg.cmt.noPlayer': (
         '[红果短剧] 找不到红果短剧桌面播放器（{path}）——请在 设置 › 红果播放器路径 填写它的 exe 位置'
     ),
@@ -343,6 +347,7 @@ ZH = {
     'crawl.weibo.keyword': '关键词: {kw}',
     'crawl.weibo.keyword_plain': '关键词: {kw}（无时间范围，单链接搜索）',
     'crawl.weibo.link_done': '第 {i} 个链接爬取完成，获取 {n} 条数据',
+    'crawl.weibo.window_partial': '第 {i} 个链接未走完（已收 {n} 条），游标停在这一条，继续时会重新进入它',
     'crawl.weibo.link_error': '处理搜索链接时出错: {err}',
     'crawl.weibo.links': '共生成 {n} 个搜索链接（每小时1个）',
     'crawl.weibo.max_page': '最大页码: {n}',
@@ -682,6 +687,10 @@ EN = {
         '[Hongguo] waited {seconds}s and no comment page arrived for this episode ({title}) \u2014 the '
         'player may be logged out, blocked by a dialog, or too old'
     ),
+    'crawl.hg.cmt.portBusy': (
+        '[Hongguo] 127.0.0.1:{port} is already taken: probably a mitmdump left over from a crash. End that '
+        'process and retry \u2014 otherwise the player talks to the old proxy and the harvest can come back empty'
+    ),
     'crawl.hg.cmt.off': 'off',
     'crawl.hg.cmt.on': 'on',
     'crawl.hg.cmt.playerBusy': (
@@ -829,6 +838,9 @@ EN = {
     'crawl.weibo.keyword': 'Keyword: {kw}',
     'crawl.weibo.keyword_plain': 'Keyword: {kw} (no time range, single search link)',
     'crawl.weibo.link_done': 'Link {i} done, {n} rows collected',
+    'crawl.weibo.window_partial': (
+        'Link {i} was not walked to its end ({n} rows so far); the cursor stays on it and 继续 re-enters it'
+    ),
     'crawl.weibo.link_error': 'Error processing search link: {err}',
     'crawl.weibo.links': 'Built {n} search links (one per hour)',
     'crawl.weibo.max_page': 'Max page number: {n}',

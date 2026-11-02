@@ -97,8 +97,10 @@ def find_mitmdump() -> str:
     found = shutil.which('mitmdump')
     if found:
         return found
-    beside = os.path.join(os.path.dirname(sys.executable), 'mitmdump.exe')
-    return beside if os.path.isfile(beside) else ''
+    # ``shutil.which`` with an explicit path applies the target OS's own suffix rules
+    # (``.exe`` on Windows, none on POSIX), so no ``.exe`` is hardcoded here.
+    beside = shutil.which('mitmdump', path=os.path.dirname(sys.executable))
+    return beside or ''
 
 
 class HongguoCommentHarness:
@@ -782,6 +784,13 @@ class HongguoCommentHarness:
         self._stack_up = True
 
     def _start_proxy(self, mitmdump, port):
+        # A listener already on the port means OUR mitmdump cannot bind: the new child exits,
+        # but the port stays open for the leftover process, and the old `cert_landed and
+        # _port_open` test read that as "the proxy came up". The player then talks to a proxy
+        # whose CIXI_HG_OUT points elsewhere and the harvest settles on an empty table.
+        if self._port_open(port):
+            self.close()
+            raise ValueError(t('crawl.hg.cmt.portBusy', port=port))
         os.makedirs(paths.active().harvest_dir, exist_ok=True)
         with open(self._capture, 'a', encoding='utf-8'):
             pass
@@ -808,11 +817,12 @@ class HongguoCommentHarness:
         )
         deadline = time.time() + 15
         while time.time() < deadline:
-            cert_landed = os.path.exists(self._cert_path())
-            if cert_landed and self._port_open(port):
-                return
+            # The child's own exit is checked FIRST: it is the one fact that says the proxy did
+            # not start, and it must outrank a port that some other process happens to hold.
             if self._proxy.poll() is not None:
                 break
+            if os.path.exists(self._cert_path()) and self._port_open(port):
+                return
             time.sleep(0.3)
         self.close()
         raise ValueError(t('crawl.hg.cmt.noMitmdump', detail=f'proxy did not come up on 127.0.0.1:{port}'))

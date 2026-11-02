@@ -492,6 +492,23 @@ class TestClose:
         assert harness.login_wall is False
 
 
+class TestProxyPort:
+    def test_a_busy_port_is_refused_before_mitmdump_starts(self, tmp_path, monkeypatch):
+        """A leftover mitmdump holds the port; the new child dies on bind, but ``_port_open``
+        still answers yes — the old check read that as "the proxy came up" and the harvest
+        settled on an empty table fed by the leftover's capture file."""
+        import crawlers.platforms.hongguo.harvest as harvest_module
+
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        monkeypatch.setattr(harness, '_port_open', lambda port: True)
+        started = []
+        monkeypatch.setattr(harvest_module.subprocess, 'Popen', lambda *a, **k: started.append(a))
+        with pytest.raises(ValueError) as err:
+            harness._start_proxy(str(tmp_path / 'mitmdump'), 8860)
+        assert not started, 'nothing may be spawned onto a port that is already taken'
+        assert '8860' in str(err.value)
+
+
 class TestStackCleanup:
     def test_a_player_popen_failure_reaps_the_proxy(self, tmp_path, monkeypatch):
         """``_start_player``'s ``Popen`` raises ``OSError`` (file busy, directory gone),

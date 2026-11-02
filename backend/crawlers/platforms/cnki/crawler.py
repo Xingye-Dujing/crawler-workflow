@@ -478,12 +478,20 @@ class CnkiCrawler(Crawler):
             self.driver.switch_to.window(handle)
             texts = self._download_export_file()
         finally:
-            with contextlib.suppress(WebDriverException):
+            # Cleanup must never replace the error that brought us here: a session that died
+            # mid-download raises a connection error from close(), and that used to mask the
+            # real ``_download_export_file`` failure (and skip _clear_selection entirely).
+            # Any failure here is about a session that is already gone (urllib's connection
+            # error is not a WebDriverException), so it is logged, never re-raised.
+            try:
                 self.driver.close()
+            except Exception as e:
+                logger.debug('cnki export window close failed: %s', e)
             if main:
-                with contextlib.suppress(WebDriverException):
+                with contextlib.suppress(Exception):
                     self.driver.switch_to.window(main)
-            self._clear_selection()
+            with contextlib.suppress(Exception):
+                self._clear_selection()
         if not texts:
             raise self.ExportError(t('crawl.cnki.exportEmpty'))
         return texts

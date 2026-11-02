@@ -62,6 +62,7 @@ class TestTheCursorRecordsPositionNotContent:
 
         def _harvest_two(url, target):
             crawler._collected.extend([{'微博ID': f'{len(crawler._collected)}'} for _ in range(2)])
+            crawler._window_walked_whole = True
             return ['a', 'b']
 
         monkeypatch.setattr(crawler, '_scrape_single_search', _harvest_two)
@@ -72,6 +73,39 @@ class TestTheCursorRecordsPositionNotContent:
         total = position.get('url_total')
         assert total and total > 1, f'the walk records how many windows there are, got {total}'
         assert position.get('url_index') == total, 'and that it walked them all'
+
+
+class TestAWindowCutShortByTheTargetIsNotProof:
+    """A window the target crossed mid-page is not read to its end, so it cannot go behind the
+    cursor: 继续 with a larger target would start AFTER it and never ask for the pages that
+    were left. The ledger de-dupes by 微博ID, so re-entering costs requests, never rows."""
+
+    def test_the_cursor_stays_on_the_window_that_was_cut_short(self, monkeypatch):
+        crawler = _bare(monkeypatch)
+
+        def scrape(url, target):
+            crawler._collected.append({'微博ID': f'{len(crawler._collected)}'})
+            crawler._window_walked_whole = False  # stopped at the target on page 1 of 3
+            return ['x']
+
+        monkeypatch.setattr(crawler, '_scrape_single_search', scrape)
+        crawler.search('三亚', start_time='2026-01-01', end_time='2026-01-02', target_count=1)
+        position = crawler.position
+        assert position.get('url_index') == 0, f'the cut-short window was marked done → 继续 skips it: {position}'
+
+    def test_a_window_walked_to_its_end_still_advances_the_cursor(self, monkeypatch):
+        """Positive control: the refusal above must not freeze the cursor on every window."""
+        crawler = _bare(monkeypatch)
+
+        def scrape(url, target):
+            crawler._collected.append({'微博ID': f'{len(crawler._collected)}'})
+            crawler._window_walked_whole = True
+            return ['x']
+
+        monkeypatch.setattr(crawler, '_scrape_single_search', scrape)
+        crawler.search('三亚', start_time='2026-01-01', end_time='2026-01-02', target_count=10_000)
+        position = crawler.position
+        assert position.get('url_index') == position.get('url_total'), position
 
 
 class TestARefusedWindowIsNotProof:
@@ -90,8 +124,10 @@ class TestARefusedWindowIsNotProof:
             calls['n'] += 1
             if calls['n'] == 1:
                 crawler._collected.append({'微博ID': 'x1'})
+                crawler._window_walked_whole = True
                 return ['x1']  # first window proves
             crawler.login_wall = True  # the second window bounces the session
+            crawler._window_walked_whole = False
             return []
 
         monkeypatch.setattr(crawler, '_scrape_single_search', scrape)

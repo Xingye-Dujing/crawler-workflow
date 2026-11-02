@@ -134,6 +134,11 @@ class WeiboCrawler(Crawler):
             # costs requests, never rows.
             self.mark_position(card_index=0, page_index=0, done=self.collected())
             page_data = self._scrape_single_search(url, target)
+            # ``False`` unless the window was walked to its own end: a window abandoned when the
+            # target was crossed proves only the pages it read, and marking it done let 继续 skip
+            # the pages after the crossing. Re-entering it costs requests, never rows (the ledger
+            # de-dupes by 微博ID).
+            window_walked_whole = getattr(self, '_window_walked_whole', False)
             walked = idx
             logger.info(t('crawl.weibo.link_done', i=idx, n=len(page_data)))
             logger.info(t('crawl.weibo.accumulated', n=self.collected()))
@@ -152,7 +157,10 @@ class WeiboCrawler(Crawler):
                 # the user needs to hear.
                 break
 
-            self.mark_position(url_index=idx, done=self.collected())
+            if window_walked_whole:
+                self.mark_position(url_index=idx, done=self.collected())
+            else:
+                logger.info(t('crawl.weibo.window_partial', i=idx, n=self.collected()))
 
             if idx < total_urls and self.collected() < target:
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
@@ -496,6 +504,10 @@ class WeiboCrawler(Crawler):
         refusing it silently cost ~40% of a window.
         """
         scraped = []
+        # Set to True only on the paths where this window was read to its end. The caller
+        # advances ``url_index`` on that flag alone, so a window cut short by the target (or by
+        # an exception) is re-entered on 继续 instead of being skipped.
+        self._window_walked_whole = False
         try:
             logger.info(t('crawl.weibo.visiting', url=base_url))
             logger.info(t('crawl.weibo.waiting'))
@@ -511,19 +523,25 @@ class WeiboCrawler(Crawler):
             # one-page window from a pager this crawl could not read.
             logger.info(t('crawl.weibo.total_pages', n=total_pages))
             if total_pages <= 1:
+                self._window_walked_whole = True
                 return scraped
             page_url = shaping.page_url(base_url)
+            cut_short = False
             for page_num in range(2, total_pages + 1):
                 if self.collected() >= target:
                     # Unwinding again: ``_harvest`` is where a target gets crossed and where the console
                     # says so, and the window's closing line names 「达到目标条数」 as its reason.
                     logger.debug(t('crawl.weibo.target_reached', n=target))
+                    cut_short = True
                     break
                 # Politeness *between* requests: this is the path that reaches
                 # s.weibo.com's rate limiter, so the pause is the fix.
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
                 logger.info(t('crawl.weibo.page_crawling', i=page_num, total=total_pages))
                 if not self._await_search_page(f'{page_url}{page_num}'):
+                    # The page never rendered: the remaining pages of this window are unread,
+                    # so this window is not behind the cursor yet.
+                    cut_short = True
                     break
                 self.mark_position(page_index=page_num, card_index=0)
                 found, cards = self._harvest(target)
@@ -535,6 +553,7 @@ class WeiboCrawler(Crawler):
                     logger.warning(t('crawl.weibo.page_empty', i=page_num))
                     break
                 logger.info(t('crawl.weibo.page_done', i=page_num, n=len(found), total=self.collected()))
+            self._window_walked_whole = not cut_short
             return scraped
         except Exception as e:
             logger.error(t('crawl.weibo.link_error', err=e), exc_info=True)
@@ -637,6 +656,11 @@ class WeiboCrawler(Crawler):
         logger.info(t('crawl.weibo.page_cards', n=len(cards)))
         start = min(as_index(self.position.get('card_index')), len(cards))
         kept = []
+        # Once a card raises, the cursor stops advancing for the rest of the page: a position
+        # past the failure would tell 继续 that card was read, and `cards[start:]` would never
+        # come back to it. Later cards are still harvested (the ledger de-dupes on re-entry);
+        # only the cursor is held behind the hole.
+        hole = False
         for idx, card in enumerate(cards[start:], start + 1):
             if self.collected() >= target:
                 logger.info(t('crawl.weibo.target_reached', n=target))
@@ -645,11 +669,12 @@ class WeiboCrawler(Crawler):
                 item = self._scrape_card(card, idx)
             except Exception:
                 logger.warning(t('crawl.weibo.card_error', i=idx), exc_info=True)
-                self.mark_position(card_index=idx, done=self.collected())
+                hole = True
                 continue
             if item is not None and self.emit(item):
                 kept.append(item)
-            self.mark_position(card_index=idx, done=self.collected())
+            if not hole:
+                self.mark_position(card_index=idx, done=self.collected())
         return kept, len(cards)
 
     def _scrape_card(self, card, idx: int) -> dict | None:

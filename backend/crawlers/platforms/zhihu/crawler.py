@@ -643,19 +643,25 @@ class ZhihuCrawler(Crawler):
         cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
         cursor['total'] = max(cursor['total'], len(cards))
         start = min(cursor['scanned'], len(cards))
+        # Set once a card raises. The cursor then stops advancing for the rest of this round:
+        # recording the failure as "scanned" is the one thing that makes it permanent, because
+        # the next round starts at ``cards[start:]`` and never looks at that index again.
+        hole = False
         for idx, card in enumerate(cards[start:], start + 1):
             if self.collected() >= target_count:
                 logger.info(t('crawl.zhihu.target_reached', n=target_count))
                 break
-            cursor['scanned'] = idx
             try:
                 card_class = card.get_attribute('class') or ''
                 if 'hotLanding' in card_class:
                     # 热榜落地推广卡: zero anchors, no title node, a truncated
                     # preview of an answer that appears properly further down
                     # the list. Harvesting it only pollutes the table with
-                    # rows nobody can open.
+                    # rows nobody can open. Deliberately skipped, so it IS scanned.
                     logger.debug(t('crawl.zhihu.skipped', i=idx))
+                    if not hole:
+                        cursor['scanned'] = idx
+                        self.mark_position(done=self.collected(), scanned=idx)
                     continue
                 item = self._scrape_card(card)
                 if not item.get('链接'):
@@ -688,9 +694,13 @@ class ZhihuCrawler(Crawler):
                     logger.debug(t('crawl.zhihu.skipped', i=idx))
             except Exception as e:
                 logger.error(t('crawl.zhihu.process_error', i=idx, err=e))
-            # Recorded per card: a kill between two cards costs at most the one
-            # in flight.
-            self.mark_position(done=self.collected(), scanned=idx)
+                hole = True
+            # Recorded per card, AFTER it was processed: a kill between two cards costs at
+            # most the one in flight, and a card that raised above is never recorded, so
+            # 继续 re-reads from it.
+            if not hole:
+                cursor['scanned'] = idx
+                self.mark_position(done=self.collected(), scanned=idx)
 
     def _is_answer_card(self, item: dict) -> bool:
         """Whether this card's own address says it is an answer.

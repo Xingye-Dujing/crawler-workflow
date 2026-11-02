@@ -123,4 +123,9 @@ def fetch_text(driver, url: str, requests: list | None = None, timeout: float = 
         raw = driver.execute_async_script(js)
     except Exception as e:
         return f'ERR {e}'
-    return raw if isinstance(raw, str) else json.dumps(raw)
+    if isinstance(raw, str):
+        return raw
+    # ``None`` here means the async callback never fired. It must not come back as the four
+    # characters ``null``: callers treat a non-``ERR`` reply as page text, so a lost callback
+    # would be read as an ordinary document instead of a failed fetch.
+    return f'ERR unexpected reply: {raw!r}'
