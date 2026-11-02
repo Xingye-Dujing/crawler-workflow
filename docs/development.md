@@ -195,6 +195,10 @@ CIXI_LIVE_USE_USER_PROFILE=1 .venv/Scripts/python.exe -m pytest -q -m "live_quic
 `.github/workflows/ci.yml` 兜底：它跑 `ruff check`、`ruff format --check`、两档 pylint（产品 / tests，各一次 `--rcfile`）、
 fast 全量，以及一个用真 Chrome 跑 `-m integration` 的 `browser` job（`.pylintrc.probes` 是本地档，CI 不跑）。本地提交前请显式跑一遍上面的命令。
 
+`uses:` 里的 action 版本由 `.github/dependabot.yml` 每周开一个合并 PR 刷新——旧运行时是先弃用、再拒绝的（Node 20 → 24
+就是这样以「每个 job 一条注解」的形式出现的，见 `ci.yml` 顶部注释）。`fast` 的 `timeout-minutes` 是 45 而不是 30：绿的一次
+实测已用 29m40s，30 只剩六十秒余量，而超时只会报成一条 cancelled 的运行记录。
+
 **"CI 有没有覆盖某一步"只能查运行历史，不能读本地 yaml**（读文件会把"计划要做"说成"已经在做"）：
 
 ```bash

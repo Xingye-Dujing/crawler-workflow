@@ -1,0 +1,14 @@
+# Action versions age silently. The Node 20 → 24 deprecation arrived as an annotation on every
+# job until ci.yml's `uses:` lines were bumped by hand (checkout v4 → v7, setup-python v5 → v7),
+# and the next removal is announced the same way — in a run's annotations, not in a PR.
+# Dependabot opens that PR instead: one grouped weekly PR for every `uses:` version.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ['*']

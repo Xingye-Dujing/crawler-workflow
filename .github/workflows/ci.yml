@@ -30,7 +30,10 @@ env:
 jobs:
   fast:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # 45, not 30: a green fast job was measured at 29m40s (26m49s of it the pytest tier), so 30
+    # left one slow case between green and a timeout — and a timeout reports as a cancelled run,
+    # never as the test that hung.
+    timeout-minutes: 45
 
     steps:
       # Node-24 majors on purpose. checkout v4 / setup-python v5 target Node 20, which the
