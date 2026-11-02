@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from crawlers.engine import times
 from crawlers.platforms.youtube.comments import parse_youtube_comments
 from crawlers.platforms.youtube.crawler import (
     apply_player,
@@ -34,6 +35,19 @@ from crawlers.platforms.youtube.crawler import (
 pytestmark = pytest.mark.unit
 
 TOKEN = 'CgpRIvYDECgKQghhcG9zIiA'
+
+
+def _site_now() -> datetime:
+    """Now, on the clock a site prints its relative wording in, as a naive stamp.
+
+    ``datetime.now()`` is the clock of the MACHINE — UTC on the CI runner, UTC+8 on this
+    box — while "2 days ago" names the site's own zone, which ``crawlers.engine.times``
+    pins to +08:00. Asking the host's clock made one fixture resolve eight hours apart
+    and pass on this box only: AGENTS' 「no test may pass just because of the machine it
+    ran on」. The zone is taken from the product rather than spelled again here, so the
+    two can never drift apart.
+    """
+    return datetime.now(times._CST).replace(tzinfo=None)
 
 
 def _continuation(token):
@@ -193,14 +207,15 @@ class TestChannelRow:
     ``publishedTimeText`` is relative on anything fresh ('2 days ago'), and a relative word
     stored in a table means a different date tomorrow — so it is converted the moment it is
     read, which is the only moment that conversion is possible. What these tests can assert
-    is therefore the RESOLVED instant, computed against the same clock: a hard-coded string
-    would only prove which day the test was written on.
+    is therefore the RESOLVED instant, computed against the same clock — the site's own
+    zone (``_site_now``), never the host's ``datetime.now()``, which is eight hours behind
+    on a UTC CI runner.
     """
 
     @staticmethod
     def _assert_relative_to_now(value, days):
         moment = datetime.strptime(value, '%Y-%m-%d %H:%M')
-        expected = datetime.now() + timedelta(days=days)
+        expected = _site_now() + timedelta(days=days)
         assert abs((moment - expected).total_seconds()) <= 300, f'{value} is not ~{days} day(s) ago'
 
     def test_a_lockup_becomes_a_row(self):
@@ -402,7 +417,7 @@ class TestCommentRows:
         assert first['评论内容'].startswith('做大叔')
         # '1 year ago' resolved at read time; asserted against the same clock.
         moment = datetime.strptime(first['评论时间'], '%Y-%m-%d %H:%M')
-        assert abs((moment - (datetime.now() - timedelta(days=365))).total_seconds()) <= 300
+        assert abs((moment - (_site_now() - timedelta(days=365))).total_seconds()) <= 300
         assert first['点赞数'] == 56
         assert first['回复数'] == 2
         assert first['楼层'] == 1

@@ -528,6 +528,11 @@ class TestStackCleanup:
         monkeypatch.setattr(harvest_module, 'find_player', lambda: str(tmp_path / 'player.exe'))
         monkeypatch.setattr(harvest_module.procs, 'reap_process', lambda pid: (reaped.append(pid), (True, 'reaped'))[1])
         harness, _said = _harness(tmp_path, capture_lines=[])
+        # The trust store is the third machine fact in this case: this box has a trusted mitm
+        # CA under ~/.mitmproxy, a CI runner has none, and ``_ensure_trusted`` refuses BY NAME
+        # there — before ``_start_player`` is reached, so the OSError below never happens and
+        # the case fails on a machine, not on a bug. What it proves is the reaping, not the CA.
+        monkeypatch.setattr(harness, '_ensure_trusted', lambda: None)
         del harness._ensure_stack  # the real stack gate runs
 
         def _fake_proxy(mitmdump, port):
