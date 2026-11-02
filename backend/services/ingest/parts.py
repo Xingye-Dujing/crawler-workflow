@@ -27,9 +27,11 @@ import pandas as pd
 # overwrote each other. A stem is a storage key, so only a REAL export extension is ever removed.
 _TRAILING_EXT = re.compile(r'\.(csv|json|tsv|xlsx|xls|txt|md|html|parquet)$', re.IGNORECASE)
 
-# The number a shard carries in its name: ``{stem}.part{NNN}{ext}``. ``search`` finds the LAST
-# ``.part…`` so a stem that itself contains the literal ``.part`` still yields the real index.
-_PART_NUMBER = re.compile(r'\.part(\d+)\.[A-Za-z0-9]+$')
+# The number a shard carries in its name: ``{stem}.part{NNN}{ext}`` — the writer always pads to at
+# least three digits. ``search`` finds the LAST ``.part…`` so a stem that itself contains the
+# literal ``.part`` still yields the real index, and ``\d{3,}`` keeps a user's export literally
+# named ``a.part1.csv`` from being adopted as shard 1 of ``a``.
+_PART_NUMBER = re.compile(r'\.part(\d{3,})\.[A-Za-z0-9]+$')
 
 
 def dump_rows(rows, path: str, columns: list, fmt: str) -> None:
@@ -66,10 +68,18 @@ class PartWriter:
         # resume continues the numbering and the final merge includes them —
         # that is what turns "parts survive a kill" into a real guarantee
         # instead of an orphaned pile of files.
-        prefix = f'{stem}.part'
-        self._parts = sorted(
-            os.path.join(self.dir, f) for f in os.listdir(self.dir) if f.startswith(prefix) and f.endswith(self.ext)
-        )
+        self._parts = []
+        for name in os.listdir(self.dir):
+            if not name.endswith(self.ext):
+                continue
+            match = _PART_NUMBER.search(name)
+            if not match or name[: match.start()] != stem:
+                # Either not a shard name at all, or a DIFFERENT stem that merely starts with
+                # ours: ``a.part...`` is not a shard of ``a`` when the text before the number
+                # is not exactly ``a``.
+                continue
+            self._parts.append(os.path.join(self.dir, name))
+        self._parts.sort()
         # The next slot is the HIGHEST adopted part number + 1, never ``len(parts)``: a hole
         # (a middle shard deleted from the export panel while a different run is live) made
         # ``len`` reuse an existing number, so ``_write_part`` overwrote an adopted shard AND

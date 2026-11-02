@@ -10,7 +10,7 @@ def bin_column(
     df: pd.DataFrame, column: str, bins: list = None, labels: list = None, new_col: str = ''
 ) -> pd.DataFrame:
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='bin_column', col=column))
     work = df.copy()
     bin_col = new_col or f'{column}_bin'
     if bins is None:

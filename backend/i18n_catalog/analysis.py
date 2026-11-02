@@ -259,6 +259,7 @@ ZH = {
     'cluster.not_enough': '有效行数不足，无法聚类（至少需要 2 行）',
     'corr.done': '相关性分析（{method}）：找到 {n} 对（min_abs={min_abs:.2f}）',
     'corr.ignored_columns': '相关性分析：以下列不是数值列，已跳过（{columns}）',
+    'corr.undefined_pairs': '相关性分析：以下列对算不出相关系数（可能是常数列或样本不足），未列入结果：{pairs}',
     'corr.need_cols': '相关性分析至少需要 2 个数值列',
     'corr.no_usable_columns': '相关性分析：你指定的列都不是数值列（{columns}）',
     'emotion.bert_bad_label': 'BERT 模型回了一个不认识的情绪标签「{label}」，无法归入这六类',
@@ -672,6 +673,10 @@ EN = {
     'cluster.not_enough': 'Not enough valid rows for clustering (need >= 2)',
     'corr.done': 'Correlation analysis ({method}): {n} pairs found (min_abs={min_abs:.2f})',
     'corr.ignored_columns': 'Correlation: skipped the non-numeric columns ({columns})',
+    'corr.undefined_pairs': (
+        'Correlation: these pairs have no defined coefficient (constant column or too few rows) '
+        'and are left out of the result: {pairs}'
+    ),
     'corr.need_cols': 'Need at least 2 numeric columns for correlation analysis',
     'corr.no_usable_columns': 'Correlation: none of the columns you named holds numbers ({columns})',
     'emotion.bert_bad_label': 'the BERT model answered an unrecognised emotion label "{label}"',

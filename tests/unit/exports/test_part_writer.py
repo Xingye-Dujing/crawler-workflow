@@ -134,6 +134,15 @@ class TestAdoptionAndAtomicity:
         assert (tmp_path / 'wf.part004.csv').exists(), 'the next shard must be 004, not reuse 003'
         assert not (tmp_path / 'wf.part002.csv').exists()  # the hole stays a hole, never re-filled wrong
 
+    def test_a_file_merely_sharing_the_prefix_is_not_adopted_as_a_shard(self, tmp_path):
+        """``a.part1.csv`` is a complete export of its own. The old prefix test adopted it as
+        shard 1 of ``a`` and merged its rows into ``a``'s result."""
+        (tmp_path / 'a.part1.csv').write_text('c\nrow1\n', encoding='utf-8-sig')
+        (tmp_path / 'a.part001.csv').write_text('c\nours\n', encoding='utf-8-sig')
+        writer = PartWriter(str(tmp_path), 'a', 'csv', batch_size=0)
+        names = [os.path.basename(path) for path in writer._parts]
+        assert names == ['a.part001.csv'], names
+
     def test_a_completed_part_leaves_no_temp_file(self, tmp_path):
         """Atomic tmp+replace: a settled batch lands as exactly ``{stem}.partNNN.ext``. A crash
         mid-write would leave only ``.tmp`` — which the adoption glob never picks up — never a

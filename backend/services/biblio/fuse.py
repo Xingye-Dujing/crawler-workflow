@@ -163,7 +163,15 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
         records = result if isinstance(result, list) else []
         if not records:
             raise ValueError(t('fuse.empty_parent', nid=nid or '(fuse)', pid=str(pid)))
-        columns = list(records[0].keys())
+        # The union of every row's keys, first-seen order: a merged/sharded parent can have a
+        # role column only on later rows, and reading the first row's keys alone made that
+        # column silently invisible — every 年份/题名/作者 cell for the whole parent came back
+        # empty while the node reported success.
+        columns: list[str] = []
+        for record in records:
+            for key in record:
+                if key not in columns:
+                    columns.append(key)
         found = {role: _candidates(columns, parsed[role]) for role, _key in _ROLES}
         if not found['entity']:
             raise ValueError(

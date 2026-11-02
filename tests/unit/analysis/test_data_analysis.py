@@ -514,9 +514,13 @@ class TestReshaping:
         with pytest.raises(UnknownOperationError, match='衰退期'):
             D.groupby_agg(frame, '阶段', 'v', 'sum', order_col='序')
 
-    def test_groupby_agg_with_a_missing_column_changes_nothing(self, df):
-        assert D.groupby_agg(df, 'nope', '点赞') is df
-        assert D.groupby_agg(df, '作者', 'nope') is df
+    def test_groupby_agg_refuses_a_missing_column_by_name(self, df):
+        """It used to hand the row-level table back, and every downstream chart read
+        un-grouped rows under a grouped label."""
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.groupby_agg(df, 'nope', '点赞')
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.groupby_agg(df, '作者', 'nope')
 
     def test_groupby_agg_renames_failure_as_unknown_operation(self):
         frame = pd.DataFrame({'g': ['a', 'b'], 't': ['x', 'y']})
@@ -637,8 +641,9 @@ class TestReshaping:
             D.bin_column(frame, 'v', bins=bins, labels=labels)
         assert 'v' in str(err.value), str(err.value)
 
-    def test_bin_column_on_a_missing_column_changes_nothing(self, df):
-        assert D.bin_column(df, 'nope', bins=[0, 1]) is df
+    def test_bin_column_refuses_a_missing_column_by_name(self, df):
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.bin_column(df, 'nope', bins=[0, 1])
 
 
 # ─── the operator vocabulary shared with the browser ───────────────────
@@ -1094,10 +1099,10 @@ class TestDedupeSimilar:
         with pytest.raises(UnknownOperationError):
             D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=-1)
 
-    def test_a_column_that_is_not_there_is_a_no_op_like_every_other_step(self):
+    def test_a_column_that_is_not_there_is_refused_by_name(self):
         frame = pd.DataFrame([{'别的': 'a'}, {'别的': 'b'}])
-        out = D.dedupe_similar(frame, column='正文')
-        assert list(out.columns) == ['别的'] and len(out) == 2
+        with pytest.raises(UnknownOperationError, match='正文'):
+            D.dedupe_similar(frame, column='正文')
 
     def test_the_pipeline_reports_the_rows_it_removed(self):
         steps = [{'op': 'dedupe_similar', 'params': {'column': '正文'}}]

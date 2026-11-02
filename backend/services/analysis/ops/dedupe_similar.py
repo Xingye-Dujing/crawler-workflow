@@ -33,7 +33,7 @@ def dedupe_similar(df: pd.DataFrame, column: str, max_distance: int = 8) -> pd.D
     """
     work = df.copy()
     if column not in work.columns:
-        return work
+        raise UnknownOperationError(t('analysis.step_col_missing', op='dedupe_similar', col=column))
     # Imported here, not at module scope: this module is what the app loads on a plain
     # crawl, and the dedupe helpers pull in jieba for tokenising.
     from services.datasets.dedupe import MAX_BANDED_DISTANCE, group_near_duplicates, normalize_text, simhash64

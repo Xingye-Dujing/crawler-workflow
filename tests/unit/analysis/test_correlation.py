@@ -60,6 +60,14 @@ class TestShape:
         assert list(result.columns) == COLUMNS
         assert result.empty
 
+    def test_an_undefined_pair_is_named_in_the_log(self, caplog):
+        """A constant column has no coefficient at all. It was dropped without a word, so the
+        user saw a shorter table and no reason for it."""
+        frame = pd.DataFrame({'点赞': [1, 2, 3, 4], '常量': [7, 7, 7, 7], '收藏': [4, 3, 2, 1]})
+        with caplog.at_level('WARNING'):
+            CorrelationAnalyzer.analyze_dataframe(frame)
+        assert '常量' in caplog.text, caplog.text
+
     def test_the_input_frame_is_not_mutated(self, df):
         before = df.copy()
         CorrelationAnalyzer.analyze_dataframe(df)

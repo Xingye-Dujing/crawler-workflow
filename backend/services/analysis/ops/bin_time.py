@@ -39,7 +39,9 @@ def bin_time(
     added and this step behaves exactly as it always did.
     """
     if column not in df.columns:
-        return df
+        # Same rule as every other step: a column the table does not hold is refused by name.
+        # Returning the frame untouched settled the node DONE with no phase column at all.
+        raise UnknownOperationError(t('analysis.step_col_missing', op='bin_time', col=column))
     work = df.copy()
     bounds = [value for value in (edges or []) if not _blank(value)]
     names = [str(name).strip() for name in (labels or []) if str(name).strip()]

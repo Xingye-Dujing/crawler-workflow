@@ -28,7 +28,10 @@ def groupby_agg(
     a second opinion about the same group.
     """
     if group_col not in df.columns or agg_col not in df.columns:
-        return df
+        # A missing key used to hand the row-level table back as if it were the aggregate,
+        # so every downstream chart read un-grouped rows under a grouped label.
+        missing = group_col if group_col not in df.columns else agg_col
+        raise UnknownOperationError(t('analysis.step_col_missing', op='groupby_agg', col=missing))
     metrics = list(agg_metrics or [])
     for column, _func in metrics:
         if column not in df.columns:

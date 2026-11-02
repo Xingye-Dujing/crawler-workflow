@@ -44,6 +44,13 @@ class TestFolding:
         result = _fuse([('node-1', LITERATURE), ('node-2', POSTS)], source_labels='node-1=文献')
         assert [row['来源'] for row in result['rows']] == ['文献', '文献', '微博', '知乎']
 
+    def test_a_role_column_only_later_rows_carry_is_still_found(self):
+        """A sharded/merged parent can name 年份 on row 2 and not row 1. Reading only the first
+        row's keys dropped the whole column, so every year came back blank."""
+        rows = [{'关键词': '数字治理'}, {'关键词': '算法问责', '年份': '2021'}]
+        result = _fuse([('node-2', rows)])
+        assert [row['年份'] for row in result['rows']] == ['', '2021']
+
     def test_a_year_is_read_out_of_a_timestamp(self):
         """Social tables stamp 发布时间 as a datetime; the slicing downstream needs a year or
         nothing, never a half-parsed timestamp string."""

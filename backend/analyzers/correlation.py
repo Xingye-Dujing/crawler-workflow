@@ -46,10 +46,14 @@ class CorrelationAnalyzer:
         corr_matrix = df[numeric_cols].corr(method=method)
 
         pairs = []
+        undefined = []
         for i, c1 in enumerate(numeric_cols):
             for c2 in numeric_cols[i + 1 :]:
                 val = corr_matrix.loc[c1, c2]
                 if pd.isna(val):
+                    # A constant column has no correlation — the number does not exist rather
+                    # than being zero. Naming the pair is what tells the user where it went.
+                    undefined.append(f'{c1}/{c2}')
                     continue
                 if abs(val) >= min_abs:
                     pairs.append(
@@ -68,5 +72,7 @@ class CorrelationAnalyzer:
         if not result.empty:
             result = result.sort_values('abs_correlation', ascending=False).reset_index(drop=True)
 
+        if undefined:
+            logger.warning(t('corr.undefined_pairs', pairs='、'.join(undefined)))
         logger.info(t('corr.done', method=method, n=len(result), min_abs=min_abs))
         return result
