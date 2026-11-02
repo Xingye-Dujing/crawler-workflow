@@ -1,0 +1,93 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "示例评论情感"
+      },
+      "x": 0,
+      "y": 7,
+      "folded": false
+    },
+    {
+      "id": "node-2",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "d4feca02006f4f41",
+        "dataset_name": "demo_reviews.csv",
+        "row_count": 24
+      },
+      "x": 340,
+      "y": 0,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "process",
+      "title": "处理",
+      "params": {
+        "enabled": true,
+        "format": "csv",
+        "live_export": false,
+        "mode": "snownlp",
+        "neg_threshold": "0.4",
+        "operation": "sentiment",
+        "pos_threshold": "0.6",
+        "text_column": "评论"
+      },
+      "operation": "sentiment",
+      "x": 680,
+      "y": 7,
+      "folded": false
+    },
+    {
+      "id": "node-4",
+      "type": "visualize",
+      "title": "可视化",
+      "params": {
+        "agg": "count",
+        "chart_type": "bar",
+        "data_source": "input",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "enabled": true,
+        "engine": "echarts",
+        "title": "各情感倾向的评论数",
+        "x_field": "sentiment",
+        "y_field": ""
+      },
+      "x": 1020,
+      "y": 0,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-1",
+      "to": "node-2"
+    },
+    {
+      "from": "node-2",
+      "to": "node-3"
+    },
+    {
+      "from": "node-3",
+      "to": "node-4"
+    }
+  ],
+  "settings": {
+    "mode": "parallel",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 169,
+      "panY": 402,
+      "zoom": 1
+    }
+  },
+  "name": "示例评论情感"
+}
