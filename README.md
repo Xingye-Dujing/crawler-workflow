@@ -6,6 +6,10 @@ scikit-learn，拖节点、连线条、点执行；中断了能从断点接着�
 > 这里只讲怎么用起来。分平台细节、分析方法、引擎与 API 都在 [`docs/`](docs/)（见文末索引），
 > 给 AI agent 的改动规则在 [`AGENTS.md`](AGENTS.md)。
 
+**在线体验**：<http://47.116.114.77/crawler>（云端模式，登录后使用）　·　**不想装 Python**：
+[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 有 Windows 安装包 `CaiXiHui-Setup.exe`
+和手册 PDF。
+
 <img src="docs/manual/img/hg-canvas.png" alt="采析绘画布：一条跑过的红果短剧工作流" width="100%">
 
 一条跑过的红果短剧工作流：左边是节点库，中间是画布，右边是大纲；节点左端的色条是类型，右上角的绿勾是上次运行的
@@ -40,6 +44,9 @@ cd backend && python app.py        # http://127.0.0.1:5000
 `backend/` 是 `sys.path` 根，必须从那里启动。端口用 `PORT`、监听地址用 `HOST`；开发时
 `FLASK_DEBUG=1` 开热重载。
 
+不想在本机装：直接开 <http://47.116.114.77/crawler> 用线上实例（云端模式，需要账号），或者下
+[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 里的 `CaiXiHui-Setup.exe`。
+
 **三件值得先知道的事**
 
 - **一个数据根只开一个服务。** 状态都在同一份 `data/`（运行、数据集、Cookie、导出），第二个实例会把正在
@@ -49,7 +56,8 @@ cd backend && python app.py        # http://127.0.0.1:5000
   强制多账号登录——首次启动必须给 `CRAWLER_ADMIN_PASSWORD` 和 `SECRET_KEY`，否则拒绝启动。每个账号的
   工作流、数据集、运行、Cookie、导出都在 `data/users/<账号 id>/` 下，互相看不见。旧数据用
   `tools/migrate_accounts.py` 迁到管理员名下（默认 dry-run，先备份）。
-- **不想装 Python 就用桌面版（仅 Windows）**：`desktop/` 打出 `CaiXiHui.exe`，双击启动本地服务并开浏览器，
+- **不想装 Python 就用桌面版（仅 Windows）**：[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases)
+  里有现成的 `CaiXiHui-Setup.exe`；`desktop/` 负责打出 `CaiXiHui.exe`，双击启动本地服务并开浏览器，
   数据在 `%APPDATA%\CaiXiHui`（旁边放个空的 `portable.txt` 就变便携版）。构建、体积与依赖自查见
   [`desktop/README.md`](desktop/README.md)。
 
@@ -130,7 +138,8 @@ Visualize 出图、Output 导出 → 连线、用 Name 命名 → 执行。
 
 | 文件 | 里面是什么 |
 |---|---|
-| [`docs/manual/`](docs/manual/) | 图文手册：从零到成稿，含七个真实工作流；编译出的 PDF 见 Releases 附件 |
+| [`docs/manual/`](docs/manual/) | 图文手册：从零到成稿，含七个真实工作流 |
+| [Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) | 手册 PDF（`CaiXiHui-Manual-*.pdf`）与 Windows 安装包（`CaiXiHui-Setup.exe` / 免装 zip） |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 代码结构地图与模块接缝 |
 | [`docs/collection.md`](docs/collection.md) | 各平台采什么、出哪些列、有哪些选项 |
 | [`docs/analysis.md`](docs/analysis.md) | 分析、处理、可视化、文献计量的细节 |
