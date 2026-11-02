@@ -562,9 +562,16 @@ Analyze strictly and output only the required plain string."""
         value = None
         if score:
             try:
-                value = max(0.0, min(1.0, float(score.group(1))))
+                raw = float(score.group(1))
             except ValueError:
                 value = None
+            else:
+                # Clamping stays (a 1.7 cannot be a probability), but it must not be silent:
+                # a model answering on a 0–100 scale would otherwise turn every score into 1.0
+                # with nothing in the console saying why.
+                if not 0.0 <= raw <= 1.0:
+                    logger.warning(t('ml.score_out_of_range', col='sentiment', value=raw))
+                value = max(0.0, min(1.0, raw))
         return name, value
 
     def _analyze_ml(self, df: pd.DataFrame, text_column: str) -> pd.DataFrame:

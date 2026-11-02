@@ -276,6 +276,12 @@ class TestLlmMode:
     def test_a_score_that_cannot_be_read_is_no_score_not_zero(self):
         assert SentimentAnalyzer().parse_sentiment_response('Sentiment: negative, Score: abc') == ('negative', None)
 
+    def test_a_score_above_one_is_clamped_and_reported(self, caplog):
+        with caplog.at_level('WARNING'):
+            parsed = SentimentAnalyzer().parse_sentiment_response('Sentiment: neutral, Score: 85')
+        assert parsed == ('neutral', 1.0)
+        assert '85' in caplog.text and 'sentiment' in caplog.text
+
 
 def _install_bert_stub(monkeypatch, answer_for, batches=None):
     """A fake ``transformers`` in ``sys.modules`` that answers per BATCH.

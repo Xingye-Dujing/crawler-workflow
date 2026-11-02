@@ -77,11 +77,23 @@ class TestGuards:
         assert result.loc[result['is_anomaly'] == 1, '点赞'].tolist() == [500], 'the numeric column still scored'
         assert '标题' in caplog.text, 'the dropped column must be named, not silently discarded'
 
-    def test_missing_values_are_treated_as_zero_not_as_errors(self):
+    def test_missing_values_are_imputed_not_errors(self):
         frame = pd.DataFrame({'v': [1.0, 2.0, None, 3.0, 2.0, 1.0, 2.0, None]})
         result = AnomalyDetector.analyze_dataframe(frame)
         assert len(result) == 8
         assert result['is_anomaly'].isin([0, 1]).all()
+
+    def test_a_missing_value_is_filled_with_the_column_median_not_zero(self, caplog):
+        """``fillna(0)`` made an uncollected count the extreme low of its column, so the row
+        could be flagged as an outlier for the absence of a measurement."""
+        frame = pd.DataFrame({'v': [1.0, 2.0, None, 3.0, 2.0, 1.0, 2.0, None, 4.0, 2.0]})
+        with caplog.at_level('WARNING'):
+            missing = AnomalyDetector.analyze_dataframe(frame)
+        filled = frame.fillna(frame['v'].median())
+        with caplog.at_level('WARNING'):
+            imputed = AnomalyDetector.analyze_dataframe(filled)
+        assert missing['is_anomaly'].tolist() == imputed['is_anomaly'].tolist()
+        assert 'v' in caplog.text, 'the imputation must name the column it changed'
 
 
 class TestDetection:

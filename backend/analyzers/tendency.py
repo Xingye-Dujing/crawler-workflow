@@ -134,6 +134,10 @@ Analyze strictly and output only the required plain string."""
             score = float(confidence_match.group(1))
         except ValueError:
             return None, None
+        if not 0.0 <= score <= 1.0:
+            # The clamp is deliberate; printing it keeps a percent-scale model from silently
+            # rewriting every confidence to 1.0.
+            logger.warning(t('ml.score_out_of_range', col='tendency', value=score))
         return label, max(0.0, min(1.0, score))
 
     def _match_label(self, content: str):

@@ -184,9 +184,13 @@ class TestEmotionParsing:
         # capture reads 'Fear'. Pinned because the row is scored, not refused.
         assert emotion.parse_emotion_response('Emotion: Fear/Sadness, Confidence: 0.7') == ('Fear', 0.7)
 
-    def test_a_confidence_above_one_is_clamped_not_passed_through(self, emotion):
-        assert emotion.parse_emotion_response('Emotion: Joy, Confidence: 1.8') == ('Joy', 1.0)
-        assert emotion.parse_emotion_response('Emotion: Joy, Confidence: 42') == ('Joy', 1.0)
+    def test_a_confidence_above_one_is_clamped_not_passed_through(self, emotion, caplog):
+        with caplog.at_level('WARNING'):
+            assert emotion.parse_emotion_response('Emotion: Joy, Confidence: 1.8') == ('Joy', 1.0)
+            assert emotion.parse_emotion_response('Emotion: Joy, Confidence: 42') == ('Joy', 1.0)
+        # The clamp is the contract; the log is what stops a percent-answering model from
+        # rewriting every confidence to 1.0 with nothing said about it.
+        assert '42' in caplog.text and 'emotion' in caplog.text
 
     def test_a_confidence_inside_the_range_is_left_alone(self, emotion):
         # The clamp must not round: 0.85 is the model's number, and a chart that
@@ -234,13 +238,15 @@ class TestTendencyParsing:
     def test_a_missing_confidence_is_unparseable(self, tendency):
         assert tendency.parse_tendency_response('Tendency: Satire/Mockery') == (None, None)
 
-    def test_a_confidence_above_one_is_clamped(self, tendency):
+    def test_a_confidence_above_one_is_clamped_and_reported(self, tendency, caplog):
         # Unlike emotion.py this path has no in-range branch at all: every score
         # goes through max/min, so the two endpoints are the only reachable cap.
-        assert tendency.parse_tendency_response('Tendency: Advocacy/Call-to-action, Confidence: 1.4') == (
-            'Advocacy/Call-to-action',
-            1.0,
-        )
+        with caplog.at_level('WARNING'):
+            assert tendency.parse_tendency_response('Tendency: Advocacy/Call-to-action, Confidence: 1.4') == (
+                'Advocacy/Call-to-action',
+                1.0,
+            )
+        assert '1.4' in caplog.text and 'tendency' in caplog.text
         assert tendency.parse_tendency_response('Tendency: Satire/Mockery, Confidence: 0.9.9') == (None, None)
 
 

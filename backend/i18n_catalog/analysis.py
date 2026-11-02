@@ -246,6 +246,8 @@ ZH = {
     'analysis.type_convert_failed': '列 {col} 转换为 {dtype} 失败：{err}',
     'anomaly.done': '异常检测：{n}/{total} 行被标记（contamination={c:.2f}）',
     'anomaly.ignored_columns': '异常检测：以下列不是数值列，已跳过（{columns}）',
+    'anomaly.imputed': '异常检测：{n} 个空值按各列中位数补入（涉及 {columns} 列，整列为空时补 0：{empty}）',
+    'ml.score_out_of_range': '{col} 的回答 {value} 不在 0–1 之间，得分被按边界截断；请检查模型提示词',
     'anomaly.no_numeric': '没有可用于异常检测的数值列',
     'anomaly.no_usable_columns': '异常检测：你指定的列都不是数值列（{columns}）',
     'anomaly.too_few': '行数过少（{n} < {min}），异常检测无法给出结论',
@@ -649,6 +651,13 @@ EN = {
     'analysis.type_convert_failed': 'Type conversion failed for column {col} -> {dtype}: {err}',
     'anomaly.done': 'Anomaly detection: {n}/{total} rows flagged (contamination={c:.2f})',
     'anomaly.ignored_columns': 'Anomaly detection: skipped the non-numeric columns ({columns})',
+    'anomaly.imputed': (
+        'Anomaly detection: filled {n} empty cells with their column median '
+        '(columns {columns}; an all-empty column is filled with 0: {empty})'
+    ),
+    'ml.score_out_of_range': (
+        '{col}: the model answered {value}, outside 0–1 — the score was clamped to the nearest bound; check the prompt'
+    ),
     'anomaly.no_numeric': 'No numeric columns available for anomaly detection',
     'anomaly.no_usable_columns': 'Anomaly detection: none of the columns you named holds numbers ({columns})',
     'anomaly.too_few': 'Too few rows ({n} < {min}) — anomaly detection cannot reach a conclusion',

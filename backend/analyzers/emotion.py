@@ -138,6 +138,7 @@ Analyze strictly and output only the required plain string."""
                     score = float(confidence_match.group(1))
                     if 0 <= score <= 1:
                         return label, score
+                    logger.warning(t('ml.score_out_of_range', col='emotion', value=score))
                     return label, max(0.0, min(1.0, score))
                 except ValueError:
                     return None, None

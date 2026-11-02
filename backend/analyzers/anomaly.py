@@ -58,7 +58,19 @@ class AnomalyDetector:
         if len(work) < AnomalyDetector.MIN_ROWS:
             raise ValueError(t('anomaly.too_few', n=len(work), min=AnomalyDetector.MIN_ROWS))
 
-        x_mat = work[numeric_cols].fillna(0)
+        # A missing cell is not a measured 0: filling with 0 made a row with an uncollected
+        # like-count look like the extreme low of its column and get flagged as an outlier.
+        # The column median is the neutral stand-in; a column with no value at all falls back
+        # to 0, and both cases are named in the log.
+        gaps = int(work[numeric_cols].isna().sum().sum())
+        if gaps:
+            empty = [str(name) for name in numeric_cols if work[name].isna().all()]
+            x_mat = work[numeric_cols].fillna(work[numeric_cols].median()).fillna(0)
+            logger.warning(
+                t('anomaly.imputed', n=gaps, columns=', '.join(map(str, numeric_cols)), empty=', '.join(empty))
+            )
+        else:
+            x_mat = work[numeric_cols]
 
         model = IsolationForest(
             contamination=contamination,
