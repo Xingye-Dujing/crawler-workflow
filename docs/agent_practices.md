@@ -22,9 +22,10 @@ model or `model_registry.json`'s `operation` default) and `_resolve_bert_mode` d
 and a multi-model BERT comparison never degrades. torch/transformers go to `requirements-optional.txt` (not CI-installed)
 precisely so CI exercises the degrade-and-print path rather than hiding it.
 
-The local PostToolUse `ruff format` **silently fails on a restricted workspace** (measured `os error 5`: ruff writes a
-temp file then renames) — the edit stays unformatted while the hook looks fine. Hence run `ruff format` by hand before
-committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
+The local post-edit `ruff format` (OpenCode's `formatter` → `.opencode/hooks/format.mjs`, formerly the Qoder
+`PostToolUse` hook) **silently fails on a restricted workspace** (measured `os error 5`: ruff writes a temp file then
+renames) — the edit stays unformatted while the formatter looks fine. Hence run `ruff format` by hand before committing;
+CI (`ruff check` + `ruff format --check`) is the unskippable gate.
 
 ## How tests are written here
 
@@ -143,7 +144,7 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   sees it. Rule: dotted/prose rewrites belong to `.md` and hand-edited docstrings; `.py` code changes by import/attribute
   rules only.
 - **A re-export needs `__all__`, and an order pin is a contract only where order is data.** Collapsing five chart-type sets
-  into `services/charts/registry.py` hit both: ① `contracts.py` kept re-exports that PostToolUse `ruff --fix` deleted as
+  into `services/charts/registry.py` hit both: ① `contracts.py` kept re-exports that the post-edit `ruff --fix` deleted as
   F401 (a name imported only to hand on is *unused* unless `__all__` says otherwise); ② deriving `ECHARTS_ONLY_TYPES`
   put types in panel order and a pre-existing test compared it **as a list** — membership lists both sides test only with
   `in` must be compared as sets; the order pin belongs only to `CHART_TYPES`.

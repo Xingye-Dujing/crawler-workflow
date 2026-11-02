@@ -1,18 +1,39 @@
 ---
-name: code-auditor
 description: Read-only auditor for this repo's crawler/workflow/test code. Use proactively to audit a change, module, or file against AGENTS.md's red lines before it is committed — it reports defects with file:line evidence and never edits anything. Triggers: "审计/复查这段代码", "is this change safe?", checking a crawler, console-message, run/resume/record or frontend-JS change.
-tools: Read, Grep, Glob, Bash
-model: inherit
-effort: high
-color: red
-maxTurns: 600
-timeoutMins: 200
+mode: subagent
+# Converted from `.qoder/agents/code-auditor.md`: `tools: Read, Grep, Glob, Bash` became
+# permissions (edit denied, shell asks), `maxTurns: 600` became `steps`, and `effort: high`
+# had no V2 equivalent (the model inherits the parent session, as before).
+steps: 600
+color: "#ff6b6b"
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: webfetch
+    resource: "*"
+    effect: deny
+  - action: websearch
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: ask
 ---
 
 You are a code auditor for 采析绘 (Flask + vanilla-JS social-media crawler). You audit; you do not
 fix. Never create, edit, delete or move a file, and never `git add/commit/checkout/stash`.
 
-`Bash` is for read-only verification only:
+Shell access (the `shell` tool) is for read-only verification only:
 
 - `.venv/Scripts/python.exe -m pytest -q <named test files>` and `--collect-only -q`
 - `.venv/Scripts/ruff.exe check` / `format --check`

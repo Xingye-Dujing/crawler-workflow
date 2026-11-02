@@ -53,8 +53,8 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   `method=auto`→embedding/LDA; sentiment/emotion/tendency bert→`snownlp`/`ml`); analyzers refuse an unrunnable `bert` by
   name; a multi-model BERT comparison never degrades.
 - CI (`.github/workflows/ci.yml`, windows-latest): fast tier + `ruff check`/`format --check` over `backend/ tests/`. The
-  local PostToolUse `ruff format` fails on a restricted workspace (`os error 5`) — format by hand; CI is the unskippable
-  gate. `backend/test_*.py` are probe scripts, NOT pytest.
+  local post-edit `ruff format` (OpenCode's `formatter` → `.opencode/hooks/format.mjs`) fails on a restricted workspace
+  (`os error 5`) — format by hand; CI is the unskippable gate. `backend/test_*.py` are probe scripts, NOT pytest.
 - `ml_train/` (gitignored) trains the sklearn+bert models `emotion`/`tendency`/`sentiment` load
   (`data/model_registry.json`); changing features/labels means retraining there (`ml_train/README.md`).
 - **Test tiers** (`pytest.ini` excludes real tiers; `tests/unit/gates/test_test_tiers.py`): Fast `python -m pytest -q`
@@ -360,8 +360,8 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   batch run decides whether to push.
 - **The closure gate is NOT a lane**: any "it is done" claim = one full run of every tier, nothing deselected/skipped, no
   file needing a change. Any edit restarts the loop.
-- **Edit**: PostToolUse auto-runs `ruff format` + `ruff check --fix` on touched `.py`; committed files still pass `ruff
-  check`/`format --check` by hand.
+- **Edit**: OpenCode's `formatter` → `.opencode/hooks/format.mjs` auto-runs `ruff format` + `ruff check --fix` on touched
+  `.py`; committed files still pass `ruff check`/`format --check` by hand.
 - **Tests ship with the change.** Any code file touched (backend or frontend JS) syncs the suite in the same change. A
   previously-green test failing because of your change means the bug is the change — fix the code, not the test (unless it
   pinned an old bug). An unfixed product bug gets `@pytest.mark.xfail(strict=False, reason='product bug <file:line> — …')`.

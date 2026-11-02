@@ -28,8 +28,6 @@ logs/
 # which is the part worth keeping. The rule stays so the next probe is ignored the same way, and it is
 # linted locally with `--rcfile=.pylintrc.probes` (never in CI: a runner has none of these files).
 backend/test_*.py
-.qoder/settings.local.json
-.qoder/sessions/
 # WorkBuddy session workspace (local memory notes only, never source).
 .workbuddy/
 .coverage

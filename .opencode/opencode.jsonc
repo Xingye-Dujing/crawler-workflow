@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Converted from `.qoder/settings.json`: its `PostToolUse` hook ran
+  //   .venv/Scripts/python.exe .qoder/hooks/format.py
+  // on every Write/Edit. OpenCode has no hook config, it has formatters that run after
+  // `write`/`edit`/`patch`, so the same behaviour lives in `.opencode/hooks/format.mjs`
+  // (ruff format, then ruff check --fix, on the touched file only, never blocking).
+  "formatter": {
+    "ruff": {
+      "command": ["node", ".opencode/hooks/format.mjs", "$FILE"],
+      "extensions": [".py"]
+    }
+  }
+}
