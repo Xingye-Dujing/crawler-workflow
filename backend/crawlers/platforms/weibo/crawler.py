@@ -80,6 +80,11 @@ class WeiboCrawler(Crawler):
     # "no number asked" sentinel is *no ceiling*, not a very big one.
     DEFAULT_TARGET = math.inf
 
+    #: Set by ``_scrape_single_search`` — True only when the window was read to its own end.
+    #: ``search`` advances ``url_index`` on this flag alone, so a window cut short by the target
+    #: (or by an exception) is re-entered on 继续 instead of being skipped.
+    _window_walked_whole = False
+
     @staticmethod
     def _parse_date(value: str) -> datetime:
         try:

@@ -537,6 +537,9 @@ class TestTheWindowWalkStopsOnAnyRefusal:
                 raise CrawlerStopped('stopped')
             item = {'正文': url}
             crawler.emit(item)
+            # The real ``_scrape_single_search`` sets this on the paths where the window was read
+            # to its end; the stub has to model that contract or it proves nothing about the cursor.
+            crawler._window_walked_whole = True
             return [item]
 
         crawler._scrape_single_search = _window
