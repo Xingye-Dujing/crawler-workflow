@@ -6,6 +6,11 @@ scikit-learn，拖节点、连线条、点执行；中断了能从断点接着�
 > 这里只讲怎么用起来。分平台细节、分析方法、引擎与 API 都在 [`docs/`](docs/)（见文末索引），
 > 给 AI agent 的改动规则在 [`AGENTS.md`](AGENTS.md)。
 
+<img src="docs/manual/img/hg-canvas.png" alt="采析绘画布：一条跑过的红果短剧工作流" width="100%">
+
+一条跑过的红果短剧工作流：左边是节点库，中间是画布，右边是大纲；节点左端的色条是类型，右上角的绿勾是上次运行的
+结论。界面六块区域各自管什么、每块怎么用，见[图文手册](docs/manual/)。
+
 ## 快速开始
 
 源码版 Windows / Linux / macOS 都能跑（云端部署目标是 Linux）。只有两处是 Windows 专属：`desktop/`
@@ -71,6 +76,29 @@ cd backend && python app.py        # http://127.0.0.1:5000
 - **数据集与定时**：累积数据集带版本与去重策略，可多源合并同构数据集；定时任务用预设或 cron 跑已存画布
   （含模型节点的画布会标明不能定时），停机错过的时刻只记“已错过”，不补跑。→ [`docs/workflow.md`](docs/workflow.md)
 - **界面**：中英双语、亮暗主题、快捷键与框选、运行前诊断（每个节点常驻校验角标）。→ [`docs/workflow.md`](docs/workflow.md)
+
+### 看界面
+
+下面几张图都是从[图文手册](docs/manual/)里取的，按界面现在的样子拍：
+
+| 数据源面板 | 数据预览 |
+|:--:|:--:|
+| <img src="docs/manual/img/hg-source.png" width="300" alt="数据源节点面板"> | <img src="docs/manual/img/hg-data.png" width="480" alt="数据预览"> |
+| 平台、采集引擎、内容、数量、分片、格式一行一行往下排；需要先选一项的字段不替你猜默认值 | 采完不用导出就能翻，顶上是行数与列数，一页一页往下看 |
+
+分析节点也一样，参数就是这一步的口径，选错按名拒绝：
+
+| 主题距离图（LDA + 句向量） | 情感演化曲线 |
+|:--:|:--:|
+| <img src="docs/manual/img/liu-topicmap.png" width="300" alt="主题距离图节点面板"> | <img src="docs/manual/img/liu-evolution.png" width="300" alt="情感演化曲线节点面板"> |
+| 一行一个主题，出 `topic/pc1/pc2/prevalence_pct` 再交给可视化画气泡 | 按日聚合成指数，接“情感演化”可视化节点出曲线与阶段 |
+
+出图与运行：
+
+| 图表预览 | 控制台日志 |
+|:--:|:--:|
+| <img src="docs/manual/img/demo-chart.png" width="420" alt="图表预览"> | <img src="docs/manual/img/run-log.png" width="480" alt="控制台日志"> |
+| ECharts 与 Matplotlib 两套引擎，出图即可复制 LaTeX 图源与三线表 | 实时日志按工作流分页签，同一份同时写进运行库，事后还能翻到 |
 
 ## 项目结构
 
