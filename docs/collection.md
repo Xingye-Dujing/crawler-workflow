@@ -161,6 +161,8 @@
   Cookie 只落在文件里、真正抓取用的 profile 永远不再读它。**现在保存即更新**：粘贴成功那一刻 `app.py` 就把这份 Cookie 种进该账号自己的 profile（`_plant_saved_cookie_into_profile`），不再需要
   第二个按钮（按钮与 `POST /api/cookies/refresh-profile` 已删除）。唯一当场做不到的是那个浏览器正被占用，此时保存仍成功、`sessions.profiles.needs_refresh` 会让下一次抓取自动带上它。种进去这个动作
   是 Chrome 唯一能写进 Cookie 库的途径（那个库被应用绑定加密，外部进程写不了）。**一条实测划出的边界**：Chrome 只把**带有效期**的 Cookie 写进 profile 库，会话 Cookie 关掉窗口就没了。详见 `docs/crawler_notes.md`。
+  **例外：红果短剧不建持久 Profile**（`needs_profile = False`）。四个榜对匿名浏览器直接开放，这个目录换不来任何会话，只会累积 Chrome 自己的组件缓存
+  （实测约 86 MB，渲染进程随后每次启动都不应答），所以它每次都用一次性浏览器：设置里的“使用 Profile”压不过它，也不占 profile 锁。已经存在的旧目录不会自动删除，在“设置”里删掉即可。详见 `docs/crawler_notes.md`。
 - **同一平台多账号（限流的结构性解法）**：站点踢人踢的是**账号会话**，换个账号就是平行的第二条路。Cookie 面板多了一个**“账号”**输入框：每个登录都有名字，**默认那份也不例外**——它的名字就是
   `default`（输入框显示 `default` 而不是留空）。留空仍被接受（它是 `default` 的历史拼法，在 `CookieManager.key` 这唯一一处折成同一个账号）；新名字允许 `a-z0-9_-`（1–24 位）但统一按小写存储，
   所以 `Work` 和 `work` 是同一个会话。填一个新名字再点“浏览器生成”或“保存”，就得到 `data/cookies/<平台>@<账号>_cookies.json` 与独立设备目录 `chrome_profile/<平台>/<账号>`（默认那份一个字节都没动）——

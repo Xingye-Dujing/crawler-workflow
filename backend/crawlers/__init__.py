@@ -110,6 +110,15 @@ def get_crawler(
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
+    # A platform whose every board is public (``needs_profile = False``) gains nothing from a
+    # persistent browser profile: there is no login to keep and no device identity to hold, only a
+    # directory for Chrome's own component caches to grow in until the renderer stops answering.
+    # The answer is structural, not a per-run preference, so it overrides ``use_profile`` outright —
+    # no directory is created, nothing needs a lock, and no "renderer unresponsive" line can be
+    # earned from a device this platform never needed. ``use_profile`` still governs every other
+    # platform, including the one-run choice the panel makes before a parallel canvas.
+    if getattr(cls, 'needs_profile', True) is False:
+        use_profile = False
     account = str(account or '').strip()
     # A cloud host has no display, so a caller that asked for a window gets a headless
     # browser: since #148 a headless session carries a desktop UA and real window metrics,

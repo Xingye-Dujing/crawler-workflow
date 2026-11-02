@@ -113,6 +113,17 @@ class Crawler(ABC):
     # platform that measures a real need opts in.
     needs_images = False
 
+    #: Whether this platform benefits from a *persistent* browser profile — a kept session, a
+    #: stable device identity. Default True, because that is what most platforms need. A platform
+    #: whose every board is served to an anonymous browser says ``False``: ``get_crawler`` then
+    #: launches a throwaway browser, so no persistent directory is ever created for it. That
+    #: directory would gain nothing (there is no login to keep) and only accumulate Chrome's own
+    #: component caches until its renderer wedges — measured on hongguo, whose profile grew to
+    #: tens of MB of ``component_crx_cache``/``WasmTtsEngine`` entries and then stopped answering
+    #: every run's health check. This is a structural fact about the platform, not a per-run
+    #: preference: ``use_profile`` still governs every platform that keeps this True.
+    needs_profile: bool = True
+
     #: "May this crawl stop?" — installed by the runner, defaulted on the class so a
     #: test double that subclasses Crawler without calling ``__init__`` still answers
     #: it (False) instead of raising AttributeError from inside ``emit``.

@@ -220,6 +220,44 @@ class TestFactoryPolicy:
         assert fake_crawler()['profile_dir'] == login_profile
         assert fake_crawler()['for_login'] is False
 
+
+class TestAPlatformThatKeepsNoDevice:
+    """``needs_profile = False`` is a fact about the platform, so it overrides the setting.
+
+    Measured on hongguo: every board is served to an anonymous browser, so the persistent directory
+    bought nothing and only accumulated Chrome's component caches until its renderer stopped
+    answering. ``use_profile`` answers "does *this run* want a device"; a platform with no login and
+    no device identity to hold is a different question, and the factory has to answer it itself.
+    """
+
+    @staticmethod
+    def _anonymous(monkeypatch):
+        monkeypatch.setattr(Recorder, 'needs_profile', False, raising=False)
+
+    def test_such_a_platform_is_handed_no_profile_directory(self, profiles_on, tmp_path, monkeypatch, fake_crawler):
+        self._anonymous(monkeypatch)
+        crawlers_pkg.get_crawler('hongguo', cookie_dir='/tmp/cookies')
+        assert fake_crawler()['profile_dir'] is None
+        assert not (tmp_path / 'profiles' / 'hongguo').exists(), (
+            'a directory this platform can never use must not be created for it'
+        )
+
+    def test_an_explicit_use_profile_cannot_override_it(self, profiles_on, monkeypatch, fake_crawler):
+        """The panel's per-run "use a profile" choice is about a device the platform wants; a
+        platform that says it wants none is not asking to be talked into one."""
+        self._anonymous(monkeypatch)
+        crawlers_pkg.get_crawler('hongguo', cookie_dir='/tmp/cookies', use_profile=True)
+        assert fake_crawler()['profile_dir'] is None
+
+    def test_a_platform_that_keeps_the_default_still_gets_its_device(self, profiles_on, fake_crawler):
+        crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
+        assert fake_crawler()['profile_dir'] == profiles.profile_dir_for('weibo')
+
+    def test_hongguo_is_the_platform_that_says_so(self):
+        """Pinned by name: the rule's only subject today is the boards-only platform, and a
+        second platform adopting it has to arrive as a deliberate edit with its own measurement."""
+        assert crawlers_pkg.crawler_class('hongguo').needs_profile is False
+
     def test_an_explicit_refresh_replants_into_a_used_profile(self, profiles_on, fake_crawler, tmp_path):
         """#108, the one door through which a used profile is given the file again.
 

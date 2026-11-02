@@ -138,6 +138,13 @@ class HongguoCrawler(Crawler):
     # (measured), so there is no session state here to keep or to lose. The matrix says the
     # same thing on its side (``needs_session=False``), which is what keeps this platform
     # out of the cookie preflight and out of the panel's account list.
+    #
+    # The same fact means ``needs_profile = False``: with no login to keep, the persistent
+    # directory bought nothing and only accumulated Chrome's component caches until its renderer
+    # stopped answering — the hongguo profile grew to tens of MB of ``component_crx_cache``/
+    # ``WasmTtsEngine`` entries, and every run had to discard it and fall back. ``get_crawler``
+    # launches a throwaway browser for this platform instead, so the directory is never created.
+    needs_profile = False
 
     def search(self, keyword=None, **_kwargs):
         """No keyword search exists on this site; the panel offers only its boards."""
