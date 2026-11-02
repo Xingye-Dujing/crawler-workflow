@@ -1,65 +1,52 @@
+# ─── Tooling caches ───
 .venv/
-.vscode/
+__pycache__/
 .ruff_cache/
 .pytest_cache/
-__pycache__/
-# Restore points written by tools/backup.py (a git bundle + a data archive). They can be large and
-# may hold credentials with --with-cookies, so they never belong in history.
-backups/
-# The runtime state stays out of the repo (runs.db / datasets.db / cookies / exports),
-# but a saved workflow is authored work the user wants versioned — it references datasets
-# by id, so a checkout of it is only useful next to the same data/, which is stated in the
-# README rather than hidden by an ignore rule.
+.coverage
+htmlcov/
+jieba.cache
+.vscode/
+# Project-local pip download cache + build temp, deliberately off the C: drive.
+.pip-cache/
+.tmp/
+
+# ─── Runtime state ───
+# data/ holds runs.db / datasets.db / cookies / exports. A saved workflow is authored work and IS
+# versioned: it references datasets by id, so a checkout is only useful beside the same data/.
 data/*
 !data/workflows/
 !data/workflows/**
-# The fine-tuned model registry is a name→relative-path map the model picker and docs cite;
-# tiny, no secrets — version it so others get the same display names.
 !data/model_registry.json
 logs/
-# `.pylintrc` USED to be ignored here, which is why pylint was never a real review standard:
-# the configuration lived on one machine, CI could not read it, and a clone linted nothing.
-# The three tier configs (.pylintrc, .pylintrc.tests, .pylintrc.probes) are versioned on purpose.
-# backend/test_*.py are one-off measurement PROBES, kept out of git ON PURPOSE: they run against a
-# live site with a real cookie and assert nothing, so tracking them would put throwaway scripts in
-# CI's `ruff check backend/` and the pytest collection. The 141 that had accumulated were archived
-# to F:/python_project/crawls/_archive/backend_probes_2026-10-25.zip and deleted on 2026-10-25; what
-# they measured is cited in docs/crawler_notes.md, docs/why_finetuned_bert.md and docs/live_test_plan.md,
-# which is the part worth keeping. The rule stays so the next probe is ignored the same way, and it is
-# linted locally with `--rcfile=.pylintrc.probes` (never in CI: a runner has none of these files).
-backend/test_*.py
-# WorkBuddy session workspace (local memory notes only, never source).
-.workbuddy/
-.coverage
-htmlcov/
-
 scratchpad/
-# Real vendor exports stay on the machine they were downloaded on. Their own files say so:
-# the Dimensions download's first row is "Redistribution / external use of this work (or parts
-# thereof) is prohibited without prior written approval", and Scopus/WoS licences say the same
-# in their terms. The committed fixtures are the synthetic `*_demo.*` files beside these, which
-# are written to the *same* column names, tag spellings and separators — so every dialect
-# discovered here is still tested, without shipping anyone's data.
+
+# Restore points from tools/backup.py (a git bundle + a data archive; may hold cookies).
+backups/
+
+# ─── Sources that stay on this machine ───
+# backend/test_*.py are one-off live-site probes: they assert nothing and would land in CI's ruff and
+# pytest. They are linted locally with `.pylintrc.probes`, never in CI (a runner has none of them).
+backend/test_*.py
+# Real vendor exports are licence-restricted; the committed *_demo.* fixtures beside them carry the
+# same columns and separators, so every dialect is still tested without shipping anyone's data.
 samples/vendor/
-# ml_train holds the fine-tuning workspace. Keep the big/private subdirs out (datasets = crawled
-# social content, models = 1.6G weights, logs), but VERSION the scripts + dir-map README so every
-# cited accuracy/F1 has its producing code in the repo. These scripts self-locate their sys.path.
+
+# ─── ml_train ───
+# Big/private subdirs stay out (datasets = crawled content, models = ~1.6G weights); the scripts and
+# the dir-map README are versioned so every cited accuracy has its producing code in the repo.
 ml_train/*
 !ml_train/scripts/
 !ml_train/README.md
-# Project-local pip download cache + build temp (kept off the C: drive on purpose).
-.pip-cache/
-.tmp/
-# Windows desktop build: the build env, PyInstaller work dir and release artifacts are
-# reproducible from desktop/ and must never be committed.
+
+# ─── Desktop build ───
+# The build env, PyInstaller work dir and artifacts are reproducible from desktop/.
 build/
 dist/
 desktop/.venv-build/
 desktop/.pyinstaller-cache/
-# Pip sometimes falls back to cwd for temporary build dirs on restricted Windows
-# sandboxes; these are never source and must not be committed.
+# pip falls back to cwd for scratch dirs on a restricted Windows sandbox.
 pip-build-*/
 pip-install-*/
 pip-unpack-*/
 pip-ephem-wheel-cache-*/
-jieba.cache
