@@ -557,10 +557,16 @@ def _mds_2d(distances):
     if size < 2:
         return [[0.0, 0.0] for _ in range(size)]
     centering = np.eye(size) - np.ones((size, size)) / size
-    doubled = -0.5 * (matrix**2) @ centering
+    # Torgerson double-centring is B = -1/2 · H · D² · H — the centring matrix on BOTH sides.
+    # Multiplying one side only (the shape this used to ship) then symmetrising answers
+    # (AH + HA)/2, which is generally NOT HAH: measured on 2D points recovered from their own
+    # distance matrix, the one-sided form misses by 1e-1 while the two-sided form recovers
+    # them to 1e-15 — a map whose geometry was a deterministic but wrong function of the
+    # distances.
+    gram = -0.5 * centering @ (matrix**2) @ centering
     # Symmetrised before the eigensolver: floating-point drift in the product above is real,
     # and ``eigh`` on a non-symmetric input answers with numbers that mean nothing.
-    gram = (doubled + doubled.T) / 2.0
+    gram = (gram + gram.T) / 2.0
     values, vectors = np.linalg.eigh(gram)
     order = np.argsort(values)[::-1][:2]
     coordinates = []

@@ -769,7 +769,14 @@ class HongguoCommentHarness:
         try:
             self._ensure_trusted()
             self._start_player(player, port)
-        except ValueError:
+        except BaseException:
+            # EVERYTHING past the proxy — a trust refusal, an ``OSError`` from the
+            # player's Popen (file busy, directory gone), a user 停止 — must reap the
+            # mitmdump this method already started. Catching only the ValueError left a
+            # leaked proxy holding ``harvest_proxy_port``: the next attempt's
+            # ``_start_proxy`` waited out its 15 s deadline against an occupied port and
+            # failed in turn, a loop only a manually-killed mitmdump could end.
+            # ``close()`` is idempotent and its reaping failures only log.
             self.close()
             raise
         self._stack_up = True

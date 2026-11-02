@@ -27,7 +27,7 @@ import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import _to_datetime
-from services.datasets.dedupe import hamming, normalize_text, simhash64
+from services.datasets.dedupe import _band_count, _bands, hamming, normalize_text, simhash64
 
 logger = logging.getLogger(__name__)
 
@@ -75,23 +75,41 @@ class BotLikelihoodAnalyzer:
         hashes = [simhash64(tx) if tx else None for tx in texts]
 
         dup_partner = [False] * len(work)
-        # The pair scan is O(n²). Without a per-row check on ``cancel_event``, 停止
-        # pressed during a bot node would not land until the WHOLE scan finished —
-        # minutes on a large table, during which the run holds the single-run queue
-        # (AGENTS.md: "one run at a time; a busy server queues"). Checking once per
-        # outer row bounds the wait to a single row's inner scan.
+        # The pair scan is BANDED, not all-pairs: the same pigeonhole index the dedupe step
+        # uses (4 equal bands prove 3 bits — a pair within ``DUP_BITS`` must share one whole
+        # band, so only rows sharing a bucket are ever compared). The all-pairs form this
+        # used to run is ~10⁸ hamming checks at 10k rows and ~10¹⁰ at 100k — minutes to
+        # hours, with no candidate filtering. Any pair the banding never compares is farther
+        # than ``DUP_BITS`` by construction, so the verdict is identical, not approximate.
+        # The per-row ``cancel_event`` check stays: 停止 lands within one row's candidate
+        # scan instead of the whole pass (a run holds the single-run queue while it lives).
+        band_count = _band_count(DUP_BITS)
+        row_bands = [_bands(value, band_count) if value is not None else None for value in hashes]
+        buckets: dict[tuple[int, int], list[int]] = {}
+        for index, bands_of_row in enumerate(row_bands):
+            if bands_of_row is None:
+                continue
+            for position, band in enumerate(bands_of_row):
+                buckets.setdefault((position, band), []).append(index)
         for i in range(len(work)):
             if cancel_event is not None and cancel_event.is_set():
                 from crawlers.core.faults import CrawlerStopped
 
                 raise CrawlerStopped(t('crawl.stopped'))
-            if hashes[i] is None:
+            if row_bands[i] is None or not authors[i]:
                 continue
-            for j in range(len(work)):
-                if i == j or hashes[j] is None or authors[i] == authors[j] or not authors[i] or not authors[j]:
-                    continue
-                if hamming(hashes[i], hashes[j]) <= DUP_BITS:
-                    dup_partner[i] = True
+            seen: set[int] = set()
+            for position, band in enumerate(row_bands[i]):
+                for j in buckets.get((position, band), ()):
+                    if j == i or j in seen:
+                        continue
+                    seen.add(j)
+                    if hashes[j] is None or authors[i] == authors[j] or not authors[j]:
+                        continue
+                    if hamming(hashes[i], hashes[j]) <= DUP_BITS:
+                        dup_partner[i] = True
+                        break
+                if dup_partner[i]:
                     break
 
         author_stats: dict = {}

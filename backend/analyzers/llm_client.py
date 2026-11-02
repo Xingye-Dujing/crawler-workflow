@@ -837,9 +837,13 @@ def run_llm_dataframe(
 
         checkpoint = RowCache(store, answer_scope(op, client, text_column, extra_key, build_prompt, prompt_template))
     if checkpoint is None and checkpoint_dir:
-        # Keyed by node + operation + transport + the dataset's own content:
-        # a different table, model or column starts a fresh file, the same one
-        # resumes.
+        # Keyed by node + operation + transport + EVERYTHING that changes what an
+        # answer means (the same discipline ``answer_scope`` applies to the durable
+        # cache, and for the same reason): a different table, model, column,
+        # truncation cap, daemon or PROMPT starts a fresh file, the same one resumes.
+        # The prompt digest and the cap/host used to be missing here, so a run that
+        # died halfway kept answering an edited template's question with yesterday's
+        # answers — the exact replay this module's docstring forbids.
         key = '|'.join(
             str(part)
             for part in (
@@ -848,7 +852,10 @@ def run_llm_dataframe(
                 client.provider,
                 client.model,
                 text_column,
+                client.max_chars,
+                client.host,
                 extra_key,
+                prompt_version(prompt_template if prompt_template is not None else build_prompt),
                 content_key(df[text_column]),
             )
         )

@@ -597,12 +597,19 @@ def _continue_record(name: str, resumable: list, resuming: bool) -> dict:
     unfinished row of this canvas again instead of opening a fresh one per
     press. A plain Run is a new attempt and gets new rows — "one record per
     attempt" is what makes the panel's history mean anything.
+
+    Adopting CONSUMES the candidate (it is popped, not re-read): validate only
+    asks a name node for a non-empty label, so one canvas may legitimately carry
+    two same-named components, and a match that stayed in the list handed BOTH
+    the same run_id — the second ``start_run`` upsert reset the first's record
+    to running/node_done=0, its verdict overwrote the first's, and the other
+    same-named row of the previous attempt was left an orphan nobody adopts.
     """
     if not resuming:
         return {}
-    for candidate in resumable:
+    for position, candidate in enumerate(resumable):
         if str(candidate.get('workflow_name') or '') == name:
-            return dict(candidate)
+            return dict(resumable.pop(position))
     return {}
 
 

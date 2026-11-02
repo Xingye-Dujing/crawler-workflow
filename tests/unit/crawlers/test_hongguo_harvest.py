@@ -492,6 +492,44 @@ class TestClose:
         assert harness.login_wall is False
 
 
+class TestStackCleanup:
+    def test_a_player_popen_failure_reaps_the_proxy(self, tmp_path, monkeypatch):
+        """``_start_player``'s ``Popen`` raises ``OSError`` (file busy, directory gone),
+        not a ValueError — and the mitmdump ``_ensure_stack`` already started must be
+        reaped on ANY failure past it. Leaked, the proxy holds ``harvest_proxy_port``:
+        every retry's ``_start_proxy`` then waits out its 15 s deadline against an
+        occupied port and fails in turn, a loop only a manually-killed mitmdump ends."""
+        import importlib.util
+
+        import crawlers.platforms.hongguo.harvest as harvest_module
+
+        reaped = []
+        monkeypatch.setattr(importlib.util, 'find_spec', lambda _name: object())
+        monkeypatch.setattr(harvest_module.machine, 'is_frozen', lambda: False)
+        monkeypatch.setattr(harvest_module.requirements, 'requirement_met', lambda _need: True)
+        monkeypatch.setattr(harvest_module, 'find_mitmdump', lambda: str(tmp_path / 'mitmdump'))
+        monkeypatch.setattr(harvest_module, 'find_player', lambda: str(tmp_path / 'player.exe'))
+        monkeypatch.setattr(harvest_module.procs, 'reap_process', lambda pid: (reaped.append(pid), (True, 'reaped'))[1])
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        del harness._ensure_stack  # the real stack gate runs
+
+        def _fake_proxy(mitmdump, port):
+            class _FakeProc:
+                pid = 424242
+
+            harness._proxy = _FakeProc()
+
+        def _busy(player, port):
+            raise OSError('[Errno 32] file busy')
+
+        harness._start_proxy = _fake_proxy
+        harness._start_player = _busy
+        with pytest.raises(OSError):
+            harness.walk('hongguo', ARTICLE, 0)
+        assert reaped == [424242], 'the proxy this attempt started must be reaped, not leaked'
+        assert harness._proxy is None and harness._stack_up is False, 'the next attempt starts clean'
+
+
 class TestFeedingByName:
     """A 剧名 fed from an upstream column walks the CLIENT — the two rankings answer to
     different authorities, and matching a web row to a client card by hand is what used to

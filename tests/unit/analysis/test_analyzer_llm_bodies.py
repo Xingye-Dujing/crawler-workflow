@@ -780,3 +780,122 @@ class TestAggressionDispatch:
 
         assert op_needs_llm('aggression', {'mode': ''}) is False
         assert op_needs_llm('aggression', {'mode': 'llm'}) is True
+
+
+class TestJsonlCheckpointScope:
+    """The JSONL checkpoint (``checkpoint_dir``) must key its file on EVERYTHING that
+    changes what an answer means — the same discipline ``answer_scope`` applies to the
+    durable cache. The prompt digest, the truncation cap and the daemon host used to be
+    missing, so a run that died halfway resumed under an EDITED prompt with yesterday's
+    answers still in the file (the module docstring's own forbidden replay)."""
+
+    @staticmethod
+    def _ctx(tmp_path, client):
+        return {
+            'client': client,
+            'node_id': 'n1',
+            'batch_size': 10,
+            'workers': 1,
+            'publish': lambda frame: None,
+            'cancel_event': None,
+            'checkpoint_dir': str(tmp_path / 'ckpt'),
+        }
+
+    @staticmethod
+    def _run(df, client, tmp_path, template=lambda text: f'clean {text}?'):
+        from analyzers.llm_client import run_llm_dataframe
+
+        return run_llm_dataframe(
+            df,
+            '正文',
+            'clean',
+            ['清洗后'],
+            [''],
+            ('', ''),
+            template,
+            lambda reply: (reply.strip(),) if reply.strip() else ('',),
+            ctx=TestJsonlCheckpointScope._ctx(tmp_path, client),
+            label='清洗',
+        )
+
+    @staticmethod
+    def _two_row_frame():
+        return pd.DataFrame({'正文': [LONG, MID]})
+
+    def test_a_resume_reuses_the_answers_it_already_paid_for(self, tmp_path):
+        """A clean run DELETES its checkpoint (the real outputs own the data now), so the
+        resume scenario is the crashed one: row 0 answered, then the transport dies. The
+        next run must ask only about the row the crash never reached."""
+        from analyzers.llm_client import LLMError
+
+        class _DyingAfterOne(ScriptedClient):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+                self.calls = 0
+
+            def chat(self, prompt, max_retries=2):
+                self.calls += 1
+                if self.calls > 1:
+                    raise LLMError('transport died', 'transport')
+                return super().chat(prompt, max_retries)
+
+        dying = _DyingAfterOne(default='已清洗')
+        with pytest.raises(LLMError):
+            self._run(self._two_row_frame(), dying, tmp_path)
+        assert len(dying.prompts) == 1
+        resume = ScriptedClient(default='新答案')
+        result = self._run(self._two_row_frame(), resume, tmp_path)
+        assert len(resume.prompts) == 1, f'only the unanswered row reaches the model: {resume.prompts}'
+        assert MID in resume.prompts[0], 'the asked row is the one the crash never reached'
+        assert result.loc[0, '清洗后'] == '已清洗', 'row 0 comes from the checkpoint file'
+        assert result.loc[1, '清洗后'] == '新答案'
+
+    def test_an_edited_prompt_starts_a_fresh_file_not_yesterdays_answers(self, tmp_path):
+        """Editing the prompt builder must NOT let a crashed run's checkpoint answer the
+        new question: the digest is part of the key, so the resumed run re-asks."""
+        from analyzers.llm_client import LLMError
+
+        class _DyingAfterOne(ScriptedClient):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+                self.calls = 0
+
+            def chat(self, prompt, max_retries=2):
+                self.calls += 1
+                if self.calls > 1:
+                    raise LLMError('transport died', 'transport')
+                return super().chat(prompt, max_retries)
+
+        dying = _DyingAfterOne(default='第一版')
+        with pytest.raises(LLMError):
+            self._run(self._two_row_frame(), dying, tmp_path)
+        assert len(dying.prompts) == 1
+        resumed = ScriptedClient(default='第二版')
+        answer = self._run(self._two_row_frame(), resumed, tmp_path, template=lambda text: f'rewritten {text}?')
+        assert len(resumed.prompts) == 2, 'a new prompt re-pays BOTH rows: the old answers are not answers'
+        assert answer.loc[0, '清洗后'] == '第二版' and answer.loc[1, '清洗后'] == '第二版'
+
+    def test_a_different_truncation_cap_starts_a_fresh_file(self, tmp_path):
+        """``max_chars`` decides what text the model actually reads, so another cap is
+        another question: the checkpoint must not hand it the old cap's answers."""
+        from analyzers.llm_client import LLMError
+
+        class _DyingAfterOne(ScriptedClient):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+                self.calls = 0
+
+            def chat(self, prompt, max_retries=2):
+                self.calls += 1
+                if self.calls > 1:
+                    raise LLMError('transport died', 'transport')
+                return super().chat(prompt, max_retries)
+
+        dying = _DyingAfterOne(default='第一次')
+        with pytest.raises(LLMError):
+            self._run(self._two_row_frame(), dying, tmp_path)
+        assert len(dying.prompts) == 1
+        capped = ScriptedClient(default='第二次', max_chars=5)
+        answer = self._run(self._two_row_frame(), capped, tmp_path)
+        assert len(capped.prompts) == 2, 'another cap re-asks every row: no replay'
+        assert answer.loc[0, '清洗后'] == '第二次'

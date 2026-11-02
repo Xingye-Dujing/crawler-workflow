@@ -97,8 +97,13 @@ class TextCluster:
             work.loc[valid.index, 'silhouette'] = round(score, 4)
 
         elif method == 'dbscan':
-            model = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine')
-            labels = model.fit_predict(x_mat.toarray())
+            # Sparse in, sparse out: ``metric='cosine'`` runs over pairwise_distances,
+            # which supports CSR — the ``.toarray()`` this used to call densified the
+            # whole matrix (100k rows x 3000 features ≈ 2.4 GB of float64) for nothing.
+            # ``algorithm='brute'`` stated explicitly: a sparse input forces brute anyway,
+            # and naming it keeps the contract visible instead of inferred.
+            model = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine', algorithm='brute')
+            labels = model.fit_predict(x_mat)
             n_clusters_found = len(set(labels)) - (1 if -1 in labels else 0)
             n_noise = list(labels).count(-1)
             score = self._silhouette(x_mat, labels, len(valid))

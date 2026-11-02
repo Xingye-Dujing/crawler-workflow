@@ -2303,6 +2303,75 @@ class TestTopicViewsEmbedding:
         assert {'term', 'overall_freq', 'within_freq'} <= set(emb.columns)
         assert len(emb) > 0 and all(str(t) for t in emb['term'])
 
+    def test_within_freq_is_weighted_by_the_topics_own_corpus_share(self, monkeypatch):
+        """``within_freq`` is p(w|t) · p(t) · total_tokens, with p(t) the share the model's
+        OWN assignments give the topic. The weight this used to apply was a constant 1/K
+        (a normalised row sums to 1, so its K-long mean is 1/K whatever the topics are like),
+        and on a balanced K=2 corpus that agrees with the truth — so the skew here is the
+        discriminator: 3 cat docs vs 1 stock doc makes p(t_cat)=3/4. The vectoriser keeps
+        two-character tokens, so the cat cluster holds 6 (宠物×3 + 可爱/亲近/乖巧) and the
+        corpus 10: p(宠物|t)=3/6, and the answer must be 3/6 · 3/4 · 10 = 3.75 — not the
+        1/K answer 2.5, nor the unweighted p(w|t)·total = 5.0."""
+        self._install_encoder(monkeypatch)
+        frame = pd.DataFrame(
+            {
+                '正文': ['猫 狗 宠物 可爱', '猫 狗 宠物 亲近', '猫 狗 宠物 乖巧', '股票 基金 涨跌 市场'],
+            }
+        )
+        out = m.DataAnalysisService.topic_salience(frame, '正文', n_topics=2, method='embedding', topn=10)
+        assert not out[['within_freq', 'relevance']].isna().any().any(), 'no NaN may reach the table'
+        cat_row = out[out['term'] == '宠物']
+        assert len(cat_row) == 1
+        assert cat_row['overall_freq'].iloc[0] == 3
+        assert cat_row['within_freq'].iloc[0] == pytest.approx(3.75), (
+            f'a 3/4-share topic must weight its terms by 3/4: got {cat_row["within_freq"].iloc[0]}'
+        )
+
+    def test_an_empty_embedding_cluster_lists_no_terms_and_no_nan(self, monkeypatch):
+        """Three clusters over data that only separates into two leaves one cluster empty:
+        its component row is all zeros, and re-normalising that row is 0/0. The topic must
+        simply list no terms — never a NaN that poisons the table it lands in.
+
+        The empty row is injected through the ``_prepare_topic_model`` seam rather than
+        asked of KMeans: an empty cluster only exists when distinct points < n_clusters,
+        and sklearn answers that shape with a ConvergenceWarning — which this suite
+        treats as a bug. The guard under test lives in the salience step either way.
+        (importlib, not the ``ops.topic_salience`` attribute: the ops package re-exports
+        the FUNCTION under the same name, which shadows the module in its namespace.)"""
+        import importlib
+
+        import numpy as np
+
+        salience_module = importlib.import_module('services.analysis.ops.topic_salience')
+
+        class _ModelWithEmptyTopic:
+            components_ = np.array(
+                [
+                    [3.0, 0.0, 1.0],
+                    [0.0, 0.0, 0.0],  # the empty cluster: nothing this topic ever used
+                ]
+            )
+
+        monkeypatch.setattr(
+            salience_module,
+            '_prepare_topic_model',
+            lambda *a, **k: (
+                ['一', '二', '三', '四'],
+                _ModelWithEmptyTopic(),
+                np.array([[3.0, 0.0, 1.0], [3.0, 0.0, 1.0], [3.0, 0.0, 1.0], [0.0, 2.0, 2.0]]),
+                np.array([[1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]),
+                np.array(['宠物', '股票', '市场']),
+            ),
+        )
+        out = m.DataAnalysisService.topic_salience(
+            pd.DataFrame({'正文': ['一', '二', '三', '四']}), '正文', n_topics=2, method='embedding', topn=10
+        )
+        assert not out[['within_freq', 'relevance']].isna().any().any(), 'an empty cluster leaked NaN'
+        assert set(out['topic'].unique()) == {'Topic-1'}, 'the empty cluster should list nothing'
+        pet = out[out['term'] == '宠物']
+        # own = [3,0,1]/4 = [0.75, 0, 0.25], share = 1.0, total tokens = 9+2+5 = 16 → 0.75 · 16 = 12.
+        assert pet['within_freq'].iloc[0] == pytest.approx(12.0)
+
     def test_embedding_topic_by_stage_reproduces_the_lda_columns(self, monkeypatch):
         lda = m.DataAnalysisService.topic_by_stage(self._frame(), '正文', stage_col='阶段', topics=[2, 2])
         self._install_encoder(monkeypatch)
@@ -2430,8 +2499,16 @@ class TestTopicViews:
     def test_the_map_spreads_on_both_axes_rather_than_collapsing_onto_one_line(self):
         """The scaling of each MDS axis must use the eigenvalue of the axis CHOSEN. Reading the
         solver's first two slots instead takes its two smallest — numpy returns them ascending —
-        and every point lands on a vertical line with a confident-looking table beside it."""
-        out = D.topic_map(self._corpus(), '正文', n_topics=4)
+        and every point lands on a vertical line with a confident-looking table beside it.
+
+        The corpus here carries THREE vocabularies, not the class's two: topics over a
+        two-family corpus sit on one JSD line, and the truthful second eigenvalue is ZERO —
+        a flat pc2 there is the correct MDS answer, not a collapse to guard against."""
+        corpus = []
+        for index in range(20):
+            for family in (*self.FAMILIES, '谣言 辟谣 传播 网信 约谈'):
+                corpus.append({'正文': f'{self.COMMON} {family} 第{index}条'})
+        out = D.topic_map(pd.DataFrame(corpus), '正文', n_topics=4)
         assert float(out['pc1'].std()) > 0, 'PC1 collapsed to a constant'
         assert float(out['pc2'].std()) > 0, 'PC2 collapsed to a constant'
 
@@ -2452,6 +2529,23 @@ class TestTopicViews:
         spread = [max(p[axis] for p in points) - min(p[axis] for p in points) for axis in (0, 1)]
         assert spread[0] == pytest.approx(spread[1], abs=1e-6), 'a square is not drawn as a rectangle'
         assert spread[0] == pytest.approx(diagonal, abs=1e-6)
+
+    def test_mds_recovers_a_general_planar_layout_from_its_distances(self):
+        """The centring must hit BOTH sides: B = -1/2·H·D²·H. A square is too symmetric to
+        tell — its one-sided cousin (AH+HA)/2 happens to agree with HAH on it — but an
+        irregular planar layout exposes the difference: measured, the one-sided form missed
+        the true pairwise distances by ~1e-1, which is a map drawn from wrong geometry."""
+        from services.analysis.pipeline import _mds_2d
+
+        points = [(0.0, 0.0), (1.0, 2.0), (4.0, 0.0), (5.0, 3.0), (2.0, 5.0), (7.0, 1.0)]
+        distances = [[((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5 for (bx, by) in points] for (ax, ay) in points]
+        recovered = _mds_2d(distances)
+        for i in range(len(points)):
+            for j in range(i + 1, len(points)):
+                drawn = ((recovered[i][0] - recovered[j][0]) ** 2 + (recovered[i][1] - recovered[j][1]) ** 2) ** 0.5
+                assert drawn == pytest.approx(distances[i][j], abs=1e-6), (
+                    f'points {i},{j}: drawn {drawn:.6f} vs true {distances[i][j]:.6f}'
+                )
 
     def test_the_same_table_lays_the_same_map_twice(self):
         # A figure whose bubbles move between two runs of identical input cannot be cited, so

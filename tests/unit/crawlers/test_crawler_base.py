@@ -565,3 +565,84 @@ class TestNavigationGoesThroughOpen:
             f'navigations outside open changed: {found} vs {BARE_NAVIGATIONS}\n'
             'a new one should go through Crawler.open; a removed one must leave the table too'
         )
+
+
+class TestInitFailureTeardown:
+    """``_create_driver`` launches the browser and THEN plants cookies / masks — so its
+    failure path has two shapes: the browser never came up, and the browser came up and a
+    later step raised. The second used to release the profile lock while the orphan Chrome
+    still held the user-data-dir: the exact double-launch race (``session not created`` /
+    ``failed to write prefs file``) sessions/profiles.py documents, and a window nothing
+    in this process would ever close."""
+
+    @staticmethod
+    def _patch_browser(monkeypatch, drivers):
+        """The profile seams, patched; returns (locks, released). ``drivers`` collects the
+        session each ``_create_driver`` built before it raised."""
+
+        class _QuittingDriver:
+            def __init__(self):
+                self.quit_calls = 0
+
+            def quit(self):
+                self.quit_calls += 1
+
+        from crawlers.core import browser as browser_module
+
+        locks, released = [], []
+        monkeypatch.setattr(browser_module, 'claim_profile', lambda directory, abort: locks.append(directory) or 'lock')
+        monkeypatch.setattr(browser_module, 'release_profile', lambda lock: released.append(lock))
+        return _QuittingDriver, locks, released
+
+    @staticmethod
+    def _half_built(quitting_driver):
+        class _HalfBuilt(Crawler):
+            domain = 'douyin'
+            login_url = 'https://www.douyin.com/'
+
+            def _create_driver(self):
+                driver = quitting_driver()
+                self.driver = driver
+                raise RuntimeError('mask install blew up')
+
+            def get_detail(self, url):
+                return None
+
+            def search(self, keyword=None, target_count=None, urls=None, resume=None, **kw):
+                return []
+
+        return _HalfBuilt
+
+    def test_a_browser_that_came_up_before_the_failure_is_quitted(self, monkeypatch):
+        quitting_driver, locks, released = self._patch_browser(monkeypatch, [])
+        with pytest.raises(RuntimeError, match='mask install'):
+            self._half_built(quitting_driver)(headless=True, profile_dir=str(Path('profile') / 'douyin'))
+        # The instance never escapes a failed constructor, so the assertion rides the
+        # patched seams: the lock was claimed once and released exactly once.
+        assert locks == [str(Path('profile') / 'douyin')]
+        assert released == ['lock'], 'a failed init must give the profile back'
+
+    def test_a_browser_that_never_came_up_just_releases_the_lock(self, monkeypatch):
+        from crawlers.core import browser as browser_module
+
+        quitted = []
+        monkeypatch.setattr(browser_module, 'claim_profile', lambda directory, abort: 'lock')
+        monkeypatch.setattr(browser_module, 'release_profile', lambda lock: quitted.append(lock))
+
+        class _NoBrowser(Crawler):
+            domain = 'douyin'
+            login_url = 'https://www.douyin.com/'
+
+            def _create_driver(self):
+                self.driver = None
+                raise RuntimeError('chrome not found')
+
+            def get_detail(self, url):
+                return None
+
+            def search(self, keyword=None, target_count=None, urls=None, resume=None, **kw):
+                return []
+
+        with pytest.raises(RuntimeError, match='chrome not found'):
+            _NoBrowser(headless=True, profile_dir=str(Path('profile') / 'douyin'))
+        assert quitted == ['lock']

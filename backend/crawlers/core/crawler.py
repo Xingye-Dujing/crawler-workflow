@@ -261,6 +261,17 @@ class Crawler(ABC):
             # nobody is using. ``BaseException`` on purpose — ``CrawlerStopped`` is
             # one, and a Stop landing while the driver was being built used to skip
             # this release and leave the profile locked for the next run.
+            driver, self.driver = self.driver, None
+            if driver is not None:
+                # The browser CAME UP and a later init step raised (a cookie file
+                # read, a fingerprint mask): quit it here. Left alone it is an
+                # orphan Chrome holding the user-data-dir while the profile lock
+                # below is released — the exact double-launch race
+                # (``session not created`` / ``failed to write prefs file``)
+                # sessions/profiles.py documents, and a window nothing in this
+                # process would ever close.
+                with contextlib.suppress(Exception):
+                    driver.quit()
             self._release_profile()
             raise
 

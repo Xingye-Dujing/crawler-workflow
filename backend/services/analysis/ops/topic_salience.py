@@ -41,7 +41,7 @@ def topic_salience(
     lam = float(relevance)
     if not 0.0 <= lam <= 1.0:
         raise UnknownOperationError(t('analysis.topic_lambda', value=relevance))
-    texts, model, matrix, _doc_topic, vocabulary = _prepare_topic_model(
+    texts, model, matrix, doc_topic, vocabulary = _prepare_topic_model(
         df, column, topics, max_features, method, embedding_model
     )
     counts = np.asarray(matrix.sum(axis=0), dtype=float).ravel()
@@ -50,12 +50,24 @@ def topic_salience(
         raise UnknownOperationError(t('analysis.topic_features', err='the corpus has no tokens left to count'))
     p_w = counts / total_tokens
     word_topic = np.asarray(model.components_, dtype=float)
-    word_topic = word_topic / word_topic.sum(axis=1, keepdims=True)
-    prior = word_topic.sum(axis=1) / len(word_topic)
+    row_sums = word_topic.sum(axis=1, keepdims=True)
+    # Dividing an all-zero row (an empty embedding cluster) is 0/0 — NaN that would flow
+    # into within_freq/relevance and poison every row the topic still manages to print.
+    # A topic with no words lists no terms, so a zero row stays a zero row.
+    word_topic = np.divide(word_topic, row_sums, out=np.zeros_like(word_topic), where=row_sums > 0)
+    # The share of the corpus each topic actually carries, from the model's own
+    # document-topic assignments (LDA: summed responsibilities; embedding: one-hot cluster
+    # sizes — the same prevalence the map prints). The weight this used to apply divided a
+    # NORMALISED row's sum by K — a constant 1/K wearing the name ``prior``, which scaled
+    # every within_freq by the wrong topic weight and read as "the topic owns 1/K of the
+    # corpus" whatever the model had actually learned.
+    doc_mass = np.asarray(doc_topic, dtype=float).sum(axis=0)
+    mass_total = float(doc_mass.sum())
+    shares = doc_mass / mass_total if mass_total > 0 else np.full(topics, 1.0 / topics)
     rows = []
     for index in range(topics):
         own = word_topic[index]
-        within = own * float(prior[index]) * total_tokens
+        within = own * float(shares[index]) * total_tokens
         scored = []
         for position in range(len(vocabulary)):
             probability = float(own[position])
