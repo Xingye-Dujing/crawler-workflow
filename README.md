@@ -171,6 +171,7 @@ crawler_workflow/
 
 | 文件 | 里面是什么 |
 |---|---|
+| [`docs/manual/`](docs/manual/) | **从零到成稿的图文手册**（LaTeX 源 + `img/` 截图 + `shots/` 重拍脚本），含七个真实工作流的逐步实战。编译出的 PDF 是构建产物、**不进仓库**：成品见 [Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 附件，或在本目录用 `xelatex 采析绘使用手册.tex` 自行编两趟 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、大文件的耦合约束、接缝规则 |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | `workflow.js` 的**逐模块拆分方案** |
 | [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限 |

@@ -32,6 +32,23 @@ backend/test_*.py
 # same columns and separators, so every dialect is still tested without shipping anyone's data.
 samples/vendor/
 
+# ─── Built documents (PDF) stay local ───
+# docs/*.md is the project's OWN documentation (AGENTS.md keeps it true to the code) and IS versioned.
+# A compiled PDF is a build product, not source: the 使用手册 beside its .tex is rebuilt from that source,
+# so the .tex/figures are what get committed and the PDF never is. LaTeX's own droppings follow it out.
+*.pdf
+*.aux
+*.log
+*.toc
+*.out
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+# OpenChamber's screenshot cache (raw captures; the curated figures live under docs/manual/img/).
+.openchamber/
+
 # ─── ml_train ───
 # Big/private subdirs stay out (datasets = crawled content, models = ~1.6G weights); the scripts and
 # the dir-map README are versioned so every cited accuracy has its producing code in the repo.

@@ -1,0 +1,274 @@
+%% 采析绘使用手册（MiKTeX / xelatex 编译两趟；PDF 是构建产物，不进仓库）
+%% 本文件就是全书的版式模板（ch02…ch10 只写正文，不设版式）。全文仿宋，正文五号，页面上下 2.54cm 左右 3.18cm，
+%% 一级标题三号加粗、二级标题五号加粗，均不编号、左对齐，图题写 图N，表题写 表N。
+\documentclass[a4paper]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{fontspec}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,shapes.geometric,backgrounds,fit}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[left=3.18cm,right=3.18cm,top=2.54cm,bottom=2.54cm,headheight=0pt,headsep=0pt,footskip=1.2cm]{geometry}
+\usepackage{titlesec}
+\usepackage[hidelinks,bookmarks=true]{hyperref}
+\usepackage{tocloft}
+\renewcommand{\cftsecfont}{\bfseries}
+\renewcommand{\cftsecpagefont}{\bfseries}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\setlength{\cftbeforesecskip}{7pt}
+\setlength{\cftbeforesubsecskip}{2pt}
+\renewcommand{\cftsubsecfont}{\normalsize}
+
+\setCJKmainfont{FangSong}[AutoFakeBold=2.0]
+\setCJKsansfont{FangSong}[AutoFakeBold=2.0]
+\setCJKmonofont{FangSong}[AutoFakeBold=2.0]
+\setmainfont{FangSong}[AutoFakeBold=2.0]
+\setsansfont{FangSong}[AutoFakeBold=2.0]
+% 代码与路径用真正的等宽字体，与中文正文分开
+\IfFontExistsTF{Consolas}
+  {\setmonofont{Consolas}[Scale=0.92]}
+  {\IfFontExistsTF{DejaVu Sans Mono}
+    {\setmonofont{DejaVu Sans Mono}[Scale=0.9]}
+    {\setmonofont{Latin Modern Mono}}}
+
+\setcounter{secnumdepth}{-1}
+\setcounter{tocdepth}{1}
+\titleformat{\section}[block]{\normalfont\bfseries\fontsize{16}{22}\selectfont}{}{0pt}{}
+\titlespacing*{\section}{0pt}{24pt}{20pt}
+\titleformat{\subsection}[block]{\normalfont\bfseries\fontsize{10.5}{15}\selectfont}{}{0pt}{}
+\titlespacing*{\subsection}{0pt}{18pt}{14pt}
+\titleformat{\subsubsection}[runin]{\normalfont\bfseries\fontsize{10.5}{15}\selectfont}{}{0pt}{}
+
+\captionsetup{font=normalsize,labelfont=bf,labelsep=quad,skip=6pt}
+\captionsetup[figure]{name=图}
+\captionsetup[table]{name=表}
+\renewcommand{\arraystretch}{1.22}
+\setlist[enumerate]{leftmargin=1.6em,itemsep=3pt,topsep=3pt,parsep=0pt}
+\setlist[itemize]{leftmargin=1.4em,itemsep=3pt,topsep=3pt,parsep=0pt,label=\ensuremath{\bullet}}
+\graphicspath{{./img/}}
+
+% ─── 采析绘配色，取前端的设计令牌 ───
+\definecolor{cA}{HTML}{22557A}   % 图表首色，深板岩蓝
+\definecolor{cB}{HTML}{B5563C}
+\definecolor{cC}{HTML}{3E7A5A}
+\definecolor{cD}{HTML}{C79A3B}
+\definecolor{cE}{HTML}{6A5A8C}
+\definecolor{cF}{HTML}{2E7D8C}
+\definecolor{ink}{HTML}{1A1A1A}
+\definecolor{paper}{HTML}{FFFFFF}
+\definecolor{grid}{HTML}{EDEBE6}
+\definecolor{okc}{HTML}{4E8061}
+\definecolor{warnc}{HTML}{9A7740}
+\definecolor{errc}{HTML}{A85454}
+\definecolor{src}{HTML}{4A6FA5}
+\definecolor{upc}{HTML}{4A8FA5}
+\definecolor{prc}{HTML}{A85454}
+\definecolor{anl}{HTML}{9A7740}
+\definecolor{bib}{HTML}{3D7A72}
+\definecolor{viz}{HTML}{4E8061}
+\definecolor{cmt}{HTML}{B0567A}
+\definecolor{outc}{HTML}{6F7F8A}
+\definecolor{namec}{HTML}{3A4A5A}
+
+% ─── 全书共用的插图样式，对齐前端的 OMM-ZEN 视觉 ───
+% 纸白底、墨色细线、极小圆角、左侧一道类型色条、灰阶层次而不是重色块。
+\tikzset{
+  card/.style={draw=ink!15,line width=0.4pt,rounded corners=2pt,fill=paper,
+    align=center,font=\small,inner sep=6pt,minimum height=1.0cm,
+    path picture={\fill[#1] ([xshift=2.2pt]path picture bounding box.north west)
+      rectangle ([xshift=3.6pt]path picture bounding box.south west);}},
+  card/.default=cA,
+  chip/.style={draw=ink!13,line width=0.4pt,rounded corners=2pt,fill=paper,
+    align=center,font=\scriptsize,inner sep=4pt},
+  ghost/.style={draw=none,fill=none,align=center,font=\scriptsize,inner sep=2pt},
+  wire/.style={-{Latex[length=1.8mm,width=1.3mm]},draw=ink!28,line width=0.5pt},
+  softwire/.style={draw=ink!16,line width=0.45pt},
+  tag/.style={font=\scriptsize,text=ink!45,inner sep=1pt},
+  micro/.style={font=\tiny,text=ink!35,inner sep=1pt},
+  badge/.style={circle,draw=ink!18,line width=0.4pt,fill=paper,
+    text=ink!50,font=\scriptsize,inner sep=1.4pt},
+  rule/.style={draw=ink!15,line width=0.4pt},
+  accentline/.style={draw=#1,line width=1.6pt},
+  accentline/.default=cA
+}
+\arrayrulecolor{ink!30}
+\setlength{\aboverulesep}{0.35ex}
+\setlength{\belowrulesep}{0.35ex}
+
+% 小注一行，用在插图里的次要说明
+\newcommand{\micro}{\fontsize{7}{9}\selectfont\color{ink!45}}
+
+\begin{document}
+\fontsize{10.5}{13.1}\selectfont
+
+\thispagestyle{empty}
+
+\begin{center}
+\vspace*{2.2cm}
+{\bfseries\fontsize{26}{34}\selectfont 采析绘使用手册\par}
+\vspace{10pt}
+{\bfseries\fontsize{13}{20}\selectfont 从采集到论文图的一条流水线\par}
+\vspace{26pt}
+
+\begin{tikzpicture}[scale=0.98]
+  \node[card=cA,minimum width=2.6cm] (a) at (0,0) {采集\\[2pt]\micro 十个平台};
+  \node[card=cC,minimum width=2.6cm] (b) at (3.5,0) {清洗\\[2pt]\micro 去重与筛选};
+  \node[card=anl,minimum width=2.6cm] (c) at (7.0,0) {分析\\[2pt]\micro 模型与主题};
+  \node[card=viz,minimum width=2.6cm] (d) at (10.5,0) {成图\\[2pt]\micro 论文样式};
+  \draw[wire] (a) -- (b);
+  \draw[wire] (b) -- (c);
+  \draw[wire] (c) -- (d);
+  \node[micro,below=9pt of b] {数据一行行落下};
+  \node[micro,below=9pt of c] {每一步都能重来};
+\end{tikzpicture}
+
+\vspace{30pt}
+{\fontsize{11}{18}\selectfont 所有截图都来自真实运行，例子都是仓库里带着的工作流\par}
+\end{center}
+
+\vfill
+\begin{center}
+{\fontsize{9}{14}\selectfont 版本对应仓库 main 分支，二〇二六年十一月\par}
+\end{center}
+
+\newpage
+
+\tableofcontents
+
+\newpage
+
+\section{它做什么}
+
+一句话，它把网页上的公开内容变成一张能分析的表格，再把表格变成论文里的图。
+
+中间那一步是重点。它不替你写论文，也不替你选题目，它负责把重复的体力活接成流水线。
+一条流水线上有若干节点，节点之间用线连着，数据从左往右流。你按下执行，程序按顺序把每个节点跑一遍，
+每一步的中间结果都存进本地数据库，所以断网、关机、中途停下都不至于从头再来。
+
+\begin{figure}[H]\centering
+\begin{tikzpicture}[node distance=5mm,scale=0.92,transform shape]
+  \node[card=cA,text width=2.9cm] (src) {采集\\[2pt]\micro 浏览器抓公开页面};
+  \node[card=cC,right=of src,text width=2.9cm] (clean) {整理\\[2pt]\micro 清洗与去重};
+  \node[card=anl,right=of clean,text width=2.9cm] (ana) {理解\\[2pt]\micro 模型读文本};
+  \node[card=viz,right=of ana,text width=2.9cm] (viz) {表达\\[2pt]\micro 图与表};
+
+  \node[chip,below=7mm of src,text width=2.9cm] (login) {登录状态\\ Cookie 与 profile};
+  \node[chip,below=7mm of clean,text width=2.9cm] (dedupe) {三层去重\\ 精确、归一、近重复};
+  \node[chip,below=7mm of ana,text width=2.9cm] (model) {本地 Ollama\\ 或 OpenRouter};
+  \node[chip,below=7mm of viz,text width=2.9cm] (tex) {PNG、SVG\\ LaTeX 与 PDF};
+
+  \draw[softwire] (login) -- (src);
+  \draw[softwire] (dedupe) -- (clean);
+  \draw[softwire] (model) -- (ana);
+  \draw[softwire] (tex) -- (viz);
+
+  \begin{scope}[on background layer]
+    \node[draw=ink!10,line width=0.4pt,dashed,rounded corners=3pt,fit=(src)(viz)(login)(tex),inner sep=7pt] (all) {};
+  \end{scope}
+  \node[micro,above=2pt of all] {一条工作流，四段分工，任何一段都能单独重跑};
+\end{tikzpicture}
+\caption{采析绘的四段分工}
+\end{figure}
+
+谁在干活，分三种角色。人负责选题、填参数、看图；程序负责翻页、等待、写库、算数；模型只负责读文字，
+判断这段话是夸还是骂、这一簇文章在谈什么。三者边界清楚，所以模型没启动时，除了模型那一步，别的照常能跑。
+
+它适合的活有一类共同点：材料是文字，量在几千到几万条，来源在公开网页或文献库里，最后要出成图表或者论文。
+课程作业、毕业论文、课题报告，基本都是这个形状。
+
+按钮名和字段名在书里用等宽字体，比如 \texttt{执行}、\texttt{目标数量}。凡是我说它拒绝的，
+意思都是它会在开始前停下并写清原因，不会闷头跑完再给你一张空表。
+
+\section{云端试用}
+
+不想先折腾环境，可以直接用浏览器打开云端已部署的一份。
+
+\begin{center}
+\begin{minipage}{0.92\textwidth}
+\rule{\linewidth}{0.4pt}\\[5pt]
+{\bfseries 云端入口}\quad{\fontsize{11}{16}\selectfont\texttt{http://47.116.114.77/crawler}}\\[5pt]
+只要能上网就能打开，不用装 Python，不用配 Chrome，也不用在本机跑模型。
+工作流、数据集、运行记录都在服务器上，换一台电脑登录同一个账号，东西还在。\\[3pt]
+账号由站点管理员开通。登录以后可以新建画布、上传表格、接分析节点、出图，与本地版是同一套界面。\\[3pt]
+云端为了安全和速度，关掉了本地模型的界面，采集一律在后台跑，也不允许在服务器上弹出浏览器扫码登录。
+红果短剧那种要在本机播放器上旁听的采集只能在 Windows 本地做；其余靠公开页面就能读的部分，云端都能跑。\\[4pt]
+\rule{\linewidth}{0.4pt}
+\end{minipage}
+\end{center}
+
+云端与本地共用同一套操作。要真的采数据、跑本地模型、编 PDF 时，再回本机按下一节装好环境。
+
+\section{安装}
+
+要装的东西分四层，缺哪层它就在控制台点名说缺哪层。
+
+\begin{enumerate}
+\item Python 3.11 以上。代码里用了 \texttt{zip(strict=True)} 这类新语法，系统自带的 3.9 会直接报错。
+\item Chrome 浏览器，外加一个和它大版本一致的 chromedriver。程序不会替你联网下载驱动，这一点是有意的。
+\item 本地大模型用 Ollama，或者在设置里填一个 OpenRouter 的 Key。两个都不配也能跑，只是模型相关的节点用不了。
+\item 要出 PDF 图和论文成稿，再装一个 TeX 发行版。Windows 上装 MiKTeX，装的时候把中文支持勾上。
+\end{enumerate}
+
+先在项目根目录建虚拟环境，在虚拟环境里装依赖。
+
+\begin{quote}\small
+\texttt{python -m venv .venv}\\
+\texttt{.venv\textbackslash Scripts\textbackslash activate}（Linux 与 macOS 用 \texttt{source .venv/bin/activate}）\\
+\texttt{pip install -r requirements.txt}\\
+\texttt{ollama pull qwen3.5:9b}（用 OpenRouter 可以跳过）
+\end{quote}
+
+启动时一定要进入 \texttt{backend} 目录，那里是导入的根，从别处启动会找不到模块。
+
+\begin{quote}\small
+\texttt{cd backend}\\
+\texttt{python app.py}
+\end{quote}
+
+浏览器打开 \texttt{127.0.0.1:5000} 就是界面。端口和监听地址可以用环境变量 \texttt{PORT} 与 \texttt{HOST} 改。
+程序默认只监听本机，也不会自己弹浏览器，这两条都是安全的默认值。
+
+第一次启动会在项目根目录建出 \texttt{data/} 与 \texttt{logs/}。运行记录、数据集、登录状态、导出文件都在 \texttt{data/} 里，
+只有 \texttt{data/workflows/} 跟着仓库走。换电脑时把整个 \texttt{data/} 一起搬，工作流才找得到它引用的数据集。
+
+同一份数据目录同时只能开一个服务。两个实例会互相当成对方中断，把正在写的运行标成异常。要同时开第二个，
+给其中一个指定自己的数据根，两边互不干涉。程序只在 \texttt{backend/} 里跑，从别处启动会找不到模块。
+
+\section{第一次打开}
+
+页面打开后先看三处：左上角节点库，中间带网格的画布，底部一排面板按钮与状态栏。
+
+\begin{enumerate}
+\item 在节点库搜索框里输入 \texttt{数据源}，列表只剩匹配项。
+\item 点 \texttt{数据源} 一次，画布中央落下一个节点。
+\item 点右上角“\texttt{样式}”，主题选“\texttt{深色}”，界面与图表配色一起变暗；再选回“\texttt{浅色}”。
+\item 删掉刚才那个节点：选中后按 Delete。
+\end{enumerate}
+
+底部若出现一行红字，先读它。常见的是模型服务连不上、数据目录被占用、浏览器驱动找不到。这些都不阻止界面打开，
+只影响用到那项能力的节点。
+
+界面有中英两套文案，右上角的“\texttt{中文}”与“\texttt{EN}”随时切。切换只影响显示，不改数据，也不会让已保存的工作流失效。
+
+\input{ch02}
+\input{ch02b}
+\input{ch03}
+\input{ch04}
+\input{ch05}
+\input{ch06}
+\input{ch07}
+\input{ch08}
+\input{ch09}
+\input{ch10}
+
+\end{document}
