@@ -266,10 +266,30 @@ class TestThePlatformTablesAreComplete:
         recorder = _CdpRecorder(
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/148.0.0.0 Safari/537.36'
         )
-        browser.disguise_headless(recorder)
+        browser.disguise_headless(recorder, recorder.user_agent)
         override = recorder.param_for('Network.setUserAgentOverride')
         assert override['platform'] == 'Linux x86_64', recorder.calls
         assert 'HeadlessChrome' not in override['userAgent'], 'the UA half is the reason this exists'
+
+    def test_a_platform_that_keeps_no_device_is_the_one_the_matrix_calls_anonymous(self):
+        """Two facts describe one thing, and the factory and the panel read different ones.
+
+        ``needs_profile = False`` says "this platform has no kept device"; a mode with
+        ``needs_session`` True says the opposite. A platform that flipped one and not the other would
+        either build a directory nobody uses or promise the panel a session nobody keeps — so the two
+        are asserted together, and the set is pinned by name so a second subject arrives deliberately.
+        """
+        from crawlers import crawler_class
+
+        flagged = []
+        for cap in capabilities.CAPABILITIES:
+            cls = crawler_class(cap.platform)
+            if cls is None or getattr(cls, 'needs_profile', True):
+                continue
+            flagged.append(cap.platform)
+            promised = [mode.key for mode in cap.modes if mode.needs_session]
+            assert promised == [], f'{cap.platform} keeps no profile but the matrix promises a session in {promised}'
+        assert flagged == ['hongguo'], flagged
 
     def test_a_missing_chrome_is_named_by_the_executable_this_system_has(self, monkeypatch):
         """The remedy inside a “没有 Chrome” sentence is the running OS's own file name.

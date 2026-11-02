@@ -38,6 +38,20 @@
   Douyin“已移除”section), so no hover-menu guard survives; do not re-add it; and a *stored*
   profile preference still outlives the crawl, so 取/验证 Cookie and the pre-run probe write 允许 explicitly
   (`crawlers/core/browser.py::content_prefs`) or a window shows a QR-less login.
+- **A browser is built for a page, so it starts on a local document and keeps no device it cannot use.**
+  Every launch opens `about:blank` (`browser.STARTUP_PREFS`, `session.restore_on_startup=4`), never
+  `chrome://newtab/`: the new-tab page fetches Google services, and on a China-hosted or isolated box that
+  startup navigation never finishes — chromedriver parks every command behind it in
+  `WaitForPendingNavigations`, so even the UA read never reaches Chrome (measured 2026-11-03). The component
+  updater is off (`--disable-component-update`) because its CRX downloads (TTS engine, safety lists, on-device
+  models) land in the user-data-dir, are useless to a crawler, and had grown hongguo's profile until its
+  renderer stopped answering. A headless launch then health-checks the renderer with **one** bounded UA read
+  (`Config.RENDERER_PROBE_TIMEOUT`): a browser that does not answer is **refused by name**
+  (`crawl.rendererUnresponsive`) rather than carried on un-masked — every later command would wait on the same
+  socket — and it is closed through `browser.close_driver` (bounded `quit`, then a PID reap of that session).
+  A platform whose every page is anonymous declares `needs_profile = False`; `get_crawler` then forces
+  `use_profile=False`, so no persistent directory and no profile lock exist for it. That attribute and the
+  matrix's `needs_session` describe one fact: `test_platform_rules.py` refuses a platform where they disagree.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`, `engine.wall`
   (the four page verdicts), `engine.popup.Prompt` + a platform's `prompts`, `engine.feed.walk_feed` / `wait_for` /
   `jump_to_bottom` (finds what actually moves), `engine.pager.walk_pages` and `engine.jsonpath` know nothing about

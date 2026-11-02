@@ -687,6 +687,18 @@ produced this list; every entry was a real defect on at least one platform, not 
   check compares the two languages to *each other*. Now the executable name comes from `machine.chrome_executable_name()`
   (reading the same `CHROME_PATH_NAMES` the probe uses) and the platform token from `NAVIGATOR_PLATFORMS`. Deleting
   `i18n.py` from `WINDOWS_TABLES` is what makes it stick (`test_each_exempted_file_actually_holds_a_windows_artifact`).
+- **A browser that cannot answer is refused, not silently replaced.** The cloud hotfix for hongguo's wedged renderer fell
+  back to a temporary profile; that swaps the device identity mid-run, and `docs/crawler_notes.md` measures that a
+  `use_profile=False` crawl is *not* the same table as a profile crawl, so the code may not make that choice for the user.
+  The repo's answer is three structural fixes instead: start every Chrome on `about:blank` (the default new-tab page's
+  Google fetch is what hung the startup navigation and, behind it, every command), switch the component updater off (its
+  CRX caches are what grew hongguo's profile until the renderer wedged), and probe the renderer once with a hard bound —
+  refusing **by name** with the next step when it does not answer, because every later command would wait on the same
+  socket. The probe runs on a `daemon` thread: a pool thread is joined at interpreter exit, which turns "bounded" into
+  "waited for twice". Closing a wedged session reaps that session's process tree through `core/procs` (never a global
+  `taskkill`). A platform with no session keeps no profile at all (`needs_profile = False`), because the directory can
+  only accumulate Chrome's own caches; that attribute and the matrix's `needs_session` are one fact, and
+  `test_platform_rules.py` refuses a platform where they disagree.
 - **A general exemption is not a licence for the one rule the file broke.** `hongguo/harvest.py` is on the Windows-table
   list because it genuinely talks to the certificate store and finds the player window through `ctypes.windll`; that
   said nothing about the inline `taskkill /F /T /PID` sitting in its `close()`, nor about four spawn sites

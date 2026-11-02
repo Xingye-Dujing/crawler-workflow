@@ -88,6 +88,8 @@
 | `DEFAULT_HEADLESS` | 运行默认是否无头（面板每次可改） | `True` |
 | `DEFAULT_MAX_WORKERS` | 并行默认浏览器数（也是 `max_visible_browsers`/`max_headless_browsers` 的取值来源） | `4` |
 | `PAGE_WAIT_TIMEOUT` | 一次采集等待**某页首块内容**到达的总预算（区别于只界定 load 事件的 `page_load_timeout`）；有界是设计——"永远等"是一条运行槽扛不住的策略，停止永远是用户在其中的出口 | `300` |
+| `RENDERER_PROBE_TIMEOUT` | 无头浏览器启动后读一次 `navigator.userAgent` 的上限（渲染进程是否还活着）；活的渲染进程毫秒级应答，卡死的永远不会答——读到超时即按名拒绝这次启动 | `15` |
+| `RENDERER_CLOSE_TIMEOUT` | 关闭浏览器时给 `quit()` 的宽限；超时就按 PID 收掉这个会话的驱动进程树，避免在同一个不响应的 socket 上再等一遍 | `10` |
 | `WECHAT_BODY_MAX_CHARS` | 一行公众号正文保留的字符数（0=全留：以前硬砍到 5000 会静默丢掉长文结尾，读起来像短文到此为止） | `0` |
 
 排队、错峰与预检：

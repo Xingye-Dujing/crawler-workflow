@@ -195,6 +195,43 @@ class TestRefusalsFailTheNode:
         assert '根本没这列' in (nodes['node-2']['error'] or '')
 
 
+class TestABrowserThatWasRefused:
+    """A browser the machine could not bring up is a failed node with that sentence.
+
+    The crawler refuses a renderer that never answers the health check by name (and with the next
+    step in it). The ~60 tolerances around a walk are for "the site had no more rows"; a browser that
+    was never usable must not be folded into them, or the run reports a green, empty table and blames
+    the site.
+    """
+
+    def test_the_refusal_settles_the_node_and_the_run_failed(self, client, app_module, monkeypatch):
+        from i18n import t
+
+        sentence = t('crawl.rendererUnresponsive', seconds=15, domain='zhihu')
+
+        def refuse(*_args, **_kwargs):
+            raise ValueError(sentence)
+
+        monkeypatch.setattr(app_module, 'get_crawler', refuse)
+        workflow = _wf(
+            [
+                _node(
+                    'node-1',
+                    'source',
+                    {'platform': 'zhihu', 'keyword': '测试', 'target_count': 5, 'headless': True},
+                )
+            ],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'browser-refused'})
+        assert _wait(app_module)
+        run = app_module._RUN_STORE.get_run(started.get_json()['run_id'])
+        node = next(entry for entry in run['nodes'] if entry['node_id'] == 'node-1')
+        assert node['status'] == 'failed', f"a refused browser settled as '{node['status']}'"
+        assert '渲染进程' in (node['error'] or ''), node.get('error')
+        assert run['status'] == 'failed', 'a run whose browser never came up is not completed'
+
+
 class TestVisualizeNode:
     def test_echarts_spec_is_produced_and_exposed(self, client, app_module, paste):
         ds = _upload(client, paste)

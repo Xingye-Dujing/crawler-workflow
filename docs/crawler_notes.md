@@ -882,6 +882,34 @@ loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以�
 热度/收藏/点赞是站点四舍五入后的“万”标签（`8134万热度`/`53.7万收藏`/`141.8万点赞`），
 用共享的 `parse_count` 展开；站点没印数字的格子留**空**，不填 0。
 
+### 启动页、组件缓存与渲染进程健康检查（measured 2026-11-03，云端 Linux）
+
+**“读不到自己的 User-Agent”是启动页的账，不是伪装脚本的账。** 默认启动页是
+`chrome://newtab/`，它要去拉 Google 的安全名单/建议服务；在受限网络（阿里云上的这台）这次导航
+永远不完成，chromedriver 就停在 `WaitForPendingNavigations` 里——verbose 日志每 0.5 s 只重复
+`Runtime.evaluate {"expression":"1"}`，而我们的 `execute_script` 根本没到 Chrome。表现就是启动后
+读 UA 卡满驱动的 120 s 超时，并且**跟着网络时有时无**。把启动页钉成 `about:blank`
+（`crawlers/core/browser.py::STARTUP_PREFS`，Chrome 偏好 `session.restore_on_startup=4` +
+`startup_urls`）后，同一台机器上脚本与 UA 都是毫秒级返回；对照是同一台机器、同一份驱动，唯一变量
+就是启动页。**这台 Windows 开发机无法复现该停顿**（没有那种网络），所以这条只在云端验证过，
+Linux 之外的行为靠“about:blank 本身没有远端导航可等”这一结构性理由保证。
+
+**组件缓存把持久 profile 拖死，红果因此不再要 profile。** Chrome 的组件更新器会把 TTS 引擎、
+安全名单、端侧模型等 CRX 下载进 user-data-dir：实测红果的 `chrome_profile/hongguo` 里
+`component_crx_cache` 约 40 MB、`WasmTtsEngine` 约 25 MB，合计约 86 MB，随后每次启动渲染进程都
+不应答，形成“丢弃 → 回退一次性 profile”的循环。四榜本来就匿名（见上），这个目录一次也没换来
+会话，所以：`--disable-component-update` 全局关掉下载，红果声明 `needs_profile = False`，
+`get_crawler` 直接给它一次性浏览器——目录不再创建、也不再需要 profile 锁。**已经长起来的旧目录
+不会自动删除**（代码不替用户删数据），在设置里删掉该平台 profile 即可。
+
+**渲染进程不应答就具名拒绝，不再“裸无头继续”。** 无头启动后先用一次有上限（15 s）的 UA 读取做
+健康检查：活着的渲染进程毫秒级应答，卡死的永远不会答，继续跑只会让 cookie 植入和第一次导航各挂满
+一次超时。因此读取失败（超时或驱动报错）按名拒绝（`crawl.rendererUnresponsive` /
+`crawl.rendererProbeFailed`，句子里给出下一步：删掉该平台 profile，或本次改用一次性 profile），
+浏览器则以 10 s 宽限 `quit()`，仍不就按 PID 收掉这个会话的进程树。**未验证的一半**：chromedriver
+写入的 `session` 偏好是否会覆盖一个**已存在** profile 自己的启动设置——设备层要分别测“新目录”与
+“已有目录”，只有前者能证明写入生效。
+
 ### 评论只活在 App 协议里：播放器当签名预言机（measured 2026-10-19）
 
 红果的**网页端没有评论区**（四榜是网页的极限）；评论挂在单集上：

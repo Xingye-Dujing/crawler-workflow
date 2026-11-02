@@ -92,6 +92,31 @@ def test_driver_options_per_mode(captured_options, headless):
     crawler.driver = None  # nothing real to close
 
 
+@pytest.mark.parametrize('headless', [True, False])
+def test_a_session_starts_on_a_local_blank_page_never_the_new_tab(captured_options, headless):
+    """The startup navigation must not be a remote one.
+
+    Chrome's default new-tab page fetches Google services; on a network-isolated or China-hosted
+    box those fetches never resolve, so chromedriver waits for that navigation forever and every
+    command behind it — our UA read included — never reaches Chrome. ``about:blank`` has nothing
+    to fetch. The visible login window gets the same answer: it needs no Google page either.
+    """
+    crawler = ZhihuCrawler(headless=headless)
+    prefs = _prefs(captured_options)
+    assert prefs['session'] == {'restore_on_startup': 4, 'startup_urls': ['about:blank']}, prefs
+    crawler.driver = None
+
+
+@pytest.mark.parametrize('headless', [True, False])
+def test_the_component_updater_is_switched_off(captured_options, headless):
+    """Component downloads (TTS engine, safety lists, on-device models) land in the user-data-dir
+    and are useless to a crawler; on hongguo they grew the persistent profile until its renderer
+    stopped answering. Reading a page needs none of them, so neither mode may download any."""
+    crawler = ZhihuCrawler(headless=headless)
+    assert '--disable-component-update' in captured_options['options'].arguments
+    crawler.driver = None
+
+
 #: The switches chromedriver puts on every Chrome command line that we ask it to
 #: leave out. These are **names of generated switches**, not descriptions: a name
 #: chromedriver never adds is accepted silently and excludes nothing, which is
@@ -112,12 +137,12 @@ def _prefs(box):
     return (box['options'].experimental_options or {}).get('prefs') or {}
 
 
-IMAGES_BLOCKED = {'profile.managed_default_content_settings': {'images': 2}}
+IMAGES_BLOCKED = {'profile.managed_default_content_settings': {'images': 2}, **browser.STARTUP_PREFS}
 
 #: 1 = 允许, 2 = 封锁. The two are not interchangeable, and only one of them is
 #: an answer: writing nothing leaves the decision to whatever the profile already
 #: holds, which is what broke 登录窗口 (see ``test_a_login_window_overrides_a_profile_that_blocked``).
-IMAGES_ALLOWED = {'profile.managed_default_content_settings': {'images': 1}}
+IMAGES_ALLOWED = {'profile.managed_default_content_settings': {'images': 1}, **browser.STARTUP_PREFS}
 
 
 def test_a_crawl_blocks_images_and_a_login_window_undoes_it(captured_options):

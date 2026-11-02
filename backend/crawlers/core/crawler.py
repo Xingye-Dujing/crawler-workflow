@@ -1,4 +1,3 @@
-import contextlib
 import json
 import logging
 import random
@@ -275,14 +274,16 @@ class Crawler(ABC):
             driver, self.driver = self.driver, None
             if driver is not None:
                 # The browser CAME UP and a later init step raised (a cookie file
-                # read, a fingerprint mask): quit it here. Left alone it is an
+                # read, a fingerprint mask): close it here. Left alone it is an
                 # orphan Chrome holding the user-data-dir while the profile lock
                 # below is released — the exact double-launch race
                 # (``session not created`` / ``failed to write prefs file``)
                 # sessions/profiles.py documents, and a window nothing in this
-                # process would ever close.
-                with contextlib.suppress(Exception):
-                    driver.quit()
+                # process would ever close. ``close_driver`` gives quit a short
+                # grace and reaps the process if the renderer never answers: a
+                # launch refused for a wedged renderer arrives here, and waiting
+                # out quit() would pay the same stall twice.
+                browser.close_driver(driver)
             self._release_profile()
             raise
 
@@ -1123,11 +1124,13 @@ class Crawler(ABC):
 
     def close(self):
         # quit() on a dead session raises; callers close in a `finally`, where
-        # an exception would mask the real result of the crawl.
+        # an exception would mask the real result of the crawl. The quit is bounded
+        # (``browser.close_driver``): a renderer that stopped answering would otherwise
+        # park every command — quit included — behind the same unanswered socket, and a
+        # crawl that has already finished must not hang on the way out.
         driver = self.driver
         if driver is not None:
-            with contextlib.suppress(Exception):
-                driver.quit()
+            browser.close_driver(driver)
             # Cleared only while this is still the session the crawler owned. A 停止 that had to reap
             # the process replaces it with a :class:`DeadDriver` — and that reap is what lets the
             # ``quit()`` above come back at all — so clearing unconditionally would hand the worker's

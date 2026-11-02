@@ -86,10 +86,6 @@ ZH = {
     'crawl.disguisePartial': (
         '无头浏览器的伪装只应用了一部分（{err}）。这次可能仍以无头指纹被站点识别，行数偏少时先按这条排查'
     ),
-    'crawl.disguiseUnreadable': (
-        '无头浏览器的伪装没有生效：读不到自己的 User-Agent（{err}）。'
-        '这次将以“裸无头”继续，部分站点会给出一张没有内容的空页'
-    ),
     # Said by a session whose browser process was already reaped, so it must not claim a person did
     # anything: the same object answers a cookie window that was closed after its grace ran out.
     'crawl.driverDead': '这个浏览器进程已经关掉了，不再向它发送命令',
@@ -266,6 +262,16 @@ ZH = {
     'crawl.promptDismissed': '{label} 的首屏弹窗已自动点掉：“{button}”',
     'crawl.promptUnmatched': '{label} 的首屏弹窗无法对应按钮（页面提供：{buttons}），本次可能需等待其自动消失',
     'crawl.redrive': '页面没落到站点（停在 {where}），重发一次导航',
+    # A renderer that does not answer is refused, not carried on un-masked: every later command
+    # would wait on the same unanswered socket. Both sentences name the next step.
+    'crawl.rendererProbeFailed': (
+        '浏览器进程已经起来，但读不到它的页面渲染进程（{err}；{domain}）。这次不继续：'
+        '持久化 profile 卡成这样时，先在设置里删掉这个平台的 profile，或本次改用一次性 profile 再试'
+    ),
+    'crawl.rendererUnresponsive': (
+        '浏览器进程已经起来，但页面渲染进程 {seconds} 秒内没有应答（{domain}）。这次不继续：'
+        '持久化 profile 卡成这样时，先在设置里删掉这个平台的 profile，或本次改用一次性 profile 再试'
+    ),
     # ── 断点续跑与去重（爬虫侧） ──────────────────────────────
     'crawl.resume_have': '断点续跑：已采集 {n} 条，接着往下采而不是重来',
     'crawl.riskBlocked': '风控拦截：{platform} 的 {where} 返回了安全验证而非内容（会话未必失效，稍后重试）',
@@ -564,10 +570,6 @@ EN = {
         'The headless disguise was only partly applied ({err}). '
         'This run may still be recognised as headless — check here first when a crawl comes back short'
     ),
-    'crawl.disguiseUnreadable': (
-        'The headless disguise did not take: this browser could not read back its own User-Agent ({err}). '
-        'This run continues as a bare headless Chrome, and some sites answer that with a page of nothing'
-    ),
     # Said by a session whose browser process was already reaped, so it must not claim a person did
     # anything: the same object answers a cookie window that was closed after its grace ran out.
     'crawl.driverDead': 'This browser process is already closed, so no further commands are sent to it',
@@ -756,6 +758,18 @@ EN = {
         ' this run may wait for it to clear on its own'
     ),
     'crawl.redrive': 'page did not reach the site (parked on {where}), re-driving once',
+    'crawl.rendererProbeFailed': (
+        'The browser process came up, but its page renderer could not be read ({err}; {domain}). '
+        'This run does not continue: when a persistent profile wedges like this, delete that '
+        "platform's profile in the settings panel, or run this crawl with a throwaway profile, "
+        'then start it again'
+    ),
+    'crawl.rendererUnresponsive': (
+        'The browser process came up, but its page renderer did not answer within {seconds} s ({domain}). '
+        'This run does not continue: when a persistent profile wedges like this, delete that '
+        "platform's profile in the settings panel, or run this crawl with a throwaway profile, "
+        'then start it again'
+    ),
     # ── resume and dedupe (crawler side) ────────────────────────
     'crawl.resume_have': 'Resuming: {n} item(s) already collected, continuing instead of starting over',
     'crawl.riskBlocked': 'Risk control: {platform} answered {where} with a security check instead of content',

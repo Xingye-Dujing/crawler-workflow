@@ -17,9 +17,10 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 
-from core import machine
+from core import machine, procs
 from core.config import Config
 from runtime.settings import get_setting
 from selenium.common.exceptions import WebDriverException
@@ -125,6 +126,19 @@ def content_prefs(needs_images: bool) -> dict:
     return {'profile.managed_default_content_settings': {'images': 1 if needs_images else 2}}
 
 
+#: Where every Chrome this module launches puts its first document: a LOCAL blank page, never
+#: ``chrome://newtab/``. The new-tab page fetches Google services — safety lists, suggestions — and
+#: on a network-isolated or China-hosted box those fetches never resolve, so that *startup*
+#: navigation never finishes. chromedriver then parks every command behind it in
+#: ``WaitForPendingNavigations``: our ``execute_script`` never reached Chrome (the verbose log only
+#: repeated ``Runtime.evaluate {"expression":"1"}`` every 0.5 s), which is the “读不到自己的
+#: User-Agent” stall, and it came and went with the network. ``restore_on_startup`` 4 is Chrome's
+#: own value for “open these URLs”; about:blank has nothing remote to wait for, so the first script
+#: answers in milliseconds (measured 2026-11-03 on the cloud host: about:blank → script + UA OK;
+#: default new-tab → both hang).
+STARTUP_PREFS = {'session': {'restore_on_startup': 4, 'startup_urls': ['about:blank']}}
+
+
 def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -> Options:
     """The launch configuration: headless shape, profile, window, language, blockers.
 
@@ -147,6 +161,12 @@ def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -
     opts.add_argument('--disable-backgrounding-occluded-windows')
     opts.add_argument('--disable-background-timer-throttling')
     opts.add_argument('--disable-renderer-backgrounding')
+    # Chrome's component updater downloads CRX components (the TTS engine, safety lists, on-device
+    # suggestion/optimisation models) from Google into the user-data-dir. On a China-hosted box those
+    # downloads are useless, and they accumulate: the hongguo profile reached into the tens of MB of
+    # `component_crx_cache`/`WasmTtsEngine` entries before its renderer stopped responding. Reading a
+    # page needs none of them, so the updater is switched off and a persistent profile stays small.
+    opts.add_argument('--disable-component-update')
     if profile_dir:
         # Chrome creates the user-data-dir itself, so a missing directory is the
         # normal first run and not an error to handle here.
@@ -171,7 +191,7 @@ def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -
     # event was measured to never arrive at all (a 40 s TimeoutException on
     # the very first navigation), which no amount of timeout tuning fixes.
     opts.page_load_strategy = 'eager'
-    opts.add_experimental_option('prefs', content_prefs(needs_images))
+    opts.add_experimental_option('prefs', {**content_prefs(needs_images), **STARTUP_PREFS})
     return opts
 
 
@@ -232,24 +252,51 @@ def apply_stealth(driver, domain: str) -> None:
         logger.debug('automation stealth not applied for %s: %s', domain, e)
 
 
-def disguise_headless(driver) -> None:
+def _bounded_call(fn, timeout: float, what: str):
+    """Run *fn* on a daemon thread and give up on it after *timeout* seconds.
+
+    Daemon, not a ``ThreadPoolExecutor``: python joins a pool's worker threads at interpreter exit,
+    so a call that never returns would be waited for a second time on the way out — the opposite of
+    bounding it. A daemon thread is simply abandoned, and one abandoned prober per refused launch is
+    the whole leak.
+
+    The exception *fn* raised is re-raised here unchanged, so a caller can tell its own errors from
+    :class:`TimeoutError`, which is this helper's answer to "still running".
+    """
+    box: dict = {}
+
+    def call():
+        try:
+            box['value'] = fn()
+        except BaseException as exc:  # stored, then re-raised on the caller's thread
+            box['error'] = exc
+
+    worker = threading.Thread(target=call, daemon=True, name=f'browser-probe:{what}')
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise TimeoutError(f'{what} did not answer within {timeout:g} s')
+    if 'error' in box:
+        raise box['error']
+    return box.get('value')
+
+
+def disguise_headless(driver, real_ua: str) -> None:
     """Remove the two headless tells (UA, virtual-display metrics) on the live session.
 
-    The UA is read back from this very Chrome and de-Headlessed, so its version can never rot
-    against the installed build and the HTTP UA, ``navigator.userAgent`` and the Client-Hints
-    platform all stay consistent — a hand-written UA string would drift out of the match. The
-    geometry is registered to run before any page script. A CDP command that fails (an old
-    driver, a session already mid-teardown) degrades to "still a plain headless browser", which is
-    a *sanctioned* degradation and therefore has to be SAID: this is the one failure with a
-    measured row-count consequence (a bare headless 知乎 author page answers 0 rows), so a short
-    crawl that never saw this line would blame the site for a mask that did not install.
+    *real_ua* is read once by :func:`launch`'s health check and handed in: the read is the call that
+    a wedged renderer never answers, so it is bounded there and a browser that failed it is refused
+    outright instead of carrying on un-masked. The UA comes from this very Chrome and is
+    de-Headlessed, so its version can never rot against the installed build and the HTTP UA,
+    ``navigator.userAgent`` and the Client-Hints platform all stay consistent — a hand-written UA
+    string would drift out of the match. The geometry is registered to run before any page script.
+    A CDP command that fails (an old driver, a session already mid-teardown) degrades to "still a
+    plain headless browser", which is a *sanctioned* degradation and therefore has to be SAID: this
+    is the one failure with a measured row-count consequence (a bare headless 知乎 author page
+    answers 0 rows), so a short crawl that never saw this line would blame the site for a mask that
+    did not install.
     """
-    try:
-        real_ua = str(driver.execute_script('return navigator.userAgent;') or '')
-    except Exception as e:  # an unreadable session: leave the browser as a plain headless one
-        logger.warning(t('crawl.disguiseUnreadable', err=e))
-        return
-    desktop_ua = real_ua.replace('HeadlessChrome', 'Chrome')
+    desktop_ua = str(real_ua or '').replace('HeadlessChrome', 'Chrome')
     width, height = desktop_metrics()
     script = _DESKTOP_GEOMETRY_JS.replace('__METRICS__', json.dumps({'sw': width, 'sh': height}))
     try:
@@ -265,6 +312,37 @@ def disguise_headless(driver) -> None:
         logger.warning(t('crawl.disguisePartial', err=e))
 
 
+def close_driver(driver) -> None:
+    """Close one browser without ever waiting out a wedged session, and reap it if it will not go.
+
+    ``quit()`` is an in-band command, so a renderer that stopped answering leaves it queued behind
+    the same unanswered socket: on the session that just failed the health check, waiting for it
+    would turn one stall into two. A short grace on a daemon thread, then exactly this session's
+    driver process tree is reaped through :mod:`core.procs` — the per-OS reaper the 停止 path uses,
+    never a global kill. Teardown may not raise (callers close in a ``finally``), so every failure
+    here is swallowed on purpose.
+    """
+    if driver is None:
+        return
+    try:
+        _bounded_call(driver.quit, Config.RENDERER_CLOSE_TIMEOUT, 'driver.quit')
+        return
+    except TimeoutError:
+        pass  # still inside quit(): the socket is wedged and the process has to go
+    except BaseException:
+        # A session answered by a ``DeadDriver`` raises ``CrawlerStopped`` — a stop, not a wedge —
+        # and an ordinary quit error means the session already reported itself gone.
+        return
+    pid = None
+    with contextlib.suppress(BaseException):
+        pid = driver.service.process.pid
+    if not pid:
+        return
+    stopped, reason = procs.reap_process(pid)
+    if not stopped:
+        logger.debug('reaping an unresponsive driver (%s) failed: %s', pid, reason)
+
+
 def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: str) -> ChromeWebDriver:
     """Build one Chrome exactly as a crawl session wants it, and hand back the live driver.
 
@@ -277,6 +355,12 @@ def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: 
 
     The two masks run before anything navigates, because the cookie plant that follows is the
     session's first page load and the hook must already be installed when it runs.
+
+    A headless session is health-checked before it is disguised: one bounded UA read, and a renderer
+    that does not answer is closed and refused by name (:func:`_bounded_call`). Refusing is the
+    honest answer — every later command would wait on the same unanswered socket — and it is only
+    possible because the launch starts on ``about:blank`` (see :data:`STARTUP_PREFS`): a page with
+    nothing remote to fetch has no legitimate reason to be busy for fifteen seconds.
     """
     opts = build_options(headless, profile_dir, needs_images)
     resolve_browser(opts)
@@ -296,7 +380,26 @@ def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: 
             t('crawl.browserStartFailed', err=str(exc).strip().splitlines()[0] if str(exc).strip() else repr(exc))
         ) from exc
     if headless:
-        disguise_headless(driver)
+        # The browser process is up, but a wedged renderer answers no CDP script at all — the
+        # “读不到自己的 User-Agent” stall, which used to hang the disguise for the driver's whole
+        # timeout. Probe with one bounded UA read FIRST: a live renderer answers in milliseconds, and
+        # a dead one is refused here rather than carried on un-masked (every later command would hang
+        # on the same socket). Reading it here also means the disguise needs no second read.
+        try:
+            real_ua = _bounded_call(
+                lambda: str(driver.execute_script('return navigator.userAgent;') or ''),
+                Config.RENDERER_PROBE_TIMEOUT,
+                'the renderer',
+            )
+        except TimeoutError as exc:
+            close_driver(driver)
+            raise ValueError(
+                t('crawl.rendererUnresponsive', seconds=int(Config.RENDERER_PROBE_TIMEOUT), domain=domain)
+            ) from exc
+        except Exception as exc:
+            close_driver(driver)
+            raise ValueError(t('crawl.rendererProbeFailed', err=exc, domain=domain)) from exc
+        disguise_headless(driver, real_ua)
     # Hide the page-visible automation tells on EVERY browser (the visible login window
     # included), before any navigation.
     apply_stealth(driver, domain)

@@ -252,6 +252,20 @@ class Config:
     #: never blocks a run — rather than caching a verdict off a page that was never shown.
     COOKIE_PREFLIGHT_TIMEOUT = 45
 
+    #: The bound on reading a browser's own ``navigator.userAgent`` at launch — the health check
+    #: that decides whether this renderer answers at all. It is not a page-load wait: a live
+    #: renderer answers in milliseconds, while a wedged one never answers, because chromedriver
+    #: parks the command behind a navigation that will not finish (measured on a China-hosted
+    #: box, where Chrome's new-tab page sat on a Google fetch that never resolved and the verbose
+    #: log only repeated ``Runtime.evaluate {"expression":"1"}``). 15 s is far more than
+    #: "responsive" needs and short enough that the stall stays bounded.
+    RENDERER_PROBE_TIMEOUT = 15
+
+    #: The grace a browser gets to close before its process tree is reaped. ``quit()`` is an
+    #: in-band command: on a session that just failed the health check it queues behind the same
+    #: unresponsive socket, so waiting for it turns one stall into two.
+    RENDERER_CLOSE_TIMEOUT = 10
+
     #: How many probe browsers may be open at once. Capped rather than one-per-platform
     #: because each is a Chrome on the user's desktop, and four already covers the
     #: widest canvas this tool crawls.

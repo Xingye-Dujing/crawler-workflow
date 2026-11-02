@@ -42,8 +42,23 @@ def launches(monkeypatch, tmp_path):
     }
 
     class FakeChrome:
+        # A headless launch now health-checks its renderer with one bounded UA read, so the double
+        # has to answer the way a live session does — anything less is a browser this suite would
+        # (correctly) refuse.
         def __init__(self, options=None, service=None):
             box['constructed'] = True
+
+        def execute_script(self, _script, *_args):
+            return 'Mozilla/5.0 HeadlessChrome/148.0.0.0 Safari/537.36'
+
+        def execute_cdp_cmd(self, _name, _params=None):
+            return None
+
+        def set_window_size(self, *_args):
+            return None
+
+        def set_page_load_timeout(self, _seconds):
+            return None
 
     monkeypatch.setattr(browser_module, 'ChromeWebDriver', FakeChrome)
     monkeypatch.setattr(browser_module, 'Service', lambda executable_path=None: ('service', executable_path))
