@@ -82,21 +82,22 @@ Matplotlib 的 GUI 后端、Selenium 的 Linux/macOS driver 等无用负载排�
 
 ## 体积边界
 
-**当前交付实测（同一台机、同一份源码，UPX 开，2026-10-26 三平台化轮重建 `build14`）**：
-文件夹 **167.5 MB**、zip **125.2 MB**、安装包 `CaiXiHui-Setup.exe` **116.4 MB**（上一轮 164.8 / 124.0 / 115.4，
-再往前 164.7 / 123.9 / 115.3；最早是 301.4 MB / 153.6 MB，而且那时根本产不出安装包——图标是张换了名字的 PNG，
-Inno 直接拒绝编译）。拆开算：UPX 压 **268** 个二进制，`226.5 → 89.1 MB`（省 **137.3 MB**），0 跳过 0 失败。
-**这轮 +2.7 MB 不是源码**：源码只加了几张按系统的表与文案（KB 量级），而 UPX 的输入体积只动了 0.1 MB——
-差值来自 `-Clean` 重装构建环境时 pip 重新解析到的传递依赖版本（`tzdata` 2 MB、OpenBLAS/numpy/scipy 的补丁版本等）。
+**当前交付实测（同一台机、同一份源码，UPX 开，2026-11-03 浏览器启动页/健康检查那轮重建）**：
+文件夹 **156.2 MB**、zip **121.3 MB**、安装包 `CaiXiHui-Setup.exe` **113.4 MB**（上一轮 2026-10-26 的
+167.5 / 125.2 / 116.4；再往前 164.8 / 124.0 / 115.4；最早是 301.4 MB / 153.6 MB，而且那时根本产不出安装包——
+图标是张换了名字的 PNG，Inno 直接拒绝编译）。拆开算：UPX 压 **268** 个二进制，`226.8 → 89.5 MB`
+（省 **137.3 MB**），0 跳过 0 失败。
+**这轮 −11.3 MB 不是新源码**：源码只动了浏览器启动与 profile 的几百行，而 UPX 的输入体积与上一轮只差
+0.3 MB——差值来自这次重装构建环境时 pip 重新解析到的依赖版本（上一轮记的那批传递依赖又变了）。
 所以体积数必须与"哪一次重装"一起记：真要它可复现，就把 runtime 清单钉死到具体版本再重建。
-**本轮新东西已随包**（都是真 exe 里读出来的，不是源码推断）：`workflow.js` 里的
-`Capabilities.runnable` / `requirementWord` / `Machine.apply` / `CAPABILITY_REQUIREMENT_WORDS`、
-`style.css` 的 `html[data-win-desktop="0"] .windows-only`、`index.html` 四行 `windows-only`、
-`app.js` 双语的 `cap.requiresWindowsDesktop` 与 `validate.modeNeedsMachine`；
-`/api/capabilities` 返回 `machine = {"windows_desktop": true}`（这台机就是 Windows 桌面），
-红果评论模式 `requires = "windows_desktop"`、四个榜单模式 `requires = ""`；`/` 里没有任何 `cdn.` 且引用
-`/vendor/echarts.min.js`（离线也能画图）。exe 旁 `tmp*` 残留 **0**（启动器自己扫掉了上一次留下的 1 个空目录），
-验收后 `data/`、`logs/`、`mplconfig/`、`instance.json` 均已清掉。
+**本轮新东西已随包**（都是真 exe 里读出来的，不是源码推断）：PYZ 里的 `crawlers.core.browser` 含
+`STARTUP_PREFS` 与 `startup_urls` / `about:blank` / `restore_on_startup`（启动页钉在本地说文档）、
+`crawl.rendererUnresponsive` / `crawl.rendererProbeFailed`（渲染进程无应答的具名拒绝）、`close_driver`；
+`crawlers.core.crawler` 与 `crawlers.platforms.hongguo.crawler` 含 `needs_profile`（红果不建持久 profile）。
+运行时也核对过：隔离数据根起 exe，`/`、`/api/config`、`/api/settings`、`/api/workflow/list`、
+`/api/data/datasets`、`/api/runs/list`、`/api/stats/summary`、`/api/cookies/flow`、`/api/capabilities` 全 **200**，
+`/api/capabilities` 的 `machine.windows_desktop = true`、15 个平台；这一次运行写的 `data/`、`logs/`、
+`mplconfig/`、`tmp/`、`instance.json` 全部落在 `CRAWLER_DATA_ROOT` 指定的隔离目录里，仓库自己的 `data/` 一个字节没动。
 
 > **这一节只按 Windows 验收。** `desktop/` 是本项目唯一故意只服务 Windows 的树；三平台分支本身
 > （Chrome/xelatex 按系统查、中文字体栈与 ctex 字体集、进程清理、文件名字节上限、控制台编码、
@@ -105,7 +106,7 @@ Inno 直接拒绝编译）。拆开算：UPX 压 **268** 个二进制，`226.5 �
 > （本机无 Linux 运行时），那是要在服务器上补的一次实测，不是已通过。
 
 **启动实测**（隔离数据根，`CIXI_NO_BROWSER=1` + exe 从终端跑，量到 `/api/config` 返回 200）：
-本轮构建 **1547 ms**（上一轮 1863 / 1647 首启/再启，再前 1562，最早 3423 ms）。
+本轮构建 **1612 ms**（上一轮 1547，再前 1863 / 1647 首启/再启，最早 3423 ms）。
 UPX 是"载入时在每个进程内存里解压"，
 理论上会拖慢启动，所以这两个数字必须和体积一起看；实测被自检挪后 + 少加载一整套 sklearn 的收益盖过，
 相对最早的 301.4 MB / 3423 ms，**体积约 −44%、启动约 −55%**。换机器时这两条都要按下面“验证构建”
