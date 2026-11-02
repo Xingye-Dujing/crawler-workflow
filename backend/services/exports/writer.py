@@ -6,10 +6,12 @@ node, a standalone REST endpoint, a unit test, a future CLI...) can call
 The workflow "Save" node is just a thin wrapper around this service.
 """
 
+import contextlib
 import json
 import logging
 import os
 import time
+import uuid
 
 import pandas as pd
 
@@ -81,11 +83,21 @@ class DataExporter:
         """
         stem = str(filename or '').strip()
         root, ext = os.path.splitext(stem)
-        wanted = cls.EXTENSIONS.get(cls.resolve(fmt), '.csv')
-        if ext.lower() in ('.csv', '.json', '.xlsx', '.xls', '.txt', '.html', '.md'):
-            return stem
+        requested = cls.resolve(fmt)
+        wanted = cls.EXTENSIONS.get(requested, '.csv')
         if not root.strip('. '):
             return f'export{wanted}'
+        if not requested:
+            # No format was asked for: the extension decides, so a name without one gets
+            # the csv default and an unknown extension is left alone for ``save`` to refuse
+            # by name. Rewriting it here would hide a typo behind a successful export.
+            return stem if ext else stem + '.csv'
+        if cls.resolve(ext.lstrip('.')) == requested:
+            return stem
+        # The extension names a DIFFERENT format than the one asked for (or none at all):
+        # ``report.txt`` + ``fmt='csv'`` used to write CSV bytes into a ``.txt`` file, which
+        # the export panel then listed as kind ``text``. The explicit format wins, so the
+        # suffix follows it.
         return root + wanted
 
     @staticmethod
@@ -165,19 +177,73 @@ class DataExporter:
         fmt = cls.resolve(fmt) or cls.infer_format(filepath)
         if fmt not in cls.SUPPORTED_FORMATS:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
+        if fmt in ('csv', 'excel'):
+            df = cls._neutralize_formulas(df)
 
-        os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
+        directory = os.path.dirname(filepath) or '.'
+        os.makedirs(directory, exist_ok=True)
 
         writer = getattr(cls, cls.WRITERS.get(fmt) or '', None)
         if writer is None:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
-        if fmt == 'txt':
-            writer(df, filepath, text_column=text_column, **kwargs)
-        else:
-            writer(df, filepath, **kwargs)
+        # Written beside the target and moved into place: a crash midway leaves a hidden
+        # temp file, never a half-written ``.csv`` that the export panel lists and the user
+        # opens as if the run had finished.
+        stem, ext = os.path.splitext(filepath)
+        staged = f'{stem}.{uuid.uuid4().hex[:8]}.part{ext}'
+        try:
+            if fmt == 'txt':
+                writer(df, staged, text_column=text_column, **kwargs)
+            else:
+                writer(df, staged, **kwargs)
+            os.replace(staged, filepath)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.remove(staged)
+            raise
 
         logger.info(t('export.done', n=len(df), path=filepath, fmt=fmt))
         return {'path': filepath, 'format': fmt, 'rows': len(df)}
+
+    #: The first characters Excel reads as the start of a formula. A crawled comment that
+    #: begins with one of these (`=HYPERLINK(...)`, `@SUM(...)`) becomes a live cell when the
+    #: CSV/Excel export is opened — data the crawler merely recorded starts executing.
+    FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+    @classmethod
+    def _neutralize_formulas(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """Prefix formula-looking text cells with ``'`` so Excel keeps them as text.
+
+        Applied to csv/excel only (a json/txt export is not evaluated by a spreadsheet),
+        and only to string cells, so a numeric ``-5`` keeps its type. The quote is the
+        spreadsheet convention for "this is text"; the count is logged once so the change
+        to the user's data is visible rather than silent.
+        """
+        hits = 0
+
+        def _fix(value):
+            nonlocal hits
+            if isinstance(value, str) and value[:1] in cls.FORMULA_PREFIXES:
+                hits += 1
+                return "'" + value
+            return value
+
+        out = df.copy()
+        for column in out.columns:
+            series = out[column]
+            # A number cannot start a formula, and pandas no longer reports a text column as
+            # ``object`` (it has its own ``str`` dtype), so the check is "not numeric/time"
+            # rather than "is object".
+            if (
+                pd.api.types.is_numeric_dtype(series)
+                or pd.api.types.is_bool_dtype(series)
+                or pd.api.types.is_datetime64_any_dtype(series)
+            ):
+                continue
+            out[column] = series.map(_fix)
+        if hits:
+            logger.warning(t('export.formula_escaped', n=hits))
+        return out
 
     # ── Individual writers ──────────────────────────────────────
 

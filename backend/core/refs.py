@@ -219,6 +219,13 @@ def _cut_bytes(text: str, limit: int) -> str:
     return encoded[:limit].decode('utf-8', 'ignore')
 
 
+#: Names Windows reserves for a device, at any extension: ``CON.csv`` is the console, not a file.
+#: Checked against the part before the FIRST dot, because ``CON.tar.gz`` is reserved too.
+_WINDOWS_DEVICE_NAMES = frozenset(
+    {'con', 'prn', 'aux', 'nul', 'clock$'} | {f'com{n}' for n in range(1, 10)} | {f'lpt{n}' for n in range(1, 10)}
+)
+
+
 def sanitize_filename(name: str, *, truncate: bool = True) -> str:
     """Make *name* safe to use as a single path component.
 
@@ -243,6 +250,12 @@ def sanitize_filename(name: str, *, truncate: bool = True) -> str:
     """
     clean = re.sub(r'[\x00-\x1f\\/*?:"<>|]', '_', str(name or ''))
     clean = clean.strip().strip('.')
+    # ``open('CON.csv')`` on Windows writes to the console device and every read of the
+    # "file" comes back empty; the same holds for NUL and the COM/LPT ports. A leading
+    # underscore keeps the name recognisable without naming a device. Checked before the
+    # length cap so the added character is inside the budget.
+    if clean.split('.')[0].strip().lower() in _WINDOWS_DEVICE_NAMES:
+        clean = '_' + clean
     if truncate and (len(clean) > MAX_FILENAME_LENGTH or len(clean.encode('utf-8')) > MAX_FILENAME_BYTES):
         root, ext = os.path.splitext(clean)
         budget = MAX_FILENAME_LENGTH - len(ext)

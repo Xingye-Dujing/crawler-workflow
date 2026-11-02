@@ -163,6 +163,24 @@ class TestSanitizeFilename:
     def test_numbers_are_stringified(self):
         assert sanitize_filename(2024) == '2024'
 
+    @pytest.mark.parametrize(
+        'raw',
+        ['CON', 'con.csv', 'NUL', 'nul.txt', 'PRN', 'AUX.csv', 'COM1', 'com9.csv', 'LPT1', 'lpt9.log', 'CON.tar.gz'],
+    )
+    def test_a_windows_device_name_cannot_become_the_file(self, raw):
+        """``open('CON.csv')`` on Windows writes to the console device: the export "succeeds"
+        and the file is empty on every read. The check is on the segment before the first dot,
+        because Windows reserves ``CON.tar.gz`` too.
+        """
+        clean = sanitize_filename(raw)
+        device = clean.split('.')[0].strip().lower()
+        assert device not in ('con', 'prn', 'aux', 'nul', 'com1', 'com9', 'lpt1', 'lpt9')
+        assert clean.startswith('_')
+
+    def test_a_normal_name_is_not_mistaken_for_a_device(self):
+        for raw in ('console.csv', 'comment', 'com10.csv', 'null_data.csv', 'auxiliary'):
+            assert sanitize_filename(raw) == raw
+
 
 class TestWindowTag:
     """A crawl's declared time window, as a filename component.

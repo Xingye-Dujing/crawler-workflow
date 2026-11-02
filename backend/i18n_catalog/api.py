@@ -164,6 +164,7 @@ ZH = {
     'ds.duplicate_columns': '表里有重复的列名：{names}——同名列会被静默覆盖，请先改名再保存',
     # ── analysis / services ───────────────────────────────────
     'export.done': '已导出 {n} 行至 {path}（{fmt}）',
+    'export.formula_escaped': '导出时给 {n} 个以 = + - @ 开头的文本单元格加了前导单引号，避免被 Excel 当成公式执行',
     'export.parquet_engine_missing': '导出 Parquet 需要列式引擎 pyarrow，请先安装：pip install pyarrow',
     'export.window_ignored': '节点 {nid}：结果文件照常生成，仅「文件名追加时间范围」被忽略——{reason}',
     'export.window_many': '文件名要求带时间范围，但这条链路上有 {n} 个不同的时间窗，一个文件说不清它装的是哪一段',
@@ -387,6 +388,9 @@ EN = {
     ),
     # ── analysis / services ───────────────────────────────────
     'export.done': 'Exported {n} rows to {path} ({fmt})',
+    'export.formula_escaped': (
+        'Prefixed {n} text cells starting with = + - @ with a quote so Excel does not run them as formulas'
+    ),
     'export.parquet_engine_missing': 'Parquet export needs the pyarrow engine — install it: pip install pyarrow',
     'export.window_ignored': (
         'Node {nid}: the file is written as normal and only "append the crawled time range" was ignored — {reason}'

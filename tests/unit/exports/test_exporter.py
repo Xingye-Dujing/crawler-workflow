@@ -134,6 +134,37 @@ class TestFormatSelection:
         assert E.save(df, target, fmt='json')['format'] == 'json'
         assert _json(target)[0]['标题'] == '三亚攻略'
 
+    @pytest.mark.parametrize('cell', ['=HYPERLINK("http://x","y")', '+1+1', '-2+3', '@SUM(A1:A2)', '\tcmd'])
+    def test_a_formula_shaped_cell_is_written_as_text(self, cell, tmp_path):
+        """A crawled comment is data. Excel reads a cell starting with ``=`` as a formula, so
+        exporting one opened a live cell the crawler merely recorded. The csv carries a
+        leading quote and the value otherwise survives.
+        """
+        target = str(tmp_path / 'f.csv')
+        E.save(pd.DataFrame({'评论内容': [cell]}), target, fmt='csv')
+        out = pd.read_csv(target, dtype=str)
+        assert out['评论内容'].iloc[0] == "'" + cell
+
+    def test_a_negative_number_stays_a_number(self, tmp_path):
+        """Only STRING cells are touched: escaping a real number would break the column."""
+        target = str(tmp_path / 'n.csv')
+        E.save(pd.DataFrame({'score': [-5.0, 3.0]}), target, fmt='csv')
+        assert '-5.0' in _read(target) and "'-5" not in _read(target)
+
+    def test_a_failed_write_leaves_no_partial_file(self, df, tmp_path, monkeypatch):
+        """A crash midway used to leave a half-written csv the panel listed as a finished
+        export. The writer stages the bytes and moves them into place only on success."""
+        target = str(tmp_path / 'half.csv')
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError('disk full')
+
+        monkeypatch.setattr(E, '_write_csv', staticmethod(_boom))
+        with pytest.raises(RuntimeError):
+            E.save(df, target, fmt='csv')
+        assert not os.path.exists(target)
+        assert not [name for name in os.listdir(tmp_path) if name.endswith('.part.csv')]
+
     @pytest.mark.parametrize('filepath', ['data.parq', 'weird.bin'])
     def test_an_unknown_format_is_refused(self, df, tmp_path, filepath):
         with pytest.raises(UnsupportedFormatError, match='Unsupported export format'):
@@ -149,8 +180,11 @@ class TestNormalizeFilename:
         'filename, fmt, expected',
         [
             ('report', 'csv', 'report.csv'),
-            ('report.txt', 'csv', 'report.txt'),
+            # Pinned wrongly until now: the suffix used to survive whatever format was asked
+            # for, so ``fmt='csv'`` wrote CSV bytes into a file the panel calls plain text.
+            ('report.txt', 'csv', 'report.csv'),
             ('report.csv', 'csv', 'report.csv'),
+            ('report.csv', 'json', 'report.json'),
             ('a.JSON', 'json', 'a.JSON'),
             ('report', 'excel', 'report.xlsx'),
             ('report', 'markdown', 'report.md'),
