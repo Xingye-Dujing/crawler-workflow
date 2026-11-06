@@ -91,7 +91,10 @@ def _scopes() -> list:
         return [None]
     rows = get_account_service().store.list_users()
     scopes = [Account(row['user_id'], row['username'], row['role']) for row in rows if row['status'] == 'active']
-    return scopes or [None]
+    # No active account is not "the local owner": the gate refuses every request, yet the
+    # ownerless ``data/schedules.json`` would keep firing crawls nobody can see or stop
+    # (``run_is_foreign`` is true for every account). Nobody's timer runs.
+    return scopes
 
 
 def tick(now: datetime = None) -> list:

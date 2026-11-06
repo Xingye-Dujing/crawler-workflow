@@ -939,6 +939,9 @@ class TestProgressAccounting:
         assert body['outcome'] == 'rejected', 'an empty canvas is not a run that finished'
         assert not any('Run finished' in line for line in body['logs']), body['logs']
         assert app_module.get_run_store().list_resumable(include_finished=True) == [], 'a refused run writes no record'
+        assert app_module.get_run_store().stats()['run_log_lines'] == 0, (
+            'a refused run wrote durable console lines no record can name or reclaim'
+        )
 
     @pytest.mark.serial
     def test_a_node_that_never_ran_is_not_announced_as_starting(self, client, app_module, monkeypatch):

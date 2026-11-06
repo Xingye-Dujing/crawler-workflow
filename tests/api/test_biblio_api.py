@@ -97,6 +97,15 @@ def _workflow(dataset_id: str, columns: str):
     }
 
 
+class TestWorkspacePaging:
+    def test_a_non_finite_limit_is_the_default_view_not_a_500(self, client):
+        """``int(float('inf'))`` raises OverflowError, which is not a ValueError: the workspace
+        answered an HTML 500 that its own panel could not parse."""
+        response = client.get('/api/biblio/runs?limit=inf')
+        assert response.status_code == 200, response.get_data(as_text=True)
+        assert response.get_json()['ok'] is True
+
+
 class TestBibliographicUpload:
     def test_an_undecodable_txt_keeps_the_old_text_fallback(self, client):
         response = client.post(

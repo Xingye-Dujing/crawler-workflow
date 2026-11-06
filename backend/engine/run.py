@@ -589,7 +589,7 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
     return results
 
 
-def _continue_record(name: str, resumable: list, resuming: bool) -> dict:
+def _continue_record(name: str, resumable: list, resuming: bool, requested: str = '') -> dict:
     """The row this workflow should keep writing, if it is a 继续.
 
     Only the resume path adopts: the attempt after a 继续 must accumulate
@@ -597,6 +597,11 @@ def _continue_record(name: str, resumable: list, resuming: bool) -> dict:
     unfinished row of this canvas again instead of opening a fresh one per
     press. A plain Run is a new attempt and gets new rows — "one record per
     attempt" is what makes the panel's history mean anything.
+
+    ``requested`` is the id the user pressed 继续 on. It is preferred over the
+    newest name match: re-deriving the record from the name alone made a run on an
+    OLD interrupted row adopt the newer (even completed) row of the same workflow,
+    rewrite its history and leave the chosen row interrupted forever.
 
     Adopting CONSUMES the candidate (it is popped, not re-read): validate only
     asks a name node for a non-empty label, so one canvas may legitimately carry
@@ -607,6 +612,11 @@ def _continue_record(name: str, resumable: list, resuming: bool) -> dict:
     """
     if not resuming:
         return {}
+    wanted = str(requested or '')
+    if wanted:
+        for position, candidate in enumerate(resumable):
+            if str(candidate.get('run_id') or '') == wanted and str(candidate.get('workflow_name') or '') == name:
+                return dict(resumable.pop(position))
     for position, candidate in enumerate(resumable):
         if str(candidate.get('workflow_name') or '') == name:
             return dict(resumable.pop(position))
@@ -675,7 +685,7 @@ def _component_run(
     ``index()`` route for the whole closure, which is a footgun, not a shortcut.
     """
     name = _wf_display_name(sub_engine, wf_idx)
-    earlier = _continue_record(name, resumable, resuming)
+    earlier = _continue_record(name, resumable, resuming, requested=run_id if wf_idx == 0 else '')
     rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
     store.start_run(
         rid,
@@ -848,6 +858,12 @@ def _run_worker(
                 execution_state['total_nodes'] = 0
                 execution_state['completed_nodes'] = 0
             add_log(t('run.rejected', n=len(errors)))
+            # No record was opened, so nothing may persist these lines: the durable sink would
+            # file them under the claim-stamped run id, and no viewer or retention sweep can ever
+            # name that id again (every query walks ``runs``). Take the sink off and drop the
+            # buffer; the live console keeps what the user needs to fix the canvas.
+            set_log_sink(None)
+            run_log_writer.disarm()
             return
 
         # Split into per-workflow connected components

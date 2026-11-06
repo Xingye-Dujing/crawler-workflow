@@ -298,6 +298,7 @@ ZH = {
     ),
     # ── 断点续跑（durable run state） ────────────────────────
     'run.row_limit': '节点 {nid} 已达到保存上限 {limit} 行，超出部分不再落库',
+    'run.part_unreadable': '分片文件读不出来，合并会静默少掉整批数据：{parts}',
     'run.serialForced': (
         '{platform} 的多条采集强制排队串行执行：同一账号并行翻页必被弹回登录页，'
         '这个平台的串行由站点决定，与错峰设置无关'
@@ -719,6 +720,7 @@ EN = {
     ),
     # ── resumable runs ────────────────────────────────────────
     'run.row_limit': 'Node {nid} hit its {limit}-row safety cap — further rows are not stored',
+    'run.part_unreadable': 'A part file could not be read; merging would silently lose its whole batch: {parts}',
     'run.serialForced': (
         '{platform} crawls are forced to run one at a time: parallel paging on one account always draws the '
         "login wall, so this platform serializes by the site's rule, not by the 错峰 setting"

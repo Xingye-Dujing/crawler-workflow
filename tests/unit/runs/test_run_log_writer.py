@@ -216,6 +216,34 @@ class TestStoreFailure:
         # Never a growing leak: whatever is retained stays within the hard cap.
         assert len(w._buf) <= w.HARD_CAP
 
+    def test_a_store_that_logs_while_opening_does_not_deadlock_the_flush(self, writer):
+        """``get_run_store()`` can create the store, and creation logs a line that the console
+        handler feeds back into ``push`` on the same thread. Holding the writer's non-reentrant
+        lock across the lookup froze the run thread and every later flush."""
+        import threading
+
+        import engine.run_logs
+
+        _module, w, store, state = writer
+        _set_run(state, 'rX')
+        w.push(['first'], 0, 'info')
+        calls = {'n': 0}
+
+        def opening_store():
+            calls['n'] += 1
+            if calls['n'] == 1:
+                w.push(['opening'], 0, 'info')
+            return store
+
+        engine.run_logs.get_run_store = opening_store
+        thread = threading.Thread(target=w.flush)
+        thread.start()
+        thread.join(5)
+        assert not thread.is_alive(), 'the flush deadlocked on the store that logged while opening'
+        assert [row[4] for row in store.batches[0][1]] == ['first']
+        w.flush()
+        assert [row[4] for row in store.batches[1][1]] == ['opening']
+
 
 class TestSinkWiring:
     def test_the_writer_is_a_valid_state_sink(self, app_module):

@@ -93,7 +93,15 @@ class UpkeepMixin:
         cache_cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(1, days) * 86400))
         cur = self._execute('DELETE FROM llm_cache WHERE created_at < ?', (cache_cutoff,))
         seen_cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(1, days) * 86400))
-        cur2 = self._execute('DELETE FROM item_seen WHERE created_at < ?', (seen_cutoff,))
+        # Age alone is not the rule here: a run SPARED by a pin (or by the per-workflow keep)
+        # keeps its rows, so its "已采集" claims must survive too — otherwise the next crawl of
+        # that canvas re-fetches every post the kept table already holds. Only claims whose
+        # owning run is gone (or that name no run at all) are swept by age.
+        cur2 = self._execute(
+            'DELETE FROM item_seen WHERE created_at < ? '
+            'AND (first_run_id IS NULL OR first_run_id NOT IN (SELECT run_id FROM runs))',
+            (seen_cutoff,),
+        )
         return {
             'runs': removed,
             'cache_entries': cur.rowcount,

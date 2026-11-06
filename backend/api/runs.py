@@ -14,7 +14,7 @@ download must answer the same ``wf``/``level``/``q`` question, because the downl
 import logging
 
 from flask import Blueprint, Response, jsonify, request
-from runtime.state import execution_state, live_run_ids, run_is_foreign
+from runtime.state import execute_lock, execution_state, live_run_ids, run_is_foreign
 from runtime.stores import get_run_store
 
 from api.http import _bad_body, _json_body, _safe_int
@@ -158,10 +158,14 @@ def runs_purge():
     """Housekeeping. Interrupted runs are the last to go — they are the ones
     somebody may still want to continue. The live run, if any, is exempt, and so
     is every 置顶 record (a manual purge must not silently undo a pin either)."""
-    keep: list[str] = []
-    keep += live_run_ids()
-    keep += sorted(locked_run_ids())
-    removed = get_run_store().purge(exclude_run_id=keep)
+    # The probe and the sweep are ONE step under the claim lock: ``begin_run`` stamps its run
+    # id under this lock, so a run pressed between the snapshot and the purge cannot open a
+    # record that is then deleted from under its writer.
+    with execute_lock:
+        keep: list[str] = []
+        keep += live_run_ids()
+        keep += sorted(locked_run_ids())
+        removed = get_run_store().purge(exclude_run_id=keep)
     prune_orphan_run_locks()
     return jsonify({'ok': True, 'removed': removed})
 
@@ -230,13 +234,14 @@ def runs_clear():
         return _bad_body()
     if data.get('confirm') is not True:
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
-    live = live_run_ids()
-    # 清空 spares every run a live thread is still writing AND every locked one — the user
-    # pinned those on purpose. A serial pass closes one record per workflow, so this is a set
-    # rather than the single id the request thread happens to hold.
-    keep = list(live)
-    keep.extend(lock_store.all_locks()['runs'])
-    removed = get_run_store().clear_all(exclude_run_ids=keep)
+    with execute_lock:
+        live = live_run_ids()
+        # 清空 spares every run a live thread is still writing AND every locked one — the user
+        # pinned those on purpose. A serial pass closes one record per workflow, so this is a set
+        # rather than the single id the request thread happens to hold.
+        keep = list(live)
+        keep.extend(lock_store.all_locks()['runs'])
+        removed = get_run_store().clear_all(exclude_run_ids=keep)
     logger.warning(t('run.cleared', runs=removed['runs'], claims=removed['item_claims']))
     return jsonify({'ok': True, 'removed': removed})
 

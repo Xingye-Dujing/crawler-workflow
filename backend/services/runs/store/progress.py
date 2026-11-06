@@ -222,51 +222,60 @@ class RowsMixin:
         limit = Config.RUN_MAX_ROWS_PER_NODE
         capped = False
         with self._lock:
-            # ``MAX(seq)+1`` and not ``COUNT(*)``: the primary key is
-            # (run_id, node_id, seq), so the maximum is a single index seek while a
-            # count visits every stored row — and this runs once per scraped row,
-            # which made a long crawl quadratic in the size of its own table (5,000
-            # rows meant ~12.5 million row visits just to find the next slot).
-            # The two answers agree because ``seq`` is dense: rows are only ever
-            # appended here or rewritten wholesale by ``replace_rows``, never
-            # deleted one at a time.
-            seq = self._conn.execute(
-                'SELECT COALESCE(MAX(seq), -1) + 1 FROM node_rows WHERE run_id = ? AND node_id = ?',
-                (run_id, node_id),
-            ).fetchone()[0]
-            existing = seq
-            stamp = self.now()
-            kept = 0
-            dropped = 0
-            batch = []
-            seen_batch = set()
-            for row in rows:
-                if existing + kept >= limit:
-                    # The cap is NOT a ledger dedupe: leave ``dropped`` alone so the caller can
-                    # tell the two apart, and record only that a warning is owed — never log here.
-                    # logger.warning runs through the console handler, which takes _completed_lock
-                    # and then the durable sink re-enters append_log → this same RLock; another
-                    # thread adding a log holds _completed_lock and wants this RLock — a textbook
-                    # AB-BA deadlock that froze the worker AND /api/workflow/status.
-                    capped = True
-                    break
-                key = item_key(row)
-                if key in seen_batch:
-                    dropped += 1
-                    continue
-                seen_batch.add(key)
-                if dedupe_scope and not self._claim_item_locked(dedupe_scope, key, run_id, stamp):
-                    dropped += 1
-                    continue
-                batch.append((run_id, node_id, seq + kept, key, _dumps(row), stamp))
-                kept += 1
-            if batch:
-                self._conn.executemany(
-                    'INSERT OR REPLACE INTO node_rows (run_id, node_id, seq, row_key, payload, created_at) '
-                    'VALUES (?, ?, ?, ?, ?, ?)',
-                    batch,
-                )
-            self._conn.commit()
+            try:
+                # ``MAX(seq)+1`` and not ``COUNT(*)``: the primary key is
+                # (run_id, node_id, seq), so the maximum is a single index seek while a
+                # count visits every stored row — and this runs once per scraped row,
+                # which made a long crawl quadratic in the size of its own table (5,000
+                # rows meant ~12.5 million row visits just to find the next slot).
+                # The two answers agree because ``seq`` is dense: rows are only ever
+                # appended here or rewritten wholesale by ``replace_rows``, never
+                # deleted one at a time.
+                seq = self._conn.execute(
+                    'SELECT COALESCE(MAX(seq), -1) + 1 FROM node_rows WHERE run_id = ? AND node_id = ?',
+                    (run_id, node_id),
+                ).fetchone()[0]
+                existing = seq
+                stamp = self.now()
+                kept = 0
+                dropped = 0
+                batch = []
+                seen_batch = set()
+                for row in rows:
+                    if existing + kept >= limit:
+                        # The cap is NOT a ledger dedupe: leave ``dropped`` alone so the caller can
+                        # tell the two apart, and record only that a warning is owed — never log here.
+                        # logger.warning runs through the console handler, which takes _completed_lock
+                        # and then the durable sink re-enters append_log → this same RLock; another
+                        # thread adding a log holds _completed_lock and wants this RLock — a textbook
+                        # AB-BA deadlock that froze the worker AND /api/workflow/status.
+                        capped = True
+                        break
+                    key = item_key(row)
+                    if key in seen_batch:
+                        dropped += 1
+                        continue
+                    seen_batch.add(key)
+                    if dedupe_scope and not self._claim_item_locked(dedupe_scope, key, run_id, stamp):
+                        dropped += 1
+                        continue
+                    batch.append((run_id, node_id, seq + kept, key, _dumps(row), stamp))
+                    kept += 1
+                if batch:
+                    self._conn.executemany(
+                        'INSERT OR REPLACE INTO node_rows (run_id, node_id, seq, row_key, payload, created_at) '
+                        'VALUES (?, ?, ?, ?, ?, ?)',
+                        batch,
+                    )
+                self._conn.commit()
+            except Exception:
+                # The claims above are staged in the same implicit transaction as the rows.
+                # Without this rollback a failed insert (SQLITE_FULL, a locked file) left them
+                # PENDING, and the next write on this connection committed them: 继续 then
+                # half-paid for rows that were never stored, and the console blamed the ledger.
+                # ``replace_rows`` already had exactly this guard.
+                self._conn.rollback()
+                raise
         if capped:
             logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
         return kept, dropped

@@ -1217,8 +1217,16 @@ class TestStopAndKill:
         try:
             resp = client.post('/api/workflow/processes/kill', json={'ident': pool.ident})
             assert resp.status_code == 403, 'a live crawl worker must not be killable'
+            # 停止 clears ``running`` at the TOP while the worker keeps settling for tens of
+            # seconds. Asking only that flag opened exactly the window in which a kill orphans
+            # a browser and strands its profile lock; liveness of the run thread is the answer.
+            app_module.execution_state['running'] = False
+            app_module.execution_state['thread'] = pool
+            resp = client.post('/api/workflow/processes/kill', json={'ident': pool.ident})
+            assert resp.status_code == 403, 'a still-settling run worker must not be killable'
         finally:
             app_module.execution_state['running'] = False
+            app_module.execution_state['thread'] = None
         # Once no run is live, a stuck pool thread is disposable again (use Stop otherwise).
         resp = client.post('/api/workflow/processes/kill', json={'ident': pool.ident})
         assert resp.status_code == 200

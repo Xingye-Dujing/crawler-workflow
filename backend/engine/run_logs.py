@@ -67,7 +67,10 @@ class RunLogWriter:
     HARD_CAP = 2000
 
     def __init__(self):
-        self._lock = threading.Lock()
+        # Reentrant: a store that logs while opening reaches ``push`` on the same thread. No
+        # path holds it across the SQLite write (``_drain`` publishes the batch and releases
+        # before touching the store), so the recursion cannot duplicate a batch.
+        self._lock = threading.RLock()
         self._buf: list = []
         self._buf_run_id: str | None = None
         #: The account whose run these lines belong to. Resolved at ARM time by the claim (which
@@ -100,50 +103,56 @@ class RunLogWriter:
 
     def push(self, parts, wf_idx, level) -> None:
         # Called from ``state._push_log`` OUTSIDE ``_completed_lock`` — parallel pool threads,
-        # the run thread and request threads all land here concurrently, so every mutation
-        # below serializes on the writer's own lock (the console lock cannot: the sink is
-        # deliberately taken off it so a SQLite flush can never re-enter it).
+        # the run thread and request threads all land here concurrently.
+        rid = str(execution_state.get('run_id') or '')
+        if not rid:
+            return
         with self._lock:
-            rid = str(execution_state.get('run_id') or '')
-            if not rid:
-                return
-            if rid != self._buf_run_id and self._buf:
-                # Serial split: the previous component's record is closed — flush its lines under
-                # ITS id before switching, or they would be re-filed onto the next workflow.
-                self._drain()
+            switching = rid != self._buf_run_id and bool(self._buf)
+        if switching:
+            # Serial split: the previous component's record is closed — flush its lines under
+            # ITS id before switching, or they would be re-filed onto the next workflow. Outside
+            # the lock: the drain opens SQLite, and store creation can log back into ``push``.
+            self._drain()
+        stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
+        name = str((execution_state.get('_wf_names') or {}).get(wf_idx, '')) if wf_idx is not None else ''
+        lvl = level or 'info'
+        with self._lock:
             self._buf_run_id = rid
-            stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
-            name = str((execution_state.get('_wf_names') or {}).get(wf_idx, '')) if wf_idx is not None else ''
-            lvl = level or 'info'
             for line in parts:
                 self._buf.append((stamp, wf_idx, name, lvl, line))
-            if lvl == 'error' or len(self._buf) >= self.FLUSH_EVERY:
-                self._drain()
+            flush_now = lvl == 'error' or len(self._buf) >= self.FLUSH_EVERY
+        if flush_now:
+            self._drain()
 
     def _drain(self) -> None:
-        # Caller holds ``self._lock``: the captured batch cannot gain a line between the
-        # store write and the swap, and two drains can never take the same batch.
-        if not self._buf or not self._buf_run_id:
+        # The store lookup is made OUTSIDE the lock: ``get_run_store()`` may CREATE the store,
+        # and that creation logs a line (``promote_stale_runs``'s warning) — which the console
+        # handler feeds back to ``push`` on this SAME thread. Holding a lock across the lookup
+        # deadlocked the run thread and every later flush.
+        with self._lock:
+            if not self._buf or not self._buf_run_id:
+                self._buf = []
+                return
+            rid = self._buf_run_id
+            batch = self._buf
+            # Published (emptied) before the write: a line pushed by the store's own creation
+            # must land in the NEXT batch, not be appended to a batch we are about to swap.
             self._buf = []
-            return
-        rid = self._buf_run_id
-        batch = self._buf
         try:
             with account_context.use(self._account):
                 get_run_store().append_log(rid, batch)
-            self._buf = []
         except Exception:
             # Keep the batch for a later flush; bound it if the store stays down. No logging
             # here — the console handler forwards back into ``push`` and would recurse.
-            self._buf = batch if len(batch) <= self.HARD_CAP else batch[-self.FLUSH_EVERY :]
+            with self._lock:
+                merged = batch + self._buf
+                self._buf = merged if len(merged) <= self.HARD_CAP else merged[-self.FLUSH_EVERY :]
 
     def flush(self) -> None:
-        # Only the writer's own lock: the drain touches SQLite, and holding
-        # ``_completed_lock`` across that write is the exact re-entry deadlock state.py
-        # takes the sink off the lock to avoid. Callers that hold ``_completed_lock``
-        # (settlement) keep the ordering ``_completed_lock`` → ``self._lock`` one-way.
-        with self._lock:
-            self._drain()
+        # No outer lock: the drain touches SQLite, and a store that logs while opening re-enters
+        # ``push`` on this same thread.
+        self._drain()
 
 
 run_log_writer = RunLogWriter()

@@ -19,6 +19,8 @@ import re
 
 import pandas as pd
 
+from i18n import t
+
 # A trailing extension the user may have typed into a filename. ``os.path.splitext`` would cut at
 # the LAST dot of ANY name, so a workflow literally named “v2.0调研” (a dot is legal) turned the
 # composed stem “v2.0调研-src-2_...” into “v2” — the node id and window suffix fell off the end as
@@ -153,7 +155,11 @@ class PartWriter:
         file; return its info. The tail is deliberately NOT written as its own
         part first — a part on disk means 'a settled batch', and a crash here
         only ever loses rows the resume ledger will collect again anyway."""
-        rows, _ = self._read_all_parts()
+        rows, columns, unreadable = self._read_all_parts()
+        if unreadable:
+            # Naming the shard beats a merged file that is quietly short by its whole batch —
+            # the caller fails the node, and the other shards stay on disk for 继续/recovery.
+            raise ValueError(t('run.part_unreadable', parts='、'.join(unreadable)))
         rows.extend(self._buffer)
         self._buffer = []
         final = os.path.join(self.dir, f'{self.stem}{self.ext}')
@@ -169,30 +175,43 @@ class PartWriter:
     def _read_all_parts(self):
         rows = []
         columns = list(self._columns)
+        unreadable: list[str] = []
         for part in self._parts:
+            try:
+                if os.path.getsize(part) == 0:
+                    continue  # an empty shard has nothing to lose
+            except OSError:
+                unreadable.append(os.path.basename(part))
+                continue
             if self.fmt == 'csv':
                 # Not OSError alone: an empty shard raises ``EmptyDataError`` and a broken
                 # quote or a mixed encoding raises ``ParserError`` / ``UnicodeDecodeError`` —
                 # all ValueError, which is the family the JSON branch below was already
                 # suppressing. With OSError only, one half-written shard from a previous crash
                 # (kept on disk on purpose, so a 继续 can pick it up) failed the WHOLE export.
-                with contextlib.suppress(OSError, ValueError):
+                try:
                     frame = pd.read_csv(part, dtype=str, keep_default_na=False)
-                    for col in frame.columns:
-                        if col not in columns:
-                            columns.append(col)
-                    rows.extend(frame.to_dict('records'))
+                except (OSError, ValueError):
+                    unreadable.append(os.path.basename(part))
+                    continue
+                for col in frame.columns:
+                    if col not in columns:
+                        columns.append(col)
+                rows.extend(frame.to_dict('records'))
             else:
-                with contextlib.suppress(OSError, ValueError):
+                try:
                     with open(part, encoding='utf-8') as fh:
                         data = json.load(fh)
-                    if isinstance(data, list):
-                        for row in (r for r in data if isinstance(r, dict)):
-                            for key in row:
-                                if key not in columns:
-                                    columns.append(key)
-                            rows.append(row)
-        return rows, columns
+                except (OSError, ValueError):
+                    unreadable.append(os.path.basename(part))
+                    continue
+                if isinstance(data, list):
+                    for row in (r for r in data if isinstance(r, dict)):
+                        for key in row:
+                            if key not in columns:
+                                columns.append(key)
+                        rows.append(row)
+        return rows, columns, unreadable
 
 
 class SnapshotWriter:

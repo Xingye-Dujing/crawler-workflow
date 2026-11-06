@@ -673,7 +673,9 @@ def kill_process():
     # registering it, orphaning Chrome and holding its profile lock — the very harm the
     # 'run' guard exists for. While a run is live those threads are off-limits; Stop is
     # the graceful door.
-    if execution_state['running'] and target.name.startswith('ThreadPoolExecutor'):
+    thread = execution_state.get('thread')
+    live = bool(execution_state['running'] or (thread is not None and thread.is_alive()))
+    if live and target.name.startswith('ThreadPoolExecutor'):
         return jsonify({'ok': False, 'error': t('api.killLiveWorker')}), 403
 
     if not target.is_alive():

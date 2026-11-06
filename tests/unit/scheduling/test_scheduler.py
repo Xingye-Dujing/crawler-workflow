@@ -197,6 +197,43 @@ class TestFireNow:
         assert scheduler_module.fire_now('nope') == {'ok': False, 'error': t('sched.taskMissing', id='nope')}
 
 
+class TestScopes:
+    def test_an_accounts_install_with_no_active_account_runs_nobody_timer(self, monkeypatch):
+        """A disabled account's timers do not fire — and neither do the LOCAL owner's: with the
+        gate on, an ownerless schedule fires a crawl every account sees as foreign."""
+        from services.accounts import service as accounts_service
+
+        monkeypatch.setattr(accounts_service, 'accounts_mode', lambda: True)
+
+        class _Store:
+            @staticmethod
+            def list_users():
+                return [{'user_id': 'u1', 'username': 'bob', 'role': 'user', 'status': 'disabled'}]
+
+        class _Service:
+            store = _Store()
+
+        monkeypatch.setattr(accounts_service, 'get_account_service', lambda: _Service())
+        assert scheduler_module._scopes() == []
+
+    def test_an_active_account_is_the_scope(self, monkeypatch):
+        from services.accounts import service as accounts_service
+
+        monkeypatch.setattr(accounts_service, 'accounts_mode', lambda: True)
+
+        class _Store:
+            @staticmethod
+            def list_users():
+                return [{'user_id': 'u1', 'username': 'bob', 'role': 'admin', 'status': 'active'}]
+
+        class _Service:
+            store = _Store()
+
+        monkeypatch.setattr(accounts_service, 'get_account_service', lambda: _Service())
+        scopes = scheduler_module._scopes()
+        assert [(scope.user_id, scope.username) for scope in scopes] == [('u1', 'bob')]
+
+
 class TestTheLanguageOfAFire:
     def test_a_fire_pins_the_task_own_language(self):
         """``set_lang`` is thread-local and a daemon starts fresh — read it from the task."""

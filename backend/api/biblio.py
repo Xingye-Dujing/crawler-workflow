@@ -18,7 +18,7 @@ from flask import Blueprint, jsonify, request
 from runtime.state import add_log
 from runtime.stores import get_biblio_store, get_run_store
 
-from api.http import _bad_body, _json_body
+from api.http import _bad_body, _json_body, _safe_int
 from i18n import t
 from services.biblio.formats import accepted_extensions
 from services.biblio.metrics import snapshot_capture
@@ -38,12 +38,13 @@ PREVIEW = 100
 
 
 def _int(value, default: int, low: int, high: int) -> int:
-    """A clamped integer query parameter — a panel typo is a smaller view, never a 500."""
-    try:
-        number = int(float(str(value).strip()))
-    except (TypeError, ValueError):
-        return default
-    return max(low, min(high, number))
+    """A clamped integer query parameter — a panel typo is a smaller view, never a 500.
+
+    Delegates to ``api.http._safe_int``: ``int(float('inf'))`` raises ``OverflowError``, which
+    is not a ``ValueError``, so ``?limit=inf`` used to answer an HTML 500 here while the
+    history route already refused the same input.
+    """
+    return _safe_int(value, default, minimum=low, maximum=high)
 
 
 @bp.route('/api/biblio/runs', methods=['GET'])

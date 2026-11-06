@@ -1013,6 +1013,19 @@ class TestPurgeAndStats:
             'an item whose rows were purged is still claimed, so no later crawl will ever collect it again'
         )
 
+    def test_purge_keeps_the_claims_of_a_spared_pinned_run(self, store, sample_rows):
+        """A pin that spares the record must spare its "已采集" ledger too. Deleting the claims
+        by age alone made the next crawl re-fetch every post the kept table already held."""
+        self._aged_run(store, 'kept', 'wf', RUN_COMPLETED, started_at='2019-05-05T00:00:00')
+        store.begin_node('kept', 'n1', 'source', fingerprint='fp')
+        store.append_rows('kept', 'n1', sample_rows[:2], dedupe_scope='item:fp')
+        first = item_key(sample_rows[0])
+        store.purge(keep_per_workflow=50, keep_days=30, exclude_run_id='kept')
+        assert store.row_count('kept', 'n1') == 2, 'the pin did not spare the record'
+        assert store.claim_item('item:fp', first, 'other') is False, (
+            'a spared run lost the ledger its kept rows promise'
+        )
+
     def test_stats_counts_everything_it_tracks(self, store, sample_rows):
         _start(store)
         store.begin_node('r1', 'n1', 'source')

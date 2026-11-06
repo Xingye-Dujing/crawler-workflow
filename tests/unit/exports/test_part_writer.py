@@ -94,6 +94,19 @@ class TestCrashSemantics:
         info = w2.finish()
         assert info['rows'] == 10
 
+    def test_a_shard_that_cannot_be_parsed_is_named_not_silently_dropped(self, tmp_path):
+        """A torn shard used to be skipped by ``contextlib.suppress`` while ``finish`` still
+        reported the other parts — the merged file was short by that whole batch, with no line
+        saying so (and ``keep_parts`` then deleted the only copy)."""
+        w1 = PartWriter(str(tmp_path), 'broken', 'csv', batch_size=2)
+        w1.add(_rows(2))
+        shard = os.path.join(tmp_path, 'broken.part001.csv')
+        with open(shard, 'w', encoding='utf-8') as handle:
+            handle.write('"unterminated\n1,2\n')
+        w2 = PartWriter(str(tmp_path), 'broken', 'csv', batch_size=2)
+        with pytest.raises(ValueError, match='part001'):
+            w2.finish()
+
 
 class TestStem:
     def test_safe_stem(self):

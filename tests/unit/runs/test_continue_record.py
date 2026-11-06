@@ -52,3 +52,25 @@ class TestContinueRecord:
         adopted = _continue_record('热榜', resumable, resuming=True)
         assert adopted == {'run_id': 'rid-0-热榜', 'workflow_name': '热榜'}
         assert resumable == []
+
+    def test_the_row_the_user_pressed_continue_on_wins_over_a_newer_name_match(self):
+        """The name-only lookup adopted the NEWEST row of that workflow, so 继续 on an older
+        interrupted row re-ran a newer completed record and never filled the chosen one."""
+        resumable = [
+            {'run_id': 'newer', 'workflow_name': '热榜'},
+            {'run_id': 'requested', 'workflow_name': '热榜'},
+        ]
+        adopted = _continue_record('热榜', resumable, resuming=True, requested='requested')
+        assert adopted['run_id'] == 'requested'
+        assert [row['run_id'] for row in resumable] == ['newer'], 'the adopted row is consumed'
+
+    def test_a_requested_row_of_another_component_falls_back_to_this_one(self):
+        """The banner offers each component's own row; pressing it on 评论 must not hand the
+        first component (热榜) a record that belongs to 评论."""
+        resumable = [
+            {'run_id': 'comment-row', 'workflow_name': '评论'},
+            {'run_id': 'hot-row', 'workflow_name': '热榜'},
+        ]
+        adopted = _continue_record('热榜', resumable, resuming=True, requested='comment-row')
+        assert adopted['run_id'] == 'hot-row'
+        assert [row['run_id'] for row in resumable] == ['comment-row']
