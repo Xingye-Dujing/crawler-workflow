@@ -63,6 +63,8 @@ dist/
 desktop/.venv-build/
 desktop/.pyinstaller-cache/
 desktop/bootstrap/.pyinstaller-cache/
+# PyInstaller/matplotlib scratch that can appear beside the checkout on a restricted box.
+tmp*/fontlist-*.json
 # pip falls back to cwd for scratch dirs on a restricted Windows sandbox.
 pip-build-*/
 pip-install-*/

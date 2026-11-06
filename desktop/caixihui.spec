@@ -31,6 +31,7 @@ from frozen_modules import package_module_names
 datas = [
     # Flask serves index.html/JS/CSS itself; world.json is read directly by biblio_geo.
     (str(BACKEND / 'static'), 'static'),
+    (str(BACKEND / 'services' / 'components' / 'default_catalog.json'), 'services/components'),
     (str(ROOT / 'samples'), 'samples'),
     (str(ROOT / 'README.md'), '.'),
     # First-run assets the launcher copies into the user's data root (never overwritten).
