@@ -61,6 +61,21 @@ def cluster_label(
     if len(order) > limit:
         raise UnknownOperationError(t('analysis.label_too_many', rows=len(order), limit=limit))
 
+    if llm is None:
+        # Reached only when ``on_fail == 'fallback'`` (the guard above): /api/analysis/run hands
+        # the pipeline no client at all. Without this branch the loop below would call
+        # ``llm.chat`` on None — an AttributeError, which the API answers as an HTML 500. The
+        # fallback is the same one the per-cluster error path writes, so "no model" and "the
+        # model refused" produce one honest shape rather than two.
+        rows = []
+        for key in order:
+            texts = [tx for tx in groups.loc[groups['_grp'] == key, text_col].dropna().astype(str) if tx.strip()]
+            if not texts:
+                raise UnknownOperationError(t('analysis.cluster_no_texts', group=key))
+            rows.append({group_col: key, 'n_docs': len(texts), summary_col: FALLBACK_MARK + texts[0][:40]})
+        logger.warning(t('analysis.cluster_fallback_all', n=len(rows)))
+        return pd.DataFrame(rows)
+
     scope = f'cluster_label:{getattr(llm, "label", "") or "model"}'
     rows = []
     summarised = 0

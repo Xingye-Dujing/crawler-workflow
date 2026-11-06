@@ -2057,6 +2057,16 @@ class TestClusterLabel:
             D.cluster_label(self._docs(), llm=None)
         assert t('analysis.label_no_llm', op='cluster_label') in str(exc.value)
 
+    def test_fallback_without_a_model_still_answers_every_cluster(self):
+        """``/api/analysis/run`` hands the pipeline no model, and ``on_fail='fallback'`` is a
+        declared value on that door. It used to reach ``llm.chat`` on None — an AttributeError
+        the API answers as an HTML 500 — where 主题概括's own fallback branch answers the table."""
+        from services.analysis.ops.cluster_label import FALLBACK_MARK
+
+        out = D.cluster_label(self._docs(), llm=None, summary_col='摘要', on_fail='fallback')
+        assert len(out) == 3
+        assert all(str(value).startswith(FALLBACK_MARK) for value in out['摘要']), out['摘要'].tolist()
+
     def test_a_stopped_run_marks_the_clusters_the_model_never_saw(self):
         class _Stop:
             def __init__(self):
@@ -3599,6 +3609,13 @@ class TestClusterReview:
         with pytest.raises(UnknownOperationError) as exc:
             D.cluster_review(self._clusters(), llm=None)
         assert t('analysis.label_no_llm', op='cluster_review') in str(exc.value)
+
+    def test_fallback_without_a_model_still_answers_every_cluster(self):
+        """Same door as 聚类摘要: the API hands no client, and ``on_fail='fallback'`` is legal
+        there. Reaching ``llm.chat`` on None was an AttributeError, not a 400."""
+        out = D.cluster_review(self._clusters(), llm=None, on_fail='fallback')
+        assert len(out) == 2
+        assert all('未经模型' in str(value) for value in out['簇综述']), out['簇综述'].tolist()
 
     def test_a_stopped_run_marks_the_clusters_the_model_never_saw(self):
         class _Stop:

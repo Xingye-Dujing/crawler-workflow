@@ -89,6 +89,36 @@ class TestAnalysisRun:
         assert body['row_count'] == 5
         assert body['report'] == []
 
+    def test_a_fallback_step_without_a_model_is_answered_not_a_500(self, client):
+        """This door hands ``run_pipeline`` no LLM client at all, and ``on_fail='fallback'`` is
+        a declared value on it. 聚类摘要 used to reach ``llm.chat`` on None — an AttributeError
+        the handler does not catch, i.e. an HTML 500 for a legal request."""
+        response = client.post(
+            '/api/analysis/run',
+            json={
+                'data': [
+                    {'cluster': 0, '正文': 'alpha'},
+                    {'cluster': 0, '正文': 'beta'},
+                    {'cluster': 1, '正文': 'gamma'},
+                ],
+                'steps': [
+                    {
+                        'op': 'cluster_label',
+                        'params': {
+                            'group_col': 'cluster',
+                            'text_col': '正文',
+                            'summary_col': '摘要',
+                            'on_fail': 'fallback',
+                        },
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body['ok'] is True
+        assert body['row_count'] == 2
+
     def test_run_rejects_a_step_it_does_not_know(self, client, paste):
         dataset_id = paste(DIRTY_RECORDS, name='unknown-op.csv')
         response = client.post(

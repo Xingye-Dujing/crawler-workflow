@@ -81,6 +81,15 @@ def cluster_review(
     written = 0
     asked = 0
     replayed = 0
+    if llm is None:
+        # Reached only when ``on_fail == 'fallback'`` (the guard above): the pipeline API hands
+        # no client. Calling ``llm.chat`` on None would be an AttributeError the API answers as
+        # an HTML 500; build the same table-fact paragraph the per-cluster error path writes.
+        for key in order:
+            facts = _cluster_facts(work[work['_grp'] == key], name_col, freq_col, first_col, last_col, label_col, take)
+            rows.append(row(key, facts) | {summary_col: _review_fallback(facts)})
+        logger.warning(t('analysis.review_fallback_all', n=len(rows)))
+        return pd.DataFrame(rows)
     for position, key in enumerate(order):
         slice_ = work[work['_grp'] == key]
         facts = _cluster_facts(slice_, name_col, freq_col, first_col, last_col, label_col, take)

@@ -105,6 +105,8 @@ ZH = {
     'analysis.label_failed': '{topic} 的主题概括失败：{err}',
     'analysis.label_fallback': '主题“{topic}”未获模型概括，已按其权重词回退标注（{reason}）',
     'analysis.label_fallback_all': '{n} 个主题无模型可用，全部按权重词回退标注',
+    'analysis.cluster_fallback_all': '{n} 个聚类无模型可用，全部改用各自首条原文摘录',
+    'analysis.review_fallback_all': '{n} 个聚类无模型可用，全部改用表格事实综述',
     # 主题概括：一行一次模型调用，所以失败要说清是哪个主题，停手也要说清还剩几个没问。
     'analysis.label_no_llm': '“{op}”没有拿到模型客户端：只有画布上的运行才带模型',
     'analysis.label_no_words': '{topic} 的“{col}”是空的，没有特征词就没有可概括的东西',
@@ -481,6 +483,8 @@ EN = {
     'analysis.label_failed': 'the summary for {topic} failed: {err}',
     'analysis.label_fallback': 'no model summary for {topic}; labelled from its weighted words ({reason})',
     'analysis.label_fallback_all': 'no model available; {n} topics all labelled from their weighted words',
+    'analysis.cluster_fallback_all': 'no model available; {n} clusters summarised from their own first text',
+    'analysis.review_fallback_all': 'no model available; {n} clusters reviewed from the table facts',
     'analysis.label_no_llm': '{op} was handed no model client: only a canvas run carries one',
     'analysis.label_no_words': '{topic} has an empty "{col}", and there is nothing to summarise without feature words',
     'analysis.label_prompt': (
