@@ -685,7 +685,10 @@ def _component_run(
     ``index()`` route for the whole closure, which is a footgun, not a shortcut.
     """
     name = _wf_display_name(sub_engine, wf_idx)
-    earlier = _continue_record(name, resumable, resuming, requested=run_id if wf_idx == 0 else '')
+    # The requested id is offered to EVERY component and adopted only by the one whose name it
+    # carries: the banner can offer a row of a component that is not workflow zero, and a
+    # name-only match would otherwise still pick that component's newest row.
+    earlier = _continue_record(name, resumable, resuming, requested=run_id)
     rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
     store.start_run(
         rid,
