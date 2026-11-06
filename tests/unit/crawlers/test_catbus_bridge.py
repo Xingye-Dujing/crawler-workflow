@@ -156,6 +156,17 @@ class TestTheDiscoveryVerdict:
         info = bridge.probe(force=True)
         assert info.reason_key == 'catbus.noCli', '“装了 Node” and “装了 CatBus” are two separate facts'
 
+    def test_source_without_a_build_names_the_build_rather_than_no_catbus(self, monkeypatch, tmp_path):
+        """The settings box may hold the checkout's ``cli.ts``; when the build is missing that is
+        a different fact from “this machine has no CatBus”, and the user can act on it."""
+        source = str(tmp_path / 'src' / 'x' / 'cli.ts')
+        monkeypatch.setattr(settings, 'get_setting', lambda key: source if key == 'catbus_cli' else '')
+        monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '')
+        monkeypatch.setattr(bridge, '_call', answer())
+        info = bridge.probe(force=True)
+        assert info.reason_key == 'catbus.sourceOnly'
+        assert info.reason_params == {'path': source, 'entry': str(tmp_path / 'dist' / 'x' / 'cli.js')}
+
     def test_an_old_runtime_is_refused_before_it_fails_obscurely(self, monkeypatch):
         seen = []
         monkeypatch.setattr(bridge, '_call', answer(version='v18.20.4\n', record=seen))

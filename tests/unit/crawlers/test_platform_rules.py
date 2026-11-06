@@ -403,6 +403,40 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         found = machine.catbus_candidate_paths('linux', {'CATBUS_HOME': '/srv/catbus', 'PATH': ''})
         assert '/srv/catbus/dist/integrations/crawler-workflow/cli.js' in found
 
+    def test_typescript_source_is_answered_with_the_build_it_belongs_to(self):
+        """Pointing the box at ``src/.../cli.ts`` is what a developer naturally does, and Node
+        cannot run it: type stripping leaves the ``./errors.js`` imports unrewritten. The twin is
+        the answer, in the TARGET's separators, and only the last ``src`` segment is rewritten —
+        a checkout may itself sit under a directory called ``src``."""
+        assert (
+            machine.catbus_source_twin('F:\\catbus-0.2.1\\src\\integrations\\crawler-workflow\\cli.ts', 'win32')
+            == 'F:\\catbus-0.2.1\\dist\\integrations\\crawler-workflow\\cli.js'
+        )
+        assert (
+            machine.catbus_source_twin('/home/u/src/catbus/src/x/cli.ts', 'linux') == '/home/u/src/catbus/dist/x/cli.js'
+        )
+        assert machine.catbus_source_twin('/srv/catbus/cli.mts', 'darwin') == '/srv/catbus/cli.mjs'
+        assert machine.catbus_source_twin('/srv/catbus/cli.js', 'linux') == ''
+        assert machine.catbus_entry_at('/srv/catbus/src/x/cli.ts', 'linux') == '/srv/catbus/dist/x/cli.js'
+
+    def test_typescript_source_is_never_a_runnable_entry(self, tmp_path):
+        """On Windows “any file is a program” waved ``cli.ts`` through, and the probe then died
+        with ``ERR_MODULE_NOT_FOUND`` naming a file the user never mentioned. Source is a named
+        state (“build it”), never an entry, whatever the host thinks about executables."""
+        source = tmp_path / 'cli.ts'
+        source.write_text('export {};\n', encoding='utf-8')
+        assert not machine.catbus_entry_usable(str(source))
+        assert machine.find_catbus_cli(str(source), {'PATH': ''}, 'linux') == ''
+
+    def test_a_built_twin_makes_the_source_path_work_as_typed(self, tmp_path):
+        src = tmp_path / 'src' / 'integrations' / 'cli.ts'
+        src.parent.mkdir(parents=True)
+        src.write_text('export {};\n', encoding='utf-8')
+        built = tmp_path / 'dist' / 'integrations' / 'cli.js'
+        built.parent.mkdir(parents=True)
+        built.write_text('// catbus\n', encoding='utf-8')
+        assert machine.find_catbus_cli(str(src), {'PATH': ''}) == str(built)
+
     def test_macos_offers_the_homebrew_prefix_and_windows_the_appdata_one(self):
         mac = machine.catbus_candidate_paths('darwin', {'PATH': '/opt/homebrew/bin'})
         assert '/opt/homebrew/lib/node_modules/catbus-cli/dist/integrations/crawler-workflow/cli.js' in mac

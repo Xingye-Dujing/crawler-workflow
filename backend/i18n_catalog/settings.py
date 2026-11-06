@@ -124,6 +124,7 @@ ZH = {
     # warning says which of the two complaints it is, and names the setting the box belongs to.
     'set.catbusMissing': 'CatBus 组件（{tool}）在该位置不存在：{path}',
     'set.catbusNeedFile': '{tool} 要填可执行程序本身，不是它所在的目录：{path}',
+    'set.catbusSource': '{tool} 填的是 TypeScript 源码：{path}；Node 不能直接运行它，请先构建，或改填 {entry}',
     'set.driverEmpty': '驱动路径为空：将由 Selenium 自动取与当前 Chrome 匹配的驱动（首次需要联网）',
     # ── 运行时设置校验 ────────────────────────────────────────
     'set.driverMissing': '驱动文件不存在：{path}',
@@ -269,6 +270,10 @@ EN = {
     'set.browserMissing': 'Browser executable does not exist: {path}',
     'set.catbusMissing': 'The CatBus component ({tool}) does not exist at that location: {path}',
     'set.catbusNeedFile': '{tool} wants the executable itself, not the folder holding it: {path}',
+    'set.catbusSource': (
+        '{tool} is TypeScript source: {path}; Node cannot run it directly, so build the checkout '
+        'or point this at {entry}'
+    ),
     'set.driverEmpty': (
         'Driver path was empty — nothing is forced on it: Selenium fetches the driver matching the '
         'installed Chrome (the first time needs network)'

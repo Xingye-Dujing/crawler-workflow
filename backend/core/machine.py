@@ -342,6 +342,16 @@ CATBUS_ENTRY = ('dist', 'integrations', 'crawler-workflow', 'cli.js')
 # about what kind of entry the user pointed at.
 CATBUS_SCRIPT_SUFFIXES = ('.js', '.mjs', '.cjs')
 
+#: Suffixes that mean "TypeScript source". Node cannot be pointed at these: type stripping drops the
+#: annotations but does NOT rewrite the ``./errors.js`` specifiers CatBus' sources use, so the spawn
+#: dies with ``ERR_MODULE_NOT_FOUND`` naming a file the user never mentioned. The build's ``dist``
+#: twin is the entry, and :func:`catbus_source_twin` maps one to the other.
+CATBUS_SOURCE_SUFFIXES = ('.ts', '.tsx', '.mts', '.cts')
+
+#: The build output for each source suffix: CatBus' ``src/**`` compiles into ``dist/**`` unchanged
+# apart from the extension.
+CATBUS_BUILT_SUFFIX = {'.ts': '.js', '.tsx': '.js', '.mts': '.mjs', '.cts': '.cjs'}
+
 #: The npm package that ships the adapter (its ``bin`` name is ``catbus``).
 CATBUS_PACKAGE = 'catbus-cli'
 
@@ -469,11 +479,17 @@ def catbus_entry_usable(path: str) -> bool:
     file is mode 644 — Node *reads* it, the kernel never executes it — so demanding the executable bit
     reported "no CatBus" on every Linux and macOS box and silently removed the whole second backend
     from the panel. A path without a script suffix is a wrapper the bridge spawns directly, so it
-    keeps the executable rule; there the mode is what decides whether the call works.
+    keeps the executable rule; there the mode is what decides whether the call works. TypeScript
+    source is never usable, even on Windows where the “any file is a program” branch would wave it
+    through: Node cannot resolve its build-style imports, and the spawn then fails with a stack
+    trace naming an unrelated file instead of saying “this is source, build it”.
     """
     if not os.path.isfile(path):
         return False
-    if path.lower().endswith(CATBUS_SCRIPT_SUFFIXES):
+    lowered = path.lower()
+    if lowered.endswith(CATBUS_SOURCE_SUFFIXES):
+        return False
+    if lowered.endswith(CATBUS_SCRIPT_SUFFIXES):
         return os.access(path, os.R_OK)
     return os.name == 'nt' or os.access(path, os.X_OK)
 
@@ -483,6 +499,38 @@ def catbus_candidates(env: dict | None = None, system: str | None = None) -> lis
     return [path for path in dict.fromkeys(catbus_candidate_paths(system, env)) if catbus_entry_usable(path)]
 
 
+def catbus_source_twin(path: str, system: str | None = None) -> str:
+    """The built entry a TypeScript source path names, or '' when the path is not source.
+
+    “Point it at the adapter” naturally means the file the checkout contains, and in a CatBus
+    development copy that file is ``src/integrations/crawler-workflow/cli.ts``. Node cannot run it
+    (see :data:`CATBUS_SOURCE_SUFFIXES`), so the honest answer is the twin the build produced:
+    ``src`` becomes ``dist`` and the suffix becomes the one Node runs. Only the *last* ``src``
+    segment is rewritten, because a checkout may itself live under a directory called ``src``.
+
+    '' means "not a source path"; a non-empty answer may still not exist on disk, which is how the
+    caller tells “build the checkout” apart from “no CatBus here at all”.
+    """
+    path = str(path or '').strip()
+    if not path or not path.lower().endswith(CATBUS_SOURCE_SUFFIXES):
+        return ''
+    os_name = platform_name(system)
+    mod = ntpath if os_name == 'win32' else posixpath
+    norm = mod.normpath(path)
+    suffix = mod.splitext(norm)[1].lower()
+    drive, tail = mod.splitdrive(norm)
+    rooted = tail.startswith(mod.sep)
+    parts = [part for part in tail.split(mod.sep) if part]
+    for index in range(len(parts) - 1, -1, -1):
+        if parts[index].lower() == 'src':
+            parts[index] = 'dist'
+            break
+    parts[-1] = mod.splitext(parts[-1])[0] + CATBUS_BUILT_SUFFIX[suffix]
+    if drive or rooted:
+        return mod.join(drive + mod.sep, *parts)
+    return mod.join(*parts)
+
+
 def catbus_entry_at(path: str, system: str | None = None) -> str:
     """The adapter entry a hand-written path points at: a file as given, a checkout root resolved.
 
@@ -490,6 +538,10 @@ def catbus_entry_at(path: str, system: str | None = None) -> str:
     “指到 CatBus 的目录”. A directory is the second one, so it gains the one suffix that makes it
     the entry — which is also what ``CATBUS_HOME`` has always meant here. Joined with the TARGET's
     separator, so a Linux answer asked from this box still reads as a Linux path.
+
+    A ``.ts`` path is source, never the entry, so it is answered with its built twin: pointing the
+    box at ``src/.../cli.ts`` is what a developer does, and refusing it as “no CatBus” hid a
+    checkout that had simply been built one directory over.
     """
     path = str(path or '').strip()
     if not path:
@@ -497,7 +549,7 @@ def catbus_entry_at(path: str, system: str | None = None) -> str:
     if os.path.isdir(path):
         join, _sep = _path_shape(platform_name(system))
         return join(path, *CATBUS_ENTRY)
-    return path
+    return catbus_source_twin(path, system) or path
 
 
 def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | None = None) -> str:

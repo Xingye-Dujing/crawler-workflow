@@ -149,6 +149,17 @@ def _probe_now() -> Probe:
         )
     entry = machine.find_catbus_cli(cli_setting)
     if not entry:
+        # A checkout pointed at its ``.ts`` is a *named* state, not “no CatBus”: the twin tells the
+        # user which build output is missing, and a build fixes it without touching this setting.
+        twin = machine.catbus_source_twin(cli_setting)
+        if twin:
+            return Probe(
+                available=False,
+                reason_key='catbus.sourceOnly',
+                reason_params={'path': cli_setting, 'entry': twin},
+                node=node,
+                node_version=node_version,
+            )
         return Probe(available=False, reason_key='catbus.noCli', node=node, node_version=node_version)
     call = _call(argv_for(node, entry, ['capabilities']), capture=True)
     if call.spawn_error or call.code != 0:

@@ -214,7 +214,7 @@
 
 1. 装 Node（CatBus 的 `engines`：`^22.22.2 || ^24.15.0 || >=26.0.0`）；
 2. 装 CatBus（`npm i -g catbus-cli`，或用一份源码检出）；
-3. 告诉本项目适配器在哪。**首选项是“设置”面板里的两栏**：“CatBus 适配器路径”可填 `…/crawler-workflow/cli.js` 或直接填一份 CatBus 目录（自动补上入口）；“CatBus 的 Node 程序”只接受程序本身
+3. 告诉本项目适配器在哪。**首选项是“设置”面板里的两栏**：“CatBus 适配器路径”可填 `…/crawler-workflow/cli.js`、一份 CatBus 目录（自动补上入口），或源码 `…/src/…/cli.ts`（自动换成同一检出的 `dist/**/cli.js`；Node 不能直接运行 TS 源码，构建缺失时会点名说该构建哪个文件）；“CatBus 的 Node 程序”只接受程序本身
    （`node.exe` / `/usr/bin/node`），填成目录会被点名说明。两栏都留空 = 按本机系统查找。环境变量优先级：**面板 > 环境变量 > 系统候选表 > `PATH`**（`CATBUS_HOME`/`CIXI_CATBUS_CLI`/`CATBUS_CLI`，Node 同理
    `CIXI_NODE_BIN`/`NODE_BIN`）。存盘后立刻重新探测一次本机能力——缓存里那句“本机没有”不该把刚修好的选项继续压灰。
 4. 在 CatBus 侧登录它自己的账号：`catbus <平台> auth login`（**不是**本项目的“打开浏览器登录”）。它的登录门按后端分别发问（`bilibili@work` 与 `bilibili@work#catbus` 是两个判定），绝不缓存成一份 Cookie 判决。

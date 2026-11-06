@@ -30,6 +30,10 @@ ZH = {
     'catbus.probeFailed': 'CatBus 适配器没能给出能力清单：{detail}',
     'catbus.probeUnreadable': 'CatBus 适配器返回的不是能读的答案：{detail}',
     'catbus.refused': '{platform} / {mode} 通过 CatBus 采集失败：{detail}',
+    'catbus.sourceOnly': (
+        'CatBus 适配器指向的是 TypeScript 源码（{path}），Node 不能直接运行它；请先在 CatBus 目录里构建，'
+        '或把这里改到构建产物：{entry}'
+    ),
     'catbus.start': 'CatBus 开始采集：{mode}，目标 {n} 条',
     'catbus.startOnce': 'CatBus 开始执行：{mode}',
     'catbus.stopped': '{platform} / {mode} 已通过 CatBus 停止，已经落库的行保留',
@@ -219,6 +223,10 @@ EN = {
     'catbus.probeFailed': 'the CatBus adapter could not report its capability list: {detail}',
     'catbus.probeUnreadable': 'the CatBus adapter answered with something unreadable: {detail}',
     'catbus.refused': '{platform} / {mode} could not be crawled through CatBus: {detail}',
+    'catbus.sourceOnly': (
+        'the CatBus adapter path is TypeScript source ({path}), which Node cannot run directly; build '
+        'the CatBus checkout first, or point this setting at the build output: {entry}'
+    ),
     'catbus.start': 'CatBus starts crawling: {mode}, target {n} rows',
     'catbus.startOnce': 'CatBus starts: {mode}',
     'catbus.stopped': '{platform} / {mode} was stopped through CatBus; the rows already stored are kept',

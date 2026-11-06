@@ -291,6 +291,32 @@ class TestTheSecondBackendPaths:
         assert ghost in body['warnings'][0]
         assert 'catbus_cli' in body['warnings'][0], 'two boxes share a panel; the warning says which'
 
+    def test_a_source_path_is_accepted_when_its_build_exists(self, client, tmp_path):
+        """A developer points the box at the checkout's ``cli.ts``; the stored value stays as typed,
+        and the resolution maps it to the ``dist`` twin. Warning here would be noise."""
+        source = tmp_path / 'src' / 'integrations' / 'cli.ts'
+        source.parent.mkdir(parents=True)
+        source.write_text('export {};\n', encoding='utf-8')
+        built = tmp_path / 'dist' / 'integrations' / 'cli.js'
+        built.parent.mkdir(parents=True)
+        built.write_text('// catbus\n', encoding='utf-8')
+        body = client.post('/api/settings', json={'catbus_cli': str(source)}).get_json()
+        assert body['warnings'] == [], body['warnings']
+        assert body['settings']['catbus_cli'] == str(source)
+
+    def test_source_without_a_build_says_which_file_to_build(self, client, tmp_path):
+        """The old behaviour stored it silently and the backend was simply absent: the warning has
+        to name the build output, not just “TypeScript source is unusable”."""
+        source = tmp_path / 'src' / 'integrations' / 'cli.ts'
+        source.parent.mkdir(parents=True)
+        source.write_text('export {};\n', encoding='utf-8')
+        body = client.post('/api/settings', json={'catbus_cli': str(source)}).get_json()
+        assert body['settings']['catbus_cli'] == str(source), 'the box keeps what was typed'
+        assert len(body['warnings']) == 1
+        assert 'catbus_cli' in body['warnings'][0], 'two boxes share a panel; the warning says which'
+        assert str(source) in body['warnings'][0]
+        assert str(tmp_path / 'dist' / 'integrations' / 'cli.js') in body['warnings'][0]
+
     def test_a_folder_in_the_node_box_is_refused_in_words(self, client, tmp_path):
         """``catbus_node`` is a program, and a directory would fail as "no Node" — the wrong sentence."""
         folder = tmp_path / 'v24'

@@ -27,7 +27,7 @@
 | `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。按系统查的第二条路（Windows 查安装根、Linux 查 `/usr/bin/chromium` 等与 `PATH`、macOS 查 bundle）；容器里通常是 `CHROME_BIN=/usr/bin/chromium`。**本项目要求使用本机已安装的 Chrome**；设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上** | 空 |
 | `CIXI_DRIVER_PATH` | chromedriver 路径（等价于设置面板的“驱动路径”）。**必须指向本机已安装、与大版本匹配的驱动**；本仓库不做自动下载，驱动缺失/版本不符按名拒绝 | 空 |
 | `CIXI_NODE_BIN` / `NODE_BIN` | 第二采集后端（CatBus）用的 Node 运行时，按系统查表；版本按 CatBus `engines` 核对，太旧按名拒绝 | 空 |
-| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个直接指名文件或可执行包装；`CATBUS_HOME` 指源码检出根；都没设就按 npm 全局前缀找。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
+| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个指名文件、可执行包装或源码 `cli.ts`（自动换成构建产物 `dist/**/cli.js`）；`CATBUS_HOME` 指源码检出根（同样读 `dist` 入口）；都没设就按 npm 全局前缀找。**Node 不能直接运行 TS 源码**（类型擦除不重写 `./x.js` 导入），源码没有构建产物时按名说明要构建哪个文件。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码：启动时检查 `stdout/stderr` 能不能写汉字，不能就改 UTF-8 并打印一行；能写就只把 `errors` 设成 `replace`，**不改编码**（强扭成 UTF-8 反而把正常窗口弄成乱码） | — |
 
 > **三套系统都在范围内**：Windows 是开发机，Linux 是云端部署目标，macOS 也要求可用。只有 `desktop/`
@@ -47,7 +47,7 @@
 | `driver_path` | chromedriver 路径（覆盖 `core/config.py` 默认值） |
 | `browser_binary` | Chrome 二进制路径 |
 | `latex_binary` | `xelatex` 可执行文件（“编译”节点与论文成稿用它把 LaTeX 转 PDF；空=自动检测 PATH 与常见 MiKTeX 安装根） |
-| `catbus_cli` / `catbus_node` | 第二采集后端（CatBus）的两个本机路径，与“驱动路径”同一形状。`catbus_cli` 可填适配器文件或一份 CatBus 目录（自动补入口）；`catbus_node` 只接受程序本身。都可留空=按本机系统查找；优先级 设置面板 > 环境变量 > 系统候选表 > `PATH`。路径不存在只警告不拒绝，保存后面板立刻重探本机能力 |
+| `catbus_cli` / `catbus_node` | 第二采集后端（CatBus）的两个本机路径，与“驱动路径”同一形状。`catbus_cli` 可填构建产物 `cli.js`、一份 CatBus 目录（自动补入口）或源码 `cli.ts`（自动换成 `dist/**/cli.js`；**Node 跑不了 TS 源码**，构建缺失时按名给出该构建的文件）；`catbus_node` 只接受程序本身。都可留空=按本机系统查找；优先级 设置面板 > 环境变量 > 系统候选表 > `PATH`。路径不存在只警告不拒绝，保存后面板立刻重探本机能力 |
 | `window_size` | 浏览器窗口尺寸（`--window-size=WxH`，默认 `1920x1080`） |
 | `page_load_timeout` / `element_timeout` | 页面/元素超时（秒；默认 40 / 15） |
 | `ollama_host` | Ollama 地址（覆盖环境变量） |

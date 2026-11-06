@@ -18,6 +18,7 @@ import re
 import threading
 
 from core.config import Config
+from core.machine import catbus_source_twin
 
 from i18n import t
 
@@ -215,6 +216,12 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     # A folder is not a runtime; naming ``…\nvm\v24\bin`` would otherwise be accepted
                     # and then fail as "no Node", which is a message about the wrong thing.
                     warnings.append(t('set.catbusNeedFile', tool=key, path=v))
+                twin = catbus_source_twin(v) if key == 'catbus_cli' else ''
+                if twin and os.path.isfile(v) and not os.path.isfile(twin):
+                    # Stored as typed, because the adapter resolution maps it: a build makes this
+                    # exact setting work. Saying so here is the difference between “build it” and a
+                    # backend that is silently absent until someone reads the log.
+                    warnings.append(t('set.catbusSource', tool=key, path=v, entry=twin))
                 vals[key] = v
             elif key == 'window_size':
                 v = str(raw or '').strip()
