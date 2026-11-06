@@ -30,7 +30,10 @@ _TABLE_GROUPS = (
 
 
 def detect(text: str) -> bool:
-    if re.search(r'(?m)^PT\s+\S', text) and re.search(r'(?m)^ER\s*$', text):
+    # Spaces, never ``\s``: the Tab-delimited download's header row is ``PT\tAU\tTI\t…``, and
+    # ``\s`` claimed it here — then the tagged reader found no ``TI`` line and answered "no
+    # records" for a full, valid site download (unsupported.py names it now instead).
+    if re.search(r'(?m)^PT +\S', text) and re.search(r'(?m)^ER\s*$', text):
         return True
     # A user who opens the Excel export and re-saves it as CSV is the common case, and the
     # upload route recognises formats from the text before it ever builds a frame.

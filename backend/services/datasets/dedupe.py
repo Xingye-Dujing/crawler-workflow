@@ -298,13 +298,21 @@ def normalize_text(text: str) -> str:
 
 
 def normalized_key(text: str) -> str:
-    """sha1 of the normalised text — the "same comment" key.
+    """sha1 of the normalised text — the "same comment" key, or ``''`` when no residue is left.
 
     Separate from ``normalize_text`` so callers that only compare two rows do
     not carry a 40-character string per row, and so the key stays stable if
     the normalisation gains a rule (a stored key is a contract).
+
+    ``''`` is the one answer that is not an identity: a comment made only of URLs or emoticon
+    codes normalises to nothing, and every such comment would otherwise share one key — a
+    dedupe then deleted three distinct comments as "the same" (the near-duplicate op already
+    skips these rows; this is the same rule at the key itself).
     """
-    return hashlib.sha1(normalize_text(text).encode('utf-8')).hexdigest()
+    normalized = normalize_text(text)
+    if not normalized:
+        return ''
+    return hashlib.sha1(normalized.encode('utf-8')).hexdigest()
 
 
 # ─── SimHash ───

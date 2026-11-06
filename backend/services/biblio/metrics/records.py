@@ -59,9 +59,27 @@ class BiblioError(ValueError):
 # ─── Shared parsing helpers ─────────────────────────────────────
 
 
+def _cell_text(value) -> str:
+    """One table cell as text, with a missing value reading as EMPTY rather than ``'nan'``.
+
+    ``float('nan')`` is truthy, so ``str(value or '')`` keeps it: an uploaded CSV with a partly
+    blank column reaches this module as NaN (``pd.DataFrame(records)`` re-materialises ``None``
+    as NaN), and every graph then grew a real entity named ``nan``. ``text()`` in
+    ``formats/common.py`` had the right rule already; this is the same one for metrics.
+    """
+    if value is None:
+        return ''
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
 def _split(value) -> list[str]:
     seen: list[str] = []
-    for part in _LIST_SPLIT.split(str(value or '')):
+    for part in _LIST_SPLIT.split(_cell_text(value)):
         item = part.strip().strip('.')
         if item and item not in seen:
             seen.append(item)
@@ -69,12 +87,12 @@ def _split(value) -> list[str]:
 
 
 def _year(value) -> int | None:
-    match = _YEAR.search(str(value or ''))
+    match = _YEAR.search(_cell_text(value))
     return int(match.group(0)) if match else None
 
 
 def _numeric(value) -> float:
-    text = str(value if value is not None else '').replace(',', '').strip()
+    text = _cell_text(value).replace(',', '').strip()
     try:
         return float(text)
     except ValueError:
@@ -118,7 +136,7 @@ def _reference_nodes(
 
 def _document_references(record: dict, columns: dict) -> tuple[list[str], list[dict]]:
     """The raw and structured references a document carries."""
-    raw_text = str(record.get(columns['reference']) or '')
+    raw_text = _cell_text(record.get(columns['reference']))
     raw_refs = [line.strip() for line in raw_text.splitlines() if line.strip()]
     structured = references_from_json(record.get('引文')) if '引文' in record else []
     return raw_refs, structured
@@ -274,9 +292,9 @@ def _doc_terms(
         return _split(row.get(label_columns.get('author', '作者')))[:_MAX_LABEL_TERMS]
     parts = []
     if source in ('all', 'title'):
-        parts.append(str(row.get(label_columns.get('title', columns['title'])) or ''))
+        parts.append(_cell_text(row.get(label_columns.get('title', columns['title']))))
     if source in ('all', 'abstract'):
-        parts.append(str(row.get(label_columns.get('abstract', columns['abstract'])) or ''))
+        parts.append(_cell_text(row.get(label_columns.get('abstract', columns['abstract']))))
     text = ' '.join(parts)
     try:
         tokens = KeywordExtractor.tokenize(text, _TERM_POS)
@@ -289,7 +307,7 @@ def _doc_terms(
 
 
 def _term_entities(row: dict, columns: dict) -> list[str]:
-    text = ' '.join(str(row.get(columns[name]) or '') for name in ('title', 'abstract'))
+    text = ' '.join(_cell_text(row.get(columns[name])) for name in ('title', 'abstract'))
     try:
         tokens = KeywordExtractor.tokenize(text, _TERM_POS)
     except Exception:
@@ -440,10 +458,10 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
 
         if entity in COUPLING_TYPES:
             if entity in ('journal', 'source'):
-                name = str(record.get(columns['entity']) or '').strip()
+                name = _cell_text(record.get(columns['entity'])).strip()
             else:
-                title = str(record.get(columns['title']) or '').strip()
-                record_id = str(record.get('记录ID') or '').strip()
+                title = _cell_text(record.get(columns['title'])).strip()
+                record_id = _cell_text(record.get('记录ID')).strip()
                 name = title or record_id or f'record-{len(docs) + 1}'
                 if name in seen_doc_names:
                     name = f'{name}（{record_id[:6] or len(docs) + 1}）'
@@ -464,7 +482,7 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
                 # Only a fused table carries 来源; a plain literature or crawl table never does,
                 # and then the node table grows neither column (an all-empty provenance column
                 # would read as a claim that everything came from nowhere in particular).
-                'source': str(record.get('来源') or '').strip() if '来源' in df.columns else '',
+                'source': _cell_text(record.get('来源')).strip() if '来源' in df.columns else '',
                 'tc': _numeric(record.get(columns['tc'])) if columns['tc'] in df.columns else None,
                 'usage': _numeric(record.get(columns['usage'])) if columns['usage'] in df.columns else None,
                 # The overlay labels travel WITH the document, because a node's distribution is
@@ -627,9 +645,21 @@ def _apply_label_rules(
             new_node_years[canonical] = node_years.get(key)
 
     for doc in docs:
-        doc['entities'] = [mapping[name] for name in doc['entities'] if name in mapping]
+        # ``dict.fromkeys``: the feature exists because ONE document may carry two spellings of
+        # the same entity (``关键词 = 'AI;人工智能'``). Mapping them without collapsing produced
+        # ``['AI','AI']`` — double 频次, doubled edges, cosine > 1 and, with one document, a
+        # self-loop.
+        doc['entities'] = list(dict.fromkeys(mapping[name] for name in doc['entities'] if name in mapping))
         if doc.get('name') in mapping:
             doc['name'] = mapping[doc['name']]
+    if str(params.get('entity_type') or '') not in COUPLING_TYPES:
+        # The counts must be re-derived from the COLLAPSED entity list: merging the per-spelling
+        # year counts above added AI's documents and 人工智能's documents together, so the alias
+        # pair still reported one concept twice (a document carrying both spellings counted 2).
+        new_year_counts = defaultdict(Counter)
+        for doc in docs:
+            for entity_name in doc['entities']:
+                new_year_counts[entity_name][doc['year']] += 1
 
     notes = []
     if aliased:

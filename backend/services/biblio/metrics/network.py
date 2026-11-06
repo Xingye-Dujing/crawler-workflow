@@ -197,7 +197,9 @@ def _normalized_edges(
             weight = 2.0 * c / (fi + fj)
         elif measure == 'jaccard':
             denominator = fi + fj - c
-            weight = count / denominator if denominator > 0 else 0.0
+            # The numerator the switch selected, like cosine/dice/association above. Dividing
+            # the raw ``count`` here mixed two counting modes in one number.
+            weight = c / denominator if denominator > 0 else 0.0
         else:
             weight = c / (fi * fj)
         if weight <= 0:

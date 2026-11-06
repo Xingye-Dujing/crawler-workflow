@@ -151,6 +151,33 @@ class TestInternationalFormats:
                 continue
             raise AssertionError(f'{path.name} is a fixture no reader owns')
 
+    def test_a_wos_tab_delimited_export_is_named_not_read_as_empty(self):
+        """The tab separator matched the tagged reader's ``\\s`` and then found no ``TI`` line:
+        a full site download was answered “no records” instead of naming the shape."""
+        text = 'PT\tAU\tTI\tPY\nJ\tZhang, Y\tA study of X\t2021\nER\n'
+        with pytest.raises(ValueError) as exc:
+            parse_text(text)
+        message = str(exc.value)
+        assert 'Tab-delimited' in message or '制表符' in message, message
+
+    def test_a_semicolon_csv_reads_its_own_columns(self):
+        """The delimiter check read the already-split header cells, so ``count(';')`` was always
+        zero and a European list-separator export became a one-column table."""
+        from services.biblio.formats.common import frame_of
+
+        frame = frame_of('Title;Authors;Year\nA;Zhang, Y;2021\n')
+        assert list(frame.columns) == ['Title', 'Authors', 'Year']
+        assert frame.iloc[0]['Authors'] == 'Zhang, Y'
+
+    def test_the_china_spellings_are_one_country(self):
+        """``PEOPLES R CHINA`` used to become “People's Republic of China” while a bare
+        ``China`` stayed “China”: one country split across two entity rows while the map
+        merged them — two answers to one question."""
+        from services.biblio.formats.countries import country_in_affiliation
+
+        spellings = ('Peoples R China', "People's Republic of China", 'China', 'P R China')
+        assert {country_in_affiliation(value) for value in spellings} == {"People's Republic of China"}
+
     def test_a_lens_patent_export_is_refused_by_name(self):
         """The real file we were given is the patent collection; drawing it as authors is worse."""
         with pytest.raises(ValueError) as exc:

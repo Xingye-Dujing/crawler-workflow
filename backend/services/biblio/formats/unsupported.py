@@ -42,4 +42,21 @@ def lens_patents(value: str) -> str:
 
 
 #: Each entry answers a recognisable file with the sentence that refuses it.
-REFUSALS = ((lens_patents,),)
+
+
+def wos_tab_delimited(value: str) -> str:
+    """Name WoS' Tab-delimited download, or return ``''``.
+
+    Its first row is the two-letter tagged vocabulary separated by TABS (``PT\tAU\tTI\tPY``),
+    not the tagged text's ``PT J``/``ER`` layout. The tagged reader used to claim the file and
+    then answer "no records", which reads as a corrupt download when the real problem is a
+    shape this build does not read.
+    """
+    first = next((line for line in str(value or '').splitlines() if line.strip()), '')
+    cells = [cell.strip().upper() for cell in first.split('\t')]
+    if len(cells) >= 3 and cells[0] == 'PT' and {'TI', 'AU'} & set(cells):
+        return t('api.biblioWosTab')
+    return ''
+
+
+REFUSALS = ((lens_patents,), (wos_tab_delimited,))

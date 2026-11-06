@@ -15,6 +15,8 @@ nothing is refused by name rather than contributing an empty slice of the graph.
 import re
 from pathlib import Path
 
+import pandas as pd
+
 from i18n import t
 
 #: The canonical record columns a ``biblio`` node reads with its default mapping, plus the
@@ -125,9 +127,26 @@ def _candidates(columns, wanted: list[str]) -> str:
     return ''
 
 
+def _cell_text(value) -> str:
+    """A cell as text; NaN/NaT read as EMPTY, never as the entity ``'nan'``.
+
+    ``float('nan')`` is truthy and survives ``value or ''``. A fused table's partly blank
+    column is exactly how that reaches a knowledge graph (an uploaded CSV goes through a
+    records round trip, which turns ``None`` back into NaN).
+    """
+    if value is None:
+        return ''
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
 def _values(value) -> list[str]:
     seen: list[str] = []
-    for part in _LIST_SPLIT.split(str(value if value is not None else '')):
+    for part in _LIST_SPLIT.split(_cell_text(value)):
         item = part.strip().strip('.')
         if item and item not in seen:
             seen.append(item)
@@ -141,7 +160,7 @@ def _year_of(value) -> str:
     ``2021年``; the slicing downstream needs an integer year or nothing at all, never a
     half-parsed timestamp.
     """
-    match = _YEAR.search(str(value if value is not None else ''))
+    match = _YEAR.search(_cell_text(value))
     return match.group(1) if match else ''
 
 
@@ -191,23 +210,23 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
             year = _year_of(record.get(found['year'])) if found['year'] else ''
             if not year and not parsed['keep_undated']:
                 continue
-            title = str(record.get(found['title']) or '').strip() if found['title'] else ''
+            title = _cell_text(record.get(found['title'])).strip() if found['title'] else ''
             # A table that carries several platforms labels each row with its OWN one; the
             # table-level label is only the fallback for rows that do not say.
-            origin = (str(record.get(source_column) or '').strip() if source_column else '') or label
+            origin = (_cell_text(record.get(source_column)).strip() if source_column else '') or label
             rows.append(
                 {
                     '记录ID': f'{origin}#{position}-{index}',
                     '题名': title or f'{origin} {index + 1}',
-                    '作者': str(record.get(found['author']) or '').strip() if found['author'] else '',
-                    '作者单位': str(record.get(found['affiliation']) or '').strip() if found['affiliation'] else '',
+                    '作者': _cell_text(record.get(found['author'])).strip() if found['author'] else '',
+                    '作者单位': _cell_text(record.get(found['affiliation'])).strip() if found['affiliation'] else '',
                     # A post has no journal; the source name is the closest honest reading of
                     # "where this record came from", and it is what the dual map would key on.
                     '来源期刊': origin,
                     '年份': year,
                     '关键词': ';'.join(terms),
-                    '摘要': str(record.get(found['text']) or '').strip() if found['text'] else '',
-                    '参考文献': str(record.get(found['reference']) or '').strip() if found['reference'] else '',
+                    '摘要': _cell_text(record.get(found['text'])).strip() if found['text'] else '',
+                    '参考文献': _cell_text(record.get(found['reference'])).strip() if found['reference'] else '',
                     '来源': origin,
                 }
             )
@@ -249,7 +268,7 @@ def _source_label(records, columns, parsed: dict, pid, position: int) -> tuple[s
     """
     source_column = _candidates(columns, parsed['source_columns'])
     if source_column:
-        values = {str(record.get(source_column) or '').strip() for record in records}
+        values = {_cell_text(record.get(source_column)).strip() for record in records}
         values.discard('')
         if len(values) == 1:
             return values.pop(), source_column
@@ -270,7 +289,6 @@ def export_records(rows: list[dict], out_dir: str, base_name: str) -> str:
     hand to a colleague, and the only way to check that a term really did come from the corpus
     they think it came from.
     """
-    import pandas as pd
 
     target = Path(out_dir)
     target.mkdir(parents=True, exist_ok=True)

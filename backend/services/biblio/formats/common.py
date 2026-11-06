@@ -134,11 +134,23 @@ def make_row(
     )
 
 
+def delimiter_of(text_value: str) -> str:
+    """The CSV separator of the first data line: ``,`` unless semicolons are the majority.
+
+    Chosen from the raw LINE, not from ``header_of``'s already-split cells: ``list.count(';')``
+    counts cells that are exactly ``';'``, so the old check was always ``0 > 0`` and the
+    semicolon path could never run (a European Excel export was stored as one column).
+    """
+    first = next((line for line in data_lines(text_value) if line.strip()), '')
+    return ';' if first.count(';') > first.count(',') else ','
+
+
 def header_of(text_value: str) -> list[str]:
     """The first CSV line's column names, with a BOM removed."""
+    delimiter = delimiter_of(text_value)
     for line in data_lines(text_value):
         try:
-            row = next(csv.reader([line]))
+            row = next(csv.reader([line], delimiter=delimiter))
         except csv.Error:
             return []
         return [cell.strip().lstrip('\ufeff').strip('"\'') for cell in row]
@@ -169,10 +181,7 @@ def data_lines(text_value: str) -> list[str]:
 def frame_of(text_value: str) -> pd.DataFrame:
     """Read a bibliographic CSV without letting pandas invent nulls."""
     lines = data_lines(text_value)
-    header = header_of(text_value)
-    delimiter = ','
-    if header and header.count(';') > header.count(','):
-        delimiter = ';'
+    delimiter = delimiter_of(text_value)
     return pd.read_csv(
         io.StringIO('\n'.join(lines)),
         sep=delimiter,

@@ -17,6 +17,8 @@ ZH = {
     '不是学术文献。文献计量网络按学术文献建模，把发明人与申请人当作者画出来只会得到一张错图；'
     '请在 Lens 里改选文献（非专利）集合后重新导出',
     'api.biblioNotRecognized': '无法把 {name} 识别为任何已支持的文献导出格式',
+    'api.biblioWosTab': '这是 Web of Science 的“制表符分隔（Tab-delimited）”导出，'
+    '本程序读的是纯文本（Tagged）或 Excel/CSV 导出；请在导出时改选其中一种后重新上传',
     'api.bodyNotObject': '请求体必须是 JSON 对象',
     'api.cloudNoLocalModel': (
         '这台服务器没有本地模型可连（“{provider}”需要宿主自己跑一个 Ollama 守护进程）：'
@@ -150,6 +152,7 @@ ZH = {
     'ds.corrupt': '数据集 {did} 读不出来（记录已损坏），请重新上传',
     'ds.lineage_columns': '累积数据集“{name}”的列与已有版本不一致：多出 {extra}；缺少 {missing}',
     'ds.lineage_current_missing': '累积数据集“{name}”的当前版本 {id} 不存在',
+    'ds.lineage_empty': '累积数据集“{name}”还没有任何行，这次也没有新行可追加',
     'ds.lineage_identity': '未知的去重方式：{value}（只能是整行或指定列）',
     'ds.lineage_key_missing': '去重列不在表中：{cols}',
     'ds.lineage_keys_required': '按列去重时必须填写去重列',
@@ -200,6 +203,8 @@ EN = {
     'Number), not scholarly records. The bibliometric network models publications, so drawing '
     'inventors and applicants as authors would only produce a wrong figure',
     'api.biblioNotRecognized': 'Could not recognize {name} as any supported bibliographic export',
+    'api.biblioWosTab': 'This is a Web of Science Tab-delimited export. This app reads the plain-text '
+    '(Tagged) or the Excel/CSV export; choose one of those and upload it again',
     'api.bodyNotObject': 'request body must be a JSON object',
     'api.cloudNoLocalModel': (
         'This server has no local model to talk to ("{provider}" wants an Ollama daemon on its own '
@@ -371,6 +376,7 @@ EN = {
         'Cumulative dataset “{name}” does not match its current version: extra {extra}; missing {missing}'
     ),
     'ds.lineage_current_missing': 'The current version {id} of cumulative dataset “{name}” is missing',
+    'ds.lineage_empty': 'Cumulative dataset “{name}” holds no rows yet, and this run has none to append',
     'ds.lineage_identity': 'Unknown duplicate policy: {value} (use whole row or named columns)',
     'ds.lineage_key_missing': 'Key column(s) not in the table: {cols}',
     'ds.lineage_keys_required': 'The named-columns policy needs at least one key column',

@@ -540,6 +540,11 @@ class DatasetStore:
                 raise ValueError(
                     t('ds.lineage_too_large', name=clean, n=len(current) + len(added), max=Config.DATASET_MAX_ROWS)
                 )
+            if not added and not found:
+                # A brand-new lineage with no rows would be reported as version 0 while no row
+                # exists anywhere: the accumulate node logged success for a lineage it never
+                # created. There is nothing to accumulate yet, and that is said by name.
+                raise ValueError(t('ds.lineage_empty', name=clean))
             if not added:
                 meta = self.meta(current_id) or {}
                 return {

@@ -270,6 +270,7 @@ _ALIASES = {
     'UNITED STATES OF AMERICA': 'United States',
     'PEOPLES R CHINA': "People's Republic of China",
     "PEOPLE'S REPUBLIC OF CHINA": "People's Republic of China",
+    'PEOPLES REPUBLIC OF CHINA': "People's Republic of China",
     'P R CHINA': "People's Republic of China",
     'PR CHINA': "People's Republic of China",
     'CHINA MAINLAND': 'China',
@@ -301,6 +302,11 @@ _ALIASES = {
 }
 
 _ALIASES = {**_ALIASES, **{name.upper(): name for name in _COUNTRIES.splitlines() if name.strip()}}
+# One canonical name per country, whichever spelling the export printed. The country list writes
+# ``China``; the affiliation table above writes the formal name, and without this fold a fused
+# corpus emitted BOTH as separate entity rows while the map merged them into one region.
+for _china_alias in ('CHINA', 'CHINA MAINLAND', 'MAINLAND CHINA'):
+    _ALIASES[_china_alias] = "People's Republic of China"
 _ALIASES = {alias: canonical for alias, canonical in _ALIASES.items() if alias}
 _ORDERED = sorted(_ALIASES, key=len, reverse=True)
 _TRAILING = re.compile(r'[^A-Z ]+$')

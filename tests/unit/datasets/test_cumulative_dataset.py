@@ -21,6 +21,14 @@ def _rows(*rows):
 
 
 class TestAppendLineage:
+    def test_a_brand_new_lineage_with_no_rows_is_refused(self, store):
+        """Returning a made-up ``version 0`` claimed a lineage that was never inserted: the
+        accumulate node printed “version=0” and the next run started again at version 1."""
+        with pytest.raises(ValueError, match='空累积'):
+            store.append_lineage('空累积', pd.DataFrame())
+        assert store.lineage('空累积') is None
+        assert store.lineage_history('空累积') == []
+
     def test_the_first_append_creates_version_one_and_the_second_appends(self, store):
         first = store.append_lineage('微博累积', _rows({'id': 1, 'value': 'a'}, {'id': 2, 'value': 'b'}))
         assert first['changed'] is True

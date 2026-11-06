@@ -37,6 +37,9 @@ def drop_duplicates(df: pd.DataFrame, columns: list = None, keep: str = 'first',
     joined = work[cols[0]].fillna('').astype(str)
     for name in cols[1:]:
         joined = joined + '\x1e' + work[name].fillna('').astype(str)
-    work['__dedupe_key__'] = joined.map(normalized_key)
+    # ``normalized_key`` answers '' for a row that normalises to nothing (URL-only, emoticon-
+    # only): that is "no identity", not one shared identity. A unique placeholder per position
+    # keeps those rows apart instead of deleting all but the first as duplicates.
+    work['__dedupe_key__'] = [key or f'__row_{position}__' for position, key in enumerate(joined.map(normalized_key))]
     out = work.drop_duplicates(subset=['__dedupe_key__'], keep=keep)
     return out.drop(columns=['__dedupe_key__']).reset_index(drop=True)

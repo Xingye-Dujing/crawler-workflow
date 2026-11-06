@@ -1019,6 +1019,15 @@ class TestDropDuplicatesModes:
             D.drop_duplicates(pd.DataFrame(self.FARM), columns=['正文'], mode=mode)
         assert 'drop_duplicates' in str(err.value) and mode in str(err.value)
 
+    def test_rows_that_normalise_to_nothing_are_not_all_one_comment(self):
+        """An empty residue is "no identity", not one shared identity: three different
+        link-only/emoticon-only comments used to collapse into one and be deleted."""
+        frame = pd.DataFrame(
+            [{'正文': value} for value in ('https://t.cn/A1', 'https://t.cn/B2', '[微笑]', '[doge]', '真实评论')]
+        )
+        out = D.drop_duplicates(frame, columns=['正文'], mode='normalized')
+        assert len(out) == 5, out['正文'].tolist()
+
     def test_a_blank_column_list_still_means_every_column(self):
         out = D.drop_duplicates(pd.DataFrame(self.FARM), mode='normalized')
         assert len(out) == 2, '留空=全部 is a rule of this step, not of one mode'

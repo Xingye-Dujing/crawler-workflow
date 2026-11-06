@@ -246,8 +246,8 @@ class TestCitations:
     def test_alias_and_exclusion_rules_run_before_the_graph(self):
         frame = pd.DataFrame(
             [
-                {'题名': 'a', '年份': 2020, '关键词': 'AI;人工智能;噪声', '摘要': ''},
-                {'题名': 'b', '年份': 2020, '关键词': 'AI;人工智能;噪声', '摘要': ''},
+                {'题名': 'a', '年份': 2020, '关键词': 'AI;人工智能;噪声;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2020, '关键词': 'AI;人工智能;噪声;乙', '摘要': ''},
             ]
         )
         result = metrics.build(
@@ -255,9 +255,38 @@ class TestCitations:
             _params(aliases='人工智能=AI', exclude_values='噪声'),
             'test',
         )
-        assert {row['节点'] for row in result['rows']} == {'人工智能'}
+        assert {row['节点'] for row in result['rows']} == {'人工智能', '乙'}
         assert any('别名合并' in note or 'Alias merge' in note for note in result['notes'])
         assert any('排除列表' in note or 'Exclusion list' in note for note in result['notes'])
+
+    def test_an_alias_pair_inside_one_document_counts_the_entity_once(self):
+        """``关键词 = 'AI;人工智能'`` is one concept written twice. Mapping both spellings without
+        collapsing them counted the concept twice in that document — inflated 频次, doubled edges,
+        a cosine above 1, and (with one document) a self-loop."""
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': 'AI;人工智能;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2020, '关键词': 'AI;乙', '摘要': ''},
+            ]
+        )
+        result = metrics.build(frame, _params(aliases='人工智能=AI'), 'test')
+        frequencies = {row['节点']: row['频次'] for row in result['rows']}
+        assert frequencies['人工智能'] == 2, frequencies
+        assert frequencies['乙'] == 2, frequencies
+        assert all(edge['source'] != edge['target'] for edge in result['edges']), result['edges']
+        assert all(edge['weight'] <= 1.0 for edge in result['edges']), result['edges']
+
+    def test_a_blank_cell_never_becomes_an_entity_named_nan(self):
+        """A records round trip turns ``None`` back into NaN, and ``str(nan or '')`` is ``'nan'``:
+        the graph grew a real entity named nan that no document ever mentioned."""
+        frame = pd.DataFrame(
+            [
+                {'题名': 'digital governance', '年份': 2020, '摘要': 'public administration reform'},
+                {'题名': 'city portals', '年份': 2020, '摘要': float('nan')},
+            ]
+        )
+        result = metrics.build(frame, _params(entity_type='term'), 'test')
+        assert 'nan' not in {row['节点'] for row in result['rows']}
 
     def test_citation_expansion_uses_references_from_records_in_the_table(self):
         frame = pd.DataFrame(
@@ -802,6 +831,13 @@ class TestFractionalCounting:
         split = metrics.build(_counting_frame(), _params(counting='fractional'), 'test')
         assert _edge(full, '甲', '丙') is not None
         assert _edge(split, '甲', '丙') is None
+
+    def test_jaccard_divides_the_same_numerator_it_selected(self):
+        """Cosine/dice/association read the fractional numerator; jaccard alone divided the raw
+        count by a denominator the fractional numerator had already been subtracted from — a
+        hybrid of two counting modes wearing the name of one."""
+        split = metrics.build(_counting_frame(), _params(counting='fractional', link_measure='jaccard'), 'test')
+        assert _edge(split, '甲', '乙')['weight'] == pytest.approx(2.1 / (3 + 3 - 2.1))
 
     def test_the_console_says_the_counting_ran_and_which_documents_were_split(self):
         quiet = metrics.build(_counting_frame(), _params(counting='full'), 'test')
