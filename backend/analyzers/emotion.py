@@ -171,7 +171,10 @@ Analyze strictly and output only the required plain string."""
             op='emotion',
             result_columns=['emotion', 'confidence'],
             blank=['', None],
-            fail_value=('Neutral', 0.5),
+            # A row the model answered with something unparseable is 未判定 with no confidence —
+            # the same third state the cleaner uses. 'Neutral' is a real verdict, so stamping it
+            # here let a chart that reads only the label report a failed read as a measured one.
+            fail_value=('未判定', None),
             build_prompt=self.build_emotion_prompt,
             parse=self.parse_emotion_response,
             ctx=ctx,

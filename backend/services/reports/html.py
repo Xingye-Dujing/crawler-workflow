@@ -161,8 +161,19 @@ def safe_stem(name: str, fallback: str = 'report') -> str:
 
 
 def _text(value) -> str:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    """One cell as text; a missing value (None/NaN/NaT/pd.NA) is EMPTY, never ``'nan'``.
+
+    Checking the value itself, rather than stringifying the whole column first, keeps pandas'
+    spelling of a missing cell out of the document: ``astype(str)`` turns ``pd.NA`` into
+    ``'<NA>'`` and a float NaN into ``'nan'`` on some dtypes, and those would print as data.
+    """
+    if value is None:
         return ''
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
     return str(value)
 
 
@@ -360,7 +371,7 @@ class ReportService:
         head = ''.join(f'<th>{_cell(_localize_label(column))}</th>' for column in df.columns)
         body = ''.join(
             '<tr>' + ''.join(f'<td>{_cell(value)}</td>' for value in record) + '</tr>'
-            for record in shown.astype(str).values.tolist()
+            for record in shown.itertuples(index=False, name=None)
         )
         note = ''
         if rows > row_limit:

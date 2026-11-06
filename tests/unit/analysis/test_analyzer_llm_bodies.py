@@ -6,9 +6,9 @@ device tier can see:
 
 - what a model answer has to look like before it counts (the parsers are the
   only place a free-form reply becomes a table cell),
-- what a rejected answer becomes (``fail_value`` — an unparseable row is
-  *reported as Neutral*, not left blank, so the gap never shows up as a hole in
-  the table),
+- what a rejected answer becomes (``fail_value`` — an unparseable row becomes the
+  third state ``未判定`` with no confidence, never a real label like ``Neutral``/``Objective
+  Statement``, so a chart can tell a failed read from a measured verdict),
 - the ML fallback's neutral default and who it writes it into,
 - the exact result-column names the browser's result table addresses.
 
@@ -499,7 +499,7 @@ class TestRunnerDeclaration:
         assert seen['op'] == 'emotion'
         assert seen['result_columns'] == ['emotion', 'confidence']
         assert seen['blank'] == ['', None]
-        assert seen['fail_value'] == ('Neutral', 0.5)
+        assert seen['fail_value'] == ('未判定', None), 'a failed row must not wear the real Neutral verdict'
         assert 'skip_value' not in seen and 'min_len' not in seen
         assert seen['label'] == t('label.emotion')
         assert seen.get('extra_key', '') == ''  # nothing widens an emotion scope
@@ -510,7 +510,7 @@ class TestRunnerDeclaration:
         tendency.analyze_dataframe(one_row_frame(), '正文', ctx={'client': ScriptedClient()})
         assert seen['op'] == 'tendency'
         assert seen['result_columns'] == ['tendency', 'tendency_confidence']
-        assert seen['fail_value'] == ('Objective Statement', 0.5)
+        assert seen['fail_value'] == ('未判定', None), 'a failed row must not wear Objective Statement'
         assert 'skip_value' not in seen and 'min_len' not in seen
         assert seen['label'] == t('label.tendency')
 
@@ -539,22 +539,19 @@ class TestAnalyzerRows:
         assert len(client.prompts) == 1
         assert 'Media Content Analysis Expert' in client.prompts[0]
 
-    def test_an_unparseable_answer_becomes_the_neutral_failure_default(self, emotion):
-        """The row runner counts (None, None) as a failure and then fills the gap
-        with ``fail_value`` — so a bad answer is reported as Neutral 0.5 rather
-        than as a blank, which is why a chart can never tell the two apart."""
+    def test_an_unparseable_answer_becomes_undetermined_not_neutral(self, emotion):
+        """The row runner counts (None, None) as a failure and fills the gap with
+        ``fail_value``. It used to write Neutral 0.5 — a real verdict — so a chart reading the
+        label could not tell a failed read from a measured neutral. 未判定 is the third state."""
         client = ScriptedClient(default='这段话情绪不明显')
         result = emotion.analyze_dataframe(one_row_frame(), '正文', ctx={'client': client})
-        assert (result.loc[0, 'emotion'], result.loc[0, 'confidence']) == ('Neutral', 0.5)
+        assert (result.loc[0, 'emotion'], result.loc[0, 'confidence']) == ('未判定', None)
         assert len(client.prompts) == 1
 
-    def test_tendency_falls_back_to_objective_statement_the_same_way(self, tendency):
+    def test_an_unparseable_tendency_answer_is_undetermined_not_objective(self, tendency):
         client = ScriptedClient(default='无法判断')
         result = tendency.analyze_dataframe(one_row_frame(), '正文', ctx={'client': client})
-        assert (result.loc[0, 'tendency'], result.loc[0, 'tendency_confidence']) == (
-            'Objective Statement',
-            0.5,
-        )
+        assert (result.loc[0, 'tendency'], result.loc[0, 'tendency_confidence']) == ('未判定', None)
 
     def test_a_cleaner_receives_its_verdict_and_its_cleaned_text(self, cleaner):
         client = ScriptedClient(default='KEEP: 三亚的海非常蓝')

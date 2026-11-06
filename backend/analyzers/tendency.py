@@ -181,7 +181,10 @@ Analyze strictly and output only the required plain string."""
             op='tendency',
             result_columns=['tendency', 'tendency_confidence'],
             blank=['', None],
-            fail_value=('Objective Statement', 0.5),
+            # Same third state as emotion/cleaner: 'Objective Statement' is tendency's real
+            # neutral verdict, so an unparseable answer must not wear it (a label-only chart
+            # could not tell a failed read from a measured objective statement).
+            fail_value=('未判定', None),
             build_prompt=self.build_tendency_prompt,
             parse=self.parse_tendency_response,
             ctx=ctx,

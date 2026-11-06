@@ -279,6 +279,24 @@ class TestReportCharts:
         )
         assert captured['platforms'] == [['微博']]
 
+    def test_a_missing_cell_is_blank_not_a_pandas_spelling(self, tmp_path):
+        """The table used ``astype(str)`` on the frame first, which turns a missing value into
+        ``nan`` / ``<NA>`` / ``None`` before ``_cell`` can map it to an empty cell."""
+        import pandas as pd
+
+        from services.reports.html import ReportService
+
+        markup = ReportService(str(tmp_path)).build(
+            't',
+            [{'id': 'n1', 'title': 't', 'rows': [{'a': 1.0, 'b': None, 'c': pd.NA}]}],
+            options={'show_charts': False},
+        )
+        lowered = markup.lower()
+        assert '<td>nan</td>' not in lowered
+        assert '<td>none</td>' not in lowered
+        assert '<td>&lt;na&gt;</td>' not in lowered
+        assert markup.count('<td></td>') == 2
+
 
 class TestStudioImages:
     def test_only_images_are_offered_for_embedding(self, client, app_module):

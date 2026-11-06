@@ -18,6 +18,8 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
 
 - **情感分析（三模式）**：LLM 逐行深度分析、传统 ML（sklearn TF-IDF + 逻辑回归）批量推理，或**微调 BERT**；情绪标签集现按 **SMP2020-EWECT 六类**
   （`Anger`/`Fear`/`Joy`/`Neutral`/`Sadness`/`Surprise`，此前是少了 `Surprise` 的五类）。
+  - `llm` 逐行模式里，模型给出无法解析的回答时该行记 **`未判定`**（置信度留空），**不写 `Neutral`**：
+    “没判出来”和“判为中性”是两句话，只读标签的图表必须能区分。
   - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram。
     `/api/analysis/train` 的自训与 `ml_train/` 的重训共用这一管线。
   - `bert`（**默认**；未点名模型时自动取注册表里 emotion op 的默认模型）：填一个本机 HuggingFace 目录路径即可整列**分批推理**（有显卡自动走显卡，`batch_size`、
@@ -35,6 +37,8 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
     `snownlp`，并在控制台打印本次实际用了哪种**——绝不静默把 SnowNLP 的结论冒充成 bert。分析器**本身**被直接当 bert 调用仍按名拒绝（纵深防御）；勾 ≥2 模型的多模型对比不降级、维持按名拒绝。
     **注**：这一条通路在本仓库**从未真跑过**（开发机没有对应模型），不要把它当作已验证功能。
 - **倾向性分析（三模式）**：LLM 逐行、传统 ML 批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）。
+  - `llm` 逐行模式里，模型给出无法解析的回答时该行记 **`未判定`**（置信度留空），**不写 `Objective Statement`**；
+    与情绪/清洗的第三态一致，只读标签的图表不会把失败读成一次真实判定。
   - `bert`（**默认**；未点名模型时自动取注册表里 tendency op 的默认模型，缺栈/无模型时执行器降级到 `ml` 并打印）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——
     `ml_train/scripts/distill_tendency_labels.py` 用节点自己的 `llm` 通路在真实微博上逐条打标签（产出 `ml_train/datasets/tendency_distilled.csv`），再由
     `ml_train/scripts/train_tendency_bert_v1.py` / `train_tendency_bert_v2.py` 微调 `hfl/chinese-roberta-wwm-ext`。`pipeline('text-classification')` 直接读 `id2label`
