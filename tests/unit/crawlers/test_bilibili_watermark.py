@@ -55,6 +55,20 @@ def test_without_a_watermark_the_same_walk_fetches_the_boundary(crawler):
     assert crawler._watermark_candidate == 'BVnew1'
 
 
+def test_a_risk_code_mid_search_names_the_refusal_and_keeps_the_flag(crawler):
+    """A block that arrives after some rows landed used to be swallowed: the walk broke, the
+    summary said “完成”, and neither the console nor ``risk_blocked`` named the wall — a short
+    table settled DONE. It is a refusal now, flagged so the executor reports 风控 (back off)."""
+    crawler._wait_bvids = lambda: ['BV1', 'BV2', 'BV3']
+    answers = iter([{'code': 0, 'data': {'bvid': 'BV1'}}, {'code': -352}])
+    crawler._fetch_json = lambda _url: next(answers)
+    crawler._polite_pause = lambda *_args: None
+    with pytest.raises(RuntimeError, match='-352'):
+        crawler.search('keyword', target_count=5)
+    assert crawler.risk_blocked is True
+    assert [row['BV号'] for row in crawler.test_emitted] == ['BV1']
+
+
 def _source(platform, collect, **extra):
     params = {'platform': platform, 'collect': collect, **extra}
     return {'nodes': [{'id': 'node-0', 'type': 'source', 'platform': platform, 'params': params}], 'connections': []}

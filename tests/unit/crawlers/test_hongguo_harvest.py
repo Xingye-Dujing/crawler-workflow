@@ -163,6 +163,22 @@ def _harness(tmp_path, ui=None, capture_lines=(), params=None):
 
 
 class TestWalk:
+    def test_a_half_written_capture_line_is_kept_for_the_next_read(self, tmp_path):
+        """An append can land mid-line. Consuming that fragment (json.loads skipped it, the
+        offset had already passed it) silently lost the whole comment page it belonged to."""
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        first = _record(entries=[_entry('7001', '甲', 1792313924)])
+        with open(harness._capture, 'a', encoding='utf-8') as handle:
+            handle.write(first + '\n')
+            handle.write('{"kind": "comment"')
+        assert len(harness._read_records()) == 1, 'the complete line is read'
+        with open(harness._capture, 'a', encoding='utf-8') as handle:
+            handle.write(', "marker": 1}\n')
+        records = harness._read_records()
+        assert len(records) == 1
+        assert records[0]['marker'] == 1, 'the fragment was completed and read exactly once'
+        assert harness._read_records() == []
+
     def test_one_page_one_episode_is_the_site_attested_end(self, tmp_path):
         lines = [_record(entries=[_entry('7001', '第一', 1792313924), _entry('7002', '第二', 1792313925)], total=2)]
         harness, _said = _harness(tmp_path, capture_lines=lines)
@@ -266,8 +282,9 @@ class TestWalk:
     def test_two_pages_of_one_group_merge_without_double_counting(self, tmp_path):
         shared = _entry('7001', '重复', 1792313924)
         lines = [
-            _record(entries=[shared, _entry('7002', '甲', 1792313925)], total=3),
-            _record(entries=[_entry('7001', '重复', 1792313924), _entry('7003', '乙', 1792313926)], total=3),
+            _record(entries=[shared, _entry('7002', '甲', 1792313925)], total=4),
+            _record(entries=[_entry('7001', '重复', 1792313924), _entry('7003', '乙', 1792313926)], total=4),
+            _record(entries=[_entry('7004', '丙', 1792313927)], total=4),
         ]
         ui = _FakeUI(second_page_lines=[])
         harness, _said = _harness(tmp_path, ui=ui, capture_lines=lines)
@@ -277,8 +294,10 @@ class TestWalk:
         assert status == OK
         ids = [r['评论ID'] for r in rows]
         assert ids.count('7001') == 1, 'the same comment from two pages merges to one row'
-        assert set(ids) == {'7001', '7002', '7003'}
-        assert harness.end_reason == 'site_end', 'kept 3 of total 3 — now the arithmetic licenses it'
+        assert set(ids) == {'7001', '7002', '7003', '7004'}
+        floors = [r['楼层'] for r in rows]
+        assert len(set(floors)) == len(floors), f'a page overlap repeated a floor: {floors}'
+        assert harness.end_reason == 'site_end', 'kept 4 of total 4 — now the arithmetic licenses it'
 
     def test_a_silent_scroll_is_asked_again_before_the_thread_is_given_up(self, tmp_path):
         # The measured loss this retry exists for: a page that did not answer the first

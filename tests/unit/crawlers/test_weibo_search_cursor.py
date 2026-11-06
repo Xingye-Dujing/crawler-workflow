@@ -75,6 +75,33 @@ class TestTheCursorRecordsPositionNotContent:
         assert position.get('url_index') == total, 'and that it walked them all'
 
 
+class TestAnEmptyWindowIsTheSitesAnswer:
+    """未找到相关结果 is an ANSWER, not a page that never arrived. A date-range walk is mostly
+    empty hourly windows, and re-entering all of them on 继续 is a full page load apiece."""
+
+    @staticmethod
+    def _crawler(monkeypatch, no_result):
+        crawler = _bare(monkeypatch)
+        crawler._page_had_no_result = False
+
+        def await_page(_url):
+            crawler._page_had_no_result = no_result
+            return False
+
+        monkeypatch.setattr(crawler, '_await_search_page', await_page)
+        return crawler
+
+    def test_an_empty_window_goes_behind_the_cursor(self, monkeypatch):
+        crawler = self._crawler(monkeypatch, no_result=True)
+        assert crawler._scrape_single_search('https://s.weibo.com/x', 10) == []
+        assert crawler._window_walked_whole is True, 'an empty answer left the window unproven'
+
+    def test_a_page_that_never_rendered_stays_unproven(self, monkeypatch):
+        crawler = self._crawler(monkeypatch, no_result=False)
+        assert crawler._scrape_single_search('https://s.weibo.com/x', 10) == []
+        assert crawler._window_walked_whole is False, 'a failed load was recorded as walked whole'
+
+
 class TestAWindowCutShortByTheTargetIsNotProof:
     """A window the target crossed mid-page is not read to its end, so it cannot go behind the
     cursor: 继续 with a larger target would start AFTER it and never ask for the pages that

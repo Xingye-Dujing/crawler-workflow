@@ -127,6 +127,10 @@ class HongguoCommentHarness:
             paths.active().harvest_dir, f'capture-{time.strftime("%Y%m%d-%H%M%S")}-{uuid.uuid4().hex[:6]}.jsonl'
         )
         self._offset = 0
+        # Bytes after the last complete line. A capture page can be hundreds of KB, so a read
+        # that lands inside an append would otherwise consume the fragment: json.loads skipped
+        # it, the offset had already moved past it, and that page was silently lost.
+        self._carry = b''
         self._pending = []
         self._reply_inbox = []
         self._proxy = None
@@ -516,7 +520,11 @@ class HongguoCommentHarness:
             prog['total'] = max(prog['total'], total)
         for row in fresh:
             self._floors_by_cid[str(row['评论ID'])] = row['楼层']
-        self._next_floor += len(fresh)
+        # Advance by the rows ``hg_comment_rows`` NUMBERED, not by the ones kept: it numbers every
+        # row of the page, so a page that repeats a few ids from the previous one would otherwise
+        # move the counter backwards into the range it just handed out, and the next page repeats
+        # floor numbers in one thread (父楼层 then has two possible parents).
+        self._next_floor += len(rows)
         if group:
             self._groups_done.add(group)
         if dropped:
@@ -588,7 +596,8 @@ class HongguoCommentHarness:
             )
             fresh = [r for r in page_rows if str(r['评论ID']) not in self._reply_ids]
             self._reply_ids.update(str(r['评论ID']) for r in fresh)
-            self._next_floor += len(fresh)
+            # Numbered, not kept — see the episode path above.
+            self._next_floor += len(page_rows)
             key = parent or parent_key or f'anon-reply-{len(self._reply_progress)}'
             rprog = self._reply_progress.setdefault(key, {'kept': 0, 'total': 0, 'floor': floor})
             rprog['kept'] += len(fresh)
@@ -717,16 +726,28 @@ class HongguoCommentHarness:
 
     def _read_records(self):
         """Complete JSONL lines appended since the last read (the unit-test seam:
-        a test writes the file and this returns them, no process involved)."""
+        a test writes the file and this returns them, no process involved).
+
+        Binary, and only up to the last newline: the addon appends one record per line, so a read
+        that lands in the middle of a write leaves the fragment in ``_carry`` for the next read
+        instead of consuming (and dropping) it.
+        """
         try:
-            with open(self._capture, encoding='utf-8') as handle:
+            with open(self._capture, 'rb') as handle:
                 handle.seek(self._offset)
                 chunk = handle.read()
-                self._offset = handle.tell()
+                end = handle.tell()
         except OSError:
             return []
+        data = self._carry + chunk
+        self._offset = end
+        cut = data.rfind(b'\n')
+        if cut < 0:
+            self._carry = data
+            return []
+        complete, self._carry = data[:cut], data[cut + 1 :]
         records = []
-        for line in chunk.splitlines():
+        for line in complete.decode('utf-8', errors='replace').splitlines():
             if not line.strip():
                 continue
             try:

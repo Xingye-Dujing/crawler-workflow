@@ -69,6 +69,24 @@ def duration_seconds(node) -> int:
         or get_in(node, 'accessibility.accessibilityData.label')
         or ''
     )
+    # The label spells its units out, so each number is multiplied by ITS OWN unit. Folding the
+    # integers positionally as H:M:S was only right when all three components were present:
+    # "1 hour" became one second and "2 hours, 30 minutes" became 150 s.
+    units = re.findall(r'(\d+)\s*(hours?|minutes?|seconds?|小时|分钟|分|秒)', label, flags=re.IGNORECASE)
+    if units:
+        scale = {
+            'hour': 3600,
+            'hours': 3600,
+            '小时': 3600,
+            'minute': 60,
+            'minutes': 60,
+            '分钟': 60,
+            '分': 60,
+            'second': 1,
+            'seconds': 1,
+            '秒': 1,
+        }
+        return sum(int(value) * scale[unit.lower()] for value, unit in units)
     numbers = [int(chunk) for chunk in re.findall(r'\d+', label)]
     if numbers:
         seconds = 0

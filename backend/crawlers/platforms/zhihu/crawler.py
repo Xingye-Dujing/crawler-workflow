@@ -364,9 +364,12 @@ class ZhihuCrawler(Crawler):
             emitted += 1
             self.mark_position(board='hot', done=self.collected())
         logger.info(t('crawl.zhihu.hotDone', n=self.collected(), total=target_count))
-        if emitted < target_count:
+        if self.collected() < target_count:
             # The one promise this mode cannot keep is the number in the box, and the
             # site is the reason — say it once, in the console, where the user is.
+            # Asked of the TABLE's size, not of this attempt's emissions: a 继续 that
+            # re-reads a board whose rows are already stored emits fewer than the target
+            # while holding all of it, and used to announce a short board that was not.
             logger.info(t('crawl.zhihu.hotCapped', board=len(rows)))
             # A fixed board that is shorter than the ask is the SITE's size → licensed.
             self.note_end('capped')

@@ -517,6 +517,13 @@ class WeiboCrawler(Crawler):
             logger.info(t('crawl.weibo.visiting', url=base_url))
             logger.info(t('crawl.weibo.waiting'))
             if not self._await_search_page(base_url):
+                # 未找到相关结果 is the site ANSWERING "this window is empty", not "the page
+                # never arrived": a date-range walk is mostly empty hourly windows, and treating
+                # every one of them as unproven made 继续 replay all of them. The flag is what
+                # tells the two apart (``_await_search_page`` still answers one bool for its
+                # existing callers).
+                if getattr(self, '_page_had_no_result', False):
+                    self._window_walked_whole = True
                 return scraped
             scraped.extend(self._harvest(target)[0])
             if self.collected() >= target:
@@ -544,6 +551,10 @@ class WeiboCrawler(Crawler):
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
                 logger.info(t('crawl.weibo.page_crawling', i=page_num, total=total_pages))
                 if not self._await_search_page(f'{page_url}{page_num}'):
+                    if getattr(self, '_page_had_no_result', False):
+                        # The site answered "no results" for this page: the window ends here,
+                        # so it is read whole rather than re-entered on 继续.
+                        break
                     # The page never rendered: the remaining pages of this window are unread,
                     # so this window is not behind the cursor yet.
                     cut_short = True
@@ -612,6 +623,7 @@ class WeiboCrawler(Crawler):
         if self.pending_waits >= self.MAX_PENDING_WAITS:
             logger.warning(t('crawl.weibo.page_gave_up', waits=self.pending_waits))
             return False
+        self._page_had_no_result = False
         started = time.monotonic()
         ticks = max(1, int(Config.PAGE_WAIT_TIMEOUT / self.FIRST_CONTENT_TICK))
         for _ in range(ticks):
@@ -619,6 +631,7 @@ class WeiboCrawler(Crawler):
                 raise CrawlerStopped(t('crawl.stopped'))
             if self._element_or_none('.card-no-result') is not None:
                 self.pending_waits = 0
+                self._page_had_no_result = True
                 logger.info(t('crawl.weibo.no_result'))
                 return False
             if self._element_or_none(self.CARD_SELECTOR) is not None:

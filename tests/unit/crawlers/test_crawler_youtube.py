@@ -155,6 +155,11 @@ class TestClockAndDuration:
         [
             ({'simpleText': '3:10:59'}, 11459),
             ({'accessibility': {'accessibilityData': {'label': '3 hours, 10 minutes, 59 seconds'}}}, 11459),
+            # A label that names only one or two units: each number is scaled by its own unit,
+            # never by its position in a clock face (which read “1 hour” as one second).
+            ({'accessibility': {'accessibilityData': {'label': '1 hour'}}}, 3600),
+            ({'accessibility': {'accessibilityData': {'label': '2 hours, 30 minutes'}}}, 9000),
+            ({'accessibility': {'accessibilityData': {'label': '3小时10分59秒'}}}, 11459),
             ({'text': '5:33'}, 333),
             (
                 {

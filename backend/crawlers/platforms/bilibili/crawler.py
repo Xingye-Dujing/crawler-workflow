@@ -150,8 +150,12 @@ class BilibiliCrawler(VideoCrawler):
                         logger.debug(t('crawl.bili.duplicate', i=bvid))
                 elif code is not None and code != CODE_GONE:
                     # Risk control or a dead session: keep what is on disk, but
-                    # do not spend further pages on it.
+                    # do not spend further pages on it. The refusal must be NAMED even when
+                    # rows already landed — a search that stops at row 37/200 used to end with
+                    # “搜索完成，共获取 37 条” and nothing else: no console reason, no ``risk``
+                    # flag, so the run settled DONE over a wall. Mid-crawl is 判失败 → 继续.
                     blocked = str(code)
+                    self.risk_blocked = True
                     break
                 elif code == CODE_GONE:
                     # A withdrawn/private video is a fact about this row, not a silent hole.
@@ -174,7 +178,7 @@ class BilibiliCrawler(VideoCrawler):
                 break
             page += 1
             self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
-        if blocked and not self.collected():
+        if blocked:
             raise RuntimeError(t('crawl.bili.blocked', code=blocked))
         logger.info(t('crawl.bili.finished', n=self.collected(), total=target_count))
         return self.results()

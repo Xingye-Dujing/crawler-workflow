@@ -65,3 +65,35 @@ def test_a_clean_round_still_advances_every_card():
 
     assert cursor['scanned'] == 2
     assert marks == [{'done': 1, 'scanned': 1}, {'done': 2, 'scanned': 2}]
+
+
+def test_a_resumed_board_that_already_holds_the_target_is_not_called_short(monkeypatch, caplog):
+    """A 继续 re-reads the whole board, so this attempt emits nothing new. The cap message and
+    its ``capped`` end are claims about the SITE, and must be asked of the table's size."""
+    import logging
+
+    from crawlers.platforms.zhihu import crawler as zhihu
+
+    items = [{'target': {'id': str(index), 'url': f'https://www.zhihu.com/question/{index}'}} for index in range(30)]
+    instance = ZhihuCrawler.__new__(ZhihuCrawler)
+    instance._collected = [{'链接': item['target']['url']} for item in items]
+    instance._sink = None
+    instance._cursor = {}
+    instance._cursor_sink = None
+    instance.driver = None
+    instance.requests = []
+    instance.login_wall = False
+    instance.resume_of = lambda _kwargs: {'done': 0}  # the cursor lagged behind the stored rows
+    instance.open = lambda _url: None
+    instance.check_login_wall = lambda _url: None
+    instance.mark_position = lambda **_kwargs: None
+    ends = []
+    instance.note_end = ends.append
+    monkeypatch.setattr(zhihu.pagefetch, 'fetch_json', lambda *_args, **_kwargs: {'data': items})
+
+    with caplog.at_level(logging.INFO):
+        rows = instance.hot(target_count=30)
+
+    assert len(rows) == 30
+    assert ends == [], 'a board holding the whole target was licensed as short'
+    assert 'hotCapped' not in caplog.text and '只有' not in caplog.text
