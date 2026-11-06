@@ -1,0 +1,39 @@
+"""The environment panel is a view of the server's facts, not a second opinion.
+
+No node harness here: the panel is a thin renderer over ``/api/environment`` and
+``/api/components``. What is worth pinning statically is that it asks those two routes, polls the
+job instead of holding a request open, and never inserts server data as HTML.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+JS = REPO / 'backend' / 'static' / 'js' / 'components.js'
+HTML = REPO / 'backend' / 'static' / 'index.html'
+CATALOGUE = REPO / 'backend' / 'static' / 'js' / 'i18n' / 'components.js'
+
+
+def test_the_panel_asks_the_server_for_both_halves():
+    source = JS.read_text(encoding='utf-8')
+    assert "fetch('/api/environment')" in source
+    assert "fetch('/api/components')" in source
+    assert '/api/components/jobs/' in source
+    assert 'setTimeout(tick' in source, 'a long download must be polled, not awaited inside one fetch'
+
+
+def test_server_data_is_text_never_markup():
+    source = JS.read_text(encoding='utf-8')
+    assert 'innerHTML' not in source, 'capability reasons come from the server and must stay text'
+    assert 'textContent' in source
+
+
+def test_the_page_loads_the_panel_and_its_words():
+    html = HTML.read_text(encoding='utf-8')
+    assert 'js/components.js' in html
+    assert 'js/i18n/components.js' in html
+    assert 'components-panel' in html
+    catalogue = CATALOGUE.read_text(encoding='utf-8')
+    for key in ('env.title', 'env.stateMissing', 'env.installFailed'):
+        assert f"'{key}'" in catalogue

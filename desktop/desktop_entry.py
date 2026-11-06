@@ -540,6 +540,64 @@ def _wait_and_open(url: str, *, open_url=webbrowser.open) -> None:
 
 
 # ─── startup ─────────────────────────────────────────────────
+def _join_backend(base: Path) -> None:
+    """Source runs import ``app`` from ``backend/``; a frozen bundle already carries it."""
+    backend = base / 'backend'
+    if backend.is_dir() and str(backend) not in sys.path:
+        sys.path.insert(0, str(backend))
+
+
+def _component_doctor(base: Path) -> int:
+    """Print the same environment matrix the installer shows, as JSON, and exit.
+
+    The bootstrap runs this after installing components, so the “what can I do?” answer comes from
+    the application that will actually run — not from a second probe written into the installer.
+    """
+    _join_backend(base)
+    try:
+        from services.components.probe import environment
+
+        report = environment()
+    except Exception as exc:
+        _print_safe(json.dumps({'schema': 1, 'error': str(exc), 'capabilities': []}, ensure_ascii=False))
+        return 1
+    _print_safe(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def apply_component_env() -> None:
+    """Let a portable install point the existing machine lookups at its own components.
+
+    An explicit setting still wins (``runtime.settings`` reads it first), and an environment value
+    the user exported is never overwritten. This is only the default a bundled layout needs: without
+    it, installing Chrome beside the app would change nothing because ``find_chrome`` does not know
+    that folder exists.
+    """
+    try:
+        from core.machine import chrome_executable_name
+
+        from services.components.manifest import Manifest
+        from services.components.paths import components_root
+
+        root = components_root()
+        os.environ.setdefault('CIXI_COMPONENTS_DIR', str(root))
+        manifest = Manifest(root).load()
+        paths = {
+            'chrome': ('CHROME_PATH', chrome_executable_name()),
+            'chromedriver': ('CIXI_DRIVER_PATH', 'chromedriver.exe' if os.name == 'nt' else 'chromedriver'),
+            'node': ('CIXI_NODE_BIN', 'node.exe' if os.name == 'nt' else 'node'),
+            'catbus': ('CIXI_CATBUS_CLI', 'dist/integrations/crawler-workflow/cli.js'),
+        }
+        for component_id, (variable, name) in paths.items():
+            installed = manifest.path_of(component_id)
+            candidate = installed / name if installed else None
+            if candidate and candidate.exists() and not os.environ.get(variable):
+                os.environ[variable] = str(candidate)
+    except (ImportError, OSError, ValueError):
+        # A source checkout without a manifest is the normal case; the per-OS tables still answer.
+        return
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     # A redirected console on a non-Chinese Windows uses the ANSI codepage and raises on the
@@ -588,6 +646,9 @@ def main(argv=None) -> int:
     with contextlib.suppress(OSError):
         os.chdir(base)
 
+    if '--doctor' in argv:
+        return _component_doctor(base)
+
     handle, already_running = acquire_instance_mutex(root)
     if already_running:
         if handle:
@@ -610,6 +671,7 @@ def main(argv=None) -> int:
     # Patch the two package-level facts that a frozen bundle cannot infer: relative
     # optional models are looked up beside the exe, and a chromedriver that does not
     # exist must be left blank so Selenium Manager can resolve it.
+    apply_component_env()
     try:
         from core import config
 

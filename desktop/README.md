@@ -30,7 +30,21 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 | `dist/CaiXiHui/` | 绿色版文件夹，双击 `CaiXiHui.exe` |
 | `dist/CaiXiHui-win64.zip` | 分发用压缩包（约比文件夹小一半，取决于内容） |
 | `dist/CaiXiHui-Setup.exe` | **单文件安装包**（`-Installer`，需要本机装有 Inno Setup） |
+| `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 12 MB，默认国内镜像） |
 | `dist/CaiXiHui-bert-models-win64.zip` | 可选 BERT 模型包（`desktop/build_model_pack.py` 单独产出，见下文） |
+
+### 在线安装器
+
+`desktop\bootstrap\` 是一个独立的小安装器：选择目录和组件后，从清单里的地址下载便携 zip、校验 SHA-256、
+解压并登记到 `<安装目录>/components`，最后调用 `CaiXiHui.exe --doctor` 显示能力矩阵。默认清单是**国内直连**
+（Gitee + npmmirror），不需要翻墙；Chrome 从 Google 官方 Chrome for Testing 下载，安装器不重新分发它。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
+```
+
+清单在 `backend/services/components/default_catalog.json`；组件布局、体积、限制和安全规则见
+[`docs/installer.md`](../docs/installer.md)。
 
 **分发只有一个文件的人给 `CaiXiHui-Setup.exe`**：安装动作把 `Compression=lzma2/ultra64` 一次做完，
 所以程序本体仍是解开的文件夹——启动不需要每次解压。运行时单文件（PyInstaller/Nuitka 的 onefile）被

@@ -61,6 +61,8 @@ BODY_ROUTES = [
     '/api/cookies/rename',
     '/api/cookies/save',
     '/api/cookies/verify',
+    '/api/components/install',
+    '/api/components/remove',
     '/api/data/clear',
     '/api/data/diff',
     '/api/data/datasets/<dataset_id>/rename',
@@ -124,6 +126,7 @@ NON_OBJECT_BODIES = ['null', '[1, 2]', '"abc"', '123']
 BODYLESS_POSTS = {
     '/api/cookies/generate/cancel': 'signals the login window to close',
     '/api/cookies/generate/confirm': 'signals the login window that the user is done',
+    '/api/components/jobs/<job_id>/cancel': 'signals the background install job to stop; the job id is in the URL',
     '/api/data/upload': 'multipart form field, not a JSON body',
     '/api/project/import': 'multipart project bundle, not a JSON body',
     '/api/runs/purge': 'applies the retention policy, which lives in settings',

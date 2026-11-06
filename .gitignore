@@ -62,6 +62,7 @@ build/
 dist/
 desktop/.venv-build/
 desktop/.pyinstaller-cache/
+desktop/bootstrap/.pyinstaller-cache/
 # pip falls back to cwd for scratch dirs on a restricted Windows sandbox.
 pip-build-*/
 pip-install-*/

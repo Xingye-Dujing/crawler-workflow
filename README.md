@@ -45,7 +45,8 @@ cd backend && python app.py        # http://127.0.0.1:5000
 `FLASK_DEBUG=1` 开热重载。
 
 不想在本机装：直接开 <http://47.116.114.77/crawler> 用线上实例（云端模式，需要账号），或者下
-[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 里的 `CaiXiHui-Setup.exe`。
+[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 里的 `CaiXiHui-Setup.exe`；
+只想要一个下载器就用 `CaiXiHui-Online-Setup.exe`，默认走国内镜像（Gitee / npmmirror），不需要翻墙。
 
 **三件值得先知道的事**
 
@@ -57,7 +58,9 @@ cd backend && python app.py        # http://127.0.0.1:5000
   工作流、数据集、运行、Cookie、导出都在 `data/users/<账号 id>/` 下，互相看不见。旧数据用
   `tools/migrate_accounts.py` 迁到管理员名下（默认 dry-run，先备份）。
 - **不想装 Python 就用桌面版（仅 Windows）**：[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases)
-  里有现成的 `CaiXiHui-Setup.exe`；`desktop/` 负责打出 `CaiXiHui.exe`，双击启动本地服务并开浏览器，
+  里有现成的 `CaiXiHui-Setup.exe`；只想要小体积下载器就用 `CaiXiHui-Online-Setup.exe`，默认从 Gitee /
+  npmmirror 下载主程序、Chrome、chromedriver、Node 和 CatBus，国内不需要翻墙（见
+  [`docs/installer.md`](docs/installer.md)）。`desktop/` 负责打出 `CaiXiHui.exe`，双击启动本地服务并开浏览器，
   数据在 `%APPDATA%\CaiXiHui`（旁边放个空的 `portable.txt` 就变便携版）。构建、体积与依赖自查见
   [`desktop/README.md`](desktop/README.md)。
 
@@ -146,6 +149,7 @@ Visualize 出图、Output 导出 → 连线、用 Name 命名 → 执行。
 | [`docs/workflow.md`](docs/workflow.md) | 引擎、断点续跑、界面、节点类型、定时任务 |
 | [`docs/api.md`](docs/api.md) | 全部 HTTP 端点 |
 | [`docs/config.md`](docs/config.md) | 环境变量、运行时设置、常量、云端部署 |
+| [`docs/installer.md`](docs/installer.md) | 在线安装器、国内直连镜像、环境检测与组件管理 |
 | [`docs/development.md`](docs/development.md) | 完整结构、测试分层、备份与恢复 |
 | [`docs/crawler_notes.md`](docs/crawler_notes.md) | 逐平台真机实测记录（改爬虫前先看） |
 | [`docs/crawler_rules.md`](docs/crawler_rules.md) | 采集端工程规则 |

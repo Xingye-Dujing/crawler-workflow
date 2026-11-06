@@ -219,3 +219,16 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/schedules/delete` | POST | 删除一个任务（没有此 id 回 404） |
 | `/api/schedules/toggle` | POST | 开关一个任务：关掉即清空 `next_run`，重开当场重算 |
 | `/api/schedules/run` | POST | “立即执行”：立刻跑一次并记账，即使任务被关掉；服务正忙时和别处一样排队 |
+
+### 环境与组件
+
+安装器与运行中的应用读同一份组件清单和探测结果（`services/components/`）；GET 从不下载，安装是一个可轮询的后台任务。
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/environment` | GET | 能力矩阵：主程序、Selenium、CatBus、本机/云端 LLM、BERT、PDF、中文图表、上传/分析/报告。每行 `state` ∈ `ok/degraded/missing/unknown`，并带 `reason_key` + `reason_params`，由前端 `t()` 渲染 |
+| `/api/components` | GET | 组件清单与已安装版本、体积、是否可下载、是否有更新；`downloadable=false` 的是只检测不下载的组件（如 MiKTeX） |
+| `/api/components/install` | POST | `{id}` 启动后台安装任务；未知组件 400；同一组件已有任务时返回那个任务而不是并行下载 |
+| `/api/components/jobs/<job_id>` | GET | 任务状态 `{state, done, total, error, path, cancellable}`；`running/done/failed/cancelled` |
+| `/api/components/jobs/<job_id>/cancel` | POST | 请求取消下载；已完成的字节留在缓存里，下次可续传 |
+| `/api/components/remove` | POST | `{id}` 删除一个组件的版本目录与清单行；主程序本身 400（卸载走安装器） |

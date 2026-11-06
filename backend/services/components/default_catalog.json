@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "generated_at": "2026-11-06T12:00:00Z",
+  "components": {
+    "app": {
+      "version": "1.0.0",
+      "kind": "archive",
+      "label": "采析绘主程序",
+      "summary": "双击即用的 Windows 桌面版；含 Flask 服务、分析器和图表工坊",
+      "provides": ["app"],
+      "requires": [],
+      "default": true,
+      "license": "MIT",
+      "homepage": "https://gitee.com/Xingye-Dujing/crawler-workflow",
+      "notes": "安装到 app/，上一版保留为 app.previous 以便回滚",
+      "platforms": {
+        "win32": {
+          "archive": "zip",
+          "install_as": "app",
+          "strip_prefix": "CaiXiHui",
+          "verify": ["CaiXiHui.exe"],
+          "sha256": "8cca500c53c7c3546809c770bac6725030796636e7a86972be5dba0201c1d966",
+          "size": 127231486,
+          "parts": [
+            {
+              "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.001",
+              "sha256": "3c5bc6aa728ea39abbfb7f1336262e9da7315b069bc5fdba0b876745495ac2ac",
+              "size": 99614720
+            },
+            {
+              "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.002",
+              "sha256": "f7aa97f43e5bffcdb8e3aa711546555f44d09024a0e152eb8ec4cf6b03b83da9",
+              "size": 27616766
+            }
+          ]
+        }
+      }
+    },
+    "chrome": {
+      "version": "157.0.8103.38",
+      "kind": "archive",
+      "label": "Chrome for Testing",
+      "summary": "Google 官方测试版 Chrome，免安装；与随包 chromedriver 版本成对",
+      "provides": ["browser"],
+      "requires": [],
+      "default": true,
+      "license": "Google Chrome Terms of Service",
+      "homepage": "https://googlechromelabs.github.io/chrome-for-testing/",
+      "notes": "国内直连默认走 npmmirror 镜像；官方地址作为备用。不会重新分发 Chrome 二进制",
+      "platforms": {
+        "win32": {
+          "archive": "zip",
+          "strip_prefix": "chrome-win64",
+          "verify": ["chrome.exe"],
+          "sha256": "ae0deef27d449e1d7529df7705d609bab102de48464da13567ed3dd2ee1a0586",
+          "size": 210600182,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/win64/chrome-win64.zip",
+            "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/win64/chrome-win64.zip"
+          ]
+        }
+      }
+    },
+    "chromedriver": {
+      "version": "157.0.8103.38",
+      "kind": "archive",
+      "label": "chromedriver",
+      "summary": "与上面 Chrome 同一版本的驱动，杜绝大版本不匹配",
+      "provides": ["driver"],
+      "requires": ["chrome"],
+      "default": true,
+      "license": "Google Chrome Terms of Service",
+      "homepage": "https://googlechromelabs.github.io/chrome-for-testing/",
+      "notes": "同一发行版保证版本成对；国内直连默认 npmmirror",
+      "platforms": {
+        "win32": {
+          "archive": "zip",
+          "strip_prefix": "chromedriver-win64",
+          "verify": ["chromedriver.exe"],
+          "sha256": "f50ee10dfebbb9ffbe666e7ad12b2c952abd5255c90c24beb12de0fbadab6571",
+          "size": 11594835,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/win64/chromedriver-win64.zip",
+            "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/win64/chromedriver-win64.zip"
+          ]
+        }
+      }
+    },
+    "node": {
+      "version": "24.21.0",
+      "kind": "archive",
+      "label": "Node.js 24",
+      "summary": "CatBus 的运行时；满足 CatBus engines 的 24.15.0 以上",
+      "provides": ["node"],
+      "requires": [],
+      "default": true,
+      "license": "MIT",
+      "homepage": "https://nodejs.org/",
+      "notes": "便携 zip；国内直连走 npmmirror 的 node 二进制镜像",
+      "platforms": {
+        "win32": {
+          "archive": "zip",
+          "strip_prefix": "node-v24.21.0-win-x64",
+          "verify": ["node.exe"],
+          "sha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+          "size": 37618919,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/node/v24.21.0/node-v24.21.0-win-x64.zip",
+            "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
+          ]
+        }
+      }
+    },
+    "catbus": {
+      "version": "0.3.0-crawler-workflow",
+      "kind": "archive",
+      "label": "CatBus 采析绘适配版",
+      "summary": "第二采集后端；已包含构建产物与生产依赖，不需要 npm",
+      "provides": ["catbus"],
+      "requires": ["node"],
+      "default": true,
+      "license": "MIT",
+      "homepage": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow",
+      "notes": "国内直连从 Gitee 下载并拼接；登录态仍需用户首次自己完成",
+      "platforms": {
+        "win32": {
+          "archive": "zip",
+          "strip_prefix": "catbus-crawler-workflow",
+          "verify": ["dist/integrations/crawler-workflow/cli.js"],
+          "sha256": "604f2c1ab5008bd91fea4934d68d82ea91853385684f7e59ed0542778f4f5acf",
+          "size": 173307321,
+          "parts": [
+            {
+              "url": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow/releases/download/crawler-workflow-v0.3.0/catbus-crawler-workflow-win64.zip.001",
+              "sha256": "4ca326d464fcc6f2d4200b81d9a34468a64d38b50b9cf361b1f79a144b276a16",
+              "size": 99614720
+            },
+            {
+              "url": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow/releases/download/crawler-workflow-v0.3.0/catbus-crawler-workflow-win64.zip.002",
+              "sha256": "43580cc58e4068722a1acd00523256cbaa5defd16202af73bc4394ce85d424b6",
+              "size": 73692601
+            }
+          ]
+        }
+      }
+    },
+    "xelatex": {
+      "version": "",
+      "kind": "manual",
+      "label": "xelatex（MiKTeX）",
+      "summary": "只在编译 PDF / 论文成稿时需要；默认只检测，不下载",
+      "provides": ["pdf"],
+      "requires": [],
+      "default": false,
+      "license": "MiKTeX",
+      "homepage": "https://mirrors.tuna.tsinghua.edu.cn/CTAN/systems/win32/miktex/",
+      "notes": "MiKTeX 体积大且宏包按需安装，交给有需要的用户；国内可用清华 CTAN 镜像",
+      "platforms": {
+        "win32": {}
+      }
+    }
+  }
+}

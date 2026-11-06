@@ -1,0 +1,229 @@
+"""The component core: catalogue validation, safe archives, fetch, install and the manifest.
+
+These cases use only tmp files and ``file://`` URLs: no network, no Chrome, no daemon. The point is
+that every refusal is named (bad schema, HTTP URL, missing digest, zip-slip, wrong payload) and that
+a failed install leaves no half-written component behind.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import os
+import zipfile
+from pathlib import Path
+
+import pytest
+from core.machine import platform_name
+
+from services.components import install as install_module
+from services.components.archive import ArchiveError, safe_extract
+from services.components.catalog import Asset, Catalog, CatalogError, Part, load_catalog
+from services.components.fetch import DownloadError, download_asset
+from services.components.install import InstallError, install_component, remove_component
+from services.components.manifest import Manifest, ManifestError
+
+
+def _zip_bytes(entries: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as handle:
+        for name, payload in entries.items():
+            handle.writestr(name, payload)
+    return buffer.getvalue()
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _asset(path: Path, sha: str, size: int, **changes) -> Asset:
+    values = {
+        'urls': (path.as_uri(),),
+        'parts': (),
+        'sha256': sha,
+        'size': size,
+        'archive': 'zip',
+        'strip_prefix': 'top',
+        'install_as': 'component',
+        'verify': ('hello.txt',),
+    }
+    values.update(changes)
+    return Asset(**values)
+
+
+class TestCatalog:
+    def test_the_bundled_catalogue_is_valid_and_defaults_to_the_domestic_route(self):
+        catalog = Catalog(load_catalog())
+        defaults = catalog.defaults()
+        assert {'app', 'chrome', 'chromedriver', 'node', 'catbus'} <= set(defaults)
+        chrome = catalog.get('chrome').asset()
+        assert chrome is not None and 'npmmirror.com' in chrome.urls[0], 'the novice default must not need a VPN'
+        catbus = catalog.get('catbus').asset()
+        assert catbus is not None and catbus.parts and 'gitee.com' in catbus.parts[0].url
+
+    def test_a_schema_this_installer_does_not_know_is_refused(self):
+        with pytest.raises(CatalogError, match='schema'):
+            Catalog({'schema': 999, 'components': {}})
+
+    def test_an_http_url_and_a_missing_digest_are_refused_by_name(self):
+        base = {
+            'schema': 1,
+            'components': {
+                'x': {
+                    'version': '1',
+                    'platforms': {
+                        'win32': {
+                            'urls': ['http://example.com/x.zip'],
+                            'sha256': '0' * 64,
+                            'size': 1,
+                        }
+                    },
+                }
+            },
+        }
+        with pytest.raises(CatalogError, match='https'):
+            Catalog(base)
+        base['components']['x']['platforms']['win32']['urls'] = ['https://example.com/x.zip']
+        base['components']['x']['platforms']['win32']['sha256'] = 'nope'
+        with pytest.raises(CatalogError, match='sha256'):
+            Catalog(base)
+
+
+class TestManifest:
+    def test_a_record_survives_a_reload_and_pruning_keeps_the_newest(self, tmp_path):
+        manifest = Manifest(tmp_path)
+        for index, version in enumerate(('1.0', '2.0', '3.0')):
+            path = tmp_path / 'components' / 'node' / version
+            path.mkdir(parents=True)
+            os.utime(path, (1000 + index, 1000 + index))
+        manifest.record('node', '3.0', tmp_path / 'components' / 'node' / '3.0', 'a' * 64, 'https://example.com')
+        manifest.save()
+        assert Manifest(tmp_path).load().get('node')['version'] == '3.0'
+        removed = Manifest(tmp_path).load().prune('node', keep=2)
+        assert [item.name for item in removed] == ['1.0']
+        assert (tmp_path / 'components' / 'node' / '3.0').exists()
+
+    def test_a_path_outside_the_root_is_refused(self, tmp_path):
+        manifest = Manifest(tmp_path)
+        with pytest.raises(ManifestError, match='escapes'):
+            manifest.record('x', '1', tmp_path.parent / 'elsewhere', 'a' * 64, '')
+
+
+class TestArchive:
+    def test_the_top_folder_is_stripped_and_files_land_inside(self, tmp_path):
+        archive = tmp_path / 'a.zip'
+        archive.write_bytes(_zip_bytes({'top/hello.txt': b'hi', 'top/sub/a.txt': b'a'}))
+        target = tmp_path / 'out'
+        safe_extract(archive, target, strip_prefix='top')
+        assert (target / 'hello.txt').read_bytes() == b'hi'
+        assert (target / 'sub' / 'a.txt').read_bytes() == b'a'
+
+    def test_parent_traversal_is_refused_and_writes_nothing_outside(self, tmp_path):
+        archive = tmp_path / 'bad.zip'
+        archive.write_bytes(_zip_bytes({'../evil.txt': b'x'}))
+        target = tmp_path / 'out'
+        with pytest.raises(ArchiveError, match='parent traversal'):
+            safe_extract(archive, target)
+        assert not (tmp_path / 'evil.txt').exists()
+
+    def test_an_symlink_entry_is_refused(self, tmp_path):
+        archive = tmp_path / 'link.zip'
+        info = zipfile.ZipInfo('top/link')
+        info.external_attr = 0o120777 << 16
+        with zipfile.ZipFile(archive, 'w') as handle:
+            handle.writestr(info, '')
+        with pytest.raises(ArchiveError, match='symlink'):
+            safe_extract(archive, tmp_path / 'out')
+
+
+class TestFetch:
+    def test_a_file_url_is_accepted_only_when_insecure_is_explicit(self, tmp_path):
+        source = tmp_path / 'x.zip'
+        source.write_bytes(b'payload')
+        asset = _asset(source, _sha(b'payload'), 7)
+        with pytest.raises(DownloadError, match='non-HTTPS'):
+            download_asset(asset, tmp_path / 'copy.zip')
+        assert download_asset(asset, tmp_path / 'copy.zip', allow_insecure=True).read_bytes() == b'payload'
+
+    def test_a_checksum_mismatch_deletes_the_download_and_names_the_file(self, tmp_path):
+        source = tmp_path / 'x.zip'
+        source.write_bytes(b'payload')
+        asset = _asset(source, '0' * 64, 7)
+        with pytest.raises(DownloadError, match='SHA-256'):
+            download_asset(asset, tmp_path / 'copy.zip', allow_insecure=True)
+        assert not (tmp_path / 'copy.zip').exists()
+
+    def test_parts_are_concatenated_and_verified_as_one_file(self, tmp_path):
+        first, second = b'hello ', b'world'
+        part_a, part_b = tmp_path / 'a.001', tmp_path / 'a.002'
+        part_a.write_bytes(first)
+        part_b.write_bytes(second)
+        asset = _asset(
+            part_a,
+            _sha(first + second),
+            len(first + second),
+            urls=(),
+            parts=(
+                Part(url=part_a.as_uri(), sha256=_sha(first), size=len(first)),
+                Part(url=part_b.as_uri(), sha256=_sha(second), size=len(second)),
+            ),
+        )
+        target = download_asset(asset, tmp_path / 'joined.zip', allow_insecure=True)
+        assert target.read_bytes() == first + second
+
+
+class TestInstall:
+    @pytest.fixture
+    def catalogue(self):
+        system = platform_name()
+        return Catalog(
+            {
+                'schema': 1,
+                'components': {
+                    'demo': {
+                        'version': '1.0',
+                        'platforms': {
+                            system: {
+                                'archive': 'zip',
+                                'strip_prefix': 'top',
+                                'verify': ['hello.txt'],
+                                'urls': ['https://example.com/demo.zip'],
+                                'sha256': '0' * 64,
+                                'size': 1,
+                            }
+                        },
+                    }
+                },
+            }
+        )
+
+    def test_install_extracts_registers_and_removes(self, tmp_path, catalogue, monkeypatch):
+        archive = tmp_path / 'demo.zip'
+        archive.write_bytes(_zip_bytes({'top/hello.txt': b'hi'}))
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(archive.read_bytes())
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        target = install_component(catalogue, 'demo', tmp_path / 'root')
+        assert (target / 'hello.txt').read_bytes() == b'hi'
+        record = Manifest(tmp_path / 'root').load().get('demo')
+        assert record['version'] == '1.0'
+        assert remove_component(tmp_path / 'root', 'demo')
+        assert not target.exists()
+
+    def test_a_payload_without_the_expected_file_is_refused(self, tmp_path, catalogue, monkeypatch):
+        archive = tmp_path / 'demo.zip'
+        archive.write_bytes(_zip_bytes({'top/other.txt': b'hi'}))
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(archive.read_bytes())
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        with pytest.raises(InstallError, match='hello.txt'):
+            install_component(catalogue, 'demo', tmp_path / 'root')
+        assert not (tmp_path / 'root' / 'components' / 'demo').exists()

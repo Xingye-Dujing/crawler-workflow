@@ -2053,6 +2053,14 @@
           两栏都可留空：留空时按本机系统查找。这里填的路径优先于环境变量，PATH 只是最后的兜底；适配器那一栏既能填 cli.js 文件，也能填 CatBus 目录。
         </span>
       </div>
+      <div class="dd-item-row">
+        <span data-i18n="env.title">环境与组件</span>
+        <span class="dd-ctrl">
+          <button class="panel-close" type="button" onclick="ComponentsPanel.open()" data-i18n="env.open">
+            环境与组件
+          </button>
+        </span>
+      </div>
       <div class="dd-item-row cloud-hide">
         <span data-i18n="set.window">窗口大小</span>
         <span class="dd-ctrl">
@@ -2392,6 +2400,7 @@
     <script src="js/i18n/checks.js"></script>
     <script src="js/i18n/misc.js"></script>
     <script src="js/i18n/accounts.js"></script>
+    <script src="js/i18n/components.js"></script>
     <script src="js/app.js"></script>
     <!-- The three sections app.js no longer needs to hold: the LLM transport settings, the
          machine-local settings plus the browser-profile row, and the panels-as-windows behaviour
@@ -2403,6 +2412,24 @@
     <!-- Reusable-node templates, inside view and run expansion. After app.js so the
          Style menu's preference and the i18n catalogue are already defined. -->
     <script src="js/reusable.js"></script>
+    <script src="js/components.js"></script>
+    <div id="components-panel" class="env-overlay" hidden>
+      <div class="env-card">
+        <div class="console-header">
+          <span data-i18n="env.title">环境与组件</span>
+          <div class="console-actions">
+            <button class="panel-close" type="button" onclick="ComponentsPanel.refresh()" data-i18n="env.refresh">
+              重新检测
+            </button>
+            <button class="panel-close" type="button" onclick="ComponentsPanel.close()" data-i18n="env.close">
+              关闭
+            </button>
+          </div>
+        </div>
+        <div id="components-body" class="env-body"></div>
+      </div>
+    </div>
+
     <script src="js/schedules.js"></script>
     <script src="js/accounts.js"></script>
   </body>

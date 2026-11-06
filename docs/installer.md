@@ -1,0 +1,91 @@
+# 在线安装器与环境检测（Windows）
+
+这是一个**可选**的安装方式：先下载一个约 12 MB 的 `CaiXiHui-Online-Setup.exe`，由它把主程序和需要的
+第三方便携组件下载到用户选择的目录。离线安装包 `CaiXiHui-Setup.exe` 仍然保留，给没有网络或不想下载组件的人。
+
+小白默认走**国内直连**：主程序与 CatBus 来自 Gitee，Chrome for Testing / chromedriver / Node.js 来自
+npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载都核对 SHA-256，镜像不可信也不会被当成可信。
+
+## 一键安装包含什么
+
+| 组件 | 版本 | 体积 | 来源（默认，国内可直连） |
+|---|---|---|---|
+| 采析绘主程序 | 1.0.0 | 121 MB | Gitee Release（分两段） |
+| Chrome for Testing | 157.0.8103.38 | 201 MB | npmmirror |
+| chromedriver | 157.0.8103.38 | 11 MB | npmmirror（与 Chrome 同版本） |
+| Node.js | 24.21.0 | 36 MB | npmmirror |
+| CatBus 采析绘适配版 | 0.3.0 | 165 MB | Gitee Release（分两段） |
+
+**默认一键 ≈ 535 MB**，装完主程序、Selenium 采集和 CatBus 采集都可用。
+
+以下组件默认**不选**：
+
+- **Ollama 运行时 + 模型**：官方 Windows zip 约 1.5 GB，模型每个 2–4 GB；没有国内官方镜像。采析绘的
+  非 LLM 分析、清洗、统计、图表、报告不受影响；LLM 节点需要本机 Ollama 或 OpenRouter。
+- **MiKTeX / xelatex**：默认只检测；需要编译 PDF / 论文成稿时再装，国内可用清华 CTAN 镜像。
+- **BERT 模型包**：约 780 MB，单独发布；不装时相关节点会降级到 ml/snownlp 并打印实际方法。
+
+## 安装位置
+
+默认 `%LOCALAPPDATA%\Programs\CaiXiHui`，不需要管理员权限；可以改成 `D:\CaiXiHui` 等其他盘。布局：
+
+```
+<安装目录>\
+  app\                      主程序（上一版保留为 app.previous）
+  components\<id>\<版本>\    Chrome / chromedriver / Node / CatBus
+  install-manifest.json      每个组件的版本、路径、SHA-256、来源
+```
+
+数据仍然在 `%APPDATA%\CaiXiHui`（或 `portable.txt` 的便携模式），与安装目录分开；卸载主程序不会删除用户数据。
+
+启动器会在应用导入配置之前读取 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus 的路径导出为
+现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。**设置面板里手填的路径仍然优先**，
+用户自己导出的环境变量也不会被覆盖。
+
+## 环境检测
+
+安装完成后，安装器会调用刚装好的 `CaiXiHui.exe --doctor`，把同一份矩阵显示出来；应用运行后也可以在
+“设置 → 环境与组件”打开同一个面板（`GET /api/environment`）。
+
+每一行只有四种状态：
+
+- **可用**：依赖存在且版本匹配；
+- **可用（有降级）**：能跑，但缺少某项会降级（例如没有 BERT 模型）；
+- **不可用**：点名缺什么（Chrome / chromedriver / Node / CatBus / Ollama / xelatex / 中文字体）；
+- **无法核对**：探测本身失败，绝不显示成绿色。
+
+矩阵覆盖：主程序、Selenium 采集、CatBus 采集、本机 LLM、云端 LLM、BERT、PDF 编译、中文图表、上传/分析/报告。
+
+## 组件管理
+
+`GET /api/components` 列出清单与已安装版本；面板可以单项安装 / 更新 / 卸载，安装是后台任务
+（`POST /api/components/install` + `GET /api/components/jobs/<id>` 轮询），不会让一个浏览器请求挂几十分钟。
+组件按版本存放，默认只保留当前和上一版；卸载组件不删除用户数据。
+
+## 安全与合规
+
+- 所有下载只接受 HTTPS；逐项核对清单里的 SHA-256，失败删除字节并点名 URL。
+- 解压拒绝绝对路径、`..`、符号链接，限制条目数与总大小；先解压到 staging，再原子移动到目标目录。
+- 不执行下载来的 exe / msi；第三方一律便携 zip 解压。
+- **Chrome 不随安装器重新分发**：安装时从 Google 官方 Chrome for Testing 下载，国内默认走 npmmirror 镜像；
+  两个地址指向同一份官方构建。
+- 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。
+
+## 构建
+
+```powershell
+# 主程序（已有）
+powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
+
+# 在线安装器（约 12 MB）
+powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
+```
+
+清单：`backend/services/components/default_catalog.json`。发布新版本时更新其中的版本、URL、SHA-256 与体积；
+`tools/release_components.py` 负责从构建产物生成这份文件。
+
+## 已知限制
+
+- 平台登录、Cookie、OpenRouter API Key 是用户身份，不能预装；安装器只把“还缺什么”列出来。
+- Ollama 模型没有国内官方镜像，默认不选；选择本机 LLM 的用户需要能访问 `registry.ollama.ai` 或自备 Ollama。
+- 只有 Windows x64；`desktop/` 是仓库里唯一的 Windows-only 目录。

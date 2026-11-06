@@ -12,6 +12,7 @@ from api.accounts import bp as accounts_bp
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
 from api.capabilities import bp as capabilities_bp
+from api.components import bp as components_bp
 from api.config import bp as config_bp
 from api.data import bp as data_bp
 from api.diagnostics import bp as diagnostics_bp
@@ -523,6 +524,10 @@ app.register_blueprint(config_bp)
 # ``/api/capabilities`` extends the static matrix with the live account list, so it reads
 # ``state.cookie_manager`` and moves no further than that singleton does.
 app.register_blueprint(capabilities_bp)
+# ``/api/environment`` and ``/api/components*``: what this machine can run and what the installer
+# may add. The probes and the catalogue live in ``services.components`` so the bootstrap installer
+# and the running app answer the same question the same way.
+app.register_blueprint(components_bp)
 # ``/api/settings`` holds machine-local values (driver path, window, timeouts, Ollama address) that
 # are re-read per run, so a save applies without restarting the server.
 app.register_blueprint(settings_bp)

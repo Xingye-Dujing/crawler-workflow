@@ -912,3 +912,59 @@ button.history-del:hover {
   border-color: var(--ink);
 }
 
+
+/* ── Environment & components modal ───────────────────────────────────── */
+.env-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.env-overlay[hidden] { display: none; }
+.env-card {
+  width: min(860px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2, #16181d);
+  border: 1px solid var(--line2, #333);
+  border-radius: 6px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.env-body {
+  overflow: auto;
+  padding: 4px 14px 14px;
+}
+.env-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line2, #262a31);
+}
+.env-row:last-child { border-bottom: none; }
+.env-state {
+  flex: 0 0 92px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.env-state.ok { color: #59c46b; }
+.env-state.degraded { color: #d6a13c; }
+.env-state.missing { color: #e05d5d; }
+.env-state.unknown { color: #8a8f98; }
+.env-name { flex: 0 0 210px; }
+.env-reason { flex: 1; color: var(--text-dim, #9aa0a6); font-size: 12px; }
+.env-component {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line2, #262a31);
+  font-size: 12px;
+}
+.env-component:last-child { border-bottom: none; }
+.env-component .env-grow { flex: 1; }
+.env-hint { color: var(--text-dim, #9aa0a6); font-size: 12px; margin: 8px 0; }

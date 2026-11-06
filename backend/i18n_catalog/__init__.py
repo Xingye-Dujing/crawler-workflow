@@ -8,7 +8,20 @@ small file instead of a 4,600-line one — and a missing word can be audited per
 import time rather than silently kept from whichever module came last.
 """
 
-from i18n_catalog import accounts, analysis, api, biblio, charts, collect, cookie, crawl, run, sched, settings
+from i18n_catalog import (
+    accounts,
+    analysis,
+    api,
+    biblio,
+    charts,
+    collect,
+    components,
+    cookie,
+    crawl,
+    run,
+    sched,
+    settings,
+)
 
 MODULES = (
     crawl,
@@ -22,4 +35,5 @@ MODULES = (
     api,
     settings,
     accounts,
+    components,
 )

@@ -104,6 +104,18 @@ def chrome_executable_name(system: str | None = None) -> str:
     return names[0] if names else 'Chrome'
 
 
+def driver_executable_name(system: str | None = None) -> str:
+    """The chromedriver file name for this OS (one table, not a ``.exe`` written in a probe)."""
+    names = DRIVER_FILE_NAMES.get(platform_name(system)) or ()
+    return names[0] if names else 'chromedriver'
+
+
+def node_executable_name(system: str | None = None) -> str:
+    """The Node file name for this OS, from the same table the Node probe uses."""
+    names = NODE_PATH_NAMES.get(platform_name(system)) or ()
+    return names[0] if names else 'node'
+
+
 def platform_name(system: str | None = None) -> str:
     """The OS key this module's tables are indexed by, normalized onto three values."""
     name = str(sys.platform if system is None else system)
@@ -323,6 +335,10 @@ NODE_PATH_NAMES = {
     'darwin': ('node',),
     'win32': ('node.exe',),
 }
+
+#: Driver and Node file names a machine's own install uses. The installer/probe ask this table
+#: instead of spelling ``.exe`` outside the per-OS facts (see ``tests/unit/crawlers``).
+DRIVER_FILE_NAMES = {'linux': ('chromedriver',), 'darwin': ('chromedriver',), 'win32': ('chromedriver.exe',)}
 
 #: The Node releases CatBus' ``engines`` field accepts, split the way a semver range actually reads:
 # ``^22.22.2 || ^24.15.0`` are two *major-bound* floors (a 23.x or 25.x runtime is in neither, even

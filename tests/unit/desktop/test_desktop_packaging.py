@@ -13,6 +13,7 @@ answered by something before its browser hand-off can be measured.
 import contextlib
 import importlib.util
 import json
+import os
 import re
 import socket
 import struct
@@ -1227,3 +1228,37 @@ class TestTheAddressSurvivesWhenNoBrowserExists:
             app_module._open_browser('http://127.0.0.1:5000')
         said = [record.message for record in caplog.records if record.levelname == 'WARNING']
         assert i18n.t('misc.browserNotFound', url='http://127.0.0.1:5000') in said, said
+
+
+class TestPortableComponentsPointTheLookups:
+    """A component installed beside the app must be what the existing lookups find.
+
+    ``find_chrome``/``Config.DRIVER_PATH``/CatBus discovery all read their answer at call time, so
+    the launcher exports the manifest's paths before the app imports ``config``. An explicit
+    environment value the user set is never overwritten.
+    """
+
+    def test_an_installed_node_is_exported_but_an_explicit_value_wins(self, desktop, tmp_path, monkeypatch):
+        from services.components.manifest import Manifest
+
+        root = tmp_path / 'components'
+        node = root / 'components' / 'node' / '24.0' / 'node.exe'
+        node.parent.mkdir(parents=True)
+        node.write_bytes(b'')
+        manifest = Manifest(root)
+        manifest.record('node', '24.0', node.parent, 'a' * 64, 'https://example.com')
+        manifest.save()
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(root))
+        monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
+        desktop.apply_component_env()
+        assert os.environ['CIXI_NODE_BIN'] == str(node)
+
+        monkeypatch.setenv('CIXI_NODE_BIN', 'C:/already/set/node.exe')
+        desktop.apply_component_env()
+        assert os.environ['CIXI_NODE_BIN'] == 'C:/already/set/node.exe'
+
+    def test_no_manifest_is_quiet(self, desktop, tmp_path, monkeypatch):
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'nothing-here'))
+        monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
+        desktop.apply_component_env()
+        assert 'CIXI_NODE_BIN' not in os.environ
