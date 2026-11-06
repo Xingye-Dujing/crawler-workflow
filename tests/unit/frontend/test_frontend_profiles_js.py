@@ -151,6 +151,22 @@ SCENARIOS = [
         'profiles': _profiles_rows(enabled=True),
         'hintPlatform': 'weibo',
     },
+    # A flagged crawl the user switched OFF is not on the canvas for this run: asking about
+    # its profile (and its queue, VPN and serial turn) is a question about a crawl that will
+    # not happen.
+    {
+        'id': 'off-disabled-flagged',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': False},
+        'nodes': {
+            'n0': {
+                'id': 'n0',
+                'type': 'source',
+                'params': {'platform': FLAGGED[0], 'collect': 'posts', 'keyword': 'k', 'enabled': False},
+            }
+        },
+        'profiles': _profiles_rows(enabled=False),
+    },
     # Two flagged platforms in one run.
     {
         'id': 'off-two-flagged',
@@ -358,6 +374,10 @@ class TestPreRunGate:
 
     def test_an_unflagged_canvas_never_hears_about_it(self, ui):
         assert ui['off-unflagged']['notice'] == 0 and ui['off-unflagged']['shown'] is False
+
+    def test_a_disabled_crawl_is_not_counted(self, ui):
+        assert ui['off-disabled-flagged']['notice'] == 0
+        assert ui['off-disabled-flagged']['shown'] is False, 'a switched-off crawl asked about its profile'
 
     def test_running_anyway_proceeds_and_setup_does_not(self, ui):
         assert ui['off-flagged']['proceed'] is True and ui['off-flagged']['openedSettings'] == 0

@@ -201,6 +201,21 @@ def state(tmp_path_factory):
             ],
         },
         {
+            'id': 'edit_after_undo_is_a_new_step',
+            'add': ['source'],
+            'paramEdits': [{'id': 'node-1', 'key': 'keyword', 'value': 'AI'}],
+            'undo': True,
+            'editAfterUndo': [{'id': 'node-1', 'key': 'keyword', 'value': 'Robot'}],
+            'undoAgain': True,
+        },
+        {
+            'id': 'paste_single_then_undo',
+            'add': ['source'],
+            'copy': 'node-1',
+            'paste': 1,
+            'undo': True,
+        },
+        {
             'id': 'autosaves_do_not_evict_history',
             'initialPush': True,
             'add': ['source'],
@@ -539,6 +554,22 @@ class TestUndoCoversParameterEdits:
         assert len(r['nodes']) == 5
         assert r['historyLen'] == 1, f'each restored node pushed its own snapshot: {r["historyLen"]}'
         assert r['historyIdx'] == 0
+
+    def test_an_edit_after_an_undo_is_a_new_step_not_a_rewrite(self, state):
+        """restoreState handed the history entry's own params object to the live node, so an
+        edit after Ctrl+Z rewrote the entry undo had just restored, the save looked unchanged,
+        and the next undo skipped the edit entirely (and landed on the empty canvas)."""
+        r = state['edit_after_undo_is_a_new_step']
+        assert len(r['nodes']) == 1, 'the branch edit rewrote the snapshot undo restored'
+        assert r['nodes'][0]['params'].get('keyword') is None, 'undo must restore the state before the branch edit'
+        assert r['historyLen'] == 2, r['historyLen']
+
+    def test_a_single_paste_is_one_undo_step(self, state):
+        """addNode saved the fresh defaults and the paste saved again; the first Ctrl+Z left a
+        node wearing the type's default parameters."""
+        r = state['paste_single_then_undo']
+        assert len(r['nodes']) == 1, 'the pasted node is still there after undo'
+        assert r['nodes'][0]['id'] == 'node-1'
 
 
 class TestTypingNeverTouchesTheCanvas:

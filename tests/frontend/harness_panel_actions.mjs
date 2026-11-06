@@ -836,6 +836,13 @@ fresh();
 const emNode = addCanvasNode('analysis', { operation: 'topic_label', label_max_topics: '30' });
 out.diagnostics_cost_label_no_rows = pa.estimateCost();
 
+/* clean's declared default mode is llm: a blank box is one call per row, not zero. */
+fresh();
+const cdSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '30' });
+const cdNode = addCanvasNode('process', { operation: 'clean' });
+pa.canvas.connections = [{ from: cdSrc, to: cdNode }];
+out.diagnostics_cost_clean_default = pa.estimateCost();
+
 /* ── lexicon manager panel: render, add, filter ────────────────────── */
 fresh();
 route('/api/lexicon', {

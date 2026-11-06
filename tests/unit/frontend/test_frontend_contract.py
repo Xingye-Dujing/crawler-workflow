@@ -141,6 +141,11 @@ class TestLlmGateParity:
         ('ner_regex', {'operation': 'ner', 'mode': 'regex'}, None),
         ('ner_llm', {'operation': 'ner', 'mode': 'llm'}, None),
         ('ner_bogus_mode', {'operation': 'ner', 'mode': 'sklearn'}, None),
+        # 网暴判定's optional llm mode was missing from the browser list entirely: the run
+        # started, reached the server, and only then failed for want of a model.
+        ('aggression_default', {'operation': 'aggression'}, None),
+        ('aggression_llm', {'operation': 'aggression', 'mode': 'llm'}, None),
+        ('aggression_lexicon', {'operation': 'aggression', 'mode': 'lexicon'}, None),
         # Polarity answers the same question four ways, three of which need no model, so
         # the whole grid is in here: `mode !== 'ml'` was the old reading and it would
         # block a SnowNLP run behind an API key nothing in the canvas asked for.

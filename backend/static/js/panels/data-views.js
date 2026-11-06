@@ -102,7 +102,7 @@ var dataNodes = {
         var node = canvas.nodes[nodeId];
         var current = node && node.params && node.params.dataset_id ? node.params.dataset_id : '';
         var items = list.map(function (d) {
-            return { value: d.dataset_id, label: escapeHtml(dataNodes._dsLabel(d)) };
+            return { value: d.dataset_id, label: dataNodes._dsLabel(d) };
         });
         select.innerHTML = '<option value="">' + escapeHtml(I18n.t('dataSource.choosePlaceholder')) + '</option>' +
             selectOptionTags(items, current, '');
@@ -130,7 +130,7 @@ var dataNodes = {
         if (!select || !canvas.nodes[nodeId]) return;
         var current = String(canvas.nodes[nodeId].params.basemap_dataset_id || '');
         var items = Object.keys(dataNodes._datasets).map(function (id) {
-            return { value: id, label: escapeHtml(dataNodes._dsLabel(dataNodes._datasets[id])) };
+            return { value: id, label: dataNodes._dsLabel(dataNodes._datasets[id]) };
         });
         select.innerHTML = '<option value="">' + escapeHtml(I18n.t('biblio.ui.noBasemap')) + '</option>' +
             selectOptionTags(items, current, '');

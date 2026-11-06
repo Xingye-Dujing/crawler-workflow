@@ -39,9 +39,9 @@ SCENARIOS = [
     },
     {'id': 'empty-canvas-is-silent', 'nodes': {}},
     {
-        'id': 'dismissed-blocks-the-run',
+        'id': 'notice-cannot-be-dismissed',
         'nodes': {'n1': {'type': 'comment', 'params': _COMMENT_URL}},
-        'answers': {'comment': None},
+        'answers': {'comment': 'go'},
     },
 ]
 
@@ -87,10 +87,12 @@ class TestCommentRegionGate:
         r = case(report, 'empty-canvas-is-silent')
         assert r['hasComment'] is False and r['dialogs'] == []
 
-    def test_dismissing_the_notice_does_not_start_the_run(self, report):
-        """The gate returns false when the user closes it, so execute() stops — a notice the
-        user declines must not be bulldozed past into a crawl they meant to hold off on."""
-        r = case(report, 'dismissed-blocks-the-run')
+    def test_the_notice_cannot_be_dismissed_into_a_silent_no_run(self, report):
+        """The notice has one answer. Dismissable, Esc/backdrop resolved to the shell's
+        cancelValue and execute() read that as “do not run” — no run, no toast, and the next
+        click showed the same notice again."""
+        r = case(report, 'notice-cannot-be-dismissed')
         assert r['hasComment'] is True
-        assert r['confirm'] is False
+        assert r['dialogs'][0]['dismissable'] is False
+        assert r['confirm'] is True, 'the only button is 知道了, which starts the run'
         assert r['dialogs'][0]['labels'] and r['okText'] in r['dialogs'][0]['labels']

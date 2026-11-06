@@ -1624,6 +1624,7 @@ function nodeClipboardScenario() {
    the workspace drop listener against the live page. */
 function clipDragToCanvasScenario() {
     freshWorld();
+    canvas.disabledTypes = []; // a previous scenario disabled `output`; this one tests the drop doors
     const srcId = addNode('source', 10, 10);
     canvas.nodes[srcId].title = '源Z';
     canvas.nodes[srcId].params = { platform: 'zhihu', keyword: 'DRAGME' };
@@ -1666,6 +1667,16 @@ function clipDragToCanvasScenario() {
     dispatchOn(canvas.workspace, 'drop', ev({ target: { closest: () => null }, dataTransfer: { getData: () => '' } }));
     const emptyAddsNothing = Object.keys(canvas.nodes).length === idsBefore3;
 
+    // A type the user disabled is refused by the drop too — the palette's click path already
+    // toasts, and a drag used to bypass that check and create the greyed-out node.
+    canvas.disabledTypes = ['output'];
+    const idsBeforeDisabled = Object.keys(canvas.nodes).length;
+    dispatchOn(canvas.workspace, 'drop', ev({
+        target: { closest: () => null }, clientX: 410, clientY: 140,
+        dataTransfer: { getData: (t) => (t === 'text/plain' ? 'output' : '') },
+    }));
+    const disabledDropAddsNothing = Object.keys(canvas.nodes).length === idsBeforeDisabled;
+
     // A TEXT row is not draggable and drags nothing onto the canvas.
     Clipboard.add({ kind: 'text', payload: 'plain note' });
     Clipboard.render();
@@ -1683,6 +1694,7 @@ function clipDragToCanvasScenario() {
         paletteAddedOne: palNew.length === 1,
         paletteIsOutput: palNew.length === 1 && canvas.nodes[palNew[0]].type === 'output',
         emptyAddsNothing,
+        disabledDropAddsNothing,
         textRowNotDraggable: !!textRow,
         textDragWroteNothing: dt2._d['application/x-canvas-clip'] === undefined,
     };

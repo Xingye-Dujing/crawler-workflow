@@ -467,8 +467,9 @@ const workflow = {
             if (cap.serialOnly) forced[cap.platform] = true;
         });
         var counts = {};
-        Object.keys(canvas.nodes).forEach(function (id) {
-            var node = canvas.nodes[id] || {};
+        var live = effectiveNodeMap();
+        Object.keys(live).forEach(function (id) {
+            var node = live[id] || {};
             if (node.type !== 'source') return;
             var platform = (node.params || {}).platform;
             if (platform && forced[platform]) counts[platform] = (counts[platform] || 0) + 1;
@@ -516,7 +517,7 @@ const workflow = {
         var values = (window.AppSettings && AppSettings._values) || {};
         if (!values.use_browser_profile) return null;
         if (values.same_platform_queue) return null;
-        var shared = profileCollisions(canvas.nodes, canvas.connections);
+        var shared = profileCollisions(effectiveNodeMap(), canvas.connections);
         /* A serial-only platform is taken out of the fork: its crawls queue whatever
            this answer says, so letting it appear here would offer 真并行 that the
            gate will not deliver. */
@@ -554,8 +555,9 @@ const workflow = {
            with it), so its platforms are read off the links with the same rule the
            textarea's examples follow. A canvas that crawls nothing asks nothing. */
         var found = [];
-        Object.keys(canvas.nodes).forEach(function (id) {
-            var node = canvas.nodes[id];
+        var live = effectiveNodeMap();
+        Object.keys(live).forEach(function (id) {
+            var node = live[id];
             var p = node.params || {};
             if (node.type === 'source') {
                 if (p.platform) found.push(p.platform);
@@ -665,6 +667,10 @@ const workflow = {
         if (!this._hasCommentCrawl()) return true;
         var choice = await showDialog({
             message: I18n.t('dialog.commentRegionNotice'),
+            /* A notice has one answer. Dismissable, Esc/backdrop resolved to the shell's
+               cancelValue and execute() read that as "do not run" — no run, no toast, and the
+               next click showed the same notice again. */
+            dismissable: false,
             buttons: [{ label: I18n.t('dialog.commentRegionOk'), value: 'go', primary: true }],
         });
         return choice === 'go';
@@ -1688,12 +1694,27 @@ function showPlatformAdvice() {
 
    Returns 0 when profiles are on, when the matrix has not loaded (no claim without
    the facts), and when nothing in the run is flagged. */
-function profileNoticeCount(nodes, settings, matrix) {
-    if (!settings || settings.use_browser_profile) return 0;
+/* One node map for every pre-run question: the nodes the run will ACTUALLY execute.
+   A disabled node (its own switch, its type off, or starved by a disabled upstream) runs
+   nothing, so counting it made the run ask about queues, VPN and profile conflicts for a
+   crawl that would never start. ``effectiveIds`` is the canvas mirror of the backend's
+   effective_workflow; without it (a harness without the panel) the full map is the answer. */
+function effectiveNodeMap() {
+    var all = (typeof canvas !== 'undefined' && canvas.nodes) || {};
+    if (typeof canvas === 'undefined' || !canvas.effectiveIds) return all;
+    var out = {};
+    canvas.effectiveIds().forEach(function (id) {
+        if (all[id]) out[id] = all[id];
+    });
+    return out;
+}
+
+function profileNoticeCount(nodes, settings, matrix) {    if (!settings || settings.use_browser_profile) return 0;
     if (!matrix || !Array.isArray(matrix.platforms)) return 0;
     var wanted = {};
-    Object.keys(nodes || {}).forEach(function (id) {
-        var node = nodes[id] || {};
+    var live = effectiveNodeMap();
+    Object.keys(live || {}).forEach(function (id) {
+        var node = live[id] || {};
         if (node.type !== 'source' && node.type !== 'comment') return;
         var platform = (node.params || {}).platform;
         if (!platform) return;

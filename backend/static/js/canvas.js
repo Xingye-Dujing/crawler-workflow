@@ -770,7 +770,9 @@ const canvas = {
             const type = e.dataTransfer.getData('text/plain');
             if (type) {
                 const pos = this._screenToCanvas(e.clientX - 110, e.clientY - 40);
-                this.addNode(type, pos.x, pos.y);
+                /* The palette's own door, not ``addNode``: clicking a disabled type is refused
+                   by name, and a drop used to bypass that check entirely. */
+                this.addNodeFromPalette(type, pos);
             }
         });
 
@@ -984,7 +986,7 @@ const canvas = {
         return (this.disabledTypes || []).indexOf(type) >= 0;
     },
 
-    addNodeFromPalette(type) {
+    addNodeFromPalette(type, pos) {
         const t = String(type || '').trim();
         if (!t) return null;
         // Refused by name, never silently: the library item still sits there, so the answer is a
@@ -993,7 +995,7 @@ const canvas = {
             if (typeof showToast === 'function') showToast(I18n.t('palette.blocked', { label: I18n.t('node.' + t) }));
             return null;
         }
-        const id = this.addNode(t);
+        const id = pos ? this.addNode(t, pos.x, pos.y) : this.addNode(t);
         this.selectNode(id);
         if (typeof showToast === 'function') {
             showToast(I18n.t('palette.added', { label: I18n.t('node.' + t) }));
@@ -1045,27 +1047,36 @@ const canvas = {
     pasteClipboardAt(pos) {
         if (!this._clipboardData) return null;
         const pp = pos || this._nextPastePos();
-        const id = this.addNode(this._clipboardData.type, pp.x, pp.y);
-        if (this.nodes[id]) {
-            this.nodes[id].params = JSON.parse(JSON.stringify(this._clipboardData.params));
-            /* Same order restoreState needs: updateNodeDisplay only keeps a name that is
-               already on both the node AND its element, so stamping it afterwards would let the
-               re-stamp overwrite the copied name with the type's default label. */
-            if (this._clipboardData.title) {
-                this.nodes[id].title = this._clipboardData.title;
-                const titleEl = this.nodes[id].el && this.nodes[id].el.querySelector('.node-title');
-                if (titleEl) titleEl.textContent = this._clipboardData.title;
+        /* ONE undo step, like the batch path: addNode saves the freshly-minted DEFAULTS on its
+           own, and the copied params/name are written after that. The second save used to be a
+           second history entry, so the first Ctrl+Z left a node holding the type defaults. */
+        let id = null;
+        this._historySaving = true;
+        try {
+            id = this.addNode(this._clipboardData.type, pp.x, pp.y);
+            if (this.nodes[id]) {
+                this.nodes[id].params = JSON.parse(JSON.stringify(this._clipboardData.params));
+                /* Same order restoreState needs: updateNodeDisplay only keeps a name that is
+                   already on both the node AND its element, so stamping it afterwards would let the
+                   re-stamp overwrite the copied name with the type's default label. */
+                if (this._clipboardData.title) {
+                    this.nodes[id].title = this._clipboardData.title;
+                    const titleEl = this.nodes[id].el && this.nodes[id].el.querySelector('.node-title');
+                    if (titleEl) titleEl.textContent = this._clipboardData.title;
+                }
+                this.updateNodeDisplay(id);
+                /* The params (and the copy's name) are written only AFTER addNode has already run
+                   its own saveState of the freshly-minted defaults, and updateNodeDisplay repaints
+                   the box's TEXT but not the enable/disable shading, which disableStates computes on
+                   a full render. So a paste has to re-render and re-save here, or the copied node's
+                   enabled:false and edited title never reach the draft and it comes back ENABLED (and
+                   unnamed) on the next load. */
+                this.scheduleRender();
             }
-            this.updateNodeDisplay(id);
-            /* The params (and the copy's name) are written only AFTER addNode has already run
-               its own saveState of the freshly-minted defaults, and updateNodeDisplay repaints
-               the box's TEXT but not the enable/disable shading, which disableStates computes on
-               a full render. So a paste has to re-render and re-save here, or the copied node's
-               enabled:false and edited title never reach the draft and it comes back ENABLED (and
-               unnamed) on the next load. */
-            this.scheduleRender();
-            this.saveState();
+        } finally {
+            this._historySaving = false;
         }
+        this.saveState();
         if (typeof showToast === 'function') showToast(I18n.t('toast.nodePasted'));
         return id;
     },

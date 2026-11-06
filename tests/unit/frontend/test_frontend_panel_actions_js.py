@@ -431,6 +431,13 @@ class TestDiagnostics:
         assert cost['llmCalls'] == 0
         assert cost['crawlRows'] == 0
 
+    def test_a_clean_node_with_a_blank_mode_is_priced_at_one_call_per_row(self, pa):
+        """clean's declared default is llm. Reading only ``mode === 'llm'`` priced an untouched
+        clean node at 0 calls while the run would pay for every row."""
+        cost = pa['diagnostics_cost_clean_default']
+        assert cost['crawlRows'] == 30
+        assert cost['llmCalls'] == 30
+
 
 class TestLexiconPanel:
     """The lexicon manager renders the user's terms, adds a pasted batch, and filters."""

@@ -624,6 +624,11 @@ class TestClipboardDragToCanvas:
     def test_a_drop_carrying_nothing_adds_nothing(self, ix):
         assert ix['clip_drag_to_canvas']['emptyAddsNothing'] is True
 
+    def test_a_disabled_type_cannot_be_dropped_back_in(self, ix):
+        """The palette's click path refuses a disabled type; the drop handler called addNode
+        directly and silently created the greyed-out node the user had just switched off."""
+        assert ix['clip_drag_to_canvas']['disabledDropAddsNothing'] is True
+
     def test_a_text_row_is_not_draggable_and_drags_no_node(self, ix):
         c = ix['clip_drag_to_canvas']
         assert c['textRowNotDraggable'] is True, 'a text row must not advertise itself as draggable'

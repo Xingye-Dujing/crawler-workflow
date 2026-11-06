@@ -100,7 +100,11 @@ Object.assign(canvas, {
             const id = canvas.addNode(n.type, n.x, n.y, n.id);
             idMap[n.id] = id;
             if (canvas.nodes[id]) {
-                canvas.nodes[id].params = n.params;
+                /* A SNAPSHOT in, a snapshot out. getState() deep-copies params for exactly this
+                   reason, and handing the history entry's own object back made the live node
+                   alias it: the next in-place updateParam rewrote the PAST entry, so the edit
+                   was not undoable and redo restored a state that had been edited. */
+                canvas.nodes[id].params = JSON.parse(JSON.stringify(n.params || {}));
                 /* The renamed title must travel back BEFORE the display update
                    — which re-stamps only titles that are still a type default —
                    and into the ELEMENT too, because that is what the re-stamp

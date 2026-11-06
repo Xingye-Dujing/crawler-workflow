@@ -181,6 +181,13 @@ for (const sc of scenarios) {
         wiring.left = Object.keys(canvas.nodes);
     }
     if (sc.undo) canvas.undo();
+    /* A branch OFF a rewound state: the edit after an undo must land in a NEW history entry,
+       not rewrite the snapshot undo just restored. */
+    for (const e of sc.editAfterUndo || []) {
+        canvas.nodes[e.id].params[e.key] = e.value;
+        canvas.saveState();
+    }
+    if (sc.undoAgain) canvas.undo();
     if (sc.redo) canvas.redo();
     if (sc.setLang) I18n.lang = sc.setLang;
     for (const id of sc.refresh || []) canvas.updateNodeDisplay(id);

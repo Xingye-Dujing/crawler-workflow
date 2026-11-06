@@ -37,6 +37,7 @@ for (const sc of scenarios) {
                 message: options.message,
                 labels: buttons.map(function (b) { return b.label; }),
                 values: buttons.map(function (b) { return ('value' in b) ? String(b.value) : '<absent>'; }),
+                dismissable: options.dismissable,
             });
             var answers = ${JSON.stringify(sc.answers || {})};
             var hasGo = buttons.some(function (b) { return b.value === 'go'; });

@@ -290,7 +290,7 @@ function selectOptionTags(items, stored, defVal) {
                 (known && String(item.value) === value ? ' selected' : '') +
                 (item.disabled ? ' disabled' : '') +
                 '>' +
-                item.label +
+                escapeHtml(String(item.label)) +
                 '</option>'
             );
         })
@@ -452,7 +452,7 @@ function openSettings(nodeId) {
     panel.classList.add('open');
     var html = '<div class="settings-group">' +
         '<label class="settings-label">' + I18n.t('settings.nodeType') + '</label>' +
-        '<span style="font-size:12px;color:var(--text-dim);">' + nodeTypeWord(node.type) + '</span>' +
+        '<span style="font-size:12px;color:var(--text-dim);">' + escapeHtml(nodeTypeWord(node.type)) + '</span>' +
         '</div>';
     /* The columns this node will emit — the edit-time lineage. A producer whose shape
        the server can see lists them; a crawl/comment/resume says so plainly rather than
@@ -817,7 +817,7 @@ function openSettings(nodeId) {
                shows 跟随全局 plus whatever value is already stored. */
             if (typeof LLMSettings !== 'undefined' && LLMSettings.load().provider === 'ollama') {
                 var modelOpts = [{ value: '', label: I18n.t('settings.followGlobalModel') }];
-                if (p.model) modelOpts.push({ value: p.model, label: escapeHtml(p.model) });
+                if (p.model) modelOpts.push({ value: p.model, label: p.model });
                 html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.nodeModel') + '</label>' +
                     '<select class="settings-select" id="node-model-' + nodeId + '" ' +
                     'onchange="updateParam(\'' + nodeId + '\',\'model\',this.value)">' +
@@ -1006,10 +1006,10 @@ async function renderNodeModelSelect(nodeId) {
     var tags = _nodeOllamaModels === '' ? [] : _nodeOllamaModels;
     var items = [{ value: '', label: I18n.t('settings.followGlobalModel') }];
     tags.forEach(function (m) {
-        items.push({ value: m, label: escapeHtml(m) });
+        items.push({ value: m, label: m });
     });
     if (current && !tags.some(function (m) { return m === current; })) {
-        items.push({ value: current, label: escapeHtml(current) });
+        items.push({ value: current, label: current });
     }
     sel.innerHTML = selectOptionTags(items, current, '');
 }
@@ -1135,7 +1135,7 @@ function nodeNeedsLlm(params, nodeOperation) {
     if (op === 'clean') return (mode || 'llm') === 'llm';
     if (op === 'emotion' || op === 'tendency') return (mode || 'bert') === 'llm';
     if (op === 'sentiment') return (mode || 'bert') === 'llm';
-    if (op === 'ner') return mode === 'llm';
+    if (op === 'ner' || op === 'aggression') return mode === 'llm';
     return false;
 }
 

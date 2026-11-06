@@ -1234,6 +1234,15 @@ class TestPanelEscaping:
         poisoned_panels = [pid for pid, _t, params in _PANELS if any(v == HOSTILE for v in _poison(params).values())]
         assert len(poisoned_panels) >= 12, f'only {poisoned_panels} carry a hostile value'
 
+    def test_a_node_type_and_a_select_label_are_escaped_too(self):
+        """A node ``type`` is read straight from an edited workflow file, and ``nodeTypeWord``
+        returns it verbatim when the catalogue has no key. A select label is equally data: the
+        account selector prints a user-typed name, and an off-list stored value becomes its own
+        option's label. Both used to be concatenated raw."""
+        source = (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
+        assert 'escapeHtml(nodeTypeWord(node.type))' in source
+        assert 'escapeHtml(String(item.label))' in source
+
     def test_the_panel_this_harness_cannot_render_escapes_where_it_is_written(self):
         """``renderResumeSettings`` fills itself from an awaited fetch, so the HTML
         this file captures is the “没有可续跑记录” placeholder — the run/node selects
