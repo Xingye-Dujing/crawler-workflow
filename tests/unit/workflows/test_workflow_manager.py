@@ -28,6 +28,15 @@ class TestNameCleaning:
         assert WorkflowManager.MAX_NAME_LENGTH == 60
         assert len(manager.clean_name('长' * 200)) == 60
 
+    def test_a_name_that_contains_the_extension_is_listed_and_described(self, manager):
+        """``replace('.json', '')`` stripped every occurrence: "情感分析.json" was saved as
+        "情感分析.json.json" and listed as "情感分析", a broken row whose path did not exist."""
+        manager.save('情感分析.json', WORKFLOW)
+        assert manager.list_workflows() == ['情感分析.json']
+        rows = manager.describe()
+        assert rows and rows[0]['name'] == '情感分析.json' and rows[0]['broken'] is False
+        assert manager.load('情感分析.json')['name'] == '情感分析.json'
+
     @pytest.mark.parametrize(
         'raw, expected',
         [

@@ -112,7 +112,10 @@ class WorkflowManager:
         if not os.path.exists(self.workflow_dir):
             return []
         files = [f for f in os.listdir(self.workflow_dir) if f.endswith('.json')]
-        return [f.replace('.json', '') for f in files]
+        # ``replace`` stripped EVERY occurrence: a workflow named "情感分析.json" produced
+        # "情感分析.json.json" and was listed as "情感分析", whose path does not exist — a
+        # permanently broken row the panel could neither open nor delete.
+        return [f[: -len('.json')] for f in files]
 
     def describe(self) -> list:
         """One object per saved file: what the management panel draws.

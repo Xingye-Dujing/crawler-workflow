@@ -281,6 +281,12 @@ class TestFigure:
         with pytest.raises(ChartConfigError, match='Field not found'):
             L.to_latex_document(_cat(), 'box', x='g', y='nope')
 
+    def test_topic_terms_rank_is_read_top_down(self):
+        """The ECharts builder sets ``inverse`` so rank 1 is at the top; the paper emitted the
+        symbolic axis without the reverse, putting the most salient term at the bottom."""
+        out = L.to_latex_document(_tt(), 'topic_terms', x='term', y='overall', y2='within')
+        assert 'y dir=reverse' in out
+
     def test_a_type_missing_its_required_field_refuses_by_name(self):
         with pytest.raises(ChartConfigError):
             L.to_latex_document(_cat(), 'scatter', x='v')  # scatter needs y too

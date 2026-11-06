@@ -55,18 +55,27 @@ def test_without_a_watermark_the_same_walk_fetches_the_boundary(crawler):
     assert crawler._watermark_candidate == 'BVnew1'
 
 
-def test_a_risk_code_mid_search_names_the_refusal_and_keeps_the_flag(crawler):
-    """A block that arrives after some rows landed used to be swallowed: the walk broke, the
-    summary said “完成”, and neither the console nor ``risk_blocked`` named the wall — a short
-    table settled DONE. It is a refusal now, flagged so the executor reports 风控 (back off)."""
+def test_a_risk_code_mid_search_keeps_the_rows_and_latches_the_flag(crawler):
+    """A block after some rows landed used to be swallowed: the walk broke and the summary
+    said “完成” with neither the console nor ``risk_blocked`` naming the wall. The rows are
+    kept (they are paid for) and the flag lets the executor fail the node with 风控."""
     crawler._wait_bvids = lambda: ['BV1', 'BV2', 'BV3']
     answers = iter([{'code': 0, 'data': {'bvid': 'BV1'}}, {'code': -352}])
     crawler._fetch_json = lambda _url: next(answers)
     crawler._polite_pause = lambda *_args: None
+    crawler.results = lambda: list(crawler.test_emitted)
+    rows = crawler.search('keyword', target_count=5)
+    assert [row['BV号'] for row in rows] == ['BV1'], 'a paid-for row must survive the refusal'
+    assert crawler.risk_blocked is True
+
+
+def test_a_risk_code_before_any_row_is_the_refusal(crawler):
+    crawler._wait_bvids = lambda: ['BV1']
+    crawler._fetch_json = lambda _url: {'code': -352}
+    crawler._polite_pause = lambda *_args: None
     with pytest.raises(RuntimeError, match='-352'):
         crawler.search('keyword', target_count=5)
     assert crawler.risk_blocked is True
-    assert [row['BV号'] for row in crawler.test_emitted] == ['BV1']
 
 
 def _source(platform, collect, **extra):

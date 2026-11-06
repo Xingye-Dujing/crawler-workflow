@@ -178,7 +178,11 @@ class BilibiliCrawler(VideoCrawler):
                 break
             page += 1
             self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
-        if blocked:
+        if blocked and not self.collected():
+            # Nothing landed before the refusal: there is no table to keep, so this is the
+            # refusal itself. With rows on disk the crawler returns them and latches
+            # ``risk_blocked`` — the source executor then fails the node with 风控 and 继续
+            # re-enters at the cursor, keeping every paid-for row.
             raise RuntimeError(t('crawl.bili.blocked', code=blocked))
         logger.info(t('crawl.bili.finished', n=self.collected(), total=target_count))
         return self.results()

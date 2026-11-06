@@ -141,6 +141,30 @@ class TestThePaperDocument:
         kinds = {entry['kind'] for entry in store.files_for_run('run-tex-1')}
         assert {'latex_doc', 'report_pdf'} <= kinds, f'the export browser and 智能清除 must find both: {kinds}'
 
+    def test_figure_numbers_follow_the_run_order_not_the_filename(self, client, app_module, data_root, monkeypatch):
+        """``files_for_run`` sorts by NAME, and the paper trusted it as the run's own order:
+        the alphabet numbered 图 1 as whichever title sorted first, not the chart the user drew
+        first (and the preview numbered)."""
+        from services.runs.store import NODE_DONE, RUN_COMPLETED
+
+        store = app_module.get_run_store()
+        export = data_root / 'data' / 'exports'
+        export.mkdir(parents=True, exist_ok=True)
+        store.start_run('run-order', '顺序演示', 'fp-order', node_total=2)
+        for node_id, title in (('node-1', 'Z图'), ('node-2', 'A图')):
+            store.begin_node('run-order', node_id, 'visualize', title=title)
+            name = f'{title}-{node_id}-latex.txt'
+            (export / name).write_text(_figure('knowledge_graph', title), encoding='utf-8')
+            store.record_file('run-order', node_id, name, 'latex')
+            store.finish_node('run-order', node_id, NODE_DONE)
+        store.finish_run('run-order', RUN_COMPLETED)
+        monkeypatch.setattr('services.charts.pdf.find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr('services.charts.pdf.subprocess.run', _fake_xelatex())
+
+        body = client.post('/api/report/latex', json={'run_id': 'run-order'}).get_json()
+        document = (export / body['tex']).read_text(encoding='utf-8')
+        assert document.index('Z图') < document.index('A图'), 'the alphabet numbered the figures'
+
     def test_a_chart_that_filed_no_latex_is_not_invented_but_is_named(self, client, app_module, data_root, monkeypatch):
         """node-3 has no registered source: the document carries two figures, not three with a
         blank box where the third should be — and the document says out loud which chart is missing.

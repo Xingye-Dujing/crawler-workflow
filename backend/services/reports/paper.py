@@ -347,7 +347,12 @@ def generate(run_id: str, *, title: str, store, export_dir: str) -> dict:
     # ``by_node`` is an insertion-ordered dict filled from the run's own filing order below, so
     # iterating it IS the run order.
     entries = []
-    for node_id, slot in by_node.items():
+    ordered_ids = [str(node.get('node_id') or '') for node in nodes]
+    ordered_ids += [node_id for node_id in by_node if node_id not in set(ordered_ids)]
+    for node_id in ordered_ids:
+        slot = by_node.get(node_id)
+        if slot is None:
+            continue
         caption = titles.get(node_id) or node_id
         entries.append(
             {

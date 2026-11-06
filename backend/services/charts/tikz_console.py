@@ -383,7 +383,7 @@ class ConsoleFigureMixin:
         # Reference fig-5: slim paired bars, and a legend swatch drawn as a thin rectangle so it matches the bars
         # instead of a fat default line marker.
         return (
-            f'\\begin{{axis}}[cixi,xbar,enlargelimits=0.15,bar width=0.13cm,bar shift=0.17cm,'
+            f'\\begin{{axis}}[cixi,xbar,y dir=reverse,enlargelimits=0.15,bar width=0.13cm,bar shift=0.17cm,'
             f'legend image code/.code={{\\draw[#1] (0cm,-0.09cm) rectangle (0.5cm,0.09cm);}},'
             f'symbolic y coords={{{_cat_keys(len(terms))}}},ytick=data,'
             f'yticklabels={{{_cat_labels(terms)}}},'

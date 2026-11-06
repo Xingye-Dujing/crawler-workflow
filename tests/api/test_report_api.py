@@ -259,6 +259,27 @@ class TestOptions:
         assert 'options' in response.get_json()['error']
 
 
+class TestReportCharts:
+    def test_the_platform_column_is_localised_for_charts_too(self, tmp_path, monkeypatch):
+        """The table block localised 平台, the charts read the raw frame — one report showed
+        `weibo` bars above a table saying 微博."""
+        from services.reports.html import ReportService
+
+        captured = {}
+
+        def charts(self, frames):
+            captured['platforms'] = [frame['frame']['平台'].tolist() for frame in frames]
+            return []
+
+        monkeypatch.setattr(ReportService, '_charts', charts)
+        ReportService(str(tmp_path)).build(
+            't',
+            [{'id': 'n1', 'title': 't', 'rows': [{'平台': 'weibo'}]}],
+            options={'show_charts': True},
+        )
+        assert captured['platforms'] == [['微博']]
+
+
 class TestStudioImages:
     def test_only_images_are_offered_for_embedding(self, client, app_module):
         # A report is an .html and a studio chart is a .png; the picker must

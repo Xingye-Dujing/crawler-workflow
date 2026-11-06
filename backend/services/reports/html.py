@@ -389,7 +389,9 @@ class ReportService:
             if keep is not None and ident not in keep:
                 continue
             rows = entry.get('rows') or []
-            frame = pd.DataFrame(rows) if rows else pd.DataFrame()
+            # Localised ONCE, before the charts and the tables: the table block used to apply
+            # this itself, so a 平台 bar chart above it printed `weibo` beside a table saying 微博.
+            frame = DataExporter.localized_platform(pd.DataFrame(rows)) if rows else pd.DataFrame()
             frames.append({'id': ident, 'title': _text(entry.get('title')) or ident, 'frame': frame})
         total_rows = sum(len(frame['frame']) for frame in frames)
         non_empty = sum(1 for frame in frames if not frame['frame'].empty)

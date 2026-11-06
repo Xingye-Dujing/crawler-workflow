@@ -137,6 +137,15 @@ def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     emit_latex = as_bool(params.get('emit_latex', True))
     emit_latex_table = as_bool(params.get('emit_latex_table', True))
     if emit_latex or emit_latex_table:
+        nid = str(node.get('id') or '')
+        run_id = str((ctx or {}).get('run_id') or '')
+        base_name = str(node.get('title') or nid or chart_type)
+        if run_id:
+            # A run's figure is an artifact of THAT run: two runs of one canvas (or a preview
+            # with the same title) used to rewrite one `<title>.txt`, so the ledger of the older
+            # run pointed at the newer figure and a paper mixed two runs. The identity goes
+            # FIRST because ``sanitize_filename`` keeps the head when it truncates a long title.
+            base_name = f'{run_id}-{nid}-{base_name}'
         spec.update(
             build_latex_outputs(
                 df,
@@ -153,7 +162,7 @@ def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
                 tokenize=tokenize,
                 emit_latex=emit_latex,
                 emit_latex_table=emit_latex_table,
-                base_name=node.get('title') or node.get('id') or chart_type,
+                base_name=base_name,
                 log=True,
             )
         )
