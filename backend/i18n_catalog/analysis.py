@@ -80,6 +80,9 @@ ZH = {
     'analysis.flow_stages': '主题流向至少要 2 个相邻阶段，现在只有 {stages} 个',
     'analysis.flow_weights': '{topic}（阶段“{stage}”）的“{col}”里没有可用的词权重，无法算分布差异',
     'analysis.forecast_dates': '“{col}”不是能解析成日期的时段列（一个日期都没有）：阶段名没法外推',
+    'analysis.forecast_subdaily': (
+        '“{col}”的时段间隔小于一天（同一日期多期），预测轴按天会重叠成同一个点：请先按天聚合再预测'
+    ),
     'analysis.forecast_done': '{method} 外推：{rows} 期观测，往后 {horizon} 步，间隔 {gap} 天（末期 {last}）',
     'analysis.forecast_duplicate': '“{col}”里有同一天出现两行：{days}（两行会被当成趋势的两步）',
     # ── 往前看：曲线外推与二次爆发预警 ──
@@ -223,6 +226,7 @@ ZH = {
         '主题距离图：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}'
         '（气泡大小=主题占比，坐标=两主题词分布的 JS 散度经 MDS）'
     ),
+    'analysis.topic_map_unused': '主题距离图：{topics} 没有任何文档，没有词分布可比较，坐标放在原点',
     'analysis.topic_method_auto_embedding': '主题方法 auto：检测到编码器，使用 embedding（{model}）',
     'analysis.topic_method_auto_lda': '主题方法 auto：无编码器包，改用 LDA（结果按 LDA 计）',
     'analysis.topic_rows': 'LDA 需要至少和主题数一样多的文本：主题 {topics} 个、有效文本 {rows} 行',
@@ -446,6 +450,10 @@ EN = {
         '{topic} (phase "{stage}") has no usable word weights in "{col}", so no divergence can be computed'
     ),
     'analysis.forecast_dates': '"{col}" is not a period column of dates: a phase NAME cannot be extrapolated',
+    'analysis.forecast_subdaily': (
+        '"{col}" has periods shorter than a day (several rows share one date); a day axis would collapse '
+        'the forecast into one point — aggregate to days first'
+    ),
     'analysis.forecast_done': (
         '{method} forecast: {rows} observed periods, {horizon} steps ahead, {gap}-day spacing (last {last})'
     ),
@@ -619,6 +627,9 @@ EN = {
     'analysis.topic_map_done': (
         'intertopic map: {n} topics over {rows} texts, perplexity {perplexity} '
         '(bubble size = topic share; coordinates = MDS of the Jensen-Shannon distance between word distributions)'
+    ),
+    'analysis.topic_map_unused': (
+        'intertopic map: {topics} has no documents (no word distribution to compare); placed at the origin'
     ),
     'analysis.topic_method_auto_embedding': 'topic method auto: encoder detected, using embedding ({model})',
     'analysis.topic_method_auto_lda': (

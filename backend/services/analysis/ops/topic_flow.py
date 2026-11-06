@@ -82,10 +82,10 @@ def topic_flow(
             skipped += 1
             continue
         weights = weights_list[number]
-        if not weights:
-            # No weights means no distribution. Filing the row as uniform-over-its-words
-            # would compute a similarity from a list overlap while the message reported a
-            # divergence, which is two different measurements wearing one name.
+        if not weights or not any(value > 0 for value in weights.values()):
+            # A ``word:0`` cell (the unused-topic fallback) parses to weights, but it is not a
+            # distribution: ``_jsd`` would answer 0 and the flow would claim a perfect carry-over
+            # from a topic with no word mass at all.
             raise UnknownOperationError(
                 t('analysis.flow_weights', topic=topic_list[number] or f'#{number + 1}', stage=key, col=weights_col)
             )

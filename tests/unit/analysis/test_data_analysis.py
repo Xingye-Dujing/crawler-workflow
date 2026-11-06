@@ -2565,6 +2565,32 @@ class TestTopicViews:
         assert out[['pc1', 'pc2']].notna().all().all()
         assert all(len(words.split('、')) == 4 for words in out['feature_words'])
 
+    def test_an_unused_topic_does_not_poison_the_map(self, monkeypatch):
+        """A zero KMeans cluster row has no word mass: normalising it produced NaNs, every JSD
+        against it was NaN, and MDS answered NaN coordinates (or raised inside numpy)."""
+        from importlib import import_module
+
+        import numpy as np
+
+        module = import_module('services.analysis.ops.topic_map')
+
+        class _Model:
+            components_ = np.array([[1.0, 2.0, 0.0], [0.0, 0.0, 0.0], [2.0, 1.0, 0.0]])
+
+            @staticmethod
+            def perplexity(_matrix):
+                return 3.0
+
+        doc_topic = np.array([[0.9, 0.0, 0.1], [0.8, 0.0, 0.2]])
+        monkeypatch.setattr(
+            module,
+            '_prepare_topic_model',
+            lambda *args, **kwargs: (['a', 'b'], _Model(), None, doc_topic, np.array(['甲', '乙', '丙'])),
+        )
+        out = module.topic_map(pd.DataFrame({'正文': ['a', 'b']}), '正文', n_topics=3, topn=2)
+        assert out[['pc1', 'pc2']].notna().all().all()
+        assert out.loc[out['topic'] == 'Topic-2', ['pc1', 'pc2']].values.tolist() == [[0.0, 0.0]]
+
     def test_the_map_spreads_on_both_axes_rather_than_collapsing_onto_one_line(self):
         """The scaling of each MDS axis must use the eigenvalue of the axis CHOSEN. Reading the
         solver's first two slots instead takes its two smallest — numpy returns them ascending —
@@ -2872,6 +2898,14 @@ class TestTopicFlow:
     def _flow(self, **kwargs):
         return D.topic_flow(self._frame(), **kwargs)
 
+    def test_a_zero_mass_topic_is_refused_not_called_identical(self):
+        """``word:0`` parses as weights; ``_jsd`` then answers 0 (identical) and the flow claims a
+        perfect carry-over from a topic with no word mass at all."""
+        rows = list(self.ROWS)
+        rows[1] = ('发酵期', 'TopicⅠ-2', '外卖、商家、退款', '外卖:0 商家:0 退款:0')
+        with pytest.raises(UnknownOperationError, match='TopicⅠ-2'):
+            D.topic_flow(self._frame(rows), min_similarity=0.01)
+
     def test_edges_join_the_shapes_the_sankey_node_reads(self):
         out = self._flow(min_similarity=0.01)
         assert list(out.columns) == [
@@ -3140,6 +3174,18 @@ class TestForecast:
             }
         )
 
+    def test_an_hourly_series_is_refused_because_the_forecast_axis_is_daily(self):
+        """Every future row is labelled %Y-%m-%d: an hourly series put all horizon points on one
+        date, i.e. one point on the chart, with no warning."""
+        frame = pd.DataFrame(
+            {
+                'period': [f'2024-04-10 {hour:02d}:00' for hour in range(8)],
+                'sentiment_index': [index / 10 for index in range(8)],
+            }
+        )
+        with pytest.raises(UnknownOperationError, match='一天|shorter than a day'):
+            D.forecast(frame, horizon=2)
+
     def test_history_keeps_its_numbers_and_the_future_gets_the_band(self):
         out = D.forecast(self._curve(), horizon=2, window=3)
         assert list(out.columns) == ['period', 'actual', 'predicted', 'lower', 'upper', 'horizon']
@@ -3343,8 +3389,15 @@ class TestSentimentEvolution:
             rows += [{'period': period, 'sentiment': 'negative'}] * negative
         return pd.DataFrame(rows)
 
-    def test_the_papers_phase_shares_come_back_out(self):
-        # 发酵期: 17 积极 / 252 中性 / 80 消极 out of 349 (表 2).
+    def test_the_polarity_column_defaults_to_sentiment_when_the_box_is_omitted(self):
+        """``label_col`` is in ``one``, so the gate refused the very default the operation's
+        signature declares ('sentiment') when a caller left the box out."""
+        frame = self._frame({'d1': (1, 1, 1)})
+        out, report = D.run_pipeline(frame, [{'op': 'sentiment_evolution', 'params': {'column': 'period'}}])
+        assert [step['op'] for step in report] == ['sentiment_evolution']
+        assert len(out) == 1 and out.at[0, 'total'] == 3
+
+    def test_the_papers_phase_shares_come_back_out(self):  # 发酵期: 17 积极 / 252 中性 / 80 消极 out of 349 (表 2).
         out = D.sentiment_evolution(self._frame({'发酵期': (17, 252, 80)}), 'period')
         assert out.at[0, 'positive_n'] == 17
         assert out.at[0, 'neutral_n'] == 252
@@ -3691,3 +3744,21 @@ class TestClusterReview:
         out = D.cluster_review(frame, llm=client)
         assert '年份跨度' not in client.prompts[0]
         assert '年份跨度' not in list(out.columns)
+
+
+class TestFlatJoinStep:
+    def test_a_flat_join_step_reads_its_sibling_fields_without_mutating_the_node(self):
+        """A flat step keeps its fields beside ``op`` (the panel shape); the join injection
+        assumed a nested params dict, died with ``KeyError: 'params'``, and wrote a live
+        DataFrame into the canvas state the run record echoes."""
+        from nodes.executors.analysis import execute_analysis_node
+
+        steps = [{'op': 'join_tables', 'left_on': '城市', 'right_on': '城市'}]
+        node = {'id': 'n1', 'type': 'analysis', 'params': {'steps': steps}}
+        rows = execute_analysis_node(
+            node,
+            [{'城市': '甲', '值': 0}],
+            upstream=[('p1', [{'城市': '甲', '值': 0}]), ('p2', [{'城市': '甲', '值': 1}])],
+        )
+        assert rows == [{'城市': '甲', '值_x': 0, '值_y': 1}]
+        assert steps[0] == {'op': 'join_tables', 'left_on': '城市', 'right_on': '城市'}, 'the canvas copy was mutated'

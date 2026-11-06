@@ -136,3 +136,13 @@ class TestLiveReloadWithdrawsDeletedTerms:
         # …while the term that was NOT deleted stays, or the fix would be a blanket reset that
         # silently throws away the rest of the lexicon.
         assert self.OTHER in jieba.lcut(self.OTHER), 'the reload withdrew more than was deleted'
+
+    def test_clearing_the_whole_list_withdraws_every_term(self, lex):
+        """An empty file has nothing to LOAD, and the withdrawal loop used to live inside that
+        branch: 清空 removed the terms from the table while jieba kept cutting with them."""
+        lex.add('userdict', [self.WORD])
+        reload_userdict()
+        assert self.WORD in jieba.lcut(self.WORD)
+        lex.clear('userdict')
+        reload_userdict()
+        assert self.WORD not in jieba.lcut(self.WORD), '清空 left the term in the tokenizer'

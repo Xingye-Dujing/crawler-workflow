@@ -62,6 +62,10 @@ def materialize_userdict() -> int:
     return len(lines)
 
 
+#: The terms the process loaded into jieba last, so a reload can withdraw the ones deleted.
+_loaded_terms: set[str] = set()
+
+
 def load_userdict() -> None:
     """Materialise and load the user dict into the process-wide jieba tokenizer.
 
@@ -90,21 +94,21 @@ def load_userdict() -> None:
         except OSError:
             logger.warning(t('lex.userdictLoadFailed'), exc_info=True)
             return
-        for gone in _loaded_terms - loaded_here:
-            with contextlib.suppress(Exception):
-                jieba.del_word(gone)
+    # Withdraw BEFORE the count check: an empty file (the 清空 button, or deleting the last
+    # term) has nothing to load, and skipping the loop left every term it had loaded glued into
+    # the tokenizer until a process restart.
+    for gone in _loaded_terms - loaded_here:
+        with contextlib.suppress(Exception):
+            jieba.del_word(gone)
+    if count and os.path.isfile(path):
         try:
             jieba.load_userdict(path)
         except Exception:
             logger.warning(t('lex.userdictLoadFailed'), exc_info=True)
             return
-        # Only a load that got this far replaces the remembered set: a failed reload must
-        # leave the previous words on record rather than orphan them in the tokenizer.
-        _loaded_terms = loaded_here
-
-
-#: The terms the process loaded into jieba last, so a reload can withdraw the ones deleted.
-_loaded_terms: set[str] = set()
+    # Only a load that got this far replaces the remembered set: a failed reload must leave the
+    # previous words on record rather than orphan them in the tokenizer.
+    _loaded_terms = loaded_here
 
 
 def reload_userdict() -> int:

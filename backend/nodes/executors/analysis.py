@@ -181,11 +181,21 @@ def execute_analysis_node(node: dict, current_input: list, upstream: list = None
     # a candidate right table.
     right_tables = [res for _pid, res in (upstream or [])[1:] if isinstance(res, list) and res]
 
-    for step in steps:
+    steps = list(steps)
+    for index, step in enumerate(steps):
         if step.get('op') == 'join_tables':
             if not right_tables:
                 raise UnknownOperationError(t('wf.join_no_right_table'))
-            step['params']['other_df'] = pd.DataFrame(right_tables[0])
+            # A run-local COPY: a flat step has no ``params`` dict at all (``run_pipeline``
+            # accepts both shapes), and writing the DataFrame into ``node['params']`` left a
+            # live pandas object inside the canvas state the record echoes.
+            join_params = (
+                dict(step.get('params'))
+                if isinstance(step.get('params'), dict)
+                # A flat panel-shaped step keeps its fields BESIDE ``op``; those are the kwargs.
+                else {key: value for key, value in step.items() if key != 'op'}
+            )
+            steps[index] = {**step, 'params': {**join_params, 'other_df': pd.DataFrame(right_tables[0])}}
 
     # An unknown/malformed step RAISES straight through: the executor turns it into
     # this node's failure and prints the reason with the node's label — one line,

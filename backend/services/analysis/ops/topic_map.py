@@ -43,7 +43,23 @@ def topic_map(
     mass = doc_topic.sum(axis=0)
     total = float(mass.sum())
     claimed = [int(owner) for owner in doc_topic.argmax(axis=1)]
-    points = _mds_2d(_jsd_matrix(model.components_))
+    # An unused topic has no word distribution (a zero KMeans cluster row): normalising it
+    # produced a NaN row, every pairwise JSD against it was NaN, and the MDS answered NaNs or
+    # raised from numpy. Map only the topics that have mass; the empty ones sit at the centre.
+    components = model.components_
+    usable = [index for index in range(len(components)) if float(components[index].sum()) > 0]
+    if len(usable) < len(components):
+        logger.warning(
+            t(
+                'analysis.topic_map_unused',
+                topics='、'.join(f'Topic-{index + 1}' for index in range(len(components)) if index not in usable),
+            )
+        )
+    points = [[0.0, 0.0] for _ in components]
+    if len(usable) >= 2:
+        mapped = _mds_2d(_jsd_matrix(components[usable]))
+        for position, index in enumerate(usable):
+            points[index] = mapped[position]
     rows = []
     for index in range(topics):
         component = model.components_[index]

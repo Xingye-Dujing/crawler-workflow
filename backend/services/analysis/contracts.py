@@ -142,7 +142,10 @@ STEP_PARAMS: dict = {
         'nonblank': ('summary_col',),
         'enums': {'on_fail': ('abort', ON_FAIL)},
     },
-    'sentiment_evolution': {'one': ('column', 'label_col')},
+    # ``label_col`` is deliberately NOT gated here: its signature default is the polarity
+    # column the polarity node writes, and the step itself refuses a named column the table
+    # does not hold. Listing it in ``one`` refused the very default the operation declares.
+    'sentiment_evolution': {'one': ('column',)},
     # The three reads that follow the staged model all name the columns 分阶段 LDA writes: a
     # lifecycle built on a guessed word column is a story about the wrong cell, and these steps
     # would still print a complete-looking table. ``size_col`` for the timeline is gated for the

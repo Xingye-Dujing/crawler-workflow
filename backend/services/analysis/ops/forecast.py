@@ -109,6 +109,11 @@ def forecast(
     gaps = work['stamp'].diff().dropna()
     sizes = gaps.dt.days.value_counts()
     modal = int(sizes.index[0])
+    if modal < 1:
+        # The axis is a CALENDAR DAY (`_forecast_row` prints %Y-%m-%d), so an hourly series
+        # stamped every horizon row with the same date — three "future points" that are one
+        # point on the chart. Refusing by name beats a figure nobody can read.
+        raise UnknownOperationError(t('analysis.forecast_subdaily', col=column))
     uneven = int(sizes.drop(index=modal).sum()) if len(sizes) > 1 else 0
     if uneven:
         logger.warning(t('analysis.forecast_uneven', steps=uneven, gap=modal, rows=len(work)))
