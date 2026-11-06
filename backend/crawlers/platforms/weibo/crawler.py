@@ -52,6 +52,9 @@ class WeiboCrawler(Crawler):
       同平台排队 setting is for — the crawler cannot talk the site out of it.
     """
 
+    #: True when the page the walk just waited on was the site's ``.card-no-result`` plate —
+    #: an ANSWER ("this window is empty"), not a page that failed to arrive.
+    _page_had_no_result = False
     domain = 'weibo.com'
     #: 热搜, served by the logged-in origin. Measured: ``ok: 1`` with ~52 rows in
     #: ``data.realtime``, repeatable, and answered with or without a session.

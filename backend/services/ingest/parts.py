@@ -155,7 +155,7 @@ class PartWriter:
         file; return its info. The tail is deliberately NOT written as its own
         part first — a part on disk means 'a settled batch', and a crash here
         only ever loses rows the resume ledger will collect again anyway."""
-        rows, columns, unreadable = self._read_all_parts()
+        rows, _columns, unreadable = self._read_all_parts()
         if unreadable:
             # Naming the shard beats a merged file that is quietly short by its whole batch —
             # the caller fails the node, and the other shards stay on disk for 继续/recovery.
