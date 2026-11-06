@@ -317,8 +317,6 @@ class TestDataframeRunner:
         row 1, so a burst of unparseable answers named one row several times."""
         import logging
 
-        from analyzers.llm_client import run_llm_dataframe
-
         client = ScriptedClient()
         client.default_reply = 'garbage'
         with caplog.at_level(logging.INFO):

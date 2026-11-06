@@ -213,7 +213,7 @@ class TestScopes:
         class _Service:
             store = _Store()
 
-        monkeypatch.setattr(accounts_service, 'get_account_service', lambda: _Service())
+        monkeypatch.setattr(accounts_service, 'get_account_service', _Service)
         assert scheduler_module._scopes() == []
 
     def test_an_active_account_is_the_scope(self, monkeypatch):
@@ -229,7 +229,7 @@ class TestScopes:
         class _Service:
             store = _Store()
 
-        monkeypatch.setattr(accounts_service, 'get_account_service', lambda: _Service())
+        monkeypatch.setattr(accounts_service, 'get_account_service', _Service)
         scopes = scheduler_module._scopes()
         assert [(scope.user_id, scope.username) for scope in scopes] == [('u1', 'bob')]
 
