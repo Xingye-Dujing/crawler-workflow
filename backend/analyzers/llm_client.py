@@ -585,6 +585,9 @@ def run_llm_rows(
     """
     say = log if log is not None else (lambda msg: None)
     total = len(jobs)
+    # A job's row id is the DataFrame's own index, which need not be 1..n (a filtered or merged
+    # table), so the console line carries the ordinal of the job in this pass.
+    row_numbers = {idx: position for position, (idx, _text) in enumerate(jobs, 1)}
     results = {}
     failures = 0
     done = 0
@@ -602,7 +605,9 @@ def run_llm_rows(
         nonlocal done, failures
         if result is None or (isinstance(result, tuple) and result and result[0] is None):
             failures += 1
-            say(t('llm.parse_failed', label=label, i=done + 1, total=total, f=failures))
+            # The row that failed, not "the next success": ``done + 1`` repeated 1 for every
+            # failure before the first success.
+            say(t('llm.parse_failed', label=label, i=row_numbers.get(idx, done + 1), total=total, f=failures))
             return
         failures = 0
         results[idx] = result

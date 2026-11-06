@@ -438,12 +438,16 @@ def _user_stopwords() -> frozenset:
     return _USER_STOP['set']
 
 
-def is_meaningful(token) -> bool:
+def is_meaningful(token, banned=None) -> bool:
     """Whether one token may enter a frequency table at all.
 
     Three rules, all of them shape rules rather than judgements about content: at least two
     characters (jieba hands back single marks and the particles the list above cannot catch when
     they are glued to nothing), some letter or digit, and not a bare number.
+
+    ``banned`` is the user's stopword SNAPSHOT for a whole pass (see :func:`filter_tokens`). The
+    version lookup behind the default is one SQLite read; a caller looping over tokens must pass
+    the snapshot instead of paying that read per token.
     """
     word = str(token or '').strip()
     if len(word) < 2:
@@ -452,12 +456,23 @@ def is_meaningful(token) -> bool:
         return False
     if _ONLY_DIGITS.match(word):
         return False
-    return word not in STOPWORDS and word not in _user_stopwords()
+    stop = _user_stopwords() if banned is None else banned
+    return word not in STOPWORDS and word not in stop
+
+
+def user_stopwords() -> frozenset:
+    """The current extra stop words, for a caller that filters many tokens in its own loop."""
+    return _user_stopwords()
 
 
 def filter_tokens(tokens) -> list:
-    """Apply :func:`is_meaningful` to an iterable already cut into tokens."""
-    return [token for token in tokens if is_meaningful(token)]
+    """Apply :func:`is_meaningful` to an iterable already cut into tokens.
+
+    The lexicon version is read ONCE for the whole list rather than once per token: this is the
+    hot path of every keyword/word-cloud/co-occurrence pass.
+    """
+    banned = _user_stopwords()
+    return [token for token in tokens if is_meaningful(token, banned)]
 
 
 def cut(text) -> list:

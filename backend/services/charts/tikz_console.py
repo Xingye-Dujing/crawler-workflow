@@ -82,7 +82,10 @@ class ConsoleFigureMixin:
         if not x or not y2:
             raise ChartConfigError('dual_line LaTeX requires a category field (x) and a second value field (y2)')
         labels, left = VisualizationService.aggregate(df, x, y, agg)
-        _, right = VisualizationService.aggregate(df, x, y2, agg2 or 'mean')
+        # ``agg2 or agg``: the ECharts builder reads the same fallback, and a fresh node stores no
+        # ``agg2`` at all (its select displays 合计/``sum``). The paper's right line used to be a
+        # mean while the screen drew a sum — two answers to one figure.
+        _, right = VisualizationService.aggregate(df, x, y2, agg2 or agg)
         pts_l = ' '.join(f'({_cat_ref(i)},{_num(v)})' for i, v in enumerate(left, 1) if math.isfinite(v))
         pts_r = ' '.join(f'({_cat_ref(i)},{_num(v)})' for i, v in enumerate(right, 1) if math.isfinite(v))
         ln = _esc(_localize_label(y) if y else t('chart.count'))
@@ -162,7 +165,13 @@ class ConsoleFigureMixin:
         VisualizationService.require_columns(df, x)
         values = pd.to_numeric(df[x], errors='coerce').dropna()
         counts, edges = _histogram_bins(values)
-        pts = ' '.join(f'({_num(edges[i])},{_num(c)})' for i, c in enumerate(counts))
+        # ``ybar interval`` draws one bar per INTERVAL: it needs n+1 x coordinates and reads the
+        # last point's x as the final right edge (its y is ignored). Emitting only n points drew
+        # n-1 bars, so the tail bin — often the finding — silently vanished from the paper figure.
+        points = [f'({_num(edges[i])},{_num(c)})' for i, c in enumerate(counts)]
+        if points:
+            points.append(f'({_num(edges[len(counts)])},0)')
+        pts = ' '.join(points)
         return (
             f'\\begin{{axis}}[cixi,xlabel={{{_esc(_localize_label(x))}}},ylabel={{{_esc(t("chart.count"))}}}]\n'
             f'\\addplot[ybar interval,fill=cA,draw=cA] coordinates {{{pts}}};\n\\end{{axis}}'
@@ -170,12 +179,21 @@ class ConsoleFigureMixin:
 
     @classmethod
     def _box(cls, df, x, y):
+        # A named y the table does not hold is refused — never swapped for the CATEGORY column x.
+        # The ECharts builder refuses exactly this; the fallback here drew a box of the phase
+        # names coerced to 0, so one node produced a refusal panel and a lying paper figure.
+        if y and y not in df.columns:
+            raise ChartConfigError(f'Field not found in the data: {y}')
         groups = []
         if x and y and y in df.columns:
             for name, g in df.groupby(x, sort=False):
-                groups.append((_localize_label(name), _box_stats(pd.to_numeric(g[y], errors='coerce').dropna())))
+                stats = _box_stats(pd.to_numeric(g[y], errors='coerce').dropna())
+                if stats is not None:
+                    groups.append((_localize_label(name), stats))
         elif x and x in df.columns:
-            groups.append((_localize_label(x), _box_stats(pd.to_numeric(df[x], errors='coerce').dropna())))
+            stats = _box_stats(pd.to_numeric(df[x], errors='coerce').dropna())
+            if stats is not None:
+                groups.append((_localize_label(x), stats))
         if not groups:
             raise ChartConfigError('box LaTeX needs a category field (x) with a numeric (y), or one numeric (x)')
         lo_all = min(s[0] for _, s in groups)
@@ -679,6 +697,22 @@ class ConsoleFigureMixin:
                     terms, pd.to_numeric(df[y], errors='coerce'), pd.to_numeric(df[y2], errors='coerce'), strict=True
                 )
             ]
+        if chart_type == 'heatmap':
+            # x and y are the two CATEGORY axes; the cell is the summed value_field (or a row
+            # count). The generic aggregate below read y as a value column and drew zeros for a
+            # perfectly valid heatmap.
+            VisualizationService.require_columns(df, x, y)
+            values = pd.to_numeric(df[value_field], errors='coerce') if value_field else None
+            head = [
+                _esc(_localize_label(x)),
+                _esc(_localize_label(y)),
+                _esc(_localize_label(value_field) if value_field else t('chart.count')),
+            ]
+            rows = []
+            for key, indices in df.groupby([x, y], sort=False).groups.items():
+                cell = values.loc[indices].sum() if values is not None else float(len(indices))
+                rows.append([_esc(str(key[0])), _esc(str(key[1])), _num(cell)])
+            return head, rows
         # the categorical/aggregated family (bar/line/dual_line/pie/scatter/histogram/box/heatmap/map/wordcloud)
         if not x:
             raise ChartConfigError(f'{chart_type} LaTeX table requires a category field (x)')

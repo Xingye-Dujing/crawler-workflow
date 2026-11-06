@@ -456,9 +456,11 @@ def _histogram_bins(values: pd.Series, bins: int = 10):
     return hist.tolist(), edges.tolist()
 
 
-def _box_stats(values: pd.Series) -> list:
+def _box_stats(values: pd.Series) -> list | None:
     if values.empty:
-        return [0, 0, 0, 0, 0]
+        # No measurement is not a measurement of zero: a five-number summary at 0 drew a real
+        # box for a group whose value column was entirely blank.
+        return None
     q1, q2, q3 = values.quantile([0.25, 0.5, 0.75])
     iqr = q3 - q1
     lower = max(values.min(), q1 - 1.5 * iqr)

@@ -496,6 +496,27 @@ class TestRelationshipNetwork:
         assert json.dumps(option, allow_nan=False)
         assert all(isinstance(link['lineStyle']['width'], float) for link in option['series'][0]['links'])
 
+    def test_a_node_whose_only_link_has_zero_weight_does_not_crash_the_graph(self):
+        """``sankey_links`` returns every group as a node while dropping zero-weight links; the
+        node then has no incident weight, and sizing it read ``incident[name]`` → KeyError."""
+        frame = pd.DataFrame({'s': ['a', 'a', 'c'], 't': ['b', 'b', 'd'], 'v': [5, 5, 0]})
+        option = V.to_echarts_option(frame, 'network', x='s', y='t', value_field='v')
+        series = option['series'][0]
+        assert {node['name'] for node in series['data']} == {'a', 'b'}
+        assert all(node['name'] in {'a', 'b'} for node in series['data'])
+
+    def test_a_text_value_field_is_refused_not_drawn_as_zero(self, df):
+        """A named y that holds no number used to answer every category with 0 (sum/count) or
+        null (mean) — a figure claiming every phase measured nothing."""
+        with pytest.raises(ChartConfigError, match='取值列|no numbers'):
+            V.to_echarts_option(df, 'bar', x='作者', y='平台')
+
+    def test_a_box_group_with_no_numbers_is_skipped_not_drawn_at_zero(self):
+        frame = pd.DataFrame({'g': ['a', 'a', 'b'], 'v': [1.0, 2.0, None]})
+        option = V.to_echarts_option(frame, 'box', x='g', y='v')
+        assert option['xAxis']['data'] == ['a']
+        assert len(option['series'][0]['data']) == 1
+
     def test_both_field_names_are_required_and_addressable(self, df):
         with pytest.raises(ChartConfigError, match='requires a source field'):
             V.to_echarts_option(df, 'network', x='作者')
@@ -744,7 +765,7 @@ class TestOptionJsonSafety:
 
     @pytest.mark.parametrize(
         'chart_type',
-        [c for c in CHART_TYPES if c not in ('network', 'model_agreement') and c not in BIBLIO_CHART_TYPES],
+        [c for c in CHART_TYPES if c not in ('network', 'model_agreement', 'box') and c not in BIBLIO_CHART_TYPES],
     )
     def test_a_frame_full_of_missing_numbers_still_serialises(self, chart_type):
         # ``network`` is out of this sweep for a reason, not by oversight: on a frame with no
@@ -752,6 +773,8 @@ class TestOptionJsonSafety:
         # (TestRelationshipNetwork) rather than a serialisable empty figure. ``model_agreement``
         # is out for a different reason: it reads the tidy 模型/标签/原行 table, so this g/v frame
         # has none of its columns and it correctly refuses — its own happy path is TestModelAgreement.
+        # ``box`` joins them: a group whose value column is entirely missing has no five-number
+        # summary, and drawing one at 0 was the fabricated-zero bug (TestAggregation).
         frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None]})
         # 双轴折线 and 显著词图 need their second field like any other type needs x: without
         # one they are a refused spec (pinned in TestConfigErrors), not a chart with a blank

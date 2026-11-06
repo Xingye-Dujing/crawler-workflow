@@ -146,7 +146,13 @@ class VisualizationService(OptionMixin):
         """
         VisualizationService.require_columns(df, x, y)
         if y:
-            numeric = pd.to_numeric(df[y], errors='coerce')
+            series = df[y]
+            numeric = pd.to_numeric(series, errors='coerce')
+            if series.notna().any() and not numeric.notna().any():
+                # A text column as the value field used to answer every category with 0 (sum/count)
+                # or null (mean) — a figure asserting "this phase has nothing" about a column that
+                # was never numeric. 热力图/散点 refuse the same input by name.
+                raise ChartConfigError(t('chart.y_not_numeric', col=y))
             grouped = numeric.groupby(df[x], sort=False).agg(agg)
         else:
             grouped = df.groupby(x, sort=False).size()
@@ -176,21 +182,22 @@ class VisualizationService(OptionMixin):
         measurements of the same corpus that a reader cannot put side by side.
         """
         VisualizationService.require_columns(df, column)
-        from analyzers.stopwords import is_meaningful
+        from analyzers.stopwords import is_meaningful, user_stopwords
 
+        banned = user_stopwords()
         texts = df[column].dropna().astype(str).tolist()
         counter = Counter()
         try:
             for text in texts:
                 for token in jieba.lcut(text):
-                    if not is_meaningful(token):
+                    if not is_meaningful(token, banned):
                         continue
                     counter[token] += 1
         except ImportError:
             for text in texts:
                 for token in text.split():
                     word = token.strip().lower()
-                    if word and is_meaningful(word):
+                    if word and is_meaningful(word, banned):
                         counter[word] += 1
 
         top = counter.most_common(top_n)

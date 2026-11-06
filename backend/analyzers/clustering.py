@@ -115,5 +115,7 @@ class TextCluster:
             raise ValueError(f'Unknown clustering method: {method}')
 
         work.loc[valid.index, 'cluster'] = labels
-        logger.info(t('cluster.done', rows=len(valid), clusters=len(set(labels)), score=score))
+        # ``-1`` is DBSCAN's noise label, not a cluster; the summary line counted it as one (its
+        # neighbour line already excluded it), so one run reported two different cluster counts.
+        logger.info(t('cluster.done', rows=len(valid), clusters=len(set(labels) - {-1}), score=score))
         return work

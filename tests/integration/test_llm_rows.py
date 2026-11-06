@@ -312,6 +312,31 @@ class TestDataframeRunner:
         assert df.loc[0, '情感'] == 'Joy' and df.loc[4, '情感'] == 'Joy'
         assert len(client.prompts) == 4  # every non-blank row reached the model
 
+    def test_a_parse_failure_names_the_row_that_failed(self, df_for_llm, caplog):
+        """The line used ``done + 1``: every failure before the first success was reported as
+        row 1, so a burst of unparseable answers named one row several times."""
+        import logging
+
+        from analyzers.llm_client import run_llm_dataframe
+
+        client = ScriptedClient()
+        client.default_reply = 'garbage'
+        with caplog.at_level(logging.INFO):
+            run_llm_dataframe(
+                df_for_llm,
+                text_column='正文',
+                op='emotion',
+                build_prompt=build_prompt,
+                parse=parse_emotion,
+                ctx={'client': client},
+                result_columns=['情感', '置信度'],
+                blank=['', 0.0],
+                fail_value=['失败', 0.0],
+            )
+        failures = [line for line in caplog.text.splitlines() if '解析失败' in line]
+        assert any('1/4' in line for line in failures), failures
+        assert any('2/4' in line for line in failures), failures
+
     def test_clean_run_discards_the_checkpoint_file(self, df_for_llm, tmp_path):
         client = ScriptedClient()
         df = run_df(df_for_llm, client=client, checkpoint_dir=str(tmp_path))

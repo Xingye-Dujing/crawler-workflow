@@ -44,6 +44,23 @@ SUSPECT_AT = 0.34
 LIKELY_AT = 0.67
 
 
+def _author_cell(value) -> str:
+    """One 评论者 cell as a name; a missing author is EMPTY, never the string ``'nan'``.
+
+    ``float('nan')`` is truthy, so ``str(value or '')`` kept it. Every deleted-account row then
+    became one pseudo-author called nan: the ``not author`` guards never fired, duplicate
+    comparisons were skipped BETWEEN all blank-author rows, and a burst was pooled from them.
+    """
+    if value is None:
+        return ''
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip()
+
+
 class BotLikelihoodAnalyzer:
     """Per-author coordinated-posting signal written onto every row."""
 
@@ -66,7 +83,7 @@ class BotLikelihoodAnalyzer:
         # Row order is preserved so the score lands back on the row it came from; the frame is
         # never reordered (a shuffled output would break the merge-order/SimHash invariants).
         texts = [normalize_text(str(v)) for v in work[text_column].tolist()]
-        authors = [str(a or '').strip() for a in work[author_column].tolist()]
+        authors = [_author_cell(a) for a in work[author_column].tolist()]
         # The project's own parser, not ``pd.to_datetime``: our crawlers write
         # ``2022年01月27日 00:59``, which pandas answers with NaT for the WHOLE column — every
         # ``times`` was then empty, so the burst signal was permanently 0 and bot_score silently

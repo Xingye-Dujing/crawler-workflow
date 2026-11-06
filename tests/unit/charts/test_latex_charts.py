@@ -256,6 +256,31 @@ class TestFigure:
         out = L.to_latex_document(_cat(), 'wordcloud', x='g', value_field='v')
         assert out.count('fontsize') >= 2 and '\\begin{tabular}' in out
 
+    def test_a_histogram_emits_one_coordinate_per_edge_so_the_tail_bin_draws(self):
+        """``ybar interval`` draws one bar per interval: n bins need n+1 x coordinates, the last
+        point's x closing the final bin. Emitting n points drew n-1 bars and silently dropped
+        the tail — the bin a heavy-tail figure exists for."""
+        df = pd.DataFrame({'v': [1, 1, 2, 2, 3, 99]})
+        out = L.to_latex_document(df, 'histogram', x='v')
+        coordinates = __import__('re').findall(r'coordinates \{([^}]*)\}', out)[0]
+        from services.charts.style import _histogram_bins
+
+        counts, _edges = _histogram_bins(df['v'])
+        assert coordinates.count('(') == len(counts) + 1, coordinates
+
+    def test_dual_line_right_axis_uses_the_same_default_aggregate_as_the_screen(self):
+        """A fresh node stores no ``agg2`` and its select displays 合计 (sum); the paper drew a
+        MEAN there — two answers to one figure."""
+        out = L.to_latex_document(_cat(), 'dual_line', x='g', y='v', y2='w')
+        right = __import__('re').findall(r'coordinates \{([^}]*)\}', out)[1]
+        assert right == '(c1,400) (c2,200) (c3,400)', right
+
+    def test_a_box_with_a_named_value_column_the_table_lacks_is_refused(self):
+        # The ECharts builder refuses this; the LaTeX side used to fall through to the CATEGORY
+        # column x coerced to 0 and drew a plausible box of phase names.
+        with pytest.raises(ChartConfigError, match='Field not found'):
+            L.to_latex_document(_cat(), 'box', x='g', y='nope')
+
     def test_a_type_missing_its_required_field_refuses_by_name(self):
         with pytest.raises(ChartConfigError):
             L.to_latex_document(_cat(), 'scatter', x='v')  # scatter needs y too

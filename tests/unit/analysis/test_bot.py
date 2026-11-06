@@ -44,6 +44,17 @@ class TestBotLikelihood:
         out = BotLikelihoodAnalyzer().analyze_dataframe(frame)
         assert (out['bot_level'] == 'none').all(), 'one author repeating is not coordination'
 
+    def test_a_blank_author_cell_is_empty_not_a_pseudo_author_named_nan(self):
+        """``float('nan')`` is truthy, so ``str(v or '')`` produced the author ``'nan'``: every
+        deleted-account row pooled into one account (duplicate checks skipped between them, one
+        burst window, and an author count that named a person who does not exist)."""
+        from analyzers.bot import _author_cell
+
+        assert _author_cell(None) == ''
+        assert _author_cell(float('nan')) == ''
+        assert _author_cell(pd.NA) == ''
+        assert _author_cell(' A ') == 'A'
+
     def test_missing_required_column_is_refused_by_name(self):
         no_author = pd.DataFrame({'正文': ['x'], '评论时间': ['2024-05-01 10:00']})
         with pytest.raises(ValueError, match='评论者'):

@@ -119,6 +119,22 @@ class TestDbscan:
         assert set(result['cluster']) == {-1}
         assert set(result['is_noise']) == {1}
 
+    def test_the_summary_does_not_count_noise_as_a_cluster(self, cluster, df, caplog):
+        """``-1`` is DBSCAN's noise marker, not a cluster: the neighbour line excluded it while
+        the summary line counted it, so one run reported two different cluster totals."""
+        import logging
+
+        from i18n import get_lang, set_lang
+
+        previous = get_lang()
+        set_lang('en')
+        try:
+            with caplog.at_level(logging.INFO):
+                cluster.analyze_dataframe(df, method='dbscan', eps=0.001, min_samples=3)
+        finally:
+            set_lang(previous)
+        assert 'into 0 clusters' in caplog.text, caplog.text
+
 
 class TestMethodDispatch:
     def test_kmeans_plus_plus_is_accepted(self, cluster, df):

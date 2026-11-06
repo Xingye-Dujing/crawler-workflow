@@ -136,6 +136,10 @@ def _network(cls, base: dict, req: ChartRequest) -> dict:
     for link in links:
         for name in (link['source'], link['target']):
             incident[name] = incident.get(name, 0.0) + link['value']
+    # ``sankey_links`` returns every group as a node while dropping zero/NaN-weighted links, so a
+    # node with no surviving edge has no entry here. Keeping it crashed on ``incident[name]``
+    # (KeyError) rather than drawing the graph; it also has no measured value to size it by.
+    nodes = [name for name in nodes if name in incident]
     biggest_node = max(incident.values()) or 1.0
     biggest_link = max(link['value'] for link in links) or 1.0
     base['series'] = [

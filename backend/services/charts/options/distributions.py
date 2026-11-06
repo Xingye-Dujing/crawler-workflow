@@ -125,6 +125,9 @@ def _box(cls, base: dict, req: ChartRequest) -> dict:
             (_localize_label(name), pd.to_numeric(group[req.y], errors='coerce').dropna())
             for name, group in req.df.groupby(req.x, sort=False)
         ]
+        groups = [group for group in groups if not group[1].empty]
+        if not groups:
+            raise ChartConfigError(f'No numeric values in "{req.y}" to draw a box plot')
         labels = [g[0] for g in groups]
         data = [_box_stats(g[1]) for g in groups]
         scatter_data = []
@@ -136,6 +139,8 @@ def _box(cls, base: dict, req: ChartRequest) -> dict:
         # Single box plot: x = numeric value (backward compat)
         values = pd.to_numeric(req.df[req.x], errors='coerce').dropna()
         stats = _box_stats(values)
+        if stats is None:
+            raise ChartConfigError(f'No numeric values in "{req.x}" to draw a box plot')
         labels = [_localize_label(req.x)]
         data = [stats]
         scatter_data = [[0, v] for v in values.tolist()]
