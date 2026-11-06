@@ -288,7 +288,10 @@ class AccountService:
             )
             raise AccountError('accounts.accountDisabled')
         self.store.record_login(row['user_id'], now, ip)
-        _throttle.clear(ip)
+        # This address AND this name — never every window at the address. The 改密 route files
+        # its ``current_password`` guesses under the same ``ip|`` prefix (``change:<user_id>``),
+        # so a broad clear here deleted the only limit on guessing a live session's password.
+        _throttle.clear(ip, row['username'])
         token = security.new_session_token()
         csrf_token = security.new_csrf_token()
         self.store.insert_session(

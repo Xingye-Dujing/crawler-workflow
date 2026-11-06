@@ -268,6 +268,11 @@ def accounts_delete(user_id: str):
             # live writer's database — and a refusal can arrive (wrong confirmation, a caller who
             # is not an administrator, the last active admin).
             service.check_deletable(actor, user_id, confirm)
+            # Refuse an account that still owns a live run or a login window BEFORE revoking
+            # anything: a 409 that has already killed the target's sessions and filed an audit
+            # row for a force logout the operator was told did not happen is the "authorize
+            # before touching the target" rule backwards.
+            _guard_idle(user_id, cookie_job=True)
             # Cut the account's sessions before the tree is touched, not after: the row outlives
             # ``release_user`` by the length of the move, and a request that arrives in that window
             # still resolves. It would rebuild the user's stores and ``ensure()`` a FRESH empty
@@ -275,7 +280,6 @@ def accounts_delete(user_id: str):
             # after, and nobody ever trashes or closes it again. Revoked first, that request has no
             # session and the window is gone.
             service.force_logout(actor, user_id)
-            _guard_idle(user_id, cookie_job=True)
             # Close this account's SQLite handles BEFORE the tree is moved. Windows refuses to
             # rename a directory that still holds an open database (and its -wal/-shm), so a
             # delete that released them afterwards could fail on exactly the platform this tool

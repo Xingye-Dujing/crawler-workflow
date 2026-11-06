@@ -215,6 +215,28 @@ def test_a_wrong_current_password_is_refused_like_a_wrong_login(service, monkeyp
     accounts_service.reset_throttle()
 
 
+def test_a_successful_login_does_not_clear_the_change_password_window(service, monkeypatch):
+    """A login clears the address+name pair it just proved, not every window at the address.
+
+    The 改密 route files its ``current_password`` guesses under the same ``ip|`` prefix, so a broad
+    clear here deleted the only limit on guessing a live session's password: one ordinary login —
+    on this account or any other sharing the address — reset it.
+    """
+    from services.accounts import service as accounts_service
+
+    accounts_service.reset_throttle()
+    monkeypatch.setattr(accounts_service, 'IP_FAILURE_LIMIT', 2)
+    _bootstrap(service)
+    ticket = service.authenticate('admin', PASSWORD, ip='10.9.9.9')
+    window = f'change:{ticket.account.user_id}'
+    accounts_service._throttle.record('10.9.9.9', window)
+    accounts_service._throttle.record('10.9.9.9', window)
+    assert accounts_service._throttle.blocked('10.9.9.9', window)
+    service.authenticate('admin', PASSWORD, ip='10.9.9.9')
+    assert accounts_service._throttle.blocked('10.9.9.9', window), 'a login wiped the 改密 guessing window'
+    accounts_service.reset_throttle()
+
+
 def test_disabled_account_cannot_log_in(service):
     admin = _bootstrap(service)
     admin = _admin(service)

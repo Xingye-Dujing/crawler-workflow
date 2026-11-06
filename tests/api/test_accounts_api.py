@@ -236,6 +236,29 @@ class TestAccountLifecycle:
         assert refused.status_code == 403, refused.get_json()
         assert releases == [], 'a non-admin closed Bob’s stores without deleting anything'
 
+    def test_a_refused_busy_delete_does_not_revoke_the_accounts_sessions(self, admin_client, monkeypatch):
+        """The 409 must arrive BEFORE the force logout. Force-logging-out first meant a refusal
+        the operator was told did not happen had already killed every session the account held
+        (and filed an audit row saying so)."""
+        bob = _create(admin_client, 'bob').get_json()['user']
+        service = accounts_service.get_account_service()
+        revocations = []
+        original = service.force_logout
+        monkeypatch.setattr(
+            service, 'force_logout', lambda *args, **kwargs: revocations.append(args[1]) or original(*args, **kwargs)
+        )
+        execution_state['running'] = True
+        execution_state['user_id'] = bob['user_id']
+        execution_state['run_id'] = 'bobs-live-run'
+        try:
+            refused = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'bob'})
+        finally:
+            execution_state['running'] = False
+            execution_state['user_id'] = ''
+            execution_state['run_id'] = ''
+        assert refused.status_code == 409, refused.get_json()
+        assert revocations == [], 'a refused delete revoked the account’s sessions anyway'
+
     def test_the_busy_probe_is_answered_only_to_an_administrator(self, admin_client):
         """“这个账号还有运行中的任务（<run id>）” names another account's run — so the
         administrator check must come before the probe, not after it."""
