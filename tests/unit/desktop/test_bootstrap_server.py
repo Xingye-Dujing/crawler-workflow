@@ -84,6 +84,19 @@ def test_a_detection_only_component_is_listed_but_never_selected(installer):
     assert 'app' not in state.effective()
 
 
+def test_the_folder_picker_buffer_is_declared_as_a_pointer(installer):
+    """A ``create_unicode_buffer`` is a c_wchar_Array, never a c_wchar_p.
+
+    Declaring ``pszDisplayName``/``SHGetPathFromIDListW`` as LPWSTR made ctypes raise before (or
+    right after) the dialog, which surfaced in the page as ERR_EMPTY_RESPONSE on /api/browse.
+    """
+    source = INSTALLER.read_text(encoding='utf-8')
+    assert "('pszDisplayName', ctypes.c_void_p)" in source
+    assert "('pszDisplayName', wintypes.LPWSTR)" not in source
+    assert 'SHGetPathFromIDListW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]' in source
+    assert 'ctypes.cast(path, ctypes.c_void_p)' in source
+
+
 def test_a_closed_page_stops_the_installer_but_a_running_download_does_not(installer):
     assert installer.idle_expired(0, 301, 'idle') is True
     assert installer.idle_expired(0, 301, 'running') is False
