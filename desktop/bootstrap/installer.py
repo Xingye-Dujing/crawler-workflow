@@ -208,8 +208,57 @@ def pick_folder(title: str) -> str:
     shell32.SHGetPathFromIDListW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
     shell32.SHGetPathFromIDListW.restype = wintypes.BOOL
     display = ctypes.create_unicode_buffer(260)
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    # Owner: this program's own console (a window in our process, so the shell never waits on a
+    # foreign thread), else the foreground window. The helper below then makes the dialog topmost
+    # for as long as it is open — an unowned browse dialog can open behind the browser.
+    kernel32.GetConsoleWindow.restype = wintypes.HWND
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    owner = kernel32.GetConsoleWindow() or user32.GetForegroundWindow() or None
+    stop_focus = threading.Event()
+
+    def focus_dialog() -> None:
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        user32.SetWindowPos.argtypes = [
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint,
+        ]
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        pid = os.getpid()
+
+        def visit(hwnd, _lparam):
+            window_pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+            if window_pid.value != pid or not user32.IsWindowVisible(hwnd):
+                return True
+            name = ctypes.create_unicode_buffer(32)
+            user32.GetClassNameW(hwnd, name, 32)
+            if name.value != '#32770':
+                return True
+            # Topmost for the dialog's lifetime: a background process cannot always take the
+            # foreground, and a picker the user cannot see is worse than one that stays on top.
+            user32.SetWindowPos(hwnd, ctypes.c_void_p(-1), 0, 0, 0, 0, 0x0003 | 0x0040)
+            user32.SetForegroundWindow(hwnd)
+            return False
+
+        callback = callback_type(visit)
+        for _ in range(25):
+            if stop_focus.wait(0.2):
+                return
+            user32.EnumWindows(callback, 0)
+
+    threading.Thread(target=focus_dialog, daemon=True).start()
     info = BrowseInfo(
-        None,
+        owner,
         None,
         ctypes.cast(display, ctypes.c_void_p),
         title,
@@ -230,6 +279,7 @@ def pick_folder(title: str) -> str:
     except (AttributeError, OSError, TypeError, ValueError):
         return ''
     finally:
+        stop_focus.set()
         if initialized:
             with contextlib.suppress(AttributeError, OSError):
                 ole32.CoUninitialize()
