@@ -388,6 +388,12 @@
         }
     });
 
+    /* The installer process stops itself once this page has been gone for a while. A heartbeat
+       keeps a page that is merely open alive; closing the window stops it. */
+    window.setInterval(function () {
+        fetch(base + '/api/ping', { method: 'POST' }).catch(function () {});
+    }, 20000);
+
     applyTheme();
     applyLang();
     applyState(state);

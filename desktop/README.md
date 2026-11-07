@@ -45,6 +45,10 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + 组件核心，约 9 MB。页面文件是
 `installer_page.html` / `installer_page.js`，测试只读它们和纯函数，不需要真的开窗口。
 
+**exe 是控制台后端**（`console=True`），不是 GUI：它启动本地服务、打印地址并交给系统默认浏览器，
+没有 Tk/Qt、没有原生对话框。浏览器打不开时控制台会打印“请手动打开：<地址>”，照抄即可；页面关掉后
+心跳停止，安装器进程几分钟内自行退出（下载中不会）。日志在 `%LOCALAPPDATA%\CaiXiHui\installer.log`。
+
 onefile 的临时目录用 `runtime_tmpdir='.'`（解在 exe 旁边并由 PyInstaller 删除），因为这台机器的
 `%TEMP%` 会被安全策略拒写；默认 `%TEMP%` 下连一个最小的 onefile 都起不来（实测
 `Could not create temporary directory`）。

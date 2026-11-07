@@ -65,7 +65,7 @@ def test_an_unknown_preset_is_refused_rather_than_guessed(installer):
 def test_the_effective_download_adds_a_requirement_the_user_did_not_tick(installer):
     state = _state(installer)
     state.set_selection(['catbus'])
-    effective = state._effective()
+    effective = state.effective()
     assert 'node' in effective, 'CatBus without Node is a download that can only fail'
     assert effective.index('node') < effective.index('catbus')
     body = state.snapshot()
@@ -81,7 +81,13 @@ def test_a_detection_only_component_is_listed_but_never_selected(installer):
     row = next(item for item in body['components'] if item['id'] == 'xelatex')
     assert row['downloadable'] is False
     assert row['checked'] is False
-    assert 'app' not in state._effective()
+    assert 'app' not in state.effective()
+
+
+def test_a_closed_page_stops_the_installer_but_a_running_download_does_not(installer):
+    assert installer.idle_expired(0, 301, 'idle') is True
+    assert installer.idle_expired(0, 301, 'running') is False
+    assert installer.idle_expired(0, 60, 'done') is False
 
 
 def test_the_running_process_says_whether_it_was_elevated(installer):

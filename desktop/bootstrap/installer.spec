@@ -1,4 +1,4 @@
-# PyInstaller spec for the online installer (one small windowed exe).
+# PyInstaller spec for the online installer (one small console exe).
 #
 # The bootstrap imports services.components through importlib so the same code the app runs is what
 # the installer runs; hiddenimports makes PyInstaller follow that indirection. The window is the
@@ -97,6 +97,9 @@ exe = EXE(
     # which a double-click makes the current directory — uses the folder the user downloaded to;
     # PyInstaller removes it again on exit.
     runtime_tmpdir='.',
-    console=False,
+    # A console program: the installer is a backend for a browser page. The console shows the
+    # URL (and any refusal) even on a machine that blocks a child browser, and it is the one
+    # window a double-click always produces.
+    console=True,
     icon=str(ICON) if ICON.exists() else None,
 )

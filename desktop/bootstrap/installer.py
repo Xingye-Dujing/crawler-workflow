@@ -22,6 +22,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -40,6 +41,60 @@ def asset_dir() -> Path:
 def icon_path() -> Path:
     candidates = (asset_dir() / 'icon.ico', Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'icon.ico')
     return next((item for item in candidates if item.exists()), candidates[0])
+
+
+def log_line(text: str) -> None:
+    """Print one line and append it to the diagnostic log.
+
+    This is a console program: the console is the fallback the user can read when the browser
+    cannot be opened. The file copy keeps the same fact after the console closes (several
+    destinations, best first: an explicit test path, the user's local app data, the exe's own
+    folder, then the system temp).
+    """
+    stamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    print(f'{stamp} {text}', flush=True)
+    line = f'{stamp} {text}\n'
+    explicit = str(os.environ.get('CIXI_INSTALLER_LOG') or '').strip()
+    candidates = []
+    if explicit:
+        candidates.append(Path(explicit))
+    local = os.environ.get('LOCALAPPDATA') or str(Path.home() / 'AppData' / 'Local')
+    candidates.append(Path(local) / 'CaiXiHui' / 'installer.log')
+    candidates.append(Path(sys.executable if getattr(sys, 'frozen', False) else __file__).parent / 'installer.log')
+    with contextlib.suppress(Exception):
+        import tempfile
+
+        candidates.append(Path(tempfile.gettempdir()) / 'CaiXiHui-installer.log')
+    for path in candidates:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open('a', encoding='utf-8') as handle:
+                handle.write(line)
+            return
+        except OSError:
+            continue
+
+
+def open_page(url: str) -> bool:
+    """Open the installer page in the user's default browser.
+
+    No GUI toolkit and no forced browser window: this program is a backend console, and the
+    browser is the front end. The URL is printed either way, so a machine that blocks a child
+    browser still leaves the user an address they can open themselves.
+    """
+    try:
+        if webbrowser.open(url):
+            return True
+    except (OSError, webbrowser.Error):
+        pass
+    startfile = getattr(os, 'startfile', None)
+    if startfile is not None:
+        try:
+            startfile(url)
+            return True
+        except OSError:
+            pass
+    return False
 
 
 def _backend_on_path() -> None:
@@ -209,14 +264,14 @@ class InstallerState:
         choices = preset_choices(preset, defaults, self._downloadable())
         return chosen_ids(choices, self._downloadable())
 
-    def _effective(self) -> list[str]:
+    def effective(self) -> list[str]:
         requires = {key: list(item.requires) for key, item in self.catalog.components.items()}
         return _PLAN.with_requirements(self.selected, requires, self._downloadable())
 
     def snapshot(self) -> dict:
         with self.lock:
             selected = set(self.selected)
-            effective = self._effective()
+            effective = self.effective()
             rows = []
             total = 0
             for item in self.catalog.components.values():
@@ -284,7 +339,7 @@ class InstallerState:
             self.job.update(values)
 
     def start(self, root: Path, data: Path) -> None:
-        ids = self._effective()
+        ids = self.effective()
         self.cancel.clear()
         with self.lock:
             self.job = {
@@ -414,6 +469,7 @@ class InstallerServer(ThreadingHTTPServer):
         super().__init__(('127.0.0.1', 0), Handler)
         self.state = state
         self.token = token
+        self.last_seen = time.monotonic()
 
     @property
     def url(self) -> str:
@@ -433,8 +489,6 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ''
 
     # ── plumbing ────────────────────────────────────────────────
-    def log_message(self, fmt, *args):
-        """The installer has no console; a request log would only be noise in a windowed build."""
 
     def _send(self, status: int, body: bytes, content_type: str) -> None:
         self.send_response(status)
@@ -459,7 +513,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _authorized(self, path: str) -> bool:
         prefix = f'/{self.server.token}/'
-        return path.startswith(prefix)
+        if path.startswith(prefix):
+            self.server.last_seen = time.monotonic()
+            return True
+        return False
 
     def _route(self) -> str:
         path = urlparse(self.path).path
@@ -480,7 +537,7 @@ class Handler(BaseHTTPRequestHandler):
         return payload if isinstance(payload, dict) else {}
 
     # ── GET ─────────────────────────────────────────────────────
-    def _get(self):
+    def handle_get(self):
         if not self._authorized(urlparse(self.path).path):
             self._send(404, b'not found', 'text/plain; charset=utf-8')
             return
@@ -503,7 +560,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b'not found', 'text/plain; charset=utf-8')
 
     # ── POST ────────────────────────────────────────────────────
-    def _post(self):
+    def handle_post(self):
         if not self._authorized(urlparse(self.path).path):
             self._send(404, b'not found', 'text/plain; charset=utf-8')
             return
@@ -533,6 +590,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'ok': True})
         elif route == '/api/launch':
             self._json(self._launch(state))
+        elif route == '/api/ping':
+            self._json({'ok': True})
         elif route == '/api/shutdown':
             self._json({'ok': True})
             self.server.stop_soon()
@@ -550,7 +609,7 @@ class Handler(BaseHTTPRequestHandler):
         if not root_text or not data_text:
             return {'ok': False, 'error': words['dir']}
         state.set_selection(payload.get('ids'))
-        ids = state._effective()
+        ids = state.effective()
         if 'app' not in ids:
             return {'ok': False, 'error': words['no_selection']}
         root = Path(root_text)
@@ -616,10 +675,16 @@ class Handler(BaseHTTPRequestHandler):
         return html.encode('utf-8')
 
 
+def _quiet_request_log(_self, *_args, **_kwargs):
+    """The installer has no console; a request log would only be noise in a windowed build."""
+
+
 # The stdlib dispatches on these exact names. Assigning them outside the class keeps the
-# pep8-naming rule honest without an exemption: the handlers themselves are ordinary methods.
-Handler.do_GET = Handler._get
-Handler.do_POST = Handler._post
+# pep8-naming rule honest without an exemption: the handlers themselves are ordinary methods, and
+# the log override keeps its own signature out of a base-class argument comparison.
+Handler.do_GET = Handler.handle_get
+Handler.do_POST = Handler.handle_post
+Handler.log_message = _quiet_request_log
 
 
 def main(argv=None) -> int:
@@ -640,17 +705,50 @@ def main(argv=None) -> int:
     token = str(os.environ.get('CIXI_INSTALLER_TOKEN') or '').strip() or secrets.token_hex(8)
     server = InstallerServer(state, token=token)
     url = server.url
-    print(f'安装器页面：{url}', flush=True)
-    timer = threading.Timer(0.3, lambda: webbrowser.open(url))
-    timer.daemon = True
-    timer.start()
+    log_line(f'安装器页面：{url}')
+
+    def open_window() -> None:
+        time.sleep(0.4)
+        if open_page(url):
+            log_line('opened the default browser')
+        else:
+            log_line(f'could not open a browser; open this address manually: {url}')
+
+    threading.Thread(target=open_window, daemon=True).start()
+    threading.Thread(target=watchdog, args=(server, state), daemon=True).start()
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+        log_line('installer stopped')
     return 0
+
+
+def idle_expired(last_seen: float, now: float, job_state: str, idle: float = 240.0) -> bool:
+    """Whether the page has been gone long enough to stop this process.
+
+    A running download is never interrupted by idleness; only a closed window is.
+    """
+    return job_state != 'running' and now - last_seen > idle
+
+
+def watchdog(server: InstallerServer, state: InstallerState, *, idle: float = 240.0) -> None:
+    """Stop after the page has been gone for a while — a closed window must not leave a process.
+
+    The page sends a heartbeat every 20 s, so a tab left open keeps the installer alive; closing
+    it stops the requests.
+    """
+    while not state.shutting_down:
+        time.sleep(20)
+        if state.job['state'] == 'running':
+            server.last_seen = time.monotonic()
+            continue
+        if idle_expired(server.last_seen, time.monotonic(), state.job['state'], idle):
+            log_line('no page requests; stopping the installer')
+            server.stop_soon(0)
+            return
 
 
 if __name__ == '__main__':
