@@ -20,13 +20,15 @@ ZH = {
     'env.bertRuntimeMissing': '缺少 onnxruntime，打包版应自带；这不是用户需要安装的组件',
     'env.browserAndDriverMissing': '没有找到 Chrome，也没有找到匹配的 chromedriver',
     'env.browserMissing': '没有找到 Chrome；可以安装便携版或使用本机已装的 Chrome',
+    'env.browserConfiguredMissing': '设置里的浏览器路径不存在：{path}；改正它，或清空让程序自己找 Chrome',
     'env.browserOk': 'Chrome 与 chromedriver 已就绪',
     'env.catbusOk': 'Node {node}，适配器 {entry}',
     'env.catbusUnknown': '无法核对 CatBus（探测本身失败）',
     'env.cloudUnknown': '需要 API Key，未在此处核对',
     'env.coreOk': '应用已启动',
     'env.driverMismatch': 'Chrome {chrome_major} 与 chromedriver {driver_major} 大版本不一致',
-    'env.driverMissing': '找到 Chrome，但没有找到 chromedriver',
+    'env.driverAutoDownload': '没有配置 chromedriver；首次采集会由 Selenium 自动下载匹配版本（需要网络）',
+    'env.driverConfiguredMissing': '设置里的驱动路径不存在：{path}',
     'env.driverUnverified': '找到 Chrome 与 chromedriver，但读不出版本，无法核对是否成对',
     'env.fontMissing': '没有中文字体；汉字会画成方框（不影响运行，但会写进论文）',
     'env.fontOk': '使用字体 {family}',
@@ -46,6 +48,7 @@ ZH = {
     'env.restartHint': '组件已装好；重启采析绘后，采集和运行会使用新组件。',
     'components.unknown': '没有这个组件：{component}（{err}）',
     'components.notDownloadable': '“{component}”只做检测，不由安装器下载；请按说明自行安装',
+    'components.appNotSelfInstallable': '主程序更新请重新运行在线安装器：运行中的应用不能替换自己',
 }
 
 EN = {
@@ -68,13 +71,19 @@ EN = {
     ),
     'env.browserAndDriverMissing': 'No Chrome and no matching chromedriver were found',
     'env.browserMissing': 'No Chrome was found; install the portable copy or use the Chrome already on this machine',
+    'env.browserConfiguredMissing': (
+        'The browser path in settings does not exist: {path}. Correct it, or clear it so the app finds Chrome itself'
+    ),
     'env.browserOk': 'Chrome and chromedriver are ready',
     'env.catbusOk': 'Node {node}, adapter {entry}',
     'env.catbusUnknown': 'CatBus could not be checked (the probe itself failed)',
     'env.cloudUnknown': 'Needs an API key; not checked here',
     'env.coreOk': 'The application is running',
     'env.driverMismatch': 'Chrome {chrome_major} and chromedriver {driver_major} are different major versions',
-    'env.driverMissing': 'Chrome was found but chromedriver was not',
+    'env.driverAutoDownload': (
+        'No chromedriver is configured; the first crawl lets Selenium download a matching one (needs network)'
+    ),
+    'env.driverConfiguredMissing': 'The driver path in settings does not exist: {path}',
     'env.driverUnverified': (
         'Chrome and chromedriver were found but neither version could be read, so the pair is unverified'
     ),
@@ -96,4 +105,7 @@ EN = {
     'env.restartHint': 'Component installed; restart CaiXiHui so crawling and runs pick it up.',
     'components.unknown': 'No such component: {component} ({err})',
     'components.notDownloadable': '"{component}" is only detected, never downloaded; install it the documented way',
+    'components.appNotSelfInstallable': (
+        'To update the application, run the online installer again: a running app cannot replace itself'
+    ),
 }

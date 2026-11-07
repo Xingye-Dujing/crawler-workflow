@@ -35,6 +35,19 @@ def test_the_panel_can_uninstall_but_never_the_application_itself():
     assert "component.id !== 'app'" in source, 'the app is removed by the uninstaller, not this panel'
 
 
+def test_the_restart_hint_is_painted_after_the_repaint_that_clears_the_body():
+    source = JS.read_text(encoding='utf-8')
+    refresh = source.index('await this.refresh();')
+    hint = source.index('if (finished) this._restartHint();')
+    assert refresh < hint, 'a hint prepended before _render is wiped in the same tick and never shows'
+
+
+def test_a_double_click_cannot_start_two_install_loops():
+    source = JS.read_text(encoding='utf-8')
+    assert 'if (this._busy) return;' in source
+    assert source.count('this._busy = false;') >= 3, 'every exit path has to release the guard'
+
+
 def test_the_page_loads_the_panel_and_its_words():
     html = HTML.read_text(encoding='utf-8')
     assert 'js/components.js' in html

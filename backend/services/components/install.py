@@ -100,7 +100,15 @@ def install_component(
         _verify_payload(staging, asset.verify)
 
         target = base / 'app' if asset.install_as == 'app' else base / 'components' / component_id / component.version
-        if _payload_ok(target, asset.verify):
+        # The app always lives in one folder, so "the file is there" cannot mean "this version is
+        # there": a version bump would download the new build and then throw it away. Every other
+        # component's folder name carries its version, which is why only the app compares versions.
+        if asset.install_as == 'app':
+            recorded = str((manifest.get(component_id) or {}).get('version') or '')
+            already_installed = _payload_ok(target, asset.verify) and recorded == component.version
+        else:
+            already_installed = _payload_ok(target, asset.verify)
+        if already_installed:
             shutil.rmtree(staging)
         elif asset.install_as == 'app':
             previous = base / 'app.previous'
@@ -142,17 +150,27 @@ def verify_component(catalog: Catalog, component_id: str, root: str | Path, *, s
 
 
 def remove_component(root: str | Path, component_id: str) -> bool:
-    """Delete a component family and its manifest row. The application itself is not removable."""
+    """Delete a component family and its manifest row. The application itself is not removable.
+
+    The bytes go first and the record second: a Chrome directory can hold a running browser, and a
+    removal that deleted the record but left the folder would report "not installed" while the disk
+    still holds it — and the next install would have to fight the leftover.
+    """
     if component_id == 'app':
         raise InstallError('the application is removed by the uninstaller, not the component manager')
     base = Path(root)
     family = base / 'components' / component_id
     manifest = Manifest(base).load()
-    removed = manifest.remove(component_id)
+    had_record = manifest.get(component_id) is not None
+    existed = family.exists()
+    if existed:
+        try:
+            shutil.rmtree(family)
+        except OSError as exc:
+            raise InstallError(f'cannot delete {family}: {exc}') from exc
+    manifest.remove(component_id)
     manifest.save()
-    if family.exists():
-        shutil.rmtree(family, ignore_errors=True)
-    return removed or family.exists()
+    return had_record or existed
 
 
 def _source(asset: Asset) -> str:

@@ -44,5 +44,24 @@ def selected_ids(preset: str, chosen: dict[str, bool], downloadable: list[str]) 
     return [component_id for component_id, on in chosen.items() if on]
 
 
+def with_requirements(selected: list[str], requires: dict[str, list[str]], downloadable: list[str]) -> list[str]:
+    """Insert every selected component's requirements ahead of it.
+
+    A novice who ticks CatBus but not Node should get a working install, not a download that ends in
+    "catbus needs node". Only downloadable ids are added: a manual component (MiKTeX) is something
+    the catalogue only detects, so it stays the user's own step.
+    """
+    ordered = list(selected)
+    changed = True
+    while changed:
+        changed = False
+        for component_id in list(ordered):
+            for required in requires.get(component_id, ()):
+                if required in downloadable and required not in ordered:
+                    ordered.insert(ordered.index(component_id), required)
+                    changed = True
+    return ordered
+
+
 def total_size(sizes: dict[str, int], ids: list[str]) -> int:
     return sum(int(sizes.get(component_id) or 0) for component_id in ids)

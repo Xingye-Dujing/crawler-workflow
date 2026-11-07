@@ -1265,3 +1265,13 @@ class TestPortableComponentsPointTheLookups:
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
         desktop.apply_component_env()
         assert 'CIXI_NODE_BIN' not in os.environ
+
+    def test_a_corrupt_manifest_does_not_stop_the_launch(self, desktop, tmp_path, monkeypatch):
+        """The manifest is an optimisation; a broken one must not be a startup failure."""
+        root = tmp_path / 'install'
+        (root / 'components').mkdir(parents=True)
+        (root / 'install-manifest.json').write_text('{not json', encoding='utf-8')
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(root / 'components'))
+        monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
+        desktop.apply_component_env()  # must return, not raise
+        assert 'CIXI_NODE_BIN' not in os.environ

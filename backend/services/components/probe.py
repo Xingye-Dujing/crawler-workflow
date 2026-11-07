@@ -90,7 +90,8 @@ def _major(text: str) -> str:
 def _chrome(root: Path) -> tuple[str, str]:
     explicit = _setting('browser_binary')
     if explicit:
-        return find_chrome(explicit), 'settings'
+        found = find_chrome(explicit)
+        return found, ('settings' if found else 'settings-missing')
     bundled = _component_binary(root, 'chrome', chrome_executable_name())
     if bundled:
         return bundled, 'component'
@@ -100,8 +101,10 @@ def _chrome(root: Path) -> tuple[str, str]:
 
 def _driver(root: Path) -> tuple[str, str]:
     explicit = _setting('driver_path')
-    if explicit and Path(explicit).is_file():
-        return explicit, 'settings'
+    if explicit:
+        # A configured path is a promise the crawler checks too: it refuses by name when the file
+        # is gone, so the panel must not answer "Selenium will download one" instead.
+        return (explicit, 'settings') if Path(explicit).is_file() else ('', 'settings-missing')
     bundled = _component_binary(root, 'chromedriver', driver_executable_name())
     if bundled:
         return bundled, 'component'
@@ -225,13 +228,38 @@ def _capability(
 def _crawl_selenium(root: Path) -> dict:
     chrome, chrome_source = _chrome(root)
     driver, driver_source = _driver(root)
-    if not chrome and not driver:
-        return _capability('crawl_selenium', 'env.capBrowser', 'missing', 'env.browserAndDriverMissing')
     if not chrome:
+        if chrome_source == 'settings-missing':
+            return _capability(
+                'crawl_selenium',
+                'env.capBrowser',
+                'missing',
+                'env.browserConfiguredMissing',
+                {'path': _setting('browser_binary')},
+                chrome_source,
+            )
+        if not driver:
+            return _capability('crawl_selenium', 'env.capBrowser', 'missing', 'env.browserAndDriverMissing')
         return _capability('crawl_selenium', 'env.capBrowser', 'missing', 'env.browserMissing')
     if not driver:
+        if driver_source == 'settings-missing':
+            return _capability(
+                'crawl_selenium',
+                'env.capBrowser',
+                'missing',
+                'env.driverConfiguredMissing',
+                {'path': _setting('driver_path')},
+                chrome_source,
+            )
+        # An empty driver path is not a refusal in this product: the crawler hands it to Selenium
+        # Manager (the launcher prints the same sentence), so the honest state is "works, degraded".
         return _capability(
-            'crawl_selenium', 'env.capBrowser', 'missing', 'env.driverMissing', {'chrome': chrome}, chrome_source
+            'crawl_selenium',
+            'env.capBrowser',
+            'degraded',
+            'env.driverAutoDownload',
+            {'chrome': chrome},
+            chrome_source,
         )
     chrome_version, driver_version = browser_version(chrome), _version(driver)
     chrome_major, driver_major = _major(chrome_version), _major(driver_version)
@@ -261,18 +289,21 @@ def _crawl_selenium(root: Path) -> dict:
 
 def component_rows(root: Path, catalog: Catalog | None) -> list[dict]:
     try:
-        installed = Manifest(root).load().installed()
+        manifest = Manifest(root).load()
     except ManifestError as exc:
         return [{'id': 'manifest', 'state': 'unknown', 'reason': str(exc)}]
     rows = []
-    for component_id, record in sorted(installed.items()):
+    for component_id, record in sorted(manifest.installed().items()):
         latest = ''
         if catalog is not None and component_id in catalog.components:
             latest = catalog.components[component_id].version
+        # A row is only "ok" when the folder the manifest names is still there: a component the user
+        # deleted by hand is not installed, however loudly the record says it is.
+        present = manifest.path_of(component_id) is not None
         rows.append(
             {
                 'id': component_id,
-                'state': 'ok',
+                'state': 'ok' if present else 'missing',
                 'version': str(record.get('version') or ''),
                 'path': str(root / str(record.get('path') or '')),
                 'latest': latest,

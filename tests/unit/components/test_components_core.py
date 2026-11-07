@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -246,6 +247,27 @@ class TestInstall:
             install_component(catalogue, 'demo', tmp_path / 'root')
         assert not (tmp_path / 'root' / 'components' / 'demo').exists()
 
+    def test_a_removal_that_cannot_delete_the_folder_keeps_the_record(self, tmp_path, catalogue, monkeypatch):
+        """A running Chrome can hold its own directory: the record must not vanish while the files stay."""
+        archive = tmp_path / 'demo.zip'
+        archive.write_bytes(_zip_bytes({'top/hello.txt': b'hi'}))
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(archive.read_bytes())
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        install_component(catalogue, 'demo', tmp_path / 'root')
+
+        def refuse(*_args, **_kwargs):
+            raise OSError('the file is in use')
+
+        monkeypatch.setattr(install_module.shutil, 'rmtree', refuse)
+        with pytest.raises(InstallError, match='cannot delete'):
+            remove_component(tmp_path / 'root', 'demo')
+        assert Manifest(tmp_path / 'root').load().get('demo') is not None
+
     def test_the_environment_reads_the_manifest_the_installer_wrote(self, tmp_path, catalogue, monkeypatch):
         archive = tmp_path / 'demo.zip'
         archive.write_bytes(_zip_bytes({'top/hello.txt': b'hi'}))
@@ -259,6 +281,64 @@ class TestInstall:
         install_component(catalogue, 'demo', tmp_path / 'root')
         rows = probe_module.component_rows(tmp_path / 'root', None)
         assert [row['id'] for row in rows] == ['demo'], 'the probe must look where the installer wrote the manifest'
+
+    def test_a_component_whose_folder_disappeared_is_not_reported_as_installed(self, tmp_path, catalogue, monkeypatch):
+        archive = tmp_path / 'demo.zip'
+        archive.write_bytes(_zip_bytes({'top/hello.txt': b'hi'}))
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(archive.read_bytes())
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        install_component(catalogue, 'demo', tmp_path / 'root')
+        shutil.rmtree(tmp_path / 'root' / 'components' / 'demo')
+        rows = probe_module.component_rows(tmp_path / 'root', None)
+        assert rows[0]['state'] == 'missing', 'the manifest record outlived the files it names'
+
+    @staticmethod
+    def _app_catalog(version: str) -> Catalog:
+        return Catalog(
+            {
+                'schema': 1,
+                'components': {
+                    'app': {
+                        'version': version,
+                        'platforms': {
+                            platform_name(): {
+                                'archive': 'zip',
+                                'strip_prefix': 'top',
+                                'install_as': 'app',
+                                'verify': ['hello.txt'],
+                                'urls': ['https://example.com/app.zip'],
+                                'sha256': '0' * 64,
+                                'size': 1,
+                            }
+                        },
+                    }
+                },
+            }
+        )
+
+    def test_a_new_application_version_replaces_app_and_keeps_the_previous_copy(self, tmp_path, monkeypatch):
+        """The app lives in one folder, so "the exe is there" cannot mean "this version is there"."""
+        current = {'bytes': _zip_bytes({'top/hello.txt': b'one'})}
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(current['bytes'])
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        root = tmp_path / 'root'
+        install_component(self._app_catalog('1.0'), 'app', root)
+        assert (root / 'app' / 'hello.txt').read_bytes() == b'one'
+        current['bytes'] = _zip_bytes({'top/hello.txt': b'two'})
+        install_component(self._app_catalog('2.0'), 'app', root)
+        assert (root / 'app' / 'hello.txt').read_bytes() == b'two', 'a version bump must replace the app folder'
+        assert (root / 'app.previous' / 'hello.txt').read_bytes() == b'one', 'the old build is the rollback'
+        assert Manifest(root).load().get('app')['version'] == '2.0'
 
 
 class TestPaths:
@@ -279,3 +359,35 @@ class TestBrowserVersion:
         # A Windows GUI binary (chrome.exe) is read through its version resource; this checks the
         # resolver answers for an executable that exists on every machine the suite runs on.
         assert browser_version(sys.executable)
+
+
+class TestCrawlCapability:
+    def test_a_missing_driver_is_degraded_because_selenium_manager_can_fetch_one(self, monkeypatch):
+        """The launcher prints "Selenium downloads a matching driver"; the panel must not call it off."""
+        monkeypatch.setattr(probe_module, '_setting', lambda key: '')
+        monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '/opt/chrome')
+        monkeypatch.setattr(probe_module, '_driver', lambda root: ('', 'none'))
+        row = probe_module._crawl_selenium(Path('.'))
+        assert row['state'] == 'degraded'
+        assert row['reason_key'] == 'env.driverAutoDownload'
+
+    def test_a_configured_browser_that_is_gone_is_named_rather_than_guessed(self, monkeypatch):
+        monkeypatch.setattr(
+            probe_module, '_setting', lambda key: r'C:\gone\chrome.exe' if key == 'browser_binary' else ''
+        )
+        monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '')
+        monkeypatch.setattr(probe_module, '_driver', lambda root: ('', 'none'))
+        row = probe_module._crawl_selenium(Path('.'))
+        assert row['state'] == 'missing'
+        assert row['reason_key'] == 'env.browserConfiguredMissing'
+        assert row['reason_params']['path'].endswith('chrome.exe')
+
+    def test_a_configured_driver_that_is_gone_is_named_rather_than_guessed(self, monkeypatch):
+        settings = {'browser_binary': '', 'driver_path': r'C:\gone\chromedriver.exe'}
+        monkeypatch.setattr(probe_module, '_setting', lambda key: settings.get(key, ''))
+        monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '/opt/chrome')
+        monkeypatch.setattr(probe_module, '_driver', lambda root: ('', 'settings-missing'))
+        row = probe_module._crawl_selenium(Path('.'))
+        assert row['state'] == 'missing'
+        assert row['reason_key'] == 'env.driverConfiguredMissing'
+        assert row['reason_params']['path'].endswith('chromedriver.exe')

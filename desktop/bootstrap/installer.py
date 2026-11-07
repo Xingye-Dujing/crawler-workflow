@@ -243,7 +243,9 @@ class Installer(tk.Tk):
         self.size_label.config(text=self.t('size', size=human_size(total)))
 
     def _selected_ids(self) -> list[str]:
-        return _selected_ids(self.preset.get(), self.chosen, self.catalog)
+        ids = _selected_ids(self.preset.get(), self.chosen, self.catalog)
+        requires = {key: list(item.requires) for key, item in self.catalog.components.items()}
+        return _PLAN.with_requirements(ids, requires, list(self.catalog.downloadable()))
 
     def _browse(self) -> None:
         chosen = filedialog.askdirectory(initialdir=self.root_dir.get() or str(Path.home()))

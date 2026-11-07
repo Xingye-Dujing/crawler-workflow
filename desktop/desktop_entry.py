@@ -580,13 +580,18 @@ def apply_component_env() -> None:
     the user exported is never overwritten. This is only the default a bundled layout needs: without
     it, installing Chrome beside the app would change nothing because ``find_chrome`` does not know
     that folder exists.
+
+    Best effort by design: a source checkout has no manifest, and a corrupt one must not stop the
+    application from starting — the per-OS lookups still answer, and the panel names the bad file.
     """
     try:
         from core.machine import chrome_executable_name
 
-        from services.components.manifest import Manifest
+        from services.components.manifest import Manifest, ManifestError
         from services.components.paths import components_root, install_root
-
+    except ImportError:
+        return
+    try:
         os.environ.setdefault('CIXI_COMPONENTS_DIR', str(components_root()))
         manifest = Manifest(install_root()).load()
         paths = {
@@ -600,8 +605,7 @@ def apply_component_env() -> None:
             candidate = installed / name if installed else None
             if candidate and candidate.exists() and not os.environ.get(variable):
                 os.environ[variable] = str(candidate)
-    except (ImportError, OSError, ValueError):
-        # A source checkout without a manifest is the normal case; the per-OS tables still answer.
+    except (OSError, ValueError, ManifestError):
         return
 
 

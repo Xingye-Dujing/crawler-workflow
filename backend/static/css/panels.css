@@ -929,10 +929,11 @@ button.history-del:hover {
   max-height: 82vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg2, #16181d);
-  border: 1px solid var(--line2, #333);
+  background: var(--bg);
+  border: 1px solid var(--line);
   border-radius: 6px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: var(--text);
 }
 .env-body {
   overflow: auto;
@@ -943,7 +944,7 @@ button.history-del:hover {
   gap: 8px;
   align-items: baseline;
   padding: 7px 0;
-  border-bottom: 1px solid var(--line2, #262a31);
+  border-bottom: 1px solid var(--line2);
 }
 .env-row:last-child { border-bottom: none; }
 .env-state {
@@ -951,20 +952,20 @@ button.history-del:hover {
   font-size: 11px;
   letter-spacing: 0.5px;
 }
-.env-state.ok { color: #59c46b; }
-.env-state.degraded { color: #d6a13c; }
-.env-state.missing { color: #e05d5d; }
-.env-state.unknown { color: #8a8f98; }
+.env-state.ok { color: var(--ok); }
+.env-state.degraded { color: var(--warn); }
+.env-state.missing { color: var(--err); }
+.env-state.unknown { color: var(--text-dim); }
 .env-name { flex: 0 0 210px; }
-.env-reason { flex: 1; color: var(--text-dim, #9aa0a6); font-size: 12px; }
+.env-reason { flex: 1; color: var(--text-dim); font-size: 12px; }
 .env-component {
   display: flex;
   gap: 8px;
   align-items: center;
   padding: 5px 0;
-  border-bottom: 1px solid var(--line2, #262a31);
+  border-bottom: 1px solid var(--line2);
   font-size: 12px;
 }
 .env-component:last-child { border-bottom: none; }
 .env-component .env-grow { flex: 1; }
-.env-hint { color: var(--text-dim, #9aa0a6); font-size: 12px; margin: 8px 0; }
+.env-hint { color: var(--text-dim); font-size: 12px; margin: 8px 0; }

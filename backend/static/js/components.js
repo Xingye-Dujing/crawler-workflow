@@ -6,6 +6,7 @@
  */
 const ComponentsPanel = {
     _jobTimer: null,
+    _busy: false,
     _stateKeys: {
         ok: 'env.stateOk',
         degraded: 'env.stateDegraded',
@@ -24,6 +25,7 @@ const ComponentsPanel = {
         if (panel) panel.hidden = true;
         if (this._jobTimer) window.clearTimeout(this._jobTimer);
         this._jobTimer = null;
+        this._busy = false;
     },
 
     _label(id) {
@@ -113,6 +115,8 @@ const ComponentsPanel = {
     },
 
     async install(id) {
+        if (this._busy) return;
+        this._busy = true;
         const body = document.getElementById('components-body');
         if (body) {
             const note = document.createElement('div');
@@ -130,6 +134,7 @@ const ComponentsPanel = {
             if (!answer.ok) throw new Error(answer.error || 'install');
             this._poll(answer.job.id);
         } catch (err) {
+            this._busy = false;
             await this._error(I18n.t('env.installFailed', { err: String(err.message || err) }));
         }
     },
@@ -177,14 +182,19 @@ const ComponentsPanel = {
                     this._jobTimer = window.setTimeout(tick, 900);
                     return;
                 }
+                const finished = answer.job.state === 'done';
                 if (answer.job.state === 'failed') {
                     await this._error(I18n.t('env.installFailed', { err: answer.job.error || '' }));
-                } else if (answer.job.state === 'done') {
+                } else if (finished) {
                     showToast(I18n.t('env.installDone', { id: answer.job.component }));
-                    this._restartHint();
                 }
-                this.refresh();
+                // The hint has to be painted AFTER the repaint, not before it: _render clears the
+                // body, so a hint prepended first is wiped in the same tick and never shows.
+                await this.refresh();
+                if (finished) this._restartHint();
+                this._busy = false;
             } catch (err) {
+                this._busy = false;
                 await this._error(I18n.t('env.installFailed', { err: String(err.message || err) }));
             }
         };

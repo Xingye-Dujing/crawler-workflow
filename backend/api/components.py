@@ -10,6 +10,8 @@ setting, and the only change here is which path is passed to :func:`load_catalog
 
 from __future__ import annotations
 
+from contextlib import suppress
+
 from flask import Blueprint, jsonify
 
 from api.http import _json_body
@@ -29,14 +31,22 @@ def _catalog() -> Catalog:
 
 
 def _rows(catalog: Catalog) -> list[dict]:
-    try:
-        installed = Manifest(install_root()).load().installed()
-    except ManifestError:
-        installed = {}
+    manifest = Manifest(install_root())
+    # An unreadable manifest means "nothing is known to be installed"; it must not blank the whole
+    # panel, and the environment report already names the broken file.
+    with suppress(ManifestError):
+        manifest.load()
     rows = []
     for component in catalog.components.values():
-        record = installed.get(component.id) or {}
+        record = manifest.get(component.id) or {}
+        target = manifest.path_of(component.id)
         asset = component.asset()
+        # The running application cannot replace itself (its own files are open), so a new build is
+        # the online installer's job — it moves the old folder to app.previous for a rollback.
+        downloadable = asset is not None and component.id != 'app'
+        # A record whose folder is gone is not an installation: the version is what the manifest
+        # says, the installation is what exists on disk.
+        installed_version = str(record.get('version') or '') if target else ''
         rows.append(
             {
                 'id': component.id,
@@ -51,10 +61,10 @@ def _rows(catalog: Catalog) -> list[dict]:
                 'homepage': component.homepage,
                 'notes': component.notes,
                 'size': asset.size if asset else 0,
-                'downloadable': asset is not None,
-                'installed': record.get('version') or '',
+                'downloadable': downloadable,
+                'installed': installed_version,
                 'path': record.get('path') or '',
-                'update': bool(record.get('version') and record.get('version') != component.version),
+                'update': bool(installed_version and installed_version != component.version),
             }
         )
     return rows
@@ -86,6 +96,8 @@ def install_component():
         component = catalog.get(component_id)
     except CatalogError as exc:
         return jsonify({'ok': False, 'error': t('components.unknown', component=component_id, err=str(exc))}), 400
+    if component_id == 'app':
+        return jsonify({'ok': False, 'error': t('components.appNotSelfInstallable')}), 400
     if component.asset() is None:
         return (
             jsonify({'ok': False, 'error': t('components.notDownloadable', component=component_id)}),

@@ -43,6 +43,26 @@ def test_the_catalogue_lists_the_domestic_defaults(client):
     assert {'app', 'chrome', 'chromedriver', 'node', 'catbus'} <= set(rows)
     assert rows['chrome']['downloadable'] is True
     assert rows['xelatex']['downloadable'] is False, 'detection-only components are not downloaded'
+    assert rows['app']['downloadable'] is False, 'the running app cannot replace itself; the installer does that'
+
+
+def test_a_record_whose_folder_is_gone_is_not_an_installation(client, monkeypatch, tmp_path):
+    import shutil
+
+    from services.components.manifest import Manifest
+
+    root = tmp_path / 'install'
+    target = root / 'components' / 'node' / '24.0.0'
+    target.mkdir(parents=True)
+    record = Manifest(root)
+    record.record('node', '24.0.0', target, 'a' * 64, 'https://example.com')
+    record.save()
+    monkeypatch.setattr(components_api, 'install_root', lambda: root)
+    rows = {row['id']: row for row in client.get('/api/components').get_json()['components']}
+    assert rows['node']['installed'] == '24.0.0'
+    shutil.rmtree(target)
+    rows = {row['id']: row for row in client.get('/api/components').get_json()['components']}
+    assert rows['node']['installed'] == '', 'the manifest record outlived the files it names'
 
 
 def test_an_unknown_component_is_refused_before_any_download(client):
@@ -59,6 +79,17 @@ def test_a_detection_only_component_says_so_instead_of_starting_a_failed_job(cli
     assert response.status_code == 400
     assert 'xelatex' in response.get_json()['error']
     assert started == [], 'a manual component must not reach the downloader'
+
+
+def test_the_running_application_refuses_to_install_itself(client, monkeypatch):
+    from i18n import t
+
+    started = []
+    monkeypatch.setattr(components_api.jobs, 'start', lambda *args, **kwargs: started.append(args))
+    response = client.post('/api/components/install', json={'id': 'app'})
+    assert response.status_code == 400
+    assert response.get_json()['error'] == t('components.appNotSelfInstallable')
+    assert started == [], 'the app updates through the installer, never through its own process'
 
 
 def test_the_panel_reads_the_manifest_from_the_install_root(client, monkeypatch, tmp_path):

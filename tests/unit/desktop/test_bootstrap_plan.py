@@ -41,3 +41,21 @@ def test_presets_do_not_accidentally_select_optional_components(plan):
     assert plan.selected_ids('app', chosen, ['app', 'chrome', 'ollama']) == ['app']
     assert plan.selected_ids('all', chosen, ['app', 'chrome', 'ollama']) == ['app', 'chrome', 'ollama']
     assert plan.total_size({'app': 10, 'chrome': 5}, ['app', 'chrome']) == 15
+
+
+def test_a_requirement_is_added_ahead_of_the_component_that_needs_it(plan):
+    requires = {'catbus': ['node'], 'chromedriver': ['chrome'], 'node': [], 'chrome': []}
+    downloadable = ['app', 'chrome', 'chromedriver', 'node', 'catbus']
+    assert plan.with_requirements(['catbus'], requires, downloadable) == ['node', 'catbus']
+    assert plan.with_requirements(['catbus', 'chromedriver'], requires, downloadable) == [
+        'node',
+        'catbus',
+        'chrome',
+        'chromedriver',
+    ]
+    assert plan.with_requirements(['app'], requires, downloadable) == ['app']
+
+
+def test_a_requirement_the_installer_cannot_download_is_not_invented(plan):
+    """MiKTeX is detection-only: adding it would create a job that can only fail."""
+    assert plan.with_requirements(['app'], {'app': ['xelatex']}, ['app']) == ['app']

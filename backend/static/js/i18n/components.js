@@ -32,7 +32,13 @@
         'env.browserOk': 'Chrome and chromedriver are ready',
         'env.browserAndDriverMissing': 'No Chrome and no matching chromedriver were found',
         'env.browserMissing': 'No Chrome was found; install the portable copy or use the Chrome already on this machine',
-        'env.driverMissing': 'Chrome was found but chromedriver was not',
+        'env.browserConfiguredMissing': (
+            'The browser path in settings does not exist: {path}. Correct it, or clear it so the app finds Chrome itself'
+        ),
+        'env.driverAutoDownload': (
+            'No chromedriver is configured; the first crawl lets Selenium download a matching one (needs network)'
+        ),
+        'env.driverConfiguredMissing': 'The driver path in settings does not exist: {path}',
         'env.driverUnverified': 'Chrome and chromedriver were found but neither version could be read, so the pair is unverified',
         'env.driverMismatch': 'Chrome {chrome_major} and chromedriver {driver_major} are different major versions',
         'env.catbusOk': 'Node {node}, adapter {entry}',
@@ -59,6 +65,9 @@
         'env.restartHint': 'Component installed; restart CaiXiHui so crawling and runs pick it up.',
         'components.unknown': 'No such component: {component} ({err})',
         'components.notDownloadable': '"{component}" is only detected, never downloaded; install it the documented way',
+        'components.appNotSelfInstallable': (
+            'To update the application, run the online installer again: a running app cannot replace itself'
+        ),
         'components.appLabel': 'CaiXiHui application',
         'components.chromeLabel': 'Chrome for Testing',
         'components.chromedriverLabel': 'chromedriver',
@@ -98,7 +107,9 @@
         'env.browserOk': 'Chrome 与 chromedriver 已就绪',
         'env.browserAndDriverMissing': '没有找到 Chrome，也没有找到匹配的 chromedriver',
         'env.browserMissing': '没有找到 Chrome；可以安装便携版或使用本机已装的 Chrome',
-        'env.driverMissing': '找到 Chrome，但没有找到 chromedriver',
+        'env.browserConfiguredMissing': '设置里的浏览器路径不存在：{path}；改正它，或清空让程序自己找 Chrome',
+        'env.driverAutoDownload': '没有配置 chromedriver；首次采集会由 Selenium 自动下载匹配版本（需要网络）',
+        'env.driverConfiguredMissing': '设置里的驱动路径不存在：{path}',
         'env.driverUnverified': '找到 Chrome 与 chromedriver，但读不出版本，无法核对是否成对',
         'env.driverMismatch': 'Chrome {chrome_major} 与 chromedriver {driver_major} 大版本不一致',
         'env.catbusOk': 'Node {node}，适配器 {entry}',
@@ -125,6 +136,7 @@
         'env.restartHint': '组件已装好；重启采析绘后，采集和运行会使用新组件。',
         'components.unknown': '没有这个组件：{component}（{err}）',
         'components.notDownloadable': '“{component}”只做检测，不由安装器下载；请按说明自行安装',
+        'components.appNotSelfInstallable': '主程序更新请重新运行在线安装器：运行中的应用不能替换自己',
         'components.appLabel': '采析绘主程序',
         'components.chromeLabel': 'Chrome for Testing',
         'components.chromedriverLabel': 'chromedriver',
