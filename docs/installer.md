@@ -89,9 +89,9 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 ## 已验证
 
 2026-11-06 用安装器自己的下载路径（`services.components.fetch.download_asset`，含镜像回退与分片拼接）
-重新下载了默认一键的全部五项，并逐项核对清单：主程序 127,295,132 B、Chrome 210,600,182 B、chromedriver
+重新下载了默认一键的全部五项，并逐项核对清单：主程序 127,300,751 B、Chrome 210,600,182 B、chromedriver
 11,594,835 B、Node 37,618,919 B、CatBus 173,307,321 B，共约 534.5 MB，大小与 SHA-256 全部一致。
-主程序那一项在发布后又重下了一次 Gitee 的两个分片并拼接，摘要 `109e206c…` 与清单一致。
+主程序那一项在发布后又从 Gitee 重下两个分片并拼接，摘要与清单一致。
 
 `install-manifest.json` 的位置也在真机上核对过：用 `python -m services.components --root <目录> install node`
 装到 `<目录>/components/node/<版本>`，清单在 `<目录>/install-manifest.json`；设置 `CIXI_COMPONENTS_DIR=<目录>/components`
