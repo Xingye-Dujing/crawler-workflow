@@ -29,6 +29,12 @@ def test_server_data_is_text_never_markup():
     assert 'textContent' in source
 
 
+def test_the_panel_can_uninstall_but_never_the_application_itself():
+    source = JS.read_text(encoding='utf-8')
+    assert "'/api/components/remove'" in source
+    assert "component.id !== 'app'" in source, 'the app is removed by the uninstaller, not this panel'
+
+
 def test_the_page_loads_the_panel_and_its_words():
     html = HTML.read_text(encoding='utf-8')
     assert 'js/components.js' in html

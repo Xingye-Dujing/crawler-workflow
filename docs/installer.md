@@ -42,9 +42,13 @@ npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载�
 现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。**设置面板里手填的路径仍然优先**，
 用户自己导出的环境变量也不会被覆盖。
 
+两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
+指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。
+
 ## 环境检测
 
-安装完成后，安装器会调用刚装好的 `CaiXiHui.exe --doctor`，把同一份矩阵显示出来；应用运行后也可以在
+安装完成后，安装器会调用刚装好的 `CaiXiHui.exe --doctor`，把同一份矩阵显示出来（安装器不复制应用里的
+词条，`--doctor` 每行同时带 `label_text`/`reason_text`，所以窗口里看到的是中文句子而不是键名）；应用运行后也可以在
 “设置 → 环境与组件”打开同一个面板（`GET /api/environment`）。
 
 每一行只有四种状态：
@@ -54,13 +58,18 @@ npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载�
 - **不可用**：点名缺什么（Chrome / chromedriver / Node / CatBus / Ollama / xelatex / 中文字体）；
 - **无法核对**：探测本身失败，绝不显示成绿色。
 
+Chrome 的版本在 Windows 上通过可执行文件的版本资源读取，**不会启动浏览器**（`chrome.exe --version` 在
+Windows 上不打印版本，还会把参数交给已经打开的浏览器）；读不出版本时这一行是“可用（有降级）”，不会冒充成对。
+
 矩阵覆盖：主程序、Selenium 采集、CatBus 采集、本机 LLM、云端 LLM、BERT、PDF 编译、中文图表、上传/分析/报告。
 
 ## 组件管理
 
 `GET /api/components` 列出清单与已安装版本；面板可以单项安装 / 更新 / 卸载，安装是后台任务
 （`POST /api/components/install` + `GET /api/components/jobs/<id>` 轮询），不会让一个浏览器请求挂几十分钟。
-组件按版本存放，默认只保留当前和上一版；卸载组件不删除用户数据。
+组件按版本存放，默认只保留当前和上一版；卸载组件不删除用户数据。只检测不下载的组件（如 MiKTeX）按名拒绝安装，
+不会起一个注定失败的任务。取消安装**不删除**已经下载的字节，下次从断点续传。装好组件后**重启采析绘**才会让采集
+和运行用上新组件（启动器在导入配置前导出路径），面板会提示这一点。
 
 ## 安全与合规
 
@@ -70,6 +79,16 @@ npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载�
 - **Chrome 不随安装器重新分发**：安装时从 Google 官方 Chrome for Testing 下载，国内默认走 npmmirror 镜像；
   两个地址指向同一份官方构建。
 - 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。
+
+## 已验证
+
+2026-11-06 用安装器自己的下载路径（`services.components.fetch.download_asset`，含镜像回退与分片拼接）
+重新下载了默认一键的全部五项，并逐项核对清单：主程序 127,291,376 B、Chrome 210,600,182 B、chromedriver
+11,594,835 B、Node 37,618,919 B、CatBus 173,307,321 B，共 534.6 MB，大小与 SHA-256 全部一致。
+
+`install-manifest.json` 的位置也在真机上核对过：用 `python -m services.components --root <目录> install node`
+装到 `<目录>/components/node/<版本>`，清单在 `<目录>/install-manifest.json`；设置 `CIXI_COMPONENTS_DIR=<目录>/components`
+后 `doctor` 能读到这一行。
 
 ## 构建
 

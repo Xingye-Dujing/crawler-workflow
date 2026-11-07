@@ -116,6 +116,64 @@ def node_executable_name(system: str | None = None) -> str:
     return names[0] if names else 'node'
 
 
+def browser_version(binary: str, system: str | None = None) -> str:
+    """A browser's version text, read WITHOUT starting the browser.
+
+    ``chrome.exe --version`` prints nothing on Windows (a GUI executable has no console) and can
+    hand its argument to a browser that is already running — measured: it opened a tab in the user's
+    session. A probe that launches the browser is a probe that changes the machine, so Windows reads
+    the executable's version resource, which is the same number the other two systems print.
+    """
+    if not binary:
+        return ''
+    if platform_name(system) == 'win32':
+        return _windows_file_version(binary)
+    return _console_version(binary)
+
+
+def _windows_file_version(path: str) -> str:
+    """``major.minor.build.patch`` from a Windows executable's version resource, or ''."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:  # pragma: no cover - ctypes ships with CPython on every platform we run
+        return ''
+    try:
+        version = ctypes.WinDLL('version')
+        handle = wintypes.DWORD()
+        target = ctypes.c_wchar_p(path)
+        size = version.GetFileVersionInfoSizeW(target, ctypes.byref(handle))
+        if not size:
+            return ''
+        buffer = ctypes.create_string_buffer(size)
+        if not version.GetFileVersionInfoW(target, 0, size, buffer):
+            return ''
+        pointer = ctypes.c_void_p()
+        length = wintypes.UINT()
+        if not version.VerQueryValueW(buffer, ctypes.c_wchar_p('\\'), ctypes.byref(pointer), ctypes.byref(length)):
+            return ''
+        # VS_FIXEDFILEINFO: signature, struct version, then the two halves of the file version.
+        fields = ctypes.cast(pointer, ctypes.POINTER(wintypes.DWORD))
+        high, low = fields[2], fields[3]
+        return f'{high >> 16}.{high & 0xFFFF}.{low >> 16}.{low & 0xFFFF}'
+    except (AttributeError, OSError, ValueError):
+        return ''
+
+
+def _console_version(binary: str) -> str:
+    """``binary --version`` on a system whose browser is a console child of the shell."""
+    import subprocess
+
+    from core.procs import popen_kwargs
+
+    try:
+        result = subprocess.run([binary, '--version'], capture_output=True, timeout=10, check=False, **popen_kwargs())
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    text = ((result.stdout or b'') + (result.stderr or b'')).decode('utf-8', errors='replace').strip()
+    return text.splitlines()[0] if text else ''
+
+
 def platform_name(system: str | None = None) -> str:
     """The OS key this module's tables are indexed by, normalized onto three values."""
     name = str(sys.platform if system is None else system)

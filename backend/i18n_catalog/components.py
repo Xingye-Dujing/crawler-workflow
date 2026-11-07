@@ -27,6 +27,7 @@ ZH = {
     'env.coreOk': '应用已启动',
     'env.driverMismatch': 'Chrome {chrome_major} 与 chromedriver {driver_major} 大版本不一致',
     'env.driverMissing': '找到 Chrome，但没有找到 chromedriver',
+    'env.driverUnverified': '找到 Chrome 与 chromedriver，但读不出版本，无法核对是否成对',
     'env.fontMissing': '没有中文字体；汉字会画成方框（不影响运行，但会写进论文）',
     'env.fontOk': '使用字体 {family}',
     'env.ollamaMissing': '连不上 {host}；可以安装本机 Ollama，或改用云端 API',
@@ -39,7 +40,12 @@ ZH = {
     'components.installStarted': '正在安装 {component}；进度见任务状态',
     'components.jobMissing': '找不到这个安装任务',
     'components.removeFailed': '无法卸载 {component}：{err}',
+    'env.remove': '卸载',
+    'env.removeConfirm': '卸载 {id}？只会删除组件文件，用户数据不受影响。',
+    'env.removed': '{id} 已卸载',
+    'env.restartHint': '组件已装好；重启采析绘后，采集和运行会使用新组件。',
     'components.unknown': '没有这个组件：{component}（{err}）',
+    'components.notDownloadable': '“{component}”只做检测，不由安装器下载；请按说明自行安装',
 }
 
 EN = {
@@ -69,6 +75,9 @@ EN = {
     'env.coreOk': 'The application is running',
     'env.driverMismatch': 'Chrome {chrome_major} and chromedriver {driver_major} are different major versions',
     'env.driverMissing': 'Chrome was found but chromedriver was not',
+    'env.driverUnverified': (
+        'Chrome and chromedriver were found but neither version could be read, so the pair is unverified'
+    ),
     'env.fontMissing': 'No Chinese font; Han characters draw as boxes (the app runs, but a paper would show it)',
     'env.fontOk': 'Using {family}',
     'env.ollamaMissing': 'Cannot reach {host}; install local Ollama or use a cloud API',
@@ -81,5 +90,10 @@ EN = {
     'components.installStarted': 'Installing {component}; the job status carries the progress',
     'components.jobMissing': 'That installation job does not exist',
     'components.removeFailed': 'Could not remove {component}: {err}',
+    'env.remove': 'Uninstall',
+    'env.removeConfirm': 'Uninstall {id}? Only the component files are deleted; user data is untouched.',
+    'env.removed': '{id} uninstalled',
+    'env.restartHint': 'Component installed; restart CaiXiHui so crawling and runs pick it up.',
     'components.unknown': 'No such component: {component} ({err})',
+    'components.notDownloadable': '"{component}" is only detected, never downloaded; install it the documented way',
 }

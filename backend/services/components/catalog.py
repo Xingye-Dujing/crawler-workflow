@@ -21,6 +21,7 @@ A catalogue is data; every check here answers a question the rest of the code de
 from __future__ import annotations
 
 import json
+import re
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -190,8 +191,13 @@ def validate_catalog(payload: Any) -> None:
         if not isinstance(raw, dict):
             raise CatalogError(f'component {component_id} must be an object')
         kind = raw.get('kind', 'archive')
-        if kind != 'manual' and not raw.get('version'):
+        version = str(raw.get('version') or '')
+        if kind != 'manual' and not version:
             raise CatalogError(f'component {component_id} has no version')
+        if version and (re.search(r'[\\/]', version) or '..' in version):
+            # The version becomes a directory name under components/<id>/; a separator or '..' there
+            # would install outside the root the manifest is allowed to name.
+            raise CatalogError(f'component {component_id} has an unusable version {version!r}')
         if kind not in _ALLOWED_KINDS:
             raise CatalogError(f'component {component_id} has unknown kind {kind!r}')
         platforms = raw.get('platforms')

@@ -1,4 +1,4 @@
-/* Environment & components modal 鈥?the browser's view of /api/environment and /api/components.
+/* Environment & components modal - the browser's view of /api/environment and /api/components.
  *
  * The server owns every fact: which capability is usable and why, which component is installed, and
  * whether an install is running. This file only paints rows and polls a job; it never guesses that
@@ -94,6 +94,13 @@ const ComponentsPanel = {
                 button.onclick = () => this.install(component.id);
                 line.append(button);
             }
+            if (component.installed && component.id !== 'app') {
+                const remove = document.createElement('button');
+                remove.className = 'panel-close';
+                remove.textContent = I18n.t('env.remove');
+                remove.onclick = () => this.remove(component.id);
+                line.append(remove);
+            }
             body.append(line);
         }
     },
@@ -127,6 +134,39 @@ const ComponentsPanel = {
         }
     },
 
+    async remove(id) {
+        const answer = await showDialog({
+            message: I18n.t('env.removeConfirm', { id: this._label(id) }),
+            buttons: [
+                { label: I18n.t('env.remove'), value: 'yes', primary: true },
+                { label: I18n.t('env.close'), value: 'no' },
+            ],
+        });
+        if (answer !== 'yes') return;
+        try {
+            const response = await fetch('/api/components/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id }),
+            });
+            const result = await response.json();
+            if (!result.ok) throw new Error(result.error || 'remove');
+            showToast(I18n.t('env.removed', { id: this._label(id) }));
+            this.refresh();
+        } catch (err) {
+            await this._error(I18n.t('components.removeFailed', { component: id, err: String(err.message || err) }));
+        }
+    },
+
+    _restartHint() {
+        const body = document.getElementById('components-body');
+        if (!body || body.querySelector('.env-restart')) return;
+        const note = document.createElement('div');
+        note.className = 'env-hint env-restart';
+        note.textContent = I18n.t('env.restartHint');
+        body.prepend(note);
+    },
+
     _poll(jobId) {
         const tick = async () => {
             try {
@@ -141,6 +181,7 @@ const ComponentsPanel = {
                     await this._error(I18n.t('env.installFailed', { err: answer.job.error || '' }));
                 } else if (answer.job.state === 'done') {
                     showToast(I18n.t('env.installDone', { id: answer.job.component }));
+                    this._restartHint();
                 }
                 this.refresh();
             } catch (err) {

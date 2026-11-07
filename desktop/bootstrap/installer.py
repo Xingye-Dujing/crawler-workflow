@@ -48,6 +48,8 @@ TEXT = {
         'doctor_title': '环境检查',
         'doctor_head': '这台机器现在可以做什么：',
         'doctor_missing': '缺少：{what}',
+        'doctor_running': '正在检查环境…',
+        'doctor_empty': '没有拿到环境报告：应用没有返回结果。可以打开“环境与组件”重新检测。',
         'close': '关闭',
         'need_admin': '这个目录不可写，请换一个目录（推荐“浏览…”选 D 盘）。',
         'license': '第三方组件按各自的许可证分发；Chrome 从 Google 官方测试通道下载，不随本安装器重新分发。',
@@ -76,6 +78,8 @@ TEXT = {
         'doctor_title': 'Environment check',
         'doctor_head': 'This machine can now:',
         'doctor_missing': 'Missing: {what}',
+        'doctor_running': 'Checking the environment…',
+        'doctor_empty': 'No environment report came back. Open 环境与组件 in the app to check again.',
         'close': 'Close',
         'need_admin': 'That folder is not writable; choose another one (D: is fine).',
         'license': (
@@ -134,6 +138,10 @@ _PLAN_SPEC.loader.exec_module(_PLAN)
 Catalog = _CATALOG.Catalog
 CatalogError = _CATALOG.CatalogError
 load_catalog = _CATALOG.load_catalog
+_DOWNLOAD = importlib.import_module('services.components.fetch')
+DownloadError = _DOWNLOAD.DownloadError
+_MANIFEST = importlib.import_module('services.components.manifest')
+ManifestError = _MANIFEST.ManifestError
 InstallError = _INSTALL.InstallError
 install_component = _INSTALL.install_component
 default_root = _PLAN.default_root
@@ -301,7 +309,9 @@ class Installer(tk.Tk):
                         self.message.put(('progress', int((start + done / size) / total * 100)))
 
                 install_component(self.catalog, component_id, root, progress=progress, cancel=self.cancel.is_set)
-            except (InstallError, CatalogError, OSError) as exc:
+            except (InstallError, CatalogError, DownloadError, ManifestError, OSError) as exc:
+                # A network failure is a DownloadError, which is not an OSError: without it here the
+                # worker thread died silently and the window sat on "installing" with the button off.
                 self.message.put(('failed', str(exc)))
                 return
             self.message.put(('log', f'{component_id} {component.version} → {root}'))
@@ -327,6 +337,9 @@ class Installer(tk.Tk):
                     self._finish()
                     self.status.config(text=self.t('done'))
                     self.after(200, self._doctor)
+                elif kind == 'doctor':
+                    self.status.config(text='')
+                    self._doctor_window(payload)
         except queue.Empty:
             pass
         self.after(150, self._poll)
@@ -343,11 +356,27 @@ class Installer(tk.Tk):
         exe = Path(self.root_dir.get()) / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
         if not exe.exists():
             return
+        self.status.config(text=self.t('doctor_running'))
+        # The report is a subprocess of the packaged app (up to 90 s next to a live Ollama); it runs
+        # off the UI thread so the window keeps painting, and comes back through the same queue.
+        threading.Thread(target=self._doctor_worker, args=(exe, Path(self.root_dir.get())), daemon=True).start()
+
+    def _doctor_worker(self, exe: Path, root: Path) -> None:
+        env = dict(os.environ)
+        env['CIXI_COMPONENTS_DIR'] = str(root / 'components')
+        report: dict = {}
         try:
-            result = subprocess.run([str(exe), '--doctor'], capture_output=True, timeout=90, check=False)
-            report = json.loads((result.stdout or b'{}').decode('utf-8', errors='replace'))
+            result = subprocess.run([str(exe), '--doctor'], capture_output=True, timeout=90, check=False, env=env)
+            text = (result.stdout or b'').decode('utf-8', errors='replace')
+            # The launcher may print a note about the data root before the report (a fallback is
+            # always stated aloud), so the JSON starts at the first brace rather than at byte 0.
+            start = text.find('{')
+            report = json.loads(text[start:]) if start >= 0 else {}
         except (OSError, subprocess.SubprocessError, ValueError):
             report = {}
+        self.message.put(('doctor', report if isinstance(report, dict) else {}))
+
+    def _doctor_window(self, report: dict) -> None:
         window = tk.Toplevel(self)
         window.title(self.t('doctor_title'))
         window.geometry('720x460')
@@ -355,24 +384,32 @@ class Installer(tk.Tk):
         body = ttk.Frame(window, padding=12)
         body.pack(fill='both', expand=True)
         labels = STATE_LABEL[self.lang]
-        for row in report.get('capabilities') or ():
+        rows = report.get('capabilities') or ()
+        if not rows:
+            ttk.Label(body, text=self.t('doctor_empty'), wraplength=660).pack(anchor='w')
+        for row in rows:
             state = labels.get(row.get('state'), row.get('state'))
-            text = f'[{state}] {row.get("label_key")}'
+            label = row.get('label_text') or row.get('label_key')
+            text = f'[{state}] {label}'
             if row.get('reason_key'):
                 text += f' — {self._reason(row)}'
             ttk.Label(body, text=text, wraplength=660).pack(anchor='w', pady=1)
         buttons = ttk.Frame(window, padding=12)
         buttons.pack(fill='x')
+        exe = Path(self.root_dir.get()) / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
         ttk.Button(buttons, text=self.t('launch'), command=lambda: self._launch(exe)).pack(side='left')
         ttk.Button(buttons, text=self.t('close'), command=window.destroy).pack(side='right')
 
     def _reason(self, row: dict) -> str:
+        # The packaged app renders the sentence with its own catalogue; the installer keeps no
+        # second copy of those words. A row without text (an older build) falls back to the key
+        # and its parameters rather than inventing a sentence.
+        text = row.get('reason_text')
+        if text:
+            return str(text)
         reason = str(row.get('reason_key') or '')
         params = row.get('reason_params') or {}
-        if reason.startswith('env.'):
-            # The installer carries no copy of the app catalogue; show the parameters, never invent words.
-            return reason + (f' ({params})' if params else '')
-        return reason
+        return reason + (f' ({params})' if params else '')
 
     def _launch(self, exe: Path) -> None:
         env = dict(os.environ)

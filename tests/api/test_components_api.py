@@ -52,6 +52,29 @@ def test_an_unknown_component_is_refused_before_any_download(client):
     assert body['ok'] is False and 'nope' in body['error']
 
 
+def test_a_detection_only_component_says_so_instead_of_starting_a_failed_job(client, monkeypatch):
+    started = []
+    monkeypatch.setattr(components_api.jobs, 'start', lambda *args, **kwargs: started.append(args))
+    response = client.post('/api/components/install', json={'id': 'xelatex'})
+    assert response.status_code == 400
+    assert 'xelatex' in response.get_json()['error']
+    assert started == [], 'a manual component must not reach the downloader'
+
+
+def test_the_panel_reads_the_manifest_from_the_install_root(client, monkeypatch, tmp_path):
+    from services.components.manifest import Manifest
+
+    root = tmp_path / 'install'
+    target = root / 'components' / 'node' / '24.0.0'
+    target.mkdir(parents=True)
+    record = Manifest(root)
+    record.record('node', '24.0.0', target, 'a' * 64, 'https://example.com')
+    record.save()
+    monkeypatch.setattr(components_api, 'install_root', lambda: root)
+    rows = {row['id']: row for row in client.get('/api/components').get_json()['components']}
+    assert rows['node']['installed'] == '24.0.0', 'the manifest lives one level above components/'
+
+
 def test_install_starts_a_job_and_the_job_can_be_polled(client, monkeypatch):
     monkeypatch.setattr(
         components_api.jobs,

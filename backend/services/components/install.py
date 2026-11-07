@@ -22,6 +22,7 @@ import os
 import shutil
 import uuid
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 
 from core.machine import platform_name
@@ -54,6 +55,12 @@ def _replace(target: Path, staging: Path) -> None:
     if target.exists():
         shutil.rmtree(target)
     os.replace(staging, target)
+
+
+def _drop_empty(path: Path) -> None:
+    """Remove a scratch directory that is empty again; never a folder with anything in it."""
+    with suppress(OSError):
+        path.rmdir()
 
 
 def install_component(
@@ -111,9 +118,12 @@ def install_component(
         if asset.install_as != 'app':
             manifest.prune(component_id, keep=keep_versions)
         cache.unlink(missing_ok=True)
+        _drop_empty(staging.parent)
+        _drop_empty(cache.parent)
         return target
     except (InstallError, DownloadError, ManifestError, OSError):
         shutil.rmtree(staging, ignore_errors=True)
+        _drop_empty(staging.parent)
         raise
 
 

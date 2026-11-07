@@ -1235,20 +1235,23 @@ class TestPortableComponentsPointTheLookups:
 
     ``find_chrome``/``Config.DRIVER_PATH``/CatBus discovery all read their answer at call time, so
     the launcher exports the manifest's paths before the app imports ``config``. An explicit
-    environment value the user set is never overwritten.
+    environment value the user set is never overwritten. ``CIXI_COMPONENTS_DIR`` names the
+    ``components/`` folder, and the manifest lives one level above it — the layout the online
+    installer writes and the launcher has to read.
     """
 
     def test_an_installed_node_is_exported_but_an_explicit_value_wins(self, desktop, tmp_path, monkeypatch):
         from services.components.manifest import Manifest
 
-        root = tmp_path / 'components'
-        node = root / 'components' / 'node' / '24.0' / 'node.exe'
+        root = tmp_path / 'install'
+        components = root / 'components'
+        node = components / 'node' / '24.0' / 'node.exe'
         node.parent.mkdir(parents=True)
         node.write_bytes(b'')
         manifest = Manifest(root)
         manifest.record('node', '24.0', node.parent, 'a' * 64, 'https://example.com')
         manifest.save()
-        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(root))
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
         desktop.apply_component_env()
         assert os.environ['CIXI_NODE_BIN'] == str(node)

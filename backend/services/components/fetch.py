@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -34,6 +35,14 @@ _CONTENT_RANGE = re.compile(r'bytes\s+(\d+)-', re.IGNORECASE)
 
 class DownloadError(Exception):
     """A download that could not be completed or verified; the sentence names what failed."""
+
+
+class DownloadCancelledError(DownloadError):
+    """The user stopped the download.
+
+    The bytes so far are kept, and a retry resumes from them: deleting a half-fetched 1.5 GB archive
+    because somebody pressed 取消 is the opposite of what the button means.
+    """
 
 
 def sha256_file(path: str | Path) -> str:
@@ -88,7 +97,7 @@ def _download_one(
                 done = start
                 while True:
                     if cancel and cancel():
-                        raise DownloadError('cancelled')
+                        raise DownloadCancelledError(f'cancelled while downloading {url}')
                     block = response.read(CHUNK)
                     if not block:
                         break
@@ -124,7 +133,8 @@ def download_asset(
     """Fetch ``asset`` into ``dest``, trying every mirror and verifying the result.
 
     ``dest`` is complete only on success; a failed or unverified file is removed so a later retry
-    does not silently reuse it.
+    does not silently reuse it. A **cancel** is the exception: it keeps the partial file (and the
+    completed parts) and raises :class:`DownloadCancelledError`, so the next attempt resumes.
     """
     target = Path(dest)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +151,8 @@ def download_asset(
             try:
                 _download_one(part.url, part_path, part.size, progress, cancel, allow_insecure, timeout)
                 _verify(part_path, part.sha256, part.size)
+            except DownloadCancelledError:
+                raise
             except DownloadError as exc:
                 errors.append(str(exc))
                 part_path.unlink(missing_ok=True)
@@ -150,8 +162,7 @@ def download_asset(
                 for index in range(1, len(asset.parts) + 1):
                     piece = target.with_name(f'{target.name}.part{index:02d}')
                     with open(piece, 'rb') as source:
-                        for block in iter(lambda: source.read(CHUNK), b''):
-                            handle.write(block)
+                        shutil.copyfileobj(source, handle, CHUNK)
                     piece.unlink(missing_ok=True)
             try:
                 _verify(target, asset.sha256, asset.size)
@@ -165,6 +176,8 @@ def download_asset(
                 _download_one(url, target, asset.size, progress, cancel, allow_insecure, timeout)
                 _verify(target, asset.sha256, asset.size)
                 return target
+            except DownloadCancelledError:
+                raise
             except DownloadError as exc:
                 errors.append(str(exc))
                 target.unlink(missing_ok=True)

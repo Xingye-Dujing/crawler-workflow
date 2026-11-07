@@ -18,7 +18,7 @@ from services.components import jobs
 from services.components.catalog import Catalog, CatalogError, load_catalog
 from services.components.install import InstallError, remove_component
 from services.components.manifest import Manifest, ManifestError
-from services.components.paths import components_root
+from services.components.paths import install_root
 from services.components.probe import environment
 
 bp = Blueprint('components', __name__)
@@ -30,7 +30,7 @@ def _catalog() -> Catalog:
 
 def _rows(catalog: Catalog) -> list[dict]:
     try:
-        installed = Manifest(components_root()).load().installed()
+        installed = Manifest(install_root()).load().installed()
     except ManifestError:
         installed = {}
     rows = []
@@ -83,10 +83,15 @@ def install_component():
     component_id = str(payload.get('id') or '').strip()
     try:
         catalog = _catalog()
-        catalog.get(component_id)
+        component = catalog.get(component_id)
     except CatalogError as exc:
         return jsonify({'ok': False, 'error': t('components.unknown', component=component_id, err=str(exc))}), 400
-    job = jobs.start(catalog, component_id, components_root())
+    if component.asset() is None:
+        return (
+            jsonify({'ok': False, 'error': t('components.notDownloadable', component=component_id)}),
+            400,
+        )
+    job = jobs.start(catalog, component_id, install_root())
     return jsonify({'ok': True, 'job': job, 'message': t('components.installStarted', component=component_id)})
 
 
@@ -113,7 +118,7 @@ def remove():
         return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
     component_id = str(payload.get('id') or '').strip()
     try:
-        removed = remove_component(components_root(), component_id)
+        removed = remove_component(install_root(), component_id)
     except InstallError as exc:
         return jsonify({'ok': False, 'error': t('components.removeFailed', component=component_id, err=str(exc))}), 400
     return jsonify({'ok': True, 'removed': removed})

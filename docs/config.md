@@ -26,7 +26,7 @@
 | `MAX_UPLOAD_MB` | 单个请求体上限（过大时返回 413 JSON，而非把整机内存吃光） | `64` |
 | `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。按系统查的第二条路（Windows 查安装根、Linux 查 `/usr/bin/chromium` 等与 `PATH`、macOS 查 bundle）；容器里通常是 `CHROME_BIN=/usr/bin/chromium`。**本项目要求使用本机已安装的 Chrome**；设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上** | 空 |
 | `CIXI_DRIVER_PATH` | chromedriver 路径（等价于设置面板的“驱动路径”）。**必须指向本机已安装、与大版本匹配的驱动**；本仓库不做自动下载，驱动缺失/版本不符按名拒绝 | 空 |
-| `CIXI_COMPONENTS_DIR` | 在线安装器装好的组件目录（`app/`、`components/`、`install-manifest.json` 所在根）。启动器会按清单把 Chrome/驱动/Node/CatBus 路径导出；设置面板里手填的路径仍然优先 | 安装目录旁；源码运行是 `data/components` |
+| `CIXI_COMPONENTS_DIR` | 在线安装器装好的**组件目录**（安装根下的 `components/`，每个组件一个子目录）。清单 `install-manifest.json` 在它的上一级（安装根）；启动器会按清单把 Chrome/驱动/Node/CatBus 路径导出；设置面板里手填的路径仍然优先 | 安装根下的 `components/`；源码运行是 `data/components` |
 | `CIXI_NODE_BIN` / `NODE_BIN` | 第二采集后端（CatBus）用的 Node 运行时，按系统查表；版本按 CatBus `engines` 核对，太旧按名拒绝 | 空 |
 | `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个指名文件、可执行包装或源码 `cli.ts`（自动换成构建产物 `dist/**/cli.js`）；`CATBUS_HOME` 指源码检出根（同样读 `dist` 入口）；都没设就按 npm 全局前缀找。**Node 不能直接运行 TS 源码**（类型擦除不重写 `./x.js` 导入），源码没有构建产物时按名说明要构建哪个文件。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码：启动时检查 `stdout/stderr` 能不能写汉字，不能就改 UTF-8 并打印一行；能写就只把 `errors` 设成 `replace`，**不改编码**（强扭成 UTF-8 反而把正常窗口弄成乱码） | — |

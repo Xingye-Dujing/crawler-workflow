@@ -550,14 +550,22 @@ def _join_backend(base: Path) -> None:
 def _component_doctor(base: Path) -> int:
     """Print the same environment matrix the installer shows, as JSON, and exit.
 
-    The bootstrap runs this after installing components, so the “what can I do?” answer comes from
+    The bootstrap runs this after installing components, so the "what can I do?" answer comes from
     the application that will actually run — not from a second probe written into the installer.
+    Each row carries its keys (for a machine reader) AND the rendered sentence, because the
+    installer deliberately holds no copy of the app's catalogue: without the text it could only
+    print ``env.browserMissing`` at a novice.
     """
     _join_backend(base)
     try:
+        from i18n import set_lang, t
         from services.components.probe import environment
 
+        set_lang('zh')
         report = environment()
+        for row in report.get('capabilities') or ():
+            row['label_text'] = t(str(row.get('label_key') or ''))
+            row['reason_text'] = t(str(row.get('reason_key') or ''), **(row.get('reason_params') or {}))
     except Exception as exc:
         _print_safe(json.dumps({'schema': 1, 'error': str(exc), 'capabilities': []}, ensure_ascii=False))
         return 1
@@ -577,11 +585,10 @@ def apply_component_env() -> None:
         from core.machine import chrome_executable_name
 
         from services.components.manifest import Manifest
-        from services.components.paths import components_root
+        from services.components.paths import components_root, install_root
 
-        root = components_root()
-        os.environ.setdefault('CIXI_COMPONENTS_DIR', str(root))
-        manifest = Manifest(root).load()
+        os.environ.setdefault('CIXI_COMPONENTS_DIR', str(components_root()))
+        manifest = Manifest(install_root()).load()
         paths = {
             'chrome': ('CHROME_PATH', chrome_executable_name()),
             'chromedriver': ('CIXI_DRIVER_PATH', 'chromedriver.exe' if os.name == 'nt' else 'chromedriver'),

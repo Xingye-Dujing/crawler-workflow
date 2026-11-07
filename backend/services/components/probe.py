@@ -1,13 +1,13 @@
 """The environment matrix: which features this machine can actually run, and why not.
 
 The installer and the app must give the same answer, so both call this module. It reads the same
-settings the crawlers read (an explicit path beats a bundled one) and it never turns 鈥淚 could not
-check鈥?into a green row:
+settings the crawlers read (an explicit path beats a bundled one) and it never turns "I could not
+check" into a green row:
 
-- ``ok``       鈥?the dependency is present and version-compatible;
-- ``degraded`` 鈥?the feature runs but something is missing or will fall back (named);
-- ``missing``  鈥?the feature cannot run until the named component is installed;
-- ``unknown``  鈥?a check could not be completed.
+- ``ok``: the dependency is present and version-compatible;
+- ``degraded``: the feature runs but something is missing or will fall back (named);
+- ``missing``: the feature cannot run until the named component is installed;
+- ``unknown``: a check could not be completed.
 
 Every reason is a catalogue key plus parameters, never an English sentence composed here: the
 installer renders it in the user's language, and the tests can assert on the key.
@@ -24,6 +24,7 @@ from typing import Any
 
 from core.config import Config
 from core.machine import (
+    browser_version,
     chrome_executable_name,
     driver_executable_name,
     find_chrome,
@@ -34,7 +35,7 @@ from core.procs import popen_kwargs
 
 from services.components.catalog import Catalog, CatalogError, load_catalog
 from services.components.manifest import Manifest, ManifestError
-from services.components.paths import components_root
+from services.components.paths import install_root
 
 _VERSION = re.compile(r'(\d+)\.(\d+)')
 
@@ -232,7 +233,7 @@ def _crawl_selenium(root: Path) -> dict:
         return _capability(
             'crawl_selenium', 'env.capBrowser', 'missing', 'env.driverMissing', {'chrome': chrome}, chrome_source
         )
-    chrome_version, driver_version = _version(chrome), _version(driver)
+    chrome_version, driver_version = browser_version(chrome), _version(driver)
     chrome_major, driver_major = _major(chrome_version), _major(driver_version)
     params = {
         'chrome': chrome,
@@ -240,7 +241,13 @@ def _crawl_selenium(root: Path) -> dict:
         'chrome_version': chrome_version,
         'driver_version': driver_version,
     }
-    if chrome_major and driver_major and chrome_major != driver_major:
+    if not (chrome_major and driver_major):
+        # Saying "ok" here would be the module turning "I could not check" into a green row: both
+        # files exist, but whether they are a matching pair is exactly what was not read.
+        return _capability(
+            'crawl_selenium', 'env.capBrowser', 'degraded', 'env.driverUnverified', params, driver_source
+        )
+    if chrome_major != driver_major:
         return _capability(
             'crawl_selenium',
             'env.capBrowser',
@@ -252,7 +259,7 @@ def _crawl_selenium(root: Path) -> dict:
     return _capability('crawl_selenium', 'env.capBrowser', 'ok', 'env.browserOk', params, driver_source)
 
 
-def _component_rows(root: Path, catalog: Catalog | None) -> list[dict]:
+def component_rows(root: Path, catalog: Catalog | None) -> list[dict]:
     try:
         installed = Manifest(root).load().installed()
     except ManifestError as exc:
@@ -278,7 +285,7 @@ def _component_rows(root: Path, catalog: Catalog | None) -> list[dict]:
 
 def environment(root: str | Path | None = None, catalog_path: str | Path | None = None) -> dict:
     """The full report: capabilities, installed components, and the OS this answer is for."""
-    base = components_root(root)
+    base = install_root(root)
     try:
         catalog = Catalog(load_catalog(catalog_path))
     except (ImportError, OSError, ValueError, CatalogError):
@@ -303,7 +310,7 @@ def environment(root: str | Path | None = None, catalog_path: str | Path | None 
         'os': platform_name(),
         'root': str(base),
         'capabilities': capabilities,
-        'components': _component_rows(base, catalog),
+        'components': component_rows(base, catalog),
         'catalog': {
             'generated_at': catalog.generated_at if catalog else '',
             'components': len(catalog.components) if catalog else 0,

@@ -14,7 +14,7 @@ from i18n import set_lang, t
 from services.components.catalog import Catalog, CatalogError, load_catalog
 from services.components.install import InstallError, install_component, remove_component
 from services.components.manifest import Manifest, ManifestError
-from services.components.paths import components_root
+from services.components.paths import install_root
 from services.components.probe import environment
 
 
@@ -37,7 +37,7 @@ def _doctor(args) -> int:
 
 def _list(args) -> int:
     catalog = Catalog(load_catalog(args.catalog))
-    manifest = Manifest(components_root(args.root)).load()
+    manifest = Manifest(install_root(args.root)).load()
     for component in catalog.components.values():
         installed = manifest.get(component.id)
         version = installed['version'] if installed else '-'
@@ -48,14 +48,14 @@ def _list(args) -> int:
 
 def _install(args) -> int:
     catalog = Catalog(load_catalog(args.catalog))
-    root = components_root(args.root)
+    root = install_root(args.root)
     path = install_component(catalog, args.component, root)
     print(path)
     return 0
 
 
 def _remove(args) -> int:
-    removed = remove_component(components_root(args.root), args.component)
+    removed = remove_component(install_root(args.root), args.component)
     print('removed' if removed else 'not installed')
     return 0
 

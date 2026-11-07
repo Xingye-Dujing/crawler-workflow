@@ -10,18 +10,21 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import sys
 import zipfile
 from pathlib import Path
 
 import pytest
-from core.machine import platform_name
+from core.machine import browser_version, platform_name
 
 from services.components import install as install_module
+from services.components import probe as probe_module
 from services.components.archive import ArchiveError, safe_extract
 from services.components.catalog import Asset, Catalog, CatalogError, Part, load_catalog
-from services.components.fetch import DownloadError, download_asset
+from services.components.fetch import DownloadCancelledError, DownloadError, download_asset
 from services.components.install import InstallError, install_component, remove_component
 from services.components.manifest import Manifest, ManifestError
+from services.components.paths import components_root, install_root
 
 
 def _zip_bytes(entries: dict[str, bytes]) -> bytes:
@@ -64,6 +67,11 @@ class TestCatalog:
     def test_a_schema_this_installer_does_not_know_is_refused(self):
         with pytest.raises(CatalogError, match='schema'):
             Catalog({'schema': 999, 'components': {}})
+
+    def test_a_version_that_would_escape_the_component_folder_is_refused(self):
+        payload = {'schema': 1, 'components': {'x': {'version': '../evil', 'platforms': {'win32': {}}}}}
+        with pytest.raises(CatalogError, match='unusable version'):
+            Catalog(payload)
 
     def test_an_http_url_and_a_missing_digest_are_refused_by_name(self):
         base = {
@@ -153,6 +161,16 @@ class TestFetch:
             download_asset(asset, tmp_path / 'copy.zip', allow_insecure=True)
         assert not (tmp_path / 'copy.zip').exists()
 
+    def test_a_cancel_keeps_the_partial_file_for_the_next_attempt(self, tmp_path):
+        source = tmp_path / 'x.zip'
+        source.write_bytes(b'payload')
+        asset = _asset(source, _sha(b'payload'), 7)
+        target = tmp_path / 'copy.zip'
+        with pytest.raises(DownloadCancelledError):
+            download_asset(asset, target, allow_insecure=True, cancel=lambda: True)
+        assert target.exists(), 'the bytes already fetched must not be deleted by the Cancel button'
+        assert download_asset(asset, target, allow_insecure=True).read_bytes() == b'payload'
+
     def test_parts_are_concatenated_and_verified_as_one_file(self, tmp_path):
         first, second = b'hello ', b'world'
         part_a, part_b = tmp_path / 'a.001', tmp_path / 'a.002'
@@ -227,3 +245,37 @@ class TestInstall:
         with pytest.raises(InstallError, match='hello.txt'):
             install_component(catalogue, 'demo', tmp_path / 'root')
         assert not (tmp_path / 'root' / 'components' / 'demo').exists()
+
+    def test_the_environment_reads_the_manifest_the_installer_wrote(self, tmp_path, catalogue, monkeypatch):
+        archive = tmp_path / 'demo.zip'
+        archive.write_bytes(_zip_bytes({'top/hello.txt': b'hi'}))
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(archive.read_bytes())
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        install_component(catalogue, 'demo', tmp_path / 'root')
+        rows = probe_module.component_rows(tmp_path / 'root', None)
+        assert [row['id'] for row in rows] == ['demo'], 'the probe must look where the installer wrote the manifest'
+
+
+class TestPaths:
+    def test_the_components_directory_is_one_level_below_the_install_root(self, tmp_path, monkeypatch):
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'root' / 'components'))
+        assert components_root() == tmp_path / 'root' / 'components'
+        assert install_root() == tmp_path / 'root'
+
+    def test_an_explicit_root_is_the_install_root(self, tmp_path):
+        assert install_root(tmp_path / 'somewhere') == tmp_path / 'somewhere'
+
+
+class TestBrowserVersion:
+    def test_a_missing_file_has_no_version(self, tmp_path):
+        assert browser_version(str(tmp_path / 'missing-chrome')) == ''
+
+    def test_an_existing_executable_answers_its_version(self):
+        # A Windows GUI binary (chrome.exe) is read through its version resource; this checks the
+        # resolver answers for an executable that exists on every machine the suite runs on.
+        assert browser_version(sys.executable)
