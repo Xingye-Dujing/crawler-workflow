@@ -709,10 +709,17 @@ def main(argv=None) -> int:
 
     def open_window() -> None:
         time.sleep(0.4)
-        if open_page(url):
-            log_line('opened the default browser')
+        mark = server.last_seen
+        open_page(url)
+        # `webbrowser.open` returning True only means the shell accepted the call. The page's own
+        # request is the proof that a browser is really showing it; otherwise print the address.
+        deadline = time.monotonic() + 6
+        while time.monotonic() < deadline and server.last_seen <= mark:
+            time.sleep(0.2)
+        if server.last_seen > mark:
+            log_line('浏览器已打开安装页面')
         else:
-            log_line(f'could not open a browser; open this address manually: {url}')
+            log_line(f'没有等到浏览器打开页面，请手动打开：{url}')
 
     threading.Thread(target=open_window, daemon=True).start()
     threading.Thread(target=watchdog, args=(server, state), daemon=True).start()
