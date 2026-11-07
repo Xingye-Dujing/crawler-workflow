@@ -19,18 +19,18 @@
           "install_as": "app",
           "strip_prefix": "CaiXiHui",
           "verify": ["CaiXiHui.exe"],
-          "sha256": "109e206c63f6982231460f6443cdfad3fd13c43d368ccdaca3e19734bef15dab",
-          "size": 127295132,
+          "sha256": "9ad586ed7ef2ee764c11f8b7d07f337eae3ef26aa3e1b2a061e0adc0be19e718",
+          "size": 127300751,
           "parts": [
             {
               "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.001",
-              "sha256": "9728e5e931d6ace95d915ec0b52bbfffde10fe1384ce6821ad5afaef81e5526d",
+              "sha256": "4f995a0ece326b98262ee1e58562e2d2990bd14cb8f47556ceb468fa38c20a04",
               "size": 99614720
             },
             {
               "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.002",
-              "sha256": "b93d2b17f25b35ce213aa10a2bcc75272b21e55f3a81f580b929b2b8ea1fa454",
-              "size": 27680412
+              "sha256": "4eb44e4b9533ae84bf05f45b59435946e63fc000faf82d8e91003b5f0b15b975",
+              "size": 27686031
             }
           ]
         }
