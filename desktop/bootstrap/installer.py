@@ -183,7 +183,9 @@ def pick_folder(title: str) -> str:
         _fields_ = [
             ('hwndOwner', wintypes.HWND),
             ('pidlRoot', ctypes.c_void_p),
-            ('pszDisplayName', wintypes.LPWSTR),
+            # A buffer, not a str: declaring LPWSTR made ctypes reject the create_unicode_buffer
+            # below (c_wchar_Array is not c_wchar_p) before the dialog ever opened.
+            ('pszDisplayName', ctypes.c_void_p),
             ('lpszTitle', wintypes.LPCWSTR),
             ('ulFlags', wintypes.UINT),
             ('lpfn', ctypes.c_void_p),
@@ -209,7 +211,7 @@ def pick_folder(title: str) -> str:
     info = BrowseInfo(
         None,
         None,
-        display,
+        ctypes.cast(display, ctypes.c_void_p),
         title,
         return_only_fsdirs | edit_box | new_dialog_style,
         None,
