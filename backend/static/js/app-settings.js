@@ -12,6 +12,7 @@
    found) come back in the response. */
 const AppSettings = {
     _inputMap: {
+        component_source: 'set-component-source',
         driver_path: 'set-driver',
         browser_binary: 'set-binary',
         latex_binary: 'set-latex',

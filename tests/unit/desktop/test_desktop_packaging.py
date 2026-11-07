@@ -1240,6 +1240,11 @@ class TestPortableComponentsPointTheLookups:
     installer writes and the launcher has to read.
     """
 
+    @pytest.fixture(autouse=True)
+    def _isolate_source_variable(self, monkeypatch):
+        # apply_component_env writes the frozen choice; restore the process after each case.
+        monkeypatch.delenv('CIXI_COMPONENT_SOURCE', raising=False)
+
     def test_an_installed_node_is_exported_but_an_explicit_value_wins(self, desktop, tmp_path, monkeypatch):
         from services.components.manifest import Manifest
 
@@ -1253,17 +1258,17 @@ class TestPortableComponentsPointTheLookups:
         manifest.save()
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
-        desktop.apply_component_env()
+        desktop.apply_component_env(tmp_path)
         assert os.environ['CIXI_NODE_BIN'] == str(node)
 
         monkeypatch.setenv('CIXI_NODE_BIN', 'C:/already/set/node.exe')
-        desktop.apply_component_env()
+        desktop.apply_component_env(tmp_path)
         assert os.environ['CIXI_NODE_BIN'] == 'C:/already/set/node.exe'
 
     def test_no_manifest_is_quiet(self, desktop, tmp_path, monkeypatch):
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'nothing-here'))
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
-        desktop.apply_component_env()
+        desktop.apply_component_env(tmp_path)
         assert 'CIXI_NODE_BIN' not in os.environ
 
     def test_a_corrupt_manifest_does_not_stop_the_launch(self, desktop, tmp_path, monkeypatch):
@@ -1273,5 +1278,59 @@ class TestPortableComponentsPointTheLookups:
         (root / 'install-manifest.json').write_text('{not json', encoding='utf-8')
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(root / 'components'))
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
-        desktop.apply_component_env()  # must return, not raise
+        desktop.apply_component_env(tmp_path)  # must return, not raise
         assert 'CIXI_NODE_BIN' not in os.environ
+
+    def test_choosing_the_machines_own_copy_exports_nothing(self, desktop, tmp_path, monkeypatch):
+        """A user who picked 本机 wants the Chrome they already have, not the installer's one.
+
+        The choice is read from the settings file BEFORE ``config`` is imported, because that
+        module snapshots the environment; reading it afterwards could not undo an export.
+        """
+        from services.components.manifest import Manifest
+
+        root = tmp_path / 'install'
+        components = root / 'components'
+        node = components / 'node' / '24.0' / 'node.exe'
+        node.parent.mkdir(parents=True)
+        node.write_bytes(b'')
+        manifest = Manifest(root)
+        manifest.record('node', '24.0', node.parent, 'a' * 64, 'https://example.com')
+        manifest.save()
+        settings = tmp_path / 'data'
+        settings.mkdir()
+        (settings / 'settings.json').write_text('{"component_source": "system"}', encoding='utf-8')
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
+        monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
+        monkeypatch.delenv('CIXI_COMPONENT_SOURCE', raising=False)
+        desktop.apply_component_env(tmp_path)
+        assert 'CIXI_NODE_BIN' not in os.environ, 'the bundled Node must not be exported'
+        assert os.environ['CIXI_COMPONENT_SOURCE'] == 'system'
+
+
+class TestACustomDataFolder:
+    """The installer can put the data anywhere; a double-click must find it again."""
+
+    def test_the_recorded_folder_is_used_before_appdata(self, desktop, tmp_path):
+        chosen = tmp_path / 'elsewhere' / 'data'
+        (tmp_path / 'data-root.txt').write_text(str(chosen), encoding='utf-8')
+        assert desktop.choose_data_root(tmp_path, env={'APPDATA': str(tmp_path / 'appdata')}) == chosen.resolve()
+
+    def test_an_empty_record_file_is_not_a_choice(self, desktop, tmp_path):
+        (tmp_path / 'data-root.txt').write_text('   ', encoding='utf-8')
+        chosen = desktop.choose_data_root(tmp_path, env={'APPDATA': str(tmp_path / 'appdata')})
+        assert chosen == (tmp_path / 'appdata' / 'CaiXiHui')
+
+    def test_a_recorded_folder_is_never_silently_replaced(self, desktop, tmp_path):
+        """The user chose it; falling back to AppData would hide their data somewhere else."""
+        blocked = tmp_path / 'blocked'
+        blocked.write_text('not a directory', encoding='utf-8')
+        (tmp_path / 'data-root.txt').write_text(str(blocked), encoding='utf-8')
+        candidates = desktop.data_root_candidates(tmp_path, env={'APPDATA': str(tmp_path / 'appdata')})
+        assert candidates == [blocked.resolve()]
+        with pytest.raises(desktop.DataRootError):
+            desktop.prepare_data_root(tmp_path, env={'APPDATA': str(tmp_path / 'appdata')})
+
+    def test_the_elevated_relaunch_cannot_loop(self, desktop):
+        """An administrator-unwritable folder must not bounce between two UAC prompts forever."""
+        assert desktop.try_elevate(['--elevated']) is False

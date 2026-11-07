@@ -1,99 +1,45 @@
 """The online installer: choose a folder and components, download from domestic mirrors, launch.
 
-This is the small Windows-only counterpart to ``CaiXiHui-Setup.exe``. It is one file, does not need
-admin rights and downloads only portable archives; the application itself is just another catalogue
-entry. The novice preset is deliberately the no-VPN route: the bundled catalogue puts npmmirror and
-Gitee first, so a user in China can finish without a proxy.
+The window is the user's own browser showing a page this process serves on ``127.0.0.1``: the
+application is a web UI, so the installer can wear the SAME design language for the cost of a few
+kilobytes of CSS instead of shipping a GUI toolkit. The exe stays small (stdlib server + the
+component core), which is what "小而精" asks for, and the page is generated from the application's
+own tokens (``backend/static/css/base.css``).
 
-The UI is Tkinter because it ships with CPython and the build already uses PyInstaller. Download,
-verification, extraction and the environment report are the same modules the running app uses, so
-the installer cannot disagree with the app about what is installed.
+It is deliberately a Windows desktop tool: it needs a folder picker (``SHBrowseForFolderW``) and
+PyInstaller. Download, verification, extraction and the environment report are the same modules the
+running app uses, so the installer cannot disagree with the app about what is installed.
 """
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
 import json
 import os
-import queue
+import secrets
 import subprocess
 import sys
 import threading
-import tkinter as tk
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from urllib.parse import urlparse
 
-TEXT = {
-    'zh': {
-        'title': '采析绘安装器',
-        'intro': '选择安装位置和要安装的组件。默认是“国内直连”，不需要翻墙。',
-        'dir': '安装位置',
-        'browse': '浏览…',
-        'preset': '安装方式',
-        'preset_one': '一键安装（推荐，国内直连）',
-        'preset_all': '全部组件',
-        'preset_app': '仅主程序',
-        'components': '组件',
-        'size': '需要下载：{size}',
-        'install': '开始安装',
-        'launch': '启动采析绘',
-        'open': '打开安装目录',
-        'cancel': '取消',
-        'installing': '正在安装 {name}…',
-        'done': '安装完成。正在检查环境…',
-        'failed': '安装失败：{err}',
-        'no_selection': '至少选择主程序。',
-        'disk': '目标磁盘剩余 {free}，需要 {need}。请换一个磁盘或减少组件。',
-        'doctor_title': '环境检查',
-        'doctor_head': '这台机器现在可以做什么：',
-        'doctor_missing': '缺少：{what}',
-        'doctor_running': '正在检查环境…',
-        'doctor_empty': '没有拿到环境报告：应用没有返回结果。可以打开“环境与组件”重新检测。',
-        'close': '关闭',
-        'need_admin': '这个目录不可写，请换一个目录（推荐“浏览…”选 D 盘）。',
-        'license': '第三方组件按各自的许可证分发；Chrome 从 Google 官方测试通道下载，不随本安装器重新分发。',
-        'vpn': '默认使用国内镜像（npmmirror / Gitee）；不需要翻墙。',
-    },
-    'en': {
-        'title': 'CaiXiHui Installer',
-        'intro': 'Choose where to install and which components. The default is the domestic route; no VPN needed.',
-        'dir': 'Install folder',
-        'browse': 'Browse…',
-        'preset': 'Preset',
-        'preset_one': 'One-click (recommended, domestic)',
-        'preset_all': 'All components',
-        'preset_app': 'Application only',
-        'components': 'Components',
-        'size': 'Download size: {size}',
-        'install': 'Install',
-        'launch': 'Launch CaiXiHui',
-        'open': 'Open folder',
-        'cancel': 'Cancel',
-        'installing': 'Installing {name}…',
-        'done': 'Installed. Checking the environment…',
-        'failed': 'Install failed: {err}',
-        'no_selection': 'Select at least the application.',
-        'disk': 'The target drive has {free} free but needs {need}. Choose another drive or fewer components.',
-        'doctor_title': 'Environment check',
-        'doctor_head': 'This machine can now:',
-        'doctor_missing': 'Missing: {what}',
-        'doctor_running': 'Checking the environment…',
-        'doctor_empty': 'No environment report came back. Open 环境与组件 in the app to check again.',
-        'close': 'Close',
-        'need_admin': 'That folder is not writable; choose another one (D: is fine).',
-        'license': (
-            'Third-party components keep their own licences; Chrome is downloaded from Google for '
-            'Testing and is not redistributed here.'
-        ),
-        'vpn': 'Domestic mirrors (npmmirror / Gitee) are tried first; no VPN is needed.',
-    },
-}
+#: The exe is windowed, but the packaged app's own doctor report is a child process; the report is
+#: read with this timeout (a live Ollama answers slowly).
+DOCTOR_TIMEOUT = 90
 
-STATE_LABEL = {
-    'zh': {'ok': '可用', 'degraded': '可用（有降级）', 'missing': '不可用', 'unknown': '无法核对'},
-    'en': {'ok': 'available', 'degraded': 'available (degraded)', 'missing': 'unavailable', 'unknown': 'not checked'},
-}
+
+def asset_dir() -> Path:
+    bundled = getattr(sys, '_MEIPASS', None)
+    return Path(bundled).resolve() if bundled else Path(__file__).resolve().parent
+
+
+def icon_path() -> Path:
+    candidates = (asset_dir() / 'icon.ico', Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'icon.ico')
+    return next((item for item in candidates if item.exists()), candidates[0])
 
 
 def _backend_on_path() -> None:
@@ -135,6 +81,16 @@ _PLAN_SPEC = importlib.util.spec_from_file_location('installer_plan', Path(__fil
 assert _PLAN_SPEC and _PLAN_SPEC.loader
 _PLAN = importlib.util.module_from_spec(_PLAN_SPEC)
 _PLAN_SPEC.loader.exec_module(_PLAN)
+# Loaded by path, like the plan: this module is a script in both a source run and a onefile
+# bundle, and a plain ``import ui_theme`` would need the script directory on sys.path in the test
+# harness (where it is not).
+_THEME_SPEC = importlib.util.spec_from_file_location('installer_theme', Path(__file__).with_name('ui_theme.py'))
+assert _THEME_SPEC and _THEME_SPEC.loader
+ui_theme = importlib.util.module_from_spec(_THEME_SPEC)
+_THEME_SPEC.loader.exec_module(ui_theme)
+TEXT = ui_theme.TEXT
+STATE_LABEL = ui_theme.STATE_LABEL
+
 Catalog = _CATALOG.Catalog
 CatalogError = _CATALOG.CatalogError
 load_catalog = _CATALOG.load_catalog
@@ -144,285 +100,556 @@ _MANIFEST = importlib.import_module('services.components.manifest')
 ManifestError = _MANIFEST.ManifestError
 InstallError = _INSTALL.InstallError
 install_component = _INSTALL.install_component
+chosen_ids = _PLAN.chosen_ids
+default_data_root = _PLAN.default_data_root
 default_root = _PLAN.default_root
 free_space = _PLAN.free_space
 human_size = _PLAN.human_size
+preset_choices = _PLAN.preset_choices
 
 
-def _selected_ids(preset: str, chosen: dict[str, tk.BooleanVar], catalog: Catalog) -> list[str]:
-    downloadable = list(catalog.downloadable())
-    return _PLAN.selected_ids(preset, {key: var.get() for key, var in chosen.items()}, downloadable)
+def pick_folder(title: str) -> str:
+    """The native Windows folder picker, without a GUI toolkit in the bundle.
+
+    ``SHBrowseForFolderW`` is an OS dialog: it costs nothing to ship, and the installer only needs
+    a path (a browser cannot hand one over). Cancelled or unsupported answers are ``''``.
+    """
+    if os.name != 'nt':
+        return ''
+    import ctypes
+    from ctypes import wintypes
+
+    # shellapi.h's BIF_* flags; locals, so the naming rule can stay lowercase.
+    return_only_fsdirs = 0x00000001
+    edit_box = 0x00000010
+    new_dialog_style = 0x00000040
+
+    class BrowseInfo(ctypes.Structure):
+        _fields_ = [
+            ('hwndOwner', wintypes.HWND),
+            ('pidlRoot', ctypes.c_void_p),
+            ('pszDisplayName', wintypes.LPWSTR),
+            ('lpszTitle', wintypes.LPCWSTR),
+            ('ulFlags', wintypes.UINT),
+            ('lpfn', ctypes.c_void_p),
+            ('lParam', wintypes.LPARAM),
+            ('iImage', ctypes.c_int),
+        ]
+
+    shell32 = ctypes.windll.shell32
+    ole32 = ctypes.windll.ole32
+    # A request handler runs on its own thread; Shell dialogs want an initialized apartment.
+    # A thread already in another mode is fine (RPC_E_CHANGED_MODE) — it only means "do not
+    # uninitialize", not "cannot show a folder picker".
+    initialized = False
+    with contextlib.suppress(AttributeError, OSError):
+        result = ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+        initialized = result in (0, 1)  # S_OK / S_FALSE
+    shell32.SHBrowseForFolderW.restype = ctypes.c_void_p
+    shell32.SHGetPathFromIDListW.argtypes = [ctypes.c_void_p, wintypes.LPWSTR]
+    display = ctypes.create_unicode_buffer(260)
+    info = BrowseInfo(
+        None,
+        None,
+        display,
+        title,
+        return_only_fsdirs | edit_box | new_dialog_style,
+        None,
+        0,
+        0,
+    )
+    try:
+        item = shell32.SHBrowseForFolderW(ctypes.byref(info))
+        if not item:
+            return ''
+        path = ctypes.create_unicode_buffer(260)
+        try:
+            shell32.SHGetPathFromIDListW(ctypes.c_void_p(item), path)
+        finally:
+            ole32.CoTaskMemFree(ctypes.c_void_p(item))
+    except (AttributeError, OSError):
+        return ''
+    finally:
+        if initialized:
+            with contextlib.suppress(AttributeError, OSError):
+                ole32.CoUninitialize()
+    return path.value or ''
 
 
-class Installer(tk.Tk):
-    def __init__(self) -> None:
-        super().__init__()
-        self.lang = 'zh'
-        self.catalog = Catalog(load_catalog())
-        self.root_dir = tk.StringVar(value=str(default_root()))
-        self.preset = tk.StringVar(value='one')
-        self.message: queue.Queue[tuple] = queue.Queue()
-        self.worker: threading.Thread | None = None
+class InstallerState:
+    """Everything the page may ask about, guarded because the install runs on a thread."""
+
+    def __init__(self, catalog: Catalog, root: str, data: str, elevated: bool) -> None:
+        self.catalog = catalog
+        self.root = str(root)
+        self.data = str(data)
+        self.elevated = elevated
+        self.lock = threading.RLock()
         self.cancel = threading.Event()
-        self.chosen: dict[str, tk.BooleanVar] = {}
-        self._build()
-        self._poll()
+        self.preset = 'one'
+        self.selected = self._preset_ids('one')
+        self.job = {
+            'state': 'idle',
+            'done': 0,
+            'total': 100,
+            'status_key': '',
+            'status_params': {},
+            'error': '',
+            'log': [],
+        }
+        self.doctor = {'state': 'idle', 'report': {}}
+        self.shutting_down = False
 
-    # ── UI ──────────────────────────────────────────────────────
-    def t(self, key: str, **values) -> str:
-        text = TEXT[self.lang].get(key, key)
-        try:
-            return text.format(**values)
-        except (KeyError, IndexError):
-            return text
+    # ── selections ──────────────────────────────────────────────
+    def _downloadable(self) -> list[str]:
+        return list(self.catalog.downloadable())
 
-    def _build(self) -> None:
-        self.title(self.t('title'))
-        self.geometry('820x640')
-        self.minsize(760, 560)
-        frame = ttk.Frame(self, padding=18)
-        frame.pack(fill='both', expand=True)
+    def _preset_ids(self, preset: str) -> list[str]:
+        defaults = [item.id for item in self.catalog.components.values() if item.default]
+        choices = preset_choices(preset, defaults, self._downloadable())
+        return chosen_ids(choices, self._downloadable())
 
-        ttk.Label(frame, text=self.t('intro'), wraplength=760).pack(anchor='w')
-        top = ttk.Frame(frame)
-        top.pack(fill='x', pady=(12, 4))
-        ttk.Label(top, text=self.t('dir')).pack(side='left')
-        ttk.Entry(top, textvariable=self.root_dir).pack(side='left', fill='x', expand=True, padx=8)
-        ttk.Button(top, text=self.t('browse'), command=self._browse).pack(side='left')
-
-        preset = ttk.LabelFrame(frame, text=self.t('preset'), padding=10)
-        preset.pack(fill='x', pady=10)
-        for value, key in (('one', 'preset_one'), ('all', 'preset_all'), ('app', 'preset_app')):
-            ttk.Radiobutton(preset, text=self.t(key), value=value, variable=self.preset, command=self._refresh).pack(
-                anchor='w'
-            )
-
-        components = ttk.LabelFrame(frame, text=self.t('components'), padding=10)
-        components.pack(fill='both', expand=True)
-        for component in self.catalog.components.values():
-            row = ttk.Frame(components)
-            row.pack(fill='x', pady=1)
-            asset = component.asset()
-            variable = tk.BooleanVar(value=component.default and asset is not None)
-            self.chosen[component.id] = variable
-            if asset is None:
-                ttk.Checkbutton(row, text=f'{component.id} — {component.summary}', state='disabled').pack(side='left')
-            else:
-                ttk.Checkbutton(
-                    row,
-                    text=f'{component.id} {component.version} — {component.summary}',
-                    variable=variable,
-                    command=self._refresh,
-                ).pack(side='left')
-                ttk.Label(row, text=human_size(asset.size)).pack(side='right')
-
-        ttk.Label(frame, text=self.t('vpn')).pack(anchor='w', pady=(8, 0))
-        ttk.Label(frame, text=self.t('license'), wraplength=760, foreground='#666').pack(anchor='w')
-        self.size_label = ttk.Label(frame, text='')
-        self.size_label.pack(anchor='w', pady=(8, 0))
-
-        self.progress = ttk.Progressbar(frame, mode='determinate')
-        self.progress.pack(fill='x', pady=(8, 4))
-        self.status = ttk.Label(frame, text='')
-        self.status.pack(anchor='w')
-        self.log = tk.Text(frame, height=7, state='disabled')
-        self.log.pack(fill='both', expand=True, pady=(6, 6))
-
-        actions = ttk.Frame(frame)
-        actions.pack(fill='x')
-        self.install_button = ttk.Button(actions, text=self.t('install'), command=self._start)
-        self.install_button.pack(side='left')
-        self.cancel_button = ttk.Button(actions, text=self.t('cancel'), command=self._cancel, state='disabled')
-        self.cancel_button.pack(side='left', padx=6)
-        ttk.Button(actions, text=self.t('open'), command=self._open_folder).pack(side='right')
-        self._refresh()
-
-    def _refresh(self) -> None:
-        selected = self._selected_ids()
-        total = sum(self.catalog.get(item).asset().size for item in selected if self.catalog.get(item).asset())
-        self.size_label.config(text=self.t('size', size=human_size(total)))
-
-    def _selected_ids(self) -> list[str]:
-        ids = _selected_ids(self.preset.get(), self.chosen, self.catalog)
+    def _effective(self) -> list[str]:
         requires = {key: list(item.requires) for key, item in self.catalog.components.items()}
-        return _PLAN.with_requirements(ids, requires, list(self.catalog.downloadable()))
+        return _PLAN.with_requirements(self.selected, requires, self._downloadable())
 
-    def _browse(self) -> None:
-        chosen = filedialog.askdirectory(initialdir=self.root_dir.get() or str(Path.home()))
-        if chosen:
-            self.root_dir.set(chosen)
+    def snapshot(self) -> dict:
+        with self.lock:
+            selected = set(self.selected)
+            effective = self._effective()
+            rows = []
+            total = 0
+            for item in self.catalog.components.values():
+                info = item.asset()
+                if info is None:
+                    rows.append(
+                        {
+                            'id': item.id,
+                            'version': item.version,
+                            'summary': item.summary,
+                            'downloadable': False,
+                            'checked': False,
+                            'size': 0,
+                            'size_text': '',
+                        }
+                    )
+                    continue
+                total += info.size if item.id in effective else 0
+                rows.append(
+                    {
+                        'id': item.id,
+                        'version': item.version,
+                        'summary': item.summary,
+                        'downloadable': True,
+                        'checked': item.id in selected,
+                        'size': info.size,
+                        'size_text': human_size(info.size),
+                    }
+                )
+            return {
+                'root': self.root,
+                'data': self.data,
+                'preset': self.preset,
+                'components': rows,
+                # Bytes, not a sentence: the page renders the size in its own language.
+                'total': total,
+                'job': dict(self.job, log=list(self.job['log'])),
+            }
 
-    def _open_folder(self) -> None:
-        path = Path(self.root_dir.get())
-        path.mkdir(parents=True, exist_ok=True)
-        if os.name == 'nt':
-            os.startfile(path)
-        else:
-            subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(path)])
+    # ── actions ─────────────────────────────────────────────────
+    def set_selection(self, ids) -> None:
+        if not isinstance(ids, list):
+            return
+        allowed = set(self._downloadable())
+        with self.lock:
+            self.selected = [str(item) for item in ids if str(item) in allowed]
 
-    def _say(self, line: str) -> None:
-        self.log.configure(state='normal')
-        self.log.insert('end', line + '\n')
-        self.log.see('end')
-        self.log.configure(state='disabled')
+    def set_preset(self, preset: str) -> bool:
+        if preset not in ('one', 'app'):
+            return False
+        with self.lock:
+            self.preset = preset
+            self.selected = self._preset_ids(preset)
+        return True
 
-    # ── install ─────────────────────────────────────────────────
-    def _start(self) -> None:
-        if self.worker and self.worker.is_alive():
-            return
-        selected = self._selected_ids()
-        if 'app' not in selected:
-            messagebox.showwarning(self.t('title'), self.t('no_selection'))
-            return
-        root = Path(self.root_dir.get())
-        try:
-            root.mkdir(parents=True, exist_ok=True)
-            probe = root / '.write-test'
-            probe.write_text('ok', encoding='utf-8')
-            probe.unlink()
-        except OSError:
-            messagebox.showerror(self.t('title'), self.t('need_admin'))
-            return
-        need = sum(self.catalog.get(item).asset().size for item in selected if self.catalog.get(item).asset())
-        free = free_space(root)
-        if free and free < need + 200 * 1024 * 1024:
-            messagebox.showerror(self.t('title'), self.t('disk', free=human_size(free), need=human_size(need)))
-            return
+    def _log(self, line: str) -> None:
+        with self.lock:
+            lines = self.job['log']
+            lines.append(line)
+            if len(lines) > 200:
+                del lines[:-200]
+
+    def _set_job(self, **values) -> None:
+        with self.lock:
+            self.job.update(values)
+
+    def start(self, root: Path, data: Path) -> None:
+        ids = self._effective()
         self.cancel.clear()
-        self.install_button.config(state='disabled')
-        self.cancel_button.config(state='normal')
-        self.progress.config(value=0, maximum=100)
-        self.worker = threading.Thread(target=self._run_install, args=(root, selected), daemon=True)
-        self.worker.start()
+        with self.lock:
+            self.job = {
+                'state': 'running',
+                'done': 0,
+                'total': 100,
+                'status_key': '',
+                'status_params': {},
+                'error': '',
+                'log': [],
+            }
+        self.root = str(root)
+        self.data = str(data)
+        threading.Thread(target=self._run_job, args=(ids, root, data), daemon=True).start()
 
-    def _run_install(self, root: Path, selected: list[str]) -> None:
-        total = max(1, len(selected))
-        for index, component_id in enumerate(selected):
+    def _run_job(self, ids: list[str], root: Path, data: Path) -> None:
+        total = max(1, len(ids))
+        for index, component_id in enumerate(ids):
             if self.cancel.is_set():
-                self.message.put(('failed', 'cancelled'))
+                self._set_job(state='cancelled')
                 return
             component = self.catalog.get(component_id)
-            self.message.put(('status', self.t('installing', name=component_id)))
-            self.message.put(('progress', int(index / total * 100)))
+            self._set_job(status_key='installing', status_params={'name': component_id})
+            self._set_job(done=int(index / total * 100))
             try:
 
                 def progress(done: int, size: int, start=index) -> None:
                     if size:
-                        self.message.put(('progress', int((start + done / size) / total * 100)))
+                        self._set_job(done=int((start + done / size) / total * 100))
 
                 install_component(self.catalog, component_id, root, progress=progress, cancel=self.cancel.is_set)
             except (InstallError, CatalogError, DownloadError, ManifestError, OSError) as exc:
                 # A network failure is a DownloadError, which is not an OSError: without it here the
-                # worker thread died silently and the window sat on "installing" with the button off.
-                self.message.put(('failed', str(exc)))
+                # thread died silently and the page sat on "installing" with the button off.
+                self._set_job(state='failed', error=str(exc), status_key='')
                 return
-            self.message.put(('log', f'{component_id} {component.version} → {root}'))
-        self.message.put(('progress', 100))
-        self.message.put(('done', ''))
+            self._log(f'{component_id} {component.version} -> {root}')
+        self._write_data_root(root, data)
+        self._set_job(done=100, state='done', status_key='done', status_params={})
+        self._run_doctor(root, data)
 
-    # ── result ──────────────────────────────────────────────────
-    def _poll(self) -> None:
+    def _write_data_root(self, root: Path, data: Path) -> None:
+        """Tell the application where its data belongs, so a later double-click finds it.
+
+        Written after the app is unpacked (the install replaces ``app/``) and before launch. The
+        launcher reads this file before it falls back to AppData, which is what lets a user keep
+        every byte off the system drive.
+        """
         try:
-            while True:
-                kind, payload = self.message.get_nowait()
-                if kind == 'progress':
-                    self.progress.config(value=payload)
-                elif kind == 'status':
-                    self.status.config(text=payload)
-                elif kind == 'log':
-                    self._say(payload)
-                elif kind == 'failed':
-                    self._finish()
-                    self.status.config(text=self.t('failed', err=payload))
-                    messagebox.showerror(self.t('title'), self.t('failed', err=payload))
-                elif kind == 'done':
-                    self._finish()
-                    self.status.config(text=self.t('done'))
-                    self.after(200, self._doctor)
-                elif kind == 'doctor':
-                    self.status.config(text='')
-                    self._doctor_window(payload)
-        except queue.Empty:
-            pass
-        self.after(150, self._poll)
+            target = root / 'app' / 'data-root.txt'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(str(data), encoding='utf-8')
+        except OSError as exc:
+            with self.lock:
+                self.job['log'].append(f'data-root.txt: {exc}')
 
-    def _finish(self) -> None:
-        self.install_button.config(state='normal')
-        self.cancel_button.config(state='disabled')
-
-    def _cancel(self) -> None:
-        self.cancel.set()
-        self.status.config(text=self.t('cancel'))
-
-    def _doctor(self) -> None:
-        exe = Path(self.root_dir.get()) / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
+    def _run_doctor(self, root: Path, data: Path) -> None:
+        exe = root / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
         if not exe.exists():
+            self.doctor = {'state': 'done', 'report': {}}
             return
-        self.status.config(text=self.t('doctor_running'))
-        # The report is a subprocess of the packaged app (up to 90 s next to a live Ollama); it runs
-        # off the UI thread so the window keeps painting, and comes back through the same queue.
-        threading.Thread(target=self._doctor_worker, args=(exe, Path(self.root_dir.get())), daemon=True).start()
-
-    def _doctor_worker(self, exe: Path, root: Path) -> None:
+        self.doctor = {'state': 'running', 'report': {}}
         env = dict(os.environ)
         env['CIXI_COMPONENTS_DIR'] = str(root / 'components')
+        env['CRAWLER_DATA_ROOT'] = str(data)
+        # The report is Chinese and captured through a pipe: without this the child uses the
+        # console code page (cp936 on a Chinese Windows) and the decoded sentence is mojibake.
+        # The app also writes UTF-8 bytes itself; this is the second line of defence.
+        env['PYTHONIOENCODING'] = 'utf-8'
         report: dict = {}
         try:
-            result = subprocess.run([str(exe), '--doctor'], capture_output=True, timeout=90, check=False, env=env)
-            text = (result.stdout or b'').decode('utf-8', errors='replace')
+            result = subprocess.run(
+                [str(exe), '--doctor'],
+                capture_output=True,
+                timeout=DOCTOR_TIMEOUT,
+                check=False,
+                env=env,
+            )
+            text = (result.stdout or b'').decode('utf-8-sig', errors='replace')
             # The launcher may print a note about the data root before the report (a fallback is
             # always stated aloud), so the JSON starts at the first brace rather than at byte 0.
             start = text.find('{')
             report = json.loads(text[start:]) if start >= 0 else {}
         except (OSError, subprocess.SubprocessError, ValueError):
             report = {}
-        self.message.put(('doctor', report if isinstance(report, dict) else {}))
+        self.doctor = {'state': 'done', 'report': report if isinstance(report, dict) else {}}
 
-    def _doctor_window(self, report: dict) -> None:
-        window = tk.Toplevel(self)
-        window.title(self.t('doctor_title'))
-        window.geometry('720x460')
-        ttk.Label(window, text=self.t('doctor_head'), padding=12).pack(anchor='w')
-        body = ttk.Frame(window, padding=12)
-        body.pack(fill='both', expand=True)
-        labels = STATE_LABEL[self.lang]
-        rows = report.get('capabilities') or ()
-        if not rows:
-            ttk.Label(body, text=self.t('doctor_empty'), wraplength=660).pack(anchor='w')
-        for row in rows:
-            state = labels.get(row.get('state'), row.get('state'))
-            label = row.get('label_text') or row.get('label_key')
-            text = f'[{state}] {label}'
-            if row.get('reason_key'):
-                text += f' — {self._reason(row)}'
-            ttk.Label(body, text=text, wraplength=660).pack(anchor='w', pady=1)
-        buttons = ttk.Frame(window, padding=12)
-        buttons.pack(fill='x')
-        exe = Path(self.root_dir.get()) / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
-        ttk.Button(buttons, text=self.t('launch'), command=lambda: self._launch(exe)).pack(side='left')
-        ttk.Button(buttons, text=self.t('close'), command=window.destroy).pack(side='right')
 
-    def _reason(self, row: dict) -> str:
-        # The packaged app renders the sentence with its own catalogue; the installer keeps no
-        # second copy of those words. A row without text (an older build) falls back to the key
-        # and its parameters rather than inventing a sentence.
-        text = row.get('reason_text')
-        if text:
-            return str(text)
-        reason = str(row.get('reason_key') or '')
-        params = row.get('reason_params') or {}
-        return reason + (f' ({params})' if params else '')
+def _writable(path: Path) -> str:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / '.write-test'
+        probe.write_text('ok', encoding='utf-8')
+        probe.unlink()
+    except OSError as exc:
+        return str(exc)
+    return ''
 
-    def _launch(self, exe: Path) -> None:
+
+def relaunch_command(argv: list[str]) -> tuple[str, str]:
+    """The exe to elevate and its argument string, for a frozen build or a source run."""
+    if getattr(sys, 'frozen', False):
+        return sys.executable, subprocess.list2cmdline(argv)
+    script = str(Path(__file__).resolve())
+    return sys.executable, subprocess.list2cmdline([script, *argv])
+
+
+def _relaunch_elevated(root: Path, data: Path) -> bool:
+    """Ask Windows for administrator rights once, with the same folders preselected."""
+    if os.name != 'nt':
+        return False
+    try:
+        import ctypes
+
+        exe, params = relaunch_command(['--root', str(root), '--data', str(data), '--elevated'])
+        result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', exe, params, None, 1)
+    except (AttributeError, OSError):
+        return False
+    return result > 32
+
+
+class InstallerServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = False
+
+    def __init__(self, state: InstallerState, token: str) -> None:
+        super().__init__(('127.0.0.1', 0), Handler)
+        self.state = state
+        self.token = token
+
+    @property
+    def url(self) -> str:
+        return f'http://127.0.0.1:{self.server_address[1]}/{self.token}/'
+
+    def stop_soon(self, delay: float = 0.2) -> None:
+        if self.state.shutting_down:
+            return
+        self.state.shutting_down = True
+        timer = threading.Timer(delay, self.shutdown)
+        timer.daemon = True
+        timer.start()
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = 'CaiXiHuiInstaller'
+    sys_version = ''
+
+    # ── plumbing ────────────────────────────────────────────────
+    def log_message(self, fmt, *args):
+        """The installer has no console; a request log would only be noise in a windowed build."""
+
+    def _send(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(body)
+
+    def _json(self, payload: dict, status: int = 200) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        self._send(status, body, 'application/json; charset=utf-8')
+
+    def _asset(self, name: str, content_type: str) -> None:
+        path = asset_dir() / name
+        if not path.exists():
+            self._send(404, b'not found', 'text/plain; charset=utf-8')
+            return
+        self._send(200, path.read_bytes(), content_type)
+
+    def _authorized(self, path: str) -> bool:
+        prefix = f'/{self.server.token}/'
+        return path.startswith(prefix)
+
+    def _route(self) -> str:
+        path = urlparse(self.path).path
+        prefix = f'/{self.server.token}'
+        return path[len(prefix) :] or '/'
+
+    def _body(self) -> dict:
+        try:
+            length = int(self.headers.get('Content-Length') or 0)
+        except ValueError:
+            return {}
+        if length <= 0 or length > 65536:
+            return {}
+        try:
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+        except (ValueError, UnicodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    # ── GET ─────────────────────────────────────────────────────
+    def _get(self):
+        if not self._authorized(urlparse(self.path).path):
+            self._send(404, b'not found', 'text/plain; charset=utf-8')
+            return
+        route = self._route()
+        if route in ('/', '/index.html'):
+            self._send(200, self._page(), 'text/html; charset=utf-8')
+        elif route == '/installer_page.js':
+            self._asset('installer_page.js', 'application/javascript; charset=utf-8')
+        elif route == '/icon.ico':
+            path = icon_path()
+            if path.exists():
+                self._send(200, path.read_bytes(), 'image/x-icon')
+            else:
+                self._send(404, b'', 'image/x-icon')
+        elif route == '/api/state':
+            self._json({'ok': True, 'state': self.server.state.snapshot()})
+        elif route == '/api/doctor':
+            self._json(dict(self.server.state.doctor))
+        else:
+            self._send(404, b'not found', 'text/plain; charset=utf-8')
+
+    # ── POST ────────────────────────────────────────────────────
+    def _post(self):
+        if not self._authorized(urlparse(self.path).path):
+            self._send(404, b'not found', 'text/plain; charset=utf-8')
+            return
+        route = self._route()
+        state = self.server.state
+        payload = self._body()
+        if route == '/api/select':
+            state.set_selection(payload.get('ids'))
+            self._json({'ok': True, 'state': state.snapshot()})
+        elif route == '/api/preset':
+            if not state.set_preset(str(payload.get('preset') or '')):
+                self._json({'ok': False, 'error': 'unknown preset'}, 400)
+            else:
+                self._json({'ok': True, 'state': state.snapshot()})
+        elif route == '/api/browse':
+            kind = str(payload.get('kind') or 'root')
+            lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
+            title = TEXT[lang]['data_dir' if kind == 'data' else 'dir']
+            self._json({'ok': True, 'path': pick_folder(title)})
+        elif route == '/api/start':
+            self._json(self._start(state, payload))
+        elif route == '/api/cancel':
+            state.cancel.set()
+            self._json({'ok': True, 'state': state.snapshot()})
+        elif route == '/api/open':
+            self._open_folder(state.root)
+            self._json({'ok': True})
+        elif route == '/api/launch':
+            self._json(self._launch(state))
+        elif route == '/api/shutdown':
+            self._json({'ok': True})
+            self.server.stop_soon()
+        else:
+            self._send(404, b'not found', 'text/plain; charset=utf-8')
+
+    # ── actions ─────────────────────────────────────────────────
+    def _start(self, state: InstallerState, payload: dict) -> dict:
+        lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
+        words = TEXT[lang]
+        if state.job['state'] == 'running':
+            return {'ok': False, 'error': words['already_running']}
+        root_text = str(payload.get('root') or '').strip()
+        data_text = str(payload.get('data') or '').strip()
+        if not root_text or not data_text:
+            return {'ok': False, 'error': words['dir']}
+        state.set_selection(payload.get('ids'))
+        ids = state._effective()
+        if 'app' not in ids:
+            return {'ok': False, 'error': words['no_selection']}
+        root = Path(root_text)
+        data = Path(data_text)
+        refused = _writable(root) or _writable(data)
+        if refused:
+            # Nothing was downloaded yet, so asking for rights here costs the user one prompt
+            # instead of a failed install minutes later — and only when the folder needs it.
+            if not state.elevated and _relaunch_elevated(root, data):
+                self.server.stop_soon(0.8)
+                return {'ok': False, 'relaunching': True}
+            message = words['elevated_again'] if state.elevated else words['elevate_failed']
+            return {'ok': False, 'error': message}
+        need = sum(state.catalog.get(item).asset().size for item in ids if state.catalog.get(item).asset())
+        free = free_space(root)
+        if free and free < need + 200 * 1024 * 1024:
+            return {
+                'ok': False,
+                'error': words['disk'].format(free=human_size(free), need=human_size(need)),
+            }
+        state.start(root, data)
+        return {'ok': True, 'state': state.snapshot()}
+
+    def _open_folder(self, root: str) -> None:
+        path = Path(root)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            if os.name == 'nt':
+                os.startfile(path)
+            else:
+                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(path)])
+        except OSError:
+            return
+
+    def _launch(self, state: InstallerState) -> dict:
+        root = Path(state.root)
+        exe = root / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
+        if not exe.exists():
+            return {'ok': False, 'error': TEXT['zh']['not_installed']}
         env = dict(os.environ)
-        env['CIXI_COMPONENTS_DIR'] = str(Path(self.root_dir.get()) / 'components')
-        subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env)
-        self.destroy()
+        env['CIXI_COMPONENTS_DIR'] = str(root / 'components')
+        env['CRAWLER_DATA_ROOT'] = state.data
+        try:
+            subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env)
+        except OSError as exc:
+            return {'ok': False, 'error': str(exc)}
+        self.server.stop_soon(1.0)
+        return {'ok': True}
+
+    def _page(self) -> bytes:
+        template = (asset_dir() / 'installer_page.html').read_text(encoding='utf-8')
+        config = {
+            'token': self.server.token,
+            'lang': 'zh',
+            'text': TEXT,
+            'state_labels': STATE_LABEL,
+            'state': self.server.state.snapshot(),
+        }
+        payload = json.dumps(config, ensure_ascii=False).replace('</', '<\\/')
+        html = template.replace('{{CSS}}', ui_theme.stylesheet()).replace(
+            '{{CONFIG}}', f'window.INSTALLER = {payload};'
+        )
+        return html.encode('utf-8')
 
 
-def main() -> int:
-    app = Installer()
-    app.mainloop()
+# The stdlib dispatches on these exact names. Assigning them outside the class keeps the
+# pep8-naming rule honest without an exemption: the handlers themselves are ordinary methods.
+Handler.do_GET = Handler._get
+Handler.do_POST = Handler._post
+
+
+def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    options: dict[str, str] = {}
+    for index, arg in enumerate(argv):
+        if arg in ('--root', '--data') and index + 1 < len(argv):
+            options[arg[2:]] = argv[index + 1]
+    catalog = Catalog(load_catalog())
+    state = InstallerState(
+        catalog,
+        options.get('root') or str(default_root()),
+        options.get('data') or str(default_data_root()),
+        elevated='--elevated' in argv,
+    )
+    # A random path token keeps other local pages from poking this server. The environment
+    # override exists for the packaged smoke test, which cannot read a windowed build's stdout.
+    token = str(os.environ.get('CIXI_INSTALLER_TOKEN') or '').strip() or secrets.token_hex(8)
+    server = InstallerServer(state, token=token)
+    url = server.url
+    print(f'安装器页面：{url}', flush=True)
+    timer = threading.Timer(0.3, lambda: webbrowser.open(url))
+    timer.daemon = True
+    timer.start()
+    try:
+        server.serve_forever(poll_interval=0.2)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
     return 0
 
 

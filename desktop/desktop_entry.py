@@ -31,6 +31,7 @@ import json
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -75,6 +76,29 @@ def choose_data_root(app_dir_path, *, env=None, appdata=None, portable_marker=No
     return data_root_candidates(app_dir_path, env=env, portable_marker=portable_marker)[0]
 
 
+#: The installer writes this beside the exe; an empty or missing file means "use the defaults".
+DATA_ROOT_FILE = 'data-root.txt'
+
+
+def configured_data_root(app_dir_path) -> Path | None:
+    """The data folder a previous install/choice recorded, or ``None``.
+
+    Deliberately a plain text file rather than an environment variable: a double-clicked exe
+    inherits no environment, so a choice made in the installer would otherwise vanish on the
+    next launch. An empty file is "not configured" (a user may create it to clear the choice).
+    """
+    try:
+        text = (Path(app_dir_path) / DATA_ROOT_FILE).read_text(encoding='utf-8').strip()
+    except (OSError, UnicodeError):
+        return None
+    if not text:
+        return None
+    try:
+        return Path(text).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+
+
 def _has_own_data(path: Path) -> bool:
     """Whether this candidate already holds a ``data/`` — i.e. someone's real history."""
     try:
@@ -98,6 +122,11 @@ def data_root_candidates(app_dir_path, *, env=None, portable_marker=None) -> lis
     if override:
         return [Path(override).expanduser().resolve()]
     base = Path(app_dir_path).resolve()
+    chosen = configured_data_root(base)
+    if chosen is not None:
+        # A folder the installer (or the user) named is the answer, not a hint: silently falling
+        # back to AppData would put the data somewhere the user did not choose.
+        return [chosen]
     marker = Path(portable_marker) if portable_marker is not None else base / 'portable.txt'
     ordered: list[Path] = []
     if marker.exists():
@@ -196,6 +225,38 @@ def error_log_dirs(data_root=None) -> list[Path]:
     return dirs
 
 
+def running_elevated() -> bool:
+    """Whether this process already holds administrator rights (Windows only)."""
+    if os.name != 'nt':
+        return False
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def try_elevate(argv=None) -> bool:
+    """Relaunch this exe through UAC once, keeping its arguments, and let the caller exit.
+
+    A data folder the user placed on a protected drive (``C:\\``) is a legitimate choice; the
+    answer is one permission prompt, not a startup failure they cannot act on. The relaunch is
+    marked ``--elevated`` so an administrator-unwritable folder cannot bounce through UAC forever.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if os.name != 'nt' or running_elevated() or '--elevated' in argv:
+        return False
+    # ShellExecuteW takes the program and its ARGUMENTS separately; repeating the exe inside the
+    # argument string would hand the elevated process a bogus first argument. A source run also
+    # needs the script path, because sys.executable is then python.exe.
+    arguments = argv if is_frozen() else [str(Path(__file__).resolve()), *argv]
+    try:
+        params = subprocess.list2cmdline([*arguments, '--elevated'])
+        result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', sys.executable, params, None, 1)
+    except (AttributeError, OSError):
+        return False
+    return result > 32
+
+
 def _message_box(message: str, title: str = '') -> None:
     """A blocking Windows dialog, frozen builds only: a source run already has a live terminal.
 
@@ -233,6 +294,25 @@ def _print_safe(text: str) -> None:
         return
     with contextlib.suppress(Exception):
         print(data.decode(encoding, errors='replace'), flush=True)
+
+
+def _print_utf8(text: str) -> None:
+    """Write text as UTF-8 BYTES, whatever this console's code page is.
+
+    ``_print_safe`` protects the console's own encoding; it cannot help a caller that captures the
+    pipe and decodes it as UTF-8. A redirected stdout on a Chinese Windows encodes to cp936, so
+    every Chinese sentence arrived at the installer as mojibake (the installer decodes UTF-8).
+    The ``--doctor`` report is machine input, so its bytes are fixed here instead of guessed.
+    """
+    buffer = getattr(sys.stdout, 'buffer', None)
+    if buffer is not None:
+        try:
+            buffer.write((str(text) + '\n').encode('utf-8'))
+            buffer.flush()
+            return
+        except (OSError, ValueError, AttributeError):
+            pass
+    _print_safe(text)
 
 
 def fail_loudly(message: str, log_dirs, *, detail: str = '', dialog=_message_box, title: str = '') -> Path | None:
@@ -567,13 +647,13 @@ def _component_doctor(base: Path) -> int:
             row['label_text'] = t(str(row.get('label_key') or ''))
             row['reason_text'] = t(str(row.get('reason_key') or ''), **(row.get('reason_params') or {}))
     except Exception as exc:
-        _print_safe(json.dumps({'schema': 1, 'error': str(exc), 'capabilities': []}, ensure_ascii=False))
+        _print_utf8(json.dumps({'schema': 1, 'error': str(exc), 'capabilities': []}, ensure_ascii=False))
         return 1
-    _print_safe(json.dumps(report, ensure_ascii=False, indent=2))
+    _print_utf8(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 
 
-def apply_component_env() -> None:
+def apply_component_env(data_root=None) -> None:
     """Let a portable install point the existing machine lookups at its own components.
 
     An explicit setting still wins (``runtime.settings`` reads it first), and an environment value
@@ -581,15 +661,27 @@ def apply_component_env() -> None:
     it, installing Chrome beside the app would change nothing because ``find_chrome`` does not know
     that folder exists.
 
+    The user's choice (``component_source``) is read from the settings file BEFORE ``core.config``
+    is imported, because that module snapshots the environment into class attributes: a read after
+    the import could not undo an export. ``system`` exports nothing, which is exactly what leaves
+    the machine's own Chrome/Node/driver in charge. The choice is frozen in
+    ``CIXI_COMPONENT_SOURCE`` so the panel describes this process, not a later save.
+
     Best effort by design: a source checkout has no manifest, and a corrupt one must not stop the
     application from starting — the per-OS lookups still answer, and the panel names the bad file.
     """
     try:
         from core.machine import chrome_executable_name
 
+        from services.components import source
         from services.components.manifest import Manifest, ManifestError
         from services.components.paths import components_root, install_root
     except ImportError:
+        return
+    choice = source.stored_source(data_root)
+    os.environ[source.ENV_VAR] = choice
+    if choice != source.BUNDLED:
+        # 本机 chosen: the installer's folder may be complete and must still be ignored.
         return
     try:
         os.environ.setdefault('CIXI_COMPONENTS_DIR', str(components_root()))
@@ -621,6 +713,10 @@ def main(argv=None) -> int:
     try:
         root, refusals = prepare_data_root(base)
     except DataRootError as exc:
+        # A data folder on a protected drive is writable for an administrator; ask once (UAC)
+        # instead of failing the launch. A refusal to elevate still gets the named refusal.
+        if try_elevate(argv):
+            return 0
         asked = str(os.environ.get('CRAWLER_DATA_ROOT') or '').strip()
         fail_loudly(data_root_refusal_message(exc.notes, asked), error_log_dirs())
         return 1
@@ -682,12 +778,15 @@ def main(argv=None) -> int:
     # Patch the two package-level facts that a frozen bundle cannot infer: relative
     # optional models are looked up beside the exe, and a chromedriver that does not
     # exist must be left blank so Selenium Manager can resolve it.
-    apply_component_env()
+    apply_component_env(root)
     try:
         from core import config
 
         config.BASE_DIR = str(base)
-        config.DRIVER_PATH = find_driver(base)
+        # The bundled driver the launcher exported is the answer when 安装器的组件 is chosen;
+        # ``find_driver`` only knows the machine's own locations. The settings default is taken
+        # from this attribute, which is why the export has to happen before the config import.
+        config.DRIVER_PATH = str(os.environ.get('CIXI_DRIVER_PATH') or '').strip() or find_driver(base)
     except Exception:
         fail_loudly(
             '启动失败：配置模块没有加载成功，数据目录与浏览器路径无法确定。请把日志文件发给维护者。',

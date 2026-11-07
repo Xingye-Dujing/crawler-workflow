@@ -20,13 +20,14 @@
 | `CRAWLER_TRUST_PROXY_DEPTH` | 这台服务前面站了几层反向代理（`1` = 一层）。设了才会读 `X-Forwarded-For` 的**右数第 depth+1 个**地址作为访客来源，用于审计日志与登录失败窗口；代理层数写在 `remote_addr` 上会让全服共用同一个失败窗口、审计也只能指到代理。**默认 0：完全不信该头**——那等于允许客户端自己编造来源地址 | `0` |
 | `PORT` | 服务端口 | `5000` |
 | `HOST` | 监听地址（默认只监听本机）。局域网内其他机器访问需设为 `0.0.0.0`，**但这要求账号已启用**：没有账号时登录门禁不会打开，绑定非本机地址会被按名拒绝启动（设置 `CRAWLER_ADMIN_PASSWORD` 即可） | `127.0.0.1` |
-| `CRAWLER_DATA_ROOT` | `data/` 与 `logs/` 的父目录（给某个进程一份**自己**的状态：验证脚本、测试里自启的那台服务，都不会碰你真正在用的那份） | 项目根目录 |
+| `CRAWLER_DATA_ROOT` | `data/` 与 `logs/` 的父目录（给某个进程一份**自己**的状态：验证脚本、测试里自启的那台服务，都不会碰你真正在用的那份）。**优先级最高**：设了它就只用它，不会退回其他位置 | 未设时依次读 `<安装目录>\app\data-root.txt`（安装器里选的“数据文件夹”）、`portable.txt`（便携模式）、`%APPDATA%\CaiXiHui`、程序目录 |
 | `CRAWLER_CLOUD` | 云端部署形状（`1`/`true`/`yes`/`on`）：隐藏 Ollama 与“无头”设置、所有抓取强制无头、拒绝“浏览器生成”。命令行 `python app.py cloud` 是同一件事，它在 import 之前把这个变量抬起来 | 关闭 |
 | `FLASK_DEBUG` | 调试模式（含热重载与自动打开浏览器，调试器可执行任意代码，勿在他人可达的机器上开启） | 关闭 |
 | `MAX_UPLOAD_MB` | 单个请求体上限（过大时返回 413 JSON，而非把整机内存吃光） | `64` |
 | `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。按系统查的第二条路（Windows 查安装根、Linux 查 `/usr/bin/chromium` 等与 `PATH`、macOS 查 bundle）；容器里通常是 `CHROME_BIN=/usr/bin/chromium`。**本项目要求使用本机已安装的 Chrome**；设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上** | 空 |
 | `CIXI_DRIVER_PATH` | chromedriver 路径（等价于设置面板的“驱动路径”）。留空时交给 Selenium Manager——首次采集会自动下载匹配版本（需要网络）；填了就必须指向存在的文件，否则按名拒绝。安装器可以代装一对匹配的 Chrome for Testing + chromedriver | 空 |
 | `CIXI_COMPONENTS_DIR` | 在线安装器装好的**组件目录**（安装根下的 `components/`，每个组件一个子目录）。清单 `install-manifest.json` 在它的上一级（安装根）；启动器会按清单把 Chrome/驱动/Node/CatBus 路径导出；设置面板里手填的路径仍然优先 | 安装根下的 `components/`；源码运行是 `data/components` |
+| `CIXI_COMPONENT_SOURCE` | 本次进程用哪一份组件：`bundled`（安装器装的那份，默认）或 `system`（本机已安装的）。启动器把设置里的选择冻结在这里，所以运行中改设置不会让面板谎报“已换成另一份”；改设置后重启才生效。`system` 时启动器不导出上一条里的组件路径，并忽略设置里指向安装器目录的旧路径 | 启动器写入；源码运行取 `component_source` 设置 |
 | `CIXI_NODE_BIN` / `NODE_BIN` | 第二采集后端（CatBus）用的 Node 运行时，按系统查表；版本按 CatBus `engines` 核对，太旧按名拒绝 | 空 |
 | `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个指名文件、可执行包装或源码 `cli.ts`（自动换成构建产物 `dist/**/cli.js`）；`CATBUS_HOME` 指源码检出根（同样读 `dist` 入口）；都没设就按 npm 全局前缀找。**Node 不能直接运行 TS 源码**（类型擦除不重写 `./x.js` 导入），源码没有构建产物时按名说明要构建哪个文件。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码：启动时检查 `stdout/stderr` 能不能写汉字，不能就改 UTF-8 并打印一行；能写就只把 `errors` 设成 `replace`，**不改编码**（强扭成 UTF-8 反而把正常窗口弄成乱码） | — |
@@ -47,6 +48,7 @@
 |------|------|
 | `driver_path` | chromedriver 路径（覆盖 `core/config.py` 默认值） |
 | `browser_binary` | Chrome 二进制路径 |
+| `component_source` | `bundled`（默认，优先用在线安装器装好的 Chrome/chromedriver/Node/CatBus）或 `system`（即使安装器那份存在也改用本机已安装的）。在“设置 → 环境与组件”面板顶部切换，重启采析绘后生效；启动器把它冻结为 `CIXI_COMPONENT_SOURCE` |
 | `latex_binary` | `xelatex` 可执行文件（“编译”节点与论文成稿用它把 LaTeX 转 PDF；空=自动检测 PATH 与常见 MiKTeX 安装根） |
 | `catbus_cli` / `catbus_node` | 第二采集后端（CatBus）的两个本机路径，与“驱动路径”同一形状。`catbus_cli` 可填构建产物 `cli.js`、一份 CatBus 目录（自动补入口）或源码 `cli.ts`（自动换成 `dist/**/cli.js`；**Node 跑不了 TS 源码**，构建缺失时按名给出该构建的文件）；`catbus_node` 只接受程序本身。都可留空=按本机系统查找；优先级 设置面板 > 环境变量 > 系统候选表 > `PATH`。路径不存在只警告不拒绝，保存后面板立刻重探本机能力 |
 | `window_size` | 浏览器窗口尺寸（`--window-size=WxH`，默认 `1920x1080`） |

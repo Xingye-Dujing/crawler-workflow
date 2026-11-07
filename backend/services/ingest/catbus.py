@@ -120,8 +120,13 @@ def explicit_paths() -> tuple[str, str]:
     # is read by the capabilities endpoint at import time on a cold start.
     from runtime.settings import get_setting
 
-    node = str(get_setting('catbus_node') or '').strip() or str(Config.CATBUS_NODE or '').strip()
-    cli = str(get_setting('catbus_cli') or '').strip() or str(Config.CATBUS_CLI or '').strip()
+    from services.components import source
+
+    # A stored path that points into the installer's tree stops counting when 本机 was chosen —
+    # otherwise "use the Node already on this PATH" would still launch the bundled one forever,
+    # because the setting was persisted from the environment before the switch.
+    node = source.usable(get_setting('catbus_node')) or source.usable(Config.CATBUS_NODE)
+    cli = source.usable(get_setting('catbus_cli')) or source.usable(Config.CATBUS_CLI)
     return node, cli
 
 

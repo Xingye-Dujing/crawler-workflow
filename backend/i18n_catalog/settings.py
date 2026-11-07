@@ -118,6 +118,7 @@ ZH = {
     'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
     'set.badOllamaHost': 'Ollama 地址需以 http:// 或 https:// 开头，已恢复默认',
     'set.badProfileDir': '浏览器 Profile 目录必须填绝对路径（收到：{value}），已恢复为内置目录',
+    'set.badSource': '组件来源只能是 bundled（安装器安装的）或 system（本机已装的），已恢复默认（收到：{value}）',
     'set.badWindow': '窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {default}',
     'set.browserMissing': '浏览器程序不存在：{path}',
     # The two CatBus paths are accepted as either a file or a CatBus checkout directory, so the
@@ -266,6 +267,10 @@ EN = {
     'set.badNumber': '{setting} is not a number — restored the default {value}',
     'set.badOllamaHost': 'The Ollama address must start with http:// or https:// — restored the default',
     'set.badProfileDir': 'The profile directory must be an absolute path (got: {value}) — restored the built-in one',
+    'set.badSource': (
+        'Component source is either bundled (installed by the installer) or system (already on this '
+        'machine) — restored the default (got: {value})'
+    ),
     'set.badWindow': 'Window size must look like WIDTHxHEIGHT (e.g. 1920x1080) — restored the default {default}',
     'set.browserMissing': 'Browser executable does not exist: {path}',
     'set.catbusMissing': 'The CatBus component ({tool}) does not exist at that location: {path}',

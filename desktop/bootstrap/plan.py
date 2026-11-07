@@ -19,6 +19,13 @@ def default_root(env: dict | None = None, home: Path | None = None) -> Path:
     return Path(base) / 'Programs' / 'CaiXiHui'
 
 
+def default_data_root(env: dict | None = None, home: Path | None = None) -> Path:
+    """The launcher's own default, shown here so the folder can be moved before the first run."""
+    values = os.environ if env is None else env
+    base = values.get('APPDATA') or values.get('LOCALAPPDATA') or str((home or Path.home()) / 'AppData' / 'Roaming')
+    return Path(base) / 'CaiXiHui'
+
+
 def human_size(size: int) -> str:
     value = float(size or 0)
     for unit in ('B', 'KB', 'MB', 'GB'):
@@ -35,13 +42,25 @@ def free_space(path: Path) -> int:
         return 0
 
 
-def selected_ids(preset: str, chosen: dict[str, bool], downloadable: list[str]) -> list[str]:
-    """The component ids a preset means; ``chosen`` is only read for the custom preset."""
-    if preset == 'all':
-        return list(downloadable)
-    if preset == 'app':
-        return ['app']
-    return [component_id for component_id, on in chosen.items() if on]
+def preset_choices(preset: str, defaults: list[str], downloadable: list[str]) -> dict[str, bool]:
+    """The checkbox state a preset means.
+
+    一键安装 is exactly the catalogue's defaults and 仅主程序 is the application alone; there is
+    no third "everything" preset, because the defaults ARE every downloadable component — two
+    radio buttons that tick the same boxes made the choice look like it did something.
+    """
+    wanted = {'app'} if preset == 'app' else set(defaults)
+    return {component_id: component_id in wanted for component_id in downloadable}
+
+
+def chosen_ids(chosen: dict[str, bool], downloadable: list[str]) -> list[str]:
+    """The ticked components, in catalogue order.
+
+    The checkboxes are the answer for every preset: a user who unticks Chrome must not still get
+    Chrome because a radio button said "one-click". Requirements are still added by
+    :func:`with_requirements`, so CatBus without Node cannot produce a doomed install.
+    """
+    return [component_id for component_id in downloadable if chosen.get(component_id)]
 
 
 def with_requirements(selected: list[str], requires: dict[str, list[str]], downloadable: list[str]) -> list[str]:

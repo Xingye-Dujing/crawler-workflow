@@ -204,7 +204,12 @@ def resolve_browser(opts: Options) -> None:
     exception from a child process. The probe is :mod:`core.machine`, shared with the
     desktop launcher's self-check, so the two can never disagree about this machine.
     """
-    browser_binary = str(get_setting('browser_binary') or '').strip()
+    # A stored path inside the installer's tree is honoured only while 安装器的组件 is the chosen
+    # source; with 本机 chosen the same setting outlives the switch and would otherwise pin the
+    # crawler to a Chrome the user just said not to use.
+    from services.components import source
+
+    browser_binary = source.usable(get_setting('browser_binary'))
     resolved = machine.find_chrome(browser_binary)
     if browser_binary and not resolved:
         # An explicit path is the answer or nothing: falling back to a different Chrome than the one
@@ -220,7 +225,9 @@ def resolve_browser(opts: Options) -> None:
 
 def make_service() -> Service:
     """The driver service: a configured path must be a file, a blank one is Selenium Manager's."""
-    driver_path = str(get_setting('driver_path') or '').strip()
+    from services.components import source
+
+    driver_path = source.usable(get_setting('driver_path'))
     if driver_path and not os.path.isfile(driver_path):
         # Blank means "let Selenium Manager resolve a matching driver", which is the normal
         # answer on a fresh machine; a filled-in path that is not a file is a stale setting,

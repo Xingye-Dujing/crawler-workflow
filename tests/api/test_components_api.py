@@ -36,6 +36,28 @@ def test_environment_answers_the_matrix_without_probing_devices(client, monkeypa
     assert body['root'].endswith('components')
 
 
+def test_the_environment_reports_both_the_running_and_the_stored_source(client, monkeypatch):
+    """The panel needs the stored choice for its buttons and the running one for the matrix:
+    they differ right after a switch, and the row must not describe a browser this process
+    will never launch."""
+    report = {
+        'schema': 1,
+        'os': 'win32',
+        'root': 'C:/CaiXiHui/components',
+        'component_source': 'bundled',
+        'component_source_preference': 'system',
+        'capabilities': [
+            {'id': 'crawl_selenium', 'label_key': 'env.capBrowser', 'state': 'ok', 'reason_key': 'env.browserOk'},
+        ],
+        'components': [],
+        'catalog': {'generated_at': '', 'components': 0},
+    }
+    monkeypatch.setattr(components_api, 'environment', lambda: report)
+    body = client.get('/api/environment').get_json()
+    assert body['component_source'] == 'bundled'
+    assert body['component_source_preference'] == 'system'
+
+
 def test_the_catalogue_lists_the_domestic_defaults(client):
     body = client.get('/api/components').get_json()
     assert body['ok'] is True

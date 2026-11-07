@@ -230,7 +230,10 @@ def load_workflow():
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
     workflow = get_workflow_manager().load(name)
     if not workflow:
-        return jsonify({'ok': False, 'error': 'Not found'}), 404
+        # ``missing`` is the machine-readable half: the boot reload uses it to forget a remembered
+        # file that no longer exists (a fresh data root, a deleted or renamed canvas) so every
+        # later start does not re-request it. The sentence is for a person opening it by name.
+        return jsonify({'ok': False, 'missing': True, 'error': t('api.workflowMissing', name=name)}), 404
     # Reconnect the nodes with their files *before* the canvas draws them, so
     # the workflow it returns is the runnable one.
     datasets = _restore_workflow_datasets(name, workflow)

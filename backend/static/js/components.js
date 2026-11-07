@@ -7,11 +7,20 @@
 const ComponentsPanel = {
     _jobTimer: null,
     _busy: false,
+    _source: '',
+    _sourceBusy: false,
     _stateKeys: {
         ok: 'env.stateOk',
         degraded: 'env.stateDegraded',
         missing: 'env.stateMissing',
         unknown: 'env.stateUnknown',
+    },
+    /* Which copy a capability row is using. The server names it per row; an unknown source is
+       simply not annotated, never guessed. */
+    _sourceKeys: {
+        component: 'env.sourceComponent',
+        system: 'env.sourceSystemNow',
+        settings: 'env.sourceSettings',
     },
 
     open() {
@@ -56,6 +65,11 @@ const ComponentsPanel = {
         if (!body) return;
         body.textContent = '';
 
+        // Which copy the NEXT start uses: the stored preference, not this process's frozen
+        // choice, so the button the user just pressed stays pressed until a restart applies it.
+        this._source = env.component_source_preference || env.component_source || 'bundled';
+        body.append(this._sourcePicker());
+
         const caps = document.createElement('div');
         for (const row of env.capabilities || []) {
             const line = document.createElement('div');
@@ -70,6 +84,13 @@ const ComponentsPanel = {
             reason.className = 'env-reason';
             reason.textContent = I18n.t(row.reason_key, row.reason_params || {});
             line.append(state, name, reason);
+            const from = this._sourceKeys[row.source];
+            if (from) {
+                const tag = document.createElement('span');
+                tag.className = 'env-src';
+                tag.textContent = '· ' + I18n.t(from);
+                line.append(tag);
+            }
             caps.append(line);
         }
         body.append(caps);
@@ -104,6 +125,48 @@ const ComponentsPanel = {
                 line.append(remove);
             }
             body.append(line);
+        }
+    },
+
+    _sourcePicker() {
+        const row = document.createElement('div');
+        row.className = 'env-source';
+        const label = document.createElement('span');
+        label.className = 'env-name';
+        label.textContent = I18n.t('env.sourceTitle');
+        row.append(label);
+        for (const [value, key] of [['bundled', 'env.sourceBundled'], ['system', 'env.sourceSystem']]) {
+            const button = document.createElement('button');
+            button.className = 'env-source-choice';
+            button.setAttribute('aria-pressed', value === this._source ? 'true' : 'false');
+            button.textContent = I18n.t(key);
+            button.onclick = () => this.setSource(value);
+            row.append(button);
+        }
+        const hint = document.createElement('span');
+        hint.className = 'env-reason';
+        hint.textContent = I18n.t('env.sourceHint');
+        row.append(hint);
+        return row;
+    },
+
+    async setSource(value) {
+        if (this._sourceBusy || value === this._source) return;
+        this._sourceBusy = true;
+        try {
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ component_source: value }),
+            });
+            const answer = await response.json();
+            if (!answer.ok) throw new Error(answer.error || 'source');
+            await this.refresh();
+            this._restartHint();
+        } catch (err) {
+            await this._error(I18n.t('env.sourceFailed', { err: String(err.message || err) }));
+        } finally {
+            this._sourceBusy = false;
         }
     },
 

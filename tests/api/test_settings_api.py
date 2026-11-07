@@ -108,6 +108,18 @@ class TestSettingsWrite:
         assert 'secret' not in body['settings']
         assert body['settings']['window_size'] == '900x900'
 
+    @pytest.mark.parametrize('value', ['bundled', 'system'])
+    def test_the_component_source_round_trips(self, client, value):
+        body = client.post('/api/settings', json={'component_source': value}).get_json()
+        assert body['warnings'] == []
+        assert body['settings']['component_source'] == value
+
+    def test_a_component_source_typo_restores_the_default_and_says_so(self, client):
+        """The two names launch different browsers; a typo must not silently become either."""
+        body = client.post('/api/settings', json={'component_source': 'laptop'}).get_json()
+        assert body['settings']['component_source'] == 'bundled'
+        assert any('bundled' in warning for warning in body['warnings']), body['warnings']
+
     @pytest.mark.parametrize('key', [key for key, value in settings.DEFAULTS.items() if isinstance(value, bool)])
     @pytest.mark.parametrize(
         ('sent', 'expected'),

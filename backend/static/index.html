@@ -1986,6 +1986,19 @@
          applies from the next execution, no server restart needed. -->
     <div id="settings-menu" class="dropdown dropdown-wide">
       <div class="dd-item-row">
+        <span data-i18n="set.componentSource">组件来源</span>
+        <span class="dd-ctrl">
+          <select
+            id="set-component-source"
+            class="settings-input"
+            onchange="onSettingInput('component_source', this.value)"
+          >
+            <option value="bundled" data-i18n="set.componentSourceBundled">安装器安装的（默认）</option>
+            <option value="system" data-i18n="set.componentSourceSystem">本机已安装的</option>
+          </select>
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.driver">浏览器驱动路径</span>
         <span class="dd-ctrl">
           <input

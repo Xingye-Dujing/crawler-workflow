@@ -341,6 +341,54 @@ class TestInstall:
         assert Manifest(root).load().get('app')['version'] == '2.0'
 
 
+class TestComponentSource:
+    """The installer's copy and the machine's copy are both legitimate; the user chooses."""
+
+    def test_a_stored_path_inside_the_installers_tree_is_ignored_when_the_machine_is_chosen(
+        self, tmp_path, monkeypatch
+    ):
+        from services.components import source
+
+        components = tmp_path / 'components'
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
+        stored = str(components / 'chrome' / '1.0' / 'chrome.exe')
+        assert source.usable(stored) == ''
+        # A path the user really chose elsewhere still wins.
+        assert source.usable('/opt/chrome') == '/opt/chrome'
+
+    def test_the_same_stored_path_is_kept_when_the_installer_is_chosen(self, tmp_path, monkeypatch):
+        from services.components import source
+
+        components = tmp_path / 'components'
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        stored = str(components / 'chrome' / '1.0' / 'chrome.exe')
+        assert source.usable(stored) == stored
+
+    def test_the_launcher_reads_the_preference_before_config_exists(self, tmp_path):
+        from services.components import source
+
+        (tmp_path / 'data').mkdir()
+        (tmp_path / 'data' / 'settings.json').write_text('{"component_source": "system"}', encoding='utf-8')
+        assert source.stored_source(tmp_path) == 'system'
+
+    def test_a_broken_or_missing_settings_file_means_the_default(self, tmp_path):
+        from services.components import source
+
+        assert source.stored_source(tmp_path) == 'bundled'
+        (tmp_path / 'data').mkdir()
+        (tmp_path / 'data' / 'settings.json').write_text('{not json', encoding='utf-8')
+        assert source.stored_source(tmp_path) == 'bundled'
+
+    def test_a_typo_is_not_a_third_choice(self):
+        from services.components import source
+
+        assert source.normalize('system') == 'system'
+        assert source.normalize('BUNDLED') == 'bundled'
+        assert source.normalize('laptop') == 'bundled'
+
+
 class TestPaths:
     def test_the_components_directory_is_one_level_below_the_install_root(self, tmp_path, monkeypatch):
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'root' / 'components'))
@@ -381,6 +429,22 @@ class TestCrawlCapability:
         assert row['state'] == 'missing'
         assert row['reason_key'] == 'env.browserConfiguredMissing'
         assert row['reason_params']['path'].endswith('chrome.exe')
+
+    def test_the_machine_copy_wins_when_the_installer_copy_is_not_chosen(self, monkeypatch, tmp_path):
+        """A matching Chrome in the installer's folder must not overrule 本机."""
+        chrome = tmp_path / 'components' / 'chrome' / '1.0' / 'chrome.exe'
+        chrome.parent.mkdir(parents=True)
+        chrome.write_bytes(b'')
+        manifest = Manifest(tmp_path)
+        manifest.record('chrome', '1.0', chrome.parent, 'a' * 64, 'https://example.com')
+        manifest.save()
+        monkeypatch.setattr(probe_module.component_source, 'prefer_bundled', lambda: False)
+        monkeypatch.setattr(probe_module, '_setting', lambda key: '')
+        monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '/usr/bin/google-chrome')
+        monkeypatch.setattr(probe_module, '_driver', lambda root: ('', 'none'))
+        row = probe_module._crawl_selenium(tmp_path)
+        assert row['source'] == 'system'
+        assert row['reason_params']['chrome'] == '/usr/bin/google-chrome'
 
     def test_a_configured_driver_that_is_gone_is_named_rather_than_guessed(self, monkeypatch):
         settings = {'browser_binary': '', 'driver_path': r'C:\gone\chromedriver.exe'}

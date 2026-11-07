@@ -769,6 +769,17 @@ def life(tmp_path_factory, capabilities_matrix):
             'reload': True,
             'loadResponse': {'ok': True, 'workflow': opened},
         },
+        {
+            # A remembered file that no longer exists (a fresh data root, a deleted or renamed
+            # canvas). Kept, the boot would request it again on every start and show a console
+            # 404 the user cannot act on; the next Save would also silently recreate the file.
+            'id': 'reload_open_file_gone',
+            'storedOpenFile': '已删除的流程',
+            'hasDraft': True,
+            'restore': True,
+            'reload': True,
+            'loadResponse': {'ok': False, 'missing': True, 'error': 'gone'},
+        },
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
         {
             # The camera a person panned to must ride into the saved file.
@@ -1026,6 +1037,15 @@ class TestFileLifecycle:
         assert [n['title'] for n in r['nodes']] == ['抓取微博', '清洗', 'Output'], (
             'the server content loads, not the stale draft'
         )
+
+    def test_a_remembered_file_that_is_gone_is_forgotten_not_re_requested(self, life):
+        """The open-file record must not outlive the file: a fresh data root or a deleted canvas
+        otherwise 404s on every start, and the next Save would recreate a name chosen elsewhere."""
+        r = life['reload_open_file_gone']
+        assert r['currentFile'] is None, 'a file the server no longer has cannot stay the open file'
+        assert r['openFileStored'] is None, 'the next start must not request the missing file again'
+        assert r['draftStored'] is True, "the draft is the user's unsaved work and must stay"
+        assert any('openFileGone' in msg for msg in r['toasts']), r['toasts']
 
     def test_a_failed_open_leaves_the_current_canvas_and_name_intact(self, life):
         r = life['open_missing']

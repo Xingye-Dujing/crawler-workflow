@@ -30,6 +30,12 @@ DEFAULTS = {
     'driver_path': Config.DRIVER_PATH,
     # Chrome executable itself; empty = let Selenium find the default install.
     'browser_binary': '',
+    #: Which copy of Chrome / chromedriver / Node / CatBus to use when the online installer has
+    #: put one on this machine: ``bundled`` (its own tree, the default) or ``system`` (the
+    #: machine's). Both are legitimate — the bundled tree is what makes a one-click install
+    #: isolated from a working local Chrome, and refusing it would take that choice away.
+    #: Read at startup by the launcher (``services.components.source``); a change needs a restart.
+    'component_source': 'bundled',
     # MiKTeX ``xelatex`` executable used by the 编译 (compile) node to turn LaTeX into a PDF.
     # Empty = auto-detect (PATH, then the common MiKTeX install locations).
     'latex_binary': '',
@@ -192,6 +198,16 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 if v and not os.path.isfile(v):
                     warnings.append(t('set.browserMissing', path=v))
                 vals[key] = v
+            elif key == 'component_source':
+                # Two names, and only two: a typo must not silently become either answer, because
+                # the two choices launch different browsers. The choice is applied by the next
+                # start (the launcher exports the bundled paths before ``config`` is imported).
+                v = str(raw or '').strip().lower()
+                if v in ('bundled', 'system'):
+                    vals[key] = v
+                else:
+                    vals[key] = DEFAULTS[key]
+                    warnings.append(t('set.badSource', value=raw))
             elif key == 'latex_binary':
                 v = str(raw or '').strip()
                 if v and not os.path.isfile(v):

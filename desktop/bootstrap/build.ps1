@@ -1,8 +1,8 @@
 # Build the small online installer (CaiXiHui-Online-Setup.exe).
 #
 # It uses the same desktop build environment as the offline app (PyInstaller only), but the spec
-# carries just the component core and the Tkinter UI, so the result is tens of megabytes rather
-# than a second full application. UPX is off on purpose (see the spec).
+# carries just the component core and the local page server -- no GUI toolkit at all -- so the
+# result is a few megabytes rather than a second full application. UPX is off on purpose (spec).
 #
 #   powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
 

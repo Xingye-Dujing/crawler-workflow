@@ -1,9 +1,10 @@
 # PyInstaller spec for the online installer (one small windowed exe).
 #
 # The bootstrap imports services.components through importlib so the same code the app runs is what
-# the installer runs; hiddenimports makes PyInstaller follow that indirection. UPX is deliberately
-# off: the installer is the first file SmartScreen sees, and an uncompressed ~15 MB exe is a much
-# weaker false-positive signal than a packed one.
+# the installer runs; hiddenimports makes PyInstaller follow that indirection. The window is the
+# user's browser showing a page the exe serves from 127.0.0.1 — no GUI toolkit is bundled at all,
+# which is what keeps the download small. UPX is deliberately off here too: this is the first file
+# SmartScreen sees, and packing it would trade a few MB for more false positives.
 
 from pathlib import Path
 
@@ -11,6 +12,8 @@ ROOT = Path(SPECPATH).resolve().parent.parent  # desktop/bootstrap -> repo root
 BACKEND = ROOT / 'backend'
 CATALOG = BACKEND / 'services' / 'components' / 'default_catalog.json'
 ICON = BACKEND / 'static' / 'icon.ico'
+PAGE = ROOT / 'desktop' / 'bootstrap' / 'installer_page.html'
+PAGE_JS = ROOT / 'desktop' / 'bootstrap' / 'installer_page.js'
 
 a = Analysis(
     [str(ROOT / 'desktop' / 'bootstrap' / 'installer.py')],
@@ -19,6 +22,12 @@ a = Analysis(
     datas=[
         (str(CATALOG), 'services/components'),
         (str(ROOT / 'desktop' / 'bootstrap' / 'plan.py'), '.'),
+        (str(ROOT / 'desktop' / 'bootstrap' / 'ui_theme.py'), '.'),
+        # The page, its script and the window/tab icon; a onefile bundle resolves them through
+        # sys._MEIPASS, i.e. the root this copies them to.
+        (str(PAGE), '.'),
+        (str(PAGE_JS), '.'),
+        (str(ICON), '.'),
     ],
     hiddenimports=[
         'services.components.catalog',
@@ -35,6 +44,9 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
+        # No GUI toolkit, no analysis stack, no web client: the installer is a local HTTP server
+        # plus the component core. Excluding tkinter is what removes Tcl/Tk (about 9 MB).
+        'tkinter',
         'tkinter.test',
         'test',
         'tests',
@@ -57,6 +69,10 @@ a = Analysis(
         'capabilities',
         'crawlers',
         'tzdata',
+        # No database and no decimal arithmetic anywhere in this program: sqlite3.dll alone is
+        # 1.5 MB, and the installer is what a user waits on before anything is installed.
+        'sqlite3',
+        'decimal',
     ],
     noarchive=False,
 )
@@ -75,7 +91,12 @@ exe = EXE(
     strip=False,
     upx=False,
     upx_exclude=[],
-    runtime_tmpdir=None,
+    # A onefile normally unpacks into %TEMP%. On a machine where endpoint protection denies that
+    # folder (measured on this build box: a trivial onefile died with “Could not create temporary
+    # directory”), the installer would fail before its first window. Unpacking beside the exe —
+    # which a double-click makes the current directory — uses the folder the user downloaded to;
+    # PyInstaller removes it again on exit.
+    runtime_tmpdir='.',
     console=False,
     icon=str(ICON) if ICON.exists() else None,
 )

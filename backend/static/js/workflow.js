@@ -117,15 +117,35 @@ const workflow = {
                 if (result && result.ok && result.workflow) {
                     loaded = this.loadFromJSON(result.workflow);
                     if (loaded) canvas.markSaved();
+                } else if ((resp && resp.status === 404) || (result && result.missing)) {
+                    /* The remembered name outlived the file: a fresh data root, a delete, a
+                       rename. Kept, every start would request the same missing file (a console
+                       404 the user cannot act on) and the next Save would silently recreate a
+                       file under a name chosen in an earlier session. The draft stays; only the
+                       name is dropped, so Save asks for one. */
+                    this.forgetOpenFile();
+                    showToast(I18n.t('toast.openFileGone', { name: name }));
                 }
             } catch (e) {
-                /* offline at boot, or the file is gone: leave the draft as-is, never throw into boot */
+                /* offline at boot: leave the draft as-is, never throw into boot */
             }
         }
         if (typeof resumeBar !== 'undefined' && resumeBar && resumeBar.refresh) resumeBar.refresh();
         /* A draft that was restored without a server file still has results filed
            under its structure. loadFromJSON already asks; this is the no-file case. */
         if (!loaded && typeof runResults !== 'undefined' && runResults.refresh) runResults.refresh();
+    },
+
+    /* Drop the remembered file name without touching the drawing. Used when the server says the
+       file is gone, and exposed as one seam so the harness can assert both halves of that: the
+       name is forgotten, the draft is not. */
+    forgetOpenFile() {
+        this.currentFile = null;
+        try {
+            localStorage.removeItem('crawler_open_file');
+        } catch (e) {
+            /* A browser that refuses localStorage simply keeps nothing to forget. */
+        }
     },
 
     async save() {

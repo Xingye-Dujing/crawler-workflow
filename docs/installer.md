@@ -1,7 +1,11 @@
 # 在线安装器与环境检测（Windows）
 
-这是一个**可选**的安装方式：先下载一个约 12 MB 的 `CaiXiHui-Online-Setup.exe`，由它把主程序和需要的
+这是一个**可选**的安装方式：先下载一个几 MB 的 `CaiXiHui-Online-Setup.exe`，由它把主程序和需要的
 第三方便携组件下载到用户选择的目录。离线安装包 `CaiXiHui-Setup.exe` 仍然保留，给没有网络或不想下载组件的人。
+
+安装器窗口是**本机浏览器打开的一个页面**（`127.0.0.1` 上的随机端口 + 随机路径令牌，只监听本机）：
+界面用的就是应用前端的纸白/墨黑设计语言，浅色为默认，右上角可切换深色；内容按一屏排布，不出现滚动条。
+这样就不需要把 Qt / Tcl-Tk 这类 GUI 工具包打进 exe，安装器本体只有几 MB。
 
 小白默认走**国内直连**：主程序与 CatBus 来自 Gitee，Chrome for Testing / chromedriver / Node.js 来自
 npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载都核对 SHA-256，镜像不可信也不会被当成可信。
@@ -36,11 +40,20 @@ npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载�
   install-manifest.json      每个组件的版本、路径、SHA-256、来源
 ```
 
-数据仍然在 `%APPDATA%\CaiXiHui`（或 `portable.txt` 的便携模式），与安装目录分开；卸载主程序不会删除用户数据。
+数据默认在 `%APPDATA%\CaiXiHui`（或 `portable.txt` 的便携模式），与安装目录分开；卸载主程序不会删除用户数据。
+**安装器里可以单独特定“数据文件夹”**（例如 `D:\CaiXiHui-data`），装完写进 `<安装目录>\app\data-root.txt`，
+启动器优先读它——这样程序和用户数据都能完全放在 C 盘以外，换盘不用重装。清空这个文件就回到默认位置。
+
+目标目录需要管理员权限时（例如 `C:\Program Files` 下），安装器**只请求一次** UAC，并用原来的两个路径重新打开；
+拒绝授权时会点名是哪个文件夹不可写，而不是下载到一半才失败。主程序启动时如果数据目录不可写，也会同样请求一次。
 
 启动器会在应用导入配置之前读取 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus 的路径导出为
 现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。**设置面板里手填的路径仍然优先**，
 用户自己导出的环境变量也不会被覆盖。
+
+“环境与组件”面板顶部可以选**组件来源**：默认“安装器安装的”（上表这些便携版），也可以改成“本机已安装的”，
+即使本机已经有一份匹配的 Chrome/Node，也按用户的选择来。切换在重启采析绘后生效；选择和本次启动生效的来源
+是两个字段（`component_source_preference` / `component_source`），面板不会把“下次才生效”说成“现在就用”。
 
 两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
 指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。
@@ -85,6 +98,8 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 - **Chrome 不随安装器重新分发**：安装时从 Google 官方 Chrome for Testing 下载，国内默认走 npmmirror 镜像；
   两个地址指向同一份官方构建。
 - 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。
+- 安装器不调用系统 shell 执行下载内容；页面只由本机 `127.0.0.1` 提供服务，路径带随机令牌，并用
+  `Content-Type: application/json` 的 POST（浏览器跨站请求会先被预检拦住）。
 
 ## 已验证
 
@@ -97,15 +112,25 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 装到 `<目录>/components/node/<版本>`，清单在 `<目录>/install-manifest.json`；设置 `CIXI_COMPONENTS_DIR=<目录>/components`
 后 `doctor` 能读到这一行。
 
+2026-11-07 安装器改为浏览器页面后复核：打包的 `CaiXiHui-Online-Setup.exe` 为 **8.6 MB**（无 Qt / Tcl-Tk；
+onefile 解在 exe 旁边而不是 `%TEMP%`）。启动后 `/`、`/api/state`、`installer_page.js`、`icon.ico` 均返回 200；
+`preset=app` 只剩主程序，勾选 `app + catbus` 时体积自动加上 Node（338,226,991 B，逐项相加一致）；
+页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告由应用以 UTF-8 字节输出，安装器按 UTF-8 解码，
+不再出现乱码。
+
 ## 构建
 
 ```powershell
 # 主程序（已有）
 powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
 
-# 在线安装器（约 12 MB）
+# 在线安装器（几 MB：标准库 HTTP 服务 + 组件核心，不带 GUI 工具包）
 powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
 ```
+
+安装器界面由三个文件组成：`desktop/bootstrap/installer_page.html`（结构）、`installer_page.js`
+（只负责画和发请求）和 `ui_theme.py`（词条、调色板、CSS；和 `base.css` 用同一组令牌）。页面文本一律用
+`textContent` 写入，图标全部是内联 SVG（勾选、太阳/月亮），不使用字体图标或 Unicode 符号。
 
 清单：`backend/services/components/default_catalog.json`。发布新版本时更新其中的版本、URL、SHA-256 与体积；
 `tools/release_components.py` 负责从构建产物生成这份文件。

@@ -30,14 +30,24 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 | `dist/CaiXiHui/` | 绿色版文件夹，双击 `CaiXiHui.exe` |
 | `dist/CaiXiHui-win64.zip` | 分发用压缩包（约比文件夹小一半，取决于内容） |
 | `dist/CaiXiHui-Setup.exe` | **单文件安装包**（`-Installer`，需要本机装有 Inno Setup） |
-| `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 12 MB，默认国内镜像） |
+| `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 9 MB，默认国内镜像） |
 | `dist/CaiXiHui-bert-models-win64.zip` | 可选 BERT 模型包（`desktop/build_model_pack.py` 单独产出，见下文） |
 
 ### 在线安装器
 
-`desktop\bootstrap\` 是一个独立的小安装器：选择目录和组件后，从清单里的地址下载便携 zip、校验 SHA-256、
-解压并登记到 `<安装目录>/components`，最后调用 `CaiXiHui.exe --doctor` 显示能力矩阵。默认清单是**国内直连**
-（Gitee + npmmirror），不需要翻墙；Chrome 从 Google 官方 Chrome for Testing 下载，安装器不重新分发它。
+`desktop\bootstrap\` 是一个独立的小安装器：选择目录、数据文件夹和组件后，从清单里的地址下载便携 zip、
+校验 SHA-256、解压并登记到 `<安装目录>/components`，最后调用 `CaiXiHui.exe --doctor` 显示能力矩阵。
+默认清单是**国内直连**（Gitee + npmmirror），不需要翻墙；Chrome 从 Google 官方 Chrome for Testing 下载，
+安装器不重新分发它。
+
+**窗口是本机浏览器打开的一个页面**（`127.0.0.1` 随机端口 + 随机路径令牌），界面复用应用前端的
+纸白/墨黑设计语言（`ui_theme.py` 的令牌与 `base.css` 同源），默认浅色、右上角可切深色，一屏放得下。
+所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + 组件核心，约 9 MB。页面文件是
+`installer_page.html` / `installer_page.js`，测试只读它们和纯函数，不需要真的开窗口。
+
+onefile 的临时目录用 `runtime_tmpdir='.'`（解在 exe 旁边并由 PyInstaller 删除），因为这台机器的
+`%TEMP%` 会被安全策略拒写；默认 `%TEMP%` 下连一个最小的 onefile 都起不来（实测
+`Could not create temporary directory`）。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1

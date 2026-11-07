@@ -172,9 +172,17 @@ class TestWorkflowCrud:
         assert os.path.splitext(os.path.basename(body['path']))[0] == 'w' * 60
 
     def test_load_of_an_unknown_workflow_is_404(self, client):
+        """``missing`` is the machine-readable half: the boot reload forgets a remembered file the
+        server no longer has, instead of asking for it on every start."""
+        from i18n import t
+
         response = client.get('/api/workflow/load', query_string={'name': 'never-saved'})
         assert response.status_code == 404
-        assert response.get_json() == {'ok': False, 'error': 'Not found'}
+        assert response.get_json() == {
+            'ok': False,
+            'missing': True,
+            'error': t('api.workflowMissing', name='never-saved'),
+        }
 
     def test_delete_of_an_unknown_workflow_is_not_an_error(self, client):
         assert client.post('/api/workflow/delete', json={'name': 'ghost-workflow'}).get_json() == {'ok': True}

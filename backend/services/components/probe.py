@@ -33,6 +33,7 @@ from core.machine import (
 )
 from core.procs import popen_kwargs
 
+from services.components import source as component_source
 from services.components.catalog import Catalog, CatalogError, load_catalog
 from services.components.manifest import Manifest, ManifestError
 from services.components.paths import install_root
@@ -58,6 +59,10 @@ def _installed_path(root: Path, component_id: str) -> Path | None:
 
 
 def _component_binary(root: Path, component_id: str, name: str) -> str:
+    # 本机 was chosen: the installer's folder may hold a perfectly good Chrome, and the user asked
+    # for the machine's one anyway. "A local copy exists" is never a reason to overrule that.
+    if not component_source.prefer_bundled():
+        return ''
     path = _installed_path(root, component_id)
     if path is None:
         return ''
@@ -88,7 +93,7 @@ def _major(text: str) -> str:
 
 
 def _chrome(root: Path) -> tuple[str, str]:
-    explicit = _setting('browser_binary')
+    explicit = component_source.usable(_setting('browser_binary'))
     if explicit:
         found = find_chrome(explicit)
         return found, ('settings' if found else 'settings-missing')
@@ -100,7 +105,7 @@ def _chrome(root: Path) -> tuple[str, str]:
 
 
 def _driver(root: Path) -> tuple[str, str]:
-    explicit = _setting('driver_path')
+    explicit = component_source.usable(_setting('driver_path'))
     if explicit:
         # A configured path is a promise the crawler checks too: it refuses by name when the file
         # is gone, so the panel must not answer "Selenium will download one" instead.
@@ -340,6 +345,11 @@ def environment(root: str | Path | None = None, catalog_path: str | Path | None 
         'schema': 1,
         'os': platform_name(),
         'root': str(base),
+        # What the process is running under now (frozen at startup), and the stored choice the
+        # NEXT start will use. They differ right after the user flips the switch, and the panel
+        # says so instead of showing a browser this process will never launch.
+        'component_source': component_source.effective(),
+        'component_source_preference': component_source.preference(),
         'capabilities': capabilities,
         'components': component_rows(base, catalog),
         'catalog': {

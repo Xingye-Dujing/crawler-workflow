@@ -48,6 +48,20 @@ def test_a_double_click_cannot_start_two_install_loops():
     assert source.count('this._busy = false;') >= 3, 'every exit path has to release the guard'
 
 
+def test_the_panel_offers_both_component_sources_and_asks_the_server():
+    """The installer's copy and the machine's copy are both legitimate; the panel must offer the
+    choice and read the current one from the server instead of assuming the installer's."""
+    source = JS.read_text(encoding='utf-8')
+    assert "fetch('/api/settings'" in source, 'the saved preference is a setting, not local state'
+    assert 'env.component_source_preference' in source, 'the buttons show what the next start uses'
+    assert "['bundled', 'env.sourceBundled']" in source
+    assert "'system'" in source and "'env.sourceSystem'" in source
+    assert 'this._sourceKeys[row.source]' in source, 'each row names the copy it is using'
+    catalogue = CATALOGUE.read_text(encoding='utf-8')
+    for key in ('env.sourceTitle', 'env.sourceBundled', 'env.sourceSystem', 'env.sourceHint'):
+        assert f"'{key}'" in catalogue
+
+
 def test_the_page_loads_the_panel_and_its_words():
     html = HTML.read_text(encoding='utf-8')
     assert 'js/components.js' in html
