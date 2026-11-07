@@ -46,7 +46,7 @@ def start(catalog: Catalog, component_id: str, root: str | Path, *, system: str 
             if job['component'] == component_id and job['state'] == 'running':
                 return _snapshot(job)
         job_id = uuid.uuid4().hex[:12]
-        cancel = threading.Event()
+        stop = threading.Event()
         job = {
             'id': job_id,
             'component': component_id,
@@ -57,7 +57,7 @@ def start(catalog: Catalog, component_id: str, root: str | Path, *, system: str 
             'path': '',
         }
         _JOBS[job_id] = job
-        _CANCEL[job_id] = cancel
+        _CANCEL[job_id] = stop
 
     def progress(done: int, total: int) -> None:
         with _LOCK:
@@ -72,11 +72,11 @@ def start(catalog: Catalog, component_id: str, root: str | Path, *, system: str 
                 root,
                 system=system,
                 progress=progress,
-                cancel=cancel.is_set,
+                cancel=stop.is_set,
             )
         except (InstallError, DownloadError, CatalogError, ManifestError, OSError) as exc:
             with _LOCK:
-                job['state'] = 'cancelled' if cancel.is_set() else 'failed'
+                job['state'] = 'cancelled' if stop.is_set() else 'failed'
                 job['error'] = str(exc)
         else:
             with _LOCK:
