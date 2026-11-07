@@ -118,10 +118,10 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-07 安装器改为浏览器页面后复核：打包的 `CaiXiHui-Online-Setup.exe` 为 **8.6 MB**（无 Qt / Tcl-Tk；
-onefile 解在 exe 旁边而不是 `%TEMP%`）。启动后 `/`、`/api/state`、`installer_page.js`、`icon.ico` 均返回 200；
-`preset=app` 只剩主程序，勾选 `app + catbus` 时体积自动加上 Node（338,226,991 B，逐项相加一致）；
-页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告由应用以 UTF-8 字节输出，安装器按 UTF-8 解码，
-不再出现乱码。
+onefile 解在 exe 旁边而不是 `%TEMP%`）。启动后控制台打印页面地址，`/`、`/api/state`、`installer_page.js`、
+`icon.ico` 均返回 200；`preset=app` 只剩主程序，勾选 `app + catbus` 时体积自动加上 Node（338,226,991 B，
+逐项相加一致）；页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告由应用以 UTF-8 字节输出，
+安装器按 UTF-8 解码，不再出现乱码。
 
 ## 构建
 
