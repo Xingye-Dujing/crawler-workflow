@@ -201,7 +201,10 @@ def pick_folder(title: str) -> str:
         result = ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
         initialized = result in (0, 1)  # S_OK / S_FALSE
     shell32.SHBrowseForFolderW.restype = ctypes.c_void_p
-    shell32.SHGetPathFromIDListW.argtypes = [ctypes.c_void_p, wintypes.LPWSTR]
+    # Both parameters are pointers. Declaring the buffer as LPWSTR made ctypes refuse the
+    # c_wchar_Array a create_unicode_buffer returns; the buffer is cast to a void pointer instead.
+    shell32.SHGetPathFromIDListW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    shell32.SHGetPathFromIDListW.restype = wintypes.BOOL
     display = ctypes.create_unicode_buffer(260)
     info = BrowseInfo(
         None,
@@ -219,10 +222,10 @@ def pick_folder(title: str) -> str:
             return ''
         path = ctypes.create_unicode_buffer(260)
         try:
-            shell32.SHGetPathFromIDListW(ctypes.c_void_p(item), path)
+            shell32.SHGetPathFromIDListW(ctypes.c_void_p(item), ctypes.cast(path, ctypes.c_void_p))
         finally:
             ole32.CoTaskMemFree(ctypes.c_void_p(item))
-    except (AttributeError, OSError):
+    except (AttributeError, OSError, TypeError, ValueError):
         return ''
     finally:
         if initialized:
@@ -579,7 +582,14 @@ class Handler(BaseHTTPRequestHandler):
             kind = str(payload.get('kind') or 'root')
             lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
             title = TEXT[lang]['data_dir' if kind == 'data' else 'dir']
-            self._json({'ok': True, 'path': pick_folder(title)})
+            try:
+                picked = pick_folder(title)
+            except (OSError, TypeError, ValueError) as exc:
+                # A picker failure is "no path chosen", never a dead HTTP request: the page's
+                # browse button used to end in ERR_EMPTY_RESPONSE when the shell call raised.
+                log_line(f'folder picker failed: {exc}')
+                picked = ''
+            self._json({'ok': True, 'path': picked})
         elif route == '/api/start':
             self._json(self._start(state, payload))
         elif route == '/api/cancel':
@@ -713,7 +723,10 @@ def main(argv=None) -> int:
         open_page(url)
         # `webbrowser.open` returning True only means the shell accepted the call. The page's own
         # request is the proof that a browser is really showing it; otherwise print the address.
-        deadline = time.monotonic() + 6
+        # A cold browser can take longer than a handoff; six seconds produced a false "open it
+        # manually" while the tab was still starting on a real machine. Fifteen is enough for a
+        # first-run profile without making a blocked launch look like it worked.
+        deadline = time.monotonic() + 15
         while time.monotonic() < deadline and server.last_seen <= mark:
             time.sleep(0.2)
         if server.last_seen > mark:
