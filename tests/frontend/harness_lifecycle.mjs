@@ -133,7 +133,11 @@ const out = {};
    we look. No animation frames here on purpose: this harness leaves render frames queued,
    and flushing them would run a repaint against a node the scenario already tore down. */
 async function settle() {
-    for (let i = 0; i < 12; i++) {
+    /* 60 rather than 12: the Windows runner is slower enough that a capability fetch's
+       then-chain (each link is a microtask, each timer stub a macrotask) outlived twelve
+       turns; the leaked saveState then flipped the NEXT scenario's draft assertion. The
+       turns are empty event-loop passes, so the extra cost is negligible. */
+    for (let i = 0; i < 60; i++) {
         await new Promise((r) => setImmediate(r));
     }
     await null;
@@ -166,6 +170,10 @@ for (const sc of scenarios) {
        of the file that draft belongs to; `hasDraft: false` simulates a fresh browser. */
     delete sandbox.__stored.crawler_open_file;
     delete sandbox.__stored.crawler_canvas;
+    /* Let a writer the previous scenario left queued land BEFORE this scenario seeds; the
+       seed below then owns the draft and the scenario's assertions cannot see a stranger's
+       save. `settle` is still held at 60 turns for the slower Windows runner. */
+    await settle();
     if (sc.hasDraft !== false) sandbox.__stored.crawler_canvas = JSON.stringify({ nodes: [], view: {} });
     if (sc.storedOpenFile !== undefined) sandbox.__stored.crawler_open_file = sc.storedOpenFile;
     sandbox.__dialogAnswer = sc.dialogAnswer ?? null;
