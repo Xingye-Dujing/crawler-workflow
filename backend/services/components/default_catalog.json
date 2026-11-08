@@ -19,18 +19,18 @@
           "install_as": "app",
           "strip_prefix": "CaiXiHui",
           "verify": ["CaiXiHui.exe"],
-          "sha256": "82a531c07c760de5af35ae9a56d2cfe3006ec45fc9f198cb5db59f69e24feaf5",
-          "size": 128487852,
+          "sha256": "fb812fa11d36cbfa990951e4ed3491f5d30777c37846de88b4afe52fdbab09d6",
+          "size": 128490379,
           "parts": [
             {
               "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.001",
-              "sha256": "fa7004f439c7b0ba093b5a14720d0af78011f89c4ac07a6060058d8ef685ab8e",
+              "sha256": "582b359462f8cac1bfc871352758c78588dbd53dc447de870b4313312f2d0f52",
               "size": 99614720
             },
             {
               "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.002",
-              "sha256": "27f123c09122e757fd0bef5a0f7d2c1af94e59f66b94b57e8d027025a08860f5",
-              "size": 28873132
+              "sha256": "584d1ab74568d2b84c10cda8f7f971fb824e6122e37c6b0c3bec699ce16ed33e",
+              "size": 28875659
             }
           ]
         }
@@ -142,6 +142,36 @@
             }
           ]
         }
+      }
+    },
+    "ollama": {
+      "version": "",
+      "kind": "manual",
+      "label": "Ollama（本地模型）",
+      "summary": "本地 LLM 运行时；不随安装器下载，装好后环境检查会显示可用模型",
+      "provides": ["llm"],
+      "requires": [],
+      "default": false,
+      "license": "MIT",
+      "homepage": "https://ollama.com/",
+      "notes": "只影响本地模型节点；模型二选一，也可以改用 OpenRouter API Key",
+      "platforms": {
+        "win32": {}
+      }
+    },
+    "bert": {
+      "version": "",
+      "kind": "manual",
+      "label": "BERT 微调模型包",
+      "summary": "情感/情绪/倾向/主题的 BERT 权重（约 780 MB）；单独下载，不随安装器分发",
+      "provides": ["bert"],
+      "requires": [],
+      "default": false,
+      "license": "见模型卡",
+      "homepage": "https://github.com/Xingye-Dujing/crawler-workflow/releases",
+      "notes": "不放模型包时相关节点会降级到 ml/snownlp 并打印实际方法；需要时从 Releases 单独下载",
+      "platforms": {
+        "win32": {}
       }
     },
     "xelatex": {

@@ -74,14 +74,17 @@ def test_the_effective_download_adds_a_requirement_the_user_did_not_tick(install
     )
 
 
-def test_a_detection_only_component_is_listed_but_never_selected(installer):
+def test_all_detection_only_dependencies_are_listed_but_never_selected(installer):
+    """xelatex, Ollama and the BERT model pack are dependencies the installer must mention,
+    greyed and with no download; they are not part of the one-click download."""
     state = _state(installer)
-    state.set_selection(['xelatex'])
+    state.set_selection(['xelatex', 'ollama', 'bert'])
     body = state.snapshot()
-    row = next(item for item in body['components'] if item['id'] == 'xelatex')
-    assert row['downloadable'] is False
-    assert row['checked'] is False
-    assert 'app' not in state.effective()
+    for component_id in ('xelatex', 'ollama', 'bert'):
+        row = next(item for item in body['components'] if item['id'] == component_id)
+        assert row['downloadable'] is False, f'{component_id} must stay detection-only'
+        assert row['checked'] is False, f'{component_id} must never be ticked'
+    assert state.effective() == [], 'a detection-only row is not a download'
 
 
 def test_the_folder_picker_buffer_is_declared_as_a_pointer(installer):
@@ -129,6 +132,18 @@ def test_a_busy_fixed_port_falls_back_to_an_ephemeral_one(installer):
             server.server_close()
     finally:
         blocker.close()
+
+
+def test_a_network_classified_install_path_is_refused_before_download(installer):
+    """F: is Fixed to Win32 but remote to the CLR; the installed onedir app cannot start there.
+
+    The refusal must come before the 560 MB download and name the chosen folder, not surface later
+    as ``Failed to resolve Python.Runtime.Loader.Initialize``.
+    """
+    source = INSTALLER.read_text(encoding='utf-8')
+    assert 'path_load_refusal(root)' in source
+    assert source.index('path_load_refusal(root)') < source.index('need = sum(')
+    assert 'bad_path' in installer.TEXT['zh'] and 'bad_path' in installer.TEXT['en']
 
 
 def test_the_running_process_says_whether_it_was_elevated(installer):

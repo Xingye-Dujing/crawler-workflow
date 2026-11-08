@@ -20,6 +20,7 @@ import importlib.util
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -491,6 +492,56 @@ def _writable(path: Path) -> str:
     return ''
 
 
+def path_load_refusal(root: Path) -> str:
+    """``''`` when .NET can load an assembly from this folder, else the reason.
+
+    Windows classifies some volumes as "remote" for the CLR (this project's F: is one): the
+    installed onedir application would then fail to load pythonnet/WebView2 with
+    ``Failed to resolve Python.Runtime.Loader.Initialize``. ``GetDriveType`` says Fixed for that
+    volume, so the only honest test is the load itself: copy a managed DLL into the chosen folder
+    and ask a separate PowerShell process to ``Assembly.LoadFrom`` it. Nothing is downloaded
+    before this runs, so a bad drive is refused before the user pays for it.
+    """
+    if os.name != 'nt':
+        return ''
+    try:
+        import pythonnet
+
+        source = Path(pythonnet.__file__).resolve().parent / 'runtime' / 'Python.Runtime.dll'
+    except Exception:
+        source = asset_dir() / 'pythonnet' / 'runtime' / 'Python.Runtime.dll'
+    if not source.is_file():
+        return ''
+    probe = Path(root) / '.caixihui-path-probe.dll'
+    try:
+        shutil.copy2(source, probe)
+    except OSError:
+        return ''
+    quoted = str(probe).replace("'", "''")
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f"try {{ [Reflection.Assembly]::LoadFrom('{quoted}') | Out-Null; 'OK' }} "
+        'catch { $_.Exception.Message; exit 1 }'
+    )
+    try:
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    finally:
+        with contextlib.suppress(OSError):
+            probe.unlink()
+    if result.returncode == 0 and 'OK' in (result.stdout or ''):
+        return ''
+    lines = (result.stderr or result.stdout or '').strip().splitlines()
+    return lines[-1] if lines else 'Assembly.LoadFrom was refused'
+
+
 def relaunch_command(argv: list[str]) -> tuple[str, str]:
     """The exe to elevate and its argument string, for a frozen build or a source run."""
     if getattr(sys, 'frozen', False):
@@ -690,6 +741,12 @@ class Handler(BaseHTTPRequestHandler):
                 return {'ok': False, 'relaunching': True}
             message = words['elevated_again'] if state.elevated else words['elevate_failed']
             return {'ok': False, 'error': message}
+        remote = path_load_refusal(root)
+        if remote:
+            # A named refusal instead of letting the user install 560 MB onto a volume the
+            # application cannot start from; the raw CLR sentence goes to the log.
+            log_line(f'install path refused: {root}: {remote}')
+            return {'ok': False, 'error': words['bad_path'].format(path=root)}
         need = sum(state.catalog.get(item).asset().size for item in ids if state.catalog.get(item).asset())
         free = free_space(root)
         if free and free < need + 200 * 1024 * 1024:

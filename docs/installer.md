@@ -30,6 +30,13 @@ npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载�
 
 **默认一键 ≈ 535 MB**，装完主程序、Selenium 采集和 CatBus 采集都可用。
 
+安装器列表还会列出**只检测、不下载**的依赖（灰色、不可勾选）：Ollama（本地模型）、BERT 微调模型包、
+xelatex（MiKTeX），这样项目全部依赖都在同一页可见；它们不参与“一键安装”的体积。
+
+**安装位置会被提前校验**：如果所选文件夹所在的盘被 Windows/CLR 当作“网络位置”（本项目实测 F: 就是；
+`GetDriveType` 对它仍返回 Fixed），安装器会**在下载前**用一次真实的 `Assembly.LoadFrom` 探针拒绝，并
+点名该文件夹、请改用 C: 或 D:，而不是装完后才在启动时失败。
+
 以下组件默认**不选**：
 
 - **Ollama 运行时 + 模型**：官方 Windows zip 约 1.5 GB，模型每个 2–4 GB；没有国内官方镜像。采析绘的
@@ -125,7 +132,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,791,804 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+**13,794,463 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
