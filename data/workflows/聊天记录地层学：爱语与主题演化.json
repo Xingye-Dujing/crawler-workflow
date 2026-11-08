@@ -1,24 +1,16 @@
 {
-  "name": "聊天记录地层学：爱语与主题演化",
-  "settings": {
-    "mode": "serial",
-    "headless": false,
-    "max_workers": 4,
-    "disabledTypes": [],
-    "view": {"panX": 0, "panY": 0, "zoom": 0.6}
-  },
   "nodes": [
     {
       "id": "n1",
       "type": "upload",
       "title": "上传 脱敏聊天记录",
       "params": {
-        "dataset_id": "",
+        "dataset_id": "d3758ed42a4bfd7e",
         "dataset_name": "my-love_wxid_rfy0k2j6bbne22_desensitized_textonly.csv",
         "row_count": 14851
       },
       "x": 0,
-      "y": 400,
+      "y": 278,
       "folded": false
     },
     {
@@ -26,14 +18,15 @@
       "type": "analysis",
       "title": "提取日期",
       "params": {
-        "operation": "extract_time",
         "column": "时间",
-        "time_part": "date",
+        "enabled": true,
+        "operation": "extract_time",
         "time_new_col": "日期",
-        "enabled": true
+        "time_part": "date"
       },
-      "x": 340,
-      "y": 400,
+      "operation": "extract_time",
+      "x": 460,
+      "y": 294,
       "folded": false
     },
     {
@@ -41,16 +34,17 @@
       "type": "analysis",
       "title": "划分地层纪元（依据日量断点）",
       "params": {
-        "operation": "bin_time",
         "column": "时间",
+        "enabled": true,
+        "operation": "bin_time",
         "phase_edges": "2024-09-03, 2025-02-01, 2025-04-01, 2026-06-01, 2026-09-01, 2026-12-31",
         "phase_labels": "星屑纪, 春潮纪, 碎雨纪, 夏汛纪, 银潮纪",
         "phase_new_col": "阶段",
-        "phase_order_col": "阶段序号",
-        "enabled": true
+        "phase_order_col": "阶段序号"
       },
-      "x": 680,
-      "y": 400,
+      "operation": "bin_time",
+      "x": 800,
+      "y": 294,
       "folded": false
     },
     {
@@ -58,15 +52,16 @@
       "type": "process",
       "title": "情感极性（snownlp）",
       "params": {
-        "operation": "sentiment",
+        "enabled": true,
         "mode": "snownlp",
-        "text_column": "内容",
-        "pos_threshold": "0.6",
         "neg_threshold": "0.4",
-        "enabled": true
+        "operation": "sentiment",
+        "pos_threshold": "0.6",
+        "text_column": "内容"
       },
-      "x": 1020,
-      "y": 400,
+      "operation": "sentiment",
+      "x": 1174,
+      "y": 294,
       "folded": false
     },
     {
@@ -74,18 +69,19 @@
       "type": "analysis",
       "title": "每日情感演化指标",
       "params": {
-        "operation": "sentiment_evolution",
         "column": "日期",
+        "enabled": true,
+        "index_new_col": "sentiment_index",
         "label_col": "sentiment",
-        "label_positive": "positive",
         "label_negative": "negative",
         "label_neutral": "neutral",
-        "score_col": "score",
-        "index_new_col": "sentiment_index",
-        "enabled": true
+        "label_positive": "positive",
+        "operation": "sentiment_evolution",
+        "score_col": "score"
       },
-      "x": 1360,
-      "y": 160,
+      "operation": "sentiment_evolution",
+      "x": 1522,
+      "y": 154,
       "folded": false
     },
     {
@@ -93,14 +89,15 @@
       "type": "output",
       "title": "导出 每日指标表",
       "params": {
-        "operation": "save",
-        "format": "csv",
+        "enabled": true,
         "filename": "聊天地层-每日指标",
         "filename_timestamp": true,
-        "enabled": true
+        "format": "csv",
+        "operation": "save"
       },
-      "x": 1700,
-      "y": 160,
+      "operation": "save",
+      "x": 1950,
+      "y": 0,
       "folded": false
     },
     {
@@ -108,19 +105,20 @@
       "type": "analysis",
       "title": "各纪元情感占比与指数",
       "params": {
-        "operation": "sentiment_evolution",
         "column": "阶段",
+        "enabled": true,
         "evolution_order_col": "阶段序号",
+        "index_new_col": "sentiment_index",
         "label_col": "sentiment",
-        "label_positive": "positive",
         "label_negative": "negative",
         "label_neutral": "neutral",
-        "score_col": "score",
-        "index_new_col": "sentiment_index",
-        "enabled": true
+        "label_positive": "positive",
+        "operation": "sentiment_evolution",
+        "score_col": "score"
       },
-      "x": 1360,
-      "y": 400,
+      "operation": "sentiment_evolution",
+      "x": 1522,
+      "y": 294,
       "folded": false
     },
     {
@@ -128,14 +126,15 @@
       "type": "output",
       "title": "导出 纪元情感表",
       "params": {
-        "operation": "save",
-        "format": "csv",
+        "enabled": true,
         "filename": "聊天地层-纪元情感",
         "filename_timestamp": true,
-        "enabled": true
+        "format": "csv",
+        "operation": "save"
       },
-      "x": 1700,
-      "y": 400,
+      "operation": "save",
+      "x": 1950,
+      "y": 448,
       "folded": false
     },
     {
@@ -143,20 +142,21 @@
       "type": "analysis",
       "title": "分纪元 LDA 主题（需要本地 Ollama）",
       "params": {
-        "operation": "topic_by_stage",
         "column": "内容",
+        "enabled": true,
+        "operation": "topic_by_stage",
         "stage_col": "阶段",
         "stage_order_col": "阶段序号",
         "stage_topic_counts": "3,5,4,4,6",
-        "topic_method": "lda",
         "topic_max_features": "2000",
-        "topic_topn": "7",
+        "topic_method": "lda",
         "topic_sample_n": "3",
-        "word_source": "tfidf",
-        "enabled": true
+        "topic_topn": "7",
+        "word_source": "tfidf"
       },
-      "x": 1360,
-      "y": 640,
+      "operation": "topic_by_stage",
+      "x": 1522,
+      "y": 434,
       "folded": false
     },
     {
@@ -164,14 +164,15 @@
       "type": "output",
       "title": "导出 纪元主题表",
       "params": {
-        "operation": "save",
-        "format": "csv",
+        "enabled": true,
         "filename": "聊天地层-纪元主题",
         "filename_timestamp": true,
-        "enabled": true
+        "format": "csv",
+        "operation": "save"
       },
-      "x": 1700,
-      "y": 640,
+      "operation": "save",
+      "x": 1950,
+      "y": 588,
       "folded": false
     },
     {
@@ -179,17 +180,18 @@
       "type": "visualize",
       "title": "图 每日消息量",
       "params": {
-        "operation": "chart",
-        "engine": "echarts",
+        "agg": "sum",
         "chart_type": "line",
+        "enabled": true,
+        "engine": "echarts",
+        "operation": "chart",
         "title": "每日消息量",
         "x_field": "period",
-        "y_field": "total",
-        "agg": "sum",
-        "enabled": true
+        "y_field": "total"
       },
-      "x": 1700,
-      "y": 40,
+      "operation": "chart",
+      "x": 1950,
+      "y": 140,
       "folded": false
     },
     {
@@ -197,31 +199,77 @@
       "type": "visualize",
       "title": "图 每日情感指数",
       "params": {
-        "operation": "chart",
-        "engine": "echarts",
+        "agg": "sum",
         "chart_type": "line",
+        "enabled": true,
+        "engine": "echarts",
+        "operation": "chart",
         "title": "每日情感倾向指数",
         "x_field": "period",
-        "y_field": "sentiment_index",
-        "agg": "sum",
-        "enabled": true
+        "y_field": "sentiment_index"
       },
-      "x": 1700,
-      "y": 240,
+      "operation": "chart",
+      "x": 1950,
+      "y": 294,
       "folded": false
     }
   ],
   "connections": [
-    {"from": "n1", "to": "n2"},
-    {"from": "n2", "to": "n3"},
-    {"from": "n3", "to": "n4"},
-    {"from": "n4", "to": "n5"},
-    {"from": "n4", "to": "n7"},
-    {"from": "n4", "to": "n9"},
-    {"from": "n5", "to": "n6"},
-    {"from": "n5", "to": "n11"},
-    {"from": "n7", "to": "n8"},
-    {"from": "n9", "to": "n10"},
-    {"from": "n5", "to": "n12"}
-  ]
+    {
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "from": "n3",
+      "to": "n4"
+    },
+    {
+      "from": "n4",
+      "to": "n5"
+    },
+    {
+      "from": "n4",
+      "to": "n7"
+    },
+    {
+      "from": "n4",
+      "to": "n9"
+    },
+    {
+      "from": "n5",
+      "to": "n6"
+    },
+    {
+      "from": "n5",
+      "to": "n11"
+    },
+    {
+      "from": "n7",
+      "to": "n8"
+    },
+    {
+      "from": "n9",
+      "to": "n10"
+    },
+    {
+      "from": "n5",
+      "to": "n12"
+    }
+  ],
+  "settings": {
+    "mode": "serial",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 40,
+      "panY": 239.57695852534562,
+      "zoom": 0.7497695852534563
+    }
+  },
+  "name": "聊天记录地层学：爱语与主题演化"
 }
