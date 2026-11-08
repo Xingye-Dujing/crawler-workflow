@@ -32,9 +32,11 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   `sys.platform='win32'` patch faking a product gate (patch both sides or assert the refusal), no timezone literal for the
   "server local" zone.
 - **Byte limits are byte limits:** ext4 NAME_MAX 255 is UTF-8 **bytes**; a Windows path cap is characters.
-- **Real Linux/macOS startup is unverifiable here** (no docker/WSL): land code + platform-independent tests, list Linux as
-  unverified, state Linux packages (Chrome/Chromium + driver, `fonts-noto-cjk`, optional
-  `texlive-xetex`/`texlive-lang-chinese`).
+- **CI runs the fast and device tiers on all three systems** (`.github/workflows/ci.yml`: `windows-latest`,
+  `ubuntu-latest`, `macos-15`, including the real-Chrome `browser` job). A Linux/macOS-only failure is a real finding,
+  not "unverified". CI still cannot prove a real cloud-server boot/crawl, `live_site`/Ollama, CatBus, or the packaged
+  desktop GUI. Linux packages: Chrome/Chromium + driver, `fonts-noto-cjk`, optional
+  `texlive-xetex`/`texlive-lang-chinese`.
 
 ## Commands
 
@@ -52,9 +54,10 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **Never SILENTLY answer with a model other than the one claimed**: a degradation PRINTS the method that ran (topic
   `method=auto`→embedding/LDA; sentiment/emotion/tendency bert→`snownlp`/`ml`); analyzers refuse an unrunnable `bert` by
   name; a multi-model BERT comparison never degrades.
-- CI (`.github/workflows/ci.yml`, windows-latest): fast tier + `ruff check`/`format --check` over `backend/ tests/`. The
-  local post-edit `ruff format` (OpenCode's `formatter` → `.opencode/hooks/format.mjs`) fails on a restricted workspace
-  (`os error 5`) — format by hand; CI is the unskippable gate. `backend/test_*.py` are probe scripts, NOT pytest.
+- CI (`.github/workflows/ci.yml`, three-runner matrix): fast tier + `ruff check`/`format --check` + both pylint tiers
+  (targets enumerated by `tools/ci_lint_tiers.py`) on Windows, Linux and macOS. The local post-edit `ruff format`
+  (OpenCode's `formatter` → `.opencode/hooks/format.mjs`) fails on a restricted workspace (`os error 5`) — format by
+  hand; CI is the unskippable gate. `backend/test_*.py` are probe scripts, NOT pytest.
 - `ml_train/` (gitignored) trains the sklearn+bert models `emotion`/`tendency`/`sentiment` load
   (`data/model_registry.json`); changing features/labels means retraining there (`ml_train/README.md`).
 - **Test tiers** (`pytest.ini` excludes real tiers; `tests/unit/gates/test_test_tiers.py`): Fast `python -m pytest -q`

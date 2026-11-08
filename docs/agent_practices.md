@@ -711,10 +711,15 @@ produced this list; every entry was a real defect on at least one platform, not 
   `BASE_DIR` joins as a missed scope. They are a different family of model: the registry stores `ml_train/models/<name>`
   — the training workspace, which lives next to the checkout and is never under `CRAWLER_DATA_ROOT` — while
   `ml_base.MODEL_DIR` (`Config.DATA_DIR/models`) holds the sklearn joblib files. Two homes, two owners, one knob each.
-- **What this box cannot prove.** No Linux runtime here (no docker/WSL, user's decision), so these landed as code +
-  platform-independent tests. **Starting on Linux/macOS is an unverified surface**: a real-container crawl, a `fandol`
-  compile, the snap/app-bundle Chrome lookups are reasoned and tested by substitution. The Linux packages are in README/
-  `docs/config.md`; run them once on the server and report what differs.
+- **What CI now proves, and what it still cannot.** The platform tables above landed as code + substitution tests because
+  this box has no Linux runtime. Since 2026-11 `.github/workflows/ci.yml` runs the fast tier and the real-Chrome device
+  tier on Windows, Ubuntu and macOS (all six jobs green on run #42519799665, head `4f0ee16`). The first matrix runs found
+  the expected portability debt — 48 platform-pinned assertions in the fast tier (ctex's `fontset`, component assets,
+  Chrome/Node discovery polluted by the runner's own installs, MDS tolerance, directory order) plus real product facts
+  (`os.startfile`, `--accept-lang`, the hongguo window probes) — which is the evidence that the matrix asks a different
+  question on each OS. **Still unproven by CI**: a real cloud-server boot and crawl, a `fandol` compile, `live_site`/
+  Ollama/CatBus, and the packaged desktop window. The Linux packages are in README/`docs/config.md`; run them once on the
+  server and report what differs.
 
 ## The second crawl backend (CatBus) — why the boundary is where it is
 

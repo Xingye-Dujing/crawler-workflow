@@ -101,7 +101,7 @@ crawler_workflow/
 │   ├── model_registry.json       # 微调模型清单 · locks.json：面板条目钉住台账
 │   ├── cookies/ · exports/ · models/ · checkpoints/ · chrome_profile/<平台>/<账号> · harvest/（红果收割产物）
 │   └── workflows/                # 工作流配置（**进版本库**：作者写出的成果，引用数据集按 id）
-├── build/make_lint_lists.py      # 生成三档 pylint 的目标清单（一次性脚本其余已删；结果由测试钉住）
+├── tools/                        # 构建/迁移/备份工具；ci_lint_tiers.py 枚举 CI 与本地共用的 pylint 文件目标
 ├── .pylintrc · .pylintrc.tests · .pylintrc.probes
 ├── docs/                         # 本文所在，含 crawler_rules.md（采集端规则）/crawler_notes.md（实测）/agent_practices.md（证据）/live_test_plan.md
 ├── logs/
@@ -128,8 +128,8 @@ ML 模型保存在 `data/models/` 下，训练一次后持久可用；`ml_train/
 
 ### 自动化测试（pytest）
 
-测试体系分六层，位于 `tests/`（约 **265** 个测试文件）。当前**收集数**：快速层 **8,249**（共 8,604 项中 355 项被
-`pytest.ini` 排除）、设备层 **194**、`live_site` **161**、`live_quick` **11**。所有写入都落在临时目录（绝不触碰真实
+测试体系分六层，位于 `tests/`（约 **265** 个测试文件）。当前**收集数**：快速层约 **8.8k**（本次实测 8,818 passed +
+4 skipped；另有 356 项被 `pytest.ini` 排除），设备层与 live 层按下面的 marker 选择。所有写入都落在临时目录（绝不触碰真实
 `data/`）。每层的“证明了什么”一句话，详细 bug 故事见 [agent_practices.md](agent_practices.md) 与 [crawler_notes.md](crawler_notes.md)，
 不在此复述：
 
@@ -175,13 +175,14 @@ CIXI_LIVE_USE_USER_PROFILE=1 .venv/Scripts/python.exe -m pytest -q -m "live_quic
 
 ### Lint：三档标准，三次运行，都要干净
 
-`build/make_lint_lists.py` 生成每档的目标清单（嵌套配置不会被 pylint 读到，所以每档是独立一次带 `--rcfile` 的调用）：
+`tools/ci_lint_tiers.py` 枚举每档的目标文件（嵌套配置不会被 pylint 读到，所以每档是独立一次带 `--rcfile` 的调用；
+空列表会按名失败，不会在“没有文件”时报绿）。CI 与本机跑的是同一个脚本：
 
 ```bash
-.venv/Scripts/ruff.exe   check backend/ tests/
-.venv/Scripts/ruff.exe   format --check backend/ tests/
-.venv/Scripts/pylint.exe --rcfile=.pylintrc        <product targets>   # backend 去掉其 test_*.py + desktop/tools/ml_train/scripts
-.venv/Scripts/pylint.exe --rcfile=.pylintrc.tests  tests/
+.venv/Scripts/python.exe -m ruff check backend/ tests/
+.venv/Scripts/python.exe -m ruff format --check backend/ tests/
+.venv/Scripts/python.exe tools/ci_lint_tiers.py product   # backend 去掉其 test_*.py + desktop/tools/ml_train/scripts
+.venv/Scripts/python.exe tools/ci_lint_tiers.py tests     # tests/
 .venv/Scripts/pylint.exe --rcfile=.pylintrc.probes backend/test_*.py   # 一次性探针脚本的本地档（CI 不跑）
 ```
 
@@ -192,12 +193,22 @@ CIXI_LIVE_USE_USER_PROFILE=1 .venv/Scripts/python.exe -m pytest -q -m "live_quic
 
 `ruff format` 与 `ruff --fix` 用“写临时文件 → 改名覆盖”落盘。在限制写入的工作区（含本项目沙箱会话）这一步
 会直接失败（`os error 5`），钩子静默什么都没做而编辑看起来成功——格式债就这样积累。所以格式与 lint 由
-`.github/workflows/ci.yml` 兜底：它跑 `ruff check`、`ruff format --check`、两档 pylint（产品 / tests，各一次 `--rcfile`）、
-fast 全量，以及一个用真 Chrome 跑 `-m integration` 的 `browser` job（`.pylintrc.probes` 是本地档，CI 不跑）。本地提交前请显式跑一遍上面的命令。
+`.github/workflows/ci.yml` 兜底：`fast` 与 `browser` 都是 **Windows / Ubuntu / macOS 三系统矩阵**。每个系统跑
+`ruff check`、`ruff format --check`、两档 pylint（产品 / tests，各一次 `--rcfile`）和 fast 全量；`browser` job 用真 Chrome
+跑 `-m integration`，并保留 `CRAWLER_REQUIRE_NODE=1` / `CRAWLER_REQUIRE_BROWSER=1`，设备缺失时是失败而不是跳过。Ubuntu
+的设备层会安装 `fonts-noto-cjk`/`fonts-wqy-zenhei`，Linux 的 product lint 会额外安装已声明的 `pywebview`（`desktop/`
+的函数内导入需要一个可解析的模块）。`.pylintrc.probes` 是本地档，CI 不跑。本地提交前请显式跑一遍上面的命令。
+
+`workflow_dispatch` 有一个 `probe` 开关：只有手动触发并勾选时，Ubuntu/macOS 的失败才不会红整次运行，用于第一次排查；
+push / PR 始终是阻塞门禁。两个 job 的 `timeout-minutes` 都是 50（Windows fast 一次实测 29m40s，30 只剩一分钟余量，
+超时又只会报成 cancelled）。
 
 `uses:` 里的 action 版本由 `.github/dependabot.yml` 每周开一个合并 PR 刷新——旧运行时是先弃用、再拒绝的（Node 20 → 24
-就是这样以“每个 job 一条注解”的形式出现的，见 `ci.yml` 顶部注释）。`fast` 的 `timeout-minutes` 是 45 而不是 30：绿的一次
-实测已用 29m40s，30 只剩六十秒余量，而超时只会报成一条 cancelled 的运行记录。
+就是这样以“每个 job 一条注解”的形式出现的，见 `ci.yml` 顶部注释）。
+
+**CI 能证明什么**：三系统上的 fast 层与真实 Chrome 设备层（run #42519799665 起）。**仍只能在本地做**：真实云端服务器
+启动/采集、`live_site`/`live_quick`、Ollama 活模型、CatBus 适配器（未发布的 checkout）、打包后的桌面窗口。CI 绿不等于
+“所有层都跑过”。
 
 **"CI 有没有覆盖某一步"只能查运行历史，不能读本地 yaml**（读文件会把"计划要做"说成"已经在做"）：
 
