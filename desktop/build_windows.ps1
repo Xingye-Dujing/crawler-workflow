@@ -2,6 +2,16 @@
 #
 #   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
 #   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
+#   powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer -Sign
+#
+# The release chain is split into stages so the compile stage never holds a certificate:
+#   1. compile       : this script WITHOUT -Sign (no CIXI_SIGN_* value is read)
+#   2. sign launcher : -Sign runs desktop\sign_windows.ps1 AFTER UPX and BEFORE Inno
+#   3. package       : -PackageOnly on the already-signed folder (zip + Setup.exe)
+#   4. sign setup    : -Sign on that stage signs Setup.exe too
+#   5. manifest      : desktop\release_manifest.py writes SHA256SUMS over the final bytes
+# Signing before UPX is useless: packing rewrites the PE and destroys the signature.
+# Signing before Inno is required: the installer must embed the signed launcher verbatim.
 #
 # The build environment is separate from the project .venv on purpose: it contains only
 # desktop/requirements-runtime.txt plus PyInstaller, so torch/transformers/pyarrow and
@@ -11,12 +21,17 @@ param(
     [switch]$Clean,
     [switch]$NoZip,
     [switch]$Installer,
+    # Wrap an already-built (and already-signed) folder: no venv, no PyInstaller, no UPX.
+    [switch]$PackageOnly,
     [switch]$KeepWork,
     [switch]$RemoveBuildEnv,
     # UPX compression of the collected binaries is ON by default (it roughly halves the folder);
     # pass -NoUpx on a machine without the tool, or when shipping a build you cannot re-sign.
     [switch]$NoUpx,
-    [switch]$SkipInstall
+    [switch]$SkipInstall,
+    # Run the Authenticode stage at the two points where the bytes are final.
+    [switch]$Sign,
+    [string]$Version = '1.0.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +57,24 @@ $Dist = Join-Path $DistRoot 'CaiXiHui'
 $Work = Join-Path $RepoRoot 'build\pyinstaller'
 $Spec = Join-Path $PSScriptRoot 'caixihui.spec'
 $Zip = Join-Path $DistRoot 'CaiXiHui-win64.zip'
+$LauncherExe = Join-Path $Dist 'CaiXiHui.exe'
+$SetupExe = Join-Path $DistRoot 'CaiXiHui-Setup.exe'
+$OnlineSetupExe = Join-Path $DistRoot 'CaiXiHui-Online-Setup.exe'
+$SignScript = Join-Path $PSScriptRoot 'sign_windows.ps1'
+$IssScript = Join-Path $PSScriptRoot 'installer.iss'
+
+# The installer stamps this same version into current-version and install.json. A version
+# with a slash, a space or a prerelease suffix would make the pointer a path or break
+# VersionInfoVersion, so it is refused before a ten-minute build starts.
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "-Version must be three numeric groups (for example 1.0.0), not '$Version'."
+}
+if ($PackageOnly -and $Clean) {
+    throw '-PackageOnly wraps an existing folder; -Clean would delete it. Drop one of the two flags.'
+}
+if ($Sign -and -not (Test-Path $SignScript)) {
+    throw "missing signing stage: $SignScript"
+}
 
 function Write-Step([string]$Text) {
     Write-Host ""
@@ -82,75 +115,76 @@ if ($iconHead -join '.' -ne '0.0.1.0') {
     throw "$Icon is not an ICO (header must be 00 00 01 00): run .venv\Scripts\python.exe tools\build_icon.py"
 }
 
-Write-Step "Build environment"
-# -Clean and -SkipInstall contradict each other: -Clean deletes the build environment below, and
-# -SkipInstall then refuses to reinstall it, so the run recreates an empty venv and fails at
-# "No module named PyInstaller" several minutes later with no connection to the real cause.
-# Measured: one wasted build. Refuse the pair at once instead.
-if ($Clean -and $SkipInstall) {
-    throw '-Clean deletes the build environment, so -SkipInstall cannot follow it: drop one of the two flags.'
-}
-$BasePython = Join-Path $RepoRoot '.venv\Scripts\python.exe'
-if (-not (Test-Path $BasePython)) {
-    $BasePython = (Get-Command python -ErrorAction Stop).Source
-}
-if ($Clean -and (Test-Path $Venv)) {
-    Remove-Item -LiteralPath $Venv -Recurse -Force
-}
-if (-not (Test-Path $VenvPython)) {
-    Invoke-Exe $BasePython @('-m', 'venv', $Venv)
-}
-# jieba/snownlp ship as source distributions; without a prepared build environment pip
-# spends a long time in an isolated build env on a fresh machine. setuptools+wheel make
-# --no-build-isolation deterministic (and wheels are unaffected by the flag).
-if ($SkipInstall) {
-    Write-Host 'Skipping dependency installation (-SkipInstall).'
+if (-not $PackageOnly) {
+    Write-Step "Build environment"
+    # -Clean and -SkipInstall contradict each other: -Clean deletes the build environment below, and
+    # -SkipInstall then refuses to reinstall it, so the run recreates an empty venv and fails at
+    # "No module named PyInstaller" several minutes later with no connection to the real cause.
+    # Measured: one wasted build. Refuse the pair at once instead.
+    if ($Clean -and $SkipInstall) {
+        throw '-Clean deletes the build environment, so -SkipInstall cannot follow it: drop one of the two flags.'
+    }
+    $BasePython = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+    if (-not (Test-Path $BasePython)) {
+        $BasePython = (Get-Command python -ErrorAction Stop).Source
+    }
+    if ($Clean -and (Test-Path $Venv)) {
+        Remove-Item -LiteralPath $Venv -Recurse -Force
+    }
+    if (-not (Test-Path $VenvPython)) {
+        Invoke-Exe $BasePython @('-m', 'venv', $Venv)
+    }
+    # jieba/snownlp ship as source distributions; without a prepared build environment pip
+    # spends a long time in an isolated build env on a fresh machine. setuptools+wheel make
+    # --no-build-isolation deterministic (and wheels are unaffected by the flag).
+    if ($SkipInstall) {
+        Write-Host 'Skipping dependency installation (-SkipInstall).'
+    } else {
+        Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '--upgrade', 'setuptools==78.1.0', 'wheel')
+        $RuntimeReq = Join-Path $PSScriptRoot 'requirements-runtime.txt'
+        $BuildReq = Join-Path $PSScriptRoot 'requirements-build.txt'
+        Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '--no-build-isolation', '-r', $RuntimeReq)
+        Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '-r', $BuildReq)
+    }
+
+    Write-Step "PyInstaller onedir"
+    if ($Clean) {
+        Remove-Item -LiteralPath $Dist -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    # PyInstaller is deliberately NOT given upx=True: when it cannot find the tool it compresses
+    # nothing and says so only in a line most people scroll past, which would make the folder's
+    # advertised size a guess. The explicit pass below fails by name instead.
+    Invoke-Exe $VenvPython @('-m', 'PyInstaller', '--noconfirm', '--clean', '--distpath', $DistRoot, '--workpath', $Work, $Spec)
+
+    Write-Step "Prune unused platform/test payloads"
+    Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'prune_dist.py'), $Dist)
+
+    if (-not $NoUpx) {
+        Write-Step "Compress binaries with UPX"
+        Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'compress_dist.py'), $Dist)
+    } else {
+        Write-Host 'UPX compression SKIPPED (-NoUpx): the folder keeps its full size.'
+    }
+
+    if ($Sign) {
+        # AFTER UPX: packing rewrites the PE and would destroy the signature. BEFORE Inno:
+        # the installer has to embed these exact signed bytes.
+        Write-Step "Sign the launcher before the installer wraps its bytes"
+        & $SignScript -Target @($LauncherExe)
+    }
 } else {
-    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '--upgrade', 'setuptools==78.1.0', 'wheel')
-    $RuntimeReq = Join-Path $PSScriptRoot 'requirements-runtime.txt'
-    $BuildReq = Join-Path $PSScriptRoot 'requirements-build.txt'
-    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '--no-build-isolation', '-r', $RuntimeReq)
-    Invoke-Exe $VenvPython @('-m', 'pip', 'install', '--no-input', '--no-cache-dir', '--progress-bar', 'off', '-r', $BuildReq)
-}
-
-Write-Step "PyInstaller onedir"
-if ($Clean) {
-    Remove-Item -LiteralPath $Dist -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
-}
-# PyInstaller is deliberately NOT given upx=True: when it cannot find the tool it compresses
-# nothing and says so only in a line most people scroll past, which would make the folder's
-# advertised size a guess. The explicit pass below fails by name instead.
-Invoke-Exe $VenvPython @('-m', 'PyInstaller', '--noconfirm', '--clean', '--distpath', $DistRoot, '--workpath', $Work, $Spec)
-
-Write-Step "Prune unused platform/test payloads"
-Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'prune_dist.py'), $Dist)
-
-if (-not $NoUpx) {
-    Write-Step "Compress binaries with UPX"
-    Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'compress_dist.py'), $Dist)
-} else {
-    Write-Host 'UPX compression SKIPPED (-NoUpx): the folder keeps its full size.'
+    Write-Step "Package an already-built, already-signed folder"
+    if (-not (Test-Path $LauncherExe)) {
+        throw "-PackageOnly needs the built launcher at $LauncherExe; run the compile stage first."
+    }
+    Write-Host 'No venv, PyInstaller, prune, UPX or re-sign of the launcher in this stage.'
 }
 
 $folderBytes = Get-FolderSize $Dist
 Write-Host ("Folder: {0}  ({1:N1} MB)" -f $Dist, ($folderBytes / 1MB))
 
-if (-not $NoZip) {
-    Write-Step "Compressed zip"
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    if (Test-Path $Zip) { Remove-Item -LiteralPath $Zip -Force }
-    [System.IO.Compression.ZipFile]::CreateFromDirectory(
-        $Dist,
-        $Zip,
-        [System.IO.Compression.CompressionLevel]::Optimal,
-        $true
-    )
-    $zipBytes = (Get-Item $Zip).Length
-    Write-Host ("Zip:    {0}  ({1:N1} MB)" -f $Zip, ($zipBytes / 1MB))
-}
-
-if ($Installer) {
+if ($Installer -or $PackageOnly) {
     Write-Step "Inno Setup"
     # Version- and drive-agnostic on purpose. Hardcoding "Program Files\Inno Setup 6" misses a real
     # install: measured here, the tool lives at `E:\Inno Setup 7\ISCC.exe` -- a different major
@@ -171,15 +205,42 @@ if ($Installer) {
     $candidates += (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
     $iscc = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
     if (-not $iscc) {
+        if ($Sign) {
+            throw '-Sign needs ISCC.exe to produce a signed Setup.exe (checked Program Files, LOCALAPPDATA, drive roots, PATH and $env:CIXI_ISCC).'
+        }
         Write-Warning 'ISCC.exe not found (checked Program Files, LOCALAPPDATA, every drive root for "Inno Setup *\ISCC.exe", PATH, and $env:CIXI_ISCC); the portable folder/zip is still usable.'
     } else {
         Write-Host ("Using ISCC: {0}" -f $iscc)
-        Invoke-Exe $iscc @((Join-Path $PSScriptRoot 'installer.iss'))
-        $setup = Join-Path $DistRoot 'CaiXiHui-Setup.exe'
-        if (Test-Path $setup) {
-            Write-Host ("Setup:  {0}  ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
+        # The same version lands in AppVersion, current-version and install.json.
+        Invoke-Exe $iscc @("/DMyAppVersion=$Version", $IssScript)
+        if (Test-Path $SetupExe) {
+            Write-Host ("Setup:  {0}  ({1:N1} MB)" -f $SetupExe, ((Get-Item $SetupExe).Length / 1MB))
+            if ($Sign) {
+                Write-Step "Sign the installer after Inno embeds the signed bytes"
+                $targets = @($SetupExe)
+                if (Test-Path $OnlineSetupExe) { $targets += $OnlineSetupExe }
+                & $SignScript -Target $targets
+            }
+        } elseif ($Sign) {
+            throw "ISCC produced no $SetupExe; refusing to call an unsigned build signed."
         }
     }
+}
+
+if (-not $NoZip) {
+    # Last: the zip must carry the SIGNED launcher, so it is made from the final folder,
+    # never from the pre-signing bytes. A -PackageOnly stage overwrites the stale zip.
+    Write-Step "Compressed zip from the final folder"
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    if (Test-Path $Zip) { Remove-Item -LiteralPath $Zip -Force }
+    [System.IO.Compression.ZipFile]::CreateFromDirectory(
+        $Dist,
+        $Zip,
+        [System.IO.Compression.CompressionLevel]::Optimal,
+        $true
+    )
+    $zipBytes = (Get-Item $Zip).Length
+    Write-Host ("Zip:    {0}  ({1:N1} MB)" -f $Zip, ($zipBytes / 1MB))
 }
 
 if (-not $KeepWork) {
@@ -193,3 +254,6 @@ if ($RemoveBuildEnv) {
 Write-Step "Done"
 Write-Host "Portable folder: $Dist"
 if (-not $NoZip) { Write-Host "Distribution zip: $Zip" }
+if ($Sign) {
+    Write-Host 'Next stage: desktop\release_manifest.py --dist dist --version <version>'
+}

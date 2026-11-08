@@ -909,7 +909,14 @@ class TestTheUpxPassReportsWhatItActuallyDid:
         keystroke away from the README's install command.
         """
         targets = [
-            PACKAGING / name for name in ('build_windows.ps1', 'requirements-runtime.txt', 'requirements-build.txt')
+            PACKAGING / name
+            for name in (
+                'build_windows.ps1',
+                'sign_windows.ps1',
+                'bin/CaiXiHui.cmd',
+                'requirements-runtime.txt',
+                'requirements-build.txt',
+            )
         ]
         targets += [REPO / name for name in ('requirements.txt', 'requirements-optional.txt')]
         for path in targets:

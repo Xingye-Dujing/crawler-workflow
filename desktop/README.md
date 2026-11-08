@@ -32,6 +32,8 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 | `dist/CaiXiHui-Setup.exe` | **单文件安装包**（`-Installer`，需要本机装有 Inno Setup） |
 | `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 9 MB，默认国内镜像） |
 | `dist/CaiXiHui-bert-models-win64.zip` | 可选 BERT 模型包（`desktop/build_model_pack.py` 单独产出，见下文） |
+| `dist/SHA256SUMS` | 最终**签名后**产物的 `sha256sum` 清单（发布链第 5 步） |
+| `dist/release-manifest.json` | 同上，带体积、版本、渠道与在线安装器清单要用的摘要 |
 
 ### 在线安装器
 
@@ -84,7 +86,9 @@ PyInstaller 把无效字节照抄进 exe 资源，还打印一句 `Copying icon 
 常用参数：`-Clean` 重建构建环境与产物；`-NoZip` 跳过压缩；`-KeepWork` 保留
 PyInstaller 中间目录；`-RemoveBuildEnv` 构建后删掉 `desktop/.venv-build`（省几百 MB，
 下次重建会重新安装依赖）；`-NoUpx` **关掉** UPX（默认开）；`-SkipInstall` 跳过依赖安装（构建环境
-已经准备好时用）；`-Installer` 额外用 Inno Setup（6/7）出安装包。
+已经准备好时用）；`-Installer` 额外用 Inno Setup（6/7）出安装包。`-Sign` 在 UPX 之后、
+Inno 之前签主程序并在 ISCC 之后签安装包（见下面"分发链"）；`-PackageOnly` 只打包一个已经
+签好的文件夹；`-Version 1.0.0` 把同一个版本号交给 `ISCC /D` 和发布清单。
 
 **UPX**：本机实测把解压后体积从约 301 MB 降到约 **192 MB**，应用与工作流跑通。现在它是**默认步骤**，
 但不再交给 PyInstaller：`caixihui.spec` 里 `upx=False`，构建后由 `desktop/compress_dist.py` 对
@@ -107,6 +111,86 @@ PowerShell 执行 `desktop\.venv-build\Scripts\python.exe -m pip install --no-bu
 mitmproxy / pytest / ruff，因此这些包不会被 PyInstaller 收进发行包。`caixihui.spec` 再把
 Matplotlib 的 GUI 后端、Selenium 的 Linux/macOS driver 等无用负载排掉；`prune_dist.py`
 在构建后做一次保守的清理并报告释放了多少空间。
+
+## 分发链：签名、安装器与清单
+
+借鉴 `anomalyco/hex` 的分发链（MIT），但只抄"字节怎么被签名、怎么被核对"这一层，不碰
+hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段不需要证书**：
+
+| 阶段 | 命令 | 是否持密钥 |
+|---|---|---|
+| 1 编译 | `build_windows.ps1 -NoZip`（CI 用 `-NoZip`，zip 要等签完再做） | 否 |
+| 2 签主程序 | `sign_windows.ps1 -Target dist\CaiXiHui\CaiXiHui.exe` | 是 |
+| 3 打包 | `build_windows.ps1 -PackageOnly -Version 1.0.0`（zip + Inno Setup） | 否 |
+| 4 签安装包 | `sign_windows.ps1 -Target dist\CaiXiHui-Setup.exe` | 是 |
+| 5 出清单 | `release_manifest.py --dist dist --version 1.0.0` + `--check` | 否 |
+
+本机一步到位也可以：`build_windows.ps1 -Installer -Sign -Version 1.0.0`，再由阶段 5 出清单。
+`-PackageOnly` 跳过 venv / PyInstaller / prune / UPX / 重签主程序，只打包一个**已经签过**的
+文件夹；`-Sign` 会在两个正确位置自动调用签名脚本。
+
+**顺序不是风格问题**：UPX 改写 PE，签在它之前等于没签；Inno 把文件夹里的字节压进安装包，
+所以必须先签 `CaiXiHui.exe` 再跑 ISCC；签名本身又会给 `Setup.exe` 增加证书表，所以
+`SHA256SUMS` 只能最后算。zip 也从最终文件夹生成（脚本把它放在最后），否则压缩包里装的
+是未签名的主程序。`release_manifest.py` 会按名拒绝缺少 `CaiXiHui/CaiXiHui.exe`、
+`CaiXiHui-win64.zip`、`CaiXiHui-Setup.exe` 的产物，`--check` 重新哈希每个文件。
+
+签名脚本 `desktop/sign_windows.ps1` 用 `signtool /fd SHA256 /tr <时间戳> /td SHA256`
+（RFC 3161 时间戳），随后用 `Get-AuthenticodeSignature` 检查 `Status` 与
+`TimeStamperCertificate`——短有效期证书没有时间戳会随证书一起失效。工具、凭据、签名或
+时间戳缺一样都**按名拒绝**并非零退出，不会"安静地发一个未签名包"。凭据从环境变量读，
+编译脚本一行都不碰：
+
+| 变量 | 用途 |
+|---|---|
+| `CIXI_SIGN_MODE` | `pfx` / `subject` / `azure`，省略时按下面的变量推断 |
+| `CIXI_SIGN_PFX` + `CIXI_SIGN_PASSWORD` | 本地 PFX；密码只能经 `signtool /p` 的命令行传，CI 不建议用 |
+| `CIXI_SIGN_SUBJECT` | 已装进用户证书库的证书，`/n` |
+| `CIXI_SIGN_DLIB` + `CIXI_SIGN_DMDF` | Azure Artifact Signing 的 dlib 与 metadata JSON |
+| `CIXI_SIGNTOOL` / `CIXI_SIGN_TIMESTAMP` | 覆盖 signtool 查找与 RFC 3161 服务器 |
+
+`-AllowUntrustedRoot` 只给本地自签名冒烟用（会打印警告），不能用于发布。`Get-AuthenticodeSignature`
+要求证书链可信；自签证书跑不过发布校验，这是有意的。
+
+**签名会改变字节**：`CaiXiHui-win64.zip` 的摘要随之变化，在线安装器清单
+`backend/services/components/default_catalog.json` 里 `app.win32` 的 `sha256`/`size` 必须在
+最后一次签名之后重新生成（`tools/release_components.py --component app=dist\CaiXiHui-win64.zip`）。
+`release_manifest.py` 打印的 `app catalog:` 那一行就是这两个数。
+
+### 安装器这次改了什么
+
+`installer.iss` 保持 per-user（`PrivilegesRequired=lowest`）、`CloseApplications=yes`、UTF-8 BOM 头
+（Inno 读无 BOM 的 `.iss` 用 ANSI，向导文案是中文）与平铺的 exe 布局，新增：
+
+- **精确停进程**：`PrepareToInstall` 与卸载时调用 `StopManagedApp()`，按 `$_.Path` 前缀过滤
+  `{app}\`，只停这份安装里的 `CaiXiHui.exe`。不用 `taskkill /IM`，便携盘上的另一份不会被杀；
+  `CloseApplications` 依赖 Restart Manager，控制台窗口里的 Flask 服务不响应它。
+- **PATH**：`ChangesEnvironment=yes` + `AddBinToPath/RemoveBinFromPath` 把 `{app}\bin` 加进
+  `HKCU\Environment\Path`，卸载时只摘掉自己那一段。`desktop/bin/CaiXiHui.cmd` 转发 `%*` 与退出码，
+  于是终端里 `CaiXiHui --doctor` 可用；放进 PATH 的是这个几字节的目录，不是 150 MB 的程序目录。
+- **版本指针与回执**：`versions\<version>\install.json`（`SaveStringsToUTF8FileWithoutBOM`，
+  非 ASCII 安装路径不会变成 GBK 字节）与 `current-version`（ASCII），两者都经 `.partial`
+  + 改名原子写入；`current-version` 只接受安全的版本 token，不能当路径用。校验工具
+  `install_receipt.py --root <安装目录>` 会核对编码、BOM、token、指针与回执里的版本一致性。
+- `ISCC` 由构建脚本传 `/DMyAppVersion=<版本>`，同一个版本号同时进 `AppVersion`、
+  `current-version`、`install.json` 与发布清单。
+
+**刻意没抄的两件事**：hex 的 `versions/<v>/hex.exe` 是给它的应用内自更新器用的，本项目没有
+自更新器（在线安装器用 `install-manifest.json` 管组件版本），而且 `app_dir()`、
+`portable.txt`、`data-root.txt` 与组件布局都读 exe 所在文件夹——把 exe 挪进版本目录会同时
+改掉这些约定。所以 `versions/` 这里只放回执，exe 仍然平铺。另外本 exe 是 `console=True`，
+终端本来就会等待它，不需要 hex 的 `hex.com`（GUI 子系统 + `.COM` 双入口）那套。
+
+### 验收状态（不夸大）
+
+- 2026-11-08 用本机的 **Inno Setup 7** 以 `--no-compression -dMyAppVersion=1.0.0` 完整编译过
+  `installer.iss`（退出 0），证明 `[Code]` 的 Pascal 与 `/D` 传参语法正确；
+  两个 PowerShell 脚本经语法解析器检查无错。
+- **没有在真机上跑过**：静默安装/卸载、HKCU PATH 增删、真实 Authenticode 签名与时间戳、
+  `.github/workflows/release-windows.yml` 的 CI 流程。签名需要证书与时间戳服务，
+  SmartScreen 声誉也要按发布者慢慢积累；签了名不等于杀软不误报，UPX + 未建立声誉的新证书
+  仍应先在本机双击验一次。
+- Linux/macOS 不涉及这一节；源码版仍走浏览器，`desktop/` 依旧是唯一 Windows-only 的树。
 
 ## 体积边界
 

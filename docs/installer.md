@@ -102,7 +102,11 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 - 不执行下载来的 exe / msi；第三方一律便携 zip 解压。
 - **Chrome 不随安装器重新分发**：安装时从 Google 官方 Chrome for Testing 下载，国内默认走 npmmirror 镜像；
   两个地址指向同一份官方构建。
-- 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。
+- 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。离线包/主程序的完整签名链
+  （编译不持密钥 → 签 exe → 打 Setup → 签 Setup → 时间戳 → `SHA256SUMS`）见
+  [`desktop/README.md`](../desktop/README.md) 的"分发链"一节。
+- **签名会改变分发出去的字节**：`app.win32.sha256`/`size` 必须在最后一次签名之后、以最终
+  `CaiXiHui-win64.zip` 为准重新生成，否则在线安装器会按旧摘要拒绝自己刚发布的版本。
 - 安装器不调用系统 shell 执行下载内容；页面只由本机 `127.0.0.1` 提供服务，路径带随机令牌，并用
   `Content-Type: application/json` 的 POST（浏览器跨站请求会先被预检拦住）。
 
@@ -138,7 +142,8 @@ powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
 `textContent` 写入，图标全部是内联 SVG（勾选、太阳/月亮），不使用字体图标或 Unicode 符号。
 
 清单：`backend/services/components/default_catalog.json`。发布新版本时更新其中的版本、URL、SHA-256 与体积；
-`tools/release_components.py` 负责从构建产物生成这份文件。
+`tools/release_components.py` 负责从构建产物生成这份文件。最终产物的 `SHA256SUMS` 与
+`release-manifest.json` 由 `desktop/release_manifest.py` 在签名链的最后一步写出，`--check` 可复核。
 
 ## 已知限制
 

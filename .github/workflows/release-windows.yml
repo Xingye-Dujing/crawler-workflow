@@ -1,0 +1,170 @@
+name: release-windows
+
+# Split like anomalyco/hex: the COMPILE job holds no signing credentials; only the two
+# sign-* jobs enter the `release` environment and see secrets. Signing happens after UPX
+# (packing destroys a signature) and again after Inno Setup (which embeds the signed
+# launcher bytes). The manifest is written last, over the final bytes.
+#
+# Manually dispatched only. NOT yet run against real certificates or a real Inno install on
+# a hosted runner: the local build + double-click acceptance in desktop/README.md remains
+# the verified path. A green run here is evidence about the chain's shape, not a release.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, three numeric groups (for example 1.0.0)'
+        required: true
+        default: '1.0.0'
+      channel:
+        description: 'stable or dev'
+        required: true
+        default: 'stable'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compile, unsigned
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Base venv (the build script makes its own desktop\.venv-build)
+        run: python -m venv .venv
+      - name: UPX, the same packer the local release uses
+        run: choco install upx --yes --no-progress
+      # -NoZip: the zip is made AFTER signing, from the signed folder. No CIXI_SIGN_*
+      # value is set anywhere in this job.
+      - name: Build the folder without credentials
+        run: powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -NoZip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-dist
+          path: dist/
+          if-no-files-found: error
+
+  sign-exe:
+    name: Sign the launcher
+    needs: build
+    runs-on: windows-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: unsigned-dist
+          path: dist
+      - name: Materialise the certificate in this job only
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.CIXI_SIGN_PFX_BASE64 }}
+        run: |
+          if (-not $env:PFX_BASE64) { throw 'CIXI_SIGN_PFX_BASE64 is not configured in the release environment' }
+          New-Item -ItemType Directory -Force build | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $PWD 'build\signing.pfx'), [Convert]::FromBase64String($env:PFX_BASE64))
+      - name: Sign and timestamp CaiXiHui.exe
+        shell: pwsh
+        env:
+          CIXI_SIGN_MODE: pfx
+          CIXI_SIGN_PFX: build\signing.pfx
+          CIXI_SIGN_PASSWORD: ${{ secrets.CIXI_SIGN_PASSWORD }}
+        run: powershell -ExecutionPolicy Bypass -File desktop\sign_windows.ps1 -Target dist\CaiXiHui\CaiXiHui.exe
+      - name: Remove the certificate
+        if: always()
+        shell: pwsh
+        run: Remove-Item -LiteralPath build\signing.pfx -Force -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-dist
+          path: dist/
+          if-no-files-found: error
+
+  installer:
+    name: Zip and Setup from the signed bytes
+    needs: sign-exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-dist
+          path: dist
+      - name: Inno Setup 6
+        run: choco install innosetup --yes --no-progress
+      # -PackageOnly skips venv/PyInstaller/prune/UPX and never re-signs the launcher.
+      # It zips the already-signed folder and wraps it in Setup.exe.
+      - name: Package
+        run: powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -PackageOnly -Version ${{ inputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packaged-dist
+          path: dist/
+          if-no-files-found: error
+
+  sign-setup:
+    name: Sign the installer
+    needs: installer
+    runs-on: windows-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: packaged-dist
+          path: dist
+      - name: Materialise the certificate in this job only
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.CIXI_SIGN_PFX_BASE64 }}
+        run: |
+          if (-not $env:PFX_BASE64) { throw 'CIXI_SIGN_PFX_BASE64 is not configured in the release environment' }
+          New-Item -ItemType Directory -Force build | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $PWD 'build\signing.pfx'), [Convert]::FromBase64String($env:PFX_BASE64))
+      - name: Sign and timestamp Setup.exe
+        shell: pwsh
+        env:
+          CIXI_SIGN_MODE: pfx
+          CIXI_SIGN_PFX: build\signing.pfx
+          CIXI_SIGN_PASSWORD: ${{ secrets.CIXI_SIGN_PASSWORD }}
+        run: powershell -ExecutionPolicy Bypass -File desktop\sign_windows.ps1 -Target dist\CaiXiHui-Setup.exe
+      - name: Remove the certificate
+        if: always()
+        shell: pwsh
+        run: Remove-Item -LiteralPath build\signing.pfx -Force -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v7
+        with:
+          name: final-dist
+          path: dist/
+          if-no-files-found: error
+
+  manifest:
+    name: Hash the final bytes
+    needs: sign-setup
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v8
+        with:
+          name: final-dist
+          path: dist
+      - name: Write SHA256SUMS and release-manifest.json
+        run: |
+          python -m venv .venv
+          .venv/Scripts/python.exe desktop/release_manifest.py --dist dist --version ${{ inputs.version }} --channel ${{ inputs.channel }}
+          .venv/Scripts/python.exe desktop/release_manifest.py --dist dist --check
+      - name: Catalog reminder
+        run: echo "Update backend/services/components/default_catalog.json with the app sha256/size printed above (tools/release_components.py)."
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-manifest
+          path: |
+            dist/SHA256SUMS
+            dist/release-manifest.json
+          if-no-files-found: error
