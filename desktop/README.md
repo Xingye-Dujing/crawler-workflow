@@ -399,6 +399,21 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 - 弹窗自己弹不出来时（无窗口站、服务会话）会在控制台说明“弹窗没能显示”，不静默吞掉；
 - 首次示例文件/模型复制失败不会阻止启动，只点名说明。
 
+## macOS（GitHub Actions 构建）
+
+`desktop/macos_entry.py` 是 macOS 专用入口：同样的 Flask 服务 + pywebview 的 Cocoa/WebKit 窗口，
+数据在 `~/Library/Application Support/CaiXiHui`（`CRAWLER_DATA_ROOT` 可覆盖）。`desktop/caixihui_macos.spec`
+用 PyInstaller `BUNDLE` 打出 `CaiXiHui.app`，`desktop/build_macos.py` 再用 `hdiutil` 生成
+`CaiXiHui-macOS-<arch>.dmg`。依赖在 `desktop/requirements-macos.txt`（不含 onnxruntime/tokenizers，
+BERT 节点在 macOS 上按设计降级到 sklearn/snownlp 并打印实际方法）。
+
+`.github/workflows/macos-build.yml` 在 `macos-15-intel`（x86_64）和 `macos-15`（arm64）两个 runner
+上构建，DMG 上传到 `workflow_dispatch` 指定的 Release tag（默认 `exe-2026-11`），文件名带架构后缀。
+
+**未在本机实测**：这个 checkout 没有 macOS，PyInstaller 也不能交叉编译；首次真实构建要等 GitHub
+Actions 跑完。DMG 未签名/未公证，首次打开需右键“打开”或在“隐私与安全性”里放行。macOS 上不提供在线
+安装器；Chrome/chromedriver/Node/CatBus 由用户自行安装（Chrome 驱动可由 Selenium Manager 解析）。
+
 ## 受限终端里构建（本仓库实测）
 
 `build_windows.ps1` 会把 pip 的临时目录指到 `build/tmp` 并加 `--no-cache-dir`。原因是实测到的

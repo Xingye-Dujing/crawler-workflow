@@ -19,7 +19,7 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **A capability impossible off Windows refuses BY NAME and its UI entry disappears** (a run-time refusal is too late).
   Verdict from the server (`Config.CLOUD_MODE`/`sys.platform`); JS holds no second opinion. Existing: 红果短剧 harvest,
   the login-cookie window, local Ollama under cloud mode.
-- **`desktop/` is the ONE Windows-only tree** (PyInstaller/UPX/Inno); its facts never leak into `backend/`.
+- **`desktop/` is the ONE OS-packaging tree** (Windows PyInstaller/UPX/Inno + macOS PyInstaller `BUNDLE`/DMG); its Windows- and macOS-only facts never leak into `backend/`. The macOS build runs only on GitHub's macOS runners (`desktop/build_macos.py`, `.github/workflows/macos-build.yml`); this checkout has never executed it.
 - **Machine lookups are per-OS tables in one place**: Chrome/xelatex/Node+CatBus in `core/machine.py` +
   `services/charts/pdf.py`, joined with the TARGET separator (`ntpath`/`posixpath`); CJK font stack and ctex in
   `services/charts/visualizer.py`/`tikz.py`. Overrides: `CHROME_BIN`/`CHROME_PATH`, `CIXI_NODE_BIN`/`NODE_BIN`,

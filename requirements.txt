@@ -64,7 +64,7 @@ tzdata==2026.2
 # run is a false import-error. They are Windows-only (pywebview hosts Edge WebView2 through
 # pythonnet); the markers keep a Linux/macOS install from pulling a Windows GUI stack. The packaged
 # build pins the same versions in desktop/requirements-runtime.txt.
-pywebview==6.2.1; sys_platform == "win32"
+pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
 pythonnet==3.0.5; sys_platform == "win32"
 # desktop/patch_manifest.py rewrites the Inno Setup outer manifest to requireAdministrator; the
 # product pylint tier imports every desktop tool, so this small pure-Python PE reader belongs in a

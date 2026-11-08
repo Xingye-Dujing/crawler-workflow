@@ -57,14 +57,16 @@ cd backend && python app.py        # http://127.0.0.1:5000
   强制多账号登录——首次启动必须给 `CRAWLER_ADMIN_PASSWORD` 和 `SECRET_KEY`，否则拒绝启动。每个账号的
   工作流、数据集、运行、Cookie、导出都在 `data/users/<账号 id>/` 下，互相看不见。旧数据用
   `tools/migrate_accounts.py` 迁到管理员名下（默认 dry-run，先备份）。
-- **不想装 Python 就用桌面版（仅 Windows）**：[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases)
+- **不想装 Python 就用桌面版（Windows / macOS）**：[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases)
   里有现成的 `CaiXiHui-Setup.exe`；只想要小体积下载器就用 `CaiXiHui-Online-Setup.exe`，默认从 Gitee /
   npmmirror 下载主程序、Chrome、chromedriver、Node 和 CatBus，国内不需要翻墙（见
   [`docs/installer.md`](docs/installer.md)）。安装器和主程序都是**原生窗口**（Windows 自带的
-  Microsoft Edge WebView2），没有控制台、也不开浏览器；浅色/深色可切，一屏放得下。
+  Microsoft Edge WebView2；macOS 用系统 WebKit），没有控制台、也不开浏览器；浅色/深色可切，一屏放得下。
   程序和用户数据都能选在 C 盘以外（“数据文件夹”写进 `app\data-root.txt`）。`desktop/` 负责打出
   `CaiXiHui.exe`，双击启动本地服务并在窗口里显示界面，数据默认在 `%APPDATA%\CaiXiHui`（旁边放个空的
-  `portable.txt` 就变便携版）。构建、体积与依赖自查见 [`desktop/README.md`](desktop/README.md)。
+  `portable.txt` 就变便携版）。macOS 的 `.app`/DMG 由 `desktop/build_macos.py` 在 GitHub 的 macOS runner
+  上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`。
+  构建、体积与依赖自查见 [`desktop/README.md`](desktop/README.md)。
 
 ## 能做什么
 
