@@ -8,10 +8,12 @@
 Microsoft Edge WebView2。界面用的就是应用前端的纸白/墨黑设计语言，浅色为默认，右上角可切换深色；
 内容按一屏排布，不出现滚动条。这样就不需要把 Qt / Tcl-Tk 这类 GUI 工具包打进 exe。
 
-**exe 是窗口程序**（`console=False`），没有控制台，也不经过浏览器。固定端口让页面来源稳定，
-语言/主题（`localStorage`）下次打开仍然有效；关闭窗口即结束进程，正在下载时会拒绝关闭（先点“取消”）。
-Edge WebView2 运行时随 Win10/11 自带；缺少它的机器会被原生对话框按名字拒绝并给出安装地址
-（`%LOCALAPPDATA%\CaiXiHui\installer.log` 记录同一件事）。自动化验收可用 `--no-window` 只起服务。
+**exe 是窗口程序**（`console=False`），且**双击先请求管理员**（manifest 为
+`requireAdministrator`）：UAC 在 onefile 解包之前出现，机器对未提权进程禁止 `%TEMP%` 写入时也能解包。
+主程序本身不带管理员清单。固定端口让页面来源稳定，语言/主题（`localStorage`）下次打开仍然有效；
+关闭窗口即结束进程，正在下载时会拒绝关闭（先点“取消”）。Edge WebView2 运行时随 Win10/11 自带；
+缺少它的机器会被原生对话框按名字拒绝并给出安装地址（`%LOCALAPPDATA%\CaiXiHui\installer.log` 记录
+同一件事）。自动化验收可用 `--no-window` 只起服务，但它同样经过 UAC 清单。
 
 小白默认走**国内直连**：主程序与 CatBus 来自 Gitee，Chrome for Testing / chromedriver / Node.js 来自
 npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载都核对 SHA-256，镜像不可信也不会被当成可信。
@@ -123,7 +125,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,792,260 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+**13,792,188 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
@@ -131,15 +133,18 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 加上 Node（338,226,991 B，逐项相加一致）；页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告
 由应用以 UTF-8 字节输出，安装器按 UTF-8 解码，不再出现乱码。
 
-> **2026-11-09 修掉了 F: 上的这个失败**：.NET Framework 会把 F: 这类盘当“网络位置”，拒绝从
-> `_MEI…` 里 `LoadFrom` pythonnet，报 `Failed to resolve Python.Runtime.Loader.Initialize`，而对话框
-> 又误说成“请安装 WebView2”。现在窗口栈会先复制到 `%LOCALAPPDATA%\CaiXiHui\webview-runtime`，两个
-> 加载器都改从本地路径读；从 `dist`（F:）直接复测时不再出现该错误——本会话的 WebView2 仍在受限沙箱里
-> 报 `E_UNEXPECTED`，那一条只有真实桌面会话能显示页面。对话框也只在错误确实与 WebView2 有关时才提示安装。
+> **2026-11-09 的窗口修复**：onefile 改为默认解到用户 `%TEMP%`（与参考桌面项目
+> `D:\blog\web\public` 相同），不再用 `runtime_tmpdir='.'` 把 .NET 程序集解到 exe 旁边的 F: 盘上，
+> 于是不再出现 `Failed to resolve Python.Runtime.Loader.Initialize` 或纯白窗口。窗口数据目录会依次尝试
+> `%LOCALAPPDATA%\CaiXiHui`、`%APPDATA%`、程序数据目录、`%TEMP%`，不会再报
+> `Storage path … is not writable`。主程序 exe 如果是整个文件夹放在 F: 这类被 .NET 当“网络位置”的盘上，
+> 会明确提示复制到 C: 或 D:；这不是 WebView2 缺失，也不再误弹“请安装 WebView2”。
 >
-> 离线 `CaiXiHui-Setup.exe` 改为 `PrivilegesRequired=admin`：Inno 的 loader 在向导出现前就要往用户
-> `%TEMP%` 解压内层 setup，被策略拒绝时会报 `unable to create the directory "...\is-XXXX.tmp" ...
-> Error 5`；整个 Setup 提权后才能通过。安装路径与 HKCU PATH 仍是 per-user，装完后程序本身不带管理员清单。
+> 离线 `CaiXiHui-Setup.exe`：Inno 的 loader 固定 asInvoker，在 UAC 之前就要往用户 `%TEMP%` 解压内层
+> setup，被策略拒绝时正是“unable to create the directory "...\is-XXXX.tmp" ... Error 5”。构建脚本现在用
+> `desktop/patch_manifest.py` 把外层 exe 的 manifest 改成 `requireAdministrator`，双击**先弹 UAC**，
+> loader 在管理员令牌下解包；`PrivilegesRequired=admin` 只是内层 setup 的声明。安装路径与 HKCU PATH
+> 仍是 per-user，装完后程序本身不带管理员清单。
 
 ## 构建
 

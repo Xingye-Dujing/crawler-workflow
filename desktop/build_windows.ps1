@@ -214,6 +214,11 @@ if ($Installer -or $PackageOnly) {
         # The same version lands in AppVersion, current-version and install.json.
         Invoke-Exe $iscc @("/DMyAppVersion=$Version", $IssScript)
         if (Test-Path $SetupExe) {
+            # Inno's loader is always asInvoker and extracts into %TEMP% before the inner setup can
+            # ask for UAC. On a machine that denies that write, the wizard never appears. Patching
+            # the outer manifest to requireAdministrator makes Windows elevate the double-click
+            # first; it must happen before -Sign, because signing covers the patched bytes.
+            Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'patch_manifest.py'), $SetupExe)
             Write-Host ("Setup:  {0}  ({1:N1} MB)" -f $SetupExe, ((Get-Item $SetupExe).Length / 1MB))
             if ($Sign) {
                 Write-Step "Sign the installer after Inno embeds the signed bytes"

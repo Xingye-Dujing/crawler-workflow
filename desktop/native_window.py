@@ -36,76 +36,57 @@ _HANDLE = 0
 _ALLOW_CLOSE = False
 
 
-def storage_dir(name: str) -> str:
-    """Where WebView2 keeps cookies and localStorage for one of the two windows.
+def _takes_write(path: Path) -> bool:
+    """Whether this process can really create a directory and a file inside it.
 
-    Explicit, not pywebview's default: the data must live under the user's own profile beside the
-    rest of this application's state, and it must be the SAME folder on every launch.
+    ``os.access`` on Windows answers about the token, not the ACL in effect for this process and
+    endpoint protection; a probe file is the only honest test. pywebview refuses a profile folder
+    with its own ``os.access`` check, so the folder must exist and be writable before it is passed.
     """
-    base = os.environ.get('LOCALAPPDATA') or str(Path.home() / 'AppData' / 'Local')
-    return str(Path(base) / 'CaiXiHui' / name)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / '.write-test'
+        probe.write_text('ok', encoding='utf-8')
+        probe.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def storage_dir(name: str) -> str:
+    """A writable folder for WebView2 state, in the first place this process may write.
+
+    ``%LOCALAPPDATA%`` is the normal answer; a locked-down machine may deny creating anything under
+    it (measured: the window died with “Storage path … is not writable”, while the program's own data
+    root was fine). ``%APPDATA%``, the application's ``CRAWLER_DATA_ROOT`` and finally the exe's
+    folder are tried in that order, and the first that takes a probe file wins. The LocalAppData
+    path is returned when nothing works, so the refusal names the intended place rather than a
+    surprising substitute.
+    """
+    local = Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'CaiXiHui' / name
+    candidates = [local]
+    roaming = str(os.environ.get('APPDATA') or '').strip()
+    if roaming:
+        candidates.append(Path(roaming) / 'CaiXiHui' / name)
+    data_root = str(os.environ.get('CRAWLER_DATA_ROOT') or '').strip()
+    if data_root:
+        candidates.append(Path(data_root) / name)
+    temp = str(os.environ.get('TEMP') or os.environ.get('TMP') or '').strip()
+    if temp:
+        # The reference desktop build (D:\blog\web\public) proves a onefile's per-user temp is
+        # writable on this machine even when LocalAppData\CaiXiHui is not; WebView2 only needs a
+        # folder it can create, and the temp fallback keeps the window usable.
+        candidates.append(Path(temp) / 'CaiXiHui' / name)
+    candidates.append(Path(sys.executable).resolve().parent / 'webview-profile')
+    for candidate in candidates:
+        if _takes_write(candidate):
+            return str(candidate)
+    return str(local)
 
 
 def handle() -> int:
     """The window's native HWND, or ``0`` before it is shown (the folder picker's owner)."""
     return _HANDLE
-
-
-def stage_window_stack() -> str:
-    """Copy the .NET assemblies to a local folder and point both loaders at it.
-
-    .NET Framework treats some paths as "remote" (UNC, substituted/network-backed volumes, and
-    measured on this project's F: drive) and refuses ``Assembly.LoadFrom`` there with "Attempt to
-    load an assembly from a network location". The symptom was the installer extracted beside
-    itself on such a drive dying with ``Failed to resolve Python.Runtime.Loader.Initialize``, while
-    the same bytes run fine from C:.
-
-    The stack is about 1.5 MB. Copying it once into ``%LOCALAPPDATA%`` makes every .NET load local,
-    so the program (and the folder the user installs it into) may live on any drive. A storage
-    refusal is not fatal: the original paths still work on a local drive.
-    """
-    try:
-        import json
-        import shutil
-
-        import pythonnet
-        import webview
-        import webview.util
-    except Exception:
-        return ''
-    source_webview = Path(webview.__file__).resolve().parent
-    source_pythonnet = Path(pythonnet.__file__).resolve().parent
-    source_lib = source_webview / 'lib'
-    source_runtime = source_pythonnet / 'runtime'
-    if not source_lib.is_dir() or not source_runtime.is_dir():
-        return ''
-    stamp = {}
-    for name in ('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll'):
-        if (source_lib / name).is_file():
-            stamp[name] = (source_lib / name).stat().st_size
-    if (source_runtime / 'Python.Runtime.dll').is_file():
-        stamp['Python.Runtime.dll'] = (source_runtime / 'Python.Runtime.dll').stat().st_size
-    target = Path(storage_dir('webview-runtime'))
-    marker = target / 'stamp.json'
-    try:
-        current = json.loads(marker.read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        current = None
-    try:
-        if current != stamp:
-            with contextlib.suppress(OSError):
-                shutil.rmtree(target)
-            (target / 'webview').mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source_lib, target / 'webview' / 'lib', dirs_exist_ok=True)
-            shutil.copytree(source_runtime, target / 'pythonnet' / 'runtime', dirs_exist_ok=True)
-            marker.write_text(json.dumps(stamp), encoding='utf-8')
-    except OSError:
-        return ''
-    # These two module attributes are what the loaders read their assembly paths from; the code
-    # itself is already imported from the bundle.
-    webview.util.__file__ = str(target / 'webview' / 'util.py')
-    pythonnet.__file__ = str(target / 'pythonnet' / '__init__.py')
-    return str(target)
 
 
 def available() -> bool:
@@ -115,6 +96,36 @@ def available() -> bool:
     with contextlib.suppress(ValueError, ImportError):
         return importlib.util.find_spec('webview') is not None
     return False
+
+
+def ensure_streams() -> None:
+    """Give a windowed build real ``stdout``/``stderr`` when anything is listening.
+
+    PyInstaller's windowed bootloader leaves ``sys.stdout`` as ``None``, so ``print`` raises. Two
+    cases must still write: the installer captures ``--doctor`` through a pipe, and ``CaiXiHui
+    --doctor`` run from a terminal should answer there (the exe attaches to the parent console).
+    A plain double-click has no listener and gets ``os.devnull``.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    # These streams outlive the function on purpose (they become ``sys.stdout``), which is why
+    # they are not opened in a ``with``. The fd is inherited from a pipe, or from the terminal
+    # this GUI exe attached itself to; a plain double-click gets os.devnull.
+    stream = None
+    with contextlib.suppress(OSError, ValueError):
+        stream = io.TextIOWrapper(io.FileIO(1, 'w', closefd=False), encoding='utf-8', errors='replace')
+    if stream is None and os.name == 'nt':
+        with contextlib.suppress(AttributeError, OSError):
+            import ctypes
+
+            ctypes.windll.kernel32.AttachConsole(-1)  # ATTACH_PARENT_PROCESS
+            stream = io.TextIOWrapper(io.FileIO('CONOUT$', 'w'), encoding='utf-8', errors='replace')
+    if stream is None:
+        stream = io.TextIOWrapper(io.FileIO(os.devnull, 'w'), encoding='utf-8', errors='replace')
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
 
 
 def close() -> None:
@@ -148,12 +159,18 @@ def run(
     WebView2 runtime is missing, the host refused to start). The caller decides how loud that is.
     """
     global _WINDOW, _HANDLE, _ALLOW_CLOSE
-    # Must run before the first .NET import: it points both loaders at a local copy of the stack.
-    stage_window_stack()
+    # The proven reference build (D:\blog\web\public) lets the onefile extract its .NET stack into
+    # the user temp dir and does not repoint the loader; copying the assemblies elsewhere made
+    # WebView2 fail to initialise (E_UNEXPECTED) even with a complete DLL set.
+    if storage:
+        os.environ.setdefault('WEBVIEW2_USER_DATA_FOLDER', storage)
     try:
         import webview
     except Exception as exc:
         return f'无法加载 WebView2 窗口组件：{exc}'
+    # Same two grants as the reference launcher: the application exports files and opens docs.
+    webview.settings['ALLOW_DOWNLOADS'] = True
+    webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = True
 
     window = webview.create_window(
         title,
@@ -234,8 +251,16 @@ def complain(reason: str, title: str = '采析绘') -> None:
     along. A diagnosis that guesses is worse than the raw reason.
     """
     lowered = reason.lower()
+    remote = 'python.runtime' in lowered or 'network location' in lowered
     missing_runtime = 'webview2' in lowered or '运行时' in reason
-    if missing_runtime:
+    if remote:
+        drive = Path(sys.executable).drive or '?'
+        text = (
+            f'{reason}\n\n'
+            f'Windows 把程序所在的盘（{drive}）当作“网络位置”，.NET 拒绝从那里加载窗口组件；\n'
+            'WebView2 本身没有问题。请把整个程序文件夹复制到本机 C: 或 D: 磁盘后再运行。'
+        )
+    elif missing_runtime:
         text = (
             f'{reason}\n\n'
             '这个程序用 Windows 自带的 Microsoft Edge WebView2 显示界面。\n'
@@ -291,33 +316,3 @@ def activate(pid: int) -> bool:
         return True
     except (AttributeError, OSError, TypeError, ValueError):
         return False
-
-
-def ensure_streams() -> None:
-    """Give a windowed build real ``stdout``/``stderr`` when anything is listening.
-
-    PyInstaller's windowed bootloader leaves ``sys.stdout`` as ``None``, so ``print`` raises. Two
-    cases must still write: the installer captures ``--doctor`` through a pipe, and ``CaiXiHui
-    --doctor`` run from a terminal should answer there (the exe attaches to the parent console).
-    A plain double-click has no listener and gets ``os.devnull``.
-    """
-    if sys.stdout is not None and sys.stderr is not None:
-        return
-    # These streams outlive the function on purpose (they become ``sys.stdout``), which is why
-    # they are not opened in a ``with``. The fd is inherited from a pipe, or from the terminal
-    # this GUI exe attached itself to; a plain double-click gets os.devnull.
-    stream = None
-    with contextlib.suppress(OSError, ValueError):
-        stream = io.TextIOWrapper(io.FileIO(1, 'w', closefd=False), encoding='utf-8', errors='replace')
-    if stream is None and os.name == 'nt':
-        with contextlib.suppress(AttributeError, OSError):
-            import ctypes
-
-            ctypes.windll.kernel32.AttachConsole(-1)  # ATTACH_PARENT_PROCESS
-            stream = io.TextIOWrapper(io.FileIO('CONOUT$', 'w'), encoding='utf-8', errors='replace')
-    if stream is None:
-        stream = io.TextIOWrapper(io.FileIO(os.devnull, 'w'), encoding='utf-8', errors='replace')
-    if sys.stdout is None:
-        sys.stdout = stream
-    if sys.stderr is None:
-        sys.stderr = stream

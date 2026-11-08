@@ -1128,6 +1128,21 @@ def test_the_launcher_starts_the_clock_the_serving_process_needs():
     assert source.index('start_background_services()') < source.index('server.serve_forever')
 
 
+def test_the_setup_manifest_requests_admin_before_the_loader():
+    """Inno's loader is asInvoker and extracts into %TEMP% before the inner setup can elevate.
+
+    On a locked-down machine that is the “unable to create the directory …is-XXXX.tmp, Error 5”
+    dialog. The build patches the outer manifest to requireAdministrator, which makes Windows show
+    UAC at the double-click, before any extraction; it has to happen before signing.
+    """
+    script = (PACKAGING / 'build_windows.ps1').read_text(encoding='utf-8')
+    assert 'patch_manifest.py' in script
+    assert script.index('patch_manifest.py') < script.index('Sign the installer')
+    patcher = (PACKAGING / 'patch_manifest.py').read_text(encoding='utf-8')
+    assert 'requireAdministrator' in patcher
+    assert 'get_offset_from_rva' in patcher, 'the resource RVA must be converted before writing'
+
+
 def test_the_doctor_sees_the_components_that_were_just_installed():
     """A successful online install reported “CatBus 找不到适配器” because ``--doctor`` returned
     before the manifest's paths were exported. The report the installer shows must describe the

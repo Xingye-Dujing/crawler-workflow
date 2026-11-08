@@ -114,14 +114,20 @@ exe = EXE(
     strip=False,
     upx=False,
     upx_exclude=[],
-    # A onefile normally unpacks into %TEMP%. On a machine where endpoint protection denies that
-    # folder (measured on this build box: a trivial onefile died with “Could not create temporary
-    # directory”), the installer would fail before its first window. Unpacking beside the exe —
-    # which a double-click makes the current directory — uses the folder the user downloaded to;
-    # PyInstaller removes it again on exit.
-    runtime_tmpdir='.',
+    # Default onefile behaviour: unpack into the user's %TEMP%. This is the reference desktop
+    # build's shape (D:\blog\web\public: onefile + --windowed) and it is what keeps the .NET
+    # assemblies LOCAL: an earlier runtime_tmpdir='.' unpacked beside an exe on F:, and .NET then
+    # refused `LoadFrom` with “assembly from a network location”. PyInstaller removes the folder
+    # on exit. The window host still stages the assemblies to a writable local folder first; that
+    # is a second line of defence for onedir installs on network drives.
     # A desktop program: the page lives in a WebView2 window created by this process. A failure
     # before that window exists is reported by a native message box and installer.log.
     console=False,
+    # Request admin at the double-click, before the onefile bootloader extracts into %TEMP%.
+    # This is the same promise the offline Setup now keeps (its outer manifest is patched to
+    # requireAdministrator too): UAC first, then the loader, then the page. It also lets the
+    # extraction succeed on a machine whose policy denies unsigned non-elevated processes a
+    # %TEMP% write (the "cannot create temporary directory" dialog).
+    uac_admin=True,
     icon=str(ICON) if ICON.exists() else None,
 )

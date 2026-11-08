@@ -49,17 +49,21 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + WebView2 宿主 + 组件核心，约 14 MB。页面文件是
 `installer_page.html` / `installer_page.js`，测试只读它们和纯函数，不需要真的开窗口。
 
-**exe 是窗口程序**（`console=False`）：没有控制台，也没有“交给浏览器”这一步。固定端口让页面来源
-保持稳定，语言/主题（`localStorage`）下次打开仍然有效；窗口关闭即结束进程，下载中会拒绝关闭
-（先点“取消”）。装了 Edge 的 Windows（Win10/11 自带 WebView2 运行时）可以直接运行；缺运行时的机器会
-被一个原生对话框按名字拒绝，并给出安装地址。诊断日志在 `%LOCALAPPDATA%\CaiXiHui\installer.log`。
-自动化验收可用 `--no-window`（或 `CIXI_NO_WINDOW=1`）只起服务、不开窗口。
+**exe 是窗口程序**（`console=False`），且**双击先请求管理员**（spec 的 `uac_admin=True`，manifest
+为 `requireAdministrator`）：UAC 在 onefile 解包之前出现，机器对未提权进程禁止 `%TEMP%` 写入时也能
+解包。主程序本身不带管理员清单。固定端口让页面来源保持稳定，语言/主题（`localStorage`）下次打开仍然
+有效；窗口关闭即结束进程，下载中会拒绝关闭（先点“取消”）。装了 Edge 的 Windows（Win10/11 自带 WebView2
+运行时）可以直接运行；缺运行时的机器会被一个原生对话框按名字拒绝，并给出安装地址。诊断日志在
+`%LOCALAPPDATA%\CaiXiHui\installer.log`。自动化验收可用 `--no-window`（或 `CIXI_NO_WINDOW=1`）只起
+服务、不开窗口（该模式不经过 UAC 清单之外的窗口逻辑，仍会先请求管理员）。
 
-**窗口栈会先复制到本地**（`%LOCALAPPDATA%\CaiXiHui\webview-runtime`）：.NET Framework 把某些盘/路径
-（UNC、映射盘、替代盘，以及本项目的 F:）当成“网络位置”，拒绝 `Assembly.LoadFrom`，症状是
-`Failed to resolve Python.Runtime.Loader.Initialize`——即使 WebView2 已经装好。复制约 1.5 MB 的
-pythonnet/pywebview 程序集到本地后，安装器和主程序都可以放在任意盘运行；这段失败也不再被误报成
-“请安装 WebView2”。
+**onefile 默认解到用户 `%TEMP%`**，与参考桌面项目 `D:\blog\web\public` 的打包方式一致：不在 exe
+旁边解包，所以 .NET 从不从“网络位置”盘 `LoadFrom`，窗口不会再白屏或报
+`Failed to resolve Python.Runtime.Loader.Initialize`。早期用 `runtime_tmpdir='.'` 把 onefile 解在
+exe 旁边，正是白窗口/CLR 失败的根因。窗口数据目录由 `storage_dir()` 选择：优先
+`%LOCALAPPDATA%\CaiXiHui`，被策略拒绝时依次退到 `%APPDATA%`、程序数据目录、`%TEMP%`，不会再弹
+“Storage path … is not writable”。主程序 exe 如果是**整个文件夹**放在 F: 这类被 .NET 当“网络位置”的
+盘上运行，会收到明确提示：把文件夹复制到 C: 或 D: 再运行（这是机器策略，不是缺 WebView2）。
 
 onefile 的临时目录用 `runtime_tmpdir='.'`（解在 exe 旁边并由 PyInstaller 删除），因为这台机器的
 `%TEMP%` 会被安全策略拒写；默认 `%TEMP%` 下连一个最小的 onefile 都起不来（实测
@@ -170,10 +174,13 @@ hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段
 ### 安装器这次改了什么
 
 `installer.iss` 现在请求管理员（`PrivilegesRequired=admin`），安装路径仍是 per-user：
-`{localappdata}\Programs\CaiXiHui`、HKCU PATH 不变，装完的程序本身也不带管理员清单。改成 admin 是因为
-Inno 的 **loader 在向导出现前**就要往用户 `%TEMP%` 解出内层 setup；某台机器对未签名的非提权进程拒绝该写入，
-报 `unable to create the directory "...\is-XXXX.tmp" ... Error 5`，根本没走到安装向导。其余保持
-`CloseApplications=yes`、UTF-8 BOM 头（Inno 读无 BOM 的 `.iss` 用 ANSI，向导文案是中文）与平铺的 exe 布局，新增：
+`{localappdata}\Programs\CaiXiHui`、HKCU PATH 不变，装完的程序本身也不带管理员清单。但只设
+`PrivilegesRequired` 不够：Inno 的 **loader 固定是 asInvoker**，在向导出现前就要往用户 `%TEMP%`
+解出内层 setup；某台机器对未签名的非提权进程拒绝该写入，报
+`unable to create the directory "...\is-XXXX.tmp" ... Error 5`。所以构建脚本会在 ISCC 之后、签名之前用
+`desktop/patch_manifest.py` 把**外层 exe 的 manifest** 改成 `requireAdministrator`：双击即弹 UAC，
+loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、UTF-8 BOM 头（Inno 读无 BOM 的
+`.iss` 用 ANSI，向导文案是中文）与平铺的 exe 布局，新增：
 
 - **精确停进程**：`PrepareToInstall` 与卸载时调用 `StopManagedApp()`，按 `$_.Path` 前缀过滤
   `{app}\`，只停这份安装里的 `CaiXiHui.exe`。不用 `taskkill /IM`，便携盘上的另一份不会被杀；
