@@ -41,7 +41,15 @@ def _state(installer):
     return installer.InstallerState(installer.Catalog(installer.load_catalog()), 'C:/app', 'D:/data', False)
 
 
-def test_the_default_preset_ticks_exactly_the_catalogue_defaults(installer):
+def _windows_assets(monkeypatch):
+    """The bootstrap installer ships Windows assets; ask for them on every test runner."""
+    from services.components import catalog as catalog_module
+
+    monkeypatch.setattr(catalog_module, 'platform_name', lambda system=None: 'win32')
+
+
+def test_the_default_preset_ticks_exactly_the_catalogue_defaults(installer, monkeypatch):
+    _windows_assets(monkeypatch)
     state = _state(installer)
     body = state.snapshot()
     expected = {item.id for item in state.catalog.components.values() if item.default and item.asset()}
@@ -49,7 +57,8 @@ def test_the_default_preset_ticks_exactly_the_catalogue_defaults(installer):
     assert body['total'] > 0
 
 
-def test_switching_to_application_only_untickes_everything_else(installer):
+def test_switching_to_application_only_untickes_everything_else(installer, monkeypatch):
+    _windows_assets(monkeypatch)
     state = _state(installer)
     assert state.set_preset('app') is True
     body = state.snapshot()
@@ -62,7 +71,8 @@ def test_an_unknown_preset_is_refused_rather_than_guessed(installer):
     assert state.preset == 'one'
 
 
-def test_the_effective_download_adds_a_requirement_the_user_did_not_tick(installer):
+def test_the_effective_download_adds_a_requirement_the_user_did_not_tick(installer, monkeypatch):
+    _windows_assets(monkeypatch)
     state = _state(installer)
     state.set_selection(['catbus'])
     effective = state.effective()

@@ -783,7 +783,7 @@ class HongguoCommentHarness:
         player = find_player()
         if not player:
             raise ValueError(t('crawl.hg.cmt.noPlayer', path=str(get_setting('hongguo_player_path') or '')))
-        if ctypes.windll.user32.FindWindowW(PLAYER_CLASS, None):
+        if machine.is_windows() and ctypes.windll.user32.FindWindowW(PLAYER_CLASS, None):
             # A player the USER launched carries no proxy env; it can never feed this
             # harvest, and killing a window the user opened is not this tool's right.
             raise ValueError(t('crawl.hg.cmt.playerBusy'))

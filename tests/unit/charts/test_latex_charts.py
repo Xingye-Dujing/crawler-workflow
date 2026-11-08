@@ -211,7 +211,9 @@ class TestFigure:
         assert '\\begin{document}' in out and out.rstrip().endswith('\\end{document}')
         # every figure is a pgfplots axis, a tikzpicture, or (word cloud) a minipage box — never bare prose
         assert '\\begin{axis}' in out or '\\begin{tikzpicture}' in out or '\\begin{minipage}' in out
-        assert '\\usepackage{ctex}' in out and '\\usepackage{pgfplots}' in out
+        # Off Windows ctex carries its own font set (`\usepackage[fontset=fandol]{ctex}`), so
+        # the bare spelling is a Windows fact, not the contract.
+        assert ('\\usepackage{ctex}' in out or '\\usepackage[fontset=' in out) and '\\usepackage{pgfplots}' in out
 
     def test_labels_and_numbers_survive_into_the_source(self):
         out = L.to_latex_document(_cat(), 'bar', x='g', y='v')

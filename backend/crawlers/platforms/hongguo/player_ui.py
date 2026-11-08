@@ -19,6 +19,7 @@ import contextlib
 import ctypes
 import logging
 import re
+import sys
 import time
 
 from crawlers.core.faults import CrawlerStopped
@@ -96,6 +97,11 @@ class PlayerUI:
 
     def window(self):
         """The player's top-level window control, or ``None``."""
+        if sys.platform != 'win32':
+            # A Windows-only capability. The harvest gate refuses this node by name before it
+            # reaches here; keeping the probe itself safe makes the module importable and
+            # testable on the other systems instead of dying on a missing ``ctypes.windll``.
+            return None
         if not ctypes.windll.user32.FindWindowW(PLAYER_CLASS, None):
             return None
         auto = self._ensure_library()
@@ -117,6 +123,8 @@ class PlayerUI:
         ``SetForegroundWindow`` do. Best-effort: Windows may refuse a background process's
         SetForegroundWindow (focus-stealing prevention); the guarded coordinate click then still
         foregrounds it — which is exactly why the user's manual click made it start scrolling."""
+        if sys.platform != 'win32':
+            return
         hwnd = ctypes.windll.user32.FindWindowW(PLAYER_CLASS, None)
         if not hwnd:
             return

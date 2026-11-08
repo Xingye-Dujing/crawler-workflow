@@ -58,7 +58,15 @@ def test_the_environment_reports_both_the_running_and_the_stored_source(client, 
     assert body['component_source_preference'] == 'system'
 
 
-def test_the_catalogue_lists_the_domestic_defaults(client):
+def _windows_assets(monkeypatch):
+    """The installer's catalogue is Windows-only; ask it for that OS on every test runner."""
+    from services.components import catalog as catalog_module
+
+    monkeypatch.setattr(catalog_module, 'platform_name', lambda system=None: 'win32')
+
+
+def test_the_catalogue_lists_the_domestic_defaults(client, monkeypatch):
+    _windows_assets(monkeypatch)
     body = client.get('/api/components').get_json()
     assert body['ok'] is True
     rows = {row['id']: row for row in body['components']}
@@ -129,6 +137,7 @@ def test_the_panel_reads_the_manifest_from_the_install_root(client, monkeypatch,
 
 
 def test_install_starts_a_job_and_the_job_can_be_polled(client, monkeypatch):
+    _windows_assets(monkeypatch)
     monkeypatch.setattr(
         components_api.jobs,
         'start',

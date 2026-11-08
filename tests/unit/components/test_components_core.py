@@ -58,11 +58,13 @@ def _asset(path: Path, sha: str, size: int, **changes) -> Asset:
 class TestCatalog:
     def test_the_bundled_catalogue_is_valid_and_defaults_to_the_domestic_route(self):
         catalog = Catalog(load_catalog())
-        defaults = catalog.defaults()
+        # The installer is a Windows desktop component; asking for the host asset on Linux would
+        # find none (the catalogue has win32 entries only), not a broken catalogue.
+        defaults = catalog.defaults('win32')
         assert {'app', 'chrome', 'chromedriver', 'node', 'catbus'} <= set(defaults)
-        chrome = catalog.get('chrome').asset()
+        chrome = catalog.get('chrome').asset('win32')
         assert chrome is not None and 'npmmirror.com' in chrome.urls[0], 'the novice default must not need a VPN'
-        catbus = catalog.get('catbus').asset()
+        catbus = catalog.get('catbus').asset('win32')
         assert catbus is not None and catbus.parts and 'gitee.com' in catbus.parts[0].url
 
     def test_a_schema_this_installer_does_not_know_is_refused(self):

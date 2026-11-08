@@ -1224,7 +1224,9 @@ class TestPortableComponentsPointTheLookups:
 
         root = tmp_path / 'install'
         components = root / 'components'
-        node = components / 'node' / '24.0' / 'node.exe'
+        # ``apply_component_env`` asks for this OS's executable name: node.exe on Windows and
+        # node elsewhere. The installed file must match the name the lookup will ask for.
+        node = components / 'node' / '24.0' / ('node.exe' if os.name == 'nt' else 'node')
         node.parent.mkdir(parents=True)
         node.write_bytes(b'')
         manifest = Manifest(root)

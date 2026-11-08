@@ -45,11 +45,13 @@ class TestTheMachineProbes:
     def test_candidates_are_read_from_the_environment_and_must_exist(self, tmp_path):
         chrome = tmp_path / 'chrome.exe'
         env = {'PROGRAMFILES': str(tmp_path), 'CHROME_PATH': str(chrome), 'CHROME_BIN': ''}
-        assert machine.chrome_candidates(env) == [], 'no candidate exists on disk yet'
+        # A runner image may already carry Chrome in the OS's own install paths; this case is
+        # about the environment override, so the host's real browser is not a candidate for it.
+        assert str(chrome) not in machine.chrome_candidates(env), 'no candidate exists on disk yet'
         chrome.write_bytes(b'MZ')
         os.chmod(chrome, 0o755)
         found = machine.chrome_candidates(env)
-        assert found == [str(chrome)], 'the env override answers, the install root does not exist here'
+        assert found[0] == str(chrome), 'the env override answers before any install root'
 
     def test_a_configured_ollama_address_decides_the_port(self):
         # The launcher used to probe 127.0.0.1:11434 whatever the user had set, so a daemon on

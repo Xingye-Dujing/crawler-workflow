@@ -646,10 +646,14 @@ class TestValidateUsesLabels:
         errors = WorkflowEngine(_wf([node], [])).validate()
         assert any('2 link(s) do not match the selected platform (Zhihu)' in e for e in errors)
 
-    def test_a_platform_that_takes_names_accepts_a_line_that_is_not_a_link(self, en):
+    def test_a_platform_that_takes_names_accepts_a_line_that_is_not_a_link(self, en, monkeypatch):
         # 红果's comment crawl runs inside the desktop client, whose boards answer to a
         # title. The rule that refuses a foreign domain must not read a 剧名 as a broken
         # link — while a line that IS a link still has to belong to the chosen platform.
+        # This case is about the URL/name grammar, not the host's Windows-desktop gate.
+        import capabilities.registry as capabilities
+
+        monkeypatch.setattr(capabilities, 'mode_blocker', lambda *_args, **_kwargs: '')
         # The corpus is the SAME four lines the browser's validator is driven with in
         # test_frontend_js.py, so the panel, this validation and the executor's router are
         # asked one question with one spelling of it (capabilities.registry.is_url_cell).

@@ -499,8 +499,10 @@ class TestOneBrowserPerProfile:
         a = str(tmp_path / 'bilibili')
         assert profiles.lock_for(a) is profiles.lock_for(a)
         assert profiles.lock_for(a) is not profiles.lock_for(str(tmp_path / 'zhihu'))
-        # Windows paths differ by case and separator while naming one directory.
-        assert profiles.lock_for(a) is profiles.lock_for(a.replace('/', '\\').upper().lower())
+        # Case and separator folding is a Windows path fact. Off Windows a backslash is an
+        # ordinary filename character, so that spelling names a different path by design.
+        if os.name == 'nt':
+            assert profiles.lock_for(a) is profiles.lock_for(a.replace('/', '\\').upper().lower())
 
     def test_a_second_thread_waits_for_the_first_to_finish(self, tmp_path):
         path = str(tmp_path / 'weibo')

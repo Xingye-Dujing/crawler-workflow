@@ -127,7 +127,8 @@ class TestThePaperDocument:
         pdf = export / body['name']
         document = (export / body['tex']).read_text(encoding='utf-8')
         assert pdf.exists() and pdf.read_bytes().startswith(b'%PDF'), 'the compiled PDF is the deliverable'
-        assert '\\documentclass[12pt]{article}' in document and '\\usepackage{ctex}' in document
+        assert '\\documentclass[12pt]{article}' in document
+        assert '\\usepackage{ctex}' in document or '\\usepackage[fontset=' in document
         # Every item is an ``[H]`` float: a plain figure/table lets TeX move the item past the section
         # the reader is in, and that is how the first compile produced a page of nothing but the heading.
         assert '\\usepackage{float}' in document
