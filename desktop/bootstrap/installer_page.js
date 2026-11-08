@@ -166,9 +166,11 @@
         var status = job.status_key ? t(job.status_key, job.status_params || {}) : '';
         byId('status').textContent = status || (job.error ? t('failed', { err: job.error }) : '');
         var log = byId('log');
-        // No scrollbar anywhere on this page: the log keeps its newest lines and clips the rest.
-        var lines = (job.log || []).slice(-4);
+        // Every server line is shown, including the last two components (Node/CatBus). The pane
+        // owns the remaining height and scrolls internally only if the lines exceed one screen.
+        var lines = job.log || [];
         log.textContent = lines.join('\n');
+        log.scrollTop = log.scrollHeight;
         byId('install').disabled = job.state === 'running';
         byId('cancel').disabled = job.state !== 'running';
         if (job.state === 'done') requestDoctor();

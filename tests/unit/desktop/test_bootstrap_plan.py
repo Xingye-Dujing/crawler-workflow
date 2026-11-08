@@ -154,6 +154,21 @@ def test_the_installer_keeps_one_one_click_preset_and_no_duplicate(theme):
     assert 'renderComponents' in page
 
 
+def test_the_install_log_shows_every_line_not_just_three(theme):
+    """Node and CatBus are the last components, so a ``slice(-4)`` plus a 54 px clip cut them off.
+
+    The run pane now owns the leftover height and scrolls internally only when the lines exceed
+    one screen; every server line is rendered.
+    """
+    page = (ROOT / 'desktop' / 'bootstrap' / 'installer_page.html').read_text(encoding='utf-8')
+    js = (ROOT / 'desktop' / 'bootstrap' / 'installer_page.js').read_text(encoding='utf-8')
+    css = theme.stylesheet()
+    assert 'section class="run"' in page
+    assert 'slice(-4)' not in js
+    assert 'log.scrollTop = log.scrollHeight' in js
+    assert 'section.run .log' in css and 'overflow-y: auto' in css
+
+
 def test_the_installer_ships_no_gui_toolkit():
     """The window is the OS WebView2 host: bundling Qt or Tcl/Tk would multiply the download for
     a page. ``console=False`` is part of the same promise — a console is not a window."""

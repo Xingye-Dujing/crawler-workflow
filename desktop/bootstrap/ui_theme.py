@@ -289,6 +289,11 @@ input[type="checkbox"]:disabled {{ border-color: var(--line2); background-color:
 .progress > span {{ display: block; height: 100%; width: 0; background: var(--text); transition: width .25s; }}
 .status {{ color: var(--dim); font-size: 11px; min-height: 16px; }}
 .status:empty {{ min-height: 0; }}
+/* The run pane owns the leftover height: every server log line is rendered (the old four-line
+   slice plus a 54 px clip cut off Node/CatBus), and the pane scrolls internally only when the
+   lines genuinely exceed one screen. The page itself stays one screen, no page scrollbar. */
+section.run {{ flex: 1; min-height: 0; display: flex; flex-direction: column; border-bottom: none; }}
+section.run .log {{ flex: 1; min-height: 0; max-height: none; overflow-y: auto; }}
 .log {{
   margin-top: 5px; max-height: 54px; overflow: hidden; background: var(--paper);
   border: 1px solid var(--line2); padding: 5px 8px; color: var(--dim);
