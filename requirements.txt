@@ -66,3 +66,7 @@ tzdata==2026.2
 # build pins the same versions in desktop/requirements-runtime.txt.
 pywebview==6.2.1; sys_platform == "win32"
 pythonnet==3.0.5; sys_platform == "win32"
+# desktop/patch_manifest.py rewrites the Inno Setup outer manifest to requireAdministrator; the
+# product pylint tier imports every desktop tool, so this small pure-Python PE reader belongs in a
+# clean dev environment too (the build venv already carries it through PyInstaller).
+pefile==2024.8.26
