@@ -33,7 +33,13 @@ VersionInfoDescription=采析绘 工作流采集与分析
 DefaultDirName={localappdata}\Programs\CaiXiHui
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+; Request admin for the WHOLE Setup, loader included. Inno's loader extracts itself into the
+; user's TEMP before the inner setup starts, so a machine whose policy denies %TEMP% writes to
+; unsigned non-elevated processes failed with "unable to create the directory ... Error 5" and
+; never reached the wizard. Elevating the manifest makes the loader run with the admin token,
+; which is the one token that policy allows. Per-user paths ({localappdata}, HKCU PATH) stay
+; per-user: UAC keeps the same account, and the app itself still runs without elevation.
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist

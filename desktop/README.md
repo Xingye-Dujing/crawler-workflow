@@ -55,6 +55,12 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 被一个原生对话框按名字拒绝，并给出安装地址。诊断日志在 `%LOCALAPPDATA%\CaiXiHui\installer.log`。
 自动化验收可用 `--no-window`（或 `CIXI_NO_WINDOW=1`）只起服务、不开窗口。
 
+**窗口栈会先复制到本地**（`%LOCALAPPDATA%\CaiXiHui\webview-runtime`）：.NET Framework 把某些盘/路径
+（UNC、映射盘、替代盘，以及本项目的 F:）当成“网络位置”，拒绝 `Assembly.LoadFrom`，症状是
+`Failed to resolve Python.Runtime.Loader.Initialize`——即使 WebView2 已经装好。复制约 1.5 MB 的
+pythonnet/pywebview 程序集到本地后，安装器和主程序都可以放在任意盘运行；这段失败也不再被误报成
+“请安装 WebView2”。
+
 onefile 的临时目录用 `runtime_tmpdir='.'`（解在 exe 旁边并由 PyInstaller 删除），因为这台机器的
 `%TEMP%` 会被安全策略拒写；默认 `%TEMP%` 下连一个最小的 onefile 都起不来（实测
 `Could not create temporary directory`）。
@@ -163,8 +169,11 @@ hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段
 
 ### 安装器这次改了什么
 
-`installer.iss` 保持 per-user（`PrivilegesRequired=lowest`）、`CloseApplications=yes`、UTF-8 BOM 头
-（Inno 读无 BOM 的 `.iss` 用 ANSI，向导文案是中文）与平铺的 exe 布局，新增：
+`installer.iss` 现在请求管理员（`PrivilegesRequired=admin`），安装路径仍是 per-user：
+`{localappdata}\Programs\CaiXiHui`、HKCU PATH 不变，装完的程序本身也不带管理员清单。改成 admin 是因为
+Inno 的 **loader 在向导出现前**就要往用户 `%TEMP%` 解出内层 setup；某台机器对未签名的非提权进程拒绝该写入，
+报 `unable to create the directory "...\is-XXXX.tmp" ... Error 5`，根本没走到安装向导。其余保持
+`CloseApplications=yes`、UTF-8 BOM 头（Inno 读无 BOM 的 `.iss` 用 ANSI，向导文案是中文）与平铺的 exe 布局，新增：
 
 - **精确停进程**：`PrepareToInstall` 与卸载时调用 `StopManagedApp()`，按 `$_.Path` 前缀过滤
   `{app}\`，只停这份安装里的 `CaiXiHui.exe`。不用 `taskkill /IM`，便携盘上的另一份不会被杀；

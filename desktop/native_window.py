@@ -51,6 +51,63 @@ def handle() -> int:
     return _HANDLE
 
 
+def stage_window_stack() -> str:
+    """Copy the .NET assemblies to a local folder and point both loaders at it.
+
+    .NET Framework treats some paths as "remote" (UNC, substituted/network-backed volumes, and
+    measured on this project's F: drive) and refuses ``Assembly.LoadFrom`` there with "Attempt to
+    load an assembly from a network location". The symptom was the installer extracted beside
+    itself on such a drive dying with ``Failed to resolve Python.Runtime.Loader.Initialize``, while
+    the same bytes run fine from C:.
+
+    The stack is about 1.5 MB. Copying it once into ``%LOCALAPPDATA%`` makes every .NET load local,
+    so the program (and the folder the user installs it into) may live on any drive. A storage
+    refusal is not fatal: the original paths still work on a local drive.
+    """
+    try:
+        import json
+        import shutil
+
+        import pythonnet
+        import webview
+        import webview.util
+    except Exception:
+        return ''
+    source_webview = Path(webview.__file__).resolve().parent
+    source_pythonnet = Path(pythonnet.__file__).resolve().parent
+    source_lib = source_webview / 'lib'
+    source_runtime = source_pythonnet / 'runtime'
+    if not source_lib.is_dir() or not source_runtime.is_dir():
+        return ''
+    stamp = {}
+    for name in ('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll'):
+        if (source_lib / name).is_file():
+            stamp[name] = (source_lib / name).stat().st_size
+    if (source_runtime / 'Python.Runtime.dll').is_file():
+        stamp['Python.Runtime.dll'] = (source_runtime / 'Python.Runtime.dll').stat().st_size
+    target = Path(storage_dir('webview-runtime'))
+    marker = target / 'stamp.json'
+    try:
+        current = json.loads(marker.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        current = None
+    try:
+        if current != stamp:
+            with contextlib.suppress(OSError):
+                shutil.rmtree(target)
+            (target / 'webview').mkdir(parents=True, exist_ok=True)
+            shutil.copytree(source_lib, target / 'webview' / 'lib', dirs_exist_ok=True)
+            shutil.copytree(source_runtime, target / 'pythonnet' / 'runtime', dirs_exist_ok=True)
+            marker.write_text(json.dumps(stamp), encoding='utf-8')
+    except OSError:
+        return ''
+    # These two module attributes are what the loaders read their assembly paths from; the code
+    # itself is already imported from the bundle.
+    webview.util.__file__ = str(target / 'webview' / 'util.py')
+    pythonnet.__file__ = str(target / 'pythonnet' / '__init__.py')
+    return str(target)
+
+
 def available() -> bool:
     """Whether the WebView2 host can be imported at all (a missing runtime refuses later)."""
     import importlib.util
@@ -91,6 +148,8 @@ def run(
     WebView2 runtime is missing, the host refused to start). The caller decides how loud that is.
     """
     global _WINDOW, _HANDLE, _ALLOW_CLOSE
+    # Must run before the first .NET import: it points both loaders at a local copy of the stack.
+    stage_window_stack()
     try:
         import webview
     except Exception as exc:
@@ -168,16 +227,27 @@ def alert(message: str, title: str = '') -> None:
 
 
 def complain(reason: str, title: str = '采析绘') -> None:
-    """Name a missing/refused WebView2 runtime and open the page that installs it."""
-    text = (
-        f'{reason}\n\n'
-        '这个程序用 Windows 自带的 Microsoft Edge WebView2 显示界面。\n'
-        '请先安装 WebView2 运行时，再重新打开：\n'
-        f'{WEBVIEW2_URL}'
-    )
+    """Report a failed window, naming WebView2 only when that is the actual cause.
+
+    The old text always told the user to install WebView2, so a Python.Runtime load failure on a
+    drive .NET treats as remote read as "your WebView2 is missing" while it was installed all
+    along. A diagnosis that guesses is worse than the raw reason.
+    """
+    lowered = reason.lower()
+    missing_runtime = 'webview2' in lowered or '运行时' in reason
+    if missing_runtime:
+        text = (
+            f'{reason}\n\n'
+            '这个程序用 Windows 自带的 Microsoft Edge WebView2 显示界面。\n'
+            '请先安装 WebView2 运行时，再重新打开：\n'
+            f'{WEBVIEW2_URL}'
+        )
+    else:
+        text = f'{reason}\n\n窗口没能打开。请把这段提示和日志文件一起发给维护者。'
     alert(text, title)
-    with contextlib.suppress(OSError):
-        os.startfile(WEBVIEW2_URL)
+    if missing_runtime:
+        with contextlib.suppress(OSError):
+            os.startfile(WEBVIEW2_URL)
 
 
 def activate(pid: int) -> bool:

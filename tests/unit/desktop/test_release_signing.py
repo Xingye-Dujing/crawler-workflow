@@ -213,7 +213,10 @@ class TestTheChainIsInTheRightOrder:
         assert (DESKTOP / 'installer.iss').read_bytes().startswith(b'\xef\xbb\xbf')
         for token in (
             'ChangesEnvironment=yes',
-            'PrivilegesRequired=lowest',
+            # Admin is for Inno's loader, which extracts itself into %TEMP% before the inner
+            # setup runs: a locked-down machine denied that write to a non-elevated unsigned
+            # process with Error 5. The install paths themselves stay per-user.
+            'PrivilegesRequired=admin',
             'StopManagedApp()',
             'function PrepareToInstall',
             'SaveStringsToUTF8FileWithoutBOM',

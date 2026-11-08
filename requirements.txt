@@ -59,3 +59,10 @@ Pillow==12.3.0
 # to do with the code. macOS ships the directory; declaring the provider everywhere is cheaper than
 # detecting whether this machine has one.
 tzdata==2026.2
+# The desktop window host: ``desktop/native_window.py`` imports webview/pythonnet directly, and the
+# product pylint tier lints ``desktop/`` -- so a clean dev/CI environment must have them or every lint
+# run is a false import-error. They are Windows-only (pywebview hosts Edge WebView2 through
+# pythonnet); the markers keep a Linux/macOS install from pulling a Windows GUI stack. The packaged
+# build pins the same versions in desktop/requirements-runtime.txt.
+pywebview==6.2.1; sys_platform == "win32"
+pythonnet==3.0.5; sys_platform == "win32"

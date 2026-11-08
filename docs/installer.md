@@ -122,8 +122,8 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 装到 `<目录>/components/node/<版本>`，清单在 `<目录>/install-manifest.json`；设置 `CIXI_COMPONENTS_DIR=<目录>/components`
 后 `doctor` 能读到这一行。
 
-2026-11-08 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,791,219 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
+**13,792,260 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
@@ -131,9 +131,15 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 加上 Node（338,226,991 B，逐项相加一致）；页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告
 由应用以 UTF-8 字节输出，安装器按 UTF-8 解码，不再出现乱码。
 
-> 本机受限工作区会把 F: 上的 .NET 程序集当成“网络位置”拒绝加载，所以窗口模式的实测是把 exe 复制到 C:
-> 后完成的；用户从浏览器下载到 `C:\Users\...\Downloads` 后双击正是同一情形。若某台机器把安装器放在
-> UNC/映射盘上，WebView2 会按名报错而不是留一个白窗口。
+> **2026-11-09 修掉了 F: 上的这个失败**：.NET Framework 会把 F: 这类盘当“网络位置”，拒绝从
+> `_MEI…` 里 `LoadFrom` pythonnet，报 `Failed to resolve Python.Runtime.Loader.Initialize`，而对话框
+> 又误说成“请安装 WebView2”。现在窗口栈会先复制到 `%LOCALAPPDATA%\CaiXiHui\webview-runtime`，两个
+> 加载器都改从本地路径读；从 `dist`（F:）直接复测时不再出现该错误——本会话的 WebView2 仍在受限沙箱里
+> 报 `E_UNEXPECTED`，那一条只有真实桌面会话能显示页面。对话框也只在错误确实与 WebView2 有关时才提示安装。
+>
+> 离线 `CaiXiHui-Setup.exe` 改为 `PrivilegesRequired=admin`：Inno 的 loader 在向导出现前就要往用户
+> `%TEMP%` 解压内层 setup，被策略拒绝时会报 `unable to create the directory "...\is-XXXX.tmp" ...
+> Error 5`；整个 Setup 提权后才能通过。安装路径与 HKCU PATH 仍是 per-user，装完后程序本身不带管理员清单。
 
 ## 构建
 

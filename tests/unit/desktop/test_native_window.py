@@ -140,6 +140,51 @@ def test_a_window_that_never_loads_is_reported_and_closed(window, fake_webview):
     assert fake_webview['last_window'].destroyed == 1
 
 
+def test_the_window_stack_is_staged_locally(window, monkeypatch, tmp_path):
+    """A drive .NET calls "remote" refuses to load the assemblies beside the exe.
+
+    The stack is copied under LOCALAPPDATA and both module paths are repointed there; a second
+    launch with the same assembly sizes reuses the copy instead of recopying it.
+    """
+    monkeypatch.setenv('LOCALAPPDATA', str(tmp_path))
+    packages = tmp_path / 'site-packages'
+    lib = packages / 'webview' / 'lib'
+    lib.mkdir(parents=True)
+    (lib / 'Microsoft.Web.WebView2.Core.dll').write_bytes(b'core')
+    (lib / 'Microsoft.Web.WebView2.WinForms.dll').write_bytes(b'windows-forms')
+    (packages / 'webview' / '__init__.py').write_text('', encoding='utf-8')
+    util = packages / 'webview' / 'util.py'
+    util.write_text('', encoding='utf-8')
+    runtime = packages / 'pythonnet' / 'runtime'
+    runtime.mkdir(parents=True)
+    (runtime / 'Python.Runtime.dll').write_bytes(b'python-runtime')
+    (packages / 'pythonnet' / '__init__.py').write_text('', encoding='utf-8')
+
+    fake_webview = types.ModuleType('webview')
+    fake_webview.__file__ = str(packages / 'webview' / '__init__.py')
+    fake_util = types.ModuleType('webview.util')
+    fake_util.__file__ = str(util)
+    fake_webview.util = fake_util
+    fake_pythonnet = types.ModuleType('pythonnet')
+    fake_pythonnet.__file__ = str(packages / 'pythonnet' / '__init__.py')
+    monkeypatch.setitem(sys.modules, 'webview', fake_webview)
+    monkeypatch.setitem(sys.modules, 'webview.util', fake_util)
+    monkeypatch.setitem(sys.modules, 'pythonnet', fake_pythonnet)
+
+    target = window.stage_window_stack()
+    assert target == str(tmp_path / 'CaiXiHui' / 'webview-runtime')
+    staged = Path(target)
+    assert (staged / 'webview' / 'lib' / 'Microsoft.Web.WebView2.Core.dll').read_bytes() == b'core'
+    assert (staged / 'pythonnet' / 'runtime' / 'Python.Runtime.dll').read_bytes() == b'python-runtime'
+    assert fake_util.__file__ == str(staged / 'webview' / 'util.py')
+    assert fake_pythonnet.__file__ == str(staged / 'pythonnet' / '__init__.py')
+
+    marker = staged / 'webview' / 'lib' / 'second-run.txt'
+    marker.write_text('kept', encoding='utf-8')
+    assert window.stage_window_stack() == target
+    assert marker.exists(), 'an unchanged stack must not be copied again'
+
+
 def test_storage_lives_under_the_user_profile(window, monkeypatch, tmp_path):
     monkeypatch.setenv('LOCALAPPDATA', str(tmp_path))
     assert Path(window.storage_dir('webview-installer')) == tmp_path / 'CaiXiHui' / 'webview-installer'
