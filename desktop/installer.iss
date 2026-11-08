@@ -58,9 +58,10 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "..\dist\CaiXiHui\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Only bin\ goes on PATH, never the 150 MB folder with its 268 binaries. The .cmd forwards to
-; the console exe (console=True), so `CaiXiHui --doctor` works from a terminal and its exit
-; code survives. It is ASCII by construction: SaveStringToFile writes the ANSI codepage.
+; Only bin\ goes on PATH, never the 150 MB folder with its 268 binaries. The .cmd launches the
+; windowed exe with `start /wait`, so `CaiXiHui --doctor` answers in the calling terminal (the
+; exe attaches to that console) and its exit code survives. It is ASCII by construction:
+; SaveStringToFile writes the ANSI codepage.
 Source: "bin\CaiXiHui.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 [Icons]
@@ -85,9 +86,9 @@ Type: files; Name: "{app}\current-version.partial"
 
 [Code]
 { A running installed copy holds the per-data-root instance lock and the files [Files] is
-  about to replace. CloseApplications=yes uses the Restart Manager, which a console-window
-  server does not answer. Stop by EXECUTABLE PATH, not by name: a portable copy on a USB
-  drive is a different install and must keep running. }
+  about to replace. CloseApplications=yes uses the Restart Manager, which this launcher does
+  not answer. Stop by EXECUTABLE PATH, not by name: a portable copy on a USB drive is a
+  different install and must keep running. }
 procedure StopManagedApp();
 var
   Prefix, Quoted, Command: String;

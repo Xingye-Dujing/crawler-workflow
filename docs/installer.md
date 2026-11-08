@@ -3,14 +3,15 @@
 这是一个**可选**的安装方式：先下载一个几 MB 的 `CaiXiHui-Online-Setup.exe`，由它把主程序和需要的
 第三方便携组件下载到用户选择的目录。离线安装包 `CaiXiHui-Setup.exe` 仍然保留，给没有网络或不想下载组件的人。
 
-安装器窗口是**本机浏览器打开的一个页面**（`127.0.0.1` 上的随机端口 + 随机路径令牌，只监听本机）：
-界面用的就是应用前端的纸白/墨黑设计语言，浅色为默认，右上角可切换深色；内容按一屏排布，不出现滚动条。
-这样就不需要把 Qt / Tcl-Tk 这类 GUI 工具包打进 exe，安装器本体只有几 MB。
+安装器窗口是**本进程自己的原生 WebView2 窗口**：页面由 `127.0.0.1` 上的本地服务提供（固定端口 3968 +
+随机路径令牌，只监听本机），由 `desktop/native_window.py` 用 pywebview 装进 Windows 自带的
+Microsoft Edge WebView2。界面用的就是应用前端的纸白/墨黑设计语言，浅色为默认，右上角可切换深色；
+内容按一屏排布，不出现滚动条。这样就不需要把 Qt / Tcl-Tk 这类 GUI 工具包打进 exe。
 
-**exe 是一个控制台后端，不是 GUI**：没有 Tk / Qt，也没有原生对话框。它启动本地服务后用系统默认浏览器
-打开页面，并在控制台里打印地址；如果某台机器不允许由这个未签名 exe 拉起浏览器，控制台仍会显示
-“请手动打开：<地址>”，用户复制到浏览器即可（`%LOCALAPPDATA%\CaiXiHui\installer.log` 也记同样的行）。
-页面每 20 秒发一次心跳，关掉页面后安装器进程会在几分钟内自行退出；正在下载时不会因为空闲被结束。
+**exe 是窗口程序**（`console=False`），没有控制台，也不经过浏览器。固定端口让页面来源稳定，
+语言/主题（`localStorage`）下次打开仍然有效；关闭窗口即结束进程，正在下载时会拒绝关闭（先点“取消”）。
+Edge WebView2 运行时随 Win10/11 自带；缺少它的机器会被原生对话框按名字拒绝并给出安装地址
+（`%LOCALAPPDATA%\CaiXiHui\installer.log` 记录同一件事）。自动化验收可用 `--no-window` 只起服务。
 
 小白默认走**国内直连**：主程序与 CatBus 来自 Gitee，Chrome for Testing / chromedriver / Node.js 来自
 npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载都核对 SHA-256，镜像不可信也不会被当成可信。
@@ -121,11 +122,18 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 装到 `<目录>/components/node/<版本>`，清单在 `<目录>/install-manifest.json`；设置 `CIXI_COMPONENTS_DIR=<目录>/components`
 后 `doctor` 能读到这一行。
 
-2026-11-07 安装器改为浏览器页面后复核：打包的 `CaiXiHui-Online-Setup.exe` 为 **8.6 MB**（无 Qt / Tcl-Tk；
-onefile 解在 exe 旁边而不是 `%TEMP%`）。启动后控制台打印页面地址，`/`、`/api/state`、`installer_page.js`、
-`icon.ico` 均返回 200；`preset=app` 只剩主程序，勾选 `app + catbus` 时体积自动加上 Node（338,226,991 B，
-逐项相加一致）；页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告由应用以 UTF-8 字节输出，
-安装器按 UTF-8 解码，不再出现乱码。
+2026-11-08 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
+**13,791,322 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
+`icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
+而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
+被创建，30 秒内没有触发“页面没加载”的失败分支。`preset=app` 只剩主程序，勾选 `app + catbus` 时体积自动
+加上 Node（338,226,991 B，逐项相加一致）；页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告
+由应用以 UTF-8 字节输出，安装器按 UTF-8 解码，不再出现乱码。
+
+> 本机受限工作区会把 F: 上的 .NET 程序集当成“网络位置”拒绝加载，所以窗口模式的实测是把 exe 复制到 C:
+> 后完成的；用户从浏览器下载到 `C:\Users\...\Downloads` 后双击正是同一情形。若某台机器把安装器放在
+> UNC/映射盘上，WebView2 会按名报错而不是留一个白窗口。
 
 ## 构建
 

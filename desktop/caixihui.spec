@@ -65,9 +65,22 @@ for driver in glob.glob(str(ROOT / 'drivers' / 'chromedriver.exe')):
 
 # onnxruntime is the runtime the packaged app answers bert nodes with, and it loads its C++
 # backend as a DLL beside its own .pyd. Stated explicitly because a missing piece there is not a
-# boot failure — the import is lazy — it is a refusal on the first bert run on the user's machine.
+# boot failure - the import is lazy - it is a refusal on the first bert run on the user's machine.
 try:
     binaries += collect_dynamic_libs('onnxruntime')
+except Exception:
+    pass
+
+# The native window host (Edge WebView2). pywebview's own hook collects webview/lib and the
+# clr_loader DLLs; pythonnet 3.x additionally loads Python.Runtime.dll from ``pythonnet/runtime``
+# (not from the bundle root the upstream hook copies it to), so the file is placed where the
+# package looks for it or the window cannot start at all.
+try:
+    import pythonnet
+
+    runtime = Path(pythonnet.__file__).parent / 'runtime'
+    for runtime_file in sorted(runtime.glob('*')):
+        datas.append((str(runtime_file), 'pythonnet/runtime'))
 except Exception:
     pass
 
@@ -97,6 +110,12 @@ hiddenimports += [
     # Imported inside ``main()`` (the launcher keeps its boot path import-light), so state it
     # rather than trusting the analysis to reach a function-level import in the entry script.
     'bert_pack',
+    # The native window is imported lazily inside ``native_window.run``; naming it here is what
+    # makes PyInstaller follow it and run the pywebview/clr hooks that ship the WebView2 .NET parts.
+    'webview',
+    'webview.platforms.winforms',
+    'webview.platforms.edgechromium',
+    'clr',
 ]
 
 # Optional/heavy stacks that are NOT part of the packaged runtime. The app already
@@ -150,7 +169,7 @@ excludes = [
 
 a = Analysis(
     [str(SPEC_DIR / 'desktop_entry.py')],
-    pathex=[str(BACKEND)],
+    pathex=[str(BACKEND), str(SPEC_DIR)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -174,7 +193,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    # A desktop program, not a console: the page is shown in this process's own WebView2 window.
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

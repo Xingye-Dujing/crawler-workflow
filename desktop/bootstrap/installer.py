@@ -1,10 +1,11 @@
 """The online installer: choose a folder and components, download from domestic mirrors, launch.
 
-The window is the user's own browser showing a page this process serves on ``127.0.0.1``: the
-application is a web UI, so the installer can wear the SAME design language for the cost of a few
-kilobytes of CSS instead of shipping a GUI toolkit. The exe stays small (stdlib server + the
-component core), which is what "小而精" asks for, and the page is generated from the application's
-own tokens (``backend/static/css/base.css``).
+The page is served on ``127.0.0.1`` and shown in this process's own WebView2 window
+(``desktop/native_window.py``), not in a browser and not behind a console: the application is a
+web UI, so the installer wears the SAME design language for the cost of a few kilobytes of CSS
+instead of shipping a GUI toolkit. The exe stays small (stdlib server + the component core), which
+is what "小而精" asks for, and the page is generated from the application's own tokens
+(``backend/static/css/base.css``).
 
 It is deliberately a Windows desktop tool: it needs a folder picker (``SHBrowseForFolderW``) and
 PyInstaller. Download, verification, extraction and the environment report are the same modules the
@@ -23,7 +24,6 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -44,15 +44,16 @@ def icon_path() -> Path:
 
 
 def log_line(text: str) -> None:
-    """Print one line and append it to the diagnostic log.
+    """Append one line to the diagnostic log (and echo it only where something is listening).
 
-    This is a console program: the console is the fallback the user can read when the browser
-    cannot be opened. The file copy keeps the same fact after the console closes (several
-    destinations, best first: an explicit test path, the user's local app data, the exe's own
-    folder, then the system temp).
+    The exe is windowed, so ``stdout`` is normally ``None``; the file copy is the record that
+    survives a failed window. Destinations, best first: an explicit test path, the user's local
+    app data, the exe's own folder, then the system temp.
     """
     stamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    print(f'{stamp} {text}', flush=True)
+    if sys.stdout is not None:
+        with contextlib.suppress(OSError, ValueError):
+            print(f'{stamp} {text}', flush=True)
     line = f'{stamp} {text}\n'
     explicit = str(os.environ.get('CIXI_INSTALLER_LOG') or '').strip()
     candidates = []
@@ -73,28 +74,6 @@ def log_line(text: str) -> None:
             return
         except OSError:
             continue
-
-
-def open_page(url: str) -> bool:
-    """Open the installer page in the user's default browser.
-
-    No GUI toolkit and no forced browser window: this program is a backend console, and the
-    browser is the front end. The URL is printed either way, so a machine that blocks a child
-    browser still leaves the user an address they can open themselves.
-    """
-    try:
-        if webbrowser.open(url):
-            return True
-    except (OSError, webbrowser.Error):
-        pass
-    startfile = getattr(os, 'startfile', None)
-    if startfile is not None:
-        try:
-            startfile(url)
-            return True
-        except OSError:
-            pass
-    return False
 
 
 def _backend_on_path() -> None:
@@ -145,6 +124,26 @@ ui_theme = importlib.util.module_from_spec(_THEME_SPEC)
 _THEME_SPEC.loader.exec_module(ui_theme)
 TEXT = ui_theme.TEXT
 STATE_LABEL = ui_theme.STATE_LABEL
+
+
+def _load_window_module():
+    """The shared WebView2 host, loaded by path like the plan and the theme.
+
+    In a source checkout it sits one level above ``bootstrap/``; in the onefile bundle the spec
+    copies it beside ``installer.py`` (``sys._MEIPASS``). Both are tried, in that order.
+    """
+    candidates = [asset_dir() / 'native_window.py', Path(__file__).resolve().parents[1] / 'native_window.py']
+    path = next((item for item in candidates if item.is_file()), None)
+    if path is None:
+        raise ImportError('native_window.py is missing from the installer bundle')
+    spec = importlib.util.spec_from_file_location('installer_window', path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+native_window = _load_window_module()
 
 Catalog = _CATALOG.Catalog
 CatalogError = _CATALOG.CatalogError
@@ -209,13 +208,11 @@ def pick_folder(title: str) -> str:
     shell32.SHGetPathFromIDListW.restype = wintypes.BOOL
     display = ctypes.create_unicode_buffer(260)
     user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
-    # Owner: this program's own console (a window in our process, so the shell never waits on a
-    # foreign thread), else the foreground window. The helper below then makes the dialog topmost
-    # for as long as it is open — an unowned browse dialog can open behind the browser.
-    kernel32.GetConsoleWindow.restype = wintypes.HWND
+    # Owner: this process's own WebView2 window, so the dialog is modal to it and cannot open
+    # behind it. The helper below is the second line of defence for a window the shell refuses to
+    # treat as the foreground one.
     user32.GetForegroundWindow.restype = wintypes.HWND
-    owner = kernel32.GetConsoleWindow() or user32.GetForegroundWindow() or None
+    owner = native_window.handle() or user32.GetForegroundWindow() or None
     stop_focus = threading.Event()
 
     def focus_dialog() -> None:
@@ -516,15 +513,23 @@ def _relaunch_elevated(root: Path, data: Path) -> bool:
     return result > 32
 
 
+#: A fixed port keeps the page's origin stable, which is what makes ``localStorage`` (language,
+#: theme) survive a restart. A busy port falls back to an ephemeral one; the token still guards the
+#: server either way.
+INSTALLER_PORT = 3968
+
+
 class InstallerServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, state: InstallerState, token: str) -> None:
-        super().__init__(('127.0.0.1', 0), Handler)
+    def __init__(self, state: InstallerState, token: str, port: int = INSTALLER_PORT) -> None:
+        super().__init__(('127.0.0.1', int(port)), Handler)
         self.state = state
         self.token = token
-        self.last_seen = time.monotonic()
+        # Set by main(): closing the window is what ends the GUI loop, so the server cannot stop
+        # on its own (a launch or an elevation request ends BOTH).
+        self.on_stop = None
 
     @property
     def url(self) -> str:
@@ -534,7 +539,13 @@ class InstallerServer(ThreadingHTTPServer):
         if self.state.shutting_down:
             return
         self.state.shutting_down = True
-        timer = threading.Timer(delay, self.shutdown)
+
+        def stop() -> None:
+            self.shutdown()
+            if self.on_stop is not None:
+                self.on_stop()
+
+        timer = threading.Timer(delay, stop)
         timer.daemon = True
         timer.start()
 
@@ -567,11 +578,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, path.read_bytes(), content_type)
 
     def _authorized(self, path: str) -> bool:
-        prefix = f'/{self.server.token}/'
-        if path.startswith(prefix):
-            self.server.last_seen = time.monotonic()
-            return True
-        return False
+        return path.startswith(f'/{self.server.token}/')
 
     def _route(self) -> str:
         path = urlparse(self.path).path
@@ -652,8 +659,6 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'ok': True})
         elif route == '/api/launch':
             self._json(self._launch(state))
-        elif route == '/api/ping':
-            self._json({'ok': True})
         elif route == '/api/shutdown':
             self._json({'ok': True})
             self.server.stop_soon()
@@ -749,7 +754,22 @@ Handler.do_POST = Handler.handle_post
 Handler.log_message = _quiet_request_log
 
 
+def may_close(job_state: str) -> bool:
+    """Whether the window's X may end the process. A running download is never cut off; 取消 is
+    the documented way out, and closing would leave a half-downloaded component behind."""
+    return job_state != 'running'
+
+
+def _make_server(state: InstallerState, token: str) -> InstallerServer:
+    """The fixed port when it is free, an ephemeral one when another program holds it."""
+    try:
+        return InstallerServer(state, token=token, port=INSTALLER_PORT)
+    except OSError:
+        return InstallerServer(state, token=token, port=0)
+
+
 def main(argv=None) -> int:
+    native_window.ensure_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
     options: dict[str, str] = {}
     for index, arg in enumerate(argv):
@@ -765,62 +785,38 @@ def main(argv=None) -> int:
     # A random path token keeps other local pages from poking this server. The environment
     # override exists for the packaged smoke test, which cannot read a windowed build's stdout.
     token = str(os.environ.get('CIXI_INSTALLER_TOKEN') or '').strip() or secrets.token_hex(8)
-    server = InstallerServer(state, token=token)
+    server = _make_server(state, token)
+    server.on_stop = native_window.close
     url = server.url
-    log_line(f'安装器页面：{url}')
+    log_line(f'安装器已启动：{url}')
+    threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.2}, daemon=True).start()
 
-    def open_window() -> None:
-        time.sleep(0.4)
-        mark = server.last_seen
-        open_page(url)
-        # `webbrowser.open` returning True only means the shell accepted the call. The page's own
-        # request is the proof that a browser is really showing it; otherwise print the address.
-        # A cold browser can take longer than a handoff; six seconds produced a false "open it
-        # manually" while the tab was still starting on a real machine. Fifteen is enough for a
-        # first-run profile without making a blocked launch look like it worked.
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline and server.last_seen <= mark:
-            time.sleep(0.2)
-        if server.last_seen > mark:
-            log_line('浏览器已打开安装页面')
-        else:
-            log_line(f'没有等到浏览器打开页面，请手动打开：{url}')
-
-    threading.Thread(target=open_window, daemon=True).start()
-    threading.Thread(target=watchdog, args=(server, state), daemon=True).start()
-    try:
-        server.serve_forever(poll_interval=0.2)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-        log_line('installer stopped')
-    return 0
-
-
-def idle_expired(last_seen: float, now: float, job_state: str, idle: float = 240.0) -> bool:
-    """Whether the page has been gone long enough to stop this process.
-
-    A running download is never interrupted by idleness; only a closed window is.
-    """
-    return job_state != 'running' and now - last_seen > idle
-
-
-def watchdog(server: InstallerServer, state: InstallerState, *, idle: float = 240.0) -> None:
-    """Stop after the page has been gone for a while — a closed window must not leave a process.
-
-    The page sends a heartbeat every 20 s, so a tab left open keeps the installer alive; closing
-    it stops the requests.
-    """
-    while not state.shutting_down:
-        time.sleep(20)
-        if state.job['state'] == 'running':
-            server.last_seen = time.monotonic()
-            continue
-        if idle_expired(server.last_seen, time.monotonic(), state.job['state'], idle):
-            log_line('no page requests; stopping the installer')
-            server.stop_soon(0)
-            return
+    # The window is the whole user interface: no console, no browser handoff. It blocks here, and
+    # closing it (or a launch/elevation request, which calls close()) ends the process.
+    # ``--no-window`` is the automation seam: the same server, no GUI.
+    no_window = os.environ.get('CIXI_NO_WINDOW') == '1' or '--no-window' in argv
+    if no_window:
+        with contextlib.suppress(KeyboardInterrupt):
+            server.serve_forever(poll_interval=0.2)
+        failure = ''
+    else:
+        failure = native_window.run(
+            TEXT['zh']['title'],
+            url,
+            width=1080,
+            height=760,
+            min_size=(920, 640),
+            storage=native_window.storage_dir('webview-installer'),
+            on_close=lambda: may_close(state.job['state']),
+        )
+    if failure:
+        log_line(f'window failed: {failure}')
+        native_window.complain(failure)
+    with contextlib.suppress(OSError):
+        server.shutdown()
+    server.server_close()
+    log_line('installer stopped')
+    return 1 if failure else 0
 
 
 if __name__ == '__main__':

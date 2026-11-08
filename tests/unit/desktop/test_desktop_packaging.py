@@ -5,23 +5,19 @@ launcher's writable-data choices, its first-run seeding (never overwrite), its d
 fallback, and the spec's exclusion list so a later dependency cannot silently pull a
 multi-gigabyte stack back into ``dist/``.
 
-Nothing here runs the app's own server or needs a frozen exe, and ``main()`` is not called; one test
-stands up a throwaway stdlib HTTP server because the launcher's "is it up yet?" probe has to be
-answered by something before its browser hand-off can be measured.
+Nothing here runs the app's own server or needs a frozen exe, and ``main()`` is not called: the
+window, the server wiring and the spec are checked as source/build facts, and the launcher's pure
+helpers are exercised directly.
 """
 
-import contextlib
 import importlib.util
 import json
 import os
 import re
 import socket
 import struct
-import sys
 import tempfile
-import threading
 import types
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -283,21 +279,23 @@ class TestFailureReporting:
 
 
 class TestAlreadyRunning:
-    def test_the_found_address_is_opened(self, desktop, tmp_path):
+    def test_the_running_window_is_raised(self, desktop, tmp_path):
         desktop.write_instance(tmp_path, 5057)
-        opened = []
-        verdict = desktop._open_existing_instance(tmp_path, dialog=lambda *a: None, open_url=opened.append)
+        raised = []
+        verdict = desktop._open_existing_instance(
+            tmp_path, dialog=lambda *a: None, activate=lambda pid: raised.append(pid) or True
+        )
         assert verdict is True
-        assert opened == ['http://127.0.0.1:5057/']
+        assert raised == [os.getpid()], 'the instance file carries the pid the window is found by'
 
-    def test_a_missing_address_is_dialogued_not_printed(self, desktop, tmp_path):
+    def test_a_missing_window_is_dialogued_not_printed(self, desktop, tmp_path):
         """The mutex said another copy is running; a console line about it dies with this process,
         and the address file lives in the OTHER copy's data root — so it is named, loudly."""
         asked = []
         verdict = desktop._open_existing_instance(
             tmp_path,
             dialog=lambda message, title='': asked.append((message, title)),
-            open_url=lambda url: None,
+            activate=lambda pid: False,
         )
         assert verdict is False
         assert asked and str(tmp_path) in asked[0][0] and '已在运行' in asked[0][1]
@@ -492,11 +490,20 @@ class TestTheBuildKnowsEveryPackage:
         """
         spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
         backend = REPO / 'backend'
+        # The window stack is third-party (not files here). Every external module the spec names
+        # must be listed in this matrix, so a typo in a package name is caught, not shipped.
+        external = {
+            'webview',
+            'webview.platforms.winforms',
+            'webview.platforms.edgechromium',
+            'clr',
+        }
         missing = set()
         for name in self._stated(spec):
             relative = f'{name.replace(".", "/")}.py'
-            if not (backend / relative).is_file() and not (PACKAGING / relative).is_file():
-                missing.add(name)
+            if (backend / relative).is_file() or (PACKAGING / relative).is_file() or name in external:
+                continue
+            missing.add(name)
         assert missing == set(), f'the spec states hidden imports that no longer exist: {sorted(missing)}'
 
 
@@ -505,7 +512,8 @@ class TestPackagingContract:
         spec = (PACKAGING / 'caixihui.spec').read_text(encoding='utf-8')
         assert 'COLLECT(' in spec, 'the build is onedir, not a single-file exe'
         assert 'onefile' not in spec.lower()
-        assert 'console=True' in spec
+        assert 'console=False' in spec, 'the program is a native window, not a console'
+        assert 'webview' in spec and 'clr' in spec, 'the window host is not bundled'
         for excluded in ('torch', 'transformers', 'sentence_transformers', 'pyarrow', 'mitmproxy', 'uiautomation'):
             assert repr(excluded) in spec or f"'{excluded}'" in spec, f'{excluded} is not excluded'
         assert 'requirements-runtime.txt' in (PACKAGING / 'README.md').read_text(encoding='utf-8')
@@ -522,10 +530,10 @@ class TestPackagingContract:
 
     def test_the_launcher_binds_loopback_and_never_starts_the_reloader(self):
         source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
-        assert "host='127.0.0.1'" in source
+        assert "make_server('127.0.0.1'" in source
         assert '0.0.0.0' not in source
-        assert 'use_reloader=False' in source
-        assert 'CIXI_NO_BROWSER' in source
+        assert 'use_reloader' not in source, 'the WSGI server is built directly, never by app.run'
+        assert 'CIXI_NO_WINDOW' in source
         assert 'CRAWLER_DATA_ROOT' in source
 
     def test_no_startup_path_can_exit_as_a_bare_traceback(self):
@@ -581,73 +589,6 @@ class TestPackagingContract:
         for stale in ('data', 'logs', 'mplconfig', 'instance.json', 'startup_error.log'):
             assert not (tmp_path / stale).exists(), f'{stale} would ship to every user'
         assert (tmp_path / 'portable.txt').exists() and (tmp_path / 'drivers' / 'chromedriver.exe').is_file()
-
-
-class TestTheSelfCheckNeverDelaysTheBind:
-    """Four filesystem probes and a TCP connect used to run between picking the port and
-    binding it, so the window sat there for seconds before the browser could reach the app."""
-
-    def test_the_probe_runs_after_the_bind_not_before_it(self):
-        source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
-        thread = source.index('threading.Thread(target=_print_dependencies')
-        assert 'print_dependency_report(dependency_report(base))' not in source, 'the check is back on the bind path'
-        assert thread < source.index('flask_app.run('), 'the self-check must not precede the bind'
-        # What still has to stay synchronous, because the server needs the answer: the driver
-        # lookup that feeds ``config.DRIVER_PATH`` (its last reference is the one in ``main()``).
-        assert source.rindex('find_driver(') < thread
-
-    def test_the_words_are_the_ones_the_console_always_printed(self, desktop):
-        lines = desktop.dependency_lines({})
-        assert lines[0] == '依赖自检（不影响启动，只说明哪类节点可用）：'
-        assert [line.split(':')[0].strip() for line in lines[1:]] == ['Chrome', 'chromedriver', 'Ollama', 'xelatex']
-        assert '未找到（采集节点需要安装 Chrome）' in lines[1]
-        assert 'Selenium 自动下载匹配版本' in lines[2]
-        assert '可改用 OpenRouter' in lines[3]
-        assert '只影响 PDF / 论文成稿' in lines[4]
-
-    def test_a_machine_that_has_everything_names_every_path(self, desktop):
-        report = {
-            'chrome': 'C:/chrome.exe',
-            'driver': 'C:/chromedriver.exe',
-            'xelatex': 'D:/xelatex.exe',
-            'ollama': True,
-        }
-        text = '\n'.join(desktop.dependency_lines(report))
-        assert 'Chrome: 已找到' in text, 'Chrome is answered as a fact, not as a path'
-        for value in ('C:/chromedriver.exe', 'D:/xelatex.exe', '运行中'):
-            assert value in text
-
-    def test_a_probe_that_raises_is_reported_and_never_propagates(self, desktop, monkeypatch, capsys):
-        """The absence of the four lines must not look like a quiet pass."""
-
-        def _boom(_path):
-            raise OSError('disk went away')
-
-        monkeypatch.setattr(desktop, 'dependency_report', _boom)
-        desktop._print_dependencies(Path('.'))  # must not raise: it runs unwatched on a daemon thread
-        printed = capsys.readouterr().out
-        assert '依赖自检未能完成' in printed
-        assert 'disk went away' in printed
-
-    def test_the_block_is_one_write_so_nothing_splits_it(self, desktop, monkeypatch):
-        writes = []
-
-        class _Console:
-            def write(self, text):
-                writes.append(text)
-
-            def flush(self):
-                pass
-
-        monkeypatch.setattr(
-            desktop, 'dependency_report', lambda _path: {'chrome': 'c', 'driver': 'd', 'ollama': True, 'xelatex': 'x'}
-        )
-        monkeypatch.setattr(sys, 'stdout', _Console())
-        desktop._print_dependencies(Path('.'))
-        # ``print`` adds the line ending as its own write; what must not split is the text.
-        blocks = [text for text in writes if text.strip()]
-        assert len(blocks) == 1, f'the report ships in {len(blocks)} text writes; Flask can split them apart'
-        assert blocks[0].count('\n') == 4
 
 
 class TestThePrunerOnlyCutsWhatIsProvablyDead:
@@ -777,6 +718,22 @@ class TestTheUpxPassReportsWhatItActuallyDid:
         ):
             assert compressor.is_unchanged(tmp_path / name), f'{name} would be packed'
         assert not compressor.is_unchanged(tmp_path / 'numpy.cp311-win_amd64.pyd')
+
+    def test_the_window_stack_is_never_packed(self, compressor, tmp_path):
+        """UPX cannot verify a managed .NET image: the real build failed eight files and stopped.
+
+        The window host is pythonnet + pywebview + clr_loader; their DLLs must reach the user
+        byte-for-byte, or WebView2 never starts.
+        """
+        for relative in (
+            '_internal/pythonnet/runtime/Python.Runtime.dll',
+            '_internal/webview/lib/Microsoft.Web.WebView2.Core.dll',
+            '_internal/webview/lib/Microsoft.Web.WebView2.WinForms.dll',
+            '_internal/webview/lib/WebView2Loader.dll',
+            '_internal/clr_loader/ffi/dlls/amd64/ClrLoader.dll',
+            '_internal/webview/lib/WebBrowserInterop.x64.dll',
+        ):
+            assert compressor.is_unchanged(tmp_path / relative), f'{relative} would be packed'
 
     def test_targets_are_the_executables_of_this_build_only(self, compressor, tmp_path):
         internal = tmp_path / '_internal'
@@ -1168,60 +1125,28 @@ def test_the_launcher_starts_the_clock_the_serving_process_needs():
     source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
     assert 'from app import start_background_services' in source
     assert source.count('start_background_services()') == 1
-    assert source.index('start_background_services()') < source.index('flask_app.run(')
+    assert source.index('start_background_services()') < source.index('server.serve_forever')
 
 
-@contextlib.contextmanager
-def _served():
-    """A throwaway local server that answers 200 on ``/api/config``, as a context manager.
+class TestTheWindowIsTheUserInterface:
+    """There is no console and no browser handoff: the page lives in a WebView2 window.
 
-    The launcher's open path needs a probe that succeeds — not our app, just an address that says
-    "here I am" once, so what is under test is what happens AFTER the server is confirmed reachable.
+    The points worth pinning are the ones a regression would silently undo — a window that does not
+    persist localStorage, a second double-click that cannot reach the running copy, and a build
+    that still starts a console that no one reads.
     """
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b'{}')
+    def test_the_launcher_shows_the_page_in_a_native_window(self):
+        source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
+        assert 'native_window.run(' in source
+        assert 'webbrowser' not in source, 'the browser handoff is gone, not a second mode'
+        assert "'--no-window'" in source, 'the automation seam has a name'
 
-        # No ``log_message`` override: the access line goes to stderr, and the assertions below read
-        # stdout only — shadowing the base method's parameters is how this fixture once earned a
-        # pylint W0221.
-
-    server = HTTPServer(('127.0.0.1', 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f'http://127.0.0.1:{server.server_port}'
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-
-
-class TestTheAddressSurvivesWhenNoBrowserExists:
-    """``webbrowser.open`` answers ``False`` when nothing is registered — it never raises.
-
-    A console that goes quiet right after the startup line is the failure this project has been asked
-    to remove twice, and both entries have the same hole: the launcher and ``app._open_browser``.
-    """
-
-    @pytest.mark.enable_socket
-    def test_the_launcher_prints_the_address_instead_of_going_quiet(self, desktop, capsys):
-        with _served() as url:
-            desktop._wait_and_open(url, open_url=lambda _target: False)
-            out = capsys.readouterr().out
-        assert '请手动打开' in out, out
-        assert url in out, 'the printed line has to carry the address it could not hand over'
-
-    @pytest.mark.enable_socket
-    def test_a_successful_open_adds_no_line_of_its_own(self, desktop, capsys):
-        opened = []
-        with _served() as url:
-            desktop._wait_and_open(url, open_url=lambda target: opened.append(target) or True)
-        assert opened == [url]
-        assert capsys.readouterr().out == ''
+    def test_the_installer_shows_the_page_in_the_same_native_window(self):
+        source = (PACKAGING / 'bootstrap' / 'installer.py').read_text(encoding='utf-8')
+        assert 'native_window.run(' in source
+        assert 'webbrowser' not in source
+        assert 'open_page' not in source
 
     def test_the_source_startup_logs_the_same_fact(self, caplog, monkeypatch):
         import webbrowser

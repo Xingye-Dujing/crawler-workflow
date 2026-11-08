@@ -1,8 +1,10 @@
 """Windows double-click entry point for the packaged 采析绘 build.
 
-``backend/app.py``'s ``__main__`` is deliberately NOT reused: it opens the browser itself
-and enables the Werkzeug reloader, which would spawn a second process and leave the console
-window looking dead. This entry point owns the frozen-specific concerns instead:
+``backend/app.py``'s ``__main__`` is deliberately NOT reused: it opens a browser and enables
+the Werkzeug reloader, which would spawn a second process and leave the console looking dead.
+The packaged program has neither a console nor a browser: the page is served on ``127.0.0.1``
+and shown in this process's own WebView2 window (``native_window.py``). This entry point owns
+the frozen-specific concerns instead:
 
 * pick a writable data root (``%APPDATA%\\CaiXiHui`` by default, or the folder beside the
   exe when ``portable.txt`` is present) and export it before ``config`` is imported; if the
@@ -12,10 +14,10 @@ window looking dead. This entry point owns the frozen-specific concerns instead:
 * seed the demo workflow and the small scikit-learn models on first run, without ever
   overwriting a file the user already has;
 * find a real chromedriver or leave the path blank so Selenium Manager can resolve one;
-* enforce one local server per data root, bind ``127.0.0.1`` only, and open the browser
-  once the server answers;
-* keep the console visible: closing it stops the server, which is the one "quit" a
-  non-technical user can find without a tray icon dependency.
+* enforce one local server per data root, bind ``127.0.0.1`` only, and show the page in a
+  native WebView2 window once the server is listening;
+* end the server when that window closes — the one "quit" a non-technical user can find
+  without a tray icon.
 
 Everything here is import-safe (no server starts at import) so the packaging contract can
 be tested by ``tests/unit/desktop/test_desktop_packaging.py`` without a frozen build.
@@ -37,16 +39,19 @@ import tempfile
 import threading
 import time
 import traceback
-import urllib.request
-import webbrowser
 from pathlib import Path
+
+# The window host is a sibling module. A source run gets it from the script directory; the frozen
+# build carries it in the bundle, so this insert is a no-op there.
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import native_window
 
 APP_NAME = 'CaiXiHui'
 DISPLAY_NAME = '采析绘'
 PREFERRED_PORT = 5000
 PORT_ATTEMPTS = 30
 MUTEX_NAME = 'Local\\CaiXiHuiDesktop'
-BROWSER_WAIT_SECONDS = 60.0
 
 
 # ─── paths ────────────────────────────────────────────────────
@@ -484,97 +489,29 @@ def clear_instance(data_root, port: int | None = None) -> None:
         path.unlink()
 
 
-def _open_existing_instance(data_root, *, dialog=_message_box, open_url=webbrowser.open) -> bool:
-    """Open the already-running copy, or report by name that it could not be found.
+def _open_existing_instance(data_root, *, dialog=_message_box, activate=None) -> bool:
+    """Raise the already-running copy's window, or report by name that it could not be found.
 
-    The not-found case is the one the user cannot diagnose alone: the mutex says another copy
-    is running, the address file is not in the root THIS launch chose, and a console line about
-    it dies with this process. So it is dialogued and filed, not printed.
+    There is no browser to hand the address to any more, so a second double-click restores the
+    existing window. The not-found case is the one the user cannot diagnose alone: the mutex says
+    another copy is running, and its address file may live in a DIFFERENT data root. It is
+    dialogued and filed, never printed — the process that would print it is about to exit.
     """
     payload = read_instance(data_root)
-    url = str(payload.get('url') or '')
-    if not url:
-        fail_loudly(
-            f'已有 {DISPLAY_NAME} 实例在运行，但本次使用的数据目录里没有它的地址记录：\n'
-            f'  {data_root}\n'
-            f'通常说明正在运行的那一份用的是另一个数据目录（例如一份装在 %APPDATA%，'
-            f'这一份是便携拷贝）。\n请关闭旧窗口后再双击，或给这一份指定它自己的数据目录。',
-            error_log_dirs(data_root),
-            dialog=dialog,
-            title=f'{DISPLAY_NAME} 已在运行',
-        )
-        return False
-    _print_safe(f'{DISPLAY_NAME} 已在运行，正在打开：{url}')
-    open_url(url)
-    return True
-
-
-# ─── first-run diagnostics ───────────────────────────────────
-def dependency_report(app_dir_path, *, env=None) -> dict:
-    """What is present/missing, as facts for the console (never a blocking gate).
-
-    Crawling needs Chrome and later a matching chromedriver; local LLM nodes need Ollama;
-    PDF/paper nodes need xelatex. Uploading and analysing files works without any of them,
-    so the launcher starts regardless and only tells the user what each status affects.
-
-    Every probe is the backend's own. This used to keep a second list of Chrome install paths, a
-    second MiKTeX scan, and a hardcoded 127.0.0.1:11434 — that last one told a user who pointed
-    “设置 → Ollama 地址” at another machine that no daemon was running, one line before the app
-    answered from it. Two answers to the same machine-level question is the defect; the launcher
-    runs this on a background thread once the application module has been imported, so asking the
-    modules that own the answer costs nothing on the bind path.
-    """
-
-    from core import machine
-    from runtime.settings import get_setting
-
-    from services.charts.pdf import find_xelatex
-
-    env = os.environ if env is None else env
-    return {
-        'chrome': machine.find_chrome(env=env),
-        'driver': find_driver(app_dir_path, env=env),
-        'xelatex': find_xelatex(),
-        'ollama': machine.ollama_reachable(str(get_setting('ollama_host') or '')),
-    }
-
-
-def dependency_lines(report: dict) -> list:
-    """The self-check as text lines — one source of wording for both print paths below."""
-    return [
-        '依赖自检（不影响启动，只说明哪类节点可用）：',
-        '  Chrome: ' + ('已找到' if report.get('chrome') else '未找到（采集节点需要安装 Chrome）'),
-        '  chromedriver: '
-        + (report['driver'] if report.get('driver') else '未配置（首次采集会由 Selenium 自动下载匹配版本，需要联网）'),
-        '  Ollama: ' + ('运行中' if report.get('ollama') else '未检测到（只影响本地模型节点；可改用 OpenRouter）'),
-        '  xelatex: ' + (report['xelatex'] if report.get('xelatex') else '未找到（只影响 PDF / 论文成稿）'),
-    ]
-
-
-def print_dependency_report(report: dict) -> None:
-    for line in dependency_lines(report):
-        print(line, flush=True)
-
-
-def _print_dependencies(app_dir_path) -> None:
-    """Run the self-check and print it, on the background thread.
-
-    It probes four filesystem locations and opens a TCP socket, so on a machine with a cold
-    disk cache it is seconds — and it used to sit between picking the port and binding it,
-    which is why the window sat there before the browser could connect. It is deliberately not
-    a gate: whatever it finds, the server is already running. A failure inside the probe is
-    reported as its own line rather than killing the thread silently, because the absence of
-    the four lines is otherwise indistinguishable from a machine where the check passed quietly.
-
-    One write, not five: Flask's own startup lines land on the same console from another
-    thread, and five separate writes can be split apart mid-block.
-    """
-    try:
-        report = dependency_report(app_dir_path)
-    except Exception:  # a diagnostic must never break a start; the server is already running
-        print(f'依赖自检未能完成：{traceback.format_exc(limit=1).strip()}', flush=True)
-        return
-    print('\n'.join(dependency_lines(report)), flush=True)
+    pid = int(payload.get('pid') or 0)
+    activate = native_window.activate if activate is None else activate
+    if pid and activate(pid):
+        return True
+    fail_loudly(
+        f'已有 {DISPLAY_NAME} 窗口在运行，但本次没能把它调到前台。\n'
+        f'数据目录：{data_root}\n'
+        f'通常说明正在运行的那一份用的是另一个数据目录（例如一份装在 %APPDATA%，'
+        f'这一份是便携拷贝）。\n请从任务栏打开旧窗口，或关闭它后再双击。',
+        error_log_dirs(data_root),
+        dialog=dialog,
+        title=f'{DISPLAY_NAME} 已在运行',
+    )
+    return False
 
 
 def sweep_startup_litter(install_dir) -> int:
@@ -598,25 +535,6 @@ def sweep_startup_litter(install_dir) -> int:
             holder.rmdir()
             removed += 1
     return removed
-
-
-def _wait_and_open(url: str, *, open_url=webbrowser.open) -> None:
-    deadline = time.monotonic() + BROWSER_WAIT_SECONDS
-    probe = url.rstrip('/') + '/api/config'
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(probe, timeout=1.5) as response:
-                if response.status == 200:
-                    if not open_url(url):
-                        # A machine with no registered browser does not raise: the call just answers
-                        # False, and the console would go quiet with a working server behind it.
-                        # Printing the address is the whole remedy — nothing else is missing.
-                        print(f'这台机器没有可接住地址的默认浏览器，请手动打开：{url}', flush=True)
-                    return
-        except OSError:
-            time.sleep(0.5)
-    print(f'服务器已启动，但浏览器没有在 {int(BROWSER_WAIT_SECONDS)} 秒内确认可访问。', flush=True)
-    print(f'请手动打开：{url}', flush=True)
 
 
 # ─── startup ─────────────────────────────────────────────────
@@ -702,9 +620,12 @@ def apply_component_env(data_root=None) -> None:
 
 
 def main(argv=None) -> int:
+    # A windowed build starts with no stdout at all: ``--doctor`` still has to answer a pipe or a
+    # terminal, and the reports below must never be the thing that kills the launch.
+    native_window.ensure_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
     # A redirected console on a non-Chinese Windows uses the ANSI codepage and raises on the
-    # first Chinese character; the reports below must never be the thing that kills the launch.
+    # first Chinese character.
     for stream in (sys.stdout, sys.stderr):
         with contextlib.suppress(AttributeError, OSError, ValueError):
             stream.reconfigure(errors='replace')
@@ -766,12 +687,11 @@ def main(argv=None) -> int:
 
     port = None
     try:
-        seeded = seed_user_data(resources / 'seed', root)
+        seed_user_data(resources / 'seed', root)
     except OSError as exc:
         # A demo workflow or a bundled model that will not copy is a loss of two nice-to-haves,
         # not of the app: start anyway and name what did not land.
-        seeded = []
-        print(f'首次示例文件未能放入数据目录（不影响使用）：{exc}', flush=True)
+        _print_safe(f'首次示例文件未能放入数据目录（不影响使用）：{exc}')
     with contextlib.suppress(OSError):
         (root / 'mplconfig').mkdir(parents=True, exist_ok=True)
 
@@ -812,11 +732,11 @@ def main(argv=None) -> int:
             'untouched': f'登记失败：{traceback.format_exc(limit=1).strip()}',
         }
     if ledger['added']:
-        print(f'已登记 BERT 模型包：{", ".join(ledger["added"])}', flush=True)
+        _print_safe(f'已登记 BERT 模型包：{", ".join(ledger["added"])}')
     if ledger['skipped']:
-        print(f'模型包里这些名字已在注册表中，保留你原来的条目：{", ".join(ledger["skipped"])}', flush=True)
+        _print_safe(f'模型包里这些名字已在注册表中，保留你原来的条目：{", ".join(ledger["skipped"])}')
     if ledger['packs'] and ledger['untouched']:
-        print(f'BERT 模型包未写入注册表：{ledger["untouched"]}', flush=True)
+        _print_safe(f'BERT 模型包未写入注册表：{ledger["untouched"]}')
 
     try:
         from app import app as flask_app
@@ -848,47 +768,62 @@ def main(argv=None) -> int:
         )
         return 1
 
+    try:
+        from werkzeug.serving import make_server
+
+        server = make_server('127.0.0.1', port, flask_app, threaded=True)
+    except Exception:
+        fail_loudly(
+            '没有启动：本地服务器没能监听端口。请把日志文件发给维护者。',
+            error_log_dirs(root),
+            detail=traceback.format_exc(),
+        )
+        return 1
     write_instance(root, port)
     atexit.register(clear_instance, root, port)
     url = f'http://127.0.0.1:{port}/'
-
-    with contextlib.suppress(Exception):
-        ctypes.windll.kernel32.SetConsoleTitleW(f'{DISPLAY_NAME} - {url}')
-
-    print(f'{DISPLAY_NAME} 已启动：{url}', flush=True)
-    print(f'数据目录：{root}', flush=True)
-    if seeded:
-        print(f'已放入首次示例文件：{", ".join(seeded)}', flush=True)
-    print('关闭此窗口即可停止服务（运行中的数据会保留，下次可续跑）。', flush=True)
-    threading.Thread(target=_print_dependencies, args=(base,), daemon=True).start()
-
-    no_browser = os.environ.get('CIXI_NO_BROWSER') == '1' or '--no-browser' in argv
-    if not no_browser:
-        threading.Thread(target=_wait_and_open, args=(url,), daemon=True).start()
+    _print_safe(f'{DISPLAY_NAME} 已启动：{url}')
+    _print_safe(f'数据目录：{root}')
 
     # The same startup work ``python app.py`` does in its ``__main__``: this launcher imports the
     # module and runs Flask itself, so ``__main__`` never ran here and the packaged app served
-    # requests with NO scheduled-task clock (the 定时任务 panel said so, truthfully).
+    # requests with NO scheduled-task clock (the 定时任务 panel said so, truthfully). Started
+    # before the first request is served, so a scheduled task cannot observe a dead clock.
     try:
         start_background_services()
     except Exception:
         # Retention and the queue are conveniences; the clock is the one thing whose absence the
         # user sees in the panel. Say what failed and keep serving — but never hide it.
-        print('后台服务启动失败（定时任务可能不会触发）：', file=sys.stderr, flush=True)
         traceback.print_exc()
 
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    # ``CIXI_NO_WINDOW``/``--no-window`` is the automation seam (the packaged smoke check): the
+    # server runs without a GUI, never a second user-facing mode.
+    no_window = os.environ.get('CIXI_NO_WINDOW') == '1' or '--no-window' in argv
     try:
-        flask_app.run(host='127.0.0.1', port=port, use_reloader=False, threaded=True)
+        if no_window:
+            server.serve_forever()
+        else:
+            failure = native_window.run(
+                DISPLAY_NAME,
+                url,
+                width=1280,
+                height=820,
+                min_size=(1024, 700),
+                storage=native_window.storage_dir('webview'),
+            )
+            if failure:
+                # The one dialog names the missing runtime and where to get it; the file keeps the
+                # same fact for a maintainer (a message box cannot be scrolled or copied).
+                write_startup_error(failure, error_log_dirs(root))
+                native_window.complain(failure, title=f'{DISPLAY_NAME} 无法打开窗口')
+                return 1
     except KeyboardInterrupt:
         pass
-    except Exception:
-        fail_loudly(
-            '服务异常退出。请把日志文件发给维护者。',
-            error_log_dirs(root),
-            detail=traceback.format_exc(),
-        )
-        return 1
     finally:
+        server.shutdown()
+        server.server_close()
         clear_instance(root, port)
         # Self-clean what this launch created; a killed process never gets the chance, which is why
         # the same sweep also runs at start.

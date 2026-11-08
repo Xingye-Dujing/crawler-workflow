@@ -155,9 +155,12 @@ def test_the_installer_keeps_one_one_click_preset_and_no_duplicate(theme):
 
 
 def test_the_installer_ships_no_gui_toolkit():
-    """The window is the browser: bundling Qt or Tcl/Tk would multiply the download for a page."""
+    """The window is the OS WebView2 host: bundling Qt or Tcl/Tk would multiply the download for
+    a page. ``console=False`` is part of the same promise — a console is not a window."""
     spec = (ROOT / 'desktop' / 'bootstrap' / 'installer.spec').read_text(encoding='utf-8')
     assert 'PySide6' not in spec and 'PyQt' not in spec
     assert "'tkinter'" in spec, 'Tcl/Tk must be excluded from the onefile'
+    assert 'console=False' in spec
+    assert "'webview'" in spec and "'clr'" in spec, 'the WebView2 host must be bundled'
     page = (ROOT / 'desktop' / 'bootstrap' / 'installer_page.js').read_text(encoding='utf-8')
     assert 'innerHTML' not in page, 'server data stays text; the installer page never injects markup'

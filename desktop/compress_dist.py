@@ -31,8 +31,20 @@ UNCHANGED_NAMES = (
     'vcruntime140_1.dll',
     'msvcp140.dll',
     'ucrtbase.dll',
+    # The native-window stack is managed .NET, not a native image UPX can prove: measured on the
+    # real build, packing these eight files failed verification and stopped a release. They are
+    # small anyway (about 1.4 MB together, against the 137 MB UPX saves elsewhere).
+    'python.runtime.dll',
+    'webview2loader.dll',
+    'microsoft.web.webview2.core.dll',
+    'microsoft.web.webview2.winforms.dll',
+    'webbrowserinterop.x64.dll',
+    'webbrowserinterop.x86.dll',
+    'clrloader.dll',
 )
-UNCHANGED_PREFIXES = ('api-ms-win-', 'ext-ms-win-')
+UNCHANGED_PREFIXES = ('api-ms-win-', 'ext-ms-win-', 'microsoft.web.webview2.')
+#: Whole packages whose PE files belong to the window host (pythonnet, pywebview, clr_loader).
+UNCHANGED_DIRS = ('clr_loader', 'pythonnet', 'webview')
 
 #: Extensions worth compressing. ``.dll``/``.pyd``/``.exe`` are the PE files PyInstaller collects.
 PE_SUFFIXES = ('.dll', '.pyd', '.exe')
@@ -49,7 +61,9 @@ WORKERS = 8
 
 def is_unchanged(path: Path) -> bool:
     name = path.name.lower()
-    return name in UNCHANGED_NAMES or name.startswith(UNCHANGED_PREFIXES)
+    if name in UNCHANGED_NAMES or name.startswith(UNCHANGED_PREFIXES):
+        return True
+    return any(part.lower() in UNCHANGED_DIRS for part in Path(path).parts[:-1])
 
 
 def already_packed(path: Path) -> bool:

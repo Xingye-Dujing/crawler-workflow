@@ -1,10 +1,10 @@
-# PyInstaller spec for the online installer (one small console exe).
+# PyInstaller spec for the online installer (one small windowed exe).
 #
 # The bootstrap imports services.components through importlib so the same code the app runs is what
-# the installer runs; hiddenimports makes PyInstaller follow that indirection. The window is the
-# user's browser showing a page the exe serves from 127.0.0.1 — no GUI toolkit is bundled at all,
-# which is what keeps the download small. UPX is deliberately off here too: this is the first file
-# SmartScreen sees, and packing it would trade a few MB for more false positives.
+# the installer runs; hiddenimports makes PyInstaller follow that indirection. The page is served
+# from 127.0.0.1 and shown in this process's own WebView2 window (pywebview); no Qt/Tcl/Tk is
+# bundled, which is what keeps the download small. UPX is deliberately off here too: this is the
+# first file SmartScreen sees, and packing it would trade a few MB for more false positives.
 
 from pathlib import Path
 
@@ -14,22 +14,45 @@ CATALOG = BACKEND / 'services' / 'components' / 'default_catalog.json'
 ICON = BACKEND / 'static' / 'icon.ico'
 PAGE = ROOT / 'desktop' / 'bootstrap' / 'installer_page.html'
 PAGE_JS = ROOT / 'desktop' / 'bootstrap' / 'installer_page.js'
+WINDOW = ROOT / 'desktop' / 'native_window.py'
+
+datas = [
+    (str(CATALOG), 'services/components'),
+    (str(ROOT / 'desktop' / 'bootstrap' / 'plan.py'), '.'),
+    (str(ROOT / 'desktop' / 'bootstrap' / 'ui_theme.py'), '.'),
+    # The page, its script and the window/tab icon; a onefile bundle resolves them through
+    # sys._MEIPASS, i.e. the root this copies them to.
+    (str(PAGE), '.'),
+    (str(PAGE_JS), '.'),
+    (str(ICON), '.'),
+    # The shared window host is loaded by path, so the analysis cannot see it.
+    (str(WINDOW), '.'),
+]
+# pythonnet 3.x loads Python.Runtime.dll from ``pythonnet/runtime``; the upstream hook copies it to
+# the bundle root instead, which is not where the package looks. Without this copy the process
+# starts and the window never appears.
+try:
+    import pythonnet
+
+    _runtime = Path(pythonnet.__file__).parent / 'runtime'
+    for _file in sorted(_runtime.glob('*')):
+        datas.append((str(_file), 'pythonnet/runtime'))
+except Exception:
+    pass
 
 a = Analysis(
     [str(ROOT / 'desktop' / 'bootstrap' / 'installer.py')],
     pathex=[str(BACKEND)],
     binaries=[],
-    datas=[
-        (str(CATALOG), 'services/components'),
-        (str(ROOT / 'desktop' / 'bootstrap' / 'plan.py'), '.'),
-        (str(ROOT / 'desktop' / 'bootstrap' / 'ui_theme.py'), '.'),
-        # The page, its script and the window/tab icon; a onefile bundle resolves them through
-        # sys._MEIPASS, i.e. the root this copies them to.
-        (str(PAGE), '.'),
-        (str(PAGE_JS), '.'),
-        (str(ICON), '.'),
-    ],
+    datas=datas,
     hiddenimports=[
+        # pywebview + pythonnet: the window is Edge WebView2 hosted in this process. The upstream
+        # PyInstaller hooks collect webview/lib and clr_loader's native parts; pythonnet 3.x loads
+        # Python.Runtime.dll from ``pythonnet/runtime``, which the datas block below restores.
+        'webview',
+        'webview.platforms.winforms',
+        'webview.platforms.edgechromium',
+        'clr',
         'services.components.catalog',
         'services.components.manifest',
         'services.components.fetch',
@@ -97,9 +120,8 @@ exe = EXE(
     # which a double-click makes the current directory — uses the folder the user downloaded to;
     # PyInstaller removes it again on exit.
     runtime_tmpdir='.',
-    # A console program: the installer is a backend for a browser page. The console shows the
-    # URL (and any refusal) even on a machine that blocks a child browser, and it is the one
-    # window a double-click always produces.
-    console=True,
+    # A desktop program: the page lives in a WebView2 window created by this process. A failure
+    # before that window exists is reported by a native message box and installer.log.
+    console=False,
     icon=str(ICON) if ICON.exists() else None,
 )

@@ -1,9 +1,9 @@
-"""The installer's local server state, exercised without opening a browser.
+"""The installer's local server state, exercised without opening the native window.
 
-The window is the user's browser, so the contract worth pinning is the model behind it: a preset
-is a set of ticks, an unticked component is not installed, and a requirement (CatBus → Node) is
-added to the effective download. Nothing here binds a socket; the page itself is covered by the
-static checks in ``test_bootstrap_plan.py``.
+The window is a WebView2 view over this state, so the contract worth pinning is the model behind
+it: a preset is a set of ticks, an unticked component is not installed, and a requirement (CatBus
+→ Node) is added to the effective download. Nothing here binds a socket; the page itself is
+covered by the static checks in ``test_bootstrap_plan.py``.
 """
 
 from __future__ import annotations
@@ -97,10 +97,38 @@ def test_the_folder_picker_buffer_is_declared_as_a_pointer(installer):
     assert 'ctypes.cast(path, ctypes.c_void_p)' in source
 
 
-def test_a_closed_page_stops_the_installer_but_a_running_download_does_not(installer):
-    assert installer.idle_expired(0, 301, 'idle') is True
-    assert installer.idle_expired(0, 301, 'running') is False
-    assert installer.idle_expired(0, 60, 'done') is False
+def test_the_window_cannot_be_closed_while_a_download_runs(installer):
+    """Closing the window ends the process; a half-downloaded component is not resumable, so the
+    X is refused and the page's 取消 is the documented way out."""
+    assert installer.may_close('running') is False
+    assert installer.may_close('idle') is True
+    assert installer.may_close('done') is True
+
+
+def test_the_page_origin_is_stable_so_local_storage_survives(installer):
+    """A random port would be a new origin on every launch, and the page's language/theme
+    choice (localStorage) would reset each time. The token still guards the server."""
+    assert installer.INSTALLER_PORT == 3968
+
+
+@pytest.mark.enable_socket
+def test_a_busy_fixed_port_falls_back_to_an_ephemeral_one(installer):
+    import socket
+
+    blocker = socket.socket()
+    try:
+        try:
+            blocker.bind(('127.0.0.1', installer.INSTALLER_PORT))
+        except OSError:
+            pytest.skip('the installer port is already in use on this machine')
+        blocker.listen(1)
+        server = installer._make_server(_state(installer), 'token')
+        try:
+            assert server.server_address[1] != installer.INSTALLER_PORT
+        finally:
+            server.server_close()
+    finally:
+        blocker.close()
 
 
 def test_the_running_process_says_whether_it_was_elevated(installer):

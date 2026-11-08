@@ -7,8 +7,9 @@
 > “Cross-platform”一节办。打包版只按 Windows 验收。
 
 这不是单文件 exe，而是一个可压缩分发的**文件夹**：`dist/CaiXiHui/CaiXiHui.exe` 是入口，
-旁边是运行时和只读资源。双击 exe 会启动本地 Flask 服务（只绑定 `127.0.0.1`）并打开浏览器；
-关闭那个控制台窗口即停止服务。首次运行会把数据目录放在 `%APPDATA%\CaiXiHui`。
+旁边是运行时和只读资源。双击 exe 会启动本地 Flask 服务（只绑定 `127.0.0.1`），并在本进程自己的
+窗口里用系统自带的 Microsoft Edge WebView2 显示界面；**没有控制台，也不交给浏览器**。
+关闭该窗口即停止服务。首次运行会把数据目录放在 `%APPDATA%\CaiXiHui`。
 
 单文件 exe 被刻意排除：它每次启动都要把几百 MB 解压到临时目录，启动慢、更容易被杀软误报，
 而 Chrome/Ollama/MiKTeX 这些外部依赖本来也不会因为单文件而消失。
@@ -30,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 | `dist/CaiXiHui/` | 绿色版文件夹，双击 `CaiXiHui.exe` |
 | `dist/CaiXiHui-win64.zip` | 分发用压缩包（约比文件夹小一半，取决于内容） |
 | `dist/CaiXiHui-Setup.exe` | **单文件安装包**（`-Installer`，需要本机装有 Inno Setup） |
-| `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 9 MB，默认国内镜像） |
+| `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 14 MB，默认国内镜像） |
 | `dist/CaiXiHui-bert-models-win64.zip` | 可选 BERT 模型包（`desktop/build_model_pack.py` 单独产出，见下文） |
 | `dist/SHA256SUMS` | 最终**签名后**产物的 `sha256sum` 清单（发布链第 5 步） |
 | `dist/release-manifest.json` | 同上，带体积、版本、渠道与在线安装器清单要用的摘要 |
@@ -42,14 +43,17 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 默认清单是**国内直连**（Gitee + npmmirror），不需要翻墙；Chrome 从 Google 官方 Chrome for Testing 下载，
 安装器不重新分发它。
 
-**窗口是本机浏览器打开的一个页面**（`127.0.0.1` 随机端口 + 随机路径令牌），界面复用应用前端的
+**窗口是本进程自己的 WebView2 窗口**（`desktop/native_window.py`，pywebview + Edge WebView2），
+页面仍由 `127.0.0.1` 的本地服务提供（固定端口 3968，路径里的随机令牌只监听本机）。界面复用应用前端的
 纸白/墨黑设计语言（`ui_theme.py` 的令牌与 `base.css` 同源），默认浅色、右上角可切深色，一屏放得下。
-所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + 组件核心，约 9 MB。页面文件是
+所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + WebView2 宿主 + 组件核心，约 14 MB。页面文件是
 `installer_page.html` / `installer_page.js`，测试只读它们和纯函数，不需要真的开窗口。
 
-**exe 是控制台后端**（`console=True`），不是 GUI：它启动本地服务、打印地址并交给系统默认浏览器，
-没有 Tk/Qt、没有原生对话框。浏览器打不开时控制台会打印“请手动打开：<地址>”，照抄即可；页面关掉后
-心跳停止，安装器进程几分钟内自行退出（下载中不会）。日志在 `%LOCALAPPDATA%\CaiXiHui\installer.log`。
+**exe 是窗口程序**（`console=False`）：没有控制台，也没有“交给浏览器”这一步。固定端口让页面来源
+保持稳定，语言/主题（`localStorage`）下次打开仍然有效；窗口关闭即结束进程，下载中会拒绝关闭
+（先点“取消”）。装了 Edge 的 Windows（Win10/11 自带 WebView2 运行时）可以直接运行；缺运行时的机器会
+被一个原生对话框按名字拒绝，并给出安装地址。诊断日志在 `%LOCALAPPDATA%\CaiXiHui\installer.log`。
+自动化验收可用 `--no-window`（或 `CIXI_NO_WINDOW=1`）只起服务、不开窗口。
 
 onefile 的临时目录用 `runtime_tmpdir='.'`（解在 exe 旁边并由 PyInstaller 删除），因为这台机器的
 `%TEMP%` 会被安全策略拒写；默认 `%TEMP%` 下连一个最小的 onefile 都起不来（实测
@@ -164,7 +168,7 @@ hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段
 
 - **精确停进程**：`PrepareToInstall` 与卸载时调用 `StopManagedApp()`，按 `$_.Path` 前缀过滤
   `{app}\`，只停这份安装里的 `CaiXiHui.exe`。不用 `taskkill /IM`，便携盘上的另一份不会被杀；
-  `CloseApplications` 依赖 Restart Manager，控制台窗口里的 Flask 服务不响应它。
+  `CloseApplications` 依赖 Restart Manager，这个启动器不响应它。
 - **PATH**：`ChangesEnvironment=yes` + `AddBinToPath/RemoveBinFromPath` 把 `{app}\bin` 加进
   `HKCU\Environment\Path`，卸载时只摘掉自己那一段。`desktop/bin/CaiXiHui.cmd` 转发 `%*` 与退出码，
   于是终端里 `CaiXiHui --doctor` 可用；放进 PATH 的是这个几字节的目录，不是 150 MB 的程序目录。
@@ -178,8 +182,9 @@ hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段
 **刻意没抄的两件事**：hex 的 `versions/<v>/hex.exe` 是给它的应用内自更新器用的，本项目没有
 自更新器（在线安装器用 `install-manifest.json` 管组件版本），而且 `app_dir()`、
 `portable.txt`、`data-root.txt` 与组件布局都读 exe 所在文件夹——把 exe 挪进版本目录会同时
-改掉这些约定。所以 `versions/` 这里只放回执，exe 仍然平铺。另外本 exe 是 `console=True`，
-终端本来就会等待它，不需要 hex 的 `hex.com`（GUI 子系统 + `.COM` 双入口）那套。
+改掉这些约定。所以 `versions/` 这里只放回执，exe 仍然平铺。本 exe 现在是窗口程序
+（`console=False`），终端里的等待由 `bin/CaiXiHui.cmd` 的 `start /wait` 负责，`--doctor` 会附着到
+调用它的控制台，所以仍然不需要 hex 的 `.COM` 双入口那套。
 
 ### 验收状态（不夸大）
 
@@ -194,7 +199,12 @@ hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段
 
 ## 体积边界
 
-**当前交付实测（同一台机、同一份源码，UPX 开，2026-11-03 浏览器启动页/健康检查那轮重建）**：
+**2026-11-08 原生窗口那一轮**：文件夹 **158.8 MB**、zip **122.5 MB**（比上一轮 +2.6 / +1.2 MB：pywebview +
+pythonnet + WebView2 的 .NET 包装；运行时本体不打包，用的是系统已装的 Edge WebView2）。UPX 压 **268** 个
+二进制，`227.5 → 90.1 MB`，0 跳过 0 失败；窗口栈的 7 个 .NET DLL 按名排除（UPX 无法验证托管程序集，
+上一轮实测 8 个文件校验失败并中止发布）。本轮没有重打 `CaiXiHui-Setup.exe`。
+
+**上一次交付实测（同一台机、同一份源码，UPX 开，2026-11-03 浏览器启动页/健康检查那轮重建）**：
 文件夹 **156.2 MB**、zip **121.3 MB**、安装包 `CaiXiHui-Setup.exe` **113.4 MB**（上一轮 2026-10-26 的
 167.5 / 125.2 / 116.4；再往前 164.8 / 124.0 / 115.4；最早是 301.4 MB / 153.6 MB，而且那时根本产不出安装包——
 图标是张换了名字的 PNG，Inno 直接拒绝编译）。拆开算：UPX 压 **268** 个二进制，`226.8 → 89.5 MB`
@@ -217,7 +227,7 @@ hex 的 Rust/Rune GUI。链被拆成互不依赖凭据的阶段，**编译阶段
 > “Cross-platform”一节与 `tests/unit/crawlers/test_platform_rules.py`。**Linux/macOS 上的真实启动没跑过**
 > （本机无 Linux 运行时），那是要在服务器上补的一次实测，不是已通过。
 
-**启动实测**（隔离数据根，`CIXI_NO_BROWSER=1` + exe 从终端跑，量到 `/api/config` 返回 200）：
+**启动实测**（隔离数据根，`CIXI_NO_WINDOW=1` + exe 从终端跑，量到 `/api/config` 返回 200）：
 本轮构建 **1612 ms**（上一轮 1547，再前 1863 / 1647 首启/再启，最早 3423 ms）。
 UPX 是"载入时在每个进程内存里解压"，
 理论上会拖慢启动，所以这两个数字必须和体积一起看；实测被自检挪后 + 少加载一整套 sklearn 的收益盖过，
@@ -387,16 +397,17 @@ desktop\.venv-build\Scripts\python.exe -m pip install --no-cache-dir --no-build-
 
 ## 验证构建
 
-构建脚本不会自动跑爬虫。发布前至少确认（**必须真的双击**，`CIXI_NO_BROWSER=1` + 指定
-`CRAWLER_DATA_ROOT` 恰好绕过了唯一真正会失败的那条路径）：
+构建脚本不会自动跑爬虫。发布前至少确认（**必须真的双击**，`CIXI_NO_WINDOW=1` + 指定
+`CRAWLER_DATA_ROOT` 恰好绕过了唯一真正会失败的那条路径——窗口创建）：
 
-1. 双击 `CaiXiHui.exe`，浏览器打开 `http://127.0.0.1:5000/`（端口被占用会自动顺延）；
+1. 双击 `CaiXiHui.exe`，出现原生窗口显示 `http://127.0.0.1:5000/`（端口被占用会自动顺延），
+   右上角浅色/深色切换在重启后仍保持（WebView2 的 localStorage）；
 2. 首页、`/api/config`、`/api/workflow/list`、`/api/data/datasets`、`/api/runs/list` 返回 200；
 3. 打开文献计量演示工作流，能看到画布；上传 `samples/` 中的 CNKI 样例可跑通；
 4. 设置页显示 chromedriver/Ollama 状态；不装 Chrome 时上传/分析仍可用；
 5. **量一次启动**：从进程起来到 `/api/config` 返回 200 的毫秒数，UPX 开与关各测一次（同一台机、
    同一数据根），两个数字都要写进发布说明——只报体积就是拿启动换 KPI；
-6. **放了模型包就跑一次三个 bert 节点**（情感/情绪/倾向），确认控制台打印的是
+6. **放了模型包就跑一次三个 bert 节点**（情感/情绪/倾向），确认日志里打印的是
    `runtime=onnx precision=fp16`，且降级那条线仍然可用：把模型包临时改名，同一节点应打印它降级到了
    ml/snownlp——两句话都要看见，才算“打包版真跑 BERT”和“没模型也不骗人”都成立；
 7. 瘦身分发物里的死数据文件确实没被读到：`snownlp` 的**情感回退**在裁掉 py2 marshal 与训练语料之后

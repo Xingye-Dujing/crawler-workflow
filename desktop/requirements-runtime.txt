@@ -44,3 +44,9 @@ xlrd==2.0.2
 # jieba imports pkg_resources when it is present; keeping it explicit avoids a
 # warning-only dependency on whatever a bare venv happens to include.
 setuptools==78.1.0
+# The desktop window: Edge WebView2 hosted in-process. pywebview talks to WebView2 through its
+# .NET wrapper, which pythonnet loads; the WebView2 runtime itself ships with Windows 10/11 and
+# is NOT bundled here. pythonnet 3.0.x is pinned because its Python.Runtime.dll loads on the
+# .NET Framework every supported Windows already has.
+pywebview==6.2.1
+pythonnet==3.0.5

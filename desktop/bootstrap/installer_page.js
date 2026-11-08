@@ -267,11 +267,10 @@
     }
 
     function onQuit() {
-        post('/api/shutdown')
-            .catch(function () {})
-            .then(function () {
-                window.close();
-            });
+        /* The server closes this window; a page cannot close a native WebView2 window itself. */
+        notice(t('quit'));
+        byId('quit').disabled = true;
+        post('/api/shutdown').catch(function () {});
     }
 
     function openDoctor(report) {
@@ -381,19 +380,6 @@
             applyState(state);
         });
     }
-    window.addEventListener('beforeunload', function (event) {
-        if (state.job && state.job.state === 'running') {
-            event.preventDefault();
-            event.returnValue = '';
-        }
-    });
-
-    /* The installer process stops itself once this page has been gone for a while. A heartbeat
-       keeps a page that is merely open alive; closing the window stops it. */
-    window.setInterval(function () {
-        fetch(base + '/api/ping', { method: 'POST' }).catch(function () {});
-    }, 20000);
-
     applyTheme();
     applyLang();
     applyState(state);
