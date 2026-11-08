@@ -1,135 +1,157 @@
 name: ci
 
-# Two jobs, run on every push, every pull request and by hand.
+# Two jobs, run on every push, every pull request and by hand, on the three systems this project
+# runs on: Windows (development), Linux (the cloud deployment target) and macOS.
 #
 # `fast` — ruff, both pylint standards and the fast tier: no browser, no daemon, no account.
 # `browser` — the device tier's Chrome half: real Chrome driven by the real UI tests, with
 #             CRAWLER_REQUIRE_BROWSER so a driver that cannot start FAILS instead of skipping,
 #             and CRAWLER_REQUIRE_NODE so the ~43 frontend JS cases cannot hide as skips.
 #
+# The lint targets are enumerated by `tools/ci_lint_tiers.py` rather than by a shell, because the
+# gate must ask the same question on every runner: a PowerShell-only enumeration would turn the
+# workflow into a Windows fact the moment a Linux job was added. That script passes explicit FILES
+# (a bare directory name can resolve to an installed distribution in site-packages), prints how many
+# it linted, and fails on an empty list.
+#
 # What stays a LOCAL obligation, stated rather than pretended: the Ollama-marked cases (they want a
 # daemon with models pulled on the box), the CatBus adapter cases (the adapter is a separate,
 # unpublished checkout — a runner has nothing to install), the desktop rebuild (a frozen exe has to
-# be double-clicked on a real Windows desktop), and live_quick / live_site (they spend the user's
-# accounts, so AGENTS.md forbids running them unattended anywhere, including CI). A green check here
-# is therefore evidence about the browser and the code, never "all tiers passed".
+# be double-clicked on a real desktop), and live_quick / live_site (they spend the user's accounts,
+# so AGENTS.md forbids running them unattended anywhere, including CI). A green check here is
+# therefore evidence about the browser and the code on three platforms, never "all tiers passed".
 #
-# windows-latest rather than ubuntu-latest on purpose: every verification this project has ever had
-# was on Windows, and changing platform and adding a first CI run in the same step turns one unknown
-# into two. Widening to Linux is its own change, with the failures read.
+# The runner matrix is deliberate: Windows remains the baseline, Ubuntu is the deployment target,
+# and macOS is in the product's supported set. A missing runner is a review decision, never an
+# accidental deletion.
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      # First-run triage only: a manual dispatch may let the Ubuntu/macOS jobs fail without
+      # failing the run, so their failures can be read and fixed before the gate blocks pushes.
+      # Push and pull-request runs are always blocking.
+      probe:
+        description: 'Let the Ubuntu/macOS jobs fail without failing the run (first-run triage only)'
+        type: boolean
+        default: false
 
 env:
-  # Node is on the runner image; requiring it turns "the JS tier silently skipped" into a red run.
+  # Node is on the runner image, but setup-node pins it: requiring node turns "the JS tier
+  # silently skipped" into a red run, and an image change must not silently remove the tier.
   CRAWLER_REQUIRE_NODE: '1'
 
 jobs:
   fast:
-    runs-on: windows-latest
+    strategy:
+      # One operating system failing must not hide the others' answer.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            python: .venv/Scripts/python.exe
+          - runner: ubuntu-latest
+            python: .venv/bin/python
+          - runner: macos-15
+            python: .venv/bin/python
+    runs-on: ${{ matrix.runner }}
+    # Triage escape hatch only (see the workflow_dispatch input above); normal runs are blocking.
+    continue-on-error: ${{ github.event.inputs.probe == 'true' && matrix.runner != 'windows-latest' }}
     # 45, not 30: a green fast job was measured at 29m40s (26m49s of it the pytest tier), so 30
     # left one slow case between green and a timeout — and a timeout reports as a cancelled run,
     # never as the test that hung.
-    timeout-minutes: 45
+    timeout-minutes: 50
 
     steps:
-      # Node-24 majors on purpose. checkout v4 / setup-python v5 target Node 20, which the
-      # runner already forces onto Node 24 — an annotation on every job — and which GitHub will
-      # one day refuse to start at all. Nothing this workflow uses changed across v5..v7
-      # (no submodules, no LFS, no `pip-install` input, no token pushed from CI), so the bump is
-      # a version change only; the proof is a real run, never this comment.
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Create the venv the project mandates
         run: python -m venv .venv
 
       - name: Install declared dependencies
-        run: .venv/Scripts/python.exe -m pip install --upgrade pip -r requirements.txt
+        run: ${{ matrix.python }} -m pip install --upgrade pip -r requirements.txt
+
+      # `requirements.txt` installs pywebview on Windows and macOS because the desktop window
+      # needs it. Linux never runs that window, but the product pylint tier lints `desktop/`, and
+      # pylint resolves the function-level `import webview` in `native_window.py`/`macos_entry.py`.
+      # Installing the already-declared package here keeps the lint gate honest without adding a
+      # GUI stack to the Linux server's runtime set.
+      - name: Install the declared desktop package for the Linux lint tier
+        if: runner.os == 'Linux'
+        run: ${{ matrix.python }} -m pip install 'pywebview==6.2.1'
 
       # Formatting is checked HERE and not only in the local hook, because the hook cannot
       # run everywhere: `ruff format` writes through a temporary file and a rename, which a
       # restricted workspace refuses outright — measured, it fails with os error 5 and the
       # edit silently stays unformatted. This step is the gate that cannot be skipped.
       - name: Lint
-        run: .venv/Scripts/ruff.exe check backend/ tests/
+        run: ${{ matrix.python }} -m ruff check backend/ tests/
 
       - name: Format
-        run: .venv/Scripts/ruff.exe format --check backend/ tests/
+        run: ${{ matrix.python }} -m ruff format --check backend/ tests/
 
-      # Pylint runs THREE times with three standards, because the honest answer differs by tree:
-      # product code may not be exempt from anything; `tests/` is exempt only from the three
-      # messages pytest's design makes meaningless (fixture-name shadowing, fixture arguments that
-      # ARE the usage, deliberate white-box private access); `backend/test_*.py` are the manual
-      # measurement scripts AGENTS.md keeps out of pytest, whose sys.path bootstrap must precede
-      # their imports. Nested config files are NOT read by pylint (measured), so each tier is its
-      # own invocation with an explicit --rcfile. Targets are listed as FILES, never as bare
-      # directory names: a folder called `packaging` would resolve to the PyPA distribution in
-      # site-packages instead of this repository (the folder is `desktop/` now, and the rule stays),
-      # and every step refuses an empty target list, because a gate that silently checks nothing is
-      # worse than no gate.
+      # Pylint runs on all three tiers that a runner can honestly run. The third tier
+      # (`.pylintrc.probes`) stays local: `backend/test_*.py` are gitignored measurement scripts,
+      # so a hosted runner has none of them, and a step that "passed" over an empty list would be
+      # the silent green this project refuses.
       #
-      # `--disable=C,R --fail-on=W,E,F` is the standard the user set: FATAL, ERROR and WARNING must
-      # be zero. It is scoped on the COMMAND LINE, never in the tier configs, so nothing is hidden
-      # from a local run. pylint's exit code is a bitmap of the categories it saw, and CONVENTION
-      # and REFACTOR advice is present by design — the lazy imports that break real cycles are
-      # `import-outside-toplevel`, and they are deliberate — so without the scoping the gate would be
-      # red forever and everyone would learn to ignore it. Run the same command without the flags to
-      # see what is being waived.
-      # Targets are enumerated as FILES, never as bare directory names: a folder called `packaging`
-      # would resolve to the PyPA distribution in site-packages instead of this repository (the folder
-      # is `desktop/` now, and the rule stays). The `@(...)` block uses STATEMENTS, not a comma list:
-      # `@( (Get-ChildItem a), (Get-ChildItem b) ) | ForEach-Object FullName` builds an array of TWO
-      # arrays, and `FullName` asked of an array is not a member — measured on the runner, that shape
-      # passed pylint two empty arguments and pylint answered "No files to lint: exiting." with exit 1.
-      # Loud, which is the point: a gate that reports success over an empty list is worse than none.
+      # The enumeration lives in `tools/ci_lint_tiers.py`; it prints `linting N ... files` and
+      # exits non-zero when a tier has no sources. The standard is scoped on the command line
+      # (`--disable=C,R --fail-on=W,E,F`) so nothing is hidden from a local run.
       - name: Pylint — product
-        run: |
-          $targets = @(
-            Get-ChildItem backend -Recurse -Filter *.py -File | Where-Object Name -notlike 'test_*'
-            Get-ChildItem desktop, tools, 'ml_train/scripts' -Filter *.py -File
-          ) | ForEach-Object { $_.FullName }
-          if (-not $targets) { throw 'no product sources found to lint' }
-          Write-Output "linting $($targets.Count) product files"
-          .venv/Scripts/pylint.exe --persistent=n --rcfile=.pylintrc --disable=C,R --fail-on=W,E,F --jobs=2 $targets
+        run: ${{ matrix.python }} tools/ci_lint_tiers.py product
 
       - name: Pylint — tests
-        run: |
-          $targets = @(Get-ChildItem tests -Recurse -Filter *.py -File | ForEach-Object { $_.FullName })
-          if (-not $targets) { throw 'no test sources found to lint' }
-          Write-Output "linting $($targets.Count) test files"
-          .venv/Scripts/pylint.exe --persistent=n --rcfile=.pylintrc.tests --disable=C,R --fail-on=W,E,F --jobs=2 $targets
+        run: ${{ matrix.python }} tools/ci_lint_tiers.py tests
 
-      # NO third CI step on purpose. The measurement scripts (`backend/test_*.py`) are gitignored on
-      # purpose — see .gitignore — so a hosted runner has zero of them to lint. A CI step that
-      # "passed" over an empty target list would be exactly the silent green this workflow refuses
-      # to produce, so the third tier (`.pylintrc.probes`) is a LOCAL standard: run it before
-      # handing a probe to anyone, with
+      # The local probes command is documented here but never run:
       #     .venv/Scripts/pylint.exe --rcfile=.pylintrc.probes (Get-ChildItem backend -Filter test_*.py)
+      # `backend/test_*.py` are gitignored, so CI has no third tier to lint.
 
-      # `node` is on the runner image, so the frontend harness cases run rather than skip.
       # `-rs` prints every skip with its reason: a tier that "passed" while cases skipped is the
       # failure shape this repo has been bitten by twice, and the summary line alone hides it.
       - name: Fast tier
-        run: .venv/Scripts/python.exe -m pytest -q -rs
+        run: ${{ matrix.python }} -m pytest -q -rs --junitxml=ci-fast-${{ matrix.runner }}.xml
 
-  # The device tier's Chrome half. This is the only part of the local "全部门禁" chain a hosted
-  # runner can honestly run: the cases drive a real browser over file:// fixtures, so they need no
-  # account, no daemon and no network beyond Selenium Manager fetching a matching driver.
+      - name: Keep the pytest report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-fast-${{ matrix.runner }}
+          path: ci-fast-${{ matrix.runner }}.xml
+          if-no-files-found: ignore
+
+  # The device tier's Chrome half. The cases drive a real browser over file:// fixtures, so they
+  # need no account, no daemon and no network beyond the driver that Selenium Manager fetches.
   #
   # CRAWLER_REQUIRE_BROWSER=1 is the point of the job. Without it a machine whose chromedriver
   # starts-and-crashes skips every browser case and the job still reports success — measured locally
   # as a run printing "191 passed" beside one silent skip. With it, an unavailable browser is an
   # error, and `tests/device_policy.py` routes every per-case driver failure through that rule.
   browser:
-    runs-on: windows-latest
-    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            python: .venv/Scripts/python.exe
+          - runner: ubuntu-latest
+            python: .venv/bin/python
+          - runner: macos-15
+            python: .venv/bin/python
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ github.event.inputs.probe == 'true' && matrix.runner != 'windows-latest' }}
+    timeout-minutes: 50
 
     env:
       CRAWLER_REQUIRE_BROWSER: '1'
@@ -141,15 +163,59 @@ jobs:
         with:
           python-version: '3.11'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Create the venv the project mandates
         run: python -m venv .venv
 
       - name: Install declared dependencies
-        run: .venv/Scripts/python.exe -m pip install --upgrade pip -r requirements.txt
+        run: ${{ matrix.python }} -m pip install --upgrade pip -r requirements.txt
+
+      # A browser that renders Chinese text needs Chinese fonts. The Docker image installs the same
+      # two packages (`deploy/Dockerfile`), so the Ubuntu runner measures the deployment shape
+      # rather than a font-less image that makes every CJK label fall back to boxes.
+      - name: Install CJK fonts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-wqy-zenhei
+
+      # Ubuntu's runner image carries Chrome. Keep a named fallback rather than letting a missing
+      # browser become a skipped tier; Selenium Manager fetches the matching driver.
+      - name: Ensure Chrome (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if ! command -v google-chrome >/dev/null 2>&1 && [ ! -x /usr/bin/chromium ]; then
+            sudo apt-get install -y google-chrome-stable
+          fi
+
+      # macOS runners carry Chrome.app in the image; install it only if that changes.
+      - name: Ensure Chrome (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [ ! -d '/Applications/Google Chrome.app' ]; then
+            brew install --cask google-chrome
+          fi
+
+      - name: Report the browser (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          google-chrome --version 2>/dev/null || chromium --version 2>/dev/null || \
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --version 2>/dev/null || true
 
       # `-m integration` selects the browser cases; the Ollama-marked half of the device tier is
-      # left out because the runner has no daemon, and the CatBus adapter cases will report themselves
+      # left out because the runner has no daemon, and the CatBus adapter cases report themselves
       # as skipped for the same reason (the adapter is a separate, unpublished checkout).
       - name: Device tier — real Chrome
-        run: .venv/Scripts/python.exe -m pytest -q -m integration -rs
+        run: ${{ matrix.python }} -m pytest -q -m integration -rs --junitxml=ci-browser-${{ matrix.runner }}.xml
 
+      - name: Keep the pytest report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-browser-${{ matrix.runner }}
+          path: ci-browser-${{ matrix.runner }}.xml
+          if-no-files-found: ignore

@@ -11,6 +11,7 @@ import json
 
 import pandas as pd
 import pytest
+from core import machine
 
 import services.charts.tikz as lc
 from services.charts.contracts import BIBLIO_CHART_TYPES
@@ -300,8 +301,16 @@ class TestPaperStyle:
     a value label on every bar, boxed leader-line labels, and the reference tables' spacing."""
 
     def test_preamble_locks_the_paper_font_and_palette(self):
+        system = machine.platform_name()
         out = L.to_latex_document(_cat(), 'bar', x='g', y='v')
-        assert r'\setCJKmainfont[scale=0.95,' in out
+        if system == 'win32':
+            assert r'\setCJKmainfont[scale=0.95,' in out
+        else:
+            # FangSong is a Windows font. Off Windows ctex's own font set is named instead, and
+            # asking for the missing family would make the emitted document fail to compile.
+            fontset = 'fandol' if system == 'linux' else 'macnew'
+            assert rf'\usepackage[fontset={fontset}]{{ctex}}' in out
+            assert r'\setCJKmainfont' not in out
         # the paper's own blue, decoupled from the on-screen accent palette
         assert r'\definecolor{cA}{HTML}{22557A}' in out
         assert r'\renewcommand{\arraystretch}{1.25}' in out

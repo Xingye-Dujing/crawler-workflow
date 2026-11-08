@@ -144,47 +144,33 @@ class TestTheStandards:
         project refuses.
         """
         ci = (REPO / '.github' / 'workflows' / 'ci.yml').read_text(encoding='utf-8')
-        assert ci.count('--rcfile=.pylintrc.tests') == 1
-        assert re.search(r'--rcfile=\.pylintrc(?![.\w])', ci), 'the product tier is missing from CI'
-        assert 'pylint.exe --persistent=n --rcfile=.pylintrc --ignore-patterns' not in ci
-        # Either shell may enumerate the targets, as long as it enumerates FILES and fails on an empty
-        # list. The bug this pins is a bare directory name reaching pylint as a package name — `packaging`
-        # resolved to the PyPA distribution in site-packages, so the gate linted somebody else's code —
-        # and that bug is identical on Windows and on Linux, so the rule is not "use PowerShell".
-        enumerated = 'Get-ChildItem' in ci or 'find ' in ci
-        assert enumerated, 'targets must be enumerated as files, not as bare directory names'
-        # …and the enumeration must FLATTEN. Measured on the runner: the product step was written
-        # ``@( (Get-ChildItem backend…), (Get-ChildItem desktop…) ) | ForEach-Object FullName``, which
-        # builds an array of TWO arrays — and ``ForEach-Object -MemberName`` does not member-enumerate
-        # an array it is handed. pylint received two empty arguments and answered
-        # ``No files to lint: exiting.`` with exit 1. It failed LOUDLY, which is the only reason
-        # anyone noticed: the same shape on a day the lists happen to work would have been a green
-        # step checking nobody's code. The pin is the projection: per-object ``{ $_.FullName }`` over a
-        # flattened ``@()``, and each step says out loud how many files it read.
-        # The pin is the projection, asked of the CODE and not of the prose: the workflow's own comment
-        # quotes the broken spelling to explain it, and a substring check over comments would convict
-        # the explanation of the fix.
+        lint_script = (REPO / 'tools' / 'ci_lint_tiers.py').read_text(encoding='utf-8')
+        # Asked of the CODE, not of the prose: the workflow's comments explain the old PowerShell
+        # shape, and a substring check over comments would convict the explanation of the fix.
         ci_code = '\n'.join(line for line in ci.splitlines() if not line.lstrip().startswith('#'))
-        assert 'ForEach-Object FullName' not in ci_code, 'project per object: { $_.FullName }'
-        assert ci_code.count('ForEach-Object { $_.FullName }') == 2, 'both tiers must enumerate this way'
-        counting = re.findall(r'Write-Output "linting \$\(\$targets\.Count\)', ci_code)
-        assert len(counting) == 2, 'a gate must report how much it linted, in the log'
-        failing = ci.count('throw') + ci.count('-z "$') + ci.count('-z ${')
-        assert failing >= 2, 'a tier that finds no sources must fail, not pass silently'
-        # The gate checks FATAL/ERROR/WARNING, and it does so on the command line: a `--disable=C,R`
-        # living in a tier config would hide conventions from local runs too, which is not the deal.
-        scoped = [
-            line
-            for line in ci.splitlines()
-            if '--disable=C,R --fail-on=W,E,F' in line and not line.lstrip().startswith('#')
-        ]
-        assert len(scoped) == 2, 'exactly the two CI steps must carry the FATAL/ERROR/WARNING scoping'
+        # Both tiers are one invocation of the portable enumerator. Keeping the enumeration in a
+        # Python file is what lets the same two commands run on Windows, Linux and macOS; inline
+        # PowerShell (or bash) would make the gate itself a platform fact, which is the bug this pins.
+        assert ci_code.count('tools/ci_lint_tiers.py product') == 1
+        assert ci_code.count('tools/ci_lint_tiers.py tests') == 1
+        assert 'Get-ChildItem' not in ci_code, 'the lint gate must not be a PowerShell fact'
+        # The script enumerates FILES, names how much it linted, refuses an empty tier, and keeps
+        # FATAL/ERROR/WARNING scoping on the pylint command line rather than in a tier config.
+        assert "('backend', True, True)" in lint_script
+        assert "'desktop'" in lint_script and "'tools'" in lint_script and "'ml_train/scripts'" in lint_script
+        assert "'tests', True, False" in lint_script
+        assert "'--disable=C,R', '--fail-on=W,E,F'" in lint_script
+        assert "f'--rcfile={rcfile}'" in lint_script
+        assert "'.pylintrc'" in lint_script and "'.pylintrc.tests'" in lint_script
+        assert 'if not files:' in lint_script and 'return 1' in lint_script
+        assert "print(f'linting {len(files)} {args.tier} files')" in lint_script
         assert '--disable=C,R' not in (REPO / '.pylintrc').read_text(encoding='utf-8')
-        # The renamed folder is part of the gate, not a tidy-up: `Get-ChildItem packaging` would
-        # silently lint the installed distribution again.
-        assert 'Get-ChildItem desktop' in ci, 'the product tier must list the desktop/ build sources'
         assert not (REPO / 'packaging').exists(), 'no project directory may shadow an installed distribution'
         assert '--disable=C,R' not in (REPO / '.pylintrc.tests').read_text(encoding='utf-8')
+        # The matrix is the whole point: the same commands run on all three systems. A runner that
+        # drifts out of the list should be a review decision, not an accidental deletion.
+        for runner in ('windows-latest', 'ubuntu-latest', 'macos-15'):
+            assert runner in ci, f'{runner} is missing from the CI matrix'
         # The probes tier may be DOCUMENTED in this file (the local command is worth writing down),
         # but no step may RUN it — a step over an empty target list is the silent green we refuse.
         probes_lines = [line for line in ci.splitlines() if '.pylintrc.probes' in line]

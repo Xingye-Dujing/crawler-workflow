@@ -253,6 +253,7 @@ class TestFailureReporting:
         assert logged is None
         assert asked == ['启动失败。']
 
+    @pytest.mark.skipif(os.name != 'nt', reason='MessageBoxW is a Windows capability')
     def test_the_real_dialog_opens_only_for_the_frozen_build(self, desktop, monkeypatch):
         """A source run has a terminal that stays up; an unattended build check that hit a failure
         would otherwise stall on a box nobody is there to dismiss. When the build IS frozen the box
@@ -267,6 +268,7 @@ class TestFailureReporting:
         desktop._message_box('启动失败。', '采析绘 已在运行')
         assert len(seen) == 1 and seen[0][1] == '启动失败。' and seen[0][2] == '采析绘 已在运行'
 
+    @pytest.mark.skipif(os.name != 'nt', reason='MessageBoxW is a Windows capability')
     def test_a_dialog_that_cannot_be_shown_says_so(self, desktop, monkeypatch, capsys):
         def _refuse(*args):
             raise OSError('no window station')
@@ -276,6 +278,22 @@ class TestFailureReporting:
         monkeypatch.setattr(desktop.ctypes, 'windll', windll)
         desktop._message_box('启动失败。')
         assert '弹窗没能显示' in capsys.readouterr().out
+
+    @pytest.mark.skipif(os.name == 'nt', reason='the POSIX refusal is the branch under test')
+    def test_no_dialog_is_attempted_off_windows(self, desktop, monkeypatch):
+        """The other two cases exercise Windows' ``MessageBoxW``. Here the contract is the
+        refusal: neither a source run nor a frozen one may reach into ``ctypes.windll`` on a
+        system where that attribute does not exist."""
+
+        class _NoWindll:
+            def __getattr__(self, name):
+                raise AssertionError(f'ctypes.{name} was touched without a Windows message box')
+
+        monkeypatch.setattr(desktop, 'is_frozen', lambda: False)
+        monkeypatch.setattr(desktop, 'ctypes', _NoWindll())
+        desktop._message_box('启动失败。')  # a source run must return without asking
+        monkeypatch.setattr(desktop, 'is_frozen', lambda: True)
+        desktop._message_box('启动失败。')  # frozen or not, there is no box to open here
 
 
 class TestAlreadyRunning:

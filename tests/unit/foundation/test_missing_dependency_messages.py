@@ -7,6 +7,7 @@ process, a figure full of boxes, or a PDF that simply never appeared.
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -32,6 +33,10 @@ class TestTheMachineProbes:
     def test_an_explicit_browser_path_is_the_answer_or_nothing(self, tmp_path):
         real = tmp_path / 'chrome.exe'
         real.write_bytes(b'MZ')
+        # Off Windows `_is_executable` also asks for the executable bit, and that is the product
+        # contract: a Chrome on PATH without it would raise PermissionError from the driver rather
+        # than be reported as this machine's browser.
+        os.chmod(real, 0o755)
         assert machine.find_chrome(str(real)) == str(real)
         # A typo must not be papered over by a Chrome the user never chose: a copied profile is a
         # second device to a site's risk control, so which browser ran is the user's decision.
@@ -42,6 +47,7 @@ class TestTheMachineProbes:
         env = {'PROGRAMFILES': str(tmp_path), 'CHROME_PATH': str(chrome), 'CHROME_BIN': ''}
         assert machine.chrome_candidates(env) == [], 'no candidate exists on disk yet'
         chrome.write_bytes(b'MZ')
+        os.chmod(chrome, 0o755)
         found = machine.chrome_candidates(env)
         assert found == [str(chrome)], 'the env override answers, the install root does not exist here'
 
@@ -138,7 +144,9 @@ class TestWhatALaTeXRefusalSays:
     def test_a_missing_package_is_named_as_a_package(self):
         message = latex_compile.explain_failure("! LaTeX Error: File `ctex.sty' not found.", b'')
         assert 'ctex' in message
-        assert 'MiKTeX' in message
+        # The remedy is an operating-system fact: a Linux user is not told to open MiKTeX.
+        expected = {'win32': 'MiKTeX', 'linux': 'apt-get', 'darwin': 'MacTeX'}[machine.platform_name()]
+        assert expected in message, message
 
     def test_a_missing_font_is_named_as_a_font(self):
         log = '! Package fontspec Error: The font "FangSong" cannot be found.'
