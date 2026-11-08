@@ -538,7 +538,12 @@ def path_load_refusal(root: Path) -> str:
             probe.unlink()
     if result.returncode == 0 and 'OK' in (result.stdout or ''):
         return ''
-    lines = (result.stderr or result.stdout or '').strip().splitlines()
+    output = f'{result.stdout or ""}\n{result.stderr or ""}'
+    # Only the CLR's remote-assembly refusal is a verdict. A locked-down PowerShell (execution
+    # policy, missing profile) must not block a perfectly good folder: that check could not answer.
+    if '0x80131515' not in output and 'network location' not in output and '网络位置' not in output:
+        return ''
+    lines = output.strip().splitlines()
     return lines[-1] if lines else 'Assembly.LoadFrom was refused'
 
 
