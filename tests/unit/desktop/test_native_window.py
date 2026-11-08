@@ -168,6 +168,18 @@ def test_storage_falls_back_to_the_application_data_root(window, monkeypatch, tm
     assert Path(window.storage_dir('webview')) == tmp_path / 'data' / 'webview'
 
 
+def test_complaining_about_a_missing_runtime_does_not_require_startfile(window, monkeypatch):
+    """``os.startfile`` is Windows-only; the notice must still be assembled off Windows.
+
+    The branch that offers the WebView2 download is reachable only on Windows, but importing and
+    linting the module happens on every runner. Asking for the attribute instead of dereferencing
+    it keeps that path from turning an importable module into a platform-specific one.
+    """
+    monkeypatch.setattr(window, 'alert', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(window, 'os', types.SimpleNamespace())
+    window.complain('WebView2 runtime is missing')  # must not raise
+
+
 def test_a_machine_without_the_host_is_refused_by_name(window, monkeypatch):
     monkeypatch.setitem(sys.modules, 'webview', None)
     reason = window.run('采析绘', 'http://127.0.0.1:3968/token/')

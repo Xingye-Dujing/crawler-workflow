@@ -271,8 +271,12 @@ def complain(reason: str, title: str = '采析绘') -> None:
         text = f'{reason}\n\n窗口没能打开。请把这段提示和日志文件一起发给维护者。'
     alert(text, title)
     if missing_runtime:
-        with contextlib.suppress(OSError):
-            os.startfile(WEBVIEW2_URL)
+        # ``os.startfile`` exists only on Windows. Asking for it through ``getattr`` keeps this
+        # module importable (and lintable) on Linux/macOS, where this branch cannot run anyway.
+        open_url = getattr(os, 'startfile', None)
+        if open_url is not None:
+            with contextlib.suppress(OSError):
+                open_url(WEBVIEW2_URL)
 
 
 def activate(pid: int) -> bool:

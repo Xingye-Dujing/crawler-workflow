@@ -5114,6 +5114,9 @@ def test_a_server_without_a_desktop_hides_the_windows_only_controls_and_greys_th
         I18n.apply();
         const rows = Array.from(document.querySelectorAll('.windows-only'));
         const display = () => rows.map((el) => getComputedStyle(el).display);
+        // Measure the visible state deliberately: a Linux/macOS server already starts with the
+        // verdict false, so the page loaded by this test would otherwise begin hidden.
+        Machine.apply({ machine: { windows_desktop: true } });
         const before = display();
         Machine.apply({ machine: { windows_desktop: false } });
         const after = display();

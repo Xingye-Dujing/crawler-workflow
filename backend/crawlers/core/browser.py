@@ -175,6 +175,11 @@ def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -
     # settings store, editable in the frontend 设置 panel.
     opts.add_argument(f'--window-size={get_setting("window_size")}')
     opts.add_argument('--lang=zh-CN')
+    # ``--lang`` sets the UI locale, which a Linux/macOS runner without that locale falls back
+    # from — navigator.languages then reports en-US even though the UI language was asked for.
+    # ``--accept-lang`` is the switch that actually seeds navigator.languages and the HTTP header
+    # on every OS, so the language surface the automation mask claims to leave alone is zh-CN.
+    opts.add_argument('--accept-lang=zh-CN,zh')
     # Sites' risk control treats navigator.webdriver as proof of a bot and
     # hard-blocks content pages (search keeps working, which is why the block
     # looked selective). Hide the automation flag on both surfaces.

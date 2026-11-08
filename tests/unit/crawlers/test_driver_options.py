@@ -88,6 +88,7 @@ def test_driver_options_per_mode(captured_options, headless):
         assert flag in args, f'{flag} must be on in {"headless" if headless else "visible"} mode too'
     assert '--window-size=' in joined
     assert '--lang=zh-CN' in joined
+    assert '--accept-lang=zh-CN,zh' in joined, 'navigator.languages needs the accept-lang switch, not only --lang'
     assert captured_options['service'][0] == 'service'
     crawler.driver = None  # nothing real to close
 
