@@ -1128,6 +1128,15 @@ def test_the_launcher_starts_the_clock_the_serving_process_needs():
     assert source.index('start_background_services()') < source.index('server.serve_forever')
 
 
+def test_the_doctor_sees_the_components_that_were_just_installed():
+    """A successful online install reported “CatBus 找不到适配器” because ``--doctor`` returned
+    before the manifest's paths were exported. The report the installer shows must describe the
+    components that were installed, not only the ones already on PATH."""
+    source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
+    assert source.count('apply_component_env(root)') == 1
+    assert source.index('apply_component_env(root)') < source.index("if '--doctor' in argv:")
+
+
 class TestTheWindowIsTheUserInterface:
     """There is no console and no browser handoff: the page lives in a WebView2 window.
 

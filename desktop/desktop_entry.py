@@ -674,6 +674,12 @@ def main(argv=None) -> int:
     with contextlib.suppress(OSError):
         os.chdir(base)
 
+    # The environment matrix the installer shows must describe the components that were just
+    # installed, so the manifest's paths are exported BEFORE either the doctor report or the app
+    # import runs. Skipping this made a successful online install report “CatBus 找不到适配器”.
+    _join_backend(base)
+    apply_component_env(root)
+
     if '--doctor' in argv:
         return _component_doctor(base)
 
@@ -698,7 +704,6 @@ def main(argv=None) -> int:
     # Patch the two package-level facts that a frozen bundle cannot infer: relative
     # optional models are looked up beside the exe, and a chromedriver that does not
     # exist must be left blank so Selenium Manager can resolve it.
-    apply_component_env(root)
     try:
         from core import config
 
