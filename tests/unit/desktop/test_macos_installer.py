@@ -116,17 +116,18 @@ def test_the_mac_components_live_under_the_chosen_data_root(tmp_path, monkeypatc
     assert paths.install_root() == tmp_path / 'root'
 
 
-def test_the_checked_in_catalog_has_both_mac_arches_and_no_catbus_build():
+def test_the_checked_in_catalog_has_both_mac_arches_for_every_native_component():
     catalog = Catalog(load_catalog(CATALOG_PATH))
-    for component_id in ('chrome', 'chromedriver', 'node'):
+    for component_id in ('chrome', 'chromedriver', 'node', 'catbus'):
         for key in ('darwin-arm64', 'darwin-x64'):
             asset = catalog.get(component_id).asset(key)
             assert asset is not None, f'{component_id} has no {key} asset'
             assert len(asset.sha256) == 64
             assert asset.size > 0
-            assert asset.urls and all(url.startswith('https://') for url in asset.urls)
-    assert catalog.get('catbus').asset('darwin-arm64') is None
-    assert catalog.get('catbus').asset('darwin-x64') is None
+            assert asset.urls or asset.parts, f'{component_id}/{key} has no source'
+            for url in [*asset.urls, *(part.url for part in asset.parts)]:
+                assert url.startswith('https://')
+    assert 'node' in catalog.get('catbus').requires, 'the installer must add Node with CatBus'
     assert catalog.get('catbus').asset('win32') is not None
     # The build script adds the application entry; the checked-in catalogue never names bytes that
     # have not been built yet.

@@ -435,9 +435,10 @@ tokenizers，不含 torch/transformers；BERT 用 ONNX 运行时，和 Windows �
 `~/Library/Application Support/CaiXiHui/components`。安装器构建时生成自己的清单（多一条 `darwin-<arch>`
 的 `app` 资产，SHA-256 正好是那个 DMG）；签入的 `default_catalog.json` 只放已存在的 mac 组件资产。
 
-macOS 上 **CatBus 没有官方构建**：安装器仍把它列出来，但灰色不可勾选并显示“此平台暂不提供”；
-Selenium 采集和其他功能不受影响。在线安装器不请求管理员权限；主程序的数据目录写进
-`data-root.txt`（.app 旁边）和 `com.caixihui.desktop` 的首选项，移动 .app 后仍能找到自定义数据目录。
+macOS 的 **CatBus 现在有官方 arm64/x64 构建**：安装器会像 Windows 一样列出并默认勾选，自动连同 Node
+一起装好；已装好的 `CIXI_CATBUS_CLI` / `CIXI_NODE_BIN` 由启动器在导入配置前导出。在线安装器不请求管理员
+权限；主程序的数据目录写进 `data-root.txt`（.app 旁边）和 `com.caixihui.desktop` 的首选项，移动 .app 后
+仍能找到自定义数据目录。
 
 **未在本机实测**：这个 checkout 没有 macOS，PyInstaller 也不能交叉编译；首次真实构建要等 GitHub
 Actions 跑完。DMG 未签名/未公证，首次打开需右键“打开”或在“隐私与安全性”里放行。macOS 的

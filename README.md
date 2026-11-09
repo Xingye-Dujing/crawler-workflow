@@ -69,7 +69,8 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   `portable.txt` 就变便携版）。macOS 的 `.app`/DMG 由 `desktop/build_macos.py` 在 GitHub 的 macOS runner
   上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`；
   同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（先下载主程序 DMG 和
-  Chrome/Node，再装到 `/Applications`）；CatBus 在 macOS 上暂无官方构建，安装器会灰显并说明。
+  Chrome/Node，再装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像 Windows 一样下载并
+  连同 Node 一起装好。
   Windows 与 macOS 的在线安装器都能选一个本地的 `CaiXiHui-bert-models-win64.zip`（ONNX 模型两个平台
   通用；这是只读源），解压到数据文件夹的 `bert_models/`（存放位置随数据文件夹同步）并登记进模型列表。
   构建、体积与依赖自查见 [`desktop/README.md`](desktop/README.md)。

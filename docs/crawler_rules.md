@@ -399,8 +399,9 @@
   `login_wall` / `risk_blocked` 是"我们的浏览器会话死了／被风控了"的浏览器事实，catbus 后端**永不置位**
   （置了会翻 `execution_state['cookie_expired']`，把用户引向重存 Selenium Cookie 这条错建议），
   改为抛出自己那一句带 `catbus <平台> auth login` 的拒绝。
-- **macOS 没有 CatBus 官方构建。** 在线安装器仍列出它（灰色、显示“此平台暂不提供”），不假装可下载；
-  Selenium 采集不受影响。已有自建 CatBus 的 macOS 用户可以在设置里指向自己的 Node 与 `cli.js`。
+- **macOS 现在有 CatBus 官方构建。** 在线安装器按 `darwin-arm64` / `darwin-x64` 下载对应包，随主程序
+  一起装好 Node；`CIXI_CATBUS_CLI` / `CIXI_NODE_BIN` 由启动器在导入配置前导出。没有官方构建时按名说明的
+  旧规则不再适用；自建 CatBus 的用户仍可在设置里指向自己的 Node 与 `cli.js`。
 - **只读能力才进清单，写操作机械排除。** CatBus 侧由 `write()` 声明的命令带 `mutating: true`，清单生成时机械排除；
   适配器另外拒绝 `msg *`（私信是用户的私人通信，不是要采集的内容）。新增一个读命令时清单自动带上它，
   不需要在采析绘里加一行；新增一个写命令也不可能自动出现在面板上。适配器测试同时从 `vocab.ts` 源码清点

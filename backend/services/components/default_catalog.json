@@ -207,6 +207,44 @@
               "size": 73692601
             }
           ]
+        },
+        "darwin-arm64": {
+          "archive": "zip",
+          "strip_prefix": "catbus-crawler-workflow",
+          "verify": ["dist/integrations/crawler-workflow/cli.js"],
+          "sha256": "55db40f1680d9a305a7be75d49231ff83ba1a29e28ce7b2e63832048d3ba1b2b",
+          "size": 177355997,
+          "parts": [
+            {
+              "url": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow/releases/download/crawler-workflow-v0.3.0/catbus-crawler-workflow-darwin-arm64.zip.001",
+              "sha256": "07ea5eec81d9e3af0090f2f2217f321b131c2374d5198d8a746ed788aad5f23b",
+              "size": 94371840
+            },
+            {
+              "url": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow/releases/download/crawler-workflow-v0.3.0/catbus-crawler-workflow-darwin-arm64.zip.002",
+              "sha256": "f128691e91174d52698020870c0b94595c8415e20f9e156b2d526e26bf55c4f2",
+              "size": 82984157
+            }
+          ]
+        },
+        "darwin-x64": {
+          "archive": "zip",
+          "strip_prefix": "catbus-crawler-workflow",
+          "verify": ["dist/integrations/crawler-workflow/cli.js"],
+          "sha256": "3d18821284982e2370e5fb913c7d79c6f71d9e009b55046ccd8f80b54320dc15",
+          "size": 178694935,
+          "parts": [
+            {
+              "url": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow/releases/download/crawler-workflow-v0.3.0/catbus-crawler-workflow-darwin-x64.zip.001",
+              "sha256": "b9f595770ff192f6dee3f4477a038523c1d4f79db69e32ed9e6b9d7efb273c71",
+              "size": 94371840
+            },
+            {
+              "url": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow/releases/download/crawler-workflow-v0.3.0/catbus-crawler-workflow-darwin-x64.zip.002",
+              "sha256": "d112d3787ac7e8acf499c21a0e383cc6b7174464103876b2a1f4fd00b20ed401",
+              "size": 84323095
+            }
+          ]
         }
       }
     },

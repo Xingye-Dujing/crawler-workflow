@@ -109,10 +109,10 @@ Chrome for Testing、chromedriver、Node.js 装到 `~/Library/Application Suppor
 用户目录，而不是静默失败。安装完成会写入 `data-root.txt`（.app 旁边）和 `com.caixihui.desktop`
 的首选项，所以之后从 Finder 双击也能找到自定义数据目录。
 
-macOS 的组件清单按 CPU 分开：`darwin-arm64` / `darwin-x64`。Chrome for Testing、chromedriver 与
-Node.js 的官方资产本来就是按架构分开的；两个地址（npmmirror + Google/Node 官方）指向同一份构建。
-**CatBus 目前没有 macOS 官方构建**：安装器仍列出它（灰色、不可勾选，显示“此平台暂不提供”），
-Selenium 采集不受影响；已有自建 CatBus 的用户可以在设置里指向自己的 Node 和 `cli.js`。
+macOS 的组件清单按 CPU 分开：`darwin-arm64` / `darwin-x64`。Chrome for Testing、chromedriver、
+Node.js 和 **CatBus** 的官方资产都按架构分开；两个地址（npmmirror + Gitee/Google）指向同一份构建。
+CatBus 的 mac 包会自动带上 Node 依赖，安装后在启动器导出 `CIXI_CATBUS_CLI` / `CIXI_NODE_BIN`，
+设置里的“环境与组件”和 CatBus 节点都能直接使用。
 
 构建（macOS runner 上，见 `.github/workflows/macos-build.yml`）：
 
@@ -261,6 +261,6 @@ macOS 的构建命令见上面的“macOS 在线安装器”；它只能在 macO
 - Ollama 模型没有国内官方镜像，默认不选；选择本机 LLM 的用户需要能访问 `registry.ollama.ai` 或自备 Ollama。
 - Windows 版为 x64；macOS 版为 11+（arm64 / x86_64）。`desktop/` 是唯一的 OS 打包目录，Windows 和
   macOS 的平台事实都留在里面，不进 `backend/`。
-- macOS 的 DMG 未签名/未公证，首次打开需右键“打开”；CatBus 没有 macOS 构建，安装器只显示不安装。
+- macOS 的 DMG 未签名/未公证，首次打开需右键“打开”；CatBus 有 macOS 官方构建，安装器会连同 Node 一起安装。
 - Windows 与 macOS 都带 onnxruntime + tokenizers；BERT 模型包是同一份 ONNX 目录。torch/transformers
   仍只在开发机使用，不进桌面包。
