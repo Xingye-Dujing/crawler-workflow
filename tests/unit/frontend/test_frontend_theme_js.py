@@ -56,6 +56,12 @@ class TestThemeSwitch:
 
 
 class TestThemeFirstPaint:
+    """theme-boot.js, the page's first script, applies the SAVED choice before any app code.
+
+    The harness seeds ``theme: dark, bg: void, lang: en`` before loading the page, so these
+    assertions read what the first painted frame would show — not what a later repaint fixes.
+    """
+
     def test_the_first_run_default_is_light_not_auto(self):
         """A new install starts paper-white; auto remains a choice the user can pick later."""
         boot = (JS_DIR / 'theme-boot.js').read_text(encoding='utf-8')
@@ -63,12 +69,6 @@ class TestThemeFirstPaint:
         assert "settings.theme || 'light'" in boot
         assert "theme: 'light'" in app
         assert "dataset.themeChoice || 'light'" in app
-
-    """theme-boot.js, the page's first script, applies the SAVED choice before any app code.
-
-    The harness seeds ``theme: dark, bg: void, lang: en`` before loading the page, so these
-    assertions read what the first painted frame would show — not what a later repaint fixes.
-    """
 
     def test_the_saved_theme_is_on_the_document_before_app_code_runs(self, theme):
         boot = theme['boot']
