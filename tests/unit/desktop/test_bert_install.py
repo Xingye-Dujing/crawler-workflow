@@ -168,7 +168,8 @@ def test_the_page_and_state_expose_the_optional_field():
 def test_elevation_and_open_use_the_real_state():
     installer = (REPO / 'desktop' / 'bootstrap' / 'installer.py').read_text(encoding='utf-8')
     script = (REPO / 'desktop' / 'bootstrap' / 'installer_page.js').read_text(encoding='utf-8')
-    assert 'IsUserAnAdmin' in installer
+    assert 'TokenElevation' in installer or 'GetTokenInformation' in installer
+    assert 'shell32.IsUserAnAdmin' not in installer, 'group membership is not elevation'
     assert 'not is_elevated()' in installer, 'a manifest-elevated process must not ask for UAC twice'
     assert "payload.get('root')" in installer, 'Open folder must use the path on screen'
     assert "root: byId('root').value" in script

@@ -724,20 +724,55 @@ def relaunch_command(argv: list[str]) -> tuple[str, str]:
 
 
 def is_elevated() -> bool:
-    """Whether THIS process already holds an administrator token.
+    """Whether THIS process's token is elevated (not merely an Administrators-group member).
 
-    The online installer's manifest is ``requireAdministrator``, so normally the first process is
-    already elevated. The old code treated "not started with ``--elevated``" as "not elevated" and
-    asked for UAC a second time; when Windows declined that redundant request the user saw
-    "没有拿到管理员权限" after having just clicked 是 on the real prompt. Ask the token instead.
+    ``IsUserAnAdmin`` reports group membership, which stays true for a filtered UAC token; using it
+    would skip the elevation prompt on a non-elevated admin and then fail at the first write. Ask
+    the token's ``TokenElevation`` value instead.
     """
     if os.name != 'nt':
         return False
     try:
         import ctypes
+        from ctypes import wintypes
 
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except (AttributeError, OSError):
+        kernel32 = ctypes.windll.kernel32
+        advapi32 = ctypes.windll.advapi32
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        advapi32.OpenProcessToken.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.HANDLE),
+        ]
+        advapi32.OpenProcessToken.restype = wintypes.BOOL
+        advapi32.GetTokenInformation.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        advapi32.GetTokenInformation.restype = wintypes.BOOL
+        token = wintypes.HANDLE()
+        # TOKEN_QUERY = 0x0008
+        if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(token)):
+            return False
+        try:
+            elevation = wintypes.DWORD()
+            size = wintypes.DWORD()
+            # TokenElevation = 20; a DWORD where 1 means the token is elevated.
+            if not advapi32.GetTokenInformation(
+                token,
+                20,
+                ctypes.byref(elevation),
+                ctypes.sizeof(elevation),
+                ctypes.byref(size),
+            ):
+                return False
+            return elevation.value == 1
+        finally:
+            kernel32.CloseHandle(token)
+    except (AttributeError, OSError, TypeError, ValueError):
         return False
 
 
