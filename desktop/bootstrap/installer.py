@@ -723,14 +723,35 @@ def relaunch_command(argv: list[str]) -> tuple[str, str]:
     return sys.executable, subprocess.list2cmdline([script, *argv])
 
 
-def _relaunch_elevated(root: Path, data: Path) -> bool:
+def is_elevated() -> bool:
+    """Whether THIS process already holds an administrator token.
+
+    The online installer's manifest is ``requireAdministrator``, so normally the first process is
+    already elevated. The old code treated "not started with ``--elevated``" as "not elevated" and
+    asked for UAC a second time; when Windows declined that redundant request the user saw
+    "没有拿到管理员权限" after having just clicked 是 on the real prompt. Ask the token instead.
+    """
+    if os.name != 'nt':
+        return False
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def _relaunch_elevated(root: Path, data: Path, bert: str = '') -> bool:
     """Ask Windows for administrator rights once, with the same folders preselected."""
     if os.name != 'nt':
         return False
     try:
         import ctypes
 
-        exe, params = relaunch_command(['--root', str(root), '--data', str(data), '--elevated'])
+        argv = ['--root', str(root), '--data', str(data), '--elevated']
+        if bert:
+            argv += ['--bert', bert]
+        exe, params = relaunch_command(argv)
         result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', exe, params, None, 1)
     except (AttributeError, OSError):
         return False
@@ -890,7 +911,8 @@ class Handler(BaseHTTPRequestHandler):
             state.cancel.set()
             self._json({'ok': True, 'state': state.snapshot()})
         elif route == '/api/open':
-            self._open_folder(state.root)
+            target = str(payload.get('root') or '').strip() or state.root
+            self._open_folder(target)
             self._json({'ok': True})
         elif route == '/api/launch':
             self._json(self._launch(state))
@@ -922,15 +944,19 @@ class Handler(BaseHTTPRequestHandler):
         state.set_bert(bert_text if state.bert_supported else '')
         root = Path(root_text)
         data = Path(data_text).expanduser()
-        refused = _writable(root) or _writable(data)
-        if refused:
-            # Nothing was downloaded yet, so asking for rights here costs the user one prompt
-            # instead of a failed install minutes later — and only when the folder needs it.
-            if not state.elevated and _relaunch_elevated(root, data):
+        for path in (root, data):
+            problem = _writable(path)
+            if not problem:
+                continue
+            # The manifest already asks for admin, so a second UAC here is only for an unusual
+            # non-elevated run (a source checkout, a host that stripped the manifest). Never ask
+            # twice when this token is already administrator: a redundant request can be denied
+            # and then the real write error is hidden behind a misleading "no admin" sentence.
+            if not is_elevated() and not state.elevated and _relaunch_elevated(root, data, state.bert):
                 self.server.stop_soon(0.8)
                 return {'ok': False, 'relaunching': True}
-            message = words['elevated_again'] if state.elevated else words['elevate_failed']
-            return {'ok': False, 'error': message}
+            log_line(f'install path not writable: {path}: {problem}')
+            return {'ok': False, 'error': words['not_writable'].format(path=path, err=problem)}
         remote = path_load_refusal(root)
         if remote:
             # A named refusal instead of letting the user install 560 MB onto a volume the
@@ -1037,7 +1063,7 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     options: dict[str, str] = {}
     for index, arg in enumerate(argv):
-        if arg in ('--root', '--data') and index + 1 < len(argv):
+        if arg in ('--root', '--data', '--bert') and index + 1 < len(argv):
             options[arg[2:]] = argv[index + 1]
     catalog = Catalog(load_catalog())
     state = InstallerState(
@@ -1046,6 +1072,8 @@ def main(argv=None) -> int:
         options.get('data') or str(default_data_root()),
         elevated='--elevated' in argv,
     )
+    if options.get('bert'):
+        state.set_bert(options['bert'])
     # A random path token keeps other local pages from poking this server. The environment
     # override exists for the packaged smoke test, which cannot read a windowed build's stdout.
     token = str(os.environ.get('CIXI_INSTALLER_TOKEN') or '').strip() or secrets.token_hex(8)

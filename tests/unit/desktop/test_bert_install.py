@@ -165,6 +165,15 @@ def test_the_page_and_state_expose_the_optional_field():
     assert 'GetOpenFileNameW' in installer
 
 
+def test_elevation_and_open_use_the_real_state():
+    installer = (REPO / 'desktop' / 'bootstrap' / 'installer.py').read_text(encoding='utf-8')
+    script = (REPO / 'desktop' / 'bootstrap' / 'installer_page.js').read_text(encoding='utf-8')
+    assert 'IsUserAnAdmin' in installer
+    assert 'not is_elevated()' in installer, 'a manifest-elevated process must not ask for UAC twice'
+    assert "payload.get('root')" in installer, 'Open folder must use the path on screen'
+    assert "root: byId('root').value" in script
+
+
 def test_the_installer_bundles_the_placement_module_and_registry_reader():
     windows = (REPO / 'desktop' / 'bootstrap' / 'installer.spec').read_text(encoding='utf-8')
     macos = (REPO / 'desktop' / 'bootstrap' / 'installer_macos.spec').read_text(encoding='utf-8')

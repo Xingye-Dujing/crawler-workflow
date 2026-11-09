@@ -41,6 +41,7 @@ TEXT = {
         'failed': '安装失败：{err}',
         'no_selection': '至少选择主程序。',
         'disk': '目标磁盘剩余 {free}，需要 {need}。请换一个磁盘或减少组件。',
+        'not_writable': '无法写入这个文件夹：\n{path}\n{err}\n请换一个文件夹，或确认它有写入权限。',
         'bad_path': (
             '这个文件夹所在的盘被 Windows 当作“网络位置”，装好的程序会无法加载界面组件：\n'
             '{path}\n请改选本机 C: 或 D: 上的文件夹（例如 C:\\Users\\你\\Programs\\CaiXiHui）。'
@@ -97,6 +98,9 @@ TEXT = {
         'failed': 'Install failed: {err}',
         'no_selection': 'Select at least the application.',
         'disk': 'The target drive has {free} free but needs {need}. Choose another drive or fewer components.',
+        'not_writable': (
+            'That folder cannot be written:\n{path}\n{err}\nChoose another folder or check its permissions.'
+        ),
         'bad_path': (
             'Windows classifies that drive as a network location, so the installed application '
             'could not load its window components:\n{path}\n'

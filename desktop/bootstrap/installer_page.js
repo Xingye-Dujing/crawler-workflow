@@ -282,7 +282,7 @@
     }
 
     function onOpen() {
-        post('/api/open').catch(function () {});
+        post('/api/open', { root: byId('root').value }).catch(function () {});
     }
 
     function onQuit() {
