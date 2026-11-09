@@ -204,6 +204,13 @@ x64 207,117,913 B；chromedriver arm64 9,378,279 B / x64 10,409,330 B；Node arm
 x64 54,203,979 B。SHA-256 见 `backend/services/components/default_catalog.json` 的 `darwin-arm64` /
 `darwin-x64` 条目。
 
+2026-11-09 的 macOS workflow（`main@473fe82`）也产出了两组产物：应用 DMG arm64 **156,092,737 B**
+（SHA-256 `da57c51137d881bd2d9c1bea39e75b50650c8ef7a20636c6d9a56eafd62db3a3`）/ x86_64
+**164,019,973 B**（`904eab2ebb5133645c119602cb8d6440efd696e5c12172bc9ef86f0828b34b6b`）；在线安装器 DMG
+arm64 **13,527,061 B**（`f9bf81b7005731443d883f864cf616acd6c918273adeb2ad398770033dadb655`）/ x86_64
+**14,312,449 B**（`522cdb31aff5719a0e6d81e58fb63ef35439e25c809c401cb74da112f2719016`）。
+两个安装器分别写了对应架构应用 DMG 的摘要；**没有在真实 Mac 上运行过**。
+
 ## 构建
 
 ```powershell
