@@ -980,6 +980,9 @@ class Handler(BaseHTTPRequestHandler):
         root = Path(root_text)
         data = Path(data_text).expanduser()
         for path in (root, data):
+            anchor = path.anchor
+            if anchor and not Path(anchor).exists():
+                return {'ok': False, 'error': words['drive_missing'].format(path=path)}
             problem = _writable(path)
             if not problem:
                 continue

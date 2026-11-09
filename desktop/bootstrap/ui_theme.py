@@ -42,6 +42,11 @@ TEXT = {
         'no_selection': '至少选择主程序。',
         'disk': '目标磁盘剩余 {free}，需要 {need}。请换一个磁盘或减少组件。',
         'not_writable': '无法写入这个文件夹：\n{path}\n{err}\n请换一个文件夹，或确认它有写入权限。',
+        'drive_missing': (
+            '这个盘符在当前管理员会话里不可见：\n{path}\n'
+            '如果它是映射网络驱动器（或 subst），UAC 提权不会继承原会话的盘符映射；'
+            '请改用 UNC 路径（\\\\服务器\\共享\\...）或本机 C:/D:。'
+        ),
         'bad_path': (
             '这个文件夹所在的盘被 Windows 当作“网络位置”，装好的程序会无法加载界面组件：\n'
             '{path}\n请改选本机 C: 或 D: 上的文件夹（例如 C:\\Users\\你\\Programs\\CaiXiHui）。'
@@ -100,6 +105,11 @@ TEXT = {
         'disk': 'The target drive has {free} free but needs {need}. Choose another drive or fewer components.',
         'not_writable': (
             'That folder cannot be written:\n{path}\n{err}\nChoose another folder or check its permissions.'
+        ),
+        'drive_missing': (
+            'This drive is not visible in the elevated session:\n{path}\n'
+            "If it is a mapped network drive (or subst), UAC does not inherit the original session's "
+            'drive mappings. Use the UNC path (\\\\server\\share\\...) or a local C:/D: folder.'
         ),
         'bad_path': (
             'Windows classifies that drive as a network location, so the installed application '
