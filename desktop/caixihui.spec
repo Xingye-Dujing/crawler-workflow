@@ -35,7 +35,7 @@ datas = [
     (str(ROOT / 'samples'), 'samples'),
     (str(ROOT / 'README.md'), '.'),
     # First-run assets the launcher copies into the user's data root (never overwritten).
-    (str(ROOT / 'data' / 'workflows' / '文献计量演示：CNKI 与 CSSCI 知识图谱.json'), 'seed/workflows'),
+    (str(ROOT / 'data' / 'workflows' / '红果短剧-四个热播榜.json'), 'seed/workflows'),
 ]
 for model in sorted(glob.glob(str(ROOT / 'data' / 'models' / '*.pkl'))):
     datas.append((model, 'seed/models'))

@@ -75,7 +75,8 @@
             ['title', 'title'], ['intro', 'intro'], ['dir-label', 'dir'], ['data-label', 'data_dir'],
             ['data-hint', 'data_hint'], ['bert-label', 'bert'], ['bert-hint', 'bert_hint'],
             ['preset-label', 'preset'], ['preset-one', 'preset_one'],
-            ['preset-app', 'preset_app'], ['components-label', 'components'], ['vpn', 'vpn'],
+            ['preset-app', 'preset_app'], ['shortcut-label', 'shortcut'],
+            ['components-label', 'components'], ['vpn', 'vpn'],
             ['license', 'license'], ['install', 'install'], ['cancel', 'cancel'], ['open', 'open'],
             ['browse-root', 'browse'], ['browse-data', 'browse'], ['browse-bert', 'browse'],
             ['doctor-launch', 'launch'], ['doctor-close', 'close'],
@@ -170,6 +171,7 @@
         for (var i = 0; i < radios.length; i += 1) {
             radios[i].checked = radios[i].value === state.preset;
         }
+        byId('shortcut').checked = state.shortcut !== false;
         renderComponents(state.components || []);
         byId('total').textContent = t('size', { size: humanSize(state.total) });
         var job = state.job || {};
@@ -256,6 +258,7 @@
                 root: byId('root').value,
                 data: byId('data').value,
                 bert: byId('bert').value,
+                shortcut: byId('shortcut').checked,
                 ids: selectedIds(),
                 lang: lang,
             });
@@ -407,9 +410,12 @@
     applyLang();
     applyState(state);
     if (!cfg.bert_supported) {
-        // The macOS bundle has no onnxruntime: a placed pack could never load, so the field is
-        // absent rather than accepting data that does nothing.
+        // A platform whose packaged app cannot load BERT must not accept a pack that could never
+        // load; Windows and macOS both support it today, the server flag stays the one verdict.
         byId('bert-section').hidden = true;
+    }
+    if (!cfg.shortcut_supported) {
+        byId('shortcut-choice').hidden = true;
     }
     if (state.job && state.job.state === 'running') startPolling();
 })();

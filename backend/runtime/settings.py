@@ -76,12 +76,11 @@ DEFAULTS = {
     #: from searching twice in one second, and no second browser reaching for a
     #: profile Chrome already holds. Off restores true concurrency and its risk.
     #: The cost of each choice is spelled out in the panel and the pre-run dialog.
-    'same_platform_queue': True,
+    'same_platform_queue': False,
     #: How long a crawl that had to queue behind its own platform then waits before
-    #: opening its browser. The site's tolerance is what set the default (12 s clears
-    #: both measured collisions), but how patient one account should be is the user's
-    #: call — a heavy 并行 canvas may want a bigger gap, and somebody who only ever
-    #: crawls two platforms at once may want none. 0 still queues; it just adds no gap.
+    #: opening its browser. The default is 1 s (2026-11): a short spacing is enough for the
+    #: measured collisions without making a parallel canvas feel serial. The user can raise it
+    #: for a heavy account, or set 0 to add no gap at all.
     'same_platform_stagger': int(Config.SAME_PLATFORM_STAGGER),
     # Give every platform its own Chrome profile so the crawl browser stays the same
     # device across runs. Off = the old behaviour (a blank profile plus a planted

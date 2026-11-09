@@ -61,8 +61,12 @@ xelatex（MiKTeX），这样项目全部依赖都在同一页可见；它们不�
 
 目标目录需要管理员权限时（例如 `C:\Program Files` 下），安装器**只请求一次** UAC，并用原来的两个路径重新打开；
 拒绝授权时会点名是哪个文件夹不可写，而不是下载到一半才失败。主程序启动时如果数据目录不可写，也会同样请求一次。
-安装器用进程 token（`IsUserAnAdmin`）判断当前是否已经提权：manifest 已经把进程提权时不会再弹第二次 UAC；
+安装器用进程 token（`GetTokenInformation` 的 `TokenElevation`）判断当前是否已经提权：manifest 已经把进程提权时不会再弹第二次 UAC；
 真的写不进去时提示点名文件夹和系统错误。“打开安装位置”使用输入框里当前的路径，不会跳回默认 C:。
+
+两个 Windows 安装器都有**创建桌面快捷方式**选项，快捷方式名字是“采析绘”（`采析绘.lnk`）：离线 Setup 用
+Inno 的 `desktopicon` 任务，在线安装器用页面上的“创建桌面快捷方式（采析绘）”复选框，默认勾选；取消就不创建。
+macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad 管理。
 
 启动器会在应用导入配置之前读取 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus 的路径导出为
 现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。**设置面板里手填的路径仍然优先**，

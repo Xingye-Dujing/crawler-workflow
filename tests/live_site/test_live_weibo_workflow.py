@@ -1336,7 +1336,7 @@ def test_g1_a_parallel_weibo_canvas_is_forced_into_the_queue(client, app_module,
     The switch has to be **off** for this cell to observe anything, and that is worth stating because it is
     the difference between testing a red line and testing a default: :func:`gate.hold` computes
     ``forced_serial = serial_only_of(platform) and not get_setting('same_platform_queue')``, so with the
-    queue on — its shipped default — weibo waits anyway and says so with ``run.platformQueued``. That line
+    queue on — the old default — weibo waits anyway and says so with ``run.platformQueued``. That line
     proves the *user's* switch worked. Only with it off does the console have to answer the real question,
     "did the matrix outrank the switch?", and ``run.serialForced`` is the only line that can say so.
 

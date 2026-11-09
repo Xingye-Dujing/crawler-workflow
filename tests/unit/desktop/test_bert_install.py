@@ -153,8 +153,18 @@ def test_the_page_and_state_expose_the_optional_field():
     page = (REPO / 'desktop' / 'bootstrap' / 'installer_page.html').read_text(encoding='utf-8')
     script = (REPO / 'desktop' / 'bootstrap' / 'installer_page.js').read_text(encoding='utf-8')
     installer = (REPO / 'desktop' / 'bootstrap' / 'installer.py').read_text(encoding='utf-8')
-    for marker in ('id="bert"', 'id="browse-bert"', 'id="bert-section"', 'id="bert-hint"', 'id="models-preview"'):
+    for marker in (
+        'id="bert"',
+        'id="browse-bert"',
+        'id="bert-section"',
+        'id="bert-hint"',
+        'id="models-preview"',
+        'id="shortcut"',
+        'id="shortcut-choice"',
+    ):
         assert marker in page
+    assert "shortcut: byId('shortcut').checked" in script
+    assert '采析绘.lnk' in installer
     theme = (REPO / 'desktop' / 'bootstrap' / 'ui_theme.py').read_text(encoding='utf-8')
     assert 'models_location' in theme and 'bert_source' in theme
     assert 'modelsPreview' in script and 'path_separator' in script

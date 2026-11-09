@@ -86,6 +86,7 @@ MAC_WORDS = {
         'elevate_failed': '这个目录不可写。请换一个目录，或检查它的权限。',
         'relaunching': '正在重新打开安装器…',
         'bad_path': '这个文件夹不能被写入：{path}',
+        'drive_missing': '这个文件夹不可用：{path}',
         'open': '打开安装目录',
     },
     'en': {
@@ -115,6 +116,7 @@ MAC_WORDS = {
         'elevate_failed': 'That folder is not writable. Choose another folder or check its permissions.',
         'relaunching': 'Reopening the installer…',
         'bad_path': 'That folder cannot be written: {path}',
+        'drive_missing': 'That folder is not available: {path}',
         'open': 'Open install folder',
     },
 }
@@ -276,6 +278,10 @@ def _install_app(catalog, root: Path, data: Path, progress, cancel) -> Path:
 
 class MacInstallerState(installer.InstallerState):
     """The Windows state with a macOS job: app from a DMG, tools into the data root."""
+
+    #: The macOS app is installed in /Applications and appears in Launchpad; a desktop .lnk is a
+    #: Windows shell concept, so its page hides the checkbox.
+    shortcut_supported = False
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

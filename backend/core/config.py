@@ -230,7 +230,7 @@ class Config:
     #: both collisions, and the settings panel hands the number to the user, because
     #: how patient a given account should be is a judgement about that account, not a
     #: fact this code can know. 0 in the panel means "queue, but do not add a gap".
-    SAME_PLATFORM_STAGGER = 12.0
+    SAME_PLATFORM_STAGGER = 1.0
 
     #: A wall met *before the first row* is that collision's shape, not a dead cookie:
     #: a cookie that dies mid-crawl leaves rows behind, and that path stays

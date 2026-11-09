@@ -1197,6 +1197,23 @@ def test_the_launcher_opens_the_main_window_maximized():
     assert 'maximized=True' in entry
 
 
+def test_the_bundled_demo_workflow_is_the_hongguo_hot_list():
+    demo = REPO / 'data' / 'workflows' / '红果短剧-四个热播榜.json'
+    assert demo.is_file()
+    for spec in (PACKAGING / 'caixihui.spec', PACKAGING / 'caixihui_macos.spec'):
+        text = spec.read_text(encoding='utf-8')
+        assert '红果短剧-四个热播榜.json' in text
+        assert '文献计量演示' not in text, 'the first-run canvas is the hot-list demo, not the biblio one'
+
+
+def test_the_offline_installer_offers_a_desktop_shortcut_named_caixihui():
+    iss = (PACKAGING / 'installer.iss').read_text(encoding='utf-8-sig')
+    assert '#define MyAppName "采析绘"' in iss
+    assert 'Name: "desktopicon"' in iss
+    assert 'Name: "{autodesktop}\\{#MyAppName}"' in iss
+    assert 'Tasks: desktopicon' in iss
+
+
 def test_the_doctor_sees_the_components_that_were_just_installed():
     """A successful online install reported “CatBus 找不到适配器” because ``--doctor`` returned
     before the manifest's paths were exported. The report the installer shows must describe the

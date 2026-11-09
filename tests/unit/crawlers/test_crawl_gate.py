@@ -85,6 +85,13 @@ def _enter(platform):
         return waited
 
 
+def test_the_default_queue_is_off_and_stagger_is_one_second():
+    from runtime import settings
+
+    assert settings.DEFAULTS['same_platform_queue'] is False
+    assert settings.DEFAULTS['same_platform_stagger'] == 1
+
+
 class TestStrictQueue:
     def test_an_empty_platform_costs_nothing(self, monkeypatch, isolated):
         _settings(monkeypatch, queue=True)

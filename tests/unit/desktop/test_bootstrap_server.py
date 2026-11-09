@@ -85,6 +85,9 @@ def test_the_optional_bert_path_is_part_of_the_state(installer):
     assert body['bert'] == ''
     assert body['bert_supported'] is True
     assert body['models'] == str(Path('D:/data') / 'bert_models'), 'the model folder follows the data folder'
+    assert body['shortcut'] is True and body['shortcut_supported'] is True
+    state.set_shortcut(False)
+    assert state.snapshot()['shortcut'] is False
     state.set_bert('D:/models/CaiXiHui-bert-models-win64.zip')
     assert state.snapshot()['bert'] == 'D:/models/CaiXiHui-bert-models-win64.zip'
 

@@ -50,6 +50,9 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 `app/` 的路径，否则写绝对路径（macOS 总是绝对路径）；已有同名目录或条目不会覆盖。Windows 和 macOS
 的安装器都显示这一组路径。
 
+两个 Windows 安装器都有“创建桌面快捷方式”选项，名字是“采析绘”（`采析绘.lnk`）：离线 Setup 用 Inno 的
+`desktopicon` 任务，在线安装器用页面复选框（默认勾选）；取消就不创建。macOS 不显示这个选项。
+
 **窗口是本进程自己的 WebView2 窗口**（`desktop/native_window.py`，pywebview + Edge WebView2），
 页面仍由 `127.0.0.1` 的本地服务提供（固定端口 3968，路径里的随机令牌只监听本机）。界面复用应用前端的
 纸白/墨黑设计语言（`ui_theme.py` 的令牌与 `base.css` 同源），默认浅色、右上角可切深色，一屏放得下。
@@ -278,8 +281,9 @@ pandas/numpy/scipy/scikit-learn/matplotlib/snownlp/jieba 是包体的主要部�
   出图，需要模型的节点可改用 OpenRouter 或暂不使用。
 - **MiKTeX / xelatex**：不在包内；只影响编译节点、图表 PDF 与论文成稿，其余功能正常。
 
-`seed/models/*.pkl`（约 12 MB）与一个文献计量演示工作流会被复制到数据目录，作为首次体验；
-已存在的用户文件永远不会被覆盖。
+`seed/models/*.pkl`（约 12 MB）与一个红果热播榜演示工作流（`红果短剧-四个热播榜.json`）会被复制到数据目录，
+作为首次体验；已存在的用户文件永远不会被覆盖。文献计量工作流仍保留在仓库 `data/workflows/` 供分析示例，
+但**不再进入桌面包的 seed**。
 
 ## BERT 模型包（可选，单独分发；Windows / macOS 通用）
 
@@ -465,10 +469,10 @@ desktop\.venv-build\Scripts\python.exe -m pip install --no-cache-dir --no-build-
 构建脚本不会自动跑爬虫。发布前至少确认（**必须真的双击**，`CIXI_NO_WINDOW=1` + 指定
 `CRAWLER_DATA_ROOT` 恰好绕过了唯一真正会失败的那条路径——窗口创建）：
 
-1. 双击 `CaiXiHui.exe`，出现原生窗口显示 `http://127.0.0.1:5000/`（端口被占用会自动顺延），
-   右上角浅色/深色切换在重启后仍保持（WebView2 的 localStorage）；
+1. 双击 `CaiXiHui.exe`，出现**最大化**的原生窗口显示 `http://127.0.0.1:5000/`（端口被占用会自动顺延），
+   首次启动是浅色；右上角浅色/深色切换在重启后仍保持（WebView2 的 localStorage）；
 2. 首页、`/api/config`、`/api/workflow/list`、`/api/data/datasets`、`/api/runs/list` 返回 200；
-3. 打开文献计量演示工作流，能看到画布；上传 `samples/` 中的 CNKI 样例可跑通；
+3. 打开红果热播榜演示工作流，能看到画布；红果采集需要登录/风控条件，上传 `samples/` 的样例仍可验证分析；
 4. 设置页显示 chromedriver/Ollama 状态；不装 Chrome 时上传/分析仍可用；
 5. **量一次启动**：从进程起来到 `/api/config` 返回 200 的毫秒数，UPX 开与关各测一次（同一台机、
    同一数据根），两个数字都要写进发布说明——只报体积就是拿启动换 KPI；

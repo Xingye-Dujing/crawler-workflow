@@ -187,6 +187,7 @@ ManifestError = _MANIFEST.ManifestError
 InstallError = _INSTALL.InstallError
 install_component = _INSTALL.install_component
 download_asset = _DOWNLOAD.download_asset
+_PROC = importlib.import_module('core.procs')
 chosen_ids = _PLAN.chosen_ids
 default_data_root = _PLAN.default_data_root
 default_root = _PLAN.default_root
@@ -399,12 +400,61 @@ def pick_file(title: str) -> str:
     return file_buffer.value or ''
 
 
+def create_shortcut(exe: Path) -> str:
+    """Create ``采析绘.lnk`` on this user's Desktop; ``''`` on success or the reason.
+
+    The shortcut is a convenience, never a reason to call a finished install failed. PowerShell's
+    ``[Environment]::GetFolderPath('Desktop')`` follows OneDrive/redirection; paths travel in the
+    environment, not in the command line, so a Chinese or spaced install folder cannot break the
+    quoting. The same name is used by the offline Setup's desktop-icon task.
+    """
+    if os.name != 'nt':
+        return ''
+    if not exe.is_file():
+        return f'missing {exe}'
+    env = dict(os.environ)
+    env['CIXI_SHORTCUT_TARGET'] = str(exe)
+    env['CIXI_SHORTCUT_NAME'] = '采析绘.lnk'
+    env['CIXI_SHORTCUT_DESC'] = '采析绘'
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "$dir=[Environment]::GetFolderPath('Desktop');"
+        '$path=Join-Path $dir $env:CIXI_SHORTCUT_NAME;'
+        '$shell=New-Object -ComObject WScript.Shell;'
+        '$link=$shell.CreateShortcut($path);'
+        '$link.TargetPath=$env:CIXI_SHORTCUT_TARGET;'
+        '$link.WorkingDirectory=Split-Path -Parent $env:CIXI_SHORTCUT_TARGET;'
+        '$link.IconLocation=$env:CIXI_SHORTCUT_TARGET;'
+        '$link.Description=$env:CIXI_SHORTCUT_DESC;'
+        '$link.Save()'
+    )
+    try:
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script],
+            capture_output=True,
+            timeout=30,
+            check=False,
+            env=env,
+            **_PROC.popen_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return str(exc)
+    if result.returncode != 0:
+        text = (result.stderr or result.stdout or b'').decode('utf-8', errors='replace').strip()
+        return text.splitlines()[-1] if text else f'exit {result.returncode}'
+    return ''
+
+
 class InstallerState:
     """Everything the page may ask about, guarded because the install runs on a thread."""
 
     #: Whether this platform's packaged app can actually load a BERT pack. Windows ships
     #: onnxruntime; the macOS bundle deliberately does not, so its page hides the path field.
     bert_supported = True
+
+    #: Desktop shortcuts are a Windows shell concept. The macOS app is installed in /Applications
+    #: and appears in Launchpad; a checkbox there would do nothing.
+    shortcut_supported = True
 
     def __init__(
         self,
@@ -418,6 +468,7 @@ class InstallerState:
         self.data = str(data)
         self.elevated = elevated
         self.bert = ''
+        self.shortcut = True
         self.lock = threading.RLock()
         self.cancel = threading.Event()
         self.preset = 'one'
@@ -489,6 +540,8 @@ class InstallerState:
                 'models': self.models,
                 'bert': self.bert,
                 'bert_supported': self.bert_supported,
+                'shortcut': self.shortcut,
+                'shortcut_supported': self.shortcut_supported,
                 'preset': self.preset,
                 'components': rows,
                 # Bytes, not a sentence: the page renders the size in its own language.
@@ -510,6 +563,10 @@ class InstallerState:
     def set_bert(self, path) -> None:
         with self.lock:
             self.bert = str(path or '').strip()
+
+    def set_shortcut(self, enabled) -> None:
+        with self.lock:
+            self.shortcut = bool(enabled)
 
     def set_selection(self, ids) -> None:
         if not isinstance(ids, list):
@@ -598,6 +655,12 @@ class InstallerState:
             for name in placed['skipped_folders']:
                 self._log(f'bert model folder already present, kept: {name}')
             self._log(f'bert {ledger["packs"]} packs -> {models}')
+        if self.shortcut:
+            problem = create_shortcut(root / 'app' / 'CaiXiHui.exe')
+            if problem:
+                self._log(f'shortcut not created: {problem}')
+            else:
+                self._log('shortcut -> 采析绘.lnk')
         self._write_data_root(root, data)
         self._set_job(done=100, state='done', status_key='done', status_params={})
         self._run_doctor(root, data)
@@ -977,6 +1040,11 @@ class Handler(BaseHTTPRequestHandler):
             if problem:
                 return {'ok': False, 'error': words['bert_invalid'].format(err=problem)}
         state.set_bert(bert_text if state.bert_supported else '')
+        raw_shortcut = payload.get('shortcut', True)
+        if isinstance(raw_shortcut, str):
+            state.set_shortcut(raw_shortcut.strip().lower() not in ('0', 'false', 'off', 'no', ''))
+        else:
+            state.set_shortcut(bool(raw_shortcut))
         root = Path(root_text)
         data = Path(data_text).expanduser()
         for path in (root, data):
@@ -1058,6 +1126,7 @@ class Handler(BaseHTTPRequestHandler):
             'text': self.words,
             'state_labels': STATE_LABEL,
             'bert_supported': self.server.state.bert_supported,
+            'shortcut_supported': self.server.state.shortcut_supported,
             'path_separator': os.sep,
             'state': self.server.state.snapshot(),
         }

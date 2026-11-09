@@ -55,8 +55,8 @@
 | `page_load_timeout` / `element_timeout` | 页面/元素超时（秒；默认 40 / 15） |
 | `ollama_host` | Ollama 地址（覆盖环境变量） |
 | `cookie_preflight_before_run` | 运行前是否自动验证各平台 Cookie，过期就禁止执行（默认开；关掉则什么都不问） |
-| `same_platform_queue` | 真排队：同一平台一次只跑一条采集，前一条整个跑完才轮到下一条（默认开）。关掉只剩错峰。微博不受此开关影响，永远真排队（矩阵 `serial_only`） |
-| `same_platform_stagger` | 同平台错峰间隔（秒，默认 12，可填 0~600；0=不额外隔）。只对同时在跑的同平台采集生效，串行永远无缝 |
+| `same_platform_queue` | 真排队：同一平台一次只跑一条采集，前一条整个跑完才轮到下一条（**默认关**）。关掉时按 `same_platform_stagger` 错峰；打开时严格串行。微博不受此开关影响，永远真排队（矩阵 `serial_only`） |
+| `same_platform_stagger` | 同平台错峰间隔（秒，默认 1，可填 0~600；0=不额外隔）。只对同时在跑的同平台采集生效，串行永远无缝 |
 | `ask_overseas_network` | 画布里有海外平台时，运行前先问一句“外网开了吗”（默认开） |
 | `use_browser_profile` | 是否为每个平台使用持久浏览器 Profile 目录（默认开；关闭=每次全新浏览器 + 种一份旧 Cookie 快照） |
 | `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
@@ -102,7 +102,7 @@
 
 | 常量 | 说明 | 默认值 |
 |------|------|--------|
-| `SAME_PLATFORM_STAGGER` | 同平台两条同时在跑的采集至少隔多久发车（面板 `same_platform_stagger` 可改） | `12.0` |
+| `SAME_PLATFORM_STAGGER` | 同平台两条同时在跑的采集至少隔多久发车（面板 `same_platform_stagger` 可改） | `1.0` |
 | `PROFILE_LOCK_TIMEOUT` | 一个平台的 profile 被另一次采集占用时，最多排队多久；超时即以可读原因判该节点失败，不再抛驱动栈（面板可改） | `900` |
 | `WALL_RETRY_BACKOFF` | 第 0 行就撞墙时的退避重试等待；0 关掉重试（有过半数据的墙不在此列，那是 Cookie 死了，走续跑） | `45.0` |
 | `PLATFORM_GATE_TIMEOUT` | 一次采集最多等多久轮到本平台的同平台排队 | `900` |

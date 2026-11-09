@@ -105,6 +105,12 @@ def test_the_mac_installer_offers_the_same_optional_bert_pack(installer_app):
     assert 'root_label=models.as_posix()' in source
 
 
+def test_the_mac_installer_hides_the_windows_desktop_shortcut(installer_app):
+    assert installer_app.MacInstallerState.shortcut_supported is False
+    source = (BOOTSTRAP / 'installer_macos.py').read_text(encoding='utf-8')
+    assert 'shortcut_supported = False' in source
+
+
 def test_the_mac_components_live_under_the_chosen_data_root(tmp_path, monkeypatch):
     from services.components import paths
 
