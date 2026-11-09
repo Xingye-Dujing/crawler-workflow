@@ -1226,12 +1226,14 @@ class TestPortableComponentsPointTheLookups:
         root = tmp_path / 'install'
         components = root / 'components'
         # ``apply_component_env`` asks for this platform's component layout: node.exe on Windows,
-        # bin/node in the macOS/Linux tarballs. The installed file must match the lookup.
-        node = components / 'node' / '24.0' / component_payload_path('node')
+        # bin/node in the macOS/Linux tarballs. The manifest records the VERSION DIRECTORY — the
+        # installed root the lookup joins the payload path onto, not the payload's own folder.
+        version_dir = components / 'node' / '24.0'
+        node = version_dir / component_payload_path('node')
         node.parent.mkdir(parents=True)
         node.write_bytes(b'')
         manifest = Manifest(root)
-        manifest.record('node', '24.0', node.parent, 'a' * 64, 'https://example.com')
+        manifest.record('node', '24.0', version_dir, 'a' * 64, 'https://example.com')
         manifest.save()
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
@@ -1268,11 +1270,12 @@ class TestPortableComponentsPointTheLookups:
 
         root = tmp_path / 'install'
         components = root / 'components'
-        node = components / 'node' / '24.0' / component_payload_path('node')
+        version_dir = components / 'node' / '24.0'
+        node = version_dir / component_payload_path('node')
         node.parent.mkdir(parents=True)
         node.write_bytes(b'')
         manifest = Manifest(root)
-        manifest.record('node', '24.0', node.parent, 'a' * 64, 'https://example.com')
+        manifest.record('node', '24.0', version_dir, 'a' * 64, 'https://example.com')
         manifest.save()
         settings = tmp_path / 'data'
         settings.mkdir()
