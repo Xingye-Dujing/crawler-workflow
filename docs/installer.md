@@ -191,7 +191,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,795,365 B（约 13.8 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+**13,867,776 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
@@ -222,12 +222,16 @@ x64 207,117,913 B；chromedriver arm64 9,378,279 B / x64 10,409,330 B；Node arm
 x64 54,203,979 B。SHA-256 见 `backend/services/components/default_catalog.json` 的 `darwin-arm64` /
 `darwin-x64` 条目。
 
-2026-11-09 的 macOS workflow（`main@473fe82`）也产出了两组产物：应用 DMG arm64 **156,092,737 B**
-（SHA-256 `da57c51137d881bd2d9c1bea39e75b50650c8ef7a20636c6d9a56eafd62db3a3`）/ x86_64
-**164,019,973 B**（`904eab2ebb5133645c119602cb8d6440efd696e5c12172bc9ef86f0828b34b6b`）；在线安装器 DMG
-arm64 **13,527,061 B**（`f9bf81b7005731443d883f864cf616acd6c918273adeb2ad398770033dadb655`）/ x86_64
-**14,312,449 B**（`522cdb31aff5719a0e6d81e58fb63ef35439e25c809c401cb74da112f2719016`）。
+2026-11-09 的 macOS workflow（`main@75acd5e`，发布 tag `e8be04d`）也产出了两组产物：应用 DMG arm64
+**177,687,485 B**（SHA-256 `0a099826953f3dbdf215cdff25f30c1471b2aa6d87f1ba5bd71544ec4f560925`）/ x86_64
+**188,191,515 B**（`01ce7a8b2d47ef8dc296bbf0037ead4b621d1ec7d31f61214030d19e012e4ee8`）；在线安装器 DMG
+arm64 **14,833,224 B**（`d24e45e318c1b1af8f17ef4f5b4454d458a361cbe017845de17b9ef8e787ea5d`）/ x86_64
+**15,624,870 B**（`b4eccd28b12050bea4fb41099aa3a72d0ef0a5117daa8e32e755824120b253ff`）。
 两个安装器分别写了对应架构应用 DMG 的摘要；**没有在真实 Mac 上运行过**。
+
+2026-11-09 的 Windows 发布（圆形图标、BERT 两路径）：`CaiXiHui-win64.zip` **130,133,526 B**、离线
+`CaiXiHui-Setup.exe` **121,684,967 B**、在线 `CaiXiHui-Online-Setup.exe` **13,867,776 B**。三个 exe 图标
+都从同一份圆形 ICO 资源实测为 32×32、四角 alpha=0、中心 alpha=255；zip/Setup 内是同一份新主程序。
 
 ## 构建
 

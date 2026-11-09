@@ -225,6 +225,11 @@ loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、U
 
 ## 体积边界
 
+**2026-11-09 圆形图标 + BERT 安装那一轮**：`CaiXiHui-win64.zip` **130,133,526 B（124.1 MB）**、
+`CaiXiHui-Setup.exe` **121,684,967 B（116.0 MB）**、`CaiXiHui-Online-Setup.exe` **13,867,776 B（13.2 MB）**。
+三个 exe 都嵌入了同一份圆形 ICO（实测 32×32，角 alpha=0、中心 alpha=255）；macOS 应用 DMG
+177,687,485 / 188,191,515 B（含 onnxruntime），在线安装器 DMG 14,833,224 / 15,624,870 B。
+
 **2026-11-08 原生窗口那一轮**：文件夹 **158.8 MB**、zip **122.5 MB**（比上一轮 +2.6 / +1.2 MB：pywebview +
 pythonnet + WebView2 的 .NET 包装；运行时本体不打包，用的是系统已装的 Edge WebView2）。UPX 压 **268** 个
 二进制，`227.5 → 90.1 MB`，0 跳过 0 失败；窗口栈的 7 个 .NET DLL 按名排除（UPX 无法验证托管程序集，
