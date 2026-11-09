@@ -58,8 +58,8 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 纸白/墨黑设计语言（`ui_theme.py` 的令牌与 `base.css` 同源），默认浅色、右上角可切深色，一屏放得下。
 所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + WebView2 宿主 + 组件核心，约 14 MB。页面文件是
 `installer_page.html` / `installer_page.js`，测试只读它们和纯函数，不需要真的开窗口。
-主程序窗口由 `desktop_entry.py` / `macos_entry.py` 以 `maximized=True` 打开，启动即最大化；首次主题默认
-浅色，设置里的“自动/浅色/深色”仍可改。
+主程序窗口由 `desktop_entry.py` / `macos_entry.py` 以 `maximized=True` 打开；首次主题默认浅色，设置里的
+“自动/浅色/深色”仍可改。
 
 **exe 是窗口程序**（`console=False`），且**双击先请求管理员**（spec 的 `uac_admin=True`，manifest
 为 `requireAdministrator`）：UAC 在 onefile 解包之前出现，机器对未提权进程禁止 `%TEMP%` 写入时也能

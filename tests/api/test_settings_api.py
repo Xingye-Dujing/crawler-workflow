@@ -70,7 +70,7 @@ class TestSettingsRead:
         body = client.get('/api/settings').get_json()
         assert body['ok'] is True
         assert set(body['settings']) == set(settings.DEFAULTS)
-        assert body['settings']['window_size'] == '1920x1080'
+        assert body['settings']['window_size'] == '960x920'
         assert body['settings']['page_load_timeout'] == 40
         assert body['settings']['ollama_host'] == Config.OLLAMA_HOST
 
@@ -79,6 +79,11 @@ class TestSettingsRead:
         settings._values = None
         body = client.get('/api/settings').get_json()
         assert body['settings'] == settings.DEFAULTS
+
+
+def test_the_run_before_switches_default_to_no_cookie_probe_and_a_clean_console():
+    assert settings.DEFAULTS['cookie_preflight_before_run'] is False
+    assert settings.DEFAULTS['clear_console_before_run'] is True
 
 
 class TestSettingsWrite:
@@ -146,25 +151,24 @@ class TestSettingsWrite:
         assert any(key in warning for warning in body['warnings']), body['warnings']
 
     @pytest.mark.parametrize(
-        'key',
+        ('key', 'expected'),
         [
-            'cookie_preflight_before_run',
-            'same_platform_queue',
-            'use_browser_profile',
+            ('cookie_preflight_before_run', False),
+            ('same_platform_queue', False),
+            ('use_browser_profile', True),
         ],
     )
-    def test_the_switches_that_protect_a_run_default_to_on(self, client, key):
-        """The check protects a run from an hour spent on a dead cookie; queueing
-        protects a crawl the site would otherwise bounce. Opting out of any of them
-        is the explicit act, not the default."""
-        assert client.get('/api/settings').get_json()['settings'][key] is True
+    def test_the_run_switches_default_to_their_shipped_choice(self, client, key, expected):
+        """Cookie probing and true queueing are opt-in; the persistent profile protects the
+        login identity and stays on. Opting in/out is an explicit act."""
+        assert client.get('/api/settings').get_json()['settings'][key] is expected
 
     @pytest.mark.parametrize(
         ('patch', 'key', 'expected', 'warning'),
         [
-            ({'window_size': 'big'}, 'window_size', '1920x1080', 'WIDTHxHEIGHT'),
-            ({'window_size': '1920'}, 'window_size', '1920x1080', 'WIDTHxHEIGHT'),
-            ({'window_size': '1920x'}, 'window_size', '1920x1080', 'WIDTHxHEIGHT'),
+            ({'window_size': 'big'}, 'window_size', '960x920', 'WIDTHxHEIGHT'),
+            ({'window_size': '1920'}, 'window_size', '960x920', 'WIDTHxHEIGHT'),
+            ({'window_size': '1920x'}, 'window_size', '960x920', 'WIDTHxHEIGHT'),
             ({'ollama_host': 'localhost:11434'}, 'ollama_host', Config.OLLAMA_HOST, 'must start with http'),
             ({'ollama_host': 'ftp://box:11434'}, 'ollama_host', Config.OLLAMA_HOST, 'must start with http'),
             ({'driver_path': ''}, 'driver_path', Config.DRIVER_PATH, 'Driver path was empty'),

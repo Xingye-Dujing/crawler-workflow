@@ -51,17 +51,17 @@
 | `component_source` | `bundled`（默认，优先用在线安装器装好的 Chrome/chromedriver/Node/CatBus）或 `system`（即使安装器那份存在也改用本机已安装的）。在“设置 → 环境与组件”面板顶部切换，重启采析绘后生效；启动器把它冻结为 `CIXI_COMPONENT_SOURCE` |
 | `latex_binary` | `xelatex` 可执行文件（“编译”节点与论文成稿用它把 LaTeX 转 PDF；空=自动检测 PATH 与常见 MiKTeX 安装根） |
 | `catbus_cli` / `catbus_node` | 第二采集后端（CatBus）的两个本机路径，与“驱动路径”同一形状。`catbus_cli` 可填构建产物 `cli.js`、一份 CatBus 目录（自动补入口）或源码 `cli.ts`（自动换成 `dist/**/cli.js`；**Node 跑不了 TS 源码**，构建缺失时按名给出该构建的文件）；`catbus_node` 只接受程序本身。都可留空=按本机系统查找；优先级 设置面板 > 环境变量 > 系统候选表 > `PATH`。路径不存在只警告不拒绝，保存后面板立刻重探本机能力 |
-| `window_size` | 浏览器窗口尺寸（`--window-size=WxH`，默认 `1920x1080`） |
+| `window_size` | 采集浏览器窗口尺寸（`--window-size=WxH`，默认 `960x920`） |
 | `page_load_timeout` / `element_timeout` | 页面/元素超时（秒；默认 40 / 15） |
 | `ollama_host` | Ollama 地址（覆盖环境变量） |
-| `cookie_preflight_before_run` | 运行前是否自动验证各平台 Cookie，过期就禁止执行（默认开；关掉则什么都不问） |
+| `cookie_preflight_before_run` | 运行前是否自动验证各平台 Cookie，过期就禁止执行（**默认关**；关掉则什么都不问） |
 | `same_platform_queue` | 真排队：同一平台一次只跑一条采集，前一条整个跑完才轮到下一条（**默认关**）。关掉时按 `same_platform_stagger` 错峰；打开时严格串行。微博不受此开关影响，永远真排队（矩阵 `serial_only`） |
 | `same_platform_stagger` | 同平台错峰间隔（秒，默认 1，可填 0~600；0=不额外隔）。只对同时在跑的同平台采集生效，串行永远无缝 |
 | `ask_overseas_network` | 画布里有海外平台时，运行前先问一句“外网开了吗”（默认开） |
 | `use_browser_profile` | 是否为每个平台使用持久浏览器 Profile 目录（默认开；关闭=每次全新浏览器 + 种一份旧 Cookie 快照） |
 | `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
 | `max_visible_browsers` / `max_headless_browsers` | 一次并行运行最多同时开几台浏览器，按本次是窗口 / 无头分别取（默认都取 `DEFAULT_MAX_WORKERS=4`；窗口比无头更费机器）。串行轮流，不受此限 |
-| `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；默认关，关掉时上一轮的行留到下次轮询覆盖，会看起来像继承了旧输出） |
+| `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；**默认开**，开后上一轮的行不会留到下一轮） |
 | `gentle_crawl` | 把采集的礼貌停顿按固定倍率拉长（只改节奏，不改指纹、不动页面到达预算；默认关）。刚被风控挑战过的会话宜退让，代价是墙钟时间变慢 |
 | `hongguo_player_path` | 红果短剧评论收割用的桌面播放器路径（**不自动检测**——猜错路就会对着错误的构建收割，拒绝时点名这个设置；Windows 专属） |
 | `mitmdump_path` | 收割用的 `mitmdump`；空=PATH，再退回本 venv 的 Scripts |

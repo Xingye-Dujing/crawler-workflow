@@ -1192,7 +1192,7 @@ def test_the_setup_manifest_requests_admin_before_the_loader():
 
 def test_the_launcher_opens_the_main_window_maximized():
     source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
-    assert 'maximized=True' in source, 'the application opens full-screen, the installer does not'
+    assert 'maximized=True' in source
     entry = (PACKAGING / 'macos_entry.py').read_text(encoding='utf-8')
     assert 'maximized=True' in entry
 

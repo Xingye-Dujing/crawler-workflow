@@ -49,7 +49,7 @@ DEFAULTS = {
     'catbus_cli': Config.CATBUS_CLI,
     'catbus_node': Config.CATBUS_NODE,
     # "--window-size=WxH" passed to every crawler browser.
-    'window_size': '1920x1080',
+    'window_size': '960x920',
     # driver.set_page_load_timeout — how long a page may take to load.
     'page_load_timeout': 40,
     # Default for Crawler.wait_for_element (was a hardcoded 15 in base.py).
@@ -61,7 +61,7 @@ DEFAULTS = {
     # asks nothing and blocks nothing — the old “执行前确认 Cookie” fallback is gone.
     # On costs one page load per platform (cached for a few minutes), and is what turns
     # “一小时后才发现 Cookie 早死了” into a refusal that names the platform.
-    'cookie_preflight_before_run': True,
+    'cookie_preflight_before_run': False,
     #: Which network each platform is reachable from is a fact the crawl matrix owns
     #: (``Capability.region``); this only decides whether the user is ASKED about it. On: a
     #: canvas holding any overseas platform is asked before the run whether the VPN is up,
@@ -100,7 +100,7 @@ DEFAULTS = {
     #: Wipe the console — every tab and its retained history, not just the visible one —
     #: the instant a new run starts. Off keeps the last run's lines up until the next poll
     #: overwrites them, which is what makes a fresh run look like it inherited old output.
-    'clear_console_before_run': False,
+    'clear_console_before_run': True,
     #: Stretch the politeness pauses a crawl takes (``Crawler._polite_pause`` and the douyin
     #: panel's between-screen wait) by a fixed factor — pacing only, never fingerprint: no new
     #: stealth, no identity mutation, and NOT the page-arrival render budgets. A gentle rhythm
