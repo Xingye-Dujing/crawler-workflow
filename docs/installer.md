@@ -197,7 +197,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,870,427 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+**13,870,670 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
@@ -228,15 +228,15 @@ x64 207,117,913 B；chromedriver arm64 9,378,279 B / x64 10,409,330 B；Node arm
 x64 54,203,979 B。SHA-256 见 `backend/services/components/default_catalog.json` 的 `darwin-arm64` /
 `darwin-x64` 条目。
 
-2026-11-09 的 macOS workflow（`main@75acd5e`，发布 tag `e8be04d`）也产出了两组产物：应用 DMG arm64
-**177,687,485 B**（SHA-256 `0a099826953f3dbdf215cdff25f30c1471b2aa6d87f1ba5bd71544ec4f560925`）/ x86_64
-**188,191,515 B**（`01ce7a8b2d47ef8dc296bbf0037ead4b621d1ec7d31f61214030d19e012e4ee8`）；在线安装器 DMG
-arm64 **14,833,224 B**（`d24e45e318c1b1af8f17ef4f5b4454d458a361cbe017845de17b9ef8e787ea5d`）/ x86_64
-**15,624,870 B**（`b4eccd28b12050bea4fb41099aa3a72d0ef0a5117daa8e32e755824120b253ff`）。
+2026-11-09 的 macOS workflow（`main@e16ee00`，发布 tag `e16ee00`）也产出了两组产物：应用 DMG arm64
+**177,472,317 B**（SHA-256 `1725ee54e1b027e4b3600c338ff932c7185e68c36dd5b5714f9dfeac6a516912`）/ x86_64
+**188,786,347 B**（`c4dab5bf41de30f55d3ff20a9797aa6a1d81f5557418f43613faaf0543594f22`）；在线安装器 DMG
+arm64 **14,832,845 B**（`fff10974c104f242940a238ce0bd2fa14708b1b06a591988f7dd74b197f4eee5`）/ x86_64
+**15,628,168 B**（`4d476e449990cb41037aa63be155d3116776ef1f7c3a228fb09e8c4b5bcdb5ee`）。
 两个安装器分别写了对应架构应用 DMG 的摘要；**没有在真实 Mac 上运行过**。
 
-2026-11-09 的 Windows 发布（圆形图标、BERT 两路径）：`CaiXiHui-win64.zip` **130,133,526 B**、离线
-`CaiXiHui-Setup.exe` **121,684,967 B**、在线 `CaiXiHui-Online-Setup.exe` **13,867,776 B**。三个 exe 图标
+2026-11-09 的 Windows 发布（圆形图标、BERT 两路径）：`CaiXiHui-win64.zip` **130,130,388 B**、离线
+`CaiXiHui-Setup.exe` **121,680,864 B**、在线 `CaiXiHui-Online-Setup.exe` **13,870,670 B**。三个 exe 图标
 都从同一份圆形 ICO 资源实测为 32×32、四角 alpha=0、中心 alpha=255；zip/Setup 内是同一份新主程序。
 
 ## 构建
