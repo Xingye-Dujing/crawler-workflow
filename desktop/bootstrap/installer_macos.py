@@ -423,8 +423,6 @@ class MacHandler(installer.Handler):
         for path in (root, data):
             if not _takes_write(path):
                 return {'ok': False, 'error': words['not_writable'].format(path=path)}
-        if bert_text and not _takes_write(data / 'bert_models'):
-            return {'ok': False, 'error': words['not_writable'].format(path=data / 'bert_models')}
         need = sum(state.catalog.get(item).asset().size for item in ids if state.catalog.get(item).asset())
         if state.bert:
             with contextlib.suppress(OSError):

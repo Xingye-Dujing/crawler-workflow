@@ -998,8 +998,6 @@ class Handler(BaseHTTPRequestHandler):
             # application cannot start from; the raw CLR sentence goes to the log.
             log_line(f'install path refused: {root}: {remote}')
             return {'ok': False, 'error': words['bad_path'].format(path=root)}
-        if state.bert and not _writable(data / 'bert_models'):
-            return {'ok': False, 'error': words['elevate_failed']}
         need = sum(state.catalog.get(item).asset().size for item in ids if state.catalog.get(item).asset())
         free = free_space(root)
         if free and free < need + 200 * 1024 * 1024:
