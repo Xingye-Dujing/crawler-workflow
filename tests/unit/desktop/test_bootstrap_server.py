@@ -45,7 +45,7 @@ def _windows_assets(monkeypatch):
     """The bootstrap installer ships Windows assets; ask for them on every test runner."""
     from services.components import catalog as catalog_module
 
-    monkeypatch.setattr(catalog_module, 'platform_name', lambda system=None: 'win32')
+    monkeypatch.setattr(catalog_module, 'platform_asset_key', lambda system=None, machine=None: 'win32')
 
 
 def test_the_default_preset_ticks_exactly_the_catalogue_defaults(installer, monkeypatch):
@@ -63,6 +63,19 @@ def test_switching_to_application_only_untickes_everything_else(installer, monke
     assert state.set_preset('app') is True
     body = state.snapshot()
     assert [row['id'] for row in body['components'] if row['checked']] == ['app']
+
+
+def test_a_component_with_no_asset_here_is_marked_unavailable_not_merely_unticked(installer, monkeypatch):
+    """CatBus has no macOS build; the row must say so instead of looking like an unticked option."""
+    from services.components import catalog as catalog_module
+
+    monkeypatch.setattr(catalog_module, 'platform_asset_key', lambda system=None, machine=None: 'darwin-arm64')
+    state = _state(installer)
+    rows = {row['id']: row for row in state.snapshot()['components']}
+    assert rows['chrome']['downloadable'] is True
+    assert rows['catbus']['downloadable'] is False
+    assert rows['catbus']['unavailable'] is True
+    assert rows['ollama']['unavailable'] is False, 'a manual component is detection-only on every platform'
 
 
 def test_an_unknown_preset_is_refused_rather_than_guessed(installer):

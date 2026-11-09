@@ -50,13 +50,18 @@ def run(command: list[str]) -> None:
     subprocess.run(command, check=True, cwd=str(ROOT))
 
 
-def build_dmg(app: Path, arch: str) -> Path:
-    stage = ROOT / 'build' / 'dmg-stage'
+def build_dmg(app: Path, arch: str, *, stem: str = 'CaiXiHui', volume: str = 'CaiXiHui') -> Path:
+    """Wrap an existing ``.app`` in a DMG named ``<stem>-macOS-<arch>.dmg``.
+
+    ``stem`` lets the macOS online installer reuse this exact staging (ditto + /Applications
+    symlink + UDZO) without a second copy of the hdiutil sequence.
+    """
+    stage = ROOT / 'build' / f'dmg-stage-{stem.lower()}'
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir(parents=True)
-    run(['ditto', str(app), str(stage / 'CaiXiHui.app')])
+    run(['ditto', str(app), str(stage / app.name)])
     os.symlink('/Applications', stage / 'Applications')
-    dmg = DIST / f'CaiXiHui-macOS-{arch}.dmg'
+    dmg = DIST / f'{stem}-macOS-{arch}.dmg'
     if dmg.exists():
         dmg.unlink()
     run(
@@ -64,7 +69,7 @@ def build_dmg(app: Path, arch: str) -> Path:
             'hdiutil',
             'create',
             '-volname',
-            'CaiXiHui',
+            volume,
             '-srcfolder',
             str(stage),
             '-ov',

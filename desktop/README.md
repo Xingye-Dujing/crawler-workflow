@@ -410,9 +410,22 @@ BERT 节点在 macOS 上按设计降级到 sklearn/snownlp 并打印实际方法
 `.github/workflows/macos-build.yml` 在 `macos-15-intel`（x86_64）和 `macos-15`（arm64）两个 runner
 上构建，DMG 上传到 `workflow_dispatch` 指定的 Release tag（默认 `exe-2026-11`），文件名带架构后缀。
 
+**macOS 在线安装器**：同一次 workflow 在应用 DMG 之后运行
+`python desktop/build_macos_installer.py --app-dmg dist/CaiXiHui-macOS-<arch>.dmg --release-tag <tag>
+--arch <arch>`，产出 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`。它是一个小 `.app`：复用
+`desktop/bootstrap/installer.py` 的页面、状态与组件核心（`installer_macos.py` 只换 Cocoa 窗口、
+`osascript` 文件夹选择器和安装步骤），把主程序从它刚构建的 DMG 用 `hdiutil` 挂载、`ditto` 复制到
+`/Applications`（该账号不可写时用 `~/Applications`），Chrome/chromedriver/Node 装到
+`~/Library/Application Support/CaiXiHui/components`。安装器构建时生成自己的清单（多一条 `darwin-<arch>`
+的 `app` 资产，SHA-256 正好是那个 DMG）；签入的 `default_catalog.json` 只放已存在的 mac 组件资产。
+
+macOS 上 **CatBus 没有官方构建**：安装器仍把它列出来，但灰色不可勾选并显示“此平台暂不提供”；
+Selenium 采集和其他功能不受影响。在线安装器不请求管理员权限；主程序的数据目录写进
+`data-root.txt`（.app 旁边）和 `com.caixihui.desktop` 的首选项，移动 .app 后仍能找到自定义数据目录。
+
 **未在本机实测**：这个 checkout 没有 macOS，PyInstaller 也不能交叉编译；首次真实构建要等 GitHub
-Actions 跑完。DMG 未签名/未公证，首次打开需右键“打开”或在“隐私与安全性”里放行。macOS 上不提供在线
-安装器；Chrome/chromedriver/Node/CatBus 由用户自行安装（Chrome 驱动可由 Selenium Manager 解析）。
+Actions 跑完。DMG 未签名/未公证，首次打开需右键“打开”或在“隐私与安全性”里放行。macOS 的
+Chrome for Testing/chromedriver 下载地址走 npmmirror（官方 Google 地址备用），主程序来自 GitHub Release。
 
 ## 受限终端里构建（本仓库实测）
 

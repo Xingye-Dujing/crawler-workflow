@@ -485,6 +485,13 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
 - **The same locale trap eats `requirements-*.txt`, and one em dash is enough.** pip's `auto_decode` uses the preferred
   encoding and honours UTF-8 only with a BOM, so a Chinese comment or a `—` → `UnicodeDecodeError: 'gbk'`. The test checks
   raw bytes of the ps1, both `desktop/requirements-*.txt` and the two root requirement files.
+- **A Mac download is per-CPU, and an `.app` is copied, never unzipped.** Chrome for Testing ships
+  `mac-arm64`/`mac-x64` as separate archives, so the catalogue keys are `darwin-arm64`/`darwin-x64` (Windows keeps
+  `win32`) and `platform_asset_key` is the only chooser. A downloaded `.app` must be mounted from its DMG and copied
+  with `ditto`: Python's `zipfile` extraction drops the framework symlinks and executable bits, and the installed app
+  then cannot start. Chrome/Node archives use `services/components/macos.py` (`ditto`/`tar`) for the same reason;
+  `safe_extract` stays the portable, symlink-refusing path for Windows. Pinned by
+  `tests/unit/desktop/test_macos_installer.py`.
 - **UPX: do the pass yourself, never trust a packer that skips quietly.** PyInstaller's `upx=True` compresses nothing when
   it can't find the tool and only prints it in a scroll-past line. `desktop/compress_dist.py` runs with `upx --best
   --force`, treats a missing `upx` on PATH as a **build failure by name**, verifies each output with `upx -t`, restores

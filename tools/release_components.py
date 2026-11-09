@@ -7,7 +7,11 @@ to publish, not a URL that might change.
     python tools/release_components.py --component chrome=build/chrome-win64.zip \
         --url chrome=https://registry.npmmirror.com/.../chrome-win64.zip --out catalog.json
 
-``--check`` validates the catalogue and prints the total download size without writing.
+A component may carry several platform assets now (``win32`` and two Mac architectures), and one
+Windows zip must never overwrite a Mac digest. ``ID=path`` therefore updates the CURRENT machine's
+asset; name another one explicitly with ``ID:PLATFORM=path`` (for example
+``chrome:darwin-arm64=build/chrome-mac-arm64.zip``). ``--check`` validates the catalogue and prints
+the total download size without writing.
 """
 
 from __future__ import annotations
@@ -30,46 +34,72 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _pairs(values: list[str]) -> dict[str, str]:
-    result = {}
+def _pairs(values: list[str]) -> dict[tuple[str, str], str]:
+    """``ID=value`` or ``ID:PLATFORM=value``, keyed so two platforms cannot overwrite each other."""
+    result: dict[tuple[str, str], str] = {}
     for value in values:
-        key, _, path = value.partition('=')
-        if not key or not path:
-            raise SystemExit(f'expected id=path, got {value!r}')
-        result[key] = path
+        key, _, payload = value.partition('=')
+        component_id, _, platform_key = key.partition(':')
+        if not component_id or not payload:
+            raise SystemExit(f'expected id=path or id:platform=path, got {value!r}')
+        result[(component_id, platform_key)] = payload
     return result
+
+
+def _updates(updates: dict[str, str], platform_key: str, fallback: str) -> str:
+    """The value for one asset: an explicit platform, else this machine's own, else nothing."""
+    if platform_key in updates:
+        return updates[platform_key]
+    if '' in updates and platform_key == fallback:
+        return updates['']
+    return ''
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--catalog', default=str(DEFAULT))
     parser.add_argument('--out', default='')
-    parser.add_argument('--component', action='append', default=[], metavar='ID=PATH')
-    parser.add_argument('--url', action='append', default=[], metavar='ID=URL')
+    parser.add_argument('--component', action='append', default=[], metavar='ID[:PLATFORM]=PATH')
+    parser.add_argument('--url', action='append', default=[], metavar='ID[:PLATFORM]=URL')
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args(argv)
+
+    sys.path.insert(0, str(ROOT / 'backend'))
+    from core.machine import platform_asset_key
 
     catalog_path = Path(args.catalog)
     payload = json.loads(catalog_path.read_text(encoding='utf-8'))
     files = _pairs(args.component)
     urls = _pairs(args.url)
+    own = platform_asset_key()
 
     for component_id, raw in (payload.get('components') or {}).items():
-        for _platform, asset in (raw.get('platforms') or {}).items():
-            if files and component_id not in files and not args.check:
+        component_files = {key: value for (cid, key), value in files.items() if cid == component_id}
+        component_urls = {key: value for (cid, key), value in urls.items() if cid == component_id}
+        if files and component_id not in {cid for cid, _ in files} and not args.check:
+            continue
+        for platform_key, asset in (raw.get('platforms') or {}).items():
+            path_text = _updates(component_files, platform_key, own)
+            url_text = _updates(component_urls, platform_key, own)
+            if not path_text and not url_text:
                 continue
-            if component_id in files:
-                path = Path(files[component_id])
+            if path_text:
+                path = Path(path_text)
                 if not path.is_file():
-                    raise SystemExit(f'missing file for {component_id}: {path}')
+                    raise SystemExit(f'missing file for {component_id}:{platform_key}: {path}')
                 asset['sha256'] = sha256(path)
                 asset['size'] = path.stat().st_size
-                if component_id in urls:
-                    asset['urls'] = [urls[component_id]]
-                    asset.pop('parts', None)
-            elif component_id in urls:
-                asset['urls'] = [urls[component_id]]
+            if url_text:
+                asset['urls'] = [url_text]
                 asset.pop('parts', None)
+        if files and component_id in {cid for cid, _ in files}:
+            unknown = {
+                platform_key
+                for platform_key in component_files
+                if platform_key and platform_key not in (raw.get('platforms') or {})
+            }
+            if unknown:
+                raise SystemExit(f'{component_id} has no asset for {", ".join(sorted(unknown))}')
 
     total = 0
     for raw in (payload.get('components') or {}).values():

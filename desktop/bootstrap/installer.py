@@ -60,8 +60,11 @@ def log_line(text: str) -> None:
     candidates = []
     if explicit:
         candidates.append(Path(explicit))
-    local = os.environ.get('LOCALAPPDATA') or str(Path.home() / 'AppData' / 'Local')
-    candidates.append(Path(local) / 'CaiXiHui' / 'installer.log')
+    if sys.platform == 'darwin':
+        candidates.append(Path.home() / 'Library' / 'Logs' / 'CaiXiHui' / 'installer.log')
+    else:
+        local = os.environ.get('LOCALAPPDATA') or str(Path.home() / 'AppData' / 'Local')
+        candidates.append(Path(local) / 'CaiXiHui' / 'installer.log')
     candidates.append(Path(sys.executable if getattr(sys, 'frozen', False) else __file__).parent / 'installer.log')
     with contextlib.suppress(Exception):
         import tempfile
@@ -155,6 +158,7 @@ _MANIFEST = importlib.import_module('services.components.manifest')
 ManifestError = _MANIFEST.ManifestError
 InstallError = _INSTALL.InstallError
 install_component = _INSTALL.install_component
+download_asset = _DOWNLOAD.download_asset
 chosen_ids = _PLAN.chosen_ids
 default_data_root = _PLAN.default_data_root
 default_root = _PLAN.default_root
@@ -339,6 +343,9 @@ class InstallerState:
                             'checked': False,
                             'size': 0,
                             'size_text': '',
+                            # A manual entry is detection-only everywhere; a real component with no
+                            # asset here simply has no build for this OS (CatBus on macOS).
+                            'unavailable': item.kind != 'manual',
                         }
                     )
                     continue
@@ -579,8 +586,8 @@ class InstallerServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, state: InstallerState, token: str, port: int = INSTALLER_PORT) -> None:
-        super().__init__(('127.0.0.1', int(port)), Handler)
+    def __init__(self, state: InstallerState, token: str, port: int = INSTALLER_PORT, handler=None) -> None:
+        super().__init__(('127.0.0.1', int(port)), handler or Handler)
         self.state = state
         self.token = token
         # Set by main(): closing the window is what ends the GUI loop, so the server cannot stop
@@ -609,6 +616,15 @@ class InstallerServer(ThreadingHTTPServer):
 class Handler(BaseHTTPRequestHandler):
     server_version = 'CaiXiHuiInstaller'
     sys_version = ''
+
+    #: The platform installer may replace these two seams: the shared page text differs on macOS
+    #: (no “domestic” claim for the DMG, no Windows elevation sentence), and its folder picker is
+    #: ``osascript`` rather than ``SHBrowseForFolderW``.
+    @property
+    def words(self) -> dict:
+        return TEXT
+
+    pick_folder = staticmethod(pick_folder)
 
     # ── plumbing ────────────────────────────────────────────────
 
@@ -696,9 +712,9 @@ class Handler(BaseHTTPRequestHandler):
         elif route == '/api/browse':
             kind = str(payload.get('kind') or 'root')
             lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
-            title = TEXT[lang]['data_dir' if kind == 'data' else 'dir']
+            title = self.words[lang]['data_dir' if kind == 'data' else 'dir']
             try:
-                picked = pick_folder(title)
+                picked = self.pick_folder(title)
             except (OSError, TypeError, ValueError) as exc:
                 # A picker failure is "no path chosen", never a dead HTTP request: the page's
                 # browse button used to end in ERR_EMPTY_RESPONSE when the shell call raised.
@@ -724,7 +740,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── actions ─────────────────────────────────────────────────
     def _start(self, state: InstallerState, payload: dict) -> dict:
         lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
-        words = TEXT[lang]
+        words = self.words[lang]
         if state.job['state'] == 'running':
             return {'ok': False, 'error': words['already_running']}
         root_text = str(payload.get('root') or '').strip()
@@ -777,7 +793,7 @@ class Handler(BaseHTTPRequestHandler):
         root = Path(state.root)
         exe = root / 'app' / ('CaiXiHui.exe' if os.name == 'nt' else 'CaiXiHui')
         if not exe.exists():
-            return {'ok': False, 'error': TEXT['zh']['not_installed']}
+            return {'ok': False, 'error': self.words['zh']['not_installed']}
         env = dict(os.environ)
         env['CIXI_COMPONENTS_DIR'] = str(root / 'components')
         env['CRAWLER_DATA_ROOT'] = state.data
@@ -793,7 +809,7 @@ class Handler(BaseHTTPRequestHandler):
         config = {
             'token': self.server.token,
             'lang': 'zh',
-            'text': TEXT,
+            'text': self.words,
             'state_labels': STATE_LABEL,
             'state': self.server.state.snapshot(),
         }

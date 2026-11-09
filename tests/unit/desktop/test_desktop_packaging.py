@@ -21,6 +21,7 @@ import types
 from pathlib import Path
 
 import pytest
+from core.machine import component_payload_path
 
 pytestmark = pytest.mark.unit
 
@@ -1224,9 +1225,9 @@ class TestPortableComponentsPointTheLookups:
 
         root = tmp_path / 'install'
         components = root / 'components'
-        # ``apply_component_env`` asks for this OS's executable name: node.exe on Windows and
-        # node elsewhere. The installed file must match the name the lookup will ask for.
-        node = components / 'node' / '24.0' / ('node.exe' if os.name == 'nt' else 'node')
+        # ``apply_component_env`` asks for this platform's component layout: node.exe on Windows,
+        # bin/node in the macOS/Linux tarballs. The installed file must match the lookup.
+        node = components / 'node' / '24.0' / component_payload_path('node')
         node.parent.mkdir(parents=True)
         node.write_bytes(b'')
         manifest = Manifest(root)
@@ -1267,7 +1268,7 @@ class TestPortableComponentsPointTheLookups:
 
         root = tmp_path / 'install'
         components = root / 'components'
-        node = components / 'node' / '24.0' / 'node.exe'
+        node = components / 'node' / '24.0' / component_payload_path('node')
         node.parent.mkdir(parents=True)
         node.write_bytes(b'')
         manifest = Manifest(root)

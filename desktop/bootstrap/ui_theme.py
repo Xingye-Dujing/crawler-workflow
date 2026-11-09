@@ -50,6 +50,7 @@ TEXT = {
         'not_installed': '主程序还没有装好，先完成安装。',
         'theme_dark': '切换到深色',
         'theme_light': '切换到浅色',
+        'unavailable_here': '此平台暂不提供',
     },
     'en': {
         'title': 'CaiXiHui Installer',
@@ -108,6 +109,7 @@ TEXT = {
         'not_installed': 'The application is not installed yet; finish the install first.',
         'theme_dark': 'Switch to dark',
         'theme_light': 'Switch to light',
+        'unavailable_here': 'not available on this platform',
     },
 }
 

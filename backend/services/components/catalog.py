@@ -27,12 +27,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from core.machine import platform_name
+from core.machine import platform_asset_key
 
 SCHEMA = 1
 CATALOG_NAME = 'default_catalog.json'
 MAX_CATALOG_BYTES = 4 * 1024 * 1024
-_ALLOWED_ARCHIVES = ('zip', 'tar.gz')
+_ALLOWED_ARCHIVES = ('zip', 'tar.gz', 'dmg')
 _ALLOWED_KINDS = ('archive', 'manual')
 
 
@@ -117,10 +117,18 @@ class Component:
     platforms: dict[str, dict]
 
     def asset(self, system: str | None = None) -> Asset | None:
-        """This OS's asset, or ``None`` when the component is documentation or ships for another OS."""
+        """This OS's asset, or ``None`` when the component is documentation or ships for another OS.
+
+        ``system`` may be an OS name (``darwin``) or an OS+CPU key (``darwin-arm64``); the default
+        is the running machine's full key, so a Mac downloads the archive its CPU can run. A
+        hand-written single-architecture ``darwin`` entry still works as the fallback.
+        """
         if self.kind == 'manual':
             return None
-        raw = self.platforms.get(platform_name(system))
+        key = str(system or platform_asset_key())
+        raw = self.platforms.get(key)
+        if not raw and key.startswith('darwin-'):
+            raw = self.platforms.get('darwin')
         if not raw:
             return None
         parts = tuple(
@@ -169,7 +177,7 @@ class Catalog:
             raise CatalogError(f'unknown component {component_id!r}') from exc
 
     def downloadable(self, system: str | None = None) -> dict[str, Component]:
-        """Components that actually have an asset for this OS, in catalogue order."""
+        """Components that actually have an asset for this OS/CPU key, in catalogue order."""
         return {key: item for key, item in self.components.items() if item.asset(system) is not None}
 
     def defaults(self, system: str | None = None) -> list[str]:

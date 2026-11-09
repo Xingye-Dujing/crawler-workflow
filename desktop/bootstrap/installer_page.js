@@ -119,7 +119,7 @@
         name.textContent = item.id + ' ' + item.version + ' — ' + item.summary;
         var meta = document.createElement('span');
         meta.className = 'meta';
-        meta.textContent = item.size_text || '';
+        meta.textContent = item.size_text || (item.unavailable ? t('unavailable_here') : '');
         row.append(box, name, meta);
         return row;
     }

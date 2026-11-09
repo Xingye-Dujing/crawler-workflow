@@ -589,7 +589,7 @@ def apply_component_env(data_root=None) -> None:
     application from starting — the per-OS lookups still answer, and the panel names the bad file.
     """
     try:
-        from core.machine import chrome_executable_name
+        from core.machine import component_payload_path
 
         from services.components import source
         from services.components.manifest import Manifest, ManifestError
@@ -605,10 +605,10 @@ def apply_component_env(data_root=None) -> None:
         os.environ.setdefault('CIXI_COMPONENTS_DIR', str(components_root()))
         manifest = Manifest(install_root()).load()
         paths = {
-            'chrome': ('CHROME_PATH', chrome_executable_name()),
-            'chromedriver': ('CIXI_DRIVER_PATH', 'chromedriver.exe' if os.name == 'nt' else 'chromedriver'),
-            'node': ('CIXI_NODE_BIN', 'node.exe' if os.name == 'nt' else 'node'),
-            'catbus': ('CIXI_CATBUS_CLI', 'dist/integrations/crawler-workflow/cli.js'),
+            'chrome': ('CHROME_PATH', component_payload_path('chrome')),
+            'chromedriver': ('CIXI_DRIVER_PATH', component_payload_path('chromedriver')),
+            'node': ('CIXI_NODE_BIN', component_payload_path('node')),
+            'catbus': ('CIXI_CATBUS_CLI', component_payload_path('catbus')),
         }
         for component_id, (variable, name) in paths.items():
             installed = manifest.path_of(component_id)

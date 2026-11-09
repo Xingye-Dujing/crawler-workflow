@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import plistlib
 import socket
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from pathlib import Path
 
 APP_NAME = 'CaiXiHui'
 DISPLAY_NAME = '采析绘'
+BUNDLE_ID = 'com.caixihui.desktop'
 PREFERRED_PORT = 5000
 PORT_ATTEMPTS = 30
 
@@ -54,10 +56,41 @@ def _takes_write(path: Path) -> bool:
     return True
 
 
+def _configured_data_root() -> Path | None:
+    """The folder the online installer chose, written beside the .app (or into Resources).
+
+    The full-DMG build has no such file and uses the default. Reading it BEFORE ``core.config`` is
+    imported is what makes a custom data folder survive a later double-click from Finder, where no
+    ``CRAWLER_DATA_ROOT`` environment exists.
+    """
+    executable = Path(sys.executable).resolve()
+    candidates: list[Path] = []
+    if len(executable.parents) >= 4 and executable.parents[2].suffix == '.app':
+        candidates.append(executable.parents[3] / 'data-root.txt')
+        candidates.append(executable.parents[1] / 'Resources' / 'data-root.txt')
+    for path in candidates:
+        try:
+            text = path.read_text(encoding='utf-8').strip()
+        except OSError:
+            continue
+        if text:
+            return Path(text).expanduser().resolve()
+    try:
+        preference = Path.home() / 'Library' / 'Preferences' / f'{BUNDLE_ID}.plist'
+        payload = plistlib.loads(preference.read_bytes())
+    except (OSError, ValueError):
+        payload = {}
+    configured = str(payload.get('CRAWLER_DATA_ROOT') or '').strip() if isinstance(payload, dict) else ''
+    return Path(configured).expanduser().resolve() if configured else None
+
+
 def data_root() -> Path:
     override = str(os.environ.get('CRAWLER_DATA_ROOT') or '').strip()
     if override:
         return Path(override).expanduser().resolve()
+    configured = _configured_data_root()
+    if configured is not None:
+        return configured
     return default_data_root()
 
 
@@ -100,6 +133,19 @@ def seed_user_data(root: Path) -> None:
         seed(resource_dir() / 'seed', root)
 
 
+def apply_component_env(root: Path) -> None:
+    """Let a double-click find Chrome/Node installed by the online installer.
+
+    ``desktop_entry.apply_component_env`` is the one implementation of that rule (it reads
+    ``install-manifest.json`` before ``core.config`` snapshots the environment). Reusing it keeps
+    Windows and macOS from disagreeing about which component the app will actually launch.
+    """
+    from desktop_entry import apply_component_env as apply_env
+
+    with contextlib.suppress(OSError):
+        apply_env(root)
+
+
 def doctor() -> int:
     from i18n import set_lang, t
     from services.components.probe import environment
@@ -136,6 +182,8 @@ def main(argv=None) -> int:
     backend = base / 'backend'
     if backend.is_dir() and str(backend) not in sys.path:
         sys.path.insert(0, str(backend))
+    # Before core.config is imported: it snapshots CHROME_PATH/CIXI_NODE_BIN/etc. at import time.
+    apply_component_env(root)
     if '--doctor' in argv:
         try:
             return doctor()

@@ -47,6 +47,8 @@ cd backend && python app.py        # http://127.0.0.1:5000
 不想在本机装：直接开 <http://47.116.114.77/crawler> 用线上实例（云端模式，需要账号），或者下
 [Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 里的 `CaiXiHui-Setup.exe`；
 只想要一个下载器就用 `CaiXiHui-Online-Setup.exe`，默认走国内镜像（Gitee / npmmirror），不需要翻墙。
+macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积的
+`CaiXiHui-Online-Setup-macOS-<arch>.dmg` 在线安装。
 
 **三件值得先知道的事**
 
@@ -65,7 +67,9 @@ cd backend && python app.py        # http://127.0.0.1:5000
   程序和用户数据都能选在 C 盘以外（“数据文件夹”写进 `app\data-root.txt`）。`desktop/` 负责打出
   `CaiXiHui.exe`，双击启动本地服务并在窗口里显示界面，数据默认在 `%APPDATA%\CaiXiHui`（旁边放个空的
   `portable.txt` 就变便携版）。macOS 的 `.app`/DMG 由 `desktop/build_macos.py` 在 GitHub 的 macOS runner
-  上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`。
+  上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`；
+  同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（先下载主程序 DMG 和
+  Chrome/Node，再装到 `/Applications`）；CatBus 在 macOS 上暂无官方构建，安装器会灰显并说明。
   构建、体积与依赖自查见 [`desktop/README.md`](desktop/README.md)。
 
 ## 能做什么

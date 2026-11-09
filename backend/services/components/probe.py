@@ -25,8 +25,7 @@ from typing import Any
 from core.config import Config
 from core.machine import (
     browser_version,
-    chrome_executable_name,
-    driver_executable_name,
+    component_payload_path,
     find_chrome,
     ollama_reachable,
     platform_name,
@@ -58,7 +57,7 @@ def _installed_path(root: Path, component_id: str) -> Path | None:
         return None
 
 
-def _component_binary(root: Path, component_id: str, name: str) -> str:
+def _component_binary(root: Path, component_id: str) -> str:
     # 本机 was chosen: the installer's folder may hold a perfectly good Chrome, and the user asked
     # for the machine's one anyway. "A local copy exists" is never a reason to overrule that.
     if not component_source.prefer_bundled():
@@ -66,8 +65,9 @@ def _component_binary(root: Path, component_id: str, name: str) -> str:
     path = _installed_path(root, component_id)
     if path is None:
         return ''
-    candidate = path / name
-    return str(candidate) if candidate.is_file() else ''
+    relative = component_payload_path(component_id)
+    candidate = path / relative if relative else None
+    return str(candidate) if candidate and candidate.is_file() else ''
 
 
 def _version(binary: str) -> str:
@@ -97,7 +97,7 @@ def _chrome(root: Path) -> tuple[str, str]:
     if explicit:
         found = find_chrome(explicit)
         return found, ('settings' if found else 'settings-missing')
-    bundled = _component_binary(root, 'chrome', chrome_executable_name())
+    bundled = _component_binary(root, 'chrome')
     if bundled:
         return bundled, 'component'
     found = find_chrome()
@@ -110,7 +110,7 @@ def _driver(root: Path) -> tuple[str, str]:
         # A configured path is a promise the crawler checks too: it refuses by name when the file
         # is gone, so the panel must not answer "Selenium will download one" instead.
         return (explicit, 'settings') if Path(explicit).is_file() else ('', 'settings-missing')
-    bundled = _component_binary(root, 'chromedriver', driver_executable_name())
+    bundled = _component_binary(root, 'chromedriver')
     if bundled:
         return bundled, 'component'
     found = shutil.which('chromedriver')

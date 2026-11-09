@@ -34,6 +34,7 @@ from services.components.manifest import Manifest, ManifestError
 
 Progress = Callable[[int, int], None]
 Cancel = Callable[[], bool]
+Extract = Callable[[Path, Path, str, str], None]
 ARCHIVE_SUFFIXES = {'zip': '.zip', 'tar.gz': '.tar.gz'}
 
 
@@ -63,6 +64,21 @@ def _drop_empty(path: Path) -> None:
         path.rmdir()
 
 
+def _platform_extract(archive: Path, staging: Path, archive_type: str, strip_prefix: str) -> None:
+    """Unpack the way the target OS must: ditto/tar on macOS, the portable extractor elsewhere.
+
+    A macOS ``.app`` loses its framework symlinks and executable bits under the portable
+    extractor, so the platform's own tool is not an optimization — it is the only way the payload
+    can run. See :mod:`services.components.macos`.
+    """
+    if platform_name() == 'darwin':
+        from services.components.macos import extract_native
+
+        extract_native(archive, staging, archive_type=archive_type, strip_prefix=strip_prefix)
+        return
+    safe_extract(archive, staging, archive_type=archive_type, strip_prefix=strip_prefix)
+
+
 def install_component(
     catalog: Catalog,
     component_id: str,
@@ -73,6 +89,7 @@ def install_component(
     cancel: Cancel | None = None,
     allow_insecure: bool = False,
     keep_versions: int = 2,
+    extract: Extract | None = None,
 ) -> Path:
     """Download, verify, extract and register one component; return its installed path."""
     component: Component = catalog.get(component_id)
@@ -85,7 +102,11 @@ def install_component(
         if manifest.get(required) is None:
             raise InstallError(f'{component_id} needs {required}, which is not installed')
 
-    suffix = ARCHIVE_SUFFIXES[asset.archive]
+    suffix = ARCHIVE_SUFFIXES.get(asset.archive)
+    if suffix is None:
+        # A DMG carries a signed .app bundle and is mounted, not extracted; the desktop installer
+        # owns that step. Saying so beats a KeyError from a component manager that never could.
+        raise InstallError(f'{component_id}: {asset.archive} bundles are installed by the desktop installer')
     cache = base / '.cache' / f'{component_id}-{component.version}{suffix}'
     staging = base / '.staging' / f'{component_id}-{component.version}-{uuid.uuid4().hex[:8]}'
     try:
@@ -94,7 +115,7 @@ def install_component(
             shutil.rmtree(staging)
         staging.mkdir(parents=True, exist_ok=True)
         try:
-            safe_extract(archive, staging, archive_type=asset.archive, strip_prefix=asset.strip_prefix)
+            (extract or _platform_extract)(archive, staging, asset.archive, asset.strip_prefix)
         except ArchiveError as exc:
             raise InstallError(f'cannot extract {component_id}: {exc}') from exc
         _verify_payload(staging, asset.verify)

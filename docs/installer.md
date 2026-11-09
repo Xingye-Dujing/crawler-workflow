@@ -1,4 +1,4 @@
-# 在线安装器与环境检测（Windows）
+# 在线安装器与环境检测（Windows / macOS）
 
 这是一个**可选**的安装方式：先下载一个几 MB 的 `CaiXiHui-Online-Setup.exe`，由它把主程序和需要的
 第三方便携组件下载到用户选择的目录。离线安装包 `CaiXiHui-Setup.exe` 仍然保留，给没有网络或不想下载组件的人。
@@ -73,6 +73,44 @@ xelatex（MiKTeX），这样项目全部依赖都在同一页可见；它们不�
 两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
 指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。
 
+## macOS 在线安装器
+
+macOS 没有 `CaiXiHui-Online-Setup.dmg` 这种“Windows 安装器换皮”，而是同一个小 `.app` 的 DMG：
+`CaiXiHui-Online-Setup-macOS-<arch>.dmg`（arm64 / x86_64 各一个）。它复用同一个安装页面
+（`desktop/bootstrap/installer.py` + `installer_page.html/js` + `ui_theme.py`），由
+`desktop/bootstrap/installer_macos.py` 换掉三处平台差异：
+
+- 窗口：pywebview 的 Cocoa/WebKit（系统自带），不是 WebView2；
+- 文件夹选择：`osascript` 的 `choose folder`；
+- 安装：主程序不是 zip，而是一个 DMG。安装器下载并核对它，用 `hdiutil` 挂载、`ditto` 复制
+  `CaiXiHui.app` 到安装位置（默认 `/Applications`；该账号不可写时用 `~/Applications`），再
+  `hdiutil detach`。`ditto` 会保留 .app 内部的 framework 符号链接和可执行位——用 Python 的
+  zipfile 解压会把这些丢掉，装好的程序将无法启动。
+
+Chrome for Testing、chromedriver、Node.js 装到 `~/Library/Application Support/CaiXiHui/components`；
+主程序的数据目录也默认在这里。安装器不请求管理员权限，目标不可写时**点名该文件夹**并请改选
+用户目录，而不是静默失败。安装完成会写入 `data-root.txt`（.app 旁边）和 `com.caixihui.desktop`
+的首选项，所以之后从 Finder 双击也能找到自定义数据目录。
+
+macOS 的组件清单按 CPU 分开：`darwin-arm64` / `darwin-x64`。Chrome for Testing、chromedriver 与
+Node.js 的官方资产本来就是按架构分开的；两个地址（npmmirror + Google/Node 官方）指向同一份构建。
+**CatBus 目前没有 macOS 官方构建**：安装器仍列出它（灰色、不可勾选，显示“此平台暂不提供”），
+Selenium 采集不受影响；已有自建 CatBus 的用户可以在设置里指向自己的 Node 和 `cli.js`。
+
+构建（macOS runner 上，见 `.github/workflows/macos-build.yml`）：
+
+```bash
+python desktop/build_macos.py --clean
+python desktop/build_macos_installer.py --clean \
+  --app-dmg "dist/CaiXiHui-macOS-$(uname -m).dmg" \
+  --release-tag exe-2026-11 \
+  --arch "$(uname -m)"
+```
+
+`build_macos_installer.py` 在这一步生成安装器自己的清单：把刚构建的 DMG 的 SHA-256 / 体积写进
+`app.platforms['darwin-<arch>']`，URL 指向同一个 Release tag。签入的
+`backend/services/components/default_catalog.json` 不会提前写还没构建出来的摘要。
+
 ## 环境检测
 
 安装完成后，安装器会调用刚装好的 `CaiXiHui.exe --doctor`，把同一份矩阵显示出来（安装器不复制应用里的
@@ -109,7 +147,10 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 
 - 所有下载只接受 HTTPS；逐项核对清单里的 SHA-256，失败删除字节并点名 URL。
 - 解压拒绝绝对路径、`..`、符号链接，限制条目数与总大小；先解压到 staging，再原子移动到目标目录。
-- 不执行下载来的 exe / msi；第三方一律便携 zip 解压。
+  macOS 的 Chrome/Node 资产必须保留符号链接和可执行位，所以改用系统 `ditto`/`tar` 解包；它们同样是
+  先核对 SHA-256 的固定字节，且仍解到 staging 后再替换。
+- 不执行下载来的 exe / msi；第三方一律便携 zip 解压。主程序在 macOS 上是 DMG 里的 `.app`，安装器只
+  挂载和复制它，不执行安装脚本。
 - **Chrome 不随安装器重新分发**：安装时从 Google 官方 Chrome for Testing 下载，国内默认走 npmmirror 镜像；
   两个地址指向同一份官方构建。
 - 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。离线包/主程序的完整签名链
@@ -153,6 +194,16 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 > loader 在管理员令牌下解包；`PrivilegesRequired=admin` 只是内层 setup 的声明。安装路径与 HKCU PATH
 > 仍是 per-user，装完后程序本身不带管理员清单。
 
+2026-11-09 macOS 的 arm64 / x86_64 应用 DMG 由 GitHub Actions 构建并上传到 Release；在线安装器的
+生成清单（`app.platforms.darwin-arm64` / `darwin-x64` 的 SHA-256、体积、URL）和页面契约由
+`tests/unit/desktop/test_macos_installer.py` 在 Windows 上覆盖。这个 checkout 没有 macOS，
+**未做真实 Mac 启动验证**；安装器 DMG 也在同一次 workflow 中产出。
+
+macOS 的三项组件资产也从 npmmirror 实际下载并核对：Chrome for Testing arm64 196,562,867 B /
+x64 207,117,913 B；chromedriver arm64 9,378,279 B / x64 10,409,330 B；Node arm64 52,909,993 B /
+x64 54,203,979 B。SHA-256 见 `backend/services/components/default_catalog.json` 的 `darwin-arm64` /
+`darwin-x64` 条目。
+
 ## 构建
 
 ```powershell
@@ -163,16 +214,22 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
 powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
 ```
 
+macOS 的构建命令见上面的“macOS 在线安装器”；它只能在 macOS runner 上执行（`hdiutil`、`ditto`）。
+
 安装器界面由三个文件组成：`desktop/bootstrap/installer_page.html`（结构）、`installer_page.js`
 （只负责画和发请求）和 `ui_theme.py`（词条、调色板、CSS；和 `base.css` 用同一组令牌）。页面文本一律用
 `textContent` 写入，图标全部是内联 SVG（勾选、太阳/月亮），不使用字体图标或 Unicode 符号。
 
 清单：`backend/services/components/default_catalog.json`。发布新版本时更新其中的版本、URL、SHA-256 与体积；
-`tools/release_components.py` 负责从构建产物生成这份文件。最终产物的 `SHA256SUMS` 与
+`tools/release_components.py` 负责从构建产物生成这份文件。一个组件现在可能同时有 `win32`、
+`darwin-arm64`、`darwin-x64` 三项，`--component chrome=...` 默认只改**当前机器**的那一项；要改另一项必须写
+`--component chrome:darwin-arm64=<zip>`，这样一个 Windows zip 不会覆盖 Mac 的摘要。最终产物的 `SHA256SUMS` 与
 `release-manifest.json` 由 `desktop/release_manifest.py` 在签名链的最后一步写出，`--check` 可复核。
 
 ## 已知限制
 
 - 平台登录、Cookie、OpenRouter API Key 是用户身份，不能预装；安装器只把“还缺什么”列出来。
 - Ollama 模型没有国内官方镜像，默认不选；选择本机 LLM 的用户需要能访问 `registry.ollama.ai` 或自备 Ollama。
-- 只有 Windows x64；`desktop/` 是仓库里唯一的 Windows-only 目录。
+- Windows 版为 x64；macOS 版为 11+（arm64 / x86_64）。`desktop/` 是唯一的 OS 打包目录，Windows 和
+  macOS 的平台事实都留在里面，不进 `backend/`。
+- macOS 的 DMG 未签名/未公证，首次打开需右键“打开”；CatBus 没有 macOS 构建，安装器只显示不安装。

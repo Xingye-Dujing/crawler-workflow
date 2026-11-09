@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-from core.machine import is_frozen
+from core.machine import is_frozen, platform_name
 
 
 def install_root(root: str | Path | None = None) -> Path:
@@ -38,6 +38,18 @@ def components_root(root: str | Path | None = None) -> Path:
     if override:
         return Path(override)
     if is_frozen():
+        # macOS follows its own convention: the .app lives in /Applications (or ~/Applications)
+        # while its downloadable components belong to the user's data root (the folder the online
+        # installer showed as “data folder”). The launcher exports CRAWLER_DATA_ROOT before this is
+        # asked; the fallback is the packaged app's default.
+        if platform_name() == 'darwin':
+            configured = str(os.environ.get('CRAWLER_DATA_ROOT') or '').strip()
+            base = (
+                Path(configured).expanduser()
+                if configured
+                else Path.home() / 'Library' / 'Application Support' / 'CaiXiHui'
+            )
+            return base / 'components'
         # Two layouts ship: the online installer puts the application in ``<root>/app`` with
         # ``<root>/components`` beside it, while the portable zip is one folder with the exe at its
         # top. Reading the folder NAME keeps both working without a marker file.

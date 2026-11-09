@@ -6,13 +6,13 @@
       "version": "1.0.0",
       "kind": "archive",
       "label": "采析绘主程序",
-      "summary": "双击即用的 Windows 桌面版；含 Flask 服务、分析器和图表工坊",
+      "summary": "双击即用的桌面版；含 Flask 服务、分析器和图表工坊",
       "provides": ["app"],
       "requires": [],
       "default": true,
       "license": "MIT",
       "homepage": "https://gitee.com/Xingye-Dujing/crawler-workflow",
-      "notes": "安装到 app/，上一版保留为 app.previous 以便回滚",
+      "notes": "安装到安装目录；Windows 保留上一版为 app.previous 以便回滚",
       "platforms": {
         "win32": {
           "archive": "zip",
@@ -58,6 +58,28 @@
             "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/win64/chrome-win64.zip",
             "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/win64/chrome-win64.zip"
           ]
+        },
+        "darwin-arm64": {
+          "archive": "zip",
+          "strip_prefix": "chrome-mac-arm64",
+          "verify": ["Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"],
+          "sha256": "3406b38b52b7d341d74450eb7b369be038c9fec9894c8b8a9e9e9f97333caf2f",
+          "size": 196562867,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/mac-arm64/chrome-mac-arm64.zip",
+            "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/mac-arm64/chrome-mac-arm64.zip"
+          ]
+        },
+        "darwin-x64": {
+          "archive": "zip",
+          "strip_prefix": "chrome-mac-x64",
+          "verify": ["Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"],
+          "sha256": "c6fcc2869b0d5a421e880d7bcdabe96e4261c4100e125fc4e4daf6346474efa6",
+          "size": 207117913,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/mac-x64/chrome-mac-x64.zip",
+            "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/mac-x64/chrome-mac-x64.zip"
+          ]
         }
       }
     },
@@ -82,6 +104,28 @@
           "urls": [
             "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/win64/chromedriver-win64.zip",
             "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/win64/chromedriver-win64.zip"
+          ]
+        },
+        "darwin-arm64": {
+          "archive": "zip",
+          "strip_prefix": "chromedriver-mac-arm64",
+          "verify": ["chromedriver"],
+          "sha256": "e59394fda6a05067362c225678e185e46e473cebea1593025deb2b2641b75688",
+          "size": 9378279,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/mac-arm64/chromedriver-mac-arm64.zip",
+            "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/mac-arm64/chromedriver-mac-arm64.zip"
+          ]
+        },
+        "darwin-x64": {
+          "archive": "zip",
+          "strip_prefix": "chromedriver-mac-x64",
+          "verify": ["chromedriver"],
+          "sha256": "7725504324ce8e8e03f78392ecf288890e082d215f619edd87a2dc1235e780a4",
+          "size": 10409330,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/chrome-for-testing/157.0.8103.38/mac-x64/chromedriver-mac-x64.zip",
+            "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/mac-x64/chromedriver-mac-x64.zip"
           ]
         }
       }
@@ -108,6 +152,28 @@
             "https://registry.npmmirror.com/-/binary/node/v24.21.0/node-v24.21.0-win-x64.zip",
             "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
           ]
+        },
+        "darwin-arm64": {
+          "archive": "tar.gz",
+          "strip_prefix": "node-v24.21.0-darwin-arm64",
+          "verify": ["bin/node"],
+          "sha256": "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057",
+          "size": 52909993,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/node/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz",
+            "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz"
+          ]
+        },
+        "darwin-x64": {
+          "archive": "tar.gz",
+          "strip_prefix": "node-v24.21.0-darwin-x64",
+          "verify": ["bin/node"],
+          "sha256": "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097",
+          "size": 54203979,
+          "urls": [
+            "https://registry.npmmirror.com/-/binary/node/v24.21.0/node-v24.21.0-darwin-x64.tar.gz",
+            "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
+          ]
         }
       }
     },
@@ -121,7 +187,7 @@
       "default": true,
       "license": "MIT",
       "homepage": "https://gitee.com/Xingye-Dujing/catbus-crawler-workflow",
-      "notes": "国内直连从 Gitee 下载并拼接；登录态仍需用户首次自己完成",
+      "notes": "国内直连从 Gitee 下载并拼接；登录态仍需用户首次自己完成。macOS 目前没有官方构建，Selenium 采集不受影响",
       "platforms": {
         "win32": {
           "archive": "zip",

@@ -49,16 +49,27 @@ jobs:
       - name: Build .app and DMG
         run: python desktop/build_macos.py --clean
 
+      - name: Build macOS online installer
+        run: |
+          python desktop/build_macos_installer.py --clean \
+            --app-dmg "dist/CaiXiHui-macOS-${{ matrix.arch }}.dmg" \
+            --release-tag "$RELEASE_TAG" \
+            --arch "${{ matrix.arch }}"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: caixihui-macos-${{ matrix.arch }}
-          path: dist/CaiXiHui-macOS-*.dmg
+          path: |
+            dist/CaiXiHui-macOS-*.dmg
+            dist/CaiXiHui-Online-Setup-macOS-*.dmg
           if-no-files-found: error
 
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$RELEASE_TAG" dist/CaiXiHui-macOS-*.dmg \
+          gh release upload "$RELEASE_TAG" \
+            dist/CaiXiHui-macOS-*.dmg \
+            dist/CaiXiHui-Online-Setup-macOS-*.dmg \
             --repo "$GITHUB_REPOSITORY" --clobber

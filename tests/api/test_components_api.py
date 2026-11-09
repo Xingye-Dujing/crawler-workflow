@@ -62,7 +62,7 @@ def _windows_assets(monkeypatch):
     """The installer's catalogue is Windows-only; ask it for that OS on every test runner."""
     from services.components import catalog as catalog_module
 
-    monkeypatch.setattr(catalog_module, 'platform_name', lambda system=None: 'win32')
+    monkeypatch.setattr(catalog_module, 'platform_asset_key', lambda system=None, machine=None: 'win32')
 
 
 def test_the_catalogue_lists_the_domestic_defaults(client, monkeypatch):

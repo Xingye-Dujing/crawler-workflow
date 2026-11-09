@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ntpath
 import os
+import platform
 import posixpath
 import socket
 import sys
@@ -184,6 +185,26 @@ def platform_name(system: str | None = None) -> str:
     if name.startswith(('win', 'cygwin', 'msys')):
         return 'win32'
     return name
+
+
+def platform_asset_key(system: str | None = None, machine: str | None = None) -> str:
+    """The catalogue key for THIS OS *and* CPU, because a Mac app is per-architecture.
+
+    ``platform_name`` stays one value per OS: every user-facing table (Chrome candidates, remedies,
+    navigator.platform) is the same on both Macs. A downloadable archive is not — Chrome for Testing
+    ships ``mac-arm64`` and ``mac-x64`` separately, and installing the wrong one produces a binary
+    that cannot start. Windows keeps the bare ``win32`` key: its release is one x64 build, and the
+    existing catalogue must keep validating unchanged.
+    """
+    os_name = platform_name(system)
+    if os_name != 'darwin':
+        return os_name
+    value = str(platform.machine() if machine is None else machine).lower()
+    if value in ('arm64', 'aarch64'):
+        return 'darwin-arm64'
+    if value in ('x86_64', 'amd64', 'i386', 'x86'):
+        return 'darwin-x64'
+    return 'darwin'
 
 
 def is_windows(system: str | None = None) -> bool:
@@ -397,6 +418,41 @@ NODE_PATH_NAMES = {
 #: Driver and Node file names a machine's own install uses. The installer/probe ask this table
 #: instead of spelling ``.exe`` outside the per-OS facts (see ``tests/unit/crawlers``).
 DRIVER_FILE_NAMES = {'linux': ('chromedriver',), 'darwin': ('chromedriver',), 'win32': ('chromedriver.exe',)}
+
+#: Where an installer component keeps its executable INSIDE its version folder. This is not the
+#: same question as ``chrome_executable_name``: that one is a name a user types on PATH, while this
+#: is the payload's own layout. macOS Chrome for Testing is an ``.app`` whose binary is three
+#: folders down, and Node's tarball puts ``node`` under ``bin/``; probing ``chrome`` or ``node`` in
+#: the component root would report a correctly installed component as missing.
+COMPONENT_PAYLOAD_PATHS = {
+    'chrome': {
+        'darwin': ('Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+        'linux': ('chrome',),
+        'win32': ('chrome.exe',),
+    },
+    'chromedriver': {
+        'darwin': ('chromedriver',),
+        'linux': ('chromedriver',),
+        'win32': ('chromedriver.exe',),
+    },
+    'node': {
+        'darwin': ('bin', 'node'),
+        'linux': ('bin', 'node'),
+        'win32': ('node.exe',),
+    },
+    'catbus': {
+        'darwin': ('dist', 'integrations', 'crawler-workflow', 'cli.js'),
+        'linux': ('dist', 'integrations', 'crawler-workflow', 'cli.js'),
+        'win32': ('dist', 'integrations', 'crawler-workflow', 'cli.js'),
+    },
+}
+
+
+def component_payload_path(component_id: str, system: str | None = None) -> str:
+    """The POSIX relative path of a component's executable, or ``''`` for an unknown component."""
+    parts = COMPONENT_PAYLOAD_PATHS.get(str(component_id or ''), {}).get(platform_name(system))
+    return posixpath.join(*parts) if parts else ''
+
 
 #: The Node releases CatBus' ``engines`` field accepts, split the way a semver range actually reads:
 # ``^22.22.2 || ^24.15.0`` are two *major-bound* floors (a 23.x or 25.x runtime is in neither, even
