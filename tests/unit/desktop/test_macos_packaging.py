@@ -53,15 +53,40 @@ def test_the_workflow_builds_both_architectures_and_uploads_the_dmg():
     assert 'x86_64' in workflow and 'arm64' in workflow
     assert 'desktop/build_macos.py --clean' in workflow
     assert 'gh release upload "$RELEASE_TAG"' in workflow
-    assert 'requirements-macos.txt' in workflow
+    assert 'requirements-runtime.txt' in workflow
     assert 'permissions:' in workflow and 'contents: write' in workflow
 
 
-def test_macos_requirements_are_the_runtime_set_without_windows_or_torch():
-    text = (DESKTOP / 'requirements-macos.txt').read_text(encoding='utf-8')
+def test_the_macos_bundle_collects_the_bert_runtime():
+    spec = (DESKTOP / 'caixihui_macos.spec').read_text(encoding='utf-8')
+    assert "collect_dynamic_libs('onnxruntime')" in spec
+    assert "'bert_pack'" in spec
+    entry = (DESKTOP / 'macos_entry.py').read_text(encoding='utf-8')
+    assert 'seed_models(root)' in entry
+    assert 'root_label=models.as_posix()' in entry
+
+
+def test_the_shared_runtime_set_selects_windows_and_macos_with_markers():
+    text = (DESKTOP / 'requirements-runtime.txt').read_text(encoding='utf-8')
     names = {line.split('==', 1)[0].strip().lower() for line in text.splitlines() if '==' in line}
-    for present in ('flask', 'pandas', 'numpy', 'scipy', 'scikit-learn', 'selenium', 'jieba', 'snownlp', 'pywebview'):
-        assert present in names, f'{present} is missing from the macOS runtime set'
-    for absent in ('torch', 'transformers', 'pyarrow', 'mitmproxy', 'pythonnet', 'onnxruntime', 'pytest'):
-        assert absent not in names, f'{absent} must not enter the macOS bundle'
+    for present in (
+        'flask',
+        'pandas',
+        'numpy',
+        'scipy',
+        'scikit-learn',
+        'selenium',
+        'jieba',
+        'snownlp',
+        'pywebview',
+        'onnxruntime',
+        'tokenizers',
+    ):
+        assert present in names, f'{present} is missing from the desktop runtime set'
+    for absent in ('torch', 'transformers', 'pyarrow', 'mitmproxy', 'pytest'):
+        assert absent not in names, f'{absent} must not enter the desktop bundle'
+    assert 'onnxruntime==1.31.0; sys_platform == "win32"' in text
+    assert 'onnxruntime==1.19.2; sys_platform == "darwin"' in text
+    assert 'pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"' in text
+    assert 'pythonnet==3.0.5; sys_platform == "win32"' in text, 'pythonnet is the Windows-only WebView2 bridge'
     assert not {byte for byte in text.encode('utf-8') if byte > 127}, 'pip reads this as cp1252 on mac'

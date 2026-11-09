@@ -15,11 +15,17 @@ ICON = BACKEND / 'static' / 'icon.ico'
 PAGE = ROOT / 'desktop' / 'bootstrap' / 'installer_page.html'
 PAGE_JS = ROOT / 'desktop' / 'bootstrap' / 'installer_page.js'
 WINDOW = ROOT / 'desktop' / 'native_window.py'
+BERT_INSTALL = ROOT / 'desktop' / 'bootstrap' / 'bert_install.py'
+BERT_PACK = ROOT / 'desktop' / 'bert_pack.py'
 
 datas = [
     (str(CATALOG), 'services/components'),
     (str(ROOT / 'desktop' / 'bootstrap' / 'plan.py'), '.'),
     (str(ROOT / 'desktop' / 'bootstrap' / 'ui_theme.py'), '.'),
+    # The BERT path field is a Windows feature; both the placement module and the registry reader
+    # are scripts loaded by path, so the bundle needs their source files.
+    (str(BERT_INSTALL), '.'),
+    (str(BERT_PACK), '.'),
     # The page, its script and the window/tab icon; a onefile bundle resolves them through
     # sys._MEIPASS, i.e. the root this copies them to.
     (str(PAGE), '.'),

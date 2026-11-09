@@ -129,6 +129,34 @@ _THEME_SPEC.loader.exec_module(ui_theme)
 TEXT = ui_theme.TEXT
 STATE_LABEL = ui_theme.STATE_LABEL
 
+#: The BERT pack placement module is a script too (it loads ``desktop/bert_pack.py`` by path), so
+#: it is loaded explicitly rather than imported. The onefile bundle copies both files beside this.
+_BERT_SPEC = importlib.util.spec_from_file_location(
+    'installer_bert_install', Path(__file__).with_name('bert_install.py')
+)
+assert _BERT_SPEC and _BERT_SPEC.loader
+_BERT = importlib.util.module_from_spec(_BERT_SPEC)
+_BERT_SPEC.loader.exec_module(_BERT)
+BertPackError = _BERT.BertPackError
+bert_pack_problem = _BERT.pack_problem
+install_bert_pack = _BERT.install
+
+
+def models_registry_label(models: str | Path, install_root: str | Path) -> str:
+    """How ``model_registry.json`` names the chosen folder.
+
+    A folder inside the install root is written relative to ``app/`` so moving the installation keeps
+    working; a folder elsewhere (the default is under the data root) is absolute — there is no stable
+    relative answer across drives/trees, and the registry is machine-local user data.
+    """
+    resolved = Path(models).expanduser().resolve()
+    try:
+        resolved.relative_to(Path(install_root).resolve())
+    except ValueError:
+        return resolved.as_posix()
+    app_dir = Path(install_root).resolve() / 'app'
+    return Path(os.path.relpath(resolved, app_dir)).as_posix()
+
 
 def _load_window_module():
     """The shared WebView2 host, loaded by path like the plan and the theme.
@@ -288,14 +316,108 @@ def pick_folder(title: str) -> str:
     return path.value or ''
 
 
+def pick_file(title: str) -> str:
+    """The native Windows open-file dialog for the BERT archive; ``''`` when cancelled.
+
+    ``GetOpenFileNameW`` is the shell's own dialog, like the folder picker above: no GUI toolkit in
+    the bundle, and the filter starts on the model pack's ``.zip``. The owner is the installer window
+    so the dialog cannot open behind it.
+    """
+    if os.name != 'nt':
+        return ''
+    import ctypes
+    from ctypes import wintypes
+
+    class OpenFileName(ctypes.Structure):
+        _fields_ = [
+            ('lStructSize', wintypes.DWORD),
+            ('hwndOwner', wintypes.HWND),
+            ('hInstance', wintypes.HANDLE),
+            ('lpstrFilter', wintypes.LPCWSTR),
+            ('lpstrCustomFilter', wintypes.LPWSTR),
+            ('nMaxCustFilter', wintypes.DWORD),
+            ('nFilterIndex', wintypes.DWORD),
+            # A buffer, not LPWSTR: ctypes rejects the c_wchar_Array a create_unicode_buffer
+            # returns for a c_wchar_p field (the same trap the folder picker documents).
+            ('lpstrFile', ctypes.c_void_p),
+            ('nMaxFile', wintypes.DWORD),
+            ('lpstrFileTitle', ctypes.c_void_p),
+            ('nMaxFileTitle', wintypes.DWORD),
+            ('lpstrInitialDir', wintypes.LPCWSTR),
+            ('lpstrTitle', wintypes.LPCWSTR),
+            ('Flags', wintypes.DWORD),
+            ('nFileOffset', wintypes.WORD),
+            ('nFileExtension', wintypes.WORD),
+            ('lpstrDefExt', wintypes.LPCWSTR),
+            ('lCustData', wintypes.LPARAM),
+            ('lpfnHook', ctypes.c_void_p),
+            ('lpTemplateName', wintypes.LPCWSTR),
+            ('pvReserved', ctypes.c_void_p),
+            ('dwReserved', wintypes.DWORD),
+            ('FlagsEx', wintypes.DWORD),
+        ]
+
+    file_buffer = ctypes.create_unicode_buffer(32768)
+    # OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER | OFN_NOCHANGEDIR
+    flags = 0x00001000 | 0x00000800 | 0x00080000 | 0x00000008
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    owner = native_window.handle() or user32.GetForegroundWindow() or None
+    info = OpenFileName(
+        ctypes.sizeof(OpenFileName),
+        owner,
+        None,
+        'BERT model pack (*.zip)\0*.zip\0All files (*.*)\0*.*\0\0',
+        None,
+        0,
+        1,
+        ctypes.cast(file_buffer, ctypes.c_void_p),
+        len(file_buffer),
+        None,
+        0,
+        None,
+        title,
+        flags,
+        0,
+        0,
+        'zip',
+        0,
+        None,
+        None,
+        None,
+        0,
+        0,
+    )
+    dialog = ctypes.windll.comdlg32
+    dialog.GetOpenFileNameW.argtypes = [ctypes.POINTER(OpenFileName)]
+    dialog.GetOpenFileNameW.restype = wintypes.BOOL
+    try:
+        if not dialog.GetOpenFileNameW(ctypes.byref(info)):
+            return ''
+    except (AttributeError, OSError, TypeError, ValueError):
+        return ''
+    return file_buffer.value or ''
+
+
 class InstallerState:
     """Everything the page may ask about, guarded because the install runs on a thread."""
 
-    def __init__(self, catalog: Catalog, root: str, data: str, elevated: bool) -> None:
+    #: Whether this platform's packaged app can actually load a BERT pack. Windows ships
+    #: onnxruntime; the macOS bundle deliberately does not, so its page hides the path field.
+    bert_supported = True
+
+    def __init__(
+        self,
+        catalog: Catalog,
+        root: str,
+        data: str,
+        elevated: bool,
+    ) -> None:
         self.catalog = catalog
         self.root = str(root)
         self.data = str(data)
         self.elevated = elevated
+        self.bert = ''
         self.lock = threading.RLock()
         self.cancel = threading.Event()
         self.preset = 'one'
@@ -364,6 +486,9 @@ class InstallerState:
             return {
                 'root': self.root,
                 'data': self.data,
+                'models': self.models,
+                'bert': self.bert,
+                'bert_supported': self.bert_supported,
                 'preset': self.preset,
                 'components': rows,
                 # Bytes, not a sentence: the page renders the size in its own language.
@@ -372,6 +497,20 @@ class InstallerState:
             }
 
     # ── actions ─────────────────────────────────────────────────
+    @property
+    def models(self) -> str:
+        """The model storage folder follows the data folder, exactly like ``data/`` and ``logs/``.
+
+        The source archive is a separate, optional value (:attr:`bert`); this is only where its
+        extracted folders live. Keeping it derived means a user who moves the data folder never has
+        a registry pointing at the old drive.
+        """
+        return str(Path(self.data) / 'bert_models')
+
+    def set_bert(self, path) -> None:
+        with self.lock:
+            self.bert = str(path or '').strip()
+
     def set_selection(self, ids) -> None:
         if not isinstance(ids, list):
             return
@@ -437,6 +576,28 @@ class InstallerState:
                 self._set_job(state='failed', error=str(exc), status_key='')
                 return
             self._log(f'{component_id} {component.version} -> {root}')
+        if self.bert:
+            self._set_job(done=99, status_key='bert_installing', status_params={})
+            models = Path(self.models)
+            try:
+                placed = install_bert_pack(
+                    self.bert,
+                    root,
+                    data,
+                    models_dir=models,
+                    root_label=models_registry_label(models, root),
+                )
+            except (BertPackError, OSError, ValueError) as exc:
+                self._set_job(state='failed', error=str(exc), status_key='')
+                return
+            ledger = placed['ledger']
+            for name in ledger['added']:
+                self._log(f'bert registered: {name}')
+            for name in ledger['skipped']:
+                self._log(f'bert existing registry entry kept: {name}')
+            for name in placed['skipped_folders']:
+                self._log(f'bert model folder already present, kept: {name}')
+            self._log(f'bert {ledger["packs"]} packs -> {models}')
         self._write_data_root(root, data)
         self._set_job(done=100, state='done', status_key='done', status_params={})
         self._run_doctor(root, data)
@@ -625,6 +786,7 @@ class Handler(BaseHTTPRequestHandler):
         return TEXT
 
     pick_folder = staticmethod(pick_folder)
+    pick_file = staticmethod(pick_file)
 
     # ── plumbing ────────────────────────────────────────────────
 
@@ -712,9 +874,10 @@ class Handler(BaseHTTPRequestHandler):
         elif route == '/api/browse':
             kind = str(payload.get('kind') or 'root')
             lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
-            title = self.words[lang]['data_dir' if kind == 'data' else 'dir']
+            title_key = {'data': 'data_dir', 'bert': 'bert'}.get(kind, 'dir')
+            title = self.words[lang][title_key]
             try:
-                picked = self.pick_folder(title)
+                picked = self.pick_file(title) if kind == 'bert' else self.pick_folder(title)
             except (OSError, TypeError, ValueError) as exc:
                 # A picker failure is "no path chosen", never a dead HTTP request: the page's
                 # browse button used to end in ERR_EMPTY_RESPONSE when the shell call raised.
@@ -751,8 +914,14 @@ class Handler(BaseHTTPRequestHandler):
         ids = state.effective()
         if 'app' not in ids:
             return {'ok': False, 'error': words['no_selection']}
+        bert_text = str(payload.get('bert') or '').strip()
+        if state.bert_supported and bert_text:
+            problem = _BERT.pack_problem(bert_text)
+            if problem:
+                return {'ok': False, 'error': words['bert_invalid'].format(err=problem)}
+        state.set_bert(bert_text if state.bert_supported else '')
         root = Path(root_text)
-        data = Path(data_text)
+        data = Path(data_text).expanduser()
         refused = _writable(root) or _writable(data)
         if refused:
             # Nothing was downloaded yet, so asking for rights here costs the user one prompt
@@ -768,6 +937,8 @@ class Handler(BaseHTTPRequestHandler):
             # application cannot start from; the raw CLR sentence goes to the log.
             log_line(f'install path refused: {root}: {remote}')
             return {'ok': False, 'error': words['bad_path'].format(path=root)}
+        if state.bert and not _writable(data / 'bert_models'):
+            return {'ok': False, 'error': words['elevate_failed']}
         need = sum(state.catalog.get(item).asset().size for item in ids if state.catalog.get(item).asset())
         free = free_space(root)
         if free and free < need + 200 * 1024 * 1024:
@@ -775,6 +946,19 @@ class Handler(BaseHTTPRequestHandler):
                 'ok': False,
                 'error': words['disk'].format(free=human_size(free), need=human_size(need)),
             }
+        bert_need = 0
+        if state.bert:
+            with contextlib.suppress(OSError):
+                source = Path(state.bert)
+                if source.is_file():
+                    bert_need = source.stat().st_size
+        if bert_need:
+            data_free = free_space(data)
+            if data_free and data_free < bert_need + 200 * 1024 * 1024:
+                return {
+                    'ok': False,
+                    'error': words['disk'].format(free=human_size(data_free), need=human_size(bert_need)),
+                }
         state.start(root, data)
         return {'ok': True, 'state': state.snapshot()}
 
@@ -811,6 +995,8 @@ class Handler(BaseHTTPRequestHandler):
             'lang': 'zh',
             'text': self.words,
             'state_labels': STATE_LABEL,
+            'bert_supported': self.server.state.bert_supported,
+            'path_separator': os.sep,
             'state': self.server.state.snapshot(),
         }
         payload = json.dumps(config, ensure_ascii=False).replace('</', '<\\/')

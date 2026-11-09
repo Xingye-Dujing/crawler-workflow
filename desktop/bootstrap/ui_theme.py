@@ -15,6 +15,15 @@ TEXT = {
         'dir': '安装位置',
         'data_dir': '数据文件夹',
         'data_hint': '工作流、运行记录、Cookie 都放在这里；和程序分开放，换盘不用重装。',
+        'bert': '微调 BERT（可选）',
+        'models_location': '模型存放位置：{path}',
+        'bert_source': 'BERT 模型压缩包（源，可选）',
+        'bert_hint': (
+            '选一个 zip 或已解压的 bert_models 文件夹；安装器只读取它，解压到上面的模型存放位置'
+            '（随数据文件夹）并登记。留空跳过。'
+        ),
+        'bert_installing': '正在放置 BERT 模型…',
+        'bert_invalid': '这个 BERT 模型包不可用：{err}',
         'browse': '浏览…',
         'preset': '安装方式',
         'preset_one': '一键安装（推荐，国内直连）',
@@ -61,6 +70,16 @@ TEXT = {
             'Workflows, run records and cookies live here; keeping them apart from the program '
             'means a drive change needs no reinstall.'
         ),
+        'bert': 'Fine-tuned BERT (optional)',
+        'models_location': 'Model location: {path}',
+        'bert_source': 'BERT model archive (source, optional)',
+        'bert_hint': (
+            'Choose a zip or an unpacked bert_models folder; the installer only reads it, unpacks it '
+            'into the model location above (which follows the data folder) and registers it. '
+            'Leave empty to skip.'
+        ),
+        'bert_installing': 'Placing the BERT models…',
+        'bert_invalid': 'That BERT model pack cannot be used: {err}',
         'browse': 'Browse…',
         'preset': 'Preset',
         'preset_one': 'One-click (recommended, domestic)',

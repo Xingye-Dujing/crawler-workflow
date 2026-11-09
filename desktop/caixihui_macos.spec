@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 SPEC_DIR = Path(SPECPATH).resolve()
 ROOT = SPEC_DIR.parent
@@ -44,6 +44,14 @@ try:
 except Exception:
     pass
 
+# onnxruntime loads its C++ backend as a dylib beside its own extension. A static import graph
+# does not collect that by itself, and the failure is lazy: the first bert node on the user's Mac
+# would refuse with a missing library instead of the app failing at build time.
+try:
+    binaries += collect_dynamic_libs('onnxruntime')
+except Exception:
+    pass
+
 hiddenimports = []
 for package in (
     'api',
@@ -69,6 +77,8 @@ hiddenimports += [
     'scheduling.clock',
     'sessions.profiles',
     'bert_pack',
+    'onnxruntime',
+    'tokenizers',
     'webview.platforms.cocoa',
     'objc',
     'Foundation',

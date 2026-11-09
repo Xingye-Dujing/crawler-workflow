@@ -23,6 +23,8 @@ if str(BACKEND) not in sys.path:
 datas = [
     (CATALOG, '.'),
     (str(BOOTSTRAP / 'installer.py'), '.'),
+    (str(BOOTSTRAP / 'bert_install.py'), '.'),
+    (str(ROOT / 'desktop' / 'bert_pack.py'), '.'),
     (str(BOOTSTRAP / 'plan.py'), '.'),
     (str(BOOTSTRAP / 'installer_page.html'), '.'),
     (str(BOOTSTRAP / 'installer_page.js'), '.'),

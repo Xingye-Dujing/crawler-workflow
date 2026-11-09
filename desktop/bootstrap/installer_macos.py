@@ -168,6 +168,24 @@ def pick_folder(title: str) -> str:
     return (result.stdout or '').strip().rstrip('/') or '/'
 
 
+def pick_file(title: str) -> str:
+    """The native file chooser (the BERT field is hidden on macOS, but the seam stays complete)."""
+    script = f'POSIX path of (choose file with prompt {_applescript_string(title)})'
+    try:
+        result = subprocess.run(
+            ['/usr/bin/osascript', '-e', script],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    if result.returncode != 0:
+        return ''
+    return (result.stdout or '').strip()
+
+
 def _run(command: list[str], what: str) -> None:
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode == 0:
@@ -301,6 +319,28 @@ class MacInstallerState(installer.InstallerState):
                 self._set_job(state='failed', error=str(exc), status_key='')
                 return
             self._log(f'{component_id} {component.version} -> {root if component_id == "app" else data}')
+        if self.bert:
+            self._set_job(done=99, status_key='bert_installing', status_params={})
+            models = Path(data) / 'bert_models'
+            try:
+                placed = installer.install_bert_pack(
+                    self.bert,
+                    root,
+                    data,
+                    models_dir=models,
+                    root_label=models.as_posix(),
+                )
+            except (installer.BertPackError, OSError, ValueError) as exc:
+                self._set_job(state='failed', error=str(exc), status_key='')
+                return
+            ledger = placed['ledger']
+            for name in ledger['added']:
+                self._log(f'bert registered: {name}')
+            for name in ledger['skipped']:
+                self._log(f'bert existing registry entry kept: {name}')
+            for name in placed['skipped_folders']:
+                self._log(f'bert model folder already present, kept: {name}')
+            self._log(f'bert {ledger["packs"]} packs -> {models}')
         self._write_data_root(root, data)
         self._set_job(done=100, state='done', status_key='done', status_params={})
         self._run_doctor(root, data)
@@ -357,6 +397,7 @@ class MacHandler(installer.Handler):
         return MAC_TEXT
 
     pick_folder = staticmethod(pick_folder)
+    pick_file = staticmethod(pick_file)
 
     def _start(self, state: MacInstallerState, payload: dict) -> dict:
         lang = 'en' if str(payload.get('lang')) == 'en' else 'zh'
@@ -371,12 +412,25 @@ class MacHandler(installer.Handler):
         ids = state.effective()
         if 'app' not in ids:
             return {'ok': False, 'error': words['no_selection']}
+        bert_text = str(payload.get('bert') or '').strip()
+        if bert_text:
+            problem = installer.bert_pack_problem(bert_text)
+            if problem:
+                return {'ok': False, 'error': words['bert_invalid'].format(err=problem)}
+        state.set_bert(bert_text)
         root = Path(root_text).expanduser()
         data = Path(data_text).expanduser()
         for path in (root, data):
             if not _takes_write(path):
                 return {'ok': False, 'error': words['not_writable'].format(path=path)}
+        if bert_text and not _takes_write(data / 'bert_models'):
+            return {'ok': False, 'error': words['not_writable'].format(path=data / 'bert_models')}
         need = sum(state.catalog.get(item).asset().size for item in ids if state.catalog.get(item).asset())
+        if state.bert:
+            with contextlib.suppress(OSError):
+                source = Path(state.bert)
+                if source.is_file():
+                    need += source.stat().st_size
         free = installer.free_space(data)
         if free and free < need + 200 * 1024 * 1024:
             return {

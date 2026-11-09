@@ -146,6 +146,20 @@ def apply_component_env(root: Path) -> None:
         apply_env(root)
 
 
+def seed_models(root: Path) -> None:
+    """Register BERT packs the user placed in ``<data>/bert_models``.
+
+    macOS has no writable folder beside the .app, so the online installer and a manual unpack both
+    use the user's data root. Registry paths are absolute; ``resolve_bert_model`` and the probe both
+    accept them, and the app bundle stays replaceable.
+    """
+    from desktop_entry import seed_bert_models
+
+    models = Path(root) / 'bert_models'
+    with contextlib.suppress(OSError):
+        seed_bert_models(root, root, models_dir=models, root_label=models.as_posix())
+
+
 def doctor() -> int:
     from i18n import set_lang, t
     from services.components.probe import environment
@@ -184,6 +198,9 @@ def main(argv=None) -> int:
         sys.path.insert(0, str(backend))
     # Before core.config is imported: it snapshots CHROME_PATH/CIXI_NODE_BIN/etc. at import time.
     apply_component_env(root)
+    # A BERT pack in the user's data root is invisible without a registry entry; register it before
+    # the app is imported, exactly as the Windows launcher does.
+    seed_models(root)
     if '--doctor' in argv:
         try:
             return doctor()

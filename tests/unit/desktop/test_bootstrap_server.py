@@ -78,6 +78,16 @@ def test_a_component_with_no_asset_here_is_marked_unavailable_not_merely_unticke
     assert rows['ollama']['unavailable'] is False, 'a manual component is detection-only on every platform'
 
 
+def test_the_optional_bert_path_is_part_of_the_state(installer):
+    state = _state(installer)
+    body = state.snapshot()
+    assert body['bert'] == ''
+    assert body['bert_supported'] is True
+    assert body['models'] == str(Path('D:/data') / 'bert_models'), 'the model folder follows the data folder'
+    state.set_bert('D:/models/CaiXiHui-bert-models-win64.zip')
+    assert state.snapshot()['bert'] == 'D:/models/CaiXiHui-bert-models-win64.zip'
+
+
 def test_an_unknown_preset_is_refused_rather_than_guessed(installer):
     state = _state(installer)
     assert state.set_preset('everything') is False

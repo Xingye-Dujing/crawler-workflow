@@ -73,6 +73,23 @@ xelatex（MiKTeX），这样项目全部依赖都在同一页可见；它们不�
 两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
 指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。
 
+## BERT 模型包（可选，Windows / macOS）
+
+这里有两个**不同**的路径，安装器把它们分开：
+
+- **模型压缩包（源）**：你已有的 `CaiXiHui-bert-models-win64.zip`（或已经解压的 `bert_models` 文件夹）。
+  这是只读输入，安装器不会移动或覆盖它。
+- **模型存放位置**：`<数据文件夹>/bert_models`，**随“数据文件夹”自动同步**，不需要再单独选一次。
+  页面会在“微调 BERT（可选）”下直接显示这个路径；改数据文件夹，它跟着变。
+
+安装器会在**下载前**检查源路径和 zip 内容；装完组件后把完整的模型目录解压到模型存放位置，再用
+`desktop/bert_pack.py` 登记进 `<数据文件夹>/data/model_registry.json`。Windows 的存放位置如果就在安装根内，
+注册表写相对 `app/` 的路径；在数据文件夹或别处则写绝对路径（macOS 总是绝对路径）。已有同名模型目录/条目
+保留，安装器只补缺的；只接受带 `model.onnx`、`tokenizer.json`、`cixi_bert.json` 的完整目录，半包按名拒绝。
+
+源路径留空就跳过 BERT，不下载、不占空间；模型存放位置始终显示，因为它只是数据文件夹的派生。Windows 和
+macOS 都带 onnxruntime + tokenizers，模型包是同一份 ONNX 目录。
+
 ## macOS 在线安装器
 
 macOS 没有 `CaiXiHui-Online-Setup.dmg` 这种“Windows 安装器换皮”，而是同一个小 `.app` 的 DMG：
@@ -147,6 +164,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 
 - 所有下载只接受 HTTPS；逐项核对清单里的 SHA-256，失败删除字节并点名 URL。
 - 解压拒绝绝对路径、`..`、符号链接，限制条目数与总大小；先解压到 staging，再原子移动到目标目录。
+  用户选择的 BERT 模型包也走同一条 `safe_extract` 检查；只接受带完整三件套的模型目录。
   macOS 的 Chrome/Node 资产必须保留符号链接和可执行位，所以改用系统 `ditto`/`tar` 解包；它们同样是
   先核对 SHA-256 的固定字节，且仍解到 staging 后再替换。
 - 不执行下载来的 exe / msi；第三方一律便携 zip 解压。主程序在 macOS 上是 DMG 里的 `.app`，安装器只
@@ -240,3 +258,5 @@ macOS 的构建命令见上面的“macOS 在线安装器”；它只能在 macO
 - Windows 版为 x64；macOS 版为 11+（arm64 / x86_64）。`desktop/` 是唯一的 OS 打包目录，Windows 和
   macOS 的平台事实都留在里面，不进 `backend/`。
 - macOS 的 DMG 未签名/未公证，首次打开需右键“打开”；CatBus 没有 macOS 构建，安装器只显示不安装。
+- Windows 与 macOS 都带 onnxruntime + tokenizers；BERT 模型包是同一份 ONNX 目录。torch/transformers
+  仍只在开发机使用，不进桌面包。

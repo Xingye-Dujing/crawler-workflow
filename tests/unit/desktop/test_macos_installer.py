@@ -97,6 +97,14 @@ def test_a_dmg_is_refused_by_the_generic_component_manager_before_download(tmp_p
         install_component(catalog, 'app', tmp_path)
 
 
+def test_the_mac_installer_offers_the_same_optional_bert_pack(installer_app):
+    assert installer_app.MacInstallerState.bert_supported is True
+    source = (BOOTSTRAP / 'installer_macos.py').read_text(encoding='utf-8')
+    assert 'installer.install_bert_pack(' in source
+    assert 'models_dir=models' in source
+    assert 'root_label=models.as_posix()' in source
+
+
 def test_the_mac_components_live_under_the_chosen_data_root(tmp_path, monkeypatch):
     from services.components import paths
 

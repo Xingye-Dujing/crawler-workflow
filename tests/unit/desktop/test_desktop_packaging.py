@@ -989,7 +989,7 @@ class TestTheModelPackBecomesARegistryEntry:
         """Order matters: ``/api/models`` reads the registry through Config, so a late registration
         would show an empty model list on the first start after unpacking a pack."""
         source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
-        assert source.index('seed_registry(root /') < source.index('from app import app')
+        assert source.index('seed_bert_models(base, root)') < source.index('from app import app')
 
 
 class TestTheModelPackArchive:
@@ -1115,6 +1115,34 @@ class TestTheIconIsWhatItsNameSays:
         assert script.index('is not an ICO') < script.index('Write-Step "Build environment"'), (
             'the check that costs nothing has to run before the steps that cost ten minutes'
         )
+
+    def test_the_master_is_the_processed_new_photo(self, tmp_path):
+        from PIL import Image
+
+        art = REPO / 'backend' / 'static' / 'icon.jpg'
+        assert art.is_file(), 'the raw art the icons are generated from belongs beside them'
+        with Image.open(self.ART) as image:
+            assert image.format == 'PNG'
+            assert image.width == image.height
+            assert image.width >= 512, 'the macOS .icns needs a high-resolution master'
+            rgba = image.convert('RGBA')
+            assert rgba.getpixel((0, 0))[3] == 0, 'the icon is circular: corners are transparent'
+            assert rgba.getpixel((rgba.width // 2, rgba.height // 2))[3] == 255
+        builder = _load('build_icon', self.GENERATOR)
+        prepared = builder.prepare(art, tmp_path / 'master.png')
+        with Image.open(prepared) as image:
+            assert image.format == 'PNG' and image.size == (builder.PNG_MASTER, builder.PNG_MASTER)
+            rgba = image.convert('RGBA')
+            assert rgba.getpixel((0, 0))[3] == 0
+            assert rgba.getpixel((rgba.width // 2, rgba.height // 2))[3] == 255
+
+    def test_every_committed_frame_is_circular(self):
+        from PIL import Image
+
+        with Image.open(self.ICON) as image:
+            rgba = image.convert('RGBA')
+            assert rgba.getpixel((0, 0))[3] == 0, 'the Windows icon must keep transparent corners'
+            assert rgba.getpixel((rgba.width // 2, rgba.height // 2))[3] == 255
 
     def test_the_generator_rebuilds_the_same_frames_from_the_source_art(self, tmp_path):
         builder = _load('build_icon', self.GENERATOR)

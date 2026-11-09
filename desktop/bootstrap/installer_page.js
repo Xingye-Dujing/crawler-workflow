@@ -73,16 +73,19 @@
         document.title = t('title');
         var pairs = [
             ['title', 'title'], ['intro', 'intro'], ['dir-label', 'dir'], ['data-label', 'data_dir'],
-            ['data-hint', 'data_hint'], ['preset-label', 'preset'], ['preset-one', 'preset_one'],
+            ['data-hint', 'data_hint'], ['bert-label', 'bert'], ['bert-hint', 'bert_hint'],
+            ['preset-label', 'preset'], ['preset-one', 'preset_one'],
             ['preset-app', 'preset_app'], ['components-label', 'components'], ['vpn', 'vpn'],
             ['license', 'license'], ['install', 'install'], ['cancel', 'cancel'], ['open', 'open'],
-            ['browse-root', 'browse'], ['browse-data', 'browse'], ['doctor-launch', 'launch'],
-            ['doctor-close', 'close'],
+            ['browse-root', 'browse'], ['browse-data', 'browse'], ['browse-bert', 'browse'],
+            ['doctor-launch', 'launch'], ['doctor-close', 'close'],
         ];
         pairs.forEach(function (pair) {
             var node = byId(pair[0]);
             if (node) node.textContent = t(pair[1]);
         });
+        byId('bert').setAttribute('placeholder', t('bert_source'));
+        modelsPreview();
         byId('quit').textContent = t('quit');
         var buttons = document.querySelectorAll('.lang button[data-lang]');
         for (var i = 0; i < buttons.length; i += 1) {
@@ -146,12 +149,23 @@
         });
     }
 
+    /* The model storage folder follows the data folder; the archive the user picks is only the
+       source. Showing the derived path here keeps the two visibly different. */
+    function modelsPreview() {
+        var data = byId('data').value.replace(/[\\/]+$/, '');
+        var path = data ? data + (cfg.path_separator || '/') + 'bert_models' : '';
+        byId('models-preview').textContent = path ? t('models_location', { path: path }) : '';
+    }
+
     function applyState(next) {
         if (next) state = next;
         var root = byId('root');
         var data = byId('data');
+        var bert = byId('bert');
         if (document.activeElement !== root) root.value = state.root || '';
         if (document.activeElement !== data) data.value = state.data || '';
+        if (document.activeElement !== bert) bert.value = state.bert || '';
+        modelsPreview();
         var radios = document.querySelectorAll('input[name="preset"]');
         for (var i = 0; i < radios.length; i += 1) {
             radios[i].checked = radios[i].value === state.preset;
@@ -225,7 +239,9 @@
         post('/api/browse', { kind: kind, lang: lang })
             .then(function (answer) {
                 if (answer.ok && answer.path) {
-                    byId(kind === 'data' ? 'data' : 'root').value = answer.path;
+                    var target = { root: 'root', data: 'data', bert: 'bert' }[kind] || 'root';
+                    byId(target).value = answer.path;
+                    if (kind === 'data') modelsPreview();
                 }
             })
             .catch(function (err) {
@@ -239,6 +255,7 @@
             var answer = await post('/api/start', {
                 root: byId('root').value,
                 data: byId('data').value,
+                bert: byId('bert').value,
                 ids: selectedIds(),
                 lang: lang,
             });
@@ -361,6 +378,10 @@
     byId('browse-data').addEventListener('click', function () {
         onBrowse('data');
     });
+    byId('browse-bert').addEventListener('click', function () {
+        onBrowse('bert');
+    });
+    byId('data').addEventListener('input', modelsPreview);
     byId('install').addEventListener('click', onInstall);
     byId('cancel').addEventListener('click', onCancel);
     byId('open').addEventListener('click', onOpen);
@@ -385,5 +406,10 @@
     applyTheme();
     applyLang();
     applyState(state);
+    if (!cfg.bert_supported) {
+        // The macOS bundle has no onnxruntime: a placed pack could never load, so the field is
+        // absent rather than accepting data that does nothing.
+        byId('bert-section').hidden = true;
+    }
     if (state.job && state.job.state === 'running') startPolling();
 })();

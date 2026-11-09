@@ -1,4 +1,4 @@
-# Windows 桌面版（onedir）
+# 桌面版（Windows onedir / macOS BUNDLE）
 
 > **这一整棵树是本项目唯一故意只服务 Windows 的地方**（PyInstaller + UPX + Inno Setup 只能产 exe）。
 > 里面的 Windows 事实——`%APPDATA%` 数据根、命名互斥量、`MessageBoxW`、`chrome.exe` 安装根、cp936 控制台、
@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 | `dist/CaiXiHui-win64.zip` | 分发用压缩包（约比文件夹小一半，取决于内容） |
 | `dist/CaiXiHui-Setup.exe` | **单文件安装包**（`-Installer`，需要本机装有 Inno Setup） |
 | `dist/CaiXiHui-Online-Setup.exe` | **在线安装器**（`desktop\bootstrap\build.ps1`，约 14 MB，默认国内镜像） |
-| `dist/CaiXiHui-bert-models-win64.zip` | 可选 BERT 模型包（`desktop/build_model_pack.py` 单独产出，见下文） |
+| `dist/CaiXiHui-bert-models-win64.zip` | 可选 BERT 模型包（`desktop/build_model_pack.py` 单独产出；ONNX 模型 Windows/macOS 通用） |
 | `dist/SHA256SUMS` | 最终**签名后**产物的 `sha256sum` 清单（发布链第 5 步） |
 | `dist/release-manifest.json` | 同上，带体积、版本、渠道与在线安装器清单要用的摘要 |
 
@@ -42,6 +42,13 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 校验 SHA-256、解压并登记到 `<安装目录>/components`，最后调用 `CaiXiHui.exe --doctor` 显示能力矩阵。
 默认清单是**国内直连**（Gitee + npmmirror），不需要翻墙；Chrome 从 Google 官方 Chrome for Testing 下载，
 安装器不重新分发它。
+
+“微调 BERT（可选）”区分两个路径：**源**是 `CaiXiHui-bert-models-win64.zip`（或解压后的 `bert_models`
+文件夹），安装器只读取并校验它（`safe_extract`，拒绝路径穿越/符号链接）；**存放位置**是
+`<数据目录>/bert_models`，随数据文件夹自动同步。装完组件后完整模型目录解压到存放位置，再由
+`desktop/bert_pack.py` 登记到 `<数据目录>/data/model_registry.json`。存放位置在安装根内时注册表写相对
+`app/` 的路径，否则写绝对路径（macOS 总是绝对路径）；已有同名目录或条目不会覆盖。Windows 和 macOS
+的安装器都显示这一组路径。
 
 **窗口是本进程自己的 WebView2 窗口**（`desktop/native_window.py`，pywebview + Edge WebView2），
 页面仍由 `127.0.0.1` 的本地服务提供（固定端口 3968，路径里的随机令牌只监听本机）。界面复用应用前端的
@@ -65,9 +72,10 @@ exe 旁边，正是白窗口/CLR 失败的根因。窗口数据目录由 `storag
 “Storage path … is not writable”。主程序 exe 如果是**整个文件夹**放在 F: 这类被 .NET 当“网络位置”的
 盘上运行，会收到明确提示：把文件夹复制到 C: 或 D: 再运行（这是机器策略，不是缺 WebView2）。
 
-onefile 的临时目录用 `runtime_tmpdir='.'`（解在 exe 旁边并由 PyInstaller 删除），因为这台机器的
-`%TEMP%` 会被安全策略拒写；默认 `%TEMP%` 下连一个最小的 onefile 都起不来（实测
-`Could not create temporary directory`）。
+onefile 默认解到用户 `%TEMP%`（PyInstaller 退出时删除）；spec 不再设置 `runtime_tmpdir`，所以
+onefile 不往 exe 旁边的 F: 盘解 .NET 程序集。早先的 `runtime_tmpdir='.'` 正是
+`Failed to resolve Python.Runtime.Loader.Initialize` 的根因；当前策略由 `installer.spec` 的注释和
+`tests/unit/desktop/test_bootstrap_plan.py` 钉住。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
@@ -93,9 +101,10 @@ Inno 7 会警告 `LZMAUseSeparateProcess` 已过时并忽略它，所以那一�
 Inno Setup 把它刻进安装包。它长期就是那张 PNG 换了个 `.ico` 名字：浏览器按内容嗅探，所以网页图标一直是对的；
 PyInstaller 把无效字节照抄进 exe 资源，还打印一句 `Copying icon to EXE` 好像成功了；Inno 直接拒绝编译
 （实测 `Resource update error: Icon file is invalid`），而且是在文件夹与 zip 已经花完十分钟之后才说。
-现在它由 `tools/build_icon.py` 从 `backend/static/icon.png` 生成（16/24/32/48/64/128/256 七档），
-构建脚本**动手之前**先检查头四个字节，`tests/unit/desktop/test_desktop_packaging.py` 逐帧钉住目录与画框。
-改图标 = 改 `icon.png` 后跑一次 `.venv\Scripts\python.exe tools\build_icon.py`。
+现在它由 `tools/build_icon.py` 从 `backend/static/icon.jpg` 生成：先把照片处理成**圆形**的
+1024×1024 `icon.png` 主图（圆形、四角透明，macOS 的 `.icns` 从这里来），再生成 16/24/32/48/64/128/256
+七档圆形 ICO。构建脚本**动手之前**先检查头四个字节，`tests/unit/desktop/test_desktop_packaging.py`
+逐帧钉住目录、画框和透明四角。改图标 = 换 `icon.jpg` 后跑一次 `.venv\Scripts\python.exe tools\build_icon.py`。
 
 常用参数：`-Clean` 重建构建环境与产物；`-NoZip` 跳过压缩；`-KeepWork` 保留
 PyInstaller 中间目录；`-RemoveBuildEnv` 构建后删掉 `desktop/.venv-build`（省几百 MB，
@@ -211,7 +220,8 @@ loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、U
   `.github/workflows/release-windows.yml` 的 CI 流程。签名需要证书与时间戳服务，
   SmartScreen 声誉也要按发布者慢慢积累；签了名不等于杀软不误报，UPX + 未建立声誉的新证书
   仍应先在本机双击验一次。
-- Linux/macOS 不涉及这一节；源码版仍走浏览器，`desktop/` 依旧是唯一 Windows-only 的树。
+- Linux/macOS 已纳入构建与测试，macOS 有完整的 `.app`/DMG 打包；`desktop/` 是 OS 打包目录，
+  不再是 Windows-only 的树。
 
 ## 体积边界
 
@@ -262,7 +272,7 @@ pandas/numpy/scipy/scikit-learn/matplotlib/snownlp/jieba 是包体的主要部�
 `seed/models/*.pkl`（约 12 MB）与一个文献计量演示工作流会被复制到数据目录，作为首次体验；
 已存在的用户文件永远不会被覆盖。
 
-## BERT 模型包（可选，单独分发）
+## BERT 模型包（可选，单独分发；Windows / macOS 通用）
 
 包里没有 torch/transformers，但**有 onnxruntime + tokenizers**，所以微调 BERT 能在打包版里真跑——
 前提是把模型作为单独的压缩包放到应用旁边。四个模型即使按最小的"不掉判定"配方也是 780 MB，
@@ -276,7 +286,8 @@ pandas/numpy/scipy/scikit-learn/matplotlib/snownlp/jieba 是包体的主要部�
     ml_train\models\onnx emotion_ewect_six sentiment_weibosenti_bin tendency_stance_v1 tendency_stance_v2_cyberbully
 ```
 
-安装：**解压到应用目录**，使 `bert_models/` 与 `CaiXiHui.exe` 同级（每个模型是它下面的一个子目录）。
+安装：Windows 绿色版/离线版**解压到应用目录**，使 `bert_models/` 与 `CaiXiHui.exe` 同级（每个模型是它下面的
+一个子目录）；macOS 完整版放进 `~/Library/Application Support/CaiXiHui/bert_models/`，在线安装器会自己处理。
 下次启动时启动器会扫描这些目录并把完整的那个登记进 `<数据根>/data/model_registry.json`，
 所以放好模型包不需要重装应用。登记遵守三条：**只登记 `model.onnx`+`tokenizer.json`+`cixi_bert.json`
 齐备的目录**（半成品会在面板里出现然后在运行时拒绝，那是更坏的答案）；**同名条目以用户已有的为准**，
@@ -404,8 +415,8 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 `desktop/macos_entry.py` 是 macOS 专用入口：同样的 Flask 服务 + pywebview 的 Cocoa/WebKit 窗口，
 数据在 `~/Library/Application Support/CaiXiHui`（`CRAWLER_DATA_ROOT` 可覆盖）。`desktop/caixihui_macos.spec`
 用 PyInstaller `BUNDLE` 打出 `CaiXiHui.app`，`desktop/build_macos.py` 再用 `hdiutil` 生成
-`CaiXiHui-macOS-<arch>.dmg`。依赖在 `desktop/requirements-macos.txt`（不含 onnxruntime/tokenizers，
-BERT 节点在 macOS 上按设计降级到 sklearn/snownlp 并打印实际方法）。
+`CaiXiHui-macOS-<arch>.dmg`。依赖和 Windows 共用 `desktop/requirements-runtime.txt`（含 onnxruntime +
+tokenizers，不含 torch/transformers；BERT 用 ONNX 运行时，和 Windows 是同一套分析器）。
 
 `.github/workflows/macos-build.yml` 在 `macos-15-intel`（x86_64）和 `macos-15`（arm64）两个 runner
 上构建，DMG 上传到 `workflow_dispatch` 指定的 Release tag（默认 `exe-2026-11`），文件名带架构后缀。

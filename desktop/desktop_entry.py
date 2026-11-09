@@ -619,6 +619,35 @@ def apply_component_env(data_root=None) -> None:
         return
 
 
+def seed_bert_models(
+    base: Path,
+    data_root: Path,
+    *,
+    models_dir: str | Path | None = None,
+    root_label: str = 'bert_models',
+) -> dict:
+    """Register complete BERT packs into ``<data_root>/data/model_registry.json``.
+
+    Windows and macOS both call this before importing the app, so the first ``/api/models`` already
+    sees the pack. ``models_dir`` defaults to the Windows/portable layout (``bert_models`` beside the
+    exe); macOS passes its user-writable data folder and an absolute ``root_label``.
+    """
+    try:
+        from bert_pack import seed_registry
+
+        target = Path(models_dir) if models_dir is not None else Path(base) / 'bert_models'
+        return seed_registry(Path(data_root) / 'data', target, root_label=root_label)
+    except Exception:
+        # A pack that will not register is a lost optional feature, not a reason to not start:
+        # the app works, uploading and crawling are unaffected, and the reason is printed.
+        return {
+            'packs': 0,
+            'added': [],
+            'skipped': [],
+            'untouched': f'登记失败：{traceback.format_exc(limit=1).strip()}',
+        }
+
+
 def main(argv=None) -> int:
     # A windowed build starts with no stdout at all: ``--doctor`` still has to answer a pipe or a
     # terminal, and the reports below must never be the thing that kills the launch.
@@ -723,19 +752,7 @@ def main(argv=None) -> int:
     # A BERT model pack the user unpacked beside the exe is otherwise invisible: the panel lists
     # models from the registry file, not from the filesystem. Runs after the data root is settled
     # and before the app is imported, so the first /api/models already sees the pack.
-    try:
-        from bert_pack import seed_registry
-
-        ledger = seed_registry(root / 'data', base / 'bert_models')
-    except Exception:
-        # A pack that will not register is a lost optional feature, not a reason to not start:
-        # the app works, uploading and crawling are unaffected, and the reason is printed.
-        ledger = {
-            'packs': 0,
-            'added': [],
-            'skipped': [],
-            'untouched': f'登记失败：{traceback.format_exc(limit=1).strip()}',
-        }
+    ledger = seed_bert_models(base, root)
     if ledger['added']:
         _print_safe(f'已登记 BERT 模型包：{", ".join(ledger["added"])}')
     if ledger['skipped']:

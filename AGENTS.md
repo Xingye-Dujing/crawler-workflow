@@ -16,6 +16,11 @@ cookie-capture only) via Selenium, cleans/analyzes text with local Ollama LLMs +
 **Windows (dev), Linux (cloud), macOS.** Nothing in `backend/`, `tools/`, `ml_train/`, `tests/` or docs may hardcode a
 Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, `taskkill`, cp936 console, Windows-only font.
 
+- **Every feature ships for all three systems in the same change. Windows-only is a defect, not the default.** Design the
+  server behavior, data paths, tests and docs for Linux and macOS alongside Windows; a desktop packaging path (installer/
+  `.exe`) must have its cross-platform counterpart (macOS `.app`/DMG) or a named reason. Only a capability that cannot
+  physically exist elsewhere may be gated to one OS, and then the rule below applies: server verdict + named refusal +
+  hidden UI entry.
 - **A capability impossible off Windows refuses BY NAME and its UI entry disappears** (a run-time refusal is too late).
   Verdict from the server (`Config.CLOUD_MODE`/`sys.platform`); JS holds no second opinion. Existing: 红果短剧 harvest,
   the login-cookie window, local Ollama under cloud mode.

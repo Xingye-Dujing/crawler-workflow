@@ -12,7 +12,7 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
 - **为什么默认主推微调 BERT（而非通用大模型）**：见 [`docs/why_finetuned_bert.md`](why_finetuned_bert.md)——质量、速度、成本、确定性四维对比，含本机实测的 accuracy/F1。
 - **BERT 有两个运行时，打包版走第二个**：`sentiment` / `emotion` / `tendency` 三个节点的 `bert` 模式都通过 `analyzers/sentiment.py` 里**同一个加载器**
   回答，返回同一种 `{'label','score'}` 值。选择顺序：装了 `torch`+`transformers` 就用它（开发机，有显卡就上显卡），否则用 `onnxruntime`+`tokenizers` 跑导出的
-  ONNX 图（**Windows 桌面版就是这一条**，包里没有 torch），两者都没有才按名拒绝/降级。日志一定写明 `runtime=` 与 `precision=`。导出与实测脚本见
+  ONNX 图（**Windows / macOS 桌面版就是这一条**，包里没有 torch），两者都没有才按名拒绝/降级。日志一定写明 `runtime=` 与 `precision=`。导出与实测脚本见
   `ml_train/scripts/export_onnx_bert.py` + `ml_train/scripts/eval_onnx_parity.py`（结论：fp32 图与 torch 逐条判定完全一致，默认发 fp16，int8 会让 6.7–14.2% 的行改判定，
   只作为显式选项保留；模型本体不进应用包，见 [`desktop/README.md`](../desktop/README.md)）。下面各条里“缺 `torch`/`transformers` 就降级”的说法要按这条读：**两种运行时都不可用**才降级。
 

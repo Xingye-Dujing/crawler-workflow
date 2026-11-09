@@ -492,6 +492,11 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   then cannot start. Chrome/Node archives use `services/components/macos.py` (`ditto`/`tar`) for the same reason;
   `safe_extract` stays the portable, symlink-refusing path for Windows. Pinned by
   `tests/unit/desktop/test_macos_installer.py`.
+- **An imported BERT pack has two paths: the user's source archive and a storage folder that follows the data
+  directory.** The installer reads the source; the models go to `<data>/bert_models`, never inside `app/` (that folder
+  is replaced wholesale on update). The registry label is relative to `app/` only when the storage folder is inside the
+  install root; otherwise absolute (the macOS data folder). Complete folders and existing registry names are left
+  untouched. Pinned by `tests/unit/desktop/test_bert_install.py`.
 - **UPX: do the pass yourself, never trust a packer that skips quietly.** PyInstaller's `upx=True` compresses nothing when
   it can't find the tool and only prints it in a scroll-past line. `desktop/compress_dist.py` runs with `upx --best
   --force`, treats a missing `upx` on PATH as a **build failure by name**, verifies each output with `upx -t`, restores
@@ -505,9 +510,9 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
 - **A file's extension is a promise to some readers and a suggestion to others.** `backend/static/icon.ico` was the app's
   PNG renamed: browser content-sniffs it (favicon looked right), PyInstaller copied invalid bytes printing "Copying icon",
   Inno Setup refused to compile (`Resource update error: Icon file is invalid`) only *after* the folder/zip took ten
-  minutes. Fix: `tools/build_icon.py` generates a real ICO (16/24/32/48/64/128/256),
-  `test_desktop_packaging.py::TestTheIconIsWhatItsNameSays` parses every frame offset, and the build checks the header
-  bytes **before** the expensive steps.
+  minutes. Fix: `tools/build_icon.py` turns `icon.jpg` into a circular 1024×1024 PNG master and generates a real ICO
+  (16/24/32/48/64/128/256, transparent corners); `test_desktop_packaging.py::TestTheIconIsWhatItsNameSays` parses every
+  frame offset and the alpha at the centre/corner, and the build checks the header bytes **before** the expensive steps.
 - **A background build's exit code is only as trustworthy as its wrapper.** A failed-on-icon run reported *completed
   (exit code 0)* because the command ended with an `echo`; the log's own last line was `powershell exit=1`. Launch the
   build as the **last** thing the shell does and read the log's own summary lines.
@@ -637,6 +642,12 @@ tier is its own invocation with an explicit `--rcfile`. `tests/unit/gates/test_l
 Developed on Windows, deployed on a **Linux cloud server** (`CRAWLER_CLOUD=1`), macOS in scope. Three read-only audits
 produced this list; every entry was a real defect on at least one platform, not a style preference. Rules in AGENTS.md
 "Cross-platform"; evidence here.
+
+- **The default is all three; "we only use Windows" is not a design reason.** The user stated this on 2026-11-09 after a
+  Windows-only BERT installer field was proposed. Every capability must be designed, implemented and tested for Windows,
+  Linux and macOS in the same change. A desktop package feature needs its macOS counterpart (`.app`/DMG) and the Linux
+  source path; a single-OS branch is allowed only when the capability is physically absent elsewhere, and then the server
+  answers the refusal by name and the UI entry disappears — never a silent Windows-only control.
 
 - **Chrome discovery was a Windows-only table.** `chrome_candidates` built `%PROGRAMFILES%…chrome.exe` and nothing else,
   so a server with `/usr/bin/chromium` answered “本机没有可用的 Chrome”; the Docker image worked **only** because it

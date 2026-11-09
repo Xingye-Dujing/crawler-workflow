@@ -1,4 +1,8 @@
-# Runtime-only dependency set for the Windows onedir build.
+# Runtime-only dependency set for the Windows onedir and macOS .app builds.
+#
+# One file, selected by environment markers: Windows takes the Edge WebView2 host and the newer
+# onnxruntime; macOS takes the Cocoa host and a universal2 onnxruntime. Keeping two near-identical
+# lists made a version bump a two-place edit and let the Mac list drift.
 #
 # This is intentionally NOT requirements.txt: the dev/test tools (ruff, pylint, pytest)
 # and the optional multi-gigabyte stacks (torch, transformers, sentence-transformers,
@@ -35,7 +39,11 @@ scipy==1.17.1
 scikit-learn==1.9.0
 snownlp==0.12.3
 networkx==3.6.1
-onnxruntime==1.31.0
+# Windows has the 1.31 cp311 wheel. macOS 1.19.2 is the last universal2 wheel for Python 3.11 that
+# supports macOS 11+; newer releases publish an arm64-only macOS wheel and would strand the Intel
+# DMG. Both load the same exported ONNX graphs.
+onnxruntime==1.31.0; sys_platform == "win32"
+onnxruntime==1.19.2; sys_platform == "darwin"
 tokenizers==0.22.2
 # Web of Science sells an "Excel" download that is legacy OLE2 .xls; pandas opens that
 # only through xlrd (openpyxl reads .xlsx), so the packaged app needs it to accept a file
@@ -44,9 +52,16 @@ xlrd==2.0.2
 # jieba imports pkg_resources when it is present; keeping it explicit avoids a
 # warning-only dependency on whatever a bare venv happens to include.
 setuptools==78.1.0
-# The desktop window: Edge WebView2 hosted in-process. pywebview talks to WebView2 through its
-# .NET wrapper, which pythonnet loads; the WebView2 runtime itself ships with Windows 10/11 and
-# is NOT bundled here. pythonnet 3.0.x is pinned because its Python.Runtime.dll loads on the
-# .NET Framework every supported Windows already has.
-pywebview==6.2.1
-pythonnet==3.0.5
+# The IANA zone database: Windows has no system zoneinfo directory, and a slim Linux image usually
+# does not either. Declared explicitly on both packaged platforms so a resolver change cannot make
+# a schedule or a timestamp silently depend on the host.
+tzdata==2026.2
+# Pillow generates the macOS .icns and is a matplotlib dependency; the tool imports PIL directly.
+Pillow==12.3.0
+# The desktop window: Edge WebView2 on Windows, Cocoa/WebKit on macOS. pywebview talks to WebView2
+# through its .NET wrapper, which pythonnet loads; the WebView2 runtime itself ships with Windows
+# 10/11 and is NOT bundled here. pythonnet 3.0.x is pinned because its Python.Runtime.dll loads on
+# the .NET Framework every supported Windows already has. The markers keep the Windows stack off a
+# macOS install and the Cocoa stack off Windows.
+pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
+pythonnet==3.0.5; sys_platform == "win32"
