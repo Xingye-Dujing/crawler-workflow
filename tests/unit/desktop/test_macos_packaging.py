@@ -47,6 +47,11 @@ def test_the_dmg_builder_names_the_architecture_and_uses_hdiutil():
     assert "sys.platform != 'darwin'" in source, 'the build must refuse to pretend on Windows'
 
 
+def test_the_macos_window_opens_maximized():
+    source = (DESKTOP / 'macos_entry.py').read_text(encoding='utf-8')
+    assert 'maximized=True' in source
+
+
 def test_the_workflow_builds_both_architectures_and_uploads_the_dmg():
     workflow = WORKFLOW.read_text(encoding='utf-8')
     assert 'macos-15-intel' in workflow and 'macos-15' in workflow

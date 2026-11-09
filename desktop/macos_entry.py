@@ -249,6 +249,7 @@ def main(argv=None) -> int:
             height=820,
             min_size=(1024, 700),
             text_select=True,
+            maximized=True,
         )
         webview.start(private_mode=False, storage_path=str(root / 'webview'))
     except Exception:

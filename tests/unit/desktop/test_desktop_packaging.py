@@ -1190,6 +1190,13 @@ def test_the_setup_manifest_requests_admin_before_the_loader():
     assert 'get_offset_from_rva' in patcher, 'the resource RVA must be converted before writing'
 
 
+def test_the_launcher_opens_the_main_window_maximized():
+    source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
+    assert 'maximized=True' in source, 'the application opens full-screen, the installer does not'
+    entry = (PACKAGING / 'macos_entry.py').read_text(encoding='utf-8')
+    assert 'maximized=True' in entry
+
+
 def test_the_doctor_sees_the_components_that_were_just_installed():
     """A successful online install reported “CatBus 找不到适配器” because ``--doctor`` returned
     before the manifest's paths were exported. The report the installer shows must describe the

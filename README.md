@@ -63,7 +63,8 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   里有现成的 `CaiXiHui-Setup.exe`；只想要小体积下载器就用 `CaiXiHui-Online-Setup.exe`，默认从 Gitee /
   npmmirror 下载主程序、Chrome、chromedriver、Node 和 CatBus，国内不需要翻墙（见
   [`docs/installer.md`](docs/installer.md)）。安装器和主程序都是**原生窗口**（Windows 自带的
-  Microsoft Edge WebView2；macOS 用系统 WebKit），没有控制台、也不开浏览器；浅色/深色可切，一屏放得下。
+  Microsoft Edge WebView2；macOS 用系统 WebKit），没有控制台、也不开浏览器；**主程序首次启动默认浅色**
+  （设置里仍可切自动/深色），**启动即最大化**；安装器是一屏窗口。
   程序和用户数据都能选在 C 盘以外（“数据文件夹”写进 `app\data-root.txt`）。`desktop/` 负责打出
   `CaiXiHui.exe`，双击启动本地服务并在窗口里显示界面，数据默认在 `%APPDATA%\CaiXiHui`（旁边放个空的
   `portable.txt` 就变便携版）。macOS 的 `.app`/DMG 由 `desktop/build_macos.py` 在 GitHub 的 macOS runner

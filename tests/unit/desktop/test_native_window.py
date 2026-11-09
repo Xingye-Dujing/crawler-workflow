@@ -108,6 +108,14 @@ def test_the_page_goes_into_webview2_not_a_browser(window, fake_webview):
     assert fake_webview['start']['storage_path'] == 'C:/state'
 
 
+def test_the_application_window_opens_maximized(window, fake_webview):
+    reason = window.run('采析绘', 'http://127.0.0.1:5000/', maximized=True)
+    assert reason == ''
+    assert fake_webview['window']['maximized'] is True
+    assert window.run('采析绘', 'http://127.0.0.1:5000/') == ''
+    assert fake_webview['window']['maximized'] is False, 'the installer keeps its one-screen size'
+
+
 def test_the_handle_is_captured_for_the_folder_picker(window, fake_webview):
     assert window.handle() == 0
     seen = []

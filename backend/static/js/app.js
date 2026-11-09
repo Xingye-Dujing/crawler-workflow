@@ -293,7 +293,7 @@ const Settings = {
     _key: 'crawler_settings',
     defaults: {
         bg: 'bg-grid',
-        theme: 'auto',
+        theme: 'light',
         parallel: true,
         headless: true,
         menuPinned: true,
@@ -305,7 +305,7 @@ const Settings = {
     save() {
         const data = {
             bg: Array.from(document.body.classList).find(c => c.startsWith('bg-')) || 'bg-grid',
-            theme: document.documentElement.dataset.themeChoice || 'auto',
+            theme: document.documentElement.dataset.themeChoice || 'light',
             parallel: RunState.parallel,
             headless: RunState.headless,
             menuPinned: document.getElementById('top-menu').classList.contains('pinned'),
@@ -342,7 +342,7 @@ const Settings = {
         I18n.apply();
         /* Theme — the choice (auto/light/dark) is stored; auto follows the OS. The design
            system is no longer light-only: html[data-theme] drives the token override. */
-        document.documentElement.dataset.themeChoice = s.theme || 'auto';
+        document.documentElement.dataset.themeChoice = s.theme || 'light';
         applyTheme();
         /* Background */
         document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
@@ -389,7 +389,7 @@ function resolveTheme(choice) {
 
 function applyTheme() {
     var html = document.documentElement;
-    var choice = html.dataset.themeChoice || 'auto';
+    var choice = html.dataset.themeChoice || 'light';
     html.dataset.themeChoice = choice;
     var resolved = resolveTheme(choice);
     html.dataset.theme = resolved;

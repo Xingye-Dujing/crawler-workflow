@@ -834,6 +834,7 @@ def main(argv=None) -> int:
                 height=820,
                 min_size=(1024, 700),
                 storage=native_window.storage_dir('webview'),
+                maximized=True,
             )
             if failure:
                 # The one dialog names the missing runtime and where to get it; the file keeps the

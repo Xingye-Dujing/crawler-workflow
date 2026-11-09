@@ -55,11 +55,15 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 纸白/墨黑设计语言（`ui_theme.py` 的令牌与 `base.css` 同源），默认浅色、右上角可切深色，一屏放得下。
 所以 exe **不带 Qt / Tcl-Tk**：标准库 HTTP 服务 + WebView2 宿主 + 组件核心，约 14 MB。页面文件是
 `installer_page.html` / `installer_page.js`，测试只读它们和纯函数，不需要真的开窗口。
+主程序窗口由 `desktop_entry.py` / `macos_entry.py` 以 `maximized=True` 打开，启动即最大化；首次主题默认
+浅色，设置里的“自动/浅色/深色”仍可改。
 
 **exe 是窗口程序**（`console=False`），且**双击先请求管理员**（spec 的 `uac_admin=True`，manifest
 为 `requireAdministrator`）：UAC 在 onefile 解包之前出现，机器对未提权进程禁止 `%TEMP%` 写入时也能
 解包。主程序本身不带管理员清单。固定端口让页面来源保持稳定，语言/主题（`localStorage`）下次打开仍然
-有效；窗口关闭即结束进程，下载中会拒绝关闭（先点“取消”）。装了 Edge 的 Windows（Win10/11 自带 WebView2
+有效；窗口关闭即结束进程，下载中会拒绝关闭（先点“取消”）。安装器按进程 token 判断是否已提权，manifest
+已经提权时不会再次弹 UAC；目录真的不可写时提示点名路径和系统错误，“打开安装位置”使用当前输入路径。
+装了 Edge 的 Windows（Win10/11 自带 WebView2
 运行时）可以直接运行；缺运行时的机器会被一个原生对话框按名字拒绝，并给出安装地址。诊断日志在
 `%LOCALAPPDATA%\CaiXiHui\installer.log`。自动化验收可用 `--no-window`（或 `CIXI_NO_WINDOW=1`）只起
 服务、不开窗口（该模式不经过 UAC 清单之外的窗口逻辑，仍会先请求管理员）。

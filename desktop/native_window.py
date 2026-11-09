@@ -152,11 +152,13 @@ def run(
     min_size: tuple[int, int] = (900, 620),
     storage: str = '',
     on_close=None,
+    maximized: bool = False,
 ) -> str:
     """Show ``url`` in a native window and block until it closes.
 
     Returns ``''`` on a normal close, or a sentence naming why no window could be shown (the
     WebView2 runtime is missing, the host refused to start). The caller decides how loud that is.
+    ``maximized`` is for the application's main window; the installer keeps its one-screen size.
     """
     global _WINDOW, _HANDLE, _ALLOW_CLOSE
     # The proven reference build (D:\blog\web\public) lets the onefile extract its .NET stack into
@@ -180,6 +182,7 @@ def run(
         min_size=min_size,
         background_color=BACKGROUND,
         text_select=True,
+        maximized=maximized,
     )
     _WINDOW = window
     _HANDLE = 0

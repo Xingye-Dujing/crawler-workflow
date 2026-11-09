@@ -15,7 +15,7 @@
     try {
         var settings = JSON.parse(localStorage.getItem('crawler_settings'));
         if (!settings) return;
-        var choice = settings.theme || 'auto';
+        var choice = settings.theme || 'light';
         var html = document.documentElement;
         var resolved = choice !== 'auto'
             ? choice

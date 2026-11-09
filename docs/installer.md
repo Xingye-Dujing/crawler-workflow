@@ -61,6 +61,8 @@ xelatex（MiKTeX），这样项目全部依赖都在同一页可见；它们不�
 
 目标目录需要管理员权限时（例如 `C:\Program Files` 下），安装器**只请求一次** UAC，并用原来的两个路径重新打开；
 拒绝授权时会点名是哪个文件夹不可写，而不是下载到一半才失败。主程序启动时如果数据目录不可写，也会同样请求一次。
+安装器用进程 token（`IsUserAnAdmin`）判断当前是否已经提权：manifest 已经把进程提权时不会再弹第二次 UAC；
+真的写不进去时提示点名文件夹和系统错误。“打开安装位置”使用输入框里当前的路径，不会跳回默认 C:。
 
 启动器会在应用导入配置之前读取 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus 的路径导出为
 现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。**设置面板里手填的路径仍然优先**，
@@ -191,7 +193,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,867,776 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+**13,870,427 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
