@@ -17,8 +17,6 @@ def join_tables(
     """
     if other_df is None or len(other_df) == 0:
         raise UnknownOperationError(t('analysis.join_no_right'))
-    if not left_on or not right_on:
-        raise UnknownOperationError(t('analysis.join_need_keys'))
     # The gate checks this when the step comes through ``run_pipeline``; a direct call (the
     # analysis node's own dispatch, a unit test) reaches pandas with whatever it was given,
     # and ``how='lef'`` raises a KeyError naming a join method rather than the parameter.
@@ -28,6 +26,13 @@ def join_tables(
         raise UnknownOperationError(
             t('analysis.bad_option', op='join_tables', param='how', value=how, allowed=', '.join(JOIN_HOW))
         )
+    if how == 'cross':
+        # A CROSS JOIN is the one join with no key: every left row against every right row. Demanding
+        # keys before the branch meant the 交叉连接 option could never run — it refused with “需要连接
+        # 键” for the one shape that has none, while the enum advertised it and the panel offered it.
+        return df.merge(other_df, how='cross')
+    if not left_on or not right_on:
+        raise UnknownOperationError(t('analysis.join_need_keys'))
     missing = []
     if left_on not in df.columns:
         missing.append(f'{left_on} (left)')

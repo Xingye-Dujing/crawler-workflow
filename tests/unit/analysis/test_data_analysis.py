@@ -570,6 +570,23 @@ class TestReshaping:
         with pytest.raises(UnknownOperationError):
             D.join_tables(pd.DataFrame({'k': [1]}), pd.DataFrame({'k': [1]}))
 
+    def test_a_cross_join_needs_no_keys_and_is_the_one_shape_that_has_none(self):
+        """``cross`` was advertised in ``JOIN_HOW``, offered by the panel — and unusable.
+
+        The key check ran before the branch, so 交叉连接 always refused with “需要连接键” for the one
+        join that by definition has no key: every left row against every right row.
+        """
+        left = pd.DataFrame({'城市': ['甲', '乙']})
+        right = pd.DataFrame({'分数': [1, 2]})
+        out = D.join_tables(left, right, how='cross')
+        assert len(out) == 4, 'a cross join is the cartesian product'
+        assert sorted(out['城市']) == ['乙', '乙', '甲', '甲']
+
+    def test_a_cross_join_still_refuses_an_empty_right_table(self):
+        """No keys does not mean no right-hand table: an empty fan-in is a refusal, not 0 rows."""
+        with pytest.raises(UnknownOperationError):
+            D.join_tables(pd.DataFrame({'k': [1]}), pd.DataFrame(), how='cross')
+
     def test_join_tables_names_the_missing_columns(self):
         left = pd.DataFrame({'k': [1]})
         right = pd.DataFrame({'other': [1]})
