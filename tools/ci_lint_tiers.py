@@ -27,10 +27,17 @@ REPO = Path(__file__).resolve().parents[1]
 
 #: (root, recurse, drop files named ``test_*``). The product roots are the same list CI has always
 #: linted; ``test_*.py`` under ``backend/`` are the local measurement scripts, not product code.
+#:
+#: ``desktop`` MUST recurse: the packaging build products live beside ``installer.py``, not under a
+#: hand-maintained folder, so ``desktop/bootstrap/`` (the installer, its macOS twin, the theme and
+#: the plan/bert helpers — roughly 2,400 lines that decide where the app is installed and which
+#: bytes are downloaded) was silently outside BOTH pylint here and the two ruff commands in
+#: ``.github/workflows/ci.yml``. A gate that names ``desktop`` while never opening the files that
+#: ship is the failure mode this list exists to prevent.
 PRODUCT_ROOTS = (
     ('backend', True, True),
-    ('desktop', False, False),
-    ('tools', False, False),
+    ('desktop', True, False),
+    ('tools', True, False),
     ('ml_train/scripts', False, False),
 )
 
@@ -47,11 +54,31 @@ PYLINT_FLAGS = ('--persistent=n', '--disable=C,R', '--fail-on=W,E,F', '--jobs=2'
 
 
 def _sources(root: Path, recurse: bool, drop_probes: bool) -> list[Path]:
+    """Every product source under ``root``, excluding other people's code.
+
+    Recursing means the exclusions have to be explicit. ``desktop/.venv-build`` is the build
+    environment (``site-packages`` inside it, ~9,700 files) — the same rule
+    ``tests/unit/gates/test_lint_gate.py`` states, so the gate and this tier agree, and linting it
+    is also how the command line overflowed (measured: ``WinError 206`` at 9,803 files).
+    """
     pattern = '**/*.py' if recurse else '*.py'
-    found = [path for path in root.glob(pattern) if path.is_file()]
+    found = [path for path in root.glob(pattern) if path.is_file() and _is_ours(path, root)]
     if drop_probes:
         found = [path for path in found if not path.name.startswith('test_')]
     return found
+
+
+#: Generated or third-party trees, by the same names the lint gate refuses. `ml_train` is here for
+#: the global walk; `ml_train/scripts` is named as a root of its own, so it is still linted.
+SKIP_DIRS = {'dist', 'build', '.git', 'node_modules', 'data', 'logs', 'scratchpad', 'ml_train'}
+SITE_PACKAGES = 'site-packages'
+VENV_PREFIX = '.venv'
+
+
+def _is_ours(path: Path, root: Path) -> bool:
+    """True when every part of the path is ours: no environment, no generated tree."""
+    parts = path.relative_to(root).parts
+    return not any(part in SKIP_DIRS or part == SITE_PACKAGES or part.startswith(VENV_PREFIX) for part in parts)
 
 
 def targets(tier: str, root: Path = REPO) -> list[Path]:

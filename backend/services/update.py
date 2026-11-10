@@ -46,6 +46,118 @@ _JOB_LOCK = threading.Lock()
 _JOB: dict = {}
 _FEED_CACHE: dict = {'at': 0.0, 'feed': None, 'error': ''}
 
+#: The version names ONE directory under ``data/updates``, so it is DATA, not a path. The value
+#: arrives from the network and the next step is ``shutil.rmtree``: a version of ``..`` used to
+#: resolve to ``data/`` itself, so "download the update" could delete every account's tree. A
+#: dotted release number is the only shape the release script writes; anything else is refused by
+#: name, and the resolved directory is asserted to be a CHILD of ``data/updates`` as a second lock.
+_VERSION_RE = re.compile(r'^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$')
+
+#: A package is a few hundred MB. A feed that asks for more is not an offer this machine accepts:
+#: without a ceiling, one bad (or malicious) manifest fills the disk the app needs for its data.
+MAX_PACKAGE_BYTES = 4 * 1024**3
+
+#: Where a release-signing public key may live: the environment (PEM text or a path to one) and,
+#: for a packaged install, a file beside the data root. Absent means the feed is unsigned; present
+#: means a feed WITHOUT a valid signature is refused (failure closed, not "best effort").
+PUBKEY_ENV = 'CIXI_UPDATE_PUBKEY'
+PUBKEY_FILE = 'update-pubkey.pem'
+
+
+def version_dir(version: str) -> Path:
+    """The staged folder for one feed version, or a named refusal.
+
+    Two independent answers to the same question (shape, then containment) because the cost of
+    being wrong here is the whole data root.
+    """
+    text = str(version or '').strip()
+    if not _VERSION_RE.match(text) or '..' in text:
+        raise ValueError(f'发行清单里的版本号不可用：{text or "(空)"}')
+    root = updates_root()
+    target = root / text
+    if target.resolve().parent != root.resolve():
+        raise ValueError(f'发行清单里的版本号越出了更新目录：{text}')
+    return target
+
+
+def _require_https(url: str) -> str:
+    """A download URL, or a refusal. Every hop is checked, not only the first."""
+    text = str(url or '').strip()
+    if not text.lower().startswith('https://'):
+        raise ValueError(f'拒绝非 HTTPS 的下载地址：{text or "(空)"}')
+    return text
+
+
+class _HttpsRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only if the NEXT hop is still HTTPS.
+
+    ``urllib`` happily follows a 302 to ``http://``/``ftp://``, so checking the URL before
+    ``urlopen`` said "HTTPS only" while the bytes could still arrive in clear text.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _require_https(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_HttpsRedirects)
+
+
+def _public_key_pem() -> bytes | None:
+    """The release-signing public key, if this machine was given one."""
+    raw = str(os.environ.get(PUBKEY_ENV) or '').strip()
+    if raw:
+        if len(raw) > 40 and 'BEGIN PUBLIC KEY' in raw:
+            return raw.encode('utf-8')
+        candidate = Path(raw).expanduser()
+        if candidate.is_file():
+            return candidate.read_bytes()
+        return None
+    packaged = Path(Config.DATA_DIR) / PUBKEY_FILE
+    if packaged.is_file():
+        return packaged.read_bytes()
+    return None
+
+
+def _canonical_feed(payload: dict) -> bytes:
+    """The exact bytes a signature covers: the document minus its own ``signature`` field."""
+    body = {key: value for key, value in payload.items() if key != 'signature'}
+    return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+
+#: Public spelling for the release-signing tool (``tools/sign_release_feed.py``). The signature is
+#: over THESE bytes, so the tool imports this function instead of re-implementing the canonical form:
+#: two encoders that drift would produce signatures the client rejects with no visible cause.
+canonical_feed = _canonical_feed
+
+
+def verify_feed_signature(payload: dict) -> None:
+    """Refuse a feed whose signature is missing or wrong, once a public key is configured.
+
+    The SHA-256 in the manifest only says "the bytes match what the manifest claims", and the
+    manifest is the thing an attacker rewrites first — so the digest alone cannot protect an
+    update that ends in a program swap. With a key present, the signature is the trust root and a
+    failure is a refusal. Without one the feed is still accepted (the product cannot update
+    otherwise) but :func:`check` says so out loud instead of pretending the chain is verified.
+    """
+    key_pem = _public_key_pem()
+    if key_pem is None:
+        return
+    signature = str(payload.get('signature') or '').strip()
+    if not signature:
+        raise ValueError('更新清单没有签名，本机已配置校验公钥，拒绝使用')
+    try:
+        import base64
+
+        from cryptography.hazmat.primitives import serialization
+
+        key = serialization.load_pem_public_key(key_pem)
+        key.verify(base64.b64decode(signature), _canonical_feed(payload))
+    except ImportError as exc:  # a build without the verifier must not silently trust the feed
+        raise ValueError('这份安装缺少签名校验组件（cryptography），无法核对更新清单') from exc
+    except Exception as exc:
+        raise ValueError(f'更新清单签名校验失败：{exc}') from exc
+
 
 def current_version() -> str:
     return APP_VERSION
@@ -103,12 +215,10 @@ def _fetch(url: str, timeout: float = 8.0) -> bytes:
 
 
 def _valid_feed(payload) -> bool:
-    return (
-        isinstance(payload, dict)
-        and payload.get('schema') == 1
-        and bool(str(payload.get('version') or '').strip())
-        and isinstance(payload.get('platforms'), dict)
-    )
+    if not isinstance(payload, dict) or payload.get('schema') != 1:
+        return False
+    version = str(payload.get('version') or '').strip()
+    return bool(_VERSION_RE.match(version)) and '..' not in version and isinstance(payload.get('platforms'), dict)
 
 
 def fetch_feed(force: bool = False) -> dict | None:
@@ -125,6 +235,11 @@ def fetch_feed(force: bool = False) -> dict | None:
             continue
         if not _valid_feed(payload):
             error = f'{url}: not a version feed'
+            continue
+        try:
+            verify_feed_signature(payload)
+        except ValueError as exc:
+            error = f'{url}: {exc}'
             continue
         with _JOB_LOCK:
             _FEED_CACHE.update({'at': time.monotonic(), 'feed': payload, 'error': ''})
@@ -170,6 +285,10 @@ def check() -> dict:
         'notes': str(feed.get('notes') or ''),
         'platform': _platform_key(),
         'asset_ready': asset_ready,
+        # Whether this machine can actually check the manifest. `False` is not a failure (the
+        # product must still update), but it is a fact the panel shows instead of implying the
+        # SHA-256 chain has a trust root it does not have.
+        'signed': _public_key_pem() is not None,
     }
 
 
@@ -181,15 +300,17 @@ def _size_of(asset: dict) -> int:
 
 
 def _stream(url: str, destination: Path) -> int:
-    request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+    request = urllib.request.Request(_require_https(url), headers={'User-Agent': USER_AGENT})
     written = 0
-    with urllib.request.urlopen(request, timeout=60) as response, open(destination, 'wb') as handle:
+    with _OPENER.open(request, timeout=60) as response, open(destination, 'wb') as handle:
         while True:
             block = response.read(1024 * 1024)
             if not block:
                 break
-            handle.write(block)
             written += len(block)
+            if written > MAX_PACKAGE_BYTES:
+                raise RuntimeError(f'下载超过上限 {MAX_PACKAGE_BYTES // 1024**3} GiB，已中止')
+            handle.write(block)
     return written
 
 
@@ -291,7 +412,11 @@ def _stage_macos(package: Path, staging: Path) -> Path:
 
 
 def _run_download(version: str, asset: dict) -> None:
-    root = updates_root() / re.sub(r'[^0-9A-Za-z._-]+', '_', version)
+    try:
+        root = version_dir(version)
+    except ValueError as exc:
+        _fail(str(exc))
+        return
     try:
         if root.exists():
             shutil.rmtree(root)
@@ -452,8 +577,10 @@ def apply_update() -> dict:
     if not writable:
         return {'ok': False, 'error': '安装目录不可写；请用安装器更新，或把程序放到有写权限的文件夹'}
     staged = Path(str(current['staged']))
-    version = str(current.get('version') or 'new')
-    script_dir = updates_root() / re.sub(r'[^0-9A-Za-z._-]+', '_', version)
+    try:
+        script_dir = version_dir(str(current.get('version') or ''))
+    except ValueError as exc:
+        return {'ok': False, 'error': str(exc)}
     script_dir.mkdir(parents=True, exist_ok=True)
     if machine.platform_name() == 'win32':
         script = script_dir / 'apply.ps1'

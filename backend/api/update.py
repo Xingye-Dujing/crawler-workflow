@@ -37,6 +37,13 @@ def _running() -> bool:
 
 @bp.get('/api/update/check')
 def update_check():
+    """Who may ask. The answer leaves the machine (two HTTPS feeds) and, when a package is
+    already staged, ``check()`` prunes ``data/updates`` — both are host-level acts, the same door
+    ``download``/``apply`` guard. The panel hides the banner for other accounts; hiding is
+    cosmetic, the 403 is the permission."""
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
     return jsonify(update.check())
 
 

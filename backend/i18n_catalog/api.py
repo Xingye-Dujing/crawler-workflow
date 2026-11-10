@@ -20,6 +20,10 @@ ZH = {
     'api.biblioWosTab': '这是 Web of Science 的“制表符分隔（Tab-delimited）”导出，'
     '本程序读的是纯文本（Tagged）或 Excel/CSV 导出；请在导出时改选其中一种后重新上传',
     'api.bodyNotObject': '请求体必须是 JSON 对象',
+    'api.internalError': '服务器处理这个请求时出错了，原因已写入 logs/ 下的日志',
+    'api.internalErrorLog': '未处理的异常：{method} {path}（{kind}），详情见日志文件',
+    'api.httpError': '请求被拒绝（HTTP {code}）',
+    'api.prefixRefusedLog': '忽略不可用的 X-Forwarded-Prefix：{prefix}',
     'api.cloudNoLocalModel': (
         '这台服务器没有本地模型可连（“{provider}”需要宿主自己跑一个 Ollama 守护进程）：'
         '云端部署只支持 OpenRouter，请在“设置 → AI”里改选 OpenRouter 并填入模型与 API Key'
@@ -211,6 +215,10 @@ EN = {
     'api.biblioWosTab': 'This is a Web of Science Tab-delimited export. This app reads the plain-text '
     '(Tagged) or the Excel/CSV export; choose one of those and upload it again',
     'api.bodyNotObject': 'request body must be a JSON object',
+    'api.internalError': 'The server failed while handling this request; the cause is in the log under logs/',
+    'api.internalErrorLog': 'unhandled exception: {method} {path} ({kind}); the traceback is in the log file',
+    'api.httpError': 'Request refused (HTTP {code})',
+    'api.prefixRefusedLog': 'ignoring an unusable X-Forwarded-Prefix: {prefix}',
     'api.cloudNoLocalModel': (
         'This server has no local model to talk to ("{provider}" wants an Ollama daemon on its own '
         'host): a cloud deployment only supports OpenRouter — pick OpenRouter under Settings → AI and '

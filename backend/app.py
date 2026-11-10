@@ -51,6 +51,7 @@ from runtime.state import (
 )
 from scheduling import clock
 from sessions.routes import bp as sessions_bp
+from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from engine import run_schedule
@@ -142,6 +143,34 @@ def _origin_is_local(origin: str, server_host: str = '') -> bool:
     return bool(server_host) and origin_host == server_host.rsplit(':', 1)[0]
 
 
+#: A proxy may prepend ONE path prefix (``/cixi``), and it is used to build ``Location`` headers
+#: and relative asset URLs — so it is data, not a redirect. Segments of unreserved characters only:
+#: no scheme, no ``//``, no ``\``, no ``..``, no query/fragment.
+_URL_PREFIX = re.compile(r'^(?:/[A-Za-z0-9._~-]+)+$')
+
+
+@app.before_request
+def _refuse_unsafe_url_prefix():
+    """Throw away an ``X-Forwarded-Prefix`` that is not a path prefix.
+
+    ``ProxyFix(x_prefix=1)`` copies the client-supplied header into ``SCRIPT_NAME``, and
+    ``api/auth.py`` builds the login redirect as ``script_root + '/login?next=...'``. A value of
+    ``//evil.example`` therefore produced a protocol-relative 302 on the login page — an open
+    redirect that also poisoned every relative asset URL for as long as the header was present.
+    ``safe_next`` cannot help: the prefix is concatenated BEFORE it is consulted.
+
+    Runs first (registered before the origin guard) so nothing downstream ever sees a bad value.
+    """
+    prefix = str(request.environ.get('SCRIPT_NAME') or '')
+    if not prefix:
+        return None
+    if _URL_PREFIX.match(prefix) and '..' not in prefix.split('/'):
+        return None
+    logger.warning(t('api.prefixRefusedLog', prefix=prefix[:120]))
+    request.environ['SCRIPT_NAME'] = ''
+    return None
+
+
 @app.before_request
 def _reject_foreign_origin():
     """Refuse a cross-origin request outright, not just its read-back.
@@ -197,7 +226,19 @@ def _no_store_ui_assets(resp):
         resp.headers['Cache-Control'] = 'no-store'
     elif path == '/' or path == '/index.html' or path.startswith('/js/') or path.startswith('/css/'):
         resp.headers['Cache-Control'] = 'no-cache'
-    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    # Framing is refused everywhere EXCEPT the one document this app frames ITSELF. `DENY` is not
+    # a cross-origin rule: it forbids the document from being displayed in ANY frame, including a
+    # same-origin one, so widening it from the login page to every response silently locked the
+    # Chart Studio out of its own overlay — `static/js/zenviz.js` loads `/zenviz.html?embed=1` into
+    # `#studio-frame`, and the browser answered "refused to connect" (a blank panel whose loading
+    # spinner never clears, because `iframe.load` still fires for the refusal page).
+    # `SAMEORIGIN` is the narrowest answer that keeps the studio working: the page must not be
+    # framed by a foreign parent, which is the clickjacking case these headers exist for.
+    if path == '/zenviz.html':
+        resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        resp.headers.setdefault('Content-Security-Policy', "frame-ancestors 'self'")
+    else:
+        resp.headers.setdefault('X-Frame-Options', 'DENY')
     resp.headers.setdefault('Referrer-Policy', 'same-origin')
     return resp
 
@@ -463,6 +504,44 @@ def _payload_too_large(_error):
     limit_bytes = int(app.config.get('MAX_CONTENT_LENGTH') or 0)
     mb = round(limit_bytes / (1024 * 1024), 2) if limit_bytes > 0 else UPLOAD_LIMIT_MB
     return jsonify({'ok': False, 'error': t('api.payloadTooLarge', limit=mb)}), 413
+
+
+@app.errorhandler(HTTPException)
+def _http_refusal(error: HTTPException):
+    """A framework refusal keeps the envelope the panel parses.
+
+    A 404/405/401 raised by Flask itself used to fall through to Werkzeug's HTML page, and the
+    frontend calls ``resp.json()`` on every answer — so an unknown URL surfaced as "the button is
+    broken" instead of a reason. Outside ``/api/`` the framework's own page is still right.
+
+    The sentence comes from the catalogue rather than from ``error.description``: the console and
+    the panels are bilingual, and a Werkzeug string is English whatever the UI language is. A 4xx
+    keeps its own code and names it; only a 5xx is described as an internal error, because calling
+    a mistyped URL a "server error" is a lie the panel would then repeat to the user.
+    """
+    if request.path.startswith('/api/'):
+        code = int(error.code or 500)
+        message = t('api.internalError') if code >= 500 else t('api.httpError', code=code)
+        return jsonify({'ok': False, 'error': message, 'status': code}), code
+    return error
+
+
+@app.errorhandler(Exception)
+def _unexpected_failure(error: Exception):
+    """A bug answers in the SAME envelope, and the traceback stays in the log.
+
+    Without this, anything the handlers did not catch (a ``sqlite3.OperationalError``, a
+    ``RecursionError`` from a deeply nested JSON upload, a ``KeyError``) became an HTML 500: the
+    panel could not read it, and under ``FLASK_DEBUG`` the response body carried the Werkzeug
+    traceback — on a server that holds crawl cookies and can spawn a browser. The sentence is
+    generic on purpose; ``logger.exception`` keeps the cause where it belongs.
+    """
+    if isinstance(error, HTTPException):
+        return _http_refusal(error)
+    logger.exception(t('api.internalErrorLog', method=request.method, path=request.path, kind=type(error).__name__))
+    if request.path.startswith('/api/'):
+        return jsonify({'ok': False, 'error': t('api.internalError')}), 500
+    return t('api.internalError'), 500
 
 
 # ─── Run queue ────────────────────────────────────────────────

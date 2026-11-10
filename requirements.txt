@@ -72,3 +72,4 @@ pythonnet==3.0.5; sys_platform == "win32"
 # product pylint tier imports every desktop tool, so this small pure-Python PE reader belongs in a
 # clean dev environment too (the build venv already carries it through PyInstaller).
 pefile==2024.8.26
+cryptography==44.0.3

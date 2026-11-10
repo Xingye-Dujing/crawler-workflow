@@ -40,7 +40,11 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.runner }}
     env:
-      RELEASE_TAG: ${{ inputs.release_tag || 'exe-2026-11' }}
+      # A tag push (`macos-*`) has EMPTY `inputs`, so the old `|| 'exe-2026-11'` fallback pointed
+      # every tagged build at the previous release and then `--clobber` replaced its published
+      # bytes: version.json kept pinning the old sha256/size, so every installed Mac client's
+      # update check failed. A tag push now lands on ITS OWN tag; the hardcoded fallback is gone.
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
       INSTALLER_ONLY: ${{ inputs.installer_only && '1' || '' }}
     steps:
       - name: Check out source
@@ -80,14 +84,27 @@ jobs:
           path: dist/CaiXiHui-Online-Setup-macOS-*.dmg
           if-no-files-found: error
 
+      - name: Refuse a tag that does not look like a release tag
+        # `github.ref_name` on a branch (a mistaken workflow_dispatch without the input) would
+        # create or overwrite a branch-named release. Name the refusal instead.
+        run: |
+          case "$RELEASE_TAG" in
+            exe-*) ;;
+            *) echo "release tag must start with exe- (got: $RELEASE_TAG)" >&2; exit 1 ;;
+          esac
+
       - name: Upload application to GitHub Release
+        # No `--clobber`: `gh release upload` refuses an asset name that is already published, so
+        # a version collision (or a re-run of an old tag) STOPS here. The previous `--clobber`
+        # overwrote a release's bytes while `version.json` kept pinning the old sha256, which made
+        # every already-installed client's update check fail — see docs/release.md.
         if: env.INSTALLER_ONLY != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$RELEASE_TAG" \
             dist/CaiXiHui-macOS-*.dmg \
-            --repo "$GITHUB_REPOSITORY" --clobber
+            --repo "$GITHUB_REPOSITORY"
 
       - name: Upload installer to GitHub Release
         env:
@@ -95,4 +112,4 @@ jobs:
         run: |
           gh release upload "$RELEASE_TAG" \
             dist/CaiXiHui-Online-Setup-macOS-*.dmg \
-            --repo "$GITHUB_REPOSITORY" --clobber
+            --repo "$GITHUB_REPOSITORY"

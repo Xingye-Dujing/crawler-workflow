@@ -149,11 +149,24 @@ def _entry_meta(file: str, files: dict) -> dict:
 
 
 def _unique_workflow_name(manager: WorkflowManager, original: str, taken: set) -> str:
+    """The first free name, with the ``(N)`` tail reserved BEFORE the length cap.
+
+    ``clean_name`` caps the stem at ``MAX_NAME_LENGTH``, so appending the tail first and cleaning
+    afterwards cut the tail straight back off a long name: every candidate collapsed to ``base``,
+    which is by definition already in ``taken``, and the loop never ended. Importing the same
+    project twice with a ~57+ character workflow name therefore hung the request forever. The tail
+    comes out of the same budget here, and the loop refuses by name instead of spinning if a
+    future ``clean_name`` ever eats the tail again.
+    """
     base = manager.clean_name(original)
     candidate = base
     suffix = 2
     while candidate.casefold() in taken:
-        candidate = manager.clean_name(f'{base} ({suffix})')
+        if suffix > 9999:
+            raise ValueError(t('project.nameConflict', name=base))
+        tail = f' ({suffix})'
+        room = max(1, manager.MAX_NAME_LENGTH - len(tail))
+        candidate = manager.clean_name(f'{base[:room]}{tail}')
         suffix += 1
     return candidate
 

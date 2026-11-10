@@ -31,6 +31,11 @@
 | `CIXI_NODE_BIN` / `NODE_BIN` | 第二采集后端（CatBus）用的 Node 运行时，按系统查表；版本按 CatBus `engines` 核对，太旧按名拒绝 | 空 |
 | `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个指名文件、可执行包装或源码 `cli.ts`（自动换成构建产物 `dist/**/cli.js`）；`CATBUS_HOME` 指源码检出根（同样读 `dist` 入口）；都没设时，“本机已安装的”模式按 npm 全局前缀找，“安装器安装的”模式只认启动器导出的入口，缺了按名报“安装器未安装”。**Node 不能直接运行 TS 源码**（类型擦除不重写 `./x.js` 导入），源码没有构建产物时按名说明要构建哪个文件。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码：启动时检查 `stdout/stderr` 能不能写汉字，不能就改 UTF-8 并打印一行；能写就只把 `errors` 设成 `replace`，**不改编码**（强扭成 UTF-8 反而把正常窗口弄成乱码） | — |
+| `CIXI_UPDATE_PUBKEY` | 更新清单（`version.json`）的校验公钥：PEM 文本，或指向 PEM 文件的路径；打包版也可放在数据根下的 `update-pubkey.pem`。**配了就必须签名有效，否则拒绝更新**（能改清单的人可以同时改 URL 与 SHA-256，清单本身需要一个离线信任根）。未配置时自更新照常可用，`/api/update/check` 返回 `signed: false`。详见 [release.md](release.md) | 空 |
+
+> **反向代理的前缀头**：`X-Forwarded-Prefix` 只被当作**路径前缀**接受（形如 `/cixi` 的一段或多段
+> 无保留字符路径）。带 `//`、反斜杠、`..`、scheme 的值会被丢弃并记一行日志——它会被拼进
+> `Location` 头与相对资源地址，放任客户端自编就等于开放重定向。部署在子路径时让代理按固定值转发该头。
 
 > **三套系统都在范围内**：Windows 是开发机，Linux 是云端部署目标，macOS 也要求可用。只有 `desktop/`
 > （PyInstaller + UPX + Inno Setup）与“红果短剧评论收割”是 Windows 专属（非 Windows 与 cloud 模式下由

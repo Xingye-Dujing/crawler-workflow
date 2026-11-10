@@ -218,7 +218,19 @@ if ($Installer -or $PackageOnly) {
             # ask for UAC. On a machine that denies that write, the wizard never appears. Patching
             # the outer manifest to requireAdministrator makes Windows elevate the double-click
             # first; it must happen before -Sign, because signing covers the patched bytes.
-            Invoke-Exe $VenvPython @((Join-Path $PSScriptRoot 'patch_manifest.py'), $SetupExe)
+            #
+            # -PackageOnly deliberately skips the build venv, so `$VenvPython` does not exist in
+            # that stage: resolve an interpreter instead of assuming one. The release workflow's
+            # installer job installs `pefile` (from requirements.txt) for exactly this call.
+            $PatchPython = if (Test-Path $VenvPython) {
+                $VenvPython
+            } else {
+                (Get-Command python -ErrorAction SilentlyContinue).Source
+            }
+            if (-not $PatchPython) {
+                throw "patch_manifest.py needs a Python interpreter: create desktop\.venv-build or put python on PATH."
+            }
+            Invoke-Exe $PatchPython @((Join-Path $PSScriptRoot 'patch_manifest.py'), $SetupExe)
             Write-Host ("Setup:  {0}  ({1:N1} MB)" -f $SetupExe, ((Get-Item $SetupExe).Length / 1MB))
             if ($Sign) {
                 Write-Step "Sign the installer after Inno embeds the signed bytes"

@@ -95,10 +95,10 @@ jobs:
       # restricted workspace refuses outright — measured, it fails with os error 5 and the
       # edit silently stays unformatted. This step is the gate that cannot be skipped.
       - name: Lint
-        run: ${{ matrix.python }} -m ruff check backend/ tests/
+        run: ${{ matrix.python }} -m ruff check backend/ tests/ desktop/ tools/
 
       - name: Format
-        run: ${{ matrix.python }} -m ruff format --check backend/ tests/
+        run: ${{ matrix.python }} -m ruff format --check backend/ tests/ desktop/ tools/
 
       # Pylint runs on all three tiers that a runner can honestly run. The third tier
       # (`.pylintrc.probes`) stays local: `backend/test_*.py` are gitignored measurement scripts,

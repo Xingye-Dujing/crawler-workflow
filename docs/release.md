@@ -187,6 +187,31 @@ macOS 包由 GitHub Actions 的 `.github/workflows/macos-build.yml` 构建，不
 
 macOS 自更新从 GitHub Release 下载 DMG。访问不了 GitHub 的 Mac 仍应使用在线安装器或完整 DMG。
 
+## 更新清单的可选签名（建议开启）
+
+`version.json` 里的 SHA-256 只能证明"下载到的字节 = 清单说的字节"，而清单本身就是**最先被改的那一份**：
+能改 Gitee/GitHub 上 `version.json` 的人，同时改掉 `url` 与 `sha256` 即可让客户端装上一份任意程序。
+所以客户端支持对清单做**离线签名校验**，且是"配置了公钥就失败即拒绝"（fail closed）：
+
+- 公钥位置：环境变量 `CIXI_UPDATE_PUBKEY`（PEM 文本，或指向 PEM 文件的路径），或打包版数据根下的
+  `update-pubkey.pem`。**没有配置公钥时**自更新照常可用，但 `/api/update/check` 会返回 `signed: false`，
+  面板与日志会说明这条链没有信任根。
+- 签名方式：对清单去掉 `signature` 字段后的 JSON（`sort_keys=True`、紧凑分隔符、`ensure_ascii=True`）做
+  Ed25519 签名，结果以 base64 写回清单的 `signature` 字段。校验用 `cryptography`（`requirements.txt` 已声明）。
+- 配套规则（与签名一起生效，避免"签了名却仍可从明文/畸形地址取包"）：
+  - 下载地址必须是 `https://`，**每一跳重定向都重新校验**（302 到 `http://`/`ftp://` 会被拒绝）；
+  - 单包上限 4 GiB，超过即中止；
+  - 清单里的 `version` 必须是点分版本号，客户端只用它当作 `data/updates/` 下的**一个目录名**（带 `..`、
+    分隔符的版本号一律按名拒绝——这个值直接进 `shutil.rmtree` 的路径）。
+
+发行脚本若要生成签名，用仓库根的工具（需要私钥，**私钥不要进仓库**）：
+
+```bash
+python tools/sign_release_feed.py version.json --key release-private.pem   # 写回 signature 字段
+```
+
+未签名 → 已签名的切换是兼容的：没配公钥的旧客户端忽略 `signature` 字段。
+
 ## version.json 模板
 
 ```json

@@ -22,7 +22,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,7 +81,7 @@ def manifest_payload(
         'app': 'CaiXiHui',
         'version': version,
         'channel': channel,
-        'generated_at': generated_at or datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'generated_at': generated_at or datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'artifacts': artifacts,
         'catalog_hint': {
             'component': 'app',
