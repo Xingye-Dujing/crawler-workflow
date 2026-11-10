@@ -63,7 +63,8 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
 - **不想装 Python 就用桌面版（Windows / macOS）**：[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases)
   里有现成的 `CaiXiHui-Setup.exe`；只想要小体积下载器就用 `CaiXiHui-Online-Setup.exe`，默认从 Gitee /
   npmmirror 下载主程序、Chrome、chromedriver、Node 和 CatBus，国内不需要翻墙（见
-  [`docs/installer.md`](docs/installer.md)）。安装器和主程序都是**原生窗口**（Windows 自带的
+  [`docs/installer.md`](docs/installer.md)；以后的功能更新与发版步骤见
+  [`docs/release.md`](docs/release.md)）。安装器和主程序都是**原生窗口**（Windows 自带的
   Microsoft Edge WebView2；macOS 用系统 WebKit），没有控制台、也不开浏览器；**主程序首次启动默认浅色**
   （设置里仍可切自动/深色），**启动即最大化**；安装器是一屏窗口。**关闭主窗口即退出整个程序**，
   **最小化则继续在后台采集/跑定时任务**。

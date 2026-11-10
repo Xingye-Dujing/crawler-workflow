@@ -103,6 +103,7 @@ macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad �
   失败则移回 `CaiXiHui.app.previous` 再启动。
 - **源码运行**不执行自更新（`supported: false`），避免把开发检出替换成发布包；请更新代码后重启。
 - 下载与替换都在 `<data>/updates/` 下进行；更新失败不会改动当前安装，重新检查/重试即可。
+- 完整的发版顺序、版本号同步、分片/摘要模板见 [`release.md`](release.md)。
 
 ## BERT 模型包（可选，Windows / macOS）
 
