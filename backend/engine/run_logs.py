@@ -61,6 +61,8 @@ class RunLogWriter:
     It must never write the console back (no ``add_log``/``logger`` on failure — the log
     handler forwards here, so a failure log would recurse). A store error keeps the batch for
     the next flush, bounded by a hard cap so a permanently-dead DB cannot grow memory forever.
+    A kept batch keeps its RUN ID too: the next run's lines may arrive while the failed write is
+    in flight, and a buffer that merged them lost the attribution the whole class exists for.
     """
 
     FLUSH_EVERY = 200
@@ -73,6 +75,12 @@ class RunLogWriter:
         self._lock = threading.RLock()
         self._buf: list = []
         self._buf_run_id: str | None = None
+        #: Batches a failed write kept back, each WITH the run it belongs to, oldest first
+        #: (``[(run_id, rows)]``). One buffer shared by two runs is what mis-filed a console:
+        #: ``_drain`` empties ``_buf`` and then opens SQLite, which is long enough for the next
+        #: run to print, so a retry that merged A's failed rows with B's fresh ones had to choose
+        #: one id for both — whichever it chose, one run's viewer lied.
+        self._pending: list[tuple[str, list]] = []
         #: The account whose run these lines belong to. Resolved at ARM time by the claim (which
         #: runs bound) rather than at flush time by whoever happened to print the 200th line:
         #: the pool threads and the Stop reapers start with NO account context, so resolving it
@@ -91,7 +99,13 @@ class RunLogWriter:
         Takes the writer's own lock for the whole swap (the same way ``flush`` does):
         ``push`` runs OUTSIDE ``_completed_lock`` (see the class docstring), so replacing
         ``_buf`` without it let a concurrent push append into the list ``reset`` had just
-        swapped out — the durable log of a stopped run lost its tail."""
+        swapped out — the durable log of a stopped run lost its tail.
+
+        ``_pending`` is deliberately NOT dropped: those lines were printed by a run that is
+        over, and a later flush still writes them under that run's own id. Discarding them here
+        would throw away console output that already happened — the one thing this writer
+        promises never to lose.
+        """
         with self._lock:
             self._buf = []
             self._buf_run_id = None
@@ -131,23 +145,40 @@ class RunLogWriter:
         # handler feeds back to ``push`` on this SAME thread. Holding a lock across the lookup
         # deadlocked the run thread and every later flush.
         with self._lock:
-            if not self._buf or not self._buf_run_id:
-                self._buf = []
-                return
-            rid = self._buf_run_id
-            batch = self._buf
+            current = (self._buf_run_id, self._buf) if self._buf and self._buf_run_id else None
+            carried = self._pending
             # Published (emptied) before the write: a line pushed by the store's own creation
             # must land in the NEXT batch, not be appended to a batch we are about to swap.
             self._buf = []
-        try:
-            with account_context.use(self._account):
-                get_run_store().append_log(rid, batch)
-        except Exception:
-            # Keep the batch for a later flush; bound it if the store stays down. No logging
-            # here — the console handler forwards back into ``push`` and would recurse.
-            with self._lock:
-                merged = batch + self._buf
-                self._buf = merged if len(merged) <= self.HARD_CAP else merged[-self.FLUSH_EVERY :]
+            self._buf_run_id = None
+            self._pending = []
+        queue = [*(carried or []), *([current] if current else [])]
+        failed: list[tuple[str, list]] = []
+        for rid, rows in queue:
+            if not rid or not rows:
+                continue
+            try:
+                with account_context.use(self._account):
+                    get_run_store().append_log(rid, rows)
+            except Exception:
+                # Keep this batch WITH its id for a later flush. No logging here — the console
+                # handler forwards back into ``push`` and would recurse.
+                failed.append((rid, rows))
+        if not failed:
+            return
+        with self._lock:
+            # Newest failures go behind anything a concurrent drain already put back, so the log
+            # stays in print order per run.
+            kept = failed + self._pending
+            total = sum(len(rows) for _rid, rows in kept)
+            while total > self.HARD_CAP and len(kept) > 1:
+                _oldest_id, oldest_rows = kept.pop(0)
+                total -= len(oldest_rows)
+            if total > self.HARD_CAP and kept:
+                # A single batch bigger than the cap: trim its head rather than drop the run.
+                rid, rows = kept[0]
+                kept[0] = (rid, rows[-self.FLUSH_EVERY :])
+            self._pending = kept
 
     def flush(self) -> None:
         # No outer lock: the drain touches SQLite, and a store that logs while opening re-enters

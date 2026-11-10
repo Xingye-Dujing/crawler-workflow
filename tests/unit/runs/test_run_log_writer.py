@@ -201,11 +201,45 @@ class TestStoreFailure:
         _set_run(state, 'rX')
         store.fail = True
         w.push(['keep me'], 0, 'info')
-        w.flush()  # drains → append_log raises → swallowed, batch retained
-        assert [r[4] for r in w._buf] == ['keep me']
+        w.flush()  # drains → append_log raises → swallowed, batch retained (with its run id)
         store.fail = False
         w.flush()  # the retained batch goes out on the next attempt
-        assert store.batches and store.batches[0][1][0][4] == 'keep me'
+        # Asserted through the STORE, not through a field: the retained lines are kept in a
+        # per-run queue now (``_pending``), and what this test is about is that they survive.
+        assert store.batches and store.batches[0][0] == 'rX'
+        assert store.batches[0][1][0][4] == 'keep me'
+
+    def test_kept_lines_go_back_to_the_run_that_printed_them(self, writer):
+        """Retaining a batch must retain its RUN ID with it — and that only bites under a RACE.
+
+        ``_drain`` empties ``_buf`` (line "published before the write") and then opens SQLite, which
+        is slow enough for the next run's first line to arrive. That line sets ``_buf_run_id`` to the
+        NEW id. If the write then fails, the retained batch is prepended back to the buffer: with the
+        old code the id stayed on the new run, so run A's console was written under run B — A's viewer
+        comes back empty and B's shows lines B never printed. The injection below IS that window.
+        """
+        _module, w, store, state = writer
+        _set_run(state, 'A')
+        w.push(['A line'], 0, 'info')
+
+        real_append = store.append_log
+
+        def failing_append(_run_id, _rows):
+            # The next run prints while this (doomed) write is in flight.
+            _set_run(state, 'B')
+            w.push(['B line'], 1, 'info')
+            raise RuntimeError('db down')
+
+        store.append_log = failing_append
+        w.flush()  # A's batch fails; B's line is now in the buffer too
+
+        store.append_log = real_append
+        w.flush()
+        by_run = {}
+        for run_id, rows in store.batches:
+            by_run.setdefault(run_id, []).extend(row[4] for row in rows)
+        assert by_run.get('A') == ['A line'], by_run
+        assert 'A line' not in by_run.get('B', []), "run A's console was filed under run B"
 
     def test_a_persistently_failing_store_is_bounded(self, writer):
         _module, w, store, state = writer
