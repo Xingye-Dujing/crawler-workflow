@@ -12,6 +12,7 @@ wrote for that parent, or the parent node's own title. A parent whose declared c
 nothing is refused by name rather than contributing an empty slice of the graph.
 """
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -211,14 +212,24 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
             if not year and not parsed['keep_undated']:
                 continue
             title = _cell_text(record.get(found['title'])).strip() if found['title'] else ''
+            author = _cell_text(record.get(found['author'])).strip() if found['author'] else ''
             # A table that carries several platforms labels each row with its OWN one; the
             # table-level label is only the fallback for rows that do not say.
             origin = (_cell_text(record.get(source_column)).strip() if source_column else '') or label
             rows.append(
                 {
-                    '记录ID': f'{origin}#{position}-{index}',
+                    # A CONTENT identity, like every other record table in this project: the importer
+                    # builds ``记录ID`` as a hash of title|first author|year|journal, and a downstream
+                    # reader treats it as the record's identity (``metrics.records`` falls back to it
+                    # as a document NAME, and disambiguates two same-titled works with ``[:6]``). A
+                    # positional id — ``{origin}#{parent}-{row}`` — broke both: inserting a parent
+                    # shifted every id, so the same paper was drawn under a different name in the next
+                    # run's figure. The source stays a PREFIX so the same work cited by two platforms
+                    # stays two rows (which is what this node is for) while each row keeps one stable
+                    # identity across runs.
+                    '记录ID': f'{origin}#{_content_id(title, author, year, origin)}',
                     '题名': title or f'{origin} {index + 1}',
-                    '作者': _cell_text(record.get(found['author'])).strip() if found['author'] else '',
+                    '作者': author,
                     '作者单位': _cell_text(record.get(found['affiliation'])).strip() if found['affiliation'] else '',
                     # A post has no journal; the source name is the closest honest reading of
                     # "where this record came from", and it is what the dual map would key on.
@@ -257,6 +268,19 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
             'rows': len(rows),
         },
     }
+
+
+def _content_id(title: str, author: str, year: str, origin: str) -> str:
+    """A stable, content-derived identity for one fused record.
+
+    Mirrors ``importer._record_id`` (title | first author | year) with the source folded in, because
+    this node deliberately keeps the SAME work from two sources as two rows. A positional id made the
+    same record change identity whenever a parent was added or removed, and a downstream reader uses
+    ``记录ID`` as the record's name when it has no title.
+    """
+    first_author = (author.split(';')[0] if author else '').strip()
+    raw = f'{title.strip()}|{first_author}|{year}|{origin.strip()}'.encode()
+    return hashlib.sha1(raw).hexdigest()[:16]
 
 
 def _source_label(records, columns, parsed: dict, pid, position: int) -> tuple[str, str]:

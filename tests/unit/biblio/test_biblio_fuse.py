@@ -119,6 +119,28 @@ class TestRefusals:
 
 
 class TestContract:
+    def test_a_row_keeps_its_identity_when_the_parents_are_reordered(self):
+        """``记录ID`` is a CONTENT identity here, like every other record table in this project.
+
+        It used to be ``{origin}#{parent index}-{row index}``: inserting or removing a parent shifted
+        every id, so the same paper was drawn under a different name in the next run's figure —
+        ``metrics.records`` falls back to ``记录ID`` as a document NAME when a record has no title,
+        and disambiguates two same-titled works with ``[:6]``.
+        """
+        first = _fuse([('node-1', LITERATURE), ('node-2', POSTS)])
+        second = _fuse([('node-2', POSTS), ('node-1', LITERATURE)])
+
+        def by_title(result):
+            return {row['题名']: row['记录ID'] for row in result['rows']}
+
+        assert by_title(first) == by_title(second), 'reordering the parents renumbered the records'
+
+    def test_two_same_titled_records_get_different_ids(self):
+        """A hash over title alone would collide; the source and the year are part of the identity."""
+        result = _fuse([('node-1', LITERATURE), ('node-2', POSTS)])
+        ids = [row['记录ID'] for row in result['rows']]
+        assert len(set(ids)) == len(ids), ids
+
     def test_the_output_columns_are_a_fixed_contract(self):
         """A fusion node's output is canonical by design: whatever the sources called their
         columns, the downstream node reads 题名/关键词/年份/来源 with its default mapping."""
