@@ -14144,32 +14144,15 @@
             reportError("数据解析失败", e, true);
           }
         };
+        /* The parser lives in `js/zenviz-parse.js` (loaded before this file) so a test can run it.
+           Delegating keeps ONE implementation: an inlined copy here would drift from the tested one
+           the moment either changed, and the drift would be silent — a table that loads differently
+           on the page than in the suite. */
         function parseTextData(raw) {
-          const lines = raw.split(/\r?\n/).filter((x) => x.trim());
-          const delim = lines[0].includes("\t")
-            ? "\t"
-            : lines[0].includes(",")
-              ? ","
-              : lines[0].includes(";")
-                ? ";"
-                : /\s{2,}/.test(lines[0])
-                  ? "whitespace"
-                  : " ";
-          const split = (l) =>
-            delim === "whitespace"
-              ? l.trim().split(/\s{2,}/)
-              : l.split(delim).map((x) => x.trim());
-          let headers = split(lines[0]);
-          let rows = lines.slice(1).map(split);
-          const max = Math.max(headers.length, ...rows.map((r) => r.length));
-          if (headers.length < max)
-            while (headers.length < max)
-              headers.push("列" + (headers.length + 1));
-          rows = rows.map((r) => {
-            while (r.length < max) r.push("");
-            return r;
-          });
-          return { headers, rows };
+          if (!window.ZenvizParse || typeof window.ZenvizParse.textData !== "function") {
+            throw new Error("zenviz-parse.js 未加载：无法解析粘贴的数据");
+          }
+          return window.ZenvizParse.textData(raw);
         }
         $("#import-btn").onclick = () => $("#file-input").click();
         $("#file-input").onchange = async (e) => {

@@ -725,6 +725,16 @@ var chartStudio = {
 
     handleMessage(evt) {
         if (!evt || !evt.data || evt.data.source !== 'zenviz-bridge') return;
+        /* TRUST BOUNDARY: `source` is a string any window can put in a postMessage. Without these
+           two checks, any page that can get itself embedded beside the studio — an ad frame, a
+           drag-dropped HTML export, another site opened in this app's WebView — could post
+           `{source:'zenviz-bridge', type:'zenviz:snapshot', dataUrl:'…'}` and drive a save, or fake
+           `ready`/`dataApplied` to make the studio report a chart it never drew. Both facts are
+           structural, so they are checked rather than trusted: same origin, and the message came
+           from THIS studio's frame. */
+        if (evt.origin !== window.location.origin) return;
+        var frame = document.getElementById('studio-frame');
+        if (frame && evt.source && evt.source !== frame.contentWindow) return;
         var msg = evt.data;
 
         if (msg.type === 'zenviz:ready') {
