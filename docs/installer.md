@@ -253,11 +253,11 @@ x64 207,117,913 B；chromedriver arm64 9,378,279 B / x64 10,409,330 B；Node arm
 x64 54,203,979 B。SHA-256 见 `backend/services/components/default_catalog.json` 的 `darwin-arm64` /
 `darwin-x64` 条目。
 
-2026-11-11 的 macOS workflow（`main@46b19f4`，发布 tag `exe-2026-11`）也产出了两组产物：应用 DMG arm64
-**177,704,943 B**（SHA-256 `5d770a96c429d77a173adb4ca6ba9e6c8cbd6c0362a0bf4f534a0e68695ec0a7`）/ x86_64
-**188,680,566 B**（`8c8482c8645043b65fe42087a6c36bef0f4f77114d79cb0fb5959fcf66a56d04`）；在线安装器 DMG
-arm64 **14,844,528 B**（`c91357bc2dbbdf9ed470704b2f468860d5581c8d95ddca58d19f07a2b09e962f`）/ x86_64
-**15,638,507 B**（`34e7a0017654a3fb4ba9b23b748b2e1eec83372edb093a027613441cca27c2e9`）。
+2026-11-11 的 macOS workflow（`main@a45510c`，发布 tag `exe-2026-11`）也产出了两组产物：应用 DMG arm64
+**177,675,158 B**（SHA-256 `471fb4a1b915ca6c7f8a8b9cd4698b0cb8da3b4744a61528ae05952ada3fdfc1`）/ x86_64
+**187,529,072 B**（`da0e4362b0b4a0b21f4279e38bb36106f49c56f678de79120751fb02f95771eb`）；在线安装器 DMG
+arm64 **14,844,863 B**（`a886c8bb7b927bc5e6bb50941509289c99f0535cc10a11aff63d4074b8f09851`）/ x86_64
+**15,640,403 B**（`9204fc91b31d829ac38f6fd32065d9f6a3b819b7f21bcf6be0a45f09686c6df4`）。
 两个安装器分别写了对应架构应用 DMG 的摘要；**没有在真实 Mac 上运行过**。
 
 2026-11-11 的 Windows 发布（主程序自更新、关闭窗口彻底退出、安装器组件模式以清单为准）：`CaiXiHui-win64.zip`
