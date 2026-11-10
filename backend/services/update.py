@@ -326,14 +326,14 @@ def start_download() -> dict:
             return {'ok': True, 'job': dict(_JOB)}
         _JOB.clear()
         _JOB.update({'id': uuid.uuid4().hex, 'state': 'downloading', 'progress': 0, 'error': '', 'version': latest})
-        job = dict(_JOB)
+        snapshot = dict(_JOB)
     threading.Thread(
         target=_run_download,
         args=(latest, asset),
         name='update-download',
         daemon=True,
     ).start()
-    return {'ok': True, 'job': job}
+    return {'ok': True, 'job': snapshot}
 
 
 def job(job_id: str = '') -> dict:
