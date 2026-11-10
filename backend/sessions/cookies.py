@@ -6,6 +6,8 @@ import re
 import tempfile
 import time
 
+from core.atomic import replace as atomic_replace
+
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -281,7 +283,11 @@ class CookieManager:
                 json.dump(cookies, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp, path)
+            # ``atomic.replace``, not a bare ``os.replace``: the reader this method is written to
+            # survive is a crawler seeding its session from this very file, and on Windows an open
+            # handle on the target makes the rename fail with ``PermissionError`` — a save that
+            # reported failure while the login it was replacing was still perfectly good.
+            atomic_replace(tmp, path)
         except BaseException:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
@@ -297,10 +303,18 @@ class CookieManager:
         return t(label_key, **label_args) if label_key else str(account or '').strip()
 
     def load(self, platform: str, account: str = '') -> list:
+        """The saved cookie rows, or ``[]`` when there is nothing usable to read.
+
+        ``OSError`` (not just its ``FileNotFoundError`` subclass) is caught because on Windows an
+        antivirus or a second reader holds the jar open for a moment and the open raises
+        ``PermissionError`` — the management panel counts rows through :meth:`entry_count`, so that
+        momentary lock turned "how many cookies?" into an HTTP 500. A jar nobody can read is
+        indistinguishable, for this answer, from a jar that is not there.
+        """
         try:
             with open(self.path_for(platform, account), encoding='utf-8') as f:
                 cookies = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        except (OSError, json.JSONDecodeError, ValueError):
             return []
         return cookies if isinstance(cookies, list) else []
 

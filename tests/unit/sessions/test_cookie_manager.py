@@ -193,6 +193,27 @@ class TestDamagedFiles:
         expected = ['x'] if payload == ['x'] else []
         assert manager.load('zhihu') == expected
 
+    def test_a_jar_held_open_by_another_process_reads_as_no_cookies(self, manager, monkeypatch):
+        """On Windows an open handle on the file makes ``open`` raise ``PermissionError``.
+
+        That is an ``OSError`` but NOT a ``FileNotFoundError``, so the old ``except`` let it through:
+        the management panel counts rows through ``entry_count`` → ``load``, which turned a momentary
+        antivirus or second-reader lock into an HTTP 500 for the question "how many cookies?".
+        """
+        import builtins
+
+        manager.save('zhihu', COOKIES)
+        real_open = builtins.open
+
+        def refuse(path, *args, **kwargs):
+            if str(path).endswith('.json'):
+                raise PermissionError(13, 'the file is held by another process', str(path))
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, 'open', refuse)
+        assert manager.load('zhihu') == []
+        assert manager.entry_count('zhihu') == 0
+
     def test_a_platform_with_no_file_reads_as_no_cookies(self, manager):
         assert manager.load('wechat') == []
 
