@@ -170,6 +170,27 @@ class TestFittedBehaviour:
         assert classifier.fit(TEXTS, LABELS) is classifier
         assert classifier._fitted is True
 
+    def test_the_label_map_is_published_with_the_pipeline_it_describes(self, model_dir):
+        """A reader that holds the lock must never see a NEW map beside an OLD pipeline.
+
+        The map used to be assigned before the lock was taken and the pipeline fitted inside it, so a
+        concurrent ``predict`` (which takes the same lock) could pair the new labels with the
+        still-unfitted model: it answered a class index that model never produced, or raised
+        IndexError when the new map had fewer labels. Both are now published in one critical section,
+        which is what makes this state reachable only as a whole.
+        """
+        classifier = MLClassifier(model_name=_unique_name('atomicpublish'), pipeline=_picklable_pipeline())
+        classifier.fit(TEXTS, ['neg', 'neg', 'neg', 'neg', 'pos', 'pos', 'pos', 'pos'])
+        # The published pair agrees: the fitted model knows exactly the classes the map declares.
+        assert classifier._label_map == {'neg': 0, 'pos': 1}
+        assert classifier._fitted is True
+        assert sorted(classifier.pipeline.classes_.tolist()) == [0, 1], (
+            'the pipeline was trained on the same indices the map declares'
+        )
+        # …and a predict right after the publish answers mapped labels, never a raw index.
+        answers = classifier.predict(['三亚的海非常蓝', '糟糕的体验'])
+        assert {label for label, _score in answers} <= {'pos', 'neg'}
+
     def test_the_input_frame_is_not_mutated(self, model_dir):
         texts = list(TEXTS)
         labels = list(LABELS)

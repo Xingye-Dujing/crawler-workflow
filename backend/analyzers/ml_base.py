@@ -135,16 +135,21 @@ class MLClassifier:
             # deep (and as an HTTP 500).
             raise ValueError(t('ml.need_two_labels', label=unique[0] if unique else ''))
         tokenized = [_tokenize(t) for t in texts]
-        self._label_map = {lb: i for i, lb in enumerate(unique)}
-        y = np.array([self._label_map[lb] for lb in labels])
+        # Built locally and PUBLISHED inside the lock, together with the pipeline it describes. It was
+        # assigned here, outside: a concurrent ``predict`` (which takes the lock) could then read the
+        # new label map against the still-unfitted pipeline — answering a class index the old model
+        # never produced, or an IndexError when the new map has fewer labels than the old pipeline.
+        label_map = {lb: i for i, lb in enumerate(unique)}
+        y = np.array([label_map[lb] for lb in labels])
         with self._lock:
             self.pipeline.fit(tokenized, y)
+            self._label_map = label_map
             self._fitted = True
             # Atomic: a crash halfway through a direct dump left a truncated pickle that every
             # later ``predict`` failed to load — and, because the failure was an UnpicklingError,
             # it read as a broken install rather than "this model was never finished training".
             temporary = f'{self._path}.tmp'
-            joblib.dump({'pipeline': self.pipeline, 'label_map': self._label_map}, temporary)
+            joblib.dump({'pipeline': self.pipeline, 'label_map': label_map}, temporary)
             os.replace(temporary, self._path)
         return self
 
