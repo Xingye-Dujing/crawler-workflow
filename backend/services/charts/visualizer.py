@@ -153,10 +153,22 @@ class VisualizationService(OptionMixin):
                 # or null (mean) — a figure asserting "this phase has nothing" about a column that
                 # was never numeric. 热力图/散点 refuse the same input by name.
                 raise ChartConfigError(t('chart.y_not_numeric', col=y))
-            grouped = numeric.groupby(df[x], sort=False).agg(agg)
+            grouped = numeric.groupby(df[x], sort=False)
+            aggregated = grouped.agg(agg)
+            # A GROUP whose cells are all missing is not a group worth 0 either: `sum` of an
+            # all-NaN group is 0.0 with pandas' ``min_count=0`` default, so a phase nobody measured
+            # drew as "this phase is 0" — the same lie ``style._box_stats`` refuses. A frame that
+            # is missing EVERYWHERE still serialises (as nulls, i.e. an empty chart): "nothing to
+            # plot" is a different answer from "this value is wrong", and the report/echo tests
+            # pin that shape. ``count`` is the measurement of how many numbers a group really had,
+            # and it is the one aggregate whose keyword differs, so the mask comes from it.
+            empty = grouped.count() == 0
+            if bool(empty.any()):
+                aggregated = aggregated.astype('float64')
+                aggregated[empty] = float('nan')
         else:
-            grouped = df.groupby(x, sort=False).size()
-        return [_localize_label(value) for value in grouped.index.astype(str)], grouped.values.tolist()
+            aggregated = df.groupby(x, sort=False).size()
+        return [_localize_label(value) for value in aggregated.index.astype(str)], aggregated.values.tolist()
 
     # ── ECharts option builder ───────────────────────────────────
 
