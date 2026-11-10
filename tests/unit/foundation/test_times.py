@@ -48,6 +48,27 @@ class TestRelativeChinese:
     @pytest.mark.parametrize(
         'label, expected',
         [
+            # Month and year offsets were missing entirely: a month-old 今日头条 comment or a
+            # two-year-old weibo post is printed exactly this way, and the row then carried an
+            # empty 时间 — so a date-ordered table silently dropped everything older than a week.
+            # Months are the module's documented 30-day approximation (``_shift``), not calendar
+            # arithmetic: a site's “3个月前” is not an exact instant either.
+            ('3个月前', '2026-07-04 14:30'),
+            ('1个月前', '2026-09-02 14:30'),
+            # The same sentence with 个 dropped, which several sites do.
+            ('1月前', '2026-09-02 14:30'),
+            ('2年前', '2024-10-02 14:30'),
+            # 个 is also dropped before 周 and 小时.
+            ('2周前', '2026-09-18 14:30'),
+            ('1个小时前', '2026-10-02 13:30'),
+        ],
+    )
+    def test_the_larger_units_a_site_prints_are_read_too(self, label, expected):
+        assert times.relative_to_absolute(label, now=NOW) == expected
+
+    @pytest.mark.parametrize(
+        'label, expected',
+        [
             ('今天 09:05', '2026-10-02 09:05'),
             ('昨天 21:30', '2026-10-01 21:30'),
             ('前天21:30', '2026-09-30 21:30'),

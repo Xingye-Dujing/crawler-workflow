@@ -12,6 +12,7 @@ ZH = {
     'api.badAccount': '账号名不合法：{account}（字母、数字、下划线或连字符，1-24 个；统一按小写保存）',
     'api.badRequest': '请求格式不对：{what}',
     'api.biblioDecode': '无法解码文件 {name}（已尝试 UTF-8 与 GB18030）',
+    'api.biblioDecodeSuspect': '{name} 按 GB18030 解出来是乱码（多半是 Big5 或 Shift-JIS 文件）：请用记事本/Excel 另存为 UTF-8 后再上传',
     'api.biblioEmpty': '无法从 {format} 文件中解析出任何文献记录',
     'api.biblioLensPatent': '这是 Lens 的专利库导出（列里有 Jurisdiction、Inventors、Application Number），'
     '不是学术文献。文献计量网络按学术文献建模，把发明人与申请人当作者画出来只会得到一张错图；'
@@ -210,6 +211,7 @@ EN = {
     ),
     'api.badRequest': 'Malformed request: {what}',
     'api.biblioDecode': 'Could not decode {name} (tried UTF-8 and GB18030)',
+    'api.biblioDecodeSuspect': '{name} decodes to mojibake as GB18030 (it is probably Big5 or Shift-JIS): re-save it as UTF-8 and upload again',
     'api.biblioEmpty': 'No bibliographic records could be parsed from the {format} file',
     'api.biblioLensPatent': 'This is a Lens PATENT export (its columns include Jurisdiction, Inventors and Application '
     'Number), not scholarly records. The bibliometric network models publications, so drawing '

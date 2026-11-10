@@ -1070,3 +1070,35 @@ class TestTheGIndexBoxIsTheCeiling:
     def test_the_ceiling_is_never_exceeded(self):
         for ceiling in (1, 2, 3, 4, 5, 6, 1000):
             assert len(self._selected(ceiling)) <= ceiling
+
+
+class TestADecoratedCitationCountIsStillThatCount:
+    """`float(text)` answered 0 for every decorated count, and the exports decorate them all.
+
+    ``>500`` and ``约300`` are what a site prints, and a TRUNCATED export cell is the same shape. A
+    zero is not a missing number in this table: it is a real rank in every citation metric, so a work
+    with ">500" citations sorted below one with 1 — on the chart a reader would take as evidence.
+    """
+
+    @pytest.mark.parametrize(
+        ('raw', 'expected'),
+        [
+            ('1,234+', 1234.0),
+            ('>500', 500.0),
+            ('约300', 300.0),
+            ('12', 12.0),
+            ('3.5', 3.5),
+            ('', 0.0),
+            (None, 0.0),
+            ('N/A', 0.0),
+        ],
+    )
+    def test_the_first_stated_number_is_the_value(self, raw, expected):
+        from services.biblio.metrics.records import _numeric
+
+        assert _numeric(raw) == expected
+
+    def test_a_decorated_count_outranks_a_small_plain_one(self):
+        from services.biblio.metrics.records import _numeric
+
+        assert _numeric('>500') > _numeric('1'), 'a decorated count must not sort below a real 1'

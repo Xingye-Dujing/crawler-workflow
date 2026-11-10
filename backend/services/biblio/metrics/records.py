@@ -25,6 +25,9 @@ from services.biblio.schema import (
 
 _YEAR = re.compile(r'(?:19|20)\d{2}')
 _LIST_SPLIT = re.compile(r'[;；,，、]+')
+#: The first number a decorated count states: ``>500``, ``约300``, ``1,234+`` (commas stripped first).
+#: A decimal is allowed, and a comma inside the digits is already gone by the time this runs.
+_LEADING_NUMBER = re.compile(r'\d+(?:\.\d+)?')
 _TERM_POS = frozenset({'n', 'nz', 'vn', 'v', 'eng'})
 _MAX_TERMS_PER_DOC = 30
 _MAX_LABEL_TERMS = 40
@@ -92,7 +95,18 @@ def _year(value) -> int | None:
 
 
 def _numeric(value) -> float:
+    """The number a citation/usage cell states, or 0 when it states none.
+
+    ``float(text)`` answered 0 for every DECORATED count, and the sites decorate them all the time:
+    ``1,234+``, ``>500``, ``约300``, and — the case that matters — a cell the export TRUNCATED
+    mid-value. A zero is not a missing number here: it is a real rank in every citation metric, so a
+    work with ">500" citations sorted below one with 1. The first number in the cell is what the cell
+    is stating; only a cell with no digits at all is 0.
+    """
     text = _cell_text(value).replace(',', '').strip()
+    match = _LEADING_NUMBER.search(text)
+    if match:
+        return float(match.group(0))
     try:
         return float(text)
     except ValueError:

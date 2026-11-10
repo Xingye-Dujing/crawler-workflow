@@ -312,3 +312,34 @@ class TestInternationalFormats:
             # A .ris file that is not RIS must not quietly become one text row;
             # the upload route reports this refusal as a 400.
             parse_text('not a ris file at all', 'RIS')
+
+
+class TestAWrongEncodingIsRefusedNotImported:
+    """GB18030 accepts almost any byte pair, so a Big5/Shift-JIS file "decodes" — into mojibake.
+
+    It then went straight into the record table: hundreds of rows of characters no reader can use,
+    reported as a successful import. The fallback now checks its own result and refuses by name,
+    telling the user to re-save as UTF-8.
+    """
+
+    #: Long enough that the share test has samples: a three-character file can be 100 % anything.
+    ZH = '题名,作者,来源期刊,年份\n数字治理研究,张三,公共管理学报,2020\n' * 40
+
+    def test_a_big5_file_is_refused_with_an_actionable_message(self):
+        from services.biblio.importer import BiblioDecodeError, decode_text
+
+        with pytest.raises(BiblioDecodeError) as excinfo:
+            decode_text(self.ZH.encode('big5', errors='ignore'), 'big5.csv')
+        assert 'UTF-8' in str(excinfo.value), 'the message must say what to do'
+
+    def test_a_real_gb18030_export_still_decodes(self):
+        """The check must not cost a genuine CSSCI/CNKI download: it contains none of the
+        characters a wrong codec produces."""
+        from services.biblio.importer import decode_text
+
+        assert decode_text(self.ZH.encode('gb18030')) == self.ZH
+
+    def test_utf8_is_preferred_and_never_inspected(self):
+        from services.biblio.importer import decode_text
+
+        assert decode_text(self.ZH.encode('utf-8')) == self.ZH

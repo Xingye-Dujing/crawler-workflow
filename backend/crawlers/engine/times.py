@@ -53,12 +53,18 @@ _CN_DAY = re.compile(r'^(今天|昨天|前天)\s*(?:(\d{1,2}):(\d{2}))?$')
 _CN_DAY_OFFSET = {'今天': 0, '昨天': -1, '前天': -2}
 
 #: Offsets, Chinese, largest unit first (``1小时前`` must not be read by a 秒 rule).
+#: 个月/年 were missing: a two-year-old weibo post or a month-old 今日头条 comment is printed that
+#: way, and the resolver fell through to "unparseable" — the row then carried the raw stamp or an
+#: empty 时间, so a date-ordered table silently lost everything older than a month. The abbreviated
+#: 1月前/1年前 is the same sentence with 个 dropped, which several sites do.
 _CN_OFFSETS = (
     (re.compile(r'^(\d+)\s*秒前$'), 'seconds'),
     (re.compile(r'^(\d+)\s*分钟前$'), 'minutes'),
-    (re.compile(r'^(\d+)\s*小时前$'), 'hours'),
+    (re.compile(r'^(\d+)\s*(?:个)?小时前$'), 'hours'),
     (re.compile(r'^(\d+)\s*天前$'), 'days'),
-    (re.compile(r'^(\d+)\s*周前$'), 'weeks'),
+    (re.compile(r'^(\d+)\s*(?:个)?周前$'), 'weeks'),
+    (re.compile(r'^(\d+)\s*个?月前$'), 'months'),
+    (re.compile(r'^(\d+)\s*年前$'), 'years'),
 )
 #: ``刚刚``/``刚才``: the site's word for "this minute", which is now, to the minute.
 _CN_NOW = re.compile(r'^(?:刚刚|刚才|片刻前|就在刚刚)$')

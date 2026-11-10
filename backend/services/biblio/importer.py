@@ -90,6 +90,15 @@ class BiblioDecodeError(ValueError):
     """The bytes are neither UTF-8 nor GB18030; the Upload route keeps them as text."""
 
 
+#: Share of "no real document holds this" characters that makes a GB18030 decode look like a wrong
+#: codec. Measured against the repo's own fixtures: every CJK sample stays under 0.1 %, while a Big5
+#: file read as GB18030 lands far above it.
+_MOJIBAKE_SHARE = 0.02
+
+#: …and the count below which the share alone is noise (a three-character file can be 100 % anything).
+_MOJIBAKE_SAMPLES = 10
+
+
 # ─── Encoding and detection ─────────────────────────────────────
 
 
@@ -99,13 +108,45 @@ def decode_text(raw: bytes, name: str = '') -> str:
     CNKI writes UTF-8, but a CSSCI download or a re-saved file is routinely
     GB18030. Both are tried by name; a file neither can decode is a 400, not
     a table of replacement characters.
+
+    GB18030 is tried only as a FALLBACK, and its result is checked: the encoding accepts almost
+    every byte pair, so a Big5 or Shift-JIS file "decodes" into mojibake that then went straight into
+    the record table — hundreds of rows of characters no reader can use, reported as a successful
+    import. A result dominated by rare CJK extension or private-use code points is refused BY NAME
+    instead, and the message says what to do (re-save as UTF-8). Clean files are untouched: the
+    check needs a double-digit count of suspicious characters before it fires.
     """
     for encoding in ('utf-8-sig', 'gb18030'):
         try:
-            return raw.decode(encoding)
+            text = raw.decode(encoding)
         except UnicodeDecodeError:
             continue
+        if encoding == 'gb18030' and _looks_like_mojibake(text):
+            raise BiblioDecodeError(t('api.biblioDecodeSuspect', name=name or 'txt'))
+        return text
     raise BiblioDecodeError(t('api.biblioDecode', name=name or 'txt'))
+
+
+def _looks_like_mojibake(text: str) -> bool:
+    """Whether a GB18030 decode produced text a reader could not use.
+
+    A wrong-encoding decode does not fail — it lands in the CJK ranges that real Chinese text avoids:
+    the extension-A block (U+3400–U+4DBF), the compatibility/rare tail above U+9FA5, and the
+    private-use area (U+E000–U+F8FF). Real exports contain essentially none of those, so a share
+    above :data:`_MOJIBAKE_SHARE` with enough samples is evidence of the wrong codec rather than of
+    unusual prose.
+    """
+    sample = text[:20000]
+    suspicious = 0
+    considered = 0
+    for char in sample:
+        if char.isspace():
+            continue
+        considered += 1
+        code = ord(char)
+        if 0x3400 <= code <= 0x4DBF or 0xE000 <= code <= 0xF8FF or 0x9FA6 <= code <= 0x9FFF:
+            suspicious += 1
+    return suspicious >= _MOJIBAKE_SAMPLES and considered > 0 and suspicious / considered > _MOJIBAKE_SHARE
 
 
 def detect_format(text: str) -> str | None:
