@@ -1205,6 +1205,9 @@ def main(argv=None) -> int:
             min_size=(920, 640),
             storage=native_window.storage_dir('webview-installer'),
             on_close=lambda: may_close(state.job['state']),
+            # A closed installer must not linger either: the next run would otherwise contend for
+            # the fixed port and the same component folders.
+            exit_on_close=True,
         )
     if failure:
         log_line(f'window failed: {failure}')
@@ -1213,7 +1216,12 @@ def main(argv=None) -> int:
         server.shutdown()
     server.server_close()
     log_line('installer stopped')
-    return 1 if failure else 0
+    status = 1 if failure else 0
+    if not no_window:
+        # A closed installer must not linger with its fixed port and install folders held; the
+        # status keeps a failed window visible to whoever launched the installer.
+        native_window.terminate_process(status)
+    return status
 
 
 if __name__ == '__main__':

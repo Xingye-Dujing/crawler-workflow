@@ -28,11 +28,6 @@ from i18n import MESSAGES, t
 from services.charts import tikz, visualizer
 from services.charts.pdf import XELATEX_PATHS
 
-#: The suite's autouse fixture pins ``machine.find_chrome`` to a fixed fake (a crawler test must
-#: not depend on the browser installed on the runner). These cases are ABOUT discovery itself, so
-#: they put the real function back for their own duration.
-_REAL_FIND_CHROME = machine.find_chrome
-
 pytestmark = pytest.mark.unit
 
 #: Captured at import, before the suite-wide ``machine_has_a_browser`` pin replaces the attribute.
@@ -360,7 +355,8 @@ class TestChromeDiscoveryPerPlatform:
         os.chmod(real, 0o600)
         assert str(real) not in machine.chrome_candidates({'CHROME_BIN': str(real), 'PATH': ''}, 'linux')
 
-    def test_a_typo_names_itself_on_every_platform(self, tmp_path):
+    def test_a_typo_names_itself_on_every_platform(self, tmp_path, monkeypatch):
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
         real = tmp_path / 'chrome'
         real.write_bytes(b'MZ')
         os.chmod(real, 0o755)
@@ -493,16 +489,20 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         trapped: asking them at all fails the case, rather than relying on a search that happens
         to come back empty on this runner.
         """
-        chrome = tmp_path / 'chrome'
+        components = tmp_path / 'components'
+        components.mkdir()
+        (tmp_path / 'install-manifest.json').write_text('{"schema":1,"components":{}}', encoding='utf-8')
+        chrome = components / 'chrome'
         chrome.write_bytes(b'MZ')
-        node = tmp_path / 'node'
+        node = components / 'node'
         node.write_bytes(b'MZ')
-        cli = tmp_path / 'cli.js'
+        cli = components / 'cli.js'
         cli.write_text('// catbus\n', encoding='utf-8')
         for name in ('CHROME_PATH', 'CHROME_BIN', 'CIXI_NODE_BIN', 'NODE_BIN', 'CIXI_CATBUS_CLI', 'CATBUS_CLI'):
             monkeypatch.delenv(name, raising=False)
-        monkeypatch.setattr(machine, 'find_chrome', _REAL_FIND_CHROME)
+        monkeypatch.setattr(machine, 'find_chrome', REAL_FIND_CHROME)
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
         for name in ('chrome_candidates', 'node_candidates', 'catbus_candidates'):
 
             def refuse(*args, _name=name, **kwargs):
@@ -516,6 +516,49 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         assert machine.find_chrome('', {'CHROME_BIN': str(chrome), 'PATH': ''}, 'linux') == str(chrome)
         assert machine.find_node('', {'NODE_BIN': str(node), 'PATH': ''}, 'linux') == str(node)
         assert machine.find_catbus_cli('', {'CIXI_CATBUS_CLI': str(cli), 'PATH': ''}, 'linux') == str(cli)
+        # An env variable is not a permission: a path outside the component tree is still 本机.
+        outside = tmp_path.parent / 'outside-chrome'
+        outside.write_bytes(b'MZ')
+        os.chmod(outside, 0o755)
+        assert machine.find_chrome('', {'CHROME_BIN': str(outside), 'PATH': ''}, 'linux') == ''
+        assert not machine.inside_installer_components(str(components) + '-evil')
+
+    def test_no_installer_manifest_means_the_machine_tables(self, tmp_path, monkeypatch):
+        """Portable zip / source / cloud: no manifest, so 'bundled' must not refuse the machine copy."""
+        chrome = tmp_path / 'chrome'
+        chrome.write_bytes(b'MZ')
+        os.chmod(chrome, 0o755)
+        monkeypatch.setattr(machine, 'find_chrome', REAL_FIND_CHROME)
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'components'))
+        monkeypatch.delenv('CHROME_PATH', raising=False)
+        monkeypatch.delenv('CHROME_BIN', raising=False)
+        assert machine.installer_components_only() is False
+        assert machine.find_chrome('', {'CHROME_BIN': str(chrome), 'PATH': ''}, 'linux') == str(chrome)
+
+    def test_installer_manifest_outranks_a_stale_export(self, tmp_path, monkeypatch):
+        """The manifest is the current installed record; an old export cannot shadow it."""
+        from services.components.manifest import Manifest
+
+        install = tmp_path
+        components = install / 'components'
+        current_dir = components / 'chrome' / '2.0'
+        current = current_dir / machine.component_payload_path('chrome')
+        current.parent.mkdir(parents=True)
+        current.write_bytes(b'MZ')
+        os.chmod(current, 0o755)
+        stale_dir = components / 'chrome' / '1.0'
+        stale = stale_dir / machine.component_payload_path('chrome')
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b'MZ')
+        os.chmod(stale, 0o755)
+        manifest = Manifest(install)
+        manifest.record('chrome', '2.0', current_dir, 'a' * 64, 'https://example.com')
+        manifest.save()
+        monkeypatch.setattr(machine, 'find_chrome', REAL_FIND_CHROME)
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
+        assert machine.find_chrome('', {'CHROME_PATH': str(stale), 'PATH': ''}, 'linux') == str(current)
 
     def test_the_version_floors_are_catbus_engines_translated(self):
         assert machine.node_version_supported('v24.21.0')

@@ -738,8 +738,8 @@ def main(argv=None) -> int:
         (root / 'mplconfig').mkdir(parents=True, exist_ok=True)
 
     # Patch the two package-level facts that a frozen bundle cannot infer: relative
-    # optional models are looked up beside the exe, and a chromedriver that does not
-    # exist must be left blank so Selenium Manager can resolve it.
+    # optional models are looked up beside the exe, and the driver default follows the
+    # chosen component source (本机 may leave it blank for Selenium Manager; 安装器 never does).
     try:
         from core import config
 
@@ -752,9 +752,7 @@ def main(argv=None) -> int:
         # switch forbids. A missing installer driver stays blank and the run refuses by name.
         driver_export = str(os.environ.get('CIXI_DRIVER_PATH') or '').strip()
         config.DRIVER_PATH = (
-            driver_export
-            if component_source.effective() == component_source.BUNDLED
-            else driver_export or find_driver(base)
+            driver_export if component_source.effective() == component_source.BUNDLED else find_driver(base)
         )
     except Exception:
         fail_loudly(
@@ -838,6 +836,20 @@ def main(argv=None) -> int:
     # ``CIXI_NO_WINDOW``/``--no-window`` is the automation seam (the packaged smoke check): the
     # server runs without a GUI, never a second user-facing mode.
     no_window = os.environ.get('CIXI_NO_WINDOW') == '1' or '--no-window' in argv
+    exit_code = 0
+
+    def release_window() -> None:
+        # Idempotent: a user close calls it from the GUI thread before ending the process, and the
+        # normal return path calls it again from ``finally``.
+        with contextlib.suppress(Exception):
+            server.shutdown()
+        with contextlib.suppress(Exception):
+            server.server_close()
+        clear_instance(root, port)
+        # Self-clean what this launch created; a killed process never gets the chance, which is why
+        # the same sweep also runs at start.
+        sweep_startup_litter(base)
+
     try:
         if no_window:
             server.serve_forever()
@@ -851,30 +863,27 @@ def main(argv=None) -> int:
                 storage=native_window.storage_dir('webview'),
                 maximized=True,
                 exit_on_close=True,
+                on_closed=release_window,
             )
             if failure:
                 # The one dialog names the missing runtime and where to get it; the file keeps the
                 # same fact for a maintainer (a message box cannot be scrolled or copied).
                 write_startup_error(failure, error_log_dirs(root))
                 native_window.complain(failure, title=f'{DISPLAY_NAME} 无法打开窗口')
-                return 1
+                exit_code = 1
     except KeyboardInterrupt:
         pass
     finally:
-        server.shutdown()
-        server.server_close()
-        clear_instance(root, port)
-        # Self-clean what this launch created; a killed process never gets the chance, which is why
-        # the same sweep also runs at start.
-        sweep_startup_litter(base)
+        release_window()
         if not no_window:
             # Closing the window must end the program, not leave a windowless process whose mutex
             # makes the next double-click report "已有 采析绘 窗口在运行，但本次没能把它调到前台". The GUI
             # host and third-party libraries leave non-daemon threads behind, and the interpreter
             # waits for them after ``main`` returns. Minimising never reaches here — only destroying
-            # the window does. A failed startup exits the same way, after its error is on disk.
-            native_window.terminate_process()
-    return 0
+            # the window does. A failed startup exits the same way, after its error is on disk, and
+            # keeps its non-zero status.
+            native_window.terminate_process(exit_code)
+    return exit_code
 
 
 if __name__ == '__main__':

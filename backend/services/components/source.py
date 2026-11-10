@@ -20,7 +20,7 @@ import json
 import os
 from pathlib import Path
 
-from services.components.paths import components_root
+from core.machine import inside_installer_components, installer_components_root
 
 BUNDLED = 'bundled'
 SYSTEM = 'system'
@@ -65,10 +65,27 @@ def stored_source(data_root: str | Path | None = None) -> str:
     return normalize(value)
 
 
+def installer_available() -> bool:
+    """Whether the installer component tree is actually here.
+
+    The choice says which copy to use *when both exist*; a portable zip, a source checkout, a cloud
+    container and the offline Setup carry no installer manifest. Treating their absent tree as
+    “安装器安装的” would make every one of them refuse Chrome/chromedriver/Node with “安装器未安装”,
+    so the stored preference only takes effect where the tree it names exists.
+    """
+    root = installer_components_root()
+    if not root:
+        return False
+    return (Path(root).parent / 'install-manifest.json').is_file()
+
+
 def effective() -> str:
     """The source THIS process runs under (the launcher freezes its startup choice here)."""
     override = str(os.environ.get(ENV_VAR) or '').strip()
-    return normalize(override) if override else preference()
+    choice = normalize(override) if override else preference()
+    if choice == BUNDLED and not installer_available():
+        return SYSTEM
+    return choice
 
 
 def prefer_bundled() -> bool:
@@ -76,16 +93,12 @@ def prefer_bundled() -> bool:
 
 
 def inside_components(path: str | Path) -> bool:
-    """Whether a path belongs to the installer's own component tree."""
-    text = str(path or '').strip()
-    if not text:
-        return False
-    try:
-        root = Path(components_root()).resolve()
-        candidate = Path(text).expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return candidate == root or root in candidate.parents
+    """Whether a path belongs to the installer's own component tree.
+
+    Delegated to :mod:`core.machine` so the crawler's answer, the panel's answer and this
+    selection cannot disagree about the root or about case/symlink handling.
+    """
+    return inside_installer_components(str(path or '').strip())
 
 
 def usable(path) -> str:

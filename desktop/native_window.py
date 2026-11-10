@@ -19,7 +19,6 @@ from __future__ import annotations
 import contextlib
 import io
 import os
-import signal
 import sys
 from pathlib import Path
 
@@ -129,20 +128,25 @@ def ensure_streams() -> None:
         sys.stderr = stream
 
 
-def terminate_process() -> None:
-    """End this process now, without waiting for threads the GUI host left behind.
+def terminate_process(status: int = 0) -> None:
+    """End this process now with *status*, without waiting for threads the GUI host left behind.
 
     The application window is the program: once it is destroyed there is no surface to return to,
     and a lingering non-daemon thread would keep a windowless process alive — the next double-click
     then reports “已有 采析绘 窗口在运行，但本次没能把它调到前台”. Minimising never calls this.
+    ``status`` is kept so a failed startup is still observed as a failure, not as success.
     """
     if os.name == 'nt':
         with contextlib.suppress(AttributeError, OSError):
             import ctypes
 
-            ctypes.windll.kernel32.ExitProcess(0)
-    # SIGKILL exists only on POSIX; Windows already returned through ExitProcess above.
-    os.kill(os.getpid(), getattr(signal, 'SIGKILL', signal.SIGTERM))
+            ctypes.windll.kernel32.ExitProcess(int(status))
+    # libc's ``exit`` terminates without waiting for Python's non-daemon threads and keeps the
+    # status. Calling it through ctypes (rather than ``os._exit``) keeps pylint's protected-member
+    # rule quiet; on macOS ``CDLL(None)`` resolves the symbol in libSystem, on Linux in libc.
+    import ctypes
+
+    ctypes.CDLL(None).exit(int(status))
 
 
 def close() -> None:
@@ -171,6 +175,7 @@ def run(
     on_close=None,
     maximized: bool = False,
     exit_on_close: bool = False,
+    on_closed=None,
 ) -> str:
     """Show ``url`` in a native window and block until it closes.
 
@@ -237,8 +242,13 @@ def run(
         # The application window IS the program. Terminating here (not only after ``start`` returns)
         # covers a GUI host that keeps its loop or a non-daemon thread alive after the last window is
         # destroyed — the shape that left a windowless process behind and blocked the next launch.
-        # A minimise never fires this event.
-        if exit_on_close:
+        # A minimise never fires this event. A program-triggered ``close()`` (page never loaded,
+        # install finished) must not terminate here: ``run`` still has to return its failure to the
+        # caller, which reports it and then exits through its own cleanup.
+        if exit_on_close and not _ALLOW_CLOSE:
+            if on_closed is not None:
+                with contextlib.suppress(Exception):
+                    on_closed()
             terminate_process()
 
     window.events.shown += remember_handle

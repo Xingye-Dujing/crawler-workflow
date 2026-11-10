@@ -242,12 +242,20 @@ def main(argv=None) -> int:
         start_background_services()
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{port}/'
+    exit_code = 0
+
+    def release_window() -> None:
+        with contextlib.suppress(OSError):
+            server.shutdown()
+        with contextlib.suppress(OSError):
+            server.server_close()
+
     try:
         import webview
 
         webview.settings['ALLOW_DOWNLOADS'] = True
         webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = True
-        webview.create_window(
+        window = webview.create_window(
             DISPLAY_NAME,
             url,
             width=1280,
@@ -256,18 +264,24 @@ def main(argv=None) -> int:
             text_select=True,
             maximized=True,
         )
+
+        def closed() -> None:
+            # The window is the program: a destroyed window ends the process even if the Cocoa host
+            # keeps a thread or its loop alive. Minimising does not fire this event.
+            release_window()
+            native_window.terminate_process()
+
+        window.events.closed += closed
         webview.start(private_mode=False, storage_path=str(root / 'webview'))
     except Exception:
         fail('窗口没能打开。请把日志发给维护者。', root, traceback.format_exc())
-        return 1
+        exit_code = 1
     finally:
-        with contextlib.suppress(OSError):
-            server.shutdown()
-        server.server_close()
+        release_window()
         # Same rule as the Windows launcher: a closed window (or a failed one) ends the process.
         # The Cocoa host leaves threads behind, and the interpreter would otherwise wait for them
         # after ``main`` returns. Minimising keeps the event loop alive and never reaches this line.
-        native_window.terminate_process()
+        native_window.terminate_process(exit_code)
 
 
 if __name__ == '__main__':

@@ -467,6 +467,19 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `promote_stale_runs()` settle the user's live run). The fallback chain exists for the double-click default only.
 - **The mutex is per data root.** "One server per data root" is the app's rule, so the mutex name hashes the root; a
   root-blind name let an installed copy refuse a portable one.
+- **The window is the program.** A user close ends the process (`native_window.terminate_process`), because the GUI host
+  leaves non-daemon threads behind and a windowless process keeps the data-root mutex — the next double-click then reports
+  “已有 采析绘 窗口在运行，但本次没能把它调到前台”. Minimise does not fire `closed` and keeps the run/scheduler alive.
+  A *programmatic* `close()` (page never loaded, install finished) must not terminate inside the event: `run()` still has
+  to return its failure so the caller can write the log and show the dialog.
+- **“安装器安装的” is an installer fact, not the absence of a setting.** It applies only when
+  `install-manifest.json` exists. A source checkout, portable zip, offline Setup and cloud container have no installer
+  tree; treating their empty tree as installer mode refused every crawl with “安装器未安装”. Their effective source is
+  本机. The component manager can still create a tree in a source run; the runtime reads the manifest from the same root.
+- **The manifest outranks a stale export.** When installer mode is in force, the installed record is checked first, then
+  the launcher's `CHROME_PATH`/`CIXI_DRIVER_PATH`/`CIXI_NODE_BIN`/`CIXI_CATBUS_CLI` (only if inside the component root),
+  and only then a configured path. An old export pointing at an older version must not shadow the current install; the
+  probe and the crawler read the same order, or the panel goes green while the run refuses.
 - **A failure reporter must not be able to fail first.** `fail_loudly` files the log and shows the dialog BEFORE printing:
   on a redirected console with a non-UTF codepage the first Chinese char raises `UnicodeEncodeError`, losing both file and
   dialog. `_print_safe` degrades to `sys.stdout.buffer`, never back through the stream that threw.

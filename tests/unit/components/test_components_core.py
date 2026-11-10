@@ -363,6 +363,7 @@ class TestComponentSource:
         from services.components import source
 
         components = tmp_path / 'components'
+        (tmp_path / 'install-manifest.json').write_text('{"schema":1,"components":{}}', encoding='utf-8')
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
         stored = str(components / 'chrome' / '1.0' / 'chrome.exe')
@@ -372,9 +373,20 @@ class TestComponentSource:
         """The reverse of the 本机 rule: a saved local Chrome cannot outvote 安装器安装的 either."""
         from services.components import source
 
+        (tmp_path / 'install-manifest.json').write_text('{"schema":1,"components":{}}', encoding='utf-8')
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'components'))
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
         assert source.usable(str(tmp_path / 'machine-chrome')) == ''
+
+    def test_without_an_installer_tree_the_stored_choice_means_the_machine(self, tmp_path, monkeypatch):
+        """A zip/source/cloud install has no manifest; making it strict would refuse every crawl."""
+        from services.components import source
+
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'components'))
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        assert source.installer_available() is False
+        assert source.prefer_bundled() is False
+        assert source.usable('/usr/bin/chromium') == '/usr/bin/chromium'
 
     def test_the_launcher_reads_the_preference_before_config_exists(self, tmp_path):
         from services.components import source
@@ -433,6 +445,7 @@ class TestCrawlCapability:
     def test_installer_source_reports_the_missing_installer_chrome_not_the_machines(self, monkeypatch):
         """安装器安装的: no installer copy means missing, even when the machine has a Chrome."""
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr(probe_module.component_source, 'prefer_bundled', lambda: True)
         monkeypatch.setattr(probe_module, '_setting', lambda key: '')
         monkeypatch.setattr(probe_module, '_component_binary', lambda root, component_id: '')
         monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '')
@@ -443,6 +456,7 @@ class TestCrawlCapability:
 
     def test_installer_source_reports_the_missing_installer_driver_not_selenium_manager(self, monkeypatch):
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr(probe_module.component_source, 'prefer_bundled', lambda: True)
         monkeypatch.setattr(probe_module, '_setting', lambda key: '')
         monkeypatch.setattr(probe_module, '_component_binary', lambda root, component_id: '/opt/chrome')
         monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '/opt/chrome')

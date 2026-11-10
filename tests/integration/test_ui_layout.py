@@ -45,6 +45,32 @@ REPO = Path(__file__).resolve().parents[2]
 VIEWPORTS = [(1920, 1080), (1366, 768), (1024, 700)]
 
 
+_VIEWPORT = {'size': None}
+
+
+def _apply_viewport(driver):
+    size = _VIEWPORT.get('size')
+    if size is None:
+        return
+    width, height = size
+    driver.execute_cdp_cmd(
+        'Emulation.setDeviceMetricsOverride',
+        {'width': int(width), 'height': int(height), 'deviceScaleFactor': 1, 'mobile': False},
+    )
+
+
+def _set_viewport(driver, width, height):
+    """Lay the page out at *width* × *height* regardless of the OS window manager.
+
+    Windows ignores ``set_window_size`` on a real Chrome window, so the previous code measured
+    whatever size the browser happened to have — silently, because the old default was 1920 wide.
+    The override is re-applied after a navigation, because Chrome resets device metrics on
+    ``driver.get``; ``document.documentElement.clientWidth`` then reads the emulated width the assertions use.
+    """
+    _VIEWPORT['size'] = (width, height)
+    _apply_viewport(driver)
+
+
 @pytest.fixture(scope='module')
 def app_url(tmp_path_factory):
     """Boot the real server on a private port, in a state root of its own.
@@ -136,6 +162,9 @@ def _load_app(driver, app_url):
             'return { ready: document.readyState, canvas: typeof canvas, i18n: typeof I18n };'
         )
         if state['ready'] == 'complete' and state['canvas'] == 'object' and state['i18n'] == 'object':
+            # A navigation resets Chrome's device-metrics override; re-apply after the document is
+            # really ready, not right after `get` (the reset can arrive later).
+            _apply_viewport(driver)
             return
         if time.monotonic() >= deadline:
             break
@@ -227,11 +256,11 @@ _AUDIT_JS = """
         scopeMissing: !document.getElementById(__SCOPE__),
         scopeScroll: [scope.scrollWidth, scope.clientWidth],
         measured: measured,
-        outsideViewport: Math.round(Math.max(0, rect.right - window.innerWidth, -rect.left)),
+        outsideViewport: Math.round(Math.max(0, rect.right - document.documentElement.clientWidth, -rect.left)),
         clipped: clipped.slice(0, 8),
         scrollers: scrollers.filter((r) => r.clippedCells).slice(0, 8),
         page: [document.documentElement.scrollWidth, document.documentElement.clientWidth,
-               window.innerWidth],
+               document.documentElement.clientWidth],
         body: [document.body.scrollWidth, document.body.clientWidth]
     };
     """
@@ -443,7 +472,7 @@ def _seed(driver, panel_id):
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_the_page_itself_never_grows_a_horizontal_bar(app_url, driver, lang):
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(f"document.body.dataset.lang = '{lang}'; I18n.apply();")
@@ -466,7 +495,7 @@ def test_the_page_itself_never_grows_a_horizontal_bar(app_url, driver, lang):
 def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, lang):
     """The English labels are the long ones, so a panel that fits in Chinese can
     still break in English — which is why the language is a parameter."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     opened = driver.execute_script(
@@ -504,7 +533,7 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
     that claims a concurrency this run never had would all be invisible to the
     Python tier. Both languages, because the English label is the longer one.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -528,7 +557,7 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
         if (!cell) return {found: false};
         const chips = Array.from(cell.querySelectorAll('.runs-mgr-tag'));
         const table = document.querySelector('#runs-panel table');
-        const window1366 = window.innerWidth;
+        const window1366 = document.documentElement.clientWidth;
         const label = (key) => I18n.t(key).replace('{n}', 2);
         return {
             found: true,
@@ -576,7 +605,7 @@ def test_a_stopping_record_says_stopping_and_offers_nothing(app_url, driver, lan
     run is still writing its rows — and (d) do all of that in both languages without
     the longer label pushing the table or the page into a horizontal bar.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -639,7 +668,7 @@ def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, l
     both languages), and the longer English label must still not clip or grow a
     page-level bar.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -704,7 +733,7 @@ def test_loading_a_run_paints_node_verdicts_and_marks_the_record(driver, app_url
     older record really repaints the nodes. ``fetch`` is stubbed throughout — this
     tier performs no server writes and starts no run.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_async_script(
@@ -880,7 +909,7 @@ def test_the_help_overlay_opens_over_the_page_without_breaking_layout(driver, ap
     """The cheat sheet is a fixed full-viewport backdrop; if its sheet or a row overflowed
     (long English labels) it would grow a horizontal bar over the whole page. Opened in a
     real engine, in both languages, it must stay inside its own box."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     opened = driver.execute_script(
@@ -1005,7 +1034,7 @@ def test_the_bibliometrics_panel_names_its_columns_and_keeps_the_caret(app_url, 
 
     Nothing is written: the panel is painted from a stubbed ``/api/biblio/*`` answer.
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -1138,7 +1167,7 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
     resolved tooltip in this language. Toggling back must clear all of it. Two
     connected nodes are drawn (floor: 2 boxes, 1 wire measured).
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
@@ -1239,7 +1268,7 @@ def test_a_hostile_workflow_name_stays_text_and_inside_its_attribute(app_url, dr
     page-level bar. Nothing is written: ``fetch`` is stubbed.
     """
     hostile = 'q"uote \'quote \\slash <img src=x onerror=alert(1)> 以及一段很长的中文工作流名称用来把它撑开'
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -1281,7 +1310,7 @@ def test_a_hostile_workflow_name_stays_text_and_inside_its_attribute(app_url, dr
             imgElements: document.querySelectorAll('#workflows-mgr-body img').length,
             clipped: cell ? cell.scrollWidth - cell.clientWidth : null,
             cellRight: cell ? Math.round(cell.getBoundingClientRect().right) : null,
-            windowWidth: window.innerWidth,
+            windowWidth: document.documentElement.clientWidth,
             tableOverflows: table ? table.scrollWidth - table.clientWidth : null,
             page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
         };
@@ -1321,7 +1350,7 @@ def test_a_dialog_never_asks_the_browser_to_overflow_it(app_url, driver, lang):
     this can be present in the CSS and still lose in the browser, so the only assertion
     that means anything here is a rect.
     """
-    driver.set_window_size(1000, 768)
+    _set_viewport(driver, 1000, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(f"document.body.dataset.lang = '{lang}'; I18n.apply();")
@@ -1374,7 +1403,7 @@ def test_the_dialog_dismisses_by_x_backdrop_and_esc(app_url, driver):
     all of it. Measured in the real browser: only a real event dispatch proves the
     backdrop-target check and the keydown handler fire, and that dismissing a dialog
     removes its close button so it cannot leak across dialogs."""
-    driver.set_window_size(1000, 768)
+    _set_viewport(driver, 1000, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
 
@@ -1471,7 +1500,7 @@ def test_the_resume_banner_gets_out_of_the_pinned_menu_s_way(app_url, driver):
     with it on, so a measurement that starts from whatever the page happened to load
     compares pinned with pinned and passes on a rule that does nothing.
     """
-    driver.set_window_size(1280, 768)
+    _set_viewport(driver, 1280, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     moved = driver.execute_script(
@@ -1508,7 +1537,7 @@ def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
 
     ``fetch`` is stubbed, so no run is started and nothing is written.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     # The page's own replay must have landed before the box is emptied, or the server's
@@ -1580,7 +1609,7 @@ def test_a_page_that_reloaded_takes_the_console_back_up_in_a_real_browser(app_ur
     started — and the answer is the shape ``/api/workflow/status?tail=`` really ships: a
     tail plus the total that was ever produced.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     # The boot replay shares one in-flight promise with this test's own call, so a replay
@@ -1667,7 +1696,7 @@ def test_a_fresh_page_reconnects_its_console_without_being_asked(app_url, driver
     worth showing) and the panel must stay SHUT (a run that ended before this page opened
     does not get to take over the screen on every refresh).
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     # The boot step is one fetch deep, so wait for the lines rather than for a tick.
@@ -1724,7 +1753,7 @@ def test_deleting_one_history_row_reaches_the_server_with_that_run_only(app_url,
     ``fetch`` is stubbed for the whole test: this tier must not write, and a live
     ``/api/history/delete`` would erase a record of the user's own runs.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -1818,11 +1847,16 @@ def test_a_narrow_window_moves_the_floating_popups_inside_it(app_url, driver, wi
     — a ``.panel`` selector matches nothing here, and matched nothing for as long as
     this test has existed, which is how it kept passing while checking zero elements.
     """
-    driver.set_window_size(width, 700)
+    _set_viewport(driver, width, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
     shown, offenders = driver.execute_script(
         """
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:1px;visibility:hidden';
+        document.body.appendChild(probe);
+        const viewportWidth = probe.offsetWidth;
+        probe.remove();
         const seen = [];
         for (const id of arguments[0]) {
             const el = document.getElementById(id);
@@ -1833,7 +1867,7 @@ def test_a_narrow_window_moves_the_floating_popups_inside_it(app_url, driver, wi
             // A container CSS keeps off screen until it is really opened (a
             // dropdown anchored to a hidden button) has no layout to judge.
             if (r.width <= 0 || r.height <= 0 || getComputedStyle(el).visibility === 'hidden') continue;
-            seen.push([id, Math.round(r.left), Math.round(r.right), window.innerWidth]);
+            seen.push([id, Math.round(r.left), Math.round(r.right), viewportWidth]);
         }
         return [seen, seen.filter(([id, left, right, w]) => left < -1 || right > w + 1)];
         """,
@@ -1900,7 +1934,7 @@ def test_a_wide_node_is_bounded_and_its_title_says_it_was_cut(app_url, driver):
     """A node summary is user text; without a ceiling one long keyword made the
     whole page scroll sideways, and without an ellipsis a truncated title just
     looked like a shorter name."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _quiet_canvas(driver, app_url)
     made = driver.execute_script(NODE_JS, [])
     assert made['nodeMaxWidth'] != 'none', 'the .node max-width guard is gone'
@@ -1945,7 +1979,7 @@ def test_auto_layout_clears_a_wide_node_and_draws_its_wire_flat(app_url, driver)
     unequal heights, so the bezier bowed. The node harness fakes offsetWidth/Height —
     this is the tier that measures pixels; it asserts on everything it counted.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _quiet_canvas(driver, app_url)
     made = driver.execute_script(AUTO_LAYOUT_JS, [])
     ra, rb = made['rects'][made['a']], made['rects'][made['b']]
@@ -2069,7 +2103,7 @@ def test_a_wire_between_far_apart_nodes_is_painted_not_clipped(app_url, driver):
     The viewport is emulated, because on Windows `set_window_size` is answered by neither
     the OS nor the page (see the cookie panel case above for the measurement).
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     driver.execute_cdp_cmd(
         'Emulation.setDeviceMetricsOverride',
         {'width': 1366, 'height': 768, 'deviceScaleFactor': 1, 'mobile': False},
@@ -2153,7 +2187,7 @@ def test_auto_layout_fits_the_camera_like_adapt(app_url, driver):
     longer fits at 100%, the camera must have SHRUNK (zoom<1) and every node must sit
     inside the workspace and below the menu bar — the exact contract 适应 upholds,
     because autoLayout now calls it rather than centre-at-100% on its own."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _quiet_canvas(driver, app_url)
     made = driver.execute_script(AUTO_LAYOUT_FIT_JS, [])
     wl, wt, wr, wb = made['viewport']
@@ -2195,7 +2229,7 @@ def test_fit_view_clears_the_menu_and_holds_the_whole_cluster(app_url, driver):
     nodes off-screen AND a pinned menu bar sat on top of them. After fit EVERY node
     box must lie inside the workspace AND below the menu bar — measured in real
     rendered pixels, the only tier that sees true offsetWidth and the true menu."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _quiet_canvas(driver, app_url)
     made = driver.execute_script(FIT_VIEW_JS, [])
     wl, wt, wr, wb = made['viewport']
@@ -2238,7 +2272,7 @@ def test_the_node_library_collapses_out_of_the_way_and_reopens(app_url, driver):
     must hide the item list but KEEP the header clickable (a way back), shrink the
     panel, and flip its own state; a second click restores it byte-for-byte. Every
     value below is measured on a real page — this is the tier that sees CSS."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _quiet_canvas(driver, app_url)
     got = driver.execute_script(PALETTE_COLLAPSE_JS, [])
     before, collapsed, expanded = got['before'], got['collapsed'], got['expanded']
@@ -2297,7 +2331,7 @@ return {
     // max-height is derived from ``window.innerHeight`` (app.js's resizable dialog), so a
     // "content overflows" verdict without the viewport it was measured in cannot be told apart
     // from a window that is simply not the one this test claims to be testing.
-    inner: [window.innerWidth, window.innerHeight],
+    inner: [document.documentElement.clientWidth, window.innerHeight],
     outer: [window.outerWidth, window.outerHeight],
     maxH: getComputedStyle(box).maxHeight
 };
@@ -2318,7 +2352,7 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
     viewport is therefore *emulated*, which is the one thing a page cannot disagree with, and
     the check below fails loudly if the emulated size did not take effect.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     driver.execute_cdp_cmd(
         'Emulation.setDeviceMetricsOverride',
         {'width': 1366, 'height': 768, 'deviceScaleFactor': 1, 'mobile': False},
@@ -2362,7 +2396,7 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
     profile cells are gone, the dock shuts the other bottom panel, and the account box's
     candidates are a dropdown that exists only while the box is in use.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     seeded = driver.execute_script(
@@ -2562,7 +2596,7 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
     ``cookieRows`` rather than a fetch, so nothing here races the disk; the "no second request"
     half of this rule is pinned in the node harness, which can count them exactly.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     measured = driver.execute_script(
@@ -2691,7 +2725,7 @@ def test_the_report_rows_field_wears_the_same_skin_as_the_text_field(app_url, dr
     dialog's own text input (a known ``.settings-input``), and a divergence is exactly the OS default
     creeping back. (measured: 2 inputs × 4 computed properties)
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     got = driver.execute_script(
@@ -2779,7 +2813,7 @@ def test_a_wire_ends_on_its_port_after_a_bare_refresh(app_url, driver):
     numbers. Without a resize observer the ends sit on yesterday's box — the
     headless harness cannot see this because its stub never re-lays out.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _wait_for_id(driver, 'workspace')
     driver.execute_script(REFRESH_ALIGN_DRAFT, [])
@@ -3040,7 +3074,7 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
     real browser. Nothing is written to the server: ``fetch`` is stubbed with a payload
     shaped exactly like the endpoint's, so what is measured is the row the product draws.
     """
-    driver.set_window_size(1100, 768)
+    _set_viewport(driver, 1100, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -3114,7 +3148,7 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
                 nodes: row.querySelectorAll('.rm-node').length,
                 panelBar: [panel.scrollWidth, panel.clientWidth],
                 pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
-                windowWidth: window.innerWidth,
+                windowWidth: document.documentElement.clientWidth,
                 detailRight: Math.round(row.getBoundingClientRect().right),
             };
         };
@@ -3177,7 +3211,7 @@ def test_the_menu_bar_never_hides_a_button_past_its_left_edge(app_url, driver, l
     a scrollbar actually reserved when it overflows (``offsetHeight - clientHeight``
     is the ink-free proof that one exists), and no page-level bar either way.
     """
-    driver.set_window_size(width, 700)
+    _set_viewport(driver, width, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
@@ -3230,7 +3264,7 @@ def test_a_tall_panel_scrolls_itself_instead_of_hanging_off_the_screen(app_url, 
     is inside the viewport, it genuinely overflowed its own client height, and the
     document grew neither bar.
     """
-    driver.set_window_size(1366, 700)
+    _set_viewport(driver, 1366, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
@@ -3306,7 +3340,7 @@ def test_an_option_longer_than_its_menu_is_cut_visibly(app_url, driver, lang):
     ellipsised and stay inside the menu, and the full text must survive somewhere
     the user can read it (``title``).
     """
-    driver.set_window_size(1024, 700)
+    _set_viewport(driver, 1024, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
@@ -3360,7 +3394,7 @@ def test_an_option_longer_than_its_menu_is_cut_visibly(app_url, driver, lang):
         out.labelOverflow = label.scrollWidth - label.clientWidth;
         out.rowInsideMenu = lr.right <= mr.right + 1 && lr.left >= mr.left - 1;
         out.rowTitleIsFull = row.title === LONG;
-        out.menuInsideWindow = mr.left >= -1 && mr.right <= window.innerWidth + 1;
+        out.menuInsideWindow = mr.left >= -1 && mr.right <= document.documentElement.clientWidth + 1;
         return out;
         """,
         [],
@@ -3392,7 +3426,7 @@ def test_the_camera_and_a_zero_coordinate_survive_a_real_reload(app_url, driver)
     the page for real, and reads the camera and the node position back off the
     re-booted canvas. Measured floor: 1 node and the three camera numbers.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -3480,7 +3514,7 @@ def test_autosave_writes_the_open_file_over_a_real_debounce_timer(app_url, drive
     browser can prove it fires, saves EXACTLY once for one quiet change, names the already-open
     file (never invents a new one), and clears the dirty flag on success. It must also stay
     SILENT (no toast), because a save that announces itself every few seconds is noise."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
@@ -3536,7 +3570,7 @@ def test_the_minimap_uses_real_box_geometry_and_a_click_is_a_view_only_change(ap
     A click must move the CAMERA (proving the click→world→recentre path runs in a browser) while
     leaving getState() and the undo history untouched, because the camera is deliberately outside
     the model."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
@@ -3581,7 +3615,7 @@ def test_the_clipboard_drawer_renders_a_copy_and_pastes_it_as_one_undo_step(app_
     SAME canvas._pasteAt the keyboard uses, not a second implementation. It also pins that
     the board lives in its OWN key, so a copy never dirties the workflow draft's clipboard.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
@@ -3664,7 +3698,7 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     ``clientWidth`` and not ``innerWidth``: it excludes a classic scrollbar, so it is the
     right-most column the user can actually see.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
@@ -3687,7 +3721,7 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
         return {
             clientWidth: cw,
             clientHeight: ch,
-            innerWidth: window.innerWidth,
+            innerWidth: document.documentElement.clientWidth,
             left: r.left,
             right: r.right,
             width: r.width,
@@ -3698,7 +3732,7 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
             visibility: cs.visibility,
             transform: cs.transform,
             open: d.classList.contains('open'),
-            viewport: window.innerWidth + 'x' + window.innerHeight,
+            viewport: document.documentElement.clientWidth + 'x' + window.innerHeight,
         };
         """,
         [],
@@ -3750,7 +3784,7 @@ def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_do
     """Selection paints real DOM classes and the marquee hit-test reads real box geometry; a batch
     delete must physically remove those boxes from #nodes-container. The stub records a fake
     class list and layout — only here can we watch the boxes actually light and vanish."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
@@ -3796,7 +3830,7 @@ def test_batch_paste_and_apply_to_all_reach_the_real_dom(app_url, driver):
     """Batch copy→paste adds real boxes (one undo step), and a same-type multi-select writes one
     panel field to EVERY selected node's real params — the DOM/`getState` view of the apply-to-all
     path the node harness checks only at the object level."""
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
     _reset_canvas(driver)
@@ -3843,7 +3877,7 @@ def test_saving_a_chart_as_svg_hands_over_a_real_vector_document(app_url, driver
     The off-screen surface is the other half: an export that leaves a hidden chart instance and a
     stray `<div>` on the page leaks on every click.
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_script(
@@ -3911,7 +3945,7 @@ def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, dr
     Nothing is written: the option is handed straight to the preview window in the shape
     ``services/biblio/charts`` ships it (every node carrying its own ``yearSeries``).
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -4032,7 +4066,7 @@ def test_the_world_map_loads_its_shipped_basemap_and_prints_no_colliding_labels(
     Nothing is written to the server; the option is built in the page in the shape
     ``services/biblio/charts`` ships.
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     served = _read_url_json(app_url + '/geo/world.json')
     assert served is not None, 'the basemap is not served — static_url_path is "", so the app path is /geo/...'
     features = served.get('features') or []
@@ -4214,7 +4248,7 @@ def test_the_concentric_rings_draw_inside_the_preview_panel(app_url, driver, lan
     the rings fit a narrow preview is to render them there; the note matters because "which ring
     is which year" is not guessable from the picture alone.
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -4299,7 +4333,7 @@ def test_the_overlay_views_print_every_label_inside_the_preview_panel(app_url, d
     be stated per data item. The note under the title and the legend share the top band, which is
     why the sentiment grid starts at a fixed 112 px rather than a percentage.
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
     driver.execute_script(
@@ -4380,7 +4414,7 @@ def test_the_export_guide_lists_a_link_the_user_can_copy(app_url, driver, lang):
     this tier exists to see. And the backdrop dismissal is an identity test against the overlay
     element, which only a real click can prove is not fired by a click inside the sheet.
     """
-    driver.set_window_size(1400, 900)
+    _set_viewport(driver, 1400, 900)
     _load_app(driver, app_url)
     driver.execute_script(
         """
@@ -4438,7 +4472,7 @@ def test_the_export_guide_lists_a_link_the_user_can_copy(app_url, driver, lang):
             missing: body.querySelectorAll('.source-help-missing').length,
             steps: body.querySelectorAll('.source-help-steps li').length,
             accepts: (document.getElementById('dataset-file-input').getAttribute('accept') || '').split(','),
-            insideViewport: box.right <= window.innerWidth + 1 && box.left >= -1,
+            insideViewport: box.right <= document.documentElement.clientWidth + 1 && box.left >= -1,
             opened: document.getElementById('source-help-overlay').classList.contains('open'),
         };
         """
@@ -4562,7 +4596,7 @@ def test_a_reusable_node_expands_inside_its_own_border_and_aggregates_statuses(d
                     open: overlay.classList.contains('open'),
                     cards: previewStage.querySelectorAll('.reusable-inner-node').length,
                     inside:
-                        box.getBoundingClientRect().right <= window.innerWidth + 1 &&
+                        box.getBoundingClientRect().right <= document.documentElement.clientWidth + 1 &&
                         box.getBoundingClientRect().bottom <= window.innerHeight + 1,
                 };
                 ReusableNodes.closePreview();
@@ -5048,7 +5082,7 @@ def test_the_shipped_page_draws_its_figures_without_asking_anything_off_this_mac
     actually loaded. The count of measured resources is reported because "no foreign request" from a
     page that loaded nothing would pass for the wrong reason.
     """
-    driver.set_window_size(1366, 768)
+    _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     facts = driver.execute_async_script(
         """
@@ -5172,7 +5206,7 @@ def test_the_crawl_panel_offers_platform_then_engine_then_function(app_url, driv
     measures every platform the payload gives at least one engine to, and exercises the switch on
     the first one that offers two available engines — zero such platforms is stated, not hidden.
     """
-    driver.set_window_size(1650, 1080)
+    _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
     facts = driver.execute_async_script(

@@ -63,6 +63,9 @@ class _FakeWindow:
 
     def destroy(self):
         self.destroyed += 1
+        # The real backends raise ``closed`` here (winforms FormClosed, Cocoa windowWillClose).
+        # Firing it in the double is what keeps the programmatic-close cases honest.
+        self.events.closed.set()
 
 
 @pytest.fixture()
@@ -153,6 +156,15 @@ def test_exit_on_close_ends_the_process_without_a_window(window, fake_webview, m
     fake_webview['on_start'] = during
     window.run('采析绘', 'http://127.0.0.1:5000/', exit_on_close=True)
     assert ended == [True]
+
+
+def test_exit_on_close_ignores_a_programmatic_close(window, fake_webview, monkeypatch):
+    """A page that never loads closes itself; that must still reach the caller's error dialog."""
+    ended = []
+    monkeypatch.setattr(window, 'terminate_process', lambda *args: ended.append(args))
+    fake_webview['on_start'] = lambda _fake: window.close()
+    assert window.run('采析绘', 'http://127.0.0.1:5000/', exit_on_close=True) == ''
+    assert ended == [], 'run() still has to report the failure before the process ends'
 
 
 def test_a_window_that_never_loads_is_reported_and_closed(window, fake_webview):

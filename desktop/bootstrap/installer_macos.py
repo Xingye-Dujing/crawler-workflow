@@ -516,7 +516,13 @@ def run_window(title: str, url: str, state: MacInstallerState) -> str:
     def closing() -> bool:
         return bool(installer.may_close(state.job['state']))
 
+    def closed() -> None:
+        # Same rule as the Windows installer: closing the window ends the process, not just the
+        # event loop. A lingering Cocoa host would keep the fixed port and the install folder busy.
+        installer.native_window.terminate_process()
+
     window.events.closing += closing
+    window.events.closed += closed
     try:
         webview.start(gui='cocoa', private_mode=False, storage_path=str(storage))
     except Exception as exc:
@@ -578,7 +584,10 @@ def main(argv=None) -> int:
         server.shutdown()
     server.server_close()
     installer.log_line('installer stopped')
-    return 1 if failure else 0
+    status = 1 if failure else 0
+    if not no_window:
+        installer.native_window.terminate_process(status)
+    return status
 
 
 if __name__ == '__main__':

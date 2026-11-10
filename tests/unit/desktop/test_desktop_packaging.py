@@ -1195,11 +1195,22 @@ def test_closing_the_window_ends_the_process():
     double-click with “已有 采析绘 窗口在运行，但本次没能把它调到前台”). A minimise never returns
     from the event loop, so only an actual close reaches this exit."""
     source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
-    assert 'native_window.terminate_process()' in source
+    assert 'native_window.terminate_process(' in source
     entry = (PACKAGING / 'macos_entry.py').read_text(encoding='utf-8')
-    assert 'native_window.terminate_process()' in entry
+    assert 'native_window.terminate_process(' in entry
     window = (PACKAGING / 'native_window.py').read_text(encoding='utf-8')
-    assert 'def terminate_process()' in window and 'ExitProcess(0)' in window
+    assert 'def terminate_process(status: int = 0)' in window
+    assert 'ExitProcess(int(status))' in window
+
+
+def test_both_installers_end_the_process_when_their_window_closes():
+    """An installer left alive would keep its fixed port and install folders; closing ends it."""
+    windows = (PACKAGING / 'bootstrap' / 'installer.py').read_text(encoding='utf-8')
+    assert 'exit_on_close=True' in windows
+    assert 'native_window.terminate_process(status)' in windows
+    macos = (PACKAGING / 'bootstrap' / 'installer_macos.py').read_text(encoding='utf-8')
+    assert 'window.events.closed += closed' in macos
+    assert 'installer.native_window.terminate_process' in macos
 
 
 def test_the_launcher_opens_the_main_window_maximized():
@@ -1273,8 +1284,9 @@ class TestPortableComponentsPointTheLookups:
     """A component installed beside the app must be what the existing lookups find.
 
     ``find_chrome``/``Config.DRIVER_PATH``/CatBus discovery all read their answer at call time, so
-    the launcher exports the manifest's paths before the app imports ``config``. An explicit
-    environment value the user set is never overwritten. ``CIXI_COMPONENTS_DIR`` names the
+    the launcher exports the manifest's paths before the app imports ``config``. In installer mode
+    the manifest wins over an older machine value; a value already inside the component tree is
+    kept. ``CIXI_COMPONENTS_DIR`` names the
     ``components/`` folder, and the manifest lives one level above it — the layout the online
     installer writes and the launcher has to read.
     """

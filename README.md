@@ -23,8 +23,9 @@ scikit-learn，拖节点、连线条、点执行；中断了能从断点接着�
 **你需要什么**
 
 - Python 3.11（代码用了 `zip(..., strict=True)`），依赖装在项目自己的 `.venv/` 里，不要用系统 Python。
-- Chrome 和**与它大版本匹配的 chromedriver**。程序按当前系统自己找，也认 `CHROME_PATH`/`CHROME_BIN`
-  与 `CIXI_DRIVER_PATH`（设置面板里也能填）。版本不匹配会按名拒绝，不会偷偷下载一个驱动顶上。
+- Chrome 和**与它大版本匹配的 chromedriver**。源码/便携版按当前系统自己找，也认 `CHROME_PATH`/`CHROME_BIN`
+  与 `CIXI_DRIVER_PATH`（设置面板里也能填）；在线安装版默认只用安装器装的那一份，缺了按名报“安装器未安装”，
+  只有切到“本机已安装的”才查本机。版本不匹配会按名拒绝，不会偷偷下载一个驱动顶上。
 - 模型二选一：[Ollama](https://ollama.ai/) 本地跑，或 OpenRouter 的 API Key。只做清洗/统计不动模型也能用。
 - 可选：`xelatex` 只给“编译 PDF / 论文成稿”，中文字体（Linux 装 `fonts-noto-cjk`）只给中文图表；
   缺了会告诉你缺什么，不会画一屏方框。

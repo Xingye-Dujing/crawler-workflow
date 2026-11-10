@@ -237,32 +237,34 @@ def resolve_browser(opts: Options) -> None:
         # The executable name is this system's own, read off the table the probe uses: a Linux
         # sentence telling the user to point 设置 at ``chrome.exe`` is a refusal nobody can act on.
         raise ValueError(t('crawl.chromeMissing', browser=machine.chrome_executable_name()))
-    if browser_binary:
-        opts.binary_location = browser_binary
+    if browser_binary or source.prefer_bundled():
+        # ``resolved``, not the stored/exported value: in installer mode the manifest may have
+        # overruled a stale path, and the browser must launch the copy that was actually checked.
+        opts.binary_location = resolved
 
 
 def make_service() -> Service:
     """The driver service: a configured path must be a file, a blank one is Selenium Manager's."""
     from services.components import source
 
-    driver_path = source.usable(get_setting('driver_path'))
     if source.prefer_bundled():
-        # Same authority as Chrome: an old settings.json with an empty (or machine) driver path
-        # must not send this launch to Selenium Manager while the installer's driver sits unused.
-        exported = source.usable(os.environ.get('CIXI_DRIVER_PATH') or Config.DRIVER_PATH)
-        if exported:
-            driver_path = exported
+        # Same authority order as Chrome: the manifest, then the launcher's export, and only then a
+        # configured path. A settings.json written by an older build (empty or machine) must not
+        # send this launch to Selenium Manager while the installer's driver sits unused.
+        driver_path = machine.installer_component_path('chromedriver')
+        if not driver_path:
+            driver_path = source.usable(os.environ.get('CIXI_DRIVER_PATH') or Config.DRIVER_PATH)
+        if not driver_path:
+            raise ValueError(t('crawl.installerDriverMissing'))
+        if not os.path.isfile(driver_path):
+            raise ValueError(t('crawl.installerDriverGone', path=driver_path))
+        return Service(executable_path=driver_path)
+    driver_path = source.usable(get_setting('driver_path'))
     if driver_path and not os.path.isfile(driver_path):
         # Blank means "let Selenium Manager resolve a matching driver", which is the normal
         # answer on a fresh machine; a filled-in path that is not a file is a stale setting,
         # and Selenium Manager would be skipped because a path WAS given.
-        if source.prefer_bundled() and source.inside_components(driver_path):
-            raise ValueError(t('crawl.installerDriverGone', path=driver_path))
         raise ValueError(t('crawl.driverMissing', path=driver_path))
-    if not driver_path and source.prefer_bundled():
-        # Selenium Manager would download a driver outside the installer's tree; that is the
-        # silent fallback this source forbids. A missing installer component is refused by name.
-        raise ValueError(t('crawl.installerDriverMissing'))
     return Service(executable_path=driver_path)
 
 

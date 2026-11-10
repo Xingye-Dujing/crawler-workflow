@@ -99,6 +99,7 @@ def test_no_chrome_refuses_and_names_the_setting(launches):
 def test_installer_source_refuses_a_missing_installer_chrome(launches, monkeypatch):
     """安装器安装的 is strict: the machine's Chrome is not a fallback, so the refusal says so."""
     monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+    monkeypatch.setattr('services.components.source.prefer_bundled', lambda: True)
     launches['chrome'] = ''
     with pytest.raises(ValueError) as caught:
         _start()
@@ -168,6 +169,7 @@ def test_an_installer_driver_outranks_a_stale_empty_setting(launches, monkeypatc
     mismatch / first-use network fetch.
     """
     monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+    (tmp_path / 'install-manifest.json').write_text('{"schema":1,"components":{}}', encoding='utf-8')
     components = tmp_path / 'components'
     driver = components / 'chromedriver' / '1.0' / 'chromedriver'
     driver.parent.mkdir(parents=True)
@@ -189,6 +191,7 @@ def test_an_installer_driver_outranks_a_stale_empty_setting(launches, monkeypatc
 def test_installer_source_refuses_a_missing_installer_driver(launches, monkeypatch):
     """In installer mode a blank driver is not Selenium Manager's cue: it is a missing component."""
     monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+    monkeypatch.setattr('services.components.source.prefer_bundled', lambda: True)
     launches['settings']['driver_path'] = ''
     with pytest.raises(ValueError) as caught:
         _start()

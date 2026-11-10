@@ -17,6 +17,7 @@ import platform
 import posixpath
 import socket
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -175,17 +176,71 @@ def _console_version(binary: str) -> str:
     return text.splitlines()[0] if text else ''
 
 
+def installer_components_root() -> str:
+    """The installer's component directory for this process, or '' when it has none.
+
+    The launcher exports ``CIXI_COMPONENTS_DIR``. A source checkout has no launcher, so the same
+    ``<data root>/components`` the component manager writes is used; a frozen bundle without the
+    export has no safe guess and answers ''. This mirrors ``services.components.paths`` without
+    importing it (that module imports this one).
+    """
+    override = str(os.environ.get('CIXI_COMPONENTS_DIR') or '').strip()
+    if override:
+        return override
+    if is_frozen():
+        return ''
+    base = str(os.environ.get('CRAWLER_DATA_ROOT') or '').strip()
+    if not base:
+        base = str(Path(__file__).resolve().parents[2])
+    # ``Config.DATA_DIR`` is ``<data root>/data``; the component manager's source layout is
+    # ``<data root>/data/components`` (``services.components.paths.components_root``).
+    return str(Path(base) / 'data' / 'components')
+
+
 def installer_components_only() -> bool:
     """Whether this process may use only the installer's own components.
 
     The desktop launcher freezes the user's ``component_source`` choice in
-    ``CIXI_COMPONENT_SOURCE`` before :mod:`core.config` is imported. Absent (a source run, the
-    installer's own probe) means the shipped default: the installer's tree. In that mode the
-    machine's own Chrome/Node/CatBus is NOT a fallback — a component the installer did not
-    install is reported by name, because silently using a different browser or runtime would
-    contradict the switch the user set. ``system`` restores the per-OS candidate tables.
+    ``CIXI_COMPONENT_SOURCE`` before :mod:`core.config` is imported. In that mode the machine's
+    own Chrome/Node/CatBus is NOT a fallback — a component the installer did not install is
+    reported by name, because silently using a different browser or runtime would contradict the
+    switch the user set. ``system`` restores the per-OS candidate tables.
+
+    It is also an *installer fact*: a portable zip, a source checkout, the offline Setup and a
+    cloud container carry no ``install-manifest.json``. Their component source is necessarily 本机;
+    returning True there would refuse every crawl with “安装器未安装” on machines where the online
+    installer was never used.
     """
-    return str(os.environ.get('CIXI_COMPONENT_SOURCE') or '').strip().lower() != 'system'
+    if str(os.environ.get('CIXI_COMPONENT_SOURCE') or '').strip().lower() == 'system':
+        return False
+    root = installer_components_root()
+    if not root:
+        return False
+    return os.path.isfile(os.path.join(os.path.dirname(root), 'install-manifest.json'))
+
+
+def inside_installer_components(path: str) -> bool:
+    """Whether *path* belongs to the component tree the launcher exported.
+
+    The exported environment variables are the only installer-owned paths this process may use in
+    installer mode. Checking them against ``CIXI_COMPONENTS_DIR`` (rather than trusting the variable
+    name) is what stops a stale ``CHROME_PATH``/``CIXI_NODE_BIN`` a user or an old launcher left in
+    the environment from standing in for a component the installer never placed.
+    """
+    root = installer_components_root()
+    if not root or not path:
+        return False
+    try:
+        root_norm = os.path.normcase(os.path.realpath(root))
+        path_norm = os.path.normcase(os.path.realpath(str(path)))
+    except (OSError, ValueError):
+        return False
+    return path_norm == root_norm or path_norm.startswith(root_norm + os.sep)
+
+
+def _installer_export(values) -> list[str]:
+    """Exported paths that are real executables inside the installer's component tree."""
+    return [path for path in values if path and _is_executable(path) and inside_installer_components(path)]
 
 
 def platform_name(system: str | None = None) -> str:
@@ -299,16 +354,20 @@ def find_chrome(explicit: str = '', env: dict | None = None, system: str | None 
     explicit path that does not exist returns '' rather than falling back to a found install, so
     the caller can name the typo instead of silently crawling a different Chrome than the one the
     user pointed at (a copied-profile Chrome is a second device to a site's risk control).
+    In installer mode the manifest is the authority and is checked BEFORE ``explicit``: an old
+    configured/exported path must not shadow the version the component manager currently records.
     """
+    if installer_components_only():
+        installed = installer_component_path('chrome')
+        if installed:
+            return installed
     explicit = str(explicit or '').strip()
     if explicit:
         return explicit if _is_executable(explicit) else ''
     if installer_components_only():
-        # The launcher exports CHROME_PATH only for a component it actually installed. Reading
-        # any further (Program Files, PATH) is the silent fallback the source switch forbids.
+        # A value outside CIXI_COMPONENTS_DIR is not the installer's, however the variable is named.
         source = os.environ if env is None else env
-        exported = [str(source.get(name) or '').strip() for name in CHROME_ENV_VARS]
-        found = [path for path in exported if path and _is_executable(path)]
+        found = _installer_export([str(source.get(name) or '').strip() for name in CHROME_ENV_VARS])
         return found[0] if found else ''
     candidates = chrome_candidates(env, system)
     return candidates[0] if candidates else ''
@@ -474,6 +533,35 @@ def component_payload_path(component_id: str, system: str | None = None) -> str:
     return posixpath.join(*parts) if parts else ''
 
 
+def installer_component_path(component_id: str) -> str:
+    """The installer's current payload for *component_id*, or '' when it has none.
+
+    The manifest is the record the component manager maintains and the launcher exports; reading
+    it here means a run still finds the installed copy when an export is missing or stale, and the
+    probe and the crawler cannot disagree about which Chrome/Node/CatBus exists.
+    """
+    root = installer_components_root()
+    if not root:
+        return ''
+    try:
+        from services.components.manifest import Manifest, ManifestError
+    except ImportError:
+        return ''
+    try:
+        installed = Manifest(Path(root).parent).load().path_of(component_id)
+    except (OSError, ValueError, ManifestError):
+        return ''
+    if installed is None:
+        return ''
+    relative = component_payload_path(component_id)
+    candidate = installed / relative if relative else None
+    if candidate is None:
+        return ''
+    inside = inside_installer_components(str(candidate))
+    usable = catbus_entry_usable(str(candidate)) if component_id == 'catbus' else _is_executable(str(candidate))
+    return str(candidate) if inside and usable else ''
+
+
 #: The Node releases CatBus' ``engines`` field accepts, split the way a semver range actually reads:
 # ``^22.22.2 || ^24.15.0`` are two *major-bound* floors (a 23.x or 25.x runtime is in neither, even
 # though it is numerically larger than 22.22.2), and ``>=26.0.0`` is the one open-ended floor. Written
@@ -558,15 +646,19 @@ def find_node(explicit: str = '', env: dict | None = None, system: str | None = 
     """The Node to run the CatBus adapter with, or '' when this machine has no Node at all.
 
     Like :func:`find_chrome`, an explicit setting that does not exist answers '' — the caller names
-    the typo instead of quietly running a different runtime than the one the user pointed at.
+    the typo instead of quietly running a different runtime than the one the user pointed at — and
+    in installer mode the manifest is checked before that setting.
     """
+    if installer_components_only():
+        installed = installer_component_path('node')
+        if installed:
+            return installed
     explicit = str(explicit or '').strip()
     if explicit:
         return explicit if _is_executable(explicit) else ''
     if installer_components_only():
         source = os.environ if env is None else env
-        exported = [str(source.get(name) or '').strip() for name in NODE_ENV_VARS]
-        found = [path for path in exported if path and _is_executable(path)]
+        found = _installer_export([str(source.get(name) or '').strip() for name in NODE_ENV_VARS])
         return found[0] if found else ''
     found = node_candidates(env, system)
     return found[0] if found else ''
@@ -713,13 +805,17 @@ def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | N
     '' is a reason, not a failure: the CatBus backend then simply is not offered, and it is offered
     nowhere in the UI either (see ``services/ingest/catbus.py``).
     """
+    if installer_components_only():
+        installed = installer_component_path('catbus')
+        if installed:
+            return installed
     explicit = catbus_entry_at(explicit, system)
     if explicit:
         return explicit if catbus_entry_usable(explicit) else ''
     if installer_components_only():
         source = os.environ if env is None else env
         exported = [catbus_entry_at(source.get(name), system) for name in CATBUS_ENV_VARS]
-        found = [path for path in exported if path and catbus_entry_usable(path)]
+        found = [path for path in exported if path and catbus_entry_usable(path) and inside_installer_components(path)]
         return found[0] if found else ''
     found = catbus_candidates(env, system)
     return found[0] if found else ''

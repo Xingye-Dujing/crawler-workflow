@@ -99,6 +99,10 @@ def _exported(variable: str) -> str:
 
 
 def _chrome(root: Path) -> tuple[str, str]:
+    # The manifest is the installed record; an old export that still exists must not outrank it.
+    bundled = _component_binary(root, 'chrome')
+    if bundled:
+        return bundled, 'component'
     if component_source.prefer_bundled():
         exported = _exported('CHROME_PATH') or _exported('CHROME_BIN')
         if exported:
@@ -108,9 +112,6 @@ def _chrome(root: Path) -> tuple[str, str]:
     if explicit:
         found = find_chrome(explicit)
         return found, ('settings' if found else 'settings-missing')
-    bundled = _component_binary(root, 'chrome')
-    if bundled:
-        return bundled, 'component'
     if component_source.prefer_bundled():
         # 安装器安装的 means exactly that: a machine-wide Chrome is not a substitute for a
         # component the installer never put there. ``find_chrome`` already refuses the per-OS
@@ -122,6 +123,10 @@ def _chrome(root: Path) -> tuple[str, str]:
 
 
 def _driver(root: Path) -> tuple[str, str]:
+    # Same authority order as Chrome: manifest, then the launcher's export, then a configured path.
+    bundled = _component_binary(root, 'chromedriver')
+    if bundled:
+        return bundled, 'component'
     if component_source.prefer_bundled():
         exported = _exported('CIXI_DRIVER_PATH')
         if exported:
@@ -131,9 +136,6 @@ def _driver(root: Path) -> tuple[str, str]:
         # A configured path is a promise the crawler checks too: it refuses by name when the file
         # is gone, so the panel must not answer "Selenium will download one" instead.
         return (explicit, 'settings') if Path(explicit).is_file() else ('', 'settings-missing')
-    bundled = _component_binary(root, 'chromedriver')
-    if bundled:
-        return bundled, 'component'
     if component_source.prefer_bundled():
         # A downloaded driver would not be the installer's component either, so the honest state
         # is "missing", never the Selenium-Manager degradation that belongs to 本机.
@@ -167,7 +169,9 @@ def _catbus_state() -> dict:
 def _catbus_capability() -> dict:
     state = _catbus_state()
     if state.get('entry'):
-        source = 'component'
+        # The probe does not carry where the entry came from; the mode does. Calling a PATH/npm
+        # CatBus "installer" was the same second-opinion defect the source switch exists to remove.
+        source = 'component' if component_source.prefer_bundled() else 'system'
     elif component_source.prefer_bundled():
         source = 'installer-missing'
     else:

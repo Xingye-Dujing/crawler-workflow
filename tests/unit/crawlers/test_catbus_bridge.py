@@ -156,12 +156,14 @@ class TestTheDiscoveryVerdict:
     def test_installer_source_refuses_a_missing_installer_node(self, monkeypatch):
         """安装器安装的 does not fall back to the machine's Node: the reason names the installer."""
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr('services.components.source.prefer_bundled', lambda: True)
         monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '')
         info = bridge.probe(force=True)
         assert info.reason_key == 'catbus.installerNodeMissing'
 
     def test_installer_source_refuses_a_missing_installer_adapter(self, monkeypatch):
         monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr('services.components.source.prefer_bundled', lambda: True)
         monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '')
         monkeypatch.setattr(bridge, '_call', answer())
         info = bridge.probe(force=True)
