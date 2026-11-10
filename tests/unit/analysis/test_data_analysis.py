@@ -2960,8 +2960,13 @@ class TestTopicFlow:
     def test_the_closer_pair_scores_higher_and_the_table_is_sorted(self):
         out = self._flow(min_similarity=0.01)
         pair = {(row['source'], row['target']): row['similarity'] for _, row in out.iterrows()}
-        # Ⅰ-1 and Ⅱ-1 share 警方/通报 at nearly the same mass; Ⅰ-1 against Ⅱ-2 shares nothing.
-        assert pair[('TopicⅠ-1', 'TopicⅡ-1')] > pair[('TopicⅠ-1', 'TopicⅡ-2')]
+        # Ⅰ-1 and Ⅱ-1 share 警方/通报 at nearly the same mass; Ⅰ-1 against Ⅱ-2 shares nothing, so it
+        # scores 0 and is BELOW this threshold — a pair with no shared word mass is not a carry-over.
+        # The scale is honest now (``1 - JSD``): 1 is the same subject, 0 shares nothing. Under the
+        # old ``1 / (1 + d)`` every pair landed in [0.5, 1], so a 0.5 threshold admitted all of them
+        # and the figure was a complete bipartite graph whatever the user asked for.
+        assert ('TopicⅠ-1', 'TopicⅡ-2') not in pair, 'a disjoint pair must not be a flow edge'
+        assert pair[('TopicⅠ-1', 'TopicⅡ-1')] > 0.5, 'the pair sharing the same words is on the similar half'
         assert pair[('TopicⅡ-2', 'TopicⅢ-1')] > pair[('TopicⅡ-1', 'TopicⅢ-1')]
         assert (out['similarity'].diff().dropna() <= 0).all(), 'the thickest link has to come first'
 

@@ -34,7 +34,8 @@ def topic_flow(
 
     The comparison is the Jensen-Shannon divergence of the two word DISTRIBUTIONS, taken
     from the ``word:weight`` cell :meth:`topic_by_stage` writes, turned into a similarity by
-    ``1 / (1 + d)``. The distributions rather than the word lists, because two topics can
+    ``1 - d`` (JSD is measured in bits, so the result is 1 for the same subject and 0 for two
+    topics sharing no word mass). The distributions rather than the word lists, because two topics can
     share “外卖” and mean different things by how hard they lean on it; where the lists are
     all that is left, :meth:`topic_timeline` is the step to use.
 
@@ -113,7 +114,13 @@ def topic_flow(
                     [source['weights'].get(word, 0.0) for word in vocabulary],
                     [target['weights'].get(word, 0.0) for word in vocabulary],
                 )
-                similarity = 1.0 / (1.0 + divergence)
+                # ``1 - d``, not ``1 / (1 + d)``: JSD is already in [0, 1] bits, so the reciprocal
+                # squashed every pair into [0.5, 1] — a threshold of 0.5 admitted ALL of them, and the
+                # panel's default 0.5 therefore drew a complete bipartite graph (n x m edges, the
+                # hairball the adjacency rule exists to prevent) no matter what the user chose below
+                # 0.5. Subtracting keeps the scale the slider claims: 1 is the same subject, 0 shares
+                # no word mass at all.
+                similarity = 1.0 - divergence
                 best_seen = max(best_seen, similarity)
                 if similarity < threshold:
                     continue
