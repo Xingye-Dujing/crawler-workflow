@@ -51,3 +51,34 @@ class TestLockRoundTrip:
         lock_store.set_locked('exports', 'a.csv', True)
         lock_store.set_locked('exports', 'a.csv', True)
         assert lock_store.all_locks()['exports'] == ['a.csv', 'b.csv']
+
+
+class TestRenameScope:
+    """A lock is a decision about ONE artefact, so it follows that artefact when renamed.
+
+    ``/api/workflow/rename`` moves the file, the dataset refs and the layout baseline; the lock used
+    to stay behind, so the renamed canvas came back UNLOCKED (a bulk 清空 then swept away the canvas
+    the user had pinned) while the old name kept an entry nothing would ever read or clear.
+    """
+
+    def test_a_lock_travels_to_the_new_name(self):
+        lock_store.set_locked('workflows', 'old', True)
+        assert lock_store.rename_scope('workflows', 'old', 'new') is True
+        assert lock_store.is_locked('workflows', 'new') is True
+        assert lock_store.is_locked('workflows', 'old') is False, 'the old name kept an unreachable lock'
+
+    def test_renaming_an_unlocked_entry_reports_no_lock_and_writes_nothing(self):
+        assert lock_store.rename_scope('workflows', 'old', 'new') is False
+        assert lock_store.all_locks()['workflows'] == []
+
+    def test_other_panels_and_keys_are_untouched(self):
+        lock_store.set_locked('workflows', 'old', True)
+        lock_store.set_locked('workflows', 'other', True)
+        lock_store.set_locked('exports', 'a.csv', True)
+        lock_store.rename_scope('workflows', 'old', 'new')
+        assert lock_store.all_locks()['workflows'] == ['new', 'other']
+        assert lock_store.all_locks()['exports'] == ['a.csv']
+
+    def test_an_unknown_panel_is_ignored_not_raised(self):
+        """The rename route calls this unconditionally; a panel nobody declared has no locks."""
+        assert lock_store.rename_scope('secrets', 'old', 'new') is False

@@ -76,6 +76,29 @@ class TestWorkflowsRespectLock:
         resp = client.post('/api/workflow/delete', json={'name': 'flow-a'})
         assert resp.status_code == 409
 
+    def test_a_rename_carries_the_lock_to_the_new_name(self, client):
+        """The lock pins ONE canvas, so renaming must not drop it.
+
+        The route already moved the file, the dataset refs and the layout baseline; the lock stayed
+        behind, so the renamed canvas came back unlocked — a bulk 清空 then swept away the canvas the
+        user had pinned — while the old name kept an entry nothing would ever clear.
+        """
+        saved = client.post(
+            '/api/workflow/save',
+            json={'name': 'flow-old', 'workflow': {'nodes': [], 'connections': []}},
+        )
+        assert saved.status_code == 200, saved.get_json()
+        client.post('/api/locks', json={'panel': 'workflows', 'key': 'flow-old', 'locked': True})
+
+        renamed = client.post('/api/workflow/rename', json={'name': 'flow-old', 'new_name': 'flow-new'})
+        assert renamed.status_code == 200, renamed.get_json()
+
+        locks = client.get('/api/locks').get_json()['locks']['workflows']
+        assert 'flow-new' in locks, locks
+        assert 'flow-old' not in locks, 'the old name kept an unreachable lock'
+        # …and the pin still protects the renamed canvas from deletion.
+        assert client.post('/api/workflow/delete', json={'name': 'flow-new'}).status_code == 409
+
 
 class TestRunsRespectLock:
     def test_clear_spares_a_locked_run_and_removes_the_rest(self, client, app_module):

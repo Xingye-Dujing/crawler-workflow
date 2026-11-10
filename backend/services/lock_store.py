@@ -95,3 +95,25 @@ def drop(panel: str, key: str) -> None:
         if key in values[panel]:
             values[panel] = [k for k in values[panel] if k != key]
             _save(values)
+
+
+def rename_scope(panel: str, old: str, new: str) -> bool:
+    """Carry a lock from *old* to *new*; answer whether it was locked at all.
+
+    A lock is the user's own “别删这条” decision about ONE artefact, so it has to follow that artefact
+    when the artefact is renamed. ``/api/workflow/rename`` moves the file, the dataset refs and the
+    layout baseline, and used to leave the lock behind: the renamed canvas came back UNLOCKED (a 清空
+    then swept away the canvas the user had pinned) while the old name kept an entry nothing would ever
+    read or clear — :func:`drop` is only called for a name that still exists.
+    """
+    if panel not in PANELS:
+        return False
+    old, new = str(old), str(new)
+    with _lock:
+        values = _load()
+        if old not in values[panel]:
+            return False
+        if old != new:
+            values[panel] = sorted((set(values[panel]) - {old}) | {new})
+            _save(values)
+        return True

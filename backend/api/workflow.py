@@ -281,6 +281,10 @@ def rename_workflow():
     # A layout baseline is keyed by the saved file's stem; leaving it under the old
     # name would silently switch the renamed canvas back to the algorithm.
     get_workflow_history_store().rename_layout(old, new)
+    # …and the lock follows the canvas it pins. Without this the renamed workflow came back
+    # unlocked (a bulk 清空 then swept away the canvas the user had pinned) while the old name
+    # kept an entry nothing would ever read or clear.
+    lock_store.rename_scope('workflows', old, new)
     logger.info(t('api.workflowRenamed', old=old, new=new))
     return jsonify({'ok': True, 'name': new, 'path': get_workflow_manager().path_for(new), 'datasets': refs})
 
