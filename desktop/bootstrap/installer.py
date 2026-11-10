@@ -752,6 +752,10 @@ class InstallerState:
                 timeout=DOCTOR_TIMEOUT,
                 check=False,
                 env=env,
+                # The installer GUI has no console of its own on Windows, and the launcher is a
+                # console program: without this the doctor probe flashes a black window at the user
+                # (AGENTS: every backend/desktop spawn passes it).
+                **_PROC.popen_kwargs(),
             )
             text = (result.stdout or b'').decode('utf-8-sig', errors='replace')
             # The launcher may print a note about the data root before the report (a fallback is
@@ -812,6 +816,8 @@ def path_load_refusal(root: Path) -> str:
             text=True,
             timeout=30,
             check=False,
+            # Same reason as the two probes above: no console in the GUI, no black window.
+            **_PROC.popen_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return ''
@@ -1168,7 +1174,13 @@ class Handler(BaseHTTPRequestHandler):
             if os.name == 'nt':
                 os.startfile(path)
             else:
-                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(path)])
+                subprocess.Popen(
+                    ['open' if sys.platform == 'darwin' else 'xdg-open', str(path)],
+                    # DETACHED: this is the user's own file manager, launched from an installer that
+                    # exits a second later. Without it the opener is a child of the installer, and on
+                    # Windows it inherits a console the GUI does not have.
+                    **_PROC.popen_kwargs(detached=True),
+                )
         except OSError:
             return
 
@@ -1181,7 +1193,16 @@ class Handler(BaseHTTPRequestHandler):
         env['CIXI_COMPONENTS_DIR'] = str(root / 'components')
         env['CRAWLER_DATA_ROOT'] = state.data
         try:
-            subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env)
+            subprocess.Popen(
+                [str(exe)],
+                cwd=str(exe.parent),
+                env=env,
+                # DETACHED on purpose: the app must OUTLIVE the installer, which stops its own
+                # server and exits right after this call (``stop_soon``). A child in the same
+                # process group dies with the Windows job object / sails into the macOS app's
+                # terminating session — the user would see the app it just installed close itself.
+                **_PROC.popen_kwargs(detached=True),
+            )
         except OSError as exc:
             return {'ok': False, 'error': str(exc)}
         self.server.stop_soon(1.0)

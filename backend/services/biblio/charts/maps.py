@@ -71,8 +71,28 @@ def dual_map(df: pd.DataFrame, base: dict) -> dict:
     # Keep the largest side within the drawing budget; the full table remains
     # in the CSV/LaTeX appendix. A dual map that prints 500 unreadable labels
     # is not a figure.
-    left_names = sorted(left)[:DUAL_MAP_SIDE_LIMIT]
-    right_names = sorted(right)[:DUAL_MAP_SIDE_LIMIT]
+    #
+    # "Largest" has to mean the weight a node carries, not its position in the alphabet: the
+    # truncation used `sorted(...)[:LIMIT]`, so a 400-node map kept the entries whose names sort
+    # first and dropped the most-cited ones — the whole point of the figure. Ties break on the name
+    # so two runs of the same data draw the same map.
+    side_weight: dict[tuple[str, str], float] = dict(seeds)
+    for side, source, target, weight in rows:
+        if side == 'overlay':
+            ends = [('journal', source), ('category', target)]
+        elif side == 'journal':
+            ends = [('journal', source), ('journal', target)]
+        else:
+            ends = [('category', source), ('category', target)]
+        for end in ends:
+            side_weight[end] = side_weight.get(end, 0.0) + weight
+
+    def _largest(names, side):
+        ranked = sorted(names, key=lambda name: (-side_weight.get((side, name), 0.0), name))
+        return ranked[:DUAL_MAP_SIDE_LIMIT]
+
+    left_names = _largest(left, 'journal')
+    right_names = _largest(right, 'category')
     positions = {}
     for index, name in enumerate(left_names):
         positions[('journal', name)] = (150, _side_slot(index, len(left_names)))

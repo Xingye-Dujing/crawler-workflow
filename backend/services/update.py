@@ -535,19 +535,17 @@ fi
 
 
 def _spawn_script(script: Path, args: list[str]) -> None:
+    """Run the updater so it OUTLIVES this server, on every OS.
+
+    ``popen_kwargs(detached=True)`` answers both halves (Windows creation flags, POSIX
+    ``start_new_session``) from one place; this call site used to pass the POSIX half by hand, which
+    is how the other two callers came to be missing it.
+    """
     if machine.platform_name() == 'win32':
-        subprocess.Popen(
-            procs.powershell_command(str(script), args),
-            close_fds=True,
-            **procs.popen_kwargs(detached=True),
-        )
+        command = procs.powershell_command(str(script), args)
     else:
-        subprocess.Popen(
-            ['/bin/bash', str(script), *args],
-            close_fds=True,
-            start_new_session=True,
-            **procs.popen_kwargs(),
-        )
+        command = ['/bin/bash', str(script), *args]
+    subprocess.Popen(command, close_fds=True, **procs.popen_kwargs(detached=True))
 
 
 def _writable(path: Path) -> bool:

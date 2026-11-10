@@ -149,6 +149,30 @@ def test_dual_map_legend_names_the_two_sides_it_draws(dual_frame):
     assert len(categories) == 2
 
 
+def test_a_truncated_dual_map_keeps_the_heaviest_nodes_not_the_first_names():
+    """The side budget must cut the TAIL of the weight curve, not the alphabet.
+
+    It used `sorted(left)[:LIMIT]`, so a map with more nodes than the budget kept whichever names
+    sorted first and dropped the most-cited ones — the reason the figure exists. Ties break on the
+    name, so two runs of the same table draw the same map.
+    """
+    from services.biblio.charts.maps import DUAL_MAP_SIDE_LIMIT
+
+    count = DUAL_MAP_SIDE_LIMIT + 5
+    # ``DUAL_MAP_SIDE_LIMIT + 5`` journals whose weights DECREASE down the alphabet, so keeping the
+    # alphabetically-first names is exactly the wrong answer.
+    rows = [
+        {'map': 'journal', 'source': f'{index:03d}刊', 'target': '', 'weight': float(count - index)}
+        for index in range(count)
+    ]
+    rows.append({'map': 'overlay', 'source': '000刊', 'target': '甲类', 'weight': 10.0})
+    table = pd.DataFrame(rows)
+    option = VisualizationService.to_echarts_option(table, 'dual_map')
+    names = {node['name'] for node in option['series'][0]['data']}
+    assert len([name for name in names if name.endswith('刊')]) == DUAL_MAP_SIDE_LIMIT
+    assert '000刊' in names, 'the heaviest journal must survive the budget'
+
+
 def test_knowledge_graph_deduplicates_an_undirected_edge(frame):
     option = VisualizationService.to_echarts_option(frame, 'knowledge_graph')
     links = option['series'][0]['links']

@@ -1460,7 +1460,6 @@ class TestSuggestStages:
         # proposal the user cannot audit. The assertion is the whole sentence, filled with the
         # counts this curve produces: matching bare digits also matched the log line number,
         # which moved the day the module did.
-        from i18n import t
 
         curve = dict(
             zip(
@@ -2071,7 +2070,6 @@ class TestClusterLabel:
             D.cluster_label(frame, llm=self._Client())
 
     def test_no_model_is_a_refusal_not_an_empty_column(self):
-        from i18n import t
 
         with pytest.raises(UnknownOperationError) as exc:
             D.cluster_label(self._docs(), llm=None)
@@ -3693,7 +3691,6 @@ class TestClusterReview:
             D.cluster_review(pd.DataFrame({'聚类': [0]}), llm=self._Client())
 
     def test_no_model_is_a_refusal_before_anything_is_spent(self):
-        from i18n import t
 
         with pytest.raises(UnknownOperationError) as exc:
             D.cluster_review(self._clusters(), llm=None)

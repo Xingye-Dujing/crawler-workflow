@@ -192,10 +192,26 @@ def create_backup(
     with_cookies: bool = False,
     bundle: bool = True,
 ) -> dict:
-    """Write one ``<timestamp>/`` directory and return its manifest."""
+    """Write one ``<timestamp>/`` directory and return its manifest.
+
+    Two backups inside one second are a real sequence (a script that runs the tool twice, a user
+    pressing the button again after a failed verification), and ``exist_ok=False`` answered the
+    second with a bare ``FileExistsError`` — the first backup looked like a tool failure. A taken
+    name now gets ``-2``, ``-3``… appended instead of aborting.
+    """
     moment = datetime.now().astimezone()
-    target = Path(out_dir) / moment.strftime('%Y%m%d-%H%M%S')
-    target.mkdir(parents=True, exist_ok=False)
+    stamp = moment.strftime('%Y%m%d-%H%M%S')
+    target = Path(out_dir) / stamp
+    attempt = 1
+    while True:
+        try:
+            target.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            attempt += 1
+            if attempt > 99:
+                raise
+            target = Path(out_dir) / f'{stamp}-{attempt}'
 
     bundle_path = target / 'repo.bundle' if bundle else None
     git = git_facts(Path(repo_root), bundle_path)

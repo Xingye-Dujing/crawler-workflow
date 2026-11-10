@@ -69,9 +69,15 @@ def popen_kwargs(system: str | None = None, detached: bool = False) -> dict:
     ``subprocess`` module, so the POSIX answer is an empty dict rather than a keyword Python rejects
     — and the name is read through ``getattr`` so this module imports on a Linux box too.
 
-    ``detached`` adds the flags that let an updater outlive the process that started it. POSIX
-    callers pair this with ``start_new_session=True`` rather than a Windows creation flag.
+    ``detached`` adds what lets a child outlive the process that started it — the updater, the
+    installer launching the app it just installed. On Windows that is a creation flag; on POSIX it is
+    ``start_new_session=True``. Both live HERE rather than at every call site, because only one of the
+    three callers remembered the POSIX half: the others asked for a detached child and got an
+    ordinary one, so the updater/launcher died with its parent on Linux and macOS and the user saw
+    the app close itself.
     """
+    if detached and not machine.is_windows(system):
+        return {'start_new_session': True}
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     if detached and machine.is_windows(system):
         flags |= getattr(subprocess, 'DETACHED_PROCESS', 0x00000008)

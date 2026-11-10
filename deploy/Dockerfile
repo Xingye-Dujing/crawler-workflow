@@ -4,9 +4,17 @@ ARG BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
 FROM $BASE_IMAGE
 
 # 系统依赖：Chromium 浏览器 + chromedriver（版本由 apt 自动匹配）+ 中文字体（爬中文站需 CJK 字体）
-RUN echo 'deb http://mirrors.cloud.aliyuncs.com/debian trixie main' > /etc/apt/sources.list \
- && echo 'deb http://mirrors.cloud.aliyuncs.com/debian trixie-updates main' >> /etc/apt/sources.list \
- && echo 'deb http://mirrors.cloud.aliyuncs.com/debian-security trixie-security main' >> /etc/apt/sources.list
+# The suite is READ FROM THE IMAGE, never hardcoded. Pinning `trixie` sources onto a `bookworm`
+# python:3.11-slim (which is what that tag resolved to until it moved) is a mixed-system apt: the
+# package names, the chromium version and the driver pairing all come from an OS the image is not,
+# and the failure lands at `apt-get install` with a dependency error nobody local can reproduce.
+# `VERSION_CODENAME` is the fact; `debian.sources` is rewritten rather than appended so a newer base
+# image's own mirror config cannot win.
+RUN . /etc/os-release \
+ && echo "deb http://mirrors.cloud.aliyuncs.com/debian ${VERSION_CODENAME} main" > /etc/apt/sources.list \
+ && echo "deb http://mirrors.cloud.aliyuncs.com/debian ${VERSION_CODENAME}-updates main" >> /etc/apt/sources.list \
+ && echo "deb http://mirrors.cloud.aliyuncs.com/debian-security ${VERSION_CODENAME}-security main" >> /etc/apt/sources.list \
+ && rm -f /etc/apt/sources.list.d/*.sources
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

@@ -169,11 +169,24 @@ class TestWhatALaTeXRefusalSays:
         assert 'elevated privileges' in message
 
     def test_the_log_is_read_before_the_working_directory_goes_away(self):
+        """The refusal must quote main.log while it still exists.
+
+        The removal goes through ``_discard(work)`` now (it says WHERE a temp directory was left when
+        it cannot delete it, instead of ignoring the failure), so the search is for the call rather
+        than for ``shutil.rmtree`` inline — the ORDER is the property.
+        """
         source = Path(latex_compile.__file__).read_text(encoding='utf-8')
         branch = source.split('if result.returncode != 0 or not os.path.isfile(produced):')[1]
-        assert branch.index('_read_log(work)') < branch.index('shutil.rmtree(work'), (
-            'the log has to be read while it still exists'
+        read_at = branch.index('_read_log(work)')
+        discard_at = min(
+            index
+            for index in (
+                branch.find('_discard(work)'),
+                branch.find('shutil.rmtree(work'),
+            )
+            if index >= 0
         )
+        assert read_at < discard_at, 'the log has to be read while it still exists'
 
 
 class TestTheModelPackAnswer:

@@ -195,7 +195,10 @@ EN = {
     'chart.col.within_freq': 'Within-topic frequency',
     'chart.count': 'count',
     'chart.y_not_numeric': 'The chart value column "{col}" holds no numbers at all, so it cannot be plotted as values',
-    'chart.matrix_too_large': 'The heatmap cross table would hold {x} x {y} = {cells} cells, over the {limit} limit; choose two fields with fewer distinct values',
+    'chart.matrix_too_large': (
+        'The heatmap cross table would hold {x} x {y} = {cells} cells, over the {limit} limit; choose two '
+        'fields with fewer distinct values'
+    ),
     'chart.pie_negative': (
         'The pie cannot be drawn: these categories aggregate to a negative value ({names}) — a share '
         'cannot be negative, so use a bar chart or filter the rows first'

@@ -122,11 +122,7 @@ def _stable_link(link: str) -> str:
     if not text or '?' not in text:
         return text
     base, _, query = text.partition('?')
-    kept = [
-        pair
-        for pair in query.split('&')
-        if pair and pair.split('=', 1)[0].lower() not in _VOLATILE_QUERY
-    ]
+    kept = [pair for pair in query.split('&') if pair and pair.split('=', 1)[0].lower() not in _VOLATILE_QUERY]
     return f'{base}?{"&".join(kept)}' if kept else base
 
 
