@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from i18n import t
-from services.charts.contracts import ChartConfigError
+from services.charts.contracts import MATRIX_CELL_LIMIT, ChartConfigError
 from services.charts.options import OptionMixin
 from services.charts.registry import CHART_TYPES, ECHARTS_ONLY_TYPES
 from services.charts.style import (
@@ -338,6 +338,14 @@ class VisualizationService(OptionMixin):
         work = df[[x, y]].copy()
         xcats = [str(value) for value in pd.unique(df[x].astype(str))]
         ycats = [str(value) for value in pd.unique(df[y].astype(str))]
+        # One mark per CELL in ECharts, matplotlib and TikZ alike, so the cost of this shape is the
+        # product of the two cardinalities: refuse it BY NAME (naming both) rather than write a
+        # 46 MB figure source the typesetter cannot open.
+        cells_total = len(xcats) * len(ycats)
+        if cells_total > MATRIX_CELL_LIMIT:
+            raise ChartConfigError(
+                t('chart.matrix_too_large', x=len(xcats), y=len(ycats), cells=cells_total, limit=MATRIX_CELL_LIMIT)
+            )
         work['_xc'] = work[x].astype(str)
         work['_yc'] = work[y].astype(str)
         if value_field:
@@ -348,6 +356,9 @@ class VisualizationService(OptionMixin):
             grouped = work.groupby(['_yc', '_xc'], sort=False)['_v'].agg(agg)
         else:
             grouped = work.groupby(['_yc', '_xc'], sort=False).size()
+        # Every grid position carries a value: the colour scale needs the full matrix, and a json
+        # option cannot hold NaN. A cell with no measurement is drawn as 0 (this shape is pinned by
+        # the heatmap tests); what the aggregate does NOT do is invent a 0 for a MEASURED group.
         cells = {
             (str(ykey), str(xkey)): (value if np.isfinite(value) else 0) for (ykey, xkey), value in grouped.items()
         }

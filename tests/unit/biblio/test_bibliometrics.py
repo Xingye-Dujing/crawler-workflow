@@ -1031,3 +1031,42 @@ class TestPajekExport:
         assert len(edge_lines) == len(result['edges'])
         assert all(len(line.split()) == 3 for line in edge_lines)
         assert all(0 < float(line.split()[2]) <= 1 for line in edge_lines)
+
+
+class TestTheGIndexBoxIsTheCeiling:
+    """``g_index`` is rendered, validated and stored; the selection used to ignore it.
+
+    The panel showed a number that changed nothing: the g was always recomputed from the frequency
+    curve. The number is a CEILING on that g — a larger curve is cut at the box, a smaller one stays
+    as it is — so the setting now means what the panel says.
+    """
+
+    #: The curve these frequencies describe: cumulative 30, 50, 62, 70, 74, 76 against
+    #: 1, 4, 9, 16, 25, 36 — every position clears, so the curve's own g is 6.
+    CURVE_G = 6
+
+    @staticmethod
+    def _freq():
+        from collections import Counter
+
+        return Counter({'a': 30, 'b': 20, 'c': 12, 'd': 8, 'e': 4, 'f': 2})
+
+    def _selected(self, ceiling):
+        from services.biblio.metrics.network import _select
+
+        return _select(self._freq(), _params(selection='g_index', g_index=ceiling))
+
+    def test_a_ceiling_below_the_curve_cuts_it(self):
+        assert len(self._selected(1)) == 1
+        assert len(self._selected(3)) == 3
+
+    def test_a_ceiling_at_the_curve_keeps_the_whole_curve(self):
+        assert len(self._selected(self.CURVE_G)) == self.CURVE_G
+
+    def test_a_ceiling_above_the_curve_cannot_add_terms(self):
+        """The curve is the answer; a bigger box does not invent terms past it."""
+        assert len(self._selected(1000)) == self.CURVE_G
+
+    def test_the_ceiling_is_never_exceeded(self):
+        for ceiling in (1, 2, 3, 4, 5, 6, 1000):
+            assert len(self._selected(ceiling)) <= ceiling

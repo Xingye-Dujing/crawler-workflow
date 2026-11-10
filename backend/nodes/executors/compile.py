@@ -5,13 +5,16 @@ arrives empty and is read by nothing. ``emit_latex``/``emit_latex_table`` alread
 exists (``validate`` refuses a both-off visualize upstream before a run); if nothing arrives anyway —
 a parent that failed — refuse BY NAME and never emit an empty PDF.
 
-The PDF is staged under a deterministic per-node name; a downstream ``output`` renames it to the
-user's file, and a chain with no output leaves it in the export dir (recorded in the run→files
-ledger so 智能清除 can find it).
+The PDF is staged under a run-scoped name (``<run id>-compile-<node id>.pdf``, or the node id alone
+when there is no run context); a downstream ``output`` renames it to the user's file, and a chain with
+no output leaves it in the export dir (recorded in the run→files ledger so 智能清除 can find it). The
+run id is part of the name because a per-node one collided across canvases — every canvas names its
+nodes node-1, node-2… — so a second run silently replaced the file the first run's ledger pointed at.
 """
 
 import contextlib
 
+from core.refs import sanitize_filename
 from runtime import paths
 from runtime.state import add_log
 
@@ -37,7 +40,14 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
         sources.append(str(pid))
     if not docs:
         return {'error': t('wf.compile_no_source')}
-    out_name = f'compile-{node.get("id")}.pdf'
+    # The staged PDF belongs to THIS run: a per-node name alone collided across canvases (every
+    # canvas names its nodes node-1, node-2…) and across attempts, so a second compile silently
+    # replaced the file the first run's ledger pointed at. ``visualize`` prefixes the run id for the
+    # same reason, and it goes FIRST because ``sanitize_filename`` keeps the head of a name.
+    nid = str(node.get('id') or '')
+    run_id = str((ctx or {}).get('run_id') or '')
+    stem = f'{run_id}-compile-{nid}' if run_id else f'compile-{nid}'
+    out_name = f'{sanitize_filename(stem) or "compile"}.pdf'
     out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, paths.active().export_dir)
     if 'error' in out:
         # Fold the reason into the returned error so run_node_durable's single wf.node_failed

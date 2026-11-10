@@ -86,10 +86,12 @@ def merge_upstream_tables(
         for _pid, _frame in frames:
             if 'platform' not in _frame.columns:
                 _frame.insert(0, 'platform', str(platform_of.get(str(_pid), '') or ''))
-    # The reference columns come from the first frame that HAS any: an empty table answers
-    # with no columns at all, and taking its shape as the truth would call every other
-    # table's columns "extra".
-    reference = next((list(frame.columns) for _pid, frame in frames if len(frame.columns)), [])
+    # The reference columns come from the first frame that HAS ROWS, never from one that merely has
+    # columns: the platform stamp above gives even a zero-row parent a ``platform`` column, so
+    # reading "has any column" as the truth made an empty first batch the reference ``['platform']``
+    # and refused every later real table as a column mismatch — the honest empty batch the comment
+    # below promises to accept.
+    reference = next((list(frame.columns) for _pid, frame in frames if len(frame)), [])
     for pid, frame in frames[1:]:
         # A table with ZERO rows has nothing that can disagree — there is no cell to line
         # up — so it is skipped here and contributes nothing to the concatenation. Refusing

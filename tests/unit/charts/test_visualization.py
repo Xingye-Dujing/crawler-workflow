@@ -20,7 +20,8 @@ import pandas as pd
 import pytest
 from static_assets import js_text
 
-from services.charts.contracts import BIBLIO_CHART_TYPES
+from i18n import t
+from services.charts.contracts import BIBLIO_CHART_TYPES, MATRIX_CELL_LIMIT
 from services.charts.visualizer import ANNOTATED_TYPES, CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
 from services.charts.visualizer import VisualizationService as V
 
@@ -1210,3 +1211,47 @@ class TestRenderImage:
 
     def test_missing_values_do_not_break_a_server_side_render(self, df):
         assert V.render_image(df, 'bar', x='作者', y='阅读', agg='mean').count('base64') == 1
+
+
+# ─── the audit pass: number contracts a figure cannot invent ─────────────
+
+
+class TestAFigureRefusesWhatItCannotDivide:
+    """A share, a pie and a cross table have inputs they cannot draw; each is named, not guessed."""
+
+    def test_a_text_stack_field_is_refused_by_name(self):
+        """``grouped[f].sum()`` on a text column CONCATENATED its cells, and the division then raised
+        a bare ``TypeError`` from deep inside pandas — the console named pandas, not the field."""
+        frame = pd.DataFrame({'阶段': ['a', 'b'], '正面': ['甲', '乙'], '中性': [2, 1]})
+        with pytest.raises(ChartConfigError) as excinfo:
+            V.to_echarts_option(frame, 'stack_pct', x='阶段', stack_fields='正面,中性')
+        assert t('chart.y_not_numeric', col='正面') in str(excinfo.value)
+
+    def test_a_stack_field_that_is_missing_everywhere_still_serialises(self):
+        """An all-blank column is "no measurement", not a misconfiguration: the share is 0 %."""
+        frame = pd.DataFrame({'阶段': ['a', 'b'], '正面': [None, None], '中性': [2, 1]})
+        option = V.to_echarts_option(frame, 'stack_pct', x='阶段', stack_fields='正面,中性')
+        assert [segment['data'] for segment in option['series']] == [[0.0, 0.0], [100.0, 100.0]]
+
+    def test_a_negative_pie_slice_is_refused_like_the_printed_figure(self):
+        """``tikz_console._pie`` already refused this; ECharts drew it and matplotlib raised a bare
+        ValueError — one dataset, three answers, so the shared refusal is pinned here."""
+        frame = pd.DataFrame({'阶段': ['a', 'b'], '值': [3, -1]})
+        with pytest.raises(ChartConfigError) as excinfo:
+            V.to_echarts_option(frame, 'pie', x='阶段', y='值')
+        assert 'b' in str(excinfo.value)
+
+    def test_a_cross_table_is_refused_by_its_two_cardinalities(self):
+        """One mark per cell in all three projections: 600x600 produced a 46 MB TikZ source that
+        cannot be typeset, so the shape is refused before any renderer builds it."""
+        # 250 x 250 = 62,500 cells, comfortably past the 40,000 limit (200 x 200 is exactly it).
+        frame = pd.DataFrame({'x': [f'x{i}' for i in range(250)], 'y': [f'y{i}' for i in range(250)]})
+        with pytest.raises(ChartConfigError) as excinfo:
+            V.to_echarts_option(frame, 'heatmap', x='x', y='y')
+        message = str(excinfo.value)
+        assert '250' in message and str(MATRIX_CELL_LIMIT) in message
+
+    def test_a_cross_table_inside_the_budget_still_builds(self):
+        frame = pd.DataFrame({'x': ['x1', 'x2'], 'y': ['y1', 'y2']})
+        option = V.to_echarts_option(frame, 'heatmap', x='x', y='y')
+        assert len(option['series'][0]['data']) == 4

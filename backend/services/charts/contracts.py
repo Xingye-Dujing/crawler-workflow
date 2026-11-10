@@ -21,6 +21,13 @@ class ChartConfigError(ValueError):
     """
 
 
+#: Cells a cross table (heatmap) may hold before it is refused. A matrix draws one mark per CELL in
+#: every projection — measured: 600x600 = 360,000 cells produced a 46 MB TikZ source that xelatex
+#: cannot typeset, and 1500x1500 took 4.3 s just to build the ECharts option. The limit is a data
+#: limit (unlike the legibility caps above): past it there is no rendering of this shape that works,
+#: so the step refuses by name and names both cardinalities instead of writing the file.
+MATRIX_CELL_LIMIT = 40_000
+
 #: Rows a structural-variation figure draws. A y-axis row has to be tall enough to carry its
 #: own Chinese node name at the preview's height, and a forced label per row is exactly how the
 #: names end up printed on top of each other — so the cap is a legibility limit, not a data

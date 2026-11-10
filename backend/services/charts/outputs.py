@@ -11,8 +11,10 @@ as ``latex_error`` / ``latex_table_error`` and named once on the console in a re
 figure the node already drew and the run itself still succeed.
 """
 
+import contextlib
 import logging
 import os
+import uuid
 
 from core.refs import as_bool, sanitize_filename
 from runtime import paths
@@ -30,11 +32,25 @@ def write_latex_export(base: str, content: str, suffix: str) -> str:
 
     ``.txt`` (not ``.tex``) is deliberate — the user copies the body into their paper and a plain
     text artifact is what the exports browser and download route already serve without a new type.
+
+    Written through a STAGED file and renamed: two previews of the same chart title (the usual case —
+    the preview names itself after the chart type) were writing the same path with a truncating
+    ``open(..., 'w')``, so one reader could see half a document and the survivor could be a mixture
+    of both. The staged name carries ``.part`` so the exports browser never lists it either.
     """
     name = sanitize_filename(f'{base or "chart"}{suffix}.txt')
-    os.makedirs(paths.active().export_dir, exist_ok=True)
-    with open(os.path.join(paths.active().export_dir, name), 'w', encoding='utf-8') as handle:
-        handle.write(content)
+    directory = paths.active().export_dir
+    os.makedirs(directory, exist_ok=True)
+    target = os.path.join(directory, name)
+    staged = os.path.join(directory, f'{name}.{uuid.uuid4().hex[:8]}.part')
+    try:
+        with open(staged, 'w', encoding='utf-8') as handle:
+            handle.write(content)
+        os.replace(staged, target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(staged)
+        raise
     return name
 
 

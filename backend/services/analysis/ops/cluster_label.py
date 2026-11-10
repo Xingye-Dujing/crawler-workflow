@@ -55,8 +55,20 @@ def cluster_label(
         raise UnknownOperationError(t('analysis.label_no_llm', op='cluster_label'))
     groups = df.copy()
     groups['_grp'] = pd.to_numeric(groups[group_col], errors='coerce')
+    dropped = int(groups['_grp'].isna().sum())
+    if dropped:
+        # A cell a number cannot come out of is not a cluster. Dropping it silently shrank the table
+        # to the groups that happened to be numeric — and when EVERY group was text the step answered
+        # a 0-row, 0-column frame that the node settled DONE on, with none of the columns this step
+        # declares. The count is said out loud; the totals are not.
+        logger.warning(t('analysis.cluster_groups_dropped', col=group_col, n=dropped))
     groups = groups[groups['_grp'].notna()]
     order = sorted(int(k) for k in groups['_grp'].unique())
+    if not order:
+        # Nothing left to label. A named refusal, not an empty table: the columns this step promises
+        # (group_col/n_docs/summary_col) would not exist either, and every reader then blames the
+        # step that asks for them.
+        raise UnknownOperationError(t('analysis.cluster_no_groups', op='cluster_label', col=group_col))
     limit = int(max_groups)
     if len(order) > limit:
         raise UnknownOperationError(t('analysis.label_too_many', rows=len(order), limit=limit))
@@ -74,7 +86,7 @@ def cluster_label(
                 raise UnknownOperationError(t('analysis.cluster_no_texts', group=key))
             rows.append({group_col: key, 'n_docs': len(texts), summary_col: FALLBACK_MARK + texts[0][:40]})
         logger.warning(t('analysis.cluster_fallback_all', n=len(rows)))
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=[group_col, 'n_docs', summary_col])
 
     scope = f'cluster_label:{getattr(llm, "label", "") or "model"}'
     rows = []
@@ -131,4 +143,4 @@ def cluster_label(
     logger.info(t('analysis.cluster_done', n=summarised, model=getattr(llm, 'label', '')))
     if store is not None:
         logger.info(t('analysis.label_cached', asked=asked, replayed=replayed))
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=[group_col, 'n_docs', summary_col])

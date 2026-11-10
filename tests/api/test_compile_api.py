@@ -33,6 +33,17 @@ def _wf(nodes, conns):
     return {'nodes': nodes, 'connections': conns, 'settings': {'mode': 'serial'}}
 
 
+def _staged_pdfs(exports, nid):
+    """The PDFs one compile node staged, whatever run id prefixes the name.
+
+    The staged name is ``<run id>-compile-<node id>.pdf`` (run-scoped on purpose: a per-node name
+    collided across canvases, so a second run replaced the file the first run's ledger pointed at).
+    A test that hardcoded the old name would pin the collision back.
+    """
+    prefixed = sorted(path.name for path in exports.glob(f'*-compile-{nid}.pdf'))
+    return prefixed or sorted(path.name for path in exports.glob(f'compile-{nid}.pdf'))
+
+
 def _fake_xelatex_run(writes=True, returncode=0, stderr=b''):
     """Honour ``-output-directory <dir> main.tex`` by creating (or refusing) ``<dir>/main.pdf``."""
     from types import SimpleNamespace
@@ -102,7 +113,7 @@ class TestCompileNodeAndPdf:
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'cmp'})
         assert started.get_json()['ok'] is True
         assert run_finished(app_module)
-        assert (data_root / 'data' / 'exports' / 'compile-cmpA.pdf').exists(), 'the compile node must stage a PDF'
+        assert _staged_pdfs(data_root / 'data' / 'exports', 'cmpA'), 'the compile node must stage a PDF'
 
     def test_visualize_to_output_writes_a_pdf(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
@@ -149,9 +160,7 @@ class TestCompileNodeAndPdf:
         assert run_finished(app_module)
         exports = data_root / 'data' / 'exports'
         assert (exports / 'final.pdf').exists(), 'the output finalises the compile node’s PDF under the user name'
-        assert not (exports / 'compile-cmpB.pdf').exists(), (
-            'the staged file was renamed away, not copied and left behind'
-        )
+        assert not _staged_pdfs(exports, 'cmpB'), 'the staged file was renamed away, not copied and left behind'
 
     def test_both_boxes_off_is_rejected_before_the_run(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
@@ -179,7 +188,7 @@ class TestCompileNodeAndPdf:
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'bothoff'})
         assert run_finished(app_module)
         assert app_module.execution_state['outcome'] == 'rejected', 'a compile with no LaTeX is refused up front'
-        assert not (data_root / 'data' / 'exports' / 'compile-cmpC.pdf').exists()
+        assert not _staged_pdfs(data_root / 'data' / 'exports', 'cmpC')
 
     def test_missing_xelatex_fails_the_node_not_the_run(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: '')
@@ -200,3 +209,32 @@ class TestCompileNodeAndPdf:
         assert started.get_json()['ok'] is True, 'a missing compiler is a per-node failure, not a rejected canvas'
         assert run_finished(app_module)
         assert not (data_root / 'data' / 'exports' / 'no.pdf').exists(), 'no binary must mean no file, and no traceback'
+
+
+class TestTheStagedNameBelongsToOneRun:
+    def test_two_runs_stage_two_pdfs(self, client, app_module, paste, data_root, monkeypatch):
+        """A per-node name alone let run B replace the file run A's ledger pointed at.
+
+        Every canvas names its nodes ``node-1``, ``node-2``…, so ``compile-<node id>.pdf`` collided
+        across canvases and across attempts. The run id now leads the name (``visualize`` prefixes
+        it for the same reason), which is why two identical runs leave two files.
+        """
+        monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
+        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
+        ds = _upload(client, paste)
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 2}),
+                _node(
+                    'node-2',
+                    'visualize',
+                    {'chart_type': 'bar', 'x_field': '城市', 'y_field': '分数', 'engine': 'echarts'},
+                ),
+                _node('cmpTwice', 'compile'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'cmpTwice'}],
+        )
+        for _attempt in range(2):
+            client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'twice'})
+            assert run_finished(app_module)
+        assert len(_staged_pdfs(data_root / 'data' / 'exports', 'cmpTwice')) == 2

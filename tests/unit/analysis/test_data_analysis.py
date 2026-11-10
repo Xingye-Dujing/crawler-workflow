@@ -18,6 +18,7 @@ column, on a text column or on a column that is not there.
 """
 
 import ast
+import logging
 import re
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from static_assets import js_text
 # guards below read its ``__file__`` — both need the module object, not a copy of a name.
 import services.analysis.pipeline as m
 import services.analysis.topic_kernels as tk
+from i18n import t
 from services.analysis.pipeline import DataAnalysisService as D
 from services.analysis.pipeline import UnknownOperationError, _stage_order
 
@@ -3787,3 +3789,66 @@ class TestFlatJoinStep:
         )
         assert rows == [{'城市': '甲', '值_x': 0, '值_y': 1}]
         assert steps[0] == {'op': 'join_tables', 'left_on': '城市', 'right_on': '城市'}, 'the canvas copy was mutated'
+
+
+# ─── the audit pass: silent empties, mixed types, rows a comparison cannot read ────
+
+
+class TestClusterLabelRefusesAnUnlabelableGroupColumn:
+    """A group column with no number in it is a REFUSAL, not a 0-row 0-column table.
+
+    ``pd.to_numeric`` turned every text group into NaN, ``order`` came out empty, the loop never ran,
+    and ``pd.DataFrame([])`` answered a frame with no columns at all — while the node settled DONE.
+    The three columns this step declares (group_col/n_docs/summary_col) then did not exist, so the
+    step that read them was the one blamed for "missing column".
+    """
+
+    def test_a_text_group_column_is_refused_by_name(self):
+        frame = pd.DataFrame({'簇': ['A', 'A', 'B'], '正文': ['甲', '乙', '丙']})
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.cluster_label(frame, llm=None, group_col='簇', summary_col='概述', on_fail='fallback')
+        assert t('analysis.cluster_no_groups', op='cluster_label', col='簇') in str(excinfo.value)
+
+    def test_the_declared_columns_exist_even_when_the_model_is_absent(self):
+        """The fallback path answered ``pd.DataFrame(rows)``: with no rows it lost the columns."""
+        frame = pd.DataFrame({'簇': [0, 0, 1], '正文': ['甲', '乙', '丙']})
+        out = D.cluster_label(frame, llm=None, group_col='簇', summary_col='概述', on_fail='fallback')
+        assert list(out.columns) == ['簇', 'n_docs', '概述']
+        assert out['簇'].tolist() == [0, 1]
+
+    def test_partly_numeric_groups_are_counted_not_silently_dropped(self, caplog):
+        frame = pd.DataFrame({'簇': [0, 0, '别的'], '正文': ['甲', '乙', '丙']})
+        with caplog.at_level(logging.WARNING, logger='services.analysis.ops.cluster_label'):
+            D.cluster_label(frame, llm=None, group_col='簇', summary_col='概述', on_fail='fallback')
+        assert t('analysis.cluster_groups_dropped', col='簇', n=1) in caplog.text
+
+
+class TestSortRowsNamesTheColumnNotPandas:
+    def test_a_mixed_type_column_is_refused_by_name(self):
+        """``sort_values`` compares with ``<``: 5 beside "10万" raised TypeError from pandas, and the
+        console then named a comparison instead of the sort key the user has to fix."""
+        frame = pd.DataFrame({'v': [1, 'b', 2]})
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.sort_rows(frame, 'v')
+        assert t('analysis.sort_mixed_types', op='sort_rows', col='v') in str(excinfo.value)
+
+
+class TestARowTheComparisonCannotReadIsCounted:
+    """The coercion semantics are pinned elsewhere (a text column matches nothing on purpose).
+
+    What is pinned HERE is that the loss is said out loud: a partly numeric column used to drop the
+    rows the preview shows, with no count and no line in the console.
+    """
+
+    def test_a_partly_numeric_column_warns_with_its_count(self, caplog):
+        frame = pd.DataFrame({'赞': ['25', '30', '很多'], 'n': [1, 2, 3]})
+        with caplog.at_level(logging.WARNING, logger='services.analysis.ops.filter_rows'):
+            kept = D.filter_rows(frame, '赞', 'gt', '26')
+        assert kept['n'].tolist() == [2], 'the comparison itself is unchanged'
+        assert t('analysis.filter_unparsed_rows', col='赞', op='gt', n=1) in caplog.text
+
+    def test_a_fully_numeric_column_warns_about_nothing(self, caplog):
+        frame = pd.DataFrame({'赞': ['25', '30'], 'n': [1, 2]})
+        with caplog.at_level(logging.WARNING, logger='services.analysis.ops.filter_rows'):
+            D.filter_rows(frame, '赞', 'gt', '26')
+        assert 'analysis.filter_unparsed_rows' not in caplog.text

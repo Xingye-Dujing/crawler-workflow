@@ -10,8 +10,8 @@ import re
 
 from services.biblio.formats.base import FormatSpec
 from services.biblio.formats.common import (
-    cell,
     countries,
+    frame_cell,
     frame_has_groups,
     frame_of,
     header_has_groups,
@@ -158,30 +158,35 @@ def parse_frame(frame) -> tuple[list[dict], int]:
     rows: list[dict] = []
     skipped = 0
     for _, source in frame.iterrows():
-        title = cell(source, 'Title')
+        # ``frame_cell``, not ``cell``: detection matches the header through ``_norm`` (case and
+        # padding insensitive) while ``cell`` looked a name up EXACTLY, so a CSV saved with
+        # `` Title `` or ``title`` passed detection and then answered 0 rows — "the file has no
+        # records" about a file whose only problem was a padded header. The other five frame
+        # parsers already read through this helper.
+        title = frame_cell(source, frame, 'Title')
         if not title:
             skipped += 1
             continue
-        citation = cell(source, 'Citation')
+        citation = frame_cell(source, frame, 'Citation')
         match = _CITE_BLOCK.search(citation)
         rows.append(
             make_row(
                 title=title,
-                authors=_csv_authors(cell(source, 'Authors')),
+                authors=_csv_authors(frame_cell(source, frame, 'Authors')),
                 affiliations='',
-                journal=cell(source, 'Journal/Book', 'Journal'),
-                year=year_of(cell(source, 'Publication Year', 'Year') or citation),
-                volume=(match.group('volume') if match else '') or cell(source, 'Volume'),
-                issue=(match.group('issue') if match else '') or cell(source, 'Issue'),
-                page_start=(match.group('pages') if match else '') or cell(source, 'Pages'),
-                keywords=split_keywords(cell(source, 'Keywords', 'MeSH Terms')),
-                abstract=cell(source, 'Abstract'),
+                journal=frame_cell(source, frame, 'Journal/Book', 'Journal'),
+                year=year_of(frame_cell(source, frame, 'Publication Year', 'Year') or citation),
+                volume=(match.group('volume') if match else '') or frame_cell(source, frame, 'Volume'),
+                issue=(match.group('issue') if match else '') or frame_cell(source, frame, 'Issue'),
+                page_start=(match.group('pages') if match else '') or frame_cell(source, frame, 'Pages'),
+                keywords=split_keywords(frame_cell(source, frame, 'Keywords', 'MeSH Terms')),
+                abstract=frame_cell(source, frame, 'Abstract'),
                 refs=[],
-                doi=cell(source, 'DOI'),
+                doi=frame_cell(source, frame, 'DOI'),
                 fmt=ID,
-                country=countries(cell(source, 'Affiliations', 'Countries')),
-                doctype=cell(source, 'Resource Type', 'Publication Type'),
-                language=cell(source, 'Language'),
+                country=countries(frame_cell(source, frame, 'Affiliations', 'Countries')),
+                doctype=frame_cell(source, frame, 'Resource Type', 'Publication Type'),
+                language=frame_cell(source, frame, 'Language'),
             )
         )
     return rows, skipped

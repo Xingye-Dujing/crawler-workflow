@@ -185,6 +185,21 @@ def _cell(value) -> str:
     return html.escape(text, quote=True)
 
 
+def _one_chart(build, title: str):
+    """One figure as ``(title, data_uri, '')``, or ``(title, None, reason)`` when it cannot be drawn.
+
+    The guard belongs HERE rather than around the whole section: a numeric column holding ``inf``
+    makes the renderer raise, and one such column used to discard every figure the report had
+    already built. The reason travels back so the gap can be NAMED in the document as well as in
+    the log.
+    """
+    try:
+        return title, build(), ''
+    except Exception as exc:  # a chart must never take the report down
+        logger.warning(t('report.chart_failed', err=_text(exc)))
+        return title, None, _text(exc)
+
+
 def _numeric_columns(df: pd.DataFrame) -> list:
     """Columns that are numbers in the pandas sense, not merely numeric text.
 
@@ -260,11 +275,17 @@ class ReportService:
     # ── charts ──────────────────────────────────────────────────
 
     def _charts(self, frames: list) -> list:
-        """Every chart the run's tables justify, as ``(title, data_uri)``.
+        """Every chart the run's tables justify, as ``(title, data_uri_or_None, reason)``.
 
         Category columns become share-of-total bars; numeric columns become
         histograms. Which columns qualify is decided per table, so a run whose
         entity node and emotion node both produced something shows both.
+
+        ONE chart's failure is that chart's, and only that chart's: the whole section used to sit
+        inside a single ``try`` in :meth:`_chart_block`, so one column a renderer refuses (a ratio
+        holding ``inf``, say) discarded every figure already built and left the report with no
+        charts at all plus a traceback. ``None`` is the marker the caller turns into one warn line
+        while the other figures still print.
         """
         charts = []
         for entry in frames:
@@ -284,13 +305,20 @@ class ReportService:
                     # already stated by the number itself.
                     continue
                 counts.name = column
-                charts.append((f'{title} · {_localize_label(column)}', self._pie(counts)))
+                charts.append(
+                    _one_chart(lambda counts=counts: self._pie(counts), f'{title} · {_localize_label(column)}')
+                )
             for column in _numeric_columns(df):
                 if len(charts) >= MAX_CHARTS:
                     break
                 if df[column].dropna().nunique() < 2:
                     continue
-                charts.append((f'{title} · {_localize_label(column)}', self._histogram(df, column)))
+                charts.append(
+                    _one_chart(
+                        lambda df=df, column=column: self._histogram(df, column),
+                        f'{title} · {_localize_label(column)}',
+                    )
+                )
         return charts
 
     @staticmethod
@@ -309,22 +337,30 @@ class ReportService:
 
         A picture the picker named but that no longer resolves is skipped rather
         than blanking the section: one deleted file is a gap, not a lost report.
-        If drawing the built-in charts raises, the failure line still prints and
-        the studio pictures are attempted, because they cost nothing to inline.
+
+        A chart the renderer refuses is now ONE line of text, not the end of the section: the
+        per-chart guard lives in :meth:`_charts` (``None`` = that figure failed) and the pictures
+        from the studio are still inlined, because they cost nothing.
         """
         figures = []
-        note = ''
+        notes = []
         try:
             charts = self._charts(frames)
-        except Exception as e:  # a chart must never take the report down
+        except Exception as e:  # the section's own failure, one level up from a single chart
             logger.exception(t('report.chartsFailed'))
             charts = []
-            note = f'<p class="warn">{html.escape(t("report.chart_failed", err=_text(e)))}</p>'
-        for title, uri in charts:
+            notes.append(f'<p class="warn">{html.escape(t("report.chart_failed", err=_text(e)))}</p>')
+        for title, uri, reason in charts:
+            if not uri:
+                # One line per failed figure, naming the reason: the section keeps the figures that
+                # DID render, which is what "逐图隔离" has to mean to be worth anything.
+                notes.append(f'<p class="warn">{html.escape(t("report.chart_failed", err=reason))}</p>')
+                continue
             figures.append(
                 f'<figure><img src="{uri}" alt="" loading="lazy"><figcaption>{_cell(title)}</figcaption></figure>'
             )
         figures += self._image_figures(images)
+        note = ''.join(notes)
         if not figures:
             return note or f'<p class="muted">{html.escape(t("report.no_charts"))}</p>'
         return note + '<div class="charts">' + ''.join(figures) + '</div>'

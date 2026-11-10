@@ -530,6 +530,27 @@ class TestMergePlatformStamp:
         merged, _ = output_plugin.merge_upstream_tables([], upstream, '导出', platform_of={'node-1': 'weibo'})
         assert [r['platform'] for r in merged] == ['weibo', '']
 
+    def test_an_empty_first_parent_is_not_the_column_reference(self, output_plugin):
+        """A crawl that collected nothing is an EMPTY BATCH, not a column contract.
+
+        The platform stamp gives even a zero-row parent a ``platform`` column, so taking "the first
+        frame with any column" as the reference made that empty table the contract and refused the
+        real one as a mismatch (``extra``/``missing``), even though the docstring promises to accept
+        an honest empty batch.
+        """
+        upstream = [('node-1', []), ('node-2', [{'正文': '丙'}])]
+        merged, _ = output_plugin.merge_upstream_tables(
+            [], upstream, '导出', platform_of={'node-1': 'weibo', 'node-2': 'zhihu'}
+        )
+        assert merged == [{'platform': 'zhihu', '正文': '丙'}]
+
+    def test_an_empty_last_parent_contributes_no_column(self, output_plugin):
+        upstream = [('node-1', [{'正文': '甲'}]), ('node-2', [])]
+        merged, _ = output_plugin.merge_upstream_tables(
+            [], upstream, '导出', platform_of={'node-1': 'weibo', 'node-2': 'zhihu'}
+        )
+        assert merged == [{'platform': 'weibo', '正文': '甲'}]
+
     def test_no_platform_map_leaves_the_old_merge_shape(self, output_plugin):
         merged, _ = output_plugin.merge_upstream_tables(
             [], [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])], '导出'

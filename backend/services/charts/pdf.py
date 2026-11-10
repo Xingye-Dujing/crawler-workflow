@@ -9,17 +9,51 @@ Live's (or MacTeX's) elsewhere, which is why the search and the refusal both ask
 """
 
 import contextlib
+import logging
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+from types import SimpleNamespace
 
 from core import machine, procs
 from runtime.settings import get_setting
 
 from i18n import t
 from services.charts.tikz import LatexChartService
+
+#: How long one compile may take. Generous on purpose — a first run builds the font cache.
+COMPILE_TIMEOUT = 120
+
+logger = logging.getLogger(__name__)
+
+
+def _discard(work: str) -> None:
+    """Remove the throwaway compile directory, and SAY where it is when that fails.
+
+    ``shutil.rmtree(..., ignore_errors=True)`` was silent: on Windows a file held open by a
+    surviving child process leaves ``cixi-tex-*`` in %TEMP% forever, and nothing anywhere recorded
+    that a directory had been abandoned. The claim that matters is "no half-written PDF", so a
+    leaked temp directory is a fact the log has to carry.
+    """
+    try:
+        shutil.rmtree(work)
+    except OSError as exc:
+        logger.warning(t('api.compileTempLeft', path=work, err=exc))
+
+
+def _stop_process_tree(proc) -> None:
+    """Kill the compile and the children it started (``xdvipdfmx``), not just the direct child."""
+    if proc is None or proc.poll() is not None:
+        return
+    pid = getattr(proc, 'pid', None)
+    if pid:
+        stopped, reason = procs.reap_process(pid)
+        if not stopped:
+            logger.warning(t('api.compileKillFailed', pid=pid, err=reason))
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        proc.kill()
 
 
 def compose_tex(docs) -> str:
@@ -133,16 +167,27 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
         # code is read below, together with "did a PDF actually appear". ``popen_kwargs`` is the
         # Windows half of "no black window flashes for every compile" — the packaged server has no
         # console of its own, and xelatex is a console program.
-        result = subprocess.run(
+        #
+        # Popen + wait, not ``run(timeout=…)``: on timeout ``run`` kills only the DIRECT child, and
+        # xelatex starts ``xdvipdfmx`` which can outlive it holding main.pdf — the temp directory
+        # then cannot be removed (silently, with ``ignore_errors``) and stays in %TEMP% for good.
+        proc = subprocess.Popen(
             [xelatex, '-interaction=batchmode', '-halt-on-error', '-output-directory', work, 'main.tex'],
             cwd=work,
-            capture_output=True,
-            timeout=120,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             **procs.popen_kwargs(),
         )
+        try:
+            stdout, stderr = proc.communicate(timeout=COMPILE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            _stop_process_tree(proc)
+            stdout, stderr = proc.communicate()
+            _discard(work)
+            return {'error': t('api.compilePdfTimeout', seconds=COMPILE_TIMEOUT)}, ''
+        result = SimpleNamespace(returncode=proc.returncode, stdout=stdout or b'', stderr=stderr or b'')
     except (subprocess.SubprocessError, OSError) as e:
-        shutil.rmtree(work, ignore_errors=True)
+        _discard(work)
         return {'error': t('api.compilePdfFailed', err=e)}, ''
     produced = os.path.join(work, 'main.pdf')
     if result.returncode != 0 or not os.path.isfile(produced):
@@ -153,14 +198,14 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
         with contextlib.suppress(OSError):
             if os.path.isfile(produced):
                 os.remove(produced)
-        shutil.rmtree(work, ignore_errors=True)
+        _discard(work)
         return {'error': explain_failure(log_text, result.stderr)}, ''
     staged = os.path.join(export_dir, out_name)
     try:
         shutil.move(produced, staged)
     except OSError as e:
-        shutil.rmtree(work, ignore_errors=True)
+        _discard(work)
         return {'error': t('api.compilePdfFailed', err=e)}, ''
-    shutil.rmtree(work, ignore_errors=True)
+    _discard(work)
     name = os.path.basename(staged)
     return {'pdf_file': name, 'pdf_bytes': os.path.getsize(staged)}, name

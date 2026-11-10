@@ -28,6 +28,18 @@ from i18n import t
 
 logger = logging.getLogger(__name__)
 
+#: A file a writer is still producing: ``save`` stages ``<stem>.<hex>.part<ext>`` beside the target
+#: and renames it in one step. The staged name used to keep the REAL extension, so the panel listed
+#: a half-written ``.csv`` — sortable, downloadable, and indistinguishable from a finished export.
+#: It stays out of the listing and out of every download that goes through this module.
+_STAGED = re.compile(r'\.part(?:\.[A-Za-z0-9]+)?$', re.IGNORECASE)
+
+
+def is_staged(name: str) -> bool:
+    """Whether *name* is a writer's not-yet-renamed temp file."""
+    return bool(_STAGED.search(str(name or '')))
+
+
 #: Refused extensions. The panel can show the file but must not hand back a
 #: script or an executable with a content type that a browser might act on.
 UNSAFE_DOWNLOADS = ('.py', '.js', '.html', '.htm', '.exe', '.bat', '.cmd', '.sh', '.dll')
@@ -86,6 +98,9 @@ def list_exports(export_dir: str, limit: int = MAX_ENTRIES) -> list:
     entries = []
     with os.scandir(export_dir) as handles:
         for entry in handles:
+            if is_staged(entry.name):
+                # A writer's temp file is not an export yet (see ``_STAGED``).
+                continue
             try:
                 if not entry.is_file(follow_symlinks=False):
                     continue
@@ -118,7 +133,8 @@ def resolve_export_file(export_dir: str, name: str) -> str:
     # appended after the stem is capped), so capping here would make a present file
     # unresolvable. Separators/traversal are still stripped; containment is checked below.
     cleaned = sanitize_filename(name, truncate=False)
-    if not cleaned or not export_dir:
+    if not cleaned or not export_dir or is_staged(cleaned):
+        # A staged temp file is never addressable: it is a write in progress, not an export.
         return ''
     root = os.path.realpath(export_dir)
     candidate = os.path.realpath(os.path.join(root, cleaned))

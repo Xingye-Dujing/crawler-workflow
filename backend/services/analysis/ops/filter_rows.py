@@ -1,9 +1,13 @@
 """The ``filter_rows`` step, one module of the analysis op registry (see ops/__init__.py)."""
 
+import logging
+
 import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError, _checked_pattern
+
+logger = logging.getLogger(__name__)
 
 
 def _numeric_view(series: pd.Series) -> pd.Series | None:
@@ -74,7 +78,14 @@ def filter_rows(df: pd.DataFrame, column: str, op: str, value) -> pd.DataFrame:
             # Without this the pipeline died inside float() with a bare
             # "could not convert string to float".
             raise UnknownOperationError(f'"{op}" needs a numeric value, got: {value!r}') from e
+        # A text column matches nothing here on purpose (pinned: "the bound is what has to parse"),
+        # but a column that is only PARTLY numeric used to lose its text rows in silence — the
+        # preview shows those rows, the result does not, and nothing said so. The count is the line
+        # that makes the coercion auditable without changing what the comparison means.
         numeric = pd.to_numeric(s, errors='coerce')
+        unreadable = int(s.notna().sum() - numeric.notna().sum())
+        if unreadable:
+            logger.warning(t('analysis.filter_unparsed_rows', col=column, op=op, n=unreadable))
         mask = {
             'gt': numeric > bound,
             'gte': numeric >= bound,

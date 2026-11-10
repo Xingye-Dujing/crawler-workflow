@@ -277,6 +277,21 @@ class TestInternationalFormats:
         assert first['页码'] == '100-112'
         assert first['作者'] == 'Zhang M;Zhou L;Chen H'
 
+    def test_a_padded_or_recased_pubmed_header_still_reads_every_column(self):
+        """Detection matches the header through ``_norm``; reading used to match it EXACTLY.
+
+        A CSV re-saved by Excel (`` Title ``) or hand-edited (``title``) therefore passed detection
+        and then answered 0 rows — "this file has no records" about a file whose only problem was a
+        padded header — or, when just one column was padded, silently lost that column's values.
+        """
+        frame = pd.read_csv(SAMPLES / 'biblio_pubmed_csv_demo.csv', dtype=str, keep_default_na=False)
+        padded = frame.rename(columns={name: f' {name.upper()} ' for name in frame.columns})
+        parsed = parse_frame(padded)
+        assert parsed['format'] == 'PubMed'
+        assert len(parsed['rows']) == 3, 'the padded header must not read as "no records"'
+        assert parsed['rows'][0]['来源期刊'] == 'Public Administration Review'
+        assert parsed['rows'][0]['页码'] == '100-112', 'the citation column was padded too'
+
     def test_scopus_csv_is_also_read_from_a_frame(self):
         frame = pd.read_csv(SAMPLES / 'biblio_scopus_demo.csv', dtype=str, keep_default_na=False)
         parsed = parse_frame(frame)

@@ -24,6 +24,12 @@ def _pie(cls, base: dict, req: ChartRequest) -> dict:
     if not req.x:
         raise ChartConfigError('Pie chart requires a category field (x)')
     labels, values = cls.aggregate(req.df, req.x, req.y, req.agg)
+    # The same refusal the printed figure makes (``tikz_console._pie``): a share cannot be negative,
+    # and one engine accepting what another rejects is how "the same chart" means two things. It is
+    # also the input matplotlib answers with a bare ValueError from ``ax.pie``.
+    negative = [str(name) for name, value in zip(labels, values, strict=True) if _finite([value]) and value < 0]
+    if negative:
+        raise ChartConfigError(t('chart.pie_negative', names=', '.join(negative)[:120]))
     base['tooltip']['formatter'] = '{b}: {c} ({d}%)'
     base['legend'] = {
         'data': labels,

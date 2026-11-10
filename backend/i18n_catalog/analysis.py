@@ -39,6 +39,10 @@ ZH = {
     'analysis.cluster_empty': '簇 {group} 的摘要返回为空',
     'analysis.cluster_failed': '簇 {group} 的摘要失败：{err}',
     'analysis.cluster_no_texts': '簇 {group} 里没有可摘要的文本，无法问模型',
+    'analysis.cluster_no_groups': '分组列“{col}”里没有任何数字，clustering 标签无法分组：请先用“转换类型”把簇编号转成数字，或改用“簇综述”',
+    'analysis.cluster_groups_dropped': '分组列“{col}”里有 {n} 行不是数字，已跳过（这些行不会进摘要表）',
+    'analysis.filter_unparsed_rows': '“{op}”在列“{col}”上比较时，有 {n} 行不是数字、已按不匹配处理（它们不会出现在结果里）',
+    'analysis.sort_mixed_types': '排序列“{col}”里数字与文本混在一起（例如 5 与“10万”），无法排序：请先“转换类型”',
     'analysis.cluster_prompt': (
         '你是舆情分析研究员。下面是某网络暴力事件语料按语义聚类后、同一个簇里的若干条原始文本。'
         '请用不超过 40 个汉字概括这一簇在说什么；只输出概括本身，不要解释、不要引号。\n'
@@ -385,6 +389,10 @@ EN = {
     'analysis.cluster_empty': 'the summary for cluster {group} came back empty',
     'analysis.cluster_failed': 'the summary for cluster {group} failed: {err}',
     'analysis.cluster_no_texts': 'cluster {group} has no text to summarise, so the model cannot be asked',
+    'analysis.cluster_no_groups': 'The group column "{col}" holds no number at all, so clusters cannot be labelled: convert the cluster ids to numbers first, or use 簇综述 (cluster review) instead',
+    'analysis.cluster_groups_dropped': '{n} row(s) of the group column "{col}" are not numbers and were skipped (they cannot appear in the summary table)',
+    'analysis.filter_unparsed_rows': 'Comparing {op} on the column "{col}" treated {n} non-numeric row(s) as no match (they do not appear in the result)',
+    'analysis.sort_mixed_types': 'The sort column "{col}" mixes numbers with text (5 beside "10万"), so it cannot be sorted: convert the type first',
     'analysis.cluster_prompt': (
         'You are a public-opinion analyst. Below are several raw posts that fall in the SAME semantic cluster '
         'of a cyberbullying corpus. Summarise what this cluster is about in one short sentence; output the '

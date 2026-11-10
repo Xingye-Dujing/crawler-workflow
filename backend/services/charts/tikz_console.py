@@ -40,6 +40,17 @@ from .tikz_preamble import (
 )
 
 
+def _flat_cell(value) -> str:
+    """One table cell with its newlines folded to spaces.
+
+    TeX has no newline inside a cell, and a raw one turns one table row into two LINES — which is
+    the unit ``paper._split_table`` counts when it chunks a long table into blocks, so a cluster
+    summary or a paper title carrying a line break cut a page in half and xelatex failed on the
+    table with nothing in the message pointing at the cell.
+    """
+    return ' '.join(str(value).replace('\r', '\n').split('\n')).strip()
+
+
 class ConsoleFigureMixin:
     @staticmethod
     def _require_pair(x, y, what):
@@ -726,8 +737,13 @@ class ConsoleFigureMixin:
     @staticmethod
     def _tabular(head, rows) -> str:
         spec = 'l' + 'r' * (len(head) - 1) if len(head) > 1 else 'l'
-        body = '\n'.join(' & '.join(str(c) for c in row) + r'\\' for row in rows)
-        head_row = ' & '.join(rf'\textbf{{{c}}}' for c in head)
+        # A cell's text can carry a newline (a cluster summary, a paper title), and a raw one splits
+        # one table row into two LINES — which is exactly the unit ``paper._split_table`` counts when
+        # it chunks a long table into blocks, so a single such cell cut a page in half and xelatex
+        # then failed on the table with no visible cause. TeX has no newline inside a cell anyway:
+        # fold them to a space.
+        body = '\n'.join(' & '.join(_flat_cell(c) for c in row) + r'\\' for row in rows)
+        head_row = ' & '.join(rf'\textbf{{{_flat_cell(c)}}}' for c in head)
         # \footnotesize + the preamble's \arraystretch{1.25} are the reference tables' spacing; a bold header
         # row is the only emphasis a three-line table may add over \toprule/\midrule/\bottomrule.
         return (

@@ -83,6 +83,7 @@ ZH = {
     'chart.col.within_freq': '主题内词频',
     'chart.count': '数量',
     'chart.y_not_numeric': '图表的取值列“{col}”里没有任何数值（整列都是文字），无法按数值作图',
+    'chart.matrix_too_large': '热力图的交叉表是 {x} × {y} = {cells} 个单元格，超过上限 {limit}；请换基数更低的两个字段',
     'chart.pie_negative': '饼图画不出来：以下分类的聚合值是负数（{names}）——占比不能有负值，请换用柱状图或先过滤',
     'chart.noCjkFont': (
         '本机字体里没有能显示汉字的字体（已找过：{checked}）：'
@@ -194,6 +195,7 @@ EN = {
     'chart.col.within_freq': 'Within-topic frequency',
     'chart.count': 'count',
     'chart.y_not_numeric': 'The chart value column "{col}" holds no numbers at all, so it cannot be plotted as values',
+    'chart.matrix_too_large': 'The heatmap cross table would hold {x} x {y} = {cells} cells, over the {limit} limit; choose two fields with fewer distinct values',
     'chart.pie_negative': (
         'The pie cannot be drawn: these categories aggregate to a negative value ({names}) — a share '
         'cannot be negative, so use a bar chart or filter the rows first'

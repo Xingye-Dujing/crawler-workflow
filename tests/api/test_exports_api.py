@@ -396,3 +396,39 @@ class TestClearName:
             # Release the pin: the lock store is process-wide, and a left-behind “固定” entry
             # would make a later test that asserts the exact lock set see a key it never added.
             client.post('/api/locks', json={'panel': 'exports', 'key': 'a.part001.csv', 'locked': False})
+
+
+class TestAStagedFileIsNotAnExport:
+    """``save`` writes ``<stem>.<hex>.part<ext>`` and renames it in one step.
+
+    The staged name kept the REAL extension, so the listing offered a half-written ``.csv`` (sorted,
+    downloadable, indistinguishable from a finished export) and a kill mid-write left it there for
+    good. It is a write in progress, not an export: invisible, unnameable, undownloadable — while the
+    SHARD naming (``a.part000.csv``, a real export split by ``batch_size``) keeps working, because
+    that is ``.part<digits>.`` and not the writer's ``.part.`` marker.
+    """
+
+    @staticmethod
+    def _stage(export_dir: str, name: str = 'run-b.ab12cd34.part.csv') -> str:
+        path = os.path.join(export_dir, name)
+        with open(path, 'w', encoding='utf-8') as handle:
+            handle.write('half a table')
+        return path
+
+    def test_the_listing_does_not_offer_a_half_written_file(self, client, export_dir):
+        self._stage(export_dir)
+        names = {row['name'] for row in client.get('/api/exports/list').get_json()['exports']}
+        assert names == {'run-a.csv', 'script.py'}
+
+    def test_a_download_cannot_name_it(self, client, export_dir):
+        self._stage(export_dir)
+        response = client.get('/api/exports/download', query_string={'name': 'run-b.ab12cd34.part.csv'})
+        assert response.status_code == 404
+
+    def test_the_shard_naming_is_still_a_real_export(self, client, export_dir):
+        """``Sanyo.part000.csv`` is a finished batch, not a temp file."""
+        path = os.path.join(export_dir, 'big.part000.csv')
+        with open(path, 'w', encoding='utf-8') as handle:
+            handle.write('标题\n三亚\n')
+        names = {row['name'] for row in client.get('/api/exports/list').get_json()['exports']}
+        assert 'big.part000.csv' in names

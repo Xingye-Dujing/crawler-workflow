@@ -35,7 +35,11 @@ def _select(freq: Counter, params: dict) -> set[str]:
             total += freq[name]
             if total >= position * position:
                 g = position
-        return set(names[: max(1, g)])
+        # ``g_index`` IS the panel's number: the g the frequency curve yields, capped by it. The
+        # parameter used to be rendered, validated and stored while this branch ignored it, so
+        # changing the box changed nothing and the panel was showing a setting that did not exist.
+        ceiling = max(1, int(params.get('g_index') or 1))
+        return set(names[: max(1, min(g, ceiling))])
     floor = params.get('threshold_c') or params['min_count']
     return {name for name in names if freq[name] >= floor}
 
