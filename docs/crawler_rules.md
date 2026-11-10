@@ -57,7 +57,10 @@
   `jump_to_bottom` (finds what actually moves), `engine.pager.walk_pages` and `engine.jsonpath` know nothing about
   any platform; a platform module declares only selectors, endpoints and column names. New crawl logic goes through
   these helpers — a second copy of a scroll loop or a 万-parser is what this rule exists to prevent. No walk has a
-  round/page budget: "how much" is the user's target, never a constant. **A list is a document, not a bookmark:** a
+  round/page budget: "how much" is the user's target, never a constant. **A click loop is a walk too:** an expander
+  ("展开 N 条回复") is clicked until the page stops offering one, never "N times"; a control is remembered by its own
+  words (or a `data-*-tried` stamp) so a stubborn one cannot spin the loop, and 停止 is asked inside every loop that
+  now has no count to end it. **A list is a document, not a bookmark:** a
   per-row page navigates away, harvest the list before leaving it. `Crawler.open(url)` is the only navigation entry
   point: it survives a renderer timeout and **records whether the navigation settled** — a load that never finished
   is a slow network, not a refusal, and a refusal may name only what the code can see. It clears the dialog, and

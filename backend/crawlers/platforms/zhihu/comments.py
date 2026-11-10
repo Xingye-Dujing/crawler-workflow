@@ -150,12 +150,12 @@ return (function () {
 })();
 """
 
-#: How many pump-and-read rounds one panel may take, and how many of them must come back with
-#: nothing new (and no reply thread left to open) before the walk believes the panel is done.
-#: Both numbers are a *budget the crawler imposes*, so reaching the first one is announced:
-#: measured, a 261-comment panel needs ~26 fills of ~10 items, and the alternative to naming
-#: the budget is reporting 12 rows as if the site had nothing more (docs/live_test_plan.md §6).
-PANEL_ROUNDS = 60
+#: How many consecutive pump-and-read rounds may come back with nothing new (and no reply thread left
+#: to open) before the walk believes the panel is done. **Patience, not a budget**: measured, the panel
+#: answers a scroll in ~1 s, so one quiet round can just be a slow answer. There is deliberately no
+#: upper bound on the number of rounds — the only things that end a panel walk are the panel itself,
+#: the user's 停止 and the user's 评论上限 (the same rule the douyin walk paid for: a fixed round count
+#: on a 3388-comment video reported 406 rows as `ok`).
 QUIET_ROUNDS = 3
 
 #: The nested-reply opener's own words: “展开其中 2 条回复” / “查看 3 条回复” / “全部回复”.
@@ -164,6 +164,11 @@ QUIET_ROUNDS = 3
 #: bucket of comments that does not exist in the DOM until clicked (measured: +5 and +29 rows on
 #: two answers), so an un-clicked expander is 漏采 by construction.
 REPLY_OPENER = re.compile(r'(查看|展开).{0,8}回复|全部回复')
+
+#: Has this opener already been clicked? Stamped after the click so a control the site keeps showing
+#: cannot keep a panel walk alive (the round budget that used to hide that is gone).
+_TRIED_GET_JS = "return arguments[0].hasAttribute('data-zhihu-tried');"
+_TRIED_SET_JS = "arguments[0].setAttribute('data-zhihu-tried', '1');"
 
 
 @register('zhihu')
@@ -200,11 +205,18 @@ def walk(session, url: str, limit: int) -> tuple:
 
 
 def _click_reply_threads(session) -> int:
-    """Open every visible “N 条回复” thread, so nested comments exist to be read."""
+    """Open every visible “N 条回复” thread that has not been tried yet, so nested comments can be read.
+
+    Each opener is clicked **once**, stamped ``data-zhihu-tried``: a control the site keeps showing
+    (a thread whose replies are deleted, or one whose label never flips) would otherwise be clicked
+    on every round, which kept a panel walk alive forever the moment its round budget was removed.
+    """
     clicked = 0
     for el in list(session.driver.find_elements('css selector', 'button, a')):
         text = session.safe_text(el)
         if not text or not REPLY_OPENER.search(text):
+            continue
+        if session.driver.execute_script(_TRIED_GET_JS, el):
             continue
         with contextlib.suppress(Exception):
             session.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', el)
@@ -212,6 +224,8 @@ def _click_reply_threads(session) -> int:
             el.click()
             clicked += 1
             session.nap(0.4)
+        with contextlib.suppress(Exception):
+            session.driver.execute_script(_TRIED_SET_JS, el)
     return clicked
 
 
@@ -219,7 +233,7 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
     collected, seen = [], set()
     quiet = 0
     rounds = 0
-    while rounds < PANEL_ROUNDS:
+    while True:
         rounds += 1
         session.driver.execute_script(PUMP_JS)
         session.nap(0.6)
@@ -243,14 +257,16 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
             session.log(t('comment.zhihuNoAuthor', n=unnamed, total=len(fresh)))
         if limit and len(collected) >= limit:
             return collected[:limit]
+        if session.may_stop():
+            # 停止 must end the panel, not just the list of links: without a round budget this loop
+            # only ends on the panel's own evidence, so the user's stop has to be asked here.
+            break
         if not fresh and not threads:
             quiet += 1
             if quiet >= QUIET_ROUNDS:
                 break
         else:
             quiet = 0
-    if rounds >= PANEL_ROUNDS:
-        session.log(t('comment.zhihuPanelCapped', n=PANEL_ROUNDS, rows=len(collected)))
     if declared and len(collected) < declared:
         # The site's own number is the denominator the user reads off the page; anything short
         # of it is said out loud, because "the panel had 12" and "we stopped at 12 of 261" are

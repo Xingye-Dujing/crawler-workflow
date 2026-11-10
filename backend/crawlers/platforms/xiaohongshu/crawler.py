@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.engine import feed, times
 from crawlers.engine.counters import parse_count
+from crawlers.platforms.xiaohongshu.rows import note_id
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ class XiaohongshuCrawler(Crawler):
         keys = []
         for card in self._mounted_cards():
             link = self._card_link(card)
-            keys.append(self._note_id(link) or link)
+            keys.append(note_id(link) or link)
         return tuple(keys)
 
     def _note_row(self, card, seen: set) -> dict | None:
@@ -175,7 +176,7 @@ class XiaohongshuCrawler(Crawler):
             return None
         # Dedupe on the session-independent 笔记ID, not the tokenised link: the grid re-promotes the
         # same note with a fresh token, so keying on the link would re-read (and re-pay) it.
-        key = self._note_id(link) or link
+        key = note_id(link) or link
         if key in seen:
             return None
         try:
@@ -225,7 +226,7 @@ class XiaohongshuCrawler(Crawler):
     def _scrape_card(self, card, link: str) -> dict:
         return {
             '笔记链接': link,
-            '笔记ID': self._note_id(link),
+            '笔记ID': note_id(link),
             '标题': self._text_of(card, '.footer .title') or self._text_of(card, '.title'),
             '作者': self._text_of(card, '.author .name') or self._text_of(card, '.name'),
             '点赞数': parse_count(self._text_of(card, '.like-wrapper .count')),
@@ -249,11 +250,6 @@ class XiaohongshuCrawler(Crawler):
         except (TypeError, ValueError):
             return cls.DEFAULT_COMMENT_PREVIEW
         return value if value >= 0 else cls.DEFAULT_COMMENT_PREVIEW
-
-    @staticmethod
-    def _note_id(link: str) -> str:
-        m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
-        return m.group(1) if m else ''
 
     def _collected_ids(self) -> set:
         """The 笔记IDs this crawl already holds, read off its stored rows.
@@ -345,7 +341,7 @@ class XiaohongshuCrawler(Crawler):
 
         return {
             '笔记链接': url,
-            '笔记ID': self._note_id(url),
+            '笔记ID': note_id(url),
             '标题': title,
             '正文': content,
             '作者': author,
@@ -446,6 +442,15 @@ class XiaohongshuCrawler(Crawler):
     def _extract_count(self, selector: str) -> int:
         return self._count_in(selector)
 
+    #: A comment panel's cards, one entry per TOP-LEVEL comment (the measured wrapper), with a
+    #: fallback for a layout that has no wrapper. ``.comment-item`` alone matched both the wrapper's
+    #: inner card AND the wrapper, so every parent was read twice and half the preview budget went to
+    #: duplicates (measured on the real panel: 2 parents yielded 4 matches).
+    TOP_LEVEL_COMMENT_SELECTORS = (
+        '.comments-container .parent-comment',
+        '.comment-item:not(.comment-item-sub)',
+    )
+
     def extract_comments(self, max_comments: int = 5):
         if max_comments <= 0:
             # Asking for no comments must cost nothing. Left as it was, a
@@ -455,14 +460,11 @@ class XiaohongshuCrawler(Crawler):
             return []
         logger.info(t('crawl.xhs.comment_start', n=max_comments))
         comments = []
-        try:
-            comment_items = WebDriverWait(self.driver, 10).until(
-                ec.presence_of_all_elements_located((By.CSS_SELECTOR, '.comment-item, .parent-comment'))
-            )
-            logger.info(t('crawl.xhs.comment_found', n=len(comment_items)))
-        except TimeoutException:
+        comment_items = self._top_level_comments()
+        if not comment_items:
             logger.debug(t('crawl.debug.comments_missing'))
             return comments
+        logger.info(t('crawl.xhs.comment_found', n=len(comment_items)))
 
         for idx, item in enumerate(comment_items[:max_comments]):
             try:
@@ -493,6 +495,26 @@ class XiaohongshuCrawler(Crawler):
 
         logger.info(t('crawl.xhs.comment_done', n=len(comments)))
         return comments
+
+    def _top_level_comments(self) -> list:
+        """The panel's top-level comment cards, each matched once.
+
+        One wait for the measured wrapper, then a cheap fallback read for a layout without it. The
+        wait is paid once on purpose: a preview of 0 already costs nothing, and a note whose panel
+        never mounts must not buy two waits. Returns ``[]`` when there is nothing to preview (the
+        caller says "no preview", never an empty comment it invented).
+        """
+        waited, fallback = self.TOP_LEVEL_COMMENT_SELECTORS
+        try:
+            found = WebDriverWait(self.driver, 10).until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, waited)))
+        except TimeoutException:
+            found = []
+        if not found:
+            # No wait here: the measured shape already had its turn, and this only catches a page
+            # whose cards render without the wrapper.
+            with contextlib.suppress(Exception):
+                found = self.driver.find_elements(By.CSS_SELECTOR, fallback)
+        return list(found or [])
 
     def get_detail(self, url: str) -> dict | None:
         return self._scrape_note(url)

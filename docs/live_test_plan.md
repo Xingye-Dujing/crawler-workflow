@@ -161,8 +161,10 @@ E 记录诚实（`run.finished` 计数==payload==记录列==面板 chips）；F 
 ### 知乎（cn，模板本体）—— 真机 31/31 绿（2026-09-28）
 - 搜索滚动循环 U3 已修（连停 `STUCK_ROUNDS=3` 轮、删不可达的 `crawl.zhihu.confirmed`）；`test_stuck_pages_end_the_loop` 钉 20 条等式。
 - 评论面板**无“更多”按钮**、靠容器内滚动懒加载 + 子回复在 `展开其中 N 条回复` 后（U28/U29）：
-  开面板 12/10 → 滚容器 36/109 → 展开 41/**138**；走 `PANEL_ROUNDS=60` 预算 + 逐轮 `comment.zhihuRound`，
-  不足页面数字 `comment.zhihuPanelShort`、耗尽 `comment.zhihuPanelCapped`（U24）；新增 `父楼层` 列。
+  开面板 12/10 → 滚容器 36/109 → 展开 41/**138**；逐轮 `comment.zhihuRound`，不足页面数字时 `comment.zhihuPanelShort`；
+  新增 `父楼层` 列。**轮次预算已删（2026-11-10）**：`PANEL_ROUNDS=60` 与 `comment.zhihuPanelCapped` 一起去掉，
+  收工只看"连续 3 轮零新增且无未点开回复"、用户 停止、用户 评论上限——常数不许替站点说"就这么多"。
+  同一次改动给展开器加了 `data-zhihu-tried`（每个展开器只点一次），否则去掉预算后一个点不动的展开器会让走路空转。
 - 定深取作者曾横跨邻条挂错名（U22）→ 按结构定界 + `comment.zhihuNoAuthor`；评论时间/赞数曾写死（U23）→ 真读/留空。
 - 站点否证：同一关键词两次搜索卡片会换（U26）→ “不重采”判据改用**稳定供给**（热榜）。
 
@@ -236,6 +238,22 @@ E 记录诚实（`run.finished` 计数==payload==记录列==面板 chips）；F 
   详情改 `judge=False` + 不写标记的 `self.verdict(url)` 判，墙 → `crawl.xhs.deadNote` 具名 + `return None`，单条死链不得设 `risk_blocked`/`login_wall`；
   针 `test_a_walled_note_is_named_dead_and_does_not_abort_the_session` / `test_a_healthy_note_is_not_named_dead`。
 - U5：游标改位置-only、`seen` 从已存行的 `笔记ID` 播种；针 `tests/unit/crawlers/test_xhs_crawler.py::TestResumeIdentityAndCursor`。专轴：`profile_recommended`；评论 `comment_preview` 三档。
+- U62（2026-11-10 实测，已修）：评论走查只读 `.comment-item` 的**平铺**列表 —— 子回复被收进来但**不知道是谁的**（`.comment-item-sub` 是父卡片的兄弟节点），
+  每屏 10 个父评论各自只挂 1 条回复、其余全在 `div.show-more`（文案 `展开 N 条回复`）后面**从不点击**；也没有 `评论ID`（DOM 上两级都印着 `id="comment-<24hex>"`），
+  台账因此退化为整行 hash（含会重排的 `楼层`），续跑重复入库。现状实测：`共 4 条评论` = 2 父 + 2 子（分母含楼中楼）；359 条评论的帖子首屏 10 父 10 子、9 个未点开的展开器。
+  改法：一屏一次页内分组读（`.parent-comment` 为单位）→ **`楼层` 只给顶层评论编号**、子行 `楼层` 留空并用 `父楼层` 指向父评论，另加
+  `评论ID` + `子回复数` + `评论地区` + `评论者主页`（剥掉每次访问都变的 `xsec_token`），去重键改 `评论ID`（同作者连发两条“谢谢”不再吞一行）。
+  展开器用原生 `ActionChains` **点到该线程不再长为止**（实测：一次点击只放一批，随后文案变 `展开更多回复`，点 10 个挂出 40 条；"每线程只点一次"会让 10+ 条回复的线程停在第一批）；
+  滚动改滚**含评论最多的可滚容器**（实测 `.note-container`，每滚 ~10 条；旧写法滚 `.note-scroller` 只推动笔记正文栏，面板停在前 30 条）；
+  收工改**面板自身证据**（连续两屏没新行 + 没有未尝试的展开器 + 滚动没换出任何卡片），删掉 `SCROLL_ROUNDS=12` 的预算。
+  新增 `comment.xhsShort`（对账站点 `共 N 条`）、`comment.xhsNested`（总数能对上但仍有回复没展开）、
+  `comment.xhsLoginGate`（**实测**：没有站点认可的会话时，点“展开”弹 `.login-modal` 而不是展开 —— 停手并具名）、`comment.xhsGone`（链接被换成另一篇）、`comment.xhsNoPanel`。
+  **真机改前/改后（同一账号、同一条 357 条评论的帖子）**：旧 30 父 30 子且不报差额 → 新 **338 行（200 父 / 138 子）**，单条父评论最多 19 条回复，`评论ID` 全不重复；
+  面板滚到底后站点自己印 `- THE END -` 且 3 屏不再生长，剩 **18 条 + 1 条点两次也不开的回复**由 `comment.xhsShort`/`comment.xhsNested` 点名（站点不给的部分，已证明不是我们的循环停下）。
+  拿满的关键是**重试**：一批回复会在 1.8 s 之外才挂上，"点一次就退休"会锁死 42 条；现在面板还在长时不退休，静下来之后连续两次点不动才退休（`expand` 的 `idle`/`fails`）。
+  收工耐心 3 屏、`QUIET_ROUNDS=3`，`- THE END -` 只决定"怎么收"，不替站点说"就这么多"。
+  针 `tests/unit/crawlers/test_comments.py::TestXhsAdapter`（12 例）；探针 `scratchpad/probes/test_xiaohongshu_thread_probe.py`（gitignore，不入库；**真机会写用户 profile，不能与 fast suite 同时跑**）。
+  **代价**：行身份从整行 hash 变为 `(平台, 评论ID)`，改动前存过的小红书评论节点第一次“继续”会把旧行按新身份再入一次 → 那些节点请用**重新采集**。
 
 ### 红果短剧（cn）—— 匿名（无 cookie 行、无 account 字段，与微信同列免 cookie 豁免）
 - 四个榜 = 一个模式一个 select（值即存储值，见 `crawlers/platforms/hongguo/crawler.py::BOARDS`）；榜单在文档自带 loader 载荷里（`_ROUTER_DATA`，延迟 ~2s 到货）；

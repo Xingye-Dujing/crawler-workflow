@@ -980,8 +980,9 @@ Linux 之外的行为靠“about:blank 本身没有远端导航可等”这一�
 
 **第二轮真机（同日晚，热榜→评论 10 部 × 5 集）+ 代码审计查出的坑（规则见 `crawler_rules.md` 红果块，此处只留测得的数）**：
 - **误点 `回复`** 开的是输入框（抢走键盘焦点，滚轮不再翻页）：站点 698 条的一集只收 20 就走。判据 `is_expand_control`
-  须名字**同时**含“回复”与“展开/查看/更多”（裸 `回复`/`回复 3` 永不点），每集点完屏幕所有展开项（上限 **40**，按
-  (类型,名字,左上角) 去重），点完 `SendKeys {Esc}` 还焦。
+  须名字**同时**含“回复”与“展开/查看/更多”（裸 `回复`/`回复 3` 永不点），每集点完屏幕所有展开项（**不设点击数上限**：
+  按 (类型,名字) 记住已点过的，页面没有新的可点项、或播放器拒绝这次点击就收工——旧写的 40 次是"我们自己数的数"，
+  一部剧超过 40 个线程就会静默丢掉后面的），点完 `SendKeys {Esc}` 还焦。
 - **一次静默 ≠ 采完**：翻页分级滚轮 ×2 → Esc+滚轮 ×5 → `{PageDown}`×2（`_page_wait` 随 stall 增），连吃
   `_MAX_STALLS=3` 才判不完整并**具名** `已收 have / 站点 site_total`（`episodeShort`/`groupShort`）；`site_end` 仍要
   `kept >= total`，不足即 `UNDER_TARGET`。
@@ -1563,9 +1564,10 @@ pager 自报页底，排队交棒无恙。红条分三类：
    **不止一个**（子回复的列表自己也算）。按 `boxes[0]` 滚，可能一辈子在滚某一条回复的小列表，
    面板却再也不前进——这就会把短表当成走完。`_ZHIHU_PUMP_JS` 现按 inside 数量选最大者。
 6. 每轮滚动都打 `comment.zhihuRound`（第 {r} 轮新增 {n} 条，累计 {total}），走完仍不到页面自己写的
-   数字就打 `comment.zhihuPanelShort`（写着 {declared} 条，取到 {rows} 条）；轮次预算
-   （`ZHIHU_PANEL_ROUNDS=60`，连续 3 轮零新增且无未点开回复才停）走完也点名 `comment.zhihuPanelCapped`。
-   **不点名 = 没人知道自己少了。**
+   数字就打 `comment.zhihuPanelShort`（写着 {declared} 条，取到 {rows} 条）。**没有轮次预算**：
+   原有的 `PANEL_ROUNDS=60` + `comment.zhihuPanelCapped` 已在 2026-11-10 删除（和抖音、小红书同一条规则：
+   "能采多少"由站点供给与用户的 评论上限 决定，不由常数决定）。收工只有三件事：连续 3 轮零新增且无未点开回复、
+   用户 停止、用户 评论上限。**不点名 = 没人知道自己少了**，那由 `zhihuPanelShort` 负责。
 
 被否掉的替代：**把“更多”按钮的文案改个正则继续找**（站点根本没有这个控件，找到的是别的东西）；
 **用 `limit` 默认小值掩盖**（D 组以前按 limit×链接数判满，12/261 在内部对账上是"自洽"的——
@@ -2354,3 +2356,107 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 会另起一份；只有完整结束的运行才推进水位，墙、风控、停止、欠采都不写；与“重新采集”互斥（否则去重账本被释放，
 水位仍会挡住旧条目）。这一步**没有跑 live tier**（会消耗账号），所以真站是否按预期在第一页命中边界仍需一次
 `live_quick`/人工验收；离线用 fake 首页验证了“边界 BV 不被请求、之后的卡片不再处理”。
+
+### 小红书评论区：楼中楼在 DOM 里、但一半藏在“展开”后面（measured 2026-11-10）
+
+**实测的现状（改前）**：一条 359 条评论的帖子，旧走查交出 **30 父 + 30 子**（每父默认那 1 条），
+站点自己的 `共 359 条评论` 一个字都没进控制台 —— 这是"静默短表"，不是"这条帖子就这么多"。
+
+用户问“小红书的评论能不能爬楼中楼”，并给了两条真站链接。探针
+`scratchpad/probes/test_xiaohongshu_thread_probe.py`（一次性脚本、gitignore，载荷 `scratchpad/xhs_thread_probe.json`）
+用**本机自己的小红书 profile**（不拿 Cookie 文件往新 profile 重种——那在站点眼里是第二台设备）跑了三遍，
+每条链接一次页面加载。答案分三层：
+
+**一、结构：父子是兄弟，不是包含。** 一条顶层评论是 `.parent-comment` 包装层，里面是它自己的
+`.comment-item` **加上**一个 `.reply-container`；子回复是 `.reply-container` 里的
+`.comment-item.comment-item-sub`。所以旧写法按 `.comment-item` 平铺读，会把子回复**收进表**却
+**无法说出它是谁的**（`.comment-item-sub` 与父卡片同级）。第二条链接实测：10 个 `.parent-comment`、
+10 个 `.reply-container`、10 条子回复 —— **每个父评论默认只挂 1 条回复**。
+
+**二、供给：其余回复在 `div.show-more` 后面。** 同一屏量到 **9 个** `div.show-more`，文案统一是
+`展开 N 条回复`（N = 1/3/4/6/7/8/9，与父卡片的 `.reply .count` 不是同一个数——后者是这条评论的回复总数，
+可能是 `10+`）。旧走查从不点它，于是“楼中楼”永远只有每父 1 条。
+
+**三、分母与身份：**
+- `.comments-container .total` 是 `共 4 条评论` / `共 359 条评论`，**含楼中楼**（第一条：2 父 + 2 子 = 4），
+  因此它是“到底采完没有”的唯一诚实分母；
+- 两级都有 `id="comment-<24hex>"`，这是评论的站点身份（台账按 `(平台, 评论ID)` 认一条，
+  旧行没有它 → 退化成整行 hash，而整行含会重排的 `楼层`，续跑就重复入库）；
+- 作者链接 `/user/profile/<id>?…&xsec_token=…` 的 token **每次访问都变**，列里只能留路径；
+- `.date` 是日期 + `.location`（`09-06` + `山东`），日期可走 `times.absolute`，地区单列；
+- 点赞格可能是 `1千+`/`3,204`/`赞`，走共享的 `parse_count`。
+
+**四、点击的实测答案（重要且不理想）：** 合成 `element.click()` 被 `.reds-mask` / `.inner` 挡掉
+（`element click intercepted`）；原生 `ActionChains` 点击**落到元素上但什么都不发生** ——
+同一批三种方式（原生 / 页内 `el.click()` / 完整 mousedown-mouseup-click 事件序列）结果一致：
+`.login-modal` 弹出、子回复一条没挂上。也就是说**这个 profile 的小红书会话已不被站点接受**，
+“展开楼中楼”需要登录态；站点用登录框回答，而不是静默失败。
+
+**五、顺带量到的两件事：**
+- `/search_result/<笔记ID>?xsec_token=…`（站内“复制链接”给的那种）会被站点 302 到
+  `/explore/<同一个 ID>`，所以两种写法都能收，`rows.note_id` 一个正则认四种路径；
+- 页面底部的 `.comments-login`（“登录查看全部评论内容”）、首访的 `.login-modal` 都会盖住面板：
+  点击前必须用**站点自己的关闭控件**关掉它（`ESC` 不行——在浮层形态的笔记页上，ESC 关掉的是整篇笔记，
+  第二次探针就是这样读到“没有 `.comments-container`”）。
+
+据此定下的走法与列（`crawlers/platforms/xiaohongshu/comments.py`）：
+
+| 项 | 决定 | 理由 |
+|---|---|---|
+| 一屏一读 | 一次页内 `PANEL_JS` 读回整屏分组 | 357 条的面板按元素读要上千次 WebDriver 往返 |
+| `楼层` | **只给顶层评论编号** 1..N | 站点自己的“楼层”就是这个意思；回复的位置由 `父楼层` 表达，所以任何两行不会共用同一个号 |
+| `父楼层` | 顶层空、回复指向父评论楼层 | `reply_graph` 的父表只认“有楼层且无父楼层”的行，回复只提供边 |
+| `评论ID` | `#comment-<hex>` 去掉前缀 | 台账身份；续跑不再重复入库 |
+| `子回复数` | 实际落库的子行数，展开失败时退回站点数 | 与抖音同口径，不虚报也不隐藏 |
+| 去重键 | `评论ID`，退路 `(作者,正文,时间,地区)` | 旧 `(作者,正文)` 会吞掉同一作者连发的两条“谢谢” |
+| 展开器 | 原生 `ActionChains`，**点到该线程不再长为止**（站点分批放，点一次只给一批，随后文案变 `展开更多回复`） | 合成点击不动 React 这件事抖音已量过；而"每线程只点一次"会让 10+ 条回复的线程停在第一批 |
+| 展开被拒 | 弹 `.login-modal` → 关掉、停手、`comment.xhsLoginGate` 点名 | 实测的拒绝形状，不能重试成死循环 |
+| 收工 | 连续三屏没新行 + 展开器不再长 + 滚动没换出任何卡片（站点印了 `- THE END -` 时记为"已到列表末尾"） | 固定的 12 轮预算会让"采不满"读成"就这么多"；一屏安静只说明这一屏慢 |
+| 滚动 | 滚**含评论最多**的那个可滚容器（实测 `.note-container`），退路才是 `.note-scroller` | 旧写法滚 `.note-scroller` 只推动了笔记正文栏，评论面板停在前 30 条 |
+| 对账 | `共 N 条` vs 本表 + 未展开数，`comment.xhsShort`；数字能对上但仍有回复没展开时用 `comment.xhsNested` | 分母含楼中楼，差额可归因 |
+| 换篇 | 地址里的笔记 ID 变了 → `DEAD` + `comment.xhsGone` | 死链不许把别人的评论记在你贴的链接名下 |
+
+**登录之后补量到的（2026-11-10，同一个 profile、同一批链接）：**
+
+| 观测 | 结果 |
+|---|---|
+| 原生 `ActionChains` 点 10 个 `展开 N 条回复` | `.comment-item` 20 → **60**（挂出 40 条），登录框**没弹** |
+| 点完的展开器文案 | 变成 **`展开更多回复`**（不是 `展开 N 条回复`）——所以匹配必须认元素 `.show-more`，不能认"展开 N 条"这句话 |
+| 同一次点击之后 | 顶层评论 10 → **20**：展开的同时评论区又挂出了下一屏 |
+| 第一条帖子（4 条评论） | 登录后**一个展开器都没有**：2 父 + 2 子本来就全在 DOM 里 |
+| 滚动容器 | 能滚且含评论的有两个：`.note-container`（评论 164、scrollHeight 23159，每滚 ~10 条）与 `.interaction-container`（`top` 恒 0）；`.note-scroller` 不在其中 |
+
+**改前/改后，同一条 357 条评论的帖子（真机、同一账号、同一天）：**
+
+| | 行数 | 父 / 子 | 站点自己的数 | 收尾 |
+|---|---|---|---|---|
+| 旧走查（`.comment-item` 平铺、不点展开、滚 `.note-scroller`） | 30 父 + 30 子 | 30 / 30 | 357 | 无（静默短表） |
+| 新走查（分组读 + 分批展开 + 滚 `.note-container`） | **338** | **200 / 138** | 357 | `- THE END -`，差额 18 被点名 |
+
+单条父评论最多收到 **19 条**回复，338 条 `评论ID` 全不重复。**剩下 18 条是站点自己不给的**：面板滚到底后
+`.note-container` 停在 33359/34181 px、站点自己印着 `- THE END -`，再滚 3 屏一张新卡片都不挂；另有一条回复的
+"展开"点了两次也不出内容（`comment.xhsNested` 会点名它）。所以"一条不落"的天花板是**站点渲染出来的那 338 条**，
+不是我们的循环停下——控制台报的 `站点写着 357 / 本表 338 + 未展开 1 / 还差 18` 就是这句话的证据。
+
+**为拿满做的三条修正（都是实测逼出来的）：**
+
+1. **重试比"只点一次"值 41 条回复**：一批回复会在点击后 1.8 s 之外才挂上，旧的"点一次就退休"把 42 条回复锁死；
+   现在面板还在长的时候**不退休**（每轮重试），只有面板静下来之后连续两次点不动才退休。
+2. **收工耐心 2→3 屏**：最后一屏实测会在面板"看起来完了"之后第 3 轮才挂上，少等一屏就少 2 个父评论 + 1 条回复。
+3. **`- THE END -` 是站点自己的结束标记**：和"这一屏没新行 + 没有可点的展开器 + 滚动没换出卡片"一起才算收工；
+   它只决定"怎么收"，不再让任何常数替站点说"就这么多"。
+
+**登录之后补量到的（2026-11-10，同一个 profile、同一批链接）：**
+
+```
+.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --login-check   # 这个 profile 还登录着吗
+.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --login         # 扫码窗口（人工）
+.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --walk <url>    # 跑产品自己的 walk
+.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --scroll-check <url>    # 哪个盒子在喂列表
+.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --complete-check <url>  # 一直展开+滚动到平台停住，报天花板
+.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --tail-check <url>      # 面板底部：THE END 还是还有控件
+```
+
+**教训（工程侧）**：真机探针会写 `data/users/<id>/chrome_profile/xiaohongshu`，**不能和 fast suite 同时跑** ——
+`tests/unit/gates/test_test_tiers.py` 的"用户目录只读"探针正好在 Chrome 淘汰缓存文件时走目录，
+会抛 `FileNotFoundError`（实测撞过一次）。跑真机前先确认 5000 端口空闲、suite 已停。

@@ -163,13 +163,15 @@ def walk(session, url: str, limit: int) -> tuple:
         # failure, and it has to read as 无评论 rather than as a dead link.
         session.log(t('comment.commentsClosed', url=url))
         return [], OK
-    rows, cursor, seen, guard = [], 0, set(), 0
+    rows, cursor, seen = [], 0, set()
     # Did the walk stop because the SESSION was refused (must back off + 继续), or because a slow
     # link never answered (keep what was read, do not latch the session)? Neither is "the thread ended".
     session_stop = False
     first_page_unreadable = False
-    while guard < 200:
-        guard += 1
+    # No page budget: the site's own ``is_end``, a page that adds no new rpid, the user's 评论上限 and
+    # 停止 are the only things that end this walk. ``guard < 200`` used to be a number WE chose — on a
+    # thread longer than 200 pages it filed a short table as if the thread had run out.
+    while True:
         payload = _json_or_none(session.fetch_in_page(bilibili_reply_js(aid, cursor)))
         page_verdict = bili_code_verdict((payload or {}).get('code'))
         if page_verdict != 'ok':
@@ -191,6 +193,10 @@ def walk(session, url: str, limit: int) -> tuple:
         for item in page.get('replies') or []:
             seen.add(str(item.get('rpid')))
         rows.extend(parse_bilibili_comments(items, url, floor=len(rows)))
+        if session.may_stop():
+            # 停止 must end the walk: with the page budget gone this loop only ends on the site's own
+            # ``is_end``, an empty page or the user's 评论上限, so the stop has to be asked here.
+            break
         info = page.get('cursor') or {}
         if info.get('is_end') or (limit and len(rows) >= limit):
             break

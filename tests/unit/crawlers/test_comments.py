@@ -22,7 +22,6 @@ from crawlers.engine.wall import looks_blocked, looks_like_login_page
 from crawlers.platforms.bilibili.comments import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
 from crawlers.platforms.weibo.comments import parse_weibo_comments, weibo_bid
 from crawlers.platforms.xiaohongshu import comments as xhs_comments
-from crawlers.platforms.zhihu import comments as zhihu_comments
 from engine.workflow import WorkflowEngine
 
 pytestmark = pytest.mark.unit
@@ -88,6 +87,15 @@ class FakeDriver:
 
     def execute_script(self, script, *args):
         self.scripts.append(script)
+        # The page-attribute contract the walks stamp (``data-*-tried``) — modelled here so "clicked
+        # once, never again" is what the test measures rather than what a fake silently forgets.
+        if args and ('hasAttribute' in script or 'setAttribute' in script):
+            match = re.search(r"(?:has|set)Attribute\('([^']+)'", script)
+            name = match.group(1) if match else ''
+            if 'setAttribute' in script:
+                args[0]._attrs[name] = '1'
+                return None
+            return name in args[0]._attrs
         # The pump script also mentions ``.CommentContent`` (it looks for the box that holds them),
         # so the scroll ask is answered first or it would swallow a panel page.
         if 'scrollTop' in script:
@@ -406,106 +414,440 @@ class TestWeiboAdapter:
 
 # ─── xiaohongshu adapter (DOM) ──────────────────────────────────────────
 
-
-def _xhs_card(author, text, date='09-10', likes='赞'):
-    return El(
-        kids={
-            '.author-wrapper .name, .name': [El(author)],
-            '.content': [El(text)],
-            '.date': [El(date)],
-            '.like .count, .like-wrapper .count': [El(likes)],
-        }
-    )
+#: A note link the walk files rows under (the id is what the walk compares against the browser).
+XHS_NOTE = 'https://www.xiaohongshu.com/explore/6a9c3d18000000002502e846'
 
 
-class _GrowingXhsDriver(FakeDriver):
-    """A 小红书 panel that mounts ``per_round`` more comments on every scroll, up to ``total``.
+def _xhs_comment(cid, author, body, *, date='09-06', region='四川', likes='赞', replies='1'):
+    """One comment as the measured panel read reports it (``PANEL_JS``'s own shape)."""
+    return {
+        'id': f'comment-{cid}',
+        'author': author,
+        'href': f'/user/profile/{author}?channel_type=web_note_detail_r10&xsec_token=TOKEN{author}%3D',
+        'body': body,
+        'date': date,
+        'region': region,
+        'likes': likes,
+        'replies': replies,
+    }
 
-    The first screen already holds ``per_round`` comments (a scroll only ever follows a read), so the
-    walk has something to collect before it decides the panel is or is not still growing.
+
+class _XhsPanel:
+    """The measured 小红书 comment panel as data: parents, their replies, the 展开 openers.
+
+    Measured shape (2026-11-10, logged-in profile): a top-level comment mounts ONE reply by default,
+    the rest sit behind a ``.show-more`` reading ``展开 N 条回复``, and **each click pages out one more
+    batch** — after it the same control reads ``展开更多回复``. The site's own ``共 N 条评论`` counts
+    parents AND replies. All of that is modelled here so the Python half — attribution, floors, the
+    paging expander, dedupe and the shortfall — is what the unit tier actually tests.
     """
 
-    def __init__(self, per_round, total, body='正常笔记'):
-        super().__init__(body=body, pages={})
-        self._all = [_xhs_card(f'u{i}', f'内容{i}', date=f'09-{1 + i % 28}') for i in range(total)]
-        self._per = per_round
-        self._shown = per_round  # the first screen is already mounted
+    def __init__(self, parents=None, *, total='', pending=None, refuse_expand=False, batch=1, stuck=False, ended=False):
+        # each parent: {'own': card, 'subs': [card], 'hidden': [card]}
+        self.parents = list(parents or [])
+        self.total = total
+        self.pending = list(pending or [])
+        self.refuse_expand = refuse_expand
+        self.batch = batch
+        self.stuck = stuck
+        #: The site's own end marker at the bottom of the panel (measured: `- THE END -`).
+        self.ended = ended
+        self.revealed: set = set()
+        self.mounted = True
+
+    def opener_text(self, parent) -> str:
+        if parent['own']['id'] in self.revealed:
+            return '展开更多回复'
+        return f'展开 {min(self.batch, len(parent["hidden"]))} 条回复'
+
+    def snapshot(self) -> dict:
+        if not self.mounted:
+            return {'mounted': False}
+        cards = [
+            {'own': parent['own'], 'subs': list(parent['subs']), 'has_replies': bool(parent['subs'])}
+            for parent in self.parents
+        ]
+        openers = [
+            {'card': parent['own']['id'], 'text': self.opener_text(parent)}
+            for parent in self.parents
+            if parent.get('hidden')
+        ]
+        return {
+            'mounted': True,
+            'total': self.total,
+            'login_modal': False,
+            'ended': self.ended,
+            'cards': cards,
+            'openers': openers,
+        }
+
+    def key(self) -> str:
+        if not self.mounted:
+            return ''
+        ids = []
+        for parent in self.parents:
+            ids.append(parent['own']['id'])
+            ids.extend(sub['id'] for sub in parent['subs'])
+        return '|'.join(ids)
+
+    def expand(self, card_id: str) -> bool:
+        for parent in self.parents:
+            if parent['own']['id'] != card_id:
+                continue
+            if self.stuck or not parent.get('hidden'):
+                return False
+            take = parent['hidden'][: self.batch]
+            parent['subs'].extend(take)
+            parent['hidden'] = parent['hidden'][len(take) :]
+            self.revealed.add(card_id)
+            return True
+        return False
+
+    def scroll(self) -> None:
+        """One screen further down the panel: the next parent mounts (measured: it grows, never recycles)."""
+        if self.pending:
+            self.parents.append(self.pending.pop(0))
+
+
+class _XhsOpener:
+    """One ``.show-more`` element: its text, and the click the walk performs on it."""
+
+    def __init__(self, driver, parent):
+        self._driver = driver
+        self._parent = parent
+        self.text = driver.panel.opener_text(parent)
+
+    def click(self):
+        self._driver.clicks.append(self._parent['own']['id'])
+        if self._driver.panel.refuse_expand:
+            # Measured: a click the site refuses for lack of a session pops the login dialog and
+            # mounts nothing. That is the refusal this walk has to name, not click through.
+            self._driver.login_modal = True
+            return
+        self._driver.panel.expand(self._parent['own']['id'])
+
+
+class _XhsDriver:
+    """Fake driver for the 小红书 walk: the page-side reads answer the panel model."""
+
+    def __init__(self, panel, *, body='正常笔记', url=XHS_NOTE, lands_on=''):
+        self.panel = panel
+        self.body = body
+        self.current_url = url
+        self._lands_on = lands_on
+        self.scripts = []
+        self.clicks = []
+        self.login_modal = False
+
+    def get(self, url):
+        self.current_url = self._lands_on or url
+
+    def find_element(self, by, selector):
+        return El(self.body)
 
     def find_elements(self, by, selector):
-        if selector == '.comment-item':
-            return self._all[: self._shown]
+        if selector == '.comments-container .reply-container .show-more':
+            return [_XhsOpener(self, parent) for parent in self.panel.parents if parent.get('hidden')]
         return []
 
     def execute_script(self, script, *args):
         self.scripts.append(script)
-        if 'scrollBy' in script:
-            self._shown = min(len(self._all), self._shown + self._per)
-        return 120
+        if script == xhs_comments.PANEL_JS:
+            return self.panel.snapshot()
+        if script == xhs_comments.PANEL_KEY_JS:
+            return self.panel.key()
+        if script == xhs_comments.LOGIN_CLOSE_JS:
+            self.login_modal = False
+        if 'login-modal' in script and 'getBoundingClientRect' in script:
+            return self.login_modal
+        if 'scrollHeight' in script:
+            self.panel.scroll()
+        return None
+
+
+class _FakeActionChains:
+    """Stand-in for selenium ActionChains: ``perform`` runs the queued click on the element."""
+
+    def __init__(self, driver):
+        self._el = None
+
+    def move_to_element(self, element):
+        self._el = element
+        return self
+
+    def pause(self, *args):
+        return self
+
+    def click(self):
+        if self._el is not None:
+            self._el.click()
+        return self
+
+    def perform(self):
+        pass
+
+
+@pytest.fixture
+def xhs_chains(monkeypatch):
+    """The walk clicks natively (douyin's measurement); a unit test performs that click itself."""
+    monkeypatch.setattr('crawlers.platforms.xiaohongshu.comments.ActionChains', _FakeActionChains)
+
+
+def _xhs_walk(panel, *, limit=0, log=None, abort=None, **kwargs):
+    driver = _XhsDriver(panel, **kwargs)
+    session = CommentSession(driver, log=log or (lambda message: None), nap=lambda seconds: None, abort=abort)
+    return session.walk('xiaohongshu', XHS_NOTE, limit), driver
 
 
 class TestXhsAdapter:
-    def test_collects_and_dedupes_across_rounds(self):
-        cards = [_xhs_card('甲', '很全的攻略'), _xhs_card('乙', '图一在哪')]
-        driver = FakeDriver(pages={'.comment-item': cards})
-        session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
-        assert status == OK and len(rows) == 2
-        assert rows[0]['评论者'] == '甲' and rows[1]['评论内容'] == '图一在哪'
-        assert 'scrollBy' in ''.join(driver.scripts), 'must scroll to load more comments'
-        # second round returns the SAME elements → seen-set stops the loop
+    def test_a_reply_is_filed_under_its_parent_with_a_continuous_floor(self, xhs_chains):
+        """The measured shape: replies are siblings of their parent's card, one per parent by default.
 
-    def test_login_wall_page_is_blocked(self):
-        driver = FakeDriver(body='登录后查看更多内容 扫码登录', pages={'.comment-item': []})
-        session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
+        A flat ``.comment-item`` read collected them but could not say whose they were — that is what
+        ``父楼层`` exists to fix. ``楼层`` numbers TOP-LEVEL comments only (the site's own notion of a
+        floor): a reply's own 楼层 stays blank, so no two rows share a number and ``reply_graph``
+        gets its parent map from the parents and its edges from the replies.
+        """
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '薄荷', '祝福', date='09-06', region='四川', likes='2'),
+                    'subs': [_xhs_comment('a2', '作者', '谢谢！嘿嘿', date='09-07', region='浙江')],
+                    'hidden': [],
+                },
+                {
+                    'own': _xhs_comment('b1', '今天吃什么', '是的呀，这才是正确的恋爱观', date='09-06', region='山东'),
+                    'subs': [
+                        _xhs_comment('b2', '作者', '哈哈哈恋爱嘛 开心就行', date='09-07', region='浙江'),
+                        _xhs_comment('b3', '作者', '哈哈哈恋爱嘛 开心就行', date='09-07', region='浙江'),
+                    ],
+                    'hidden': [],
+                },
+            ],
+            total='共 5 条评论',
+        )
+        (rows, status), driver = _xhs_walk(panel)
+        assert status == OK
+        assert [row['楼层'] for row in rows] == [1, '', 2, '', '']
+        assert [row['父楼层'] for row in rows] == ['', 1, '', 2, 2]
+        assert [row['评论ID'] for row in rows] == ['a1', 'a2', 'b1', 'b2', 'b3']
+        assert rows[0]['子回复数'] == 1 and rows[1]['子回复数'] == 0
+        assert rows[2]['子回复数'] == 2
+        assert rows[0]['评论地区'] == '四川' and rows[1]['评论地区'] == '浙江'
+        # The author link's xsec_token changes on every visit: the column keeps the path, not the token.
+        assert rows[0]['评论者主页'] == 'https://www.xiaohongshu.com/user/profile/薄荷'
+        # Two identical bodies from one author are two comments — the old (author, body) key kept one.
+        assert [row['评论内容'] for row in rows[3:]] == ['哈哈哈恋爱嘛 开心就行'] * 2
+        # The site's own total matches the table, so nothing is owed and nothing is said.
+        assert driver.clicks == []
+
+    def test_the_expander_pages_a_thread_until_the_site_says_no_more(self, xhs_chains):
+        """Measured 2026-11-10: one click reveals ONE BATCH (40 new cards over 10 threads), and the
+        same control then reads ``展开更多回复`` — 9 of those controls were never clicked by the old walk."""
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '底单', '上周新课老师说要面对面建群', replies='3'),
+                    'subs': [_xhs_comment('a2', '猫猫咪喵喵', '好了现在你是老师了')],
+                    'hidden': [_xhs_comment('a3', '甲', '第二条回复'), _xhs_comment('a4', '乙', '第三条回复')],
+                }
+            ],
+            total='共 4 条评论',
+            batch=1,
+        )
+        (rows, status), driver = _xhs_walk(panel)
+        assert status == OK
+        assert driver.clicks == ['comment-a1', 'comment-a1'], 'one batch per click, until the thread is done'
+        assert [row['评论内容'] for row in rows] == [
+            '上周新课老师说要面对面建群',
+            '好了现在你是老师了',
+            '第二条回复',
+            '第三条回复',
+        ]
+        assert [row['父楼层'] for row in rows] == ['', 1, 1, 1]
+        assert rows[0]['子回复数'] == 3, '子回复数 is what the table actually holds'
+        assert rows[0]['楼层'] == 1 and rows[1]['楼层'] == '', 'a reply is placed by 父楼层, not a floor of its own'
+
+    def test_an_opener_that_only_says_more_is_still_clicked(self, xhs_chains):
+        """``展开更多回复`` is the site saying another page exists; ``.reply .count`` may be a rounded
+        ``10+``, so the label — not the arithmetic alone — decides that there is more to fetch."""
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '甲', '主评论', replies='4'),
+                    'subs': [_xhs_comment('a2', '乙', '首条')],
+                    'hidden': [
+                        _xhs_comment('a3', '丙', '第二批一'),
+                        _xhs_comment('a4', '丁', '第二批二'),
+                        _xhs_comment('a5', '戊', '第三批'),
+                    ],
+                }
+            ],
+            total='共 5 条评论',
+            batch=2,
+        )
+        (rows, status), driver = _xhs_walk(panel)
+        assert status == OK
+        assert len(rows) == 5, f'the whole thread, including the page behind 展开更多回复: {len(rows)}'
+        assert driver.clicks == ['comment-a1', 'comment-a1'], 'two batches, two clicks'
+
+    def test_a_thread_whose_opener_never_reveals_anything_is_retired(self, xhs_chains):
+        """A deleted/hidden reply thread only keeps its control: tried twice (a batch can land late),
+        then retired by the panel's own evidence — never re-clicked in a loop, and the gap is named."""
+        said = []
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '甲', '主评论', replies='2'),
+                    'subs': [_xhs_comment('a2', '乙', '首条回复')],
+                    'hidden': [_xhs_comment('a3', '丙', '永远展不开的回复')],
+                }
+            ],
+            total='共 3 条评论',
+            stuck=True,
+        )
+        (rows, status), driver = _xhs_walk(panel, log=said.append)
+        assert status == OK and len(rows) == 2
+        # One attempt while the panel was still feeding, then two after it went quiet — and it STOPS.
+        # The contract is "bounded and retired", never a fixed number of attempts: the count is a
+        # consequence of the panel's own state.
+        assert 2 <= driver.clicks.count('comment-a1') <= 3, driver.clicks
+        assert (
+            i18n.t(
+                'comment.xhsNested',
+                url=XHS_NOTE,
+                declared=3,
+                rows=2,
+                nested=1,
+                reason=i18n.t('crawl.stopReason.no_new'),
+            )
+            in said
+        ), said
+
+    def test_the_sites_own_end_marker_ends_the_walk(self, xhs_chains):
+        """`- THE END -` is the only exit that may be quoted as "this note has no more comments"."""
+        said = []
+        panel = _XhsPanel(
+            [{'own': _xhs_comment('a1', '甲', '最后一条', replies='0'), 'subs': [], 'hidden': []}],
+            total='共 1 条评论',
+            ended=True,
+        )
+        (rows, status), _driver = _xhs_walk(panel, log=said.append)
+        assert status == OK and len(rows) == 1
+        assert said == [], 'one comment, one row, and the site said so — nothing to report'
+
+    def test_a_thread_the_site_already_shows_whole_is_not_clicked(self, xhs_chains):
+        """When the mounted replies already meet the site's own count and it is not asking for more,
+        the remaining control is not ours to click — that spends the account for nothing."""
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '甲', '主评论', replies='1'),
+                    'subs': [_xhs_comment('a2', '乙', '唯一的回复')],
+                    'hidden': [_xhs_comment('a3', '丙', '站点已经数过的那条')],
+                }
+            ],
+            total='共 2 条评论',
+        )
+        (rows, status), driver = _xhs_walk(panel)
+        assert status == OK and len(rows) == 2
+        assert driver.clicks == [], 'the site says one reply; one reply is mounted'
+
+    def test_a_refused_expand_is_named_and_never_retried(self, xhs_chains):
+        """Measured: a click without the session the site wants answers with ``.login-modal``.
+
+        That is a refusal, not a slow render: it is said once, the walk stops clicking, and the
+        shortfall is reported against the site's own numbers instead of passing as a whole thread.
+        """
+        said = []
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '甲', '主评论', replies='2'),
+                    'subs': [_xhs_comment('a2', '乙', '首条回复')],
+                    'hidden': [_xhs_comment('a3', '丙', '没能展开的回复')],
+                }
+            ],
+            total='共 9 条评论',
+            refuse_expand=True,
+        )
+        (rows, status), driver = _xhs_walk(panel, log=said.append)
+        assert status == OK
+        assert driver.clicks == ['comment-a1'], 'tried once, then never again'
+        assert rows[0]['子回复数'] == 1, 'the reply row is what the table holds, not the site’s count'
+        assert i18n.t('comment.xhsLoginGate', url=XHS_NOTE, rows=2) in said, said
+        assert any('comment.xhsShort' in line or '写着 9 条' in line for line in said), said
+
+    def test_the_walk_ends_on_the_panels_own_evidence_not_a_round_budget(self, xhs_chains):
+        """A fixed round count made 采不满 read as 这条笔记就这么多评论; the panel itself ends the walk."""
+        whole = [
+            {'own': _xhs_comment(f'c{index}', f'u{index}', f'第 {index} 条'), 'subs': [], 'hidden': []}
+            for index in range(20)
+        ]
+        panel = _XhsPanel(whole[:1], total='共 20 条评论', pending=whole[1:])
+        (rows, status), _driver = _xhs_walk(panel)
+        assert status == OK
+        assert len(rows) == 20, f'a growing panel is walked to its end, not to a screen count: {len(rows)}'
+        assert [row['楼层'] for row in rows] == list(range(1, 21)), 'only top-level comments are floors'
+
+    def test_a_short_table_is_named_against_the_sites_own_count(self, xhs_chains):
+        said = []
+        panel = _XhsPanel(
+            [{'own': _xhs_comment('a1', '甲', '唯一的评论'), 'subs': [], 'hidden': []}],
+            total='共 20 条评论',
+        )
+        (rows, status), _driver = _xhs_walk(panel, log=said.append)
+        assert status == OK and len(rows) == 1
+        assert any('comment.xhsShort' in line or '写着 20 条' in line for line in said), said
+
+    def test_the_users_own_limit_is_not_reported_as_a_shortfall(self, xhs_chains):
+        """评论上限 1 on a 20-comment note is the ask, not the thread's absence."""
+        said = []
+        panel = _XhsPanel(
+            [{'own': _xhs_comment('a1', '甲', '第一条'), 'subs': [], 'hidden': []}],
+            total='共 20 条评论',
+        )
+        (rows, _status), _driver = _xhs_walk(panel, limit=1, log=said.append)
+        assert len(rows) == 1
+        assert said == [], f'the user set the number; nothing about the thread is missing: {said}'
+
+    def test_login_wall_page_is_blocked(self, xhs_chains):
+        panel = _XhsPanel([], total='')
+        (rows, status), _driver = _xhs_walk(panel, body='登录后查看更多内容 扫码登录')
         assert rows == [] and status == BLOCKED
 
-    def test_no_comments_is_ok(self):
-        driver = FakeDriver(body='正常笔记', pages={})
-        session = CommentSession(driver, nap=lambda s: None)
-        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
+    def test_no_panel_is_an_empty_ok_that_says_so(self, xhs_chains):
+        said = []
+        panel = _XhsPanel([])
+        panel.mounted = False
+        (rows, status), _driver = _xhs_walk(panel, log=said.append)
         assert rows == [] and status == OK
+        assert i18n.t('comment.xhsNoPanel', url=XHS_NOTE) in said, said
 
-    def test_a_budget_that_cuts_a_still_growing_panel_is_named(self):
-        """The regression the douyin "no budget" fix and the zhihu capped line already teach: a fixed
-        round count that ends the walk quietly makes 采不满 read as 这条笔记就这么多评论."""
+    def test_a_link_that_opens_another_note_is_dead_not_the_users_cookie(self, xhs_chains):
         said = []
-        driver = _GrowingXhsDriver(per_round=2, total=50)  # far more than 3 rounds can reach
-        session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        previous = xhs_comments.SCROLL_ROUNDS
-        try:
-            xhs_comments.SCROLL_ROUNDS = 3
-            rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
-        finally:
-            xhs_comments.SCROLL_ROUNDS = previous
-        assert status == OK
-        assert len(rows) == 6, 'three rounds of two new comments each'
-        assert i18n.t('comment.xhsPanelCapped', url='https://www.xiaohongshu.com/explore/x', rows=6, rounds=3) in said
+        panel = _XhsPanel(
+            [{'own': _xhs_comment('a1', '甲', '别人的评论'), 'subs': [], 'hidden': []}], total='共 1 条评论'
+        )
+        (rows, status), _driver = _xhs_walk(
+            panel, log=said.append, lands_on='https://www.xiaohongshu.com/explore/6ad2076d000000000a01f058'
+        )
+        assert rows == [] and status == DEAD
+        assert i18n.t('comment.xhsGone', url=XHS_NOTE, shown='6ad2076d000000000a01f058') in said, said
 
-    def test_a_panel_that_empties_itself_before_the_budget_is_not_reported_as_capped(self):
-        """The two-sided half: a thread the SITE ran out of must NOT gain the capped line, or "capped"
-        stops meaning anything."""
+    def test_a_stop_ends_the_walk_without_claiming_the_thread_ran_out(self, xhs_chains):
         said = []
-        driver = _GrowingXhsDriver(per_round=2, total=4)  # 2 rounds exhausts it, budget is 3
-        session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        previous = xhs_comments.SCROLL_ROUNDS
-        try:
-            xhs_comments.SCROLL_ROUNDS = 3
-            rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
-        finally:
-            xhs_comments.SCROLL_ROUNDS = previous
-        assert status == OK and len(rows) == 4, 'the panel emptied on its own before the third round'
-        assert not any('xhsPanelCapped' in line or '滚满' in line for line in said), f'said: {said}'
-
-    def test_a_stop_ends_the_xhs_walk_without_claiming_the_budget_ran_out(self):
-        """停止 is the user, not our constant: it must break the loop and must NOT print the capped line."""
-        said = []
-        driver = _GrowingXhsDriver(per_round=2, total=50)
-        session = CommentSession(driver, log=said.append, nap=lambda s: None, abort=lambda: True)
-        rows, status = session.walk('xiaohongshu', 'https://www.xiaohongshu.com/explore/x', 0)
-        assert status == OK
-        assert len(rows) == 2, 'one round collected, then 停止'
-        assert not any('滚满' in line for line in said), f'a user stop is not a budget cut: {said}'
+        whole = [
+            {'own': _xhs_comment(f'c{index}', f'u{index}', f'第 {index} 条'), 'subs': [], 'hidden': []}
+            for index in range(5)
+        ]
+        panel = _XhsPanel(whole[:1], total='共 5 条评论', pending=whole[1:])
+        (rows, status), _driver = _xhs_walk(panel, log=said.append, abort=lambda: True)
+        assert status == OK and len(rows) == 1, 'one round read, then 停止'
+        # The shortfall sentence may appear, but it must attribute the ending to the user, not the site.
+        assert all(
+            i18n.t('crawl.stopReason.stopped') in line for line in said if 'xhsShort' in line or '写着' in line
+        ), said
 
 
 # ─── zhihu adapter (DOM, panels behind buttons) ─────────────────────────
@@ -626,8 +968,13 @@ class TestZhihuAdapter:
         assert len(rows) == 1
         assert i18n.t('comment.zhihuPanelShort', declared=261, rows=1) in said
 
-    def test_the_round_budget_is_named_when_a_panel_never_settles(self):
-        """A budget the crawler imposes has to announce itself, or "we stopped" reads as "it ended"."""
+    def test_a_panel_that_never_settles_is_walked_until_it_does(self):
+        """No round budget: a panel that keeps yielding new rows is drained to its own end.
+
+        The crawler used to stop at ``PANEL_ROUNDS=60`` and name it ``comment.zhihuPanelCapped`` — a
+        number WE chose ending a walk the site was still feeding (the douyin walk paid for the same
+        lesson at 406 of 3388 rows). The only bounds left are the panel itself, 停止 and 评论上限.
+        """
         said = []
         endless = [[_zh_row('甲', f'r{i}', when='')] for i in range(40)]
         driver = FakeDriver(
@@ -636,14 +983,10 @@ class TestZhihuAdapter:
             panel_pages=endless,
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
-        previous = zhihu_comments.PANEL_ROUNDS
-        try:
-            zhihu_comments.PANEL_ROUNDS = 4
-            rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
-        finally:
-            zhihu_comments.PANEL_ROUNDS = previous
-        assert len(rows) == 4
-        assert i18n.t('comment.zhihuPanelCapped', n=4, rows=4) in said
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
+        assert len(rows) == 40, f'the panel itself ended the walk at {len(rows)} rows'
+        assert not any('zhihuPanelCapped' in line or '轮次上限' in line for line in said), said
+        assert i18n.t('comment.zhihuPanelShort', declared=999, rows=40) in said, said
 
     def test_blocked_page_reports_blocked(self):
         driver = FakeDriver(body='您当前请求存在异常，暂时限制本次访问。40362', pages={})
@@ -963,28 +1306,30 @@ class TestTheCountsWrittenIntoTheRow:
     an int, and ``1.2万`` read as 1 is still plausible — so they are pinned here.
     """
 
-    def test_xhs_floor_continues_across_scroll_rounds(self):
-        first = xhs_comments.parse_xhs_comments(
-            [('u', '甲', '第一屏', '3小时前', 0), ('u', '乙', '第一屏', '3小时前', 0)]
-        )
-        second = xhs_comments.parse_xhs_comments([('u', '丙', '第二屏', '3小时前', 0)], floor=len(first))
-        assert [row['楼层'] for row in first + second] == [1, 2, 3]
+    def test_xhs_floor_runs_across_parents_and_their_replies(self):
+        """楼层 counts top-level comments only; a reply's position is the 父楼层 it names."""
+        threads = {
+            'id:a1': {
+                'own': _xhs_comment('a1', '甲', '父评论', replies='2'),
+                'subs': [_xhs_comment('a2', '乙', '子一'), _xhs_comment('a3', '丙', '子二')],
+                'declared': 2,
+            },
+            'id:b1': {'own': _xhs_comment('b1', '丁', '下一个父评论'), 'subs': [], 'declared': 0},
+        }
+        rows = xhs_comments.parse_xhs_threads(threads, XHS_NOTE)
+        assert [row['楼层'] for row in rows] == [1, '', '', 2]
+        assert [row['父楼层'] for row in rows] == ['', 1, 1, '']
+        assert [row['子回复数'] for row in rows] == [2, 0, 0, 0]
 
-    def test_xhs_like_count_honours_the_ten_thousand_unit(self):
-        class _Session:
-            def safe_text(self, element):
-                return element.text
-
-        class _Root:
-            def __init__(self, text):
-                self._text = text
-
-            def find_elements(self, _by, _selector):
-                return [El(self._text)]
-
-        assert xhs_comments._first_number(_Session(), _Root('1.2万'), '.like .count') == 12000
-        assert xhs_comments._first_number(_Session(), _Root('3,204'), '.like .count') == 3204
-        assert xhs_comments._first_number(_Session(), _Root('赞'), '.like .count') == 0
+    def test_xhs_like_count_honours_the_units(self):
+        """``1千+`` / ``3,204`` / a bare ``赞``: the panel writes all three, and the count is read, not guessed."""
+        threads = {
+            'id:a1': {'own': _xhs_comment('a1', '甲', '好', likes='1千+'), 'subs': [], 'declared': 0},
+            'id:b1': {'own': _xhs_comment('b1', '乙', '好', likes='3,204'), 'subs': [], 'declared': 0},
+            'id:c1': {'own': _xhs_comment('c1', '丙', '好', likes='赞'), 'subs': [], 'declared': 0},
+        }
+        rows = xhs_comments.parse_xhs_threads(threads, XHS_NOTE)
+        assert [row['点赞数'] for row in rows] == [1000, 3204, 0]
 
     def test_a_millisecond_stamp_is_blank_not_a_crash(self):
         """13-digit stamps answer ``OSError``, which the old ``except ValueError`` missed."""

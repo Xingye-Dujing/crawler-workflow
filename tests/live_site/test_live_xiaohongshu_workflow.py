@@ -50,8 +50,8 @@ ACCEPTANCE_TIMEOUT = DEEP_TIMEOUT + COMMENT_TIMEOUT
 
 #: Columns the xhs posts crawler promises (``_scrape_card`` then the detail merge in ``_scrape_note``).
 POST_COLUMNS = ('笔记链接', '笔记ID', '标题', '正文', '作者', '发布时间', '点赞数', '收藏数', '评论数')
-#: Columns ``parse_xhs_comments`` writes per comment.
-COMMENT_COLUMNS = ('文章URL', '评论者', '评论内容', '评论时间', '点赞数', '楼层')
+#: Columns the comment adapter writes per comment (``parse_xhs_threads``).
+COMMENT_COLUMNS = ('文章URL', '评论者', '评论内容', '评论时间', '点赞数', '楼层', '父楼层', '评论ID', '子回复数')
 
 
 # ─── the driver, bound to xiaohongshu ───────────────────────────────────
@@ -121,11 +121,10 @@ def _assert_post_rows(rows, *, minimum: int, source: str = 'search') -> None:
 def _assert_comment_rows(rows, *, minimum: int) -> None:
     """Comment rows carry the columns the adapter writes, non-empty content, integer 点赞数.
 
-    楼层 is asserted strictly here: the walk reads the panel a screen at a time and used to
-    re-enumerate each screen from 1, so a 40-comment note carried two rows numbered 1 (and the
-    downstream "top comment by floor" readings were meaningless). ``parse_xhs_comments`` now
-    takes the rows already read as ``floor``; a regression shows up as a repeated or skipped
-    number rather than as a silently wrong column.
+    ``楼层`` numbers TOP-LEVEL comments only and must be unique and in order: the walk reads the
+    panel a screen at a time, and numbering each screen from 1 made a 40-comment note carry two rows
+    numbered 1. A reply carries a blank ``楼层`` and a ``父楼层`` that names a top-level row in the
+    table — that is the thread, and it is what ``reply_graph`` reads.
     """
     assert len(rows) >= minimum, f'expected {minimum} comment rows, got {len(rows)}'
     for row in rows:
@@ -133,9 +132,17 @@ def _assert_comment_rows(rows, *, minimum: int) -> None:
         assert not missing, f'a comment column the adapter promises is absent: {missing}'
         assert str(row.get('评论内容') or '').strip(), f'an empty comment row: {row}'
         assert isinstance(row.get('点赞数'), int), f'点赞数 is not a number: {row.get("点赞数")!r}'
-    floors = [row.get('楼层') for row in rows]
+        assert str(row.get('评论ID') or '').strip(), 'a comment without its site id cannot be resumed'
+    top = [row for row in rows if not str(row.get('父楼层') or '').strip()]
+    assert top, 'a panel of comments with no top-level row means 楼层 stopped being written'
+    floors = [row.get('楼层') for row in top]
     assert all(isinstance(floor, int) and floor >= 1 for floor in floors), f'楼层 is not a positive int: {floors[:20]}'
     assert floors == sorted(set(floors)), f'楼层 repeats or goes backwards: {floors[:20]}'
+    for row in rows:
+        if not str(row.get('父楼层') or '').strip():
+            continue
+        assert row.get('楼层') in ('', None), f'a reply may not claim a floor of its own: {row}'
+        assert row['父楼层'] in floors, f'a 父楼层 that names no top-level row: {row}'
 
 
 def _output_stems(workflow: dict) -> dict:

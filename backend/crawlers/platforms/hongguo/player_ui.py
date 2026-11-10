@@ -589,24 +589,29 @@ class PlayerUI:
             logger.debug('hongguo harvest: close_comments failed: %s', exc)
             return False
 
-    def expand_replies(self, max_clicks: int = 40) -> int:
+    def expand_replies(self) -> int:
         """Expand EVERY “展开…回复” the drawer currently shows; returns how many it clicked.
 
         One click per episode was reply-blind by design: a drawer with 30 threads and
         children under six of them yielded six expansions, and the table then claimed the
         conversation had no replies. So the walk re-reads the tree and clicks the first
-        not-yet-clicked expansion until the page offers none (bounded — a control that
-        refuses to disappear must not spin here forever), then hands the keyboard back:
-        whatever the click opened, the scroll that follows must own the focus.
+        not-yet-clicked expansion until the page offers none.
+
+        **No click budget**: the old ``max_clicks=40`` was a number WE chose ending a drawer the
+        player was still offering (an episode with more than 40 threads lost the rest silently).
+        What ends this loop is the page: nothing left to click, or a click the player refuses.
+        A control is remembered by its own words rather than its rectangle, so one that moves after
+        being clicked cannot be clicked twice — while ``展开 3 条回复`` turning into
+        ``展开更多回复`` is a new label and is followed, which is how the player pages a thread out.
         """
         clicked = 0
         seen: set[tuple] = set()
-        while clicked < max_clicks:
+        while True:
             target = None
             for ctrl, kind, name, rect in self.collect():
                 if rect.width() <= 0 or not is_expand_control(name):
                     continue
-                key = (kind, str(name).strip(), rect.left, rect.top)
+                key = (kind, str(name).strip())
                 if key in seen:
                     continue
                 target = ctrl

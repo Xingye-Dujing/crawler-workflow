@@ -235,6 +235,11 @@ def walk(session, url: str, limit: int) -> tuple:
             # shortfall, and the table is exactly as long as the node was told to make it.
             ended = 'limit'
             break
+        if session.may_stop():
+            # The only other ending this walk has is the site's own cursor; 停止 is the user's, and it
+            # must not wait for a cursor that this API is happy to keep issuing forever.
+            ended = 'stopped'
+            break
         session.nap(0.8)  # polite page interval on the comment API
     table = rows[:limit] if limit else rows
     # **The gap is measured against what the walk received, never against the truncated table** (U41,

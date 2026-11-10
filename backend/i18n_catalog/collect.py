@@ -100,11 +100,23 @@ ZH = {
     ),
     'comment.weiboShowFailed': '[微博评论] 评论接口取不回来（Cookie 可能失效或被限流）：{url}',
     'comment.xNoList': '[X 评论] 这条推文页面没有渲染出任何内容（链接失效、被删或被拦截）：{url}',
-    'comment.xhsPanelCapped': '[小红书评论] 滚满 {rounds} 轮仍未走完，按轮次上限收工（本次 {rows} 条）：{url}',
+    'comment.xhsGone': '[小红书评论] 站点把这条链接换成了另一篇笔记（{shown}），这条按失效处理：{url}',
+    'comment.xhsLoginGate': (
+        '[小红书评论] 展开楼中楼需要登录：站点对“展开”弹出了登录框，已停止展开'
+        '（本次 {rows} 行，父评论只带页面上已渲染的那几条回复）：{url}'
+    ),
+    'comment.xhsNested': (
+        '[小红书评论] {url}：有 {nested} 条回复没能展开（站点自己数在 {declared} 条之内，本表 {rows} 条）'
+        ' —— 本次收尾原因是“{reason}”'
+    ),
+    'comment.xhsNoPanel': '[小红书评论] 评论区没有渲染出来（可能被折叠、需要登录或页面未加载）：{url}',
+    'comment.xhsShort': (
+        '[小红书评论] {url}：站点写着 {declared} 条评论（含楼中楼），本次取到 {rows} 条'
+        ' + 未能展开的回复 {nested} 条（还差 {gap} 条）—— 本次收尾原因是“{reason}”'
+    ),
     'comment.ytNoPage': 'YouTube 页面没有加载成视频页（可能需要登录或被拦截）：{url}',
     'comment.zhihuNoAuthor': '[知乎评论] 本轮 {total} 条里有 {n} 条在自己的子树内没有作者链接（匿名或被折叠）',
     'comment.zhihuNoPanels': '[知乎评论] 这个回答页面上没有评论面板（可能已关闭或未加载）：{url}',
-    'comment.zhihuPanelCapped': '[知乎评论] 滚满 {n} 轮（含展开子回复）仍未走完，按轮次上限收工（本次 {rows} 条）',
     'comment.zhihuPanelShort': '[知乎评论] 页面写着 {declared} 条，本次取到 {rows} 条（差额未采到）',
     'comment.zhihuRound': '[知乎评论] 第 {r} 轮新增 {n} 条（累计 {total}）',
     'source.BibTeX.missing': '字段随导出工具而异：缺作者的条目会被计入“跳过”并在控制台点名，不会被当成空记录',
@@ -313,19 +325,32 @@ EN = {
     ),
     'comment.weiboShowFailed': '[weibo comments] the comment endpoint answered nothing (dead cookie, limited): {url}',
     'comment.xNoList': '[X comments] the post page rendered nothing at all (dead, deleted, or blocked link): {url}',
-    'comment.xhsPanelCapped': (
-        '[xiaohongshu comments] stopped after {rounds} scroll rounds with the panel still growing; '
-        'took {rows} rows: {url}'
+    'comment.xhsGone': (
+        '[xiaohongshu comments] the site served ANOTHER note for this link ({shown}); treated as a dead link: {url}'
+    ),
+    'comment.xhsLoginGate': (
+        '[xiaohongshu comments] opening 楼中楼 needs a login: the site answered 展开 with its login'
+        ' dialog, so opening stopped ({rows} rows so far, each parent keeping the replies already'
+        ' rendered): {url}'
+    ),
+    'comment.xhsNested': (
+        '[xiaohongshu comments] {url}: {nested} replies could not be opened (the site counts them'
+        ' inside its own {declared}, this table holds {rows}) — the walk ended on “{reason}”'
+    ),
+    'comment.xhsNoPanel': (
+        '[xiaohongshu comments] the comment panel never rendered '
+        '(collapsed, login-only, or the page did not load): {url}'
+    ),
+    'comment.xhsShort': (
+        '[xiaohongshu comments] {url}: the page says {declared} comments (nested replies included),'
+        ' this walk took {rows} + {nested} replies it could not open (a gap of {gap})'
+        ' — the walk ended on “{reason}”, so the gap is not “this note has no more comments”'
     ),
     'comment.ytNoPage': 'the YouTube page never loaded as a video page (login or interception?): {url}',
     'comment.zhihuNoAuthor': (
         '[zhihu comments] {n} of {total} rows carry no author link inside their own subtree (anonymous or collapsed)'
     ),
     'comment.zhihuNoPanels': '[zhihu comments] no comment panel on this answer (closed, or never loaded): {url}',
-    'comment.zhihuPanelCapped': (
-        '[zhihu comments] stopped after {n} scroll rounds (reply threads opened) with the panel still '
-        'growing; took {rows} rows'
-    ),
     'comment.zhihuPanelShort': '[zhihu comments] the page says {declared} comments, {rows} were taken',
     'comment.zhihuRound': '[zhihu comments] round {r} added {n} rows ({total} so far)',
     'source.BibTeX.missing': 'Fields vary by tool: a record without an author is counted in the skipped total and '
