@@ -90,8 +90,12 @@ Gitee/GitHub Release 的附件按“地址”下载，而摘要写在清单里�
 ### 1. 构建离线 Setup + 绿色版
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Installer
+powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Installer -Version 2026.11.11
 ```
+
+**`-Version` 必须显式传，而且是三段数字**（Inno 的 `VersionInfoVersion` 会自己补 `.0`）：脚本默认值是
+`1.0.0`，漏传会把安装器/收据按 1.0.0 盖章，而应用内 `APP_VERSION` 是四段（`2026.11.11.2`）。
+四段版本只存在于 `backend/services/version.py` 与 `version.json`；构建脚本只接受 `^\d+\.\d+\.\d+$`。
 
 产出：
 

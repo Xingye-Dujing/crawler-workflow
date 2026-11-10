@@ -6,4 +6,4 @@ the components change rarely, so a monotonic build number is easier to reason ab
 ``1.0.0``.
 """
 
-APP_VERSION = '2026.11.11.1'
+APP_VERSION = '2026.11.11.2'
