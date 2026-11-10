@@ -103,3 +103,13 @@ def test_the_cookie_dialog_is_bounded_by_the_viewport_not_fixed_pixels(results):
     assert json.loads(results)['cookieBounds'] == 'viewport bounds', (
         'a fixed maxH clips the six-platform cookie guidance with no way to grow'
     )
+
+
+def test_the_lexicon_search_box_keeps_focus_across_a_filter_keystroke(results):
+    """render() rebuilds the toolbar on every character; without re-focusing the NEW box the
+    caret fell to <body> after one key and the rest of the typing hit canvas shortcuts."""
+    import json
+
+    box = json.loads(results)['lexiconFilter']
+    assert box['focused'] is True, 'the rebuilt search box did not take focus back'
+    assert box['value'] == 'a', 'the filter value did not reach the rebuilt box'

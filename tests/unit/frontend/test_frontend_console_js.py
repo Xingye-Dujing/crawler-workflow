@@ -187,6 +187,15 @@ class TestClearConsoleBeforeRun:
         assert console['clearOnTrue'] is True, 'clear_console_before_run=true must clear'
         assert console['clearUnsetFalse'] is True, 'a valueless settings object must not clear'
 
+    def test_a_new_run_drops_the_retained_histories_but_keeps_the_cursors(self, console):
+        """With the option OFF the box is cleared, but the per-view buffers still held the
+        previous run's lines — the first trim or tab switch repainted them as this run's own
+        output. The cursors must stay: they are what decides which lines are new."""
+        dropped = console['dropHistories']
+        assert dropped['allLines'] == 0 and dropped['wfLines'] == 0, 'the previous run’s lines survived'
+        assert dropped['allSeen'] == 12, 'dropping the history moved the 全部 cursor'
+        assert dropped['wfSeen'] == 7, 'dropping the history moved a workflow cursor'
+
 
 class TestConsoleReconnect:
     """A refreshed page takes the console back up — “页面一刷新，控制台信息就丢失了”.

@@ -526,6 +526,34 @@ class TestAnotherAccountsRunIsNotYours:
             _COOKIE_JOB.clear()
             _COOKIE_JOB.update(previous)
 
+    def test_a_finished_cookie_job_stays_owner_only(self, admin_client):
+        """``active`` going False must not publish the job: the probed URL, the account label and
+        the console lines are still the answer that account paid a browser for."""
+        from sessions.routes import _COOKIE_JOB
+
+        previous = dict(_COOKIE_JOB)
+        _COOKIE_JOB.update(
+            active=False,
+            owner='u_0123456789ab',
+            kind='verify',
+            platform='zhihu',
+            account='',
+            phase='verified',
+            error='OSError: F:\\private\\cookies\\zhihu_cookies.json',
+            count=3,
+            entry='https://www.zhihu.com/secret',
+            facts={'login_wall': False, 'url': 'https://www.zhihu.com/secret'},
+            lines=['someone else’s diagnosis'],
+        )
+        try:
+            body = admin_client.get('/api/cookies/generate/status').get_json()
+            assert body['active'] is False
+            assert body['platform'] == '' and body['facts'] == {} and body['lines'] == []
+            assert body['entry'] == '' and body['error'] == '' and body['phase'] == ''
+        finally:
+            _COOKIE_JOB.clear()
+            _COOKIE_JOB.update(previous)
+
     def test_a_refused_claim_does_not_take_over_the_slot(self, admin_client, monkeypatch):
         """The LLM-requirement refusals come AFTER the run id and the owner are stamped. A loser
         must hand both back: otherwise its own console poll answers with the previous owner's
@@ -572,6 +600,48 @@ class TestAnotherAccountsRunIsNotYours:
         with account_context.use(Account(admin_id, 'admin', 'admin')):
             after = admin_client.get('/api/workflow/status').get_json()
         assert after['results'] and not after.get('foreign_run')
+
+    def test_a_thread_that_never_started_hands_the_slot_and_identity_back(self, admin_client, monkeypatch):
+        """``Thread.start`` can raise on a loaded box. The claim had already stamped the run id and
+        the owner; a handler that cleared only ``running`` left every later status answer naming a
+        run with no record, and every OTHER account reading ``foreign_run``."""
+        import engine.run as run_module
+
+        admin_id = _me(admin_client)['user_id']
+        execution_state['user_id'] = admin_id
+        execution_state['username'] = 'admin'
+        execution_state['run_id'] = 'admins-finished-run'
+        execution_state['workflow_labels'] = ['admin’s canvas']
+
+        class _NeverStarts:
+            def __init__(self, *args, **kwargs):
+                self.name = 'run'
+
+            def start(self):
+                raise RuntimeError("can't start new thread")
+
+            def is_alive(self):
+                return False
+
+        monkeypatch.setattr(run_module.threading, 'Thread', _NeverStarts)
+        answer = _post(
+            admin_client,
+            '/api/workflow/execute',
+            {
+                'workflow': {
+                    'nodes': [{'id': 'n1', 'type': 'name', 'params': {'name': 'demo'}}],
+                    'connections': [],
+                },
+                'workflow_name': 'demo',
+            },
+        )
+        assert answer.status_code == 500, answer.get_json()
+        assert execution_state['running'] is False
+        assert execution_state['thread'] is None
+        assert execution_state['run_id'] == 'admins-finished-run', 'a thread that never ran stamped a run id'
+        assert execution_state['user_id'] == admin_id
+        assert execution_state['workflow_labels'] == ['admin’s canvas']
+        assert admin_client.get('/api/workflow/status').get_json().get('foreign_run') is not True
 
     def test_the_process_panel_sees_only_your_own_run_threads(self, admin_client):
         """A thread list is a MACHINE fact. On a shared host it also holds the scheduler (killing
@@ -787,3 +857,31 @@ class TestTheProfileTemplateIsAnOperatorAction:
         response = _post(admin_client, '/api/browser/profiles/template', {'force': False})
         assert response.status_code == 200, response.get_json()
         assert response.get_json()['stubbed'] is True
+
+
+class TestComponentAndUpdateWritesAreOperatorActions:
+    """Installing/removing a component rewrites the tree every account's next run spawns, and the
+    self-update replaces the program and restarts the process. Both are machine-level writes, so
+    with accounts on they answer to the admin — the same door settings/lexicon/template use."""
+
+    def test_a_plain_account_cannot_install_a_component(self, admin_client):
+        alice = _as_plain_user(admin_client)
+        refused = _post(alice, '/api/components/install', {'id': 'chromedriver'})
+        assert refused.status_code == 403, refused.get_json()
+        assert 'admin' in refused.get_json()['error'].lower()
+
+    def test_a_plain_account_cannot_remove_a_component(self, admin_client):
+        alice = _as_plain_user(admin_client)
+        refused = _post(alice, '/api/components/remove', {'id': 'chromedriver'})
+        assert refused.status_code == 403, refused.get_json()
+
+    def test_a_plain_account_cannot_download_or_apply_an_update(self, admin_client):
+        alice = _as_plain_user(admin_client)
+        for path in ('/api/update/download', '/api/update/apply'):
+            refused = _post(alice, path, {})
+            assert refused.status_code == 403, (path, refused.get_json())
+
+    def test_an_admin_reaches_the_body_checks_not_the_gate(self, admin_client):
+        """An admin on a SOURCE run is refused by the updater's own rule, never with a 403."""
+        refused = _post(admin_client, '/api/update/download', {})
+        assert refused.status_code != 403, refused.get_json()

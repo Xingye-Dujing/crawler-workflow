@@ -329,8 +329,9 @@ class TestRows:
         assert D.filter_rows(frame, 't', 'in', 'a, b')['t'].tolist() == ['a', 'b']
         assert D.filter_rows(frame, 't', 'not_in', ['a'])['t'].tolist() == ['b', 'c']
 
-    def test_filter_on_a_missing_column_changes_nothing(self, df):
-        assert D.filter_rows(df, 'nope', 'eq', 'x') is df
+    def test_filter_on_a_missing_column_is_refused(self, df):
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.filter_rows(df, 'nope', 'eq', 'x')
 
     def test_filter_with_a_non_numeric_bound_raises(self, df):
         with pytest.raises(UnknownOperationError, match='needs a numeric value'):
@@ -353,12 +354,16 @@ class TestColumns:
         frame = pd.DataFrame({'a': [1], 'b': [2], 'c': [3]})
         assert list(D.select_columns(frame, ['c', 'a']).columns) == ['c', 'a']
 
-    def test_select_columns_drops_names_that_do_not_exist(self):
+    def test_select_columns_refuses_a_name_that_is_not_there(self):
+        """A partial match used to be silently dropped, so the export looked complete while
+        a column the user named was missing. It is a mistake they can fix, refused by name."""
         frame = pd.DataFrame({'a': [1], 'b': [2]})
-        assert list(D.select_columns(frame, ['b', 'zz']).columns) == ['b']
+        with pytest.raises(UnknownOperationError, match='zz'):
+            D.select_columns(frame, ['b', 'zz'])
 
-    def test_select_columns_with_nothing_selectable_returns_the_frame(self, df):
-        assert D.select_columns(df, ['nope']) is df
+    def test_select_columns_refuses_when_nothing_matches(self, df):
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.select_columns(df, ['nope'])
 
     def test_rename_columns(self, df):
         assert list(D.rename_columns(df, {'作者': 'who'}).columns) == ['名称', '点赞', 'who']
@@ -424,8 +429,9 @@ class TestColumns:
         frame = pd.DataFrame({'v': [1, 2]})
         assert D.convert_type(frame, 'v', 'str')['v'].tolist() == ['1', '2']
 
-    def test_convert_type_on_a_missing_column_changes_nothing(self, df):
-        assert D.convert_type(df, 'nope', 'int') is df
+    def test_convert_type_on_a_missing_column_is_refused(self, df):
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.convert_type(df, 'nope', 'int')
 
     def test_convert_type_of_unparseable_text_does_not_raise(self):
         frame = pd.DataFrame({'v': ['abc']})
@@ -439,8 +445,9 @@ class TestReshaping:
         assert D.sort_rows(frame, 'a')['a'].tolist() == [1, 2, 3]
         assert D.sort_rows(frame, 'a', ascending=False)['a'].tolist() == [3, 2, 1]
 
-    def test_sort_rows_on_a_missing_column_changes_nothing(self, df):
-        assert D.sort_rows(df, 'nope') is df
+    def test_sort_rows_on_a_missing_column_is_refused(self, df):
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.sort_rows(df, 'nope')
 
     def test_sample_without_a_bound_keeps_everything(self, df):
         assert D.sample_rows(df) is df
@@ -763,11 +770,12 @@ class TestEveryFilterOperator:
     """
 
     @pytest.mark.parametrize('op', _compared_literals('filter_rows', 'op'))
-    def test_a_column_that_is_not_there_is_a_no_op_for_every_operator(self, op):
-        """Even an unusable bound is not reached: the column check comes first, so
-        a filter on a renamed-away column keeps every row rather than refusing.
-        """
-        assert D.filter_rows(SWEEP, 'nope', op, 'not-a-number') is SWEEP
+    def test_a_missing_column_is_refused_for_every_operator(self, op):
+        """A filter on a renamed-away column used to keep every row and settle the node DONE —
+        an unfiltered table exported with a green check. The column check comes first and now
+        refuses by name, whatever the operator would have compared."""
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.filter_rows(SWEEP, 'nope', op, 'not-a-number')
 
     @pytest.mark.parametrize(
         ('op, bound, expected'),
@@ -1187,9 +1195,10 @@ class TestExtractTime:
         assert D.extract_time(frame, '时间', new_col='月份', part='month').at[0, '月份'] == 5
         assert D.extract_time(frame, '时间', new_col='小时', part='hour').at[0, '小时'] == 13
 
-    def test_a_missing_column_is_a_no_op_like_every_other_step(self):
+    def test_a_missing_column_is_refused_like_every_other_step(self):
         frame = pd.DataFrame({'别的': ['a']})
-        assert list(D.extract_time(frame, '时间').columns) == ['别的']
+        with pytest.raises(UnknownOperationError, match='时间'):
+            D.extract_time(frame, '时间')
 
 
 class TestBinTime:
@@ -3339,6 +3348,20 @@ class TestAlert:
         out = D.alert(frame, streak=2, swing=0.2, volume_col='total', volume_floor=0.6)
         assert set(out['signal']) == {'转向（已抑制）'}, 'the swing fired and the volume said no'
         assert '衰减' in ''.join(out['reason']) or '低于' in ''.join(out['reason'])
+
+    def test_a_missing_volume_cell_is_said_as_unprovided_not_zero(self):
+        """A NaN volume is "not measured". It used to be read as 0.0, so the reason printed
+        “本期热度 0” about a cell the table does not contain."""
+        frame = self._curve([-0.1, -0.15, -0.4, -0.7], volume=[900, 800, 60, None])
+        out = D.alert(frame, streak=2, swing=0.2, volume_col='total', volume_floor=0.6)
+        reason = out.iloc[-1]['reason']
+        assert '未提供' in reason, reason
+        assert '本期热度 0' not in reason, reason
+
+    def test_an_unmeasured_volume_cannot_suppress_a_real_swing(self):
+        frame = self._curve([-0.1, -0.15, -0.4, -0.7], volume=[900, 800, 60, None])
+        out = D.alert(frame, streak=2, swing=0.2, volume_col='total', volume_floor=0.6)
+        assert set(out['signal']) == {'转向'}, 'a period nobody counted is not "the crowd left"'
 
     def test_nothing_firing_still_answers_with_the_largest_value_measured(self):
         out = D.alert(self._curve([-0.1, -0.12, -0.14]), streak=2, swing=0.5)

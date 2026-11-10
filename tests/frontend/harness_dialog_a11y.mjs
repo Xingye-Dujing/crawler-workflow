@@ -17,7 +17,7 @@ vm.createContext(sandbox);
 fixWindow(vm, sandbox);
 
 const LABELS = {
-    en: { 'settings.close': 'Close' },
+    en: { 'settings.close': 'Close dialog' },
     zh: {},
 };
 const I18n = { lang: 'en', dict: LABELS, t(k) { return (LABELS.en[k] || k); } };
@@ -111,5 +111,38 @@ doc.getElementById('dialog-actions').querySelectorAll('button')[0].click();
 /* Neither superseded call is left hanging: their promises settle with their own non-answer, which
    is what lets a reopen guard (Accounts._pwOpen) reset and the debt be offered again. */
 report.superseded = [await firstDialog, await secondDialog, await third];
+
+/* The corner X: its accessible name and tooltip come from the catalogue at paint time, not from
+   a hardcoded English literal ("Close") that a zh screen reader would announce. */
+const closable = vm.runInContext(
+    'showDialog({ message: "可关闭", showClose: true, buttons: [{label:"OK",value:true}] })',
+    sandbox,
+);
+const closeBtn = box.querySelector('.dialog-close');
+report.closeAriaLabel = closeBtn ? closeBtn.getAttribute('aria-label') : null;
+report.closeTitle = closeBtn ? closeBtn.title : null;
+doc.getElementById('dialog-actions').querySelectorAll('button')[0].click();
+report.closableAnswered = await closable;
+
+/* Two toasts in a row share ONE element: the first one's deadline must not hide the second.
+   Timers are faked here, and the whole point is the pending COUNT — a second toast has to
+   cancel the first timer, so exactly one deadline is left to run. */
+const toastEl = el('div', 'toast', doc.body);
+const pendingTimers = new Map();
+let nextTimer = 1;
+sandbox.setTimeout = (fn) => {
+    const id = nextTimer++;
+    pendingTimers.set(id, fn);
+    return id;
+};
+sandbox.clearTimeout = (id) => {
+    pendingTimers.delete(id);
+};
+vm.runInContext('showToast("第一条", 1000); showToast("第二条", 1000);', sandbox);
+report.toastPendingDeadlines = pendingTimers.size;
+report.toastShownBeforeDeadline = toastEl.classList.contains('show');
+report.toastText = toastEl.textContent;
+[...pendingTimers.values()].forEach((fn) => fn());
+report.toastStillShownAfterOneDeadline = toastEl.classList.contains('show');
 
 process.stdout.write(JSON.stringify(report));

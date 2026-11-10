@@ -13,9 +13,12 @@ from __future__ import annotations
 from contextlib import suppress
 
 from flask import Blueprint, jsonify
+from runtime.state import any_run_live
 
+from api.auth import is_admin
 from api.http import _json_body
 from i18n import t
+from services.accounts.service import accounts_mode
 from services.components import jobs
 from services.components.catalog import Catalog, CatalogError, load_catalog
 from services.components.install import InstallError, remove_component
@@ -24,6 +27,24 @@ from services.components.paths import install_root
 from services.components.probe import environment
 
 bp = Blueprint('components', __name__)
+
+
+def _admin_refusal():
+    """Why this caller may not change what is installed on this machine.
+
+    ``install_root()`` is one tree shared by every account (the launch path exports it into
+    ``CHROME_PATH``/``CIXI_DRIVER_PATH``/``CIXI_NODE_BIN`` for all of them), so installing or
+    removing a component rewrites what every account's next run spawns — the same machine-level
+    write ``/api/settings`` and ``/api/lexicon`` guard with 403. The panel hides the buttons;
+    hiding is cosmetic, the 403 is the permission.
+    """
+    if accounts_mode() and not is_admin():
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    return None
+
+
+def _admin() -> bool:
+    return not accounts_mode() or is_admin()
 
 
 def _catalog() -> Catalog:
@@ -36,6 +57,10 @@ def _rows(catalog: Catalog) -> list[dict]:
     # panel, and the environment report already names the broken file.
     with suppress(ManifestError):
         manifest.load()
+    # A component's folder is a host path — the same fingerprint ``/api/settings`` blanks for a
+    # non-administrator. The panel only needs it to show where a thing lives, which is the
+    # operator's business, so an ordinary account gets the same answer as the settings panel.
+    show_paths = _admin()
     rows = []
     for component in catalog.components.values():
         record = manifest.get(component.id) or {}
@@ -63,7 +88,7 @@ def _rows(catalog: Catalog) -> list[dict]:
                 'size': asset.size if asset else 0,
                 'downloadable': downloadable,
                 'installed': installed_version,
-                'path': record.get('path') or '',
+                'path': (record.get('path') or '') if show_paths else '',
                 'update': bool(installed_version and installed_version != component.version),
             }
         )
@@ -87,6 +112,12 @@ def get_components():
 
 @bp.route('/api/components/install', methods=['POST'])
 def install_component():
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
+    if any_run_live():
+        # A download unpacks over the very chromedriver/Node/xelatex a live crawl is spawning.
+        return jsonify({'ok': False, 'error': t('components.installBusy')}), 409
     payload = _json_body()
     if payload is None:
         return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
@@ -117,6 +148,9 @@ def get_job(job_id: str):
 
 @bp.route('/api/components/jobs/<job_id>/cancel', methods=['POST'])
 def cancel_job(job_id: str):
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
     if jobs.get(job_id) is None:
         return jsonify({'ok': False, 'error': t('components.jobMissing')}), 404
     jobs.cancel(job_id)
@@ -125,6 +159,11 @@ def cancel_job(job_id: str):
 
 @bp.route('/api/components/remove', methods=['POST'])
 def remove():
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
+    if any_run_live():
+        return jsonify({'ok': False, 'error': t('components.installBusy')}), 409
     payload = _json_body()
     if payload is None:
         return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400

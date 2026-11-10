@@ -430,6 +430,24 @@ class TestFingerprints:
 # ─── startup recovery ───────────────────────────────────────────────────
 
 
+class TestAFreshAttemptDoesNotInheritTheLastReason:
+    """``begin_node`` is a fresh visit. The previous attempt's failure sentence and finish stamp
+    belong to THAT attempt; leaving them made the badge report a wall this attempt never met."""
+
+    def test_begin_node_clears_the_previous_error_and_finish_stamp(self, store):
+        _start(store)
+        store.begin_node('r1', 'node-1', 'source', fingerprint='fp')
+        store.finish_node('r1', 'node-1', NODE_FAILED, error='cookie expired')
+        failed = store.node_statuses('r1')['node-1']
+        assert failed['error'] == 'cookie expired' and failed['finished_at']
+
+        store.begin_node('r1', 'node-1', 'source', fingerprint='fp')
+        fresh = store.node_statuses('r1')['node-1']
+        assert fresh['status'] == 'running'
+        assert fresh['error'] == '', 'the new attempt reported the previous attempt’s failure'
+        assert fresh['finished_at'] is None
+
+
 class TestPromoteStale:
     def test_reopening_promotes_running_to_interrupted(self, store, tmp_path):
         _start(store)

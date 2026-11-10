@@ -93,6 +93,20 @@ out.datasetHandle = !!sandbox.__byId('dataset-resize-handle');
 out.workflowsHandle = !!sandbox.__byId('workflows-resize-handle');
 out.lexiconHandle = !!sandbox.__byId('lexicon-resize-handle');
 out.dockedList = typeof sandbox.closeDockedPanels === 'function' ? 'helper present' : 'MISSING helper';
+
+/* The lexicon search box is rebuilt by render() on every keystroke. Focus has to return to the
+   NEW element, or the first character lands and the rest goes to <body> (canvas shortcuts). */
+sandbox.lexiconManager._kind = 'stopword';
+sandbox.lexiconManager._counts = { stopword: 0 };
+sandbox.lexiconManager._last = [{ term: 'apple' }, { term: 'banana' }];
+sandbox.lexiconManager._filter = '';
+sandbox.lexiconManager.render();
+sandbox.lexiconManager.setFilter('a');
+const lexiconBox = sandbox.__byId('lexicon-filter');
+out.lexiconFilter = {
+    focused: !!(lexiconBox && lexiconBox.__focused),
+    value: lexiconBox ? lexiconBox.value : null,
+};
 /* The cookie dialog's ceiling has to be viewport-derived, not 500px. */
 out.cookieBounds = /maxW:\s*Math\.min\(760,\s*window\.innerWidth\s*-\s*40\)[\s\S]{0,80}maxH:\s*window\.innerHeight\s*-\s*40/.test(
     appSrc,

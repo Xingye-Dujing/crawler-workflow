@@ -358,6 +358,15 @@
       }
 
       var next = sel.selectedIndex
+      if (!down && !up) {
+        /* Enter / Space on an open single-choice popup: the arrows already committed the
+           highlighted row (this control moves the value as it moves), so the key's job is to
+           FINISH the interaction. It used to fall through to the "move down one" path, which
+           made Enter behave like ArrowDown and silently change the value the user was about to
+           confirm. */
+        close()
+        return
+      }
       for (var i = next + dir; i >= 0 && i < opts.length; i += dir) {
         if (!opts[i].disabled) {
           next = i

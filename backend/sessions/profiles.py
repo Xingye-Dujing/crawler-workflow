@@ -462,11 +462,18 @@ def _store_row_count(path: str, table: str) -> int:
     db = None
     try:
         db = sqlite3.connect(f'file:{os.path.abspath(path).replace(os.sep, "/")}?mode=ro', uri=True)
-        return int(db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])
+        try:
+            return int(db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])
+        except sqlite3.Error as exc:
+            # "no such table" is the one error that means the store has not been created yet — a
+            # blank directory Chrome never ran in. Every other sqlite error (database is locked,
+            # malformed, WAL/-shm trouble, unreadable) means the file EXISTS and cannot be read,
+            # which the contract below reports as material, never as an empty profile. Folding
+            # them together let a dirty template pass ``verify_pristine`` and seed every new
+            # account with somebody else's Cookies file.
+            return 0 if 'no such table' in str(exc).lower() else -1
     except sqlite3.Error:
-        # No such table means the store has not been created yet — a blank directory
-        # that has not run Chrome at all — which is the cleanest answer there is.
-        return 0
+        return -1
     except OSError:
         return -1
     finally:

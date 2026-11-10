@@ -60,6 +60,9 @@ def session(monkeypatch):
         'declared_params',
         lambda platform, mode: ('keyword', 'author', 'board', 'target_count', 'comment_limit', 'catbus_account'),
     )
+    # Paged is the ordinary answer; a fixed board / single detail declares ``paged: false`` and
+    # licenses its own short table (see ``_shortage_is_licensed``).
+    monkeypatch.setattr(bridge, 'manifest_mode', lambda platform, mode: {'paged': True})
     return made
 
 
@@ -127,6 +130,36 @@ class TestSourceModesStreamThroughTheLedger:
             ('author', {'author': '2', 'target_count': 3}),
             ('hot', {'board': 'popular', 'target_count': 3}),
         ]
+
+    def test_a_boundary_halted_short_run_is_not_convicted(self, session, monkeypatch):
+        """An incremental walk stops at the row it already has. The table is short because it was
+        TOLD to stop — convicting it made every incremental run “采得不足” and offered 继续 after a
+        correct crawl."""
+
+        def fake_run(platform, mode, params, **kw):
+            kw['on_row'](row('BV9'))  # the boundary the previous run left
+            kw['on_row'](row('BV8'))  # older, must not be filed
+            return outcome(status='ok')
+
+        monkeypatch.setattr(bridge, 'run', fake_run)
+        session.set_watermark('BV9')
+        session.search(keyword='k', target_count=5)
+        assert session.collected() == 0
+        assert session.end_reason is None, 'a walk stopped at its boundary is not an under-collect'
+
+    def test_a_non_paged_cell_is_not_measured_against_a_target(self, session, monkeypatch):
+        """A fixed board or one-item detail declares ``paged: false``: it never promised 50 rows."""
+        monkeypatch.setattr(bridge, 'manifest_mode', lambda platform, mode: {'paged': False})
+        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='ok'))
+        session.search(keyword='k', target_count=5)
+        assert session.end_reason is None
+
+    def test_an_unknown_manifest_answer_still_convicts(self, session, monkeypatch):
+        """The licence must come from the adapter. A manifest that answers nothing is not a licence."""
+        monkeypatch.setattr(bridge, 'manifest_mode', lambda platform, mode: {})
+        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='ok'))
+        session.search(keyword='k', target_count=5)
+        assert session.end_reason == UNDER_TARGET
 
     def test_a_short_crawl_convicts_itself_with_the_funnel(self, session, monkeypatch):
         """An adapter list that stopped growing is not proof the site ran out, so it says “采得不足”.

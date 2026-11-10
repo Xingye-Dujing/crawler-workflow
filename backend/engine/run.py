@@ -819,10 +819,6 @@ def _run_worker(
     created: list = []
     try:
         store = get_run_store()
-        # A rerun's erase happens HERE, after the slot is ours — not in the request that queued it.
-        # Everything below reads node statuses to decide what to reuse, so the pruned subtree has to
-        # be gone before that read or the rerun would adopt the rows it just deleted.
-        _invalidate_rerun_nodes(store, run_id, rerun)
         # Structure identity is taken on the effective graph, so it agrees with the key
         # the resume banner matches on (:func:`effective_workflow`) — disabling a node and
         # re-enabling it returns to the same identity, and a disabled node is absent from
@@ -868,6 +864,15 @@ def _run_worker(
             set_log_sink(None)
             run_log_writer.disarm()
             return
+
+        # A rerun's erase happens HERE, after the slot is ours AND after the canvas was accepted —
+        # never in the request that queued it, and never before ``validate()``. The erase deletes
+        # ``node_rows``, ``node_runs`` and the node's ``item_seen`` claims, so doing it first meant a
+        # canvas the engine then refused (a lost login, a bad param) had already destroyed the paid
+        # subtree and started nothing (AGENTS: a refused claim owns nothing; a durable mutation
+        # follows the claim). Everything below reads node statuses to decide what to reuse, so the
+        # pruned subtree still has to be gone before that read.
+        _invalidate_rerun_nodes(store, run_id, rerun)
 
         # Split into per-workflow connected components
         components = engine.find_workflows()
@@ -1078,6 +1083,10 @@ def _run_worker(
                     sub_results,
                     component_name(se) or workflow_name,
                     log_label=_wf_display_name(se, wf_idx),
+                    # The record THIS component wrote: `created` is appended once per component
+                    # (serial split) or once for the whole run (parallel/single), and wf_idx is
+                    # that same position. Without it 执行历史 invented an id nothing else knew.
+                    run_id=created[wf_idx] if wf_idx < len(created) else run_id,
                 )
         # 'completed' must mean every node really finished. A node that failed
         # or stopped half-way leaves gaps; marking the run complete hid it from
@@ -1468,6 +1477,11 @@ def begin_run(data: dict, lang_header: str) -> dict:
         execution_state['thread'] = None
         execution_state['running'] = False
         execution_state['stopping'] = False
+        # …and hand back the identity too. The claim stamped run_id/user_id/username/resume/lang/llm
+        # before the thread existed, so a thread that never started left every reader of
+        # /api/workflow/status answering a run that has no record (and every OTHER account getting
+        # ``foreign_run``). AGENTS: a refused claim owns nothing.
+        _restore_claim_stamp(_stamp_before, _ambient_before)
         # One console line, localized; logger.exception keeps the traceback in the
         # file. add_log of the same text here would print the failure twice.
         logger.exception(t('run.start_failed', err=e))

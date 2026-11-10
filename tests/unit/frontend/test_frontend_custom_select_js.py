@@ -314,8 +314,9 @@ SCENARIOS = [
         'steps': [{'do': 'key', 'target': 'kw', 'keys': ['Enter']}],
     },
     {
-        # Measured here, and reported as a product bug: see
-        # `test_enter_on_an_open_single_popup_commits_what_is_shown`.
+        # A measured product bug when this scenario was written: Enter on an open single popup
+        # moved the choice down and dispatched a change. Pinned by
+        # `test_enter_on_an_open_single_popup_finishes_without_moving_the_choice`.
         'id': 'keys-single-enter-when-open',
         'html': select('kw', CHOICES),
         'ids': ['kw'],
@@ -714,6 +715,15 @@ class TestKeyboard:
         choice would replace the user's selection with the next row."""
         c = ctl(world, 'keys-closed-escape-is-harmless', 'kw')
         assert c['value'] == 'zhihu' and world['keys-closed-escape-is-harmless']['changes'] == {'kw': 0}
+
+    def test_enter_on_an_open_single_popup_finishes_without_moving_the_choice(self, world):
+        """Enter/Space used to fall through to the “move down one” path, so confirming an open
+        single-choice popup silently picked the next row. The arrows commit as they move; the
+        key's job is to close the popup and change nothing."""
+        c = ctl(world, 'keys-single-enter-when-open', 'kw')
+        assert c['value'] == 'zhihu'
+        assert world['keys-single-enter-when-open']['changes'] == {'kw': 0}
+        assert 'open' not in c['menuClass']
 
     def test_enter_ticks_the_cursor_row_in_a_checklist(self, world):
         c = ctl(world, 'multi-keyboard', 'src')

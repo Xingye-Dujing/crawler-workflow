@@ -42,7 +42,7 @@ def suggest_stages(
     a proposal has to be comparable with them.
     """
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='suggest_stages', col=column))
     stamps = _to_datetime(df[column])
     unparsed = int(stamps.isna().sum())
     if unparsed:

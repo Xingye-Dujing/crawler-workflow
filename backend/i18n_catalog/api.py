@@ -168,6 +168,7 @@ ZH = {
     # ── analysis / services ───────────────────────────────────
     'export.done': '已导出 {n} 行至 {path}（{fmt}）',
     'export.formula_escaped': '导出时给 {n} 个以 = + - @ 开头的文本单元格加了前导单引号，避免被 Excel 当成公式执行',
+    'export.missing_text_column': '导出 TXT 失败：文本列“{column}”不在表里（检查节点里的列名，或清空它按全部列导出）',
     'export.parquet_engine_missing': '导出 Parquet 需要列式引擎 pyarrow，请先安装：pip install pyarrow',
     'export.window_ignored': '节点 {nid}：结果文件照常生成，仅“文件名追加时间范围”被忽略——{reason}',
     'export.window_many': '文件名要求带时间范围，但这条链路上有 {n} 个不同的时间窗，一个文件说不清它装的是哪一段',
@@ -190,6 +191,7 @@ ZH = {
     'api.updateRunning': '正在运行采集，先停止本次运行再更新',
     'api.updateDownloadFailed': '下载更新失败：{err}',
     'api.updateApplyFailed': '启动更新程序失败：{err}',
+    'api.updateJobMissing': '找不到这个更新任务（服务可能刚刚重启过）',
 }
 
 EN = {
@@ -400,6 +402,10 @@ EN = {
     'export.formula_escaped': (
         'Prefixed {n} text cells starting with = + - @ with a quote so Excel does not run them as formulas'
     ),
+    'export.missing_text_column': (
+        'TXT export refused: the text column "{column}" is not in the table '
+        '(fix the column name, or clear it to export every column)'
+    ),
     'export.parquet_engine_missing': 'Parquet export needs the pyarrow engine — install it: pip install pyarrow',
     'export.window_ignored': (
         'Node {nid}: the file is written as normal and only "append the crawled time range" was ignored — {reason}'
@@ -420,4 +426,5 @@ EN = {
     'api.updateRunning': 'A crawl is running; stop it before updating',
     'api.updateDownloadFailed': 'The update download failed: {err}',
     'api.updateApplyFailed': 'Could not start the updater: {err}',
+    'api.updateJobMissing': 'That update job is gone (the service may have restarted)',
 }

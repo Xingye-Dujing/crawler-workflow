@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+from i18n import t
 from services.analysis.kernels import UnknownOperationError, _checked_pattern
 
 
@@ -47,7 +48,7 @@ def _split_values(value) -> list:
 
 def filter_rows(df: pd.DataFrame, column: str, op: str, value) -> pd.DataFrame:
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='filter_rows', col=column))
     s = df[column]
     if op == 'eq':
         # The panel stores its operand as TEXT, and ``df['点赞数'] == '25'`` is False for every

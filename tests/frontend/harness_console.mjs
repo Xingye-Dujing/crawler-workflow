@@ -60,7 +60,8 @@ fixWindow(vm, sandbox);
 vm.runInContext(
     src +
         '\n;globalThis.__wf = { workflow, clearConsole, switchWfTab, consoleViews, ' +
-        'resetConsoleForNewRun, _clearConsoleBeforeRun, getActiveTab: () => _wfActiveTab };',
+        'resetConsoleForNewRun, _clearConsoleBeforeRun, dropConsoleHistories, ' +
+        'getActiveTab: () => _wfActiveTab };',
     sandbox,
 );
 /* Assigned after the load: workflow.js declares showToast itself, and a function
@@ -381,6 +382,18 @@ sandbox.AppSettings = { _values: { clear_console_before_run: true } };
 out.clearOnTrue = clearFlag() === true;
 sandbox.AppSettings = { _values: {} };
 out.clearUnsetFalse = clearFlag() === false;
+
+/* The soft half of #177: the box is blank but the retained histories still hold the previous
+   run's lines, and the first trim or tab switch repaints them as this run's own output. */
+sandbox.__wf.consoleViews.all = { seen: 12, lines: ['old-a', 'old-b'] };
+sandbox.__wf.consoleViews.wf[3] = { seen: 7, lines: ['wf-old'] };
+sandbox.__wf.dropConsoleHistories();
+out.dropHistories = {
+    allLines: sandbox.__wf.consoleViews.all.lines.length,
+    wfLines: sandbox.__wf.consoleViews.wf[3].lines.length,
+    allSeen: sandbox.__wf.consoleViews.all.seen,
+    wfSeen: sandbox.__wf.consoleViews.wf[3].seen,
+};
 
 /* ── 11. a page that reloaded mid-run takes the console back up ─────────── */
 /* The complaint: 页面一刷新，控制台信息就丢失了. Nothing in the boot sequence started

@@ -9,10 +9,26 @@ import threading
 from flask import Blueprint, jsonify
 from runtime.state import execution_state
 
+from api.auth import is_admin
 from i18n import t
 from services import update
+from services.accounts.service import accounts_mode
 
 bp = Blueprint('update', __name__)
+
+
+def _admin_refusal():
+    """Why this caller may not replace the program on this machine.
+
+    ``apply_update`` spawns the swap script and restarts this process; ``start_download`` stages a
+    new payload beside the install. Both are host-level acts — the same door ``/api/settings``,
+    ``/api/lexicon`` and ``/api/components`` guard — so on an accounts host only the administrator
+    may press them. The panel hides the banner for other accounts; hiding is cosmetic, the 403 is
+    the permission.
+    """
+    if accounts_mode() and not is_admin():
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    return None
 
 
 def _running() -> bool:
@@ -26,6 +42,9 @@ def update_check():
 
 @bp.post('/api/update/download')
 def update_download():
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
     if _running():
         return jsonify({'ok': False, 'error': t('api.updateRunning')}), 409
     result = update.start_download()
@@ -39,7 +58,7 @@ def update_download():
 def update_job(job_id: str):
     current = update.job(job_id)
     if not current:
-        return jsonify({'ok': False, 'error': 'unknown update job'}), 404
+        return jsonify({'ok': False, 'error': t('api.updateJobMissing')}), 404
     return jsonify({'ok': True, 'job': current})
 
 
@@ -50,6 +69,9 @@ def _restart_now() -> None:
 
 @bp.post('/api/update/apply')
 def update_apply():
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
     if _running():
         return jsonify({'ok': False, 'error': t('api.updateRunning')}), 409
     result = update.apply_update()

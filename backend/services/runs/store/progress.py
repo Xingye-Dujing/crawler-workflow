@@ -98,6 +98,11 @@ class NodesMixin:
             'ON CONFLICT(run_id, node_id) DO UPDATE SET status = excluded.status, node_type = excluded.node_type, '
             'title = excluded.title, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, '
             'component = excluded.component, component_name = excluded.component_name, '
+            # Every begin_node call is a fresh visit: the previous attempt's failure sentence and
+            # finish stamp belong to THAT attempt, and leaving them here made the badge/tooltip
+            # report a wall this attempt never met (and made 停止 record the old error as the
+            # reason for a node that was merely stopped).
+            "error = '', finished_at = NULL, "
             'row_count = CASE WHEN ? THEN 0 ELSE node_runs.row_count END, '
             'cursor_json = CASE WHEN ? THEN NULL ELSE node_runs.cursor_json END',
             (

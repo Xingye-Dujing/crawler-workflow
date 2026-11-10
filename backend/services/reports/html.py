@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from analyzers.llm_client import ABORT_MARK
-from i18n import t
+from i18n import get_lang, t
 from services.charts.visualizer import VisualizationService, _localize_label
 from services.exports.browser import resolve_export_file
 from services.exports.writer import DataExporter
@@ -439,7 +439,7 @@ class ReportService:
             tables_html = ''.join(self._table_block(frame, opts.max_rows) for frame in frames)
             sections += f'<section><h2>{html.escape(t("report.tables"))}</h2>{tables_html}</section>'
         return (
-            '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
+            f'<!DOCTYPE html><html lang="{html.escape(get_lang())}"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_cell(title)}</title><style>{_CSS}</style></head><body>'
             f'{header}{summary}{conclusion_block}{sections}</body></html>'

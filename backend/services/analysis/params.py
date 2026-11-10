@@ -577,7 +577,9 @@ def normalize_analysis_params(op: str, params: dict) -> dict:
         order_column = str(params.get('evolution_order_col') or '').strip()
         if order_column:
             result['order_col'] = order_column
-        if str(params.get('index_new_col') or '').strip():
-            result['new_col'] = str(params['index_new_col']).strip()
+        # Always sent with the name the panel shows: a cleared box falls back to that same
+        # default (the step's signature), while a BLANK that still reaches the step would write a
+        # column with no header — the contract refuses it by name instead.
+        result['new_col'] = str(params.get('index_new_col') or '').strip() or 'sentiment_index'
         return result
     return {}

@@ -5,6 +5,7 @@ import logging
 import pandas as pd
 
 from i18n import t
+from services.analysis.kernels import UnknownOperationError
 from services.analysis.topic_kernels import _jsd_matrix, _mds_2d, _prepare_topic_model
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ def topic_map(
     readings can be compared rather than confused.
     """
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='topic_map', col=column))
     topics = int(n_topics)
     texts, model, matrix, doc_topic, vocabulary = _prepare_topic_model(
         df, column, topics, max_features, method, embedding_model

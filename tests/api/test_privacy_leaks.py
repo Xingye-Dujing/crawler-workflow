@@ -59,6 +59,13 @@ def no_outbound_calls(monkeypatch):
 
     monkeypatch.setattr(llm_client.requests, 'get', lambda *a, **k: _Answer())
     monkeypatch.setattr(llm_client.requests, 'post', lambda *a, **k: _Answer())
+    # ``/api/environment`` also asks whether a daemon is listening on the Ollama address, and that
+    # is a real ``socket.create_connection``. Blocked by pytest-socket it was caught as OSError and
+    # the sweep passed WITH A WARNING — a warning is a test that noticed network access and let it
+    # through. Answer "nothing is listening" instead.
+    import services.components.probe as probe
+
+    monkeypatch.setattr(probe, 'ollama_reachable', lambda *_a, **_k: False)
 
 
 def _get_rules(app):

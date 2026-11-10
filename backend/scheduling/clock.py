@@ -27,7 +27,7 @@ from core.config import Config
 from runtime import account_context
 from runtime.account_context import Account
 
-from i18n import set_lang, t
+from i18n import get_lang, set_lang, t
 from scheduling import cron, store
 
 logger = logging.getLogger(__name__)
@@ -135,11 +135,23 @@ def fire_now(task_id) -> dict:
 
 
 def _fire(task: dict, now: datetime, manual: bool = False) -> dict:
-    """One attempt: ask the app to start the canvas, then write down what came back."""
-    # This is the scheduler's own thread, and a thread-local language is not inherited: pin it from
-    # the task, or a line written here would read in whatever language the last request happened to
-    # leave behind (the task's language is also the language its run console will narrate in).
+    """Run one attempt with the TASK's language pinned, then put the caller's back.
+
+    ``_fire`` is reached from the clock thread *and* from ``fire_now`` on a request thread. Pinning
+    the task's language is right for both; leaving it pinned is only right for the clock. The
+    manual path returned from here and then rebuilt its whole payload with ``t()``, so pressing
+    立即执行 on a task stored as zh repainted an English panel's rows in Chinese.
+    """
+    previous = get_lang()
     set_lang(task.get('lang') or 'zh')
+    try:
+        return _fire_body(task, now, manual)
+    finally:
+        set_lang(previous)
+
+
+def _fire_body(task: dict, now: datetime, manual: bool = False) -> dict:
+    """One attempt: ask the app to start the canvas, then write down what came back."""
     name = str(task.get('name') or task.get('id') or '')
     crashed = False
     if _starter is None:

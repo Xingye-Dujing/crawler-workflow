@@ -55,10 +55,13 @@ class TestShape:
             pd.DataFrame(columns=['a', 'b']),
         ],
     )
-    def test_without_two_numeric_columns_the_table_is_empty_but_well_shaped(self, frame):
-        result = CorrelationAnalyzer.analyze_dataframe(frame)
-        assert list(result.columns) == COLUMNS
-        assert result.empty
+    def test_without_two_numeric_columns_it_is_refused_by_name(self, frame):
+        """A well-shaped EMPTY table is not the honest answer: every downstream chart and the
+        node's green check read it as "these columns are unrelated", which is a finding nobody
+        measured. The real answer is "there was nothing to correlate", refused like the
+        text-only selection already is."""
+        with pytest.raises(ValueError):
+            CorrelationAnalyzer.analyze_dataframe(frame)
 
     def test_an_undefined_pair_is_named_in_the_log(self, caplog):
         """A constant column has no coefficient at all. It was dropped without a word, so the
@@ -116,11 +119,14 @@ class TestColumnSelection:
         result = CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞', '收藏'])
         assert result[['col1', 'col2']].values.tolist() == [['点赞', '收藏']]
 
-    def test_non_numeric_names_in_the_selection_are_dropped(self, df):
-        assert CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞', '标题']).empty
+    def test_non_numeric_names_in_the_selection_are_reported_and_leave_one_column_refused(self, df, caplog):
+        with caplog.at_level('WARNING'), pytest.raises(ValueError):
+            CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞', '标题'])
+        assert '标题' in caplog.text
 
-    def test_selecting_one_of_two_columns_leaves_nothing_to_compare(self, df):
-        assert CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞']).empty
+    def test_selecting_one_of_two_columns_leaves_nothing_to_compare_and_is_refused(self, df):
+        with pytest.raises(ValueError):
+            CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞'])
 
     def test_naming_only_text_columns_is_refused_by_name(self, df):
         """ "No pairs" is an answer about the data; "you pointed at text" is an

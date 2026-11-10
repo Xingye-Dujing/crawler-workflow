@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 
 import jieba
 import numpy as np
@@ -117,6 +118,10 @@ class MLClassifier:
         self._fitted = False
         self._label_map = {}
         self._path = os.path.join(MODEL_DIR, f'{safe}.pkl')
+        # One classifier instance is shared by every workflow thread (``get_classifier``), so the
+        # lazy load and the prediction read the same ``pipeline``/``_fitted`` pair. Without this a
+        # 训练 request and a parallel canvas could interleave a half-fitted pipeline into a predict.
+        self._lock = threading.RLock()
 
     def fit(self, texts: list[str], labels: list[str]):
         import joblib
@@ -132,43 +137,60 @@ class MLClassifier:
         tokenized = [_tokenize(t) for t in texts]
         self._label_map = {lb: i for i, lb in enumerate(unique)}
         y = np.array([self._label_map[lb] for lb in labels])
-        self.pipeline.fit(tokenized, y)
-        self._fitted = True
-        joblib.dump({'pipeline': self.pipeline, 'label_map': self._label_map}, self._path)
+        with self._lock:
+            self.pipeline.fit(tokenized, y)
+            self._fitted = True
+            # Atomic: a crash halfway through a direct dump left a truncated pickle that every
+            # later ``predict`` failed to load — and, because the failure was an UnpicklingError,
+            # it read as a broken install rather than "this model was never finished training".
+            temporary = f'{self._path}.tmp'
+            joblib.dump({'pipeline': self.pipeline, 'label_map': self._label_map}, temporary)
+            os.replace(temporary, self._path)
         return self
 
     def predict(self, texts: list[str], _neutral: str = 'Neutral') -> list[tuple[str, float]]:
         import joblib
 
-        if not self._fitted:
-            if os.path.exists(self._path):
-                data = joblib.load(self._path)
-                self.pipeline = data['pipeline']
-                self._label_map = data['label_map']
-                self._fitted = True
-            else:
-                # REFUSED, not manufactured. Handing back the caller's neutral for every row read
-                # as a finished analysis: the node settled DONE, the table printed a column that
-                # was 100% one class at 0.5, and the study's charts treated it as measured opinion.
-                # (An untrained model still must not leak a fixed 'Neutral' into a label set that
-                # has no such class — that is why the refusal names the model rather than guessing
-                # a label.) A degradation is allowed only when it is SANCTIONED and PRINTED, which
-                # is the executor's job one level up (``_resolve_bert_mode``), not this class's.
-                raise ModelNotTrainedError(t('ml.model_untrained_refused', name=self.model_name))
-        tokenized = [_tokenize(t) for t in texts]
-        probs = self.pipeline.predict_proba(tokenized)
-        indices = np.argmax(probs, axis=1)
-        rev_map = {i: lb for lb, i in self._label_map.items()}
-        return [(rev_map[idx], float(probs[i, idx])) for i, idx in enumerate(indices)]
+        with self._lock:
+            if not self._fitted:
+                if os.path.exists(self._path):
+                    try:
+                        data = joblib.load(self._path)
+                        self.pipeline = data['pipeline']
+                        self._label_map = data['label_map']
+                    except Exception as exc:
+                        # A truncated/corrupt checkpoint is a named refusal, not a traceback that
+                        # names no model: the file exists but is not a model this program wrote.
+                        raise ModelNotTrainedError(t('ml.model_unreadable', name=self.model_name)) from exc
+                    self._fitted = True
+                else:
+                    # REFUSED, not manufactured. Handing back the caller's neutral for every row read
+                    # as a finished analysis: the node settled DONE, the table printed a column that
+                    # was 100% one class at 0.5, and the study's charts treated it as measured opinion.
+                    # (An untrained model still must not leak a fixed 'Neutral' into a label set that
+                    # has no such class — that is why the refusal names the model rather than guessing
+                    # a label.) A degradation is allowed only when it is SANCTIONED and PRINTED, which
+                    # is the executor's job one level up (``_resolve_bert_mode``), not this class's.
+                    raise ModelNotTrainedError(t('ml.model_untrained_refused', name=self.model_name))
+            tokenized = [_tokenize(t) for t in texts]
+            probs = self.pipeline.predict_proba(tokenized)
+            indices = np.argmax(probs, axis=1)
+            rev_map = {i: lb for lb, i in self._label_map.items()}
+            return [(rev_map[idx], float(probs[i, idx])) for i, idx in enumerate(indices)]
 
 
 _shared_classifiers: dict[str, MLClassifier] = {}
+#: ``check-then-create`` on a module dict: two parallel workflows both constructing (and both
+#: dumping) the same ``.pkl`` was the race. The lock guards the map; construction itself is cheap
+#: (the pipeline is built in memory) and happens under it so one instance is shared, never two.
+_CLASSIFIER_LOCK = threading.Lock()
 
 
 def get_classifier(name: str) -> MLClassifier:
-    if name not in _shared_classifiers:
-        _shared_classifiers[name] = MLClassifier(model_name=name)
-    return _shared_classifiers[name]
+    with _CLASSIFIER_LOCK:
+        if name not in _shared_classifiers:
+            _shared_classifiers[name] = MLClassifier(model_name=name)
+        return _shared_classifiers[name]
 
 
 def build_training_data(df: pd.DataFrame, text_col: str, label_col: str) -> tuple[list[str], list[str]]:

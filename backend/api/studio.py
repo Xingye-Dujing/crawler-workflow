@@ -376,16 +376,40 @@ def studio_sources():
 #: browser hands over is checked before it is written. Anything that could carry a script, an
 #: event handler, an external reference or an entity declaration is REFUSED BY NAME — silently
 #: "sanitizing" it would leave a file that parses differently than the bytes the user inspected.
+#:
+#: The scan runs on the text TWICE: as written, and after XML/HTML entity decoding. A naive
+#: read-once check was bypassable with ``xlink:href="javascript&#58;alert(1)"`` — the bytes never
+#: contain the literal ``javascript:``, while the XML parser the browser uses decodes it first.
+#: ``&amp;#58;`` (double-encoded) is why the decode is applied twice.
 SVG_FORBIDDEN = re.compile(
     r'<\s*script'
     r'|\son[a-z]+\s*='
     r'|\bhref\s*='
     r'|<\s*(!\s*(DOCTYPE|ENTITY|SYSTEM)|foreignObject|iframe|embed|object)'
-    r'|\bjavascript\s*:',
+    r'|\bjavascript\s*:'
+    r'|\bdata\s*:\s*text/html'
+    r'|\burl\s*\(\s*[\'"]?\s*(javascript|data)\s*:',
     re.IGNORECASE,
 )
 #: A full-canvas vector chart is tens of KB; past this the payload is a mistake, not a chart.
 SVG_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _svg_scan_text(markup: str) -> str:
+    """The markup with entity references decoded, twice, for the safety scan.
+
+    Only the SCAN decodes: the file that is written is the bytes the caller handed over (the
+    browser will decode them the same way, which is exactly why they must be judged decoded).
+    """
+    import html
+
+    text = markup
+    for _ in range(2):
+        decoded = html.unescape(text)
+        if decoded == text:
+            break
+        text = decoded
+    return text
 
 
 @bp.route('/api/studio/save-vector', methods=['POST'])
@@ -404,7 +428,7 @@ def studio_save_vector():
         return jsonify({'ok': False, 'error': t('api.svgNotSvg')}), 400
     if not body.rstrip().endswith('</svg>'):
         return jsonify({'ok': False, 'error': t('api.svgTruncated')}), 400
-    danger = SVG_FORBIDDEN.search(body)
+    danger = SVG_FORBIDDEN.search(body) or SVG_FORBIDDEN.search(_svg_scan_text(body))
     if danger:
         return jsonify({'ok': False, 'error': t('api.svgRefused', found=danger.group(0).strip()[:40])}), 400
 

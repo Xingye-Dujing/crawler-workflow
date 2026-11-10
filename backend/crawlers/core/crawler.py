@@ -252,6 +252,13 @@ class Crawler(ABC):
         #: ``crawl.zhihu.authorTabDone``), and that exception must be closed when zhihu migrates
         #: — until then no platform sets this field at all, so the gate is entirely dormant.
         self.end_reason: str | None = None
+        #: Inputs this crawl could not prove complete. The executors read it BY ATTRIBUTE for the
+        #: two backends that stream a list (CatBus, 红果), and the comment engine reads the same
+        #: attribute to pin its cursor — a browser walk that came home short names the link here,
+        #: because "OK with fewer rows than the site counted" is a hole, not an answer. Kept on the
+        #: base class so the attribute exists on every session and the comparisons never have to
+        #: guess whether its absence means "none" or "not supported".
+        self.skipped_targets: list[str] = []
         #: The shared walk's funnel (scanned / kept / refused), surfaced so a convicted short
         #: can be *attributed* — "refused N of M" tells "the site had no more" from "our
         #: scraper dropped what it got". Optional: a handler may convict without it, and the

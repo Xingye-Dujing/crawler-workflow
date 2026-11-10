@@ -768,8 +768,11 @@ def generate_cookies():
 @bp.route('/api/cookies/generate/status', methods=['GET'])
 def cookie_generate_status():
     # Another account owning the machine-wide window is reported as an idle panel rather than
-    # its platform, phase, probe facts or console lines.
-    owned = not (_COOKIE_JOB['active'] and not _job_is_mine())
+    # its platform, phase, probe facts or console lines — and that stays true on every poll, not
+    # only while the job is live: the finished job's facts/entry/lines/error are still the answer
+    # that account paid a browser for. Reading ownership through ``active`` made every completed
+    # job public to every account the moment ``active`` flipped to False.
+    owned = _job_is_mine()
     return jsonify(
         {
             'ok': True,
@@ -1003,7 +1006,10 @@ def get_browser_profiles():
       *imported* only after a cookie actually went in. Those two booleans are the whole
       guidance sentence in the panel.
     """
-    rows = {'ok': True, 'enabled': profiles.is_enabled(), 'root': profiles.root_dir()}
+    # The root is a host path — the same fingerprint ``/api/settings`` withholds from a
+    # non-administrator. The panel only prints it; an ordinary account has nothing to do with it.
+    admin = not accounts_mode() or is_admin()
+    rows = {'ok': True, 'enabled': profiles.is_enabled(), 'root': profiles.root_dir() if admin else ''}
     # The template's own row, because "no new account can be made without it" is the
     # thing a cloud operator needs to see before they paste a cookie. The walk is over a
     # first-run skeleton (hundreds of files at most), not over a used profile — which is
@@ -1013,14 +1019,19 @@ def get_browser_profiles():
         'pristine': not profiles.find_session_material(),
     }
     rows['profiles'] = []
+    manager = CookieManager(paths.active().cookie_dir)
     for cap in capabilities.CAPABILITIES:
         platform = cap.platform
         if not CookieManager.is_supported(platform):
             continue
         # The ONE filename rule, from CookieManager — splicing ``{platform}_cookies.json`` here
-        # was a second spelling of where a login lives, and it can only ever name the default
-        # account: the panel would say "no cookie" about an account whose file it never looked at.
-        saved = CookieManager(paths.active().cookie_dir).path_for(platform, '')
+        # was a second spelling of where a login lives. The row used to look ONLY at the default
+        # account, so a platform whose saved login is ``zhihu@work_cookies.json`` read 尚无 Cookie
+        # against a file it never opened. Ask the manager which accounts exist, prefer the default
+        # device when it has one, and hand ``status`` the account the answer is actually about.
+        accounts = manager.accounts_in_order(platform) or [CookieManager.DEFAULT_ACCOUNT]
+        account = next((name for name in accounts if manager.exists(platform, name)), accounts[0])
+        saved = manager.path_for(platform, account)
         rows['profiles'].append(
             profiles.status(
                 platform,
@@ -1029,6 +1040,7 @@ def get_browser_profiles():
                 # The path, not the contents: this is what lets the panel say "the file you
                 # saved is not the session this profile holds" without reading a cookie.
                 cookie_path=saved,
+                account=CookieManager.key(account),
             )
         )
     return jsonify(rows)

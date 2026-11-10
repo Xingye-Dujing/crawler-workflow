@@ -40,8 +40,10 @@ class CorrelationAnalyzer:
                 logger.warning(t('corr.ignored_columns', columns=', '.join(unusable)))
 
         if len(numeric_cols) < 2:
-            logger.warning(t('corr.need_cols'))
-            return pd.DataFrame(columns=['col1', 'col2', 'method', 'correlation', 'abs_correlation'])
+            # Refused, not answered with an empty table: zero rows downstream reads as "these
+            # columns are unrelated", which is a finding, while the truth is "there was nothing
+            # to correlate". Same rule the unusable-column branch above already raises.
+            raise ValueError(t('corr.need_cols_more', columns='、'.join(numeric_cols) or '—'))
 
         corr_matrix = df[numeric_cols].corr(method=method)
 
@@ -65,6 +67,11 @@ class CorrelationAnalyzer:
                             'abs_correlation': round(abs(val), 4),
                         }
                     )
+
+        if not pairs and undefined:
+            # Every surviving pair was constant/undefined: the correlation does not exist, so an
+            # empty table would settle the node DONE over a "finding" nobody measured.
+            raise ValueError(t('corr.no_defined_pairs', pairs='、'.join(undefined)))
 
         # Keep the same columns whether or not any pair survived: downstream
         # nodes read them by name.

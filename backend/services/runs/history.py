@@ -238,7 +238,9 @@ class ExecutionHistoryService:
         return int(cur.rowcount or 0)
 
 
-def record_execution_history(workflow: dict, engine, results: dict, workflow_name: str = '', log_label: str = ''):
+def record_execution_history(
+    workflow: dict, engine, results: dict, workflow_name: str = '', log_label: str = '', run_id: str = ''
+):
     """After a run completes, snapshot per-node metrics (row counts, and
     emotion/tendency distributions where present) into execution_history so
     /api/history/* can chart trends across runs over time. Best-effort: a
@@ -246,11 +248,15 @@ def record_execution_history(workflow: dict, engine, results: dict, workflow_nam
 
     The name matters: without it every run was filed as "untitled" and the
     history panel's per-workflow grouping could not distinguish anything.
+    ``run_id`` is the ledger record this execution actually wrote (the run's own
+    id, or the component's in a split serial run); it used to be minted here, so
+    a run the user could open in 运行记录 was a different object in 执行历史 and
+    ``POST /api/history/delete`` could never address the record it came from.
     """
     from runtime.state import history_service
 
     try:
-        run_id = uuid.uuid4().hex[:12]
+        run_id = str(run_id or '').strip() or uuid.uuid4().hex[:12]
         workflow_name = str(workflow_name or (workflow or {}).get('name') or '').strip() or 'untitled'
         ts = history_service.now()
         rows = []

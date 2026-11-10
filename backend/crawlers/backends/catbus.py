@@ -31,6 +31,7 @@ Three things it does NOT pretend:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 
@@ -199,7 +200,7 @@ class CatbusCrawler(Crawler):
         kept = counts['kept']
         refused = counts['refused'] + len(outcome.warnings)
         self.target_total = target_count
-        if target_count and self.collected() < target_count:
+        if target_count and self.collected() < target_count and not self._shortage_is_licensed(mode, counts['halted']):
             # Convicted, not excused: an adapter list that stopped growing is not proof the site ran
             # out — a soft throttle looks exactly the same — so a short table says “采得不足” with the
             # funnel instead of settling clean. The warnings are counted as refused because that is
@@ -258,6 +259,25 @@ class CatbusCrawler(Crawler):
         return rows, OK
 
     # ─── the boundary with the adapter ────────────────────────────────────────────────────────
+
+    def _shortage_is_licensed(self, mode: str, halted: bool) -> bool:
+        """Whether a short table is the shape the walk was asked for, not a silent under-collect.
+
+        Two facts already in hand license a short list, and both used to be ignored:
+
+        * **the boundary matched** — an incremental walk stops at the row it already has; the table
+          is short because it was told to stop, which is exactly why the Selenium backends leave
+          ``end_reason`` alone on that path. Convicting it made every incremental run "采得不足" and
+          handed the user a 继续 banner after a correct crawl;
+        * **the cell is not paged** — a fixed board or a single-item detail declares ``paged:false``
+          in its own manifest, so it never promised the target count. An unknown manifest still
+          convicts (the answer must be the adapter's, never a guess).
+        """
+        if halted:
+            return True
+        with contextlib.suppress(Exception):
+            return bridge.manifest_mode(self.platform, mode).get('paged') is False
+        return False
 
     def _guard(self, mode: str, platform: str = '') -> None:
         """Refuse a cell this machine cannot crawl BEFORE anything is bought for it.

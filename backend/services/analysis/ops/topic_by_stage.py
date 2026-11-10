@@ -73,7 +73,8 @@ def topic_by_stage(
     from analyzers.keyword import KeywordExtractor
 
     if column not in df.columns or stage_col not in df.columns:
-        return df
+        missing = column if column not in df.columns else stage_col
+        raise UnknownOperationError(t('analysis.step_col_missing', op='topic_by_stage', col=missing))
     method = _resolve_topic_method(method)
     stages = _stage_order(df, stage_col, order_col)
     per_stage = _stage_topic_counts(topics, stages)

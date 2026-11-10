@@ -590,6 +590,72 @@ def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, r
     assert [str(r['评论ID']) for r in rows].count(f'c-{urls[2]}') == 1, f'the replay double-stored: {rows}'
 
 
+def test_an_ok_walk_that_names_itself_unproven_still_pins_the_cursor(app_module, recorder, monkeypatch, tmp_path):
+    """The 小红书 shape: the walk returns ``ok`` with rows it read, and says the thread was not proven.
+
+    A short table used to be an ``ok`` like any other, so the cursor stepped over the hole and 继续
+    never re-entered that note. ``skipped_targets`` is the executor's existing door for exactly this
+    (CatBus/红果 use it too), so the same rule is pinned here for the browser walks.
+    """
+    import crawlers.platforms.hongguo.crawler as hongguo_module
+    from services.runs.store import RunStore
+
+    urls = [f'https://hongguoduanju.com/detail?series_id={7696063528179878930 + i}' for i in range(3)]
+    seen = []
+    state = {'unproven_second': True}
+
+    class _HoleHarness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = None
+        target_total = 0
+        shortfall = 0
+        walk_counts = {}
+
+        def __init__(self, params=None, log=None, abort=None):
+            self.skipped_targets = []
+
+        def walk(self, platform, url, limit):
+            seen.append(url)
+            if url == urls[1] and state['unproven_second']:
+                state['unproven_second'] = False
+                # OK, with the row it did read — only the cursor verdict is "not proven".
+                self.skipped_targets.append(url)
+                return [{'平台': 'hongguo', '评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
+            return [{'平台': 'hongguo', '评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _HoleHarness()),
+    )
+    monkeypatch.setattr(app_module, 'add_log', lambda _m: None)
+    monkeypatch.setattr(_comment_plugin(), 'add_log', lambda _m: None)
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    params['urls'] = '\n'.join(urls)
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+
+    store = RunStore(str(tmp_path / 'unproven.db'))
+    store.start_run('r-unproven', 'unprovenwf', 'fp-u', headless=True)
+    store.begin_node('r-unproven', 'node-1', 'source', title='评论', fingerprint='fp-u')
+    ctx = {'store': store, 'run_id': 'r-unproven', 'fingerprints': {'node-1': 'fp-u'}, 'skipped_seen': {}}
+
+    with pytest.raises(ValueError) as caught:
+        _comment_plugin().execute_comment_node(node, headless=True, ctx=ctx)
+    assert urls[1] in str(caught.value), f'the refusal names the link it could not prove: {caught.value}'
+    cursor = store.get_cursor('r-unproven', 'node-1')
+    assert cursor.get('url_index') == 1, f'an ok-but-unproven link may not advance the cursor: {cursor}'
+
+    seen.clear()
+    _comment_plugin().execute_comment_node(node, headless=True, ctx=dict(ctx, resume=True))
+    assert seen == urls[1:], f'继续 re-walked {seen}, expected the unproven tail {urls[1:]}'
+
+
 @pytest.mark.parametrize('platform,mode_key', _pairs())
 def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key):
     """A handler the runtime cannot reach is a refusal at crawl time, not a fallback.

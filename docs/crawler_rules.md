@@ -340,6 +340,17 @@
   this table does not describe — a CSV labelled with the wrong month reads as evidence.
   The resolved name is still never written back into `node['params']` (the fingerprint rule).
 
+- **零行不是证明：没拿到站点自己的收工证据，就要 `mark_unproven` 钉住游标。** 一条评论链接返回
+  `ok` + 0 行，和“这条笔记真的没有评论”是两件事；风控、Cookie 过期、登录跳转、面板没渲染、走到一半被停止，
+  都会得到一个能读成“已完成”的空表。只有站点自己说了“就这么多”（小红书 `- THE END -`、B 站 `is_end`、
+  “暂时没有更多了”这类站点印的结束标记）或用户自己的 `评论上限` 命中时，短表才算合法；差额仍要
+  `comment.xhsShort`/`xhsNested` 点名。其余形状必须 `session.mark_unproven(url)`，执行器会把它当成洞口
+  （`url_index` 停在这条之前）并以 `run.commentsSkipped` 让节点失败/partial，`继续` 从这条重采——
+  “新增 0（正常）”不是答案。到达判定用共享的 `wall.classify`（URL + 正文 + 标题），`login` 锁
+  `login_wall`、`blocked`/`unreachable` 锁 `risk_blocked`，两者的建议是相反的。
+  Pinned: `tests/unit/crawlers/test_comments.py::TestXhsAdapter`、
+  `tests/api/test_source_dispatch_matrix.py::test_an_ok_walk_that_names_itself_unproven_still_pins_the_cursor`.
+
 - **cnki (中国知网)**: **全选 selects only the current page**; the site accumulates the selection across pages in
   localStorage, so click 全选 on every page and export once at the end (per batch when the site's own 500-selection
   ceiling is reached). The export is `导出与分析 → 导出文献 → Refworks`, which opens `manage/export.html`; its on-screen

@@ -187,12 +187,17 @@ def runs_discard():
     store = get_run_store()
     if store.get_run(run_id) is None:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
-    if reject_live_run(run_id):
-        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     if lock_store.is_locked('runs', run_id):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
-    removed = store.delete_run(run_id)
-    removed['item_claims'] = store.forget_run_items(run_id)
+    # The "no run is live" proof and the delete are ONE step under the claim lock: ``begin_run``
+    # stamps a claim's run id here, so a 继续 pressed between the check and ``delete_run`` could
+    # otherwise start writing rows under a record that had just been removed (and finish against
+    # zero rows, losing even the write-failure line). ``purge``/``clear`` already do it this way.
+    with execute_lock:
+        if reject_live_run(run_id):
+            return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
+        removed = store.delete_run(run_id)
+        removed['item_claims'] = store.forget_run_items(run_id)
     return jsonify({'ok': True, 'removed': removed})
 
 
@@ -207,11 +212,14 @@ def runs_delete():
     run_id = str(data.get('run_id') or '').strip()
     if not run_id:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
-    if reject_live_run(run_id):
-        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     if lock_store.is_locked('runs', run_id):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
-    removed = get_run_store().delete_run(run_id)
+    # Same rule as ``runs_discard``: the liveness proof and the delete share the claim lock, or a
+    # 继续 can claim the id between them and write into a record that is being removed.
+    with execute_lock:
+        if reject_live_run(run_id):
+            return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
+        removed = get_run_store().delete_run(run_id)
     lock_store.drop('runs', run_id)
     return jsonify({'ok': True, 'removed': removed})
 

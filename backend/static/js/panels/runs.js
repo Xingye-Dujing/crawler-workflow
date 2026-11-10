@@ -184,6 +184,20 @@ function _clearConsoleBeforeRun() {
     return typeof AppSettings !== 'undefined' &&
         !!(AppSettings._values && AppSettings._values.clear_console_before_run);
 }
+
+/* The soft half of #177: a new run opens in a cleared box, but each view's retained
+   history still holds the PREVIOUS run's lines. Nothing repaints them immediately — the
+   next poll appends only what the cursor has not read — yet the first trim (500-line cap)
+   or tab switch rebuilds the box from that buffer, so run A's sentences appear under run
+   B's heading. The cursors stay: `seen` is the only thing that decides what is new, and
+   moving it would replay the server's own buffer. */
+function dropConsoleHistories() {
+    consoleViews.all.lines = [];
+    Object.keys(consoleViews.wf).forEach(function (key) {
+        consoleViews.wf[key].lines = [];
+    });
+}
+
 /* ── Run records manager ──────────────────────────────────────
    Every recorded run — including orphans the resume banner can no longer
    match (the workflow was rewired or deleted since). Each row offers the
@@ -460,7 +474,7 @@ var runsManager = {
            at the time; a record read back last week has to carry the same answer, or a
            skipped workflow looks like it failed or was deleted. */
         if (r.skipped_workflows) {
-            out.push(I18n.t('runsMgr.skipped').replace('{names}', r.skipped_workflows));
+            out.push(I18n.t('runsMgr.skipped', { names: r.skipped_workflows }));
         }
         return out;
     },
@@ -1002,7 +1016,7 @@ var runsManager = {
                 (run.note ? '<span class="rm-meta-note">' + escapeHtml(run.note) + '</span>' : '') +
                 (run.skipped_workflows
                     ? '<span class="rm-meta-note">' +
-                        escapeHtml(I18n.t('runsMgr.skipped').replace('{names}', run.skipped_workflows)) +
+                        escapeHtml(I18n.t('runsMgr.skipped', { names: run.skipped_workflows })) +
                         '</span>'
                     : '') +
                 '</div>' +

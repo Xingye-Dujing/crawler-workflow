@@ -298,7 +298,11 @@ document.addEventListener('mousedown', (e) => {
        underneath while the user ticks sources in the studio. */
     if (e.target.closest('.cselect-menu, .cand-menu')) return;
     const nodeId = canvas._settingsNodeId;
-    if (nodeId && e.target.closest('#' + nodeId)) return;
+    /* A node id is a storage key, and the canvas mints ids that are legal HTML but not legal
+       CSS selectors (`2`, `node.1`): `closest('#' + id)` threw a SyntaxError inside this
+       listener, so the panel never closed on an outside click. Ask the canvas for the element. */
+    const nodeEl = nodeId && typeof canvas._nodeEl === 'function' ? canvas._nodeEl(nodeId) : null;
+    if (nodeEl && nodeEl.contains(e.target)) return;
     if (nodeId && e.target.closest('#context-menu') && canvas._contextNode === nodeId) return;
     if (e.target.closest('#studio-overlay, #data-preview-panel')) return;
     if (window.CustomSelect && CustomSelect.ownsPopup(e.target, panel)) return;

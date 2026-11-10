@@ -87,7 +87,9 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
 - **采集**：知乎、微博、小红书、微信公众号、哔哩哔哩、抖音、红果短剧、中国知网、YouTube、X（Instagram
   目前只能存 Cookie）。关键词、作者作品、热榜、评论四种玩法，支持流式落库、上游表格喂链接、多账号与持久
   Profile——红果短剧例外，它的版面全匿名，不建持久 Profile。红果**评论**要驱动本机播放器旁听，仅 Windows，
-  其他平台会置灰并写明原因。→ [`docs/collection.md`](docs/collection.md)
+  其他平台会置灰并写明原因。**评论采到 0 行不等于没有评论**：风控/登录墙/面板没渲染/中途停止都会把游标钉在
+  那一条，节点按失败或部分收尾，`继续` 从洞口重采；只有站点自己印了结束标记（如小红书 `- THE END -`）或命中
+  用户设的评论上限才算采完。→ [`docs/collection.md`](docs/collection.md)
 - **第二采集引擎 CatBus**：按“平台 × 引擎 × 功能”列出能采什么、出哪些列；能力全部读适配器自己的清单，
   不可运行的组合直接写清原因，绝不静默换后端或降级成空表。→ [`docs/collection.md`](docs/collection.md)
 - **分析**：情感、倾向、情绪（LLM / sklearn / 微调 BERT，默认 BERT，跑不动会降级并打印实际用的方法）、

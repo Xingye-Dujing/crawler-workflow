@@ -1848,9 +1848,26 @@ const canvas = {
         return node && node.el ? node.el : null;
     },
 
+    /* Stop observing a box this object is about to remove.
+       The shared ResizeObserver holds a strong reference to every target it observes, so a
+       deleted node (or one removed by undo/redo) stayed alive — element, listeners and inner
+       DOM — for the life of the page. */
+    _forgetNodeEl(el) {
+        if (el && this._nodeObserver) {
+            try {
+                this._nodeObserver.unobserve(el);
+            } catch (e) {
+                /* not observed: nothing to release */
+            }
+        }
+    },
+
     deleteNode(id) {
         const el = this._nodeEl(id);
-        if (el) el.remove();
+        if (el) {
+            this._forgetNodeEl(el);
+            el.remove();
+        }
         delete this.nodes[id];
         this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
         if (this.selectedNode === id) this.selectedNode = null;
@@ -1877,7 +1894,10 @@ const canvas = {
         if (!list.length) return;
         list.forEach((id) => {
             const el = this._nodeEl(id);
-            if (el) el.remove();
+            if (el) {
+                this._forgetNodeEl(el);
+                el.remove();
+            }
             delete this.nodes[id];
         });
         this.connections = this.connections.filter(c => list.indexOf(c.from) < 0 && list.indexOf(c.to) < 0);

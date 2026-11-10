@@ -56,8 +56,14 @@ const sandbox = {
             },
             zh: {},
         },
-        t(k) {
-            return this.dict.en[k] || k;
+        t(k, vars) {
+            let out = this.dict.en[k] || k;
+            /* Same fill as app.js: the product hands variables to I18n.t, so a stub that
+               dropped them would make ``{name}`` look like the panel's wording. */
+            Object.keys(vars || {}).forEach(function (name) {
+                out = out.split('{' + name + '}').join(String(vars[name]));
+            });
+            return out;
         },
     },
     runsManager: null,

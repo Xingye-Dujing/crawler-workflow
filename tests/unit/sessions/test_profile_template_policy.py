@@ -24,6 +24,31 @@ from sessions import profiles
 
 pytestmark = pytest.mark.unit
 
+
+class TestAnUnreadableStoreIsMaterial:
+    """A store that exists but cannot be read is not an empty one. Folding every sqlite error
+    into 0 let a template whose Cookies file was locked/truncated pass ``verify_pristine`` and
+    be copied into every new account."""
+
+    def test_a_missing_table_is_the_one_empty_answer(self, tmp_path):
+        import sqlite3
+
+        store = tmp_path / 'Cookies'
+        conn = sqlite3.connect(store)
+        conn.execute('CREATE TABLE other (x INTEGER)')
+        conn.commit()
+        conn.close()
+        assert profiles._store_row_count(str(store), 'cookies') == 0
+
+    def test_an_unopenable_file_reports_unreadable_never_zero(self, tmp_path):
+        store = tmp_path / 'Cookies'
+        store.write_bytes(b'not a sqlite database at all')
+        assert profiles._store_row_count(str(store), 'cookies') == -1
+
+    def test_a_missing_file_is_not_an_empty_profile(self, tmp_path):
+        assert profiles._store_row_count(str(tmp_path / 'absent'), 'cookies') == -1
+
+
 #: A first-run directory's worth of names, chosen for the one property that matters: the
 #: safe ones are what Chrome makes before anyone signs in, the unsafe ones are where a
 #: login lives or a machine key is wrapped. ``Local State`` is deliberately on the unsafe

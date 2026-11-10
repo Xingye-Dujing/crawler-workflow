@@ -146,10 +146,20 @@ class TestVerify:
         assert report['statusText'] == 'BUSY'
         assert report['job']['active'] is True
 
+    def test_a_poll_that_cannot_reach_the_server_settles_the_panel(self, panel):
+        """A failed status poll is not an answer. The old early return left the dialog disabled
+        and the 1-second timer running forever; three misses stop it and say so."""
+        lost = panel['pollLost']
+        assert lost['job']['timer'] is None, 'the poll timer kept running against a dead server'
+        assert lost['job']['active'] is False
+        assert lost['statusText'] == 'cookie.unreachable'
+        assert lost['entryDisabled'] is False, 'the panel stayed locked after the poll gave up'
+
     def test_reopening_the_dialog_adopts_a_running_verification(self, panel):
         report = panel['adoptedOnOpen']
         assert panel['dialogOpen'] is True
-        assert report['job'] == {'active': True, 'kind': 'verify', 'platform': 'zhihu'}
+        assert report['job']['active'] is True and report['job']['kind'] == 'verify'
+        assert report['job']['platform'] == 'zhihu'
         assert report['actionsDisplay'] == 'none'
 
 

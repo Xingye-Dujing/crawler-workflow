@@ -25,7 +25,7 @@ def extract_time(df: pd.DataFrame, column: str, new_col: str = '日期', part: s
     instead of inventing a 1970 bucket for them.
     """
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='extract_time', col=column))
     if part not in TIME_PARTS:
         raise UnknownOperationError(
             t('analysis.bad_option', op='extract_time', param='part', value=part, allowed=', '.join(TIME_PARTS))

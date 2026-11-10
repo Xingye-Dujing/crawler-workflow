@@ -47,6 +47,19 @@ const UpdatePanel = {
         if (banner) banner.hidden = true;
     },
 
+    /* A language switch re-stamps everything I18n.apply() can reach, but the banner's sentence
+       carries a {version} variable, which data-i18n attributes cannot. Repaint it from the cached
+       answer (no request) so the prompt follows the page it sits on. */
+    onLanguageChange() {
+        const banner = document.getElementById('update-banner');
+        if (!banner || !this._info || banner.hidden) return;
+        banner.querySelector('.update-text').textContent = I18n.t('update.available', {
+            version: this._info.latest,
+        });
+        const button = banner.querySelector('.update-now');
+        if (button) button.textContent = I18n.t('update.now');
+    },
+
     _message(text) {
         const banner = document.getElementById('update-banner');
         if (!banner) return;

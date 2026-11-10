@@ -45,8 +45,23 @@ var lexiconManager = {
     },
 
     setFilter(term) {
+        var previous = document.getElementById('lexicon-filter');
+        var caret = previous && typeof previous.selectionStart === 'number' ? previous.selectionStart : null;
         this._filter = term || '';
         this.render();
+        // render() rebuilds the toolbar, so the box the user is typing into is a NEW element.
+        // Without re-focusing it, the first character moved focus to <body> and the rest of
+        // the typing went to the canvas (where those keys are shortcuts).
+        var input = document.getElementById('lexicon-filter');
+        if (!input) return;
+        input.focus();
+        if (caret !== null) {
+            try {
+                input.setSelectionRange(caret, caret);
+            } catch (e) {
+                /* a stub DOM without selection support: focus alone is the contract */
+            }
+        }
     },
 
     async refresh() {
@@ -84,7 +99,7 @@ var lexiconManager = {
                 escapeHtml(k[1]) + ' (' + (self._counts[k[0]] || 0) + ')</button>';
         }).join(' ');
         var toolbar = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">' + tabs +
-            '<input class="settings-input" style="flex:1;min-width:120px;" placeholder="' + escapeHtml(I18n.t('lexMgr.search')) + '" ' +
+            '<input id="lexicon-filter" class="settings-input" style="flex:1;min-width:120px;" placeholder="' + escapeHtml(I18n.t('lexMgr.search')) + '" ' +
             'value="' + escapeHtml(this._filter) + '" oninput="lexiconManager.setFilter(this.value)">' +
             '<button class="menu-btn" onclick="lexiconManager.add()">' + escapeHtml(I18n.t('lexMgr.add')) + '</button>' +
             '<button class="menu-btn del" onclick="lexiconManager.clearAll()">' + escapeHtml(I18n.t('lexMgr.clear')) + '</button>' +

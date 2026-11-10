@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from importlib.util import find_spec
 
 import numpy as np
@@ -119,6 +120,11 @@ ONNX_GRAPH_INPUTS = ('input_ids', 'position_ids', 'attention_mask_4d', 'token_ty
 SESSION_LIMIT = 2
 _SESSIONS: dict = {}
 _SESSION_ORDER: list = []
+#: The two tables above are touched from every workflow thread of a parallel canvas (the run pool
+#: runs each workflow in its own thread). Without this lock a cache hit could find its key absent
+#: from ``_SESSION_ORDER`` (another thread had just evicted it) and raise ``ValueError`` from
+#: ``remove`` — an unnamed failure that names neither the node nor the model.
+_SESSION_LOCK = threading.Lock()
 
 
 class BertClassifier:
@@ -251,17 +257,26 @@ def bert_classifier(model_path: str, *, task: str, runtime: str = '', max_length
     different 截断长度 sharing one session would silently truncate one of them wrong.
     """
     key = (str(model_path), str(task), runtime or bert_runtime(), int(max_length))
-    if key in _SESSIONS:
-        _SESSION_ORDER.remove(key)
-        _SESSION_ORDER.append(key)
-        return _SESSIONS[key]
+    with _SESSION_LOCK:
+        if key in _SESSIONS:
+            _SESSION_ORDER.remove(key)
+            _SESSION_ORDER.append(key)
+            return _SESSIONS[key]
+    # Loaded outside the lock: a cold BERT load takes seconds and serialising it behind every other
+    # workflow's cache read would make a parallel canvas wait for one model.
     holder = BertClassifier(model_path, task=task, runtime=runtime, max_length=max_length)
-    _SESSIONS[key] = holder
-    _SESSION_ORDER.append(key)
-    while len(_SESSION_ORDER) > SESSION_LIMIT:
-        dropped = _SESSION_ORDER.pop(0)
-        _SESSIONS.pop(dropped, None)
-        logger.info(t('sentiment.bert_session_dropped', model=dropped[0]))
+    with _SESSION_LOCK:
+        existing = _SESSIONS.get(key)
+        if existing is not None:
+            _SESSION_ORDER.remove(key)
+            _SESSION_ORDER.append(key)
+            return existing
+        _SESSIONS[key] = holder
+        _SESSION_ORDER.append(key)
+        while len(_SESSION_ORDER) > SESSION_LIMIT:
+            dropped = _SESSION_ORDER.pop(0)
+            _SESSIONS.pop(dropped, None)
+            logger.info(t('sentiment.bert_session_dropped', model=dropped[0]))
     return holder
 
 

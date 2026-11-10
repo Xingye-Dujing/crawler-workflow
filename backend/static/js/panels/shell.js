@@ -249,6 +249,9 @@ function setLang(nextLang) {
        re-stamp either, because `I18n.apply()` carries no variables. Repaint both. */
     if (typeof Accounts !== 'undefined') Accounts.onLanguageChange();
     if (typeof Auth !== 'undefined' && Auth.apply) Auth.apply();
+    /* The self-update banner is JS-painted and carries a {version} variable, so neither a
+       data-i18n attribute nor I18n.apply() can re-stamp it. */
+    if (typeof UpdatePanel !== 'undefined') UpdatePanel.onLanguageChange();
     /* A reusable node's inside preview is JS-painted (title, meta, slot labels,
        statuses), so an open preview would otherwise keep the old language. */
     if (typeof ReusableNodes !== 'undefined' && ReusableNodes.repaintPreview) ReusableNodes.repaintPreview();
@@ -260,8 +263,14 @@ function showToast(msg, ms) {
     toast.classList.add('show');
     /* A longer message has to be readable, not merely present: the fixed 2.5 s was
        written for one short sentence and the multi-problem toast below carries a
-       line per problem. */
-    setTimeout(function () { toast.classList.remove('show'); }, ms || 2500);
+       line per problem. The timer is stored and cancelled, because two toasts in a
+       row share this one element: the first one's deadline used to hide the second
+       300 ms after it appeared. */
+    if (showToast._timer) clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function () {
+        showToast._timer = null;
+        toast.classList.remove('show');
+    }, ms || 2500);
 }
 
 /* Console Panel */
@@ -682,8 +691,13 @@ function showDialog(opts) {
             closeBtn = document.createElement('button');
             closeBtn.className = 'dialog-close';
             closeBtn.type = 'button';
+            /* Stamped now, in the CURRENT language, not left for the next I18n.apply():
+               a screen reader on a zh page announced the literal English "Close", and a
+               sighted user hovering the X got no tooltip at all. */
+            var closeLabel = typeof I18n !== 'undefined' && I18n.t ? I18n.t('settings.close') : 'Close';
             closeBtn.setAttribute('data-i18n-title', 'settings.close');
-            closeBtn.setAttribute('aria-label', 'Close');
+            closeBtn.setAttribute('aria-label', closeLabel);
+            closeBtn.title = closeLabel;
             closeBtn.innerHTML =
                 '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">' +
                 '<path d="M6 6l12 12M18 6L6 18"/></svg>';

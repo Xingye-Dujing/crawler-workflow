@@ -272,4 +272,7 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
         # of it is said out loud, because "the panel had 12" and "we stopped at 12 of 261" are
         # two different reports and only one of them is checkable.
         session.log(t('comment.zhihuPanelShort', declared=declared, rows=len(collected)))
+        # Named as unproven for the same reason: the cursor must not advance over a panel that
+        # came home short of the count the page printed.
+        session.mark_unproven(url)
     return collected

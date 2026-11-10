@@ -63,6 +63,10 @@ def sentiment_evolution(
     """
     if column not in df.columns:
         raise UnknownOperationError(t('analysis.step_col_missing', op='sentiment_evolution', col=column))
+    if not str(new_col or '').strip():
+        # Same refusal as bin_time's: an unnamed index column writes a header the export shows
+        # as an empty cell, and every later step that names it finds nothing.
+        raise UnknownOperationError(t('analysis.need_param', op='sentiment_evolution', param='new_col'))
     if label_col not in df.columns:
         # The polarity column IS what this step counts. Handing the table back unchanged read
         # as a successful curve whose 极性 column had simply been renamed — and the step still

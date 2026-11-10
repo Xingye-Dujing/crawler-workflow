@@ -30,7 +30,7 @@ from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.walks import register
 from crawlers.engine import times
 from crawlers.engine.counters import parse_count
-from crawlers.engine.wall import looks_blocked
+from crawlers.engine.wall import classify
 from crawlers.platforms.xiaohongshu.rows import note_id
 from i18n import stop_reason_label, t
 
@@ -101,6 +101,7 @@ return (function () {
     mounted: true,
     total: text(root.querySelector('.total')),
     login_modal: visible(root.querySelector('.login-modal')) || visible(document.querySelector('.login-modal')),
+    login_gate: visible(root.querySelector('.comments-login')) || visible(document.querySelector('.comments-login')),
     ended: /THE END|没有更多|到底/.test(text(root.querySelector('.end-container')) || ''),
     cards: cards,
     openers: openers
@@ -434,9 +435,23 @@ def walk(session, url: str, limit: int) -> tuple:
     expected = note_id(url)
     session.driver.get(url)
     session.nap(5)
-    if looks_blocked(session.body_head()):
+    current = session.driver.current_url or ''
+    # One shared classifier decides arrival, not a 600-character body sniff: the URL carries XHS's
+    # login redirect, the browser's own error page is `unreachable`, and `login` vs `blocked` are
+    # opposite advice (re-save the cookie vs back off). Only the body check used to run, so a real
+    # risk page was reported as "cookie expired" and a URL-only login bounce fell through to
+    # "no panel → ok, 0 rows".
+    title = ''
+    with contextlib.suppress(Exception):
+        title = session.driver.title or ''
+    verdict = classify(current, session.body_head(), title)
+    if verdict == 'login':
+        session.mark_login_wall()
         return [], BLOCKED
-    shown = note_id(session.driver.current_url or '')
+    if verdict in ('blocked', 'unreachable'):
+        session.mark_risk_blocked()
+        return [], BLOCKED
+    shown = note_id(current)
     if expected and shown and shown != expected:
         # The link opened ANOTHER note (a dead/aged token lands on the feed or on a substitute).
         # A row nobody asked for is worse than a missing one, so it is DEAD, not BLOCKED: the session
@@ -458,11 +473,19 @@ def walk(session, url: str, limit: int) -> tuple:
                 # The panel was there and reading it produced rows: what is left is the final answer.
                 break
             session.log(t('comment.xhsNoPanel', url=url))
+            # "No panel" is not proof the thread is empty: a login redirect or a page that never
+            # rendered leaves the cursor on this link so 继续 re-walks it.
+            session.mark_unproven(url)
             return [], OK
         if panel.get('login_modal'):
             # A dialog the page raised on its own covers the panel; the site's own control closes it.
             _dismiss_login(session)
         fresh = _absorb(panel, threads)
+        if panel.get('login_gate'):
+            # The site's own "登录查看全部评论内容" element: a wall, not a note with zero comments.
+            session.mark_login_wall()
+            rows = parse_xhs_threads(threads, url)
+            return (rows[:limit] if limit else rows), BLOCKED
         # "The panel has stopped feeding" — read BEFORE this round's expansion, so the expander knows
         # whether a failed click is final (the list is over) or just early (cards are still mounting).
         expand['idle'] = quiet > 0
@@ -495,11 +518,22 @@ def walk(session, url: str, limit: int) -> tuple:
         session.nap(1.2)
 
     rows = parse_xhs_threads(threads, url)
+    if expand['gated']:
+        # The site refused the replies with its login dialog. Keep every row already read and report
+        # BLOCKED: the node fails by name, the cursor stays here, and 继续 re-walks after a login —
+        # instead of filing an "ok, 0 new" table the cursor then steps over.
+        return (rows[:limit] if limit else rows), BLOCKED
     declared = parse_count((panel or {}).get('total'))
     # `nested` is the replies the site's own numbers count and this walk never opened, so the gap
     # stays honest whether or not the threads opened — and never double-counts landed reply rows.
     nested = sum(max(slot['declared'] - len(slot['subs']), 0) for slot in threads.values())
     asked = bool(limit and len(rows) >= limit)
+    # The site's own `- THE END -`, a reconciled denominator, or the user's own limit is the only
+    # evidence that licenses a short table. Without one, a shortfall (or a walk that merely stopped
+    # growing / was stopped) is a hole: the cursor is pinned on this link and 继续 re-walks it
+    # rather than treating "0 new" as the answer.
+    reconciled = bool(declared) and len(rows) + nested >= declared
+    licensed = bool((panel or {}).get('ended')) or asked or reconciled
     if declared and len(rows) + nested < declared and not asked:
         session.log(
             t(
@@ -526,4 +560,6 @@ def walk(session, url: str, limit: int) -> tuple:
                 reason=stop_reason_label(exit_reason),
             )
         )
+    if not licensed:
+        session.mark_unproven(url)
     return (rows[:limit] if limit else rows), OK

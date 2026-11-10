@@ -2460,3 +2460,29 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 **教训（工程侧）**：真机探针会写 `data/users/<id>/chrome_profile/xiaohongshu`，**不能和 fast suite 同时跑** ——
 `tests/unit/gates/test_test_tiers.py` 的"用户目录只读"探针正好在 Chrome 淘汰缓存文件时走目录，
 会抛 `FileNotFoundError`（实测撞过一次）。跑真机前先确认 5000 端口空闲、suite 已停。
+
+### 小红书评论：`ok + 0 行` 曾经把风控/过期 Cookie 记成“采完了”（measured 2026-11-11）
+
+用户问的是“风控或 Cookie 过期时控制台还说新增 0，续跑会不会把这些帖子重采”。答案是**不会**：走查只在
+`looks_blocked(session.body_head())` 命中时返回 `BLOCKED`，而注释区被风控/登录墙挡住时，笔记页本身可能仍
+是一张正常页面（正文 600 字里没有墙的话术），于是走查返回 `ok` 0 行，游标越过，`继续` 跳过；全部链接都这样
+时 run 还是 `completed`，连“继续”都不出现。
+
+现在改成的形状（同一轮提交，全部有单测）：
+
+| 形状 | 以前 | 现在 |
+|---|---|---|
+| 笔记页 URL 跳到 passport / `chrome://` / 浏览器错误页 | 正常页面？→ 没面板 → `ok` 0 行 | `wall.classify` 判 `login`/`blocked`/`unreachable` → `BLOCKED`，并 latch `login_wall`（登录墙）或 `risk_blocked`（退避） |
+| 面板里有站点自己的 `.comments-login`（“登录查看全部评论内容”） | 当成“这条没评论” | `BLOCKED` + `login_wall`，已读父评论保留 |
+| 点“展开”被 `.login-modal` 拒绝 | 只记 `xhsLoginGate`，仍 `ok` | 收尾 `BLOCKED`（保留已读行），游标钉在这一条 |
+| 面板没渲染 / 走到一半被停止 / 差额对不上且站点没印 THE END | `ok` | `mark_unproven(url)`：节点 partial/failed，`继续` 从这条重走 |
+| 站点印了 `- THE END -`（那 357 条的笔记拿到 338 行 = 200 父 + 138 子，站点 3 屏不再长） | 只报差额 | 差额照旧点名，但**算采完**（不 mark_unproven），否则每次续跑都会为站点不给的 18 条变红 |
+| 用户自己的 `评论上限` 命中 | 不报 | 不报、也不算未证明（和微博同一条规则） |
+
+旧 run 的游标已经越过洞口，续跑救不回来：要么“重跑节点”（会删 rows + cursor 并释放本次去重认领），
+要么勾“重新采集”再跑——提交信息里点名了这一点。
+
+真机方法照旧（全新临时 profile 等价于未登录，不碰用户登录 profile）：`scratchpad/probes/test_xiaohongshu_thread_probe.py`
+的 `--login-check/--login/--walk/--complete-check/--tail-check`。**探针会写 `data/users/<id>/chrome_profile/xiaohongshu`，
+不要和 fast suite 并行**（`tests/unit/gates/test_test_tiers.py` 的只读会话断言会撞上）。
+

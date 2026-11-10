@@ -3,10 +3,35 @@
 import json
 import re
 
-from crawlers.commenting.protocol import DEAD, OK, _strip_tags, as_count
+from crawlers.commenting.protocol import BLOCKED, DEAD, OK, _strip_tags, as_count
 from crawlers.commenting.walks import register
 from crawlers.engine import times
+from crawlers.engine.wall import looks_blocked, looks_like_login_page
 from i18n import t
+
+
+def _walled(session, body: str) -> bool:
+    """Whether the text the comment endpoint answered is a wall, not a thread.
+
+    This walk parks on ``weibo.com`` and reads the comment API in-page, so the document's body is
+    the wrong place to look: when the session has died, ``statuses/show`` answers the *passport or
+    risk page* as HTML and the JSON parse is what fails. The raw text is the evidence, and the
+    crawler's own latches (``_is_walled`` sees a captcha in the tab title) are asked alongside it.
+    """
+    if session.is_walled():
+        session.mark_risk_blocked()
+        return True
+    try:
+        current = session.driver.current_url or ''
+        title = session.driver.title or ''
+    except Exception:
+        current, title = '', ''
+    if 'passport' in current.lower() or looks_like_login_page(current, body):
+        return True
+    if looks_blocked(body, url=current, title=title):
+        session.mark_risk_blocked()
+        return True
+    return False
 
 
 def _user_home(user: dict) -> str:
@@ -179,10 +204,18 @@ def walk(session, url: str, limit: int) -> tuple:
             session.nap(2)
     except Exception:
         pass
+    raw = ''
     try:
         raw = session.fetch_in_page(weibo_show_js(bid))
         show = json.loads(raw)
     except Exception:
+        # A dead session answers the show endpoint with HTML, and the parse is the first thing that
+        # notices. Which refusal it was decides the console line and the resume: a wall is
+        # BLOCKED (the node raises cookieExpired/riskControlled and keeps its rows), a genuinely
+        # unreadable link is DEAD for this link only. Before this check every expired cookie was
+        # filed as DEAD — ten links, an empty table, and a node that settled DONE.
+        if _walled(session, raw):
+            return [], BLOCKED
         session.log(t('comment.weiboShowFailed', url=url))
         return [], DEAD
     mid = str(show.get('id') or show.get('mid') or '')
@@ -200,9 +233,15 @@ def walk(session, url: str, limit: int) -> tuple:
     # shortfall may only be attributed to the site when the cursor itself ran out.
     ended = 'cursor'
     while True:
+        raw_page = ''
         try:
-            batch = json.loads(session.fetch_in_page(weibo_comments_js(mid, max_id)))
+            raw_page = session.fetch_in_page(weibo_comments_js(mid, max_id))
+            batch = json.loads(raw_page)
         except Exception:
+            # The same dead-session shape as the show fetch: a wall answered in the page's HTML.
+            # Kept rows travel with BLOCKED so the executor still files them before it raises.
+            if _walled(session, raw_page):
+                return (rows[:limit] if limit else rows), BLOCKED
             ended = 'fetch'
             break
         items = batch.get('data') or []
@@ -257,8 +296,9 @@ def walk(session, url: str, limit: int) -> tuple:
         # site's answer (the cursor ran out, and ``comment.weiboShort`` names the gap against its own
         # number) or the user's ask (``limit``); a request that died mid-thread is neither, and the
         # table it leaves behind is shorter than the thread with no line anywhere to point at. Naming
-        # it is also the difference between “继续” and a re-crawl: the cursor already holds the page
-        # this walk reached.
+        # it is also the difference between “继续” and a re-crawl: the line claims 可继续, so the
+        # cursor must not step over this link — ``mark_unproven`` is what makes 继续 re-walk it
+        # instead of advancing past a page nobody read.
         session.log(
             t(
                 'comment.weiboFetchDied',
@@ -268,4 +308,5 @@ def walk(session, url: str, limit: int) -> tuple:
                 gap=(declared - len(rows)) if declared and len(rows) < declared else 0,
             )
         )
+        session.mark_unproven(url)
     return table, OK

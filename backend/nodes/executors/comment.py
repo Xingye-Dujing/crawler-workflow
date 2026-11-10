@@ -17,7 +17,7 @@ import capabilities.registry as capabilities
 import pandas as pd
 from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
-from runtime import paths
+from runtime import gate, paths
 from runtime.state import add_log, ambient, execution_state, stop_requested
 from selenium.common.exceptions import WebDriverException
 
@@ -327,7 +327,13 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # the walker states itself.
             skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
             try:
-                rows, status = session.walk(kind, url, limit)
+                # The same per-platform lane the source node holds: the site's wall is a collision
+                # between two crawls of ONE account, independent of the browser/profile lock, so a
+                # comment node and a source node of the same platform must queue against each other
+                # exactly as two source nodes do. Taken per LINK, not around the whole node, so one
+                # node covering several platforms never holds two lanes at once.
+                with gate.hold(kind, log=add_log, abort=stop_requested, account=account):
+                    rows, status = session.walk(kind, url, limit)
             except WebDriverException as e:
                 # One slow navigation used to take the whole node with it: the walk's bare
                 # ``driver.get`` throws its timeout straight through, and a batch where link

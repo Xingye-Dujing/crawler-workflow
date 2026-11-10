@@ -474,6 +474,15 @@ class TestCanvasState:
         ids = [n['id'] for n in state['undo_redo']['nodes']]
         assert ids == ['node-1', 'node-2']
 
+    def test_an_undo_is_written_to_the_draft_as_well_as_the_stack(self, state):
+        """The draft is the durable copy of the canvas; a reload inside the 30 s autosave window
+        used to resurrect the state Ctrl+Z had just undone, because ``_restoreHistory`` suppressed
+        ``saveState`` with ``_historySaving`` and never wrote afterwards."""
+        draft = state['undo_last']['draft'] or {}
+        assert set((draft.get('nodes') or {}).keys()) == {'node-1'}, (
+            'the undo only reached the history stack, not the draft a reload reads'
+        )
+
     def test_an_undo_keeps_every_node_under_its_own_id(self, state):
         """Ids are storage keys: runs, resume cursors and cached answers are all
         filed under them, and the workflow fingerprint hashes them. Re-minting

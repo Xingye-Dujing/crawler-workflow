@@ -127,6 +127,36 @@ class CommentSession:
         if self._owner is not None:
             self._owner.risk_blocked = True
 
+    def mark_login_wall(self) -> None:
+        """Latch a login wall on the owning crawler, when there is one.
+
+        The console's sentence turns on ``login_wall`` vs ``risk_blocked``: only the owner can say
+        which one the page was, so a walk that classified a ``login`` verdict names it here instead
+        of guessing "re-save the cookie" for a risk page (or the reverse).
+        """
+        if self._owner is not None:
+            self._owner.login_wall = True
+
+    def mark_unproven(self, url: str) -> None:
+        """Record that this link was walked WITHOUT proving it complete.
+
+        The comment executor advances its cursor only over inputs it can trust, and it already
+        reads ``skipped_targets`` for that judgement (the CatBus/红果 backends fill it when a
+        feed item could not be opened). A browser walk that detects a shortfall against the
+        site's own denominator has the same answer — a hole the cursor must not step over — so it
+        names the link here instead of returning a plain ``OK`` that launders it. A session with
+        no owner (the live tier) has nobody to record against and stays silent.
+        """
+        name = str(url or '').strip()
+        if self._owner is None or not name:
+            return
+        targets = getattr(self._owner, 'skipped_targets', None)
+        if targets is None:
+            targets = []
+            self._owner.skipped_targets = targets
+        if name not in targets:
+            targets.append(name)
+
     def is_walled(self) -> bool:
         """Whether the owning crawler sees a wall this page could not show.
 

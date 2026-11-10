@@ -182,6 +182,9 @@ class TestDashboardSave:
         assert case['after_first_rebuild'] == 1
         assert case['after_second_rebuild'] == 1, 'the board leaked an instance per refresh'
         assert case['images'] == 0, 'this cell renders live, so no picture may be banked'
+        assert case['disposed_total'] == case['created_total'] - case['after_second_rebuild'], (
+            'every instance a replaced grid owned must be disposed, not merely dropped'
+        )
         assert case['asked'] == 1
         assert case['image'] == 'data:image/png;base64,FROMINSTANCE'
 

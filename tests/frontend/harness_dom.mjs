@@ -294,6 +294,15 @@ export function makeEl(tag = 'div', id = '') {
         child.parentNode = null;
         return child;
     };
+    /* The dialog shell puts its close button at the TOP of the box (DOM order = visual order),
+       so a stub without insertBefore made the real showClose path throw inside the harness. */
+    el.insertBefore = (child, reference) => {
+        const i = reference ? el.children.indexOf(reference) : -1;
+        if (i >= 0) el.children.splice(i, 0, child);
+        else el.children.push(child);
+        _adopt(child, el);
+        return child;
+    };
     /* `contains` is the relation both popups in this app are built on: CustomSelect and the
        account-candidate list hang off <body> (a panel that scrolls would clip them), so
        "did this click land inside the panel" is answered by walking the ancestry the stub
@@ -351,7 +360,11 @@ export function makeEl(tag = 'div', id = '') {
         el[k] = v;
     };
     el.getAttribute = (k) => (el[k] === undefined ? null : el[k]);
-    el.focus = () => {};
+    el.focus = () => {
+        /* The dialog's close-button and the lexicon search both rebuild their element and then
+           need the caret back on it; a no-op focus made "did it return" unmeasurable. */
+        el.__focused = true;
+    };
     el.blur = () => {};
     el.select = () => {};
     el.click = () => dispatchOn(el, 'click');

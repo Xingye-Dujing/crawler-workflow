@@ -208,10 +208,11 @@ class TestProcessNodeOperations:
             assert {row['method'] for row in rows} == {method}
             assert all(abs(row['correlation']) <= 1 for row in rows)
 
-    def test_correlation_with_a_single_numeric_column_answers_with_an_empty_table(self, client, app_module, paste):
-        """One column has no pair to report. An empty table with the right columns
-        is the honest answer; a row of zeros would be a fabricated finding."""
-        _run, status, rows = _run_node(
+    def test_correlation_with_a_single_numeric_column_is_refused(self, client, app_module, paste):
+        """One column has no pair to report. An empty table used to settle the node DONE and
+        read downstream as "these columns are unrelated" — a finding nobody measured. It is a
+        wrong setting, refused by name like the text-only selection is."""
+        _run, status, _rows = _run_node(
             client,
             app_module,
             paste,
@@ -219,8 +220,8 @@ class TestProcessNodeOperations:
             {'operation': 'correlation', 'columns': '点赞'},
             'correlation',
         )
-        assert status['status'] == 'done', status.get('error')
-        assert rows == []
+        assert status['status'] == 'failed', status.get('error')
+        assert '2' in str(status.get('error') or '')
 
     def test_correlation_refuses_a_selection_of_only_text_columns(self, client, app_module, paste):
         _run, status, _rows = _run_node(

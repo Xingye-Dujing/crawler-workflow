@@ -11,7 +11,7 @@
    polls its status, offers Done/Cancel, and REFUSES to close while a login is
    waiting: the dialog's buttons are the only way to finish or abort that
    browser, and closing it used to leave the login window orphaned. */
-var cookieJob = { active: false, known: false, timer: null, platform: '', kind: 'login' };
+var cookieJob = { active: false, known: false, timer: null, platform: '', kind: 'login', misses: 0 };
 /* The server owns the guidance (translated, and next to the code that enforces
    which link is acceptable), so it is fetched once and rendered from cache. */
 var cookieFlows = null;
@@ -233,7 +233,24 @@ function setCookieJobUI(on) {
 
 function pollCookieJob() {
     fetchJSON('/api/cookies/generate/status').then(function (s) {
-        if (!s.ok) return;
+        if (!s.ok) {
+            /* One failed poll is a blip; a run of them means the server is gone (restarted,
+               reloading, or the network dropped mid-window). The old `return` here skipped
+               BOTH the timer cleanup and `setCookieJobUI(false)`, so every control in the
+               dialog stayed disabled and the interval fired once a second forever with the
+               status line still saying 等待登录. The job's state is unknown — say that. */
+            cookieJob.misses = (cookieJob.misses || 0) + 1;
+            if (cookieJob.misses < 3) return;
+            clearInterval(cookieJob.timer);
+            cookieJob.timer = null;
+            cookieJob.active = false;
+            cookieJob.known = false;
+            setCookieJobUI(false);
+            var lostEl = document.getElementById('cookie-status');
+            if (lostEl) lostEl.textContent = I18n.t('cookie.unreachable');
+            return;
+        }
+        cookieJob.misses = 0;
         var statusEl = document.getElementById('cookie-status');
         if (s.active) {
             cookieJob.active = true;
@@ -872,6 +889,7 @@ function cookiePlatform() {
 function startCookiePolling() {
     cookieJob.active = true;
     cookieJob.known = true;
+    cookieJob.misses = 0;
     setCookieJobUI(true);
     if (!cookieJob.timer) cookieJob.timer = setInterval(pollCookieJob, 1000);
 }

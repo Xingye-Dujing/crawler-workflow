@@ -40,7 +40,7 @@ from core.config import Config
 from runtime import account_context, paths
 
 from crawlers import crawler_class, is_crawlable
-from i18n import t
+from i18n import get_lang, set_lang, t
 from services.ingest import catbus
 from sessions import profiles
 from sessions.cookies import CookieManager
@@ -476,8 +476,12 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
     # starts with no account context, so the scope has to travel with the work explicitly.
     # Without this every probe read the checkout-level ``data/cookies`` instead of the caller's.
     owner = account_context.current()
+    # Thread-locals are not inherited: a pool thread starts at the default language, so every
+    # verdict sentence this probe renders would come back Chinese on an English page.
+    lang = get_lang()
 
     def _probe_scoped(platform: str, account: str, backend: str) -> dict:
+        set_lang(lang)
         with account_context.use(owner):
             return probe(platform, use_profile=use_profile, fresh=fresh, account=account, backend=backend)
 

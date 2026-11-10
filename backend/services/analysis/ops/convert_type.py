@@ -5,14 +5,14 @@ import logging
 import pandas as pd
 
 from i18n import t
-from services.analysis.kernels import _to_bool, _to_datetime
+from services.analysis.kernels import UnknownOperationError, _to_bool, _to_datetime
 
 logger = logging.getLogger(__name__)
 
 
 def convert_type(df: pd.DataFrame, column: str, dtype: str) -> pd.DataFrame:
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='convert_type', col=column))
     work = df.copy()
     try:
         if dtype == 'int':

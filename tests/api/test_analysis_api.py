@@ -1281,7 +1281,7 @@ BLANK_FORM = {
         'heating': 0.15,
         'volume_floor': 0.6,
     },
-    'sentiment_evolution': {'column': ''},
+    'sentiment_evolution': {'column': '', 'new_col': 'sentiment_index'},
 }
 
 # The values this repository uses for "the user typed nothing sensible".

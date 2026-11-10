@@ -666,14 +666,29 @@ var dashboard = {
        reuses the exact option instead of an instance's resolved getOption() tree. */
     _options: {},
 
+    /* Release every chart this board owns. `open()` and `close()` both rebuild/release the
+       grid, and an ECharts instance keeps its canvas, tooltip and resize registration alive
+       until `dispose()` — dropping the map alone leaked a whole generation per open. */
+    _disposeAll() {
+        var instances = this._instances || {};
+        Object.keys(instances).forEach(function (id) {
+            try {
+                if (instances[id]) instances[id].dispose();
+            } catch (e) {
+                /* already disposed by a replacement cycle: nothing left to release */
+            }
+        });
+        this._instances = {};
+        this._images = {};
+        this._options = {};
+    },
+
     async open() {
         var panel = document.getElementById('dashboard-panel');
         panel.classList.add('open');
         var grid = document.getElementById('dashboard-grid');
         grid.innerHTML = '';
-        this._instances = {};
-        this._images = {};
-        this._options = {};
+        this._disposeAll();
 
         var vizNodeIds = Object.keys(canvas.nodes).filter(function (id) {
             return canvas.nodes[id].type === 'visualize';
@@ -796,6 +811,7 @@ var dashboard = {
     },
 
     close() {
+        this._disposeAll();
         document.getElementById('dashboard-panel').classList.remove('open');
     },
 };

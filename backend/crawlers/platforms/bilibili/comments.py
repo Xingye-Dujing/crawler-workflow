@@ -219,4 +219,7 @@ def walk(session, url: str, limit: int) -> tuple:
     met_ask = bool(limit) and len(rows) >= limit
     if not met_ask and len(rows) < declared:
         session.log(t('comment.biliShort', url=url, rows=len(rows), declared=declared))
+        # A clean end far under the site's OWN denominator is a hole, not an answer: pin the
+        # cursor on this link so 继续 re-walks it (the executor reads ``skipped_targets``).
+        session.mark_unproven(url)
     return (rows[:limit] if limit else rows), OK

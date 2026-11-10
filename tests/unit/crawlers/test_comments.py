@@ -20,6 +20,7 @@ from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.session import CommentSession
 from crawlers.engine.wall import looks_blocked, looks_like_login_page
 from crawlers.platforms.bilibili.comments import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
+from crawlers.platforms.weibo import comments as weibo_comments
 from crawlers.platforms.weibo.comments import parse_weibo_comments, weibo_bid
 from crawlers.platforms.xiaohongshu import comments as xhs_comments
 from engine.workflow import WorkflowEngine
@@ -116,6 +117,66 @@ class FakeDriver:
 
 
 # ─── pure helpers ───────────────────────────────────────────────────────
+
+
+class TestWeiboWallIsNotADeadLink:
+    """A dead session used to be filed as DEAD for every link, so the node settled DONE over an
+    empty table with no cookie verdict and no 继续. The show endpoint answers a wall with HTML."""
+
+    class Session:
+        def __init__(self, responses, url='https://weibo.com/'):
+            self.responses = list(responses)
+            self.driver = type('D', (), {'current_url': url, 'title': ''})()
+            self.unproven = []
+            self.risk = False
+            self.logs = []
+
+        def fetch_in_page(self, _url, timeout_ms=25000):
+            item = self.responses.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        def nap(self, _seconds):
+            pass
+
+        def may_stop(self):
+            return False
+
+        def is_walled(self):
+            return False
+
+        def mark_risk_blocked(self):
+            self.risk = True
+
+        def mark_unproven(self, url):
+            self.unproven.append(url)
+
+        def log(self, message):
+            self.logs.append(message)
+
+    def test_a_passport_answer_is_blocked_not_dead(self):
+        session = self.Session(
+            ['<html><body>扫码登录 手机号登录</body></html>'],
+            url='https://passport.weibo.com/sso/signin?cb=x',
+        )
+        rows, status = weibo_comments.walk(session, 'https://weibo.com/1763742695/RhYNar0R1', 50)
+        assert (rows, status) == ([], BLOCKED)
+
+    def test_a_risk_page_latches_risk_control(self):
+        session = self.Session(['<html><body>安全验证 请完成验证</body></html>'])
+        rows, status = weibo_comments.walk(session, 'https://weibo.com/1763742695/RhYNar0R1', 50)
+        assert (rows, status) == ([], BLOCKED)
+        assert session.risk is True, 'a risk page must not send the user to re-save a valid cookie'
+
+    def test_a_page_request_that_dies_mid_thread_pins_the_cursor(self):
+        show = json.dumps({'id': '5001', 'comments_count': 3})
+        session = self.Session([show, RuntimeError('connection reset')])
+        rows, status = weibo_comments.walk(session, 'https://weibo.com/1763742695/RhYNar0R1', 50)
+        assert status == OK and rows == []
+        assert session.unproven == ['https://weibo.com/1763742695/RhYNar0R1'], (
+            'the line promises 可继续, so the cursor must stay on this link'
+        )
 
 
 class TestHelpers:
@@ -442,7 +503,18 @@ class _XhsPanel:
     paging expander, dedupe and the shortfall — is what the unit tier actually tests.
     """
 
-    def __init__(self, parents=None, *, total='', pending=None, refuse_expand=False, batch=1, stuck=False, ended=False):
+    def __init__(
+        self,
+        parents=None,
+        *,
+        total='',
+        pending=None,
+        refuse_expand=False,
+        batch=1,
+        stuck=False,
+        ended=False,
+        login_gate=False,
+    ):
         # each parent: {'own': card, 'subs': [card], 'hidden': [card]}
         self.parents = list(parents or [])
         self.total = total
@@ -452,6 +524,8 @@ class _XhsPanel:
         self.stuck = stuck
         #: The site's own end marker at the bottom of the panel (measured: `- THE END -`).
         self.ended = ended
+        #: The site's own "登录查看全部评论内容" element (measured for an anonymous session).
+        self.login_gate = login_gate
         self.revealed: set = set()
         self.mounted = True
 
@@ -476,6 +550,7 @@ class _XhsPanel:
             'mounted': True,
             'total': self.total,
             'login_modal': False,
+            'login_gate': self.login_gate,
             'ended': self.ended,
             'cards': cards,
             'openers': openers,
@@ -530,10 +605,12 @@ class _XhsOpener:
 class _XhsDriver:
     """Fake driver for the 小红书 walk: the page-side reads answer the panel model."""
 
-    def __init__(self, panel, *, body='正常笔记', url=XHS_NOTE, lands_on=''):
+    def __init__(self, panel, *, body='正常笔记', url=XHS_NOTE, lands_on='', owner=None):
         self.panel = panel
         self.body = body
         self.current_url = url
+        self.title = ''
+        self.owner = owner
         self._lands_on = lands_on
         self.scripts = []
         self.clicks = []
@@ -593,9 +670,28 @@ def xhs_chains(monkeypatch):
     monkeypatch.setattr('crawlers.platforms.xiaohongshu.comments.ActionChains', _FakeActionChains)
 
 
+class _XhsOwner:
+    """The browser's owning crawler, as a walk may accuse it.
+
+    The comment engine reads ``login_wall`` / ``risk_blocked`` and ``skipped_targets`` BY
+    ATTRIBUTE, so the unit walk needs the same surface a real ``Crawler`` carries.
+    """
+
+    def __init__(self, driver):
+        self.driver = driver
+        self.login_wall = False
+        self.risk_blocked = False
+        self.skipped_targets: list = []
+        self._is_walled = lambda: False
+
+
 def _xhs_walk(panel, *, limit=0, log=None, abort=None, **kwargs):
-    driver = _XhsDriver(panel, **kwargs)
-    session = CommentSession(driver, log=log or (lambda message: None), nap=lambda seconds: None, abort=abort)
+    owner = _XhsOwner(None)
+    driver = _XhsDriver(panel, owner=owner, **kwargs)
+    owner.driver = driver
+    session = CommentSession(
+        driver, log=log or (lambda message: None), nap=lambda seconds: None, abort=abort, owner=owner
+    )
     return session.walk('xiaohongshu', XHS_NOTE, limit), driver
 
 
@@ -753,11 +849,12 @@ class TestXhsAdapter:
         assert status == OK and len(rows) == 2
         assert driver.clicks == [], 'the site says one reply; one reply is mounted'
 
-    def test_a_refused_expand_is_named_and_never_retried(self, xhs_chains):
+    def test_a_refused_expand_is_blocked_and_keeps_every_row_read(self, xhs_chains):
         """Measured: a click without the session the site wants answers with ``.login-modal``.
 
-        That is a refusal, not a slow render: it is said once, the walk stops clicking, and the
-        shortfall is reported against the site's own numbers instead of passing as a whole thread.
+        That is a refusal, not a slow render and not "this thread has no more replies": the walk
+        now ends BLOCKED (rows kept), so the node fails by name, the cursor stays on this link and
+        继续 re-walks it after a login instead of stepping over an "ok, 0 new" table.
         """
         said = []
         panel = _XhsPanel(
@@ -772,11 +869,21 @@ class TestXhsAdapter:
             refuse_expand=True,
         )
         (rows, status), driver = _xhs_walk(panel, log=said.append)
-        assert status == OK
+        assert status == BLOCKED
         assert driver.clicks == ['comment-a1'], 'tried once, then never again'
+        assert rows and rows[0]['评论内容'] == '主评论', 'the parent rows already read must survive'
         assert rows[0]['子回复数'] == 1, 'the reply row is what the table holds, not the site’s count'
         assert i18n.t('comment.xhsLoginGate', url=XHS_NOTE, rows=2) in said, said
-        assert any('comment.xhsShort' in line or '写着 9 条' in line for line in said), said
+        assert driver.owner.login_wall is False
+        assert driver.owner.risk_blocked is False, 'a login dialog is not 风控'
+
+    def test_a_login_gated_panel_is_blocked_and_latches_the_wall(self, xhs_chains):
+        """The panel's own “登录查看全部评论内容” element is a wall, not a note with no comments."""
+        panel = _XhsPanel([], total='共 9 条评论', login_gate=True)
+        (rows, status), driver = _xhs_walk(panel)
+        assert rows == [] and status == BLOCKED
+        assert driver.owner.login_wall is True
+        assert driver.owner.skipped_targets == [], 'a wall uses the node’s own verdict, not the cursor pin'
 
     def test_the_walk_ends_on_the_panels_own_evidence_not_a_round_budget(self, xhs_chains):
         """A fixed round count made 采不满 read as 这条笔记就这么多评论; the panel itself ends the walk."""
@@ -796,9 +903,25 @@ class TestXhsAdapter:
             [{'own': _xhs_comment('a1', '甲', '唯一的评论'), 'subs': [], 'hidden': []}],
             total='共 20 条评论',
         )
-        (rows, status), _driver = _xhs_walk(panel, log=said.append)
+        (rows, status), driver = _xhs_walk(panel, log=said.append)
         assert status == OK and len(rows) == 1
         assert any('comment.xhsShort' in line or '写着 20 条' in line for line in said), said
+        assert driver.owner.skipped_targets == [XHS_NOTE], 'a short table without THE END pins the cursor'
+
+    def test_the_sites_end_marker_licenses_a_short_table(self, xhs_chains):
+        """Measured on the 357-comment note: 338 rows and the site printed `- THE END -`. That is the
+        site's own finish line, so the shortfall is named but the cursor is NOT pinned (failing it
+        would make every 继续 red for rows the site refuses to give)."""
+        said = []
+        panel = _XhsPanel(
+            [{'own': _xhs_comment('a1', '甲', '最后一条'), 'subs': [], 'hidden': []}],
+            total='共 20 条评论',
+            ended=True,
+        )
+        (rows, status), driver = _xhs_walk(panel, log=said.append)
+        assert status == OK and len(rows) == 1
+        assert any('comment.xhsShort' in line or '写着 20 条' in line for line in said), said
+        assert driver.owner.skipped_targets == [], 'THE END is the site saying it is finished'
 
     def test_the_users_own_limit_is_not_reported_as_a_shortfall(self, xhs_chains):
         """评论上限 1 on a 20-comment note is the ask, not the thread's absence."""
@@ -813,16 +936,20 @@ class TestXhsAdapter:
 
     def test_login_wall_page_is_blocked(self, xhs_chains):
         panel = _XhsPanel([], total='')
-        (rows, status), _driver = _xhs_walk(panel, body='登录后查看更多内容 扫码登录')
+        (rows, status), driver = _xhs_walk(panel, body='登录后查看更多内容 扫码登录')
         assert rows == [] and status == BLOCKED
+        assert driver.owner.login_wall is True, 'the console must say re-save the cookie, not back off'
 
-    def test_no_panel_is_an_empty_ok_that_says_so(self, xhs_chains):
+    def test_no_panel_is_not_proof_of_an_empty_thread(self, xhs_chains):
         said = []
         panel = _XhsPanel([])
         panel.mounted = False
-        (rows, status), _driver = _xhs_walk(panel, log=said.append)
+        (rows, status), driver = _xhs_walk(panel, log=said.append)
         assert rows == [] and status == OK
         assert i18n.t('comment.xhsNoPanel', url=XHS_NOTE) in said, said
+        assert driver.owner.skipped_targets == [XHS_NOTE], (
+            'a page that never rendered left the cursor on this link for 继续'
+        )
 
     def test_a_link_that_opens_another_note_is_dead_not_the_users_cookie(self, xhs_chains):
         said = []
@@ -842,12 +969,13 @@ class TestXhsAdapter:
             for index in range(5)
         ]
         panel = _XhsPanel(whole[:1], total='共 5 条评论', pending=whole[1:])
-        (rows, status), _driver = _xhs_walk(panel, log=said.append, abort=lambda: True)
+        (rows, status), driver = _xhs_walk(panel, log=said.append, abort=lambda: True)
         assert status == OK and len(rows) == 1, 'one round read, then 停止'
         # The shortfall sentence may appear, but it must attribute the ending to the user, not the site.
         assert all(
             i18n.t('crawl.stopReason.stopped') in line for line in said if 'xhsShort' in line or '写着' in line
         ), said
+        assert driver.owner.skipped_targets == [XHS_NOTE], '停止 is not the site saying the thread ran out'
 
 
 # ─── zhihu adapter (DOM, panels behind buttons) ─────────────────────────

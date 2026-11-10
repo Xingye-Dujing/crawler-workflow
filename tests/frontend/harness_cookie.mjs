@@ -123,6 +123,8 @@ function report() {
             active: sandbox.cookieJob.active,
             kind: sandbox.cookieJob.kind,
             platform: sandbox.cookieJob.platform,
+            timer: sandbox.cookieJob.timer,
+            misses: sandbox.cookieJob.misses,
         },
         toasts: sandbox.__toasts.slice(),
         calls: sandbox.__calls.map((call) => ({
@@ -840,5 +842,27 @@ out.languageRepaint = {
     after: languageAfter,
     askedDuringSwitch: askedAfter - askedBefore,
 };
+
+/* ── a status poll that cannot reach the server is not "still waiting" ───────
+   The old `if (!s.ok) return` skipped BOTH the timer cleanup and the unlock, so the dialog
+   stayed disabled and the interval fired once a second forever. Three misses settle it and
+   say the truth. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.__responses['/api/cookies/generate/status'] = { ok: false };
+sandbox.cookieJob.active = true;
+sandbox.cookieJob.known = true;
+sandbox.cookieJob.misses = 0;
+sandbox.cookieJob.platform = 'zhihu';
+sandbox.cookieJob.kind = 'login';
+sandbox.cookieJob.timer = 4242;
+sandbox.__byId('cookie-status').textContent = 'WAITING';
+sandbox.setCookieJobUI(true);
+sandbox.pollCookieJob();
+await flush();
+sandbox.pollCookieJob();
+await flush();
+sandbox.pollCookieJob();
+await flush();
+out.pollLost = report();
 
 process.stdout.write(JSON.stringify(out));

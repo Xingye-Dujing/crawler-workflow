@@ -83,7 +83,8 @@ var runLogViewer = {
             if (data.min_seq !== null && data.min_seq !== undefined) this._oldestSeq = data.min_seq;
             this._hasMore = !!data.has_more;
             this._noteWorkflows(older);
-            this.render();
+            var keepFromBottom = this._dom ? this._dom.body.scrollHeight - this._dom.body.scrollTop : null;
+            this.render(keepFromBottom);
         } catch (e) {
             this._setStatus(this._t('runLog.loadFailed'));
         }
@@ -109,8 +110,16 @@ var runLogViewer = {
     },
 
     _t: function (key, params) {
-        var s = (typeof I18n !== 'undefined' && I18n.t) ? I18n.t(key) : key;
-        if (params) Object.keys(params).forEach(function (k) { s = s.replace('{' + k + '}', params[k]); });
+        /* Through the catalogue's own filler, never a hand-rolled ``.replace``: a replacement
+           string treats ``$&``/``$'`` as patterns, so a run named "A $& B" printed the template's
+           ``{name}`` back at the user. ``I18n.t`` uses split/join for exactly this reason. */
+        if (typeof I18n !== 'undefined' && I18n.t) return I18n.t(key, params || {});
+        var s = key;
+        if (params) {
+            Object.keys(params).forEach(function (k) {
+                s = s.split('{' + k + '}').join(String(params[k]));
+            });
+        }
         return s;
     },
 
@@ -153,7 +162,7 @@ var runLogViewer = {
         if (this._dom && this._dom.status) this._dom.status.textContent = text;
     },
 
-    render: function () {
+    render: function (keepFromBottom) {
         var self = this;
         var html = this._rows.map(function (r) {
             var cls = 'console-line run-log-line lvl-' + escapeHtml(r.level || 'info');
@@ -163,8 +172,16 @@ var runLogViewer = {
             html = '<div class="run-log-empty">' + escapeHtml(this._t('runLog.empty')) + '</div>';
         }
         this._dom.body.innerHTML = html;
-        // Newest run output is what people came to read — land at the bottom, live-console style.
-        this._dom.body.scrollTop = this._dom.body.scrollHeight;
+        if (keepFromBottom !== undefined && keepFromBottom !== null) {
+            /* 加载更早 prepends rows: keeping the reader's distance from the BOTTOM is what
+               keeps the line they were reading under their eyes. Pinning to the bottom — the
+               live-console default — threw them back to the newest line they had just scrolled
+               away from. */
+            this._dom.body.scrollTop = Math.max(0, this._dom.body.scrollHeight - keepFromBottom);
+        } else {
+            // Newest run output is what people came to read — land at the bottom, live-console style.
+            this._dom.body.scrollTop = this._dom.body.scrollHeight;
+        }
         this._dom.older.style.display = this._hasMore ? '' : 'none';
         this._dom.older.textContent = this._t('runLog.loadOlder');
     },

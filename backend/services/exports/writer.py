@@ -295,13 +295,21 @@ class DataExporter:
 
     @staticmethod
     def _write_txt(df: pd.DataFrame, filepath: str, text_column: str = None, **_):
+        name = str(text_column or '').strip()
+        if name and name not in df.columns:
+            # A typo'd 文本列 used to fall into the "all columns" branch: the save succeeded and
+            # wrote a tab-separated dump of every column instead of the one-per-line text the node
+            # was told to write. Every other writer refuses a column it cannot find.
+            raise UnsupportedFormatError(t('export.missing_text_column', column=name))
         with open(filepath, 'w', encoding='utf-8') as f:
-            if text_column and text_column in df.columns:
-                for value in df[text_column].fillna(''):
+            if name:
+                for value in df[name].fillna(''):
                     f.write(str(value).strip() + '\n')
             else:
+                # A missing cell writes as an empty field, never the literal ``nan``: the file is
+                # read by people and by scripts that split on tabs.
                 for _, row in df.iterrows():
-                    f.write('\t'.join(str(v) for v in row.tolist()) + '\n')
+                    f.write('\t'.join('' if pd.isna(value) else str(value) for value in row.tolist()) + '\n')
 
     @staticmethod
     def _write_html(df: pd.DataFrame, filepath: str, **_):

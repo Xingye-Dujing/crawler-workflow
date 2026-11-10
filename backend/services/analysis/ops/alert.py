@@ -93,7 +93,10 @@ def alert(
     )
     volumes = (
         [
-            float(value) if pd.notna(value) else 0.0
+            # ``None`` is "this period was not measured", never 0.0: a zero here both printed
+            # “本期热度 0” about a cell the table does not contain and made the suppression guard
+            # (``held``) read "the crowd left" for a period nobody counted.
+            float(value) if pd.notna(value) else None
             for value in pd.to_numeric(df[volume_col], errors='coerce').iloc[positions].tolist()
         ]
         if volume_col and volume_col in df.columns

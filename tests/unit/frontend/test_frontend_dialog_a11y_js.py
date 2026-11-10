@@ -64,4 +64,18 @@ class TestDialogA11y:
         assert d['shiftTabAtFirstFocused'] == 2, 'Shift+Tab on the first must wrap to the last'
 
     def test_escape_still_dismisses(self, d):
-        assert d['dismissedByEsc'] is True, 'the trap must not swallow the pre-existing Esc dismissal'
+        assert d['dismissedByEsc'] is True
+
+    def test_the_close_button_names_itself_in_the_ui_language(self, d):
+        """The corner X used a hardcoded English ``aria-label`` and carried no tooltip, so a zh
+        screen reader announced "Close" and a sighted user hovering it got nothing."""
+        assert d['closeAriaLabel'] == 'Close dialog', d
+        assert d['closeTitle'] == 'Close dialog', d
+        assert d['closableAnswered'] is True
+
+    def test_a_second_toast_is_not_hidden_by_the_first_ones_deadline(self, d):
+        """Both messages share #toast; without cancelling the first timer the newer sentence
+        vanished whenever the older one expired (300 ms later in the reported repro)."""
+        assert d['toastPendingDeadlines'] == 1, "the first toast's timer was not cancelled"
+        assert d['toastShownBeforeDeadline'] is True
+        assert d['toastText'] == '第二条', 'the trap must not swallow the pre-existing Esc dismissal'

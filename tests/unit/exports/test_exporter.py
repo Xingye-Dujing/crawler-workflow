@@ -313,10 +313,12 @@ class TestSave:
         E.save(df, target)
         assert _read(target).splitlines()[0] == '三亚攻略\t12'
 
-    def test_txt_ignores_a_column_that_is_not_in_the_frame(self, df, tmp_path):
+    def test_txt_refuses_a_column_that_is_not_in_the_frame(self, df, tmp_path):
+        """A typo'd 文本列 used to fall into the all-columns branch: the export "succeeded" with a
+        tab-separated dump instead of the per-line text the node asked for."""
         target = str(tmp_path / 'fallback.txt')
-        E.save(df, target, text_column='nope')
-        assert '\t' in _read(target)
+        with pytest.raises(exporter_module.UnsupportedFormatError, match='nope'):
+            E.save(df, target, text_column='nope')
 
     def test_html_escapes_the_values(self, tmp_path):
         target = str(tmp_path / 'out.html')

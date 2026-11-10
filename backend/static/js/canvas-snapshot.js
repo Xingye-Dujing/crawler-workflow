@@ -193,12 +193,21 @@ Object.assign(canvas, {
         this._historySaving = true;
         Object.keys(this.nodes).forEach(id => {
             const el = this._nodeEl(id);
-            if (el) el.remove();
+            if (el) {
+                this._forgetNodeEl(el);
+                el.remove();
+            }
         });
         this.nodes = {};
         this.connections = [];
         this.restoreState(state);
         this._historySaving = false;
+        /* The draft is the durable copy of this canvas, and `restoreState` deliberately skips
+           its save while history is being rewritten. Without this write an undo/redo never
+           reached the draft, so a reload inside the autosave interval resurrected the state
+           the user had just undone. `_pushState` ignores a state equal to the current entry,
+           so this records the draft without adding an undo step. */
+        this.saveState();
         /* The selection is view-only, so restoreState never rebuilds it: an undo that removed
            a node left its id in ``selectedNodes`` as a ghost. ``alignSelected`` then read
            ``el.style`` on a null box (TypeError), and Delete hit the ghost and still toasted

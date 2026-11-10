@@ -15,7 +15,14 @@ def drop_duplicates(df: pd.DataFrame, columns: list = None, keep: str = 'first',
     every one of those is a new string but the same comment. The original text is what
     survives — the key is a temporary column and never reaches the output.
     """
-    subset = [c for c in (columns or []) if c in df.columns] or None
+    wanted = [str(column) for column in (columns or [])]
+    missing = [column for column in wanted if column not in df.columns]
+    if missing:
+        # An empty list means "every column" (the panel's 留空=全部). A non-empty list naming a
+        # column the table does not hold is a typo, and the old intersection turned it into
+        # "dedupe every column" — a different operation than the one asked for.
+        raise UnknownOperationError(t('analysis.step_col_missing', op='drop_duplicates', col='、'.join(missing)))
+    subset = wanted or None
     work = df.copy()
     if mode == 'exact':
         return work.drop_duplicates(subset=subset, keep=keep).reset_index(drop=True)

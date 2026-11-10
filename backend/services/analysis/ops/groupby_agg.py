@@ -1,9 +1,13 @@
 """The ``groupby_agg`` step, one module of the analysis op registry (see ops/__init__.py)."""
 
+import logging
+
 import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError
+
+logger = logging.getLogger(__name__)
 
 
 def groupby_agg(
@@ -47,6 +51,11 @@ def groupby_agg(
             agg_map[name] = (column, func)
         if order_col:
             agg_map['_group_rank'] = (order_col, 'min')
+        dropped_blank = int(df[group_col].isna().sum())
+        if dropped_blank:
+            # ``dropna=True`` drops them without a word, and the table that loses a phase reads
+            # as if the corpus had no such rows. One named line, not a silent hole.
+            logger.warning(t('analysis.groupby_dropped_blank', op='groupby_agg', col=group_col, n=dropped_blank))
         grouped = df.groupby(group_col, dropna=True).agg(**agg_map).reset_index()
         if order_col:
             ranks = pd.to_numeric(grouped['_group_rank'], errors='coerce')

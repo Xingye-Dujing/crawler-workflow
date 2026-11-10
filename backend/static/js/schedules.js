@@ -425,9 +425,9 @@ var schedulesManager = {
         if (!answer) return;
         var result = answer.result || {};
         if (result.status === 'queued') {
-            showToast(I18n.t('schedMgr.runQueued').replace('{name}', result.name || ''), 4000);
+            showToast(I18n.t('schedMgr.runQueued', { name: result.name || '' }), 4000);
         } else {
-            showToast(I18n.t('schedMgr.runStarted').replace('{name}', result.name || ''));
+            showToast(I18n.t('schedMgr.runStarted', { name: result.name || '' }));
             /* A 立即执行 fire that really started owns a live console, but the stream only ever
                took itself up from a page load — so the user had to refresh to watch it. Take the
                same attach the Run button and the boot reconnect take, now. reconnectConsole reads
@@ -444,7 +444,7 @@ var schedulesManager = {
         var task = this._find(id);
         var name = (task && task.name) || String(id || '');
         var answer = await showDialog({
-            message: I18n.t('schedMgr.confirmRemove').replace('{name}', name),
+            message: I18n.t('schedMgr.confirmRemove', { name: name }),
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: null },
                 { label: I18n.t('schedMgr.remove'), value: 'yes', primary: true },

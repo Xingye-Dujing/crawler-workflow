@@ -36,7 +36,7 @@ def topic_salience(
     import numpy as np
 
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='topic_salience', col=column))
     topics = int(n_topics)
     lam = float(relevance)
     if not 0.0 <= lam <= 1.0:

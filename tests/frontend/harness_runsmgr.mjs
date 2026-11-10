@@ -46,8 +46,15 @@ const I18n = {
         },
         zh: {},
     },
-    t(k) {
-        return this.dict.en[k] || k;
+    t(k, vars) {
+        let out = this.dict.en[k] || k;
+        /* Filled the way app.js's I18n.t does (split/join, every occurrence): the product
+           passes variables here now, and a stub that ignored them would report a raw
+           ``{names}`` as the panel's own text. */
+        Object.keys(vars || {}).forEach(function (name) {
+            out = out.split('{' + name + '}').join(String(vars[name]));
+        });
+        return out;
     },
 };
 

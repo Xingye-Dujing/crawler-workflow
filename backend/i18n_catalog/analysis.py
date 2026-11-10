@@ -167,6 +167,7 @@ ZH = {
     'analysis.stage_order_unranked': (
         '“{col}”里没有这些阶段的序号（要的是数字：划分阶段 的阶段序号，或 分阶段 LDA 的 stage_order）：{stages}'
     ),
+    'analysis.groupby_dropped_blank': '“{op}”分组时丢弃了 {n} 行：分组列“{col}”为空（这些行不属于任何一组）',
     'analysis.stages_basis_first': '自曲线首日 {day} 起',
     'analysis.stages_basis_valley': '自谷底 {valley} 的次日起',
     'analysis.stages_done': '阶段建议：{n} 个候选窗口、覆盖 {rows} 行（{span}）',
@@ -265,7 +266,8 @@ ZH = {
     'corr.done': '相关性分析（{method}）：找到 {n} 对（min_abs={min_abs:.2f}）',
     'corr.ignored_columns': '相关性分析：以下列不是数值列，已跳过（{columns}）',
     'corr.undefined_pairs': '相关性分析：以下列对算不出相关系数（可能是常数列或样本不足），未列入结果：{pairs}',
-    'corr.need_cols': '相关性分析至少需要 2 个数值列',
+    'corr.need_cols_more': '相关性分析至少需要 2 个数值列，本次只有：{columns}',
+    'corr.no_defined_pairs': '相关性分析：所有列对都算不出相关系数（常数列或样本不足）：{pairs}',
     'corr.no_usable_columns': '相关性分析：你指定的列都不是数值列（{columns}）',
     'emotion.bert_bad_label': 'BERT 模型回了一个不认识的情绪标签“{label}”，无法归入这六类',
     'emotion.bert_done': '[BERT] 情绪分类完成，{n} 行，失败 {failed} 行',
@@ -284,6 +286,7 @@ ZH = {
     'ml.model_untrained_refused': (
         '“{name}”模型尚未训练，也没有可加载的已保存模型 —— 拒绝作答，而不是给每行编一个中性结果'
     ),
+    'ml.model_unreadable': '“{name}”的模型文件存在但读不出来（可能上次训练被中断或文件被破坏）：请重新训练',
     'ml.need_two_labels': '训练至少需要 2 个不同的标签，当前只有：{label}',
     'ml.no_rows': '没有需要处理的行（目标列为空）。',
     'ml.no_training_rows': '没有可用的训练数据：所有行的文本或标签都是空的',
@@ -556,6 +559,7 @@ EN = {
     'analysis.stage_order_col': '{op}: the stage-order column "{col}" is not in this table',
     'analysis.stage_order_unparsed': 'no phase order can be read for {stages}: "{col}" holds no parsable time there',
     'analysis.stage_order_unranked': 'no phase order can be read for {stages}: "{col}" holds no number there',
+    'analysis.groupby_dropped_blank': '"{op}" dropped {n} row(s) while grouping: the group column "{col}" was empty',
     'analysis.stages_basis_first': "opens on the curve's first day {day}",
     'analysis.stages_basis_valley': 'opens the day after the valley on {valley}',
     'analysis.stages_done': 'phase proposal: {n} candidate windows covering {rows} rows ({span})',
@@ -691,7 +695,10 @@ EN = {
         'Correlation: these pairs have no defined coefficient (constant column or too few rows) '
         'and are left out of the result: {pairs}'
     ),
-    'corr.need_cols': 'Need at least 2 numeric columns for correlation analysis',
+    'corr.need_cols_more': 'Correlation analysis needs at least 2 numeric columns; this table has: {columns}',
+    'corr.no_defined_pairs': (
+        'Correlation analysis: no pair has a defined coefficient (constant columns or too few samples): {pairs}'
+    ),
     'corr.no_usable_columns': 'Correlation: none of the columns you named holds numbers ({columns})',
     'emotion.bert_bad_label': 'the BERT model answered an unrecognised emotion label "{label}"',
     'emotion.bert_done': '[BERT] emotion classification done, {n} rows, {failed} failed',
@@ -712,6 +719,9 @@ EN = {
     'ml.model_untrained_refused': (
         '"{name}" has no trained model and nothing saved to load — refusing to answer '
         'rather than inventing a neutral verdict for every row'
+    ),
+    'ml.model_unreadable': (
+        'The model file for "{name}" exists but cannot be read (a training run may have been interrupted): retrain it'
     ),
     'ml.need_two_labels': 'Training needs at least 2 distinct labels; this data only has: {label}',
     'ml.no_rows': 'Nothing to process (the target column is empty).',

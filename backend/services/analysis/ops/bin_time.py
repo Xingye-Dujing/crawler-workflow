@@ -42,6 +42,11 @@ def bin_time(
         # Same rule as every other step: a column the table does not hold is refused by name.
         # Returning the frame untouched settled the node DONE with no phase column at all.
         raise UnknownOperationError(t('analysis.step_col_missing', op='bin_time', col=column))
+    if _blank(new_col):
+        # A blank output name used to "succeed" by adding a header the CSV shows as an empty
+        # cell, and the next node that named the phase column then found nothing. Refused here,
+        # not only at the pipeline boundary, so a direct call cannot do it either.
+        raise UnknownOperationError(t('analysis.need_param', op='bin_time', param='new_col'))
     work = df.copy()
     bounds = [value for value in (edges or []) if not _blank(value)]
     names = [str(name).strip() for name in (labels or []) if str(name).strip()]

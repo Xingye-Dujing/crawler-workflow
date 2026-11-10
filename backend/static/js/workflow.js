@@ -1014,6 +1014,10 @@ const workflow = {
                     resetConsoleForNewRun();
                 } else {
                     document.getElementById('console-output').innerHTML = '';
+                    /* The box is blank but the retained per-view histories still hold the
+                       PREVIOUS run's lines; a trim or a tab switch repaints them into this
+                       run's console. Drop the text, keep the cursors. */
+                    if (typeof dropConsoleHistories === 'function') dropConsoleHistories();
                 }
                 showToast(I18n.t('toast.workflowStarted'));
                 this.pollStatus();

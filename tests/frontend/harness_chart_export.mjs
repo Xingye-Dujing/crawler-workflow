@@ -316,6 +316,8 @@ async function dashboardCase(engine, rebuild) {
             after_first_rebuild: mid,
             after_second_rebuild: Object.keys(w.x.dashboard._instances).length,
             images: Object.keys(w.x.dashboard._images).length,
+            created_total: w.created.length,
+            disposed_total: w.created.reduce((n, inst) => n + inst.disposed, 0),
             asked: saves(w).length - before,
             name: post && post.body ? post.body.name : null,
             image: post && post.body ? String(post.body.image) : null,

@@ -54,7 +54,7 @@ def topic_model(
     from sklearn.feature_extraction.text import CountVectorizer
 
     if column not in df.columns:
-        return df
+        raise UnknownOperationError(t('analysis.step_col_missing', op='topic_model', col=column))
     topics = int(n_topics)
     if topics < 2:
         raise UnknownOperationError(t('analysis.topic_count', value=topics))
