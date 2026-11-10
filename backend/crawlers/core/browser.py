@@ -255,6 +255,8 @@ def make_service() -> Service:
         if not driver_path:
             driver_path = source.usable(os.environ.get('CIXI_DRIVER_PATH') or Config.DRIVER_PATH)
         if not driver_path:
+            driver_path = source.usable(get_setting('driver_path'))
+        if not driver_path:
             raise ValueError(t('crawl.installerDriverMissing'))
         if not os.path.isfile(driver_path):
             raise ValueError(t('crawl.installerDriverGone', path=driver_path))

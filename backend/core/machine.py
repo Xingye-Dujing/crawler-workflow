@@ -358,17 +358,17 @@ def find_chrome(explicit: str = '', env: dict | None = None, system: str | None 
     configured/exported path must not shadow the version the component manager currently records.
     """
     if installer_components_only():
-        installed = installer_component_path('chrome')
-        if installed:
-            return installed
+        source = os.environ if env is None else env
+        candidates = [
+            installer_component_path('chrome'),
+            *(str(source.get(name) or '').strip() for name in CHROME_ENV_VARS),
+            str(explicit or '').strip(),
+        ]
+        found = [path for path in candidates if path and _is_executable(path) and inside_installer_components(path)]
+        return found[0] if found else ''
     explicit = str(explicit or '').strip()
     if explicit:
         return explicit if _is_executable(explicit) else ''
-    if installer_components_only():
-        # A value outside CIXI_COMPONENTS_DIR is not the installer's, however the variable is named.
-        source = os.environ if env is None else env
-        found = _installer_export([str(source.get(name) or '').strip() for name in CHROME_ENV_VARS])
-        return found[0] if found else ''
     candidates = chrome_candidates(env, system)
     return candidates[0] if candidates else ''
 
@@ -650,16 +650,17 @@ def find_node(explicit: str = '', env: dict | None = None, system: str | None = 
     in installer mode the manifest is checked before that setting.
     """
     if installer_components_only():
-        installed = installer_component_path('node')
-        if installed:
-            return installed
+        source = os.environ if env is None else env
+        candidates = [
+            installer_component_path('node'),
+            *(str(source.get(name) or '').strip() for name in NODE_ENV_VARS),
+            str(explicit or '').strip(),
+        ]
+        found = [path for path in candidates if path and _is_executable(path) and inside_installer_components(path)]
+        return found[0] if found else ''
     explicit = str(explicit or '').strip()
     if explicit:
         return explicit if _is_executable(explicit) else ''
-    if installer_components_only():
-        source = os.environ if env is None else env
-        found = _installer_export([str(source.get(name) or '').strip() for name in NODE_ENV_VARS])
-        return found[0] if found else ''
     found = node_candidates(env, system)
     return found[0] if found else ''
 
@@ -806,16 +807,18 @@ def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | N
     nowhere in the UI either (see ``services/ingest/catbus.py``).
     """
     if installer_components_only():
-        installed = installer_component_path('catbus')
-        if installed:
-            return installed
+        source = os.environ if env is None else env
+        candidates = [
+            installer_component_path('catbus'),
+            *(catbus_entry_at(source.get(name), system) for name in CATBUS_ENV_VARS),
+            catbus_entry_at(explicit, system),
+        ]
+        found = [
+            path for path in candidates if path and catbus_entry_usable(path) and inside_installer_components(path)
+        ]
+        return found[0] if found else ''
     explicit = catbus_entry_at(explicit, system)
     if explicit:
         return explicit if catbus_entry_usable(explicit) else ''
-    if installer_components_only():
-        source = os.environ if env is None else env
-        exported = [catbus_entry_at(source.get(name), system) for name in CATBUS_ENV_VARS]
-        found = [path for path in exported if path and catbus_entry_usable(path) and inside_installer_components(path)]
-        return found[0] if found else ''
     found = catbus_candidates(env, system)
     return found[0] if found else ''
