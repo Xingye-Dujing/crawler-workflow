@@ -1,37 +1,25 @@
 {
   "schema": 1,
-  "version": "2026.11.11.1",
+  "version": "2026.11.11.2",
   "released": "2026-11-11",
-  "notes": "主程序自更新、安装器组件模式修复、关闭窗口彻底退出。",
+  "notes": "评论续跑修复（未证明即钉游标）、重跑节点/权限/界面修复，并重建在线安装器",
   "platforms": {
     "win32": {
       "archive": "zip",
-      "sha256": "e055dc1295eb9796c0123e31b6855c6a1902ce003dd3bb3fde0febf057a933ab",
-      "size": 130169985,
+      "sha256": "00637201dc074db1c9edf50966847ba7bbfca03bca45c007d3635ac1a54d3c57",
+      "size": 130188739,
       "parts": [
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.001",
-          "sha256": "73297dfe488068b8fce725a5ce8e2b971befd22f14b9af7b05f97903a18c61ec",
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11.2/CaiXiHui-win64.zip.001",
+          "sha256": "84f7cb77cec552d171d3e1f2d62588dfd5154bd2725f10ff03a2a9d04d15c96f",
           "size": 99614720
         },
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.002",
-          "sha256": "443b1c0588a5f7fea9199756a092518e85c5cda356c08777112809399fc6cc6f",
-          "size": 30555265
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11.2/CaiXiHui-win64.zip.002",
+          "sha256": "df1d19daf37d82f24e73d466382168c85e66d06d44c51469e167f7ef79ae95bd",
+          "size": 30574019
         }
       ]
-    },
-    "darwin-arm64": {
-      "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-macOS-arm64.dmg",
-      "sha256": "471fb4a1b915ca6c7f8a8b9cd4698b0cb8da3b4744a61528ae05952ada3fdfc1",
-      "size": 177675158
-    },
-    "darwin-x64": {
-      "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-macOS-x86_64.dmg",
-      "sha256": "da0e4362b0b4a0b21f4279e38bb36106f49c56f678de79120751fb02f95771eb",
-      "size": 187529072
     }
   }
 }

@@ -106,8 +106,13 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Insta
 
 ### 2. 分片
 
-`version.json` 和安装器都使用 **99,614,720 B** 一片。切完后记录每一片的 SHA-256 和大小；
+`version.json` 和 Gitee 上传都使用 **99,614,720 B** 一片。切完后记录每一片的 SHA-256 和大小；
 最后一片通常小于 99,614,720 B。
+
+Gitee 单个附件的上限是 100 MB，所以 **`CaiXiHui-win64.zip` 和 `CaiXiHui-Setup.exe` 都要切**
+（上一版 Gitee 上的资产就是 `.001`/`.002` 的 Setup 与 zip）；GitHub 传完整文件。下载页要让用户先
+按顺序拼接（Windows：`copy /b CaiXiHui-Setup.exe.001+CaiXiHui-Setup.exe.002 CaiXiHui-Setup.exe`，
+POSIX：`cat ... > CaiXiHui-Setup.exe`），再校验总 SHA-256。
 
 ### 3. 更新 version.json 的 win32 条目
 
@@ -117,6 +122,10 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Insta
 ```
 https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/<新tag>/CaiXiHui-win64.zip.001
 ```
+
+**只发 Windows 的版本不要保留旧的 `darwin-*` 条目**：`version.json` 的版本号一升，Mac 客户端会提示更新，
+然后去下载上一版 DMG（装回去仍是旧版本，形成循环）。删掉 `darwin-*` 后 `asset_ready` 为假，Mac 端不提示，
+下次带 macOS 构建时再加回来。
 
 ### 4. 在线安装器（只在安装器本身变化时重建）
 
@@ -133,12 +142,19 @@ CatBus 的版本或地址变了。**主程序出新版本不需要重建它**—
 
 ### 5. 上传 Windows 资产
 
-上传到 GitHub Release 和 Gitee Release（国内直连以 Gitee 为准）：
+上传到 GitHub Release（完整文件）和 Gitee Release（国内直连以 Gitee 为准；Gitee 只传分片）：
+
+GitHub：
 
 - `CaiXiHui-Setup.exe`
 - `CaiXiHui-win64.zip`
 - `CaiXiHui-Online-Setup.exe`
-- `CaiXiHui-win64.zip.001`、`.002`（Gitee 分片）
+
+Gitee：
+
+- `CaiXiHui-win64.zip.001`、`.002`（`version.json` 的 win32 `parts` 指向这里）
+- `CaiXiHui-Setup.exe.001`、`.002`（手动下载页拼接用）
+- `CaiXiHui-Online-Setup.exe`（13 MB，不需要分片）
 
 上传后再用 `version.json` 指向它们。上传顺序不影响旧客户端，因为它们看的还是旧 `version.json`。
 
