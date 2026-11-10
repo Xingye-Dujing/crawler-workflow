@@ -95,15 +95,24 @@ def powershell_command(script: str, args: list[str] | None = None) -> list[str]:
     return ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(script), *(args or [])]
 
 
-def child_pids(proc_root: str, parent: int) -> list[int]:
-    """Direct children of ``parent``, read from a ``/proc``-shaped tree.
+def child_pids(proc_root: str, parent: int, system: str | None = None) -> list[int]:
+    """Direct children of ``parent``, read from ``/proc`` or — on macOS — from ``ps``.
 
     Linux keeps the parent's number in field 4 of ``/proc/<pid>/stat``, so a browser started by a driver
-    can be taken down with it. macOS has no ``/proc``: the caller gets an empty list and kills the driver
-    alone, which is still the truth reported rather than a claimed tree kill. The root is a parameter
-    because a test on Windows cannot manufacture ``/proc`` — it manufactures a directory that looks
-    like it, which exercises the same parsing.
+    can be taken down with it. macOS has no ``/proc``, and this used to answer an empty list there:
+    ``reap_process`` then killed the DRIVER alone and left Chrome running, holding
+    ``chrome_profile/<platform>/<account>`` for the whole ``PROFILE_LOCK_TIMEOUT`` — every later run on
+    that account waited or failed with a lock nobody was using. macOS does publish the same fact through
+    ``ps -A -o pid=,ppid=``, so the tree kill now works on all three systems. The root is a parameter
+    because a test on Windows cannot manufacture ``/proc`` — it manufactures a directory that looks like
+    it, which exercises the same parsing.
+
+    A ``ps`` that cannot be read answers ``[]`` (the driver alone is still killed, and
+    :func:`reap_process` reports the truth rather than claiming a tree kill it did not do).
     """
+    system = machine.platform_name(system)
+    if system == 'darwin':
+        return _children_via_ps(parent)
     children: list[int] = []
     try:
         entries = os.listdir(proc_root)
@@ -119,6 +128,39 @@ def child_pids(proc_root: str, parent: int) -> list[int]:
                 children.append(int(entry))
         except (OSError, ValueError):
             continue
+    return children
+
+
+def _children_via_ps(parent: int) -> list[int]:
+    """macOS: ``ps -A -o pid=,ppid=``, one ``pid ppid`` pair per line.
+
+    ``-A`` is every process and the trailing ``=`` suppresses the header, so the parse is the same
+    whitespace split on every macOS version — no column layout to guess, and ``ps`` is in the base
+    system (this must not need ``brew``).
+    """
+    try:
+        result = subprocess.run(
+            ['ps', '-A', '-o', 'pid=,ppid='],
+            capture_output=True,
+            timeout=8,
+            check=False,
+            **popen_kwargs('darwin'),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+    children: list[int] = []
+    for line in _decode(result.stdout).splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            pid, ppid = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        if ppid == parent:
+            children.append(pid)
     return children
 
 
@@ -155,7 +197,7 @@ def reap_process(pid: int, system: str | None = None, proc_root: str = '/proc') 
             tail = _decode(result.stderr or result.stdout or b'')
             return False, tail or f'taskkill exit code {result.returncode}'
         return True, ''
-    children = child_pids(proc_root, pid)
+    children = child_pids(proc_root, pid, system)
     targets = [*children, pid]
     failed = []
     for target in targets:

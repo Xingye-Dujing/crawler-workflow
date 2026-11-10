@@ -746,6 +746,47 @@ class TestReapingABrowserWorksWhereTaskkillDoesNot:
         assert set(killed[:-1]) == {5001, 5002}, 'both browsers are killed, in whatever order /proc lists them'
         assert killed[-1] == 4321, 'the parent must not outlive the browsers it started'
 
+    def test_macos_children_come_from_ps_because_there_is_no_proc(self, monkeypatch):
+        """macOS publishes the tree through ``ps``; answering ``[]`` left Chrome holding the profile.
+
+        The module used to return an empty child list on macOS, so ``reap_process`` killed the DRIVER
+        alone and Chrome kept running with ``chrome_profile/<platform>/<account>`` open — every later
+        run on that account then waited out ``PROFILE_LOCK_TIMEOUT`` on a lock nobody was using. The
+        ``/proc`` root is irrelevant there, which is why it is passed pointing nowhere.
+        """
+        output = b'  1     0\n4321     1\n5001  4321\n5002  4321\n9999     7\n'
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            return procs.subprocess.CompletedProcess(command, 0, output, b'')
+
+        monkeypatch.setattr(procs.subprocess, 'run', fake_run)
+        assert procs.child_pids('/proc', 4321, 'darwin') == [5001, 5002]
+        assert calls and calls[0][:2] == ['ps', '-A'], calls
+
+    def test_macos_reaps_the_browsers_before_the_driver(self, monkeypatch):
+        output = b'4321 1\n5001 4321\n'
+        monkeypatch.setattr(
+            procs.subprocess, 'run', lambda command, **kw: procs.subprocess.CompletedProcess(command, 0, output, b'')
+        )
+        killed = []
+        monkeypatch.setattr(procs.os, 'kill', lambda pid, _signal: killed.append(pid))
+        stopped, reason = procs.reap_process(4321, 'darwin')
+        assert (stopped, reason) == (True, '')
+        assert killed == [5001, 4321], killed
+
+    def test_a_ps_that_cannot_be_read_kills_the_driver_and_says_so(self, monkeypatch):
+        """An unreadable ``ps`` must not claim a tree kill it did not do."""
+        monkeypatch.setattr(
+            procs.subprocess, 'run', lambda command, **kw: procs.subprocess.CompletedProcess(command, 1, b'', b'nope')
+        )
+        killed = []
+        monkeypatch.setattr(procs.os, 'kill', lambda pid, _signal: killed.append(pid))
+        stopped, _reason = procs.reap_process(4321, 'darwin')
+        assert stopped is True
+        assert killed == [4321], 'the driver alone is what was actually killed'
+
     def test_a_process_the_kernel_does_not_know_is_already_stopped(self, monkeypatch):
         def raise_lookup(_pid, _signal):
             raise ProcessLookupError
