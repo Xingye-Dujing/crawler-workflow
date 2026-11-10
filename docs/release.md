@@ -163,7 +163,11 @@ Gitee：
 macOS 包由 GitHub Actions 的 `.github/workflows/macos-build.yml` 构建，不能在 Windows 上直接打：
 
 1. 先推代码并把 release tag 推到新 tag；
-2. 手动触发 workflow，`release_tag` 填新 tag；
+2. 触发 workflow，二选一：
+   - **推 tag**（`git push origin exe-2026-12`）：workflow 用 `github.ref_name` 作为发布 tag，不需要填；
+   - **手动触发**（Actions → Run workflow）：`release_tag` 填新 tag，默认值 `exe-2026-11` 只是输入框的占位。
+   tag 必须以 `exe-` 开头，否则在打包前就按名退出；上传不带 `--clobber`，同名资产会让 workflow 失败而不是
+   覆盖已经发布的字节。
 3. workflow 产出并上传：
    - `CaiXiHui-macOS-arm64.dmg`
    - `CaiXiHui-macOS-x86_64.dmg`

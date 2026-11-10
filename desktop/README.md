@@ -432,7 +432,11 @@ CPU 吞吐实测（120 行、batch 8/16/32）：fp16 约 27–31 行/秒，int8 
 tokenizers，不含 torch/transformers；BERT 用 ONNX 运行时，和 Windows 是同一套分析器）。
 
 `.github/workflows/macos-build.yml` 在 `macos-15-intel`（x86_64）和 `macos-15`（arm64）两个 runner
-上构建，DMG 上传到 `workflow_dispatch` 指定的 Release tag（默认 `exe-2026-11`），文件名带架构后缀。
+上构建，DMG 上传到一个 Release tag，文件名带架构后缀。tag 从哪来取决于怎么触发：**手动
+`workflow_dispatch` 用输入框里的 `release_tag`（默认 `exe-2026-11`），推 tag 触发则用 `github.ref_name`
+本身** —— 旧写法把两者都回退到硬编码的 `exe-2026-11`，于是推 `exe-2026-12` 时构建出的 DMG 被上传到
+`exe-2026-11` 名下，把上一次发布的文件覆盖掉。上传不带 `--clobber`：同名资产会让 workflow 失败，而不是
+悄悄替换已经发布的字节。tag 必须以 `exe-` 开头，否则构建在打包前就按名退出。
 
 **macOS 在线安装器**：同一次 workflow 在应用 DMG 之后运行
 `python desktop/build_macos_installer.py --app-dmg dist/CaiXiHui-macOS-<arch>.dmg --release-tag <tag>
