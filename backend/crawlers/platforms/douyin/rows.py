@@ -82,8 +82,13 @@ def hot_row(item: dict, rank: int) -> dict | None:
     sentence = str(item.get('sentence_id') or '').strip()
     if not word or not sentence:
         return None
+    # ``published(...) or rank`` read a REAL 0 as "absent": ``published`` exists precisely because the
+    # pinned top entry is published as ``0`` (see its docstring), and Python's ``or`` then replaced that
+    # 0 with the caller's index — the row said #1 for the entry the site ranked 0. Only a blank falls
+    # back to the index.
+    board_rank = published(item.get('position'))
     return {
-        '排名': published(item.get('position')) or rank,
+        '排名': rank if board_rank == '' else board_rank,
         '标题': word,
         '热度': published(item.get('hot_value')),
         '观看数': published(item.get('view_count')),

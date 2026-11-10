@@ -1397,6 +1397,17 @@ class TestHotBoard:
         assert row['热度'] == '' and row['观看数'] == '' and row['视频数'] == '', row
         assert row['排名'] == 1, 'the entry is first on the board; that much the answer does say'
 
+    def test_a_published_zero_rank_stays_zero(self, make_crawler):
+        """The pinned entry is published as ``position: 0`` in one run and ``null`` in another.
+
+        ``published(...) or rank`` treated that real 0 as "no figure" and wrote the caller's index
+        instead, so the row claimed #1 for the entry the site had ranked 0 — the exact confusion
+        ``published``'s own docstring exists to prevent.
+        """
+        crawler, _driver = make_crawler(cards=['1', '2'], board=_board([_entry(position=0), _entry(word='乙')]))
+        rows = crawler.hot(target_count=2)
+        assert rows[0]['排名'] == 0, 'a published 0 is a rank, not a missing value'
+
     def test_no_second_topic_column_is_invented_from_the_same_words(self, make_crawler):
         # weibo publishes ``word`` and a ``#…#`` scheme, so 话题 means something there.
         # Douyin publishes one string; a second column of it would be noise the user
