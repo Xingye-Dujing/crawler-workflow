@@ -29,9 +29,9 @@ from pathlib import Path
 
 from core import machine, procs
 from core.config import Config
-from version import APP_VERSION
 
 from services.components.archive import ArchiveError, safe_extract
+from services.version import APP_VERSION
 
 #: The same file two ways: Gitee is the primary network in China, GitHub the fallback.
 FEED_URLS = (
@@ -443,7 +443,13 @@ def apply_update() -> dict:
     mode, root, exe = install_layout()
     if not root or not exe.exists():
         return {'ok': False, 'error': '无法定位当前安装目录'}
-    if not _writable(root) or (mode == 'app' and not _writable(root / 'app')):
+    if mode == 'macapp':
+        writable = _writable(root.parent)
+    elif mode == 'app':
+        writable = _writable(root) and _writable(root / 'app')
+    else:
+        writable = _writable(root)
+    if not writable:
         return {'ok': False, 'error': '安装目录不可写；请用安装器更新，或把程序放到有写权限的文件夹'}
     staged = Path(str(current['staged']))
     version = str(current.get('version') or 'new')

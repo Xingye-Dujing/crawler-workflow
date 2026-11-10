@@ -95,7 +95,7 @@ macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad �
 
 - **发布前**：把新包（Windows 的 `CaiXiHui-win64.zip` 分片；macOS 的 DMG）先上传到 Release，再把
   `version.json` 的 `version`、`sha256`、`size`、`parts`/`url` 更新为这一版；`version.json` 里的版本必须与
-  `backend/version.py` 的 `APP_VERSION` 对应。资产没上传时不要先改 `version.json`：应用会因“当前平台没有包”而不提示。
+  `backend/services/version.py` 的 `APP_VERSION` 对应。资产没上传时不要先改 `version.json`：应用会因“当前平台没有包”而不提示。
 - **Windows**：下载分片 → 合并 → 校验总 SHA-256 → 解压到 `<data>/updates/<version>/staged`；用户确认后启动
   PowerShell 脚本等待本进程退出，在线安装布局替换 `<安装根>/app`，便携布局只替换程序文件（保留用户数据），
   旧版本放 `app.previous` 供回滚，然后重启 `CaiXiHui.exe`。

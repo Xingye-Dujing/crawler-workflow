@@ -37,6 +37,8 @@ const UpdatePanel = {
             document.body.appendChild(banner);
         }
         banner.querySelector('.update-text').textContent = I18n.t('update.available', { version: info.latest });
+        const button = banner.querySelector('.update-now');
+        if (button) button.hidden = false;
         banner.hidden = false;
     },
 

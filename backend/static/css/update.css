@@ -18,6 +18,10 @@
     font-size: 13px;
 }
 
+#update-banner[hidden] {
+    display: none;
+}
+
 #update-banner .update-text {
     overflow: hidden;
     text-overflow: ellipsis;
