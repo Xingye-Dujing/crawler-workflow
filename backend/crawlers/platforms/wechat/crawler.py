@@ -282,7 +282,16 @@ class WechatCrawler(Crawler):
         logger.debug(t('crawl.debug.time_missing'))
         return ''
 
-    _DATE_RE = re.compile(r'\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}|\d{1,2}\s*小时前|\d{1,2}\s*分钟前')
+    #: The stamps the meta line actually shows. The relative half used to admit 小时/分钟 only, so an
+    #: article published ``昨天`` — the most common "recent" wording on 公众号, and the one a live
+    #: event's time series is most likely to need — matched nothing here and came back as an empty
+    #: 发布时间 even though ``times.absolute`` could have resolved it. 天/周 and the named days are
+    #: listed because they are the same class of wording.
+    _DATE_RE = re.compile(
+        r'\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}'
+        r'|\d{1,2}\s*(?:小时|分钟|天|周)前'
+        r'|(?:今天|昨天|前天|刚刚|刚才)'
+    )
 
     def get_ip_region(self) -> str:
         """The province the article was published from (发布地区).

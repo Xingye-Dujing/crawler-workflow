@@ -53,3 +53,29 @@ def test_a_clean_walk_advances_the_cursor_to_the_end(monkeypatch):
     crawler.search(urls=[AAA, BAD, CCC])
 
     assert crawler.position.get('url_index') == 3, crawler.position
+
+
+class TestThePublishTimeLineIsRecognised:
+    """The meta line's stamp has to MATCH before ``times.absolute`` can resolve it.
+
+    ``_DATE_RE`` admitted 小时/分钟 only, so an article published ``昨天`` — the most common
+    "recent" wording on 公众号, and exactly the row a live event's time series needs — was skipped
+    by the guard and came back as an empty 发布时间, even though the resolver handles it.
+    """
+
+    @staticmethod
+    def _matches(text: str) -> bool:
+        return bool(WechatCrawler._DATE_RE.search(text))
+
+    def test_absolute_forms_still_match(self):
+        assert self._matches('2026-08-04')
+        assert self._matches('2026年8月4日')
+
+    def test_the_relative_wordings_the_page_uses_also_match(self):
+        for wording in ('3小时前', '20分钟前', '2天前', '1周前', '昨天', '前天 21:30', '刚刚'):
+            assert self._matches(wording), wording
+
+    def test_a_line_with_no_stamp_is_still_ignored(self):
+        """The guard exists so the account name (also in that meta block) is not taken for a date."""
+        assert not self._matches('旅行实验室')
+        assert not self._matches('')
