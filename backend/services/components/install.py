@@ -18,6 +18,7 @@ only OS-specific part is which asset the catalogue supplied.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import uuid
@@ -133,12 +134,25 @@ def install_component(
             shutil.rmtree(staging)
         elif asset.install_as == 'app':
             previous = base / 'app.previous'
+            moved_aside = False
             if target.exists():
                 if previous.exists():
                     shutil.rmtree(previous)
                 os.replace(target, previous)
+                moved_aside = True
             target.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(staging, target)
+            try:
+                os.replace(staging, target)
+            except OSError:
+                # PUT THE OLD APP BACK. Without this a failed swap (on Windows the running app's
+                # files are locked; a full disk fails the same way) left the user with NO app at
+                # all: the previous tree had been moved aside and the new one never arrived. The
+                # caller's except used to clean only the staging directory, so the loss was silent
+                # and the next launch found nothing to run.
+                if moved_aside:
+                    with contextlib.suppress(OSError):
+                        os.replace(previous, target)
+                raise
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             _replace(target, staging)

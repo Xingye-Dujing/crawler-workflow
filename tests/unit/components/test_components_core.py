@@ -507,6 +507,42 @@ class TestInstall:
         assert (root / 'app.previous' / 'hello.txt').read_bytes() == b'one', 'the old build is the rollback'
         assert Manifest(root).load().get('app')['version'] == '2.0'
 
+    def test_a_failed_app_swap_puts_the_previous_build_back(self, tmp_path, monkeypatch):
+        """A half-done update must never leave the user with NO app.
+
+        The old tree is moved to ``app.previous`` and the new one renamed into place. When that
+        second rename fails — on Windows the running app's files are locked, and a full disk fails
+        the same way — the move-aside had already happened, so the only cleanup was the staging
+        directory and the installation was left with nothing to launch.
+        """
+        current = {'bytes': _zip_bytes({'top/hello.txt': b'one'})}
+
+        def fake_download(asset, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(current['bytes'])
+            return Path(dest)
+
+        monkeypatch.setattr(install_module, 'download_asset', fake_download)
+        root = tmp_path / 'root'
+        install_component(self._app_catalog('1.0'), 'app', root)
+        current['bytes'] = _zip_bytes({'top/hello.txt': b'two'})
+
+        real_replace = os.replace
+
+        def refuse_the_swap(src, dst):
+            if Path(src).name.startswith('app-') or (Path(dst).name == 'app' and 'app-' in str(src)):
+                raise OSError('the running app holds its own files')
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(install_module.os, 'replace', refuse_the_swap)
+        with pytest.raises(OSError):
+            install_component(self._app_catalog('2.0'), 'app', root)
+        monkeypatch.setattr(install_module.os, 'replace', real_replace)
+
+        assert (root / 'app' / 'hello.txt').read_bytes() == b'one', (
+            'the previous build must be back in place — otherwise the user has no app at all'
+        )
+
 
 class TestComponentSource:
     """The installer's copy and the machine's copy are both legitimate; the user chooses."""
