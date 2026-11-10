@@ -1348,3 +1348,12 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   (``{source}#{parent index}-{row index}``), so inserting or removing a parent renumbered every record and the same
   paper appeared under a different name in the next run's figure. It now hashes title | first author | year | source,
   which also keeps "the same work cited by two platforms stays two rows" — the property this node exists for.
+- **"Read a switch, never compare it" has one exception-shaped hole: the SECOND layer.** `expand.expand_reusable_workflow`
+  (the server-side expansion a scheduled task runs) tested ``params.get('enabled') is False``, which only skips the
+  Python bool. A canvas that SAVED ``"false"``, ``0`` or ``"0"`` — every ordinary spelling of off — ran the group the
+  user disabled, while `engine.workflow.effective_workflow` read the SAME field through ``as_bool(..., True)`` and
+  dropped it: two layers, one switch, opposite answers. Both call `as_bool` now. A blank value still means "not set" =
+  on, which is why ``None`` is deliberately not in the test's parametrisation.
+- **A confirmation is not a switch.** ``data.get('confirm') is not True`` in the five destructive routes is correct and
+  must stay a strict identity test: a truthy ``"false"`` string, or ``1``, or ``"yes"``, must NOT authorise deleting a
+  dataset or a run. That is the one place where the as_bool rule would be the bug.
