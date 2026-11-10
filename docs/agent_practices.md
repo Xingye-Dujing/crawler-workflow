@@ -1368,6 +1368,18 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   of the same file was a valid write turned into an HTTP 500 — and the user's retry then worked, so it read as
   flakiness. `core.atomic.replace` retries with a bounded backoff, re-raises a file that stays locked (a retry that
   swallowed it would hide which file could not be written), and does NOT retry a real error like a full disk. Adopted
-  by the workflow manager, reusable templates, settings, the lock store, the lexicon and the ingest parts writer.
-  `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a fifth module was the
-  deliberate contract change that test's own message asks for, because every layer may import it.
+  by the workflow manager, reusable templates, settings, the lock store, the lexicon, the ingest parts writer and the
+  cookie jar. `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a fifth
+  module was the deliberate contract change that test's own message asks for, because every layer may import it.
+- **macOS has no `/proc`, and that silently downgraded a tree kill to a single kill.** `child_pids` answered `[]` on
+  darwin, so `reap_process` killed the DRIVER and left Chrome running with `chrome_profile/<platform>/<account>` held
+  for the whole `PROFILE_LOCK_TIMEOUT` — every later run on that account then waited on a lock nobody was using, and
+  the module's own docstring called the downgrade "the truth reported". macOS publishes the same fact through
+  `ps -A -o pid=,ppid=` (base system, no `brew`), so the tree kill now works on all three systems; an unreadable `ps`
+  still kills the driver alone and says so rather than claiming a tree it did not kill.
+- **A read that can be denied is not the same as a read that is absent.** `CookieManager.load` caught
+  `FileNotFoundError`, `JSONDecodeError` and `ValueError` but not `OSError` — so on Windows, where an antivirus or a
+  second reader holds the jar open for a moment, `open` raised `PermissionError` and it propagated: the management
+  panel counts rows through `entry_count` → `load`, i.e. a momentary lock turned "how many cookies does this account
+  have?" into an HTTP 500. A jar nobody can read is, for that question, indistinguishable from a jar that is not
+  there.
