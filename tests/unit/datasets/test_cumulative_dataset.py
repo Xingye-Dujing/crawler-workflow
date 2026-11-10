@@ -109,6 +109,35 @@ class TestAppendLineage:
         store.clear()
         assert store.list_lineages() == []
 
+    def test_deleting_the_current_version_moves_the_head_back(self, store):
+        """``delete`` promises to drop "every pointer" and missed the lineage version rows.
+
+        The panel's lineage history then listed a version whose dataset no longer existed,
+        ``dataset_lineage`` still reported the id as a lineage member (so the delete/purge guards
+        believed it was in use), and ``purge_orphans`` could never reclaim the file because a version
+        row still claimed it.
+        """
+        store.append_lineage('微博累积', _rows({'id': 1, 'value': 'a'}))
+        second = store.append_lineage('微博累积', _rows({'id': 2, 'value': 'b'}))
+        gone = second['lineage']['current_dataset_id']
+        first_version = [row for row in store.lineage_history('微博累积') if row['version'] == 1][0]
+
+        assert store.delete(gone) is True
+
+        assert store.dataset_lineage(gone) is None, 'the deleted id is still claimed as a lineage member'
+        history = store.lineage_history('微博累积')
+        assert [row['version'] for row in history] == [1], history
+        repaired = store.lineage('微博累积')
+        assert repaired['current_dataset_id'] == first_version['dataset_id'], 'the head did not move back'
+        assert repaired['version'] == 1
+
+    def test_deleting_the_only_version_drops_the_lineage(self, store):
+        """A header with no versions renders as a version with nothing behind it."""
+        only = store.append_lineage('微博累积', _rows({'id': 1, 'value': 'a'}))
+        assert store.delete(only['lineage']['current_dataset_id']) is True
+        assert store.lineage('微博累积') is None
+        assert store.lineage_history('微博累积') == []
+
 
 class TestAccumulateNode:
     def test_the_node_appends_and_returns_the_full_table(self, store, monkeypatch):

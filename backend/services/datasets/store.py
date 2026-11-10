@@ -626,10 +626,48 @@ class DatasetStore:
         return True
 
     def delete(self, dataset_id: str) -> bool:
-        """Drop one file and every pointer to it."""
-        cur = self._execute('DELETE FROM datasets WHERE dataset_id = ?', (str(dataset_id),))
-        self._execute('DELETE FROM dataset_refs WHERE dataset_id = ?', (str(dataset_id),))
+        """Drop one file and every pointer to it — including its place in a lineage.
+
+        ``dataset_lineage_versions`` was the one pointer this missed, and it is the one with state
+        attached: the panel's lineage history (``/api/data/...``) kept listing the deleted version as
+        a row whose dataset no longer exists, :meth:`dataset_lineage` kept reporting the id as a
+        lineage member (so the delete/purge guards still believed it was in use), and
+        :meth:`purge_orphans` could never reclaim the file because the version row still claimed it.
+
+        Repairing rather than refusing: the version rows go, and if the deleted dataset was the
+        lineage's CURRENT version the pointer moves to the newest survivor (or the lineage is dropped
+        when none survives — a lineage with no versions is not a history of anything).
+        """
+        target = str(dataset_id)
+        with self._lock:
+            affected = self._query('SELECT lineage_id FROM dataset_lineage_versions WHERE dataset_id = ?', (target,))
+            cur = self._execute('DELETE FROM datasets WHERE dataset_id = ?', (target,))
+            self._execute('DELETE FROM dataset_refs WHERE dataset_id = ?', (target,))
+            self._execute('DELETE FROM dataset_lineage_versions WHERE dataset_id = ?', (target,))
+            for row in affected:
+                self._repair_lineage_head(str(row['lineage_id']))
+            self._conn.commit()
         return bool(cur.rowcount)
+
+    def _repair_lineage_head(self, lineage_id: str) -> None:
+        """Point a lineage at its newest surviving version, or drop it when none survives.
+
+        Caller holds the lock and has already deleted the version rows it means to be gone.
+        """
+        newest = self._query(
+            'SELECT version, dataset_id FROM dataset_lineage_versions'
+            ' WHERE lineage_id = ? ORDER BY version DESC LIMIT 1',
+            (lineage_id,),
+        )
+        if not newest:
+            # No version left: the header alone would render as "版本 ?" with nothing behind it.
+            self._conn.execute('DELETE FROM dataset_lineages WHERE lineage_id = ?', (lineage_id,))
+            return
+        stamp = self.now()
+        self._conn.execute(
+            'UPDATE dataset_lineages SET current_dataset_id = ?, version = ?, updated_at = ? WHERE lineage_id = ?',
+            (str(newest[0]['dataset_id']), int(newest[0]['version']), stamp, lineage_id),
+        )
 
     def rename(self, dataset_id: str, name: str) -> str | None:
         """Label a stored file. Returns the stored name, or None when refused.
