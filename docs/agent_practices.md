@@ -1215,3 +1215,113 @@ A second audit (same day, whole-project) found the following, each pinned by a t
 - **An admin's probe may not hand back a `users` row.** `check_deletable` returned the raw `SELECT *` result —
   `password_hash` included — against the file's own first sentence. The route discards the value today, which is one
   line of luck rather than a rule, so it answers `public()` like every other shape a route may serialise.
+
+A third audit (whole-project, 2026-11-11) — every item below is pinned by a test that fails without its fix.
+
+- **A security header that frames nothing is a feature nobody can reach.** `/zenviz.html` — the Chart Studio — is only
+  ever loaded inside `#studio-frame`, and the same `after_request` set `X-Frame-Options: DENY` on every response, so
+  the ONE entry point to the studio was refused by the browser. It now gets `SAMEORIGIN` + `frame-ancestors 'self'`
+  while every other page keeps `DENY`; `TestStudioFraming` discovers the pages from `static/*.html`, so a second
+  frameable page has to be argued for in the test.
+- **An update that trusts its feed is a remote code door.** `services/update.py` took `version` from the manifest and
+  joined it into a path (`data/updates/<version>`), so `".."` pointed `rmtree` at the whole `data/` tree; it followed
+  redirects onto plain `http`; and it verified nothing about the feed itself. Version is now shape-checked and
+  containment-checked, every hop must be HTTPS (`_HttpsRedirects`), a 4 GiB cap bounds one package, and an optional
+  Ed25519 signature over a canonical byte form is verified fail-closed when `CIXI_UPDATE_PUBKEY` is set — the same
+  canonical bytes are what `tools/sign_release_feed.py` signs, so the two sides cannot drift.
+- **`/api/update/check` let any signed-in user make the server act.** It dials the feed and can delete downloaded
+  packages; it is now an admin route.
+- **A rename loop that never terminates is a hung request.** `_unique_workflow_name` appended ` (2)`, ` (3)`… and
+  `clean_name` truncated the result back to the same 57-character tail, so a long name looped forever inside the
+  request. The suffix is budgeted before truncation, with a hard ceiling that refuses by name.
+- **`X-Forwarded-Prefix` is attacker text that becomes a `Location`.** `ProxyFix(x_prefix=1)` put it in `SCRIPT_NAME`
+  and `redirect()` built an absolute URL from it, so `//evil.example` turned every redirect into an open one. A
+  `before_request` that runs FIRST now refuses anything that is not a plain path prefix.
+- **500s answered with the interpreter's own words.** The export writer, the report saver, the workflow saver and the
+  thread-kill door each caught their exception and echoed `str(e)` — an errno, an absolute path, a ctypes detail, on
+  every platform in a different spelling. They answer one named sentence and log the traceback.
+- **A share cannot be computed from text.** `stack_pct` summed the raw column: on a text field `GroupBy.sum`
+  CONCATENATED the cells and the division raised a bare `TypeError`; blanks counted as 0 % of the total. Each field is
+  coerced first and summed with `min_count=1` (a category nobody measured stays empty), and a field that is entirely
+  text is refused by name while an entirely-missing one still serialises (pinned).
+- **One figure must not cost the report.** The whole chart section sat in a single `try`, so one column a renderer
+  refuses (a ratio holding `inf`) discarded every figure already built. The guard moved inside the per-chart loop;
+  each failure becomes one warn line naming the reason.
+- **A half-written export is not an export.** `save` stages `…part<ext>` beside the target, and the browser listed and
+  served that staged name — sortable, downloadable, indistinguishable from a finished file (a kill left it forever).
+  The listing and the download resolver skip it; the `a.part000.csv` SHARD naming still works, because that is
+  `.part<digits>.` and not the writer's `.part.` marker.
+- **A staged artifact name belongs to one run.** `compile-<node>.pdf` collided across canvases (every canvas names its
+  nodes `node-1`…) and across attempts, so run B silently replaced the file run A's ledger pointed at. The run id now
+  leads the name.
+- **An empty first batch is not a column contract.** The merge took "the first frame with any column" as the reference,
+  and the platform stamp gives even a zero-row parent a `platform` column — so an honestly-empty first parent made the
+  real table refuse as a mismatch. The reference comes from the first frame with ROWS.
+- **A padded header passed detection and then read zero rows.** PubMed's detector matches through `_norm` (case and
+  padding insensitive) while the reader used `cell()`, an exact lookup: an Excel re-save of the same CSV answered "no
+  records". Every column now reads through `frame_cell`, like the other five frame parsers already did.
+- **A setting the panel collects and the code ignores is a lie.** `g_index` was rendered, validated and stored, and the
+  selection always recomputed the g from the curve. It is now a CEILING on that g.
+- **`1 / (1 + JSD)` squashes every pair into [0.5, 1].** JSD is already in bits, so the panel's default 0.5 admitted
+  ALL pairs and 主题流向 drew a complete bipartite graph whatever the user asked below 0.5 — the hairball the
+  adjacency rule exists to prevent. `1 - d` keeps the scale the slider claims.
+- **A negative slice has to be refused by all three renderers or by none.** TikZ already refused it; ECharts drew it
+  and matplotlib raised a bare `ValueError`. One refusal, in the option builder both share.
+- **600 x 600 cells is a 46 MB TikZ source.** A cross table draws one mark per CELL in all three projections, so the
+  shape is now refused by name past `MATRIX_CELL_LIMIT`, naming both cardinalities.
+- **A group id that is not a number is not a cluster.** `cluster_label` coerced the group column to numeric, dropped
+  the misses silently, and answered a 0-row **0-column** frame when nothing was left — the node settled DONE and the
+  step that read its declared columns was blamed. The drop is counted aloud and an empty result is refused by name.
+- **A label map published outside the lock can pair new labels with an old model.** `ml_base.fit` assigned
+  `_label_map` before taking the lock and fitted inside it, so a concurrent `predict` could read the new map against
+  the still-unfitted pipeline. Both are published in one critical section.
+- **`fetch` does not throw on a 4xx, so a refused stop reset the buttons.** Stop disabled itself and Execute came back
+  while the run was still going, and `pollStatus` never writes the running state again — a live run with no way to stop
+  it. The answer now decides, and a refusal reaches the user as a toast.
+- **A selected console tab names a workflow, and a new run may not have it.** `_wfActiveTab` was only reset on the
+  "clear console first" path, so with that option off the poll fed every view but painted `feeds[staleId]` — the
+  console appended nothing for the whole run and no tab was highlighted.
+- **The shared `ResizeObserver` holds a strong reference to every target.** Clearing `#nodes-container` on open/new
+  left every box from the closed workflow alive with its listeners and closures; `forgetAllNodeEls()` releases them.
+- **`_historySaving` outside `try/finally` stops autosave for the page's life.** A throw inside `restoreState` left the
+  flag true, so every later `saveState` skipped the draft and a reload lost the work.
+- **A double click sent two runs and raced two state machines.** `execute()` is now guarded by one in-flight flag.
+- **Any window can post `{source:'zenviz-bridge'}`.** The studio drove a save from a `postMessage` that only checked a
+  string field; it now requires the same origin AND this studio's own frame.
+- **A quoted field containing the delimiter moved every column one place right.** The studio's paste parser used
+  `line.split(delim)`; it now follows RFC 4180 (doubled quote = one literal), lives in `js/zenviz-parse.js`, and is run
+  by `harness_zenviz_parse.mjs` — the 14k-line page IIFE is not reachable from a harness.
+- **GB18030 accepts almost any byte pair, so a Big5 file "decodes".** It became hundreds of rows of mojibake reported
+  as a successful import. A fallback decode dominated by rare CJK-extension/private-use code points is refused by name,
+  telling the user to re-save as UTF-8; clean Chinese exports are untouched (the check needs a double-digit count).
+- **A token in a URL is not an identity.** 小红书 re-signs `xsec_token` every visit, so keying the ledger on `链接` made
+  every re-crawl a fresh set of items and 继续 re-stored what it had already paid for. The site id (`笔记ID`) wins, and
+  a link is hashed without its known-volatile query parameters.
+- **`float('>500')` is 0, and 0 is a real rank.** A decorated citation count sorted a work with ">500" citations below
+  one with 1. The first number the cell states is the value.
+- **A time offset a site prints must be parseable or the row loses its 时间.** `个月前`/`年前` were missing, so every post
+  older than a week came back undated; 公众号's `_DATE_RE` admitted only 小时/分钟前, so `昨天` was skipped before the
+  resolver could see it.
+- **The per-account lock is a product rule AND an availability hole.** Anyone who knows a username could hold that
+  person out by spraying wrong passwords, and the only way back was 重置密码 — a new credential for someone who did
+  nothing wrong. `POST /api/accounts/<id>/unlock` lifts the lock, keeps the password, and is audited
+  (`account_unlock`, rendered in both languages).
+- **`cross` was advertised, offered, and unusable.** The key check ran before the branch, so 交叉连接 always refused
+  with “需要连接键” for the one join that by definition has no key.
+- **An `.xlsx` is a ZIP, and the upload cap measures COMPRESSED bytes.** A highly repetitive sheet compresses ~1000:1,
+  so a 1 MB upload inflates to gigabytes inside openpyxl before any row limit applies. The archive's own table of
+  contents is read first (the check the component zips already had).
+- **A failed app swap left the user with NO app.** The old tree is moved to `app.previous` and the new one renamed into
+  place; when that rename fails — Windows locks the running app's files, a full disk fails the same way — the only
+  cleanup was the staging directory, so nothing remained to launch. The previous build is put back.
+- **`popen_kwargs(detached=True)` answered half a promise.** Only one of its three callers passed the POSIX
+  `start_new_session`, so the updater/installer died with its parent on Linux and macOS; the helper now returns both
+  halves, and four installer spawn sites that passed nothing now pass it.
+- **A backup directory named to the second is not unique.** A second run inside the same second answered a bare
+  `FileExistsError`, making a successful first backup look like a tool failure; the name gets `-2`, `-3`…
+- **A Dockerfile that pins one Debian suite onto an unknown base image is a mixed-system apt.** The codename is now
+  read from the image (`/etc/os-release`) instead of hardcoded `trixie`, which is what the `python:3.11-slim` tag
+  actually resolves to only sometimes.
+- **Lint coverage that named two trees but scanned neither.** `tools/ci_lint_tiers.py` listed `desktop`/`tools` without
+  recursion, so ~700 files were never linted; making them recursive also required excluding `.venv*`/`site-packages`/
+  `dist`/`build` (measured: without it the tier enumerated 9,803 files and died on `WinError 206`).
