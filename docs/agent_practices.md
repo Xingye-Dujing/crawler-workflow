@@ -1383,3 +1383,16 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   panel counts rows through `entry_count` → `load`, i.e. a momentary lock turned "how many cookies does this account
   have?" into an HTTP 500. A jar nobody can read is, for that question, indistinguishable from a jar that is not
   there.
+- **A cache key must carry every dimension the probed answer depends on.** `preflight._cache_key` was
+  `(scope, platform, account)`, while `has_session_to_test`/`profile_dir_for` read `use_profile`: with browser profiles
+  ON the probe reads `chrome_profile/<platform>/<account>`, with them OFF it reads the cookie file. Those are two
+  different sessions, so a run with profiles enabled cached its verdict where a later run with profiles disabled also
+  looked — that run was then gated on (or cleared by) a session it never uses. `None` is resolved through
+  `profiles.is_enabled()` before it enters the key, so the key holds the answer rather than the caller's spelling.
+- **A retried write must keep its batch AND its owner together.** `RunLogWriter._drain` publishes (empties) the buffer
+  and then opens SQLite, which is long enough for the NEXT run's first line to arrive; when the write failed, the old
+  code merged the failed rows back into that buffer with whatever `_buf_run_id` it now held. Whichever id it kept, one
+  run's viewer lied: A's console under B, or B's line under A. Kept batches are now a per-run queue
+  (`_pending: [(run_id, rows)]`) flushed under their own ids, which also means `reset()` must not drop them — those
+  lines were printed by a run that is over, and losing them is the one thing this writer promises not to do. The
+  reproducing test injects the push *during* the failing write, because without that window the bug is invisible.
