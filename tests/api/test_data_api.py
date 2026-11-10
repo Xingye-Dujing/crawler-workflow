@@ -13,6 +13,7 @@ multipart form field the browser uses.
 """
 
 import io
+import zipfile
 
 import pytest
 
@@ -107,6 +108,27 @@ class TestUpload:
         assert body['ok'] is True
         assert body['columns'] == ['title', 'score']
         assert body['row_count'] == 2
+
+    def test_a_workbook_that_expands_too_far_is_refused_before_it_is_read(self, client):
+        """An .xlsx is a ZIP of XML, and the upload cap measures COMPRESSED bytes.
+
+        A highly repetitive sheet compresses ~1000:1, so a 1 MB upload inflates to gigabytes inside
+        openpyxl before any row limit applies — the archive's own table of contents says how big it
+        really is, and it is read first (the same check the component zips get).
+        """
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr('xl/sharedStrings.xml', b'\0' * (300 * 1024 * 1024))
+        response = _upload(client, 'bomb.xlsx', buffer.getvalue())
+        assert response.status_code == 400, response.get_json()
+        body = response.get_json()
+        assert body['ok'] is False
+        assert 'bomb.xlsx' in body['error'], 'the refusal names the file'
+
+    def test_a_real_workbook_is_not_caught_by_the_expansion_check(self, client):
+        """Positive control: the guard must not cost a normal spreadsheet."""
+        body = _upload(client, 'sheet2.xlsx', _xlsx_bytes()).get_json()
+        assert body['ok'] is True and body['row_count'] == 2
 
     def test_a_multi_sheet_workbook_is_refused_not_quietly_imported_from_one(self, client):
         """``read_excel`` defaults to sheet 0, which imported only "Jan" of a Jan/Feb/Mar

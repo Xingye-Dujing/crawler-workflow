@@ -32,6 +32,39 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('data', __name__)
 
+#: Bytes an .xlsx may EXPAND to. The upload cap measures compressed bytes and a workbook of highly
+#: repetitive sheet XML compresses ~1000:1, so this is the number that actually bounds memory.
+EXCEL_EXPANDED_LIMIT = 256 * 1024 * 1024
+#: Parts an .xlsx may hold. A real workbook has tens; a crafted one has thousands of tiny+shared ones.
+EXCEL_ENTRY_LIMIT = 2000
+
+
+def _xlsx_expansion_refusal(stream) -> str:
+    """How this workbook blows up on decompression, or '' when it is reasonable.
+
+    Reads the archive's own table of contents — ``ZipInfo.file_size`` is the uncompressed size, so no
+    data has to be inflated to answer. A corrupt or non-zip .xlsx is left to openpyxl: it raises a
+    named error that the caller already turns into a 400, and refusing it here would report the wrong
+    reason.
+    """
+    import zipfile
+
+    position = stream.tell() if hasattr(stream, 'tell') else None
+    try:
+        with zipfile.ZipFile(stream) as handle:
+            entries = handle.infolist()
+            total = sum(info.file_size for info in entries)
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return ''
+    finally:
+        if position is not None and hasattr(stream, 'seek'):
+            stream.seek(position)
+    if len(entries) > EXCEL_ENTRY_LIMIT:
+        return f'{len(entries)} parts'
+    if total > EXCEL_EXPANDED_LIMIT:
+        return f'{total // (1024 * 1024)} MB expanded'
+    return ''
+
 
 @bp.route('/api/data/upload', methods=['POST'])
 def upload_dataset():
@@ -91,6 +124,15 @@ def upload_dataset():
             # arrives in. Without this branch the file fell through to
             # ``read_csv`` and came back as one column of mojibake — a
             # "successful" import of nonsense.
+            #
+            # An .xlsx is a ZIP of XML, and the upload cap measures COMPRESSED bytes: a 1 MB workbook
+            # of highly repetitive sheet XML expands to gigabytes inside openpyxl, before any row
+            # limit applies. The archive's own table of contents says how big it really is, so it is
+            # read first — the same check ``services/components/archive.py`` makes for the component
+            # zips, applied to the one other place this app inflates untrusted input.
+            bomb = _xlsx_expansion_refusal(file.stream)
+            if bomb:
+                return jsonify({'ok': False, 'error': t('api.excelTooLarge', name=filename, detail=bomb)}), 400
             book = pd.ExcelFile(file.stream)
             sheet_names = list(book.sheet_names)
             # ``read_excel`` defaults to the FIRST sheet, which silently imported one month of a

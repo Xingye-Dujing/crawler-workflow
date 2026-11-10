@@ -14,6 +14,7 @@ ZH = {
     'api.biblioDecode': '无法解码文件 {name}（已尝试 UTF-8 与 GB18030）',
     'api.exportFailedWrite': '导出写入失败：目标目录不可写或磁盘已满，请换一个文件名或清理磁盘后重试',
     'api.reportSaveFailed': '报告保存失败：导出目录不可写或磁盘已满，请清理磁盘后重试',
+    'api.excelTooLarge': '表格 {name} 解压后过大（{detail}），超过导入上限，请拆分后再上传',
     'api.workflowSaveFailed': '工作流保存失败：工作流目录不可写或磁盘已满，请清理磁盘后重试',
     'api.compareNeedsBothRuns': '对比两次运行需要在 a 与 b 里各给一个运行 id',
     'api.compareLimitInteger': '对比的 limit 必须是整数（每列最多列出多少行差异）',
@@ -223,6 +224,10 @@ EN = {
     'api.exportFailedWrite': (
         'The export could not be written: the target directory is not writable or the disk is full. '
         'Choose another name or free some space and try again'
+    ),
+    'api.excelTooLarge': (
+        'The spreadsheet {name} expands too far when read ({detail}), over the import limit: split it '
+        'and upload the parts'
     ),
     'api.reportSaveFailed': ('The report could not be saved: the export directory is not writable or the disk is full'),
     'api.workflowSaveFailed': (
