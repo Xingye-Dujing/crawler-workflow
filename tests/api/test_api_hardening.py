@@ -47,6 +47,7 @@ BODY_ROUTES = [
     '/api/accounts/<user_id>/logout',
     '/api/accounts/<user_id>/password',
     '/api/accounts/<user_id>/status',
+    '/api/accounts/<user_id>/unlock',
     '/api/analysis/run',
     '/api/analysis/train',
     '/api/biblio/project',
