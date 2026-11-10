@@ -264,6 +264,25 @@ class TestSeeding:
                 )
         assert not os.path.isdir(os.path.join(target, 'Default', 'Network')), 'the cookie store came along'
 
+    def test_a_directory_whose_files_all_failed_is_not_a_seeded_profile(self, rooted, monkeypatch):
+        """The count is the caller's evidence that a device was seeded.
+
+        The directory branch counted the entry unconditionally, so a copy that failed for every file
+        inside it (a locked Chrome file on Windows, a full disk) still reported a seeded profile —
+        and the caller went on to treat the new account as ready to log in, with an empty profile.
+        """
+        import shutil
+
+        source = _make_template(rooted, nested=['Default/Local Storage/leveldb/000003.log'])
+        target = os.path.join(str(rooted), 'zhihu', 'empty')
+        os.makedirs(target, exist_ok=True)
+
+        def refuse(*_args, **_kwargs):
+            raise OSError('the file is held by another process')
+
+        monkeypatch.setattr(shutil, 'copy2', refuse)
+        assert profiles._copy_template_into(source, target) == 0, 'nothing landed, so nothing was seeded'
+
     def test_a_name_the_copy_refuses_does_not_have_to_be_a_login(self, rooted):
         """The copy's list and the content check answer different questions.
 

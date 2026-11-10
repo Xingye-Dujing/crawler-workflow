@@ -561,6 +561,7 @@ def _copy_template_into(source: str, target: str) -> int:
         if os.path.islink(src):
             continue  # a link inside a profile can point outside the profile root
         if os.path.isdir(src):
+            landed = 0
             for walk_root, dirs, files in os.walk(src):
                 dirs[:] = [d for d in dirs if not _is_unsafe(d)]
                 rel = os.path.relpath(walk_root, src)
@@ -571,7 +572,13 @@ def _copy_template_into(source: str, target: str) -> int:
                         continue
                     with contextlib.suppress(OSError):
                         shutil.copy2(os.path.join(walk_root, fname), os.path.join(base, fname))
-            copied += 1
+                        landed += 1
+            # Count the directory only when something actually landed in it. The counter is the
+            # caller's evidence that a device was seeded; counting an entry whose every file failed
+            # (a locked Chrome file, a full disk) reported a seeded profile that has nothing in it,
+            # and the caller then treats the new account as ready to log in.
+            if landed:
+                copied += 1
         else:
             with contextlib.suppress(OSError):
                 shutil.copy2(src, dst)
