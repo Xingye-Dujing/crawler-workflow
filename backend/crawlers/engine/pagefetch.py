@@ -22,10 +22,35 @@ one that keeps the fact it judges:
   that a JSON parse would throw away.
 """
 
+import contextlib
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _script_timeout(driver, timeout):
+    """Apply ``timeout`` for the in-page fetch, then put the driver's own back.
+
+    ``set_script_timeout`` is a property of the DRIVER, not of one call: leaving it at the fetch's
+    (short) value made every later ``execute_script`` on that session inherit it, so an unrelated
+    step timed out for a reason that belonged to a fetch three nodes ago — measured as an
+    intermittent "script timeout" inside a node that never sets one. Selenium has no getter for the
+    previous value, so the crawler's own default is restored (30 s, which is what ``webdriver``
+    uses when nobody sets it).
+    """
+    previous = getattr(driver, '_cixi_script_timeout', _DEFAULT_SCRIPT_TIMEOUT)
+    driver.set_script_timeout(timeout)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(Exception):
+            driver.set_script_timeout(previous)
+
+
+#: What Selenium uses when nothing sets a script timeout, and what this module restores afterwards.
+_DEFAULT_SCRIPT_TIMEOUT = 30.0
 
 
 def _bridge(url: str) -> str:
@@ -54,8 +79,8 @@ def fetch(driver, url: str, requests: list | None = None, timeout: float = 25) -
     if requests is not None:
         requests.append(str(url))
     try:
-        driver.set_script_timeout(timeout)
-        raw = driver.execute_async_script(js)
+        with _script_timeout(driver, timeout):
+            raw = driver.execute_async_script(js)
         answer = raw if isinstance(raw, dict) else json.loads(raw)
     except Exception as e:
         return {'status': -1, 'body': '', 'error': str(e)}
@@ -92,8 +117,8 @@ def fetch_json(driver, url: str, requests: list | None = None, timeout: float = 
     if requests is not None:
         requests.append(str(url))
     try:
-        driver.set_script_timeout(timeout)
-        payload = driver.execute_async_script(js)
+        with _script_timeout(driver, timeout):
+            payload = driver.execute_async_script(js)
     except Exception as e:
         logger.debug('in-page fetch failed: %s', e)
         return {}
@@ -119,8 +144,8 @@ def fetch_text(driver, url: str, requests: list | None = None, timeout: float = 
     if requests is not None:
         requests.append(str(url))
     try:
-        driver.set_script_timeout(timeout)
-        raw = driver.execute_async_script(js)
+        with _script_timeout(driver, timeout):
+            raw = driver.execute_async_script(js)
     except Exception as e:
         return f'ERR {e}'
     if isinstance(raw, str):

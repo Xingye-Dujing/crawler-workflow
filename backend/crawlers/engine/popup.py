@@ -22,6 +22,8 @@ import json
 import time
 from dataclasses import dataclass
 
+from crawlers.engine.pagefetch import _script_timeout
+
 # The probe and the click run in one script so a dialog that closes between the
 # two round-trips cannot be half-handled.
 DISMISS_JS = """
@@ -109,42 +111,46 @@ def dismiss(driver, prompts, tries: int = DEFAULT_TRIES, tick: float = DEFAULT_T
         return out
     payload = [spec.as_js() for spec in specs]
     keys = [spec.key for spec in specs]
-    for attempt in range(max(1, tries)):
-        try:
-            driver.set_script_timeout(max(5, int(tick * 20)))
-            raw = driver.execute_async_script(DISMISS_JS, payload)
-        except Exception:
-            # A transient renderer state is not a crawl failure; the next
-            # navigation gets its own look.
-            raw = None
-        result = _as_dict(raw)
-        index = _spec_that_matched(result, specs)
-        if result.get('clicked'):
-            out.append(
-                {
-                    'key': keys[index] if index is not None else '',
-                    'clicked': result['clicked'],
-                    'matched': result.get('matched') or '',
-                    'seen': [],
-                }
-            )
-            return out
-        if result.get('matched'):
-            # The dialog is on screen and no label of ours matched it: that is a
-            # re-skin, and ``seen`` names what the page actually offers so the
-            # table above can be updated instead of guessed at.
-            out.append(
-                {
-                    'key': keys[index] if index is not None else '',
-                    'clicked': '',
-                    'matched': result.get('matched') or '',
-                    'seen': result.get('seen') or [],
-                }
-            )
-            return out
-        if attempt:
-            break  # a second look found nothing either: stop paying ticks
-        time.sleep(tick)
+    # The script timeout belongs to the DRIVER, and this loop set it per attempt without ever putting it
+    # back: the short tick-derived value stayed for the whole session, so a later, unrelated
+    # `execute_script` (a scroll, a DOM probe) could time out for a reason three nodes old. Restored
+    # once, after the loop — every attempt wants the same value anyway.
+    with _script_timeout(driver, max(5, int(tick * 20))):
+        for attempt in range(max(1, tries)):
+            try:
+                raw = driver.execute_async_script(DISMISS_JS, payload)
+            except Exception:
+                # A transient renderer state is not a crawl failure; the next
+                # navigation gets its own look.
+                raw = None
+            result = _as_dict(raw)
+            index = _spec_that_matched(result, specs)
+            if result.get('clicked'):
+                out.append(
+                    {
+                        'key': keys[index] if index is not None else '',
+                        'clicked': result['clicked'],
+                        'matched': result.get('matched') or '',
+                        'seen': [],
+                    }
+                )
+                return out
+            if result.get('matched'):
+                # The dialog is on screen and no label of ours matched it: that is a
+                # re-skin, and ``seen`` names what the page actually offers so the
+                # table above can be updated instead of guessed at.
+                out.append(
+                    {
+                        'key': keys[index] if index is not None else '',
+                        'clicked': '',
+                        'matched': result.get('matched') or '',
+                        'seen': result.get('seen') or [],
+                    }
+                )
+                return out
+            if attempt:
+                break  # a second look found nothing either: stop paying ticks
+            time.sleep(tick)
     return out
 
 

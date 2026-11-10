@@ -309,7 +309,6 @@ for _china_alias in ('CHINA', 'CHINA MAINLAND', 'MAINLAND CHINA'):
     _ALIASES[_china_alias] = "People's Republic of China"
 _ALIASES = {alias: canonical for alias, canonical in _ALIASES.items() if alias}
 _ORDERED = sorted(_ALIASES, key=len, reverse=True)
-_TRAILING = re.compile(r'[^A-Z ]+$')
 
 
 def country_in_affiliation(value: str) -> str:

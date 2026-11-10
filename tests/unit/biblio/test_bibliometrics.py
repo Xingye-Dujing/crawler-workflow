@@ -531,6 +531,33 @@ class TestContracts:
         assert result['summary']['method'] == 'members'
         assert '甲' in result['members']['甲']['cluster_label']
 
+    def test_the_dense_eigendecomposition_runs_once_when_no_cluster_empties(self, monkeypatch):
+        """``_embedding`` is O(n^3) — the whole reason ``MAX_CLUSTER_NODES`` exists.
+
+        It ran a second time unconditionally, purely to re-embed at ``len(members)``; that number only
+        differs from ``k`` when k-means produced an EMPTY group, so the common case paid for two full
+        decompositions of the same graph.
+        """
+        import networkx as nx
+
+        from services.biblio import cluster
+
+        graph = nx.Graph()
+        graph.add_weighted_edges_from(
+            [('甲', '乙', 3.0), ('乙', '丙', 3.0), ('丙', '甲', 2.0), ('丁', '戊', 3.0), ('戊', '己', 3.0)]
+        )
+        calls = []
+        original = cluster._embedding
+
+        def counted(g, names, k):
+            calls.append(k)
+            return original(g, names, k)
+
+        monkeypatch.setattr(cluster, '_embedding', counted)
+        result = cluster.cluster_graph(graph, ['甲', '乙', '丙', '丁', '戊', '己'], {}, [], 2, 'tfidf', 3)
+        assert len(calls) == 1, f'the graph was embedded {len(calls)} times for one clustering: {calls}'
+        assert result['clusters'] >= 1
+
     def test_the_demo_workflow_validates(self):
         path = ROOT / 'data' / 'workflows' / '文献计量演示：CNKI 与 CSSCI 知识图谱.json'
         workflow = json.loads(path.read_text(encoding='utf-8'))

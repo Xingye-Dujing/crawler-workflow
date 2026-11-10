@@ -241,7 +241,13 @@ def cluster_graph(
         embedding = _embedding(graph, names, k)
         labels = KMeans(n_clusters=k, random_state=SEED, n_init=10).fit_predict(embedding)
         labels, members = _relabel(labels, names)
-        embedding = _embedding(graph, names, len(members))
+        # ``_embedding`` is a full dense eigendecomposition (O(n^3), the reason MAX_CLUSTER_NODES
+        # exists), and it used to run a SECOND time unconditionally. The second pass is only needed
+        # when ``_relabel`` dropped empty clusters, because then the clustering has fewer groups than
+        # the embedding's dimension — so ask for it only in that case. On a real graph (every k-means
+        # group non-empty) this halves the cost of the whole step.
+        if len(members) != k:
+            embedding = _embedding(graph, names, len(members))
 
     communities = {index: members[index] for index in range(len(members))}
     try:
