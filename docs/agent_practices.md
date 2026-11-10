@@ -1396,3 +1396,17 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   (`_pending: [(run_id, rows)]`) flushed under their own ids, which also means `reset()` must not drop them — those
   lines were printed by a run that is over, and losing them is the one thing this writer promises not to do. The
   reproducing test injects the push *during* the failing write, because without that window the bug is invisible.
+- **"Drop every pointer" has to include the one with state attached.** `DatasetStore.delete` removed the row from
+  `datasets` and `dataset_refs` and stopped there, leaving `dataset_lineage_versions`. The panel's lineage history
+  (`/api/data/…`) then listed a version whose dataset no longer existed, `dataset_lineage` still reported the id as a
+  lineage MEMBER (so the delete/purge guards went on believing it was in use), and `purge_orphans` could never reclaim
+  the file because a version row still claimed it. The version rows go too, and a lineage whose CURRENT version was the
+  deleted one is repaired — head moved to the newest survivor, or the lineage dropped when none survives (a header with
+  no versions renders as a version with nothing behind it).
+- **A path is not a file, and a flag named "imported" must mean imported.** The crawler factory computed
+  `planting = bool(saved)`, which tests whether a cookie DIRECTORY is configured, not whether the cookie file exists.
+  `_load_cookies` shrugs a missing file off (`except OSError: return`), but the marker did not: `mark_used(imported=True,
+  cookie_stamp='')` claimed the profile had been given a session, so the panel said 已导入 for an empty profile — and
+  `needs_refresh`, which needs a non-empty recorded stamp, then answered "no" forever, so the user who saved a Cookie
+  afterwards was never offered the re-plant that would put it into that profile. `cookie_path` still follows the path
+  (the factory builds the right name whether or not the file is there); `imported` now also requires `os.path.isfile`.
