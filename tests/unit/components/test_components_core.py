@@ -18,6 +18,8 @@ from pathlib import Path
 import pytest
 from core.machine import browser_version, platform_name
 
+from services import update as update_module
+from services.components import feed
 from services.components import install as install_module
 from services.components import probe as probe_module
 from services.components.archive import ArchiveError, safe_extract
@@ -61,11 +63,14 @@ class TestCatalog:
         # The installer is a Windows desktop component; asking for the host asset on Linux would
         # find none (the catalogue has win32 entries only), not a broken catalogue.
         defaults = catalog.defaults('win32')
-        assert {'app', 'chrome', 'chromedriver', 'node', 'catbus'} <= set(defaults)
+        assert {'chrome', 'chromedriver', 'node', 'catbus'} <= set(defaults)
         chrome = catalog.get('chrome').asset('win32')
         assert chrome is not None and 'npmmirror.com' in chrome.urls[0], 'the novice default must not need a VPN'
         catbus = catalog.get('catbus').asset('win32')
         assert catbus is not None and catbus.parts and 'gitee.com' in catbus.parts[0].url
+        # The application has no bytes here on purpose: they are read from the release feed, so the
+        # same installer installs every later build (see TestFeed).
+        assert 'app' not in defaults and catalog.get('app').feed_urls('win32')
 
     def test_a_schema_this_installer_does_not_know_is_refused(self):
         with pytest.raises(CatalogError, match='schema'):
@@ -98,6 +103,166 @@ class TestCatalog:
         base['components']['x']['platforms']['win32']['sha256'] = 'nope'
         with pytest.raises(CatalogError, match='sha256'):
             Catalog(base)
+
+
+FEED = ['https://example.com/version.json', 'https://example.net/version.json']
+
+
+def _feed_catalog(feed=None, platform_entry=None):
+    return {
+        'schema': 1,
+        'components': {
+            'app': {
+                'platforms': {
+                    'win32': platform_entry
+                    or {
+                        'archive': 'zip',
+                        'install_as': 'app',
+                        'strip_prefix': 'CaiXiHui',
+                        'verify': ['CaiXiHui.exe'],
+                        'feed': feed or FEED,
+                    }
+                }
+            }
+        },
+    }
+
+
+def _feed_payload(**changes):
+    payload = {
+        'schema': 1,
+        'version': '2026.12.01.1',
+        'platforms': {
+            'win32': {
+                'archive': 'zip',
+                'sha256': 'a' * 64,
+                'size': 1000,
+                'parts': [
+                    {'url': 'https://gitee.com/x/1.001', 'sha256': 'b' * 64, 'size': 600},
+                    {'url': 'https://gitee.com/x/1.002', 'sha256': 'c' * 64, 'size': 400},
+                ],
+            }
+        },
+    }
+    payload.update(changes)
+    return payload
+
+
+class TestFeed:
+    def test_a_feed_asset_needs_no_version_and_pins_no_bytes(self):
+        catalog = Catalog(_feed_catalog())
+        component = catalog.get('app')
+        assert component.version == ''
+        # Nothing to download until the feed answers: a stale pinned build would be a downgrade.
+        assert component.asset('win32') is None
+        assert component.feed_urls('win32') == tuple(FEED)
+        # And "not resolved yet" is not "no build for this OS".
+        assert 'app' not in catalog.downloadable('win32')
+
+    def test_a_feed_asset_may_not_also_pin_bytes(self):
+        entry = {
+            'archive': 'zip',
+            'feed': list(FEED),
+            'urls': ['https://example.com/x.zip'],
+            'sha256': '0' * 64,
+            'size': 1,
+        }
+        with pytest.raises(CatalogError, match='must not also pin'):
+            Catalog(_feed_catalog(platform_entry=entry))
+
+    def test_a_feed_url_that_is_not_https_is_refused(self):
+        with pytest.raises(CatalogError, match='feed url must be https'):
+            Catalog(_feed_catalog(feed=['http://example.com/version.json']))
+
+    def test_the_feed_fills_the_urls_size_and_digest_and_names_the_build(self):
+        catalog = Catalog(_feed_catalog())
+        versions = feed.resolve(catalog, load=lambda url, timeout=0: _feed_payload())
+        assert versions == {'app': '2026.12.01.1'}
+        component = catalog.get('app')
+        assert component.version == '2026.12.01.1'
+        asset = component.asset('win32')
+        assert asset is not None
+        assert asset.sha256 == 'a' * 64 and asset.size == 1000
+        assert [part.url for part in asset.parts] == ['https://gitee.com/x/1.001', 'https://gitee.com/x/1.002']
+        # The installer's own knobs survive: the feed names bytes, never where or how to unpack them.
+        assert asset.install_as == 'app' and asset.strip_prefix == 'CaiXiHui'
+        assert asset.verify == ('CaiXiHui.exe',)
+        assert 'app' in catalog.downloadable('win32')
+
+    def test_the_second_mirror_answers_when_the_first_cannot(self):
+        calls = []
+
+        def load(url, timeout=0):
+            calls.append(url)
+            if url == FEED[0]:
+                raise CatalogError('HTTP 503')
+            return _feed_payload()
+
+        catalog = Catalog(_feed_catalog())
+        assert feed.resolve(catalog, load=load) == {'app': '2026.12.01.1'}
+        assert calls == list(FEED)
+
+    def test_an_unreadable_feed_is_a_named_refusal_that_leaves_the_catalogue_untouched(self):
+        def load(url, timeout=0):
+            raise CatalogError('network error from ' + url)
+
+        catalog = Catalog(_feed_catalog())
+        with pytest.raises(feed.FeedError, match='could not be read') as caught:
+            feed.resolve(catalog, load=load)
+        assert 'HTTP' not in str(caught.value) and 'network error' in str(caught.value)
+        assert catalog.get('app').version == ''
+        assert catalog.get('app').asset('win32') is None
+
+    def test_a_platform_the_feed_does_not_ship_is_refused_by_name(self):
+        payload = _feed_payload()
+        payload['platforms'] = {'darwin-arm64': {}}
+        with pytest.raises(feed.FeedError, match='no package for win32'):
+            feed.resolve(Catalog(_feed_catalog()), load=lambda url, timeout=0: payload)
+
+    def test_a_darwin_installer_reads_its_own_dmg_from_the_feed(self):
+        entry = {
+            'archive': 'dmg',
+            'install_as': 'app',
+            'verify': ['CaiXiHui.app/Contents/MacOS/CaiXiHui'],
+            'feed': list(FEED),
+        }
+        payload = {
+            'schema': 1,
+            'version': '2026.12.01.1',
+            'platforms': {
+                'darwin-arm64': {
+                    'archive': 'dmg',
+                    'url': 'https://github.com/x/CaiXiHui-macOS-arm64.dmg',
+                    'sha256': 'd' * 64,
+                    'size': 177000000,
+                }
+            },
+        }
+        catalog = Catalog({'schema': 1, 'components': {'app': {'platforms': {'darwin-arm64': entry}}}})
+        feed.resolve(catalog, load=lambda url, timeout=0: payload)
+        asset = catalog.get('app').asset('darwin-arm64')
+        assert asset is not None
+        assert asset.urls == ('https://github.com/x/CaiXiHui-macOS-arm64.dmg',)
+        assert asset.archive == 'dmg' and asset.verify == ('CaiXiHui.app/Contents/MacOS/CaiXiHui',)
+
+    def test_a_feed_entry_with_an_unusable_size_or_digest_is_refused(self):
+        catalog = Catalog(_feed_catalog())
+        payload = _feed_payload()
+        payload['platforms']['win32']['size'] = 0
+        with pytest.raises(feed.FeedError, match='no usable size'):
+            feed.resolve(catalog, load=lambda url, timeout=0: payload)
+        payload = _feed_payload()
+        payload['platforms']['win32']['sha256'] = ''
+        with pytest.raises(feed.FeedError, match='sha256'):
+            feed.resolve(catalog, load=lambda url, timeout=0: payload)
+
+    def test_the_checked_in_catalogue_reads_the_one_feed_the_app_itself_checks(self):
+        catalog = Catalog(load_catalog())
+        component = catalog.get('app')
+        for key in ('win32', 'darwin-arm64', 'darwin-x64'):
+            assert component.feed_urls(key) == update_module.FEED_URLS, f'app/{key} names another feed'
+            assert component.asset(key) is None, 'the application package must not be pinned in the catalogue'
+        assert 'app' not in catalog.downloadable('win32')
 
 
 class TestManifest:

@@ -14,6 +14,10 @@ A catalogue is data; every check here answers a question the rest of the code de
   download), because a mirror is not trusted merely for being a mirror;
 - a ``parts`` asset is several files that are concatenated before verification — Gitee caps one
   attachment at 100 MB, so the no-VPN route needs that shape;
+- a ``feed`` asset names no bytes at all: its URL, size and digest are read at install time from the
+  release feed (:mod:`services.components.feed`), which is what lets one installer install every
+  future build instead of only the one it was compiled against. A feed asset may not also pin bytes,
+  or two sources would disagree about which build is being installed;
 - ``verify`` names the files that must exist after extraction: a download that unpacks into the
   wrong folder is not an installation, and this turns that into a named failure.
 """
@@ -99,10 +103,15 @@ class Asset:
     strip_prefix: str
     install_as: str
     verify: tuple[str, ...]
+    #: Release-feed URLs this asset's bytes come from, empty for a pinned asset. A non-empty value
+    #: with no urls/parts means "not resolved yet": nothing may be downloaded until it is.
+    feed: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass
 class Component:
+    """One catalogue entry. Mutable because a feed asset rewrites it (see ``feed.resolve``)."""
+
     id: str
     version: str
     kind: str
@@ -116,26 +125,44 @@ class Component:
     notes: str
     platforms: dict[str, dict]
 
+    def _entry(self, system: str | None = None) -> dict | None:
+        """This OS's platform entry, falling back from ``darwin-<cpu>`` to a plain ``darwin``."""
+        key = str(system or platform_asset_key())
+        raw = self.platforms.get(key)
+        if not raw and key.startswith('darwin-'):
+            raw = self.platforms.get('darwin')
+        return raw or None
+
+    def feed_urls(self, system: str | None = None) -> tuple[str, ...]:
+        """The release feed this OS's asset is read from; ``()`` when the bytes are pinned here."""
+        raw = self._entry(system) or {}
+        feed = raw.get('feed')
+        return tuple(str(url) for url in feed) if isinstance(feed, list) else ()
+
     def asset(self, system: str | None = None) -> Asset | None:
         """This OS's asset, or ``None`` when the component is documentation or ships for another OS.
 
         ``system`` may be an OS name (``darwin``) or an OS+CPU key (``darwin-arm64``); the default
         is the running machine's full key, so a Mac downloads the archive its CPU can run. A
         hand-written single-architecture ``darwin`` entry still works as the fallback.
+
+        An unresolved ``feed`` entry is also ``None``: the feed names the file, so a caller that has
+        not resolved it has nothing to download and must say so rather than fetch a stale build.
         """
         if self.kind == 'manual':
             return None
-        key = str(system or platform_asset_key())
-        raw = self.platforms.get(key)
-        if not raw and key.startswith('darwin-'):
-            raw = self.platforms.get('darwin')
+        raw = self._entry(system)
         if not raw:
             return None
+        urls = tuple(str(url) for url in raw.get('urls') or ())
         parts = tuple(
             Part(str(p['url']), str(p.get('sha256') or ''), int(p.get('size') or 0)) for p in raw.get('parts') or ()
         )
+        feed = self.feed_urls(system)
+        if feed and not urls and not parts:
+            return None
         return Asset(
-            urls=tuple(str(url) for url in raw.get('urls') or ()),
+            urls=urls,
             parts=parts,
             sha256=str(raw.get('sha256') or ''),
             size=int(raw.get('size') or 0),
@@ -143,6 +170,7 @@ class Component:
             strip_prefix=str(raw.get('strip_prefix') or ''),
             install_as=str(raw.get('install_as') or 'component'),
             verify=tuple(str(name) for name in raw.get('verify') or ()),
+            feed=feed,
         )
 
 
@@ -200,7 +228,13 @@ def validate_catalog(payload: Any) -> None:
             raise CatalogError(f'component {component_id} must be an object')
         kind = raw.get('kind', 'archive')
         version = str(raw.get('version') or '')
-        if kind != 'manual' and not version:
+        platforms = raw.get('platforms')
+        feed_platforms = [
+            str(system) for system, asset in (platforms or {}).items() if isinstance(asset, dict) and asset.get('feed')
+        ]
+        if kind != 'manual' and not version and not feed_platforms:
+            # A feed-driven component has no version of its own: the feed says which build is
+            # current, and pinning a second number here would only be a number that goes stale.
             raise CatalogError(f'component {component_id} has no version')
         if version and (re.search(r'[\\/]', version) or '..' in version):
             # The version becomes a directory name under components/<id>/; a separator or '..' there
@@ -208,14 +242,14 @@ def validate_catalog(payload: Any) -> None:
             raise CatalogError(f'component {component_id} has an unusable version {version!r}')
         if kind not in _ALLOWED_KINDS:
             raise CatalogError(f'component {component_id} has unknown kind {kind!r}')
-        platforms = raw.get('platforms')
         if not isinstance(platforms, dict) or not platforms:
             raise CatalogError(f'component {component_id} has no platforms')
         for system, asset in platforms.items():
-            _validate_asset(component_id, system, asset, kind)
+            validate_asset(component_id, system, asset, kind)
 
 
-def _validate_asset(component_id: str, system: str, asset: Any, kind: str) -> None:
+def validate_asset(component_id: str, system: str, asset: Any, kind: str = 'archive') -> None:
+    """One platform entry: refuse what a downloader would have to guess about."""
     if not isinstance(asset, dict):
         raise CatalogError(f'{component_id}/{system}: asset must be an object')
     if kind == 'manual':
@@ -223,24 +257,41 @@ def _validate_asset(component_id: str, system: str, asset: Any, kind: str) -> No
     archive = asset.get('archive', 'zip')
     if archive not in _ALLOWED_ARCHIVES:
         raise CatalogError(f'{component_id}/{system}: unsupported archive {archive!r}')
+    feeds = _feed_urls(component_id, system, asset)
     urls = asset.get('urls') or ()
     parts = asset.get('parts') or ()
-    if not urls and not parts:
-        raise CatalogError(f'{component_id}/{system}: no urls and no parts')
-    if urls and parts:
-        raise CatalogError(f'{component_id}/{system}: use urls or parts, not both')
-    for url in list(urls) + [part.get('url') for part in parts]:
-        if not isinstance(url, str) or not url.lower().startswith('https://'):
-            raise CatalogError(f'{component_id}/{system}: every url must be https')
-    sha = str(asset.get('sha256') or '')
-    if not _looks_like_sha256(sha):
-        raise CatalogError(f'{component_id}/{system}: sha256 is missing or malformed')
-    for part in parts:
-        if not _looks_like_sha256(str(part.get('sha256') or '')):
-            raise CatalogError(f'{component_id}/{system}: a part has no usable sha256')
+    if feeds:
+        if urls or parts or asset.get('sha256') or asset.get('size'):
+            raise CatalogError(f'{component_id}/{system}: a feed asset must not also pin urls, parts, sha256 or size')
+    else:
+        if not urls and not parts:
+            raise CatalogError(f'{component_id}/{system}: no urls and no parts')
+        if urls and parts:
+            raise CatalogError(f'{component_id}/{system}: use urls or parts, not both')
+        for url in list(urls) + [part.get('url') for part in parts]:
+            if not isinstance(url, str) or not url.lower().startswith('https://'):
+                raise CatalogError(f'{component_id}/{system}: every url must be https')
+        sha = str(asset.get('sha256') or '')
+        if not _looks_like_sha256(sha):
+            raise CatalogError(f'{component_id}/{system}: sha256 is missing or malformed')
+        for part in parts:
+            if not _looks_like_sha256(str(part.get('sha256') or '')):
+                raise CatalogError(f'{component_id}/{system}: a part has no usable sha256')
     for name in asset.get('verify') or ():
         if not isinstance(name, str) or not name or '..' in name or name.startswith(('/', '\\')):
             raise CatalogError(f'{component_id}/{system}: bad verify entry {name!r}')
+
+
+def _feed_urls(component_id: str, system: str, asset: dict) -> tuple[str, ...]:
+    feed = asset.get('feed')
+    if feed is None:
+        return ()
+    if not isinstance(feed, list) or not feed:
+        raise CatalogError(f'{component_id}/{system}: feed must be a non-empty list of https urls')
+    for url in feed:
+        if not isinstance(url, str) or not url.lower().startswith('https://'):
+            raise CatalogError(f'{component_id}/{system}: every feed url must be https')
+    return tuple(feed)
 
 
 def _looks_like_sha256(value: str) -> bool:

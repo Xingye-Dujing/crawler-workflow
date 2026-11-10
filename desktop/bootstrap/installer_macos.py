@@ -410,6 +410,9 @@ class MacHandler(installer.Handler):
         words = self.words[lang]
         if state.job['state'] == 'running':
             return {'ok': False, 'error': words['already_running']}
+        refusal = installer.feed_gate(state, words)
+        if refusal is not None:
+            return refusal
         root_text = str(payload.get('root') or '').strip()
         data_text = str(payload.get('data') or '').strip()
         if not root_text or not data_text:

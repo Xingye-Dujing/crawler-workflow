@@ -93,6 +93,11 @@ macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad �
 `install-manifest.json`。页面启动后会读仓库根目录的 `version.json`（Gitee raw 优先，GitHub raw 兜底），
 发现版本更高且**当前平台有可下载包**时，顶部弹出“发现新版本”提示；只有用户点“立即更新”才下载。
 
+**在线安装器读的是同一份 `version.json`**：它的 `app` 组件条目不写地址和摘要，只写安装参数（`archive`、
+`install_as`、`strip_prefix`、`verify`）和清单地址（`feed`），安装时取当前平台的最新包并校验。所以一份安装器
+可以一直用下去，每次安装拿到的都是当时发布的最新主程序；清单读不到或没有当前平台的包时，安装器**点名拒绝**
+（显示 URL 和原因），不会退回去装旧版本。
+
 - **发布前**：把新包（Windows 的 `CaiXiHui-win64.zip` 分片；macOS 的 DMG）先上传到 Release，再把
   `version.json` 的 `version`、`sha256`、`size`、`parts`/`url` 更新为这一版；`version.json` 里的版本必须与
   `backend/services/version.py` 的 `APP_VERSION` 对应。资产没上传时不要先改 `version.json`：应用会因“当前平台没有包”而不提示。
@@ -150,15 +155,17 @@ CatBus 的 mac 包会自动带上 Node 依赖，安装后在启动器导出 `CIX
 
 ```bash
 python desktop/build_macos.py --clean
-python desktop/build_macos_installer.py --clean \
-  --app-dmg "dist/CaiXiHui-macOS-$(uname -m).dmg" \
-  --release-tag exe-2026-11 \
-  --arch "$(uname -m)"
+python desktop/build_macos_installer.py --clean --arch "$(uname -m)"
 ```
 
-`build_macos_installer.py` 在这一步生成安装器自己的清单：把刚构建的 DMG 的 SHA-256 / 体积写进
-`app.platforms['darwin-<arch>']`，URL 指向同一个 Release tag。签入的
-`backend/services/components/default_catalog.json` 不会提前写还没构建出来的摘要。
+安装器**不再**把刚构建的 DMG 摘要写进自己的清单：它的 `app` 条目只写平台架构、`archive: dmg`、
+`install_as: app` 和 `verify`，下载地址/体积/SHA-256 在安装时从 `version.json` 读取（和 Windows 同一套
+`backend/services/components/feed.py`）。所以同一个安装器可以跨版本使用，构建步骤也就不再需要应用 DMG 或
+Release tag 作为输入；`version.json` 里还没有当前架构的 DMG 时，安装器会点名拒绝而不是装错架构。
+
+只改了安装器、主程序没变时，手动触发 workflow 勾上 `installer_only`：只重建并上传两个安装器 DMG，不碰
+`version.json` 已经钉住摘要的应用 DMG。只改了主程序时，照常跑完整构建，产出四个 DMG，再用应用 DMG 的摘要
+更新 `version.json`。
 
 ## 环境检测
 
@@ -206,8 +213,9 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 - 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。离线包/主程序的完整签名链
   （编译不持密钥 → 签 exe → 打 Setup → 签 Setup → 时间戳 → `SHA256SUMS`）见
   [`desktop/README.md`](../desktop/README.md) 的"分发链"一节。
-- **签名会改变分发出去的字节**：`app.win32.sha256`/`size` 必须在最后一次签名之后、以最终
-  `CaiXiHui-win64.zip` 为准重新生成，否则在线安装器会按旧摘要拒绝自己刚发布的版本。
+- **签名会改变分发出去的字节**：`version.json` 里 `platforms.win32` 的 `sha256`/`size` 和两个分片的摘要，
+  必须在最后一次签名之后、以最终 `CaiXiHui-win64.zip` 为准生成——安装器和自更新都按这份摘要拒绝
+  对不上的字节。macOS 同理：`platforms.darwin-*` 的摘要要取自最终 DMG。
 - 安装器不调用系统 shell 执行下载内容；页面只由本机 `127.0.0.1` 提供服务，路径带随机令牌，并用
   `Content-Type: application/json` 的 POST（浏览器跨站请求会先被预检拦住）。
 
@@ -288,6 +296,10 @@ macOS 的构建命令见上面的“macOS 在线安装器”；它只能在 macO
 `darwin-arm64`、`darwin-x64` 三项，`--component chrome=...` 默认只改**当前机器**的那一项；要改另一项必须写
 `--component chrome:darwin-arm64=<zip>`，这样一个 Windows zip 不会覆盖 Mac 的摘要。最终产物的 `SHA256SUMS` 与
 `release-manifest.json` 由 `desktop/release_manifest.py` 在签名链的最后一步写出，`--check` 可复核。
+
+例外是 `app`：它没有 URL/摘要，只有 `feed`（`version.json` 的地址）和安装参数。主程序的版本、体积、摘要
+由 `version.json` 一处决定，安装器与自更新都读它；`tools/release_components.py` 不再写 `app` 的字节，也不要
+手工把旧摘要塞回清单。清单里另有一项 `ollama`/`bert`/`xelatex` 这类 `manual` 条目，只检测不下载。
 
 ## 已知限制
 

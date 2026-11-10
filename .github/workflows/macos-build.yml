@@ -3,6 +3,11 @@ name: Build macOS DMG
 # macOS releases are built on GitHub's macOS runners: the .app must be compiled on the target OS
 # (PyInstaller cannot cross-compile), and the DMG needs hdiutil. Both architectures upload to the
 # same release; the file name carries the architecture so they do not collide.
+#
+# ``installer_only`` is the "installer code changed, the application did not" run: the online
+# installer reads the application package from ``version.json`` at install time, so it can be rebuilt
+# on its own. Publishing a rebuilt application DMG without a version bump would replace the bytes
+# ``version.json`` already pins, so that half is skipped rather than silently re-hashed.
 
 on:
   workflow_dispatch:
@@ -11,6 +16,10 @@ on:
         description: GitHub Release tag to upload the DMGs to
         required: true
         default: exe-2026-11
+      installer_only:
+        description: Rebuild only the online installer (the application package is unchanged)
+        type: boolean
+        default: false
   push:
     tags:
       - "macos-*"
@@ -32,6 +41,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       RELEASE_TAG: ${{ inputs.release_tag || 'exe-2026-11' }}
+      INSTALLER_ONLY: ${{ inputs.installer_only && '1' || '' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -47,29 +57,42 @@ jobs:
           python -m pip install -r desktop/requirements-runtime.txt pyinstaller
 
       - name: Build .app and DMG
+        if: env.INSTALLER_ONLY != '1'
         run: python desktop/build_macos.py --clean
 
       - name: Build macOS online installer
-        run: |
-          python desktop/build_macos_installer.py --clean \
-            --app-dmg "dist/CaiXiHui-macOS-${{ matrix.arch }}.dmg" \
-            --release-tag "$RELEASE_TAG" \
-            --arch "${{ matrix.arch }}"
+        # No application DMG goes in: the installer reads the app package from the release feed, so
+        # the same bundle installs every later release instead of the one it was built beside.
+        run: python desktop/build_macos_installer.py --clean --arch "${{ matrix.arch }}"
 
-      - name: Upload workflow artifact
+      - name: Upload application artifact
+        if: env.INSTALLER_ONLY != '1'
         uses: actions/upload-artifact@v4
         with:
           name: caixihui-macos-${{ matrix.arch }}
-          path: |
-            dist/CaiXiHui-macOS-*.dmg
-            dist/CaiXiHui-Online-Setup-macOS-*.dmg
+          path: dist/CaiXiHui-macOS-*.dmg
           if-no-files-found: error
 
-      - name: Upload to GitHub Release
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caixihui-macos-installer-${{ matrix.arch }}
+          path: dist/CaiXiHui-Online-Setup-macOS-*.dmg
+          if-no-files-found: error
+
+      - name: Upload application to GitHub Release
+        if: env.INSTALLER_ONLY != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$RELEASE_TAG" \
             dist/CaiXiHui-macOS-*.dmg \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Upload installer to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
             dist/CaiXiHui-Online-Setup-macOS-*.dmg \
             --repo "$GITHUB_REPOSITORY" --clobber

@@ -3,7 +3,6 @@
   "generated_at": "2026-11-06T12:00:00Z",
   "components": {
     "app": {
-      "version": "1.0.0",
       "kind": "archive",
       "label": "采析绘主程序",
       "summary": "双击即用的桌面版；含 Flask 服务、分析器和图表工坊",
@@ -12,26 +11,34 @@
       "default": true,
       "license": "MIT",
       "homepage": "https://gitee.com/Xingye-Dujing/crawler-workflow",
-      "notes": "安装到安装目录；Windows 保留上一版为 app.previous 以便回滚",
+      "notes": "每次安装都从发布清单读取最新版本；Windows 保留上一版为 app.previous 以便回滚",
       "platforms": {
         "win32": {
           "archive": "zip",
           "install_as": "app",
           "strip_prefix": "CaiXiHui",
           "verify": ["CaiXiHui.exe"],
-          "sha256": "e055dc1295eb9796c0123e31b6855c6a1902ce003dd3bb3fde0febf057a933ab",
-          "size": 130169985,
-          "parts": [
-            {
-              "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.001",
-              "sha256": "73297dfe488068b8fce725a5ce8e2b971befd22f14b9af7b05f97903a18c61ec",
-              "size": 99614720
-            },
-            {
-              "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.002",
-              "sha256": "443b1c0588a5f7fea9199756a092518e85c5cda356c08777112809399fc6cc6f",
-              "size": 30555265
-            }
+          "feed": [
+            "https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json",
+            "https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json"
+          ]
+        },
+        "darwin-arm64": {
+          "archive": "dmg",
+          "install_as": "app",
+          "verify": ["CaiXiHui.app/Contents/MacOS/CaiXiHui"],
+          "feed": [
+            "https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json",
+            "https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json"
+          ]
+        },
+        "darwin-x64": {
+          "archive": "dmg",
+          "install_as": "app",
+          "verify": ["CaiXiHui.app/Contents/MacOS/CaiXiHui"],
+          "feed": [
+            "https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json",
+            "https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json"
           ]
         }
       }

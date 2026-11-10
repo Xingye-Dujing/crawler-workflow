@@ -67,6 +67,9 @@ TEXT = {
         'theme_dark': '切换到深色',
         'theme_light': '切换到浅色',
         'unavailable_here': '此平台暂不提供',
+        'feed_loading': '正在获取最新主程序版本…',
+        'feed_failed': '无法获取最新主程序版本：{err}\n点“安装”会再试一次。',
+        'feed_pending': '等待最新版本信息',
     },
     'en': {
         'title': 'CaiXiHui Installer',
@@ -145,6 +148,9 @@ TEXT = {
         'theme_dark': 'Switch to dark',
         'theme_light': 'Switch to light',
         'unavailable_here': 'not available on this platform',
+        'feed_loading': 'Fetching the latest application version…',
+        'feed_failed': 'Could not read the latest application version: {err}\nPressing install tries again.',
+        'feed_pending': 'waiting for the latest version',
     },
 }
 

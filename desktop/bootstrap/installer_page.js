@@ -120,10 +120,13 @@
         box.addEventListener('change', onToggle);
         var name = document.createElement('span');
         name.className = 'name';
-        name.textContent = item.id + ' ' + item.version + ' — ' + item.summary;
+        name.textContent = item.id + (item.version ? ' ' + item.version : '') + ' — ' + item.summary;
         var meta = document.createElement('span');
         meta.className = 'meta';
-        meta.textContent = item.size_text || (item.unavailable ? t('unavailable_here') : '');
+        // An asset read from the release feed has no size until the feed answers, and a component
+        // that truly has no build for this OS says so: the two must not read the same.
+        meta.textContent =
+            item.size_text || (item.pending ? t('feed_pending') : item.unavailable ? t('unavailable_here') : '');
         row.append(box, name, meta);
         return row;
     }
@@ -131,7 +134,19 @@
     function renderComponents(list) {
         var next = list
             .map(function (item) {
-                return item.id + ':' + (item.checked ? '1' : '0') + ':' + (item.downloadable ? '1' : '0');
+                return (
+                    item.id +
+                    ':' +
+                    (item.checked ? '1' : '0') +
+                    ':' +
+                    (item.downloadable ? '1' : '0') +
+                    ':' +
+                    (item.version || '') +
+                    ':' +
+                    (item.size_text || '') +
+                    ':' +
+                    (item.pending ? '1' : '0')
+                );
             })
             .join('|');
         if (next === signature) return;
@@ -141,6 +156,16 @@
         list.forEach(function (item) {
             holder.append(componentRow(item));
         });
+    }
+
+    /* The release feed names the application package; the page only repeats its state and reason. */
+    function renderFeed(feed) {
+        var note = byId('feed-note');
+        if (!note) return;
+        var phase = feed && feed.state;
+        if (phase === 'loading') note.textContent = t('feed_loading');
+        else if (phase === 'failed') note.textContent = t('feed_failed', { err: (feed && feed.error) || '' });
+        else note.textContent = '';
     }
 
     function selectedIds() {
@@ -173,6 +198,7 @@
         }
         byId('shortcut').checked = state.shortcut !== false;
         renderComponents(state.components || []);
+        renderFeed(state.feed);
         byId('total').textContent = t('size', { size: humanSize(state.total) });
         var job = state.job || {};
         var percent = job.total ? Math.round((job.done / job.total) * 100) : 0;
@@ -187,7 +213,10 @@
         var lines = job.log || [];
         log.textContent = lines.join('\n');
         log.scrollTop = log.scrollHeight;
-        byId('install').disabled = job.state === 'running';
+        // The application's own bytes are the one thing the page cannot proceed without: a feed
+        // still being read leaves the install button off rather than opening a half plan.
+        var feedLoading = Boolean(state.feed && state.feed.state === 'loading');
+        byId('install').disabled = job.state === 'running' || feedLoading;
         byId('cancel').disabled = job.state !== 'running';
         if (job.state === 'done') requestDoctor();
     }

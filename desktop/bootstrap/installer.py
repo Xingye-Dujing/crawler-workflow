@@ -114,6 +114,7 @@ def _backend_on_path() -> None:
 _backend_on_path()
 
 _CATALOG = importlib.import_module('services.components.catalog')
+_FEED = importlib.import_module('services.components.feed')
 _INSTALL = importlib.import_module('services.components.install')
 _PLAN_SPEC = importlib.util.spec_from_file_location('installer_plan', Path(__file__).with_name('plan.py'))
 assert _PLAN_SPEC and _PLAN_SPEC.loader
@@ -180,6 +181,8 @@ native_window = _load_window_module()
 Catalog = _CATALOG.Catalog
 CatalogError = _CATALOG.CatalogError
 load_catalog = _CATALOG.load_catalog
+resolve_feed = _FEED.resolve
+FeedError = _FEED.FeedError
 _DOWNLOAD = importlib.import_module('services.components.fetch')
 DownloadError = _DOWNLOAD.DownloadError
 _MANIFEST = importlib.import_module('services.components.manifest')
@@ -473,6 +476,13 @@ class InstallerState:
         self.cancel = threading.Event()
         self.preset = 'one'
         self.selected = self._preset_ids('one')
+        #: The release feed's answer for the application package. ``loading`` until it answers, and
+        #: the install refuses (naming the feed) if it never does: the app's bytes are not in the
+        #: catalogue any more, so there is no build to fall back to.
+        self.feed = {'state': 'idle', 'error': '', 'version': ''}
+        #: Whether the user has chosen anything. A feed that arrives late must not undo that choice
+        #: by re-applying the preset, but it must still tick the app when nobody has touched the page.
+        self._picked = False
         self.job = {
             'state': 'idle',
             'done': 0,
@@ -498,6 +508,41 @@ class InstallerState:
         requires = {key: list(item.requires) for key, item in self.catalog.components.items()}
         return _PLAN.with_requirements(self.selected, requires, self._downloadable())
 
+    # ── release feed ────────────────────────────────────────────
+    def refresh_feed(self) -> bool:
+        """Read the release feed and apply it to the catalogue; ``True`` when nothing is missing.
+
+        Called on a thread: the first page paint must not wait for two mirrors to time out. A later
+        click on 安装 retries, so an installer started before the network came up is not a dead end.
+        """
+        with self.lock:
+            if self.feed['state'] == 'loading':
+                return False
+            self.feed = {**self.feed, 'state': 'loading', 'error': ''}
+        try:
+            versions = resolve_feed(self.catalog)
+        except CatalogError as exc:
+            with self.lock:
+                self.feed = {'state': 'failed', 'error': str(exc), 'version': ''}
+            return False
+        version = str(next(iter(versions.values()), '') or '')
+        with self.lock:
+            self.feed = {'state': 'ok', 'error': '', 'version': version}
+            if not self._picked:
+                self.selected = self._preset_ids(self.preset)
+            elif 'app' in self._downloadable() and 'app' not in self.selected:
+                # The app row was disabled until the feed answered, so nothing in that window could
+                # have unticked it: a choice made then must not turn 一键安装 into "components only".
+                chosen = set(self.selected) | {'app'}
+                self.selected = [item for item in self._downloadable() if item in chosen]
+        return True
+
+    def start_feed_check(self) -> None:
+        """Start (or join) the background feed read; cheap to call on every install click."""
+        if self.feed['state'] == 'loading':
+            return
+        threading.Thread(target=self.refresh_feed, name='installer-feed', daemon=True).start()
+
     def snapshot(self) -> dict:
         with self.lock:
             selected = set(self.selected)
@@ -516,9 +561,12 @@ class InstallerState:
                             'checked': False,
                             'size': 0,
                             'size_text': '',
+                            # A feed entry with no answer yet is not "not available here": it is a
+                            # download that is about to be named, and the page says which.
+                            'pending': bool(item.feed_urls()),
                             # A manual entry is detection-only everywhere; a real component with no
                             # asset here simply has no build for this OS (CatBus on macOS).
-                            'unavailable': item.kind != 'manual',
+                            'unavailable': item.kind != 'manual' and not item.feed_urls(),
                         }
                     )
                     continue
@@ -546,6 +594,7 @@ class InstallerState:
                 'components': rows,
                 # Bytes, not a sentence: the page renders the size in its own language.
                 'total': total,
+                'feed': dict(self.feed),
                 'job': dict(self.job, log=list(self.job['log'])),
             }
 
@@ -574,6 +623,7 @@ class InstallerState:
         allowed = set(self._downloadable())
         with self.lock:
             self.selected = [str(item) for item in ids if str(item) in allowed]
+            self._picked = True
 
     def set_preset(self, preset: str) -> bool:
         if preset not in ('one', 'app'):
@@ -581,6 +631,7 @@ class InstallerState:
         with self.lock:
             self.preset = preset
             self.selected = self._preset_ids(preset)
+            self._picked = True
         return True
 
     def _log(self, line: str) -> None:
@@ -862,6 +913,21 @@ def _relaunch_elevated(root: Path, data: Path, bert: str = '') -> bool:
 INSTALLER_PORT = 3968
 
 
+def feed_gate(state: InstallerState, words: dict) -> dict | None:
+    """Refuse to install until the release feed has named the application package.
+
+    The catalogue no longer carries the app's bytes, so an unanswered feed leaves nothing to
+    download — and a build pinned here would be a version the user did not ask for. Pressing 安装 is
+    also the retry, so an installer opened before the network was up is not a dead end.
+    """
+    answer = dict(state.feed)
+    if answer['state'] == 'ok':
+        return None
+    state.start_feed_check()
+    detail = str(answer['error']) if answer['state'] == 'failed' else ''
+    return {'ok': False, 'error': words['feed_failed'].format(err=detail or words['feed_loading'])}
+
+
 class InstallerServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
@@ -1026,6 +1092,9 @@ class Handler(BaseHTTPRequestHandler):
         words = self.words[lang]
         if state.job['state'] == 'running':
             return {'ok': False, 'error': words['already_running']}
+        refusal = feed_gate(state, words)
+        if refusal is not None:
+            return refusal
         root_text = str(payload.get('root') or '').strip()
         data_text = str(payload.get('data') or '').strip()
         if not root_text or not data_text:
@@ -1179,6 +1248,9 @@ def main(argv=None) -> int:
     )
     if options.get('bert'):
         state.set_bert(options['bert'])
+    # The app's bytes come from the release feed, so ask for them before the page paints. It runs on
+    # a thread because two mirrors can take 40 s to time out, and the window must open regardless.
+    state.start_feed_check()
     # A random path token keeps other local pages from poking this server. The environment
     # override exists for the packaged smoke test, which cannot read a windowed build's stdout.
     token = str(os.environ.get('CIXI_INSTALLER_TOKEN') or '').strip() or secrets.token_hex(8)

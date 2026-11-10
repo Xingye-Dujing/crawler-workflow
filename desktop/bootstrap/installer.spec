@@ -60,6 +60,7 @@ a = Analysis(
         'webview.platforms.edgechromium',
         'clr',
         'services.components.catalog',
+        'services.components.feed',
         'services.components.manifest',
         'services.components.fetch',
         'services.components.archive',

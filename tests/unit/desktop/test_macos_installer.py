@@ -8,7 +8,6 @@ tables point at the binaries the probe will look for.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 import sys
@@ -135,26 +134,22 @@ def test_the_checked_in_catalog_has_both_mac_arches_for_every_native_component()
                 assert url.startswith('https://')
     assert 'node' in catalog.get('catbus').requires, 'the installer must add Node with CatBus'
     assert catalog.get('catbus').asset('win32') is not None
-    # The build script adds the application entry; the checked-in catalogue never names bytes that
-    # have not been built yet.
-    assert catalog.get('app').asset('darwin-arm64') is None
+    # The application ships on both Macs too, but its bytes are read from the release feed at install
+    # time: the checked-in catalogue names no file that has not been built yet, and an installer
+    # built today still installs the newest application.
+    for key in ('darwin-arm64', 'darwin-x64'):
+        assert catalog.get('app').feed_urls(key), f'app has no release feed for {key}'
+        assert catalog.get('app').asset(key) is None
 
 
-def test_the_build_script_pins_the_exact_app_dmg_it_will_publish(builder, tmp_path):
-    dmg = tmp_path / 'CaiXiHui-macOS-arm64.dmg'
-    dmg.write_bytes(b'a built application image')
-    expected = hashlib.sha256(dmg.read_bytes()).hexdigest()
-    payload = builder.build_catalog(dmg, 'arm64', 'exe-test', base=CATALOG_PATH)
-    asset = payload['components']['app']['platforms']['darwin-arm64']
-    assert asset['archive'] == 'dmg'
-    assert asset['install_as'] == 'app'
-    assert asset['sha256'] == expected
-    assert asset['size'] == len(b'a built application image')
-    assert asset['verify'] == ['CaiXiHui.app/Contents/MacOS/CaiXiHui']
-    assert asset['urls'] == [
-        'https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-test/CaiXiHui-macOS-arm64.dmg'
-    ]
-    Catalog(payload)
+def test_the_installer_is_built_without_pinning_an_application_dmg(builder):
+    source = (DESKTOP / 'build_macos_installer.py').read_text(encoding='utf-8')
+    assert '--app-dmg' not in source, 'the installer no longer takes the application DMG as an input'
+    assert 'build_catalog' not in source, 'the catalogue must not be rewritten per release'
+    assert 'version.json' in source or 'release feed' in source
+    assert builder.artifact_arch('x86_64') == 'x86_64'
+    assert builder.asset_key('x86_64') == 'x64'
+    assert builder.asset_key('arm64') == 'arm64'
 
 
 def test_the_dmg_builder_can_wrap_either_app_bundle():
@@ -162,16 +157,6 @@ def test_the_dmg_builder_can_wrap_either_app_bundle():
     assert "f'{stem}-macOS-{arch}.dmg'" in source
     assert 'stage / app.name' in source, 'the installer .app must keep its own bundle name'
     assert "os.symlink('/Applications'" in source
-
-
-def test_the_build_script_maps_x86_64_to_the_catalogue_and_artifact_names(builder, tmp_path):
-    dmg = tmp_path / 'app.dmg'
-    dmg.write_bytes(b'x64')
-    payload = builder.build_catalog(dmg, 'x86_64', 'tag', base=CATALOG_PATH)
-    asset = payload['components']['app']['platforms']['darwin-x64']
-    assert asset['urls'][0].endswith('/tag/CaiXiHui-macOS-x86_64.dmg')
-    assert builder.artifact_arch('x86_64') == 'x86_64'
-    assert builder.asset_key('x86_64') == 'x64'
 
 
 def test_the_installer_reuses_the_shared_page_instead_of_a_second_copy(installer_app):
@@ -207,13 +192,20 @@ def test_the_installer_records_the_data_folder_where_the_app_reads_it(installer_
 def test_the_workflow_builds_and_uploads_the_installer_for_both_arches():
     workflow = (REPO / '.github' / 'workflows' / 'macos-build.yml').read_text(encoding='utf-8')
     assert 'desktop/build_macos_installer.py --clean' in workflow
-    assert '--app-dmg "dist/CaiXiHui-macOS-${{ matrix.arch }}.dmg"' in workflow
-    assert '--release-tag "$RELEASE_TAG"' in workflow
+    # The installer reads the application package from the release feed, so the step no longer takes
+    # the DMG (nor the tag) it was built beside.
+    assert '--app-dmg' not in workflow
+    assert '--release-tag "$RELEASE_TAG"' not in workflow
+    assert 'RELEASE_TAG:' in workflow, 'the release upload still needs the tag'
     assert 'dist/CaiXiHui-Online-Setup-macOS-*.dmg' in workflow
     assert workflow.count('dist/CaiXiHui-Online-Setup-macOS-*.dmg') >= 2
+    # An installer-only run must not republish the application DMG: version.json already pins those
+    # bytes, so a silent replacement would break every client's digest check.
+    assert 'installer_only' in workflow
+    assert workflow.count("if: env.INSTALLER_ONLY != '1'") >= 3
 
 
-def test_the_installer_spec_is_a_windowed_cocoa_bundle_with_the_generated_catalog():
+def test_the_installer_spec_is_a_windowed_cocoa_bundle_carrying_the_checked_in_catalog():
     spec = (BOOTSTRAP / 'installer_macos.spec').read_text(encoding='utf-8')
     assert "name='CaiXiHui-Online-Setup.app'" in spec
     assert "bundle_identifier='com.caixihui.installer'" in spec

@@ -4,7 +4,9 @@
 “环境与组件”或在线安装器，不属于自更新范围。
 
 相关实现：`backend/services/update.py`、`backend/api/update.py`、`backend/services/version.py`、
-根目录 `version.json`、`backend/static/js/update.js`。
+根目录 `version.json`、`backend/static/js/update.js`；安装器一侧是
+`backend/services/components/feed.py`、`backend/services/components/catalog.py`、
+`backend/services/components/default_catalog.json`。
 
 ## 版本号
 
@@ -12,6 +14,31 @@
 - 格式是日期加构建号，例如 `2026.11.11.1`；比较时按数字段逐段比较，所以 `.2` 一定比 `.1` 新。
 - **两边必须一致**：只改 `APP_VERSION` 不改 `version.json`，用户收不到提示；只改 `version.json` 不改代码，
   用户更新后会一直提示同一个版本。
+
+## 安装器为什么不用每次重建
+
+在线安装器（Windows 的 `CaiXiHui-Online-Setup.exe`、macOS 的 `CaiXiHui-Online-Setup-macOS-*.dmg`）不再把
+主程序的下载地址、大小和 SHA-256 编进自己里面。它的组件清单里，`app` 一项写的是**发布清单地址**：
+
+```json
+"win32": {
+  "archive": "zip", "install_as": "app", "strip_prefix": "CaiXiHui",
+  "verify": ["CaiXiHui.exe"],
+  "feed": [
+    "https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json",
+    "https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json"
+  ]
+}
+```
+
+安装时它读这份 `version.json`，按当前系统/架构取包，校验 SHA-256 再安装。于是：
+
+- **同一份安装器，永远安装当次最新的主程序**；只有安装器自己的代码或 Chrome/Node 这些组件版本变了才需要重建它；
+- 主程序装好之后，后续功能更新走应用内的更新弹窗（`docs/installer.md` 的“主程序自更新”）；
+- 清单读不到时安装器**按名字拒绝**（显示 URL 和原因），不会退回去装一个旧版本；“安装”按钮本身就是重试；
+- `version.json` 里没有当前平台的包时同样拒绝，不会装错架构。
+
+因此发版时**不要**再改 `default_catalog.json` 的 `app` 条目，也不要为了新版本重建在线安装器。
 
 ## 发布顺序（重要）
 
@@ -25,7 +52,17 @@
 6. 更新 Release 说明；
 7. 提交并推送 `version.json`、`docs/`、代码。
 
-`version.json` 是最后一步：它一更新，已经装了自更新版本的客户端就会开始提示。资产没上传前不要先改它。
+`version.json` 是最后一步：它一更新，已装自更新版本的客户端会开始提示，**新下载的安装器也会立刻装到这一版**。
+
+### 每个版本用新 tag，不要覆盖同名附件
+
+Gitee/GitHub Release 的附件按“地址”下载，而摘要写在清单里。如果复用旧 tag 并把同名附件换成新字节：
+
+- 旧 `version.json` 指向的包会变成另一份字节，正在更新的客户端校验失败；
+- 上一版发出的在线安装器会下载到新字节却按旧摘要校验，直接失败。
+
+所以：**新版本 = 新 tag**（例如 `exe-2026-12`），旧 tag 的附件一个字节都不要动。
+
 
 ## 发布前必须通过
 
@@ -65,30 +102,30 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Insta
 
 ### 2. 分片
 
-在线安装器和 `version.json` 的 Windows 资产使用 **99,614,720 B** 一片。切完后记录每一片的
-SHA-256 和大小；最后一片通常小于 99,614,720 B。
+`version.json` 和安装器都使用 **99,614,720 B** 一片。切完后记录每一片的 SHA-256 和大小；
+最后一片通常小于 99,614,720 B。
 
-### 3. 更新在线安装器的组件清单
+### 3. 更新 version.json 的 win32 条目
 
-把 `CaiXiHui-win64.zip` 的总 SHA-256、总大小，以及两个分片的 URL/SHA-256/大小写进
-`backend/services/components/default_catalog.json` 的 `components.app.platforms.win32`。
-
-分片 URL 使用新 release tag，例如：
+把 `CaiXiHui-win64.zip` 的总 SHA-256、总大小，以及两个分片的 URL/SHA-256/大小写进 `version.json` 的
+`platforms.win32`（**不是** `default_catalog.json`）：
 
 ```
 https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/<新tag>/CaiXiHui-win64.zip.001
 ```
 
-### 4. 构建在线安装器
+### 4. 在线安装器（只在安装器本身变化时重建）
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1 -Clean
 desktop\.venv-build\Scripts\python.exe desktop\patch_manifest.py --check dist\CaiXiHui-Online-Setup.exe
 ```
 
-`patch_manifest.py --check` 必须显示 `requireAdministrator`。产出：
+`patch_manifest.py --check` 必须显示 `requireAdministrator`。产出 `dist\CaiXiHui-Online-Setup.exe`。
 
-- `dist\CaiXiHui-Online-Setup.exe`
+需要重建的只有：安装器页面/流程改了、`backend/services/components/` 里的代码改了、Chrome/chromedriver/Node/
+CatBus 的版本或地址变了。**主程序出新版本不需要重建它**——它读 `version.json` 决定装哪一版。
+新发布里仍建议把当前这份安装器一起上传，让下载页只有一处入口。
 
 ### 5. 上传 Windows 资产
 
@@ -123,6 +160,10 @@ macOS 包由 GitHub Actions 的 `.github/workflows/macos-build.yml` 构建，不
   "size": 123456789
 }
 ```
+
+安装器的构建步骤不再需要应用 DMG 或 tag（`desktop/build_macos_installer.py --clean --arch <arch>`）：
+它和 Windows 一样从 `version.json` 取包，所以同一份安装器可以跨版本使用。两个安装器 DMG 的摘要不写进
+`version.json`，它们只是下载入口。
 
 macOS 自更新从 GitHub Release 下载 DMG。访问不了 GitHub 的 Mac 仍应使用在线安装器或完整 DMG。
 

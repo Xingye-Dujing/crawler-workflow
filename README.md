@@ -49,7 +49,8 @@ cd backend && python app.py        # http://127.0.0.1:5000
 [Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 里的 `CaiXiHui-Setup.exe`；
 只想要一个下载器就用 `CaiXiHui-Online-Setup.exe`，默认走国内镜像（Gitee / npmmirror），不需要翻墙。
 macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积的
-`CaiXiHui-Online-Setup-macOS-<arch>.dmg` 在线安装。
+`CaiXiHui-Online-Setup-macOS-<arch>.dmg` 在线安装。两个在线安装器都**在安装时读 `version.json`**
+决定装哪一版，所以同一个安装器放久了，装出来的仍是最新主程序。
 
 **三件值得先知道的事**
 
@@ -74,9 +75,9 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`；
   主程序启动后会检查 `version.json`，有新版本时在顶部提示并可在应用内完成下载、校验、替换和重启；
   组件目录和用户数据不会被更新碰。源码运行不执行自更新。
-  同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（先下载主程序 DMG 和
-  Chrome/Node，再装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像 Windows 一样下载并
-  连同 Node 一起装好。
+  同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（安装时读 `version.json`
+  取最新主程序 DMG，再下载 Chrome/Node 装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像
+  Windows 一样下载并连同 Node 一起装好。
   Windows 与 macOS 的在线安装器都能选一个本地的 `CaiXiHui-bert-models-win64.zip`（ONNX 模型两个平台
   通用；这是只读源），解压到数据文件夹的 `bert_models/`（存放位置随数据文件夹同步）并登记进模型列表。
   构建、体积与依赖自查见 [`desktop/README.md`](desktop/README.md)。

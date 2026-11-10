@@ -83,6 +83,13 @@ def main(argv: list[str] | None = None) -> int:
             url_text = _updates(component_urls, platform_key, own)
             if not path_text and not url_text:
                 continue
+            if asset.get('feed'):
+                # The application's bytes are named by version.json, which the installer and the
+                # running app both read. A second pinned copy here would be the number that goes
+                # stale, and the catalogue refuses an asset that pins both.
+                raise SystemExit(
+                    f'{component_id}:{platform_key} is read from the release feed; update version.json instead'
+                )
             if path_text:
                 path = Path(path_text)
                 if not path.is_file():
