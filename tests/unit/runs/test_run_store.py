@@ -595,6 +595,20 @@ class TestLifecycle:
         assert run['node_done'] == 2
         assert run['status'] == RUN_FAILED
 
+    def test_a_node_that_is_still_running_is_not_counted_as_done(self, store):
+        """`running` is neither done nor failed, and the count used to be a BLACKLIST.
+
+        Excluding only pending/skipped/failed/partial left ``begin_node`` rows in the total, so
+        ``runs.node_done`` could read higher than ``execution_state['completed_nodes']`` — the two
+        numbers AGENTS requires to be one definition of "completed".
+        """
+        _start(store)
+        store.begin_node('r1', 'a', 'source')
+        store.finish_node('r1', 'a', NODE_DONE)
+        store.begin_node('r1', 'b', 'analysis')  # still running when the verdict is written
+        store.finish_run('r1', RUN_COMPLETED)
+        assert store.get_run('r1')['node_done'] == 1
+
     def test_finish_run_scoped_to_attempted_drops_a_deleted_node(self, store):
         """A ``继续`` after a finished node was removed from the canvas must not report
         that ghost as done: its ``node_runs`` row survives (the record keeps deleted

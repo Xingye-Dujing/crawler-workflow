@@ -364,8 +364,11 @@ def stop_workflow():
         execution_state['stopping'] = True
         execution_state['running'] = False
         mark_records_stopping()
-        crawlers = list(execution_state['active_crawlers'])
-        execution_state['active_crawlers'].clear()
+        crawlers = execution_state['active_crawlers'].take_all()
+        # The run that was just stopped: the late sweep below must close ITS browsers only. By the
+        # time it runs the queue may have started the next run, whose browsers are registered under
+        # a different id — closing those failed a crawl nobody had stopped.
+        stopped_run_id = str(execution_state.get('run_id') or '')
         # A daemon thread starts with a fresh (default) language; capture the request's
         # so every line this stop path prints — including run.browserStuck below — reads
         # in the UI's own language, not Chinese in an English panel.
@@ -388,7 +391,7 @@ def stop_workflow():
         # A browser the worker registered *after* the snapshot above is still in the
         # registry, and nothing else on this path would ever reach it: the node that
         # bought it is standing in a page load, not in its finally.
-        close_active_crawlers(quit_timeout=STOP_QUIT_GRACE)
+        close_active_crawlers(quit_timeout=STOP_QUIT_GRACE, run_id=stopped_run_id)
 
     # Closing a browser is quick but not instantaneous, and a visible Chrome with a
     # pending dialog can take its bounded grace to die. Doing it inline made the Stop

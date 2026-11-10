@@ -191,17 +191,26 @@ Object.assign(canvas, {
         const state = this._history[this._historyIdx];
         if (!state) return;
         this._historySaving = true;
-        Object.keys(this.nodes).forEach(id => {
-            const el = this._nodeEl(id);
-            if (el) {
-                this._forgetNodeEl(el);
-                el.remove();
-            }
-        });
-        this.nodes = {};
-        this.connections = [];
-        this.restoreState(state);
-        this._historySaving = false;
+        /* try/finally, not a bare assignment after the call: `restoreState` can throw — a stored
+           snapshot from another canvas shape, a param the current node type no longer accepts — and
+           a throw left `_historySaving` true FOR THE LIFE OF THE PAGE. Every later `saveState`
+           then believed a history rewrite was in flight and skipped the draft, so autosave stopped
+           silently while the canvas kept looking editable (a reload lost the work). The flag is
+           released here, and the one caller that writes the draft still runs. */
+        try {
+            Object.keys(this.nodes).forEach(id => {
+                const el = this._nodeEl(id);
+                if (el) {
+                    this._forgetNodeEl(el);
+                    el.remove();
+                }
+            });
+            this.nodes = {};
+            this.connections = [];
+            this.restoreState(state);
+        } finally {
+            this._historySaving = false;
+        }
         /* The draft is the durable copy of this canvas, and `restoreState` deliberately skips
            its save while history is being rewritten. Without this write an undo/redo never
            reached the draft, so a reload inside the autosave interval resurrected the state

@@ -315,6 +315,10 @@ const workflow = {
         /* The badges on screen describe the PREVIOUS canvas until this one has a
            run's statuses of its own; loadFromJSON asks for them at the end. */
         if (typeof runResults !== 'undefined') runResults.clear();
+        /* Release the boxes before the wipe: the shared ResizeObserver keeps a strong reference to
+           every target, so clearing the container alone left each box from the workflow just closed
+           alive for the life of the page (element, listeners, old data in its closures). */
+        if (typeof canvas.forgetAllNodeEls === 'function') canvas.forgetAllNodeEls();
         document.getElementById('nodes-container').innerHTML = '';
         canvas.nodes = {};
         canvas.connections = [];
@@ -382,6 +386,8 @@ const workflow = {
 
     newFile() {
         if (typeof runResults !== 'undefined') runResults.clear();
+        /* See openFile: the observer, not the DOM, is what kept the old boxes alive. */
+        if (typeof canvas.forgetAllNodeEls === 'function') canvas.forgetAllNodeEls();
         document.getElementById('nodes-container').innerHTML = '';
         canvas.nodes = {};
         canvas.connections = [];
@@ -856,6 +862,22 @@ const workflow = {
 
     async execute(opts) {
         opts = opts || {};
+        /* One in-flight press. Everything between here and the answer is an `await` (the cookie
+           gate probes a browser, then the POST follows), and the button stays clickable for that
+           whole window — a double click sent two runs to the server and, worse, raced two client
+           state machines: the second answer's `restoreRunState()` overwrote the first one's
+           `setRunning(true)`, so the console polled nothing while the run really was going. A
+           queued run is still the server's decision (`queue:false` keeps the fail-fast door). */
+        if (this._executing) return;
+        this._executing = true;
+        try {
+            return await this._executeOnce(opts);
+        } finally {
+            this._executing = false;
+        }
+    },
+
+    async _executeOnce(opts) {
         /* Validate before running */
         var validationErrors = this.validate();
         /* A reusable node's errors exist only in the expanded graph, so the canvas's
@@ -1018,6 +1040,13 @@ const workflow = {
                        PREVIOUS run's lines; a trim or a tab switch repaints them into this
                        run's console. Drop the text, keep the cursors. */
                     if (typeof dropConsoleHistories === 'function') dropConsoleHistories();
+                    /* …and drop the SELECTED tab too. `_wfActiveTab` names a workflow id from the
+                       run that just ended; a new run may have fewer workflows, so the id no longer
+                       exists among the fresh tabs. The poll then fed every view but painted
+                       `feeds[staleId]` — undefined — which meant the console appended NOTHING for
+                       the whole run and no tab was highlighted, until the user clicked a tab by
+                       hand. `resetConsoleForNewRun` (the clear-console branch) already does this. */
+                    if (typeof _wfActiveTab !== 'undefined') _wfActiveTab = 'all';
                 }
                 showToast(I18n.t('toast.workflowStarted'));
                 this.pollStatus();
@@ -1033,7 +1062,19 @@ const workflow = {
 
     async stop() {
         try {
-            await fetch('/api/workflow/stop', { method: 'POST' });
+            var resp = await fetch('/api/workflow/stop', { method: 'POST' });
+            /* The ANSWER decides, not the fact that a request left. `fetch` does not throw on a
+               4xx/5xx, so a refused stop (403 session expired, `foreign_run`, a run that finished
+               between the click and the request) used to fall through and reset the button states
+               anyway: Stop disabled itself, Execute came back, and `pollStatus` never writes
+               `setRunning(true)` again — the run kept going with no way to stop it from the UI,
+               and the next Execute queued a second run behind it. */
+            var body = await resp.json().catch(function () { return {}; });
+            if (!resp.ok || (body && body.ok === false)) {
+                var why = (body && body.error) || (I18n.t('toast.stopFailed') + ' (' + resp.status + ')');
+                showToast(why);
+                return;
+            }
             RunState.setRunning(false);
             /* Not "已停止": the Stop request only asks. The browsers close on a side
                thread and the run's own thread still owes the record its verdict, so

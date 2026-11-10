@@ -79,7 +79,17 @@ sandbox.setInterval = (fn) => {
 sandbox.clearInterval = () => {
     tick = null;
 };
-sandbox.fetch = () => Promise.resolve({ json: () => Promise.resolve(nextAnswer) });
+/* A response SHAPE, not just a body: the product reads `resp.ok` and `resp.status` (a refused
+   stop must not reset the buttons), exactly as a real `fetch` response carries them. Answering
+   `{json}` alone made every call look like an HTTP failure. `__fail` lets a scenario send a real
+   refusal without inventing a second stub. */
+let nextStatus = 200;
+sandbox.fetch = () =>
+    Promise.resolve({
+        ok: nextStatus >= 200 && nextStatus < 300,
+        status: nextStatus,
+        json: () => Promise.resolve(nextAnswer),
+    });
 
 const consoleOutput = sandbox.__byId('console-output');
 /* `const workflow` is script-scoped, not a sandbox property, so everything the
@@ -342,6 +352,24 @@ out.stopPress = {
     toasts: toasts.slice(),
     statusText: sandbox.__byId('status-text').textContent,
 };
+
+/* A REFUSED stop must leave the run stoppable. `fetch` does not throw on a 4xx/5xx, so the
+   button used to reset itself on a refusal (expired session, `foreign_run`, a run that ended
+   between the click and the request): Stop disabled itself, Execute came back, and the poll
+   never writes the running state again — a live run with no way to stop it from the UI. */
+toasts.length = 0;
+nextStatus = 403;
+nextAnswer = { ok: false, error: 'STOP-REFUSED' };
+sandbox.RunState.setRunning(true);
+sandbox.__byId('status-text').textContent = 'running';
+await wf.stop();
+out.stopRefused = {
+    toasts: toasts.slice(),
+    statusText: sandbox.__byId('status-text').textContent,
+    /* The point of the case: a refusal must not claim the run stopped. */
+    running: sandbox.RunState.running,
+};
+nextStatus = 200;
 
 /* The status bar carries the activity without the console's clock, and keeps the
    progress ratio rather than overwriting it with a different statistic. */

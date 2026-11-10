@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 STOP_QUIT_GRACE = 0.8
 
 
-def close_active_crawlers(quit_timeout: float = 3.0):
+def close_active_crawlers(quit_timeout: float = 3.0, run_id=None):
     """Close the login/crawl browsers of live sessions, one at a time.
 
     Used to run `taskkill /F /IM chromedriver.exe` — which killed every
@@ -52,8 +52,14 @@ def close_active_crawlers(quit_timeout: float = 3.0):
     runs. Each registered crawler is now quit with a bounded grace, and only a
     driver that ignores it is force-killed — by PID, tree included, so the
     chrome children of *this* session die with it.
+
+    ``run_id`` narrows the sweep to ONE record. With no id it closes every browser that no live run
+    owns (see ``ActiveCrawlers.closeable``): this runs on a side thread that can outlive the stop by
+    a reaper's 12 s join, and by then the queue may have started the next run — closing that run's
+    browser failed a crawl nobody had stopped.
     """
-    for crawler in list(execution_state['active_crawlers']):
+    registry = execution_state['active_crawlers']
+    for crawler in registry.for_run(run_id) if run_id else registry.closeable():
         close_login_browser(crawler, quit_timeout=quit_timeout)
 
 

@@ -33,8 +33,71 @@ history_service = ExecutionHistoryService(lambda: paths.active().history_db)
 #: exactly the single-user behaviour every existing caller and test expects.
 cookie_manager = CookieManager(lambda: paths.active().cookie_dir)
 
+
 #: Mutable per-process run state: one run in flight, its console buffer, its outcome counters
 #: and the LLM transport. Read ``stopping`` (not ``not running``) for a Stop — see app.stop_requested.
+class ActiveCrawlers:
+    """The browsers the run in flight has open, each tagged with the record that bought it.
+
+    A plain ``set`` could not answer "is this browser mine?". The stop path's FINAL sweep runs on a
+    side thread up to ~13 s after the request (a reaper's join timeout), and by then the queue may
+    have started the NEXT run — so closing "everything registered right now" closed that run's
+    browser and failed a crawl nobody had stopped. Each entry is therefore filed under
+    ``execution_state['run_id']`` as it was at registration time, and the sweep can ask for one run's
+    browsers instead of all of them.
+
+    Duck-compatible with the set it replaces: ``add``/``discard``/``clear``/``len``/iteration are the
+    whole surface ``nodes/executors/*`` and ``api/workflow.py`` use, plus :meth:`take_all` for the
+    stop route's snapshot-and-clear and :meth:`for_run` for the late sweep.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._by_run: dict[str, dict[int, object]] = {}
+
+    def add(self, crawler: object) -> None:
+        run_id = str(execution_state.get('run_id') or '')
+        with self._lock:
+            self._by_run.setdefault(run_id, {})[id(crawler)] = crawler
+
+    def discard(self, crawler: object) -> None:
+        key = id(crawler)
+        with self._lock:
+            for bucket in self._by_run.values():
+                bucket.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._by_run.clear()
+
+    def take_all(self) -> list:
+        """Every registered crawler, and empty the registry — the stop route's one atomic read."""
+        with self._lock:
+            taken = [crawler for bucket in self._by_run.values() for crawler in bucket.values()]
+            self._by_run.clear()
+            return taken
+
+    def for_run(self, run_id) -> list:
+        """The browsers one record opened (empty for an unknown run)."""
+        wanted = str(run_id or '')
+        with self._lock:
+            return list(self._by_run.get(wanted, {}).values())
+
+    def closeable(self) -> list:
+        """Every browser no LIVE run owns — the only set a late sweep may close."""
+        live = str(execution_state.get('run_id') or '') if execution_state.get('running') else ''
+        with self._lock:
+            return [crawler for rid, bucket in self._by_run.items() if rid != live for crawler in bucket.values()]
+
+    def __iter__(self):
+        with self._lock:
+            return iter([crawler for bucket in self._by_run.values() for crawler in bucket.values()])
+
+    def __len__(self) -> int:
+        with self._lock:
+            return sum(len(bucket) for bucket in self._by_run.values())
+
+
 execution_state: dict = {
     'running': False,
     #: Which account owns the run in flight (``''`` = the local owner). The single slot is shared
@@ -79,7 +142,7 @@ execution_state: dict = {
     # an older shape of the workflow.
     'attempted_nodes': set(),
     'outcome': '',
-    'active_crawlers': set(),
+    'active_crawlers': ActiveCrawlers(),
     # Set by Stop, cleared when a run claims the slot: it means "the user has asked
     # to stop and the worker has not written its verdict yet".
     'stopping': False,

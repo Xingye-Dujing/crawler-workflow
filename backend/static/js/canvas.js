@@ -1862,6 +1862,18 @@ const canvas = {
         }
     },
 
+    /* The same release for a wholesale wipe: opening another workflow (or starting a new one)
+       empties the nodes container in one line, and every box in it stayed observed. The observer
+       keeps a strong reference to its targets, so each box the page ever displayed survived the
+       switch — element, listeners, inner DOM and its closure over the old workflow's data. */
+    forgetAllNodeEls() {
+        const ids = Object.keys(this.nodes || {});
+        for (let i = 0; i < ids.length; i += 1) {
+            const node = this.nodes[ids[i]];
+            if (node && node.el) this._forgetNodeEl(node.el);
+        }
+    },
+
     deleteNode(id) {
         const el = this._nodeEl(id);
         if (el) {

@@ -133,6 +133,19 @@ class TestRunEndReporting:
         assert case['toasts'] == ['STOPPING-TOAST'], case['toasts']
         assert case['statusText'] == 'STOPPING'
 
+    def test_a_refused_stop_leaves_the_run_stoppable(self, console):
+        """`fetch` does not throw on a 4xx, so a refusal used to reset the buttons anyway.
+
+        The refused stop (expired session, `foreign_run`, a run that ended between the click and the
+        request) disabled 停止 and re-enabled 执行 while the run was still going, and `pollStatus`
+        never writes the running state again — a live run with no way to stop it from the UI, and the
+        next 执行 queued a second run behind it.
+        """
+        case = console['stopRefused']
+        assert case['running'] is True, 'the button state said the run had stopped'
+        assert case['toasts'] == ['STOP-REFUSED'], 'the refusal must reach the user'
+        assert case['statusText'] == 'running', 'the status bar announced a stop that never happened'
+
     def test_the_run_panel_is_kept_current_through_the_settling_window(self, console):
         """The row a user is watching is the run record, not the console.
 

@@ -1255,6 +1255,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
     # Guard and claim are one critical section. They used to be ~70 lines
     # apart: two concurrent POSTs both passed the check, both started a run
     # thread, and interleaved writes into one console, one store, one crawl.
+    start_error: Exception | None = None
     with execute_lock:
         running_thread = execution_state['thread']
         # The previous run's thread may still be unwinding after a Stop (it clears
@@ -1428,6 +1429,41 @@ def begin_run(data: dict, lang_header: str) -> dict:
             execution_state['cookie_expired'] = False
             execution_state['_mode'] = mode
             execution_state['executor'] = TaskExecutor(max_workers=max_workers, mode=mode)
+            # Claim AND start in ONE critical section. They used to be two: the handle was
+            # published after ``execute_lock`` was released, so a 停止 (or a second Run) landing in
+            # that window saw ``running=True`` with ``thread=None``, cleared the flag, and the next
+            # Run then claimed the slot — after which this start overwrote
+            # ``execution_state['thread']``, leaving TWO workers sharing one console, one results
+            # dict and one owner (and a run whose lines were filed under the other's record).
+            # ``Thread.start()`` returns as soon as the bootstrap runs, so the lock is held for
+            # microseconds rather than for the worker's life.
+            #
+            # Named 'run' so the process-monitor's kill guard (see ``kill_process``) actually
+            # matches: it refuses to inject SystemExit into ('MainThread', 'run'), but an unnamed
+            # thread reported as "Thread-N" let a stray click on the live worker raise SystemExit
+            # between acquiring a browser and registering it, orphaning a Chrome and holding its
+            # profile lock for the full timeout.
+            try:
+                execution_state['thread'] = threading.Thread(
+                    target=_run_worker,
+                    args=(
+                        workflow,
+                        mode,
+                        headless,
+                        use_profile,
+                        run_id,
+                        resume_run_id,
+                        workflow_name,
+                        max_workers,
+                        _owner,
+                        rerun,
+                    ),
+                    daemon=True,
+                    name='run',
+                )
+                execution_state['thread'].start()
+            except Exception as e:  # a start that throws is a verdict below, never a swallowed error
+                start_error = e
             started = True
         finally:
             if not started:
@@ -1440,38 +1476,14 @@ def begin_run(data: dict, lang_header: str) -> dict:
                 # run, reads A's console and results, and A is told its own run is foreign.
                 _restore_claim_stamp(_stamp_before, _ambient_before)
 
-    # Named 'run' so the process-monitor's kill guard (see ``kill_process``) actually
-    # matches: it refuses to inject SystemExit into ('MainThread', 'run'), but an
-    # unnamed thread reported as "Thread-N" and a stray click on the live run worker
-    # could raise SystemExit between acquiring a browser and registering it, orphaning
-    # a Chrome and holding its profile lock for the full timeout.
-    try:
-        execution_state['thread'] = threading.Thread(
-            target=_run_worker,
-            args=(
-                workflow,
-                mode,
-                headless,
-                use_profile,
-                run_id,
-                resume_run_id,
-                workflow_name,
-                max_workers,
-                _owner,
-                rerun,
-            ),
-            daemon=True,
-            name='run',
-        )
-        execution_state['thread'].start()
-    except Exception as e:
-        # A thread that never started never runs its finally, so the claim would stay
-        # held: ``running`` stuck True, ``settle_orphaned_records`` (which skips a
-        # running slot) never helps, and every later 运行 parks forever. Give the slot
-        # back and let the queue drain instead.
-        # Disarm first: this run opened no record, so its start failure belongs to the
-        # live console and the file log only — writing it to the durable per-run log
-        # would orphan rows under a run id no record will ever list.
+    if start_error is not None:
+        # A thread that never started never runs its finally, so the claim would stay held:
+        # ``running`` stuck True, ``settle_orphaned_records`` (which skips a running slot) never
+        # helps, and every later 运行 parks forever. Give the slot back and let the queue drain.
+        #
+        # Disarm first: this run opened no record, so its start failure belongs to the live console
+        # and the file log only — writing it to the durable per-run log would orphan rows under a
+        # run id no record will ever list.
         run_log_writer.disarm()
         set_log_sink(None)
         execution_state['thread'] = None
@@ -1482,10 +1494,10 @@ def begin_run(data: dict, lang_header: str) -> dict:
         # /api/workflow/status answering a run that has no record (and every OTHER account getting
         # ``foreign_run``). AGENTS: a refused claim owns nothing.
         _restore_claim_stamp(_stamp_before, _ambient_before)
-        # One console line, localized; logger.exception keeps the traceback in the
-        # file. add_log of the same text here would print the failure twice.
-        logger.exception(t('run.start_failed', err=e))
+        # One console line, localized; logger.exception keeps the traceback in the file.
+        logger.exception(t('run.start_failed', err=start_error))
+        # Below the lock: the drain starts the next request through ``begin_run``, which needs it.
         start_next_queued()
-        return {'status': 500, 'body': {'ok': False, 'error': str(e)}}
+        return {'status': 500, 'body': {'ok': False, 'error': str(start_error)}}
 
     return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}

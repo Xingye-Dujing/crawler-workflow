@@ -8,10 +8,10 @@ import os
 from i18n import t
 
 from .identity import (
+    NODE_DONE,
     NODE_FAILED,
     NODE_PARTIAL,
-    NODE_PENDING,
-    NODE_SKIPPED,
+    NODE_RESTORED,
     RESUMABLE_RUN_STATUS,
     RUN_INTERRUPTED,
     RUN_RUNNING,
@@ -30,22 +30,30 @@ class QueueMixin:
         and another path re-inserted. Called under the queue lock by ``app._mirror_queue``.
         """
         with self._lock:
-            self._conn.execute('DELETE FROM run_queue')
-            for position, entry in enumerate(entries):
-                self._conn.execute(
-                    'INSERT INTO run_queue (position, id, workflow_name, node_count, lang, queued_at, payload) '
-                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    (
-                        position,
-                        entry['id'],
-                        entry.get('workflow_name') or '',
-                        int(entry.get('nodes') or 0),
-                        entry.get('lang') or '',
-                        entry.get('queued_at') or '',
-                        json.dumps(entry.get('data')),
-                    ),
-                )
-            self._conn.commit()
+            try:
+                self._conn.execute('DELETE FROM run_queue')
+                for position, entry in enumerate(entries):
+                    self._conn.execute(
+                        'INSERT INTO run_queue (position, id, workflow_name, node_count, lang, queued_at, payload) '
+                        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        (
+                            position,
+                            entry['id'],
+                            entry.get('workflow_name') or '',
+                            int(entry.get('nodes') or 0),
+                            entry.get('lang') or '',
+                            entry.get('queued_at') or '',
+                            json.dumps(entry.get('data')),
+                        ),
+                    )
+                self._conn.commit()
+            except Exception:
+                # sqlite3 opens a transaction at the first DML and a failed statement does NOT wind
+                # it back, so a mirror that broke mid-write would be COMMITTED by the next write on
+                # this connection — a TRUNCATED queue restored after a restart. Same guard the row
+                # writers in ``progress.py`` carry, and for the same reason.
+                self._conn.rollback()
+                raise
 
     def load_queue(self) -> list[dict]:
         """The parked requests in drain order, or [] when nothing survived the restart.
@@ -201,8 +209,12 @@ class RunsMixin:
         ``None`` keeps the whole-record count (used by startup recovery, where no
         attempt was re-run to have shrunk the graph).
         """
-        sql = 'SELECT COUNT(*) AS n FROM node_runs WHERE run_id = ? AND status NOT IN (?, ?, ?, ?)'
-        params: list = [run_id, NODE_PENDING, NODE_SKIPPED, NODE_FAILED, NODE_PARTIAL]
+        # A WHITELIST, not a blacklist: ``running`` is neither done nor failed, and excluding only
+        # pending/skipped/failed/partial counted an in-flight node as finished — ``runs.node_done``
+        # could then read higher than ``execution_state['completed_nodes']``, which AGENTS forbids
+        # ("one definition of completed").
+        sql = 'SELECT COUNT(*) AS n FROM node_runs WHERE run_id = ? AND status IN (?, ?)'
+        params: list = [run_id, NODE_DONE, NODE_RESTORED]
         if attempted is not None:
             ids = list(attempted)
             if not ids:
@@ -491,18 +503,24 @@ class LogMixin:
         if not rows:
             return 0
         with self._lock:
-            start = self._conn.execute(
-                'SELECT COALESCE(MAX(seq), -1) + 1 FROM run_log WHERE run_id = ?', (run_id,)
-            ).fetchone()[0]
-            batch = []
-            for offset, (ts, wf_idx, wf_name, level, line) in enumerate(rows):
-                batch.append((run_id, start + offset, ts, wf_idx, wf_name or '', level or 'info', line))
-            self._conn.executemany(
-                'INSERT OR REPLACE INTO run_log (run_id, seq, ts, wf_idx, wf_name, level, line) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                batch,
-            )
-            self._conn.commit()
+            try:
+                start = self._conn.execute(
+                    'SELECT COALESCE(MAX(seq), -1) + 1 FROM run_log WHERE run_id = ?', (run_id,)
+                ).fetchone()[0]
+                batch = []
+                for offset, (ts, wf_idx, wf_name, level, line) in enumerate(rows):
+                    batch.append((run_id, start + offset, ts, wf_idx, wf_name or '', level or 'info', line))
+                self._conn.executemany(
+                    'INSERT OR REPLACE INTO run_log (run_id, seq, ts, wf_idx, wf_name, level, line) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    batch,
+                )
+                self._conn.commit()
+            except Exception:
+                # A half-written batch leaves the seq cursors consumed: the retry then starts PAST
+                # the rows it never wrote, i.e. a permanent hole in the durable console.
+                self._conn.rollback()
+                raise
         return len(batch)
 
     def read_log(
