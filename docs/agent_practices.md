@@ -1325,3 +1325,19 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
 - **Lint coverage that named two trees but scanned neither.** `tools/ci_lint_tiers.py` listed `desktop`/`tools` without
   recursion, so ~700 files were never linted; making them recursive also required excluding `.venv*`/`site-packages`/
   `dist`/`build` (measured: without it the tier enumerated 9,803 files and died on `WinError 206`).
+- **A driver timeout is session state, so borrowing it has to be repaid.** `pagefetch.fetch`/`fetch_json`/`fetch_text`
+  and `popup.dismiss` each called `driver.set_script_timeout(short)` and never restored it: every later
+  `execute_script` on that session inherited the in-page fetch's value, so a scroll or a DOM probe three nodes later
+  timed out for a reason that belonged to a fetch, and nothing in the message said so. `popup` did it per ATTEMPT
+  inside its retry loop, so the last attempt's value stuck. One `_script_timeout` context manager brackets the call and
+  restores the session maximum (Selenium has no getter, so the restored value is its own 30 s default).
+  `test_pagefetch_timeout.py` records every `set_script_timeout` and asserts the last one is the session's.
+- **A dense eigendecomposition is O(n^3) and the clustering ran it twice.** `cluster_graph` embedded the Laplacian,
+  clustered, relabelled, then re-embedded at `len(members)` — a second full `eigh` that is only needed when `_relabel`
+  dropped an EMPTY cluster, which is the rare case. On a real graph the step now pays for one decomposition instead of
+  two; `test_the_dense_eigendecomposition_runs_once_when_no_cluster_empties` counts the calls.
+- **A counter is evidence, so it may not count an attempt.** `_copy_template_into` incremented its "entries landed"
+  count for a DIRECTORY unconditionally, after a walk whose per-file copies are individually suppressed: a profile
+  template whose every file was locked (Windows) or whose disk filled still reported a seeded device, and the caller
+  then treated the new account as ready to log in with an empty profile. The directory counts only when at least one
+  file landed inside it.
