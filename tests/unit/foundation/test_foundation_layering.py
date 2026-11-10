@@ -50,9 +50,17 @@ def _roots(path: Path) -> set[str]:
 
 
 class TestTheFoundationImportsNoLayerAboveIt:
-    def test_core_exists_and_holds_the_four_foundation_modules(self):
+    def test_core_exists_and_holds_the_foundation_modules(self):
+        """The set is enumerated on purpose — a new module here is a contract change.
+
+        ``atomic`` joined it because every durable store in the project stages a file and renames it,
+        and on Windows ANY open handle on the target makes that rename fail with ``PermissionError``:
+        each store that kept its own bare ``os.replace`` was one concurrent reader away from turning a
+        valid save into a 500. It imports nothing, so every layer may use it — which is the test for
+        membership, and why extending this list was the right move rather than fixing it per store.
+        """
         modules = {path.stem for path in CORE.glob('*.py')} - {'__init__'}
-        assert modules == {'config', 'refs', 'machine', 'procs'}, (
+        assert modules == {'config', 'refs', 'machine', 'procs', 'atomic'}, (
             f'core/ holds {sorted(modules)}; a new module belongs here only if every layer may import it — '
             'say so in the package docstring and extend this contract deliberately'
         )

@@ -190,3 +190,50 @@ class TestCapturedParamsWithReusableNodes:
         params, verified = manager.captured_params('wf', 'g1__b', fingerprint)
         assert params == {'operation': 'drop_null'}
         assert verified is True
+
+
+class TestConcurrentSavesDoNotShareATempFile:
+    """The temp name has to be unique per WRITE.
+
+    It was ``.tmp-{pid}`` — distinct across processes and SHARED by every thread inside one — so a
+    save racing an autosave of the same canvas wrote one temp file: the second truncated the first's
+    bytes and ``os.replace`` published whatever survived. A truncated JSON is what ``load`` answers
+    ``None`` for, i.e. an empty canvas with no error shown.
+    """
+
+    def test_every_reader_sees_a_whole_document(self, manager):
+        import threading
+
+        # A payload big enough that a truncating write is visible between two flushes.
+        payload = {
+            'nodes': [{'id': f'node-{i}', 'type': 'process', 'params': {'blob': 'x' * 400}} for i in range(60)],
+            'connections': [],
+        }
+        manager.save('race', payload)
+        done = []
+        errors = []
+
+        def writer():
+            try:
+                for _ in range(6):
+                    manager.save('race', payload)
+                done.append(1)
+            except Exception as exc:  # a real failure must fail the test, not vanish
+                errors.append(exc)
+
+        def reader():
+            try:
+                for _ in range(30):
+                    # ``load`` answers None for an unparseable file; a reader must never see one.
+                    loaded = manager.load('race')
+                    assert loaded is not None and len(loaded['nodes']) == 60, 'a half-written canvas was published'
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=writer) for _ in range(2)] + [threading.Thread(target=reader) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(30)
+        assert not errors, errors[:3]
+        assert len(done) == 2, 'a writer thread died'

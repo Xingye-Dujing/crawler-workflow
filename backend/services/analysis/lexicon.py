@@ -13,6 +13,7 @@ import logging
 import os
 
 import jieba
+from core.atomic import replace as atomic_replace
 from core.config import Config
 
 from i18n import t
@@ -58,7 +59,7 @@ def materialize_userdict() -> int:
         handle.write('\n'.join(lines))
         if lines:
             handle.write('\n')
-    os.replace(tmp, path)
+    atomic_replace(tmp, path)
     return len(lines)
 
 

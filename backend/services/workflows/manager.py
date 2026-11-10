@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import uuid
 
+from core.atomic import replace as atomic_replace
 from core.refs import sanitize_filename
 from runtime import paths
 
@@ -47,12 +49,18 @@ class WorkflowManager:
         # crash, a full disk, a ``Ctrl+C`` or an antivirus holding the file left HALF a canvas on
         # disk; ``load`` answers ``None`` for that, the UI opens an empty canvas, and the next
         # save overwrites the remainder. That is the user's own drawing, and there is no copy.
-        tmp = f'{path}.tmp-{os.getpid()}'
+        # One temp name per WRITE, not per process: ``.tmp-{pid}`` was unique across processes and
+        # shared by every thread inside one, so a save and an autosave of the same canvas wrote the
+        # same temp file — the second truncated the first's bytes and ``os.replace`` published
+        # whatever survived (a truncated or interleaved JSON, which ``load`` then answers ``None``
+        # for: an empty canvas, silently). ``uuid4`` is what ``charts/outputs`` and the bundle writer
+        # use for the same reason.
+        tmp = f'{path}.tmp-{os.getpid()}-{uuid.uuid4().hex[:8]}'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        atomic_replace(tmp, path)
         logger.info(t('store.workflow_saved', path=path))
         return path
 
@@ -189,7 +197,7 @@ class WorkflowManager:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp, dst)
+            atomic_replace(tmp, dst)
             os.remove(src)
         else:
             os.replace(src, dst)

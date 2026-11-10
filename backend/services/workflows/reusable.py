@@ -24,6 +24,7 @@ import threading
 import time
 import uuid
 
+from core.atomic import replace as atomic_replace
 from runtime import paths
 
 from i18n import t
@@ -220,10 +221,13 @@ def _summary(payload: dict) -> dict:
 def _write_payload(payload: dict) -> None:
     os.makedirs(paths.active().reusable_dir, exist_ok=True)
     target = _path(str(payload['id']))
-    tmp = target + '.tmp'
+    # ``.tmp`` with no scoping at all was shared by every writer of this template — two tabs saving
+    # the same group, or a save racing the scheduler's — so one truncated the other's bytes and the
+    # rename published the mixture. One unique temp per write, then one atomic rename.
+    tmp = f'{target}.tmp-{uuid.uuid4().hex[:8]}'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, target)
+    atomic_replace(tmp, target)
 
 
 def list_templates() -> list:

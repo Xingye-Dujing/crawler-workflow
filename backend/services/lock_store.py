@@ -13,9 +13,9 @@ another's row.
 """
 
 import json
-import os
 import threading
 
+from core.atomic import replace as atomic_replace
 from runtime import paths
 
 _lock = threading.Lock()
@@ -47,7 +47,7 @@ def _save(values: dict) -> None:
     tmp = _path() + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(values, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, _path())
+    atomic_replace(tmp, _path())
 
 
 def all_locks() -> dict:

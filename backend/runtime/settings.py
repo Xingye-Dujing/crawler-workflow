@@ -17,6 +17,7 @@ import os
 import re
 import threading
 
+from core.atomic import replace as atomic_replace
 from core.config import Config
 from core.machine import catbus_source_twin
 
@@ -307,7 +308,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
         try:
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(vals, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, _PATH)
+            atomic_replace(tmp, _PATH)
         except OSError as e:
             warnings.append(t('set.saveFailed', err=e))
         if {'catbus_cli', 'catbus_node'} & set(patch or {}):

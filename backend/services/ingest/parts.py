@@ -18,6 +18,7 @@ import os
 import re
 
 import pandas as pd
+from core.atomic import replace as atomic_replace
 
 from i18n import t
 
@@ -141,7 +142,7 @@ class PartWriter:
         tmp = f'{path}.tmp'
         try:
             dump_rows(rows, tmp, self._columns, self.fmt)
-            os.replace(tmp, path)
+            atomic_replace(tmp, path)
         except Exception:
             with contextlib.suppress(OSError):
                 if os.path.exists(tmp):
@@ -240,7 +241,7 @@ class SnapshotWriter:
         tmp = f'{self.path}.tmp'
         try:
             dump_rows(rows, tmp, self._columns, self.fmt)
-            os.replace(tmp, self.path)
+            atomic_replace(tmp, self.path)
         except Exception:
             # The atomic replace never happened, so the half-written temp would
             # linger as a phantom "export" in the listing — remove it. On success
