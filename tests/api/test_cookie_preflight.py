@@ -232,6 +232,31 @@ class TestCache:
         preflight.probe('zhihu', fresh=True)
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
 
+    def test_the_profile_mode_is_part_of_the_cached_question(self, probe_zhihu, monkeypatch):
+        """With profiles on the probe reads ``chrome_profile/<platform>/<account>``; with them off it
+        reads the cookie file — two different sessions, so one verdict may not answer both.
+
+        The key was ``(scope, platform, account)``: a run with profiles enabled cached its verdict
+        where a later run with profiles disabled also looked, so the second run was gated on a
+        session it never uses.
+        """
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: True)
+        preflight.probe('zhihu')
+        seen = len(probe_zhihu.calls)
+
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
+        verdict = preflight.probe('zhihu')
+        assert len(probe_zhihu.calls) == seen + 1, 'the other mode reused a verdict about a different session'
+        assert verdict.get('cached') is not True
+
+    def test_the_same_profile_mode_still_reuses_its_own_verdict(self, probe_zhihu, monkeypatch):
+        """Positive control: adding the dimension must not cost the cache it protects."""
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
+        preflight.probe('zhihu')
+        seen = len(probe_zhihu.calls)
+        assert preflight.probe('zhihu')['cached'] is True
+        assert len(probe_zhihu.calls) == seen, 'the same question bought a second browser'
+
     def test_the_default_login_shares_its_verdict_across_both_spellings(self, probe_zhihu):
         """One login, one cache slot. The candidate list and a new node's preselection hand the
         default account its NAME, while an old canvas leaves it blank; the panel's 验证 recorded

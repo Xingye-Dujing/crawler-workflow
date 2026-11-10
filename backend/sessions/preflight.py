@@ -88,7 +88,7 @@ def invalidate(platform: str = None) -> None:
                 _cache.pop(key, None)
 
 
-def _cache_key(platform: str, account: str = '') -> tuple:
+def _cache_key(platform: str, account: str = '', use_profile: bool = None) -> tuple:
     """The ONE key a verdict is stored under.
 
     The scope comes first: two accounts can hold *different* sessions for the same platform and
@@ -101,13 +101,22 @@ def _cache_key(platform: str, account: str = '') -> tuple:
     “没有登录” from the slot nobody filled. The panel's 验证 wrote the folded name while the
     preflight at Run read the blank one, so the “已失效” the user had just measured never
     blocked the run.
+
+    ``use_profile`` is the third dimension, and it was missing: which session the probe READS
+    depends on it — with browser profiles on it is ``chrome_profile/<platform>/<account>``, with
+    them off it is the cookie file. A run with profiles enabled therefore cached its verdict under
+    a key a later run with profiles disabled also looked in, and the second run was gated on a
+    session it does not use (or cleared by a wall the other one hit). ``None`` means "ask the
+    setting", which is what ``has_session_to_test`` does, so the key stores that resolved answer
+    rather than the caller's spelling.
     """
-    return account_context.scope_key(), str(platform), CookieManager.path_segment(account)
+    active = profiles.is_enabled() if use_profile is None else bool(use_profile)
+    return account_context.scope_key(), str(platform), CookieManager.path_segment(account), bool(active)
 
 
-def cached(platform: str, account: str = '') -> dict | None:
-    """The stored verdict for one (platform, account) while it is young enough to quote."""
-    key = _cache_key(platform, account)
+def cached(platform: str, account: str = '', use_profile: bool = None) -> dict | None:
+    """The stored verdict for one (platform, account, profile mode) while it is young enough to quote."""
+    key = _cache_key(platform, account, use_profile)
     with _lock:
         entry = _cache.get(key)
         if not entry:
@@ -118,7 +127,7 @@ def cached(platform: str, account: str = '') -> dict | None:
         return dict(entry)
 
 
-def _remember(platform: str, verdict: dict, account: str = '') -> None:
+def _remember(platform: str, verdict: dict, account: str = '', use_profile: bool = None) -> None:
     """Cache only the two verdicts that are facts about the session.
 
     An ``unknown`` is not one: it says the check did not happen, and reusing it for
@@ -128,7 +137,7 @@ def _remember(platform: str, verdict: dict, account: str = '') -> None:
     if verdict.get('state') not in (VALID, EXPIRED):
         return
     with _lock:
-        _cache[_cache_key(platform, account)] = {**verdict, 'at': time.monotonic()}
+        _cache[_cache_key(platform, account, use_profile)] = {**verdict, 'at': time.monotonic()}
 
 
 def classify_probe(facts: dict) -> str:
@@ -339,7 +348,7 @@ def probe(
     if str(backend or '').strip().lower() == capabilities.BACKEND_CATBUS:
         return _probe_catbus(platform, account)
     if not fresh:
-        hit = cached(platform, account)
+        hit = cached(platform, account, use_profile)
         if hit:
             # ``cached=True`` is what lets the console say "reusing the check from
             # N minutes ago" instead of printing a verdict that looks freshly earned.
@@ -370,7 +379,7 @@ def probe(
         verdict['detail'] = t('cookie.pre.riskControl')
     elif verdict['state'] == UNKNOWN:
         verdict['detail'] = facts['error']
-    _remember(platform, verdict, account)
+    _remember(platform, verdict, account, use_profile)
     return verdict
 
 
