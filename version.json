@@ -20,6 +20,18 @@
           "size": 30555121
         }
       ]
+    },
+    "darwin-arm64": {
+      "archive": "dmg",
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-macOS-arm64.dmg",
+      "sha256": "5d770a96c429d77a173adb4ca6ba9e6c8cbd6c0362a0bf4f534a0e68695ec0a7",
+      "size": 177704943
+    },
+    "darwin-x64": {
+      "archive": "dmg",
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-macOS-x86_64.dmg",
+      "sha256": "8c8482c8645043b65fe42087a6c36bef0f4f77114d79cb0fb5959fcf66a56d04",
+      "size": 188680566
     }
   }
 }
