@@ -186,6 +186,28 @@ class TestAccountLifecycle:
         _post(admin_client, f'/api/accounts/{bob["user_id"]}/status', {'status': 'active'})
         _login(_new_client(admin_client), 'bob', PASSWORD)
 
+    def test_an_admin_lifts_a_failed_login_lock_over_the_api(self, admin_client):
+        """The 5-failures/15-minutes rule is also an availability hole.
+
+        Anyone who knows a username can hold that person out by spraying wrong passwords, and the
+        only way back was 重置密码 — a new credential for an account whose owner did nothing wrong.
+        The lock is armed here through the service (its own behaviour is pinned in the unit suite) so
+        this test is about the ROUTE: admin only, and it restores the same password.
+        """
+        import time
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        service = accounts_service.get_account_service()
+        failures = service.store.bump_failure(bob['user_id'], time.time())
+        service.store.set_locked_until(bob['user_id'], time.time() + 900, failures)
+        assert float(service.store.get_user(bob['user_id'])['locked_until']) > time.time(), 'the lock is armed'
+
+        unlocked = _post(admin_client, f'/api/accounts/{bob["user_id"]}/unlock', {})
+        assert unlocked.status_code == 200, unlocked.get_json()
+        assert unlocked.get_json()['ok'] is True
+        assert float(service.store.get_user(bob['user_id'])['locked_until'] or 0) == 0.0
+        _login(_new_client(admin_client), 'bob', PASSWORD)
+
     def test_delete_needs_the_exact_username_and_moves_the_tree(self, admin_client):
         bob = _create(admin_client, 'bob').get_json()['user']
         wrong = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'carol'})

@@ -173,6 +173,10 @@ const Accounts = {
                 (callable ?
                     '<button class="menu-btn" type="button" onclick="Accounts.reset(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.reset')) + '</button>' +
                     '<button class="menu-btn" type="button" onclick="Accounts.forceLogout(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.forceLogout')) + '</button>' +
+                    (user.locked_until > Date.now() / 1000 ?
+                        '<button class="menu-btn" type="button" onclick="Accounts.unlock(\'' + user.user_id + '\')">' +
+                            this.esc(I18n.t('accounts.unlock')) + '</button>'
+                        : '') +
                     (self ? '' : '<button class="menu-btn" type="button" onclick="Accounts.toggle(\'' + user.user_id + '\')">' +
                         this.esc(disabled ? I18n.t('accounts.enable') : I18n.t('accounts.disable')) + '</button>' +
                         '<button class="menu-btn" type="button" onclick="Accounts.remove(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.delete')) + '</button>')
@@ -250,6 +254,17 @@ const Accounts = {
         this.post('/api/accounts/' + encodeURIComponent(userId) + '/logout', {})
             .then((ok) => {
                 showToast(I18n.t(ok ? 'accounts.updated' : 'accounts.failed'));
+            });
+    },
+
+    unlock(userId) {
+        /* The failed-login lock is a product rule AND an availability hole: anyone who knows a
+           username can hold that person out by spraying wrong passwords. The row offers this only
+           while a lock is actually standing, and the action keeps the owner's own password. */
+        this.post('/api/accounts/' + encodeURIComponent(userId) + '/unlock', {})
+            .then((ok) => {
+                showToast(I18n.t(ok ? 'accounts.unlocked' : 'accounts.failed'));
+                if (ok) this.load();
             });
     },
 

@@ -231,6 +231,26 @@ def accounts_set_status(user_id: str):
     return jsonify({'ok': True, 'user': user})
 
 
+@bp.route('/api/accounts/<user_id>/unlock', methods=['POST'])
+def accounts_clear_lock(user_id: str):
+    """Lift a failed-login lock without touching the password.
+
+    The 5-failures/15-minutes rule is a product decision, and it is also an availability hole:
+    anyone who knows a username can hold that person out by spraying wrong passwords. The only way
+    back used to be 重置密码 — a new credential for an account whose owner did nothing wrong. This is
+    an admin action and it is audited (``account_unlock``).
+    """
+    if _json_body() is None:
+        return _bad_body()
+    try:
+        user = get_account_service().clear_lock(current_user(), user_id)
+    except AccountError as exc:
+        return _fail(exc)
+    except (OSError, sqlite3.Error) as exc:
+        return _fail_storage(exc)
+    return jsonify({'ok': True, 'user': user})
+
+
 @bp.route('/api/accounts/<user_id>/logout', methods=['POST'])
 def accounts_force_logout(user_id: str):
     if _json_body() is None:

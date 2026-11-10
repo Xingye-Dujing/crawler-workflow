@@ -38,6 +38,9 @@ EVENT_ACCOUNT_RESET = 'account_reset'
 EVENT_ACCOUNT_DISABLE = 'account_disable'
 EVENT_ACCOUNT_ENABLE = 'account_enable'
 EVENT_ACCOUNT_DELETE = 'account_delete'
+#: An admin lifted a failed-login lock. Recorded because it is an access-granting act (like
+#: ``account_enable``): the owner keeps the password they already had.
+EVENT_ACCOUNT_UNLOCK = 'account_unlock'
 EVENT_SESSION_REVOKE = 'session_revoke'
 EVENT_BOOTSTRAP = 'bootstrap'
 
@@ -453,6 +456,23 @@ class AccountService:
             result['status'] = status
             return result
 
+    def clear_lock(self, actor, user_id: str) -> dict:
+        """Lift an account's failed-login lock, keeping its password.
+
+        The per-account lock is a product rule (5 failures → 15 minutes) and it is also an
+        availability hole: anyone who knows a username can hold that person out by spraying wrong
+        passwords. Without an unlock action the only way back was 重置密码 — a new credential for
+        somebody who did nothing wrong. This restores access and records who did it.
+        """
+        with self._write_lock:
+            self._require_admin(actor)
+            row = self.store.get_user(user_id)
+            if row is None:
+                raise AccountError('accounts.notFound')
+            self.store.clear_lock(row['user_id'])
+            self._audit(EVENT_ACCOUNT_UNLOCK, user_id=row['user_id'], username=row['username'], actor=actor)
+            return self.public(self.store.get_user(user_id) or row)
+
     def force_logout(self, actor, user_id: str) -> dict:
         self._require_admin(actor)
         row = self.store.get_user(user_id)
@@ -568,6 +588,12 @@ class AccountService:
             'created_local': _local_text(row['created_at']),
             'last_login_at': float(row['last_login_at']) if row['last_login_at'] is not None else None,
             'last_login_local': _local_text(row['last_login_at']),
+            # The failed-login lock, so the panel can offer 解除锁定 for the row that is actually
+            # locked instead of always. It is not a secret (no hash, no address) and it is the only
+            # way an administrator can tell "this person is locked out" from "this person is idle".
+            'locked_until': float(row['locked_until'] or 0),
+            'locked_local': _local_text(row['locked_until']),
+            'failed_attempts': int(row['failed_attempts'] or 0),
         }
 
     # ─── internals ───

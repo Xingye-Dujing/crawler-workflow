@@ -168,6 +168,21 @@ class AccountsStore:
             self._conn.commit()
             return cur.rowcount > 0
 
+    def clear_lock(self, user_id: str) -> bool:
+        """Zero the failure counter and lift the lock; answer whether a row was there to clear.
+
+        ``set_locked_until`` cannot do this — it deliberately only arms a lock for the row STILL at
+        the failure count it was given. An admin needs the opposite: restore access to an account
+        somebody locked on purpose, without inventing a new password for its owner.
+        """
+        with self._lock:
+            cur = self._conn.execute(
+                'UPDATE users SET locked_until = 0, failed_attempts = 0 WHERE user_id = ?',
+                (user_id,),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
     def record_login(self, user_id: str, now: float, ip: str) -> None:
         self._write(
             'UPDATE users SET failed_attempts = 0, locked_until = 0, last_login_at = ?,'

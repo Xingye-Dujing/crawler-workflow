@@ -96,6 +96,41 @@ def test_wrong_password_locks_after_five_attempts(service):
     assert exc.value.key == 'accounts.lockedOut'
 
 
+def test_an_admin_can_lift_a_lock_without_touching_the_password(service):
+    """The 5-failures/15-minutes rule is a product decision AND an availability hole.
+
+    Anyone who knows a username can hold that person out by spraying wrong passwords. The only way
+    back used to be 重置密码 — a new credential for an account whose owner did nothing wrong. The
+    unlock action restores the SAME password and records who did it.
+    """
+    admin = _bootstrap(service)
+    # Bound BEFORE the lock: the actor has to be a live session, and a locked account cannot mint one.
+    actor = _login(service).account
+    for _ in range(5):
+        with pytest.raises(AccountError):
+            _login(service, password='wrong-password')
+    assert float(service.store.get_user_by_username('admin')['locked_until']) > time.time()
+
+    service.clear_lock(actor, admin['user_id'])
+
+    row = service.store.get_user_by_username('admin')
+    assert float(row['locked_until'] or 0) == 0.0, 'the lock is lifted'
+    assert int(row['failed_attempts'] or 0) == 0, 'the counter is reset, so the next failure starts over'
+    assert _login(service).account.user_id == admin['user_id'], 'the SAME password works again'
+    events = [entry['event'] for entry in service.store.list_audit(50)]
+    assert 'account_unlock' in events, events
+
+
+def test_unlocking_is_an_admin_action(service):
+    _bootstrap(service)
+    owner = _login(service).account
+    service.create_user(owner, 'member', PASSWORD)
+    member_actor = service.authenticate('member', PASSWORD, ip='10.0.0.9')
+    with pytest.raises(AccountError) as excinfo:
+        service.clear_lock(member_actor.account, owner.user_id)
+    assert excinfo.value.key == 'accounts.adminRequired'
+
+
 def test_a_locked_name_does_not_answer_differently_to_a_wrong_one(service):
     """The lockout refusal sits behind the password check on purpose. Answering it first made the
     public login form enumerate usernames: five attempts on “admin” return “请 15 分钟后再试”
