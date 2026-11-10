@@ -29,6 +29,17 @@ FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures'
 _selection = {'device_requested': False}
 
 
+@pytest.fixture(autouse=True)
+def _machine_component_source(monkeypatch):
+    """The device tier runs from a source checkout, which has no installer component tree.
+
+    Its Chrome/chromedriver are the machine's own, so the component source is 本机 — otherwise the
+    strict installer mode would refuse before a real browser is even started. A packaged install
+    keeps the default (安装器安装的); this fixture is about the test host, not the product.
+    """
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
+
+
 def pytest_collection_modifyitems(items):
     """Notice whether the selected run contains a device case at all.
 

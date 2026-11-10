@@ -42,6 +42,14 @@ ZH = {
         '本机没有可用的 Chrome，采集打不开浏览器。安装 Chrome，'
         '或在“设置 → 浏览器路径”里指向它（本系统的可执行名：{browser}）'
     ),
+    'crawl.installerChromeMissing': (
+        '当前组件来源是“安装器安装的”，但安装器没有在这台机器上安装 Chrome；'
+        '本机的 Chrome 不会被拿来顶替。请到“设置 → 环境与组件”安装，'
+        '或把组件来源改成本机已安装的并重启采析绘'
+    ),
+    'crawl.installerBrowserGone': (
+        '安装器登记的 Chrome 已不存在：{path}。请重新安装该组件，或把组件来源改成本机已安装的并重启采析绘'
+    ),
     'crawl.cnki.emptyRecord': '[知网] 导出页有一条 RefWorks 记录没有题名，按导入器规则跳过',
     'crawl.cnki.downloadFailed': '[知网] 导出题录文件没有下载成功：{err}',
     'crawl.cnki.exportBatch': '[知网] 已导出本次选择 {n} 篇（第 {first}-{last} 页）',
@@ -93,6 +101,14 @@ ZH = {
         '设置里的 chromedriver 路径不存在：{path}。'
         '它多半是与当前 Chrome 版本不匹配而失效了：换成匹配的驱动，'
         '或清空该设置让 Selenium 自己取（首次需要联网）'
+    ),
+    'crawl.installerDriverMissing': (
+        '当前组件来源是“安装器安装的”，但安装器没有安装 chromedriver；'
+        'Selenium 也不会另下一个来顶替。请到“设置 → 环境与组件”安装，'
+        '或把组件来源改成本机已安装的并重启采析绘'
+    ),
+    'crawl.installerDriverGone': (
+        '安装器登记的 chromedriver 已不存在：{path}。请重新安装该组件，或把组件来源改成本机已安装的并重启采析绘'
     ),
     'crawl.dy.authorDone': '[抖音作者] 作品列表采集结束，共 {n} 条（主页自报 {works} 条）',
     'crawl.dy.authorDoneNoCount': '[抖音作者] 作品列表采集结束，共 {n} 条（主页未给出作品数，无法判断是否已到末尾）',
@@ -516,6 +532,16 @@ EN = {
         'No Chrome on this machine, so a crawl has no browser to open. Install Chrome, or point '
         'Settings → browser path at it (the executable name on this system is {browser})'
     ),
+    'crawl.installerChromeMissing': (
+        'The component source is “Installed by the installer”, but the installer did not install '
+        'Chrome on this machine; this machine’s Chrome is not used as a substitute. Install it under '
+        'Settings → Environment & components, or switch the source to “Already on this machine” and '
+        'restart CaiXiHui'
+    ),
+    'crawl.installerBrowserGone': (
+        'The Chrome the installer registered is gone: {path}. Reinstall that component, or switch the '
+        'source to “Already on this machine” and restart CaiXiHui'
+    ),
     'crawl.cnki.emptyRecord': '[CNKI] an exported RefWorks record has no title; skipped by the importer rule',
     'crawl.cnki.downloadFailed': '[CNKI] the exported record file could not be downloaded: {err}',
     'crawl.cnki.exportBatch': '[CNKI] exported {n} records from this selection (pages {first}-{last})',
@@ -576,6 +602,15 @@ EN = {
     'crawl.driverMissing': (
         'The configured chromedriver path does not exist: {path}. It usually went stale against a Chrome update — '
         'point it at the matching driver, or clear it and let Selenium fetch one (needs network the first time)'
+    ),
+    'crawl.installerDriverMissing': (
+        'The component source is “Installed by the installer”, but the installer did not install chromedriver; '
+        'Selenium will not download a substitute either. Install it under Settings → Environment & components, '
+        'or switch the source to “Already on this machine” and restart CaiXiHui'
+    ),
+    'crawl.installerDriverGone': (
+        'The chromedriver the installer registered is gone: {path}. Reinstall that component, or switch the '
+        'source to “Already on this machine” and restart CaiXiHui'
     ),
     'crawl.dy.authorDone': '[Douyin author] post list finished, {n} rows (the profile publishes {works})',
     'crawl.dy.authorDoneNoCount': '[Douyin author] post list finished, {n} rows (the profile published no count)',

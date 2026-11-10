@@ -124,9 +124,16 @@ def explicit_paths() -> tuple[str, str]:
 
     # A stored path that points into the installer's tree stops counting when 本机 was chosen —
     # otherwise "use the Node already on this PATH" would still launch the bundled one forever,
-    # because the setting was persisted from the environment before the switch.
-    node = source.usable(get_setting('catbus_node')) or source.usable(Config.CATBUS_NODE)
-    cli = source.usable(get_setting('catbus_cli')) or source.usable(Config.CATBUS_CLI)
+    # because the setting was persisted from the environment before the switch. The reverse must
+    # also hold: in installer mode the launcher's manifest export outranks a settings.json written
+    # by an older build, or a stale machine path would keep a component the installer just placed
+    # out of reach.
+    if source.prefer_bundled():
+        node = source.usable(Config.CATBUS_NODE) or source.usable(get_setting('catbus_node'))
+        cli = source.usable(Config.CATBUS_CLI) or source.usable(get_setting('catbus_cli'))
+    else:
+        node = source.usable(get_setting('catbus_node')) or source.usable(Config.CATBUS_NODE)
+        cli = source.usable(get_setting('catbus_cli')) or source.usable(Config.CATBUS_CLI)
     return node, cli
 
 
@@ -139,7 +146,12 @@ def _probe_now() -> Probe:
     node_setting, cli_setting = explicit_paths()
     node = machine.find_node(node_setting)
     if not node:
-        return Probe(available=False, reason_key='catbus.noNode')
+        # 安装器安装的 means the machine's own Node is not a fallback: a backend that silently
+        # ran on a runtime the user did not select is the same defect as a fallback browser.
+        from services.components import source
+
+        reason = 'catbus.installerNodeMissing' if source.prefer_bundled() else 'catbus.noNode'
+        return Probe(available=False, reason_key=reason)
     # The runtime answers for itself: ``node --version`` is what the version gate is about, and
     # asking the adapter would confuse "no CatBus" with "the Node under it is too old".
     check = _call([node, '--version'], capture=True, timeout=30)
@@ -165,7 +177,10 @@ def _probe_now() -> Probe:
                 node=node,
                 node_version=node_version,
             )
-        return Probe(available=False, reason_key='catbus.noCli', node=node, node_version=node_version)
+        from services.components import source
+
+        reason = 'catbus.installerCliMissing' if source.prefer_bundled() else 'catbus.noCli'
+        return Probe(available=False, reason_key=reason, node=node, node_version=node_version)
     call = _call(argv_for(node, entry, ['capabilities']), capture=True)
     if call.spawn_error or call.code != 0:
         return Probe(
@@ -262,6 +277,8 @@ def supports(platform: str, mode: str) -> bool:
 _PANEL_KEYS = {
     'catbus.noNode': 'settings.backendNoNode',
     'catbus.noCli': 'settings.backendNoCli',
+    'catbus.installerNodeMissing': 'settings.backendInstallerNodeMissing',
+    'catbus.installerCliMissing': 'settings.backendInstallerCliMissing',
     'catbus.oldNode': 'settings.backendOldNode',
     'catbus.probeFailed': 'settings.backendProbeFailed',
     'catbus.probeUnreadable': 'settings.backendProbeFailed',

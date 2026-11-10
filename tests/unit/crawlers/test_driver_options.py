@@ -15,6 +15,13 @@ from crawlers.platforms.zhihu.crawler import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
 
+
+@pytest.fixture(autouse=True)
+def _machine_component_mode(monkeypatch):
+    """These cases assert the assembled options, not the component-source gate."""
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
+
+
 OCCLUSION_FLAGS = (
     '--disable-backgrounding-occluded-windows',
     '--disable-background-timer-throttling',

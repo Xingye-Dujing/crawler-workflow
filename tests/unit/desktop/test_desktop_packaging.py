@@ -1190,6 +1190,18 @@ def test_the_setup_manifest_requests_admin_before_the_loader():
     assert 'get_offset_from_rva' in patcher, 'the resource RVA must be converted before writing'
 
 
+def test_closing_the_window_ends_the_process():
+    """A closed window must not leave a windowless process behind (the mutex then blocks the next
+    double-click with “已有 采析绘 窗口在运行，但本次没能把它调到前台”). A minimise never returns
+    from the event loop, so only an actual close reaches this exit."""
+    source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
+    assert 'native_window.terminate_process()' in source
+    entry = (PACKAGING / 'macos_entry.py').read_text(encoding='utf-8')
+    assert 'native_window.terminate_process()' in entry
+    window = (PACKAGING / 'native_window.py').read_text(encoding='utf-8')
+    assert 'def terminate_process()' in window and 'ExitProcess(0)' in window
+
+
 def test_the_launcher_opens_the_main_window_maximized():
     source = (PACKAGING / 'desktop_entry.py').read_text(encoding='utf-8')
     assert 'maximized=True' in source
@@ -1272,7 +1284,7 @@ class TestPortableComponentsPointTheLookups:
         # apply_component_env writes the frozen choice; restore the process after each case.
         monkeypatch.delenv('CIXI_COMPONENT_SOURCE', raising=False)
 
-    def test_an_installed_node_is_exported_but_an_explicit_value_wins(self, desktop, tmp_path, monkeypatch):
+    def test_an_installed_node_is_exported_and_a_machine_value_does_not_block_it(self, desktop, tmp_path, monkeypatch):
         from services.components.manifest import Manifest
 
         root = tmp_path / 'install'
@@ -1292,9 +1304,15 @@ class TestPortableComponentsPointTheLookups:
         desktop.apply_component_env(tmp_path)
         assert os.environ['CIXI_NODE_BIN'] == str(node)
 
+        # A value from the machine is not the installed copy: in installer mode the manifest wins.
         monkeypatch.setenv('CIXI_NODE_BIN', 'C:/already/set/node.exe')
         desktop.apply_component_env(tmp_path)
-        assert os.environ['CIXI_NODE_BIN'] == 'C:/already/set/node.exe'
+        assert os.environ['CIXI_NODE_BIN'] == str(node)
+
+        # A value already inside the installer's tree names the installed copy and is kept.
+        monkeypatch.setenv('CIXI_NODE_BIN', str(node))
+        desktop.apply_component_env(tmp_path)
+        assert os.environ['CIXI_NODE_BIN'] == str(node)
 
     def test_no_manifest_is_quiet(self, desktop, tmp_path, monkeypatch):
         monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'nothing-here'))

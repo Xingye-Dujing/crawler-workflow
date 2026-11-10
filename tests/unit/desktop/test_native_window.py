@@ -33,6 +33,7 @@ class _Events:
         self.shown = _Event()
         self.loaded = _Event()
         self.closing = _Event()
+        self.closed = _Event()
 
 
 class _Event:
@@ -138,6 +139,20 @@ def test_close_ends_the_gui_loop_even_when_the_x_is_guarded(window, fake_webview
     assert verdict['refused'] is False, 'a running job refuses the user close'
     assert fake_webview['last_window'].destroyed == 1
     assert verdict['forced'] is True, 'the program can always close itself'
+
+
+def test_exit_on_close_ends_the_process_without_a_window(window, fake_webview, monkeypatch):
+    """The application window is the program: a destroyed window ends it, a hidden one does not."""
+    ended = []
+    monkeypatch.setattr(window, 'terminate_process', lambda: ended.append(True))
+
+    def during(fake):
+        fake.events.shown.set()  # minimise/restore keep the loop alive and end nothing
+        fake.events.closed.set()
+
+    fake_webview['on_start'] = during
+    window.run('采析绘', 'http://127.0.0.1:5000/', exit_on_close=True)
+    assert ended == [True]
 
 
 def test_a_window_that_never_loads_is_reported_and_closed(window, fake_webview):

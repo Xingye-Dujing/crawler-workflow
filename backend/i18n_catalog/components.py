@@ -41,11 +41,22 @@ ZH = {
     'env.sourceTitle': '组件来源',
     'env.sourceBundled': '安装器安装的（默认）',
     'env.sourceSystem': '本机已安装的',
-    'env.sourceHint': '只影响 Chrome / chromedriver / Node / CatBus 用哪一份；重启采析绘后生效。',
+    'env.sourceHint': (
+        '安装器安装的：只查安装器的组件目录，缺了直接报错，不会退回本机；本机已安装的：只查本机。重启采析绘后生效。'
+    ),
     'env.sourceFailed': '切换组件来源失败：{err}',
     'env.sourceComponent': '安装器',
     'env.sourceSystemNow': '本机',
     'env.sourceSettings': '设置里指定',
+    'env.sourceInstallerMissing': '安装器未装',
+    'env.installerBrowserMissing': (
+        '安装器没有安装 Chrome（当前组件来源是“安装器安装的”，不会改用本机的 Chrome）；'
+        '请在“环境与组件”里安装，或把组件来源切到“本机已安装的”后重启'
+    ),
+    'env.installerDriverMissing': (
+        '安装器没有安装 chromedriver（当前组件来源是“安装器安装的”，不会让 Selenium 另下一个）；'
+        '请在“环境与组件”里安装，或把组件来源切到“本机已安装的”后重启'
+    ),
     'components.catalogFailed': '组件清单读取失败：{err}',
     'components.installStarted': '正在安装 {component}；进度见任务状态',
     'components.jobMissing': '找不到这个安装任务',
@@ -107,13 +118,25 @@ EN = {
     'env.sourceBundled': 'Installed by the installer (default)',
     'env.sourceSystem': 'Already on this machine',
     'env.sourceHint': (
-        'Only decides which copy of Chrome / chromedriver / Node / CatBus is used; '
-        'takes effect after restarting CaiXiHui.'
+        'Installer copy: only the installer’s component folder is searched; a missing component is an '
+        'error, never a fallback to this machine. Machine copy: only this machine is searched. '
+        'Takes effect after restarting CaiXiHui.'
     ),
     'env.sourceFailed': 'Could not change the component source: {err}',
     'env.sourceComponent': 'installer',
     'env.sourceSystemNow': 'machine',
     'env.sourceSettings': 'from settings',
+    'env.sourceInstallerMissing': 'not installed by the installer',
+    'env.installerBrowserMissing': (
+        'The installer did not install Chrome (the component source is “Installed by the installer”, so '
+        'this machine’s Chrome is not used). Install it under Environment & components, or switch the '
+        'source to “Already on this machine” and restart'
+    ),
+    'env.installerDriverMissing': (
+        'The installer did not install chromedriver (the component source is “Installed by the installer”, '
+        'so Selenium will not download one). Install it under Environment & components, or switch the '
+        'source to “Already on this machine” and restart'
+    ),
     'components.catalogFailed': 'The component catalogue could not be read: {err}',
     'components.installStarted': 'Installing {component}; the job status carries the progress',
     'components.jobMissing': 'That installation job does not exist',

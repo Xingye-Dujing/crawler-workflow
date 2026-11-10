@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -128,6 +129,22 @@ def ensure_streams() -> None:
         sys.stderr = stream
 
 
+def terminate_process() -> None:
+    """End this process now, without waiting for threads the GUI host left behind.
+
+    The application window is the program: once it is destroyed there is no surface to return to,
+    and a lingering non-daemon thread would keep a windowless process alive — the next double-click
+    then reports “已有 采析绘 窗口在运行，但本次没能把它调到前台”. Minimising never calls this.
+    """
+    if os.name == 'nt':
+        with contextlib.suppress(AttributeError, OSError):
+            import ctypes
+
+            ctypes.windll.kernel32.ExitProcess(0)
+    # SIGKILL exists only on POSIX; Windows already returned through ExitProcess above.
+    os.kill(os.getpid(), getattr(signal, 'SIGKILL', signal.SIGTERM))
+
+
 def close() -> None:
     """Ask the window to go away; safe to call from a request thread.
 
@@ -153,6 +170,7 @@ def run(
     storage: str = '',
     on_close=None,
     maximized: bool = False,
+    exit_on_close: bool = False,
 ) -> str:
     """Show ``url`` in a native window and block until it closes.
 
@@ -215,8 +233,17 @@ def run(
         failed.append('窗口已经打开，但页面没有加载出来：本机无法启动 Microsoft Edge WebView2 组件。')
         close()
 
+    def closed() -> None:
+        # The application window IS the program. Terminating here (not only after ``start`` returns)
+        # covers a GUI host that keeps its loop or a non-daemon thread alive after the last window is
+        # destroyed — the shape that left a windowless process behind and blocked the next launch.
+        # A minimise never fires this event.
+        if exit_on_close:
+            terminate_process()
+
     window.events.shown += remember_handle
     window.events.closing += closing
+    window.events.closed += closed
     try:
         # private_mode=False + storage_path is what makes localStorage persist; the Edge engine
         # itself is the installed WebView2 runtime, so nothing is downloaded here.

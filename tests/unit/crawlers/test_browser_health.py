@@ -20,6 +20,13 @@ import crawlers.core.browser as browser
 
 pytestmark = pytest.mark.unit
 
+
+@pytest.fixture(autouse=True)
+def _machine_component_mode(monkeypatch):
+    """These cases assert renderer health, not the component-source gate."""
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
+
+
 UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.0.0 Safari/537.36'
 
 

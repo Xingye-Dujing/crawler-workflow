@@ -44,6 +44,13 @@ from runtime import settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+
+@pytest.fixture(autouse=True)
+def _machine_component_source(monkeypatch):
+    """A live run from source has no installer tree: its Chrome is this machine's own."""
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
+
+
 #: The jar the user actually saved, and the one answer to "does this platform have a session":
 #: both come from :mod:`tests.real_paths`, because the live harness asks the same question and
 #: two owners of a storage path disagree the week ``Config`` moves it.

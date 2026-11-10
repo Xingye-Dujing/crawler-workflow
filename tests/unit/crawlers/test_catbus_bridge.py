@@ -141,6 +141,9 @@ class TestTheDiscoveryVerdict:
     @pytest.fixture(autouse=True)
     def _real_logic(self, monkeypatch):
         monkeypatch.setattr(bridge, '_probe_now', _REAL_PROBE_NOW)
+        # The generic verdicts below are the 本机 answers; installer-mode refusals are their own
+        # cases (a missing installer component must not fall back to these finders).
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
         monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '/usr/bin/node')
         monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '/opt/catbus/cli.js')
 
@@ -149,6 +152,20 @@ class TestTheDiscoveryVerdict:
         info = bridge.probe(force=True)
         assert not info.available
         assert info.reason_key == 'catbus.noNode'
+
+    def test_installer_source_refuses_a_missing_installer_node(self, monkeypatch):
+        """安装器安装的 does not fall back to the machine's Node: the reason names the installer."""
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr(bridge.machine, 'find_node', lambda explicit='': '')
+        info = bridge.probe(force=True)
+        assert info.reason_key == 'catbus.installerNodeMissing'
+
+    def test_installer_source_refuses_a_missing_installer_adapter(self, monkeypatch):
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '')
+        monkeypatch.setattr(bridge, '_call', answer())
+        info = bridge.probe(force=True)
+        assert info.reason_key == 'catbus.installerCliMissing'
 
     def test_a_machine_with_node_but_no_adapter_says_so(self, monkeypatch):
         monkeypatch.setattr(bridge.machine, 'find_catbus_cli', lambda explicit='': '')

@@ -63,6 +63,9 @@ def launches(monkeypatch, tmp_path):
     monkeypatch.setattr(browser_module, 'ChromeWebDriver', FakeChrome)
     monkeypatch.setattr(browser_module, 'Service', lambda executable_path=None: ('service', executable_path))
     monkeypatch.setattr(browser_module, 'get_setting', lambda key: box['settings'].get(key, ''))
+    # These cases are the MACHINE-mode answers: the generic refusal and Selenium Manager's blank
+    # driver only exist when the user chose 本机. The installer-mode cases below set it back.
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
 
     def fake_find_chrome(explicit='', env=None):
         # Mirrors the real contract: an explicit path is the answer or nothing, so a typo is never
@@ -91,6 +94,17 @@ def test_no_chrome_refuses_and_names_the_setting(launches):
     # between the two languages cannot see it because both said the same Windows thing.
     assert machine.chrome_executable_name() in message
     assert 'constructed' not in launches, 'a browser was constructed after the refusal'
+
+
+def test_installer_source_refuses_a_missing_installer_chrome(launches, monkeypatch):
+    """安装器安装的 is strict: the machine's Chrome is not a fallback, so the refusal says so."""
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+    launches['chrome'] = ''
+    with pytest.raises(ValueError) as caught:
+        _start()
+    message = str(caught.value)
+    assert '安装器' in message and '本机' in message
+    assert 'constructed' not in launches
 
 
 def test_a_configured_browser_path_that_is_gone_is_not_replaced_by_a_found_one(launches):
@@ -144,6 +158,43 @@ def test_a_driver_that_exists_is_the_one_handed_to_the_service(launches, monkeyp
     monkeypatch.setattr(browser_module, 'Service', record_service)
     _start()
     assert seen['path'] == str(driver)
+
+
+def test_an_installer_driver_outranks_a_stale_empty_setting(launches, monkeypatch, tmp_path):
+    """A settings.json from an older build holds ``driver_path: ''``; the installed driver must win.
+
+    This is the exact first-run report: the installer's Chrome and chromedriver were both there, yet
+    the blank stored setting sent the launch to Selenium Manager and the console blamed a version
+    mismatch / first-use network fetch.
+    """
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+    components = tmp_path / 'components'
+    driver = components / 'chromedriver' / '1.0' / 'chromedriver'
+    driver.parent.mkdir(parents=True)
+    driver.write_bytes(b'MZ')
+    monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
+    monkeypatch.setenv('CIXI_DRIVER_PATH', str(driver))
+    launches['settings']['driver_path'] = ''
+    seen = {}
+
+    def record_service(executable_path=None):
+        seen['path'] = executable_path
+        return ('service', executable_path)
+
+    monkeypatch.setattr(browser_module, 'Service', record_service)
+    _start()
+    assert seen['path'] == str(driver)
+
+
+def test_installer_source_refuses_a_missing_installer_driver(launches, monkeypatch):
+    """In installer mode a blank driver is not Selenium Manager's cue: it is a missing component."""
+    monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+    launches['settings']['driver_path'] = ''
+    with pytest.raises(ValueError) as caught:
+        _start()
+    message = str(caught.value)
+    assert '安装器' in message and 'chromedriver' in message
+    assert 'constructed' not in launches
 
 
 def test_a_driver_that_will_not_pair_keeps_its_own_words(launches, monkeypatch):

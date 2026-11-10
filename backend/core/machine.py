@@ -175,6 +175,19 @@ def _console_version(binary: str) -> str:
     return text.splitlines()[0] if text else ''
 
 
+def installer_components_only() -> bool:
+    """Whether this process may use only the installer's own components.
+
+    The desktop launcher freezes the user's ``component_source`` choice in
+    ``CIXI_COMPONENT_SOURCE`` before :mod:`core.config` is imported. Absent (a source run, the
+    installer's own probe) means the shipped default: the installer's tree. In that mode the
+    machine's own Chrome/Node/CatBus is NOT a fallback — a component the installer did not
+    install is reported by name, because silently using a different browser or runtime would
+    contradict the switch the user set. ``system`` restores the per-OS candidate tables.
+    """
+    return str(os.environ.get('CIXI_COMPONENT_SOURCE') or '').strip().lower() != 'system'
+
+
 def platform_name(system: str | None = None) -> str:
     """The OS key this module's tables are indexed by, normalized onto three values."""
     name = str(sys.platform if system is None else system)
@@ -290,6 +303,13 @@ def find_chrome(explicit: str = '', env: dict | None = None, system: str | None 
     explicit = str(explicit or '').strip()
     if explicit:
         return explicit if _is_executable(explicit) else ''
+    if installer_components_only():
+        # The launcher exports CHROME_PATH only for a component it actually installed. Reading
+        # any further (Program Files, PATH) is the silent fallback the source switch forbids.
+        source = os.environ if env is None else env
+        exported = [str(source.get(name) or '').strip() for name in CHROME_ENV_VARS]
+        found = [path for path in exported if path and _is_executable(path)]
+        return found[0] if found else ''
     candidates = chrome_candidates(env, system)
     return candidates[0] if candidates else ''
 
@@ -543,6 +563,11 @@ def find_node(explicit: str = '', env: dict | None = None, system: str | None = 
     explicit = str(explicit or '').strip()
     if explicit:
         return explicit if _is_executable(explicit) else ''
+    if installer_components_only():
+        source = os.environ if env is None else env
+        exported = [str(source.get(name) or '').strip() for name in NODE_ENV_VARS]
+        found = [path for path in exported if path and _is_executable(path)]
+        return found[0] if found else ''
     found = node_candidates(env, system)
     return found[0] if found else ''
 
@@ -691,5 +716,10 @@ def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | N
     explicit = catbus_entry_at(explicit, system)
     if explicit:
         return explicit if catbus_entry_usable(explicit) else ''
+    if installer_components_only():
+        source = os.environ if env is None else env
+        exported = [catbus_entry_at(source.get(name), system) for name in CATBUS_ENV_VARS]
+        found = [path for path in exported if path and catbus_entry_usable(path)]
+        return found[0] if found else ''
     found = catbus_candidates(env, system)
     return found[0] if found else ''

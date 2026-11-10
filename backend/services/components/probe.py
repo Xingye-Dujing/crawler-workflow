@@ -16,6 +16,7 @@ installer renders it in the user's language, and the tests can assert on the key
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
 import subprocess
@@ -92,7 +93,17 @@ def _major(text: str) -> str:
     return match.group(1) if match else ''
 
 
+def _exported(variable: str) -> str:
+    """A path the launcher exported for an installer component, or '' (本机 mode drops it too)."""
+    return component_source.usable(os.environ.get(variable))
+
+
 def _chrome(root: Path) -> tuple[str, str]:
+    if component_source.prefer_bundled():
+        exported = _exported('CHROME_PATH') or _exported('CHROME_BIN')
+        if exported:
+            found = find_chrome(exported)
+            return found, 'component' if found else 'installer-missing'
     explicit = component_source.usable(_setting('browser_binary'))
     if explicit:
         found = find_chrome(explicit)
@@ -100,11 +111,21 @@ def _chrome(root: Path) -> tuple[str, str]:
     bundled = _component_binary(root, 'chrome')
     if bundled:
         return bundled, 'component'
+    if component_source.prefer_bundled():
+        # 安装器安装的 means exactly that: a machine-wide Chrome is not a substitute for a
+        # component the installer never put there. ``find_chrome`` already refuses the per-OS
+        # tables in this mode, so only a launcher-exported path can answer here.
+        found = find_chrome()
+        return (found, 'component') if found else ('', 'installer-missing')
     found = find_chrome()
     return found, 'system' if found else 'none'
 
 
 def _driver(root: Path) -> tuple[str, str]:
+    if component_source.prefer_bundled():
+        exported = _exported('CIXI_DRIVER_PATH')
+        if exported:
+            return (exported, 'component') if Path(exported).is_file() else ('', 'installer-missing')
     explicit = component_source.usable(_setting('driver_path'))
     if explicit:
         # A configured path is a promise the crawler checks too: it refuses by name when the file
@@ -113,6 +134,10 @@ def _driver(root: Path) -> tuple[str, str]:
     bundled = _component_binary(root, 'chromedriver')
     if bundled:
         return bundled, 'component'
+    if component_source.prefer_bundled():
+        # A downloaded driver would not be the installer's component either, so the honest state
+        # is "missing", never the Selenium-Manager degradation that belongs to 本机.
+        return '', 'installer-missing'
     found = shutil.which('chromedriver')
     return (found or ''), 'system' if found else 'none'
 
@@ -141,11 +166,17 @@ def _catbus_state() -> dict:
 
 def _catbus_capability() -> dict:
     state = _catbus_state()
+    if state.get('entry'):
+        source = 'component'
+    elif component_source.prefer_bundled():
+        source = 'installer-missing'
+    else:
+        source = 'system'
     return {
         'state': state['state'],
         'reason_key': state['reason_key'],
         'reason_params': state['reason_params'],
-        'source': 'component' if state.get('entry') else 'system',
+        'source': source,
     }
 
 
@@ -243,6 +274,15 @@ def _crawl_selenium(root: Path) -> dict:
                 {'path': _setting('browser_binary')},
                 chrome_source,
             )
+        if chrome_source == 'installer-missing':
+            return _capability(
+                'crawl_selenium',
+                'env.capBrowser',
+                'missing',
+                'env.installerBrowserMissing',
+                {},
+                chrome_source,
+            )
         if not driver:
             return _capability('crawl_selenium', 'env.capBrowser', 'missing', 'env.browserAndDriverMissing')
         return _capability('crawl_selenium', 'env.capBrowser', 'missing', 'env.browserMissing')
@@ -255,6 +295,15 @@ def _crawl_selenium(root: Path) -> dict:
                 'env.driverConfiguredMissing',
                 {'path': _setting('driver_path')},
                 chrome_source,
+            )
+        if driver_source == 'installer-missing':
+            return _capability(
+                'crawl_selenium',
+                'env.capBrowser',
+                'missing',
+                'env.installerDriverMissing',
+                {'chrome': chrome},
+                driver_source,
             )
         # An empty driver path is not a refusal in this product: the crawler hands it to Selenium
         # Manager (the launcher prints the same sentence), so the honest state is "works, degraded".

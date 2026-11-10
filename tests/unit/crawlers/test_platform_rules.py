@@ -28,6 +28,11 @@ from i18n import MESSAGES, t
 from services.charts import tikz, visualizer
 from services.charts.pdf import XELATEX_PATHS
 
+#: The suite's autouse fixture pins ``machine.find_chrome`` to a fixed fake (a crawler test must
+#: not depend on the browser installed on the runner). These cases are ABOUT discovery itself, so
+#: they put the real function back for their own duration.
+_REAL_FIND_CHROME = machine.find_chrome
+
 pytestmark = pytest.mark.unit
 
 #: Captured at import, before the suite-wide ``machine_has_a_browser`` pin replaces the attribute.
@@ -479,6 +484,38 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         wrapper.write_bytes(b'#!/bin/sh\n')
         os.chmod(wrapper, 0o644)
         assert machine.find_catbus_cli(str(wrapper), {'PATH': ''}, 'linux') == ''
+
+    def test_installer_mode_never_asks_the_machines_discovery_tables(self, tmp_path, monkeypatch):
+        """安装器安装的 must not fall back to the machine's PATH/npm roots.
+
+        The launcher exports exactly the components the installer put down; everything else on
+        the box belongs to 本机 and was deliberately not chosen. The fallback tables are booby
+        trapped: asking them at all fails the case, rather than relying on a search that happens
+        to come back empty on this runner.
+        """
+        chrome = tmp_path / 'chrome'
+        chrome.write_bytes(b'MZ')
+        node = tmp_path / 'node'
+        node.write_bytes(b'MZ')
+        cli = tmp_path / 'cli.js'
+        cli.write_text('// catbus\n', encoding='utf-8')
+        for name in ('CHROME_PATH', 'CHROME_BIN', 'CIXI_NODE_BIN', 'NODE_BIN', 'CIXI_CATBUS_CLI', 'CATBUS_CLI'):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setattr(machine, 'find_chrome', _REAL_FIND_CHROME)
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        for name in ('chrome_candidates', 'node_candidates', 'catbus_candidates'):
+
+            def refuse(*args, _name=name, **kwargs):
+                pytest.fail(f'{_name} was consulted')
+
+            monkeypatch.setattr(machine, name, refuse)
+        assert machine.find_chrome('', {'PATH': '/usr/bin'}, 'linux') == ''
+        assert machine.find_node('', {'PATH': '/usr/bin'}, 'linux') == ''
+        assert machine.find_catbus_cli('', {'PATH': '/usr/bin', 'HOME': '/srv'}, 'linux') == ''
+        # The exported (installer-owned) paths are the only answers in this mode.
+        assert machine.find_chrome('', {'CHROME_BIN': str(chrome), 'PATH': ''}, 'linux') == str(chrome)
+        assert machine.find_node('', {'NODE_BIN': str(node), 'PATH': ''}, 'linux') == str(node)
+        assert machine.find_catbus_cli('', {'CIXI_CATBUS_CLI': str(cli), 'PATH': ''}, 'linux') == str(cli)
 
     def test_the_version_floors_are_catbus_engines_translated(self):
         assert machine.node_version_supported('v24.21.0')

@@ -89,13 +89,17 @@ def inside_components(path: str | Path) -> bool:
 
 
 def usable(path) -> str:
-    """A configured path, or ``''`` when it points into a tree the user chose not to use.
+    """A configured path, or ``''`` when it lies in a tree the user chose not to use.
 
     A stored path is how the app remembers "the driver is here"; without this, choosing 本机 would
     keep loading the installer's driver forever, because the value was persisted before the switch
-    and a stored setting outranks every default.
+    and a stored setting outranks every default. The reverse is just as strict now: 安装器安装的
+    means only the installer's own tree, so a saved path to the machine's Chrome/Node is ignored
+    too. A user who wants that copy chooses 本机 — two sources, never a silent fallback.
     """
     text = str(path or '').strip()
-    if not text or prefer_bundled():
+    if not text:
         return text
+    if prefer_bundled():
+        return text if inside_components(text) else ''
     return '' if inside_components(text) else text

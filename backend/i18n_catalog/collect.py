@@ -19,6 +19,14 @@ ZH = {
     # 第二采集后端 CatBus（services/ingest/catbus.py）：每一句都点名缺的是哪一样。
     # 一个读不到的答案不能变成空表，因为节点会在空表上判定完成。
     'catbus.noNode': '这台机器上没有 Node 运行时，CatBus 后端因此不可用（可用 CIXI_NODE_BIN 指定）',
+    'catbus.installerNodeMissing': (
+        '当前组件来源是“安装器安装的”，但安装器没有安装 Node，CatBus 后端因此不可用；'
+        '本机的 Node 不会被拿来顶替。请到“环境与组件”安装，或把组件来源改成本机已安装的并重启'
+    ),
+    'catbus.installerCliMissing': (
+        '当前组件来源是“安装器安装的”，但安装器没有安装 CatBus 适配器；'
+        '本机的 CatBus 不会被拿来顶替。请到“环境与组件”安装，或把组件来源改成本机已安装的并重启'
+    ),
     'catbus.noRunnableCell': 'CatBus 对这个平台没有任何可运行的读功能',
     'catbus.notInManifest': 'CatBus 的清单里没有 {platform} / {mode} 这一格，不能用它采',
     'catbus.oldNode': 'CatBus 不接受这个 Node：{node} 报告 {version}（需要 22.22.2／24.15.0／26.0.0 以上）',
@@ -211,6 +219,16 @@ EN = {
     # is missing: an answer this side cannot read must never arrive as an empty table, because a node
     # settles DONE on an empty table.
     'catbus.noNode': 'this machine has no Node runtime, so the CatBus backend is unavailable (CIXI_NODE_BIN names one)',
+    'catbus.installerNodeMissing': (
+        'The component source is “Installed by the installer”, but the installer did not install Node, so the '
+        'CatBus backend is unavailable; this machine’s Node is not used as a substitute. Install it under '
+        'Environment & components, or switch the source to “Already on this machine” and restart'
+    ),
+    'catbus.installerCliMissing': (
+        'The component source is “Installed by the installer”, but the installer did not install the CatBus '
+        'adapter; this machine’s CatBus is not used as a substitute. Install it under Environment & components, '
+        'or switch the source to “Already on this machine” and restart'
+    ),
     'catbus.noRunnableCell': 'CatBus has no runnable read function for this platform',
     'catbus.notInManifest': 'the CatBus manifest has no {platform} / {mode} entry, so it cannot crawl that cell',
     'catbus.oldNode': 'CatBus will not run on this Node: {node} reports {version} (needs 22.22.2 / 24.15.0 / 26.0.0)',

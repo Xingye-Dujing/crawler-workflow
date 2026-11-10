@@ -368,6 +368,14 @@ class TestComponentSource:
         stored = str(components / 'chrome' / '1.0' / 'chrome.exe')
         assert source.usable(stored) == stored
 
+    def test_a_machine_path_is_ignored_when_the_installer_is_chosen(self, tmp_path, monkeypatch):
+        """The reverse of the 本机 rule: a saved local Chrome cannot outvote 安装器安装的 either."""
+        from services.components import source
+
+        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(tmp_path / 'components'))
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        assert source.usable(str(tmp_path / 'machine-chrome')) == ''
+
     def test_the_launcher_reads_the_preference_before_config_exists(self, tmp_path):
         from services.components import source
 
@@ -414,6 +422,7 @@ class TestBrowserVersion:
 class TestCrawlCapability:
     def test_a_missing_driver_is_degraded_because_selenium_manager_can_fetch_one(self, monkeypatch):
         """The launcher prints "Selenium downloads a matching driver"; the panel must not call it off."""
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
         monkeypatch.setattr(probe_module, '_setting', lambda key: '')
         monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '/opt/chrome')
         monkeypatch.setattr(probe_module, '_driver', lambda root: ('', 'none'))
@@ -421,7 +430,29 @@ class TestCrawlCapability:
         assert row['state'] == 'degraded'
         assert row['reason_key'] == 'env.driverAutoDownload'
 
+    def test_installer_source_reports_the_missing_installer_chrome_not_the_machines(self, monkeypatch):
+        """安装器安装的: no installer copy means missing, even when the machine has a Chrome."""
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr(probe_module, '_setting', lambda key: '')
+        monkeypatch.setattr(probe_module, '_component_binary', lambda root, component_id: '')
+        monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '')
+        row = probe_module._crawl_selenium(Path('.'))
+        assert row['state'] == 'missing'
+        assert row['reason_key'] == 'env.installerBrowserMissing'
+        assert row['source'] == 'installer-missing'
+
+    def test_installer_source_reports_the_missing_installer_driver_not_selenium_manager(self, monkeypatch):
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'bundled')
+        monkeypatch.setattr(probe_module, '_setting', lambda key: '')
+        monkeypatch.setattr(probe_module, '_component_binary', lambda root, component_id: '/opt/chrome')
+        monkeypatch.setattr(probe_module, 'find_chrome', lambda *args, **kwargs: '/opt/chrome')
+        monkeypatch.setattr(probe_module, '_driver', lambda root: ('', 'installer-missing'))
+        row = probe_module._crawl_selenium(Path('.'))
+        assert row['state'] == 'missing'
+        assert row['reason_key'] == 'env.installerDriverMissing'
+
     def test_a_configured_browser_that_is_gone_is_named_rather_than_guessed(self, monkeypatch):
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
         monkeypatch.setattr(
             probe_module, '_setting', lambda key: r'C:\gone\chrome.exe' if key == 'browser_binary' else ''
         )

@@ -69,12 +69,20 @@ Inno 的 `desktopicon` 任务，在线安装器用页面上的“创建桌面快
 macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad 管理。
 
 启动器会在应用导入配置之前读取 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus 的路径导出为
-现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。**设置面板里手填的路径仍然优先**，
-用户自己导出的环境变量也不会被覆盖。
+现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。安装器模式下清单是权威：
+设置面板里指向安装器组件目录内的路径仍然可用，指向本机或其他位置的路径会被忽略；进程里旧的、指向安装器目录外的同名
+环境变量会被安装器路径替换（否则旧 Chrome 会配安装器驱动，第一次运行就报版本不匹配）。
 
-“环境与组件”面板顶部可以选**组件来源**：默认“安装器安装的”（上表这些便携版），也可以改成“本机已安装的”，
-即使本机已经有一份匹配的 Chrome/Node，也按用户的选择来。切换在重启采析绘后生效；选择和本次启动生效的来源
+“环境与组件”面板顶部可以选**组件来源**：默认“安装器安装的”（上表这些便携版），也可以改成“本机已安装的”。
+这是严格二选一，不是“优先”：选“安装器安装的”时只认安装器写入的路径，**不再查本机安装根、`PATH` 或 npm 全局前缀**，
+缺 Chrome/chromedriver/Node/CatBus 任一份就按名报“安装器未安装”（面板和运行拒绝都会点名），绝不悄悄换成本机那份；
+选“本机已安装的”时只查本机，安装器目录里的旧路径也会被忽略。切换在重启采析绘后生效；选择和本次启动生效的来源
 是两个字段（`component_source_preference` / `component_source`），面板不会把“下次才生效”说成“现在就用”。
+这个切换只在采析绘软件端提供，安装器本身不提供。
+
+安装器模式还以**清单为权威**：启动器导出的 Chrome/chromedriver/Node/CatBus 路径覆盖 `settings.json` 里由旧版本留下的空值或本机路径，
+也会替换进程环境里指向安装器目录之外的旧值。否则旧设置会让“安装器安装的”实际拿本机 Chrome 配安装器驱动，首次运行就会报版本不匹配 /
+首次联网下载驱动那种长错误。安装器目录内的导出值保留，不清空用户数据。
 
 两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
 指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。

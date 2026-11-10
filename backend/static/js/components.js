@@ -21,6 +21,7 @@ const ComponentsPanel = {
         component: 'env.sourceComponent',
         system: 'env.sourceSystemNow',
         settings: 'env.sourceSettings',
+        'installer-missing': 'env.sourceInstallerMissing',
     },
 
     open() {

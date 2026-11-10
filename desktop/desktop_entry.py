@@ -574,10 +574,12 @@ def _component_doctor(base: Path) -> int:
 def apply_component_env(data_root=None) -> None:
     """Let a portable install point the existing machine lookups at its own components.
 
-    An explicit setting still wins (``runtime.settings`` reads it first), and an environment value
-    the user exported is never overwritten. This is only the default a bundled layout needs: without
-    it, installing Chrome beside the app would change nothing because ``find_chrome`` does not know
-    that folder exists.
+    In 本机 mode nothing is exported and an environment value the user set stays untouched. In
+    installer mode the manifest is the authority: a value already pointing inside the installer's
+    component tree is kept, but a machine path exported earlier is replaced by the installed copy —
+    otherwise a stale Chrome on ``CHROME_PATH`` would sit next to the installer's chromedriver and
+    the launch would report a version mismatch. Without this export, installing Chrome beside the
+    app would change nothing because ``find_chrome`` does not know that folder exists.
 
     The user's choice (``component_source``) is read from the settings file BEFORE ``core.config``
     is imported, because that module snapshots the environment into class attributes: a read after
@@ -613,7 +615,12 @@ def apply_component_env(data_root=None) -> None:
         for component_id, (variable, name) in paths.items():
             installed = manifest.path_of(component_id)
             candidate = installed / name if installed else None
-            if candidate and candidate.exists() and not os.environ.get(variable):
+            existing = str(os.environ.get(variable) or '').strip()
+            # In installer mode the manifest is the authority. A value the user exported that
+            # points at their own copy must not block the installer's path (that is how a stale
+            # machine Chrome ended up next to the installer's chromedriver); a value already
+            # inside this component tree is kept, because it names the same installed copy.
+            if candidate and candidate.exists() and not source.inside_components(existing):
                 os.environ[variable] = str(candidate)
     except (OSError, ValueError, ManifestError):
         return
@@ -736,11 +743,19 @@ def main(argv=None) -> int:
     try:
         from core import config
 
+        from services.components import source as component_source
+
         config.BASE_DIR = str(base)
         # The bundled driver the launcher exported is the answer when 安装器的组件 is chosen;
-        # ``find_driver`` only knows the machine's own locations. The settings default is taken
-        # from this attribute, which is why the export has to happen before the config import.
-        config.DRIVER_PATH = str(os.environ.get('CIXI_DRIVER_PATH') or '').strip() or find_driver(base)
+        # ``find_driver`` only knows the machine's own locations, so running it in that mode
+        # would put a machine driver into the settings default — the silent fallback the source
+        # switch forbids. A missing installer driver stays blank and the run refuses by name.
+        driver_export = str(os.environ.get('CIXI_DRIVER_PATH') or '').strip()
+        config.DRIVER_PATH = (
+            driver_export
+            if component_source.effective() == component_source.BUNDLED
+            else driver_export or find_driver(base)
+        )
     except Exception:
         fail_loudly(
             '启动失败：配置模块没有加载成功，数据目录与浏览器路径无法确定。请把日志文件发给维护者。',
@@ -835,6 +850,7 @@ def main(argv=None) -> int:
                 min_size=(1024, 700),
                 storage=native_window.storage_dir('webview'),
                 maximized=True,
+                exit_on_close=True,
             )
             if failure:
                 # The one dialog names the missing runtime and where to get it; the file keeps the
@@ -851,6 +867,13 @@ def main(argv=None) -> int:
         # Self-clean what this launch created; a killed process never gets the chance, which is why
         # the same sweep also runs at start.
         sweep_startup_litter(base)
+        if not no_window:
+            # Closing the window must end the program, not leave a windowless process whose mutex
+            # makes the next double-click report "已有 采析绘 窗口在运行，但本次没能把它调到前台". The GUI
+            # host and third-party libraries leave non-daemon threads behind, and the interpreter
+            # waits for them after ``main`` returns. Minimising never reaches here — only destroying
+            # the window does. A failed startup exits the same way, after its error is on disk.
+            native_window.terminate_process()
     return 0
 
 

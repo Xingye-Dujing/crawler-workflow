@@ -24,6 +24,8 @@ import threading
 import traceback
 from pathlib import Path
 
+import native_window
+
 APP_NAME = 'CaiXiHui'
 DISPLAY_NAME = '采析绘'
 BUNDLE_ID = 'com.caixihui.desktop'
@@ -212,7 +214,10 @@ def main(argv=None) -> int:
     try:
         from core import config
 
-        config.DRIVER_PATH = ''
+        # The online installer exports CIXI_DRIVER_PATH for the chromedriver it installed. Keeping
+        # it is what makes 安装器的组件 real on macOS; clearing it let Selenium Manager fetch a
+        # driver outside the installer's tree. Blank (本机 mode) stays blank as before.
+        config.DRIVER_PATH = str(os.environ.get('CIXI_DRIVER_PATH') or '').strip()
     except Exception:
         fail('启动失败：配置模块没有加载成功。请把日志发给维护者。', root, traceback.format_exc())
         return 1
@@ -259,7 +264,10 @@ def main(argv=None) -> int:
         with contextlib.suppress(OSError):
             server.shutdown()
         server.server_close()
-    return 0
+        # Same rule as the Windows launcher: a closed window (or a failed one) ends the process.
+        # The Cocoa host leaves threads behind, and the interpreter would otherwise wait for them
+        # after ``main`` returns. Minimising keeps the event loop alive and never reaches this line.
+        native_window.terminate_process()
 
 
 if __name__ == '__main__':
