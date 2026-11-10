@@ -12,6 +12,8 @@ language boundary: the JS harness pins its mapping and the Python tests pin this
 the same edge expectations.
 """
 
+from core.refs import as_bool
+
 from i18n import t
 from services.workflows.reusable import ALLOWED_TYPES
 
@@ -47,7 +49,12 @@ def expand_reusable_workflow(workflow: dict) -> tuple[dict, str]:
             expanded_nodes.append(node)
             continue
         params = node.get('params') or {}
-        if params.get('enabled') is False:
+        # ``as_bool(..., True)``, exactly like ``engine.workflow`` reads this same switch: ``is False``
+        # only skipped the group when the stored value was the Python bool, so a canvas that saved
+        # ``"false"``, ``0`` or ``"0"`` — all ordinary spellings of "off" — RAN the group the user had
+        # disabled, and the expanded graph was one the engine's own ``effective_workflow`` would have
+        # dropped. AGENTS: read a switch, never compare it.
+        if not as_bool(params.get('enabled'), True):
             continue
         enabled[nid] = node
         template = params.get('template') or {}

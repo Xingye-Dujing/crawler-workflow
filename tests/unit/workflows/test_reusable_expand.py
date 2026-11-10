@@ -2,6 +2,8 @@
 
 import copy
 
+import pytest
+
 from services.workflows.expand import expand_reusable_workflow
 
 
@@ -88,6 +90,27 @@ class TestExpansion:
         assert error == ''
         assert [n['id'] for n in expanded['nodes']] == ['up', 'down']
         assert expanded['connections'] == []
+
+    @pytest.mark.parametrize('stored', ['false', 0, '0'])
+    def test_every_spelling_of_off_drops_the_group(self, stored):
+        """``is False`` only skipped the Python bool, so a canvas that SAVED ``"false"`` ran the group.
+
+        The same switch is read by ``engine.workflow.effective_workflow`` through ``as_bool(..., True)``,
+        so the two layers disagreed: the engine dropped the group while the expansion before it ran it.
+        AGENTS: read a switch, never compare it. A BLANK value still means "not set" = on, which is
+        why ``None`` is not in this list.
+        """
+        wf = workflow(
+            [
+                {'id': 'up', 'type': 'process', 'params': {}},
+                group(enabled=stored),
+                {'id': 'down', 'type': 'output', 'params': {}},
+            ],
+            [{'from': 'up', 'to': 'g1'}, {'from': 'g1', 'to': 'down'}],
+        )
+        expanded, error = expand_reusable_workflow(wf)
+        assert error == ''
+        assert 'g1' not in [n['id'] for n in expanded['nodes']], f'{stored!r} was read as on'
 
     def test_a_group_to_group_wire_uses_the_source_output_and_target_slot(self):
         wf = workflow(
