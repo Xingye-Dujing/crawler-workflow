@@ -68,3 +68,44 @@ def test_the_platform_that_holds_no_session_still_builds_no_cookie_file(stub_fac
     The fold must not turn "no session" into an exception."""
     made = crawlers.get_crawler('wechat', cookie_dir='C:/jar', account='default')
     assert made.cookie_path == 'C:/jar/wechat_cookies.json'
+
+
+def test_a_cookie_that_was_never_saved_is_not_recorded_as_imported(monkeypatch, tmp_path):
+    """``mark_used`` must not claim a profile was given a session it never received.
+
+    The flag tested the PATH, not the file: with a cookie dir configured and nothing saved yet,
+    ``imported=True`` recorded ``cookie_stamp=''``, so the panel said 已导入 for an empty profile —
+    and ``needs_refresh`` (which needs a non-empty stamp) answered "no" from then on, so a user who
+    saved a Cookie afterwards was never offered the re-plant that would put it into that profile.
+    """
+    recorded = {}
+
+    monkeypatch.setattr(crawlers, 'crawler_class', lambda platform: _StubCrawler)
+    monkeypatch.setattr(profiles, 'profile_dir_for', lambda platform, enabled=None, account='': str(tmp_path / 'p'))
+    monkeypatch.setattr(profiles, 'needs_refresh', lambda platform, path, account='': False)
+    monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': False)
+    monkeypatch.setattr(profiles, 'file_stamp', lambda path: 'stamp' if path else '')
+    monkeypatch.setattr(profiles, 'mark_used', lambda *a, **k: recorded.update(k))
+
+    crawlers.get_crawler('weibo', cookie_dir=str(tmp_path / 'jar'), account='default')
+
+    assert recorded.get('imported') is False, 'a missing cookie file was recorded as imported'
+
+
+def test_a_cookie_that_is_there_is_still_imported(monkeypatch, tmp_path):
+    """Positive control: the plant still happens for a file that exists."""
+    recorded = {}
+    jar = tmp_path / 'jar'
+    jar.mkdir()
+    (jar / 'weibo_cookies.json').write_text('[{"name": "SUB"}]', encoding='utf-8')
+
+    monkeypatch.setattr(crawlers, 'crawler_class', lambda platform: _StubCrawler)
+    monkeypatch.setattr(profiles, 'profile_dir_for', lambda platform, enabled=None, account='': str(tmp_path / 'p'))
+    monkeypatch.setattr(profiles, 'needs_refresh', lambda platform, path, account='': False)
+    monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': False)
+    monkeypatch.setattr(profiles, 'file_stamp', lambda path: 'stamp' if path else '')
+    monkeypatch.setattr(profiles, 'mark_used', lambda *a, **k: recorded.update(k))
+
+    crawlers.get_crawler('weibo', cookie_dir=str(jar), account='default')
+
+    assert recorded.get('imported') is True

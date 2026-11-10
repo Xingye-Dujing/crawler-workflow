@@ -1,3 +1,5 @@
+import os
+
 from core.config import Config
 from sessions import profiles
 from sessions.cookies import CookieManager
@@ -146,6 +148,14 @@ def get_crawler(
     # profile holds that cookie.
     stale = bool(profile) and profiles.needs_refresh(platform, saved, account)
     planting = bool(saved) and (not profile or not profiles.is_used(platform, account) or refresh_cookies or stale)
+    # …but "planting" only means the SAVED FILE can go in. With a cookie dir configured and nothing
+    # saved yet the path is real and the file is not, and ``_load_cookies`` shrugs that off (its
+    # ``except OSError`` returns) while the marker did not: ``mark_used(imported=True,
+    # cookie_stamp='')`` then claimed the profile had been given a session, so the panel said 已导入
+    # for a profile that received nothing — and ``needs_refresh``, which needs a non-empty recorded
+    # stamp, answered "no" from then on, so the user who saved a Cookie later was never offered the
+    # re-plant that would put it into that profile.
+    imported = planting and bool(saved) and os.path.isfile(saved)
     crawler = cls(
         headless=headless,
         cookie_path=saved if planting else None,
@@ -156,5 +166,5 @@ def get_crawler(
     if profile:
         # The stamp is *which* file went in, so the panel can tell a saved-over cookie
         # from a profile that already holds the current one.
-        profiles.mark_used(platform, imported=planting, cookie_stamp=profiles.file_stamp(saved), account=account)
+        profiles.mark_used(platform, imported=imported, cookie_stamp=profiles.file_stamp(saved), account=account)
     return crawler
