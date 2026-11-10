@@ -222,7 +222,7 @@ Windows 上不打印版本，还会把参数交给已经打开的浏览器）；
 后 `doctor` 能读到这一行。
 
 2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,878,864 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
+**13,878,349 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
 包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
 `icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
 而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
@@ -261,9 +261,9 @@ arm64 **14,844,528 B**（`c91357bc2dbbdf9ed470704b2f468860d5581c8d95ddca58d19f07
 两个安装器分别写了对应架构应用 DMG 的摘要；**没有在真实 Mac 上运行过**。
 
 2026-11-11 的 Windows 发布（主程序自更新、关闭窗口彻底退出、安装器组件模式以清单为准）：`CaiXiHui-win64.zip`
-**130,169,841 B**（`4e833e4ea92ea896f9b5f3dacdc449a729de19cc73e230ed31e9165c79603217`）、离线
-`CaiXiHui-Setup.exe` **121,740,459 B**（`dc096c86c0ee6547eef6e3986fe6bed6028bf32d918f6a42ddb1c6b40b523cb0`）、
-在线 `CaiXiHui-Online-Setup.exe` **13,878,864 B**（`56ed327241e2f9cf0932aaa38ae2b28f9e5a9dd3a574cd29177a5fd819c4d2bb`）。
+**130,169,985 B**（`e055dc1295eb9796c0123e31b6855c6a1902ce003dd3bb3fde0febf057a933ab`）、离线
+`CaiXiHui-Setup.exe` **121,712,901 B**（`55926a539fb7ae4a29bfaa7fb516f3d13f5f37b532abdfdc1c5b81dff7665783`）、
+在线 `CaiXiHui-Online-Setup.exe` **13,878,349 B**（`23fc313ece7f57e75cf3583da1e0ab82e3cf017b4887b7e4577abaaf20d18b80`）。
 三个 exe 图标都从同一份圆形 ICO 资源实测为 32×32、四角 alpha=0、中心 alpha=255；zip/Setup 内是同一份新主程序。
 
 ## 构建
