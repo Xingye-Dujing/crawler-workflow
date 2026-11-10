@@ -1357,3 +1357,17 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
 - **A confirmation is not a switch.** ``data.get('confirm') is not True`` in the five destructive routes is correct and
   must stay a strict identity test: a truthy ``"false"`` string, or ``1``, or ``"yes"``, must NOT authorise deleting a
   dataset or a run. That is the one place where the as_bool rule would be the bug.
+- **A temp name scoped to the PROCESS is not scoped to the WRITER.** `WorkflowManager.save` staged under
+  ``<path>.tmp-{pid}`` and `reusable._write_payload` under a bare ``<target>.tmp``: distinct across processes, shared by
+  every thread inside one, so a save racing an autosave of the same canvas wrote ONE temp file — the second truncated
+  the first's bytes and the rename published whatever survived. A truncated JSON is exactly what `load` answers `None`
+  for, i.e. an empty canvas with no error shown. One ``uuid4`` suffix per write, which is what `charts/outputs` and the
+  bundle writer already did. Pinned by a four-thread writer/reader test that never sees a short document.
+- **On Windows a READER blocks the rename, and 28 call sites each re-learned it.** POSIX `os.replace` replaces the
+  target even while another handle has it open; Windows answers `PermissionError` (errno 13), so a save racing a load
+  of the same file was a valid write turned into an HTTP 500 — and the user's retry then worked, so it read as
+  flakiness. `core.atomic.replace` retries with a bounded backoff, re-raises a file that stays locked (a retry that
+  swallowed it would hide which file could not be written), and does NOT retry a real error like a full disk. Adopted
+  by the workflow manager, reusable templates, settings, the lock store, the lexicon and the ingest parts writer.
+  `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a fifth module was the
+  deliberate contract change that test's own message asks for, because every layer may import it.
