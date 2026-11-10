@@ -600,11 +600,14 @@ def apply_component_env(data_root=None) -> None:
         return
     choice = source.stored_source(data_root)
     os.environ[source.ENV_VAR] = choice
+    # The tree is named in BOTH modes: 本机 needs it to recognise (and ignore) a stored path
+    # that points into the installer's folder. Naming it only in installer mode let that stored
+    # path outlive the switch and launch the very Chrome the user had just rejected.
+    os.environ.setdefault('CIXI_COMPONENTS_DIR', str(components_root()))
     if choice != source.BUNDLED:
         # 本机 chosen: the installer's folder may be complete and must still be ignored.
         return
     try:
-        os.environ.setdefault('CIXI_COMPONENTS_DIR', str(components_root()))
         manifest = Manifest(install_root()).load()
         paths = {
             'chrome': ('CHROME_PATH', component_payload_path('chrome')),

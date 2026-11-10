@@ -1362,12 +1362,16 @@ class TestPortableComponentsPointTheLookups:
         settings = tmp_path / 'data'
         settings.mkdir()
         (settings / 'settings.json').write_text('{"component_source": "system"}', encoding='utf-8')
-        monkeypatch.setenv('CIXI_COMPONENTS_DIR', str(components))
+        monkeypatch.delenv('CIXI_COMPONENTS_DIR', raising=False)
+        monkeypatch.setattr('services.components.paths.components_root', lambda root=None: components)
         monkeypatch.delenv('CIXI_NODE_BIN', raising=False)
         monkeypatch.delenv('CIXI_COMPONENT_SOURCE', raising=False)
         desktop.apply_component_env(tmp_path)
         assert 'CIXI_NODE_BIN' not in os.environ, 'the bundled Node must not be exported'
         assert os.environ['CIXI_COMPONENT_SOURCE'] == 'system'
+        assert os.environ['CIXI_COMPONENTS_DIR'] == str(components), (
+            '本机 still needs the tree path to recognise and ignore a stored installer path'
+        )
 
 
 class TestACustomDataFolder:
