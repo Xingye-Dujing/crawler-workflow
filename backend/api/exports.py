@@ -93,9 +93,12 @@ def export_dataset():
         # A writer that cannot handle the frame's contents (an unhashable cell in
         # a json export) is still a request the caller can fix.
         return jsonify({'ok': False, 'error': str(e)}), 400
-    except OSError as e:
+    except OSError:
+        # The message is the file system talking: a full disk, a path another process holds, a
+        # permission the account lacks — internal detail, and on some platforms it quotes the whole
+        # absolute path. The traceback belongs in the log; the caller gets a sentence they can act on.
         logger.exception(t('misc.export_failed'))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': t('api.exportFailedWrite')}), 500
     return jsonify({'ok': True, **result})
 
 

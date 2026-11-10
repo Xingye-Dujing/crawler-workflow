@@ -165,8 +165,11 @@ def report_generate():
     try:
         saved = report.save(markup, name)
     except OSError as e:
+        # ``run.reportFailed`` keeps the operating system's own words for the CONSOLE (where the user
+        # can read them next to the file name they chose); the HTTP answer says what to do instead of
+        # echoing a path and an errno the panel cannot use.
         add_log(t('run.reportFailed', err=e))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': t('api.reportSaveFailed')}), 500
     add_log(t('run.reportSaved', name=saved['name'], size=saved['bytes']))
     return jsonify({'ok': True, **saved, 'charts': markup.count('<figure>')})
 

@@ -204,9 +204,11 @@ def save_workflow():
         return jsonify({'ok': False, 'error': t('api.paramInvalid', name='workflow')}), 400
     try:
         path = get_workflow_manager().save(name, workflow)
-    except OSError as e:
+    except OSError:
+        # Same rule as the export writer: an errno and an absolute path are not an answer the panel
+        # can act on, and the console already carries the specific sentence (misc.save_workflow_failed).
         logger.exception(t('misc.save_workflow_failed'))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': t('api.workflowSaveFailed')}), 500
     # The file mapping is part of the save: every Upload node records which
     # stored dataset it reads, so reopening this workflow later finds its file
     # already loaded instead of asking for another upload.
@@ -695,8 +697,11 @@ def kill_process():
             ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(ident), None)
             return jsonify({'ok': False, 'error': t('api.killFailedGeneric')}), 500
         return jsonify({'ok': True, 'message': t('api.killDone', name=target.name)})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+    except Exception:
+        # A ctypes call that throws is an internal failure of THIS process, not something the caller
+        # did; echoing it hands out the interpreter's own words (and the thread ident it was given).
+        logger.exception(t('api.killFailedGeneric'))
+        return jsonify({'ok': False, 'error': t('api.killFailedGeneric')}), 500
 
 
 @bp.route('/api/workflow/execute', methods=['POST'])

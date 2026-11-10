@@ -12,6 +12,9 @@ ZH = {
     'api.badAccount': '账号名不合法：{account}（字母、数字、下划线或连字符，1-24 个；统一按小写保存）',
     'api.badRequest': '请求格式不对：{what}',
     'api.biblioDecode': '无法解码文件 {name}（已尝试 UTF-8 与 GB18030）',
+    'api.exportFailedWrite': '导出写入失败：目标目录不可写或磁盘已满，请换一个文件名或清理磁盘后重试',
+    'api.reportSaveFailed': '报告保存失败：导出目录不可写或磁盘已满，请清理磁盘后重试',
+    'api.workflowSaveFailed': '工作流保存失败：工作流目录不可写或磁盘已满，请清理磁盘后重试',
     'api.biblioDecodeSuspect': (
         '{name} 按 GB18030 解出来是乱码（多半是 Big5 或 Shift-JIS 文件）：请用记事本/Excel 另存为 UTF-8 后再上传'
     ),
@@ -213,6 +216,14 @@ EN = {
     ),
     'api.badRequest': 'Malformed request: {what}',
     'api.biblioDecode': 'Could not decode {name} (tried UTF-8 and GB18030)',
+    'api.exportFailedWrite': (
+        'The export could not be written: the target directory is not writable or the disk is full. '
+        'Choose another name or free some space and try again'
+    ),
+    'api.reportSaveFailed': ('The report could not be saved: the export directory is not writable or the disk is full'),
+    'api.workflowSaveFailed': (
+        'The workflow could not be saved: the workflow directory is not writable or the disk is full'
+    ),
     'api.biblioDecodeSuspect': (
         '{name} decodes to mojibake as GB18030 (it is probably Big5 or Shift-JIS): re-save it as UTF-8 and upload again'
     ),
