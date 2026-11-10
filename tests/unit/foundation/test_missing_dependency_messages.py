@@ -28,6 +28,9 @@ REAL_FIND_CHROME = machine.find_chrome
 class TestTheMachineProbes:
     @pytest.fixture(autouse=True)
     def _real_probe(self, monkeypatch):
+        # These cases are the machine's own discovery tables, not the installer component mode.
+        monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
+        monkeypatch.delenv('CIXI_COMPONENTS_DIR', raising=False)
         monkeypatch.setattr(machine, 'find_chrome', REAL_FIND_CHROME)
 
     def test_an_explicit_browser_path_is_the_answer_or_nothing(self, tmp_path):

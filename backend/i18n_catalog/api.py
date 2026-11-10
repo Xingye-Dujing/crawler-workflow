@@ -187,6 +187,9 @@ ZH = {
     'store.dataset_saved': '文件已持久化：{name}（{rows} 行，id {did}）',
     'store.datasets_bound': '工作流 {wf} 已绑定 {n} 个上传文件',
     'store.workflow_saved': '工作流已保存：{path}',
+    'api.updateRunning': '正在运行采集，先停止本次运行再更新',
+    'api.updateDownloadFailed': '下载更新失败：{err}',
+    'api.updateApplyFailed': '启动更新程序失败：{err}',
 }
 
 EN = {
@@ -414,4 +417,7 @@ EN = {
     'store.dataset_saved': 'File stored: {name} ({rows} rows, id {did})',
     'store.datasets_bound': 'Workflow {wf} bound to {n} uploaded file(s)',
     'store.workflow_saved': 'Workflow saved: {path}',
+    'api.updateRunning': 'A crawl is running; stop it before updating',
+    'api.updateDownloadFailed': 'The update download failed: {err}',
+    'api.updateApplyFailed': 'Could not start the updater: {err}',
 }

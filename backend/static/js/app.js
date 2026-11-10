@@ -584,6 +584,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // not the stale view. A new (unnamed) canvas keeps its draft.
     boot('reloadOpenFile', () => workflow.reloadOpenFile());
     boot('stats', () => stats.init());
+    /* The main program checks its release feed once per start (and every six hours); a failure
+       is silent, because an update prompt is a convenience, not a workspace dependency. */
+    boot('updates', () => {
+        if (typeof UpdatePanel === 'undefined') return;
+        UpdatePanel.check();
+        setInterval(() => UpdatePanel.check(), 6 * 60 * 60 * 1000);
+    });
     /* Replace every OS-drawn candidate UI (select popups, datalist suggestions)
        with the themed equivalents. Runs last so it also catches anything the
        other modules rendered during init. */

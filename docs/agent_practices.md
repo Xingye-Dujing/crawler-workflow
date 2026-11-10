@@ -476,6 +476,11 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `install-manifest.json` exists. A source checkout, portable zip, offline Setup and cloud container have no installer
   tree; treating their empty tree as installer mode refused every crawl with “安装器未安装”. Their effective source is
   本机. The component manager can still create a tree in a source run; the runtime reads the manifest from the same root.
+- **A self-update replaces the program, never the user's data.** `services/update.py` stages the app payload under
+  `<data>/updates`, verifies the feed hash, and hands the swap to a per-OS script after the process exits. Windows keeps
+  `components/`, `data/`, `logs/`, cookies, models and `install-manifest.json`; macOS moves the whole `.app` with a
+  `.previous` rollback. The feed's `version` is bumped only after the assets are uploaded, and a source run refuses by
+  name (`supported: false`) instead of replacing a developer checkout.
 - **The manifest outranks a stale export.** When installer mode is in force, the installed record is checked first, then
   the launcher's `CHROME_PATH`/`CIXI_DRIVER_PATH`/`CIXI_NODE_BIN`/`CIXI_CATBUS_CLI` (only if inside the component root),
   and only then a configured path. An old export pointing at an older version must not shadow the current install; the

@@ -87,6 +87,23 @@ macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad �
 两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
 指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。
 
+## 主程序自更新
+
+主程序更新频繁，组件更新很少，所以更新只替换应用本体，不碰 `components/`、`data/`、`logs/`、Cookie、模型和
+`install-manifest.json`。页面启动后会读仓库根目录的 `version.json`（Gitee raw 优先，GitHub raw 兜底），
+发现版本更高且**当前平台有可下载包**时，顶部弹出“发现新版本”提示；只有用户点“立即更新”才下载。
+
+- **发布前**：把新包（Windows 的 `CaiXiHui-win64.zip` 分片；macOS 的 DMG）先上传到 Release，再把
+  `version.json` 的 `version`、`sha256`、`size`、`parts`/`url` 更新为这一版；`version.json` 里的版本必须与
+  `backend/version.py` 的 `APP_VERSION` 对应。资产没上传时不要先改 `version.json`：应用会因“当前平台没有包”而不提示。
+- **Windows**：下载分片 → 合并 → 校验总 SHA-256 → 解压到 `<data>/updates/<version>/staged`；用户确认后启动
+  PowerShell 脚本等待本进程退出，在线安装布局替换 `<安装根>/app`，便携布局只替换程序文件（保留用户数据），
+  旧版本放 `app.previous` 供回滚，然后重启 `CaiXiHui.exe`。
+- **macOS**：下载 DMG → 校验 → `hdiutil` 挂载、`ditto` 复制 `.app` 到暂存目录 → 退出后脚本替换整个 `.app`，
+  失败则移回 `CaiXiHui.app.previous` 再启动。
+- **源码运行**不执行自更新（`supported: false`），避免把开发检出替换成发布包；请更新代码后重启。
+- 下载与替换都在 `<data>/updates/` 下进行；更新失败不会改动当前安装，重新检查/重试即可。
+
 ## BERT 模型包（可选，Windows / macOS）
 
 这里有两个**不同**的路径，安装器把它们分开：

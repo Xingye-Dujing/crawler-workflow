@@ -494,8 +494,10 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
         (tmp_path / 'install-manifest.json').write_text('{"schema":1,"components":{}}', encoding='utf-8')
         chrome = components / 'chrome'
         chrome.write_bytes(b'MZ')
+        os.chmod(chrome, 0o755)
         node = components / 'node'
         node.write_bytes(b'MZ')
+        os.chmod(node, 0o755)
         cli = components / 'cli.js'
         cli.write_text('// catbus\n', encoding='utf-8')
         for name in ('CHROME_PATH', 'CHROME_BIN', 'CIXI_NODE_BIN', 'NODE_BIN', 'CIXI_CATBUS_CLI', 'CATBUS_CLI'):

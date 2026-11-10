@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "version": "2026.11.11.1",
+  "released": "2026-11-11",
+  "notes": "主程序自更新、安装器组件模式修复、关闭窗口彻底退出。",
+  "platforms": {
+    "win32": {
+      "archive": "zip",
+      "sha256": "2e02fd15af2186d38a9d920aa1814c54b46fe403f9a30ade41f6d54ff7b625b6",
+      "size": 130169198,
+      "parts": [
+        {
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.001",
+          "sha256": "25b2f06c85993c10fa5ae76cef9bf2398f3d60f86abf02b7c85631c758b02e5b",
+          "size": 99614720
+        },
+        {
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11/CaiXiHui-win64.zip.002",
+          "sha256": "e2f62da11a0df60b5123d027261114364874f3213c60e554839d05df3d0e724c",
+          "size": 30554478
+        }
+      ]
+    }
+  }
+}

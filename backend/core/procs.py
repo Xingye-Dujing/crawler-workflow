@@ -60,7 +60,7 @@ def reap_command(pid: int, system: str | None = None) -> list[str]:
     return []
 
 
-def popen_kwargs(system: str | None = None) -> dict:
+def popen_kwargs(system: str | None = None, detached: bool = False) -> dict:
     """The keyword arguments that keep a spawned helper from opening a console window here.
 
     The app boots short-lived helper processes (the Node that runs the CatBus backend, once per
@@ -68,9 +68,25 @@ def popen_kwargs(system: str | None = None) -> dict:
     user watches a black window appear for every one of them. That constant exists only in Windows'
     ``subprocess`` module, so the POSIX answer is an empty dict rather than a keyword Python rejects
     — and the name is read through ``getattr`` so this module imports on a Linux box too.
+
+    ``detached`` adds the flags that let an updater outlive the process that started it. POSIX
+    callers pair this with ``start_new_session=True`` rather than a Windows creation flag.
     """
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+    if detached and machine.is_windows(system):
+        flags |= getattr(subprocess, 'DETACHED_PROCESS', 0x00000008)
+        flags |= getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
     return {'creationflags': flags} if machine.is_windows(system) and flags else {}
+
+
+def powershell_command(script: str, args: list[str] | None = None) -> list[str]:
+    """The Windows interpreter and the arguments that run one updater script.
+
+    One per-OS fact, beside ``popen_kwargs``: the self-updater must not spell the executable
+    elsewhere in ``backend/`` (the cross-platform rule and its AST gate). Callers only reach this
+    branch after asking ``machine.is_windows()``.
+    """
+    return ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(script), *(args or [])]
 
 
 def child_pids(proc_root: str, parent: int) -> list[int]:

@@ -34,6 +34,7 @@ from api.schedules import bp as schedules_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from api.studio import bp as studio_bp
+from api.update import bp as update_bp
 from api.visualize import bp as visualize_bp
 from api.workflow import bp as workflow_bp
 from api.workflow_history import bp as workflow_history_bp
@@ -531,6 +532,7 @@ app.register_blueprint(components_bp)
 # ``/api/settings`` holds machine-local values (driver path, window, timeouts, Ollama address) that
 # are re-read per run, so a save applies without restarting the server.
 app.register_blueprint(settings_bp)
+app.register_blueprint(update_bp)
 app.register_blueprint(llm_bp)
 
 
