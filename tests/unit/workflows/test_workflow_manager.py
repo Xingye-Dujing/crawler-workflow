@@ -230,7 +230,8 @@ class TestConcurrentSavesDoNotShareATempFile:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = [threading.Thread(target=writer) for _ in range(2)] + [threading.Thread(target=reader) for _ in range(2)]
+        threads = [threading.Thread(target=writer) for _ in range(2)]
+        threads += [threading.Thread(target=reader) for _ in range(2)]
         for thread in threads:
             thread.start()
         for thread in threads:
