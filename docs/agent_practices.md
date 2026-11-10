@@ -1341,3 +1341,10 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   template whose every file was locked (Windows) or whose disk filled still reported a seeded device, and the caller
   then treated the new account as ready to log in with an empty profile. The directory counts only when at least one
   file landed inside it.
+- **A BIBLIOGRAPHIC record's id is its content; a CRAWLED row's is its site identity** — the same distinction AGENTS
+  makes for the ledger, on the other side of the pipeline. `importer` has always hashed
+  ``title|first author|year|journal`` into ``记录ID``, and `metrics.records` relies on that: with no title it uses the
+  id AS the document name and disambiguates two same-titled works with ``[:6]``. `fuse` built a POSITIONAL id instead
+  (``{source}#{parent index}-{row index}``), so inserting or removing a parent renumbered every record and the same
+  paper appeared under a different name in the next run's figure. It now hashes title | first author | year | source,
+  which also keeps "the same work cited by two platforms stays two rows" — the property this node exists for.
