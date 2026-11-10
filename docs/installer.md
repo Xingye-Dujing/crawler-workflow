@@ -275,6 +275,22 @@ arm64 **14,844,863 B**（`a886c8bb7b927bc5e6bb50941509289c99f0535cc10a11aff63d40
 在线 `CaiXiHui-Online-Setup.exe` **13,878,349 B**（`23fc313ece7f57e75cf3583da1e0ab82e3cf017b4887b7e4577abaaf20d18b80`）。
 三个 exe 图标都从同一份圆形 ICO 资源实测为 32×32、四角 alpha=0、中心 alpha=255；zip/Setup 内是同一份新主程序。
 
+2026-11-12 把安装器改成**安装时读 `version.json`**（`main@cd1c914`）后只重建了安装器，主程序的 zip/Setup/应用 DMG
+一个字节没动：
+
+- 源码模式实测：安装器进程的 `/api/state` 返回 `feed: ok / 2026.11.11.1`，`app` 行版本、体积
+  **130,169,985 B** 与已发布 zip 一致，默认预设勾上了 `app`，总体积 563,291,242 B；`feed.resolve` 对
+  `win32` / `darwin-arm64` / `darwin-x64` 三个条目取到的 URL、摘要与 `version.json` 完全相同。
+- 打包的 `CaiXiHui-Online-Setup.exe` **13,887,902 B**
+  （`28dc8bf9a9f712259ff516c4d7a04cf3906733c17f8042b1c70354baaeec6a99`）里确认带上了
+  `services.components.feed`（`build/pyinstaller-bootstrap/installer/PYZ-00.toc`），PE manifest 仍是
+  `requireAdministrator`；Gitee 上重新下载回来的字节与该摘要一致。窗口版这次没有重跑（需要 UAC 交互），
+  自更新链路未改。
+- `installer_only` 的 macOS run（`42825279883`）只替换了两个安装器 DMG：arm64 **14,852,875 B**
+  （`b1c4377db4a72c246a5364f2d8fe629d947957ef8a5d94b5f7e76f67e45cbfd7`）/ x86_64 **15,647,102 B**
+  （`58a72a0943041de9129f2ac4294e7332691538ee60cb99a8d3ef37458ce97baa`），应用 DMG 的摘要与
+  `version.json` 里的 `471fb4a1…` / `da0e4362…` 保持一致。**同样没有在真实 Mac 上运行过。**
+
 ## 构建
 
 ```powershell
