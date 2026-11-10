@@ -3,6 +3,7 @@
 from flask import Blueprint, jsonify, request
 from runtime.stores import get_run_store
 
+from i18n import t
 from services.runs.compare import compare_runs
 
 bp = Blueprint('run_compare', __name__)
@@ -10,15 +11,22 @@ bp = Blueprint('run_compare', __name__)
 
 @bp.route('/api/runs/compare', methods=['GET'])
 def runs_compare():
+    """The diff between two recorded runs.
+
+    The refusals go through ``t()`` because the panel prints ``body.error`` in a toast: English
+    literals here showed a Chinese UI an English sentence for a bad query string. The row ceiling is
+    the service's (``compare.compare_runs`` clamps to its own maximum), so a huge or negative ``limit``
+    cannot make this route build an unbounded diff.
+    """
     run_a = str(request.args.get('a') or '').strip()
     run_b = str(request.args.get('b') or '').strip()
     if not run_a or not run_b:
-        return jsonify({'ok': False, 'error': 'a and b are required'}), 400
+        return jsonify({'ok': False, 'error': t('api.compareNeedsBothRuns')}), 400
     raw_limit = str(request.args.get('limit') or '50').strip()
     try:
         limit = int(raw_limit)
     except (TypeError, ValueError):
-        return jsonify({'ok': False, 'error': 'limit must be an integer'}), 400
+        return jsonify({'ok': False, 'error': t('api.compareLimitInteger')}), 400
     try:
         diff = compare_runs(
             get_run_store(),

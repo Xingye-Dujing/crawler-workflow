@@ -15,6 +15,8 @@ ZH = {
     'api.exportFailedWrite': '导出写入失败：目标目录不可写或磁盘已满，请换一个文件名或清理磁盘后重试',
     'api.reportSaveFailed': '报告保存失败：导出目录不可写或磁盘已满，请清理磁盘后重试',
     'api.workflowSaveFailed': '工作流保存失败：工作流目录不可写或磁盘已满，请清理磁盘后重试',
+    'api.compareNeedsBothRuns': '对比两次运行需要在 a 与 b 里各给一个运行 id',
+    'api.compareLimitInteger': '对比的 limit 必须是整数（每列最多列出多少行差异）',
     'api.biblioDecodeSuspect': (
         '{name} 按 GB18030 解出来是乱码（多半是 Big5 或 Shift-JIS 文件）：请用记事本/Excel 另存为 UTF-8 后再上传'
     ),
@@ -216,6 +218,8 @@ EN = {
     ),
     'api.badRequest': 'Malformed request: {what}',
     'api.biblioDecode': 'Could not decode {name} (tried UTF-8 and GB18030)',
+    'api.compareNeedsBothRuns': 'Comparing two runs needs a run id in both a and b',
+    'api.compareLimitInteger': 'The comparison limit must be an integer (how many differing rows per column to list)',
     'api.exportFailedWrite': (
         'The export could not be written: the target directory is not writable or the disk is full. '
         'Choose another name or free some space and try again'
