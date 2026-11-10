@@ -173,6 +173,29 @@ class TestItemKey:
         assert item_key({'链接': 'https://x/1', '标题': 'A'}) == item_key({'链接': 'https://x/1', '标题': 'B'})
         assert item_key({'链接': 'https://x/1'}) != item_key({'链接': 'https://x/2'})
 
+    def test_a_signed_link_is_the_same_item_after_it_is_re_signed(self):
+        """小红书 hands out a fresh ``xsec_token`` on every visit for the same note.
+
+        Hashing the whole URL made the same post a NEW item on every pass, so the dedupe ledger
+        answered "not seen" and 继续 re-stored a set that had already been paid for. The token is a
+        query string, not an identity.
+        """
+        first = {'笔记链接': 'https://www.xiaohongshu.com/explore/abc?xsec_token=AAA&xsec_source=pc_search'}
+        second = {'笔记链接': 'https://www.xiaohongshu.com/explore/abc?xsec_token=BBB&xsec_source=pc_feed'}
+        assert item_key(first) == item_key(second)
+
+    def test_a_query_that_does_identify_something_is_kept(self):
+        """Only KNOWN volatile names are dropped: a page marker still distinguishes two rows."""
+        assert item_key({'链接': 'https://x/1?p=2'}) != item_key({'链接': 'https://x/1?p=3'})
+
+    def test_a_note_site_id_beats_its_link(self):
+        """The crawler already emits a session-independent 笔记ID; the ledger now prefers it."""
+        labelled = {'平台': 'xiaohongshu', '笔记ID': 'abc', '笔记链接': 'https://x/abc?xsec_token=AAA'}
+        moved = {'平台': 'xiaohongshu', '笔记ID': 'abc', '笔记链接': 'https://x/abc?xsec_token=ZZZ&extra=1'}
+        assert item_key(labelled) == item_key(moved)
+        # …and the same id on another platform is a different item, exactly like a comment id.
+        assert item_key({'平台': 'a', '笔记ID': 'abc'}) != item_key({'平台': 'b', '笔记ID': 'abc'})
+
 
 # ─── fingerprints ──────────────────────────────────────────────────────
 

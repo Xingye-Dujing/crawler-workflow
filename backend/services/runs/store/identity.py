@@ -61,6 +61,15 @@ _COMMENT_ID_FIELDS = ('评论ID',)
 # Carried alongside it so a mixed batch cannot collapse a 知乎 numeric id onto a 微博 one:
 # the two sites draw their ids from separate spaces and neither knows the other's.
 _COMMENT_PLATFORM_FIELDS = ('平台',)
+#: A NOTE's own site id, emitted beside the tokenised link by the platforms whose links are signed.
+#: 小红书 is the measured case: ``笔记链接`` carries a per-visit ``xsec_token`` (the crawler says so —
+#: "a session-independent note id goes into 笔记ID for cross-run comparison"), so keying on the link
+#: made every re-crawl a fresh set of items and the dedupe ledger never recognised one. The id is
+#: the identity; the token is a query string.
+_SITE_ID_FIELDS = ('笔记ID', '作品ID', '视频ID', '动态ID', '文章ID', '商品ID')
+#: Query parameters that change between visits and identify nothing. Stripped before a link is
+#: hashed so a signed URL and its re-signed twin are the same item (see :func:`_stable_link`).
+_VOLATILE_QUERY = ('xsec_token', 'xsec_source', 'share_token', 'share_from', 'share_medium', 'from')
 
 
 def _dumps(value) -> str:
@@ -100,6 +109,27 @@ def first_text(item: dict, fields) -> str:
     return ''
 
 
+def _stable_link(link: str) -> str:
+    """*link* without its volatile query parameters, so a re-signed URL keeps its identity.
+
+    A crawling session gets a fresh ``xsec_token`` (小红书) or ``share_token`` on every visit, and the
+    URL is otherwise the same note. Hashing it whole made the SAME post a new item on every pass:
+    the dedupe ledger's answer was "not seen" and 继续 re-stored the set it had already paid for. The
+    remaining query (a ``?p=2`` page marker, a video id) does identify something, so only the known
+    volatile names are dropped; the path and the rest of the query stay.
+    """
+    text = str(link or '').strip()
+    if not text or '?' not in text:
+        return text
+    base, _, query = text.partition('?')
+    kept = [
+        pair
+        for pair in query.split('&')
+        if pair and pair.split('=', 1)[0].lower() not in _VOLATILE_QUERY
+    ]
+    return f'{base}?{"&".join(kept)}' if kept else base
+
+
 def item_key(item) -> str:
     """Fingerprint of one crawled item — "have I already got this?".
 
@@ -118,7 +148,10 @@ def item_key(item) -> str:
     cid = first_text(item, _COMMENT_ID_FIELDS)
     if cid:
         return _sha1('comment', first_text(item, _COMMENT_PLATFORM_FIELDS), cid)
-    link = first_text(item, _URL_FIELDS)
+    sid = first_text(item, _SITE_ID_FIELDS)
+    if sid:
+        return _sha1('site', first_text(item, _COMMENT_PLATFORM_FIELDS), sid)
+    link = _stable_link(first_text(item, _URL_FIELDS))
     if link:
         return _sha1('url', link)
     parts = [
