@@ -632,7 +632,11 @@ export function baseSandbox() {
         Error,
         TypeError,
         setTimeout: (fn) => setTimeout(fn, 0),
-        clearTimeout: () => {},
+        /* A real handle, so the product's own debounce cancellation works. With a no-op
+           ``clearTimeout`` a queued autosave from one scenario ran in the next one and wrote a
+           draft the next scenario had just deleted — the load-dependent flip of
+           ``draftStored``. The handle is Node's Timeout, which is what ``clearTimeout`` takes. */
+        clearTimeout: (handle) => clearTimeout(handle),
         setInterval: () => 0,
         clearInterval: () => {},
         requestAnimationFrame: (fn) => {

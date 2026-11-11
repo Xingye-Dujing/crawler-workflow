@@ -11,6 +11,8 @@ import ast
 import io
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import capabilities.registry as capabilities
@@ -764,6 +766,21 @@ class TestReapingABrowserWorksWhereTaskkillDoesNot:
         monkeypatch.setattr(procs.subprocess, 'run', fake_run)
         assert procs.child_pids('/proc', 4321, 'darwin') == [5001, 5002]
         assert calls and calls[0][:2] == ['ps', '-A'], calls
+
+    @pytest.mark.skipif(sys.platform != 'darwin', reason='needs the real ps from macOS')
+    def test_the_real_ps_output_is_parsed_on_macos(self):
+        """The parsing above is fake output; macOS CI runs the real ``ps -A -o pid=,ppid=``.
+
+        ``ps`` is in the base system and its headerless two-column output is stable, but a fake
+        fixture cannot catch a column order or a locale change on the machine that will actually
+        reap a browser. This spawns one child and asks the real command for the tree.
+        """
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+        try:
+            assert child.pid in procs.child_pids('/proc', os.getpid(), 'darwin')
+        finally:
+            child.terminate()
+            child.wait(timeout=10)
 
     def test_macos_reaps_the_browsers_before_the_driver(self, monkeypatch):
         output = b'4321 1\n5001 4321\n'
