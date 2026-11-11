@@ -2,7 +2,7 @@
   "schema": 1,
   "version": "2026.11.12.1",
   "released": "2026-11-12",
-  "notes": "账号池与出口池（多账号自动轮换、冷却台账、代理出口）；修复 Windows 自更新不执行与三平台 CI；2026.11.11.2 及更早版本请手动安装一次本版本。",
+  "notes": "账号池与出口池（多账号自动轮换、冷却台账、代理出口）；修复 Windows 自更新不执行与三平台 CI；补齐 macOS arm64 / x86_64 DMG。2026.11.11.2 及更早版本请手动安装一次本版本。",
   "platforms": {
     "win32": {
       "archive": "zip",
@@ -20,6 +20,18 @@
           "size": 30787599
         }
       ]
+    },
+    "darwin-arm64": {
+      "archive": "dmg",
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11.12/CaiXiHui-macOS-arm64.dmg",
+      "sha256": "c888d2730e97ec2b7e8c67422a7df377d5fd8dd29ab4f5f02ca93ba04b93bc51",
+      "size": 179762252
+    },
+    "darwin-x64": {
+      "archive": "dmg",
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11.12/CaiXiHui-macOS-x86_64.dmg",
+      "sha256": "93fa912d721423a950ec0930cba9c685f0983dd9bf001af343e7b91b487b8b5e",
+      "size": 189852863
     }
   }
 }
