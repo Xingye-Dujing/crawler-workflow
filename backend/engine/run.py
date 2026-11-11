@@ -457,10 +457,11 @@ def _inputs_for(wf_engine, nid: str, upstream_of, results, wf_idx):
     if not parents:
         # A source (crawler or upload) has nothing upstream.
         return [], []
-    # ``fuse`` is the one node type where several wires are the feature, not a warning:
-    # it folds every parent and logs what each contributed, so the "the first is the
-    # primary input" sentence would describe a rule this node deliberately does not have.
-    if len(parents) > 1 and _node_of(wf_engine, nid).get('type') != 'fuse':
+    # ``fuse`` folds every parent and ``verify`` reads exactly two, so for those the
+    # "the first is the primary input" sentence would describe a rule they do not have.
+    # Every other type takes the first wire and says so, because a silently ignored table
+    # is the shape this console line exists to prevent.
+    if len(parents) > 1 and _node_of(wf_engine, nid).get('type') not in ('fuse', 'verify'):
         add_log(
             t(
                 'wf.multi_input',
@@ -533,17 +534,22 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
             # never a guessed platform.
             _platform_of = None
             _labels_of = None
-            if node.get('type') == 'output' and upstream:
-                _platform_of = {}
-                # The same graph reach the merge needs to NAME its parents: its refusals and
-                # its “已合并” line quote the parent, and a bare `node-2` in a message about
-                # which WIRE to cut is the one thing the console rule exists to stop.
+            # The node types that NAME their parents in the console: an output merge quotes
+            # the wire it refuses, the two-table steps print which parent fills which role
+            # (清单/结果, 筛选/依据), and the verify node does both. A bare `node-2` in a
+            # message about WHICH wire to cut or which table is the basis is the one thing
+            # the console rule exists to stop.
+            if upstream and node.get('type') in ('output', 'verify', 'analysis'):
                 _labels_of = {}
                 for _pid, _res in upstream:
                     _pn = _node_of(wf_engine, str(_pid))
-                    _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
-                    _platform_of[str(_pid)] = str(_p)
                     _labels_of[str(_pid)] = node_label(_pn, str(_pid))
+                if node.get('type') == 'output':
+                    _platform_of = {}
+                    for _pid, _res in upstream:
+                        _pn = _node_of(wf_engine, str(_pid))
+                        _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
+                        _platform_of[str(_pid)] = str(_p)
             result, status = run_node_durable(
                 ctx,
                 node,

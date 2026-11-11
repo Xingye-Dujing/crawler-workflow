@@ -39,7 +39,9 @@ MAX_DESCRIPTION = 500
 #: Types that make sense inside a reusable fragment. Sources buy a session; uploads own a
 #: dataset; comments are a crawl; name/resume are canvas mechanics; a nested reusable node
 #: would need its own input mapping. Refusing them keeps one meaning for "input".
-ALLOWED_TYPES = frozenset({'process', 'analysis', 'visualize', 'tokenize', 'biblio', 'fuse', 'output', 'compile'})
+ALLOWED_TYPES = frozenset(
+    {'process', 'analysis', 'visualize', 'tokenize', 'biblio', 'fuse', 'verify', 'output', 'compile'}
+)
 
 _ID = re.compile(r'^r-[0-9a-f]{12}$')
 

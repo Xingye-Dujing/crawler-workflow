@@ -1326,3 +1326,103 @@ class TestQuietNodesInConsole:
         assert nodes['node-2'].get('error'), 'the reason must be stored, not just the status'
         blob = self._logs(client, app_module)
         assert 'upload #node-2' in blob, f'the failing node was silenced along with its routine lines:\n{blob}'
+
+
+class TestVerifyNode:
+    """采集校验 through the real executor and run store.
+
+    ``tests/unit/analysis/test_verify_node.py`` proves the arithmetic; this case proves the
+    WIRING and the two promises a user acts on: a gap is an ANSWER (the node settles ``done``
+    and its rows are the gap table, which the output node writes), and the console names both
+    parents by their titles so "清单 / 结果" can be checked against the canvas.
+    """
+
+    LIST = [
+        {'标题': '甲', '链接': 'https://ex.com/p/1', '评论数': 2},
+        {'标题': '乙', '链接': 'https://ex.com/p/2', '评论数': 5},
+        {'标题': '丙', '链接': 'https://ex.com/p/3', '评论数': 1},
+    ]
+    COMMENTS = [
+        {'文章URL': 'https://ex.com/p/1', '评论内容': 'a', '评论ID': 'a1'},
+        {'文章URL': 'https://ex.com/p/1', '评论内容': 'b', '评论ID': 'a2'},
+        {'文章URL': 'https://ex.com/p/2', '评论内容': 'c', '评论ID': 'b1'},
+        {'文章URL': 'https://ex.com/p/2', '评论内容': 'd', '评论ID': 'b2'},
+    ]
+
+    def _flow(self, list_ds, comments_ds):
+        list_node = _node('node-1', 'upload', {'dataset_id': list_ds, 'row_count': 3})
+        list_node['title'] = '帖子表'
+        comments_node = _node('node-2', 'upload', {'dataset_id': comments_ds, 'row_count': 4})
+        comments_node['title'] = '评论表'
+        return _wf(
+            [
+                list_node,
+                comments_node,
+                _node(
+                    'node-3',
+                    'verify',
+                    {
+                        'input_key_column': '链接',
+                        'result_key_column': '文章URL',
+                        'expected_count_column': '评论数',
+                        'match_mode': 'url',
+                        'tolerance': 0,
+                        'per_link_limit': '',
+                        'output_mode': 'gaps',
+                    },
+                ),
+                _node('node-4', 'output', {'operation': 'save', 'format': 'json', 'filename': 'gaps'}, 'save'),
+            ],
+            [
+                {'from': 'node-1', 'to': 'node-3'},
+                {'from': 'node-2', 'to': 'node-3'},
+                {'from': 'node-3', 'to': 'node-4'},
+            ],
+        )
+
+    def test_a_gap_is_an_answer_not_a_failure(self, client, app_module, paste, data_root):
+        list_ds = paste(self.LIST, name='posts.csv')
+        comments_ds = paste(self.COMMENTS, name='comments.csv')
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(list_ds, comments_ds), 'workflow_name': 'audit'},
+        )
+        assert started.get_json()['ok'] is True, started.get_json()
+        assert _wait(app_module)
+        run_id = started.get_json()['run_id']
+        record = app_module.get_run_store().get_run(run_id)
+        nodes = {node['node_id']: node for node in record['nodes']}
+        assert record['status'] == 'completed', record
+        assert nodes['node-3']['status'] == 'done', nodes['node-3']
+
+        rows = app_module._RUN_STORE.load_rows(run_id, 'node-3')
+        assert [row['标题'] for row in rows] == ['乙', '丙'], rows
+        assert {row['采集状态'] for row in rows} == {'不完整', '未采集'}
+        assert rows[0]['缺失条数'] == 3, rows
+        # The list's own columns survive: the 链接 cell is what a re-crawl would be fed.
+        assert rows[1]['链接'] == 'https://ex.com/p/3'
+
+        exported = data_root / 'data' / 'exports' / 'gaps.json'
+        assert exported.exists(), 'the gap table must reach the save node'
+        assert len(pd.read_json(exported)) == 2
+
+    def test_the_console_line_names_the_two_parents_by_title(self, client, app_module, paste, monkeypatch):
+        """The role line is the only place a reader can check "1st = list, 2nd = result"
+        against the canvas, and it can only say that if the run loop handed the executor the
+        parents' labels. Captured at the plugin seam so the assertion is the fact, not a
+        console buffer that may already have moved on."""
+        from nodes.executors import verify as verify_plugin
+
+        lines = []
+        monkeypatch.setattr(verify_plugin, 'add_log', lambda msg, **kw: lines.append(msg))
+        list_ds = paste(self.LIST, name='role-posts.csv')
+        comments_ds = paste(self.COMMENTS, name='role-comments.csv')
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(list_ds, comments_ds), 'workflow_name': 'audit-roles'},
+        )
+        assert started.get_json()['ok'] is True, started.get_json()
+        assert _wait(app_module)
+        roles = [line for line in lines if 'node-1' in line and 'node-2' in line]
+        assert roles, lines
+        assert '帖子表 #node-1' in roles[0] and '评论表 #node-2' in roles[0], roles[0]

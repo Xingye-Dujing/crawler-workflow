@@ -165,8 +165,11 @@ STEP_PASSTHROUGH = {
 
 #: Steps whose output the server cannot enumerate without the data (unknown).
 #: ``cluster_review`` is here on purpose: its 年份跨度 cell only exists when the table carries
-#: years, so a fixed tuple would promise a column some runs never write.
-STEP_UNKNOWN = {'groupby_agg', 'join_tables', 'rename_columns', 'topic_coherence', 'cluster_review'}
+#: years, so a fixed tuple would promise a column some runs never write. ``anti_join`` joins
+#: ``join_tables`` here for the same structural reason: its output IS the kept table's
+#: columns, and the static model is handed the union of BOTH parents — promising the right
+#: table's columns would announce names the node never emits.
+STEP_UNKNOWN = {'groupby_agg', 'join_tables', 'anti_join', 'rename_columns', 'topic_coherence', 'cluster_review'}
 
 
 def normalize_analysis_params(op: str, params: dict) -> dict:
@@ -254,6 +257,23 @@ def normalize_analysis_params(op: str, params: dict) -> dict:
             'left_on': params.get('left_on', ''),
             'right_on': params.get('right_on', ''),
         }
+    if op == 'anti_join':
+        # The panel names its two selects ``match_mode``/``keep_mode`` because ``mode`` and
+        # ``keep`` already mean something else on other nodes' forms; the step reads the
+        # canonical names. ``max_distance`` is forwarded only when a number was typed, like
+        # ``dedupe_similar`` — the step's own default is the digit distance it documents.
+        result = {
+            'left_on': params.get('left_on', ''),
+            'right_on': params.get('right_on', ''),
+            'mode': params.get('match_mode') or 'trim',
+            'keep': params.get('keep_mode') or 'exclude',
+            'ignore_case': as_bool(params.get('ignore_case'), False),
+            'swap_tables': as_bool(params.get('swap_tables'), False),
+        }
+        distance = _optional_int(params.get('max_distance'))
+        if distance is not None:
+            result['max_distance'] = distance
+        return result
     if op == 'column_calc':
         return {
             'new_col': params.get('new_col', ''),

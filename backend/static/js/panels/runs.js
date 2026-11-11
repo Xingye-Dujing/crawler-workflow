@@ -1076,12 +1076,18 @@ workflow.validateDetailed = function () {
        source feed gate must not see it as a feed (backend validate builds the same
        distinction off the same rule: parent type !== 'name'). */
     var dataInput = {};
+    /* Data parents only: a two-table step reads exactly two TABLES, and a name wire carries
+       no rows (the backend's validate counts them the same way). */
+    var dataParentCount = {};
     conns.forEach(function (c) {
         hasOutput[c.from] = true;
         hasInput[c.to] = true;
         inputCount[c.to] = (inputCount[c.to] || 0) + 1;
         var src = nodes[c.from];
-        if (src && src.type !== 'name' && nodes[c.to]) dataInput[c.to] = true;
+        if (src && src.type !== 'name' && nodes[c.to]) {
+            dataInput[c.to] = true;
+            dataParentCount[c.to] = (dataParentCount[c.to] || 0) + 1;
+        }
     });
     /* Direct parents' types per node — the compile/output rules below key on exactly the same
        immediate-upstream distinction the backend validate builds. */
@@ -1126,10 +1132,36 @@ workflow.validateDetailed = function () {
             if (!params.operation) {
                 add(id, I18n.t('validate.analysisOperation').replace('{title}', label));
             }
-            if (params.operation === 'join_tables' && (inputCount[id] || 0) < 2) {
+            if (params.operation === 'join_tables' && (dataParentCount[id] || 0) < 2) {
                 /* The right-hand table is the node's second incoming
                    connection — without it the join has nothing to join with. */
                 add(id, I18n.t('validate.joinNeedsTwo').replace('{title}', label));
+            }
+            if (params.operation === 'anti_join' && (dataParentCount[id] || 0) < 2) {
+                /* 内容去重: the table being filtered and the basis table are two wires; the
+                   roles are read in order, and one wire is not a two-table question. */
+                add(id, I18n.t('validate.antiJoinNeedsTwo').replace('{title}', label));
+            }
+        }
+
+        if (type === 'verify') {
+            /* 采集校验 reads exactly two data tables (1st = list, 2nd = result). The columns
+               are checked here so a node that would refuse at run time is flagged before the
+               run is paid for — the backend validate refuses the same two. */
+            var verifyParents = dataParentCount[id] || 0;
+            if (verifyParents !== 2) {
+                add(id, I18n.t('validate.verifyNeedsTwo')
+                    .replace('{title}', label)
+                    .replace('{n}', String(verifyParents)));
+            }
+            if (!String(params.input_key_column || '').trim()) {
+                add(id, I18n.t('validate.verifyListCol').replace('{title}', label));
+            }
+            if (!String(params.result_key_column || '').trim()) {
+                add(id, I18n.t('validate.verifyResultCol').replace('{title}', label));
+            }
+            if (!hasOutput[id]) {
+                add(id, I18n.t('validate.verifyDownstream').replace('{title}', label));
             }
         }
 

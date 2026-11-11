@@ -1430,6 +1430,20 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   The OWNER travels with the batch too: `disarm()` clears `_account` at run end, so a kept batch replayed after the
   next account's run started would otherwise be written into that account's `runs.db` (or the system store). The
   reproducing tests inject the push *during* the failing write, because without that window the bug is invisible.
+- **A two-table step decides its roles by connection ORDER, and says so in all three places.** `join_tables` always
+  read the second wire as its right table, but nothing told the reader which wire that was: a user who drew the basis
+  table first joined (or de-duplicated) against the wrong side and got a plausible table. The 内容去重 step and the
+  采集校验 node keep the convention and make it visible — the node CARD names the parents filling each role
+  (`canvas._tableParentsOf`, the same wire list `engine/run.py` reads), the PANEL prints them beside a `swap_tables`
+  switch, and the run CONSOLE prints a named line every time (`wf.anti_join_roles*`, `verify.roles`). The label is
+  resolved through `nodes.labels.parent_label`, which accepts the dict the run loop passes, the callable older callers
+  passed, or a bare id — three shapes for one name, so no executor keeps a private reading of them.
+- **A gap found by an audit is an ANSWER, not a node failure.** Settling 采集校验 FAILED on "3 links were short" would
+  throw away the report table — the exact artifact the user needs to re-crawl those links — and put a red node on a run
+  that did its job. It settles DONE and the report carries the verdict (`采集状态`/`缺失条数`), with the console naming
+  the gap and the re-crawl loop. The inverse would be equally wrong: reporting an unreadable 评论数 cell as "完整"
+  claims a check that never happened, so those rows are `无法核对` and stay OUT of the gap table (there is nothing extra
+  to crawl — only a number nobody wrote down).
 - **"Drop every pointer" has to include the one with state attached.** `DatasetStore.delete` removed the row from
   `datasets` and `dataset_refs` and stopped there, leaving `dataset_lineage_versions`. The panel's lineage history
   (`/api/data/…`) then listed a version whose dataset no longer existed, `dataset_lineage` still reported the id as a

@@ -33,6 +33,7 @@
     "panels/settings.js": [
         "panels/node-analysis.js",
         "panels/node-biblio.js",
-        "panels/node-chart.js"
+        "panels/node-chart.js",
+        "panels/node-verify.js"
     ]
 }

@@ -51,6 +51,7 @@ OPERATIONS = [
     'sample_rows',
     'groupby_agg',
     'join_tables',
+    'anti_join',
     'column_calc',
     'bin_column',
     'extract_time',

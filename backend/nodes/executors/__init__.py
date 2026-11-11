@@ -23,6 +23,7 @@ from nodes.executors import (
     source,
     tokenize,
     upload,
+    verify,
     visualize,
 )
 from nodes.executors import compile as compile_plugin
@@ -42,6 +43,7 @@ _BUILTINS = (
     process,
     comment,
     source,
+    verify,
 )
 
 for _module in _BUILTINS:

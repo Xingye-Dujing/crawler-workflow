@@ -1,20 +1,28 @@
 """Analysis node: a deterministic cleaning pipeline, plus the one step that needs a model.
 
-A ``join_tables`` step merges with the table of the node's *second* incoming connection — the
-old design asked for an opaque dataset id that was shown nowhere, so a join silently joined
-nothing. A step in ``LLM_OPS`` (主题概括 / 聚类命名 / 簇综述) is the one case this node is not
+A two-table step (``join_tables`` / ``anti_join``) reads the table of the node's *second*
+incoming connection — the old design asked for an opaque dataset id that was shown nowhere, so a
+join silently joined nothing. Because the roles are decided by connection ORDER, the console
+prints which parent fills which role on every run (``wf.anti_join_roles*``): "the first wire is
+the table being filtered, the second is the basis" is a fact the user must be able to check
+against the canvas without opening the panel.
+
+A step in ``LLM_OPS`` (主题概括 / 聚类命名 / 簇综述) is the one case this node is not
 deterministic, so it borrows the process node's client builder rather than inventing a second
 reading of the LLM settings: refusing for want of a model happens HERE, before any call is paid
 for.
 """
 
 import pandas as pd
+from core.refs import as_bool
 from runtime.state import add_log, execution_state
 from runtime.stores import get_run_store
 
 from i18n import t
 from nodes.context import NodeCall, node_params, split_panel_columns
+from nodes.labels import node_label, parent_label
 from services.analysis.llm import build_llm_run_ctx
+from services.analysis.matching import STEP_TWO_TABLE
 from services.analysis.params import (
     STEP_ADD_MAYBE,
     STEP_ADD_ONE,
@@ -141,14 +149,35 @@ def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
 def read_columns(node: dict) -> list[str]:
     found: list[str] = []
     for step in _steps_of(node_params(node)):
-        spec = STEP_PARAMS.get(str(step.get('op') or ''), {})
+        op = str(step.get('op') or '')
+        spec = STEP_PARAMS.get(op, {})
         for key in ('one', 'some'):
             for pname in spec.get(key, ()):
                 found += split_panel_columns(step.get(pname))
+        if op == 'anti_join':
+            # Both sides are read from the merged fan-in, so the lineage view can flag a
+            # name neither table supplies; ``STEP_PARAMS`` cannot hold them because
+            # ``one``/``some`` are checked against the LEFT table only.
+            found += split_panel_columns(step.get('left_on'))
+            found += split_panel_columns(step.get('right_on'))
     return [c for c in found if c]
 
 
-def execute_analysis_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
+def _two_table_params(step: dict) -> dict:
+    """A flat panel-shaped step's fields, or the nested ``params`` a pipeline step carries."""
+    if isinstance(step.get('params'), dict):
+        return dict(step.get('params'))
+    # A flat step keeps its fields BESIDE ``op``; those are the kwargs.
+    return {key: value for key, value in step.items() if key != 'op'}
+
+
+def execute_analysis_node(
+    node: dict,
+    current_input: list,
+    upstream: list = None,
+    ctx: dict = None,
+    label_of=None,
+):
     """Analysis node: runs a deterministic data-cleaning pipeline (null
     handling, de-duplication, filtering, renaming, ...) via
     DataAnalysisService. Supports either a single configured operation
@@ -177,25 +206,57 @@ def execute_analysis_node(node: dict, current_input: list, upstream: list = None
         op = node.get('operation', params.get('operation', ''))
         steps = [{'op': op, 'params': normalize_analysis_params(op, params)}] if op else []
 
-    # upstream[0] is the left table (already current_input); anything after it is
-    # a candidate right table.
-    right_tables = [res for _pid, res in (upstream or [])[1:] if isinstance(res, list) and res]
+    # upstream[0] is the left table (already current_input); the SECOND connection is the
+    # other table of a two-table step (join / anti-join). ``pairs`` keeps every id so the
+    # console can say WHICH parent filled each role.
+    pairs = [(str(pid), res) for pid, res in (upstream or ())]
+    nid = str(node.get('id') or '')
+    label = node_label(node, nid)
 
     steps = list(steps)
     for index, step in enumerate(steps):
-        if step.get('op') == 'join_tables':
-            if not right_tables:
-                raise UnknownOperationError(t('wf.join_no_right_table'))
-            # A run-local COPY: a flat step has no ``params`` dict at all (``run_pipeline``
-            # accepts both shapes), and writing the DataFrame into ``node['params']`` left a
-            # live pandas object inside the canvas state the record echoes.
-            join_params = (
-                dict(step.get('params'))
-                if isinstance(step.get('params'), dict)
-                # A flat panel-shaped step keeps its fields BESIDE ``op``; those are the kwargs.
-                else {key: value for key, value in step.items() if key != 'op'}
+        op = str(step.get('op') or '')
+        if op not in STEP_TWO_TABLE:
+            continue
+        if len(pairs) < 2:
+            # The step is handed the second table by this executor; with one wire there is
+            # nothing to join with. Unlike a filter blank the user can fix in a box, this is
+            # a missing CONNECTION, so it is refused before the pipeline starts.
+            raise UnknownOperationError(t('wf.two_table_no_right', nid=label))
+        right_result = pairs[1][1]
+        if not isinstance(right_result, list):
+            raise UnknownOperationError(
+                t(
+                    'wf.two_table_not_table',
+                    nid=label,
+                    up=parent_label(label_of, pairs[1][0]),
+                )
             )
-            steps[index] = {**step, 'params': {**join_params, 'other_df': pd.DataFrame(right_tables[0])}}
+        if op == 'join_tables' and not right_result:
+            raise UnknownOperationError(t('wf.join_no_right_table'))
+        two_table = _two_table_params(step)
+        steps[index] = {**step, 'params': {**two_table, 'other_df': pd.DataFrame(right_result)}}
+        if op == 'anti_join' and as_bool(two_table.get('swap_tables'), False):
+            # Printed on EVERY run, not only the swapped one: a console line that appears
+            # only in one state makes the reader compare two runs to learn which table was
+            # kept. ``swap`` names the two roles as the step will actually use them.
+            add_log(
+                t(
+                    'wf.anti_join_roles_swapped',
+                    nid=label,
+                    keep=parent_label(label_of, pairs[1][0]),
+                    basis=parent_label(label_of, pairs[0][0]),
+                )
+            )
+        elif op == 'anti_join':
+            add_log(
+                t(
+                    'wf.anti_join_roles',
+                    nid=label,
+                    keep=parent_label(label_of, pairs[0][0]),
+                    basis=parent_label(label_of, pairs[1][0]),
+                )
+            )
 
     # An unknown/malformed step RAISES straight through: the executor turns it into
     # this node's failure and prints the reason with the node's label — one line,
@@ -243,4 +304,10 @@ def execute_analysis_node(node: dict, current_input: list, upstream: list = None
 
 
 def run(node: dict, call: NodeCall):
-    return execute_analysis_node(node, call.current_input, upstream=call.upstream, ctx=call.ctx)
+    return execute_analysis_node(
+        node,
+        call.current_input,
+        upstream=call.upstream,
+        ctx=call.ctx,
+        label_of=call.label_of,
+    )

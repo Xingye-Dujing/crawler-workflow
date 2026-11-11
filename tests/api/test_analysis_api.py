@@ -164,6 +164,20 @@ class TestAnalysisRun:
         )
         assert response.status_code == 400
 
+    def test_run_answers_a_readable_error_for_an_incomplete_anti_join(self, client, paste):
+        """内容去重 needs the second table too — an API caller cannot supply one, so the
+        refusal names it rather than escaping as a TypeError (a 500 the panel cannot read)."""
+        dataset_id = paste(DIRTY_RECORDS, name='dedupe-me.csv')
+        response = client.post(
+            '/api/analysis/run',
+            json={
+                'dataset_id': dataset_id,
+                'steps': [{'op': 'anti_join', 'params': {'left_on': 'city', 'right_on': 'city'}}],
+            },
+        )
+        assert response.status_code == 400
+        assert 'anti_join' in response.get_json()['error']
+
     def test_run_can_feed_the_next_endpoint(self, client, paste):
         """The id it returns really is a dataset the rest of the API accepts."""
         source_id = paste(DIRTY_RECORDS, name='chain.csv')
@@ -1174,6 +1188,26 @@ NORMALIZED = {
         {'join_how': 'inner', 'left_on': '城市', 'right_on': '城市'},
         {'how': 'inner', 'left_on': '城市', 'right_on': '城市'},
     ),
+    'anti_join': (
+        {
+            'left_on': '城市',
+            'right_on': '城市',
+            'match_mode': 'text',
+            'keep_mode': 'keep',
+            'ignore_case': 'true',
+            'max_distance': '6',
+            'swap_tables': 'true',
+        },
+        {
+            'left_on': '城市',
+            'right_on': '城市',
+            'mode': 'text',
+            'keep': 'keep',
+            'ignore_case': True,
+            'max_distance': 6,
+            'swap_tables': True,
+        },
+    ),
     'column_calc': ({'new_col': '两倍', 'expr': '序号 * 2'}, {'new_col': '两倍', 'expr': '序号 * 2'}),
     'bin_column': (
         {'column': '序号', 'bins': '0, 40, 80', 'bin_labels': '低, 中, 高', 'bin_new_col': '档'},
@@ -1197,6 +1231,14 @@ BLANK_FORM = {
     'sample_rows': {'n': None, 'frac': None},
     'groupby_agg': {'group_col': '', 'agg_col': '', 'agg_func': 'sum'},
     'join_tables': {'how': 'left', 'left_on': '', 'right_on': ''},
+    'anti_join': {
+        'left_on': '',
+        'right_on': '',
+        'mode': 'trim',
+        'keep': 'exclude',
+        'ignore_case': False,
+        'swap_tables': False,
+    },
     'column_calc': {'new_col': '', 'expr': ''},
     'bin_column': {'column': '', 'new_col': ''},
     # The four event-study steps. ``extract_time``/``bin_time``/``topic_model`` take a
@@ -1331,13 +1373,15 @@ def _refused_when_blank() -> list:
 def _inert_when_blank() -> list:
     """The steps allowed to do nothing when their form is blank — 留空=全部 and friends.
 
-    ``join_tables`` is left out: the node executor, not the normalizer, is the only
-    caller that can supply its right-hand table (pinned by its own test below).
+    The two-table steps are left out (``matching.STEP_TWO_TABLE``): the node executor, not
+    the normalizer, is the only caller that can supply their other table, so a blank form
+    there is a refusal rather than a harmless no-op.
     """
+    from services.analysis.matching import STEP_TWO_TABLE
     from services.analysis.pipeline import STEP_PARAMS
 
     refused = set(_refused_when_blank())
-    return sorted(name for name in STEP_PARAMS if name not in refused and name != 'join_tables')
+    return sorted(name for name in STEP_PARAMS if name not in refused and name not in STEP_TWO_TABLE)
 
 
 # ─── what the browser's settings panel actually writes ─────────────────
@@ -1575,10 +1619,11 @@ class TestNormalizedKwargs:
         read off the gate, so a step whose spec changes moves between the halves on
         its own.
         """
+        from services.analysis.matching import STEP_TWO_TABLE
         from services.analysis.pipeline import STEP_PARAMS
 
         registry = set(_registry())
-        assert set(_inert_when_blank()) | set(_refused_when_blank()) | {'join_tables'} == registry
+        assert set(_inert_when_blank()) | set(_refused_when_blank()) | set(STEP_TWO_TABLE) == registry
         assert set(STEP_PARAMS) == registry, 'the gate and this test disagree about which steps exist'
         # The refused half is what the panel can actually leave blank on purpose.
         assert set(_refused_when_blank()) <= set(BLANK_FORM), 'a refused step has no blank form to test'
@@ -1852,6 +1897,13 @@ PARSED_FIELDS = {
     # disappears into the signature default, never the literal the user typed.
     'mode',
     'max_distance',
+    # 内容去重's two selects and two switches are re-shaped the same way: a blank select falls
+    # back to its declared default and a switch is read by ``as_bool``, never forwarded as the
+    # text the browser happened to store.
+    'match_mode',
+    'keep_mode',
+    'ignore_case',
+    'swap_tables',
     # Same story for the event-study steps: every one of these carries a declared default,
     # so a blank becomes that default instead of reaching the operator as an empty string.
     'time_new_col',
@@ -2662,6 +2714,10 @@ PANEL_VALUE = {
     'join_how': 'inner',
     'left_on': 'a',
     'right_on': 'b',
+    'keep_mode': 'keep',
+    'match_mode': 'text',
+    'ignore_case': 'true',
+    'swap_tables': 'true',
     'new_col': 'c',
     'expr': 'a + 1',
     'bin_new_col': 'd',

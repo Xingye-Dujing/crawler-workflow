@@ -50,7 +50,7 @@ def registered_types() -> frozenset[str]:
 
 
 def load_builtin_executors() -> None:
-    """Import ``nodes.executors`` once, registering the eight built-in plugins.
+    """Import ``nodes.executors`` once, registering every built-in plugin.
 
     Idempotent: ``app`` calls it at import, tests may call it again after resetting the registry.
     """

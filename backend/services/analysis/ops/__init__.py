@@ -5,6 +5,7 @@
 """
 
 from services.analysis.ops.alert import alert
+from services.analysis.ops.anti_join import anti_join
 from services.analysis.ops.bin_column import bin_column
 from services.analysis.ops.bin_time import bin_time
 from services.analysis.ops.cluster_label import cluster_label
@@ -52,7 +53,10 @@ OPS = {
     'sort_rows': sort_rows,
     'sample_rows': sample_rows,
     'groupby_agg': groupby_agg,
+    # Two-table steps (``matching.STEP_TWO_TABLE``): the second table is the node's second
+    # incoming connection.
     'join_tables': join_tables,
+    'anti_join': anti_join,
     'column_calc': column_calc,
     'bin_column': bin_column,
     'extract_time': extract_time,

@@ -19,6 +19,7 @@ from services.analysis.kernels import (
     UnknownOperationError,
     _blank,
 )
+from services.analysis.matching import KEEP_MODES, MATCH_MODES
 
 JOIN_HOW = ('left', 'right', 'inner', 'outer', 'cross')
 
@@ -86,6 +87,10 @@ STEP_PARAMS: dict = {
     'sort_rows': {'one': ('column',)},
     'groupby_agg': {'one': ('group_col', 'agg_col')},
     'join_tables': {'enums': {'how': ('left', JOIN_HOW)}},
+    # 内容去重 (anti-join). The two column names may be comma-separated COMPOSITE keys, so
+    # neither goes in ``one``/``some`` — the left name is not a column of the right table and
+    # ``some`` would refuse it. The step itself names a column it cannot find.
+    'anti_join': {'enums': {'mode': ('trim', MATCH_MODES), 'keep': ('exclude', KEEP_MODES)}},
     'column_calc': {'nonblank': ('new_col', 'expr')},
     'bin_column': {'one': ('column',)},
     'sample_rows': {},

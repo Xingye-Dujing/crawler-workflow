@@ -105,11 +105,15 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
 - **处理**：确定性清洗、去重（含 SimHash 近似重复）、分组聚合、事件研究套件（阶段划分、分阶段 LDA、主题
   流向、情感演化、二次爆发预警），以及 CSV/JSON/Excel/TXT/HTML/Markdown 导出。→ [`docs/analysis.md`](docs/analysis.md)
+- **内容去重与采集校验**：分析节点的“反向筛选”拿两张上游表比一列，只留下没在另一张表出现过的行（或反过来找
+  重复），链接归一 / 文本归一 / SimHash 近似匹配都能选；采集校验节点把“清单表（链接 + 评论数）”和“评论结果表”
+  对照，报出**没采到的链接**与**条数不足的链接**，缺口表保留原始列、可直接导出再投喂评论采集只重爬这些文章。
+  → [`docs/workflow.md`](docs/workflow.md)
 - **文献计量**：上传就自动识别 CNKI/CSSCI/WoS/Scopus/PubMed/RIS/BibTeX 等导出件，按时间切片建关键词、
   作者、机构、共被引网络，输出 GraphML/GML/Pajek 等；顶栏的文献计量工作区能存快照、和上次比。→ [`docs/analysis.md`](docs/analysis.md)
 - **可视化与成稿**：ECharts 与 Matplotlib 双引擎的论文风格图表、知识图谱与各类叠加图、LaTeX 图与三线表；
   “论文成稿”只给 `run_id` 就能把登记过的图与表合成 `ctex` 文档并本机编译。→ [`docs/analysis.md`](docs/analysis.md)
-- **画布与运行**：拖拽、fan-in/fan-out、撤销重做、大纲定位、自动排布、运行队列与停止；14 种节点；画布快照
+- **画布与运行**：拖拽、fan-in/fan-out、撤销重做、大纲定位、自动排布、运行队列与停止；15 种节点；画布快照
   与可复用节点模板；节点级检查点与运行记录，默认载入本工作流最近一次结果，绿勾/转圈/红叉一眼看清上次到哪。
   → [`docs/workflow.md`](docs/workflow.md)
 - **数据集与定时**：累积数据集带版本与去重策略，可多源合并同构数据集；定时任务用预设或 cron 跑已存画布

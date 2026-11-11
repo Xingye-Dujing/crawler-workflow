@@ -5,8 +5,8 @@
  * Split out of workflow.js as `panels/settings.js`, then cut again on 2026-10-29 by node type:
  * `panels/node-analysis.js`, `panels/node-biblio.js` and `panels/node-chart.js` hold each node's own
  * option lists and form. Every name across those four files is still a page global, because inline
- * `onclick="…"` handlers call it by name; `tests/frontend/splits.json` declares the three as
- * companions of this file so a harness naming one receives all four. */
+ * `onclick="…"` handlers call it by name; `tests/frontend/splits.json` declares the four as
+ * companions of this file so a harness naming one receives all five. */
 /* Every control the source panel builds writes exactly one node parameter, and
    the parameter's *name* arrives over the network with the rest of the matrix.
    The handlers are written as inline JS, so a key has to look like an
@@ -833,6 +833,8 @@ function openSettings(nodeId) {
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'analysis') {
         html += renderAnalysisSettings(nodeId, node.params);
+    } else if (node.type === 'verify') {
+        html += renderVerifySettings(nodeId, node.params);
     } else if (node.type === 'visualize') {
         html += renderVisualizeSettings(nodeId, node.params);
     } else if (node.type === 'tokenize') {
@@ -1137,6 +1139,46 @@ function nodeNeedsLlm(params, nodeOperation) {
     if (op === 'sentiment') return (mode || 'bert') === 'llm';
     if (op === 'ner' || op === 'aggression') return mode === 'llm';
     return false;
+}
+
+/* ── Two-table roles (analysis anti-join / crawl audit) ──
+   A step that compares two tables decides its roles by CONNECTION ORDER: the first data
+   wire is the table being worked on, the second is the other table. That rule lives in the
+   engine (`engine/run.py` reads `connections` in order); the panel only READS the same list
+   so the user can check it without counting boxes. A name-node wire carries no rows and
+   never occupies a role, so it is left out on both sides of the comparison. */
+function upstreamTableParents(nodeId) {
+    /* One implementation, in canvas.js: the node CARD names the same parents, and a
+       canvas-only harness has no panel to ask. */
+    if (typeof canvas === 'undefined' || !canvas || typeof canvas._tableParentsOf !== 'function') return [];
+    return canvas._tableParentsOf(nodeId);
+}
+
+/* The two roles, printed with the parent each one is filled by. `swapped` names the state the
+   executor will use, not the wiring order — otherwise the panel would describe a different
+   question from the one the run asks. */
+function twoTableRoleLine(nodeId, swapped, firstLabelKey, secondLabelKey) {
+    var firstLabel = I18n.t(firstLabelKey);
+    var secondLabel = I18n.t(secondLabelKey);
+    if (swapped) {
+        var swap = firstLabel;
+        firstLabel = secondLabel;
+        secondLabel = swap;
+    }
+    var parents = upstreamTableParents(nodeId);
+    var html = '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+        I18n.t('settings.twoTableOrderHint') + '</div>';
+    var labels = [firstLabel, secondLabel];
+    for (var i = 0; i < parents.length; i += 1) {
+        var role = labels[i] !== undefined ? labels[i] : I18n.t('settings.twoTableExtra');
+        html += '<div style="font-size:12px;">' + (i + 1) + '. ' + escapeHtml(role) + '：' +
+            escapeHtml(parents[i].label) + '</div>';
+    }
+    if (parents.length < 2) {
+        html += '<div style="font-size:11px;color:var(--warn);">' + I18n.t('settings.twoTableNeedTwo') + '</div>';
+    }
+    html += '</div>';
+    return html;
 }
 
 /* ── Shared settings UI helpers ── */

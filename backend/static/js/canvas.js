@@ -1319,7 +1319,7 @@ const canvas = {
        back, so a node config travels between canvases, machines or a chat message. The snippet
        is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
        pasteClipboardAt — one paste path, no second implementation to drift. */
-    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
+    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment', 'verify'],
 
     /* The pinned list above is the cold-page fallback (the catalogue fetch is async and a
        restored draft must still validate before it answers). ``tests/unit/test_node_plugins.py``
@@ -1418,6 +1418,7 @@ const canvas = {
             accumulate: I18n.t('node.accumulate'),
             resume: I18n.t('node.resume'),
             comment: I18n.t('node.comment'),
+            verify: I18n.t('node.verify'),
             reusable: I18n.t('node.reusable'),
         };
         const title = labels[type] || 'Node';
@@ -1477,7 +1478,7 @@ const canvas = {
             e.stopPropagation();
             this.toggleEnabled(id);
         });
-        el.querySelector('.node-content').textContent = this.getNodeSummary(type, params);
+        el.querySelector('.node-content').textContent = this.getNodeSummary(type, params, id);
         el.querySelectorAll('.node-port').forEach((port) => {
             port.dataset.node = id;
         });
@@ -1677,6 +1678,20 @@ const canvas = {
                 format: 'csv'
             };
         }
+        /* 采集校验: the defaults describe the comment-crawl pairing (a post table's 链接 +
+           评论数 against a comment table's 文章URL), because that is the workflow this node
+           exists for. Every name stays editable for other list/result pairs. */
+        if (type === 'verify') return {
+            input_key_column: '链接',
+            result_key_column: '文章URL',
+            expected_count_column: '评论数',
+            match_mode: 'url',
+            tolerance: 0,
+            per_link_limit: '',
+            output_mode: 'gaps',
+            swap_tables: false,
+            ignore_case: false
+        };
         /* A compile node carries no fields of its own: it reads the LaTeX its upstream
            visualize node produced. Its only setting is the MiKTeX path, which lives in 设置. */
         if (type === 'compile') return {};
@@ -1707,7 +1722,49 @@ const canvas = {
         return label + ': ' + (String(value || '').trim() || '—');
     },
 
-    getNodeSummary(type, params) {
+    /* The node's incoming DATA parents, in connection order. A name-node wire carries no
+       rows and occupies no role, so it is left out — the engine's validators draw the same
+       line. Two-table steps read this order as their roles, so the card and the panel print
+       it instead of asking the user to count wires. */
+    _tableParentsOf(nodeId) {
+        const parents = [];
+        this.connections.forEach((conn) => {
+            if (String(conn.to) !== String(nodeId)) return;
+            const node = this.nodes[conn.from];
+            if (!node || node.type === 'name') return;
+            parents.push({ id: String(conn.from), label: node.title || I18n.t('node.' + node.type) });
+        });
+        return parents;
+    },
+
+    _switchOn(value) {
+        /* The full page has boolParam (panels/settings.js); a canvas-only harness does not.
+           Reading a switch this way keeps one meaning of "on" without importing the panel. */
+        if (typeof boolParam === 'function') return boolParam(value, false);
+        return value === true || value === 'true' || value === 1 || value === '1';
+    },
+
+    /* The two roles a two-table step will use, with the parent filling each. `swapped` is the
+       state the executor will honour, never the raw wiring — a card describing the opposite
+       question from the run is worse than a card saying nothing. */
+    _twoTableRoleLines(nodeId, swapped, firstKey, secondKey) {
+        /* No id = no graph in scope (a reusable template's read-only card): there is no way
+           to know the wires, and inventing "connect a second table" would describe a canvas
+           the reader is not looking at. */
+        if (!nodeId) return [];
+        const parents = this._tableParentsOf(nodeId);
+        const first = I18n.t(firstKey);
+        const second = I18n.t(secondKey);
+        const roles = swapped ? [second, first] : [first, second];
+        const lines = [];
+        parents.slice(0, 2).forEach((parent, index) => {
+            lines.push(roles[index] + ': ' + parent.label);
+        });
+        if (parents.length < 2) lines.push(I18n.t('settings.twoTableNeedTwo'));
+        return lines;
+    },
+
+    getNodeSummary(type, params, nodeId) {
         if (type === 'name') {
             var n = String(params.workflow_name || '').trim();
             return I18n.t('settings.workflowName') + ': ' + (n || I18n.t('name.unnamed'));
@@ -1768,7 +1825,36 @@ const canvas = {
         }
         if (type === 'analysis') {
             var op = params.operation || '';
+            if (op === 'anti_join') {
+                /* 内容去重: the card says WHICH table is filtered and WHICH is the basis.
+                   Both are decided by connection order, so the card reads the same wires the
+                   executor does — and flips when 交换两表 is ticked. */
+                var joinLines = [I18n.t('settings.operation') + ': ' + I18n.t('op.anti_join')];
+                return joinLines.concat(this._twoTableRoleLines(
+                    nodeId,
+                    this._switchOn(params.swap_tables),
+                    'settings.antiJoinKeepRole',
+                    'settings.antiJoinBasisRole'
+                )).join('\n');
+            }
             return I18n.t('settings.operation') + ': ' + (op ? I18n.t('op.' + op) : '?');
+        }
+        if (type === 'verify') {
+            /* The audit card names its two roles and the two columns it compares, so a
+               glance at the canvas says what is being checked against what. */
+            var verifyLines = [I18n.t('settings.verifySummary')];
+            verifyLines = verifyLines.concat(this._twoTableRoleLines(
+                nodeId,
+                this._switchOn(params.swap_tables),
+                'settings.verifyListRole',
+                'settings.verifyResultRole'
+            ));
+            var keyLine = (params.input_key_column || '') + ' ⇄ ' + (params.result_key_column || '');
+            verifyLines.push(I18n.t('settings.verifyKeys') + ': ' + keyLine);
+            if (String(params.expected_count_column || '').trim()) {
+                verifyLines.push(I18n.t('settings.verifyCount') + ': ' + params.expected_count_column);
+            }
+            return verifyLines.join('\n');
         }
         if (type === 'biblio') {
             var entity = params.entity_type || 'keyword';
@@ -1899,6 +1985,9 @@ const canvas = {
             el.remove();
         }
         delete this.nodes[id];
+        // Cards that NAME their parents (two-table steps) lose one: repaint them after the wire
+        // pruning below, or the card keeps offering a table the canvas no longer holds.
+        const orphanedTargets = this.connections.filter(c => c.from === id).map(c => c.to);
         this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
         if (this.selectedNode === id) this.selectedNode = null;
         this.selectedNodes = this.selectedNodes.filter(nid => nid !== id);
@@ -1911,6 +2000,7 @@ const canvas = {
         /* The panel is bound to this node id — leaving it open would keep showing
            its old settings and let the user edit a node that no longer exists. */
         if (this._settingsNodeId === id) closeSettings();
+        orphanedTargets.forEach((nid) => { if (this.nodes[nid]) this.updateNodeDisplay(nid); });
         this.scheduleRender();
         this.updateStatus();
         this.saveState();
@@ -1930,6 +2020,9 @@ const canvas = {
             }
             delete this.nodes[id];
         });
+        const orphanedTargets = this.connections
+            .filter(c => list.indexOf(c.to) < 0 && list.indexOf(c.from) >= 0)
+            .map(c => c.to);
         this.connections = this.connections.filter(c => list.indexOf(c.from) < 0 && list.indexOf(c.to) < 0);
         this.selectedNodes = this.selectedNodes.filter(nid => this.nodes[nid]);
         if (list.indexOf(this.selectedNode) >= 0) {
@@ -1937,6 +2030,7 @@ const canvas = {
         }
         if (list.indexOf(this._linkFromId) >= 0) this._linkFromId = null;
         if (list.indexOf(this._settingsNodeId) >= 0) closeSettings();
+        orphanedTargets.forEach((nid) => { if (this.nodes[nid]) this.updateNodeDisplay(nid); });
         this.scheduleRender();
         this.updateStatus();
         this.saveState();
@@ -2208,6 +2302,9 @@ const canvas = {
         this.scheduleRender();
         this.saveState();
         showToast(I18n.t('toast.connCreated'));
+        /* A two-table node's card names the parents that fill its roles, so the card is stale
+           the moment a wire lands. Repainting is read-only — no second undo step. */
+        this.updateNodeDisplay(toId);
         // Tokenize ↔ Visualize: force word_freq + refresh settings
         var nA = this.nodes[fromId];
         var nB = this.nodes[toId];
@@ -2334,6 +2431,9 @@ const canvas = {
         if (t === 'analysis') {
             return { category: 'fanin_analysis', i18nKey: 'conn.fanin.analysis', vars: { node: nameOf(toId) } };
         }
+        if (t === 'verify') {
+            return { category: 'fanin_verify', i18nKey: 'conn.fanin.verify', vars: { node: nameOf(toId) } };
+        }
         if (t === 'output') {
             return { category: 'fanin_merge', i18nKey: 'conn.fanin.merge', vars: { node: nameOf(toId) } };
         }
@@ -2369,6 +2469,7 @@ const canvas = {
         this.scheduleRender();
         this.saveState();
         showToast(I18n.t('toast.connRemoved'));
+        this.updateNodeDisplay(toId);
     },
 
     scheduleRender() {
@@ -2420,6 +2521,8 @@ const canvas = {
                 canvas.scheduleRender();
                 canvas.saveState();
                 showToast(I18n.t('toast.connRemoved'));
+                /* The target's card lists the wires filling its roles. */
+                canvas.updateNodeDisplay(conn.to);
             });
             hit.addEventListener('mouseenter', function () {
                 path.style.stroke = '#ff4444';
@@ -2451,7 +2554,7 @@ const canvas = {
         const el = this._nodeEl(id);
         if (!el) return;
         const content = el.querySelector('.node-content');
-        if (content) content.textContent = this.getNodeSummary(node.type, node.params);
+        if (content) content.textContent = this.getNodeSummary(node.type, node.params, id);
         /* The header label is stamped once, at creation time, so a language
            switch would leave "Data Source" sitting on a node while the rest of
            the UI turns Chinese. Re-stamp it — but only while it still is one of

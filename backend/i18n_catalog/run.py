@@ -67,6 +67,13 @@ ZH = {
     'engine.tokenize_no_column': '节点 {nid}：分词节点缺少文本列',
     'engine.unknown_node_type': '节点 {nid}：未知的节点类型“{type}”，工作流引擎无法执行它',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
+    # 采集校验 needs exactly two DATA tables: the first wire is the list, the second the
+    # result. A name node carries no rows and never occupies a role, so it is not counted.
+    'engine.verify_need_list_col': '节点 {nid}：采集校验还没有填写清单表里用于比对的列（默认 链接）',
+    'engine.verify_need_result_col': '节点 {nid}：采集校验还没有填写结果表里用于比对的列（评论结果默认 文章URL）',
+    'engine.verify_two_inputs': (
+        '节点 {nid}：采集校验需要正好两条数据上游（第 1 条=清单，第 2 条=结果），现在有 {n} 条'
+    ),
     'engine.visualize_no_chart': '节点 {nid}：可视化节点没有选择图表类型',
     'engine.visualize_no_x': '节点 {nid}：可视化节点缺少 X 字段',
     'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与“重新采集”不能同时开启',
@@ -93,6 +100,7 @@ ZH = {
     'node.source': '数据源',
     'node.tokenize': '分词',
     'node.upload': '上传文件',
+    'node.verify': '采集校验',
     'node.visualize': '可视化',
     'project.badEntry': '项目包内的文件路径不合法：{file}',
     'project.badFormat': '不是采析绘项目包',
@@ -334,6 +342,34 @@ ZH = {
     # ── upload node ───────────────────────────────────────────
     'upload.no_file': '文件上传节点未选择文件，请在节点设置里上传 CSV / JSON / TXT',
     'upload.stale': '已上传的数据集失效（服务可能重启过），请重新上传文件',
+    # ── 采集校验节点（verify） ────────────────────────────────
+    # One fact per line. All numbers are shaped here; the executor only calls t().
+    'verify.all_ok': '节点 {nid}：清单里的链接全部已覆盖，条数也都达标',
+    'verify.bad_mode': '节点 {nid}：匹配方式“{mode}”不能用于条数校验（可用：{allowed}）',
+    'verify.bad_output_mode': '节点 {nid}：未知的输出方式“{mode}”（可用：{allowed}）',
+    'verify.bad_tables': '节点 {nid}：采集校验的两个上游都必须是表格（当前有一个上游不产出行表）',
+    'verify.count_unreadable': '节点 {nid}：{n} 个链接已采到，但清单里的“{col}”为空或无法识别，只做了覆盖校验',
+    'verify.done': (
+        '节点 {nid}：清单 {rows} 行 / {links} 个链接，结果 {results} 行；'
+        '覆盖 {covered}/{links}（{coverage}），未采集 {missing} 篇，条数不足 {short} 篇（共缺 {short_by} 条），'
+        '超出 {over} 篇，无法核对 {unchecked} 篇，输出 {out} 行'
+    ),
+    'verify.duplicate_links': '节点 {nid}：清单里有 {n} 行重复的链接，按第一次出现的那行给出计数（重爬时只会抓一次）',
+    'verify.empty_list': '节点 {nid}：清单上游“{up}”没有数据行，没有可校验的链接',
+    'verify.list_blank': '节点 {nid}：清单里有 {n} 行的链接为空，无法核对（不进入缺口表）',
+    'verify.missing_count_col': '节点 {nid}：清单上游“{up}”没有列“{col}”——要只做覆盖校验，请把这个框留空',
+    'verify.missing_list_col': '节点 {nid}：清单上游“{up}”没有列“{col}”',
+    'verify.missing_result_col': '节点 {nid}：结果上游“{up}”没有列“{col}”',
+    'verify.need_list_col': '节点 {nid}：还没有填写清单表里用于比对的列（默认 链接）',
+    'verify.need_result_col': '节点 {nid}：还没有填写结果表里用于比对的列（评论结果默认 文章URL）',
+    'verify.needs_two': '节点 {nid}：采集校验需要正好两条上游连线（第 1 条=清单，第 2 条=结果），现在有 {n} 条',
+    'verify.orphans': '节点 {nid}：结果里有 {n} 个链接不在清单中——请确认两张表来自同一次采集',
+    'verify.result_blank': '节点 {nid}：结果里有 {n} 行的链接为空，无法与清单比对',
+    'verify.retry_hint': (
+        '节点 {nid}：{n} 篇没爬全——用输出节点把本节点结果存成文件，上传后接进评论采集节点的输入列“链接”，'
+        '即可只重爬这些文章'
+    ),
+    'verify.roles': '节点 {nid}：清单=“{list}”，结果=“{result}”（按连线顺序：第 1 条是清单，第 2 条是结果）',
     # The labelling step needs a model: without one the step refuses instead of leaving the
     # column blank and settling the node DONE on work that did not happen.
     'wf.analysis_llm_no_model': '“主题概括”需要模型，但这条运行没有配置模型（设置 → 模型 / 节点模型）',
@@ -345,6 +381,11 @@ ZH = {
     'wf.analysis_step_nochange': '（无变化）',
     'wf.analysis_step_removed': '（-{removed}）',
     'wf.analysis_steps_shape': '“steps”必须是步骤列表（每个一步一个对象），收到的是一个对象',
+    # The two-table steps decide their roles by connection ORDER, so the console says which
+    # parent filled which role on every run: "the first wire is the table being filtered,
+    # the second is the basis" must be checkable against the canvas without opening a panel.
+    'wf.anti_join_roles': '节点 {nid}：反向筛选——保留“{keep}”，依据“{basis}”排除其中已出现的内容',
+    'wf.anti_join_roles_swapped': '节点 {nid}：反向筛选（已交换两表）——保留“{keep}”，依据“{basis}”',
     'wf.browser_opened': '已打开浏览器用于 {platform} 登录（{url}），等待 {n} 秒完成登录…',
     'wf.compile_no_source': '编译节点没有可编译的 LaTeX 来源（上游可视化节点既未产出图也未产出表）',
     'wf.component_indexed': '{name}（第 {i}/{n} 条）',
@@ -380,6 +421,8 @@ ZH = {
     'wf.tokenize_no_col': '列“{col}”不在 {cols} 中',
     'wf.tokenize_no_column': '未配置要分词的文本列',
     'wf.tokenize_no_input': '没有上游数据，请连接数据源或文件上传节点',
+    'wf.two_table_no_right': '节点 {nid}：这个步骤需要第二条上游连线（第 1 条是被处理的表，第 2 条是另一张表）',
+    'wf.two_table_not_table': '节点 {nid}：这个步骤的第二条连线必须接一个表格节点，上游“{up}”不产出行表',
     'wf.unknown_process_op': '使用了未知操作“{op}”',
     'wf.unnamed': '未命名工作流{i}',
     'wf.validation_error': '校验错误：{err}',
@@ -472,6 +515,13 @@ EN = {
     'engine.tokenize_no_column': 'Node {nid}: tokenize node is missing its text column',
     'engine.unknown_node_type': 'Node {nid}: unknown node type "{type}", the workflow engine cannot execute it',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
+    'engine.verify_need_list_col': 'Node {nid}: the audit has no list column to compare (default 链接)',
+    'engine.verify_need_result_col': (
+        'Node {nid}: the audit has no result column to compare (comment results default 文章URL)'
+    ),
+    'engine.verify_two_inputs': (
+        'Node {nid}: an audit needs exactly two data upstreams (1st = list, 2nd = result), and this has {n}'
+    ),
     'engine.visualize_no_chart': 'Node {nid}: visualize node has no chart type',
     'engine.visualize_no_x': 'Node {nid}: visualize node is missing the x field',
     'engine.watermarkRecrawl': 'Node {nid}: cross-run watermark and re-crawl cannot both be on',
@@ -499,6 +549,7 @@ EN = {
     'node.source': 'Data Source',
     'node.tokenize': 'Tokenize',
     'node.upload': 'Upload File',
+    'node.verify': 'Crawl audit',
     'node.visualize': 'Visualize',
     'project.badEntry': 'The bundle contains a file path this importer does not accept: {file}',
     'project.badFormat': 'This is not a CaiXiHui project bundle',
@@ -772,6 +823,47 @@ EN = {
     # ── upload node ───────────────────────────────────────────
     'upload.no_file': 'Upload node has no file yet — upload a CSV / JSON / TXT in its settings',
     'upload.stale': 'That uploaded dataset is gone (the server may have restarted) — upload the file again',
+    # ── 采集校验节点 (verify) ────────────────────────────────
+    'verify.all_ok': 'Node {nid}: every link in the list is covered and every count is met',
+    'verify.bad_mode': 'Node {nid}: match mode "{mode}" cannot answer a count check (available: {allowed})',
+    'verify.bad_output_mode': 'Node {nid}: unknown output mode "{mode}" (available: {allowed})',
+    'verify.bad_tables': 'Node {nid}: both upstreams of an audit must be tables (one of them produced no row table)',
+    'verify.count_unreadable': (
+        'Node {nid}: {n} link(s) were collected but "{col}" in the list is blank or unreadable, '
+        'so only coverage was checked for them'
+    ),
+    'verify.done': (
+        'Node {nid}: list {rows} row(s) / {links} link(s), result {results} row(s); '
+        'covered {covered}/{links} ({coverage}), not collected {missing}, short {short} ({short_by} rows missing), '
+        'over {over}, unverifiable {unchecked}, output {out} row(s)'
+    ),
+    'verify.duplicate_links': (
+        'Node {nid}: {n} list row(s) repeat an earlier link; the counts come from the first occurrence '
+        '(a re-crawl fetches it once)'
+    ),
+    'verify.empty_list': 'Node {nid}: the list upstream "{up}" has no rows, so there is nothing to audit',
+    'verify.list_blank': (
+        'Node {nid}: {n} list row(s) have a blank link and cannot be checked (kept out of the gap table)'
+    ),
+    'verify.missing_count_col': (
+        'Node {nid}: the list upstream "{up}" has no column "{col}" — clear that box to check coverage only'
+    ),
+    'verify.missing_list_col': 'Node {nid}: the list upstream "{up}" has no column "{col}"',
+    'verify.missing_result_col': 'Node {nid}: the result upstream "{up}" has no column "{col}"',
+    'verify.need_list_col': 'Node {nid}: the list column to compare is empty (default 链接)',
+    'verify.need_result_col': 'Node {nid}: the result column to compare is empty (comment results default 文章URL)',
+    'verify.needs_two': (
+        'Node {nid}: an audit needs exactly two upstream connections (1st = list, 2nd = result), and this has {n}'
+    ),
+    'verify.orphans': (
+        'Node {nid}: {n} link(s) in the result are not in the list — check that both tables come from the same crawl'
+    ),
+    'verify.result_blank': 'Node {nid}: {n} result row(s) have a blank link and cannot be matched',
+    'verify.retry_hint': (
+        "Node {nid}: {n} item(s) are incomplete — save this node's rows with an Output node, upload that file, "
+        "and feed its link column into the comment crawl's input column to re-crawl only those articles"
+    ),
+    'verify.roles': 'Node {nid}: list="{list}", result="{result}" (by connection order: 1st = list, 2nd = result)',
     'wf.analysis_llm_no_model': (
         'the 主题概括 step needs a model, and this run has none (Settings → model, or the node model box)'
     ),
@@ -783,6 +875,10 @@ EN = {
     'wf.analysis_step_nochange': ' (no change)',
     'wf.analysis_step_removed': ' (-{removed})',
     'wf.analysis_steps_shape': '"steps" must be a LIST of steps (one object each), and this is a single object',
+    'wf.anti_join_roles': (
+        'Node {nid}: exclude-matching — keep "{keep}" and drop rows whose content already appears in "{basis}"'
+    ),
+    'wf.anti_join_roles_swapped': ('Node {nid}: exclude-matching (tables swapped) — keep "{keep}", basis "{basis}"'),
     'wf.browser_opened': 'Browser opened for {platform} login ({url}); waiting {n}s for the user to log in',
     'wf.compile_no_source': (
         'The compile node has no LaTeX to compile (its upstream visualize produced neither a figure nor a table)'
@@ -820,6 +916,12 @@ EN = {
     'wf.tokenize_no_col': 'column "{col}" not found in {cols}',
     'wf.tokenize_no_column': 'no text column is configured for tokenizing',
     'wf.tokenize_no_input': 'no upstream data — connect a data source or an upload node',
+    'wf.two_table_no_right': (
+        'Node {nid}: this step needs a second incoming connection (1st = the table it works on, 2nd = the other table)'
+    ),
+    'wf.two_table_not_table': (
+        'Node {nid}: the second connection of this step must carry a table, and upstream "{up}" produced no row table'
+    ),
     'wf.unknown_process_op': 'unknown process operation "{op}"',
     'wf.unnamed': 'Unnamed workflow {i}',
     'wf.validation_error': 'Validation error: {err}',

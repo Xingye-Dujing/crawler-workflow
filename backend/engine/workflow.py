@@ -576,6 +576,23 @@ class WorkflowEngine:
                         add(nid, 'engine.output_no_table', t('engine.output_no_table', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
                 add(nid, 'engine.analysis_no_op', t('engine.analysis_no_op', nid=label))
+            if ntype == 'verify':
+                # 采集校验 compares exactly TWO data tables: the first wire is the list (what
+                # was promised), the second is the result (what was collected). A name node
+                # produces no rows and never occupies a role, so it is not counted — the same
+                # distinction ``data_inputs`` makes for every other node.
+                parents = [str(conn.get('from')) for conn in self.connections if str(conn.get('to')) == str(nid)]
+                data_parents = [pid for pid in parents if (self.nodes.get(pid) or {}).get('type') != 'name']
+                if len(data_parents) != 2:
+                    add(
+                        nid,
+                        'engine.verify_two_inputs',
+                        t('engine.verify_two_inputs', nid=label, n=len(data_parents)),
+                    )
+                if not str(params.get('input_key_column') or '').strip():
+                    add(nid, 'engine.verify_need_list_col', t('engine.verify_need_list_col', nid=label))
+                if not str(params.get('result_key_column') or '').strip():
+                    add(nid, 'engine.verify_need_result_col', t('engine.verify_need_result_col', nid=label))
             if ntype == 'biblio':
                 # Count EVERY incoming wire, including a name node: the executor
                 # receives the whole upstream list, so filtering names here let a

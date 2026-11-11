@@ -22,6 +22,17 @@ ZH = {
     'analysis.alert_skipped': '“{col}”有 {n} 行解析不出日期，它们不参与预警判断',
     'analysis.alert_streak': '连续期数至少是 1，收到 {value}',
     'analysis.alert_threshold': '“{name}”阈值必须大于 0，收到 {value}',
+    # ── 内容去重（反向筛选 / anti-join） ──────────────────────
+    # The matching rules themselves live in services/analysis/matching.py; these are the
+    # refusals and the one summary line. The summary names which side was kept, because
+    # "第 1 条连线被筛选、第 2 条是依据" is the fact a reader must be able to check.
+    'analysis.anti_join_done': (
+        '反向筛选（{mode}）：左表 {rows} 行，右表 {right_keys} 个不同值；保留 {kept} 行、去掉 {removed} 行'
+        '（保留方式：{keep}；左表空值 {blank} 行、右表空值 {right_blank} 行未参与匹配）'
+    ),
+    'analysis.anti_join_key_count': '两边给出的比较列数量要一致：左 {left}，右 {right}',
+    'analysis.anti_join_left_missing': '要筛选的表里没有这些列：{cols}',
+    'analysis.anti_join_right_missing': '作为依据的表里没有这些列：{cols}',
     'analysis.bad_option': '“{op}”的“{param}”没有“{value}”这个选项（可用：{allowed}）',
     'analysis.bert_fallback': '{op} 的 bert 不可用（{reason}），本次改用 {used} 产出结果（非 bert）',
     'analysis.bin_failed': '列 {col} 分箱失败：{err}',
@@ -132,6 +143,11 @@ ZH = {
     # A count the step reads as an integer. The panel cannot send junk here (the normalizer drops
     # an unreadable box to the default), but a hand-written workflow file and /api/analysis/run
     # both reach the service, where int('abc') would otherwise surface as an opaque node failure.
+    # ── the shared matching rules (services/analysis/matching.py) ──
+    'analysis.match_bad_mode': '未知的匹配方式“{mode}”（可用：{allowed}）',
+    'analysis.match_distance': '近似文本匹配支持 0–{max} 位的 SimHash 距离，收到 {value}，已拒绝（不做全量两两比对）',
+    'analysis.match_distance_type': '近似文本匹配的距离要是一个整数，收到“{value}”',
+    'analysis.match_keyless': '匹配方式“{mode}”不产生可用于逐项对齐的键（近似匹配只能回答“是否命中”，不能数条数）',
     'analysis.need_number': '“{op}”的“{param}”要是一个整数，收到“{value}”',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
     # storage names on purpose: they are what the caller of /api/analysis/run wrote,
@@ -204,6 +220,10 @@ ZH = {
         '“{col}”有 {n} 行不是可解析的时间（站点只给了相对标签，如“09月26日 21:00”），已留空而不是猜一个年份'
     ),
     'analysis.timeline_blank': '“{col}”有 {n} 行不属于任何阶段，它们不进生命周期',
+    # The two-table steps: the second incoming connection is the other table, so a node
+    # with one wire is refused before the pipeline runs rather than answered an empty table.
+    'analysis.two_table_need_keys': '“{op}”需要填写左右两张表的比较列',
+    'analysis.two_table_no_right': '“{op}”需要第二张表：请把另一个表格节点的连线接到本节点的第二个输入',
     'analysis.timeline_done': (
         '主题生命周期：{topics} 个主题（{stages} 个阶段），{multi} 个跨多阶段、{secondary} 个判为次生舆情'
         '（词重合阈值 {value}）'
@@ -375,6 +395,14 @@ EN = {
     'analysis.alert_skipped': '{n} rows of "{col}" parse to no date, so they join no warning check',
     'analysis.alert_streak': 'the streak has to be at least 1 period, got {value}',
     'analysis.alert_threshold': 'the "{name}" threshold has to be above 0, got {value}',
+    'analysis.anti_join_done': (
+        'exclude-matching ({mode}): left table {rows} row(s), right table {right_keys} distinct value(s); '
+        'kept {kept}, dropped {removed} (keep mode: {keep}; {blank} blank left / {right_blank} blank right '
+        'cell(s) took part in no match)'
+    ),
+    'analysis.anti_join_key_count': 'both sides must name the same number of columns: left {left}, right {right}',
+    'analysis.anti_join_left_missing': 'the table being filtered has no such column(s): {cols}',
+    'analysis.anti_join_right_missing': 'the table used as the basis has no such column(s): {cols}',
     'analysis.bad_option': '{op} has no "{param}" option "{value}" (available: {allowed})',
     'analysis.bert_fallback': '{op} bert unavailable ({reason}); this run used {used} for the column, not bert',
     'analysis.bin_failed': 'Binning failed for {col}: {err}',
@@ -532,6 +560,15 @@ EN = {
         'the labelling step asks the model once per topic: {rows} rows is over the limit of {limit}, '
         'so filter the topic table first'
     ),
+    'analysis.match_bad_mode': 'unknown match mode "{mode}" (available: {allowed})',
+    'analysis.match_distance': (
+        'near-text matching supports a SimHash distance of 0–{max} bits, got {value}; refused '
+        '(an all-pairs scan is not offered)'
+    ),
+    'analysis.match_distance_type': 'the near-text distance has to be a whole number, got "{value}"',
+    'analysis.match_keyless': (
+        'match mode "{mode}" produces no per-row key (near matching can say hit/miss, never a count)'
+    ),
     'analysis.multi_models_run': 'multi-model compare: {op} ran over {n} models: {models}',
     'analysis.need_multi_models': '{op} bert mode needs ≥2 models to compare (now {n})',
     'analysis.need_number': '{op}: "{param}" has to be a whole number, got "{value}"',
@@ -620,6 +657,8 @@ EN = {
         '"09月26日 21:00"); they are left empty rather than guessed into a year'
     ),
     'analysis.timeline_blank': '{n} rows of "{col}" belong to no phase, so they join no lifecycle',
+    'analysis.two_table_need_keys': '{op} needs the comparison columns of both tables',
+    'analysis.two_table_no_right': ("{op} needs a second table: wire another table node into this node's second input"),
     'analysis.timeline_done': (
         'topic lifecycles: {topics} subjects over {stages} phases, {multi} spanning more than one phase '
         'and {secondary} flagged as a secondary flare-up (word-overlap threshold {value})'

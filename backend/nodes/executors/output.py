@@ -18,7 +18,7 @@ from runtime.state import _wf_local, add_log
 
 from i18n import t
 from nodes.context import NodeCall
-from nodes.labels import node_label
+from nodes.labels import node_label, parent_label
 from services.charts import pdf
 from services.exports.writer import DataExporter, UnsupportedFormatError
 from services.runs.files import record_file
@@ -61,7 +61,11 @@ def merge_upstream_tables(
     caller with no graph in scope: these sentences name THE PARENT — the wire the user has
     to go cut — and “上游 node-2” sends them counting boxes to work out which one that was.
     """
-    name_parent = label_of if callable(label_of) else (str)
+
+    def name_parent(pid):
+        """The adapter ``merge_upstream_tables`` calls: id → the console's name for it."""
+        return parent_label(label_of, pid)
+
     tables = []
     for pid, result in upstream or ():
         if isinstance(result, list):

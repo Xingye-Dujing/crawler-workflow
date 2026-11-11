@@ -403,7 +403,9 @@ var dataNodes = {
                 return;
             }
             payload.dataset_id = node.params.dataset_id;
-        } else if (['source', 'process', 'analysis', 'tokenize'].indexOf(node.type) >= 0) {
+        } else if (['source', 'process', 'analysis', 'tokenize', 'verify'].indexOf(node.type) >= 0) {
+            /* 采集校验 is a producer too: its own stored rows ARE the report (the gap table),
+               so the preview reads the node's result rather than the first upstream's. */
             payload.node_id = nodeId;
         } else {
             var upstream = canvas.getUpstreamNodeId(nodeId);

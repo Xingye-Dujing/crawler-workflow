@@ -16,7 +16,7 @@
  * creating a new one — a visible, deliberate action rather than silently editing every
  * instance that shares it.
  */
-var REUSABLE_ALLOWED_TYPES = ['process', 'analysis', 'visualize', 'tokenize', 'biblio', 'fuse', 'output', 'compile'];
+var REUSABLE_ALLOWED_TYPES = ['process', 'analysis', 'visualize', 'tokenize', 'biblio', 'fuse', 'verify', 'output', 'compile'];
 var REUSABLE_STAGE_MAX_W = 760;
 var REUSABLE_STAGE_MAX_H = 520;
 var REUSABLE_PREVIEW_MAX_W = 1080;

@@ -66,6 +66,7 @@ class DataAnalysisService:
     sample_rows = staticmethod(OPS['sample_rows'])
     groupby_agg = staticmethod(OPS['groupby_agg'])
     join_tables = staticmethod(OPS['join_tables'])
+    anti_join = staticmethod(OPS['anti_join'])
     column_calc = staticmethod(OPS['column_calc'])
     bin_column = staticmethod(OPS['bin_column'])
     extract_time = staticmethod(OPS['extract_time'])

@@ -8,6 +8,23 @@ importing the DAG parser — which pulls in the crawler capability layer and pan
 from i18n import t
 
 
+def parent_label(label_of, pid: str) -> str:
+    """How a console line names an UPSTREAM node, from whatever the run loop supplied.
+
+    The run loop builds ``{parent_id: node_label(parent)}`` and hands it to the executors that
+    have to name a parent (a merge refusal, a two-table role line). A direct caller — a unit
+    test, an API that runs one node — passes nothing, and a callable is what the older
+    signature accepted, so all three shapes are read here instead of each executor guessing.
+    A bare id is the last resort and is stated as such, never silently replaced by a guess.
+    """
+    pid = str(pid or '')
+    if callable(label_of):
+        return str(label_of(pid) or pid)
+    if isinstance(label_of, dict):
+        return str(label_of.get(pid) or pid)
+    return pid
+
+
 def node_label(node: dict, nid: str) -> str:
     """Console-friendly reference to a node: a name first, the id as suffix.
 

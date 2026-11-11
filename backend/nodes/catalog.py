@@ -55,6 +55,9 @@ PLUGINS: dict[str, NodePlugin] = {
     'analysis': NodePlugin('analysis', 'nodeType.analysis', 'analysis'),
     'tokenize': NodePlugin('tokenize', 'nodeType.tokenize', 'process'),
     'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),
+    # 采集校验 reads two tables (a list and a crawl result) and answers a report table; it
+    # owns no session and no login, so it groups with the processing nodes.
+    'verify': NodePlugin('verify', 'nodeType.verify', 'process'),
     'fuse': NodePlugin('fuse', 'nodeType.fuse', 'biblio'),
     'accumulate': NodePlugin('accumulate', 'nodeType.accumulate', 'data'),
     'visualize': NodePlugin('visualize', 'nodeType.visualize', 'visualize', rows='pdf'),

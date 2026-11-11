@@ -6,7 +6,12 @@
  * it a companion of that file, so a harness naming one receives both.
  */
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'cluster_review', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'anti_join', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'cluster_review', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
+/* The matching modes a two-table step offers, pinned against
+   services/analysis/matching.MATCH_MODES by tests/api/test_analysis_api.py. */
+var MATCH_MODES = ['exact', 'trim', 'url', 'text', 'similar'];
+var COUNT_MATCH_MODES = ['exact', 'trim', 'url', 'text'];
+var KEEP_MODES = ['exclude', 'keep'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -370,6 +375,29 @@ function renderAnalysisSettings(nodeId, p) {
             [{ v: 'left', l: 'Left' }, { v: 'right', l: 'Right' }, { v: 'inner', l: 'Inner' }, { v: 'outer', l: 'Outer' }]);
         html += renderParamInput(nodeId, p, 'left_on', 'settings.leftOn', 'text', '');
         html += renderParamInput(nodeId, p, 'right_on', 'settings.rightOn', 'text', '');
+    }
+    if (op === 'anti_join') {
+        /* 内容去重. The role readout is the point: "which table is filtered, which is the
+           basis" is decided by wire order, so the panel names both parents instead of
+           leaving the user to guess from two identical column boxes. */
+        html += twoTableRoleLine(nodeId, boolParam(p.swap_tables, false),
+            'settings.antiJoinKeepRole', 'settings.antiJoinBasisRole');
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.antiJoinHint') + '</div>';
+        html += renderParamSelect(nodeId, p, 'keep_mode', 'settings.antiJoinKeep', 'exclude',
+            [{ v: 'exclude', l: I18n.t('settings.antiJoinExclude') },
+             { v: 'keep', l: I18n.t('settings.antiJoinKeepOnly') }]);
+        html += renderParamInput(nodeId, p, 'left_on', 'settings.antiJoinLeft', 'text', '');
+        html += renderParamInput(nodeId, p, 'right_on', 'settings.antiJoinRight', 'text', '');
+        html += renderParamSelect(nodeId, p, 'match_mode', 'settings.matchMode', 'trim',
+            MATCH_MODES.map(function (mode) {
+                return { v: mode, l: I18n.t('matchMode.' + mode) };
+            }));
+        html += renderParamCheckbox(nodeId, p, 'ignore_case', 'settings.matchIgnoreCase', false);
+        if ((p.match_mode || 'trim') === 'similar') {
+            html += renderParamInput(nodeId, p, 'max_distance', 'settings.matchDistance', 'number', '8');
+        }
+        html += renderParamCheckbox(nodeId, p, 'swap_tables', 'settings.swapTables', false);
     }
     if (op === 'column_calc') {
         html += renderParamInput(nodeId, p, 'new_col', 'settings.newCol', 'text', '');
