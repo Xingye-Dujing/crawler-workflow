@@ -184,12 +184,18 @@ def test_a_staged_package_is_never_applied_before_it_is_staged(monkeypatch):
 
 def test_the_spawn_asks_for_a_child_that_survives_a_kill():
     """The one regression that broke every shipped updater: flags, not intentions."""
+    import os
+
     from core import procs
 
     flags = procs.popen_kwargs('win32', detached=True)
-    if flags:
+    if os.name == 'nt':
         assert flags['creationflags'] & 0x08000000, 'no CREATE_NO_WINDOW'
         assert not flags['creationflags'] & 0x00000008, 'DETACHED_PROCESS stops a console child dead'
+    else:
+        # POSIX cannot carry Windows creation flags; the detached answer on this host is a new
+        # session, which is exactly what lets the swapper outlive the server.
+        assert flags == {'start_new_session': True}
 
 
 # ─── Downloading, resuming and the handshake ───

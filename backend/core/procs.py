@@ -137,13 +137,20 @@ def popen_kwargs(system: str | None = None, detached: bool = False) -> dict:
     child gets a hidden console of its own instead of inheriting one that is not there, and Windows
     keeps no parent/child death link, so it survives both a normal exit and a kill.
     """
-    if detached and not machine.is_windows(system):
+    # A keyword is only legal when THIS interpreter can take it, so the answer needs both
+    # halves: the system being asked about AND the host running the Popen. Asking for
+    # ``('win32')`` on Linux must stay ``{}`` (creationflags is a POSIX ``ValueError``), and
+    # asking for ``('linux')`` on Windows must stay ``{}`` for the mirror reason.
+    host_windows = machine.is_windows()
+    if detached and not host_windows:
         return {'start_new_session': True}
+    if not (host_windows and machine.is_windows(system)):
+        return {}
     flags = _CREATE_NO_WINDOW
-    if detached and machine.is_windows(system):
+    if detached:
         # A process group of its own, so a Ctrl+C aimed at the parent's console does not reach it.
         flags |= _CREATE_NEW_PROCESS_GROUP
-    return {'creationflags': flags} if machine.is_windows(system) and flags else {}
+    return {'creationflags': flags}
 
 
 def powershell_command(script: str, args: list[str] | None = None) -> list[str]:
