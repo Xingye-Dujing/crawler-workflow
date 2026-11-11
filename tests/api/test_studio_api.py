@@ -322,25 +322,15 @@ def _register(data_root, name, kind='latex', run_id='run-pdf', node_id='node-2',
 @pytest.fixture
 def fake_xelatex(monkeypatch):
     """The compiler is the user's own MiKTeX, so nothing here shells out: `find_xelatex` and
-    ``subprocess.run`` are stood in for, exactly as ``test_compile_api`` does."""
-    import os
-    from types import SimpleNamespace
+    the compile PROCESS (``subprocess.Popen``) are stood in for, exactly as ``test_compile_api``
+    does. The double must be Popen-shaped: a run-shaped one passes where TeX exists and runs
+    the real binary where it does not."""
+    from latex_doubles import fake_popen
 
     import services.charts.pdf as latex_compile
 
     monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-
-    def run(command, *args, **kwargs):
-        outdir = None
-        for i, arg in enumerate(command):
-            if arg == '-output-directory':
-                outdir = command[i + 1]
-        if outdir:
-            with open(os.path.join(outdir, 'main.pdf'), 'wb') as handle:
-                handle.write(b'%PDF-1.4 fake')
-        return SimpleNamespace(returncode=0, stderr=b'')
-
-    monkeypatch.setattr(latex_compile.subprocess, 'run', run)
+    monkeypatch.setattr(latex_compile.subprocess, 'Popen', fake_popen())
     return latex_compile
 
 

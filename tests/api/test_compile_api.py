@@ -1,15 +1,15 @@
 """The MiKTeX compile node + PDF output, driven offline with a FAKE xelatex.
 
-The compiler is the user's own MiKTeX, so nothing here shells out: ``find_xelatex`` and
-``subprocess.run`` are stood in for exactly the way ``test_report_api`` does for Chrome, which lets the
-node's real branches be checked without a TeX install — a chart that emits LaTeX, one that emits neither
-box (rejected before a run), and a missing ``xelatex`` (the node FAILS with a named reason, the run does
-not crash and no half-written PDF is left).
+The compiler is the user's own MiKTeX, so nothing here shells out: ``find_xelatex`` and the
+compile process (``subprocess.Popen``) are stood in for exactly the way ``test_report_api``
+does for Chrome, which lets the node's real branches be checked without a TeX install — a
+chart that emits LaTeX, one that emits neither box (rejected before a run), and a missing
+``xelatex`` (the node FAILS with a named reason, the run does not crash and no half-written
+PDF is left).
 """
 
-import os
-
 import pytest
+from latex_doubles import fake_popen
 from run_wait import run_finished
 
 import services.charts.pdf as latex_compile
@@ -45,20 +45,14 @@ def _staged_pdfs(exports, nid):
 
 
 def _fake_xelatex_run(writes=True, returncode=0, stderr=b''):
-    """Honour ``-output-directory <dir> main.tex`` by creating (or refusing) ``<dir>/main.pdf``."""
-    from types import SimpleNamespace
+    """Honour ``-output-directory <dir> main.tex`` by creating (or refusing) ``<dir>/main.pdf``.
 
-    def run(command, *args, **kwargs):
-        outdir = None
-        for i, arg in enumerate(command):
-            if arg == '-output-directory':
-                outdir = command[i + 1]
-        if writes and outdir:
-            with open(os.path.join(outdir, 'main.pdf'), 'wb') as handle:
-                handle.write(b'%PDF-1.4 fake')
-        return SimpleNamespace(returncode=returncode, stderr=stderr)
-
-    return run
+    The production code launches a PROCESS (``Popen``) so a compile can be timed out and
+    reaped; the double therefore has to be a Popen, not the ``subprocess.run`` this used to
+    stand in for. A stale run-shaped double passes on a machine with TeX and runs the real
+    binary on a runner without it.
+    """
+    return fake_popen(writes=writes, returncode=returncode, stderr=stderr)
 
 
 def _upload(client, paste):
@@ -88,7 +82,7 @@ class TestCompileService:
 
     def test_a_failed_xelatex_leaves_no_half_written_pdf(self, tmp_path, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(False, returncode=1, stderr=b'boom'))
+        monkeypatch.setattr(latex_compile.subprocess, 'Popen', _fake_xelatex_run(False, returncode=1, stderr=b'boom'))
         out, _name = latex_compile.compile_pdf('x', 'x.pdf', str(tmp_path))
         assert 'error' in out and not (tmp_path / 'x.pdf').exists()
 
@@ -96,7 +90,7 @@ class TestCompileService:
 class TestCompileNodeAndPdf:
     def test_compile_node_stages_a_pdf(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
+        monkeypatch.setattr(latex_compile.subprocess, 'Popen', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
             [
@@ -117,7 +111,7 @@ class TestCompileNodeAndPdf:
 
     def test_visualize_to_output_writes_a_pdf(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
+        monkeypatch.setattr(latex_compile.subprocess, 'Popen', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
             [
@@ -137,7 +131,7 @@ class TestCompileNodeAndPdf:
 
     def test_compile_to_output_renames_the_staged_pdf(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
+        monkeypatch.setattr(latex_compile.subprocess, 'Popen', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
             [
@@ -164,7 +158,7 @@ class TestCompileNodeAndPdf:
 
     def test_both_boxes_off_is_rejected_before_the_run(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
+        monkeypatch.setattr(latex_compile.subprocess, 'Popen', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
             [
@@ -220,7 +214,7 @@ class TestTheStagedNameBelongsToOneRun:
         it for the same reason), which is why two identical runs leave two files.
         """
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr(latex_compile.subprocess, 'run', _fake_xelatex_run(True))
+        monkeypatch.setattr(latex_compile.subprocess, 'Popen', _fake_xelatex_run(True))
         ds = _upload(client, paste)
         workflow = _wf(
             [

@@ -6,26 +6,15 @@ and a browser cannot post a LaTeX source for xelatex to read (which would turn t
 reader of files it was never asked to open).
 """
 
-import os
-from types import SimpleNamespace
-
 import pytest
+from latex_doubles import fake_popen
 
 pytestmark = pytest.mark.api
 
 
 def _fake_xelatex(writes=True):
-    def run(command, *args, **kwargs):
-        outdir = None
-        for index, arg in enumerate(command):
-            if arg == '-output-directory':
-                outdir = command[index + 1]
-        if writes and outdir:
-            with open(os.path.join(outdir, 'main.pdf'), 'wb') as handle:
-                handle.write(b'%PDF-1.4 fake')
-        return SimpleNamespace(returncode=0, stderr=b'')
-
-    return run
+    """The compile process: a Popen-shaped double, because that is what the code launches."""
+    return fake_popen(writes=writes)
 
 
 def _rows() -> list:
@@ -112,7 +101,7 @@ def _run_with_charts(app_module, data_root, monkeypatch, *, workflow_name='ÊàêÁ®
         },
     )
     monkeypatch.setattr('services.charts.pdf.find_xelatex', lambda: 'xelatex')
-    monkeypatch.setattr('services.charts.pdf.subprocess.run', _fake_xelatex())
+    monkeypatch.setattr('services.charts.pdf.subprocess.Popen', _fake_xelatex())
     return store, export
 
 
@@ -160,7 +149,7 @@ class TestThePaperDocument:
             store.finish_node('run-order', node_id, NODE_DONE)
         store.finish_run('run-order', RUN_COMPLETED)
         monkeypatch.setattr('services.charts.pdf.find_xelatex', lambda: 'xelatex')
-        monkeypatch.setattr('services.charts.pdf.subprocess.run', _fake_xelatex())
+        monkeypatch.setattr('services.charts.pdf.subprocess.Popen', _fake_xelatex())
 
         body = client.post('/api/report/latex', json={'run_id': 'run-order'}).get_json()
         document = (export / body['tex']).read_text(encoding='utf-8')

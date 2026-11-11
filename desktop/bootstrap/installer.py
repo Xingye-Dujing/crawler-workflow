@@ -791,8 +791,12 @@ def path_load_refusal(root: Path) -> str:
     if os.name != 'nt':
         return ''
     try:
-        import pythonnet
-
+        # Resolved by name, not a static ``import``: pythonnet is declared for Windows only
+        # (``requirements.txt``), and this body is unreachable off Windows anyway. A literal
+        # import makes every Linux/macOS lint run fail with "unable to import" for a package
+        # that machine is never meant to install — the lint gate would be measuring a Windows
+        # GUI stack on a Linux server.
+        pythonnet = importlib.import_module('pythonnet')
         source = Path(pythonnet.__file__).resolve().parent / 'runtime' / 'Python.Runtime.dll'
     except Exception:
         source = asset_dir() / 'pythonnet' / 'runtime' / 'Python.Runtime.dll'
