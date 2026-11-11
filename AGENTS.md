@@ -35,7 +35,9 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **OS-only `Popen` keywords live in `core/procs`**: use `creationflags=CREATE_NO_WINDOW` via `procs.popen_kwargs()`
   (`windowsHide` raises `TypeError`). Every `backend/` spawn passes it — `tests/unit/crawlers/test_platform_rules.py`
   refuses a console child without it. A piped child writes the ANSI code page: cross in bytes, decode UTF-8 by hand,
-  params on stdin, never argv.
+  params on stdin, never argv. `detached=True` is `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` on Windows — **never
+  `DETACHED_PROCESS`**, which makes a console child (powershell) exit before its first statement; a helper the program
+  exits for must write a receipt the parent waits for (`tests/unit/foundation/test_detached_child.py`).
 - **Platform-independent tests are the proof**: no drive-letter data, no `.exe`-pinned refusal, no
   `sys.platform='win32'` patch faking a product gate (patch both sides or assert the refusal), no timezone literal for the
   "server local" zone.

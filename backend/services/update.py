@@ -9,10 +9,24 @@ The feed is a small ``version.json`` in the repository (served raw by Gitee, wit
 fallback), never a release API: the app only needs a version, notes and one verified asset. The
 download is checked against the feed's SHA-256 before anything is staged; a mismatch is a refusal,
 not a retry with an unverified file.
+
+Three processes cooperate and none of them may assume another is alive:
+
+* this module (inside the app) checks, records consent and hands the job over;
+* ``services/update_worker.py`` — a detached copy of this same program — downloads, verifies and
+  unpacks, then exits so the executable it runs from can be replaced;
+* the per-OS swapper script waits for both to be gone, replaces the program files, and starts the
+  new build (rolling back to the old one if it dies).
+
+The swap used to be the whole implementation. It silently never ran: the helper was spawned with
+``DETACHED_PROCESS``, which a console child does not survive (see ``core.procs.popen_kwargs``), and
+the app killed itself 1.5 s later regardless. It now starts only after the helper has written a
+receipt, so a helper that cannot run is a named refusal instead of a vanished program.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -20,31 +34,29 @@ import re
 import shutil
 import subprocess
 import sys
-import threading
 import time
 import urllib.error
 import urllib.request
-import uuid
 from pathlib import Path
 
 from core import machine, procs
 from core.config import Config
 
+from services import update_job
 from services.components.archive import ArchiveError, safe_extract
 from services.version import APP_VERSION
 
-#: The same file two ways: Gitee is the primary network in China, GitHub the fallback.
+#: The same file two ways: Gitee is the primary network in China, GitHub the fallback. An operator
+#: rehearsing a release (or running a private mirror) overrides both with ``CIXI_UPDATE_FEED``.
 FEED_URLS = (
     'https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json',
     'https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json',
 )
+FEED_ENV = 'CIXI_UPDATE_FEED'
 
 #: A stale check is cheap; asking on every boot would be noise, and the feed is a static file.
 FEED_TTL = 30 * 60
 USER_AGENT = 'CaiXiHui-updater'
-_JOB_LOCK = threading.Lock()
-_JOB: dict = {}
-_FEED_CACHE: dict = {'at': 0.0, 'feed': None, 'error': ''}
 
 #: The version names ONE directory under ``data/updates``, so it is DATA, not a path. The value
 #: arrives from the network and the next step is ``shutil.rmtree``: a version of ``..`` used to
@@ -52,16 +64,34 @@ _FEED_CACHE: dict = {'at': 0.0, 'feed': None, 'error': ''}
 #: dotted release number is the only shape the release script writes; anything else is refused by
 #: name, and the resolved directory is asserted to be a CHILD of ``data/updates`` as a second lock.
 _VERSION_RE = re.compile(r'^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$')
+_SHA_RE = re.compile(r'^[0-9a-f]{64}$')
 
 #: A package is a few hundred MB. A feed that asks for more is not an offer this machine accepts:
 #: without a ceiling, one bad (or malicious) manifest fills the disk the app needs for its data.
 MAX_PACKAGE_BYTES = 4 * 1024**3
+#: The manifest itself is a few kilobytes; ``response.read()`` with no ceiling was a free way for a
+#: wrong URL to fill memory.
+MAX_FEED_BYTES = 1024 * 1024
+#: Socket read timeout. A transfer that stalls this long is a named failure, not a hung updater.
+STALL_TIMEOUT = 60
+
+#: How long the swapper gets to write its receipt before the app declares the update stillborn.
+HELPER_TIMEOUT = 10.0
 
 #: Where a release-signing public key may live: the environment (PEM text or a path to one) and,
 #: for a packaged install, a file beside the data root. Absent means the feed is unsigned; present
 #: means a feed WITHOUT a valid signature is refused (failure closed, not "best effort").
 PUBKEY_ENV = 'CIXI_UPDATE_PUBKEY'
 PUBKEY_FILE = 'update-pubkey.pem'
+
+
+class UpdateError(RuntimeError):
+    """A refusal with a stable ``code`` the panel translates, plus the machine's own sentence."""
+
+    def __init__(self, code: str, detail: str = '') -> None:
+        super().__init__(detail or code)
+        self.code = str(code or 'unknown')
+        self.detail = str(detail or '')
 
 
 def version_dir(version: str) -> Path:
@@ -147,8 +177,6 @@ def verify_feed_signature(payload: dict) -> None:
     if not signature:
         raise ValueError('更新清单没有签名，本机已配置校验公钥，拒绝使用')
     try:
-        import base64
-
         from cryptography.hazmat.primitives import serialization
 
         key = serialization.load_pem_public_key(key_pem)
@@ -174,7 +202,7 @@ def is_newer(latest: str, current: str) -> bool:
 
 
 def updates_root() -> Path:
-    return Path(Config.DATA_DIR) / 'updates'
+    return update_job.updates_root()
 
 
 def _frozen() -> bool:
@@ -211,7 +239,18 @@ def _asset(feed: dict) -> dict:
 def _fetch(url: str, timeout: float = 8.0) -> bytes:
     request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+        raw = response.read(MAX_FEED_BYTES + 1)
+    if len(raw) > MAX_FEED_BYTES:
+        raise ValueError(f'更新清单超过 {MAX_FEED_BYTES} 字节，已拒绝')
+    return raw
+
+
+def feed_urls() -> tuple[str, ...]:
+    """The manifest addresses to try, in order; ``CIXI_UPDATE_FEED`` replaces both when set."""
+    override = str(os.environ.get(FEED_ENV) or '').strip()
+    if override:
+        return tuple(item.strip() for item in override.split(',') if item.strip())
+    return FEED_URLS
 
 
 def _valid_feed(payload) -> bool:
@@ -221,13 +260,15 @@ def _valid_feed(payload) -> bool:
     return bool(_VERSION_RE.match(version)) and '..' not in version and isinstance(payload.get('platforms'), dict)
 
 
+_FEED_CACHE: dict = {'at': 0.0, 'feed': None, 'error': ''}
+
+
 def fetch_feed(force: bool = False) -> dict | None:
     """The cached release feed, or ``None`` with the reason kept in ``_FEED_CACHE``."""
-    with _JOB_LOCK:
-        if not force and _FEED_CACHE['feed'] and time.monotonic() - _FEED_CACHE['at'] < FEED_TTL:
-            return _FEED_CACHE['feed']
+    if not force and _FEED_CACHE['feed'] and time.monotonic() - _FEED_CACHE['at'] < FEED_TTL:
+        return _FEED_CACHE['feed']
     error = ''
-    for url in FEED_URLS:
+    for url in feed_urls():
         try:
             payload = json.loads(_fetch(url).decode('utf-8'))
         except (OSError, ValueError, urllib.error.URLError) as exc:
@@ -241,55 +282,10 @@ def fetch_feed(force: bool = False) -> dict | None:
         except ValueError as exc:
             error = f'{url}: {exc}'
             continue
-        with _JOB_LOCK:
-            _FEED_CACHE.update({'at': time.monotonic(), 'feed': payload, 'error': ''})
+        _FEED_CACHE.update({'at': time.monotonic(), 'feed': payload, 'error': ''})
         return payload
-    with _JOB_LOCK:
-        _FEED_CACHE.update({'at': time.monotonic(), 'feed': None, 'error': error or 'no feed'})
+    _FEED_CACHE.update({'at': time.monotonic(), 'feed': None, 'error': error or 'no feed'})
     return None
-
-
-def _cleanup_updates() -> None:
-    """Drop staged packages from previous versions; the running app never needs them again."""
-    with _JOB_LOCK:
-        active = _JOB.get('state') in ('downloading', 'staging', 'done')
-    if active:
-        return
-    root = updates_root()
-    if not root.is_dir():
-        return
-    for child in root.iterdir():
-        if child.is_dir():
-            shutil.rmtree(child, ignore_errors=True)
-
-
-def check() -> dict:
-    current = current_version()
-    if not _frozen():
-        return {'ok': True, 'supported': False, 'current': current, 'reason': 'source'}
-    _cleanup_updates()
-    feed = fetch_feed()
-    if feed is None:
-        with _JOB_LOCK:
-            error = _FEED_CACHE['error']
-        return {'ok': False, 'supported': True, 'current': current, 'error': error}
-    latest = str(feed.get('version') or '').strip()
-    asset_ready = bool(_asset(feed))
-    return {
-        'ok': True,
-        'supported': True,
-        'current': current,
-        'latest': latest,
-        # A version with no asset for THIS platform is not an offer the user can act on.
-        'update_available': asset_ready and is_newer(latest, current),
-        'notes': str(feed.get('notes') or ''),
-        'platform': _platform_key(),
-        'asset_ready': asset_ready,
-        # Whether this machine can actually check the manifest. `False` is not a failure (the
-        # product must still update), but it is a fact the panel shows instead of implying the
-        # SHA-256 chain has a trust root it does not have.
-        'signed': _public_key_pem() is not None,
-    }
 
 
 def _size_of(asset: dict) -> int:
@@ -299,19 +295,135 @@ def _size_of(asset: dict) -> int:
         return 0
 
 
-def _stream(url: str, destination: Path) -> int:
-    request = urllib.request.Request(_require_https(url), headers={'User-Agent': USER_AGENT})
-    written = 0
-    with _OPENER.open(request, timeout=60) as response, open(destination, 'wb') as handle:
-        while True:
-            block = response.read(1024 * 1024)
-            if not block:
-                break
-            written += len(block)
-            if written > MAX_PACKAGE_BYTES:
-                raise RuntimeError(f'下载超过上限 {MAX_PACKAGE_BYTES // 1024**3} GiB，已中止')
-            handle.write(block)
-    return written
+def _digest_of(asset: dict) -> str:
+    return str(asset.get('sha256') or '').strip().lower()
+
+
+def _asset_usable(asset: dict) -> tuple[bool, str]:
+    """Whether the manifest entry describes a package this machine may install.
+
+    A missing digest is not "unknown", it is *unverified*: the release workflow always writes one,
+    so accepting its absence would only ever install bytes nobody checked.
+    """
+    if not asset:
+        return False, '发行清单里没有这个平台的安装包'
+    if not _SHA_RE.match(_digest_of(asset)):
+        return False, '发行清单缺少这个平台的 SHA-256，已拒绝安装未经校验的程序'
+    parts = asset.get('parts') if isinstance(asset.get('parts'), list) else []
+    if parts:
+        for index, part in enumerate(parts, 1):
+            if not str(part.get('url') or '').strip():
+                return False, f'发行清单里第 {index} 个分片没有下载地址'
+            if not _SHA_RE.match(str(part.get('sha256') or '').strip().lower()):
+                return False, f'发行清单里第 {index} 个分片没有 SHA-256'
+    elif not str(asset.get('url') or '').strip():
+        return False, '发行清单里没有这个平台的下载地址'
+    if _size_of(asset) <= 0:
+        return False, '发行清单缺少安装包大小'
+    return True, ''
+
+
+def swap_supported() -> bool:
+    """Whether THIS install can replace itself; ``False`` is a fact the panel shows, not an error.
+
+    A Linux server or a macOS build unpacked outside a bundle has no swap script, so offering
+    "update now" there would end in a refusal after the download — say it before the download.
+    """
+    if not _frozen():
+        return False
+    mode, _root, _exe = install_layout()
+    if machine.platform_name() == 'win32':
+        return mode in ('app', 'portable')
+    if machine.platform_name() == 'darwin':
+        return mode == 'macapp'
+    return False
+
+
+# ─── Checking ────────────────────────────────────────────────
+
+
+def _reconcile_boot(current: str) -> None:
+    """Turn what the last exit left behind into a state this boot can trust."""
+    job = update_job.read()
+    state = job.get('state')
+    version = str(job.get('version') or '')
+    if state == update_job.STATE_APPLYING:
+        if version and version == current:
+            update_job.write(state=update_job.STATE_APPLIED, error_code='', error_detail='')
+            update_job.log(f'新版本 {current} 已启动', actor='app')
+            return
+        swapper = int(job.get('swapper_pid') or 0)
+        if update_job.marker_file().exists() or procs.process_alive(swapper):
+            # The swap may still be running (the launcher waits for the marker before starting us).
+            return
+        update_job.fail('swap_lost', '替换脚本没有完成；当前运行的是旧版本，请重试更新')
+        return
+    # A download or a failure for a version this install already HAS is history, not a prompt:
+    # the user installed it another way (an installer, a manual copy) and a card still offering
+    # "restart to finish 2026.x" would be asking them to go backwards.
+    if state in (update_job.STATE_STAGED, update_job.STATE_FAILED) and version and not is_newer(version, current):
+        update_job.clear()
+        update_job.log(f'已清理 {version} 的旧更新任务（当前 {current}）', actor='app')
+
+
+def _cleanup_updates() -> None:
+    """Drop staging folders no job owns; the one in flight or awaiting a restart stays."""
+    job = update_job.read()
+    keep = set()
+    if job.get('state') in update_job.KEEP_STATES:
+        version = str(job.get('version') or '')
+        if version:
+            keep.add(version)
+    update_job.prune(keep)
+
+
+def check() -> dict:
+    current = current_version()
+    if not _frozen():
+        return {'ok': True, 'supported': False, 'current': current, 'reason': 'source'}
+    _reconcile_boot(current)
+    _cleanup_updates()
+    job = update_job.read()
+    answer = {
+        'ok': True,
+        'supported': True,
+        'current': current,
+        'apply_supported': swap_supported(),
+        # Whether this machine can actually check the manifest. `False` is not a failure (the
+        # product must still update), but it is a fact the panel shows instead of implying the
+        # SHA-256 chain has a trust root it does not have.
+        'signed': _public_key_pem() is not None,
+        # The persisted job travels with every check: a page reload, a second window or a restart
+        # mid-download all paint the same progress instead of offering the download again.
+        'job': update_job.public(job),
+        'feed_error': '',
+        'platform': _platform_key(),
+        'latest': current,
+        'update_available': False,
+        'asset_ready': False,
+        'notes': '',
+    }
+    feed = fetch_feed()
+    if feed is None:
+        answer['feed_error'] = _FEED_CACHE['error'] or 'no feed'
+        return answer
+    latest = str(feed.get('version') or '').strip()
+    asset = _asset(feed)
+    usable, why = _asset_usable(asset)
+    answer.update(
+        {
+            'latest': latest,
+            'notes': str(feed.get('notes') or ''),
+            'asset_ready': usable,
+            'asset_problem': '' if usable else why,
+            # A version with no usable asset for THIS platform is not an offer the user can act on.
+            'update_available': usable and is_newer(latest, current),
+        }
+    )
+    return answer
+
+
+# ─── Downloading and unpacking (the worker's half) ───────────
 
 
 def _sha256(path: Path) -> str:
@@ -322,54 +434,102 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _set_job(**values) -> None:
-    with _JOB_LOCK:
-        _JOB.update(values)
+def _stream(url: str, destination: Path, *, on_block=None, cancelled=None) -> int:
+    """Stream one file, reporting bytes as they land and stopping when asked.
+
+    ``timeout`` is a SOCKET read timeout, so a transfer that stops delivering bytes raises instead
+    of hanging the worker for the rest of the session.
+    """
+    request = urllib.request.Request(_require_https(url), headers={'User-Agent': USER_AGENT})
+    written = 0
+    with _OPENER.open(request, timeout=STALL_TIMEOUT) as response, open(destination, 'wb') as handle:
+        while True:
+            block = response.read(1024 * 1024)
+            if not block:
+                break
+            written += len(block)
+            if written > MAX_PACKAGE_BYTES:
+                raise UpdateError('size', f'下载超过上限 {MAX_PACKAGE_BYTES // 1024**3} GiB，已中止')
+            handle.write(block)
+            if on_block is not None:
+                on_block(len(block))
+            if cancelled is not None and cancelled():
+                raise UpdateError('cancelled', '已取消')
+    return written
 
 
-def _fail(message: str) -> None:
-    _set_job(state='failed', error=str(message)[:500])
+def _part_ok(path: Path, expected_size: int, expected_sha: str) -> bool:
+    """Whether a shard downloaded by an earlier attempt may be reused as it is."""
+    try:
+        if expected_size and path.stat().st_size != expected_size:
+            return False
+        return not expected_sha or _sha256(path) == expected_sha
+    except OSError:
+        return False
 
 
-def _download_package(asset: dict, package: Path) -> None:
+def download_package(asset: dict, package: Path, *, progress=None, cancelled=None) -> None:
+    """Fetch the package described by ``asset`` into ``package``, refusing anything unverified.
+
+    Shards already downloaded and verified by an earlier attempt are reused (``.ok`` sidecar), so a
+    dropped connection costs one shard, not the whole 130 MB package.
+    """
     parts = asset.get('parts') if isinstance(asset.get('parts'), list) else []
     total = _size_of(asset)
     done = 0
+
+    def report(step: int) -> None:
+        nonlocal done
+        done += int(step)
+        if progress is not None and total:
+            progress(min(95, int(done * 95 / total)))
+
     if parts:
+        verified: list[Path] = []
+        for index, part in enumerate(parts, 1):
+            if cancelled is not None and cancelled():
+                raise UpdateError('cancelled', '已取消')
+            url = str(part.get('url') or '').strip()
+            expected_size = int(part.get('size') or 0)
+            expected_sha = str(part.get('sha256') or '').strip().lower()
+            part_path = package.with_name(f'{package.name}.part{index:03d}')
+            ok_path = part_path.with_name(f'{part_path.name}.ok')
+            if ok_path.is_file() and _part_ok(part_path, expected_size, expected_sha):
+                verified.append(part_path)
+                report(part_path.stat().st_size)
+                continue
+            part_path.unlink(missing_ok=True)
+            ok_path.unlink(missing_ok=True)
+            try:
+                written = _stream(url, part_path, on_block=report, cancelled=cancelled)
+            except (OSError, urllib.error.URLError) as exc:
+                raise UpdateError('network', f'第 {index} 个分片下载失败：{exc}') from exc
+            if expected_size and written != expected_size:
+                raise UpdateError('size', f'第 {index} 个分片大小不对：{written} != {expected_size}')
+            if expected_sha and _sha256(part_path) != expected_sha:
+                raise UpdateError('sha', f'第 {index} 个分片校验失败')
+            ok_path.write_text('ok', encoding='utf-8')
+            verified.append(part_path)
         with open(package, 'wb') as output:
-            for index, part in enumerate(parts, 1):
-                url = str(part.get('url') or '').strip()
-                expected_size = int(part.get('size') or 0)
-                part_path = package.with_name(f'{package.name}.part{index:03d}')
-                try:
-                    written = _stream(url, part_path)
-                except (OSError, urllib.error.URLError) as exc:
-                    raise RuntimeError(f'第 {index} 个分片下载失败：{exc}') from exc
-                if expected_size and written != expected_size:
-                    raise RuntimeError(f'第 {index} 个分片大小不对：{written} != {expected_size}')
-                expected_sha = str(part.get('sha256') or '').strip()
-                if expected_sha and _sha256(part_path) != expected_sha:
-                    raise RuntimeError(f'第 {index} 个分片校验失败')
+            for part_path in verified:
                 with open(part_path, 'rb') as reader:
                     shutil.copyfileobj(reader, output, 1024 * 1024)
                 part_path.unlink(missing_ok=True)
-                done += written
-                _set_job(progress=min(95, int(done * 95 / total)) if total else 0)
+                part_path.with_name(f'{part_path.name}.ok').unlink(missing_ok=True)
     else:
         url = str(asset.get('url') or '').strip()
         if not url:
-            raise RuntimeError('发行清单里没有这个平台的安装包')
+            raise UpdateError('asset', '发行清单里没有这个平台的安装包')
         try:
-            _stream(url, package)
+            _stream(url, package, on_block=report, cancelled=cancelled)
         except (OSError, urllib.error.URLError) as exc:
-            raise RuntimeError(f'下载失败：{exc}') from exc
-        _set_job(progress=90)
-    expected_sha = str(asset.get('sha256') or '').strip()
+            raise UpdateError('network', f'下载失败：{exc}') from exc
+    expected_sha = _digest_of(asset)
     if expected_sha and _sha256(package) != expected_sha:
-        raise RuntimeError('安装包 SHA-256 校验失败，已拒绝使用')
+        raise UpdateError('sha', '安装包 SHA-256 校验失败，已拒绝使用')
     expected_size = _size_of(asset)
     if expected_size and package.stat().st_size != expected_size:
-        raise RuntimeError(f'安装包大小不对：{package.stat().st_size} != {expected_size}')
+        raise UpdateError('size', f'安装包大小不对：{package.stat().st_size} != {expected_size}')
 
 
 def _stage_macos(package: Path, staging: Path) -> Path:
@@ -388,7 +548,7 @@ def _stage_macos(package: Path, staging: Path) -> Path:
         try:
             bundles = sorted(mount.glob('*.app'))
             if not bundles:
-                raise RuntimeError('DMG 里没有 .app')
+                raise UpdateError('shape', 'DMG 里没有 .app')
             target = staging / 'CaiXiHui.app'
             if target.exists():
                 shutil.rmtree(target)
@@ -408,72 +568,181 @@ def _stage_macos(package: Path, staging: Path) -> Path:
                 **procs.popen_kwargs(),
             )
     except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError(f'展开 macOS 安装包失败：{exc}') from exc
+        raise UpdateError('extract', f'展开 macOS 安装包失败：{exc}') from exc
 
 
-def _run_download(version: str, asset: dict) -> None:
-    try:
-        root = version_dir(version)
-    except ValueError as exc:
-        _fail(str(exc))
+def verify_staged(staged: Path, *, platform: str = '') -> None:
+    """Refuse a payload that does not look like THIS program.
+
+    The hash only says the bytes are the ones the manifest named; a manifest that points at the
+    wrong archive would otherwise be copied over the install and leave a program-shaped hole.
+    """
+    if platform == 'darwin':
+        if not (staged / 'Contents' / 'MacOS' / 'CaiXiHui').is_file():
+            raise UpdateError('shape', '更新包里的 .app 缺少可执行文件')
         return
+    required = machine.app_payload_files(platform or None)
+    missing = [name for name in required if not (staged / name).exists()]
+    if missing:
+        raise UpdateError('shape', '更新包里没有这个程序的入口文件：' + '、'.join(missing))
+
+
+def stage_package(package: Path, root: Path) -> Path:
+    """Unpack ``package`` into ``root/staged`` (replacing anything an old attempt left)."""
+    staged = root / 'staged'
+    if staged.exists():
+        shutil.rmtree(staged, ignore_errors=True)
+    platform = machine.platform_name()
+    if platform == 'darwin':
+        target = _stage_macos(package, staged)
+        verify_staged(target, platform=platform)
+        return target
     try:
-        if root.exists():
-            shutil.rmtree(root)
-        root.mkdir(parents=True)
-        package = root / ('package.dmg' if machine.platform_name() == 'darwin' else 'package.zip')
-        _set_job(state='downloading', progress=0, error='')
-        _download_package(asset, package)
-        _set_job(state='staging', progress=96)
-        if machine.platform_name() == 'darwin':
-            staged = _stage_macos(package, root / 'staged')
-        else:
-            staged = root / 'staged'
-            safe_extract(package, staged, archive_type='zip', strip_prefix='CaiXiHui')
-        _set_job(state='done', progress=100, staged=str(staged), version=version)
-    except (ArchiveError, OSError, RuntimeError, ValueError) as exc:
-        _fail(str(exc))
+        safe_extract(package, staged, archive_type='zip', strip_prefix='CaiXiHui')
+    except ArchiveError as exc:
+        raise UpdateError('extract', f'展开安装包失败：{exc}') from exc
+    verify_staged(staged, platform=platform)
+    return staged
 
 
-def start_download() -> dict:
+# ─── Starting the download worker ───────────
+
+
+def worker_command(job_file: Path) -> list[str]:
+    """How a detached copy of this program becomes the download worker.
+
+    The packaged build is one folder, so its own executable is the cheapest interpreter that
+    already has every dependency and the already-resolved data root in its environment. A source
+    run never reaches here (:func:`prepare` refuses before).
+    """
+    return [str(sys.executable), '--update-worker', str(job_file)]
+
+
+def _spawn_worker(job_file: Path) -> int:
+    child = subprocess.Popen(
+        worker_command(job_file),
+        cwd=str(Path(sys.executable).resolve().parent),
+        close_fds=True,
+        **procs.popen_kwargs(detached=True),
+    )
+    return int(child.pid)
+
+
+def prepare() -> dict:
+    """Start (or resume) the download and unpacking of the newest release.
+
+    Everything here is a decision the app can still refuse: a platform without a swapper, a
+    manifest without a digest, a worker that will not start. Once the worker is running the app
+    may be closed — the job survives on disk and the worker finishes it.
+    """
     if not _frozen():
         return {'ok': False, 'error': '源码运行不执行自更新'}
+    if not swap_supported():
+        return {'ok': False, 'error': '当前平台不支持应用内更新，请用安装器安装新版本'}
+    job = update_job.read()
+    if job.get('state') in update_job.WORKER_STATES:
+        if update_job.worker_alive(job):
+            return {'ok': True, 'job': update_job.public(job), 'resumed': True}
+        job = update_job.fail('worker', '上一次的更新进程已经退出，任务没有完成，可以重试')
     feed = fetch_feed()
     if feed is None:
-        with _JOB_LOCK:
-            return {'ok': False, 'error': _FEED_CACHE['error'] or '无法读取更新清单'}
+        return {'ok': False, 'error': f'无法读取更新清单：{_FEED_CACHE["error"] or "no feed"}'}
     latest = str(feed.get('version') or '').strip()
     asset = _asset(feed)
-    if not asset:
-        return {'ok': False, 'error': f'发行清单里没有 {_platform_key()} 的安装包'}
-    with _JOB_LOCK:
-        if _JOB.get('state') in ('downloading', 'staging'):
-            return {'ok': True, 'job': dict(_JOB)}
-        _JOB.clear()
-        _JOB.update({'id': uuid.uuid4().hex, 'state': 'downloading', 'progress': 0, 'error': '', 'version': latest})
-        snapshot = dict(_JOB)
-    threading.Thread(
-        target=_run_download,
-        args=(latest, asset),
-        name='update-download',
-        daemon=True,
-    ).start()
-    return {'ok': True, 'job': snapshot}
+    usable, why = _asset_usable(asset)
+    if not usable:
+        return {'ok': False, 'error': why}
+    if job.get('state') == update_job.STATE_STAGED and job.get('version') == latest:
+        if Path(str(job.get('staged') or '')).is_dir():
+            return {'ok': True, 'job': update_job.public(job), 'ready': True}
+        update_job.fail('staged_missing', '已下载的更新包不见了，需要重新下载')
+        job = update_job.read()
+    resumable = job.get('state') == update_job.STATE_FAILED and job.get('version') == latest
+    if resumable:
+        job = update_job.write(
+            state=update_job.STATE_DOWNLOADING,
+            progress=0,
+            error_code='',
+            error_detail='',
+            cancel=False,
+            owner_pid=os.getpid(),
+            worker_pid=0,
+            attempts=int(job.get('attempts') or 0) + 1,
+        )
+        update_job.log(f'重试下载 {latest}（第 {job.get("attempts")} 次）', actor='app')
+    else:
+        try:
+            shutil.rmtree(version_dir(latest), ignore_errors=True)
+        except ValueError as exc:
+            return {'ok': False, 'error': str(exc)}
+        job = update_job.start(version=latest, asset=asset, from_version=current_version())
+        update_job.log(f'开始下载 {latest}', actor='app')
+    try:
+        pid = _spawn_worker(update_job.job_file())
+    except OSError as exc:
+        update_job.fail('worker', f'下载进程没能启动：{exc}')
+        return {'ok': False, 'error': f'下载进程没能启动：{exc}'}
+    update_job.write(worker_pid=pid)
+    update_job.log(f'下载进程 pid={pid}', actor='app')
+    return {'ok': True, 'job': update_job.public(update_job.read())}
 
 
-def job(job_id: str = '') -> dict:
-    with _JOB_LOCK:
-        current = dict(_JOB)
-    if job_id and current.get('id') != job_id:
-        return {}
-    return current
+def status() -> dict:
+    """The job as the panel should see it, with a dead worker reported as a named failure."""
+    job = update_job.read()
+    if job.get('state') in update_job.WORKER_STATES and not update_job.worker_alive(job):
+        job = update_job.fail('worker', '下载进程意外退出，任务没有完成，可以重试')
+    return update_job.public(job)
+
+
+def cancel() -> dict:
+    """Stop the job in flight, or throw away a package that is already staged."""
+    job = update_job.read()
+    state = job.get('state')
+    if state in update_job.WORKER_STATES:
+        if update_job.worker_alive(job):
+            update_job.write(cancel=True)
+            update_job.log('已请求取消下载', actor='app')
+            return {'ok': True, 'job': update_job.public()}
+        job = update_job.read()
+    if state in (
+        update_job.STATE_DOWNLOADING,
+        update_job.STATE_STAGING,
+        update_job.STATE_STAGED,
+        update_job.STATE_FAILED,
+        update_job.STATE_APPLIED,
+    ):
+        _remove_version_dir(job)
+        update_job.clear()
+        update_job.log('更新已取消，暂存文件已删除', actor='app')
+        return {'ok': True, 'job': update_job.public()}
+    return {'ok': False, 'error': '现在没有可以取消的更新'}
+
+
+def _remove_version_dir(job: dict) -> None:
+    try:
+        shutil.rmtree(version_dir(str(job.get('version') or '')), ignore_errors=True)
+    except ValueError:
+        return
+
+
+# ─── Swapping (the script) ───────────
 
 
 _WINDOWS_SCRIPT = r"""
-param([int]$AppPid,[string]$InstallRoot,[string]$Staged,[string]$Exe,[string]$Mode)
+param([int]$AppPid,[int]$WorkerPid,[string]$InstallRoot,[string]$Staged,[string]$Exe,[string]$Mode,
+      [string]$Receipt,[string]$Log,[string]$Marker,[int]$VerifySeconds = 15)
 $ErrorActionPreference = 'Stop'
-try { Wait-Process -Id $AppPid -Timeout 180 -ErrorAction SilentlyContinue } catch {}
-Start-Sleep -Milliseconds 900
+function Write-Log([string]$Line) {
+  try { Add-Content -LiteralPath $Log -Value ((Get-Date).ToString('s') + ' ' + $Line) } catch {}
+}
+try { Set-Content -LiteralPath $Receipt -Value ('started ' + (Get-Date).ToString('s')) } catch {}
+try { Set-Content -LiteralPath $Marker -Value ('' + $PID) } catch {}
+Write-Log ('swapper: start app=' + $AppPid + ' worker=' + $WorkerPid + ' mode=' + $Mode)
+foreach ($peer in @($AppPid, $WorkerPid)) {
+  if ($peer -gt 0) { try { Wait-Process -Id $peer -Timeout 300 -ErrorAction SilentlyContinue } catch {} }
+}
+Start-Sleep -Milliseconds 500
 $targetRoot = if ($Mode -eq 'app') { Join-Path $InstallRoot 'app' } else { $InstallRoot }
 New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
 $previous = Join-Path $InstallRoot 'app.previous'
@@ -484,68 +753,113 @@ $preserve = @('Data','data','logs','mplconfig','components','install-manifest.js
   'drivers','updates','app.previous')
 $moved = @()
 $added = @()
-try {
-  Get-ChildItem -LiteralPath $Staged -Force | ForEach-Object {
-    if ($preserve -contains $_.Name) { return }
-    $old = Join-Path $targetRoot $_.Name
-    if (Test-Path -LiteralPath $old) {
-      Move-Item -LiteralPath $old -Destination (Join-Path $previous $_.Name) -Force
-      $moved += $_.Name
-    }
-    Copy-Item -LiteralPath $_.FullName -Destination $old -Recurse -Force
-    $added += $_.Name
+function Try-Step([scriptblock]$Action) {
+  for ($i = 0; $i -lt 40; $i++) {
+    try { & $Action; return $true } catch { Start-Sleep -Milliseconds 500 }
   }
-  Start-Process -FilePath $Exe
-} catch {
-  foreach ($name in $added) {
-    $target = Join-Path $targetRoot $name
-    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+  return $false
+}
+function Remove-IfExists([string]$Path) {
+  if (Test-Path -LiteralPath $Path) {
+    Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
   }
+}
+function Restore-Program {
+  foreach ($name in $added) { Remove-IfExists (Join-Path $targetRoot $name) }
   foreach ($name in $moved) {
     $backup = Join-Path $previous $name
     $target = Join-Path $targetRoot $name
     if (Test-Path -LiteralPath $backup) {
-      if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+      Remove-IfExists $target
       Move-Item -LiteralPath $backup -Destination $target -Force
     }
   }
+}
+try {
+  Get-ChildItem -LiteralPath $Staged -Force | ForEach-Object {
+    $name = $_.Name
+    $source = $_.FullName
+    if ($preserve -contains $name) { return }
+    $old = Join-Path $targetRoot $name
+    if (Test-Path -LiteralPath $old) {
+      if (-not (Try-Step { Move-Item -LiteralPath $old -Destination (Join-Path $previous $name) -Force })) {
+        throw ('cannot move old ' + $name)
+      }
+      $moved += $name
+    }
+    if (-not (Try-Step { Copy-Item -LiteralPath $source -Destination $old -Recurse -Force })) {
+      throw ('cannot write new ' + $name)
+    }
+    $added += $name
+  }
+} catch {
+  Write-Log ('swapper: replace failed, rolling back: ' + $_.Exception.Message)
+  Restore-Program
   Start-Process -FilePath $Exe
+  try { Remove-Item -LiteralPath $Marker -Force -ErrorAction SilentlyContinue } catch {}
   exit 1
 }
+Write-Log 'swapper: files replaced, starting the new build'
+$new = Start-Process -FilePath $Exe -PassThru
+Start-Sleep -Seconds $VerifySeconds
+$alive = $false
+try { $new.Refresh(); $alive = -not $new.HasExited } catch { $alive = $false }
+if (-not $alive) {
+  Write-Log 'swapper: the new build exited right after launch, rolling back'
+  Restore-Program
+  Start-Process -FilePath $Exe
+  try { Remove-Item -LiteralPath $Marker -Force -ErrorAction SilentlyContinue } catch {}
+  exit 1
+}
+Write-Log 'swapper: new build running'
+try { Remove-Item -LiteralPath $Marker -Force -ErrorAction SilentlyContinue } catch {}
 """
 
 _MACOS_SCRIPT = """#!/bin/bash
+# Replace the .app, verify the new build stays up, and roll back otherwise.
+# The receipt is written FIRST: the app waits for it before it ends itself, so a script that
+# cannot run is a named refusal instead of a program that closes and never comes back.
 set -u
-PID="$1"
-APP="$2"
-STAGED="$3"
-while kill -0 "$PID" 2>/dev/null; do sleep 0.5; done
-sleep 0.8
-rm -rf "$APP.previous"
-mv "$APP" "$APP.previous"
-if ditto "$STAGED" "$APP"; then
-  open "$APP"
-else
+APP_PID="$1"
+WORKER_PID="$2"
+APP="$3"
+STAGED="$4"
+RECEIPT="$5"
+LOG="$6"
+MARKER="$7"
+VERIFY="${8:-15}"
+
+log() { printf '%s %s\\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$1" >> "$LOG" 2>/dev/null || true; }
+printf 'started %s\\n' "$(date '+%Y-%m-%dT%H:%M:%S')" > "$RECEIPT" 2>/dev/null || true
+printf '%s\\n' "$$" > "$MARKER" 2>/dev/null || true
+log "swapper: start app=$APP_PID worker=$WORKER_PID"
+
+for peer in "$APP_PID" "$WORKER_PID"; do
+  if [ "${peer:-0}" -gt 0 ] 2>/dev/null; then
+    while kill -0 "$peer" 2>/dev/null; do sleep 0.5; done
+  fi
+done
+sleep 0.5
+
+rollback() {
+  log "swapper: rolling back: $1"
   rm -rf "$APP"
-  mv "$APP.previous" "$APP"
-  open "$APP"
+  if [ -d "$APP.previous" ]; then mv "$APP.previous" "$APP"; fi
+  open "$APP" 2>/dev/null || true
+  rm -f "$MARKER"
   exit 1
-fi
+}
+
+rm -rf "$APP.previous"
+if ! mv "$APP" "$APP.previous"; then log 'swapper: cannot move the old bundle'; exit 1; fi
+if ! ditto "$STAGED" "$APP"; then rollback 'ditto failed'; fi
+log 'swapper: files replaced, starting the new build'
+if ! open "$APP"; then rollback 'open failed'; fi
+sleep "$VERIFY"
+if ! pgrep -f "$APP/Contents/MacOS/" >/dev/null 2>&1; then rollback 'the new build is not running'; fi
+log 'swapper: new build running'
+rm -f "$MARKER"
 """
-
-
-def _spawn_script(script: Path, args: list[str]) -> None:
-    """Run the updater so it OUTLIVES this server, on every OS.
-
-    ``popen_kwargs(detached=True)`` answers both halves (Windows creation flags, POSIX
-    ``start_new_session``) from one place; this call site used to pass the POSIX half by hand, which
-    is how the other two callers came to be missing it.
-    """
-    if machine.platform_name() == 'win32':
-        command = procs.powershell_command(str(script), args)
-    else:
-        command = ['/bin/bash', str(script), *args]
-    subprocess.Popen(command, close_fds=True, **procs.popen_kwargs(detached=True))
 
 
 def _writable(path: Path) -> bool:
@@ -558,11 +872,8 @@ def _writable(path: Path) -> bool:
         return False
 
 
-def apply_update() -> dict:
-    with _JOB_LOCK:
-        current = dict(_JOB)
-    if current.get('state') != 'done' or not current.get('staged'):
-        return {'ok': False, 'error': '更新包还没有下载完成'}
+def _swap_targets() -> dict:
+    """Where the swap would write, or the named reason it may not."""
     mode, root, exe = install_layout()
     if not root or not exe.exists():
         return {'ok': False, 'error': '无法定位当前安装目录'}
@@ -574,35 +885,135 @@ def apply_update() -> dict:
         writable = _writable(root)
     if not writable:
         return {'ok': False, 'error': '安装目录不可写；请用安装器更新，或把程序放到有写权限的文件夹'}
-    staged = Path(str(current['staged']))
+    expected = {'macapp': 'darwin'}.get(mode, 'win32')
+    if machine.platform_name() != expected:
+        return {'ok': False, 'error': '当前平台不支持应用内更新'}
+    return {'ok': True, 'mode': mode, 'root': root, 'exe': exe}
+
+
+def _spawn_script(script: Path, args: list[str]) -> int:
+    """Run the swapper so it OUTLIVES this server, on every OS.
+
+    ``popen_kwargs(detached=True)`` answers both halves (Windows creation flags, POSIX
+    ``start_new_session``) from one place — and, importantly, no longer asks for
+    ``DETACHED_PROCESS``, which killed the console child before its first statement.
+    """
+    if machine.platform_name() == 'win32':
+        command = procs.powershell_command(str(script), args)
+    else:
+        command = ['/bin/bash', str(script), *args]
+    child = subprocess.Popen(command, close_fds=True, **procs.popen_kwargs(detached=True))
+    return int(child.pid)
+
+
+def _await_helper(receipt: Path, timeout: float = HELPER_TIMEOUT) -> bool:
+    """Wait for the swapper's own receipt: proof that the script really is running."""
+    deadline = time.monotonic() + max(0.1, float(timeout))
+    while time.monotonic() < deadline:
+        if receipt.exists():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def spawn_swapper(job: dict, *, wait: bool) -> dict:
+    """Write and start the per-OS swap script for a staged job.
+
+    ``wait`` is the difference between the two callers: the 重启 button waits for the receipt and
+    refuses on silence (the window is still open, so the user can be told); a window close cannot
+    wait, and a swapper that fails to start there leaves the job staged for the next launch.
+    """
+    target = _swap_targets()
+    if not target.get('ok'):
+        return target
+    staged = Path(str(job.get('staged') or ''))
+    if not staged.is_dir():
+        return {'ok': False, 'error': '更新包已经不在了，请重新下载'}
     try:
-        script_dir = version_dir(str(current.get('version') or ''))
+        script_dir = version_dir(str(job.get('version') or ''))
     except ValueError as exc:
         return {'ok': False, 'error': str(exc)}
     script_dir.mkdir(parents=True, exist_ok=True)
+    receipt = script_dir / 'helper.started'
+    receipt.unlink(missing_ok=True)
+    marker = update_job.marker_file()
+    log_path = update_job.log_file()
+    root = Path(str(target['root']))
+    exe = Path(str(target['exe']))
+    mode = str(target['mode'])
+    app_pid = int(job.get('owner_pid') or os.getpid())
+    worker_pid = int(job.get('worker_pid') or 0)
     if machine.platform_name() == 'win32':
         script = script_dir / 'apply.ps1'
         script.write_text(_WINDOWS_SCRIPT, encoding='utf-8')
-        _spawn_script(
-            script,
-            [
-                '-AppPid',
-                str(os.getpid()),
-                '-InstallRoot',
-                str(root),
-                '-Staged',
-                str(staged),
-                '-Exe',
-                str(exe),
-                '-Mode',
-                mode,
-            ],
-        )
-    elif mode == 'macapp':
+        args = [
+            '-AppPid',
+            str(app_pid),
+            '-WorkerPid',
+            str(worker_pid),
+            '-InstallRoot',
+            str(root),
+            '-Staged',
+            str(staged),
+            '-Exe',
+            str(exe),
+            '-Mode',
+            mode,
+            '-Receipt',
+            str(receipt),
+            '-Log',
+            str(log_path),
+            '-Marker',
+            str(marker),
+        ]
+    else:
         script = script_dir / 'apply.sh'
         script.write_text(_MACOS_SCRIPT, encoding='utf-8')
         script.chmod(0o755)
-        _spawn_script(script, [str(os.getpid()), str(root), str(staged)])
-    else:
-        return {'ok': False, 'error': '当前平台不支持自更新'}
+        args = [str(app_pid), str(worker_pid), str(root), str(staged), str(receipt), str(log_path), str(marker)]
+    try:
+        pid = _spawn_script(script, args)
+    except OSError as exc:
+        update_job.log(f'替换脚本没能启动：{exc}', actor='app')
+        return {'ok': False, 'error': f'替换脚本没能启动：{exc}'}
+    update_job.write(swapper_pid=pid, state=update_job.STATE_APPLYING)
+    update_job.log(f'替换脚本已启动 pid={pid}', actor='app')
+    if wait and not _await_helper(receipt):
+        update_job.write(state=update_job.STATE_STAGED, swapper_pid=0)
+        update_job.log('替换脚本 10 秒内没有回执，已取消本次更新', actor='app')
+        return {'ok': False, 'error': '更新程序没能启动（10 秒内没有回执）；已取消本次更新，程序不会退出'}
     return {'ok': True, 'restarting': True}
+
+
+def request_restart() -> dict:
+    """Hand a staged job to the swapper and ask for the restart."""
+    job = update_job.read()
+    if job.get('state') == update_job.STATE_APPLYING:
+        if procs.process_alive(int(job.get('swapper_pid') or 0)):
+            return {'ok': True, 'restarting': True}
+        job = update_job.fail('swap_lost', '替换脚本已经退出，更新没有完成，请重试')
+    if job.get('state') != update_job.STATE_STAGED:
+        return {'ok': False, 'error': '更新包还没有下载完成'}
+    return spawn_swapper(job, wait=True)
+
+
+def on_app_close() -> None:
+    """The window is going away: hand a staged update to the swapper first.
+
+    This is the one place where "closing the window quits the program" and "the update must still
+    finish" meet. The job already holds the user's consent, the package is verified, and the
+    swapper outlives this process by construction — so the close simply gives it the go-ahead
+    instead of cancelling anything. A failure is logged (never a dialog in a closing window): the
+    job stays ``staged`` and the next launch offers the restart again.
+    """
+    try:
+        job = update_job.read()
+        if job.get('state') != update_job.STATE_STAGED:
+            return
+        result = spawn_swapper(job, wait=False)
+        if result.get('ok'):
+            update_job.log('窗口关闭，已把更新交给替换脚本', actor='app')
+        else:
+            update_job.log(f'窗口关闭时没能启动替换脚本：{result.get("error", "")}', actor='app')
+    except Exception:  # a close must never fail on the updater's account
+        return

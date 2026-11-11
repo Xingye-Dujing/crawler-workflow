@@ -1,40 +1,115 @@
-/* The main-program update prompt: one line at the top, never over the canvas. */
+/* The main-program update prompt: one paper card under the menu, never over it.
+
+   OMM-ZEN, like every other surface: the paper ground, one hairline border, the ONE --radius
+   token (2px — not a 999px pill), the soft shadow instead of a black blur, serif type inherited
+   from the page, and "active" said with an inset ink rule rather than a filled accent. The
+   previous version was a floating pill at top:18px with z-index 12000, which sat on top of the
+   48px menu strip (--menuH) — this one starts below it and stays under the menu's own layer. */
+
 #update-banner {
-    position: fixed;
-    top: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 12000;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    max-width: min(640px, calc(100vw - 32px));
-    padding: 10px 12px 10px 16px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--bg);
-    color: var(--ink);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
-    font-size: 13px;
+  position: fixed;
+  top: calc(var(--menuH) + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  /* Under the menu (999) and under the panels (1002): it is a notice, not a layer. */
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(520px, calc(100vw - 32px));
+  padding: 11px 14px 9px;
+  background: var(--paper);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 #update-banner[hidden] {
-    display: none;
+  display: none;
+}
+
+/* The panel-header vocabulary this app already uses for a card's title line. */
+#update-banner .update-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+#update-banner .update-version {
+  letter-spacing: 0.4px;
+  text-transform: none;
+  color: var(--text-dim);
 }
 
 #update-banner .update-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
 }
 
+/* A hairline track that fills with ink — the same vocabulary as every rule in the app. */
+#update-banner .update-progress {
+  height: 2px;
+  background: var(--line2);
+  overflow: hidden;
+}
+
+#update-banner .update-progress[hidden] {
+  display: none;
+}
+
+#update-banner .update-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ink);
+  transition: width 0.3s ease-out;
+}
+
+#update-banner .update-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+#update-banner .update-btn {
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+#update-banner .update-btn[hidden] {
+  display: none;
+}
+
+#update-banner .update-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+
+/* The one primary action: a hairline box that becomes an ink-underlined button, never a
+   filled accent block. */
 #update-banner .update-now {
-    flex: none;
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    padding: 5px 14px;
-    background: var(--accent);
-    color: #fff;
-    font: inherit;
-    cursor: pointer;
+  color: var(--text);
+  border-color: var(--border-dim);
+}
+
+#update-banner .update-now:hover {
+  border-color: var(--border);
 }

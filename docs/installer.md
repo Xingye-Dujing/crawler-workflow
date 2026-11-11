@@ -90,24 +90,44 @@ macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad �
 ## 主程序自更新
 
 主程序更新频繁，组件更新很少，所以更新只替换应用本体，不碰 `components/`、`data/`、`logs/`、Cookie、模型和
-`install-manifest.json`。页面启动后会读仓库根目录的 `version.json`（Gitee raw 优先，GitHub raw 兜底），
-发现版本更高且**当前平台有可下载包**时，顶部弹出“发现新版本”提示；只有用户点“立即更新”才下载。
+`install-manifest.json`。页面启动后会读仓库根目录的 `version.json`（Gitee raw 优先，GitHub raw 兜底，可用
+`CIXI_UPDATE_FEED` 覆盖成内部镜像或本地清单来排练发布），发现版本更高、**当前平台有可下载包且摘要齐全**时，
+在**菜单条下方**弹出更新卡片；只有用户点“立即更新”才下载。“稍后”安静 24 小时并按版本记住，
+“不再提示此版本”只压住那一版；下载中多一个“取消”。
 
 **在线安装器读的是同一份 `version.json`**：它的 `app` 组件条目不写地址和摘要，只写安装参数（`archive`、
 `install_as`、`strip_prefix`、`verify`）和清单地址（`feed`），安装时取当前平台的最新包并校验。所以一份安装器
 可以一直用下去，每次安装拿到的都是当时发布的最新主程序；清单读不到或没有当前平台的包时，安装器**点名拒绝**
 （显示 URL 和原因），不会退回去装旧版本。
 
+**三个进程各做一件事，谁都不假设别人还活着**：
+
+| 角色 | 做什么 | 失败时 |
+|---|---|---|
+| 主程序（页面 + 本地服务） | 检查、征求同意、画进度、决定何时退出 | 关掉窗口不影响下载 |
+| 下载进程（同一个 exe `--update-worker`，无窗口） | 下载（分片粒度续传）、逐片与总包 SHA-256、解压、形状校验 | 状态与原因写进 `job.json` 和 `update.log` |
+| 替换脚本（Windows PowerShell / macOS bash） | 等主程序与下载进程都退出 → 逐项替换并重试被占用的文件 → 校验新版本活着 → 拉起 / 回滚 | 写日志、回滚、把旧版本启动起来 |
+
+任务状态存在 `<data>/updates/job.json`（`downloading → staging → staged → applying → applied`），
+日志是 `<data>/updates/update.log`（256 KB 轮转）。所以**刷新页面、重开窗口、下载中关窗口**都能接上同一个任务：
+页面刷新后由 `/api/update/status` 重新画进度；下载中关窗口，下载进程会把剩下的工作做完，并在应用已经不在时
+直接把包交给替换脚本；下载完成后关窗口等同于点“重启并完成更新”。
+
 - **发布前**：把新包（Windows 的 `CaiXiHui-win64.zip` 分片；macOS 的 DMG）先上传到 Release，再把
   `version.json` 的 `version`、`sha256`、`size`、`parts`/`url` 更新为这一版；`version.json` 里的版本必须与
   `backend/services/version.py` 的 `APP_VERSION` 对应。资产没上传时不要先改 `version.json`：应用会因“当前平台没有包”而不提示。
-- **Windows**：下载分片 → 合并 → 校验总 SHA-256 → 解压到 `<data>/updates/<version>/staged`；用户确认后启动
-  PowerShell 脚本等待本进程退出，在线安装布局替换 `<安装根>/app`，便携布局只替换程序文件（保留用户数据），
-  旧版本放 `app.previous` 供回滚，然后重启 `CaiXiHui.exe`。
+  **总包与每个分片都必须有 `sha256`**：只有摘要才能把“清单说的字节”和“装上去的字节”对上，缺摘要按名拒绝。
+- **Windows**：下载分片 → 合并 → 校验总 SHA-256 → 解压到 `<data>/updates/<version>/staged` → 形状校验（必须有
+  `CaiXiHui.exe` 与 `_internal`）；用户确认后启动 PowerShell 脚本，等主程序与下载进程都退出，在线安装布局替换
+  `<安装根>/app`，便携布局只替换程序文件（保留用户数据），旧版本放 `app.previous` 供回滚，然后重启
+  `CaiXiHui.exe`，观察 15 秒，起不来就回滚并启动旧版本。
 - **macOS**：下载 DMG → 校验 → `hdiutil` 挂载、`ditto` 复制 `.app` 到暂存目录 → 退出后脚本替换整个 `.app`，
-  失败则移回 `CaiXiHui.app.previous` 再启动。
-- **源码运行**不执行自更新（`supported: false`），避免把开发检出替换成发布包；请更新代码后重启。
-- 下载与替换都在 `<data>/updates/` 下进行；更新失败不会改动当前安装，重新检查/重试即可。
+  失败则移回 `CaiXiHui.app.previous` 再启动（脚本对每一步都显式判断，不用 `set -e`，否则回滚本身会被跳过）。
+- **源码运行**、以及没有替换脚本的平台（Linux、非 `.app` 的 macOS 构建）不提示可下载：检查结果里
+  `apply_supported` 为假，卡片只说“请用安装器更新”，绝不先下载再拒绝。
+- **更新失败不会改动当前安装**：替换中途失败会逐项移回旧文件；新版本启动后立刻退出也会回滚。原因写在
+  `update.log`，下次启动的更新卡片会把上次的失败按名字说出来（`update.err.*`），不再是“什么都没发生”。
+- 替换期间会写 `<data>/updates/applying.marker`，此时双击启动会先等替换结束，不会在半拷贝的目录上启动。
 - 完整的发版顺序、版本号同步、分片/摘要模板见 [`release.md`](release.md)。
 
 ## BERT 模型包（可选，Windows / macOS）

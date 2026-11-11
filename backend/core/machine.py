@@ -284,6 +284,20 @@ def is_windows(system: str | None = None) -> bool:
     return platform_name(system) == 'win32'
 
 
+def app_payload_files(system: str | None = None) -> tuple[str, ...]:
+    """The entries a staged application payload MUST contain on this OS.
+
+    A hash proves the bytes are the ones the manifest named; it says nothing about what those bytes
+    are. The updater refuses a package without these, so a mis-pointed manifest cannot be copied
+    over an install and leave a program-shaped hole. The names live here (the per-OS table home)
+    because ``.exe`` is a Windows fact, and ``tests/unit/crawlers/test_platform_rules.py`` refuses
+    it anywhere else.
+    """
+    if is_windows(system):
+        return ('CaiXiHui.exe', '_internal')
+    return ()
+
+
 def is_frozen() -> bool:
     """Whether this is the packaged desktop app rather than a source checkout.
 

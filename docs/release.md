@@ -199,14 +199,18 @@ macOS 自更新从 GitHub Release 下载 DMG。访问不了 GitHub 的 Mac 仍�
 
 - 公钥位置：环境变量 `CIXI_UPDATE_PUBKEY`（PEM 文本，或指向 PEM 文件的路径），或打包版数据根下的
   `update-pubkey.pem`。**没有配置公钥时**自更新照常可用，但 `/api/update/check` 会返回 `signed: false`，
-  面板与日志会说明这条链没有信任根。
+  更新卡片的详情里会写明这条链没有信任根。
 - 签名方式：对清单去掉 `signature` 字段后的 JSON（`sort_keys=True`、紧凑分隔符、`ensure_ascii=True`）做
   Ed25519 签名，结果以 base64 写回清单的 `signature` 字段。校验用 `cryptography`（`requirements.txt` 已声明）。
 - 配套规则（与签名一起生效，避免"签了名却仍可从明文/畸形地址取包"）：
   - 下载地址必须是 `https://`，**每一跳重定向都重新校验**（302 到 `http://`/`ftp://` 会被拒绝）；
-  - 单包上限 4 GiB，超过即中止；
+  - **总包与每个分片都必须有 `sha256`**，缺摘要的条目不算“可下载”，客户端连下载都不会开始
+    （只有摘要才能把清单说的字节和装上去的字节对上；摘要缺失不是“未知”，是“未校验”）；
+  - 清单本身限读 1 MiB；单包上限 4 GiB；传输 60 秒没有新字节按名失败；
   - 清单里的 `version` 必须是点分版本号，客户端只用它当作 `data/updates/` 下的**一个目录名**（带 `..`、
-    分隔符的版本号一律按名拒绝——这个值直接进 `shutil.rmtree` 的路径）。
+    分隔符的版本号一律按名拒绝——这个值直接进 `shutil.rmtree` 的路径）；
+  - 解压后还要过**形状校验**：包内必须有 `CaiXiHui.exe` 与 `_internal`（macOS 是 `.app` 里的可执行文件），
+    否则不替换安装。摘要只证明“是清单说的字节”，不证明“这是本程序”。
 
 发行脚本若要生成签名，用仓库根的工具（需要私钥，**私钥不要进仓库**）：
 
@@ -266,19 +270,44 @@ https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.js
 - 安装器选的数据目录：`data-root.txt`（在线安装布局在 `app/data-root.txt`，便携版在 exe 旁边）；
 - `portable.txt`、`install-manifest.json`、`components/`；
 - `data/` / `Data/`、`logs/`、`mplconfig/`、Cookie、模型、BERT 模型、上传文件、导出文件；
-- Windows 旧程序放 `app.previous`，macOS 旧 `.app` 放 `CaiXiHui.app.previous` 作为回滚。
+- Windows 旧程序放 `app.previous`（每次替换前重建一份，不累积），macOS 旧 `.app` 放
+  `CaiXiHui.app.previous` 作为回滚。
 
 Windows 更新脚本按“逐项替换程序文件”的方式换 `CaiXiHui.exe`、`_internal`、`seed`、`samples` 等，
-不会整目录删掉 `app/`，所以 `data-root.txt`、`portable.txt` 和用户数据都留在原处。
+不会整目录删掉 `app/`，所以 `data-root.txt`、`portable.txt` 和用户数据都留在原处。每个被占用的文件最多重试
+20 秒（杀毒软件、正在退出的旧进程），失败就逐项移回旧文件并把旧版本启动起来。
 
 如果安装目录不可写（例如装在 `Program Files` 且当前用户无权限），应用会拒绝更新并提示用安装器，
 不会先退出再失败。
+
+## 排练一次更新（不上线也能验）
+
+`CIXI_UPDATE_FEED` 覆盖清单地址（逗号分隔可给多个），指向一份本地/内网清单即可把整条链路走一遍：
+
+```bash
+# 1. 按 release 的目录结构准备一份包；2. 写一份 version.json（版本高于当前 APP_VERSION）
+set CIXI_UPDATE_FEED=https://你的镜像/version.json
+# 3. 启动打包版 → 立即更新 → 中途关掉窗口 → 等它自己重启成新版本
+# 4. 看 <data>/updates/update.log 的时间线，以及 <data>/updates/job.json 的最终状态
+```
+
+必看的四条：下载中关窗口后能装完并自启；把清单的 `sha256` 改错会按名失败且**程序不退出**；把替换脚本换成
+一个立刻退出的程序会得到“更新程序没能启动（10 秒内没有回执）”而不是进程消失；采集进行中“立即更新”可以下载、
+“重启并完成更新”被服务端拒绝。
+
+## 从没有自更新的旧版本升上来
+
+2026.11.11 及更早的 Windows 版本里，替换脚本因为一个子进程标志（`DETACHED_PROCESS`）从来没有真正执行过：
+点“立即更新”后程序退出，然后什么都不会发生。**这一版必须手动安装一次**（完整 Setup 或 zip），之后的应用内
+更新才会真正替换程序。发版说明里要写清这一句。
 
 ## 回滚
 
 - Windows：关闭程序，把 `app.previous` 里的程序文件移回原位；保留 `data/`、`components/` 等。
 - macOS：把 `CaiXiHui.app.previous` 改回 `CaiXiHui.app`。
-- 更新脚本在复制中途失败会自动移回旧程序并重新启动。
+- 更新脚本在复制中途失败会自动移回旧程序并重新启动；新版本启动后 15 秒内退出也会自动回滚。两种情况都会写
+  `<data>/updates/update.log`，应用启动后也会读到 `job.json` 里的失败状态并在更新卡片上按名说明
+  （`update.err.swap_lost` / `update.err.<code>`），不会出现“点完更新什么都没发生”。
 
 ## 首次安装与后续更新
 

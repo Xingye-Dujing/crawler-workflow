@@ -332,6 +332,43 @@ def _results_snapshot() -> dict:
         return dict(execution_state['results'])
 
 
+# ─── Process shutdown (the self-updater's exit path) ───
+#
+# A program that replaces itself must end through the SAME door a window close takes, or the
+# swap script races the teardown: the packaged launcher's ``finally`` (server shutdown, instance
+# file, the exe handle) never runs under a hard kill, and on Windows the old image can still be
+# locked when the swapper starts moving files. The launcher owns the window and the server, so it
+# registers here how to leave; ``api.update`` asks. No hook (a source run, a cloud server) answers
+# ``False`` and the caller keeps its own fallback — a request thread must never pretend it ended
+# a process it cannot reach.
+
+#: ``callable()`` or ``None``; installed once by the packaged launcher before the first request.
+_shutdown_hook = None
+
+
+def register_shutdown(fn) -> None:
+    """Install (or clear, with ``None``) how this process should end itself."""
+    global _shutdown_hook
+    _shutdown_hook = fn
+
+
+def request_shutdown() -> bool:
+    """Ask the launcher to end this process through its own cleanup; ``False`` when it has no say.
+
+    The hook runs on the caller's thread and must be safe from one (the launcher's window close
+    is documented as such). An exception is reported as "not handled" rather than swallowed into
+    a process that then lives on with an update half-applied.
+    """
+    hook = _shutdown_hook
+    if hook is None:
+        return False
+    try:
+        hook()
+    except Exception:
+        return False
+    return True
+
+
 # ─── Console buffer ───
 # Every message that reaches the console is i18n.t(key, **params) — add_log, logging, and
 # print() all funnel through the two writers below. They live here (not ``app.py``) so the

@@ -1337,6 +1337,25 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
 - **`popen_kwargs(detached=True)` answered half a promise.** Only one of its three callers passed the POSIX
   `start_new_session`, so the updater/installer died with its parent on Linux and macOS; the helper now returns both
   halves, and four installer spawn sites that passed nothing now pass it.
+- **`DETACHED_PROCESS` is the flag that makes a console child never run.** Measured on Windows 11: `powershell.exe`
+  started with `CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` exited before its first statement —
+  with or without the standard handles redirected to `os.devnull` — while the same child under `CREATE_NO_WINDOW`
+  alone ran and outlived a `TerminateProcess` of its parent. Every shipped self-updater had this flag, so *no* Windows
+  user could ever finish an update: the app killed itself 1.5 s after a spawn that was already dead. Two rules now:
+  the Windows "detached" answer is `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` (never `DETACHED_PROCESS`), and a
+  helper the program then exits for must **prove it is running** (the swapper writes a receipt; the app waits ≤10 s
+  for it and refuses by name instead of dying silently). `tests/unit/foundation/test_detached_child.py` spawns the real
+  child and looks for its marker; flag-bit assertions could not see this.
+- **A download is not part of the window.** The job lived in an in-memory dict inside the server process, so closing
+  the window (which must exit the program) threw the user's consented update away, and the boot-time sweep deleted
+  `data/updates` anyway. The job is now a file (`services/update_job.py`) owned by a detached worker
+  (`--update-worker`, no window, no mutex, no Flask app); the swap script waits for BOTH pids because the worker is
+  the same executable that has to be replaced. Any state a surface must survive — a progress bar after F5, a reason
+  after a crash, the swap's own outcome after the server is gone — belongs on disk, not in a dict.
+- **A helper you cannot observe is a helper you cannot trust.** The swap script had no log, no receipt and no retry
+  loop; a locked file (antivirus, a slow close) failed 900 ms after the app died, and the user got "nothing happened".
+  It now logs every step to `data/updates/update.log`, retries file operations, verifies the relaunched build stays up
+  for 15 s and rolls back otherwise — so the failure mode is a sentence in a file, not silence.
 - **A backup directory named to the second is not unique.** A second run inside the same second answered a bare
   `FileExistsError`, making a successful first backup look like a tool failure; the name gets `-2`, `-3`…
 - **A Dockerfile that pins one Debian suite onto an unknown base image is a mixed-system apt.** The codename is now

@@ -81,7 +81,10 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   `CaiXiHui.exe`，双击启动本地服务并在窗口里显示界面，数据默认在 `%APPDATA%\CaiXiHui`（旁边放个空的
   `portable.txt` 就变便携版）。macOS 的 `.app`/DMG 由 `desktop/build_macos.py` 在 GitHub 的 macOS runner
   上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`；
-  主程序启动后会检查 `version.json`，有新版本时在顶部提示并可在应用内完成下载、校验、替换和重启；
+  主程序启动后会检查 `version.json`，有新版本时在**菜单条下方**弹出更新卡片（OMM-ZEN 纸面样式）：
+  “立即更新”在后台进程里下载、校验、展开，“稍后”安静 24 小时、按版本记，“不再提示此版本”只压住这一版；
+  **下载中关掉窗口不会中断更新**（任务写在 `data/updates/job.json`，日志在 `data/updates/update.log`），
+  下载完成后关窗口或点“重启并完成更新”都会替换程序并自动拉起新版本，新版本若起不来会自己回滚到旧的；
   组件目录和用户数据不会被更新碰。源码运行不执行自更新。
   同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（安装时读 `version.json`
   取最新主程序 DMG，再下载 Chrome/Node 装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像

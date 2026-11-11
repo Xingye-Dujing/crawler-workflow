@@ -60,6 +60,45 @@ def reap_command(pid: int, system: str | None = None) -> list[str]:
     return []
 
 
+def process_alive(pid: int, system: str | None = None) -> bool:
+    """Whether ``pid`` is still running on this machine.
+
+    The updater asks this about the two peers a swap has to wait for (the app and the download
+    worker) and about its own heartbeat owner. ``os.kill(pid, 0)`` is the POSIX answer; Windows has
+    no signal 0, so the process handle is opened with ``PROCESS_QUERY_LIMITED_INFORMATION`` and its
+    exit code read. A pid that belonged to somebody else and has since been reused is reported as
+    alive — the caller pairs this with its own recorded timestamp, never with the pid alone.
+    """
+    if pid <= 0:
+        return False
+    if machine.is_windows(system):
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return False
+            try:
+                code = ctypes.c_ulong(0)
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return False
+                return code.value == 259  # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except (AttributeError, OSError):
+            return False
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # it exists; it simply is not ours
+    except OSError:
+        return False
+    return True
+
+
 def popen_kwargs(system: str | None = None, detached: bool = False) -> dict:
     """The keyword arguments that keep a spawned helper from opening a console window here.
 
@@ -75,12 +114,23 @@ def popen_kwargs(system: str | None = None, detached: bool = False) -> dict:
     three callers remembered the POSIX half: the others asked for a detached child and got an
     ordinary one, so the updater/launcher died with its parent on Linux and macOS and the user saw
     the app close itself.
+
+    ``DETACHED_PROCESS`` is deliberately NOT among the Windows flags, whatever its name suggests.
+    Measured on Windows 11: a child started with it never runs at all when the child is a CONSOLE
+    program — ``powershell.exe -Command '…; Set-Content marker'`` exited before its first statement,
+    with or without the standard handles redirected to ``os.devnull``, while the same child under
+    ``CREATE_NO_WINDOW`` ran and outlived a ``TerminateProcess`` of its parent. That silent no-op is
+    what broke the self-updater: the swap script "started", the app exited, and nothing replaced it.
+
+    ``CREATE_NO_WINDOW`` is also what a process with NO console (the packaged GUI build) needs: the
+    child gets a hidden console of its own instead of inheriting one that is not there, and Windows
+    keeps no parent/child death link, so it survives both a normal exit and a kill.
     """
     if detached and not machine.is_windows(system):
         return {'start_new_session': True}
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     if detached and machine.is_windows(system):
-        flags |= getattr(subprocess, 'DETACHED_PROCESS', 0x00000008)
+        # A process group of its own, so a Ctrl+C aimed at the parent's console does not reach it.
         flags |= getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
     return {'creationflags': flags} if machine.is_windows(system) and flags else {}
 

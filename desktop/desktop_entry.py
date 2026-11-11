@@ -658,6 +658,50 @@ def seed_bert_models(
         }
 
 
+def _update_marker(data_root) -> Path:
+    """Where the swapper says it is replacing files.
+
+    The layout is ``<data>/updates/applying.marker`` — the same folder ``services/update_job.py``
+    owns; ``tests/unit/desktop/test_update_worker_entry.py`` keeps the two spellings equal.
+    """
+    return Path(data_root) / 'data' / 'updates' / 'applying.marker'
+
+
+def _wait_for_swapper(data_root, timeout: float = 60.0) -> None:
+    """Let a swap that is already running finish before this launch reads the install.
+
+    A double-click during the 15-second liveness wait of the swap script would otherwise start the
+    program from a half-copied folder. Waiting is bounded: a marker left behind by a killed script
+    must not lock the user out of their program forever.
+    """
+    marker = _update_marker(data_root)
+    if not marker.exists():
+        return
+    _print_safe('检测到正在安装更新，等待替换完成…')
+    deadline = time.monotonic() + max(1.0, float(timeout))
+    while marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.5)
+    if marker.exists():
+        _print_safe('替换脚本还没有结束，仍继续启动；如果启动失败，请再打开一次。')
+
+
+def _run_update_worker(argv) -> int:
+    """Run the detached download/stage worker (``--update-worker <job.json>``)."""
+    index = argv.index('--update-worker')
+    job_file = str(argv[index + 1]) if len(argv) > index + 1 else ''
+    try:
+        from services.update_worker import main as worker_main
+
+        return int(worker_main([job_file] if job_file else []) or 0)
+    except Exception:
+        with contextlib.suppress(Exception):
+            from services import update_job
+
+            update_job.log(f'更新进程启动失败：{traceback.format_exc(limit=3).strip()}', actor='worker')
+        _print_safe(traceback.format_exc())
+        return 1
+
+
 def main(argv=None) -> int:
     # A windowed build starts with no stdout at all: ``--doctor`` still has to answer a pipe or a
     # terminal, and the reports below must never be the thing that kills the launch.
@@ -721,6 +765,16 @@ def main(argv=None) -> int:
 
     if '--doctor' in argv:
         return _component_doctor(base)
+
+    # The self-updater's download half is this same pack with no window, no Flask app and no
+    # instance mutex: it runs BESIDE the app whose payload it fetches and must never be read as a
+    # second launch of the program. Placed here — after the data root is exported (the job and the
+    # staging folder are resolved from it) and before the mutex, the seed and the app import.
+    if '--update-worker' in argv:
+        return _run_update_worker(argv)
+
+    # A swap in progress replaces program files; starting on top of it boots half a build.
+    _wait_for_swapper(root)
 
     handle, already_running = acquire_instance_mutex(root)
     if already_running:
@@ -853,6 +907,29 @@ def main(argv=None) -> int:
         # the same sweep also runs at start.
         sweep_startup_litter(base)
 
+    def hand_over_update() -> None:
+        # The window is going away. A staged, hash-checked update already has the user's consent,
+        # so the close gives it the go-ahead instead of cancelling it — and it keeps running after
+        # this process is gone, which is exactly why closing the window can still mean "quit".
+        with contextlib.suppress(Exception):
+            from services import update
+
+            update.on_app_close()
+
+    def closing() -> None:
+        hand_over_update()
+        release_window()
+
+    # The self-updater asks for the SAME exit a user close performs (server shutdown, instance
+    # file, the exe handle released) instead of a hard kill, because the swapper replaces this
+    # program's files the moment it is gone.
+    from runtime import state as runtime_state
+
+    if no_window:
+        runtime_state.register_shutdown(server.shutdown)
+    else:
+        runtime_state.register_shutdown(native_window.close)
+
     try:
         if no_window:
             server.serve_forever()
@@ -866,7 +943,7 @@ def main(argv=None) -> int:
                 storage=native_window.storage_dir('webview'),
                 maximized=True,
                 exit_on_close=True,
-                on_closed=release_window,
+                on_closed=closing,
             )
             if failure:
                 # The one dialog names the missing runtime and where to get it; the file keeps the

@@ -899,9 +899,10 @@ class TestComponentAndUpdateWritesAreOperatorActions:
 
     def test_a_plain_account_cannot_download_or_apply_an_update(self, admin_client):
         alice = _as_plain_user(admin_client)
-        for path in ('/api/update/download', '/api/update/apply'):
+        for path in ('/api/update/download', '/api/update/restart', '/api/update/cancel'):
             refused = _post(alice, path, {})
             assert refused.status_code == 403, (path, refused.get_json())
+        assert alice.get('/api/update/status').status_code == 403
 
     def test_an_admin_reaches_the_body_checks_not_the_gate(self, admin_client):
         """An admin on a SOURCE run is refused by the updater's own rule, never with a 403."""

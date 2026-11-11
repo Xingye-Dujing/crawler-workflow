@@ -175,6 +175,40 @@ def doctor() -> int:
     return 0
 
 
+def _update_marker(root: Path) -> Path:
+    """The swapper's in-progress marker; the layout is ``services/update_job.py``'s."""
+    return Path(root) / 'data' / 'updates' / 'applying.marker'
+
+
+def _wait_for_swapper(root: Path, timeout: float = 60.0) -> None:
+    """Do not start from a bundle that is being replaced."""
+    marker = _update_marker(root)
+    if not marker.exists():
+        return
+    import time
+
+    deadline = time.monotonic() + max(1.0, float(timeout))
+    while marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.5)
+
+
+def _run_update_worker(argv) -> int:
+    """Run the detached download/stage worker (``--update-worker <job.json>``)."""
+    index = argv.index('--update-worker')
+    job_file = str(argv[index + 1]) if len(argv) > index + 1 else ''
+    try:
+        from services.update_worker import main as worker_main
+
+        return int(worker_main([job_file] if job_file else []) or 0)
+    except Exception:
+        with contextlib.suppress(Exception):
+            from services import update_job
+
+            update_job.log(f'更新进程启动失败：{traceback.format_exc(limit=3).strip()}', actor='worker')
+        print(traceback.format_exc(), file=sys.stderr)
+        return 1
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     root = data_root()
@@ -209,6 +243,12 @@ def main(argv=None) -> int:
         except Exception:
             fail('环境检查失败。', root, traceback.format_exc())
             return 1
+
+    # Same two early decisions as the Windows launcher: the download worker runs without a window
+    # (and without the data-root seeding below), and a swap in progress must finish first.
+    if '--update-worker' in argv:
+        return _run_update_worker(argv)
+    _wait_for_swapper(root)
 
     seed_user_data(root)
     try:
@@ -250,6 +290,23 @@ def main(argv=None) -> int:
         with contextlib.suppress(OSError):
             server.server_close()
 
+    def closed() -> None:
+        # The window is the program: a destroyed window ends the process even if the Cocoa host
+        # keeps a thread or its loop alive. Minimising does not fire this event. A staged update
+        # gets the go-ahead first — it keeps running after this process is gone.
+        with contextlib.suppress(Exception):
+            from services import update
+
+            update.on_app_close()
+        release_window()
+        native_window.terminate_process()
+
+    # The restart the updater asks for is the same exit a window close takes (server down, exe
+    # released) rather than a hard kill: the swapper replaces this bundle the moment it is gone.
+    from runtime import state as runtime_state
+
+    runtime_state.register_shutdown(native_window.close)
+
     try:
         import webview
 
@@ -264,12 +321,6 @@ def main(argv=None) -> int:
             text_select=True,
             maximized=True,
         )
-
-        def closed() -> None:
-            # The window is the program: a destroyed window ends the process even if the Cocoa host
-            # keeps a thread or its loop alive. Minimising does not fire this event.
-            release_window()
-            native_window.terminate_process()
 
         window.events.closed += closed
         webview.start(private_mode=False, storage_path=str(root / 'webview'))
