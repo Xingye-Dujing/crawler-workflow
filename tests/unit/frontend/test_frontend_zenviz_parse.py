@@ -9,10 +9,10 @@ grid still looked plausible. It is now `js/zenviz-parse.js`, and these cases mea
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from node_runner import run_node
 
 pytestmark = pytest.mark.unit
 
@@ -24,13 +24,7 @@ pytestmark = [pytestmark, pytest.mark.skipif(shutil.which('node') is None, reaso
 
 @pytest.fixture(scope='module')
 def parsed():
-    result = subprocess.run(
-        ['node', str(HARNESS), str(JS_DIR)],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
+    result = run_node(HARNESS, JS_DIR)
     assert result.returncode == 0, result.stderr or result.stdout
     return json.loads(result.stdout)
 
