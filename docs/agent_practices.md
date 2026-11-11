@@ -1338,16 +1338,19 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   two; `test_the_dense_eigendecomposition_runs_once_when_no_cluster_empties` counts the calls.
 - **A counter is evidence, so it may not count an attempt.** `_copy_template_into` incremented its "entries landed"
   count for a DIRECTORY unconditionally, after a walk whose per-file copies are individually suppressed: a profile
-  template whose every file was locked (Windows) or whose disk filled still reported a seeded device, and the caller
-  then treated the new account as ready to log in with an empty profile. The directory counts only when at least one
-  file landed inside it.
+  template whose every file was locked (Windows) or whose disk filled still reported a non-zero seed, so a caller that
+  reads the count (today the integration test; `profile_dir_for` ignores it) would be told a device exists with
+  nothing in it. The directory counts only when at least one file landed inside it.
 - **A BIBLIOGRAPHIC record's id is its content; a CRAWLED row's is its site identity** — the same distinction AGENTS
   makes for the ledger, on the other side of the pipeline. `importer` has always hashed
   ``title|first author|year|journal`` into ``记录ID``, and `metrics.records` relies on that: with no title it uses the
   id AS the document name and disambiguates two same-titled works with ``[:6]``. `fuse` built a POSITIONAL id instead
   (``{source}#{parent index}-{row index}``), so inserting or removing a parent renumbered every record and the same
   paper appeared under a different name in the next run's figure. It now hashes title | first author | year | source,
-  which also keeps "the same work cited by two platforms stays two rows" — the property this node exists for.
+  which also keeps "the same work cited by two platforms stays two rows" — the property this node exists for. A
+  repeated identical row in ONE source carries its occurrence ordinal in that hash: those rows are still distinct
+  records (the fusion keeps every row its parent produced), and collapsing them to one id made them indistinguishable
+  downstream. The ordinal follows the parent's row order, so reordering or adding a PARENT does not touch it.
 - **"Read a switch, never compare it" has one exception-shaped hole: the SECOND layer.** `expand.expand_reusable_workflow`
   (the server-side expansion a scheduled task runs) tested ``params.get('enabled') is False``, which only skips the
   Python bool. A canvas that SAVED ``"false"``, ``0`` or ``"0"`` — every ordinary spelling of off — ran the group the
@@ -1371,6 +1374,9 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   by the workflow manager, reusable templates, settings, the lock store, the lexicon, the ingest parts writer and the
   cookie jar. `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a fifth
   module was the deliberate contract change that test's own message asks for, because every layer may import it.
+  **The reader is the other half of that race:** while a staged file is being swapped in, `open()` on the target also
+  answers `PermissionError` on Windows. `WorkflowManager.load` retries the same short window and then re-raises, because
+  answering `None` would tell the UI the canvas is missing and make it forget a remembered file that is still on disk.
 - **macOS has no `/proc`, and that silently downgraded a tree kill to a single kill.** `child_pids` answered `[]` on
   darwin, so `reap_process` killed the DRIVER and left Chrome running with `chrome_profile/<platform>/<account>` held
   for the whole `PROFILE_LOCK_TIMEOUT` — every later run on that account then waited on a lock nobody was using, and
@@ -1393,16 +1399,18 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   and then opens SQLite, which is long enough for the NEXT run's first line to arrive; when the write failed, the old
   code merged the failed rows back into that buffer with whatever `_buf_run_id` it now held. Whichever id it kept, one
   run's viewer lied: A's console under B, or B's line under A. Kept batches are now a per-run queue
-  (`_pending: [(run_id, rows)]`) flushed under their own ids, which also means `reset()` must not drop them — those
-  lines were printed by a run that is over, and losing them is the one thing this writer promises not to do. The
-  reproducing test injects the push *during* the failing write, because without that window the bug is invisible.
+  (`_pending: [(owner, run_id, rows)]`) flushed under their own ids, which also means `reset()` must not drop them —
+  those lines were printed by a run that is over, and losing them is the one thing this writer promises not to do.
+  The OWNER travels with the batch too: `disarm()` clears `_account` at run end, so a kept batch replayed after the
+  next account's run started would otherwise be written into that account's `runs.db` (or the system store). The
+  reproducing tests inject the push *during* the failing write, because without that window the bug is invisible.
 - **"Drop every pointer" has to include the one with state attached.** `DatasetStore.delete` removed the row from
   `datasets` and `dataset_refs` and stopped there, leaving `dataset_lineage_versions`. The panel's lineage history
   (`/api/data/…`) then listed a version whose dataset no longer existed, `dataset_lineage` still reported the id as a
-  lineage MEMBER (so the delete/purge guards went on believing it was in use), and `purge_orphans` could never reclaim
-  the file because a version row still claimed it. The version rows go too, and a lineage whose CURRENT version was the
-  deleted one is repaired — head moved to the newest survivor, or the lineage dropped when none survives (a header with
-  no versions renders as a version with nothing behind it).
+  lineage MEMBER (so the delete/purge guards went on believing it was in use), and `purge_unreferenced` could never
+  reclaim the file because a version row still claimed it. The version rows go too, and a lineage whose CURRENT version
+  was the deleted one is repaired — head moved to the newest survivor, or the lineage dropped when none survives (a
+  header with no versions renders as a version with nothing behind it).
 - **A path is not a file, and a flag named "imported" must mean imported.** The crawler factory computed
   `planting = bool(saved)`, which tests whether a cookie DIRECTORY is configured, not whether the cookie file exists.
   `_load_cookies` shrugs a missing file off (`except OSError: return`), but the marker did not: `mark_used(imported=True,
@@ -1410,3 +1418,6 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   `needs_refresh`, which needs a non-empty recorded stamp, then answered "no" forever, so the user who saved a Cookie
   afterwards was never offered the re-plant that would put it into that profile. `cookie_path` still follows the path
   (the factory builds the right name whether or not the file is there); `imported` now also requires `os.path.isfile`.
+  The second half is `needs_refresh` itself: for a used-but-never-imported profile a file written AFTER `used_at` is
+  the deferred plant the save path promised (compared in whole local seconds, the marker's own resolution), while one
+  older than that use is left alone so a hand-made login is not overwritten by an old snapshot.

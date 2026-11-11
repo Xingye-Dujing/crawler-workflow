@@ -632,7 +632,8 @@ class DatasetStore:
         attached: the panel's lineage history (``/api/data/...``) kept listing the deleted version as
         a row whose dataset no longer exists, :meth:`dataset_lineage` kept reporting the id as a
         lineage member (so the delete/purge guards still believed it was in use), and
-        :meth:`purge_orphans` could never reclaim the file because the version row still claimed it.
+        :meth:`purge_unreferenced` could never reclaim the file because the version row still
+        claimed it.
 
         Repairing rather than refusing: the version rows go, and if the deleted dataset was the
         lineage's CURRENT version the pointer moves to the newest survivor (or the lineage is dropped
