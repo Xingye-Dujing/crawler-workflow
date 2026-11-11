@@ -1371,9 +1371,10 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   of the same file was a valid write turned into an HTTP 500 — and the user's retry then worked, so it read as
   flakiness. `core.atomic.replace` retries with a bounded backoff, re-raises a file that stays locked (a retry that
   swallowed it would hide which file could not be written), and does NOT retry a real error like a full disk. Adopted
-  by the workflow manager, reusable templates, settings, the lock store, the lexicon, the ingest parts writer and the
-  cookie jar. `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a fifth
-  module was the deliberate contract change that test's own message asks for, because every layer may import it.
+  by the workflow manager, reusable templates, settings, the lock store, the lexicon, the ingest parts writer, the
+  cookie jar, the scheduler store, the ML model cache, the component manifest, the export writer, the chart outputs and
+  the PDF finalisation. `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a
+  fifth module was the deliberate contract change that test's own message asks for, because every layer may import it.
   **The reader is the other half of that race:** while a staged file is being swapped in, `open()` on the target also
   answers `PermissionError` on Windows. `WorkflowManager.load` retries the same short window and then re-raises, because
   answering `None` would tell the UI the canvas is missing and make it forget a remembered file that is still on disk.
@@ -1382,7 +1383,9 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   for the whole `PROFILE_LOCK_TIMEOUT` — every later run on that account then waited on a lock nobody was using, and
   the module's own docstring called the downgrade "the truth reported". macOS publishes the same fact through
   `ps -A -o pid=,ppid=` (base system, no `brew`), so the tree kill now works on all three systems; an unreadable `ps`
-  still kills the driver alone and says so rather than claiming a tree it did not kill.
+  still kills the driver alone and says so rather than claiming a tree it did not kill. A darwin-only test starts a
+  real child and asks the real `ps` for its parent, so CI's macOS runner measures the command rather than only the
+  parser.
 - **A read that can be denied is not the same as a read that is absent.** `CookieManager.load` caught
   `FileNotFoundError`, `JSONDecodeError` and `ValueError` but not `OSError` — so on Windows, where an antivirus or a
   second reader holds the jar open for a moment, `open` raised `PermissionError` and it propagated: the management
@@ -1394,7 +1397,10 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   ON the probe reads `chrome_profile/<platform>/<account>`, with them OFF it reads the cookie file. Those are two
   different sessions, so a run with profiles enabled cached its verdict where a later run with profiles disabled also
   looked — that run was then gated on (or cleared by) a session it never uses. `None` is resolved through
-  `profiles.is_enabled()` before it enters the key, so the key holds the answer rather than the caller's spelling.
+  `profiles.is_enabled()` before it enters the key, so the key holds the answer rather than the caller's spelling — and
+  `probe` resolves it ONCE for the cache lookup, the browser, the verdict's slot and `record`. Re-reading the setting
+  at each step let a switch flipped mid-probe file the answer measured in one mode under the other; `record` takes the
+  mode its browser was actually opened in instead of asking again.
 - **A retried write must keep its batch AND its owner together.** `RunLogWriter._drain` publishes (empties) the buffer
   and then opens SQLite, which is long enough for the NEXT run's first line to arrive; when the write failed, the old
   code merged the failed rows back into that buffer with whatever `_buf_run_id` it now held. Whichever id it kept, one
@@ -1421,3 +1427,12 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   The second half is `needs_refresh` itself: for a used-but-never-imported profile a file written AFTER `used_at` is
   the deferred plant the save path promised (compared in whole local seconds, the marker's own resolution), while one
   older than that use is left alone so a hand-made login is not overwritten by an old snapshot.
+- **A panel state is the server's NEXT ACTION, not an inference from one field.** The settings table derived its
+  sentence from `has_saved_cookie`, so a used profile holding an older file was labelled “will import on first use” —
+  a promise the factory never carries out (it only plants a file newer than the session). `profiles.status` now states
+  `will_import` / `will_refresh` / `used_without_import` from the same rule `get_crawler` reads, and
+  `app-settings.js` renders those. A field named after the FILE cannot answer a question about the next RUN.
+- **A no-op `clearTimeout` makes a debounce untestable, and the leak lands in the next scenario.** The shared DOM stub
+  returned handle-like values from `setTimeout` but dropped every `clearTimeout`, so an autosave a scenario had
+  cancelled still fired while the next scenario had already deleted its draft — the load-dependent
+  `draftStored` flip. The stub now forwards the real Node handle; a test double for timers must cancel, not just fire.
