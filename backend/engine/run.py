@@ -1142,7 +1142,9 @@ def _run_worker(
         # every ``add_log`` up to and including the verdict has already been buffered.
         run_log_writer.flush()
         set_log_sink(None)
-        # Forget the owner too: a batch that outlives its run must not be filed under it later.
+        # Forget the owner too: a batch that outlives its run must not be filed under a later run.
+        # (A batch the failed flush kept carries its own owner in ``_pending``, so this only clears
+        # the next batch's default.)
         run_log_writer.disarm()
         # Release the handle this thread was recognised by, then let the queue have the slot. Both
         # before anything else in this finally can be reordered: ``start_next_queued`` checks

@@ -20,6 +20,7 @@ promise safe, and each is pinned here:
 import copy
 
 import pytest
+from runtime import account_context
 
 pytestmark = pytest.mark.unit
 
@@ -29,12 +30,14 @@ class _RecordingStore:
 
     def __init__(self):
         self.batches = []  # [(run_id, [row, ...])]
+        self.accounts = []  # the account context each batch was written under
         self.fail = False
 
     def append_log(self, run_id, rows):
         if self.fail:
             raise RuntimeError('db down')
         self.batches.append((run_id, list(rows)))
+        self.accounts.append(account_context.current())
         return len(rows)
 
 
@@ -241,14 +244,42 @@ class TestStoreFailure:
         assert by_run.get('A') == ['A line'], by_run
         assert 'A line' not in by_run.get('B', []), "run A's console was filed under run B"
 
+    def test_kept_lines_go_back_to_the_account_that_printed_them(self, writer):
+        """A kept batch must keep its OWNER, not only its run id.
+
+        ``disarm`` drops ``_account`` at the end of a run; the next account's run then arms the
+        writer. The pending batch is still A's console, and writing it under B's context would file
+        it in B's ``runs.db`` — the cross-account leak ``_account`` exists to prevent.
+        """
+        _module, w, store, state = writer
+        owner_a = account_context.Account(user_id='user-a', username='a')
+        owner_b = account_context.Account(user_id='user-b', username='b')
+        _set_run(state, 'A')
+        w.arm(owner_a)
+        w.push(['A line'], 0, 'info')
+        store.fail = True
+        w.flush()  # A's batch is kept in _pending
+        w.disarm()
+        _set_run(state, 'B')
+        w.arm(owner_b)
+        w.push(['B line'], 0, 'info')
+        store.fail = False
+        w.flush()
+
+        filed = {run_id: account for (run_id, _rows), account in zip(store.batches, store.accounts, strict=True)}
+        assert filed['A'].user_id == 'user-a', "a kept batch was filed under the next run's account"
+        assert filed['B'].user_id == 'user-b'
+
     def test_a_persistently_failing_store_is_bounded(self, writer):
         _module, w, store, state = writer
         _set_run(state, 'rX')
         store.fail = True
         for _ in range(w.HARD_CAP + 200):
             w.push(['x'], 0, 'info')
-        # Never a growing leak: whatever is retained stays within the hard cap.
-        assert len(w._buf) <= w.HARD_CAP
+        # Never a growing leak: the queue that is actually retained (``_pending``) stays within the
+        # hard cap. ``_buf`` is emptied on every attempt, so asserting on it measured nothing.
+        retained = sum(len(rows) for _owner, _rid, rows in w._pending)
+        assert 0 < retained <= w.HARD_CAP, retained
 
     def test_a_store_that_logs_while_opening_does_not_deadlock_the_flush(self, writer):
         """``get_run_store()`` can create the store, and creation logs a line that the console
