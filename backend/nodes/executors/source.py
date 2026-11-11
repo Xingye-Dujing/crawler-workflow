@@ -17,9 +17,9 @@ import time
 
 import capabilities.registry as capabilities
 from api.http import _safe_int
-from core.config import Config
 from core.refs import as_bool, comment_platforms, split_urls
 from runtime import gate, paths
+from runtime.settings import get_setting
 from runtime.state import _wf_local, add_log, ambient, execution_state, stop_requested
 
 from crawlers import get_crawler, is_crawlable
@@ -55,7 +55,7 @@ def is_collision(crawler, resume) -> bool:
         and not crawler.collected()
         and not resume
         and execution_state['running']
-        and Config.WALL_RETRY_BACKOFF > 0
+        and float(get_setting('wall_retry_backoff')) > 0
     )
 
 
@@ -69,10 +69,11 @@ def backoff_for_retry(crawler, platform: str) -> bool:
     ``WALL_RETRY_BACKOFF`` and lets the caller open a second browser for a run already
     declared over. False means "the user stopped us — do not retry".
     """
-    add_log(t('run.wallRetry', platform=platform, n=int(Config.WALL_RETRY_BACKOFF)))
+    backoff = float(get_setting('wall_retry_backoff'))
+    add_log(t('run.wallRetry', platform=platform, n=int(backoff)))
     cancel = execution_state.get('cancel_event')
     interrupted = False
-    deadline = time.monotonic() + float(Config.WALL_RETRY_BACKOFF)
+    deadline = time.monotonic() + backoff
     while time.monotonic() < deadline:
         if not execution_state['running']:
             interrupted = True

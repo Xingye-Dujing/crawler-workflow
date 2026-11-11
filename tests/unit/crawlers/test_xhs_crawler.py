@@ -455,7 +455,7 @@ class TestVirtualisedFeed:
     """
 
     def _crawler(self, make_crawler, monkeypatch, notes, page=8):
-        monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.time.sleep', lambda s: None)
+        monkeypatch.setattr('crawlers.engine.pacing.time.sleep', lambda s: None)
         crawler, driver = make_crawler(driver_cls=RecyclingGridDriver, notes=notes, page=page)
         # ``scroll_down`` drives the fake's window; the detail read and the politeness beat
         # are not this seam — the grid recycle + ``seen`` dedupe is the unit under test.
@@ -494,7 +494,7 @@ class TestUnderTargetWiring:
     """
 
     def _short_feed(self, make_crawler, monkeypatch, notes, page=8):
-        monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.time.sleep', lambda s: None)
+        monkeypatch.setattr('crawlers.engine.pacing.time.sleep', lambda s: None)
         crawler, driver = make_crawler(driver_cls=RecyclingGridDriver, notes=notes, page=page)
         crawler.scroll_down = lambda **k: driver.advance()
         crawler._polite_pause = lambda *a, **k: None

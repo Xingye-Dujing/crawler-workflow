@@ -21,7 +21,7 @@ import contextlib
 import logging
 from collections.abc import Callable
 
-from crawlers.engine import feed
+from crawlers.engine import feed, pacing
 from crawlers.engine.counters import parse_count
 from crawlers.platforms.douyin import rows
 from i18n import t
@@ -70,7 +70,7 @@ class DouyinOverlayMixin:
         for _ in range(2):
             with contextlib.suppress(Exception):
                 self.driver.find_element('css selector', 'body').send_keys(self.ESC_KEY)
-            if feed.wait_for(lambda: not self._modal_open(), 1, timeout=3.0, tick=0.5):
+            if feed.wait_for(lambda: not self._modal_open(), 1, timeout=pacing.wait(3.0), tick=0.5):
                 return True
         return not self._modal_open()
 
@@ -106,7 +106,7 @@ class DouyinOverlayMixin:
             feed.wait_for(
                 lambda: self._active_modal_id() == str(aweme_id) and self._slide_painted(),
                 1,
-                timeout=self.MODAL_WAIT,
+                timeout=pacing.wait(self.MODAL_WAIT),
                 tick=0.5,
             )
         )

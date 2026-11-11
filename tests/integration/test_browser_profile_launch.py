@@ -52,11 +52,11 @@ def _booted(driver):
 @pytest.fixture
 def rooted(tmp_path, monkeypatch):
     root = str(tmp_path / 'profiles')
-    monkeypatch.setattr(
-        profiles,
-        'get_setting',
-        lambda key: {'use_browser_profile': True, 'browser_profile_dir': root}[key],
-    )
+
+    def _setting(key):
+        return {'use_browser_profile': True, 'browser_profile_dir': root, 'profile_lock_timeout': 20}[key]
+
+    monkeypatch.setattr(profiles, 'get_setting', _setting)
     return root
 
 
@@ -167,11 +167,11 @@ def test_a_second_crawler_reuses_the_directory_and_stops_planting(rooted, tmp_pa
 
 def test_turning_profiles_off_leaves_the_persistent_directory_untouched(rooted, tmp_path, monkeypatch):
     unused = tmp_path / 'unused'
-    monkeypatch.setattr(
-        profiles,
-        'get_setting',
-        lambda key: {'use_browser_profile': False, 'browser_profile_dir': str(unused)}[key],
-    )
+
+    def _setting(key):
+        return {'use_browser_profile': False, 'browser_profile_dir': str(unused), 'profile_lock_timeout': 20}[key]
+
+    monkeypatch.setattr(profiles, 'get_setting', _setting)
     crawler = _launch()
     try:
         _booted(crawler.driver)

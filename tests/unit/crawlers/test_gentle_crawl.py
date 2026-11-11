@@ -1,20 +1,20 @@
-"""#2: the 慢速采集 (``gentle_crawl``) switch — pacing only, never the browser's identity.
+"""The 慢速采集 preset's pacing contract — one scale, never the browser's identity.
 
-Two contracts, both pure enough to test without a browser:
+The preset writes ``crawl_pace_scale`` / ``crawl_wait_scale`` / ``crawl_patience_scale``
+as concrete values (see ``runtime.settings_schema.PRESETS``); these tests prove the one
+consumer, :mod:`crawlers.engine.pacing`, applies them exactly once and leaves a
+default install at the measured baseline. The douyin risk latch lives here for the same
+historical reason: the two checks share "what a platform refusing looks like".
 
-* :func:`throttled_sleep` and :meth:`Crawler._polite_pause` stretch every inter-action pause by
-  :data:`GENTLE_PAUSE_FACTOR` when the switch is on, and behave exactly as before when it is off
-  (the default — so landing this changes nothing on any current crawl).
-* :meth:`DouyinCrawler._latch_risk_if_walled` turns a 验证码中间页 into ``risk_blocked`` (back-off)
-  and refuses to latch a login wall there, because the two carry opposite advice.
+Pacing is pure enough to test without a browser: sleep is patched on the module that
+owns it.
 """
 
 import pytest
 
-import crawlers.core.crawler as crawler_module  # the jitter is drawn here, by _polite_pause
-import crawlers.engine.pacing as pacing_module  # the pacing decision moved here on 2026-10-27
+import crawlers.engine.pacing as pacing_module
 from crawlers.core.crawler import Crawler
-from crawlers.engine.pacing import GENTLE_PAUSE_FACTOR, throttled_sleep
+from crawlers.engine.pacing import rounds, throttled_sleep, wait
 from crawlers.platforms.douyin.crawler import DouyinCrawler
 
 pytestmark = pytest.mark.unit
@@ -22,11 +22,7 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def slept(monkeypatch):
-    """Capture every sleep this module would take, without actually waiting.
-
-    Patched on the module that sleeps: pacing owns ``throttled_sleep`` now, so a patch on the
-    crawler module's ``time`` would leave the real wait in place and the assertion reading nothing.
-    """
+    """Capture every sleep this module would take, without actually waiting."""
     calls: list[float] = []
     monkeypatch.setattr(pacing_module.time, 'sleep', calls.append)
     return calls
@@ -34,49 +30,69 @@ def slept(monkeypatch):
 
 @pytest.fixture
 def no_jitter(monkeypatch):
-    """Make :meth:`_polite_pause` deterministic: a zero jitter means the pause is exactly *base*."""
-    monkeypatch.setattr(crawler_module.random, 'uniform', lambda _a, _b: 0.0)
+    """Make the pause deterministic: a zero jitter means the pause is exactly *base*."""
+    monkeypatch.setattr(pacing_module.random, 'uniform', lambda _a, _b: 0.0)
 
 
-def _set_gentle(monkeypatch, value: bool):
-    monkeypatch.setattr(pacing_module, 'get_setting', lambda key: value if key == 'gentle_crawl' else None)
+def _configure(monkeypatch, *, pace=1.0, wait_scale=1.0, patience=1.0):
+    values = {
+        'crawl_pace_scale': pace,
+        'crawl_wait_scale': wait_scale,
+        'crawl_patience_scale': patience,
+    }
+
+    def _setting(key):
+        return values.get(key)
+
+    monkeypatch.setattr(pacing_module, 'get_setting', _setting)
 
 
-def test_throttled_sleep_is_untouched_when_off(monkeypatch, slept):
-    _set_gentle(monkeypatch, False)
+def test_throttled_sleep_defaults_to_the_requested_pause(monkeypatch, slept):
+    _configure(monkeypatch)
     throttled_sleep(2.0)
-    assert slept == [2.0], 'off is today: the requested pause, unscaled'
+    assert slept == [2.0], 'a default install is exactly today: the requested pause, unscaled'
 
 
-def test_throttled_sleep_scales_when_gentle(monkeypatch, slept):
-    _set_gentle(monkeypatch, True)
+def test_throttled_sleep_scales_once(monkeypatch, slept):
+    _configure(monkeypatch, pace=4.0)
     throttled_sleep(2.0)
-    assert slept == [2.0 * GENTLE_PAUSE_FACTOR], 'gentle multiplies the wait — speed only'
+    assert slept == [8.0], 'the slow preset multiplies the pause — speed only'
 
 
-def test_polite_pause_off_matches_jittered_base(monkeypatch, slept, no_jitter):
-    _set_gentle(monkeypatch, False)
+def test_polite_pause_default_matches_jittered_base(monkeypatch, slept, no_jitter):
+    _configure(monkeypatch)
     Crawler._polite_pause(1.0, 0.4)
     assert slept == [1.0]
 
 
-def test_polite_pause_gentle_stretches_the_base(monkeypatch, slept, no_jitter):
-    _set_gentle(monkeypatch, True)
+def test_polite_pause_scales_the_base(monkeypatch, slept, no_jitter):
+    _configure(monkeypatch, pace=4.0)
     Crawler._polite_pause(1.0, 0.4)
-    assert slept == [1.0 * GENTLE_PAUSE_FACTOR]
+    assert slept == [4.0]
 
 
 def test_polite_pause_floor_scales_too(monkeypatch, slept, no_jitter):
-    """Even the 0.2 s floor rides the multiplier, so a gentle crawl never drops back to metronome
-    speed on a fast round — the whole point is the rhythm, not one long sleep."""
-    _set_gentle(monkeypatch, True)
-    Crawler._polite_pause(0.0, 0.0)  # jitter-free, base below the floor
-    assert slept == [0.2 * GENTLE_PAUSE_FACTOR]
+    """Even the 0.2 s floor rides the multiplier, so a slow crawl never drops back to
+    metronome speed on a fast round — the point is the rhythm, not one long sleep."""
+    _configure(monkeypatch, pace=4.0)
+    Crawler._polite_pause(0.0, 0.0)
+    assert slept == [0.2 * 4.0]
 
 
 def test_negative_sleep_is_clamped_not_inverted(slept):
     throttled_sleep(-5.0)
-    assert slept == [0.0], 'this scales a pause; it must never schedule a negative or invert it'
+    assert slept == [], 'this scales a pause; it must never schedule a negative sleep'
+
+
+def test_wait_and_rounds_scale_once(monkeypatch):
+    _configure(monkeypatch, wait_scale=2.0, patience=2.0)
+    assert wait(1.5) == 3.0
+    assert rounds(3) == 6
+
+
+def test_rounds_never_reaches_zero(monkeypatch):
+    _configure(monkeypatch, patience=1.0)
+    assert rounds(0) == 1
 
 
 class _WalledProbe:

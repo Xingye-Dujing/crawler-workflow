@@ -15,6 +15,17 @@ def store(tmp_path):
     instance.close()
 
 
+@pytest.fixture(autouse=True)
+def _settings_from_config(monkeypatch):
+    import services.datasets.merge as merge_module
+
+    monkeypatch.setattr(
+        merge_module,
+        'get_setting',
+        lambda key: Config.DATASET_MAX_ROWS if key == 'dataset_max_rows' else None,
+    )
+
+
 def _put(store, name, rows, columns=('标题', '正文')):
     frame = pd.DataFrame(rows, columns=list(columns))
     return store.put(frame, name=name, source='upload')

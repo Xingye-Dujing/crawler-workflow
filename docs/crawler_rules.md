@@ -26,6 +26,8 @@
   `test_frontend_contract.py::TestCrawlMatrixParity`. A field name reaches an inline handler, so one not matching
   `/^[\w.-]{1,64}$/` is dropped whole, and the JS panel is tested against the matrix dumped from Python, never a
   copy checked in.
+- **No platform owns a user-facing crawl knob.** Measured per-site baselines (a card wait, a scroll budget, a stuck round count) may live beside the platform because they are site facts, but every one is consumed through `crawlers/engine/pacing.py` (`pace_scale` / `wait_scale` / `patience_scale`). Platform modules must not call `get_setting` for crawl behaviour and must not call `time.sleep` by hand; `tests/unit/gates/test_settings_schema.py` refuses both. User choices live once in `runtime/settings_schema.py` and are rendered by the settings page.
+- **慢速采集 is a preset, not a second multiplier.** `PRESETS['slow']` writes concrete values (`crawl_pace_scale=4`, `crawl_wait_scale=2`, `crawl_patience_scale=2`, queue/preflight/caps) and snapshots what it replaced; restore is exact. Never layer a new global factor on top of it — one scale, one result, or the settings page stops predicting what a run does.
 - **A record whose worker is gone is settled by the panel, not by a restart:** `/api/runs/list` settles a row this
   process opened and never closed, once no worker is alive. Adding a run status means updating
   `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list and both app.js catalogs.

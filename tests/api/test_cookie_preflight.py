@@ -293,7 +293,11 @@ class TestCache:
         assert verdict['cached'] is True
 
     def test_a_verdict_stops_being_quotable_after_the_ttl(self, probe_zhihu, monkeypatch):
-        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TTL', -1)
+        monkeypatch.setattr(
+            preflight,
+            'get_setting',
+            lambda key: {'cookie_preflight_ttl': -1}.get(key, 300),
+        )
         preflight.probe('zhihu')
         preflight.probe('zhihu')
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
@@ -409,7 +413,11 @@ class TestParallelAndDeadline:
                 return {'error': 'never overlapped'}
 
         monkeypatch.setattr(preflight, '_probe_live', fake_probe)
-        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 1)
+        monkeypatch.setattr(
+            preflight,
+            'get_setting',
+            lambda key: {'cookie_preflight_max_parallel': 1, 'cookie_preflight_ttl': 300}.get(key, 45),
+        )
         answers = preflight.check(['zhihu', 'weibo'])
         assert {answers[p]['state'] for p in ('zhihu', 'weibo')} == {preflight.UNKNOWN}
 
@@ -427,8 +435,15 @@ class TestParallelAndDeadline:
         with_cookie('weibo')
         with_cookie('douyin')
         monkeypatch.setattr(preflight, '_probe_live', lambda p, **k: {'login_wall': False, 'risk_blocked': False})
-        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 1)
-        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TIMEOUT', 5)
+        monkeypatch.setattr(
+            preflight,
+            'get_setting',
+            lambda key: {
+                'cookie_preflight_max_parallel': 1,
+                'cookie_preflight_timeout': 5,
+                'cookie_preflight_ttl': 300,
+            }.get(key, 45),
+        )
         awaited = []
         real_result = Future.result
 
@@ -455,7 +470,11 @@ class TestParallelAndDeadline:
             return {'login_wall': True, 'risk_blocked': False}
 
         monkeypatch.setattr(preflight, '_probe_live', fake_probe)
-        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TIMEOUT', 0.3)
+        monkeypatch.setattr(
+            preflight,
+            'get_setting',
+            lambda key: {'cookie_preflight_timeout': 0.3, 'cookie_preflight_ttl': 300}.get(key, 45),
+        )
         try:
             answers = preflight.check(['zhihu'])
         finally:

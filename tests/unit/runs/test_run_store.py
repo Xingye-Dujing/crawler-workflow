@@ -39,6 +39,18 @@ from services.runs.store import (
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _settings_from_config(monkeypatch):
+    """These cases still patch Config; the store reads the editable row cap."""
+    import services.runs.store.progress as progress_module
+
+    monkeypatch.setattr(
+        progress_module,
+        'get_setting',
+        lambda key: Config.RUN_MAX_ROWS_PER_NODE if key == 'run_max_rows_per_node' else None,
+    )
+
+
 @pytest.fixture
 def store(tmp_path):
     s = RunStore(str(tmp_path / 'runs.db'))

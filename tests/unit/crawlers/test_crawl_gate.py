@@ -54,13 +54,17 @@ def isolated(monkeypatch):
         clock['now'] += seconds
 
     monkeypatch.setattr(gate, '_interruptible_sleep', _sleep)
-    monkeypatch.setattr(gate.Config, 'PLATFORM_GATE_TIMEOUT', 0.3)
+
+    def _gate_defaults(key):
+        return {'platform_gate_timeout': 0.3, 'same_platform_queue': False, 'same_platform_stagger': 0}.get(key)
+
+    monkeypatch.setattr(gate, 'get_setting', _gate_defaults)
     return {'waits': waits, 'clock': clock}
 
 
 def _settings(monkeypatch, *, queue, stagger=10.0):
     """Pin both knobs at once: the mode is a setting and so is the wait it pays."""
-    values = {'same_platform_queue': queue, 'same_platform_stagger': stagger}
+    values = {'same_platform_queue': queue, 'same_platform_stagger': stagger, 'platform_gate_timeout': 0.3}
     monkeypatch.setattr(gate, 'get_setting', lambda key: values[key])
 
 
@@ -417,7 +421,13 @@ class TestStaggerOnly:
             real_sleep(seconds, abort)
 
         monkeypatch.setattr(gate, '_interruptible_sleep', sleeping)
-        monkeypatch.setattr(gate.Config, 'PLATFORM_GATE_TIMEOUT', 5.0)
+        monkeypatch.setattr(
+            gate,
+            'get_setting',
+            lambda key: {'same_platform_queue': False, 'same_platform_stagger': 60.0, 'platform_gate_timeout': 5.0}[
+                key
+            ],
+        )
         inside, release = threading.Event(), threading.Event()
         holder = _holder('zhihu', inside, release)
         assert inside.wait(5)

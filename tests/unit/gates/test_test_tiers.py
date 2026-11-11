@@ -260,8 +260,9 @@ class TestRegionSplit:
     def test_the_warning_switch_hides_the_question_and_nothing_else(self):
         """Turning the dialog off must not change what a run does — the split of the
         live tier and the crawl itself read the matrix, never this setting."""
-        text = (REPO_ROOT / 'backend' / 'runtime' / 'settings.py').read_text(encoding='utf-8')
-        assert "'ask_overseas_network': True" in text, 'asking is the default until somebody says otherwise'
+        from runtime.settings_schema import DEFAULTS
+
+        assert DEFAULTS['ask_overseas_network'] is True, 'asking is the default until somebody says otherwise'
         gate = (REPO_ROOT / 'backend' / 'runtime' / 'gate.py').read_text(encoding='utf-8')
         assert 'ask_overseas_network' not in gate, 'a cosmetic dialog must not be wired into what actually runs'
 

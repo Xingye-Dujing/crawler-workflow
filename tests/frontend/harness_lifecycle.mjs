@@ -174,6 +174,11 @@ for (const sc of scenarios) {
        seed below then owns the draft and the scenario's assertions cannot see a stranger's
        save. `settle` is still held at 60 turns for the slower Windows runner. */
     await settle();
+    /* A writer queued by the previous scenario lands during settle, AFTER the delete
+       above — delete once more so a late write cannot resurrect the draft this
+       scenario is explicitly testing without. */
+    delete sandbox.__stored.crawler_open_file;
+    delete sandbox.__stored.crawler_canvas;
     if (sc.hasDraft !== false) sandbox.__stored.crawler_canvas = JSON.stringify({ nodes: [], view: {} });
     if (sc.storedOpenFile !== undefined) sandbox.__stored.crawler_open_file = sc.storedOpenFile;
     sandbox.__dialogAnswer = sc.dialogAnswer ?? null;

@@ -45,6 +45,7 @@ from runtime.settings import get_setting
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped
+from crawlers.engine import pacing
 from crawlers.platforms.hongguo import trust
 from crawlers.platforms.hongguo.comments import hg_comment_rows, hg_page_title, hg_series_id
 from crawlers.platforms.hongguo.naming import norm_title, screen_names
@@ -344,7 +345,7 @@ class HongguoCommentHarness:
                 # and a 30-thread drawer answered six), then drain everything the player
                 # fetched — from these clicks, its own prefetch, or a human scrolling.
                 self.ui.expand_replies()
-                time.sleep(1.5)
+                pacing.nap(1.5)
                 reply_rows, reply_refused = self._harvest_replies(article_url, title, ep)
                 scanned += len(reply_rows) + reply_refused
                 refused += reply_refused
@@ -380,7 +381,7 @@ class HongguoCommentHarness:
             # per-episode grace is short, so a child page can still be in flight after the last
             # episode: drained NOW it belongs to this drama, left in the inbox it would be read
             # at the NEXT drama's episode end and stamped with a 剧名 that never carried it.
-            time.sleep(_REPLY_SETTLE_SECONDS)
+            pacing.nap(_REPLY_SETTLE_SECONDS)
             late, late_refused = self._harvest_replies(article_url, title, episodes)
             scanned += len(late) + late_refused
             refused += late_refused
@@ -449,7 +450,7 @@ class HongguoCommentHarness:
             return 'ok'
         for _ in range(_SCREEN_SETTLE_READS):
             self._check_abort()
-            time.sleep(_SCREEN_SETTLE_SECONDS)
+            pacing.nap(_SCREEN_SETTLE_SECONDS)
             again = self.ui.screen_drama_title()
             if not again or screen_names(want_norm, norm_title(again)):
                 return 'ok'  # went cold, or settled onto the requested drama
@@ -691,7 +692,7 @@ class HongguoCommentHarness:
                 # would wait 90 s on pages the identity gate discards — the walk wants to stop the
                 # drama now, not at the deadline.
                 return None
-            time.sleep(0.5)
+            pacing.nap(0.5)
         return None
 
     @staticmethod
@@ -844,7 +845,7 @@ class HongguoCommentHarness:
                 break
             if os.path.exists(self._cert_path()) and self._port_open(port):
                 return
-            time.sleep(0.3)
+            pacing.nap(0.3)
         self.close()
         raise ValueError(t('crawl.hg.cmt.noMitmdump', detail=f'proxy did not come up on 127.0.0.1:{port}'))
 

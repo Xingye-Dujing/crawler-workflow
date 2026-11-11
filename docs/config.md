@@ -46,8 +46,11 @@
 
 ## 运行时设置（UI 设置面板 → `data/settings.json`）
 
-定义在 `runtime/settings.py` 的 `DEFAULTS`，全部可在设置面板改；保存路径与 bool 分支在
-`runtime/settings.py::save_settings`（`settings_store` 是它的旧名）。
+定义在 `runtime/settings_schema.py` 的 `SETTINGS`（一个键一条 `Setting`，含类型、范围、分组、中英文标签、读取方与是否可导出）；`runtime/settings.py` 只负责加载、校验、持久化、预设与导入导出。设置面板由 `GET /api/settings/schema` 动态渲染，新增键不需要再手写输入框。
+
+**慢速采集**是一套预设（`PRESETS['slow']`），不是单独的开关：它把节奏/等待/耐心三个倍数、同平台排队、跑前 Cookie 验证与并发上限写成具体值，并保存启用前的快照；设置页或顶栏按钮可一键启用、一键恢复。相关的三个全局倍数是 `crawl_pace_scale`、`crawl_wait_scale`、`crawl_patience_scale`，平台自身只保留实测基线，不再有自己的开关。
+
+**设置导出/导入**：`GET /api/settings/export`、`POST /api/settings/import`。默认只导出可移植值，机器路径要显式包含；导入先 `dry_run` 预览，再按 `merge`（默认）或 `replace` 应用，未知键与本机路径会逐项报告。
 
 | 键 | 说明 |
 |------|------|
@@ -67,7 +70,18 @@
 | `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
 | `max_visible_browsers` / `max_headless_browsers` | 一次并行运行最多同时开几台浏览器，按本次是窗口 / 无头分别取（默认都取 `DEFAULT_MAX_WORKERS=4`；窗口比无头更费机器）。串行轮流，不受此限 |
 | `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；**默认开**，开后上一轮的行不会留到下一轮） |
-| `gentle_crawl` | 把采集的礼貌停顿按固定倍率拉长（只改节奏，不改指纹、不动页面到达预算；默认关）。刚被风控挑战过的会话宜退让，代价是墙钟时间变慢 |
+| `crawl_pace_scale` / `crawl_wait_scale` / `crawl_patience_scale` | 全局节奏 / 等待 / 耐心倍数（默认都是 1，即各平台实测基线）。慢速预设写入 4 / 2 / 2；一键恢复回到启用前的值。`gentle_crawl` 旧键在首次读取时迁移成 `crawl_pace_scale=4` |
+| `page_wait_timeout` | 一页首次内容的总预算（秒，默认 300；原 `Config.PAGE_WAIT_TIMEOUT`） |
+| `wall_retry_backoff` / `wall_proofs` / `wall_poll` | 首行前撞墙的退避、连续读墙次数与复读间隔 |
+| `nav_retry` / `nav_settle` / `max_pending_waits` | 导航重试、重试前等待、连续未到达页面的熔断次数 |
+| `profile_lock_timeout` / `platform_gate_timeout` | Profile 锁与同平台排队的等待上限（秒） |
+| `renderer_probe_timeout` / `renderer_close_timeout` | 渲染器健康检查与关闭宽限（秒） |
+| `cookie_preflight_timeout` / `cookie_preflight_ttl` / `cookie_preflight_max_parallel` | 跑前 Cookie 检测的预算、结论缓存与并发 |
+| `run_max_rows_per_node` / `dataset_max_rows` / `max_upload_mb` | 单节点落盘、单数据集与上传大小上限 |
+| `run_keep_per_workflow` / `run_keep_days` / `dataset_keep_days` / `housekeeping_interval_minutes` | 保留策略与清理间隔 |
+| `log_max_mb` / `log_backup_count` | 日志轮转大小与份数（重启生效） |
+| `default_run_mode` / `default_headless` | 从未选过的浏览器从哪个运行模式/无头状态开始；已保存画布仍用自己的选择 |
+| `default_target_count` / `default_comment_*` / `default_*_part_size` / `default_per_article_file` / `default_keep_parts` / `default_live_export` | 新节点的默认目标、评论上限、分片、按文章拆分、保留分片与实时导出 |
 | `hongguo_player_path` | 红果短剧评论收割用的桌面播放器路径（**不自动检测**——猜错路就会对着错误的构建收割，拒绝时点名这个设置；Windows 专属） |
 | `mitmdump_path` | 收割用的 `mitmdump`；空=PATH，再退回本 venv 的 Scripts |
 | `harvest_proxy_port` | 播放器与 mitmproxy 共用的代理端口（默认 8860） |

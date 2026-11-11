@@ -31,7 +31,6 @@ const AppSettings = {
         max_visible_browsers: 'set-max-visible-browsers',
         max_headless_browsers: 'set-max-headless-browsers',
         clear_console_before_run: 'set-clear-console',
-        gentle_crawl: 'set-gentle-crawl',
         hongguo_player_path: 'set-hg-player',
         mitmdump_path: 'set-mitmdump',
         harvest_proxy_port: 'set-harvest-port',
@@ -44,6 +43,36 @@ const AppSettings = {
        (`/api/settings` answers `read_only`); the panel only mirrors it so a field is
        visibly dead rather than a trap that fails at save time. */
     readOnly: false,
+    /* The active per-run preset (慢速采集), as the server reports it: ``{active,
+       customized, applied_at, keys, can_restore}`` or null. The panel and the top
+       menu read it; no client-side second opinion about what the preset changed. */
+    preset: null,
+
+    applyPresetState(preset) {
+        this.preset = preset && preset.active ? preset : null;
+        if (window.SettingsPanel) SettingsPanel.renderPresetState();
+        if (window.TopMenu) TopMenu.refresh();
+    },
+
+    /* Seed the run switches from the server defaults ONLY when this browser has
+       never stored a choice. A browser that already chose 无头/串行 keeps it; a new
+       browser follows the global setting, which is the whole point of the setting. */
+    applyRunDefaults() {
+        if (typeof RunState === 'undefined' || typeof Settings === 'undefined') return;
+        let raw = {};
+        try {
+            raw = JSON.parse(localStorage.getItem(Settings._key) || '{}') || {};
+        } catch (e) {
+            raw = {};
+        }
+        if (!Object.prototype.hasOwnProperty.call(raw, 'headless')) {
+            RunState.headless = this._values.default_headless !== false;
+        }
+        if (!Object.prototype.hasOwnProperty.call(raw, 'parallel')) {
+            RunState.parallel = this._values.default_run_mode !== 'serial';
+        }
+        if (window.TopMenu) TopMenu.refresh();
+    },
 
     async pull(force) {
         if (this._pulled && !force) return;
@@ -55,6 +84,8 @@ const AppSettings = {
                 this._draft = {};
                 this.readOnly = result.read_only === true;
                 this._pulled = true;
+                this.applyPresetState(result.preset);
+                this.applyRunDefaults();
                 this.applyToPanel();
             }
         } catch (e) {
@@ -249,6 +280,20 @@ window.renderBrowserProfiles = renderBrowserProfiles;
 async function saveAppSettings() {
     await AppSettings.save();
 }
+
+/* One click from the top bar: apply the slow preset when it is off, restore the
+   values it replaced when it is on. The work lives on the server (snapshot included),
+   so this page is not the owner of "what the settings used to be". */
+async function toggleSlowPreset() {
+    if (typeof SettingsPanel === 'undefined') return;
+    if (window.AppSettings && AppSettings.preset && AppSettings.preset.active) {
+        await SettingsPanel.restorePreset();
+    } else {
+        await SettingsPanel.applyPreset();
+    }
+}
+
+window.toggleSlowPreset = toggleSlowPreset;
 
 /* Same window export as LLMSettings — menu.js's 设置 panel guard needs it. */
 window.AppSettings = AppSettings;

@@ -261,6 +261,8 @@ initDockResize('schedules-resize-handle', 'schedules-panel');
 initDockResize('lexicon-resize-handle', 'lexicon-panel');
 /* The bibliometrics workspace is the ninth dock in the same slot, with the same handle. */
 initDockResize('biblio-resize-handle', 'biblio-panel');
+/* The settings page is the tenth: same bottom slot, same resize handle. */
+initDockResize('settings-resize-handle', 'settings-panel');
 
 /* ── Cookie dialog: close on outside click ──
    The platform dropdown is a CustomSelect: its menu is rendered into <body>,

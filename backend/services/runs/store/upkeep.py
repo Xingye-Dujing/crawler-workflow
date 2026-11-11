@@ -3,7 +3,7 @@
 import logging
 import time
 
-from core.config import Config
+from runtime.settings import get_setting
 
 from .identity import UNRESOLVED_RUN_STATUS
 
@@ -54,8 +54,8 @@ class UpkeepMixin:
         silently destroy the very state being built.
         """
         exclude = [exclude_run_id] if isinstance(exclude_run_id, str) else list(exclude_run_id or [])
-        keep = Config.RUN_KEEP_PER_WORKFLOW if keep_per_workflow is None else int(keep_per_workflow)
-        days = Config.RUN_KEEP_DAYS if keep_days is None else int(keep_days)
+        keep = int(get_setting('run_keep_per_workflow')) if keep_per_workflow is None else int(keep_per_workflow)
+        days = int(get_setting('run_keep_days')) if keep_days is None else int(keep_days)
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(0, days) * 86400))
 
         doomed = set()

@@ -27,6 +27,26 @@ def _machine_component_mode(monkeypatch):
     monkeypatch.setenv('CIXI_COMPONENT_SOURCE', 'system')
 
 
+@pytest.fixture(autouse=True)
+def _settings_from_config(monkeypatch):
+    """The health bounds are settings now; these cases still patch the Config constants.
+
+    Read them lazily so a ``monkeypatch.setattr(Config, ...)`` inside a test is what the
+    launch sees, and answer a plausible value for every other key the launch asks.
+    """
+
+    def setting(key):
+        return {
+            'renderer_probe_timeout': Config.RENDERER_PROBE_TIMEOUT,
+            'renderer_close_timeout': Config.RENDERER_CLOSE_TIMEOUT,
+            'page_load_timeout': 40,
+            'profile_lock_timeout': Config.PROFILE_LOCK_TIMEOUT,
+            'window_size': '960x920',
+        }.get(key, '')
+
+    monkeypatch.setattr(browser, 'get_setting', setting)
+
+
 UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.0.0 Safari/537.36'
 
 

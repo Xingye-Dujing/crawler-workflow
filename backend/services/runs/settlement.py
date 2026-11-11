@@ -24,7 +24,7 @@ manual — has to ask the same question about what the user pinned.
 import contextlib
 import logging
 
-from core.config import Config
+from runtime.settings import get_setting
 from runtime.state import _completed_lock, add_log, execute_lock, execution_state, history_service, live_run_ids
 from runtime.stores import get_housekeeper, get_run_store
 
@@ -191,7 +191,7 @@ def housekeep(exclude_run_id='', force: bool = False):
         # The chart backend is never touched by the runs.db sweep (it keys on its own
         # id), so age its metric rows here — otherwise it grows forever and plots
         # trends for crawls whose data is long gone.
-        history_service.purge_older_than(Config.RUN_KEEP_DAYS)
+        history_service.purge_older_than(int(get_setting('run_keep_days')))
     prune_orphan_run_locks()
 
 

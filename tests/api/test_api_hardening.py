@@ -99,6 +99,8 @@ BODY_ROUTES = [
     '/api/schedules/save',
     '/api/schedules/toggle',
     '/api/settings',
+    '/api/settings/import',
+    '/api/settings/preset',
     '/api/studio/dataset',
     '/api/studio/save-image',
     '/api/studio/save-vector',

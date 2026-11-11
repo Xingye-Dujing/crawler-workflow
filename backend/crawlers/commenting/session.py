@@ -38,11 +38,10 @@ Design notes the code cannot shout later:
 """
 
 import contextlib
-import time
 
 from crawlers.commenting import walks
 from crawlers.commenting.protocol import DEAD, OK
-from crawlers.engine import pagefetch
+from crawlers.engine import pacing, pagefetch
 from i18n import t
 
 
@@ -59,7 +58,7 @@ class CommentSession:
         # per row of a walk that is already over.
         self._owner = owner
         self.log = log or (lambda msg: None)
-        self.nap = nap or time.sleep
+        self.nap = nap or pacing.nap
         # "May I stop?" — the same predicate the crawlers carry, because a comment
         # node reads hundreds of pages and the node handler only asks between URLs.
         self._abort = abort

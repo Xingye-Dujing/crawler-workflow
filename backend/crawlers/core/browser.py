@@ -293,6 +293,18 @@ def apply_stealth(driver, domain: str) -> None:
         logger.debug('automation stealth not applied for %s: %s', domain, e)
 
 
+def _int_setting(key: str, fallback: int) -> int:
+    """Read an integer setting, tolerating an old/partial file or a test double.
+
+    A blank or absent value must not turn a machine fact into ``ValueError``: the
+    declared fallback is what the launch used before this value became editable.
+    """
+    try:
+        return int(float(get_setting(key)))
+    except (KeyError, TypeError, ValueError):
+        return int(fallback)
+
+
 def _bounded_call(fn, timeout: float, what: str):
     """Run *fn* on a daemon thread and give up on it after *timeout* seconds.
 
@@ -366,7 +378,7 @@ def close_driver(driver) -> None:
     if driver is None:
         return
     try:
-        _bounded_call(driver.quit, Config.RENDERER_CLOSE_TIMEOUT, 'driver.quit')
+        _bounded_call(driver.quit, _int_setting('renderer_close_timeout', 10), 'driver.quit')
         return
     except TimeoutError:
         pass  # still inside quit(): the socket is wedged and the process has to go
@@ -429,13 +441,13 @@ def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: 
         try:
             real_ua = _bounded_call(
                 lambda: str(driver.execute_script('return navigator.userAgent;') or ''),
-                Config.RENDERER_PROBE_TIMEOUT,
+                int(_int_setting('renderer_probe_timeout', 15)),
                 'the renderer',
             )
         except TimeoutError as exc:
             close_driver(driver)
             raise ValueError(
-                t('crawl.rendererUnresponsive', seconds=int(Config.RENDERER_PROBE_TIMEOUT), domain=domain)
+                t('crawl.rendererUnresponsive', seconds=int(_int_setting('renderer_probe_timeout', 15)), domain=domain)
             ) from exc
         except Exception as exc:
             close_driver(driver)
@@ -458,7 +470,7 @@ def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: 
     # A timeout the driver rejects (bad value, dead session) must not kill
     # the session — the crawl can still run on the default timeout.
     with contextlib.suppress(Exception):
-        driver.set_page_load_timeout(int(get_setting('page_load_timeout')))
+        driver.set_page_load_timeout(_int_setting('page_load_timeout', 40))
     return driver
 
 
@@ -483,7 +495,7 @@ def claim_profile(profile_dir: str | None, abort):
             # closed and sends the user hunting a browser that is not there.
             raise ProfileUnavailableError(t('crawl.profile_gave_up', dir=profile_dir))
         raise ProfileUnavailableError(
-            t('crawl.profile_stuck', dir=profile_dir, seconds=round(Config.PROFILE_LOCK_TIMEOUT))
+            t('crawl.profile_stuck', dir=profile_dir, seconds=_int_setting('profile_lock_timeout', 900))
         )
     waited = time.monotonic() - started
     if waited >= 0.2:

@@ -128,7 +128,9 @@ def test_an_empty_answer_with_no_wall_is_the_crawls_own(app_module, running):
 
 def test_the_back_off_can_be_turned_off_entirely(app_module, monkeypatch):
     """0 is a supported answer, so an operator can restore the old single attempt."""
-    monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0)
+    from nodes.executors import source
+
+    monkeypatch.setattr(source, 'get_setting', lambda key: 0 if key == 'wall_retry_backoff' else None)
     crawler = _Crawler()
     rows = _source_plugin().crawl_with_collision_retry(crawler, crawler.search, {}, {}, 'weibo')
     assert rows == []

@@ -144,9 +144,10 @@ def acquire_profile(path: str, timeout: float = None, abort=None):
     stays the single blocking call it always was.
     """
     lock = lock_for(path)
+    lock_timeout = float(get_setting('profile_lock_timeout') or Config.PROFILE_LOCK_TIMEOUT)
     if abort is None:
-        return lock if lock.acquire(timeout=timeout if timeout is not None else Config.PROFILE_LOCK_TIMEOUT) else None
-    deadline = time.monotonic() + (timeout if timeout is not None else Config.PROFILE_LOCK_TIMEOUT)
+        return lock if lock.acquire(timeout=timeout if timeout is not None else lock_timeout) else None
+    deadline = time.monotonic() + (timeout if timeout is not None else lock_timeout)
     while True:
         if abort():
             return None

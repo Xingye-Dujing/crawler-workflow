@@ -14,6 +14,15 @@ var TopMenu = {
         var h = document.getElementById('btn-headless');
         if (p) p.className = 'menu-btn ' + (RunState.parallel ? 'toggle-on' : 'toggle-off');
         if (h) h.className = 'menu-btn ' + (RunState.headless ? 'toggle-on' : 'toggle-off');
+        // 慢速采集 is a stored preset, not a browser switch: the button flips between
+        // applying it and restoring the values it replaced. Server is the authority.
+        var s = document.getElementById('btn-slow-crawl');
+        if (s) {
+            var presetOn = !!(window.AppSettings && AppSettings.preset && AppSettings.preset.active);
+            s.className = 'menu-btn ' + (presetOn ? 'toggle-on' : 'toggle-off');
+            s.textContent = I18n.t(presetOn ? 'settingsPanel.presetRestore' : 'settingsPanel.slowButton');
+            s.disabled = !!(window.AppSettings && AppSettings.readOnly);
+        }
 
         var ex = document.getElementById('btn-execute');
         var st = document.getElementById('btn-stop');

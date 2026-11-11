@@ -34,7 +34,7 @@ import time
 import zipfile
 
 import pandas as pd
-from core.config import Config
+from runtime.settings import get_setting
 from runtime.stores import get_dataset_store
 
 from i18n import t
@@ -413,8 +413,9 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
                 raise ValueError(t('project.datasetInvalid', id=old_id))
             if not isinstance(records, list) or not all(isinstance(row, dict) for row in records):
                 raise ValueError(t('project.datasetInvalid', id=old_id))
-            if len(records) > Config.DATASET_MAX_ROWS:
-                raise ValueError(t('project.datasetTooLarge', id=old_id, max=Config.DATASET_MAX_ROWS))
+            limit = int(get_setting('dataset_max_rows'))
+            if len(records) > limit:
+                raise ValueError(t('project.datasetTooLarge', id=old_id, max=limit))
             try:
                 frame = pd.DataFrame(records, columns=columns)
             except (TypeError, ValueError) as e:

@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from crawlers.core.crawler import Crawler, as_index
 from crawlers.core.video import VideoCrawler, _as_int, _stamp
-from crawlers.engine import feed
+from crawlers.engine import feed, pacing
 from i18n import stop_reason_label, t
 
 logger = logging.getLogger(__name__)
@@ -264,8 +264,8 @@ class BilibiliCrawler(VideoCrawler):
             collected=self.collected,
             mark=mark,
             stopped=lambda: self.login_wall or self.may_stop() or self._watermark_hit,
-            stuck_rounds=2,
-            settle_wait=self.CARD_WAIT,
+            stuck_rounds=pacing.rounds(2),
+            settle_wait=pacing.wait(self.CARD_WAIT),
             window=self._on_screen_key,
         )
         logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))

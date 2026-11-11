@@ -38,9 +38,9 @@ import uuid
 import zlib
 
 import pandas as pd
-from core.config import Config
 from core.refs import sanitize_filename
 from runtime import paths
+from runtime.settings import get_setting
 
 from i18n import t
 
@@ -199,9 +199,10 @@ class DatasetStore:
         """
         if df is None:
             raise ValueError('dataset must be a DataFrame')
-        if len(df) > Config.DATASET_MAX_ROWS:
+        limit = int(get_setting('dataset_max_rows'))
+        if len(df) > limit:
             raise ValueError(
-                t('ds.too_many_rows', n=len(df), limit=Config.DATASET_MAX_ROWS),
+                t('ds.too_many_rows', n=len(df), limit=limit),
             )
         records = safe_records(df)
         columns = [str(c) for c in df.columns]
@@ -536,10 +537,9 @@ class DatasetStore:
                     continue
                 seen.add(key)
                 added.append(row)
-            if len(current) + len(added) > Config.DATASET_MAX_ROWS:
-                raise ValueError(
-                    t('ds.lineage_too_large', name=clean, n=len(current) + len(added), max=Config.DATASET_MAX_ROWS)
-                )
+            limit = int(get_setting('dataset_max_rows'))
+            if len(current) + len(added) > limit:
+                raise ValueError(t('ds.lineage_too_large', name=clean, n=len(current) + len(added), max=limit))
             if not added and not found:
                 # A brand-new lineage with no rows would be reported as version 0 while no row
                 # exists anywhere: the accumulate node logged success for a lineage it never
@@ -778,7 +778,7 @@ class DatasetStore:
         is what makes that workflow runnable, so only orphans — the leftovers
         of unsaved experiments — are ever removed.
         """
-        keep_days = Config.DATASET_KEEP_DAYS if keep_days is None else keep_days
+        keep_days = int(get_setting('dataset_keep_days')) if keep_days is None else keep_days
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - keep_days * 86400))
         rows = self._query(
             'SELECT dataset_id FROM datasets WHERE dataset_id NOT IN (SELECT dataset_id FROM dataset_refs)'

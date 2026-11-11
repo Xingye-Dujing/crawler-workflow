@@ -1,7 +1,6 @@
 import contextlib
 import logging
 import re
-import time
 from urllib.parse import quote, urljoin
 
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -10,7 +9,7 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
-from crawlers.engine import feed, times
+from crawlers.engine import feed, pacing, times
 from crawlers.engine.counters import parse_count
 from crawlers.platforms.xiaohongshu.rows import note_id
 from i18n import t
@@ -120,14 +119,14 @@ class XiaohongshuCrawler(Crawler):
             self._mounted_cards,
             lambda card, index: self._note_row(card, seen),
             self._emit_note,
-            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
+            scroll=lambda: self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS)),
             target=target_count,
             collected=self.collected,
             window=self._window_key,
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
-            stuck_rounds=self.STUCK_ROUNDS,
-            settle_wait=self.CARD_WAIT,
+            stuck_rounds=pacing.rounds(self.STUCK_ROUNDS),
+            settle_wait=pacing.wait(self.CARD_WAIT),
         )
 
         # U1 migration: xiaohongshu's grid publishes NO total and NO end-of-list marker the code
@@ -302,7 +301,7 @@ class XiaohongshuCrawler(Crawler):
             logger.info(t('crawl.xhs.deadNote', url=url))
             return None
         try:
-            WebDriverWait(self.driver, int(self.NOTE_WAIT * 6)).until(
+            WebDriverWait(self.driver, pacing.wait(self.NOTE_WAIT * 6)).until(
                 ec.presence_of_element_located((By.CSS_SELECTOR, '.title, #detail-title'))
             )
             logger.info(t('crawl.xhs.detail_ready'))
@@ -367,7 +366,7 @@ class XiaohongshuCrawler(Crawler):
         for _ in range(max(0, polls - 1)):
             if text:
                 break
-            time.sleep(0.2)
+            pacing.nap(0.2)
             text = self._text_of(self.driver, selector)
         return text
 
@@ -506,7 +505,9 @@ class XiaohongshuCrawler(Crawler):
         """
         waited, fallback = self.TOP_LEVEL_COMMENT_SELECTORS
         try:
-            found = WebDriverWait(self.driver, 10).until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, waited)))
+            found = WebDriverWait(self.driver, pacing.wait(10)).until(
+                ec.presence_of_all_elements_located((By.CSS_SELECTOR, waited))
+            )
         except TimeoutException:
             found = []
         if not found:

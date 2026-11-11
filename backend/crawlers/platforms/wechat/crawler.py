@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 
 from core.config import Config
 from selenium.common.exceptions import TimeoutException
@@ -9,7 +8,7 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from crawlers.core.crawler import Crawler, as_index
-from crawlers.engine import times
+from crawlers.engine import pacing, times
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -155,7 +154,9 @@ class WechatCrawler(Crawler):
 
         logger.debug(t('crawl.wechat.wait_title'))
         try:
-            WebDriverWait(self.driver, 15).until(ec.presence_of_element_located((By.CSS_SELECTOR, '#activity-name')))
+            WebDriverWait(self.driver, pacing.wait(15)).until(
+                ec.presence_of_element_located((By.CSS_SELECTOR, '#activity-name'))
+            )
             logger.debug(t('crawl.wechat.loaded'))
         except TimeoutException:
             if self.check_login_wall(url):
@@ -340,7 +341,7 @@ class WechatCrawler(Crawler):
 
         # Retry once after a short wait
         logger.debug(t('crawl.debug.content_retry'))
-        time.sleep(0.1)
+        pacing.nap(0.1)
         text = re.sub(r'\n\s*\n', '\n', self._node_text(self._content_node()))
         if not text:
             logger.warning(t('crawl.wechat.no_content'))

@@ -6,13 +6,12 @@ import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
-from core.config import Config
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.core.faults import CrawlerStopped
-from crawlers.engine import pagefetch, pager, times
+from crawlers.engine import pacing, pagefetch, pager, times
 from crawlers.engine.counters import parse_count
 from crawlers.platforms.weibo import rows as shaping
 from i18n import stop_reason_label, t
@@ -295,7 +294,7 @@ class WeiboCrawler(Crawler):
         every tick, because a walk that will not settle is the user's call to cut, not a loop to finish.
         """
         poll = 0.5
-        rounds = max(1, int(self.PAGE_WAIT * 3 / poll))
+        rounds = max(1, int(pacing.arrival(self.PAGE_WAIT) * 3 / poll))
         url = ''
         for _ in range(rounds):
             url = str(self.driver.current_url or '')
@@ -303,7 +302,7 @@ class WeiboCrawler(Crawler):
                 return url
             if self.may_stop():
                 return url
-            time.sleep(poll)
+            pacing.nap(poll)
         return url
 
     # ─── one author's posts ─────────────────────────────────────────────
@@ -623,12 +622,12 @@ class WeiboCrawler(Crawler):
         # (``Config.PAGE_WAIT_TIMEOUT``, not a platform-local guess about how long a page needs), the
         # same 停止 check every tick, and the same pending-wait breaker that keeps a dead network from
         # spending the whole budget once per window of a 6432-window range.
-        if self.pending_waits >= self.MAX_PENDING_WAITS:
+        if self.pending_waits >= pacing.max_pending_waits():
             logger.warning(t('crawl.weibo.page_gave_up', waits=self.pending_waits))
             return False
         self._page_had_no_result = False
         started = time.monotonic()
-        ticks = max(1, int(Config.PAGE_WAIT_TIMEOUT / self.FIRST_CONTENT_TICK))
+        ticks = max(1, int(pacing.page_wait_timeout() / self.FIRST_CONTENT_TICK))
         for _ in range(ticks):
             if self.may_stop():
                 raise CrawlerStopped(t('crawl.stopped'))
@@ -641,7 +640,7 @@ class WeiboCrawler(Crawler):
                 self.pending_waits = 0
                 logger.info(t('crawl.weibo.page_loaded'))
                 return True
-            time.sleep(self.FIRST_CONTENT_TICK)
+            pacing.poll_tick(self.FIRST_CONTENT_TICK)
         self.pending_waits += 1
         if self.check_login_wall(url):
             # The wall line already names the answer; a second line here would print the same event

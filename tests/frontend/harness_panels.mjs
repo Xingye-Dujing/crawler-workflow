@@ -42,7 +42,7 @@ vm.createContext(sandbox);
 fixWindow(vm, sandbox);
 for (const code of sources) vm.runInContext(code, sandbox);
 
-const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel', 'biblio-panel'];
+const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel', 'biblio-panel', 'settings-panel'];
 
 function state() {
     const out = {};
@@ -54,6 +54,13 @@ function state() {
 }
 
 const out = {};
+/* The settings page owns its own open/close state; the dock rule only needs to see it
+   take the slot. A stub keeps this harness from booting the schema/fetch machinery. */
+sandbox.SettingsPanel = {
+    toggle() {
+        sandbox.__byId('settings-panel').classList.toggle('open');
+    },
+};
 /* Each opening must leave exactly one panel open, with no stale inline height. */
 for (const target of ids) {
     for (const id of ids) {
@@ -72,6 +79,7 @@ for (const target of ids) {
         'schedules-panel': 'toggleSchedulesPanel()',
         'processes-panel': 'toggleProcessesPanel()',
         'biblio-panel': 'toggleBiblioPanel()',
+        'settings-panel': 'toggleSettingsPanel()',
     };
     const toggler = togglers[target];
     sandbox.__byId(target).classList.remove('open');

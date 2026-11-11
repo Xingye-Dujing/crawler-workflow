@@ -2,14 +2,13 @@ import contextlib
 import json
 import logging
 import re
-import time
 from urllib.parse import quote
 
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
-from crawlers.engine import feed, pagefetch, times
+from crawlers.engine import feed, pacing, pagefetch, times
 from crawlers.engine.counters import parse_count
 from i18n import stop_reason_label, t
 
@@ -238,7 +237,7 @@ class ZhihuCrawler(Crawler):
         ended = 'target'
         while self.collected() < target_count:
             rounds += 1
-            self.scroll_down(steps=self.SCROLL_STEPS)
+            self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS))
             # Adaptive wait: a screen that already grew costs one poll, a slow
             # one still gets its 1.5 s.
             before = cursor['total']
@@ -268,7 +267,7 @@ class ZhihuCrawler(Crawler):
                 # too, and every stalled round gets one more progressive pass before any judgement.
                 if height <= last_height:
                     stuck += 1
-                    if stuck >= self.STUCK_ROUNDS:
+                    if stuck >= pacing.rounds(self.STUCK_ROUNDS):
                         # The only give-up this loop may claim, naming what it actually observed:
                         # {n} really is STUCK_ROUNDS by now, and “没有更多了” was never seen — so
                         # this line reports a walk that stopped, not a list that ended.
@@ -276,7 +275,7 @@ class ZhihuCrawler(Crawler):
                         ended = 'under'
                         break
                     logger.info(t('crawl.zhihu.no_growth', n=stuck))
-                self.scroll_down(steps=self.SCROLL_STEPS)
+                self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS))
                 cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
                 self._harvest(cursor, target_count, expand)
                 if cursor['total'] > before:
@@ -494,13 +493,13 @@ class ZhihuCrawler(Crawler):
             items,
             self._profile_card,
             self.emit,
-            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
+            scroll=lambda: self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS)),
             target=target_count,
             collected=self.collected,
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
-            stuck_rounds=self.STUCK_ROUNDS,
-            settle_wait=self.CARD_WAIT,
+            stuck_rounds=pacing.rounds(self.STUCK_ROUNDS),
+            settle_wait=pacing.wait(self.CARD_WAIT),
         )
         logger.info(
             t('crawl.zhihu.authorTabDone', tab=tab, n=self.collected(), reason=stop_reason_label(result.stopped_reason))
@@ -548,7 +547,7 @@ class ZhihuCrawler(Crawler):
                 # The button's click swaps the clamped node for the full one; the
                 # text is re-read by the caller right away, and a row that is still
                 # short is simply a short answer.
-                time.sleep(0.3)
+                pacing.nap(0.3)
                 return True
         return False
 
@@ -674,7 +673,7 @@ class ZhihuCrawler(Crawler):
                     with contextlib.suppress(Exception):
                         self.driver.execute_script('arguments[0].scrollIntoView({block: "center"});', card)
                         for _ in range(4):
-                            time.sleep(0.3)
+                            pacing.nap(0.3)
                             if card.find_elements(By.CSS_SELECTOR, 'a[href]'):
                                 break
                         item = self._scrape_card(card)
@@ -682,7 +681,7 @@ class ZhihuCrawler(Crawler):
                     if self._expand_answer(card, item):
                         expand['short'] += 1
                         expand['misses'] += 1
-                        if expand['misses'] >= self.EXPAND_GIVEUP:
+                        if expand['misses'] >= pacing.rounds(self.EXPAND_GIVEUP):
                             expand['want'] = False
                             logger.info(t('crawl.zhihu.expand_stopped', n=expand['misses']))
                     else:
@@ -727,7 +726,12 @@ class ZhihuCrawler(Crawler):
         preview = str(item.get('正文') or '')
         if not self._expand_body(card):
             return False  # no 阅读全文 on this card: the answer is simply short
-        feed.wait_for(lambda: len(self._get_content(card)), len(preview) + 1, timeout=self.EXPAND_WAIT, tick=0.25)
+        feed.wait_for(
+            lambda: len(self._get_content(card)),
+            len(preview) + 1,
+            timeout=pacing.wait(self.EXPAND_WAIT),
+            tick=0.25,
+        )
         body = str(self._get_content(card) or '')
         if len(body) <= len(preview):
             return True

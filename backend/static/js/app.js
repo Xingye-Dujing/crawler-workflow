@@ -569,6 +569,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     boot('settings', () => Settings.apply());
+    /* Server defaults for the run switches (并行/无头) and the active preset. A browser
+       that already stored a choice keeps it (see AppSettings.applyRunDefaults). */
+    boot('appSettings', () => AppSettings.pull());
     boot('menu', () => TopMenu.init());
     /* The catalogue is what the canvas validates restored nodes against and seeds new ones
        from; it answers asynchronously, so a boot failure here is named by node-types.js and the

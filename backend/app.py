@@ -46,6 +46,7 @@ from core.refs import (
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
+from runtime.settings import get_setting
 from runtime.state import (
     _push_log,
 )
@@ -244,12 +245,18 @@ def _no_store_ui_assets(resp):
 
 
 def _upload_limit_mb(default: int = 64) -> int:
-    """Read MAX_UPLOAD_MB as a sane number of megabytes (clamped to 1 … 10 GiB).
+    """Read the upload ceiling from the settings page, with ``MAX_UPLOAD_MB`` as the
+    deployment override.
 
-    The ceiling has to be configurable — a big dataset stays uploadable by
-    raising it — but a typo in the environment must not *disable* it, so an
-    unparseable, infinite or non-positive value falls back to the default.
+    The ceiling has to be configurable — a big dataset stays uploadable by raising it —
+    but a typo in either place must not *disable* it, so an unparseable, infinite or
+    non-positive value falls back to the default.
     """
+    try:
+        configured = int(float(get_setting('max_upload_mb')))
+        default = configured if math.isfinite(configured) and configured > 0 else default
+    except (TypeError, ValueError, OverflowError):
+        pass
     raw = str(os.environ.get('MAX_UPLOAD_MB', '') or '').strip()
     try:
         value = int(float(raw)) if raw else default
@@ -270,8 +277,8 @@ app.config['MAX_CONTENT_LENGTH'] = UPLOAD_LIMIT_MB * 1024 * 1024
 
 logger = setup_logger(
     Config.LOG_DIR,
-    max_bytes=Config.LOG_MAX_BYTES,
-    backup_count=Config.LOG_BACKUP_COUNT,
+    max_bytes=max(1, int(get_setting('log_max_mb'))) * 1024 * 1024,
+    backup_count=max(1, int(get_setting('log_backup_count'))),
 )
 
 # Catalogue self-check. A message template carrying a printf placeholder never

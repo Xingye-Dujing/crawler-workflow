@@ -12,7 +12,7 @@ import time
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import PageNotArrivedError
 from crawlers.core.video import VideoCrawler
-from crawlers.engine import feed
+from crawlers.engine import feed, pacing
 from crawlers.engine.counters import has_count, parse_count
 from crawlers.platforms.douyin import dialogs, rows
 from crawlers.platforms.douyin.overlay import DouyinOverlayMixin
@@ -344,7 +344,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                     # Not consumed yet: leave the id out of ``done`` so a later round (while the card
                     # is still on screen) re-surfaces and retries it — 不漏采 over a transient stall.
                     # Only give up, and count it, after the bounded retries.
-                    if tries >= self.MODAL_MAX_TRIES:
+                    if tries >= pacing.rounds(self.MODAL_MAX_TRIES):
                         done.add(aweme_id)
                         self._modal_deferred += 1
                     continue
@@ -401,7 +401,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 # from the shared walk burned five minutes on an author grid whose cards it cannot see —
                 # and threw the answer away, because this loop re-reads through ``read_ids`` anyway.
                 waited_for_swap = True
-                feed.wait_for(lambda: len(read_ids()), 1, timeout=self.SCROLL_WAIT, tick=1.0)
+                feed.wait_for(lambda: len(read_ids()), 1, timeout=pacing.wait(self.SCROLL_WAIT), tick=1.0)
                 continue
             screens += 1
             on_screen = list(read_ids())
@@ -496,7 +496,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 return True
             if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
                 return False
-            time.sleep(2.0)
+            pacing.nap(2.0)
         return any(mark in self._body_text(limit=4000) for mark in marks)
 
     def _card_ids(self, anchor: str | None = None) -> list:
@@ -572,12 +572,12 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
         ``site_end`` — a stalled read stays a named shortfall, never a quiet success.
         """
         before = len(set(self._grid_ids()))
-        deadline = time.monotonic() + self.SCROLL_WAIT
+        deadline = time.monotonic() + pacing.wait(self.SCROLL_WAIT)
         grew = False
         while not self.may_stop() and time.monotonic() < deadline:
             with contextlib.suppress(Exception):
                 feed.jump_to_bottom(self.driver, self.PROFILE_GRID)
-            settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=3.0, tick=0.5)
+            settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=pacing.wait(3.0), tick=0.5)
             if settled > before:
                 grew = True
                 break

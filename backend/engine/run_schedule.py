@@ -45,6 +45,50 @@ def scheduled_canvas(name: str) -> dict:
     return {'workflow': workflow, 'error': ''}
 
 
+def _scheduled_session_gate(workflow: dict) -> str:
+    """The server-side half of 执行前自动验证 Cookie, for a run no browser started.
+
+    The manual route asks the sites from the page before pressing 执行. A scheduled fire
+    has no page behind it, so without this the same switch would silently govern only
+    half of the product. Absent/off answers at once; a platform that cannot be checked
+    does not block (the probe's ``unknown`` is not a verdict about the session).
+    """
+    from runtime.settings import get_setting
+
+    if not get_setting('cookie_preflight_before_run'):
+        return ''
+    import capabilities.registry as capabilities
+    from sessions import preflight
+
+    from engine.workflow import effective_workflow
+
+    entries = []
+    for node in effective_workflow(workflow).get('nodes') or []:
+        params = node.get('params') or {}
+        platform = str(params.get('platform') or node.get('platform') or '').strip()
+        if not platform:
+            continue
+        mode = str(params.get('collect') or params.get('mode') or '').strip()
+        backend = str(params.get('backend') or capabilities.BACKEND_SELENIUM).strip().lower()
+        if not capabilities.needs_session(platform, mode, backend):
+            continue
+        entries.append(
+            {
+                'platform': platform,
+                'account': str(params.get('account') or '').strip(),
+                'backend': backend,
+            }
+        )
+    if not entries:
+        return ''
+    results = preflight.check(entries)
+    blocked = [key for key, verdict in results.items() if verdict.get('blocking')]
+    if not blocked:
+        return ''
+    names = ', '.join(str(key) for key in blocked)
+    return t('sched.cookieBlocked', platforms=names)
+
+
 def start_scheduled_run(task: dict, manual: bool) -> dict:
     """Start one scheduled run and say what happened (started / queued / refused).
 
@@ -62,6 +106,9 @@ def start_scheduled_run(task: dict, manual: bool) -> dict:
     loaded = scheduled_canvas(str(task.get('workflow') or ''))
     if loaded['error']:
         return {'ok': False, 'error': loaded['error']}
+    gate_error = _scheduled_session_gate(loaded['workflow'])
+    if gate_error:
+        return {'ok': False, 'error': gate_error}
     name = str(task.get('name') or '')
     answer = run_engine.begin_run(
         {'workflow': loaded['workflow'], 'workflow_name': name, 'lang': task.get('lang') or 'zh'},

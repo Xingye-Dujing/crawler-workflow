@@ -17,8 +17,7 @@ Nothing here knows what a video is: it moves JSON in and JSON out, and reports
 what the answer looked like so the caller can tell an empty list from a refusal.
 """
 
-import time
-
+from crawlers.engine import pacing
 from crawlers.engine.jsonpath import collect
 
 #: Read the API key and request context the page ships with. Returns
@@ -69,7 +68,7 @@ def ready(driver, attempts: int = 10, tick: float = 0.4) -> tuple[str, dict] | N
             found = None
         if found and found.get('key') and found.get('context'):
             return str(found['key']), found['context']
-        time.sleep(tick)
+        pacing.poll_tick(tick)
     return None
 
 

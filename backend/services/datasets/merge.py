@@ -13,7 +13,7 @@ is changed.
 """
 
 import pandas as pd
-from core.config import Config
+from runtime.settings import get_setting
 
 from i18n import t
 from services.datasets.store import SOURCE_MERGE
@@ -65,8 +65,9 @@ def merge_datasets(store, dataset_ids, name: str) -> dict:
         sources.append({'dataset_id': dataset_id, 'name': label, 'rows': int(len(frame))})
 
     total = sum(row['rows'] for row in sources)
-    if total > Config.DATASET_MAX_ROWS:
-        raise ValueError(t('data.mergeTooLarge', n=total, max=Config.DATASET_MAX_ROWS))
+    limit = int(get_setting('dataset_max_rows'))
+    if total > limit:
+        raise ValueError(t('data.mergeTooLarge', n=total, max=limit))
 
     # A dataset that already carries its own 来源 column keeps it: the user's
     # per-row provenance is more specific than the table's filename.

@@ -95,12 +95,16 @@ class _MatrixCrawler(Crawler):
 @pytest.fixture
 def matrix(monkeypatch, app_module, tmp_path):
     """Replace the factory with the profile-claiming fake; record what it was asked."""
-    values = {'use_browser_profile': True, 'browser_profile_dir': str(tmp_path / 'profiles')}
+    values = {
+        'use_browser_profile': True,
+        'browser_profile_dir': str(tmp_path / 'profiles'),
+        'profile_lock_timeout': 20,
+    }
     monkeypatch.setattr(profiles, 'get_setting', lambda key: values[key])
     # Both gate knobs, in one place a test can flip. The wait is a real one here — its
     # *length* is asserted in tests/unit/crawlers/test_crawl_gate.py against a fake clock — so
     # this module shrinks it to keep the suite honest but fast.
-    knobs = {'same_platform_queue': True, 'same_platform_stagger': 0.05}
+    knobs = {'same_platform_queue': True, 'same_platform_stagger': 0.05, 'platform_gate_timeout': 20}
     monkeypatch.setattr(gate, 'get_setting', lambda key: knobs[key])
     SPANS.clear()
     asked = []

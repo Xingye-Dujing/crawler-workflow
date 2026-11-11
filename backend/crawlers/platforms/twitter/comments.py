@@ -6,7 +6,7 @@ from selenium.common.exceptions import JavascriptException, StaleElementReferenc
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.walks import register
-from crawlers.engine import feed
+from crawlers.engine import feed, pacing
 from crawlers.engine.wall import looks_blocked
 from i18n import t
 
@@ -75,7 +75,7 @@ def walk(session, url: str, limit: int) -> tuple:
     # thread and measured ~12 s to its first rendered card on a connection that
     # was fine. A fixed nap ended the walk on a page that had not painted, and
     # an empty page is what the walk reports as a dead link.
-    feed.wait_for(lambda: len(cards_of()), 1, timeout=TwitterCrawler.MOUNT_WAIT)
+    feed.wait_for(lambda: len(cards_of()), 1, timeout=pacing.wait(TwitterCrawler.MOUNT_WAIT))
     if looks_blocked(session.body_head()):
         return [], BLOCKED
 
@@ -119,8 +119,8 @@ def walk(session, url: str, limit: int) -> tuple:
         # Same rule as the timeline: the reply list recycles its nodes, so the
         # walk waits for the ids on screen to change, not for more nodes.
         window=lambda: str(session.driver.execute_script(WINDOW_LINKS_JS) or ''),
-        stuck_rounds=3,
-        settle_wait=4.0,
+        stuck_rounds=pacing.rounds(3),
+        settle_wait=pacing.wait(4.0),
         stopped=session.may_stop,
     )
     if not rows and walk_result.stopped_reason == 'no_cards':

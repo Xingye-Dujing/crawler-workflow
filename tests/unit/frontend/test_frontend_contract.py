@@ -622,26 +622,29 @@ class TestCookiePanelParity:
 
 
 class TestSettingsPanelParity:
-    """A server-side setting reaches the screen through four files, and three of them
-    are never read by any other test: ``settings.DEFAULTS`` (the key), the bool
-    branch in ``save_settings`` (so it saves at all), ``AppSettings._inputMap`` (so it
-    is read back), and the control in index.html (so a user can change it). A key
-    missing from any of the four is a setting that exists in one file only."""
+    """A server-side setting reaches the screen through the schema, and the old quick
+    dropdown still carries the machine paths. A key missing from both is a setting that
+    exists in one file only."""
 
     def _input_map(self) -> dict:
         app = js_text('app.js')
         block = app.split('_inputMap', 1)[1].split('}', 1)[0]
         return dict(re.findall(r"(\w+):\s*'(set-[\w-]+)'", block))
 
-    def test_every_server_setting_has_a_wired_control(self):
+    def test_every_server_setting_is_declared_and_renderable(self):
         from runtime import settings
+        from runtime.settings_schema import BY_KEY
 
+        assert set(BY_KEY) == set(settings.DEFAULTS), 'the schema and the store disagree about the keys'
+        panel = js_text('panels/settings-panel.js')
+        assert '/api/settings/schema' in panel, 'the full settings page must render from the schema'
+        assert 'schema.settings' in panel, 'the full settings page must render every declared field'
+        # The quick dropdown is still allowed to carry a subset, but every id it maps
+        # must exist in the markup and report back to the server.
         pairs = self._input_map()
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
-        missing = sorted(key for key in settings.DEFAULTS if key not in pairs)
-        assert not missing, f'settings nobody can edit from the panel: {missing}'
-        for key in settings.DEFAULTS:
-            element_id = pairs[key]
+        for key, element_id in pairs.items():
+            assert key in settings.DEFAULTS, f'quick panel maps unknown key {key}'
             assert f'id="{element_id}"' in html, f'{key} is mapped to a missing #{element_id}'
             assert f"onSettingInput('{key}'" in html, f'#{element_id} never tells the server about {key}'
 

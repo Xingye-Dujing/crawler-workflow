@@ -24,6 +24,20 @@ from services.datasets.store import (
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _settings_from_config(monkeypatch):
+    """These cases patch Config; the store now reads the editable setting."""
+    import services.datasets.store as store_module
+
+    def setting(key):
+        return {
+            'dataset_max_rows': Config.DATASET_MAX_ROWS,
+            'dataset_keep_days': Config.DATASET_KEEP_DAYS,
+        }.get(key)
+
+    monkeypatch.setattr(store_module, 'get_setting', setting)
+
+
 @pytest.fixture
 def store(tmp_path):
     s = DatasetStore(str(tmp_path / 'datasets.db'))

@@ -1,19 +1,16 @@
 import json
 import logging
-import random
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
-from core.config import Config
 from runtime.settings import get_setting
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
 from crawlers.core import browser
 from crawlers.core.faults import CrawlerStopped
-from crawlers.engine import feed, popup
-from crawlers.engine.pacing import throttled_sleep
+from crawlers.engine import feed, pacing, popup
 from crawlers.engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
 from i18n import t
 
@@ -562,11 +559,11 @@ class Crawler(ABC):
         genuinely refuses stays parked on every attempt and is still named after this
         returns. Returns the last navigation's settled-flag.
         """
-        for _ in range(self.NAV_RETRY):
+        for _ in range(int(get_setting('nav_retry'))):
             if settled or not self._parked_on_internal_page():
                 break
             logger.info(t('crawl.redrive', platform=self.domain, where=self._current_url()))
-            time.sleep(self.NAV_SETTLE)
+            pacing.nap(float(get_setting('nav_settle')))
             settled = self._navigate(url)
         return settled
 
@@ -607,7 +604,8 @@ class Crawler(ABC):
         refusal is on screen.
         """
         verdict = self.verdict(request_url=request_url)
-        for _ in range(max(0, self.WALL_PROOFS - 1)):
+        proofs = max(1, int(get_setting('wall_proofs') or 1))
+        for _ in range(max(0, proofs - 1)):
             # Two answers are final on the first reading. ``ok`` for the reason above;
             # ``unreachable`` because a document the browser wrote for itself cannot
             # change without a new navigation — measured, it is a *committed* document
@@ -617,7 +615,7 @@ class Crawler(ABC):
             # about a refused address is a flash.
             if verdict in ('ok', 'unreachable'):
                 break
-            time.sleep(self.WALL_POLL)
+            pacing.nap(float(get_setting('wall_poll')))
             verdict = self.verdict(request_url=request_url)
         # Latched from *this* reading rather than by calling check_intercept again,
         # because re-judging here would hand a flash one free escape and make the window
@@ -927,8 +925,12 @@ class Crawler(ABC):
         already there costs one poll, content that is slow still gets its wait.
         Bounded by poll count rather than a clock so the wait stays a pure
         function of the page (and stays instant under a fake driver).
+
+        The timeout is the platform's measured baseline, stretched by the user's
+        global ``crawl_wait_scale`` — one place, so every platform obeys the same
+        setting without carrying its own copy of the choice.
         """
-        return feed.wait_for(count_fn, target, timeout=timeout, tick=tick)
+        return feed.wait_for(count_fn, target, timeout=pacing.wait(timeout), tick=tick)
 
     # ─── the first content of one page ───────────────────────────
 
@@ -986,7 +988,8 @@ class Crawler(ABC):
         classifier, so without this the patient wait would sit out its whole budget on a
         page that has already refused.
         """
-        budget = float(Config.PAGE_WAIT_TIMEOUT if timeout is None else timeout)
+        budget = float(get_setting('page_wait_timeout')) if timeout is None else pacing.wait(float(timeout))
+        max_pending = max(1, int(get_setting('max_pending_waits') or 1))
         probe = has_content if has_content is not None else self._rendered_by_the_site
         started = time.monotonic()
         ticks = max(1, int(budget / self.FIRST_CONTENT_TICK))
@@ -1005,7 +1008,7 @@ class Crawler(ABC):
                 if self.may_stop():
                     raise CrawlerStopped(t('crawl.stopped')) from exc
                 logger.debug('first-content probe failed: %s', exc)
-            if tick == 0 and self.pending_waits >= self.MAX_PENDING_WAITS:
+            if tick == 0 and self.pending_waits >= max_pending:
                 # The breaker, consulted only after the page was actually asked once: a
                 # crawl whose *next* page is fine must not be refused sight unseen, or a
                 # pair of unlucky rows would condemn every row after them.
@@ -1054,12 +1057,11 @@ class Crawler(ABC):
         """Jittered pause between rounds that hit the network.
 
         Anti-bot caution is a requirement, not a leftover: the jitter is what
-        keeps a run of crawls from looking like a metronome. When the user has
-        switched on 慢速采集 (``gentle_crawl``) the whole pause is stretched by
-        :data:`GENTLE_PAUSE_FACTOR` through :func:`throttled_sleep` — pacing only,
-        never the browser's identity.
+        keeps a run of crawls from looking like a metronome. The global
+        ``crawl_pace_scale`` stretches every platform's baseline through
+        :func:`pacing.polite` — pacing only, never the browser's identity.
         """
-        throttled_sleep(max(0.2, base + random.uniform(-spread, spread)))
+        pacing.polite(base, spread)
 
     @staticmethod
     def as_text(value) -> str:
@@ -1092,7 +1094,7 @@ class Crawler(ABC):
     def scroll_to_bottom(self, times: int = 1, wait: float = 0.1):
         for _ in range(times):
             self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-            time.sleep(wait)
+            pacing.nap(wait)
 
     def scroll_down(self, steps: int = 3, wait: float = 0.12):
         """Walk the page down in viewport-sized steps, then land at the bottom.
@@ -1103,9 +1105,9 @@ class Crawler(ABC):
         """
         for _ in range(max(1, steps)):
             self.driver.execute_script('window.scrollBy(0, Math.max(400, window.innerHeight * 0.9));')
-            time.sleep(wait)
+            pacing.nap(wait)
         self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-        time.sleep(wait)
+        pacing.nap(wait)
 
     def page_height(self) -> int:
         """How tall the document is right now, as one number to compare against the last round's.

@@ -1587,6 +1587,11 @@ const canvas = {
         const params = Capabilities.defaults(platform);
         params.platform = platform;
         params.collect = Capabilities.mode(platform, '').key;
+        /* The file-shard fields come from the matrix's shared FILE_FIELDS list, which
+           has no mode context; the user's global defaults live in the settings store. */
+        var sv = (typeof AppSettings !== 'undefined' && AppSettings._values) || {};
+        if (sv.default_source_part_size !== undefined) params.part_size = sv.default_source_part_size;
+        if (sv.default_keep_parts !== undefined) params.keep_parts = !!sv.default_keep_parts;
         /* A per-node choice, not a platform default: the watermark is opt-in and only
            offered on modes whose walk has a stable newest-first identity. */
         params.watermark = false;
@@ -1658,7 +1663,20 @@ const canvas = {
         /* Empty run ids mean "auto": pick the newest interrupted run, and
            inside it whichever node holds the most rows. */
         if (type === 'resume') return { resume_run_id: '', resume_node_id: '', resume_limit: 0 };
-        if (type === 'comment') return { urls: '', comment_limit: 0, part_size: 50, per_article_file: true, keep_parts: false, recrawl: false, format: 'csv' };
+        if (type === 'comment') {
+            /* The cold-page fallback; once `/api/node-types` answers, that payload is
+               used instead and carries the same settings-derived values. */
+            var sv = (typeof AppSettings !== 'undefined' && AppSettings._values) || {};
+            return {
+                urls: '',
+                comment_limit: sv.default_comment_limit !== undefined ? sv.default_comment_limit : 0,
+                part_size: sv.default_comment_part_size !== undefined ? sv.default_comment_part_size : 50,
+                per_article_file: sv.default_per_article_file !== undefined ? !!sv.default_per_article_file : true,
+                keep_parts: sv.default_keep_parts !== undefined ? !!sv.default_keep_parts : false,
+                recrawl: false,
+                format: 'csv'
+            };
+        }
         /* A compile node carries no fields of its own: it reads the LaTeX its upstream
            visualize node produced. Its only setting is the MiKTeX path, which lives in 设置. */
         if (type === 'compile') return {};
@@ -2584,7 +2602,6 @@ const canvas = {
             settings: {
                 mode: RunState.parallel ? 'parallel' : 'serial',
                 headless: RunState.headless,
-                max_workers: 4,
                 disabledTypes: (this.disabledTypes || []).slice(),
                 /* The file owes the user the VIEW it was saved behind: 适应/自动排布
                    arranged the camera as much as the nodes, and a saved workflow that

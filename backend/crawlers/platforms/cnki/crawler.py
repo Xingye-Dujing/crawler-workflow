@@ -43,6 +43,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.core.faults import CrawlerStopped, PageNotArrivedError
+from crawlers.engine import pacing
 from i18n import t
 from services.biblio import importer
 
@@ -252,7 +253,7 @@ class CnkiCrawler(Crawler):
         if self.login_wall or self.risk_blocked:
             return False
         try:
-            box = WebDriverWait(self.driver, self.SEARCH_WAIT).until(
+            box = WebDriverWait(self.driver, pacing.arrival(self.SEARCH_WAIT)).until(
                 ec.presence_of_element_located((By.CSS_SELECTOR, 'input.search-input'))
             )
         except TimeoutException:
@@ -499,7 +500,9 @@ class CnkiCrawler(Crawler):
     def _wait_for_export_window(self, before: list[str]):
         """The newest window handle the export click opened, or None."""
         try:
-            WebDriverWait(self.driver, self.EXPORT_WAIT).until(lambda _d: len(self.driver.window_handles) > len(before))
+            WebDriverWait(self.driver, pacing.arrival(self.EXPORT_WAIT)).until(
+                lambda _d: len(self.driver.window_handles) > len(before)
+            )
         except TimeoutException:
             return None
         handles = [h for h in self.driver.window_handles if h not in before]
@@ -555,14 +558,14 @@ class CnkiCrawler(Crawler):
         The export window's handle exists while the POST page is still navigating;
         a CDP/click command sent into that gap answers ``aborted by navigation``.
         """
-        deadline = time.monotonic() + self.EXPORT_WAIT
+        deadline = time.monotonic() + pacing.arrival(self.EXPORT_WAIT)
         while time.monotonic() < deadline:
             try:
                 if str(self.driver.execute_script('return document.readyState;') or '') == 'complete':
                     return
             except WebDriverException:
                 pass
-            time.sleep(0.5)
+            pacing.nap(0.5)
 
     def _click_download_button(self) -> bool:
         """Wait for the export page's 导出题录文件 link and click it.
@@ -581,7 +584,7 @@ class CnkiCrawler(Crawler):
         }
         return false;
         """
-        deadline = time.monotonic() + self.EXPORT_WAIT
+        deadline = time.monotonic() + pacing.arrival(self.EXPORT_WAIT)
         while time.monotonic() < deadline:
             if self.may_stop():
                 raise CrawlerStopped(t('crawl.stopped'))
@@ -590,7 +593,7 @@ class CnkiCrawler(Crawler):
                     return True
             except WebDriverException:
                 pass
-            time.sleep(0.5)
+            pacing.nap(0.5)
         return False
 
     @staticmethod
@@ -613,7 +616,7 @@ class CnkiCrawler(Crawler):
 
     def _wait_download(self, folder: str):
         """The finished file in *folder*, or ``None`` when the budget runs out."""
-        deadline = time.monotonic() + self.EXPORT_WAIT
+        deadline = time.monotonic() + pacing.arrival(self.EXPORT_WAIT)
         while time.monotonic() < deadline:
             if self.may_stop():
                 raise CrawlerStopped(t('crawl.stopped'))
@@ -621,10 +624,10 @@ class CnkiCrawler(Crawler):
             if files:
                 # A download is complete when the progress file is gone; one more
                 # look after a short pause is enough for the browser to rename it.
-                time.sleep(0.5)
+                pacing.nap(0.5)
                 if not any(p.suffix == '.crdownload' for p in Path(folder).iterdir()):
                     return max(files, key=lambda p: p.stat().st_mtime)
-            time.sleep(0.5)
+            pacing.nap(0.5)
         return None
 
     @staticmethod
@@ -662,7 +665,7 @@ class CnkiCrawler(Crawler):
         if not clicked:
             return 'end'
         try:
-            WebDriverWait(self.driver, self.SEARCH_WAIT).until(lambda _d: self._page_mark() != before)
+            WebDriverWait(self.driver, pacing.arrival(self.SEARCH_WAIT)).until(lambda _d: self._page_mark() != before)
         except TimeoutException:
             self.check_intercept()
             return 'failed'

@@ -38,11 +38,11 @@ import threading
 import time
 
 import capabilities.registry as capabilities
-from core.config import Config
 from sessions.cookies import CookieManager
 
 from i18n import t
 from runtime.settings import get_setting
+from runtime.settings_schema import DEFAULTS
 
 #: One lock per platform, created on first use and never removed: a workflow that
 #: finishes must not free a lock another one is already waiting on.
@@ -112,6 +112,14 @@ def stagger() -> float:
     return float(get_setting('same_platform_stagger'))
 
 
+def _gate_timeout() -> float:
+    """The queue wait, falling back to the declared default for a partial test double."""
+    try:
+        return float(get_setting('platform_gate_timeout'))
+    except (KeyError, TypeError, ValueError):
+        return float(DEFAULTS['platform_gate_timeout'])
+
+
 def reset() -> None:
     """Forget every queue, every start time and every active seat. Test isolation, never a runtime act."""
     with _GUARD:
@@ -171,12 +179,12 @@ def _space_the_start(lane: str, platform: str = '', log=None, abort=None) -> boo
     lock = _lock_for(lane, _START_LOCKS)
     blocked = not lock.acquire(blocking=False)
     if blocked:
-        deadline = time.monotonic() + gap + Config.PLATFORM_GATE_TIMEOUT
+        deadline = time.monotonic() + gap + _gate_timeout()
         while not lock.acquire(timeout=0.5):
             if abort is not None and abort():
                 raise RuntimeError(t('run.queueAbandoned', platform=display))
             if time.monotonic() >= deadline:
-                raise RuntimeError(t('run.platformGateTimeout', platform=display, n=int(Config.PLATFORM_GATE_TIMEOUT)))
+                raise RuntimeError(t('run.platformGateTimeout', platform=display, n=int(_gate_timeout())))
     try:
         now = _now()
         with _GUARD:
@@ -249,7 +257,7 @@ def hold(platform: str, log=None, abort=None, account: str = ''):
     # the previous session of this account ended milliseconds ago.
     waited = not lock.acquire(blocking=False)
     if waited:
-        deadline = time.monotonic() + Config.PLATFORM_GATE_TIMEOUT
+        deadline = time.monotonic() + float(get_setting('platform_gate_timeout'))
         while True:
             if lock.acquire(timeout=1.0):
                 break
@@ -258,7 +266,7 @@ def hold(platform: str, log=None, abort=None, account: str = ''):
             if time.monotonic() >= deadline:
                 # Refused *by platform name*: the alternative is a driver stack trace
                 # that never says which of the two workflows is still holding the turn.
-                raise RuntimeError(t('run.platformGateTimeout', platform=platform, n=int(Config.PLATFORM_GATE_TIMEOUT)))
+                raise RuntimeError(t('run.platformGateTimeout', platform=platform, n=int(_gate_timeout())))
     try:
         if waited and forced_serial and log is not None:
             # The user's switch said 错峰; this line is the difference between a

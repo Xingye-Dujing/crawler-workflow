@@ -428,7 +428,10 @@ class TestRowCapWarning:
     def test_the_console_names_the_node_by_its_title(self, client, app_module, paste, monkeypatch, caplog):
         """The cap lives in the storage layer, which only knows ids; the label
         has to ride along or the console blames a box nobody called that."""
-        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 2)
+        from runtime import settings as settings_store
+
+        settings_store.all_settings()
+        monkeypatch.setitem(settings_store._values, 'run_max_rows_per_node', 2)
         ds = paste(RECORDS, name='cap.csv')
         upload = _node('node-1', 'upload', {'dataset_id': ds, 'row_count': len(RECORDS)})
         upload['title'] = '导入的样本'

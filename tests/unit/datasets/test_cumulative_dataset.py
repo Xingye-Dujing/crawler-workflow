@@ -16,6 +16,19 @@ def store(tmp_path):
     instance.close()
 
 
+@pytest.fixture(autouse=True)
+def _settings_from_config(monkeypatch):
+    import services.datasets.store as store_module
+
+    def _setting(key):
+        return {
+            'dataset_max_rows': Config.DATASET_MAX_ROWS,
+            'dataset_keep_days': Config.DATASET_KEEP_DAYS,
+        }.get(key)
+
+    monkeypatch.setattr(store_module, 'get_setting', _setting)
+
+
 def _rows(*rows):
     return pd.DataFrame(list(rows), columns=['id', 'value'])
 

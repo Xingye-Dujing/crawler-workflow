@@ -1,160 +1,95 @@
 """Runtime-editable app settings, persisted to ``data/settings.json``.
 
-Everything in here used to be a hardcoded constant (the chromedriver path was
-baked into ``core/config.py``), which meant "move the driver" required editing
-source. The frontend settings panel reads these via ``GET /api/settings`` and
-writes them via ``POST /api/settings``; each crawler / LLM call then pulls the
-current value through :func:`get_setting`, so a save takes effect on the next
-execution without a server restart.
+The keys are declared once in :mod:`runtime.settings_schema`; this module is the
+store: load, validate, merge, persist, plus the named presets and the export/import
+payloads. Every crawler / LLM call reads a value through :func:`get_setting`, so a
+save applies on the next execution without a server restart (the couple of
+``restart`` keys are flagged in the schema).
 
-Only things that are genuinely machine-local live here. Behaviour the user
-already controls per-run (headless, parallel workers, AI provider/key) keeps
-its existing flow.
+The old hand-written ``if key == ...`` chain is gone: a new key is one declaration
+in the schema, and the panel, the validator, the export filter and the coverage
+gate all read it from there. A path setting still gets its own warning ("the file
+does not exist yet") rather than a refusal, because the user may be configuring a
+machine where it will exist later.
 """
 
 import json
+import math
 import os
 import re
+import sys
 import threading
+from datetime import datetime
 
 from core.atomic import replace as atomic_replace
 from core.config import Config
 from core.machine import catbus_source_twin
 
 from i18n import t
+from runtime.settings_schema import (
+    BY_KEY,
+    DEFAULTS,
+    MACHINE_KEYS,
+    PRESETS,
+    SETTINGS,
+    schema_payload,
+)
 
 _PATH = os.path.join(Config.DATA_DIR, 'settings.json')
 _lock = threading.Lock()
-
-DEFAULTS = {
-    # Selenium chromedriver executable. Was Config.DRIVER_PATH.
-    'driver_path': Config.DRIVER_PATH,
-    # Chrome executable itself; empty = let Selenium find the default install.
-    'browser_binary': '',
-    #: Which copy of Chrome / chromedriver / Node / CatBus to use when the online installer has
-    #: put one on this machine: ``bundled`` (its own tree, the default) or ``system`` (the
-    #: machine's). Both are legitimate — the bundled tree is what makes a one-click install
-    #: isolated from a working local Chrome, and refusing it would take that choice away.
-    #: Read at startup by the launcher (``services.components.source``); a change needs a restart.
-    'component_source': 'bundled',
-    # MiKTeX ``xelatex`` executable used by the 编译 (compile) node to turn LaTeX into a PDF.
-    # Empty = auto-detect (PATH, then the common MiKTeX install locations).
-    'latex_binary': '',
-    #: The second crawl backend's two machine-level paths, spelled here rather than by editing
-    # ``PATH`` — exactly how chromedriver is configured. ``catbus_cli`` is the adapter entry
-    # (``…/catbus-cli/dist/integrations/crawler-workflow/cli.js``, or the root of a CatBus source
-    # checkout); ``catbus_node`` is the Node that runs it. Both empty = look them up per operating
-    # system (:mod:`core.machine`: npm global roots, then ``PATH``), which is why a server that
-    # installed both normally needs nothing here — and why an nvm-managed Node, which is not on a
-    # service ``PATH``, is a name you can type instead of an environment you have to edit.
-    'catbus_cli': Config.CATBUS_CLI,
-    'catbus_node': Config.CATBUS_NODE,
-    # "--window-size=WxH" passed to every crawler browser.
-    'window_size': '960x920',
-    # driver.set_page_load_timeout — how long a page may take to load.
-    'page_load_timeout': 40,
-    # Default for Crawler.wait_for_element (was a hardcoded 15 in base.py).
-    'element_timeout': 15,
-    # Local Ollama daemon (was OLLAMA_HOST env-only, with no UI).
-    'ollama_host': Config.OLLAMA_HOST,
-    #: Check whether each platform's session still works *before* starting a run that
-    # crawls it, and refuse to start when one is walled (``sessions.preflight``). Off
-    # asks nothing and blocks nothing — the old “执行前确认 Cookie” fallback is gone.
-    # On costs one page load per platform (cached for a few minutes), and is what turns
-    # “一小时后才发现 Cookie 早死了” into a refusal that names the platform.
-    'cookie_preflight_before_run': False,
-    #: Which network each platform is reachable from is a fact the crawl matrix owns
-    #: (``Capability.region``); this only decides whether the user is ASKED about it. On: a
-    #: canvas holding any overseas platform is asked before the run whether the VPN is up,
-    #: because from inside China x.com and YouTube do not load at all, and the crawler cannot
-    #: see the route. Off: nothing is asked. It is a question, not a gate — measured 2026-09-26,
-    #: an overseas exit crawled a domestic platform normally, so "which network am I on" is
-    #: worth one confirmation and nothing more.
-    'ask_overseas_network': True,
-    #: One platform is crawled by at most one workflow at a time, and two that had to
-    #: queue are further spaced apart. On, a parallel canvas keeps its *different*
-    #: platforms concurrent but same-platform crawls take turns — no passport bounce
-    #: from searching twice in one second, and no second browser reaching for a
-    #: profile Chrome already holds. Off restores true concurrency and its risk.
-    #: The cost of each choice is spelled out in the panel and the pre-run dialog.
-    'same_platform_queue': False,
-    #: How long a crawl that had to queue behind its own platform then waits before
-    #: opening its browser. The default is 1 s (2026-11): a short spacing is enough for the
-    #: measured collisions without making a parallel canvas feel serial. The user can raise it
-    #: for a heavy account, or set 0 to add no gap at all.
-    'same_platform_stagger': int(Config.SAME_PLATFORM_STAGGER),
-    # Give every platform its own Chrome profile so the crawl browser stays the same
-    # device across runs. Off = the old behaviour (a blank profile plus a planted
-    # snapshot), which sites that rotate their session cookie punish.
-    'use_browser_profile': True,
-    # Empty = the app-managed ``data/chrome_profile``. A custom path is for a profile
-    # the user created *for this tool* — never their daily Chrome profile, which Chrome
-    # locks while it runs and encrypts against other processes (see profiles).
-    'browser_profile_dir': '',
-    #: How many browsers a single parallel run may hold open at once, split by how the
-    #: run browses. It used to be one hardcoded constant for both. A headless run opens
-    #: nothing the eye has to paint and can go wide; a windowed run shows real Chrome
-    #: windows, so the same number costs the machine far more. The run's 无头/窗口 choice
-    #: picks which of the two applies (engine.run.begin_run); serial runs take turns anyway.
-    'max_visible_browsers': int(Config.DEFAULT_MAX_WORKERS),
-    'max_headless_browsers': int(Config.DEFAULT_MAX_WORKERS),
-    #: Wipe the console — every tab and its retained history, not just the visible one —
-    #: the instant a new run starts. Off keeps the last run's lines up until the next poll
-    #: overwrites them, which is what makes a fresh run look like it inherited old output.
-    'clear_console_before_run': True,
-    #: Stretch the politeness pauses a crawl takes (``Crawler._polite_pause`` and the douyin
-    #: panel's between-screen wait) by a fixed factor — pacing only, never fingerprint: no new
-    #: stealth, no identity mutation, and NOT the page-arrival render budgets. A gentle rhythm
-    #: trips a platform's 风控 far less than a metronome at full speed, and when a session has
-    #: just been challenged the safe move is to back off rather than push. On costs wall-clock
-    #: (a deep crawl runs several times slower); off is today's behaviour.
-    'gentle_crawl': False,
-    #: 红果短剧 comment harvest (``crawlers/hongguo_harvest.py``): the desktop player
-    # whose already-reverse-engineered protocol signs the comment requests, the
-    # mitmdump that reads them, and the port both share. The player path is NOT
-    # auto-detected — the install directory is the user's choice and a guessed path
-    # would harvest against the wrong build; the refusal names this setting.
-    'hongguo_player_path': '',
-    # Empty = PATH, then this venv's Scripts (where ``pip install mitmproxy`` lands).
-    'mitmdump_path': '',
-    'harvest_proxy_port': 8860,
-    #: Put the mitmproxy root cert into the CURRENT USER's trusted roots on first
-    # harvest (Windows asks once; the player's Go client accepts exactly this store,
-    # measured 2026-10-19). Off = the harvest refuses with the manual command —
-    # touching a trust store is never a surprise.
-    'harvest_auto_install_ca': True,
-}
-
 _values = None
+_preset_state: dict = {}
 
-#: ``(lo, hi)`` per numeric setting. The bounds are wide on purpose — each is a
-#: machine-dependent wait, and the one thing they must not do is refuse a value the
-#: user chose deliberately; 0 on the stagger is meaningful ("queue, add no gap"), which
-#: is why its floor is 0 while the browser waits, which cannot be zero, are not.
-_NUMERIC_RANGES = {
-    'page_load_timeout': (5, 300),
-    'element_timeout': (3, 600),
-    'same_platform_stagger': (0, 600),
-    # Bounded to the executor's own ceiling (app.py caps a run at 16 workers), so the
-    # panel cannot promise a concurrency the server would silently clamp anyway.
-    'max_visible_browsers': (1, 16),
-    'max_headless_browsers': (1, 16),
-    'harvest_proxy_port': (1024, 65535),
-}
+#: Bumped when the stored/exported payload shape changes in a way an older build
+#: cannot read. Import refuses a payload from the future by name.
+SCHEMA_VERSION = 1
+EXPORT_KIND = 'crawler-workflow.settings'
+
+__all__ = [
+    'DEFAULTS',
+    'MACHINE_KEYS',
+    'PRESETS',
+    'SCHEMA_VERSION',
+    'SETTINGS',
+    'all_settings',
+    'apply_preset',
+    'export_payload',
+    'get_setting',
+    'import_payload',
+    'preset_state',
+    'restore_preset',
+    'save_settings',
+    'schema_payload',
+]
+
+
+# ─── Load / persist ─────────────────────────────────────────────────────────
+
+
+def _read_file() -> dict:
+    try:
+        with open(_PATH, encoding='utf-8') as f:
+            stored = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return stored if isinstance(stored, dict) else {}
 
 
 def _load() -> dict:
-    global _values
+    global _values, _preset_state
     if _values is None:
+        stored = _read_file()
         vals = dict(DEFAULTS)
-        try:
-            with open(_PATH, encoding='utf-8') as f:
-                stored = json.load(f)
-            for k in DEFAULTS:
-                if k in stored and stored[k] is not None:
-                    vals[k] = stored[k]
-        except (OSError, ValueError):
-            pass  # first run / corrupt file → defaults
+        for key in DEFAULTS:
+            if key in stored and stored[key] is not None:
+                vals[key] = stored[key]
+        # Retirement migration: ``gentle_crawl`` was a bare multiplier. A user who
+        # had it on keeps the same pacing as an explicit scale; a preset snapshot is
+        # deliberately not invented (there is no "before" state to restore to).
+        if 'gentle_crawl' in stored and 'crawl_pace_scale' not in stored:
+            vals['crawl_pace_scale'] = 4.0 if bool(stored.get('gentle_crawl')) else 1.0
+        preset = stored.get('_preset')
+        _preset_state = preset if isinstance(preset, dict) else {}
         _values = vals
     return _values
 
@@ -169,153 +104,414 @@ def get_setting(key: str):
         return _load().get(key, DEFAULTS.get(key))
 
 
-def save_settings(patch: dict) -> tuple[dict, list]:
-    """Validate + merge ``patch``, persist, and return (values, warnings).
+def _write_locked(vals: dict) -> None:
+    """Write values + preset state atomically. Caller holds ``_lock``."""
+    payload = dict(vals)
+    if _preset_state:
+        payload['_preset'] = dict(_preset_state)
+    tmp = _PATH + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    atomic_replace(tmp, _PATH)
 
-    Validation never rejects a whole save: a mistyped value falls back to its
-    default and a warning comes back so the panel can show it. A missing
-    driver file is only a warning — the user may be configuring a machine
-    where the file will exist later.
+
+# ─── Validation ─────────────────────────────────────────────────────────────
+
+
+def _as_bool(raw) -> bool | None:
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw).strip().lower()
+    if text in ('true', '1', 'yes', 'on'):
+        return True
+    if text in ('false', '0', 'no', 'off'):
+        return False
+    return None
+
+
+def _coerce(spec, raw, warnings: list):
+    """Validate one value, returning the value to store.
+
+    Never raises for user input: a bad value falls back to the declared default and
+    appends one warning naming the setting. Paths may be stored even when the file is
+    absent (a warning says so), because a machine can be configured ahead of install.
+    """
+    key = spec.key
+    if spec.kind == 'bool':
+        value = _as_bool(raw)
+        if value is None:
+            warnings.append(t('set.badFlag', setting=key))
+            return spec.default
+        return value
+
+    if spec.kind in ('int', 'float'):
+        try:
+            number = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            warnings.append(t('set.badNumber', setting=key, value=raw))
+            return spec.default
+        if not math.isfinite(number):
+            warnings.append(t('set.badNumber', setting=key, value=raw))
+            return spec.default
+        value = int(number) if spec.kind == 'int' else float(number)
+        if spec.minimum is not None and value < spec.minimum:
+            warnings.append(t('set.outOfRange', setting=key, lo=spec.minimum, hi=spec.maximum, value=value))
+            return spec.default
+        if spec.maximum is not None and value > spec.maximum:
+            warnings.append(t('set.outOfRange', setting=key, lo=spec.minimum, hi=spec.maximum, value=value))
+            return spec.default
+        return value
+
+    if spec.kind == 'enum':
+        value = str(raw or '').strip().lower()
+        if value in spec.choices:
+            return value
+        if spec.key == 'component_source':
+            warnings.append(t('set.badSource', value=raw))
+        else:
+            warnings.append(t('set.badChoice', setting=key, value=raw, choices=', '.join(spec.choices)))
+        return spec.default
+
+    if spec.validator == 'window':
+        value = str(raw or '').strip()
+        if re.fullmatch(r'\d{2,5}x\d{2,5}', value):
+            return value
+        warnings.append(t('set.badWindow', default=spec.default))
+        return spec.default
+
+    if spec.validator == 'url':
+        value = str(raw or '').strip().rstrip('/')
+        if value and not re.match(r'^https?://', value):
+            warnings.append(t('set.badOllamaHost'))
+            return spec.default
+        return value or spec.default
+
+    if spec.validator == 'driver':
+        value = str(raw or '').strip()
+        if value:
+            if not os.path.isfile(value):
+                warnings.append(t('set.driverMissing', path=value))
+            return value
+        warnings.append(t('set.driverEmpty'))
+        return spec.default
+
+    if spec.validator == 'browser':
+        value = str(raw or '').strip()
+        if value and not os.path.isfile(value):
+            warnings.append(t('set.browserMissing', path=value))
+        return value
+
+    if spec.validator == 'latex':
+        value = str(raw or '').strip()
+        if value and not os.path.isfile(value):
+            warnings.append(t('set.latexMissing', path=value))
+        return value
+
+    if spec.validator in ('harvest',):
+        value = str(raw or '').strip().strip('"')
+        if value and not os.path.isfile(value):
+            warnings.append(t('set.harvestMissing', tool=key, path=value))
+        return value
+
+    if spec.validator in ('catbus', 'catbus_node'):
+        value = str(raw or '').strip().strip('"')
+        if value and not (os.path.isfile(value) or os.path.isdir(value)):
+            warnings.append(t('set.catbusMissing', tool=key, path=value))
+        if value and spec.validator == 'catbus_node' and os.path.isdir(value):
+            warnings.append(t('set.catbusNeedFile', tool=key, path=value))
+        twin = catbus_source_twin(value) if spec.validator == 'catbus' else ''
+        if twin and os.path.isfile(value) and not os.path.isfile(twin):
+            warnings.append(t('set.catbusSource', tool=key, path=value, entry=twin))
+        return value
+
+    if spec.validator == 'absdir':
+        value = str(raw or '').strip().strip('"')
+        if not value:
+            return ''
+        if not os.path.isabs(value):
+            warnings.append(t('set.badProfileDir', value=value))
+            return spec.default
+        return value
+
+    # A plain string.
+    return str(raw if raw is not None else '').strip()
+
+
+def _apply_side_effects(patch: dict) -> None:
+    """Invalidate what a save just changed, once per store write."""
+    if {'catbus_cli', 'catbus_node'} & set(patch or {}):
+        from services.ingest import catbus
+
+        catbus.reset_probe_cache()
+    if 'max_upload_mb' in (patch or {}):
+        # Flask reads ``MAX_CONTENT_LENGTH`` per request, so a save can apply at once.
+        try:
+            from app import app
+
+            app.config['MAX_CONTENT_LENGTH'] = int(float(get_setting('max_upload_mb'))) * 1024 * 1024
+        except Exception:
+            pass  # an import-time/test double without the Flask app still saves the value
+
+
+# ─── Save ───────────────────────────────────────────────────────────────────
+
+
+def save_settings(patch: dict) -> tuple[dict, list]:
+    """Validate + merge ``patch``, persist, and return ``(values, warnings)``.
+
+    Validation never rejects a whole save: a mistyped value falls back to its default
+    and a warning comes back so the panel can show it. Unknown keys are ignored (the
+    import path reports them instead of silently dropping them).
     """
     warnings = []
     with _lock:
-        vals = _load()
+        vals = dict(_load())
         for key in DEFAULTS:
             if key not in patch:
                 continue
-            raw = patch[key]
-            if key == 'driver_path':
-                v = str(raw or '').strip()
-                if v:
-                    vals[key] = v
-                    if not os.path.isfile(v):
-                        warnings.append(t('set.driverMissing', path=v))
-                else:
-                    vals[key] = DEFAULTS[key]
-                    warnings.append(t('set.driverEmpty'))
-            elif key == 'browser_binary':
-                v = str(raw or '').strip()
-                if v and not os.path.isfile(v):
-                    warnings.append(t('set.browserMissing', path=v))
-                vals[key] = v
-            elif key == 'component_source':
-                # Two names, and only two: a typo must not silently become either answer, because
-                # the two choices launch different browsers. The choice is applied by the next
-                # start (the launcher exports the bundled paths before ``config`` is imported).
-                v = str(raw or '').strip().lower()
-                if v in ('bundled', 'system'):
-                    vals[key] = v
-                else:
-                    vals[key] = DEFAULTS[key]
-                    warnings.append(t('set.badSource', value=raw))
-            elif key == 'latex_binary':
-                v = str(raw or '').strip()
-                if v and not os.path.isfile(v):
-                    warnings.append(t('set.latexMissing', path=v))
-                vals[key] = v
-            elif key in ('hongguo_player_path', 'mitmdump_path'):
-                v = str(raw or '').strip().strip('"')
-                if v and not os.path.isfile(v):
-                    warnings.append(t('set.harvestMissing', tool=key, path=v))
-                vals[key] = v
-            elif key in ('catbus_cli', 'catbus_node'):
-                # Two shapes are legitimate for ``catbus_cli`` and only one for ``catbus_node``: the
-                # adapter entry is a file, but pointing at a CatBus *checkout* is the normal thing a
-                # developer does, so a directory is accepted and read as that root. A missing path is
-                # a warning, never a refusal — same reason the driver gets: the user may be configuring
-                # a machine where the thing will exist, and a backend that cannot be found at run time
-                # already says so by name.
-                v = str(raw or '').strip().strip('"')
-                if v and not (os.path.isfile(v) or os.path.isdir(v)):
-                    warnings.append(t('set.catbusMissing', tool=key, path=v))
-                if v and key == 'catbus_node' and os.path.isdir(v):
-                    # A folder is not a runtime; naming ``…\nvm\v24\bin`` would otherwise be accepted
-                    # and then fail as "no Node", which is a message about the wrong thing.
-                    warnings.append(t('set.catbusNeedFile', tool=key, path=v))
-                twin = catbus_source_twin(v) if key == 'catbus_cli' else ''
-                if twin and os.path.isfile(v) and not os.path.isfile(twin):
-                    # Stored as typed, because the adapter resolution maps it: a build makes this
-                    # exact setting work. Saying so here is the difference between “build it” and a
-                    # backend that is silently absent until someone reads the log.
-                    warnings.append(t('set.catbusSource', tool=key, path=v, entry=twin))
-                vals[key] = v
-            elif key == 'window_size':
-                v = str(raw or '').strip()
-                if re.fullmatch(r'\d{2,5}x\d{2,5}', v):
-                    vals[key] = v
-                else:
-                    vals[key] = DEFAULTS[key]
-                    warnings.append(t('set.badWindow', default=DEFAULTS[key]))
-            elif key in _NUMERIC_RANGES:
-                # ``setting=`` rather than ``key=``: i18n.t() owns a parameter
-                # called ``key`` itself and the kwarg collision used to raise
-                # TypeError right here, 500-ing the panel that was only trying
-                # to report a warning. The value reported back is the submitted
-                # one — a warning quoting the restored default tells nothing.
-                try:
-                    v = int(float(raw))
-                except (TypeError, ValueError, OverflowError):
-                    # OverflowError is 'inf'/'1e400': float() accepts them and
-                    # int() refuses — the same trap _safe_int documents.
-                    warnings.append(t('set.badNumber', setting=key, value=raw))
-                    v = DEFAULTS[key]
-                else:
-                    lo, hi = _NUMERIC_RANGES[key]
-                    if not lo <= v <= hi:
-                        warnings.append(t('set.outOfRange', setting=key, lo=lo, hi=hi, value=v))
-                        v = DEFAULTS[key]
-                vals[key] = v
-            elif key == 'ollama_host':
-                v = str(raw or '').strip().rstrip('/')
-                if v and not re.match(r'^https?://', v):
-                    vals[key] = DEFAULTS[key]
-                    warnings.append(t('set.badOllamaHost'))
-                else:
-                    vals[key] = v or DEFAULTS[key]
-            elif key in (
-                'cookie_preflight_before_run',
-                'use_browser_profile',
-                'same_platform_queue',
-                'ask_overseas_network',
-                'clear_console_before_run',
-                'gentle_crawl',
-                'harvest_auto_install_ca',
-            ):
-                # The browser may send a real bool or the 'true'/'false' string
-                # the checkbox helpers historically produced; anything else
-                # falls back to the default rather than guessing.
-                if isinstance(raw, bool):
-                    vals[key] = raw
-                elif str(raw).strip().lower() in ('true', 'false'):
-                    vals[key] = str(raw).strip().lower() == 'true'
-                else:
-                    vals[key] = DEFAULTS[key]
-                    warnings.append(t('set.badFlag', setting=key))
-            elif key == 'browser_profile_dir':
-                # Empty means "use the app-managed directory". A path is accepted as
-                # written and created on first use (Chrome makes its own user-data-dir,
-                # so only an unusable *shape* is refused here — refusing a path whose
-                # parent exists but whose leaf does not would punish the normal case).
-                v = str(raw or '').strip().strip('"')
-                if not v:
-                    vals[key] = ''
-                elif not os.path.isabs(v):
-                    vals[key] = DEFAULTS[key]
-                    warnings.append(t('set.badProfileDir', value=v))
-                else:
-                    vals[key] = v
-        tmp = _PATH + '.tmp'
+            vals[key] = _coerce(BY_KEY[key], patch[key], warnings)
+        _values.update(vals)
         try:
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(vals, f, ensure_ascii=False, indent=2)
-            atomic_replace(tmp, _PATH)
+            _write_locked(vals)
         except OSError as e:
             warnings.append(t('set.saveFailed', err=e))
-        if {'catbus_cli', 'catbus_node'} & set(patch or {}):
-            # The second backend caches what this machine can do (a capability probe costs one Node
-            # process), and a cached “本机没有 CatBus” would otherwise keep greyed out the option the
-            # user has just pointed at a path — for minutes, with no way to see why.
-            from services.ingest import catbus
+    _apply_side_effects(patch)
+    return dict(vals), warnings
 
-            catbus.reset_probe_cache()
-        return dict(vals), warnings
+
+# ─── Presets ────────────────────────────────────────────────────────────────
+
+
+def preset_state() -> dict:
+    """What the 慢速采集 card shows: active preset, when, and whether it was edited."""
+    with _lock:
+        vals = dict(_load())
+        state = dict(_preset_state or {})
+    if not state.get('active'):
+        return {'active': '', 'customized': False, 'applied_at': '', 'keys': []}
+    preset = PRESETS.get(state.get('active'))
+    applied = state.get('applied') or {}
+    customized = bool(preset) and any(vals.get(key) != applied.get(key) for key in preset['values'] if key in applied)
+    return {
+        'active': state.get('active', ''),
+        'customized': customized,
+        'applied_at': state.get('applied_at', ''),
+        'keys': sorted(applied),
+        'can_restore': bool(state.get('previous')),
+    }
+
+
+def apply_preset(preset_id: str) -> tuple[dict, list]:
+    """Write a named preset as concrete values, snapshotting what it replaced.
+
+    Values are written, not layered over the user's settings, so the effective
+    configuration is exactly what the panel shows and no multiplier can stack.
+    Applying a preset while another is active keeps the *original* snapshot: restore
+    always goes back to the state before the first preset, never to an intermediate.
+    """
+    preset = PRESETS.get(str(preset_id or '').strip())
+    if preset is None:
+        raise KeyError(t('set.presetUnknown', preset=preset_id))
+    warnings = []
+    with _lock:
+        vals = dict(_load())
+        previous = dict((_preset_state or {}).get('previous') or {})
+        applied = {}
+        for key, raw in preset['values'].items():
+            spec = BY_KEY[key]
+            # The presets carry numbers that may need clamping (a machine with fewer
+            # than 2 headless slots). Coerce through the same path, then record the
+            # value that was actually stored so "customized" is measured against it.
+            value = _coerce(spec, raw, warnings)
+            applied[key] = value
+            if key not in previous:
+                previous[key] = vals.get(key, spec.default)
+            vals[key] = value
+        _preset_state.clear()
+        _preset_state.update(
+            {
+                'active': str(preset_id),
+                'applied_at': datetime.now().astimezone().isoformat(timespec='seconds'),
+                'previous': previous,
+                'applied': applied,
+            }
+        )
+        _values.update(vals)
+        try:
+            _write_locked(vals)
+        except OSError as e:
+            warnings.append(t('set.saveFailed', err=e))
+    return dict(vals), warnings
+
+
+def restore_preset() -> tuple[dict, list]:
+    """Put back exactly the values the active preset replaced, then clear it."""
+    warnings = []
+    with _lock:
+        state = dict(_preset_state or {})
+        if not state.get('active'):
+            return dict(_load()), [t('set.presetNone')]
+        previous = state.get('previous') or {}
+        vals = dict(_load())
+        for key, raw in previous.items():
+            spec = BY_KEY.get(key)
+            if spec is None:
+                continue
+            vals[key] = _coerce(spec, raw, warnings)
+        _preset_state.clear()
+        _values.update(vals)
+        try:
+            _write_locked(vals)
+        except OSError as e:
+            warnings.append(t('set.saveFailed', err=e))
+    _apply_side_effects(dict(previous))
+    return dict(vals), warnings
+
+
+# ─── Export / import ────────────────────────────────────────────────────────
+
+
+def export_payload(include_machine: bool = False) -> dict:
+    """A portable settings package.
+
+    Machine paths are host fingerprints and are omitted unless the caller asks for
+    them. ``secret`` settings are never written by this function, today or later.
+    """
+    with _lock:
+        vals = dict(_load())
+        preset = dict(_preset_state or {})
+    values = {}
+    machine = {}
+    for spec in SETTINGS:
+        if spec.secret:
+            continue
+        value = vals.get(spec.key, spec.default)
+        if spec.portable:
+            values[spec.key] = value
+        elif include_machine:
+            machine[spec.key] = value
+    payload = {
+        'kind': EXPORT_KIND,
+        'schema': SCHEMA_VERSION,
+        'app_version': _app_version(),
+        'exported_at': datetime.now().astimezone().isoformat(timespec='seconds'),
+        'platform': sys.platform,
+        'values': values,
+        'preset': preset,
+    }
+    if include_machine:
+        payload['machine'] = machine
+    return payload
+
+
+def _app_version() -> str:
+    try:
+        from services.version import APP_VERSION
+
+        return str(APP_VERSION)
+    except Exception:
+        return ''
+
+
+def import_payload(
+    payload: dict,
+    *,
+    mode: str = 'merge',
+    include_machine: bool = False,
+    dry_run: bool = False,
+) -> dict:
+    """Validate and (unless ``dry_run``) apply an exported settings package.
+
+    Returns ``{ok, values, warnings, skipped, changed, dry_run}``. A bad package is a
+    named refusal (``ok=False``) and writes nothing; individual bad values still
+    degrade to their defaults with warnings, exactly like an ordinary save.
+    """
+    warnings: list[str] = []
+    skipped: list[str] = []
+    if not isinstance(payload, dict):
+        return {'ok': False, 'error': t('set.importBadPayload'), 'warnings': [], 'skipped': []}
+    if payload.get('kind') != EXPORT_KIND:
+        return {
+            'ok': False,
+            'error': t('set.importBadKind', kind=payload.get('kind') or ''),
+            'warnings': [],
+            'skipped': [],
+        }
+    try:
+        version = int(payload.get('schema') or 0)
+    except (TypeError, ValueError):
+        version = 0
+    if version > SCHEMA_VERSION:
+        return {
+            'ok': False,
+            'error': t('set.importFuture', version=version, current=SCHEMA_VERSION),
+            'warnings': [],
+            'skipped': [],
+        }
+    if mode not in ('merge', 'replace'):
+        return {'ok': False, 'error': t('set.importBadMode', mode=mode), 'warnings': [], 'skipped': []}
+
+    source: dict = {}
+    raw_values = payload.get('values')
+    if isinstance(raw_values, dict):
+        source.update(raw_values)
+    raw_machine = payload.get('machine')
+    if isinstance(raw_machine, dict):
+        if include_machine:
+            source.update(raw_machine)
+        else:
+            skipped.extend(sorted(raw_machine))
+            if raw_machine:
+                warnings.append(t('set.importMachineSkipped', n=len(raw_machine)))
+
+    with _lock:
+        current = dict(_load())
+    next_values = dict(DEFAULTS) if mode == 'replace' else dict(current)
+    if mode == 'replace' and not include_machine:
+        # A replace package never carries host paths unless the caller opted in, so
+        # "reset everything" must not blank the driver/profile this machine is using.
+        for key in MACHINE_KEYS:
+            next_values[key] = current.get(key, DEFAULTS.get(key))
+    changed = []
+    for key, raw in source.items():
+        spec = BY_KEY.get(key)
+        if spec is None:
+            warnings.append(t('set.importUnknownKey', setting=key))
+            skipped.append(key)
+            continue
+        if not spec.portable and not include_machine:
+            warnings.append(t('set.importMachineSkippedKey', setting=key))
+            skipped.append(key)
+            continue
+        value = _coerce(spec, raw, warnings)
+        if next_values.get(key) != value:
+            changed.append(key)
+        next_values[key] = value
+
+    result = {
+        'ok': True,
+        'values': next_values,
+        'warnings': warnings,
+        'skipped': skipped,
+        'changed': sorted(changed),
+        'dry_run': bool(dry_run),
+    }
+    if dry_run:
+        return result
+
+    with _lock:
+        _values.update(next_values)
+        preset = payload.get('preset')
+        if isinstance(preset, dict) and preset.get('active'):
+            _preset_state.clear()
+            _preset_state.update(preset)
+        elif mode == 'replace':
+            # A replace package is the whole configuration; a stale snapshot from the
+            # previous profile would restore values this import just replaced.
+            _preset_state.clear()
+        try:
+            _write_locked(next_values)
+        except OSError as e:
+            return {'ok': False, 'error': t('set.saveFailed', err=e), 'warnings': warnings, 'skipped': skipped}
+    _apply_side_effects({key: True for key in changed})
+    return result

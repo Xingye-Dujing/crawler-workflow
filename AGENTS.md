@@ -323,8 +323,10 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - The default account is `default` (never a blank in the box), folded at `CookieManager.key`/`path_segment` (`''` ⇄
   `default`, lowercase always); `sessions.profiles`/preflight/JS box route through that fold; the candidate list and a new
   node's preselection are both `CookieManager.accounts_in_order`.
-- **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both browser catalogue sides,
-  and the `AppSettings` wiring.
+- **A new settings key is one declaration:** add a `Setting` to `runtime/settings_schema.py` (kind, default, bounds, group,
+  both-language label/hint, consumer, portable/secret flags, preset membership). The settings page renders it from
+  `GET /api/settings/schema`; `runtime/settings.py` validates and persists it. `tests/unit/gates/test_settings_schema.py`
+  fails a key with no reader, a missing translation, or a platform module that reads a setting directly.
 
 ### Login accounts and the gate
 

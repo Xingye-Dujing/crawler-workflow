@@ -835,11 +835,12 @@ class TestCrawlerHoldsItsProfile:
     def test_a_profile_held_by_someone_else_fails_with_a_reason(self, tmp_path, monkeypatch):
         """Not a silent hang and not a chromedriver stack trace: the node has to say
         which directory it is waiting for and that a browser is holding it."""
-        from core.config import Config
 
         path = str(tmp_path / 'douyin')
         self._held_elsewhere(path)
-        monkeypatch.setattr(Config, 'PROFILE_LOCK_TIMEOUT', 0.2)
+        monkeypatch.setattr(
+            crawlers_pkg.profiles, 'get_setting', lambda key: 0.2 if key == 'profile_lock_timeout' else None
+        )
         crawler_class = self._probe_class('Waiter', 'douyin')
         with pytest.raises(RuntimeError) as raised:
             crawler_class(headless=True, profile_dir=path)

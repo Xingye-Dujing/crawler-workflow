@@ -4,7 +4,7 @@ import contextlib
 import json
 import logging
 
-from core.config import Config
+from runtime.settings import get_setting
 
 from i18n import t
 
@@ -224,7 +224,7 @@ class RowsMixin:
         """
         if not rows:
             return 0, 0
-        limit = Config.RUN_MAX_ROWS_PER_NODE
+        limit = int(get_setting('run_max_rows_per_node'))
         capped = False
         with self._lock:
             try:
@@ -295,7 +295,7 @@ class RowsMixin:
         to serialise — left the node with no rows and no ``finish_node``. ``settle_nodes`` then read
         zero and the record said a table that had been produced had produced nothing.
         """
-        limit = Config.RUN_MAX_ROWS_PER_NODE
+        limit = int(get_setting('run_max_rows_per_node'))
         if len(rows) > limit:
             logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
             rows = rows[:limit]

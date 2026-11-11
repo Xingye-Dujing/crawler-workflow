@@ -30,11 +30,11 @@ pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 @pytest.fixture
 def rooted(tmp_path, monkeypatch):
     root = str(tmp_path / 'profiles')
-    monkeypatch.setattr(
-        profiles,
-        'get_setting',
-        lambda key: {'use_browser_profile': True, 'browser_profile_dir': root}[key],
-    )
+
+    def _setting(key):
+        return {'use_browser_profile': True, 'browser_profile_dir': root, 'profile_lock_timeout': 20}[key]
+
+    monkeypatch.setattr(profiles, 'get_setting', _setting)
     return root
 
 

@@ -470,6 +470,32 @@ def crawl_kwargs(mode: Mode, params: dict) -> dict:
     return out
 
 
+def _node_default(field, mode) -> object:
+    """A new node's default for *field*: the user's global choice, else the declared one.
+
+    The form used to carry its own copy of "50 rows", "part_size 0" and the comment
+    switches, so the canvas, the panel and the executor could seed different values.
+    These six are the ones a user actually tunes globally; everything else stays the
+    field's declared default because it describes the crawl's shape, not a preference.
+    """
+    key = field.key
+    from runtime.settings import get_setting
+
+    if key == 'target_count':
+        return int(get_setting('default_target_count'))
+    if key == 'comment_limit':
+        return int(get_setting('default_comment_limit'))
+    if key == 'per_article_file':
+        # Comment nodes default to one file per article; a source node has no such field.
+        return bool(get_setting('default_per_article_file'))
+    if key == 'keep_parts':
+        return bool(get_setting('default_keep_parts'))
+    if key == 'part_size':
+        column = 'default_comment_part_size' if mode.rows == 'comments' else 'default_source_part_size'
+        return int(get_setting(column))
+    return field.default
+
+
 def declared_defaults(platform: str) -> dict:
     """Every parameter the platform's modes mention, at its declared default.
 
@@ -484,7 +510,7 @@ def declared_defaults(platform: str) -> dict:
     for backend in BACKENDS:
         for mode in modes_for(platform, backend):
             for f in mode.fields + FILE_FIELDS:
-                out.setdefault(f.key, f.default)
+                out.setdefault(f.key, _node_default(f, mode))
     if out or has_platform(platform) or str(platform or '') in CATBUS_ONLY_PLATFORMS:
         out.setdefault('backend', engine_default(platform))
     return out
@@ -728,16 +754,16 @@ def _mode_as_dict(mode: Mode, engines: list[str] | None = None, cells: dict | No
         # canvas that STORED the value still shows what it holds.
         'engines': list(engines if engines is not None else [BACKEND_SELENIUM]),
         'cells': dict(cells if cells is not None else {BACKEND_SELENIUM: _available_cell()}),
-        'fields': [_field_as_dict(f) for f in mode.fields],
+        'fields': [_field_as_dict(f, mode) for f in mode.fields],
     }
 
 
-def _field_as_dict(f: Field) -> dict:
+def _field_as_dict(f: Field, mode: Mode | None = None) -> dict:
     return {
         'key': f.key,
         'control': f.control,
         'labelKey': f.label_key,
-        'default': f.default,
+        'default': _node_default(f, mode) if mode is not None else f.default,
         'hintKey': f.hint_key,
         'options': [{'value': v, 'labelKey': k} for v, k in f.options],
         'minimum': f.minimum,

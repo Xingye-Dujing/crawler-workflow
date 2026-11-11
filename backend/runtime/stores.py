@@ -21,9 +21,9 @@ import contextlib
 import threading
 
 import pandas as pd
-from core.config import Config
 
 from runtime import account_context, paths
+from runtime.settings import get_setting
 from runtime.state import _dataset_cache, dataset_cache_key, forget_ambient
 from services.analysis.lexicon_store import LexiconStore
 from services.biblio.store import BiblioStore
@@ -93,7 +93,7 @@ class _UserStores:
                 self._housekeeper = Housekeeping(
                     self.run_store(),
                     self.dataset_store(),
-                    interval_seconds=max(0, int(Config.HOUSEKEEPING_INTERVAL_MINUTES)) * 60,
+                    interval_seconds=max(0, int(get_setting('housekeeping_interval_minutes'))) * 60,
                 )
         return self._housekeeper
 
@@ -191,7 +191,7 @@ def get_housekeeper() -> Housekeeping:
                 _HOUSEKEEPER = Housekeeping(
                     get_run_store(),
                     get_dataset_store(),
-                    interval_seconds=max(0, int(Config.HOUSEKEEPING_INTERVAL_MINUTES)) * 60,
+                    interval_seconds=max(0, int(get_setting('housekeeping_interval_minutes'))) * 60,
                 )
     return _HOUSEKEEPER
 

@@ -36,8 +36,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import capabilities.registry as capabilities
-from core.config import Config
 from runtime import account_context, paths
+from runtime.settings import get_setting
 
 from crawlers import crawler_class, is_crawlable
 from i18n import get_lang, set_lang, t
@@ -121,7 +121,7 @@ def cached(platform: str, account: str = '', use_profile: bool = None) -> dict |
         entry = _cache.get(key)
         if not entry:
             return None
-        if time.monotonic() - entry['at'] > Config.COOKIE_PREFLIGHT_TTL:
+        if time.monotonic() - entry['at'] > float(get_setting('cookie_preflight_ttl')):
             _cache.pop(key, None)
             return None
         return dict(entry)
@@ -487,7 +487,7 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
     answers: dict[str, dict] = {}
     if not pairs:
         return answers
-    workers = max(1, min(len(pairs), int(Config.COOKIE_PREFLIGHT_MAX_PARALLEL)))
+    workers = max(1, min(len(pairs), int(get_setting('cookie_preflight_max_parallel'))))
     pool = ThreadPoolExecutor(max_workers=workers)
     # Each probe reads a cookie file and a profile through ``paths.active()``; a pool thread
     # starts with no account context, so the scope has to travel with the work explicitly.
@@ -518,7 +518,7 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
         # which by design does NOT block a run) and then cancelled — so an expired cookie slipped
         # past the gate silently on exactly those platforms. Waiting the full timeout per future
         # still bounds the whole loop (a queued probe is awaited, so its wait includes its queue).
-        budget = float(Config.COOKIE_PREFLIGHT_TIMEOUT)
+        budget = float(get_setting('cookie_preflight_timeout'))
         for future, (platform, account, backend) in futures.items():
             key = entry_key(platform, account, backend)
             try:
@@ -527,7 +527,7 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
                 answers[key] = _verdict(
                     platform,
                     UNKNOWN,
-                    detail=t('cookie.pre.timeout', n=int(Config.COOKIE_PREFLIGHT_TIMEOUT)),
+                    detail=t('cookie.pre.timeout', n=int(get_setting('cookie_preflight_timeout'))),
                     account=account,
                 )
     finally:

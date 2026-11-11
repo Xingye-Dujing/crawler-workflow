@@ -15,6 +15,9 @@ ZH = {
     'sched.canvasMissing': '找不到画布“{name}”（文件被改名或删除了）',
     'sched.canvasNeedsModel': '画布“{name}”里有需要模型的步骤，定时任务不碰模型（模型凭证只在浏览器里）',
     'sched.canvasReadFailed': '读取画布“{name}”时出错，已跳过这条任务',
+    'sched.cookieBlocked': (
+        '定时任务被拒绝：这些平台的登录已失效（{platforms}）。请先在 Cookie 面板重新登录，或关闭“执行前自动验证 Cookie”'
+    ),
     'sched.cronAt': 'cron：{expr}',
     'sched.cronBadCount': 'cron 表达式要 5 段（分 时 日 月 周），收到 {n} 段：{expr}',
     'sched.cronBadField': '{field} 段看不懂：{value}',
@@ -67,6 +70,8 @@ EN = {
     'sched.canvasNeedsModel': 'canvas "{name}" has steps that need a model — a scheduled task never '
     'touches one (the credential only lives in the browser)',
     'sched.canvasReadFailed': 'reading canvas "{name}" failed, so this task was skipped',
+    'sched.cookieBlocked': 'scheduled task refused: the session is dead for {platforms}. Log in again '
+    'in the Cookie panel, or turn off "verify cookies before a run"',
     'sched.cronAt': 'cron: {expr}',
     'sched.cronBadCount': 'a cron expression has 5 fields (minute hour day month weekday); got {n}: {expr}',
     'sched.cronBadField': 'the {field} field could not be read: {value}',

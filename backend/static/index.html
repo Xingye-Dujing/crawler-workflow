@@ -182,6 +182,15 @@
           Headless
         </button>
         <button
+          class="menu-btn toggle-off"
+          type="button"
+          id="btn-slow-crawl"
+          onclick="toggleSlowPreset()"
+          data-i18n="settingsPanel.slowButton"
+        >
+          Slow crawl
+        </button>
+        <button
           class="menu-btn"
           type="button"
           id="btn-ai"
@@ -1066,6 +1075,57 @@
         </div>
       </div>
       <div id="biblio-mgr-body" class="data-preview-table-wrap"></div>
+    </div>
+
+    <!-- Settings page: rendered from /api/settings/schema, so the store and the form can
+         never drift. The quick dropdown above stays for the handful of machine paths. -->
+    <div id="settings-panel">
+      <div id="settings-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="settingsPanel.header">Settings</span>
+        <div class="console-actions">
+          <button class="panel-close" type="button" onclick="SettingsPanel.refresh()" data-i18n="btn.refresh">
+            Refresh
+          </button>
+          <button class="panel-close" type="button" onclick="toggleSettingsPanel()" data-i18n="stats.close">
+            Close
+          </button>
+        </div>
+      </div>
+      <div class="settings-panel-body">
+        <nav id="settings-panel-nav" class="settings-panel-nav"></nav>
+        <section class="settings-panel-main">
+          <div class="settings-panel-tools">
+            <input
+              id="settings-panel-search"
+              class="settings-input"
+              type="text"
+              placeholder=""
+              oninput="SettingsPanel.setFilter(this.value)"
+            />
+            <button class="menu-btn" type="button" id="settings-export-btn" onclick="SettingsPanel.exportSettings()" data-i18n="settingsPanel.export">
+              Export
+            </button>
+            <label class="settings-checkbox-label">
+              <input type="checkbox" id="settings-include-machine" />
+              <span data-i18n="settingsPanel.includeMachine">Include machine paths</span>
+            </label>
+            <button class="menu-btn" type="button" id="settings-import-btn" onclick="SettingsPanel.pickImport()" data-i18n="settingsPanel.import">
+              Import
+            </button>
+            <input id="settings-import-file" type="file" accept=".json,application/json" hidden onchange="SettingsPanel.importFile(this)" />
+          </div>
+          <div id="settings-preset-card" class="settings-preset-card"></div>
+          <div id="settings-panel-form"></div>
+          <div id="settings-panel-warnings" class="settings-panel-warnings"></div>
+          <div class="settings-panel-actions">
+            <button class="menu-btn" type="button" id="settings-panel-save" onclick="SettingsPanel.save()" data-i18n="set.save">
+              Save
+            </button>
+            <span id="settings-panel-status" class="settings-panel-status"></span>
+          </div>
+        </section>
+      </div>
     </div>
 
     <!-- Processes Panel -->
@@ -1987,6 +2047,15 @@
          applies from the next execution, no server restart needed. -->
     <div id="settings-menu" class="dropdown dropdown-wide">
       <div class="dd-item-row">
+        <span data-i18n="settingsPanel.openFull">完整设置</span>
+        <span class="dd-ctrl">
+          <button class="menu-btn" type="button" onclick="SettingsPanel.open()" data-i18n="settingsPanel.openFullButton">
+            打开设置页（采集节奏、重试、导入导出…）
+          </button>
+        </span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
         <span data-i18n="set.componentSource">组件来源</span>
         <span class="dd-ctrl">
           <select
@@ -2148,19 +2217,6 @@
               onchange="onSettingInput('clear_console_before_run', this.checked)"
             />
             <span data-i18n="set.clearConsoleInline">新运行一开始就清空控制台，连各工作流标签页连同其历史一并删除</span>
-          </label>
-        </span>
-      </div>
-      <div class="dd-item-row">
-        <span data-i18n="set.gentleCrawl">慢速采集（降风控）</span>
-        <span class="dd-ctrl">
-          <label class="settings-checkbox-label">
-            <input
-              type="checkbox"
-              id="set-gentle-crawl"
-              onchange="onSettingInput('gentle_crawl', this.checked)"
-            />
-            <span data-i18n="set.gentleCrawlInline">只放慢采集节奏（每次动作间多等数秒），绝不改浏览器身份；刚被风控/验证码挡过时开启，用退避换更低的再次触发</span>
           </label>
         </span>
       </div>
@@ -2382,6 +2438,7 @@
     <script src="js/panels/run-results.js"></script>
     <script src="js/workflow-layout.js"></script>
     <script src="js/panels/settings.js"></script>
+    <script src="js/panels/settings-panel.js"></script>
     <!-- The three per-node-type settings renderers split out of panels/settings.js: the panel shell
          stays one file, each node's own option lists and form live beside it. -->
     <script src="js/panels/node-analysis.js"></script>

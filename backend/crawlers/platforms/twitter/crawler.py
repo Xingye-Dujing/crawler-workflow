@@ -58,7 +58,7 @@ from selenium.common.exceptions import JavascriptException, StaleElementReferenc
 from selenium.webdriver.common.by import By
 
 from crawlers.core.crawler import Crawler
-from crawlers.engine import feed
+from crawlers.engine import feed, pacing
 from crawlers.engine.counters import parse_count
 from i18n import stop_reason_label, t
 
@@ -381,8 +381,8 @@ class TwitterCrawler(Crawler):
             window=self.window_key,
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
-            stuck_rounds=self.STUCK_ROUNDS,
-            settle_wait=self.SETTLE_WAIT,
+            stuck_rounds=pacing.rounds(self.STUCK_ROUNDS),
+            settle_wait=pacing.wait(self.SETTLE_WAIT),
         )
         if result.stopped_reason == 'no_cards' and not self.collected():
             logger.info(t('crawl.x.no_cards', url=self._current_url()))
@@ -438,7 +438,7 @@ class TwitterCrawler(Crawler):
         self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
     def _wait_for(self, measure, target, timeout):
-        return feed.wait_for(measure, target, timeout=timeout)
+        return feed.wait_for(measure, target, timeout=pacing.wait(timeout))
 
     # ─── one tweet ────────────────────────────────────────────────────
 

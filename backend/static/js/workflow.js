@@ -2138,7 +2138,7 @@ function togglePalette() {
    leaves it visually expanded — two panels then overlap in the same slot. All
    three toggles live in this file, so the helper is called directly rather than
    reached for through `window`. */
-var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel', 'biblio-panel'];
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel', 'biblio-panel', 'settings-panel'];
 
 function closeDockedPanels(exceptId) {
     DOCKED_PANELS.forEach(function (id) {
@@ -2165,6 +2165,11 @@ function refuseWhileRunning() {
 
 function toggleDatasetPanel() {
     datasetManager.toggle();
+}
+
+/* The settings page is a dock like the readers; SettingsPanel owns its content. */
+function toggleSettingsPanel() {
+    if (typeof SettingsPanel !== 'undefined') SettingsPanel.toggle();
 }
 
 /* Reached from both the status-bar button and the menu “打开”. `wfFiles` is a

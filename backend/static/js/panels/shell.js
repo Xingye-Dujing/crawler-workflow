@@ -244,6 +244,7 @@ function setLang(nextLang) {
     /* The bibliometrics dock prints its run/node pickers, the shape of the stored table and the
        paging line from here, so nothing `I18n.apply()` re-stamps reaches them. */
     if (typeof biblioWorkspace !== 'undefined') biblioWorkspace.onLanguageChange();
+    if (typeof SettingsPanel !== 'undefined') SettingsPanel.onLanguageChange();
     /* The account registry table and its audit lines are painted from cached rows, and the top-bar
        chip reads “当前登录：alice” from a JS template with a variable — `data-i18n-title` cannot
        re-stamp either, because `I18n.apply()` carries no variables. Repaint both. */

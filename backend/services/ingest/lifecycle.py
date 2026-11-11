@@ -16,7 +16,7 @@ import sys
 import threading
 
 from core import procs
-from core.config import Config
+from runtime.settings import get_setting
 from runtime.state import add_log
 
 from crawlers.core.faults import DeadDriver
@@ -101,7 +101,7 @@ def close_login_browser(crawler, quit_timeout: float = 5.0):
         # ``Config.PROFILE_LOCK_TIMEOUT`` for it. Silence here reads as "closed", while the
         # user may be looking at the window.
         domain = getattr(crawler, 'domain', '')
-        add_log(t('run.browserStuck', platform=domain, seconds=int(Config.PROFILE_LOCK_TIMEOUT)))
+        add_log(t('run.browserStuck', platform=domain, seconds=int(get_setting('profile_lock_timeout'))))
         # ``debug`` on purpose: the console line above is the user's, and this one is for
         # whoever reads ``logs/`` — where English is what a person grepping for a hang wants,
         # and a translated frame would put a stack address through the message catalogue.

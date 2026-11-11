@@ -444,9 +444,10 @@ class TestPurgeProtectsTheLiveRun:
         """`keep_per_workflow = 0` is the adversarial setting: every run is
         beyond the cap, so the only thing standing between the live record and
         deletion is the exemption the caller passes."""
-        from core.config import Config
+        from runtime import settings as settings_store
 
-        monkeypatch.setattr(Config, 'RUN_KEEP_PER_WORKFLOW', 0)
+        settings_store.all_settings()
+        monkeypatch.setitem(settings_store._values, 'run_keep_per_workflow', 0)
         # Two finished runs of the same workflow, so purge has real work to do.
         workflow, name = _upload_flow(client, paste, 'live-purge')
         for _ in range(2):
@@ -495,9 +496,10 @@ class TestPurgeProtectsTheLiveRun:
     def test_the_same_purge_without_an_exemption_does_delete_it(self, client, app_module, monkeypatch):
         """The teeth for the test above: the live row is a purge candidate on the
         same rules, so the survival was the exemption, not luck."""
-        from core.config import Config
+        from runtime import settings as settings_store
 
-        monkeypatch.setattr(Config, 'RUN_KEEP_PER_WORKFLOW', 0)
+        settings_store.all_settings()
+        monkeypatch.setitem(settings_store._values, 'run_keep_per_workflow', 0)
         store = app_module._RUN_STORE
         store.start_run('protected', 'fp-protected', 'fp')
         store.purge(keep_per_workflow=0, exclude_run_id='protected')

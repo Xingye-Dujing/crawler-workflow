@@ -411,6 +411,26 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   - **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both browser catalogues, and
     the `AppSettings` wiring.
 
+## Settings: why one registry and one preset
+
+The settings store used to be a flat `DEFAULTS` dict plus a hand-written validator chain. A
+new key had to be added in four places, and forgetting one made it silently unsaveable — the
+panel showed a value the server never used. `runtime/settings_schema.py` is now the single
+declaration: type, default, bounds, group, both-language label keys, who reads it, whether it
+is portable, and which presets write it. `runtime/settings.py` only loads/validates/persists
+and builds export/import packages; the settings page renders from `GET /api/settings/schema`.
+`tests/unit/gates/test_settings_schema.py` fails a key that no consumer reads, a label missing
+from either language, and a platform module that calls `get_setting` or `time.sleep`.
+
+Platforms keep **measured baselines** because a card wait or a stuck-round count is a fact
+about that site, like a selector. They are not configuration: every value goes through
+`crawlers/engine/pacing.py`, where the user's three global scales apply once. That is what
+makes "slow down every platform" a real promise instead of a switch half the crawlers ignore.
+
+慢速采集 is a **preset**, not a multiplier: it writes concrete values and stores the values it
+replaced, so one click restores exactly what the user had. A second hidden factor would make
+the panel's numbers stop describing the run, and the user could not reason about the pace.
+
 ## 定时任务 (scheduler) — why the clock is narrow
 
 - **The clock is one thread, started from exactly one place.** Flask's reloader imports the module twice, so a

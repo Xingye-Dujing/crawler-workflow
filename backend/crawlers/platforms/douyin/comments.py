@@ -7,14 +7,13 @@ becoming comment text.
 
 import contextlib
 import re
-import time
 
 from selenium.common.exceptions import JavascriptException
 from selenium.webdriver.common.action_chains import ActionChains
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.walks import register
-from crawlers.engine import feed, times
+from crawlers.engine import feed, pacing, times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.pacing import throttled_sleep
 from crawlers.engine.wall import looks_blocked
@@ -465,7 +464,7 @@ def _wait_for_panel(session, timeout: float = 24.0) -> bool:
     for _ in range(ticks):
         if session.driver.find_elements('css selector', '[data-e2e="comment-item"]'):
             return True
-        time.sleep(2.0)
+        pacing.poll_tick(2.0)
     return False
 
 
@@ -491,4 +490,4 @@ def _scroll_panel(session) -> bool:
     before = count()
     with contextlib.suppress(Exception):
         feed.jump_to_bottom(session.driver, '[data-e2e="comment-list"]')
-    return bool(feed.wait_for(count, before + 1, timeout=6.0, tick=0.5) > before)
+    return bool(feed.wait_for(count, before + 1, timeout=pacing.wait(6.0), tick=0.5) > before)
