@@ -25,6 +25,17 @@ _SIGKILL = getattr(signal, 'SIGKILL', signal.SIGTERM)
 #: How a Windows tree is taken down: ``/T`` includes the chrome children chromedriver spawned.
 _WINDOWS_REAP = ('taskkill', '/F', '/T', '/PID')
 
+#: The two Win32 creation flags, as literals rather than ``getattr(subprocess, …)``.
+#:
+#: ``popen_kwargs('win32')`` is asked the WINDOWS question even from a Linux test — that is the
+#: whole point of its ``system`` parameter — and on Linux the names do not exist, so a ``getattr``
+#: fallback silently produced a zero flag and the caller's assertion (and, worse, a real refusal)
+#: saw "no CREATE_NO_WINDOW". These values are Win32 ABI constants, not host capabilities, so
+#: spelling them here is the honest answer; ``popen_kwargs`` still decides whether to USE them
+#: from the system it was asked about.
+_CREATE_NO_WINDOW = 0x08000000
+_CREATE_NEW_PROCESS_GROUP = 0x00000200
+
 
 def _decode(raw: bytes) -> str:
     """A tool's own error text, in the encoding that console actually uses.
@@ -128,10 +139,10 @@ def popen_kwargs(system: str | None = None, detached: bool = False) -> dict:
     """
     if detached and not machine.is_windows(system):
         return {'start_new_session': True}
-    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+    flags = _CREATE_NO_WINDOW
     if detached and machine.is_windows(system):
         # A process group of its own, so a Ctrl+C aimed at the parent's console does not reach it.
-        flags |= getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
+        flags |= _CREATE_NEW_PROCESS_GROUP
     return {'creationflags': flags} if machine.is_windows(system) and flags else {}
 
 

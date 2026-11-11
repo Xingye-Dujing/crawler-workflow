@@ -292,12 +292,17 @@ def test_a_helper_that_never_writes_its_receipt_is_refused(tmp_path, monkeypatch
 
 
 def test_a_helper_that_reports_in_lets_the_restart_proceed(tmp_path, monkeypatch):
-    _spawned, original = _staged_job(tmp_path, monkeypatch)
+    _spawned, _original = _staged_job(tmp_path, monkeypatch)
 
     def fake_spawn(script, args):
+        # The receipt is the whole subject: whether the real swapper runs is a DEVICE fact, and
+        # calling it here spawned ``powershell.exe``/``/bin/bash`` on whichever OS CI uses —
+        # on Linux the Windows creation flags then reached a POSIX ``Popen`` and the case failed
+        # for a reason it was never about (``_staged_job`` fakes the platform so the updater's
+        # own guards pass).
         receipt = Path(args[args.index('-Receipt') + 1])
         receipt.write_text('started', encoding='utf-8')
-        return original(script, args)
+        return 4242
 
     monkeypatch.setattr(update, '_spawn_script', fake_spawn)
     result = update.request_restart()
