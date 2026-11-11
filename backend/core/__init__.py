@@ -8,8 +8,9 @@ Five modules, each a different kind of "everybody needs this":
              write — as tables keyed by the running system, joined with the TARGET's separator;
 ``procs``    process plumbing (spawn flags, reaping a driver tree) that differs by OS;
 ``atomic``   the staged-write rename that RETRIES on Windows, where any open handle on the target
-             makes ``os.replace`` answer ``PermissionError``. Every durable store writes through it,
-             and each store that kept its own bare ``os.replace`` was one reader away from a 500.
+             makes ``os.replace`` answer ``PermissionError``. Adopted by every durable store whose
+             read can race its own write; each store that kept a bare ``os.replace`` on such a file
+             was one reader away from a 500.
 
 The direction is one-way and mechanical: nothing under ``core/`` may import a domain package,
 Flask/Selenium, or the ML stack (sklearn/scipy/matplotlib/joblib). pandas/numpy/requests are

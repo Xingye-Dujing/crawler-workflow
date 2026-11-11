@@ -389,7 +389,7 @@ class CookieManager:
             raise ValueError(f'Target account already exists: {to}')
         if not os.path.exists(source):
             return False
-        os.replace(source, target)
+        atomic_replace(source, target)
         # No log line here on purpose: only the caller knows whether the account's browser
         # directory came along, and the sentence has to say which of the two actually happened.
         return True

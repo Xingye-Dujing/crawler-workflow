@@ -14,6 +14,7 @@ import time
 import uuid
 
 import pandas as pd
+from core.atomic import replace as atomic_replace
 
 from i18n import platform_label, t
 
@@ -196,7 +197,7 @@ class DataExporter:
                 writer(df, staged, text_column=text_column, **kwargs)
             else:
                 writer(df, staged, **kwargs)
-            os.replace(staged, filepath)
+            atomic_replace(staged, filepath)
         except BaseException:
             with contextlib.suppress(OSError):
                 os.remove(staged)

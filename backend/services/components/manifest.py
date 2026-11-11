@@ -12,11 +12,12 @@ with forward slashes, so moving the whole installation to another drive keeps wo
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import time
 from pathlib import Path
 from typing import Any
+
+from core.atomic import replace as atomic_replace
 
 SCHEMA = 1
 MANIFEST_NAME = 'install-manifest.json'
@@ -30,7 +31,7 @@ def _atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + '.tmp')
     temporary.write_text(text, encoding='utf-8')
-    os.replace(temporary, path)
+    atomic_replace(temporary, path)
 
 
 def _relative(root: Path, path: Path) -> str:

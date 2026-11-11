@@ -22,6 +22,7 @@ import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from core.atomic import replace as atomic_replace
 from core.refs import as_bool
 from runtime import paths
 
@@ -91,7 +92,7 @@ def _save(tasks: list) -> None:
     tmp = _path() + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump({'version': 1, 'tasks': tasks}, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, _path())
+    atomic_replace(tmp, _path())
 
 
 # ─── Time helpers ───

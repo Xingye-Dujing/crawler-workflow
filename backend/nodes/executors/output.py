@@ -11,6 +11,7 @@ import contextlib
 import os
 
 import pandas as pd
+from core.atomic import replace as atomic_replace
 from core.refs import as_bool, sanitize_filename
 from runtime import paths
 from runtime.state import _wf_local, add_log
@@ -159,7 +160,7 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
         # The compile node already produced this (staged in EXPORT_DIR); finalize it under the user's name.
         staged = os.path.join(paths.active().export_dir, staged_pdf)
         try:
-            os.replace(staged, os.path.join(paths.active().export_dir, filename))
+            atomic_replace(staged, os.path.join(paths.active().export_dir, filename))
         except OSError as e:
             return {'error': t('api.compilePdfFailed', err=e)}
         size = os.path.getsize(os.path.join(paths.active().export_dir, filename))

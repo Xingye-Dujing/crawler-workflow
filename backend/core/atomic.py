@@ -1,10 +1,10 @@
 """One atomic-rename helper, because on Windows a READER blocks the rename.
 
-Every durable store in this project writes ``<target>.<unique>.tmp`` and then renames it into place.
-On POSIX that rename replaces whatever is there, held open or not; on Windows ``os.replace`` answers
-``PermissionError`` (errno 13) while ANY other handle has the target open — a second request loading
-the same workflow, the settings file being read by a panel, an antivirus scanner, the console
-``.jsonl`` tail.
+The durable stores whose read can race their write stage ``<target>.<unique>.tmp`` and then rename it
+into place through here. On POSIX that rename replaces whatever is there, held open or not; on Windows
+``os.replace`` answers ``PermissionError`` (errno 13) while ANY other handle has the target open — a
+second request loading the same workflow, the settings file being read by a panel, an antivirus
+scanner, the console ``.jsonl`` tail.
 
 Two consequences follow, and both were real:
 

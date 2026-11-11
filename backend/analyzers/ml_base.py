@@ -5,6 +5,7 @@ import threading
 import jieba
 import numpy as np
 import pandas as pd
+from core.atomic import replace as atomic_replace
 from core.config import Config
 from core.refs import sanitize_filename
 
@@ -150,7 +151,7 @@ class MLClassifier:
             # it read as a broken install rather than "this model was never finished training".
             temporary = f'{self._path}.tmp'
             joblib.dump({'pipeline': self.pipeline, 'label_map': label_map}, temporary)
-            os.replace(temporary, self._path)
+            atomic_replace(temporary, self._path)
         return self
 
     def predict(self, texts: list[str], _neutral: str = 'Neutral') -> list[tuple[str, float]]:

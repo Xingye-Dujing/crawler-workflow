@@ -16,6 +16,7 @@ import logging
 import os
 import uuid
 
+from core.atomic import replace as atomic_replace
 from core.refs import as_bool, sanitize_filename
 from runtime import paths
 from runtime.state import add_log
@@ -46,7 +47,7 @@ def write_latex_export(base: str, content: str, suffix: str) -> str:
     try:
         with open(staged, 'w', encoding='utf-8') as handle:
             handle.write(content)
-        os.replace(staged, target)
+        atomic_replace(staged, target)
     except BaseException:
         with contextlib.suppress(OSError):
             os.remove(staged)
