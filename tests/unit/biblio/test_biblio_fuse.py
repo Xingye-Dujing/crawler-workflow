@@ -141,6 +141,18 @@ class TestContract:
         ids = [row['记录ID'] for row in result['rows']]
         assert len(set(ids)) == len(ids), ids
 
+    def test_repeated_identical_rows_in_one_source_stay_distinct_records(self):
+        """The fusion keeps every row a parent produced; two identical rows are still two records.
+
+        A content hash over title|author|year|source alone collapsed them into one identity, so a
+        downstream reader that names documents by ``记录ID`` could not tell them apart. The ordinal
+        is per source and follows row order, so reordering PARENTS does not change it.
+        """
+        row = {'题名': '同一篇', '年份': 2021, '关键词': '数字治理', '作者': '张明'}
+        result = _fuse([('node-1', [dict(row), dict(row)])])
+        ids = [entry['记录ID'] for entry in result['rows']]
+        assert len(set(ids)) == 2, ids
+
     def test_the_output_columns_are_a_fixed_contract(self):
         """A fusion node's output is canonical by design: whatever the sources called their
         columns, the downstream node reads 题名/关键词/年份/来源 with its default mapping."""

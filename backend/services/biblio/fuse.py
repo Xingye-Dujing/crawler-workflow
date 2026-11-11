@@ -204,6 +204,11 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
             )
         label, source_column = _source_label(records, columns, parsed, pid, position)
         contributed = 0
+        #: How many times this parent has already emitted one content key. Two rows with the same
+        #: title/author/year/source are distinct rows (a repost pair, an untitled post table) and
+        #: must not collapse into one identity; the ordinal is stable while the parent's row order
+        #: is, and inserting or removing a *parent* does not touch it.
+        occurrences: dict[str, int] = {}
         for index, record in enumerate(records):
             terms = _values(record.get(found['entity']))
             if not terms:
@@ -216,6 +221,8 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
             # A table that carries several platforms labels each row with its OWN one; the
             # table-level label is only the fallback for rows that do not say.
             origin = (_cell_text(record.get(source_column)).strip() if source_column else '') or label
+            content_key = _content_key(title, author, year, origin)
+            occurrences[content_key] = occurrences.get(content_key, 0) + 1
             rows.append(
                 {
                     # A CONTENT identity, like every other record table in this project: the importer
@@ -226,8 +233,9 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
                     # shifted every id, so the same paper was drawn under a different name in the next
                     # run's figure. The source stays a PREFIX so the same work cited by two platforms
                     # stays two rows (which is what this node is for) while each row keeps one stable
-                    # identity across runs.
-                    '记录ID': f'{origin}#{_content_id(title, author, year, origin)}',
+                    # identity across runs. A repeated identical row in ONE source gets an ordinal in
+                    # its hash, so the second copy is still its own record rather than a duplicate id.
+                    '记录ID': f'{origin}#{_content_id(title, author, year, origin, occurrences[content_key])}',
                     '题名': title or f'{origin} {index + 1}',
                     '作者': author,
                     '作者单位': _cell_text(record.get(found['affiliation'])).strip() if found['affiliation'] else '',
@@ -270,17 +278,28 @@ def fuse(upstream, params: dict, nid: str = '') -> dict:
     }
 
 
-def _content_id(title: str, author: str, year: str, origin: str) -> str:
+def _content_key(title: str, author: str, year: str, origin: str) -> str:
+    """The content fields one fused row is identified by: title | first author | year | source."""
+    first_author = (author.split(';')[0] if author else '').strip()
+    return f'{title.strip()}|{first_author}|{year}|{origin.strip()}'
+
+
+def _content_id(title: str, author: str, year: str, origin: str, occurrence: int = 1) -> str:
     """A stable, content-derived identity for one fused record.
 
     Mirrors ``importer._record_id`` (title | first author | year) with the source folded in, because
     this node deliberately keeps the SAME work from two sources as two rows. A positional id made the
     same record change identity whenever a parent was added or removed, and a downstream reader uses
     ``记录ID`` as the record's name when it has no title.
+
+    ``occurrence`` > 1 is the second, third… identical row of the same source: those are distinct
+    rows (a repost pair, an untitled post table) rather than the same record, and an identity that
+    answered them with one hash made two documents indistinguishable downstream.
     """
-    first_author = (author.split(';')[0] if author else '').strip()
-    raw = f'{title.strip()}|{first_author}|{year}|{origin.strip()}'.encode()
-    return hashlib.sha1(raw).hexdigest()[:16]
+    raw = _content_key(title, author, year, origin)
+    if occurrence > 1:
+        raw = f'{raw}|#{occurrence}'
+    return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
 def _source_label(records, columns, parsed: dict, pid, position: int) -> tuple[str, str]:
