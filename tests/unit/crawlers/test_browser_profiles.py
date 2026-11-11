@@ -471,6 +471,33 @@ class TestCookieFileIsNotTheProfileSession:
         # never a guess.
         assert profiles.status('weibo')['needs_refresh'] is False
 
+    def test_the_status_row_says_which_action_the_next_run_takes(self, profiles_on, tmp_path):
+        """The panel names the next run's action from the SAME rule the factory reads.
+
+        Deriving it from ``has_saved_cookie`` alone said "will import on first use" for a used
+        profile whose older file will never be planted — a sentence no code would carry out.
+        """
+        saved = tmp_path / 'weibo_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        old = time.time() - 3600
+        os.utime(saved, (old, old))
+
+        fresh = profiles.status('weibo', has_cookie=True, cookie_path=str(saved))
+        assert (fresh['will_import'], fresh['will_refresh'], fresh['used_without_import']) == (True, False, False)
+
+        profiles.mark_used('weibo', imported=False)
+        old_row = profiles.status('weibo', has_cookie=True, cookie_path=str(saved))
+        assert (old_row['will_import'], old_row['will_refresh'], old_row['used_without_import']) == (False, False, True)
+
+        future = time.time() + 60
+        os.utime(saved, (future, future))
+        newer_row = profiles.status('weibo', has_cookie=True, cookie_path=str(saved))
+        assert (newer_row['will_import'], newer_row['will_refresh'], newer_row['used_without_import']) == (
+            False,
+            True,
+            False,
+        )
+
 
 class TestSettingsRoundTrip:
     def test_both_new_keys_are_declared_with_defaults(self):

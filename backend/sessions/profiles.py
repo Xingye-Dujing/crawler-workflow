@@ -810,6 +810,9 @@ def status(
     ``needs_refresh`` is the other half of that story: the profile *was* given a
     session, and the file it came from has been saved over since, so the login the user
     just re-took is sitting in a file the browser will never look at again by itself.
+    ``will_import``/``will_refresh``/``used_without_import`` are that same rule stated as
+    the next run's action, so the panel can name what will actually happen instead of
+    inferring it from ``has_saved_cookie`` alone.
 
     ``account`` scopes the whole answer to one account's device; the blank account is
     the platform's default device, unchanged from before multi-account existed.
@@ -821,6 +824,9 @@ def status(
     path = platform_dir(platform, account)
     exists = os.path.isdir(path)
     marker = _marker(platform, account)
+    used = bool(marker.get('used_at'))
+    imported = bool(marker.get('imported_at'))
+    stale = bool(cookie_path) and needs_refresh(platform, cookie_path, account)
     return {
         'platform': platform,
         'account': str(account or '').strip(),
@@ -828,9 +834,17 @@ def status(
         'recommended': bool(recommended),
         'path': path,
         'exists': exists,
-        'imported': bool(marker.get('imported_at')),
+        'imported': imported,
         'used_at': str(marker.get('used_at') or ''),
         'size_mb': _dir_size_mb(path) if (exists and size) else 0,
         'has_saved_cookie': bool(has_cookie),
-        'needs_refresh': bool(cookie_path) and needs_refresh(platform, cookie_path, account),
+        'needs_refresh': stale,
+        # The panel's next sentence. These are the factory's own planting rule, answered here so
+        # the UI does not have to re-derive it (and say "will import" about a profile that will not):
+        # a never-used profile imports the file on first use; a used one is given the file only when
+        # that file is newer than the session (needs_refresh). A used profile holding an older file
+        # keeps whatever session it made by hand.
+        'will_import': bool(has_cookie) and not used,
+        'will_refresh': bool(has_cookie) and used and stale,
+        'used_without_import': used and not imported and not stale,
     }

@@ -80,6 +80,11 @@ class TestProfilesEndpoint:
             # Which cookie file this profile was planted from, expressed as one boolean:
             # the panel cannot know a saved-over file is being ignored without it.
             'needs_refresh',
+            # The next run's action, so the settings panel names what will actually happen
+            # instead of inferring it from has_saved_cookie alone.
+            'will_import',
+            'will_refresh',
+            'used_without_import',
         }
         assert json.dumps(first)  # the payload must survive JSON, sizes and all
 

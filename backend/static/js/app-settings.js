@@ -130,10 +130,12 @@ function onSettingInput(field, value) {
 }
 
 /* Per-platform browser-profile state, so "启用" is not a blind switch: the panel
-   shows which platforms the crawl matrix flags as needing one and whether that
-   platform's directory has already been used (``imported``). A platform reading
-   需要登录 is the case the user has to act on — turning the setting on does nothing
-   by itself until they have logged into *that* profile once through the Cookie panel.
+   shows which platforms the crawl matrix flags as needing one and what the NEXT crawl
+   will do with that platform's saved cookie (import it, refresh it, keep the profile's
+   own session, or nothing until the user logs in through the Cookie panel). A platform
+   reading 需要登录 is the case the user has to act on — turning the setting on does
+   nothing by itself until they have logged into *that* profile once through the Cookie
+   panel.
 
    Built with textContent rather than innerHTML: the row carries a platform name and
    a state sentence, and a list assembled by string concatenation is one future
@@ -179,8 +181,14 @@ const BrowserProfiles = {
 
     _stateOf(entry) {
         if (!entry.enabled) return I18n.t('set.profileOff');
+        /* The server states the next run's action (will_import / will_refresh /
+           used_without_import); deciding it from has_saved_cookie here said "will
+           import on first use" for a used profile whose older file will never be
+           planted, which is the opposite of what the factory does. */
+        if (entry.will_refresh) return I18n.t('set.profileWillRefresh');
+        if (entry.will_import) return I18n.t('set.profileWillImport');
         if (entry.imported) return I18n.t('set.profileReady');
-        if (entry.has_saved_cookie) return I18n.t('set.profileWillImport');
+        if (entry.used_without_import) return I18n.t('set.profileUsedNoImport');
         return I18n.t('set.profileNeedsLogin');
     },
 

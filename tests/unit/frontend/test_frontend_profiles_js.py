@@ -11,8 +11,8 @@ fails here is the shipped code, not a re-telling of it. Four things are pinned:
 * the dialog itself: that it appears, that 继续运行 runs and 先去设置 does not (and
   opens the settings panel instead), and that the message carries the count;
 * the settings table: one row per platform in server order, the recommendation flag
-  on the right rows, four distinct states, and the honest note when the endpoint
-  answers nothing usable;
+  on the right rows, the states the server says the next run will take, and the honest
+  note when the endpoint answers nothing usable;
 * the Data Source panel hint, which has to say "turn it on" when it is off and "log
   into it" when it is on — the two next steps are different, and the matrix decides
   which platforms get either sentence.
@@ -111,19 +111,27 @@ def _two_crawls(*platforms):
 def _profiles_rows(enabled=True, template=None):
     rows = []
     for platform in PLATFORMS:
-        rows.append(
-            {
-                'platform': platform,
-                'enabled': enabled,
-                'recommended': platform in FLAGGED,
-                'path': f'/tmp/{platform}',
-                'exists': True,
-                'imported': platform == 'zhihu',
-                'used_at': '2026-09-24 10:00:00' if platform == 'zhihu' else '',
-                'size_mb': 12,
-                'has_saved_cookie': platform == 'weibo',
-            }
-        )
+        row = {
+            'platform': platform,
+            'enabled': enabled,
+            'recommended': platform in FLAGGED,
+            'path': f'/tmp/{platform}',
+            'exists': True,
+            'imported': platform == 'zhihu',
+            'used_at': '2026-09-24 10:00:00' if platform == 'zhihu' else '',
+            'size_mb': 12,
+            'has_saved_cookie': platform in ('weibo', 'douyin', 'xiaohongshu'),
+            'needs_refresh': platform == 'xiaohongshu',
+            'will_import': platform == 'weibo',
+            'will_refresh': platform == 'xiaohongshu',
+            'used_without_import': platform == 'douyin',
+        }
+        if platform == 'douyin':
+            row['used_at'] = '2026-09-24 10:00:00'
+        if platform == 'xiaohongshu':
+            row['imported'] = True
+            row['used_at'] = '2026-09-24 10:00:00'
+        rows.append(row)
     payload = {'ok': True, 'enabled': enabled, 'root': '/tmp', 'profiles': rows}
     # ``None`` is the OLDER payload, not a statement about the template: a server that never
     # answered the question must not be rendered as “模板缺失”.
@@ -408,12 +416,28 @@ class TestSettingsTable:
             if row['chip']:
                 assert row['kind'] == 'suggested'
 
-    def test_the_four_states_are_distinguishable(self, ui):
+    def test_the_states_are_distinguishable(self, ui):
         rows = ui['off-flagged']['rows']
         states = {row['state'] for row in rows}
         assert '功能已关闭' in states or 'switched off' in ' '.join(states), states
         on = {row['state'] for row in ui['on-flagged']['rows']}
         assert states != on, 'the table says nothing about the switch'
+
+    def test_the_panel_names_the_next_runs_action_not_just_the_file(self, ui):
+        """``has_saved_cookie`` alone cannot say what happens: a used profile with an older file
+        keeps its own session. The server now states the action, and the panel repeats it."""
+        rows = ui['on-flagged']['rows']
+
+        def state(platform):
+            return rows[PLATFORMS.index(platform)]['state']
+
+        assert 'first use' in state('weibo'), state('weibo')
+        assert 'next run' in state('xiaohongshu'), state('xiaohongshu')
+        assert 'older' in state('douyin'), state('douyin')
+        assert 'own session' in state('zhihu'), state('zhihu')
+        # A platform with no saved cookie and no use is still the "log in" case.
+        other = next(platform for platform in PLATFORMS if platform not in ('weibo', 'douyin', 'xiaohongshu', 'zhihu'))
+        assert 'not logged in' in state(other), state(other)
 
     def test_an_unusable_payload_says_so_instead_of_rendering_nothing(self, ui):
         rows = ui['no-matrix']['rows']
