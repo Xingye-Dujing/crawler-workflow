@@ -303,6 +303,25 @@ class TestAPlatformThatKeepsNoDevice:
         crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
         assert Path(fake_crawler()['cookie_path']) == saved, 'the re-saved cookie never reached its browser'
 
+    def test_a_cookie_saved_after_an_empty_first_crawl_reaches_the_next_one(self, profiles_on, fake_crawler, tmp_path):
+        """The first crawl can run before any cookie was saved, which leaves the profile used but
+        never imported. A file saved AFTER that use is the deferred plant the panel promised; the
+        empty marker must not make ``needs_refresh`` answer "no" for ever.
+        """
+        cookie_dir = tmp_path / 'cookies'
+        cookie_dir.mkdir()
+        saved = cookie_dir / 'weibo_cookies.json'
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        assert profiles.is_used('weibo') is True
+        assert profiles.is_imported('weibo') is False, 'a missing file was recorded as imported'
+
+        saved.write_text('[{"name": "SUB", "value": "first save"}]', encoding='utf-8')
+        future = time.time() + 60
+        os.utime(saved, (future, future))
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        assert Path(fake_crawler()['cookie_path']) == saved, 'the later save never reached the profile'
+        assert profiles.is_imported('weibo') is True, 'the plant was not recorded'
+
 
 class TestAccounts:
     """Multi-account: one platform, several devices, none of them each other's.
@@ -402,6 +421,27 @@ class TestCookieFileIsNotTheProfileSession:
         saved.write_text('[{"name":"a"}]', encoding='utf-8')
         profiles.mark_used('douyin', imported=False)
         assert profiles.needs_refresh('douyin', str(saved)) is False
+
+    def test_a_file_saved_after_an_empty_first_use_is_the_deferred_plant(self, profiles_on, tmp_path):
+        """The first crawl ran before a cookie existed: nothing went in, so the marker has no
+        stamp. A file written later is exactly the paste the save path deferred — the empty stamp
+        must not silence it for ever."""
+        profiles.mark_used('weibo', imported=False)
+        saved = tmp_path / 'weibo_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        future = time.time() + 60
+        os.utime(saved, (future, future))
+        assert profiles.needs_refresh('weibo', str(saved)) is True
+
+    def test_a_file_older_than_the_profile_use_is_not_offered(self, profiles_on, tmp_path):
+        """The other direction: a profile used when an old cookie file already sat there may hold
+        a login made by hand, and that file is not newer than it — leave it alone."""
+        saved = tmp_path / 'zhihu_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        old = time.time() - 3600
+        os.utime(saved, (old, old))
+        profiles.mark_used('zhihu', imported=False)
+        assert profiles.needs_refresh('zhihu', str(saved)) is False
 
     def test_a_profile_with_no_history_of_what_went_in_says_nothing(self, profiles_on, tmp_path):
         """Every profile built before this field existed answers "I cannot tell", which is

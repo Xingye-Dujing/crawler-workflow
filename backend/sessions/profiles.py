@@ -734,27 +734,55 @@ def file_stamp(path: str) -> str:
 
 
 def needs_refresh(platform: str, cookie_path: str, account: str = '') -> bool:
-    """Is the saved cookie file a *different* file than the one this profile was given?
+    """Is the saved cookie file a *different* session than the one this profile holds?
 
-    Three answers must stay separate, and two of them are "no":
+    Four answers, three of them "no":
 
     * a profile that has never been used will import the file on its own — nothing to
       refresh;
-    * a profile whose marker predates this field answers "no" rather than nagging,
+    * a profile whose marker predates the stamp field answers "no" rather than nagging,
       because "I cannot tell what went in" is not evidence that something changed;
-    * a platform with no saved file has nothing to plant.
+    * a platform with no saved file has nothing to plant;
+    * a profile used when nothing was saved answers "no" until a file is written *after*
+      that use — then that file is the deferred plant the save path promised, and it is
+      newer than the profile's own empty session. A file older than the use is not ours
+      to plant over a login the user may have made by hand.
 
-    Only "it was planted, and the file has been saved since" is a real difference, and
-    even then this is a hint and a button — never an automatic re-plant. Overwriting a
-    live profile with an older snapshot is the harm the import-once rule exists to
-    prevent; the user asking is the one thing that makes it a refresh.
+    Only a real difference is answered "yes", and even then this is a hint and a button —
+    never an automatic re-plant. Overwriting a live profile with an older snapshot is the
+    harm the import-once rule exists to prevent; the user asking is the one thing that
+    makes it a refresh.
     """
     if not cookie_path or not is_used(platform, account):
         return False
-    recorded = str(_marker(platform, account).get('cookie_stamp') or '')
+    marker = _marker(platform, account)
+    recorded = str(marker.get('cookie_stamp') or '')
     if not recorded:
-        return False
+        if marker.get('imported_at'):
+            # Every profile built before this field existed answers "I cannot tell", which is
+            # deliberately not rendered as a hint. The button still works for them.
+            return False
+        # The profile was used, but no cookie file was ever planted into it (the first crawl
+        # ran with nothing saved). A file saved AFTER that use is the deferred plant the panel
+        # promised, and it is newer than anything this profile holds; one that predates the
+        # use is not ours to plant over a login the user may have made by hand.
+        return _saved_after_use(marker, cookie_path)
     return file_stamp(cookie_path) != recorded
+
+
+def _saved_after_use(marker: dict, cookie_path: str) -> bool:
+    """Whether *cookie_path* was written after the profile's last use.
+
+    The marker stores ``used_at`` as local time; ``st_mtime`` is an epoch. Comparing them through
+    ``time.mktime`` keeps the question in the same clock the marker was written in, including the
+    DST rules of this machine. Both sides are rounded to whole seconds because that is the marker's
+    own resolution: a file written earlier in the same second must not look "newer" by its fraction.
+    """
+    try:
+        used = int(time.mktime(time.strptime(str(marker.get('used_at') or ''), '%Y-%m-%d %H:%M:%S')))
+        return int(os.stat(cookie_path).st_mtime) > used
+    except (OSError, ValueError):
+        return False
 
 
 def _dir_size_mb(path: str) -> int:
