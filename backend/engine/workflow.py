@@ -12,9 +12,11 @@ from sessions import preflight
 from sessions.cookies import CookieManager
 
 from i18n import t
+from services import pool
 from services.biblio.fuse import collect_errors as fuse_param_errors
 from services.biblio.schema import collect_errors as biblio_param_errors
 from services.charts.contracts import NO_X_TYPES
+from services.pool import selector
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,17 @@ def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     manager = CookieManager(paths.active().cookie_dir)
     out = []
     for platform in dict.fromkeys(str(p or '').strip() for p in platforms if str(p or '').strip()):
+        if selector.is_pool_value(account):
+            # The pool is asked a different question, and it must be asked before "does this
+            # account have a file": ``@pool`` is not a login, so looking it up would refuse
+            # every pool node for a cookie nobody named. Two refusals, because they want two
+            # different actions: save a login at all, versus wait for (or unfreeze) one.
+            snapshot = pool.snapshot(platform)
+            if not snapshot['total']:
+                out.append(t('engine.source_pool_empty', nid=label, platform=platform))
+            elif not snapshot['usable']:
+                out.append(t('engine.source_pool_cooling', nid=label, platform=platform))
+            continue
         if not preflight.has_session_to_test(platform, account=account):
             out.append(
                 t(

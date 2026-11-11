@@ -29,6 +29,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
 from sessions import profiles
 
+from crawlers.core import proxy as proxy_exit
 from crawlers.core.faults import ProfileUnavailableError
 from i18n import t
 
@@ -139,7 +140,7 @@ def content_prefs(needs_images: bool) -> dict:
 STARTUP_PREFS = {'session': {'restore_on_startup': 4, 'startup_urls': ['about:blank']}}
 
 
-def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -> Options:
+def build_options(headless: bool, profile_dir: str | None, needs_images: bool, proxy_args: tuple = ()) -> Options:
     """The launch configuration: headless shape, profile, window, language, blockers.
 
     Every switch here is a measured answer, not a list copied from a blog post, and the comments
@@ -197,6 +198,11 @@ def build_options(headless: bool, profile_dir: str | None, needs_images: bool) -
     # the very first navigation), which no amount of timeout tuning fixes.
     opts.page_load_strategy = 'eager'
     opts.add_experimental_option('prefs', {**content_prefs(needs_images), **STARTUP_PREFS})
+    # The exit (IP) this device leaves through. ``launch`` builds these (it has to create
+    # the credential relay first, because its port goes into the argument), and declares
+    # them last so a refusal for an unsupported exit arrives before anything launches.
+    for argument in proxy_args or ():
+        opts.add_argument(argument)
     return opts
 
 
@@ -377,26 +383,42 @@ def close_driver(driver) -> None:
     """
     if driver is None:
         return
-    try:
-        _bounded_call(driver.quit, _int_setting('renderer_close_timeout', 10), 'driver.quit')
-        return
-    except TimeoutError:
-        pass  # still inside quit(): the socket is wedged and the process has to go
-    except BaseException:
-        # A session answered by a ``DeadDriver`` raises ``CrawlerStopped`` — a stop, not a wedge —
-        # and an ordinary quit error means the session already reported itself gone.
-        return
-    pid = None
+    relay = None
+    # ``DeadDriver.__getattr__`` raises ``CrawlerStopped`` (a BaseException) for EVERY name,
+    # so the plain ``getattr(..., None)`` this used to be turned a silent teardown into a
+    # stop that replaced the crawl's own result — the exact harm the docstring forbids.
     with contextlib.suppress(BaseException):
-        pid = driver.service.process.pid
-    if not pid:
-        return
-    stopped, reason = procs.reap_process(pid)
-    if not stopped:
-        logger.debug('reaping an unresponsive driver (%s) failed: %s', pid, reason)
+        relay = getattr(driver, 'proxy_relay', None)
+    try:
+        try:
+            _bounded_call(driver.quit, _int_setting('renderer_close_timeout', 10), 'driver.quit')
+            return
+        except TimeoutError:
+            pass  # still inside quit(): the socket is wedged and the process has to go
+        except BaseException:
+            # A session answered by a ``DeadDriver`` raises ``CrawlerStopped`` — a stop, not a wedge —
+            # and an ordinary quit error means the session already reported itself gone.
+            return
+        pid = None
+        with contextlib.suppress(BaseException):
+            pid = driver.service.process.pid
+        if not pid:
+            return
+        stopped, reason = procs.reap_process(pid)
+        if not stopped:
+            logger.debug('reaping an unresponsive driver (%s) failed: %s', pid, reason)
+    finally:
+        # Every path above ends this browser, so the loopback relay (when the exit needed
+        # credentials) dies with it — including the reaped-by-PID path, which is exactly the
+        # one where no clean shutdown would otherwise close its listening socket.
+        if relay is not None:
+            with contextlib.suppress(BaseException):
+                relay.stop()
 
 
-def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: str) -> ChromeWebDriver:
+def launch(
+    headless: bool, profile_dir: str | None, needs_images: bool, domain: str, proxy: dict = None
+) -> ChromeWebDriver:
     """Build one Chrome exactly as a crawl session wants it, and hand back the live driver.
 
     A headless browser must not announce itself as headless. Measured 2026-09-26 (#148): a
@@ -415,9 +437,19 @@ def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: 
     possible because the launch starts on ``about:blank`` (see :data:`STARTUP_PREFS`): a page with
     nothing remote to fetch has no legitimate reason to be busy for fifteen seconds.
     """
-    opts = build_options(headless, profile_dir, needs_images)
-    resolve_browser(opts)
-    service = make_service()
+    # Built before the options: a credentialed exit needs its loopback relay listening
+    # first, because the port it picked is what Chrome is pointed at.
+    proxy_args, relay = proxy_exit.chrome_arguments(proxy)
+    try:
+        opts = build_options(headless, profile_dir, needs_images, proxy_args=proxy_args)
+        resolve_browser(opts)
+        service = make_service()
+    except BaseException:
+        # A refusal before Chrome starts must not leave the relay listening: nothing would
+        # ever own it, and the next attempt would accumulate one port per failure.
+        if relay is not None:
+            relay.stop()
+        raise
     try:
         # The class itself, not ``webdriver.Chrome``: that name is a re-export the package
         # builds at import time, which no type checker can see as callable, so annotating with
@@ -429,9 +461,17 @@ def launch(headless: bool, profile_dir: str | None, needs_images: bool, domain: 
         # versions it tried to pair, which is what the user has to act on. No single cause is
         # claimed, because a version mismatch, a first-run download with no network and a
         # profile Chrome refuses to share all arrive here.
+        if relay is not None:
+            relay.stop()
         raise ValueError(
             t('crawl.browserStartFailed', err=str(exc).strip().splitlines()[0] if str(exc).strip() else repr(exc))
         ) from exc
+    if relay is not None:
+        # Owned by the driver's lifetime, so a browser that never closes cleanly cannot leak
+        # a listening port (``close_driver`` stops it even when it has to reap by PID).
+        # A public name, deliberately: this is state WE hang on the driver, and a private
+        # name reads to every reviewer (and to pylint) as poking at the client's internals.
+        driver.proxy_relay = relay
     if headless:
         # The browser process is up, but a wedged renderer answers no CDP script at all — the
         # “读不到自己的 User-Agent” stall, which used to hang the disguise for the driver's whole

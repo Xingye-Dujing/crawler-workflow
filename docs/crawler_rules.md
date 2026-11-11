@@ -437,3 +437,14 @@
   控制台代码页改写，长链接列表还会撞命令行长度上限；stdout/stderr 按字节读回再显式 decode；
   子进程按 token 登记，停止与超时都走 `utils/procs`（Windows 的 `CREATE_NO_WINDOW` 只在 Windows 存在，
   POSIX 返回空 kwargs——评论每个链接起一次进程，不能每次闪一个黑窗）。
+
+## 账号池与出口池 / Account and exit pool
+
+细节与归因表见 [account_pool.md](account_pool.md)。采集端必须守住的三条：
+
+- **数据源节点只在“本次零行 + 登录墙/风控”时换号**（`SessionBlockedError`）。已经有行落库时走既有的
+  PARTIAL + 继续；换号不能让账本、游标或“采得不足”的判定看见第二个答案。
+- **评论节点按链接换号**：失败的链接本来就不在“已证明的连续前缀”里，重走它不需要移动 `url_index`。
+- **每次尝试重新 `gate.hold(..., account=该次真实账号)`**：lane 按账号分，`@pool` 不能当作 lane 的名字。
+  池模式不再对同一账号做 `wall_retry_backoff` 重试——刚测出来的墙再撞一次是纯粹的浪费。
+- 出口只按 `(账号, 平台)` 粘性绑定；出口被冷却才换 IP。出口全坏且不允许直连时**按名拒绝**，绝不静默直连。

@@ -73,6 +73,27 @@ class ProfileUnavailableError(RuntimeError):
     """
 
 
+class SessionBlockedError(RuntimeError):
+    """The site refused this session before the crawl paid for a single row.
+
+    It exists for exactly one caller: a pool-mode source node deciding whether the failure it
+    just got is one a DIFFERENT login may answer. The distinction is not "did the page say
+    wall" — the executor already knows that — but "did this attempt collect nothing", which
+    is what makes switching accounts safe. The ledger and the cursor describe a node that
+    has produced rows; rotating after rows exist would hand the second account a half-paid
+    walk and no honest place to resume from.
+
+    An ordinary ``Exception``: if no pool is listening it settles the node exactly like the
+    ``cookieExpired`` refusal it replaces, so a hand-built call still reports the wall.
+    """
+
+    def __init__(self, message: str, reason: str = '', platform: str = '', account: str = ''):
+        super().__init__(message)
+        self.reason = str(reason or '')
+        self.platform = str(platform or '')
+        self.account = str(account or '')
+
+
 class PageNotArrivedError(RuntimeError):
     """One page of a crawl stayed empty for the whole patience budget.
 

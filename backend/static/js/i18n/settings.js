@@ -307,6 +307,33 @@
         'set.overseasAsk': 'Ask about the VPN for overseas platforms',
         'set.overseasAskInline': 'Before a run, ask whether the VPN is up when the canvas crawls an overseas platform',
         'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
+        'set.poolEnabled': 'Account / exit pool',
+        'set.poolEnabledInline':
+            'Offer “pool (rotate automatically)” in the account selector. A login or an exit that hits a wall, '
+            + 'a captcha or a dead network is benched for a while and the next healthy pair takes over.',
+        'set.poolCooldown': 'Pool cooldown after a hard block (s)',
+        'set.poolCooldownHint':
+            'How long a login (login wall) or an exit (risk control) is skipped after it is blocked. Default 7200 = two hours.',
+        'set.poolNetworkCooldown': 'Pool cooldown after a network failure (s)',
+        'set.poolNetworkCooldownHint':
+            'A refused navigation or a proxy that does not answer is not the account’s fault, so its exit is benched '
+            + 'only briefly. 0 = never bench for network trouble.',
+        'set.poolMaxAttempts': 'Pool attempts per node run',
+        'set.poolMaxAttemptsHint': 'How many different login + exit pairs one node may spend in one run before it fails by name.',
+        'set.poolEscalate': 'Escalate repeated cooldowns',
+        'set.poolEscalateHint': 'Double the cooldown for a subject that is blocked again after its term ends (capped at a week).',
+        'set.poolDirectFallback': 'Allow direct connection when every exit is benched',
+        'set.poolDirectFallbackHint':
+            'Off (recommended): the run fails rather than exposing the host’s own address after a proxy problem. '
+            + 'Only matters when an exit pool is configured.',
+        'set.poolSkipBackoff': 'Pool mode skips the same-account retry',
+        'set.poolSkipBackoffHint':
+            'In pool mode, a wall before the first row switches account immediately instead of waiting out the '
+            + 'single-account retry — retrying a block that was just measured is the waste the pool exists to avoid.',
+        'set.poolPreflightLive': 'Verify pool candidates with a real browser',
+        'set.poolPreflightLiveHint':
+            'Off by default: the pre-run gate reads the stored cooldown table, so a benched login is skipped without '
+            + 'opening a browser. Turning this on spends one page load per candidate to prove it right now.',
         'set.sameQueue': 'Fully queue same-platform crawls',
         'set.sameQueueInline': '真排队: one platform runs one crawl at a time, start to finish',
         'set.stagger': 'Same-platform start gap (seconds)',
@@ -896,6 +923,28 @@
         'set.overseasAsk': '海外平台运行前问一句外网',
         'set.overseasAskInline': '画布里有海外平台时，运行前先问一句 VPN 是否已开',
         'set.cookiePreflightInline': '运行前用本次真要用的浏览器各加载一次该平台，问它 Cookie 还认不认',
+        'set.poolEnabled': '账号池 / 出口池',
+        'set.poolEnabledInline':
+            '账号选择里出现“账号池（自动轮换）”。某个账号或出口遇到登录墙、风控或网络不通时，先冷却一段时间，'
+            + '自动换下一组可用的账号与出口。',
+        'set.poolCooldown': '池内硬失败冷却（秒）',
+        'set.poolCooldownHint': '账号（登录墙）或出口（风控）被拦后跳过多久。默认 7200 秒＝2 小时。',
+        'set.poolNetworkCooldown': '池内网络失败冷却（秒）',
+        'set.poolNetworkCooldownHint':
+            '页面打不开、出口连不上不是账号的问题，所以只短暂冷却那个出口。0 表示网络问题不冷却。',
+        'set.poolMaxAttempts': '单节点每次运行最多换几组',
+        'set.poolMaxAttemptsHint': '一次运行里一个节点最多花掉几组不同的“账号＋出口”；用完就按名字报错。',
+        'set.poolEscalate': '重复被拦时延长冷却',
+        'set.poolEscalateHint': '冷却结束后又被拦，冷却时间翻倍（最长一周）。默认关闭。',
+        'set.poolDirectFallback': '出口全部冷却时允许直连',
+        'set.poolDirectFallbackHint':
+            '建议关闭：出口出问题时宁可让运行失败，也不暴露本机自己的地址。只有配置了出口池时才起作用。',
+        'set.poolSkipBackoff': '池模式跳过同账号重试',
+        'set.poolSkipBackoffHint':
+            '池模式下一进门就撞墙时直接换号，不再等“同账号退避重试”——刚测出来的墙再撞一次，正是账号池要避免的浪费。',
+        'set.poolPreflightLive': '用真浏览器验证池内候选',
+        'set.poolPreflightLiveHint':
+            '默认关闭：运行前门禁读冷却台账，冷却中的账号根本不开浏览器。打开后每个候选要真加载一次页面来现场证明。',
         'set.sameQueue': '同平台真排队',
         'set.sameQueueInline': '真排队：同一平台一次只跑一条，前一条跑完才轮到下一条',
         'set.stagger': '同平台错峰间隔（秒）',

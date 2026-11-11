@@ -41,9 +41,12 @@ from runtime.settings import get_setting
 
 from crawlers import crawler_class, is_crawlable
 from i18n import get_lang, set_lang, t
+from services import pool
 from services.ingest import catbus
+from services.pool import selector as pool_selector
 from sessions import profiles
 from sessions.cookies import CookieManager
+from sessions.session_state import has_session as _has_session
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +56,15 @@ UNKNOWN = 'unknown'
 NO_COOKIE = 'nocookie'
 NO_LOGIN = 'nologin'
 NOT_CRAWLABLE = 'notcrawlable'
+#: The pool benched this login/exit; a run would spend an attempt the whole feature exists
+#: to avoid. It reads as its own verdict because the user's next action ("wait", or
+#: "unfreeze in the pool panel") is neither "log in again" nor "try anyway".
+COOLING = 'cooling'
 
 #: The verdicts a run may not start on. Kept as one tuple because the endpoint and the
 #: browser both have to agree, and “过期就不得执行” is the user's decision, not a
 #: detail to be rediscovered in two places.
-BLOCKING = (EXPIRED, NO_COOKIE)
+BLOCKING = (EXPIRED, NO_COOKIE, COOLING)
 
 _cache: dict[tuple, dict] = {}
 _lock = threading.Lock()
@@ -190,6 +197,7 @@ _REASONS = {
     NO_COOKIE: 'cookie.verify.noCookie',
     NO_LOGIN: 'cookie.pre.noLogin',
     NOT_CRAWLABLE: 'cookie.pre.notCrawlable',
+    COOLING: 'cookie.pre.cooling',
 }
 
 
@@ -243,24 +251,14 @@ def _needs_session(platform: str) -> bool:
 def has_session_to_test(platform: str, use_profile: bool = None, account: str = '') -> bool:
     """Whether anything could carry this platform's login.
 
-    Public because the validator asks the same question before a run starts (a node that
-    names a login this machine does not have must be refused BY NAME, not answered by
-    quietly crawling as somebody else), and a
-    second copy of "is a session here" is how the two answers drift apart.
+    Delegates to :func:`sessions.session_state.has_session`, because the account pool asks
+    the very same question when it ranks candidates: a second copy of "is a session here"
+    is how one side calls a login healthy while the other calls it missing.
 
-    The saved file is the obvious source, but a *used profile* is a second one: since
-    a profile imports the cookie file once and is never re-planted, a session lives in
-    the directory from then on, and :mod:`sessions.profiles` ignores the file
-    completely. Deleting a snapshot (#111) therefore does not log that device out — so
-    this must not answer "nothing to test" while the profile is in play.
-
-    Both halves are the *account's*: one account can hold a session while another has
-    none, and asking the wrong one is how a valid login gets called missing.
+    Historical spelling kept public: the validator and the pre-run probe import THIS name,
+    and ``has_session`` is the leaf implementation both sides now share.
     """
-    if CookieManager(paths.active().cookie_dir).exists(platform, account):
-        return True
-    active = profiles.is_enabled() if use_profile is None else bool(use_profile)
-    return bool(active and profiles.is_used(platform, account))
+    return _has_session(platform, account, use_profile)
 
 
 def knows(platform: str) -> bool:
@@ -374,6 +372,17 @@ def probe(
         return _verdict(platform, NO_LOGIN, account=account)
     if not has_session_to_test(platform, use_profile, account):
         return _verdict(platform, NO_COOKIE, account=account)
+    health = pool.store.get_health('account', platform, account)
+    if pool.health.effective_state(health) == 'cooling':
+        # The pool measured this login against this site and benched it. Opening a browser
+        # to discover the same wall again is the single most expensive thing this feature
+        # exists to stop, so the answer is the stored fact plus when it expires.
+        return _verdict(
+            platform,
+            COOLING,
+            detail=t('cookie.pre.coolingUntil', when=health.get('cool_until_local') or ''),
+            account=account,
+        )
     profile = profiles.profile_dir_for(platform, enabled=use_profile, account=account)
     if profile and profiles.is_busy(profile):
         # Something already holds that browser — an in-flight run, or the panel's own
@@ -487,8 +496,17 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
     answers: dict[str, dict] = {}
     if not pairs:
         return answers
+    # A pool entry is answered as a POOL, not by picking a login here: the run's own
+    # rotation picks with the same selector, and the gate must not do the choosing. The
+    # answer stays keyed by the requested sentinel, so the dialog can name the node.
+    pooled = [p for p in pairs if pool_selector.is_pool_value(p[1]) and p[2] != capabilities.BACKEND_CATBUS]
+    pairs = [p for p in pairs if p not in pooled]
+    for platform, _account, _backend in pooled:
+        answers[entry_key(platform, pool_selector.POOL_VALUE)] = _pool_verdict(platform, use_profile, fresh)
+    if not pairs:
+        return answers
     workers = max(1, min(len(pairs), int(get_setting('cookie_preflight_max_parallel'))))
-    pool = ThreadPoolExecutor(max_workers=workers)
+    executor = ThreadPoolExecutor(max_workers=workers)
     # Each probe reads a cookie file and a profile through ``paths.active()``; a pool thread
     # starts with no account context, so the scope has to travel with the work explicitly.
     # Without this every probe read the checkout-level ``data/cookies`` instead of the caller's.
@@ -504,7 +522,7 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
 
     try:
         futures = {
-            pool.submit(_probe_scoped, platform, account, backend): (
+            executor.submit(_probe_scoped, platform, account, backend): (
                 platform,
                 account,
                 backend,
@@ -531,5 +549,59 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
                     account=account,
                 )
     finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+        executor.shutdown(wait=False, cancel_futures=True)
     return answers
+
+
+def _pool_verdict(platform: str, use_profile, fresh: bool) -> dict:
+    """The gate's answer for a node that will rotate, not for one login.
+
+    State-based by default: the stored cooldown table is exactly the "do not try again"
+    knowledge this feature exists to accumulate, and paying a browser per candidate at the
+    press of 执行 is the opposite of it. ``pool_preflight_live`` (or an explicit ``fresh``)
+    makes it prove the first candidate for real, which also teaches the pool what happened.
+    """
+    account = pool_selector.POOL_VALUE
+    snapshot = pool.snapshot(platform)
+    if not snapshot['total']:
+        return _verdict(platform, NO_COOKIE, account=account, why_key='cookie.pre.poolEmpty')
+    live = bool(fresh) or bool(get_setting('pool_preflight_live'))
+    if live:
+        candidate = pool.claim(platform)
+        if candidate is not None:
+            try:
+                verdict = probe(platform, use_profile=use_profile, fresh=fresh, account=candidate.account)
+            finally:
+                pool.release(candidate)
+            facts = _facts_of(verdict)
+            pool.observe(platform, candidate.account, facts, exit_id=candidate.exit_id)
+            snapshot = pool.snapshot(platform)
+        else:
+            verdict = _verdict(platform, COOLING, account=account, why_key='cookie.pre.poolCooling')
+            return verdict
+    if not snapshot['usable']:
+        return _verdict(
+            platform,
+            COOLING,
+            account=account,
+            detail=t('cookie.pre.poolCoolingDetail', n=snapshot['total']),
+            why_key='cookie.pre.poolCooling',
+        )
+    if live:
+        # The live probe already produced a concrete account's verdict; the pool's answer is
+        # "usable" as long as something is left, which the snapshot above just decided.
+        return _verdict(platform, VALID, account=account, probed=True)
+    return _verdict(platform, VALID, account=account)
+
+
+def _facts_of(verdict: dict) -> dict:
+    """A concrete verdict back into the bare facts :func:`services.pool.health.observe` reads.
+
+    One mapping, so a live preflight records the same evidence a crawl would.
+    """
+    state = str((verdict or {}).get('state') or '')
+    if state == EXPIRED:
+        return {'login_wall': True}
+    if state == UNKNOWN:
+        return {'error': str((verdict or {}).get('detail') or '')}
+    return {}

@@ -58,6 +58,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from engine import run_schedule
 from engine.logger import setup_logger
 from i18n import audit, set_lang, t
+from services.pool.routes import bp as pool_bp
 from services.runs.queue import (
     load_pending_queue,
 )
@@ -607,6 +608,9 @@ app.register_blueprint(report_bp)
 # The login-state cluster (``/api/cookies/*``, ``/api/profiles/delete``, ``/api/browser/profiles``)
 # is ``sessions/routes.py``; ``/api/config`` and ``/api/models`` are ``api/config.py``.
 app.register_blueprint(sessions_bp)
+# The account/exit pool's read side and its levers: which login and which exit are usable
+# now, and the human overrides that clear a cooldown or retire an exit.
+app.register_blueprint(pool_bp)
 app.register_blueprint(config_bp)
 # ``/api/capabilities`` extends the static matrix with the live account list, so it reads
 # ``state.cookie_manager`` and moves no further than that singleton does.

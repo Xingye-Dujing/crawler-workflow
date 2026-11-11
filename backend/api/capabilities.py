@@ -12,6 +12,9 @@ from flask import Blueprint, jsonify
 from runtime.state import cookie_manager
 from sessions.cookies import CookieManager
 
+from services.pool import enabled as pool_enabled
+from services.pool.selector import POOL_VALUE
+
 bp = Blueprint('capabilities', __name__)
 
 
@@ -58,6 +61,12 @@ def get_capabilities():
             # Nothing is saved anywhere: the row stays, because a structurally empty select
             # cannot show the account the user is about to save, and it is that account.
             options = [{'value': CookieManager.DEFAULT_ACCOUNT, 'labelKey': 'cookies.accountDefault'}]
+        if pool_enabled():
+            # Offered before the concrete logins because it is a different KIND of answer, and
+            # only when the feature is switched on: a canvas saved before the pool existed must
+            # not grow an option nobody asked for. ``@pool`` cannot collide with an account
+            # label (``ACCOUNT_RE`` refuses ``@``), so it is a storage value, never a login.
+            options.insert(0, {'value': POOL_VALUE, 'labelKey': 'cookies.accountPool'})
         for mode in cap.get('modes', []):
             for field in mode.get('fields', []):
                 if field.get('key') == 'account':

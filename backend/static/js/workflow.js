@@ -855,7 +855,10 @@ const workflow = {
                whoever was last picked — which, on a platform with several accounts, is a
                different file than the one the run was refused for. */
             var broken = unpackEntryKey(blocked[0]);
-            openCookieDialog(broken.platform, broken.account);
+            /* A pool node names no single login: there is no file to land on. Open the panel
+               on the platform's own account so a login can be added or refreshed, instead of
+               putting the ``@pool`` sentinel into a box whose save would refuse it. */
+            openCookieDialog(broken.platform, broken.account === '@pool' ? '' : broken.account);
         }
         return false;
     },
@@ -1921,6 +1924,10 @@ function entryLabels(entries) {
         .map(function (e) {
             var plat = typeof e === 'string' ? e : String((e && e.platform) || '');
             var acct = typeof e === 'string' ? '' : String((e && e.account) || '');
+            /* ``@pool`` is a storage sentinel, not a name: printing it as ``weibo@@pool``
+               would put a machine token inside a sentence a person reads. The server's
+               verdict text already names the specific login or the exhausted pool. */
+            if (acct === '@pool') return I18n.t('platform.' + plat) + ' · ' + I18n.t('cookies.accountPool');
             return I18n.t('platform.' + plat) + (acct ? '@' + acct : '');
         })
         .join('、');

@@ -741,6 +741,28 @@ function cookieRowCells(row) {
         }
         ops.push(profOp);
     }
+    if (poolOn()) {
+        /* The pool's two levers ride on the row they are about: a cooldown is invisible from
+           outside, so the user has to be able to say "try this login now" or "stop using it"
+           without leaving the list that named it. */
+        var poolRowState = String(row.pool_state || 'ok');
+        ops.push({
+            label: poolRowState === 'disabled' ? 'pool.enableOne' : 'pool.disableOne',
+            cls: 'cookie-mini runs-mgr-btn',
+            go: function () {
+                setPoolAccountDisabled(row, poolRowState !== 'disabled');
+            },
+        });
+        if (poolRowState === 'cooling') {
+            ops.push({
+                label: 'pool.resetOne',
+                cls: 'cookie-mini runs-mgr-btn',
+                go: function () {
+                    resetPoolAccount(row);
+                },
+            });
+        }
+    }
     ops.forEach(function (spec) {
         var b = document.createElement('button');
         b.type = 'button';
@@ -754,11 +776,119 @@ function cookieRowCells(row) {
     return { cells: cells, ops: td };
 }
 
+/* Pool state is a SECOND read, and it only ever adds to the table: with the feature off the
+ * panel is byte-for-byte what it was before. Keeping the two answers apart is deliberate —
+ * the cookie list is about files on disk, the pool is about what was measured against a
+ * site, and one failing must not blank the other. */
+var poolState = { enabled: false, summary: {}, accounts: [], exits: [], events: [] };
+var cookiesDockTab = 'accounts';
+
+function poolOn() {
+    return !!poolState.enabled;
+}
+
+function poolText(key, vars) {
+    return I18n.t(key, vars);
+}
+
+function poolStateWord(row) {
+    var state = String((row && row.pool_state) || 'ok');
+    var word = poolText('pool.state.' + state);
+    if (state === 'cooling' && row.pool_cool_until_local) word += ' · ' + row.pool_cool_until_local;
+    return word;
+}
+
+function poolReasonWord(reason) {
+    var key = {
+        login_wall: 'pool.reason.loginWall',
+        risk: 'pool.reason.risk',
+        network: 'pool.reason.network',
+        manual: 'pool.reason.manual',
+    }[String(reason || '')];
+    return key ? poolText(key) : '';
+}
+
+function poolEl(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+}
+
+function poolPost(url, body) {
+    return fetchJSON(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+    }).then(function (result) {
+        if (!result || !result.ok) throw new Error((result && result.error) || poolText('pool.loadFailed'));
+        if (result.message) showToast(result.message);
+        return result;
+    });
+}
+
+function setPoolAccountDisabled(row, disabled) {
+    return poolPost('/api/pool/account/disable', {
+        platform: row.platform,
+        account: row.account,
+        disabled: !!disabled,
+    })
+        .then(function () {
+            cookiesManager.refresh();
+        })
+        .catch(function (error) {
+            showToast(String(error.message || error));
+        });
+}
+
+function resetPoolAccount(row) {
+    return poolPost('/api/pool/account/reset', { platform: row.platform, account: row.account })
+        .then(function () {
+            cookiesManager.refresh();
+        })
+        .catch(function (error) {
+            showToast(String(error.message || error));
+        });
+}
+
+function bindPoolAccount(row, exitId) {
+    return poolPost('/api/pool/bind', { platform: row.platform, account: row.account, exit_id: exitId })
+        .then(function () {
+            cookiesManager.refresh();
+        })
+        .catch(function (error) {
+            showToast(String(error.message || error));
+        });
+}
+
+function cookiesTabBar() {
+    var bar = poolEl('div', 'cookie-pool-tabs');
+    [
+        { id: 'accounts', key: 'pool.tabAccounts' },
+        { id: 'exits', key: 'pool.tabExits' },
+        { id: 'events', key: 'pool.tabEvents' },
+    ].forEach(function (tab) {
+        var button = poolEl('button', 'cookie-mini runs-mgr-btn' + (cookiesDockTab === tab.id ? ' active' : ''), poolText(tab.key));
+        button.type = 'button';
+        button.addEventListener('click', function () {
+            cookiesDockTab = tab.id;
+            renderCookieManager();
+        });
+        bar.appendChild(button);
+    });
+    return bar;
+}
+
 function renderCookieManager() {
     /* Every saved login on this machine, one TABLE ROW per (platform, account): which platform,
        which account, how many entries, when it was taken, and the two actions. Metadata only —
        a cookie value is the login itself, and this is the one surface a stranger could stand
        in front of on a cloud deploy.
+
+       With the account pool switched on the same table grows the pool's columns (state,
+       cooling until, bound exit) and its two levers, and two more tabs carry the exit
+       inventory and the most recent measurements. The sentinel-free default keeps every
+       existing canvas and every existing test reading the same rows as before.
 
        It docks in the bottom slot with 控制台/运行记录/导出产物 (see ``toggleCookiesPanel``)
        rather than living inside the Cookie dialog: the list is the read side of a whole
@@ -767,20 +897,25 @@ function renderCookieManager() {
     var host = document.getElementById('cookies-mgr-body');
     if (!host) return;
     host.textContent = '';
+    if (!cookieRows.length && !poolState.exits.length) {
+        return void cookieListNote(host, 'cookies.noneSaved');
+    }
+    if (poolOn()) host.appendChild(cookiesTabBar());
+    if (poolOn() && cookiesDockTab === 'exits') return void renderPoolExits(host);
+    if (poolOn() && cookiesDockTab === 'events') return void renderPoolEvents(host);
     if (!cookieRows.length) {
         return void cookieListNote(host, 'cookies.noneSaved');
     }
+    var headers = ['cookies.colPlatform', 'cookies.colAccount', 'cookies.colEntries', 'cookies.colSavedAt'];
+    if (poolOn()) headers.push('pool.colState', 'pool.colExit');
+    headers.push('cookies.colActions');
     var table = document.createElement('table');
     table.className = 'data-preview-table runs-mgr-table';
     var head = document.createElement('thead');
     var headRow = document.createElement('tr');
-    ['cookies.colPlatform', 'cookies.colAccount', 'cookies.colEntries', 'cookies.colSavedAt', 'cookies.colActions'].forEach(
-        function (key) {
-            var th = document.createElement('th');
-            th.textContent = I18n.t(key);
-            headRow.appendChild(th);
-        }
-    );
+    headers.forEach(function (key) {
+        headRow.appendChild(poolEl('th', '', I18n.t(key)));
+    });
     head.appendChild(headRow);
     table.appendChild(head);
     var body = document.createElement('tbody');
@@ -800,7 +935,218 @@ function renderCookieManager() {
             td.textContent = cell.text;
             tr.appendChild(td);
         });
+        if (poolOn()) {
+            tr.appendChild(poolEl('td', 'cookie-cell-pool', poolStateWord(row)));
+            var exitCell = poolEl('td', 'cookie-cell-exit');
+            var exitText = row.exit_name || poolText('pool.bind.auto');
+            var binding = document.createElement('select');
+            binding.className = 'cookie-mini';
+            binding.title = poolText('pool.bind.label');
+            [''].concat(poolState.exits.map(function (x) { return x.id; })).forEach(function (exitId) {
+                var option = document.createElement('option');
+                option.value = exitId;
+                option.textContent = exitId
+                    ? (poolState.exits.filter(function (x) { return x.id === exitId; })[0] || {}).name || exitId
+                    : poolText('pool.bind.auto');
+                option.selected = (row.exit_id || '') === exitId;
+                binding.appendChild(option);
+            });
+            binding.addEventListener('change', function () {
+                bindPoolAccount(row, binding.value);
+            });
+            exitCell.appendChild(binding);
+            exitCell.title = exitText;
+            tr.appendChild(exitCell);
+        }
         tr.appendChild(built.ops);
+        body.appendChild(tr);
+    });
+    table.appendChild(body);
+    host.appendChild(table);
+}
+
+function renderPoolExits(host) {
+    /* The exit inventory: what a crawl leaves through. Address and health only — the panel
+       never receives a credential back, so editing one is a new password or none. */
+    var table = document.createElement('table');
+    table.className = 'data-preview-table runs-mgr-table';
+    var head = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['pool.exit.colName', 'pool.exit.colAddress', 'pool.exit.colPlatforms', 'pool.exit.colAuth', 'pool.exit.colState', 'cookies.colActions'].forEach(
+        function (key) {
+            headRow.appendChild(poolEl('th', '', I18n.t(key)));
+        }
+    );
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var body = document.createElement('tbody');
+    if (!poolState.exits.length) {
+        var emptyRow = document.createElement('tr');
+        var emptyCell = poolEl('td', 'cookie-row-empty', poolText('pool.exit.none'));
+        emptyCell.colSpan = 6;
+        emptyRow.appendChild(emptyCell);
+        body.appendChild(emptyRow);
+    }
+    poolState.exits.forEach(function (exitRow) {
+        var tr = document.createElement('tr');
+        tr.className = 'cookie-row';
+        tr.dataset.exit = exitRow.id;
+        tr.appendChild(poolEl('td', 'cookie-cell-platform', exitRow.name || exitRow.id));
+        tr.appendChild(poolEl('td', 'cookie-cell-account', exitRow.scheme + '://' + exitRow.host + ':' + exitRow.port));
+        tr.appendChild(
+            poolEl(
+                'td',
+                'cookie-cell-exit',
+                (exitRow.allowed_platforms || []).length
+                    ? exitRow.allowed_platforms.map(function (p) { return I18n.t('platform.' + p); }).join('、')
+                    : poolText('pool.exit.allPlatforms')
+            )
+        );
+        tr.appendChild(poolEl('td', '', poolText(exitRow.has_auth ? 'pool.exit.authYes' : 'pool.exit.authNo')));
+        var states = (exitRow.states || []).filter(function (s) { return s.state !== 'ok'; });
+        tr.appendChild(
+            poolEl(
+                'td',
+                'cookie-cell-pool',
+                states.length
+                    ? states.map(function (s) { return I18n.t('platform.' + s.platform) + ' · ' + poolText('pool.state.' + s.state) + (s.cool_until_local ? ' ' + s.cool_until_local : ''); }).join('；')
+                    : poolText('pool.state.ok')
+            )
+        );
+        var ops = document.createElement('td');
+        ops.className = 'runs-mgr-ops';
+        var del = poolEl('button', 'cookie-mini runs-mgr-btn del', poolText('pool.exit.delete'));
+        del.type = 'button';
+        del.addEventListener('click', function () {
+            deletePoolExit(exitRow);
+        });
+        ops.appendChild(del);
+        tr.appendChild(ops);
+        body.appendChild(tr);
+    });
+    table.appendChild(body);
+    host.appendChild(table);
+
+    var form = document.createElement('div');
+    form.className = 'cookie-pool-form';
+    var fields = [
+        { id: 'name', key: 'pool.exit.name', value: '' },
+        { id: 'host', key: 'pool.exit.host', value: '' },
+        { id: 'port', key: 'pool.exit.port', value: '' },
+        { id: 'username', key: 'pool.exit.username', value: '' },
+        { id: 'password', key: 'pool.exit.password', value: '' },
+        { id: 'platforms', key: 'pool.exit.platforms', value: '' },
+    ];
+    var inputs = {};
+    fields.forEach(function (field) {
+        var label = poolEl('label', 'cookie-pool-field', poolText(field.key));
+        var input = document.createElement('input');
+        input.className = 'cookie-mini';
+        input.placeholder = field.id === 'password' ? poolText('pool.exit.passwordKeep') : '';
+        input.value = field.value;
+        label.appendChild(input);
+        form.appendChild(label);
+        inputs[field.id] = input;
+    });
+    var scheme = document.createElement('select');
+    scheme.className = 'cookie-mini';
+    ['http', 'https', 'socks5'].forEach(function (value) {
+        var option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        scheme.appendChild(option);
+    });
+    var schemeLabel = poolEl('label', 'cookie-pool-field', poolText('pool.exit.scheme'));
+    schemeLabel.appendChild(scheme);
+    form.appendChild(schemeLabel);
+    var save = poolEl('button', 'cookie-mini runs-mgr-btn', poolText('pool.exit.save'));
+    save.type = 'button';
+    save.addEventListener('click', function () {
+        var payload = { scheme: scheme.value };
+        Object.keys(inputs).forEach(function (key) {
+            payload[key] = inputs[key].value;
+        });
+        poolPost('/api/pool/exit/save', payload)
+            .then(function () {
+                cookiesManager.refresh();
+            })
+            .catch(function (error) {
+                showToast(String(error.message || error));
+            });
+    });
+    form.appendChild(save);
+    host.appendChild(form);
+
+    var importRow = document.createElement('div');
+    importRow.className = 'cookie-pool-form';
+    var area = document.createElement('textarea');
+    area.className = 'cookie-mini';
+    area.placeholder = poolText('pool.exit.importHint');
+    importRow.appendChild(area);
+    var doImport = poolEl('button', 'cookie-mini runs-mgr-btn', poolText('pool.exit.importGo'));
+    doImport.type = 'button';
+    doImport.addEventListener('click', function () {
+        poolPost('/api/pool/exit/import', { text: area.value })
+            .then(function () {
+                cookiesManager.refresh();
+            })
+            .catch(function (error) {
+                showToast(String(error.message || error));
+            });
+    });
+    importRow.appendChild(doImport);
+    host.appendChild(importRow);
+}
+
+function deletePoolExit(exitRow) {
+    showDialog({
+        message: poolText('pool.exit.deleteConfirm', { name: exitRow.name || exitRow.id }),
+        buttons: [
+            { label: I18n.t('dialog.cancel'), value: null },
+            { label: poolText('pool.exit.delete'), value: 'delete', danger: true },
+        ],
+    }).then(function (answer) {
+        if (answer !== 'delete') return;
+        return poolPost('/api/pool/exit/delete', { id: exitRow.id }).then(function () {
+            cookiesManager.refresh();
+        });
+    });
+}
+
+function renderPoolEvents(host) {
+    var table = document.createElement('table');
+    table.className = 'data-preview-table runs-mgr-table';
+    var head = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['pool.events.colTime', 'pool.events.colWhat', 'pool.events.colPair', 'pool.events.colRows', 'pool.events.colRun'].forEach(
+        function (key) {
+            headRow.appendChild(poolEl('th', '', I18n.t(key)));
+        }
+    );
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var body = document.createElement('tbody');
+    if (!poolState.events.length) {
+        var emptyRow = document.createElement('tr');
+        var emptyCell = poolEl('td', 'cookie-row-empty', poolText('pool.events.none'));
+        emptyCell.colSpan = 5;
+        emptyRow.appendChild(emptyCell);
+        body.appendChild(emptyRow);
+    }
+    poolState.events.forEach(function (event) {
+        var tr = document.createElement('tr');
+        tr.className = 'cookie-row';
+        tr.appendChild(poolEl('td', 'runs-mgr-time', event.at_local || ''));
+        tr.appendChild(poolEl('td', '', event.kind === 'ok' ? poolText('pool.state.ok') : poolReasonWord(event.kind) || event.kind));
+        tr.appendChild(
+            poolEl(
+                'td',
+                '',
+                [I18n.t('platform.' + (event.platform || '')), event.account, event.exit_id].filter(Boolean).join(' · ')
+            )
+        );
+        tr.appendChild(poolEl('td', 'runs-mgr-id', String(event.rows || 0)));
+        tr.appendChild(poolEl('td', 'runs-mgr-id', String(event.run_id || '')));
         body.appendChild(tr);
     });
     table.appendChild(body);
@@ -849,8 +1195,20 @@ var cookiesManager = {
            when a panel opens), and a list of what is on disk that answers from a cache the
            last paste left behind would be a list of what used to be on disk. */
         var self = this;
-        return fetchJSON('/api/cookies/status')
-            .then(function (result) {
+        /* Two reads, one paint: the files on disk and what the pool has measured about them.
+           The pool read is allowed to fail without hiding the logins — a broken pool store is
+           not a reason to claim there are no cookies. */
+        var poolRead = fetchJSON('/api/pool/state').then(
+            function (result) {
+                if (result && result.ok) poolState = result;
+            },
+            function () {
+                poolState = { enabled: false, summary: {}, accounts: [], exits: [], events: [] };
+            }
+        );
+        return Promise.all([fetchJSON('/api/cookies/status'), poolRead])
+            .then(function (answers) {
+                var result = answers[0];
                 if (!result || !result.ok) throw new Error('status failed');
                 cookieRows = result.rows || [];
                 renderCookieManager();

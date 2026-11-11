@@ -82,6 +82,14 @@
 | `log_max_mb` / `log_backup_count` | 日志轮转大小与份数（重启生效） |
 | `default_run_mode` / `default_headless` | 从未选过的浏览器从哪个运行模式/无头状态开始；已保存画布仍用自己的选择 |
 | `default_target_count` / `default_comment_*` / `default_*_part_size` / `default_per_article_file` / `default_keep_parts` / `default_live_export` | 新节点的默认目标、评论上限、分片、按文章拆分、保留分片与实时导出 |
+| `pool_enabled` | 打开账号池/出口池：数据源账号选择里出现“账号池（自动轮换）”（默认关；关掉时行为与旧版完全一致） |
+| `pool_cooldown_seconds` | 硬失败（登录墙 / 风控）冷却时长，默认 7200（2 小时） |
+| `pool_network_cooldown_seconds` | 网络类失败只冷却出口，默认 300；0 = 网络问题不冷却 |
+| `pool_max_attempts` | 单节点每次运行最多换几组“账号+出口”，默认 3 |
+| `pool_escalate` | 冷却结束后再次被拦时把冷却翻倍（最长一周），默认关 |
+| `pool_allow_direct_fallback` | 出口全部冷却时是否允许直连（默认关：宁可拒绝，也不暴露本机地址） |
+| `pool_skip_wall_backoff` | 池模式跳过同账号退避重试（默认开），直接换下一组 |
+| `pool_preflight_live` | 运行前用真浏览器验证池内第一个候选（默认关：只读冷却台账，冷却中的账号不开浏览器） |
 | `hongguo_player_path` | 红果短剧评论收割用的桌面播放器路径（**不自动检测**——猜错路就会对着错误的构建收割，拒绝时点名这个设置；Windows 专属） |
 | `mitmdump_path` | 收割用的 `mitmdump`；空=PATH，再退回本 venv 的 Scripts |
 | `harvest_proxy_port` | 播放器与 mitmproxy 共用的代理端口（默认 8860） |

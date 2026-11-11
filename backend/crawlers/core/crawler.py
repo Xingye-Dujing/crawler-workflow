@@ -167,9 +167,14 @@ class Crawler(ABC):
         for_login: bool = False,
         profile_dir: str | None = None,
         abort: Callable[[], bool] | None = None,
+        proxy: dict | None = None,
     ):
         self.headless = headless
         self.cookie_path = cookie_path
+        #: The exit (IP) this browser leaves through, as a plain description. ``None`` is a
+        #: direct connection, which is also what every platform had before exits existed.
+        #: Never a credential in a log: :mod:`crawlers.core.proxy` owns the wording.
+        self.proxy = dict(proxy or {}) or None
         # A directory that outlives this browser, so the next run of this platform is
         # the same device to the site (see ``sessions.profiles``). None is the old
         # behaviour: a throwaway profile plus whatever cookie file we plant into it.
@@ -496,6 +501,7 @@ class Crawler(ABC):
             profile_dir=self.profile_dir,
             needs_images=self.needs_images,
             domain=self.domain,
+            proxy=self.proxy,
         )
         if self.cookie_path:
             self._load_cookies()

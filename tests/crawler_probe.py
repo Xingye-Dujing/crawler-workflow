@@ -44,6 +44,8 @@ def bare(driver, **attrs):
     crawler.unreachable = False
     crawler.pending_waits = 0
     crawler.profile_dir = None
+    #: The exit (IP) this browser leaves through; None is a direct connection.
+    crawler.proxy = None
     crawler._profile_lock = None
     crawler._abort = None
     crawler.cookies_loaded = 0

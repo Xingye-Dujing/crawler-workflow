@@ -330,6 +330,21 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   `GET /api/settings/schema`; `runtime/settings.py` validates and persists it. `tests/unit/gates/test_settings_schema.py`
   fails a key with no reader, a missing translation, or a platform module that reads a setting directly.
 
+### 账号池与出口池 (account/exit pool)
+
+- **A cooldown is state, not a cache:** `data/pool.db` keeps `cool_until` per `(account|exit, 平台, 主体)`, compared
+  with the clock at read time (no sweeper). Manual 停用 never expires. Saving a login clears that account's term.
+- **Rotate only at a zero-row, attributable failure.** A source node switches login when THIS attempt stored no row and
+  the site answered `login_wall`/`risk` (`SessionBlockedError`); rows already stored keep the PARTIAL-and-continue path.
+  A comment node may rotate per LINK (a blocked link was never in the proven cursor prefix). Never rotate on stop,
+  network faults, under-target or unknown failures.
+- **Each attempt takes `gate.hold(account=<real login>)`; `@pool` is a sentinel, not a login.** It may never reach
+  `CookieManager.path_for`, and it stays in the fingerprint (pool mode ≠ a fixed login). CatBus refuses it by name.
+- **An exit is sticky to `(platform, account)`**; only a benched exit is replaced ("换 IP 不换号"). Every browser path
+  (crawl, login window, verify, preflight) resolves its exit through `get_crawler`, so a session is never used from two
+  addresses. Credentials travel only in the loopback relay (`crawlers/core/proxy.py`), never argv/logs.
+- Details, attribution table and settings: `docs/account_pool.md`, `docs/crawler_rules.md` → 账号池.
+
 ### Login accounts and the gate
 
 - **A wrong password answers one sentence.** Verification runs BEFORE the lock and status check (“登录失败次数过多”/“该账号已被禁用” for a wrong password is a username oracle). The failure window is keyed `address|username`.

@@ -193,6 +193,14 @@ class TestTheSweepItself:
                 'profiles_on',
                 'saved_at',
                 'session_only',
+                # Pool metadata: a state word, a reason word, a server-formatted timestamp,
+                # a strike count and an exit id. All of it is about the login, none of it is
+                # the login — the same bar this list exists to hold.
+                'exit_id',
+                'pool_cool_until_local',
+                'pool_reason',
+                'pool_state',
+                'pool_strikes',
             ]
         ), 'a new field on this row is new information leaving the process — check it is metadata'
 

@@ -25,14 +25,16 @@ from runtime.state import _wf_local, add_log, ambient, execution_state, stop_req
 from crawlers import get_crawler, is_crawlable
 from crawlers.backends.catbus import CatbusCrawler
 from crawlers.core.crawler import UNDER_TARGET
-from crawlers.core.faults import CrawlerStopped, PageNotArrivedError
+from crawlers.core.faults import CrawlerStopped, PageNotArrivedError, SessionBlockedError
 from i18n import t
 from nodes.context import NodeCall
 from nodes.executors.comment import execute_comment_node
 from nodes.labels import node_label
+from services import pool
 from services.ingest import net as network_probe
 from services.ingest.lifecycle import close_login_browser
 from services.ingest.runtime import item_scope, name_parts, source_stream
+from services.pool import selector as pool_selector
 from services.runs.files import record_file
 from services.runs.windows import note_window
 
@@ -57,6 +59,19 @@ def is_collision(crawler, resume) -> bool:
         and execution_state['running']
         and float(get_setting('wall_retry_backoff')) > 0
     )
+
+
+def _blocked_reason(crawler) -> str:
+    """Which pool reason this session reported, or ``''``.
+
+    One mapping for every raise point, so a wall met as an exception and the same wall met
+    after the crawl returns are filed against the same subject.
+    """
+    if getattr(crawler, 'login_wall', False):
+        return pool.health.LOGIN_WALL
+    if getattr(crawler, 'risk_blocked', False):
+        return pool.health.RISK
+    return ''
 
 
 def backoff_for_retry(crawler, platform: str) -> bool:
@@ -89,7 +104,9 @@ def backoff_for_retry(crawler, platform: str) -> bool:
     return not interrupted
 
 
-def crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict, platform: str):
+def crawl_with_collision_retry(
+    crawler, handler, crawl_args: dict, resume: dict, platform: str, allow_retry: bool = True
+):
     """One trip to the platform, plus the second attempt a collision deserves.
 
     A wall met before the first row is the shape two same-platform workflows make of
@@ -104,6 +121,11 @@ def crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict,
     ``gate.hold`` in :func:`run`), or a retry would queue up behind the very
     workflow it is waiting for.
     """
+    if not allow_retry:
+        # Pool mode: the wall was just measured against THIS login, and the next step is a
+        # different pair, not the same session after a sleep. Retrying here is exactly the
+        # spend the pool exists to avoid.
+        return handler(**crawl_args, resume=resume)
     try:
         rows = handler(**crawl_args, resume=resume)
     except BaseException:
@@ -205,7 +227,15 @@ def column_to_links(rows: list, column: str) -> tuple[list[str], int]:
     return links, skipped
 
 
-def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: list = None):
+def execute_source_node(
+    node: dict,
+    headless: bool,
+    ctx: dict = None,
+    upstream: list = None,
+    account_override: str = None,
+    proxy: dict = None,
+    pool_mode: bool = False,
+):
     """Scrape a platform, one row at a time.
 
     With a run context the crawler streams into the database instead of
@@ -275,7 +305,7 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
     # it chooses WHICH session and WHICH browser device the crawl runs as — two accounts
     # of one platform are two devices, so two nodes can crawl in real parallel instead
     # of queueing behind one rate limit. Blank is the historical default account.
-    account = str(params.get('account') or '').strip()
+    account = str(account_override if account_override is not None else params.get('account') or '').strip()
     # A mode without a row budget (WeChat's article list) promised no number, so
     # nothing can be missing from it: the cookie-wall check below reads zero as
     # "this crawl ended where it was meant to" instead of inventing a target.
@@ -307,22 +337,43 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         # 平台 × 模式 is refused by that backend, with the manifest's own reason.
         crawler = CatbusCrawler(platform=platform, params=params, account=account, abort=stop_requested)
     else:
-        crawler = get_crawler(
-            platform,
-            headless=headless,
-            cookie_dir=paths.active().cookie_dir,
-            use_profile=(ctx or {}).get('use_profile'),
+        build = {
+            'headless': headless,
+            'cookie_dir': paths.active().cookie_dir,
+            'use_profile': (ctx or {}).get('use_profile'),
             # `stop_requested`, not "no run is in flight": this predicate is what makes the
             # crawl end at its next row, and an idle server (a test calling the executor
             # directly) is not a user who pressed 停止.
-            abort=stop_requested,
-            account=account,
-        )
+            'abort': stop_requested,
+            'account': account,
+        }
+        # Omitted entirely when there is no exit, so a test double's older signature still
+        # works: an argument nobody uses is not worth breaking an interface over.
+        if proxy:
+            build['proxy'] = proxy
+        crawler = get_crawler(platform, **build)
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a
     # locked runs.db, a cursor that will not parse — and a Chrome that Stop does
     # not know about is a process left on the user's machine forever.
     execution_state['active_crawlers'].add(crawler)
+
+    def _proved_rows() -> int:
+        """How many rows this node has on disk right now.
+
+        The question a pool asks before switching login is "did THIS attempt pay for
+        anything?", and the durable row count is the only answer that survives an exception
+        raised from deep inside a platform walk. A node with no run context has no ledger, so
+        it reports zero — it also has nothing to resume, which is what makes rotation there
+        harmless.
+        """
+        if ctx is None:
+            return 0
+        with contextlib.suppress(Exception):
+            return int(ctx['store'].row_count(ctx['run_id'], nid))
+        return 0
+
+    stored_before = _proved_rows()
     resume = {}
     seed_count = 0
     if watermark_scope:
@@ -430,7 +481,10 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         # The matrix decided what this crawl is called with; `resume` is the one
         # argument that is not the user's — it is where this run stopped, handed
         # over from the store.
-        rows = crawl_with_collision_retry(crawler, getattr(crawler, mode.handler), crawl_args, resume, platform)
+        allow_retry = not (pool_mode and bool(get_setting('pool_skip_wall_backoff')))
+        rows = crawl_with_collision_retry(
+            crawler, getattr(crawler, mode.handler), crawl_args, resume, platform, allow_retry=allow_retry
+        )
         if stop_requested():
             # A walk that honours 停止 does not raise: it breaks at its next row and hands
             # back what it collected. So a crawl that finished by *returning* after the
@@ -440,6 +494,14 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
             # what it was.
             raise CrawlerStopped(t('crawl.stopped'))
     except PageNotArrivedError as exc:
+        # A wall/risk page that arrived as "the page never came" is still evidence about the
+        # session. In pool mode with nothing paid for, it is the cleanest rotation point there
+        # is: no rows, no cursor, nothing a second login would have to inherit.
+        blocked = _blocked_reason(crawler)
+        if blocked and pool_mode and _proved_rows() <= stored_before:
+            with contextlib.suppress(Exception):
+                _merge_parts(None)
+            raise SessionBlockedError(str(exc), reason=blocked, platform=platform, account=account) from exc
         # The patience budget ran out with nothing on the page. What the crawler saw is
         # turned into a line that also says what this machine can reach, then the node
         # settles the way any refusal settles: the rows already streamed stay (which is
@@ -459,12 +521,15 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
         with contextlib.suppress(Exception):
             _merge_parts(None)
         raise page_not_arrived(platform, exc) from exc
-    except BaseException:
+    except BaseException as exc:
         # The crawler gave up (a wall it refuses to walk into, a risk page, a dead
         # session). Publish what that answer means BEFORE the failure travels on:
         # the toast flag, and the merged partial file the row sink already filled.
         # Suppress the bookkeeping's own errors — they must not replace the real one.
-        if getattr(crawler, 'login_wall', False):
+        # A SessionBlockedError is different: it says "this attempt is over, the next login may
+        # still work", so raising the global cookie toast here would be an alarm about a run
+        # that has not failed yet.
+        if not isinstance(exc, SessionBlockedError) and getattr(crawler, 'login_wall', False):
             execution_state['cookie_expired'] = True
         with contextlib.suppress(Exception):
             _merge_parts(None)
@@ -487,6 +552,15 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
     _merge_parts(rows)
     if wall:
         if len(rows) < target_count:
+            if pool_mode and _proved_rows() <= stored_before:
+                # Nothing was paid for by this attempt, so a different login may take the
+                # whole walk from the top with nothing to reconcile.
+                raise SessionBlockedError(
+                    t('run.cookieExpired', platform=platform),
+                    reason=pool.health.LOGIN_WALL,
+                    platform=platform,
+                    account=account,
+                )
             # A long crawl can outlive its cookie: the platform bounces the
             # browser to a login page mid-run. The rows collected before the
             # wall are safe in the store — surface the flag for the toast and
@@ -513,6 +587,13 @@ def execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: 
     # already raised in the block above, so reaching here short with ``wall`` set is impossible —
     # the two refusals are mutually exclusive by control flow, not by an added guard.)
     if target_count and len(rows) < target_count and getattr(crawler, 'risk_blocked', False):
+        if pool_mode and _proved_rows() <= stored_before:
+            raise SessionBlockedError(
+                t('run.riskControlled', platform=platform),
+                reason=pool.health.RISK,
+                platform=platform,
+                account=account,
+            )
         raise ValueError(t('run.riskControlled', platform=platform))
     # U1: a non-wall, non-risk, non-stopped crawl that came back under its target WITHOUT a
     # site-attested end must not settle clean DONE — that is §6's silent-under-collect, which
@@ -574,5 +655,91 @@ def run(node: dict, call: NodeCall):
     # reaches this function without a claim in place has no run to be "not running", and inferring
     # “the user pressed 停止” from that abandoned the queue for every such call instead of holding
     # the lane.
-    with gate.hold(platform, log=add_log, abort=stop_requested, account=account):
+    if not pool_selector.is_pool_value(account):
+        with gate.hold(platform, log=add_log, abort=stop_requested, account=account):
+            return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
+    # Pool mode. The gate is taken PER ATTEMPT with the account that attempt actually uses:
+    # its lane is per login, so holding the sentinel's lane would serialize every pool crawl
+    # of a platform into one queue and throw away the parallelism accounts exist for.
+    mode = capabilities.mode_of_node(node)
+    if mode is not None and mode.handler == 'comments':
+        # The comment engine rotates per LINK and holds its own lane around each walk; a
+        # node-level turn here would hold a second, fake lane for the whole batch.
         return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
+    tried: list[dict] = []
+    run_id = str((call.ctx or {}).get('run_id') or '')
+    node_id = str(node.get('id') or '')
+    for attempt in range(pool.max_attempts()):
+        candidate = pool.claim(platform, exclude_accounts=[item['account'] for item in tried])
+        if candidate is None:
+            break
+        entry = {'account': candidate.account, 'reason': '', 'until_local': '', 'exit_id': candidate.exit_id}
+        tried.append(entry)
+        exit_note = f' ({candidate.label()})' if candidate.label() else ''
+        add_log(
+            t(
+                'pool.attempt',
+                platform=platform,
+                n=attempt + 1,
+                account=pool.account_word(candidate.account),
+                exit=exit_note,
+            )
+        )
+        try:
+            with gate.hold(platform, log=add_log, abort=stop_requested, account=candidate.account):
+                rows = execute_source_node(
+                    node,
+                    call.headless,
+                    ctx=call.ctx,
+                    upstream=call.upstream,
+                    account_override=candidate.account,
+                    proxy=candidate.proxy,
+                    pool_mode=True,
+                )
+            # A finished attempt is a measurement too: it clears a strike counter that an old
+            # wall left behind (so escalation cannot climb on stale evidence) and leaves the
+            # row count next to the pair that produced it in the audit trail.
+            with contextlib.suppress(Exception):
+                pool.observe(
+                    platform,
+                    candidate.account,
+                    {},
+                    exit_id=candidate.exit_id,
+                    rows=len(rows) if isinstance(rows, list) else 0,
+                    run_id=run_id,
+                    node_id=node_id,
+                )
+            return rows
+        except SessionBlockedError as exc:
+            verdict = pool.observe(
+                platform,
+                candidate.account,
+                {
+                    'login_wall': exc.reason == pool.health.LOGIN_WALL,
+                    'risk_blocked': exc.reason == pool.health.RISK,
+                },
+                exit_id=candidate.exit_id,
+                run_id=run_id,
+                node_id=node_id,
+            )
+            entry['reason'] = verdict['reason']
+            entry['until_local'] = verdict['until_local']
+            add_log(
+                t(
+                    'pool.rotating',
+                    platform=platform,
+                    account=pool.account_word(candidate.account),
+                    reason=pool.reason_word(verdict['reason']),
+                    next=t('pool.nextAttempt'),
+                )
+            )
+            continue
+        finally:
+            pool.release(candidate)
+    if not tried:
+        # Nothing was even attempted. The two reasons want two different actions, so they
+        # are never folded into one sentence.
+        snapshot = pool.snapshot(platform)
+        key = 'engine.source_pool_empty' if not snapshot['total'] else 'engine.source_pool_cooling'
+        raise ValueError(t(key, nid=node_label(node, node_id), platform=platform))
+    raise ValueError(pool.exhaustion_message(platform, tried))

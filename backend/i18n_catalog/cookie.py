@@ -68,6 +68,12 @@ ZH = {
     # 运行前自动验证（preflight）：三条结论对应三种下一步，合并任何一条都会把
     # 用户支到错误的动作上——重新登录，或者什么也不做地等待。
     'cookie.pre.valid': '{platform} 的 Cookie 可用',
+    # 账号池：冷却中的账号不开浏览器，直接按台账回答；资源池已经用尽时运行前就拒绝。
+    'cookie.pre.cooling': '{platform} 的这个账号正在冷却，暂不尝试',
+    'cookie.pre.coolingUntil': '冷却至 {when}',
+    'cookie.pre.poolEmpty': '{platform} 的账号池还没有任何已保存的登录',
+    'cookie.pre.poolCooling': '{platform} 的账号池现在没有可用账号',
+    'cookie.pre.poolCoolingDetail': '共 {n} 个登录，全部在冷却或已停用',
     'cookie.profileDelete.none': '{platform} · {account} 没有可删除的浏览器 Profile',
     'cookie.profileDeleted': '已删除 {platform} · {account} 的浏览器 Profile（该设备已登出；Cookie 文件不动）',
     'cookie.refresh.done': '已把保存的 {platform} Cookie 更新进它的浏览器 profile（{n} 条）',
@@ -211,6 +217,13 @@ EN = {
     # The pre-run check (preflight). Three conclusions, three next steps: merging
     # any pair would send the user off doing the wrong thing — re-logging in, or waiting.
     'cookie.pre.valid': 'The stored {platform} cookie works',
+    # Account pool: a benched login is answered from the stored table, never by opening a
+    # browser; an exhausted pool is refused before the run starts.
+    'cookie.pre.cooling': 'That {platform} account is cooling down — not tried',
+    'cookie.pre.coolingUntil': 'cooling until {when}',
+    'cookie.pre.poolEmpty': 'The {platform} account pool has no saved login yet',
+    'cookie.pre.poolCooling': 'The {platform} account pool has no usable account right now',
+    'cookie.pre.poolCoolingDetail': '{n} login(s) in total, all cooling or disabled',
     'cookie.profileDelete.none': 'There is no browser profile to delete for {platform} · {account}',
     'cookie.profileDeleted': (
         'Deleted the browser profile for {platform} · {account} — that device is signed out; '

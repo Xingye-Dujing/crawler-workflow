@@ -61,6 +61,13 @@ ZH = {
         '节点 {nid}：{platform} 的账号“{account}”没有可用的 Cookie——请先到 Cookie 面板为该账号保存一份，'
         '或在该节点改用已有 Cookie 的账号（不会借用别的账号登录，也不会静默少采）'
     ),
+    'engine.source_pool_empty': (
+        '节点 {nid}：{platform} 的账号池里还没有任何已保存的登录——请先保存至少一份 Cookie，或把账号改回某一个具体账号'
+    ),
+    'engine.source_pool_cooling': (
+        '节点 {nid}：{platform} 的账号池现在没有可用账号（全部在冷却或已停用）——'
+        '请等到解冻时间，或在 Cookie 面板手动解冻/停用'
+    ),
     'engine.source_no_platform': '节点 {nid}：数据源节点没有选择平台',
     'engine.source_unknown_mode': '节点 {nid}：{platform} 没有这种采集内容，请在该节点的“采集内容”里改选一种',
     'engine.source_unknown_platform': '节点 {nid}：{platform} 还没有可用的采集实现，请改用已支持的平台',
@@ -508,6 +515,14 @@ EN = {
         'Node {nid}: no cookie for the {platform} account "{account}" — save one in the Cookie panel, '
         'or pick an account that has a login (this never borrows another account and never '
         'silently under-collects)'
+    ),
+    'engine.source_pool_empty': (
+        'Node {nid}: the {platform} account pool has no saved login at all — save at least one cookie, '
+        'or choose a specific account on this node'
+    ),
+    'engine.source_pool_cooling': (
+        'Node {nid}: the {platform} account pool has no usable account right now (all cooling or disabled) — '
+        'wait for the unfreeze time, or unfreeze/disable one in the Cookie panel'
     ),
     'engine.source_no_platform': 'Node {nid}: source node has no platform',
     'engine.source_unknown_mode': 'Node {nid}: {platform} has no such collection mode — pick one under Collect',

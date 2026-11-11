@@ -30,6 +30,7 @@ from runtime.state import add_log, cookie_manager, execution_state
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
 from i18n import get_lang, set_lang, t
+from services import pool
 from services.accounts.service import accounts_mode
 from services.ingest.lifecycle import close_login_browser as _close_login_browser
 from sessions import preflight, profiles
@@ -80,11 +81,20 @@ def cookie_status():
             path = cookie_manager.path_for(platform, account)
             profile = profiles.status(platform, has_cookie=True, cookie_path=path, account=account, size=False)
             label_key, label_args = cookie_manager.account_label_key(account)
+            health = pool.store.get_health('account', platform, account)
             rows.append(
                 {
                     'platform': platform,
                     'account': account,
                     'entry_key': preflight.entry_key(platform, account),
+                    # The pool's verdict travels with the login it is about: a row that said
+                    # only "3 entries, saved yesterday" left the user unable to see that this
+                    # very login is benched for another hour.
+                    'pool_state': pool.health.effective_state(health),
+                    'pool_reason': str(health.get('reason') or ''),
+                    'pool_cool_until_local': str(health.get('cool_until_local') or ''),
+                    'pool_strikes': int(health.get('strikes') or 0),
+                    'exit_id': pool.store.binding_exit_id(platform, account),
                     'label_key': label_key or '',
                     'label_args': label_args,
                     'entries': cookie_manager.entry_count(platform, account),
@@ -309,6 +319,10 @@ def save_cookies():
         if not account and cookie_manager.exists(platform):
             account = cookie_manager.next_free_account(platform)
         cookie_manager.save(platform, kept, account)
+        # A login the user just pasted IS a fresh session: whatever the pool measured about
+        # the old one is history, and leaving the cooldown in force would skip the account
+        # the user just fixed (the same reasoning ``invalidate`` below applies to the verdict).
+        pool.store.reset('account', platform, account)
         # The file this platform would be planted from just changed, so the cached
         # verdict about the previous one has to go with it.
         preflight.invalidate(platform)
@@ -653,6 +667,9 @@ def _cookie_login_worker(
             add_log(t('cookie.noCookies'))
             return
         cookie_manager.save(platform, cookies, account)
+        # A capture is a fresh login too: the account leaves the pool's cooldown now, not
+        # when the old term would have expired.
+        pool.store.reset('account', platform, account)
         # This jar was read OUT OF the platform's own profile browser, so the profile is not behind
         # the file: without this line the panel would go on offering “把 Cookie 更新进 Profile”,
         # a button that here would overwrite a live session with a copy of itself. Only when a
@@ -859,6 +876,16 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         )
         facts = crawler.diagnose(url)
         facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
+        # A verification is a real browser reading the real site through the account's own
+        # exit: the most trustworthy evidence the pool can get, and the one a user pressing
+        # 验证 expects to count. Recording it here means the panel's button and the gate's
+        # stored table can never disagree about the session just measured.
+        pool.observe(
+            platform,
+            account,
+            facts,
+            exit_id=pool.store.binding_exit_id(platform, account),
+        )
         lines = _verify_lines(platform, facts)
         with _COOKIE_JOB_LOCK:
             job['facts'] = facts

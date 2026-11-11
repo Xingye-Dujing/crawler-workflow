@@ -28,9 +28,11 @@ from crawlers.core.faults import CrawlerStopped
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label
+from services import pool
 from services.ingest import catbus
 from services.ingest.lifecycle import close_login_browser
 from services.ingest.runtime import item_scope, name_parts, source_stream
+from services.pool import selector as pool_selector
 from services.runs.files import record_file
 
 NODE_TYPE = 'comment'
@@ -120,6 +122,17 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # default account. The comment wall is a per-ACCOUNT rate limit — the reason
     # multi-account exists — so this must reach every get_crawler call below.
     account = str(params.get('account') or '').strip()
+    # A pool value is a request to rotate, not a login. The comment walk is where that pays
+    # off most: a walled LINK can be re-walked as the next login without touching the cursor,
+    # which records only the leading links this node PROVED complete.
+    pool_mode = pool_selector.is_pool_value(account)
+    if pool_mode and capabilities.is_catbus(params):
+        raise ValueError(t('pool.catbusUnsupported', platform=want))
+    # Which login each platform of this batch is currently walking as, and the claim behind
+    # it. A mixed batch may legitimately use a different login per platform.
+    active: dict[str, str] = {}
+    claimed: dict[str, object] = {}
+    tried: dict[str, list[str]] = {}
     # Does this platform's own comment form take plain names as well as links? Asked of the
     # matrix, because the router below sorts its input by DOMAIN and would otherwise drop a
     # 红果 剧名 as an unsupported link — 红果 crawls inside the client, where a title is
@@ -206,6 +219,80 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     login_seen = False
     sessions = {}
 
+    def _open_browser_session(kind: str, acct: str, proxy) -> None:
+        """Open one platform's comment browser as *acct* through *proxy*.
+
+        Its own function because a pool rotation rebuilds exactly this: the account's cookie
+        file, its profile and its exit are one identity, and a rotation that reused the old
+        browser would keep the session that was just refused.
+        """
+        build = {
+            'headless': headless,
+            'cookie_dir': paths.active().cookie_dir,
+            'use_profile': (ctx or {}).get('use_profile'),
+            'abort': stop_requested,
+            # The node's chosen login walks its comments too: the comment rate limit is an
+            # ACCOUNT limit, which is the whole reason multi-account exists.
+            'account': acct,
+        }
+        if proxy:
+            build['proxy'] = proxy
+        crawler = get_crawler(kind, **build)
+        sessions[kind] = (
+            crawler,
+            CommentSession(
+                crawler.driver,
+                log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
+                abort=stop_requested,
+                owner=crawler,
+            ),
+        )
+        # Last, so a refusal while building the session cannot leave a registered browser
+        # that nothing here would ever close.
+        execution_state['active_crawlers'].add(crawler)
+
+    def _rotate(kind: str, facts: dict) -> bool:
+        """Bench the current login/exit and open the next candidate for *kind*.
+
+        Returns False when the pool is spent, which lets the link settle as blocked exactly
+        as it does without a pool. The cursor is not touched: this link was not proven, so it
+        was never allowed to advance past the hole.
+        """
+        candidate = claimed.get(kind)
+        verdict = pool.observe(
+            kind,
+            active.get(kind, account),
+            facts,
+            exit_id=getattr(candidate, 'exit_id', ''),
+            run_id=str((ctx or {}).get('run_id') or ''),
+            node_id=nid,
+        )
+        add_log(
+            t(
+                'pool.rotating',
+                platform=kind,
+                account=pool.account_word(active.get(kind, account)),
+                reason=pool.reason_word(verdict['reason']),
+                next=t('pool.nextAttempt'),
+            )
+        )
+        tried.setdefault(kind, []).append(active.get(kind, account))
+        old = sessions.pop(kind, None)
+        if old is not None:
+            execution_state['active_crawlers'].discard(old[0])
+            close_login_browser(old[0])
+        if candidate is not None:
+            pool.release(candidate)
+            claimed.pop(kind, None)
+        nxt = pool.claim(kind, exclude_accounts=tried[kind])
+        if nxt is None:
+            return False
+        claimed[kind] = nxt
+        active[kind] = nxt.account
+        add_log(t('pool.attempt', platform=kind, n=1, account=pool.account_word(nxt.account), exit=''))
+        _open_browser_session(kind, nxt.account, nxt.proxy)
+        return True
+
     def _writer_for(idx: int) -> PartWriter:
         stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
         if stem not in writers:
@@ -281,71 +368,68 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         sessions[kind] = (harness, harness)
                         execution_state['active_crawlers'].add(harness)
                     else:
-                        # The run's 无头/窗口 choice is honoured verbatim (#148). A headless Chrome now
-                        # carries a desktop fingerprint, and a *scrolled* comment panel was measured
-                        # serving the same rows in both shapes (zhihu comments 5/5 headless, real profile,
-                        # 2026-09-26), so the old rule that forced a window onto scroll-only panels inside a
-                        # headless run is gone: no comment panel overrides what the user asked for.
-                        crawler = get_crawler(
-                            kind,
-                            headless=headless,
-                            cookie_dir=paths.active().cookie_dir,
-                            use_profile=(ctx or {}).get('use_profile'),
-                            abort=stop_requested,
-                            # The node's chosen login walks its comments too: the comment rate
-                            # limit is an ACCOUNT limit, which is the whole reason multi-account
-                            # exists. Blank = the historical default session.
-                            account=account,
-                        )
-                        # Registered for the same reason the source node registers its own:
-                        # a browser 停止 does not know about is a window the user watches keep
-                        # working — and this loop only asks "may I stop?" between URLs, so one
-                        # article's page walk could run the whole node out after the Stop.
-                        sessions[kind] = (
-                            crawler,
-                            # The comment engine reports per-URL facts; prefix them so a
-                            # line in the shared console says which node it came from.
-                            CommentSession(
-                                crawler.driver,
-                                log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
-                                abort=stop_requested,
-                                # The live attribute, not just its value: see CommentSession.driver.
-                                owner=crawler,
-                            ),
-                        )
-                        # Last, so a refusal while building the session cannot leave a
-                        # registered browser that nothing here would ever close.
-                        execution_state['active_crawlers'].add(crawler)
-            _crawler, session = sessions[kind]
-            # One dispatch, one surface: every walker — the browser session, the CatBus backend, the
-            # 红果 harness — answers ``walk(platform, url, limit)``, and each refuses a platform it has
-            # no adapter for BY NAME. The engine used to build the method name out of the routing key
-            # (``getattr(session, f'crawl_{kind}')``) and check for ``None`` here, which pushed the
-            # "does this backend speak this site?" question into an attribute lookup and made the
-            # CatBus class synthesise methods to stay reachable. Adding a platform to
-            # ``core.refs._COMMENT_DOMAINS`` without writing its walk is still a refusal, just one
-            # the walker states itself.
-            skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
-            try:
-                # The same per-platform lane the source node holds: the site's wall is a collision
-                # between two crawls of ONE account, independent of the browser/profile lock, so a
-                # comment node and a source node of the same platform must queue against each other
-                # exactly as two source nodes do. Taken per LINK, not around the whole node, so one
-                # node covering several platforms never holds two lanes at once.
-                with gate.hold(kind, log=add_log, abort=stop_requested, account=account):
-                    rows, status = session.walk(kind, url, limit)
-            except WebDriverException as e:
-                # One slow navigation used to take the whole node with it: the walk's bare
-                # ``driver.get`` throws its timeout straight through, and a batch where link
-                # 3 hung lost links 4..10 entirely. A browser-level fault on ONE link is
-                # named, counted the same way a dead link is (so the summary line and the
-                # unproven cursor gate — 继续 replays from the first hole — both see it),
-                # and the remaining links are still walked. Semantic refusals (no adapter,
-                # a locked store) and a dead or stopped browser (``CrawlerStopped`` is a
-                # ``BaseException``) still raise.
-                add_log(t('comment.linkFailed', url=url, err=e))
-                counts[DEAD] = counts.get(DEAD, 0) + 1
-                unproven.append(idx)
+                        # The run's 无头/窗口 choice is honoured verbatim (#148). A headless
+                        # Chrome now carries a desktop fingerprint, and a *scrolled* comment
+                        # panel was measured serving the same rows in both shapes (zhihu
+                        # comments 5/5 headless, real profile, 2026-09-26), so no comment
+                        # panel overrides what the user asked for.
+                        acct_now, proxy_now = account, None
+                        if pool_mode:
+                            first = pool.claim(kind)
+                            if first is None:
+                                raise ValueError(t('pool.noCandidates', platform=kind))
+                            claimed[kind] = first
+                            active[kind] = first.account
+                            acct_now, proxy_now = first.account, first.proxy
+                            add_log(t('pool.attempt', platform=kind, n=1, account=pool.account_word(acct_now), exit=''))
+                        _open_browser_session(kind, acct_now, proxy_now)
+            # One dispatch, one surface: every walker — the browser session, the CatBus backend,
+            # the 红果 harness — answers ``walk(platform, url, limit)``, and each refuses a
+            # platform it has no adapter for BY NAME.
+            #
+            # The walk is retried in place for a rotating node: a walled link is the one piece of
+            # work a second login can redo with nothing to reconcile, because the cursor was
+            # never allowed past the hole. ``dead`` carries a browser-level fault out of the
+            # retry so the rest of the batch still runs, exactly as before.
+            dead = False
+            rotations = 0
+            while True:
+                _crawler, session = sessions[kind]
+                skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
+                try:
+                    # The same per-platform lane the source node holds: the site's wall is a
+                    # collision between two crawls of ONE account, independent of the
+                    # browser/profile lock, so a comment node and a source node of the same
+                    # platform must queue against each other exactly as two source nodes do.
+                    # Taken per LINK, not around the whole node, so one node covering several
+                    # platforms never holds two lanes at once. A pool rotation re-enters with
+                    # the NEW login's lane, which is the lane the next attempt belongs to.
+                    with gate.hold(kind, log=add_log, abort=stop_requested, account=active.get(kind, account)):
+                        rows, status = session.walk(kind, url, limit)
+                except WebDriverException as e:
+                    # One slow navigation used to take the whole node with it: the walk's bare
+                    # ``driver.get`` throws its timeout straight through, and a batch where link
+                    # 3 hung lost links 4..10 entirely. A browser-level fault on ONE link is
+                    # named, counted the same way a dead link is (so the summary line and the
+                    # unproven cursor gate — 继续 replays from the first hole — both see it),
+                    # and the remaining links are still walked. Semantic refusals (no adapter,
+                    # a locked store) and a dead or stopped browser (``CrawlerStopped`` is a
+                    # ``BaseException``) still raise.
+                    add_log(t('comment.linkFailed', url=url, err=e))
+                    counts[DEAD] = counts.get(DEAD, 0) + 1
+                    unproven.append(idx)
+                    dead = True
+                    break
+                if status == BLOCKED and pool_mode and rotations < pool.max_attempts():
+                    facts = {
+                        'login_wall': bool(getattr(_crawler, 'login_wall', False)),
+                        'risk_blocked': bool(getattr(_crawler, 'risk_blocked', False)),
+                    }
+                    rotations += 1
+                    if _rotate(kind, facts):
+                        continue
+                break
+            if dead:
                 continue
             counts[status] = counts.get(status, 0) + 1
             if (
@@ -407,6 +491,10 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # this one is still unwinding, the two must not both be reaping it.
             execution_state['active_crawlers'].discard(crawler)
             close_login_browser(crawler)
+        # Claims outlive a crash only by their TTL; a run ending (for any reason) hands its
+        # accounts back now, so the next node of the same platform may use them.
+        for _candidate in claimed.values():
+            pool.release(_candidate)
 
     files = _publish_parts()
     if stop_requested():

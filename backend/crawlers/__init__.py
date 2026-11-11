@@ -15,6 +15,7 @@ from crawlers.platforms.weibo.crawler import WeiboCrawler
 from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler
 from crawlers.platforms.youtube.crawler import YouTubeCrawler
 from crawlers.platforms.zhihu.crawler import ZhihuCrawler
+from i18n import t
 
 # The registry, not just the factory: the cookie panel needs each platform's
 # host list and login page to explain itself, and reaching those through
@@ -72,6 +73,8 @@ def get_crawler(
     abort=None,
     refresh_cookies: bool = False,
     account: str = '',
+    proxy: dict = None,
+    use_proxy: bool = True,
 ):
     """Build the crawler for *platform*, in that platform's own browser profile.
 
@@ -122,6 +125,17 @@ def get_crawler(
     if getattr(cls, 'needs_profile', True) is False:
         use_profile = False
     account = str(account or '').strip()
+    # The exit is resolved HERE, not at each call site, because four different browsers read
+    # one account's session — the crawl, the login window, the verification and the pre-run
+    # probe. A login taken from one address and used from another is itself a risk signal,
+    # so they must all leave through the same exit, decided by one rule.
+    if proxy is None and use_proxy:
+        from services.pool import egress
+
+        spec = egress.proxy_for(platform, account)
+        if spec.get('unavailable'):
+            raise ValueError(t('pool.exit.unavailable', platform=platform))
+        proxy = spec or None
     # A cloud host has no display, so a caller that asked for a window gets a headless
     # browser: since #148 a headless session carries a desktop UA and real window metrics,
     # which is what makes this a working answer rather than a silently empty page. The
@@ -156,13 +170,20 @@ def get_crawler(
     # stamp, answered "no" from then on, so the user who saved a Cookie later was never offered the
     # re-plant that would put it into that profile.
     imported = planting and bool(saved) and os.path.isfile(saved)
-    crawler = cls(
-        headless=headless,
-        cookie_path=saved if planting else None,
-        for_login=for_login,
-        profile_dir=profile,
-        abort=abort,
-    )
+    build = {
+        'headless': headless,
+        'cookie_path': saved if planting else None,
+        'for_login': for_login,
+        'profile_dir': profile,
+        'abort': abort,
+    }
+    # Only a browser that HAS an exit is told about one. Every crawler built before exits
+    # existed takes the five arguments above, and a test double (or a platform class that
+    # never opts in) must not start failing because a feature it does not use arrived as a
+    # sixth keyword.
+    if proxy:
+        build['proxy'] = proxy
+    crawler = cls(**build)
     if profile:
         # The stamp is *which* file went in, so the panel can tell a saved-over cookie
         # from a profile that already holds the current one.

@@ -51,6 +51,10 @@ class DataPaths:
     biblio_db: str
     locks_json: str
     schedules_json: str
+    #: Account/exit pool health, bindings and the rotation audit trail (``services.pool``).
+    #: One file per tree for the same reason every other store is: an account's logins and
+    #: the record of which of them burned are the same person's data.
+    pool_db: str
 
     def ensure(self) -> 'DataPaths':
         """Create the directories this scope needs. Idempotent, called when an account is created
@@ -88,6 +92,7 @@ def system() -> DataPaths:
         biblio_db=Config.BIBLIO_DB,
         locks_json=os.path.join(data_dir, 'locks.json'),
         schedules_json=os.path.join(data_dir, 'schedules.json'),
+        pool_db=os.path.join(data_dir, 'pool.db'),
     )
 
 
@@ -140,6 +145,7 @@ def for_user(user_id: str) -> DataPaths:
         biblio_db=os.path.join(root, 'biblio.db'),
         locks_json=os.path.join(root, 'locks.json'),
         schedules_json=os.path.join(root, 'schedules.json'),
+        pool_db=os.path.join(root, 'pool.db'),
     )
 
 

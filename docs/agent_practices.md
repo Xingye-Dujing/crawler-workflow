@@ -1489,3 +1489,28 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   returned handle-like values from `setTimeout` but dropped every `clearTimeout`, so an autosave a scenario had
   cancelled still fired while the next scenario had already deleted its draft — the load-dependent
   `draftStored` flip. The stub now forwards the real Node handle; a test double for timers must cancel, not just fire.
+- **A cooldown table is the feature, not a cache; rotation is its downstream action.** A platform block lasts hours, so
+  the expensive act is trying again too soon. `data/pool.db` keeps `cool_until` per `(account|exit, platform, subject)`
+  — a login can be walled on weibo and fine on bilibili, and an exit can be banned by one site while serving another —
+  and the read compares against the clock instead of starting a sweeper (a second writer with its own chance to be
+  wrong). Manual 停用 is the one state a clock cannot lift. Why per pair and not per account: the same login on a
+  different IP is a different bet, and the same IP for a different login is too.
+- **Rotate only where the ledger has nothing to reconcile.** A source node switches login solely when THIS attempt
+  stored zero rows and the site answered a wall/risk page (`SessionBlockedError`). Once rows exist, the existing
+  PARTIAL-and-continue path owns the truth; rotating there would hand a second account a half-paid walk with a cursor
+  that describes the first one. A comment node is the opposite case and may rotate per link, because a blocked link
+  was never allowed into the "proven prefix" its cursor records.
+- **A failure cools only the side it accuses.** A login wall is the session's; a captcha is first the exit's; an
+  unreachable page is neither. Cooling an account for a dead line burns the resource the pool is short of — the same
+  distinction `preflight` already draws between `expired` and `unknown`. Unknown failures never cool anything.
+- **A pool is a pair, and the gate lane is the login.** Each attempt takes `gate.hold(account=<the real login>)`; a
+  sentinel lane such as `@pool` would serialize every pool crawl of one platform into one queue. `@pool` contains `@`,
+  which no account label may contain, so it can never collide with a typed name — and it must never be passed to
+  `CookieManager.path_for`. Its presence stays IN the node fingerprint (pool mode is a different crawl than a fixed
+  login), which is exactly why the sentinel, not a per-run chosen account, is what the canvas stores.
+- **An exit credential belongs in the relay, not in argv.** Chrome cannot take proxy credentials, and putting them in
+  a URL or an argument exposes them to every process listing. The loopback CONNECT relay adds `Proxy-Authorization`
+  upstream while Chrome sees only `127.0.0.1:<ephemeral>`; it dies with the driver, including the reaped-by-PID path.
+  Serving `--proxy-server` also requires `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`, or a page can
+  still learn the host's address over UDP. When every exit is benched the crawler refuses rather than connecting
+  direct: a silent direct connection exposes the address the exit was bought to hide.
