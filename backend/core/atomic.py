@@ -21,12 +21,15 @@ from __future__ import annotations
 import os
 import time
 
-#: Total attempts before the rename is reported as a failure. Ten tries over ~0.5 s covers a reader
+#: Total attempts before the rename is reported as a failure. Ten tries over ~0.4 s covers a reader
 #: that opened the file just before the writer got there; a handle that stays open is a real error
 #: and is surfaced (never swallowed) so the caller can say which file.
 ATTEMPTS = 10
-#: First back-off, doubled per attempt. Kept small: the writer usually holds a lock the UI is waiting on.
+#: First back-off, doubled per attempt and capped so the whole retry stays short: the writer usually
+#: holds a lock the UI is waiting on, and a multi-second sleep under it is worse than the 500 the
+#: retry exists to remove. A genuinely stuck handle is raised after the tenth try.
 BACKOFF = 0.01
+MAX_DELAY = 0.05
 
 
 def replace(staged, target) -> None:
@@ -46,6 +49,6 @@ def replace(staged, target) -> None:
             if attempt == ATTEMPTS - 1:
                 break
             time.sleep(delay)
-            delay *= 2
+            delay = min(delay * 2, MAX_DELAY)
     assert last is not None  # only reachable from the branch above
     raise last

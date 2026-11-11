@@ -6,6 +6,7 @@ variants), the name is carried *inside* the payload (the run reports it to the
 execution history), and nothing a user types can walk out of the directory.
 """
 
+import builtins
 import json
 import os
 
@@ -111,6 +112,42 @@ class TestSaveLoad:
         with open(manager.save('坏', dict(WORKFLOW)), 'w', encoding='utf-8') as handle:
             handle.write('{ not json')
         assert manager.load('坏') is None
+
+    def test_a_reader_held_by_a_concurrent_save_is_retried(self, manager, monkeypatch):
+        """Windows denies ``open`` while another thread's ``os.replace`` swaps the file in.
+
+        The writer retries its rename; without the reader half, a reload or autosave racing a save
+        turned an intact canvas into a ``PermissionError`` (an HTTP 500) for a few milliseconds.
+        """
+        manager.save('race', dict(WORKFLOW))
+        target = os.path.abspath(manager.path_for('race'))
+        real_open = builtins.open
+        calls = {'n': 0}
+
+        def flaky(path, *args, **kwargs):
+            if os.path.abspath(str(path)) == target and calls['n'] < 2:
+                calls['n'] += 1
+                raise PermissionError(13, 'the file is being replaced', str(path))
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, 'open', flaky)
+        monkeypatch.setattr(type(manager), 'READ_BACKOFF', 0)
+        loaded = manager.load('race')
+        assert loaded['nodes'] == WORKFLOW['nodes']
+        assert calls['n'] == 2, 'the reader did not retry the Windows replace window'
+
+    def test_a_permanently_blocked_canvas_is_not_reported_as_missing(self, manager, monkeypatch):
+        """After the retry the error still surfaces: answering ``None`` would make the UI forget a
+        remembered workflow whose file is on disk and merely held open by another process."""
+        manager.save('held', dict(WORKFLOW))
+
+        def blocked(*_args, **_kwargs):
+            raise PermissionError(13, 'still held')
+
+        monkeypatch.setattr(builtins, 'open', blocked)
+        monkeypatch.setattr(type(manager), 'READ_BACKOFF', 0)
+        with pytest.raises(PermissionError):
+            manager.load('held')
 
     def test_round_trip_of_a_full_workflow(self, manager):
         payload = dict(WORKFLOW, settings={'parallel': True}, name='ignored')

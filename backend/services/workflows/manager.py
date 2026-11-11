@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 import uuid
 
 from core.atomic import replace as atomic_replace
@@ -20,6 +21,14 @@ class WorkflowManager:
     # endpoints, so every caller inherits it.
     MAX_NAME_LENGTH = 60
     DEFAULT_NAME = 'untitled'
+    #: Reading the canvas is the other half of the Windows save race: while another thread's
+    #: ``os.replace`` swaps the file in, ``open()`` answers ``PermissionError`` (13). The window is
+    #: milliseconds and the writer retries its rename, so a bounded retry here keeps a reload or an
+    #: autosave reader from turning a whole file into a 500 (or, worse, into the “missing” answer the
+    #: UI forgets a remembered canvas on).
+    READ_ATTEMPTS = 10
+    READ_BACKOFF = 0.01
+    READ_MAX_DELAY = 0.05
 
     def __init__(self, workflow_dir: str = None):
         # Resolved at construction, not import: a bare ``WorkflowManager()`` (the schedules
@@ -65,11 +74,27 @@ class WorkflowManager:
         return path
 
     def load(self, name: str) -> dict | None:
-        try:
-            with open(self.path_for(name), encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return None
+        """The saved payload, or ``None`` when the file is absent or not valid JSON.
+
+        A ``PermissionError`` is retried: on Windows a reader loses to the writer's
+        ``os.replace`` for a few milliseconds, and that is not a missing canvas. A handle that
+        stays blocked raises after the retry, exactly as the bare ``open`` did — reporting a
+        canvas as missing would make the UI forget the remembered file it still has on disk.
+        """
+        path = self.path_for(name)
+        delay = self.READ_BACKOFF
+        for attempt in range(self.READ_ATTEMPTS):
+            try:
+                with open(path, encoding='utf-8') as f:
+                    return json.load(f)
+            except PermissionError:
+                if attempt == self.READ_ATTEMPTS - 1:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, self.READ_MAX_DELAY)
+            except (FileNotFoundError, json.JSONDecodeError):
+                return None
+        return None
 
     @staticmethod
     def _draft_nodes(draft: dict) -> list:
@@ -192,7 +217,7 @@ class WorkflowManager:
         if payload is not None:
             # Same atomicity as ``save``: a rename that failed half-way used to leave neither
             # name readable. The new file is complete before the old one is removed.
-            tmp = f'{dst}.tmp-{os.getpid()}'
+            tmp = f'{dst}.tmp-{os.getpid()}-{uuid.uuid4().hex[:8]}'
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
                 f.flush()
@@ -200,7 +225,9 @@ class WorkflowManager:
             atomic_replace(tmp, dst)
             os.remove(src)
         else:
-            os.replace(src, dst)
+            # The corrupt file is moved without a rewrite, but a reader still holds the source
+            # on Windows: the same retry the writer above uses keeps the rename from becoming a 500.
+            atomic_replace(src, dst)
         return self.clean_name(new)
 
     def delete(self, name: str):
