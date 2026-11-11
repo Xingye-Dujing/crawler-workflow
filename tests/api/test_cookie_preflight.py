@@ -257,6 +257,30 @@ class TestCache:
         assert preflight.probe('zhihu')['cached'] is True
         assert len(probe_zhihu.calls) == seen, 'the same question bought a second browser'
 
+    def test_a_switch_flipped_mid_probe_does_not_move_the_verdicts_slot(self, probe_zhihu, monkeypatch):
+        """The mode is resolved ONCE, before the browser opens.
+
+        Resolving ``is_enabled`` again in ``_remember`` (or in ``record``) filed a verdict
+        measured with profiles ON under the OFF slot if the setting moved while the page was
+        loading — the next run then reused an answer about a session it never used.
+        """
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: True)
+
+        def flip():
+            monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
+
+        probe_zhihu.hold = flip
+        preflight.probe('zhihu')
+        assert probe_zhihu.calls[0]['use_profile'] is True, 'the browser was opened by a re-read setting'
+        assert preflight.cached('zhihu', '', True) is not None, 'the verdict went to the mode it measured'
+        assert preflight.cached('zhihu', '', False) is None, 'a verdict was filed in the mode nobody measured'
+
+    def test_record_files_under_the_mode_the_caller_measured(self, probe_zhihu):
+        """The panel's 验证 measured its browser in one mode; its verdict belongs to that slot."""
+        preflight.record('zhihu', {'login_wall': False, 'risk_blocked': False}, '', use_profile=True)
+        assert preflight.cached('zhihu', '', True) is not None
+        assert preflight.cached('zhihu', '', False) is None
+
     def test_the_default_login_shares_its_verdict_across_both_spellings(self, probe_zhihu):
         """One login, one cache slot. The candidate list and a new node's preselection hand the
         default account its NAME, while an old canvas leaves it blank; the panel's 验证 recorded
@@ -532,14 +556,29 @@ class TestRoute:
         OF — a named account must not be tested through the default login's browser."""
         with_cookie('weibo', account='work')
         result = client.post('/api/cookies/preflight', json={'platforms': [{'platform': 'weibo', 'account': 'work'}]})
-        assert probes.calls == [{'platform': 'weibo', 'use_profile': None, 'account': 'work'}]
+        # Omitted ``use_profile`` means "the setting", resolved once before the browser opens, so
+        # the probe, its cache slot and its record all speak about the same mode.
+        assert probes.calls == [{'platform': 'weibo', 'use_profile': profiles.is_enabled(), 'account': 'work'}]
         # and the answer is keyed by the pair, which is what the browser matches on
         assert 'weibo@work' in result.get_json()['results']
 
-    def test_a_missing_use_profile_stays_a_missing_answer(self, client, probes, with_cookie):
+    def test_a_missing_use_profile_follows_the_setting_rather_than_becoming_false(
+        self, client, probes, with_cookie, monkeypatch
+    ):
+        """Absence is "ask the setting", and the resolved answer is what the browser is opened in.
+
+        Passing ``None`` all the way down let ``get_crawler`` re-read the setting *after* the cache
+        key was chosen; a flip in that window measured one mode and filed it under the other.
+        """
         with_cookie('zhihu')
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: True)
         client.post('/api/cookies/preflight', json={'platforms': ['zhihu']})
-        assert probes.calls[0]['use_profile'] is None, 'coercing absence to False overrides a setting'
+        assert probes.calls[0]['use_profile'] is True, 'the setting was replaced by a hard False'
+
+        preflight.reset()
+        monkeypatch.setattr(profiles, 'is_enabled', lambda: False)
+        client.post('/api/cookies/preflight', json={'platforms': ['zhihu'], 'fresh': True})
+        assert probes.calls[1]['use_profile'] is False, 'the setting was replaced by a hard True'
 
     def test_a_string_false_is_still_a_no(self, client, probes, with_cookie):
         with_cookie('zhihu')

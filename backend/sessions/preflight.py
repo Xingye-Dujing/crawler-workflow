@@ -163,16 +163,20 @@ def classify_probe(facts: dict) -> str:
     return VALID
 
 
-def record(platform: str, facts: dict, account: str = '') -> dict:
+def record(platform: str, facts: dict, account: str = '', use_profile: bool = None) -> dict:
     """Cache a verdict somebody else already measured and reported.
 
     The panel's 验证 Cookie button asks this same question of the same browser, so a
     user who just watched it answer “已失效” should not pay for a second probe to be
     told so again — and a stale “可用” must not survive the check that contradicted it.
+
+    ``use_profile`` must be the mode that browser was actually opened in. Resolving the
+    setting here instead would file a verdict measured with profiles ON under the other
+    mode if the switch moved while the probe ran; the caller knows, so it passes it in.
     """
     account = CookieManager.key(account)
     verdict = _verdict(str(platform), classify_probe(facts), probed=True, account=account)
-    _remember(platform, verdict, account)
+    _remember(platform, verdict, account, use_profile)
     return verdict
 
 
@@ -347,6 +351,10 @@ def probe(
     account = str(account or '').strip()
     if str(backend or '').strip().lower() == capabilities.BACKEND_CATBUS:
         return _probe_catbus(platform, account)
+    # ONE answer for the whole probe: the cache lookup, the session the browser reads, the
+    # verdict's slot and the record all have to speak about the same mode. Re-asking the
+    # setting at each step let a switch flipped mid-probe file this answer under the other one.
+    use_profile = profiles.is_enabled() if use_profile is None else bool(use_profile)
     if not fresh:
         hit = cached(platform, account, use_profile)
         if hit:

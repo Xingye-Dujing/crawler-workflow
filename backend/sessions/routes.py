@@ -845,8 +845,17 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         # sent there by an expired cookie: the probe lands on the login page, whose QR
         # code is an ``<img>``. Blocked, the diagnosis “cookie 已失效，去登录” pointed at
         # a window where logging in was impossible.
+        # Resolve the profile mode ONCE: this browser is opened in it, and the verdict it
+        # produces is filed in the same slot. A settings flip while the page loads must not
+        # move that verdict to the mode nobody measured.
+        use_profile = profiles.is_enabled()
         crawler = get_crawler(
-            platform, headless=False, cookie_dir=paths.active().cookie_dir, for_login=True, account=account
+            platform,
+            headless=False,
+            cookie_dir=paths.active().cookie_dir,
+            for_login=True,
+            use_profile=use_profile,
+            account=account,
         )
         facts = crawler.diagnose(url)
         facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
@@ -862,7 +871,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
             # came here from the block dialog should not have to prove the fix twice.
             # With a pasted entry URL it does not — the verdict is about that page, not
             # about the address the gate would visit.
-            preflight.record(platform, facts, account)
+            preflight.record(platform, facts, account, use_profile=use_profile)
         for line in lines:
             add_log(line)
     except Exception as e:
