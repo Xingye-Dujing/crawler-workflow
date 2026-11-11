@@ -1176,7 +1176,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path.mkdir(parents=True, exist_ok=True)
             if os.name == 'nt':
-                os.startfile(path)
+                # Resolved by name: ``os.startfile`` is a Windows-only member, and the product
+                # lint tier also runs on Linux/macOS where the attribute does not exist. A
+                # literal ``os.startfile`` there fails the gate for a branch those machines
+                # can never take.
+                launcher = getattr(os, 'startfile', None)
+                if launcher is not None:
+                    launcher(path)
             else:
                 subprocess.Popen(
                     ['open' if sys.platform == 'darwin' else 'xdg-open', str(path)],
