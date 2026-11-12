@@ -47,7 +47,7 @@
 1. 改代码、跑全量测试和 lint（见下）；
 2. 改 `backend/services/version.py` 的 `APP_VERSION`；
 3. 构建 Windows 和 macOS 新包；
-4. 把新包上传到**新的 release tag**；
+4. 把新包上传到**新的 release tag**（Gitee 先腾空间，见下面第 5 步）；
 5. 更新 `version.json` 的版本号、大小、SHA-256、下载地址/分片；
 6. 更新 Release 说明；
 7. 提交并推送 `version.json`、`docs/`、代码。
@@ -142,7 +142,29 @@ desktop\.venv-build\Scripts\python.exe desktop\patch_manifest.py --check dist\Ca
 CatBus 的版本或地址变了。**主程序出新版本不需要重建它**——它读 `version.json` 决定装哪一版。
 新发布里仍建议把当前这份安装器一起上传，让下载页只有一处入口。
 
-### 5. 上传 Windows 资产
+### 5. 先腾 Gitee 的空间（仓库附件总量 1 GB）
+
+Gitee 一个仓库的 Release 附件总量上限是 **1 GB**，而每个 Windows 版本的分片合计约 260 MB。
+实测到第 4、5 个版本时，分片传完后再传 `CaiXiHui-Online-Setup.exe` 收到
+`验证失败，文件大小已超过仓库附件大小：1 GB`，于是国内下载页缺了在线安装器——**同一份
+`version.json` 却已经指向这个 tag**，那是最难查的一类缺件。
+
+所以**每次发布都先删旧 tag 的附件，只保留当前 tag**：
+
+```powershell
+$env:GITEE_TOKEN = '<带 projects 权限的私人令牌>'      # 只从环境变量读，命令行里不出现
+.venv\Scripts\python.exe tools\prune_gitee_releases.py --tag exe-2026-11.13 --dry-run
+.venv\Scripts\python.exe tools\prune_gitee_releases.py --tag exe-2026-11.13 --tag manual-2026-11
+```
+
+只删**附件**：Release 条目、说明文字和 git tag 都保留，旧版本的下载页仍然解释得清它是哪一版；
+要保留的不止一个 tag 时把 `--tag` 写两遍（使用手册是独立的 `manual-2026-11`，不是旧程序版本）；
+当前 tag 在远端没有 Release 时脚本按名拒绝——`--tag` 拼错就会清空全仓库的资产，不能只靠小心。
+Gitee 列 Release 时不返回附件 id 和字节数，所以脚本对每个要删的 Release 再读一次
+`attach_files`（那里的 `size` 才是真的）；生成出来的 `<tag>.zip` / `.tar.gz` 是源码链接，不是附件，
+不能这样删，也不占那 1 GB。清理后再上传，分片与安装器才都装得下。GitHub 没有这个额度，旧 tag 的附件照旧留着。
+
+### 6. 上传 Windows 资产
 
 上传到 GitHub Release（完整文件）和 Gitee Release（国内直连以 Gitee 为准；Gitee 只传分片）：
 
