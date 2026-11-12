@@ -2305,6 +2305,22 @@ step();
 """
 
 
+def _settle_chrome(driver):
+    """Wait until ``--menuH``/``--barH`` describe the bars as they are NOW.
+
+    ``menu.js`` publishes both from a ResizeObserver, so a bar that just wrapped (a narrower
+    viewport, a language switch, a status line appearing) is one frame ahead of the value every
+    popup's band is computed from. Measuring in that frame compares a popup against a band the page
+    is not using yet — measured on the Windows runner: a live status bar of 119px beside a published
+    74px, which reads as a product defect but is a stale variable.
+    """
+    settled = driver.execute_async_script(CHROME_SETTLE_JS, [])
+    assert settled['settled'], (
+        f'the bars never published their measured height: --menuH/--barH {settled["published"]} '
+        f'vs live {settled["live"]}'
+    )
+
+
 def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_url, driver):
     """The eight-platform step guide wrapped into a narrow column and pushed the panel
     past the window, so every platform showed a vertical scrollbar. The panel was
@@ -2335,16 +2351,9 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
         # Chinese is what wraps this guide the most, and switching language re-lays out the menu:
         # set it BEFORE the settle below, or the settle would measure the previous language.
         driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();")
-        # The bars publish their measured height into ``--menuH``/``--barH`` from a
-        # ResizeObserver, so a layout that just changed (the emulated viewport, the forced
-        # language) leaves the published value one frame behind. Measuring in that frame reads
-        # a band the page does not have yet — measured on the runner: a 509 px cap beside a 651 px
-        # band, which looks exactly like a product defect. Wait for the publish instead.
-        settled = driver.execute_async_script(CHROME_SETTLE_JS, [])
-        assert settled['settled'], (
-            f'the bars never published their measured height: --menuH/--barH '
-            f'{settled["published"]} vs live {settled["live"]}'
-        )
+        # The bars publish their measured height from a ResizeObserver, so a layout that just
+        # changed leaves the published value one frame behind: wait for the publish, then measure.
+        _settle_chrome(driver)
         got = driver.execute_script(COOKIE_FIT_JS, [])
     finally:
         driver.execute_cdp_cmd('Emulation.clearDeviceMetricsOverride', {})
@@ -3384,6 +3393,7 @@ def test_canvas_popups_keep_the_same_band_between_the_two_bars(app_url, driver):
     _set_viewport(driver, 620, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
+    _settle_chrome(driver)
     facts = driver.execute_script(
         """
         const ids = ['dashboard-panel', 'history-panel', 'chart-preview-panel',
@@ -4015,6 +4025,13 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     # the same pair was byte-identical on Windows and Linux. Retry the pair instead of quoting the
     # first one; a page that never settles still fails, and the message says how many pairs were
     # tried and never matched.
+    # An ECharts canvas repaints on its own schedule (ink, fade, resize), so a strip over it compares
+    # two animation frames rather than two states. The question here is whether the DRAWER paints, so
+    # the canvases are blanked for the comparison; a shadow that reaches them still shows.
+    driver.execute_script(
+        "document.querySelectorAll('canvas').forEach((c) => { c.dataset.cixiHidden = c.style.visibility; "
+        "c.style.visibility = 'hidden'; });"
+    )
     closed = control = ''
     tries = 0
     while tries < 6:
@@ -4026,6 +4043,9 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = 'none';")
     gone = shot()
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = '';")
+    driver.execute_script(
+        "document.querySelectorAll('canvas').forEach((c) => { c.style.visibility = c.dataset.cixiHidden || ''; });"
+    )
     assert closed == control, (
         'the browser did not paint two identical states identically, so a pixel comparison here '
         f'proves nothing and must not be quoted ({tries} capture pairs agreed on nothing; strip {strip}, {measured})'
