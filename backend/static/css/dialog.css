@@ -13,6 +13,10 @@
   display: none;
   align-items: center;
   justify-content: center;
+  /* The scrim still covers the whole window; the CENTRING BOX is the band between
+     the two chrome bars, so a dialog keeps the same symmetric clearance. */
+  padding: var(--chrome-top) 12px var(--chrome-bottom);
+  box-sizing: border-box;
 }
 #dialog-overlay.open {
   display: flex;
@@ -22,8 +26,11 @@
   background: var(--bg);
   border: 1px solid var(--ink);
   padding: 20px;
-  min-width: 360px;
+  min-width: min(360px, calc(100vw - 24px));
   max-width: 480px;
+  max-height: var(--panel-max-h);
+  overflow-y: auto;
+  box-sizing: border-box;
   box-shadow: var(--shadow);
 }
 .dialog-close {
@@ -228,16 +235,17 @@ html[data-win-desktop="0"] .windows-only {
 #cookie-dialog {
   position: fixed;
   right: -360px;
-  top: 50%;
-  transform: translateY(-50%);
+  /* The same centred band as the node panel: 12px under the menu, 12px above the
+     status bar, with both insets following their measured (wrapped) heights. */
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
+  height: fit-content;
+  margin-block: auto;
   /* Wide enough that the eight-platform step guide — the tall part — wraps into a
      box that fits a laptop window without a vertical scrollbar (#175). The node form
      stays at 340px; this panel carries much more text, so it reads better broader. */
-  width: 600px;
-  max-width: calc(100vw - 24px);
-  /* Same reason as #node-settings: the eight-platform guide is far taller than a
-     short window, and an uncapped box scrolls the page instead of itself. */
-  max-height: calc(100vh - 24px);
+  width: min(600px, calc(100vw - 24px));
+  max-height: var(--panel-max-h);
   background: var(--bg);
   border: 1px solid var(--line);
   z-index: 1002;

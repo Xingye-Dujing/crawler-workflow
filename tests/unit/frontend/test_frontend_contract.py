@@ -221,11 +221,14 @@ class TestLlmGateParity:
         downstream, but a panel OPEN is not a user edit, so the branch may not persist it (connectNodes
         already writes it as a real change when the wire is made)."""
         source = js_text('panels/settings.js')
-        start = source.index("node.type === 'tokenize'")
-        branch = source[start : source.index("node.type === 'name'", start)]
+        start = source.index('function renderTokenizeExtra(')
+        branch = source[start : source.index('function openSettings(', start)]
         assert "p.output_mode = 'word_freq'" in branch, 'the derived default was dropped (run would read a stale mode)'
         assert 'canvas.saveState(' not in branch, 'opening the tokenize panel persisted an edit it never was'
         assert 'canvas.updateNodeDisplay(' not in branch, 'a mere view re-stamped the node and pushed history'
+        # The same helper serves the 处理 → 分词 operation and the legacy node; one caller
+        # alone would leave the other shape without the lock or the fields.
+        assert source.count('renderTokenizeExtra(nodeId, node, p)') >= 2
 
     def test_opening_an_output_panel_is_not_an_undo_step(self):
         """A pdf-only output forces ``format='pdf'`` in the live model for the run, but must not
@@ -514,6 +517,16 @@ class TestPaletteContract:
         assert "params.collect = Capabilities.mode(platform, '').key" in seeder, (
             'a new node must arrive already naming the mode it will run, not leaving it blank'
         )
+
+    def test_tokenize_is_a_process_operation_not_a_palette_item(self):
+        """New canvases reach 分词 through 处理; the old TKN type stays for saved canvases."""
+        assert 'tokenize' not in self._palette_types()
+        canvas_src = js_text('canvas.js')
+        assert "if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' }" in canvas_src
+        assert 'isTokenizeNode(node)' in canvas_src, 'the chart coupling no longer recognises 处理 → 分词'
+        settings = js_text('panels/settings.js')
+        ops = settings[settings.index('var PROCESS_OPS =') : settings.index(';', settings.index('var PROCESS_OPS ='))]
+        assert "'tokenize'" in ops, 'the process operation picker cannot create a tokenizer'
 
 
 class TestEmotionPaletteCoverage:
@@ -857,6 +870,44 @@ class TestChromeOfThePageItself:
             assert f'max-height: {ceiling}' in block, f'{selector} can slide behind a wrapped status bar: {block}'
         assert 'overflow-y: auto' in rule('#node-palette'), 'a long palette cannot scroll inside its new ceiling'
 
+    def test_canvas_independent_popups_share_the_chrome_band(self):
+        """Every floating popup keeps the same 12px band under the menu and above the
+        status bar, both of which may have wrapped to extra rows."""
+        css = css_text()
+        blocks = {}
+        for selector in (
+            '#stats-panel {',
+            '#chart-preview-panel {',
+            '#chart-fullscreen-panel {',
+            '#data-preview-panel {',
+            '#history-panel {',
+            '#dashboard-panel {',
+            '#node-settings {',
+            '#cookie-dialog {',
+            '#help-box {',
+            '#source-help-box {',
+        ):
+            blocks[selector] = css[css.index(selector) : css.index('}', css.index(selector))]
+        for selector in (
+            '#stats-panel {',
+            '#chart-preview-panel {',
+            '#chart-fullscreen-panel {',
+            '#data-preview-panel {',
+            '#history-panel {',
+            '#dashboard-panel {',
+            '#node-settings {',
+            '#cookie-dialog {',
+        ):
+            block = blocks[selector]
+            assert 'var(--chrome-top)' in block and 'var(--chrome-bottom)' in block, f'{selector} ignores a wrapped bar'
+            assert 'var(--panel-max-h)' in block or 'bottom:' in block or 'inset:' in block, selector
+        for selector in ('#help-box {', '#source-help-box {'):
+            assert 'var(--panel-max-h)' in blocks[selector], f'{selector} can run under a wrapped status bar'
+        # The dropdowns hang under a button, so JS owns the height; CSS still caps them.
+        assert 'overflow-y: auto' in css[css.index('.dropdown {') : css.index('}', css.index('.dropdown {'))]
+        menu = js_text('menu.js')
+        assert menu.count('fitDropdownToChrome(menu, r)') == 3, 'a menu still grows under the status bar'
+
     def test_the_settings_nav_active_state_has_no_shadow(self):
         """OMM-ZEN selection is a tone change; the inset bar was a fifth accent."""
         css = css_text()
@@ -898,8 +949,13 @@ class TestChromeOfThePageItself:
         css = css_text()
         for selector in ('#node-settings {', '#cookie-dialog {'):
             block = css[css.index(selector) : css.index('}', css.index(selector))]
-            assert 'max-height: calc(100vh - 24px)' in block, f'{selector} can outgrow the screen again'
-            assert 'overflow-y: auto' in block, f'{selector} lost the scroll the ceiling exists to enable'
+            assert 'max-height: var(--panel-max-h)' in block, f'{selector} can outgrow the chrome band again'
+        # Node settings scrolls its CONTENT (the header and grip stay put); the cookie
+        # dialog scrolls itself.
+        content = css[css.index('#settings-content {') : css.index('}', css.index('#settings-content {'))]
+        assert 'overflow-y: auto' in content
+        cookie = css[css.index('#cookie-dialog {') : css.index('}', css.index('#cookie-dialog {'))]
+        assert 'overflow-y: auto' in cookie
 
     def test_a_single_select_option_row_ellipsises_and_carries_its_full_text(self):
         """The ellipsis rule used to live only under ``.cselect-option.multi``, so a

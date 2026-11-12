@@ -3281,6 +3281,89 @@ def test_the_empty_history_sentence_wraps_inside_the_chart(app_url, driver):
     assert facts['align'] == 'center' and facts['justify'] == 'center', f'the sentence is not centred: {facts}'
 
 
+def test_canvas_popups_keep_the_same_band_between_the_two_bars(app_url, driver):
+    """Both bars wrap on a narrow window, and every independent popup must stay in
+    the band between them with the same 12px clearance top and bottom."""
+    _set_viewport(driver, 620, 700)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        """
+        const ids = ['dashboard-panel', 'history-panel', 'chart-preview-panel',
+                     'data-preview-panel', 'chart-fullscreen-panel'];
+        const menu = document.getElementById('top-menu');
+        const bar = document.getElementById('status-bar');
+        const cs = getComputedStyle(document.documentElement);
+        /* 100vh is the EMULATED viewport; window.innerHeight ignores the override. */
+        const inner = document.documentElement.clientHeight;
+        const out = {
+            menuH: menu.offsetHeight,
+            barH: bar.offsetHeight,
+            chromeTop: cs.getPropertyValue('--chrome-top').trim(),
+            chromeBottom: cs.getPropertyValue('--chrome-bottom').trim(),
+            panelMax: cs.getPropertyValue('--panel-max-h').trim(),
+            inner,
+            boxes: {},
+        };
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            el.classList.add('open');
+            const r = el.getBoundingClientRect();
+            out.boxes[id] = { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height) };
+        }
+        for (const id of ids) document.getElementById(id).classList.remove('open');
+        toggleSettingsMenu({ stopPropagation() {} });
+        const menuBox = document.getElementById('settings-menu');
+        const mr = menuBox.getBoundingClientRect();
+        out.settingsMenu = {
+            top: Math.round(mr.top),
+            bottom: Math.round(mr.bottom),
+            maxHeight: getComputedStyle(menuBox).maxHeight,
+        };
+        closeSettingsMenu();
+        out.fitBoxes = {};
+        for (const id of ['node-settings', 'cookie-dialog']) {
+            const el = document.getElementById(id);
+            el.classList.add('open');
+            const r = el.getBoundingClientRect();
+            out.fitBoxes[id] = { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+            el.classList.remove('open');
+        }
+        const overlay = document.getElementById('dialog-overlay');
+        overlay.classList.add('open');
+        const dialog = document.getElementById('dialog-box').getBoundingClientRect();
+        out.fitBoxes['dialog-box'] = { top: Math.round(dialog.top), bottom: Math.round(dialog.bottom) };
+        overlay.classList.remove('open');
+        return out;
+        """,
+        [],
+    )
+    assert facts['menuH'] > 56, f'the menu did not wrap, so this measured nothing: {facts}'
+    assert facts['barH'] > 28, f'the status bar did not wrap, so this measured nothing: {facts}'
+    # The custom properties keep their calc() form (Chrome does not resolve an
+    # unregistered variable), so check that each names the MEASURED bar height.
+    assert f'{facts["menuH"]}px' in facts['chromeTop'] and '+ 12px' in facts['chromeTop'], facts
+    assert f'{facts["barH"]}px' in facts['chromeBottom'] and '+ 12px' in facts['chromeBottom'], facts
+    assert all(f'{v}px' in facts['panelMax'] for v in (facts['menuH'], facts['barH'])), facts
+    for panel_id, box in facts['boxes'].items():
+        assert box['top'] == facts['menuH'] + 12, f'#{panel_id} ignores the wrapped menu: {box}'
+        assert box['bottom'] == facts['inner'] - facts['barH'] - 12, (
+            f'#{panel_id} runs under the wrapped status bar: {box}'
+        )
+        assert box['height'] > 100, f'#{panel_id} collapsed, so this proved nothing: {box}'
+    menu = facts['settingsMenu']
+    assert menu['top'] > facts['menuH'], f'the settings menu starts under the bar: {menu}'
+    assert menu['bottom'] <= facts['inner'] - facts['barH'] - 12 + 1, (
+        f'the settings menu runs behind the wrapped status bar: {menu}'
+    )
+    for panel_id, box in facts['fitBoxes'].items():
+        top_gap = box['top'] - facts['menuH']
+        bottom_gap = facts['inner'] - facts['barH'] - box['bottom']
+        assert top_gap >= 11, f'#{panel_id} starts under the menu: {box}'
+        assert bottom_gap >= 11, f'#{panel_id} runs under the status bar: {box}'
+        assert abs(top_gap - bottom_gap) <= 1, f'#{panel_id} is not centred in the chrome band: {box}'
+
+
 def test_an_outside_click_dismisses_the_settings_page(app_url, driver):
     """A form dock leaves when the user clicks back into the canvas; a click INSIDE
     it (including its own controls) must not."""

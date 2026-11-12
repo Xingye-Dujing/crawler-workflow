@@ -52,9 +52,11 @@
 #stats-panel {
   position: fixed;
   right: -340px;
-  top: 0;
-  width: 340px;
-  height: 100vh;
+  /* A side reader occupies the whole band between the two chrome bars, never the
+     viewport: a wrapped menu/status bar shrinks it instead of covering it. */
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
+  width: min(340px, calc(100vw - 24px));
   background: var(--bg);
   border-left: 1px solid var(--line);
   z-index: 200;
@@ -116,10 +118,11 @@
 #chart-preview-panel {
   position: fixed;
   right: -560px;
-  top: 10%;
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
   width: 540px;
   max-width: 92vw;
-  height: 70vh;
+  max-height: var(--panel-max-h);
   background: var(--bg);
   border: 1px solid var(--line);
   opacity: 0;
@@ -197,11 +200,11 @@
    can be opened over. */
 #chart-fullscreen-panel {
   position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 80vw;
-  height: 80vh;
+  left: 12px;
+  right: 12px;
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
+  max-height: var(--panel-max-h);
   background: var(--bg);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
@@ -253,9 +256,10 @@
 #data-preview-panel {
   position: fixed;
   right: -480px;
-  top: 8%;
-  width: 460px;
-  height: 65vh;
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
+  width: min(460px, calc(100vw - 24px));
+  max-height: var(--panel-max-h);
   background: var(--bg);
   border: 1px solid var(--line);
   opacity: 0;
@@ -340,7 +344,7 @@ table.data-preview-table tr:hover td {
 /* ── Dashboard ──────────────────────────────────────────────────────────── */
 #dashboard-panel {
   position: fixed;
-  inset: 6%;
+  inset: var(--chrome-top) 12px var(--chrome-bottom);
   background: var(--bg);
   border: 1px solid var(--line);
   z-index: 1003;
@@ -422,9 +426,10 @@ table.data-preview-table tr:hover td {
 #history-panel {
   position: fixed;
   right: -640px;
-  top: 6%;
-  width: 600px;
-  height: 75vh;
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
+  width: min(600px, calc(100vw - 24px));
+  max-height: var(--panel-max-h);
   background: var(--bg);
   border: 1px solid var(--line);
   opacity: 0;
@@ -825,14 +830,15 @@ table.data-preview-table tr:hover td {
 #node-settings {
   position: fixed;
   right: -360px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 340px;
-  /* Without a ceiling the box grows to its content, so it is the PANEL that hangs
-     off the viewport (measured: top -177 / bottom 727 in a 550px window) and the
-     `overflow-y: auto` below never engages — the top of a long node form simply
-     existed above the screen. A max-height is what makes that scroll real. */
-  max-height: calc(100vh - 24px);
+  /* Centred in the band between the two chrome bars: top and bottom use the
+     measured insets and auto margins split the leftover space evenly. A short
+     form keeps equal gaps; a tall one caps at the band and scrolls its content. */
+  top: var(--chrome-top);
+  bottom: var(--chrome-bottom);
+  height: fit-content;
+  margin-block: auto;
+  width: min(340px, calc(100vw - 24px));
+  max-height: var(--panel-max-h);
   background: var(--bg);
   border: 1px solid var(--line);
   z-index: 1001;

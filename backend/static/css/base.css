@@ -87,6 +87,12 @@
   --barBase: 28px;
   --menuH: 48px;
   --barH: 28px;
+  /* Every popup independent of the canvas sits inside the same symmetric band:
+     12px under the (wrapped) menu and 12px above the (wrapped) status bar. */
+  --chrome-gap: 12px;
+  --chrome-top: calc(var(--menuH) + var(--chrome-gap));
+  --chrome-bottom: calc(var(--barH) + var(--chrome-gap));
+  --panel-max-h: calc(100vh - var(--menuH) - var(--barH) - 24px);
 }
 
 /* ── Dark theme: one override of the same tokens ──────────────────────────

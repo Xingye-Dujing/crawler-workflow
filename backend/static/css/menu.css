@@ -282,6 +282,9 @@ body.style-menu-open #top-menu {
   padding: 4px;
   box-shadow: var(--shadow);
   border-radius: var(--radius);
+  /* Fallback ceiling; the JS fit under the button narrows it further. */
+  max-height: var(--panel-max-h);
+  overflow-y: auto;
   animation: dropIn 0.14s ease;
 }
 .dropdown.open {

@@ -123,7 +123,7 @@
      left a large empty slab under two rows, and a short run lost its last rows.
      The ceiling is the same before and after a manual resize. */
   height: auto;
-  max-height: min(50vh, 500px);
+  max-height: min(50vh, 500px, var(--panel-max-h));
   background: var(--bg);
   border-top: 1px solid var(--line);
   border-right: 1px solid var(--line);

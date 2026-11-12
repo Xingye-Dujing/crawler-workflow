@@ -129,6 +129,26 @@ var TopMenu = {
     },
 };
 
+/* The three top-menu dropdowns hang under their button, so CSS cannot know how much
+   room is left. Clamp the height against the measured status bar: the panel may scroll,
+   but its last row never hides behind the bottom chrome. */
+function fitDropdownToChrome(menu, anchorRect) {
+    var cs = getComputedStyle(document.documentElement);
+    var menuH = parseFloat(cs.getPropertyValue('--menuH')) || 48;
+    var barH = parseFloat(cs.getPropertyValue('--barH')) || 28;
+    var gap = parseFloat(cs.getPropertyValue('--chrome-gap')) || 12;
+    /* A wrapped bar is taller than the row this button belongs to: anchoring only to
+       the button would drop the panel over the bar's second row. */
+    var top = Math.max(anchorRect.bottom + 3, menuH + gap);
+    /* The CSS viewport, not window.innerHeight: the latter ignores an emulated
+       device viewport and includes a scrollbar the panel does not paint into. */
+    var viewH = document.documentElement.clientHeight || window.innerHeight;
+    var available = viewH - top - barH - gap;
+    menu.style.maxHeight = Math.max(120, available) + 'px';
+    menu.style.overflowY = 'auto';
+    return top;
+}
+
 /* ── Style submenu (background + corner radius) ───────────────────────────── */
 function toggleStyleMenu(e) {
     if (e) e.stopPropagation();
@@ -154,7 +174,7 @@ function toggleStyleMenu(e) {
     var r = btn.getBoundingClientRect();
     var left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
     menu.style.left = Math.max(8, left) + 'px';
-    menu.style.top = r.bottom + 3 + 'px';
+    menu.style.top = fitDropdownToChrome(menu, r) + 'px';
 }
 
 function closeStyleMenu() {
@@ -192,7 +212,7 @@ function toggleAiMenu(e) {
     var r = btn.getBoundingClientRect();
     var left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
     menu.style.left = Math.max(8, left) + 'px';
-    menu.style.top = r.bottom + 3 + 'px';
+    menu.style.top = fitDropdownToChrome(menu, r) + 'px';
 }
 
 function closeAiMenu() {
@@ -223,7 +243,7 @@ function toggleSettingsMenu(e) {
     var r = btn.getBoundingClientRect();
     var left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
     menu.style.left = Math.max(8, left) + 'px';
-    menu.style.top = r.bottom + 3 + 'px';
+    menu.style.top = fitDropdownToChrome(menu, r) + 'px';
 }
 
 function closeSettingsMenu() {

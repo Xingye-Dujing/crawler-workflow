@@ -480,7 +480,9 @@
   overflow: hidden;
 }
 #settings-panel.open {
-  height: min(72vh, 760px);
+  /* The dock keeps its familiar height, but never under the menu: the third term
+     is the band left by the measured menu/status bars. */
+  height: min(72vh, 760px, var(--panel-max-h));
 }
 #settings-resize-handle {
   position: absolute;
@@ -625,7 +627,7 @@
 }
 @media (max-width: 768px) {
   #settings-panel.open {
-    height: 78vh;
+    height: min(78vh, var(--panel-max-h));
   }
   .settings-panel-nav {
     width: 120px;
