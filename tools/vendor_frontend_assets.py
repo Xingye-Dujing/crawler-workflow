@@ -99,6 +99,44 @@ ASSETS: tuple[Asset, ...] = (
         license_note='Alibaba Cloud DataV.GeoAtlas administrative boundaries (province-level, '
         'nine-dash line included); stored byte-for-byte as served',
     ),
+    # The embedded Chart Studio (zenviz.html) is a separate page with its own engines.
+    # They were referenced as vendor/zv/* but never shipped, so opening the studio
+    # answered 404 for every one and the page booted without a chart library.
+    Asset(
+        rel='vendor/zv/chart.umd.min.js',
+        url=f'{CDN}/chart.js@4.4.1/dist/chart.umd.min.js',
+        sha256='d2af8974e95271638772e9e9524db5b9a6f58d6ec2d5d781400447b4a31c681e',
+        min_bytes=180_000,
+        license_note='MIT (Chart.js, Copyright (c) 2014-2024 Chart.js Contributors)',
+    ),
+    Asset(
+        rel='vendor/zv/apexcharts.min.js',
+        url=f'{CDN}/apexcharts@3.45.2/dist/apexcharts.min.js',
+        sha256='49090a28e8803db116aef2109e83e70225081624038933cabb6d66626998d46f',
+        min_bytes=450_000,
+        license_note='MIT (ApexCharts, Copyright (c) 2018-2024 ApexCharts)',
+    ),
+    Asset(
+        rel='vendor/zv/xlsx.full.min.js',
+        url=f'{CDN}/xlsx@0.18.5/dist/xlsx.full.min.js',
+        sha256='c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99',
+        min_bytes=700_000,
+        license_note='Apache-2.0 (SheetJS Community Edition)',
+    ),
+    Asset(
+        rel='vendor/zv/html2canvas.min.js',
+        url=f'{CDN}/html2canvas@1.4.1/dist/html2canvas.min.js',
+        sha256='e87e550794322e574a1fda0c1549a3c70dae5a93d9113417a429016838eab8cb',
+        min_bytes=150_000,
+        license_note='MIT (html2canvas, Copyright (c) 2012 Niklas von Hertzen)',
+    ),
+    Asset(
+        rel='vendor/zv/jspdf.umd.min.js',
+        url=f'{CDN}/jspdf@2.5.1/dist/jspdf.umd.min.js',
+        sha256='98ccf17aa10c20bb1301762618fcc9b6ab3a4e7f26b6071d64d0b41154df3875',
+        min_bytes=300_000,
+        license_note='MIT (jsPDF, Copyright (c) 2010-2023 James Hall)',
+    ),
 )
 
 FONT_CSS_URL = (
@@ -279,6 +317,7 @@ def vendor() -> list[str]:
                 f'the sha256 for {asset.rel} in this file.'
             )
         target = STATIC / asset.rel
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
         rows.append(f'{asset.rel}\t{len(payload)} bytes\tsha256 {asset.sha256}\t{asset.license_note}\t{asset.url}')
         print(f'wrote {asset.rel} ({len(payload):,} bytes)')

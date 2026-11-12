@@ -91,6 +91,18 @@ class TestThePageAsksNothingOffThisMachine:
                 continue
             assert (STATIC / path.lstrip('/')).is_file(), f'index.html references {path}, which is not shipped'
 
+    def test_the_studio_page_references_only_shipped_files(self):
+        """Chart Studio is a second page with its own engines. It pointed at
+        ``vendor/zv/*`` files that were never committed, so opening it answered
+        404 for every bundle and booted without a chart library."""
+        html = (STATIC / 'zenviz.html').read_text(encoding='utf-8')
+        referenced = re.findall(r'(?:src|href)="([^"]+)"', html)
+        shipped = [path for path in referenced if re.match(r'^(?:js|css|vendor)/', path)]
+        assert shipped, 'the studio page stopped naming local bundles; this measured nothing'
+        for path in shipped:
+            assert (STATIC / path).is_file(), f'zenviz.html references {path}, which is not shipped'
+        assert 'src="vendor/echarts.min.js"' in html, 'the studio must share the pinned ECharts file'
+
     def test_the_three_chart_bundles_are_loaded_from_the_app_itself(self):
         html = (STATIC / 'index.html').read_text(encoding='utf-8')
         for name in ('echarts.min.js', 'echarts-gl.min.js', 'echarts-wordcloud.min.js'):

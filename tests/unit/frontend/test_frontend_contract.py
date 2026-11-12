@@ -810,6 +810,17 @@ class TestChromeOfThePageItself:
         assert 'border-radius: 0' in rule('.settings-field'), 'a settings field became a card'
         assert 'border-top' not in rule('.settings-panel-actions'), 'the actions row regained its rule'
 
+    def test_the_empty_history_sentence_wraps_inside_the_chart(self):
+        """ECharts text never wraps on its own: the "no records for this metric"
+        sentence ran past both edges of the panel. A width plus ``overflow: 'break'``
+        is what turns it into centred lines."""
+        js = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
+        block = js[js.index("I18n.t('history.emptyMetric'") :]
+        block = block[: block.index('},', block.index('textStyle'))]
+        assert "width: '82%'" in block, block
+        assert "overflow: 'break'" in block, block
+        assert "align: 'center'" in block and "textAlign: 'center'" in block, block
+
     def test_the_status_bar_wraps_and_publishes_its_measured_height(self):
         """The bottom strip is the mirror of the top menu: it must wrap on a narrow
         window, grow a second row, and tell every bottom-anchored dock how tall it is."""

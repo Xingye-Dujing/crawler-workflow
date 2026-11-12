@@ -989,8 +989,14 @@ var historyPanel = {
                         workflow: wf || I18n.t('history.allWorkflows'),
                         node: I18n.t('history.metricNode.' + (metric || 'rows')),
                     }),
-                    left: 'center', top: 'middle',
-                    textStyle: { color: 'rgba(26,26,26,0.4)', fontSize: 12, fontWeight: 400, fontFamily: emptyFont },
+                    left: 'center', top: 'middle', textAlign: 'center',
+                    /* ECharts text does not wrap by itself: the long "this metric has no
+                       records" sentence ran past both edges of the panel. A width plus
+                       overflow:'break' turns it into centred lines inside the chart. */
+                    textStyle: {
+                        color: 'rgba(26,26,26,0.4)', fontSize: 12, fontWeight: 400, fontFamily: emptyFont,
+                        width: '82%', overflow: 'break', lineHeight: 19, align: 'center',
+                    },
                 },
                 xAxis: { show: false }, yAxis: { show: false }, series: [],
             }, true);
