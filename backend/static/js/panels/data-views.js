@@ -955,6 +955,28 @@ var historyPanel = {
         return el;
     },
 
+    /* The empty answer is a CSS box laid over the chart area, so a long sentence wraps
+       and stays centred. textContent, not innerHTML: the sentence carries a workflow
+       name the user typed. */
+    _paintEmpty(text) {
+        var el = document.getElementById('history-chart');
+        if (!el) return;
+        var box = el.querySelector('.chart-empty');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'chart-empty';
+            el.appendChild(box);
+        }
+        box.textContent = text;
+        box.style.display = 'flex';
+    },
+
+    _clearEmpty() {
+        var el = document.getElementById('history-chart');
+        var box = el && el.querySelector('.chart-empty');
+        if (box) box.style.display = 'none';
+    },
+
     _renderChart(rows, metric) {
         /* null means "no chart library, and the panel already says so" — drawing on it would throw
            and replace a named refusal with a console error. */
@@ -976,32 +998,23 @@ var historyPanel = {
             || '"Literata", "Songti SC", "SimSun", "宋体", serif';
 
         if (!rows.length) {
-            var emptyFont = (getComputedStyle(document.documentElement)
-                .getPropertyValue('--font') || '').trim()
-                || '"Literata", "Songti SC", "SimSun", "宋体", serif';
             /* Name WHAT has no history. “暂无执行历史” over a workflow that plainly
                ran read as a lie; the missing piece is one metric from one kind of
-               node, and the sentence says which. */
-            inst.setOption({
-                title: {
-                    text: I18n.t('history.emptyMetric', {
-                        metric: metricLabel,
-                        workflow: wf || I18n.t('history.allWorkflows'),
-                        node: I18n.t('history.metricNode.' + (metric || 'rows')),
-                    }),
-                    left: 'center', top: 'middle', textAlign: 'center',
-                    /* ECharts text does not wrap by itself: the long "this metric has no
-                       records" sentence ran past both edges of the panel. A width plus
-                       overflow:'break' turns it into centred lines inside the chart. */
-                    textStyle: {
-                        color: 'rgba(26,26,26,0.4)', fontSize: 12, fontWeight: 400, fontFamily: emptyFont,
-                        width: '82%', overflow: 'break', lineHeight: 19, align: 'center',
-                    },
-                },
-                xAxis: { show: false }, yAxis: { show: false }, series: [],
-            }, true);
+               node, and the sentence says which.
+
+               Painted as a DOM overlay, not an ECharts title: the chart renderer does
+               not wrap a title string, so every attempt to give it a width either ran
+               past both edges or shifted the block left. CSS wrapping in the panel's
+               own layout is the only arrangement that stays centred. */
+            inst.clear();
+            this._paintEmpty(I18n.t('history.emptyMetric', {
+                metric: metricLabel,
+                workflow: wf || I18n.t('history.allWorkflows'),
+                node: I18n.t('history.metricNode.' + (metric || 'rows')),
+            }));
             return;
         }
+        this._clearEmpty();
 
         var labelSet = {};
         rows.forEach(function (r) { labelSet[r.label || r.metric] = true; });

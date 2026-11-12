@@ -459,6 +459,24 @@ table.data-preview-table tr:hover td {
   padding: 6px 4px 0;
   box-sizing: border-box;
   font-family: var(--font);
+  /* The empty-state sentence is a real box over the chart area; it needs a
+     positioned parent, not an ECharts title that cannot wrap. */
+  position: relative;
+}
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 28px;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
 /* ── Run records manager (docked bottom panel content) ──────────────────── */

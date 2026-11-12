@@ -811,15 +811,22 @@ class TestChromeOfThePageItself:
         assert 'border-top' not in rule('.settings-panel-actions'), 'the actions row regained its rule'
 
     def test_the_empty_history_sentence_wraps_inside_the_chart(self):
-        """ECharts text never wraps on its own: the "no records for this metric"
-        sentence ran past both edges of the panel. A width plus ``overflow: 'break'``
-        is what turns it into centred lines."""
+        """ECharts text never wraps on its own, and giving its title a width shifted
+        the block left. The sentence is now a DOM box: real CSS wrapping and centring."""
         js = (JS_DIR / 'panels' / 'data-views.js').read_text(encoding='utf-8')
-        block = js[js.index("I18n.t('history.emptyMetric'") :]
-        block = block[: block.index('},', block.index('textStyle'))]
-        assert "width: '82%'" in block, block
-        assert "overflow: 'break'" in block, block
-        assert "align: 'center'" in block and "textAlign: 'center'" in block, block
+        assert 'this._paintEmpty(' in js, 'the empty state went back to an ECharts title'
+        block = js[js.index('_paintEmpty(text) {') :]
+        block = block[: block.index('},', block.index('box.textContent'))]
+        assert 'box.textContent = text' in block, 'a workflow name must not become markup'
+        css = css_text()
+        start = css.index('.chart-empty {')
+        empty = css[start : css.index('}', start)]
+        assert 'position: absolute' in empty and 'inset: 0' in empty, empty
+        assert 'text-align: center' in empty and 'justify-content: center' in empty, empty
+        assert 'overflow-wrap: anywhere' in empty, 'a long sentence can still run out sideways'
+        assert (
+            'position: relative' in css[css.index('#history-chart {') : css.index('}', css.index('#history-chart {'))]
+        ), 'the overlay has no positioned parent'
 
     def test_the_status_bar_wraps_and_publishes_its_measured_height(self):
         """The bottom strip is the mirror of the top menu: it must wrap on a narrow

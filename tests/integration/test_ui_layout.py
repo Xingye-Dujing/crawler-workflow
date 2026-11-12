@@ -3218,6 +3218,69 @@ def test_the_status_bar_wraps_and_the_docks_follow_its_real_height(app_url, driv
     assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts}'
 
 
+def test_the_empty_history_sentence_wraps_inside_the_chart(app_url, driver):
+    """The sentence naming the missing metric used to overflow the chart title.
+
+    It is now a DOM box over the chart area, so the assertion measures real pixels:
+    the text needs more than one line and never runs past its own box.
+    """
+    _set_viewport(driver, 1366, 768)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        window.fetch = function (url) {
+            const path = String(url).split('?')[0];
+            const payload = path === '/api/history/series'
+                ? { ok: true, rows: [], workflow_names: ['很长的工作流名称用于测试'] }
+                : { ok: true };
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(payload),
+                text: () => Promise.resolve(JSON.stringify(payload)),
+            });
+        };
+        """,
+        [],
+    )
+    opened = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        historyPanel.open().then(() => done(true));
+        """,
+    )
+    assert opened is True
+    facts = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        setTimeout(() => {
+            const chart = document.getElementById('history-chart');
+            const box = chart.querySelector('.chart-empty');
+            if (!box) return done({ missing: true, text: chart.innerText });
+            const cs = getComputedStyle(box);
+            const r = box.getBoundingClientRect();
+            done({
+                display: cs.display,
+                text: box.textContent,
+                width: Math.round(r.width),
+                height: Math.round(r.height),
+                scrollWidth: box.scrollWidth,
+                clientWidth: box.clientWidth,
+                lineHeight: parseFloat(cs.lineHeight),
+                align: cs.textAlign,
+                justify: cs.justifyContent,
+            });
+        }, 250);
+        """,
+    )
+    assert facts.get('missing') is not True, f'the empty overlay was never painted: {facts}'
+    assert '没有' in facts['text'], f'the sentence lost its reason: {facts}'
+    assert facts['width'] > 300, f'the overlay measured nothing: {facts}'
+    assert facts['scrollWidth'] <= facts['clientWidth'] + 1, f'the sentence still overflows sideways: {facts}'
+    assert facts['height'] > facts['lineHeight'] * 1.5, f'the sentence stayed on one line: {facts}'
+    assert facts['align'] == 'center' and facts['justify'] == 'center', f'the sentence is not centred: {facts}'
+
+
 def test_an_outside_click_dismisses_the_settings_page(app_url, driver):
     """A form dock leaves when the user clicks back into the canvas; a click INSIDE
     it (including its own controls) must not."""
