@@ -259,15 +259,17 @@ jobs:
             -e SECRET_KEY=ci-only-session-signing-key-not-a-secret \
             -e CRAWLER_ADMIN_PASSWORD=ci-bootstrap-not-a-secret \
             -p 5000:5000 cixi-ci:latest
-          # Five minutes, not two: a cold container has to import the whole analysis stack
-          # (sklearn, matplotlib, jieba) before Flask binds, and the first one after a fresh
-          # build is the slowest.
+          # The SAME accepted answers as the image's own HEALTHCHECK: a login gate answers an
+          # anonymous /api/config with 401, and that IS a booted server. Accepting only 200 made
+          # this job red for two minutes against a container that was already serving 401.
           for n in $(seq 1 150); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/config || true)
-            if [ "$code" = "200" ]; then
-              echo "the image booted and answered /api/config with 200 after ${n} tries"
-              exit 0
-            fi
+            case "$code" in
+              200|302|401)
+                echo "the image booted: /api/config answered $code after ${n} tries"
+                exit 0
+                ;;
+            esac
             if [ $((n % 15)) -eq 0 ]; then
               echo "still waiting (try ${n}, last HTTP ${code:-none})"
             fi

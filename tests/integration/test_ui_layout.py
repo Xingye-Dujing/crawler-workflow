@@ -323,6 +323,30 @@ def _kill_animations(driver):
     )
 
 
+def _settle_paint(driver):
+    """Wait until the page stops repainting on its own.
+
+    Every pixel comparison in this file needs two screenshots of the SAME state to be identical —
+    that is its control. The control failed on a slow macOS runner: the bundled Literata font
+    arrives a few frames after ``load``, and ``menu.js`` publishes the measured bar heights from a
+    ResizeObserver (a style write after layout), so a shot taken at ``load`` and one taken a frame
+    later are not the same picture. Waiting for the font set and two painted frames makes
+    "identical input" true instead of assumed.
+    """
+    driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const paint = () => requestAnimationFrame(() => requestAnimationFrame(() => done(true)));
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(paint);
+        } else {
+            paint();
+        }
+        """,
+        [],
+    )
+
+
 def _assert_contains_itself(result, label, may_be_wider_than_viewport=False, min_measured=1):
     assert not result['scopeMissing'], f'{label}: that id is not in the page — the audit fell back to <body>'
     assert result['measured'] >= min_measured, (
@@ -3919,6 +3943,7 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
+    _settle_paint(driver)
     facts = driver.execute_script(
         """
         const d = document.getElementById('clipboard-drawer');
@@ -5427,6 +5452,11 @@ def test_the_crawl_panel_offers_platform_then_engine_then_function(app_url, driv
     _set_viewport(driver, 1650, 1080)
     _load_app(driver, app_url)
     _kill_animations(driver)
+    # This script walks every platform the payload offers, and each switch repaints the whole
+    # settings panel: 15 platforms of real repaints is more than Selenium's 30 s default script
+    # timeout on a loaded runner, which surfaced as a chromedriver TimeoutException rather than
+    # as a fact about the panel.
+    driver.set_script_timeout(180)
     facts = driver.execute_async_script(
         """
         const done = arguments[arguments.length - 1];
