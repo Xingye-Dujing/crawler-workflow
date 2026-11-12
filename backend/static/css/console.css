@@ -548,8 +548,9 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  /* No divider: the row is part of the page's own furniture, not a section rule. */
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
 }
 .settings-panel-tools .settings-input {
   flex: 1 1 220px;
