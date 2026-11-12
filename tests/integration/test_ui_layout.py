@@ -4009,13 +4009,26 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
         answer = driver.execute_cdp_cmd('Page.captureScreenshot', {'format': 'png', 'clip': strip})
         return answer['data']
 
-    closed, control = shot(), shot()
+    # Two captures of the SAME state are the control for everything below. A browser that is still
+    # settling paints two different pictures — measured on the macOS runner: the right-edge strip
+    # (the classic overlay-scrollbar lane) differed between two captures taken a frame apart, while
+    # the same pair was byte-identical on Windows and Linux. Retry the pair instead of quoting the
+    # first one; a page that never settles still fails, and the message says how many pairs were
+    # tried and never matched.
+    closed = control = ''
+    tries = 0
+    while tries < 6:
+        tries += 1
+        closed, control = shot(), shot()
+        if closed == control:
+            break
+        time.sleep(0.2)
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = 'none';")
     gone = shot()
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = '';")
     assert closed == control, (
         'the browser did not paint two identical states identically, so a pixel comparison here '
-        f'proves nothing and must not be quoted (strip {strip}, {measured})'
+        f'proves nothing and must not be quoted ({tries} capture pairs agreed on nothing; strip {strip}, {measured})'
     )
     assert closed == gone, (
         'the closed drawer is not identical to the same box at display:none — it still paints '
