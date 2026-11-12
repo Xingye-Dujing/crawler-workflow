@@ -73,10 +73,16 @@
   function place(menu, anchor, minWidth) {
     menu.classList.add('open')
     var r = anchor.getBoundingClientRect()
+    /* Measure at the popup's natural width. A block whose width is first set to the
+       anchor's width reports that same width as scrollWidth, because every row is
+       width:100% and its label is allowed to ellipsise — which is how “算法排布” and
+       “按历史基准恢复” both became “算法…”. max-content lets the labels decide, and
+       the CSS max-width/JS ceiling then clamp it to the screen. */
     menu.style.minWidth = (minWidth || r.width) + 'px'
-    menu.style.width = r.width + 'px'
-    var wanted = menu.scrollWidth || 0
-    if (wanted > r.width) menu.style.width = Math.min(wanted + 2, MENU_MAX_WIDTH) + 'px'
+    menu.style.width = 'max-content'
+    var wanted = Math.max(menu.offsetWidth || 0, menu.scrollWidth || 0) || r.width
+    var width = Math.max(r.width, Math.min(wanted + 2, MENU_MAX_WIDTH, (window.innerWidth || 0) - 12))
+    menu.style.width = width + 'px'
     var mh = menu.offsetHeight
     var top = r.bottom + 3
     if (top + mh > window.innerHeight - 6) top = Math.max(6, r.top - mh - 3)

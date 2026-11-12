@@ -63,6 +63,18 @@ var TopMenu = {
     init() {
         this.sync();
 
+        /* The bar now wraps on a narrow window, so its height is not the static
+           --menuH token any more. Publish the measured height; the resume banner
+           and other top-inset consumers read the same variable. */
+        var bar = document.getElementById('top-menu');
+        if (bar && window.ResizeObserver) {
+            var publishMenuHeight = function () {
+                document.documentElement.style.setProperty('--menuH', bar.offsetHeight + 'px');
+            };
+            new ResizeObserver(publishMenuHeight).observe(bar);
+            publishMenuHeight();
+        }
+
         /* Style / AI / 设置 submenus close on an outside click, Esc, or resize. */
         document.addEventListener('click', (e) => {
             /* A click that belongs to an open dialog (its backdrop or box) is the

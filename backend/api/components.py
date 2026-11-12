@@ -20,6 +20,7 @@ from api.http import _json_body
 from i18n import t
 from services.accounts.service import accounts_mode
 from services.components import jobs
+from services.components import source as component_source
 from services.components.catalog import Catalog, CatalogError, load_catalog
 from services.components.install import InstallError, remove_component
 from services.components.manifest import Manifest, ManifestError
@@ -121,7 +122,18 @@ def get_components():
         catalog = _catalog()
     except CatalogError as exc:
         return jsonify({'ok': False, 'error': t('components.catalogFailed', err=str(exc))}), 500
-    return jsonify({'ok': True, 'components': _rows(catalog)})
+    # The panel needs the host's shape, not just the list: without an installer tree the
+    # installer-managed rows describe a copy that cannot exist, and with “本机” chosen they
+    # describe one this process will not launch. The catalogue itself stays complete so an
+    # installer that asks the same route still sees everything it can install.
+    return jsonify(
+        {
+            'ok': True,
+            'components': _rows(catalog),
+            'installer_available': component_source.installer_available(),
+            'component_source': component_source.effective(),
+        }
+    )
 
 
 @bp.route('/api/components/install', methods=['POST'])

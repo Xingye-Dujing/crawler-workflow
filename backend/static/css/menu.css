@@ -22,41 +22,35 @@
 #top-menu {
   position: fixed;
   left: 0;
-  top: calc(-1 * var(--menuH));
+  top: 0;
   width: 100%;
-  height: var(--menuH);
+  min-height: var(--menuH);
+  height: auto;
   background: var(--bg);
   border-bottom: 1px solid var(--ink);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  /* Centred AND overflowing is the one combination that hides content with no way
-     back: a scroller cannot reach negative overflow, so the first buttons hung off
-     the left edge at 1366px English (measured: first -63, last 1414 of 1344).
-     `safe center` keeps the centred look while the row fits and falls back to a
-     start-anchored row when it does not. */
+  /* Every group is an unbreakable unit, so a narrow window drops WHOLE groups onto
+     a second row instead of splitting a label from its buttons. Rows stay centred;
+     `safe center` keeps the first row visible even when one group alone is wider
+     than the window. */
   justify-content: safe center;
+  align-content: center;
   gap: 2px;
   z-index: 999;
-  padding: 0 10px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  /* A thin, VISIBLE bar: this is the page's only menu, and hiding the scrollbar
-     turned "the window is narrower than the toolbar" into buttons that simply
-     cannot be found. */
-  scrollbar-width: thin;
-  transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-#top-menu::-webkit-scrollbar {
-  height: 6px;
-}
-#top-menu::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 3px;
+  padding: 4px 10px;
+  overflow: visible;
+  /* Sliding by a transform rather than a hardcoded -48px: the bar wraps to two or
+     three rows on a narrow window, and the old constant left the extra rows on
+     screen (or hid only half the bar). */
+  transform: translateY(-100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #menu-trigger:hover ~ #top-menu,
 #top-menu:hover,
 #top-menu.pinned {
-  top: 0;
+  transform: none;
 }
 
 .menu-group {
@@ -231,7 +225,7 @@
 }
 /* keep the bar visible while the style submenu is open (unpinned mode) */
 body.style-menu-open #top-menu {
-  top: 0;
+  transform: none;
 }
 .dd-ctrl {
   display: inline-flex;
@@ -375,6 +369,11 @@ body.style-menu-open #top-menu {
   white-space: normal;
   text-align: center;
 }
+/* The 完整设置 row's button is a sentence, not a menu word: a browser's default
+   centred button label left the first line floating away from the label column. */
+#settings-menu .dd-ctrl > .menu-btn.settings-open-full {
+  text-align: left;
+}
 /* Path fields want the full width; numeric ones stay short. */
 #settings-menu .settings-input-sm {
   flex: 0 0 96px;
@@ -401,9 +400,9 @@ body.style-menu-open #top-menu {
 .profile-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0;
   /* Vertical scrolling inside a declared list is allowed; sideways never. */
-  max-height: 168px;
+  max-height: 220px;
   overflow-y: auto;
   overflow-x: hidden;
   /* Square on purpose: a rounded box cuts the first and last row's descenders at
@@ -411,27 +410,38 @@ body.style-menu-open #top-menu {
   border-radius: 0;
   padding: 2px 0;
 }
+/* One platform is a three-cell row: name, suggestion chip, action sentence. The
+   fixed name column keeps the two-character Chinese names from breaking into one
+   character per line, and the sentence starts at the same left edge on every row
+   instead of being pushed to the right. */
 .profile-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 3px 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line2);
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 1.5;
+}
+.profile-item:first-child {
+  border-top: 0;
 }
 .profile-item .profile-name {
-  flex: 0 1 auto;
+  grid-column: 1;
   min-width: 0;
   color: var(--text);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .profile-item .profile-state {
-  flex: 1 1 auto;
+  grid-column: 3;
   min-width: 0;
-  text-align: right;
+  text-align: left;
   color: var(--text-dim);
   overflow-wrap: anywhere;
 }
 .profile-item .profile-chip {
+  grid-column: 2;
   flex: 0 0 auto;
   padding: 0 4px;
   /* Square, and the hairline divider colour: --border is the strong ink colour, and
@@ -440,6 +450,10 @@ body.style-menu-open #top-menu {
   font-size: 9px;
   color: var(--text-dim);
   white-space: nowrap;
+}
+/* A note row has no name or chip; its sentence owns the whole width. */
+.profile-item > .profile-state:first-child {
+  grid-column: 1 / -1;
 }
 .ai-hint {
   margin-top: 4px;

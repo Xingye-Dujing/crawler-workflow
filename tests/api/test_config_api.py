@@ -29,10 +29,19 @@ from sessions import profiles
 from sessions.cookies import CookieManager
 
 from services.accounts.service import accounts_mode
+from services.components import source as component_source
 
 pytestmark = pytest.mark.api
 
-CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers', 'cloud_mode', 'auth_required', 'auth'}
+CONFIG_KEYS = {
+    'ollama_model',
+    'default_headless',
+    'max_workers',
+    'cloud_mode',
+    'installer_available',
+    'auth_required',
+    'auth',
+}
 # The cookie panel's platform set is the manager's own list — mirroring it here
 # would only ever record the last time someone forgot the other side.
 COOKIE_PLATFORMS = set(CookieManager.PLATFORMS)
@@ -62,6 +71,7 @@ class TestConfigEndpoint:
             'default_headless': True,
             'max_workers': 9,
             'cloud_mode': Config.CLOUD_MODE,
+            'installer_available': component_source.installer_available(),
             'auth_required': accounts_mode(),
             'auth': {
                 'enabled': accounts_mode(),

@@ -15,6 +15,7 @@ from runtime import paths
 from runtime.account_context import current as current_account
 
 from services.accounts.service import accounts_mode
+from services.components import source as component_source
 
 bp = Blueprint('config', __name__)
 
@@ -32,6 +33,10 @@ def get_config():
             # told once: where its own data lands. It is a fact about the server, so the server
             # says it — a frontend guess would be a second opinion about the deployment.
             'cloud_mode': Config.CLOUD_MODE,
+            # The installer's component tree exists on this host. A source checkout and a
+            # cloud/portable deploy have none: offering “安装器安装的” there names a copy
+            # that cannot exist, so the page hides that choice and the installer list.
+            'installer_available': component_source.installer_available(),
             # Whether this host asks for a login. The page shows 退出登录 only when it does, and
             # keeps the button out of a desktop session that has no session to end.
             'auth_required': accounts_mode(),

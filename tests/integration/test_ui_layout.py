@@ -3200,16 +3200,11 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
 @pytest.mark.parametrize('width', [1366, 1024])
-def test_the_menu_bar_never_hides_a_button_past_its_left_edge(app_url, driver, lang, width):
-    """``#top-menu`` is one fixed row of twenty buttons. It used to be centred inside
-    ``overflow: auto`` with its scrollbar hidden — and a scroller cannot scroll to a
-    NEGATIVE overflow, so once the row was wider than the window BOTH ends were
-    unreachable, not merely off-screen. Measured at 1366px in English: the row wanted
-    1577px, the first button sat at x=53 only after the fix, and before it sat at -63.
-
-    Asserted is the shape that makes an overflowing bar honest: anchored at the left,
-    a scrollbar actually reserved when it overflows (``offsetHeight - clientHeight``
-    is the ink-free proof that one exists), and no page-level bar either way.
+def test_the_menu_bar_wraps_whole_groups_instead_of_scrolling(app_url, driver, lang, width):
+    """``#top-menu`` used to be one fixed row: a narrow window forced a horizontal
+    scrollbar and the user asked for wrapping instead. Asserted are the shape and the
+    pixels: whole groups stay inside the bar, the bar grows to two or more centred
+    rows rather than scrolling, and the page itself still has no horizontal bar.
     """
     _set_viewport(driver, width, 700)
     _load_app(driver, app_url)
@@ -3223,13 +3218,14 @@ def test_the_menu_bar_never_hides_a_button_past_its_left_edge(app_url, driver, l
         const buttons = Array.from(bar.querySelectorAll('.menu-btn'));
         const r = bar.getBoundingClientRect();
         const first = buttons.length ? buttons[0].getBoundingClientRect() : null;
+        const last = buttons.length ? buttons[buttons.length - 1].getBoundingClientRect() : null;
         return {{
             measured: buttons.length,
-            barLeft: Math.round(r.left),
+            bar: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.height)],
             firstLeft: first ? Math.round(first.left) : null,
-            scroll: [bar.scrollWidth, bar.clientWidth],
-            reserved: bar.offsetHeight - bar.clientHeight,
-            computedScrollbar: getComputedStyle(bar).scrollbarWidth,
+            lastRight: last ? Math.round(last.right) : null,
+            scroll: [bar.scrollWidth, bar.clientWidth, bar.scrollHeight, bar.clientHeight],
+            wrap: getComputedStyle(bar).flexWrap,
             justify: getComputedStyle(bar).justifyContent,
             page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
         }};
@@ -3237,19 +3233,14 @@ def test_the_menu_bar_never_hides_a_button_past_its_left_edge(app_url, driver, l
         [],
     )
     assert facts['measured'] >= 15, f'the bar drew {facts["measured"]} buttons, so this measured nothing'
-    assert facts['firstLeft'] >= facts['barLeft'] - 1, (
-        f'a button hangs off the left edge where no scrollbar can reach it: {facts}'
+    assert facts['wrap'] == 'wrap', f'the bar stopped wrapping: {facts}'
+    assert facts['firstLeft'] >= facts['bar'][0] - 1 and facts['lastRight'] <= facts['bar'][2] + 1, (
+        f'a button left the bar where no scrollbar can reach it: {facts}'
     )
-    overflows = facts['scroll'][0] > facts['scroll'][1] + 1
-    if overflows:
-        assert facts['reserved'] >= 4, f'the row overflows with no visible scrollbar: {facts}'
-        assert facts['computedScrollbar'] != 'none', f'the affordance is hidden again: {facts}'
-    assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts["page"]}'
+    assert facts['scroll'][0] <= facts['scroll'][1] + 1, f'the bar still scrolls sideways: {facts}'
+    assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts}'
     if width == 1024:
-        assert overflows, (
-            f'at 1024px the row no longer overflows ({facts["scroll"]}), so the anchored-and-visible '
-            'path this test exists for stopped being exercised — update or delete the test'
-        )
+        assert facts['bar'][3] > 56, f'at 1024px the bar did not wrap to a second row: {facts}'
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])

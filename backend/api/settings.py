@@ -31,6 +31,7 @@ from api.auth import is_admin
 from api.http import _bad_body, _json_body
 from i18n import t
 from services.accounts.service import accounts_mode
+from services.components import source as component_source
 
 bp = Blueprint('settings', __name__)
 
@@ -82,6 +83,7 @@ def get_settings_schema():
         for field in schema.get('settings', []):
             if field.get('key') in MACHINE_KEYS:
                 field['default'] = ''
+    schema['installer_available'] = component_source.installer_available()
     return jsonify({'ok': True, 'schema': schema, 'read_only': not _is_admin()})
 
 

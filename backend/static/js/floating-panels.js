@@ -324,6 +324,17 @@ document.addEventListener('mousedown', (e) => {
      answer is pending would strand the dialog over an empty canvas. */
 document.addEventListener('mousedown', (e) => {
     if (!e.target || !e.target.closest) return;
+    /* The full-screen chart is stacked ABOVE the board, so a click on anything
+       outside it dismisses only the chart first. The board stays where it was;
+       the NEXT outside click dismisses the board. Without this return, one click
+       on the workspace closed both windows at once. */
+    var fullscreen = document.getElementById('chart-fullscreen-panel');
+    if (fullscreen && fullscreen.classList.contains('open') && !e.target.closest('#chart-fullscreen-panel')) {
+        if (!e.target.closest('.cselect-menu, .cand-menu, #dialog-overlay, #cookie-dialog')) {
+            if (typeof closeChartFullscreen === 'function') closeChartFullscreen();
+            return;
+        }
+    }
     /* A click inside the board popup itself, the sibling history popup, or any overlay
        the user legitimately stacks on top of the board — the fullscreen chart, the data
        preview panel, the chart studio — must not dismiss the board. Those are top-level

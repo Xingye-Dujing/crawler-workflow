@@ -181,6 +181,12 @@ html[data-win-desktop="0"] .windows-only {
   gap: 2px;
   padding-top: 4px;
 }
+/* The column names are the table's only fixed labels. `.runs-mgr-table th` is
+   dimmed for secondary metadata elsewhere; here the heading row was so faint it
+   read as a disabled or transparent cell. */
+.cookie-manager .runs-mgr-table th {
+  color: var(--text);
+}
 .cookie-row {
   border-top: 1px solid var(--border);
   padding: 6px 0;

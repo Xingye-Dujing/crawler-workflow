@@ -440,6 +440,36 @@ function filterPalette(query) {
     flush();
 }
 
+/* ── The installer's component tree ─────────────────────────────────────────
+   A source checkout (this page under `python app.py`) has no installer manifest,
+   so “安装器安装的” describes a copy that cannot exist. The server says whether
+   the tree is there; the page only removes the choices and rows that would name
+   it. The stored `component_source` still round-trips on the server — the run
+   path itself already folds a missing tree to “本机”. */
+const InstallerMode = {
+    available: true,
+
+    set(available) {
+        this.available = available !== false;
+        document.documentElement.dataset.installer = this.available ? '1' : '0';
+        this.apply();
+    },
+
+    apply() {
+        if (this.available) return;
+        const row = document.getElementById('settings-menu-component-source');
+        if (row) row.hidden = true;
+        const select = document.getElementById('set-component-source');
+        if (select) {
+            /* Remove, do not merely hide: a hidden option is still a value the
+               control can be asked for by a keyboard or a stale restore. */
+            const bundled = select.querySelector('option[value="bundled"]');
+            if (bundled) select.removeChild(bundled);
+            select.value = 'system';
+        }
+    },
+};
+
 /* ── What this server can serve ─────────────────────────────────────────────
    The cloud flag is the SERVER's fact (`python app.py cloud`), read once from
    /api/config, and it decides which controls exist: a cloud host has no display to

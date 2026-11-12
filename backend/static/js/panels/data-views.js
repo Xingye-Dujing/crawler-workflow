@@ -1021,9 +1021,17 @@ var historyPanel = {
             var emptyFont = (getComputedStyle(document.documentElement)
                 .getPropertyValue('--font') || '').trim()
                 || '"Literata", "Songti SC", "SimSun", "宋体", serif';
+            /* Name WHAT has no history. “暂无执行历史” over a workflow that plainly
+               ran read as a lie; the missing piece is one metric from one kind of
+               node, and the sentence says which. */
             inst.setOption({
                 title: {
-                    text: I18n.t('history.empty'), left: 'center', top: 'middle',
+                    text: I18n.t('history.emptyMetric', {
+                        metric: metricLabel,
+                        workflow: wf || I18n.t('history.allWorkflows'),
+                        node: I18n.t('history.metricNode.' + (metric || 'rows')),
+                    }),
+                    left: 'center', top: 'middle',
                     textStyle: { color: 'rgba(26,26,26,0.4)', fontSize: 12, fontWeight: 400, fontFamily: emptyFont },
                 },
                 xAxis: { show: false }, yAxis: { show: false }, series: [],

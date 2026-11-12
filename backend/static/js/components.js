@@ -69,7 +69,11 @@ const ComponentsPanel = {
         // Which copy the NEXT start uses: the stored preference, not this process's frozen
         // choice, so the button the user just pressed stays pressed until a restart applies it.
         this._source = env.component_source_preference || env.component_source || 'bundled';
-        body.append(this._sourcePicker());
+        this._installer = env.installer_available !== false;
+        /* No installer tree → there is no second copy to choose. A source checkout cannot
+           accept “安装器安装的”, so the picker is absent, not a disabled button whose only
+           outcome is a restart that changes nothing. */
+        if (this._installer) body.append(this._sourcePicker());
 
         const caps = document.createElement('div');
         for (const row of env.capabilities || []) {
@@ -102,23 +106,40 @@ const ComponentsPanel = {
         body.append(title);
 
         for (const component of components) {
+            if (!this._showComponent(component)) continue;
             const line = document.createElement('div');
             line.className = 'env-component';
             const name = document.createElement('span');
             name.className = 'env-grow';
             name.textContent = this._label(component.id) + '  ' + component.version;
             const state = document.createElement('span');
-            state.className = 'env-state ' + (component.installed ? 'ok' : 'missing');
-            state.textContent = component.installed ? I18n.t('env.installed') : I18n.t('env.notInstalled');
+            if (component.kind === 'manual') {
+                /* A manual component (Ollama, the BERT pack, MiKTeX) is never put
+                   there by the installer: “未安装” was false — those three are
+                   detected on this machine and the capability matrix above already
+                   says whether each is usable. Read the SAME answer here. */
+                const cap = this._capabilityFor(env, component.id);
+                const capState = (cap && cap.state) || 'unknown';
+                state.className = 'env-state ' + (capState === 'ok' ? 'ok' : capState === 'degraded' ? 'degraded' : capState === 'missing' ? 'missing' : 'unknown');
+                state.textContent = capState === 'ok'
+                    ? I18n.t('env.detectedHere')
+                    : capState === 'degraded'
+                        ? I18n.t('env.detectedDegraded')
+                        : I18n.t('env.notDetected');
+                if (cap && cap.reason_key) state.title = I18n.t(cap.reason_key, cap.reason_params || {});
+            } else {
+                state.className = 'env-state ' + (component.installed ? 'ok' : 'missing');
+                state.textContent = component.installed ? I18n.t('env.installed') : I18n.t('env.notInstalled');
+            }
             line.append(name, state);
-            if (component.downloadable && (!component.installed || component.update)) {
+            if (component.kind !== 'manual' && component.downloadable && (!component.installed || component.update)) {
                 const button = document.createElement('button');
                 button.className = 'panel-close';
                 button.textContent = I18n.t(component.installed ? 'env.update' : 'env.install');
                 button.onclick = () => this.install(component.id);
                 line.append(button);
             }
-            if (component.installed && component.id !== 'app') {
+            if (component.kind !== 'manual' && component.installed && component.id !== 'app') {
                 const remove = document.createElement('button');
                 remove.className = 'panel-close';
                 remove.textContent = I18n.t('env.remove');
@@ -127,6 +148,27 @@ const ComponentsPanel = {
             }
             body.append(line);
         }
+    },
+
+    /* Which catalogue rows this host can actually talk about. Manual components are
+       checked on the machine in every mode; installer-managed rows only exist while
+       the installer's tree does, and only matter while that copy is the one selected. */
+    _showComponent(component) {
+        if (component.kind === 'manual') return true;
+        if (!this._installer) return false;
+        if (this._source === 'system') return false;
+        return true;
+    },
+
+    /* Manual components carry a `provides` capability, not an installer manifest. */
+    _capabilityFor(env, id) {
+        const wanted = {
+            ollama: 'llm_local',
+            bert: 'bert',
+            xelatex: 'pdf',
+        }[id];
+        const caps = (env && env.capabilities) || [];
+        return caps.filter((cap) => cap.id === wanted)[0] || null;
     },
 
     _sourcePicker() {

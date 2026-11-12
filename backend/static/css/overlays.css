@@ -586,33 +586,47 @@
   border: 1px solid var(--ink);
   box-shadow: var(--shadow);
   border-radius: var(--radius);
-  padding: 12px 16px 16px;
-  min-width: 340px;
-  max-width: 460px;
+  padding: 14px 18px 18px;
+  width: min(540px, calc(100vw - 24px));
   color: var(--text);
 }
+/* The cheat sheet is a reading surface, not another sectioned dock: the header's
+   rule would cut the sheet off from its own first shortcut. */
 #help-box .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 .help-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
+/* Keys sit in their own left column as a quiet capsule; the description reads from
+   the same left edge down the list. Centre-aligning them made the column jump and
+   packed the two halves together, which is what made the old sheet hard to scan. */
 .help-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
   font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 0;
 }
 .help-keys {
-  flex: 0 0 168px;
-  text-align: right;
-  color: var(--text-dim);
-  font-family: monospace;
+  justify-self: start;
+  padding: 1px 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+  background: var(--hover);
+  text-align: left;
+  color: var(--text);
+  font-family: var(--font);
+  letter-spacing: 0.2px;
   white-space: nowrap;
 }
 

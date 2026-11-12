@@ -1120,7 +1120,6 @@
             </button>
             <input id="settings-import-file" type="file" accept=".json,application/json" hidden onchange="SettingsPanel.importFile(this)" />
           </div>
-          <div id="settings-preset-card" class="settings-preset-card"></div>
           <div id="settings-panel-form"></div>
           <div id="settings-panel-warnings" class="settings-panel-warnings"></div>
           <div class="settings-panel-actions">
@@ -2054,13 +2053,13 @@
       <div class="dd-item-row">
         <span data-i18n="settingsPanel.openFull">完整设置</span>
         <span class="dd-ctrl">
-          <button class="menu-btn" type="button" onclick="SettingsPanel.open()" data-i18n="settingsPanel.openFullButton">
+          <button class="menu-btn settings-open-full" type="button" onclick="SettingsPanel.open()" data-i18n="settingsPanel.openFullButton">
             打开设置页（采集节奏、重试、导入导出…）
           </button>
         </span>
       </div>
       <div class="dd-divider"></div>
-      <div class="dd-item-row">
+      <div class="dd-item-row" id="settings-menu-component-source">
         <span data-i18n="set.componentSource">组件来源</span>
         <span class="dd-ctrl">
           <select

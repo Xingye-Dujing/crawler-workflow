@@ -85,6 +85,9 @@ class TestProfilesEndpoint:
             'will_import',
             'will_refresh',
             'used_without_import',
+            # True when the saved file is a copy of this profile's OWN in-browser login:
+            # “未导入” would be a false alarm after 浏览器生成.
+            'own_session',
         }
         assert json.dumps(first)  # the payload must survive JSON, sizes and all
 

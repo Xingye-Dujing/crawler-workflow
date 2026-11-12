@@ -853,6 +853,18 @@ def status(
     used = bool(marker.get('used_at'))
     imported = bool(marker.get('imported_at'))
     stale = bool(cookie_path) and needs_refresh(platform, cookie_path, account)
+    # The profile's OWN session: 浏览器生成 logs in inside the profile and then records
+    # that the saved file is a copy of that very session (``remember_cookie``). It was
+    # never "imported" from elsewhere, so ``imported`` is false — but it is absolutely
+    # not "an older cookie was not imported". Without this answer the panel showed the
+    # 未导入 warning immediately after a successful in-profile login.
+    own_session = bool(
+        used
+        and not imported
+        and cookie_path
+        and marker.get('cookie_stamp')
+        and str(marker.get('cookie_stamp')) == file_stamp(cookie_path)
+    )
     return {
         'platform': platform,
         'account': str(account or '').strip(),
@@ -861,6 +873,7 @@ def status(
         'path': path,
         'exists': exists,
         'imported': imported,
+        'own_session': own_session,
         'used_at': str(marker.get('used_at') or ''),
         'size_mb': _dir_size_mb(path) if (exists and size) else 0,
         'has_saved_cookie': bool(has_cookie),
@@ -872,5 +885,5 @@ def status(
         # keeps whatever session it made by hand.
         'will_import': bool(has_cookie) and not used,
         'will_refresh': bool(has_cookie) and used and stale,
-        'used_without_import': used and not imported and not stale,
+        'used_without_import': used and not imported and not stale and not own_session,
     }

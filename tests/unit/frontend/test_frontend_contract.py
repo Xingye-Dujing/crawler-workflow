@@ -772,21 +772,40 @@ class TestChromeOfThePageItself:
             'the two must sit at one indentation to be siblings, or the rule is dead text'
         )
 
-    def test_an_overflowing_menu_bar_is_anchored_and_admits_it(self):
-        """``justify-content: center`` inside ``overflow: auto`` is the one combination
-        that hides content with no way back — a scroller cannot reach a negative
-        overflow, so at 1366px English the bar's first button sat 63px off the left
-        edge with its scrollbar hidden. The browser tier measures the pixels; this
-        pins the declarations that produce them, so the fix cannot be dropped by an
-        edit that never opens Chrome."""
+    def test_an_overflowing_menu_bar_wraps_instead_of_scrolling(self):
+        """A narrow window used to turn the bar into one row inside ``overflow: auto``.
+        A scrollbar could only reach part of the row, and wrapping is what the user
+        asked for: whole groups drop onto a second centred row and the bar height grows.
+        """
         css = css_text()
         bar = css[css.index('#top-menu {') : css.index('#menu-trigger:hover')]
         assert 'justify-content: safe center' in bar, f'the bar is centred again: {bar}'
-        assert 'scrollbar-width: none' not in bar, 'the overflow affordance is hidden again'
-        assert 'scrollbar-width: thin' in bar
-        assert 'overflow-y: hidden' in bar, 'a vertical bar would push the row out of the 48px strip'
-        assert '#top-menu::-webkit-scrollbar {' in css
-        assert 'display: none' not in css[css.index('#top-menu::-webkit-scrollbar {') :].split('}')[0]
+        assert 'flex-wrap: wrap' in bar, 'a narrow window must wrap, not scroll sideways'
+        assert 'overflow-x: auto' not in bar, 'the horizontal scroller is back'
+        assert 'min-height: var(--menuH)' in bar and 'height: auto' in bar, 'the bar cannot grow a wrapped row'
+        assert 'transform: translateY(-100%)' in bar, 'the hidden bar must slide by its own height'
+
+    def test_the_shortcut_sheet_and_the_env_card_follow_the_paper_rules(self):
+        """These are deliberate square/radius decisions, not drift: the mask must cover
+        its corners, the settings row is a rule not a card, and the cheat sheet reads in
+        the body font with a left-aligned key column instead of a cramped monospace one."""
+        css = css_text()
+
+        def rule(selector):
+            start = css.index(selector + ' {')
+            return css[start : css.index('}', start)]
+
+        help_keys = rule('.help-keys')
+        assert 'font-family: var(--font)' in help_keys and 'text-align: left' in help_keys, help_keys
+        assert 'monospace' not in help_keys, 'the key column still overrides the page font'
+        help_head = rule('#help-box .panel-header')
+        assert 'border-bottom: 0' in help_head, 'the shortcut header regained its rule'
+        assert 'border-radius: 0' in rule('.env-overlay'), 'a rounded mask leaks the page through its corners'
+        assert 'border-radius: var(--radius)' in rule('.env-card'), 'the env card ignores the radius knob'
+        for selector in ('.env-row', '.env-component'):
+            assert 'border-bottom' not in rule(selector), f'{selector} regained its divider'
+        assert 'border-radius: 0' in rule('.settings-field'), 'a settings field became a card'
+        assert 'border-top' not in rule('.settings-panel-actions'), 'the actions row regained its rule'
 
     def test_the_workbench_copy_of_the_bar_keeps_the_same_rule(self):
         """``css/zenviz.css`` carries its own copy of the top-menu block for the embedded

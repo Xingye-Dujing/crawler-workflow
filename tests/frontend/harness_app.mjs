@@ -30,7 +30,7 @@ fixWindow(vm, sandbox);
    page no longer loads fails by name instead of quietly shrinking the world under test. */
 loadPageScripts(sandbox, { jsDir, only: ['workflow.js', 'custom-select.js', 'app.js'] });
 
-const PANELS = ['dashboard-panel', 'history-panel', 'node-settings', 'cookie-dialog'];
+const PANELS = ['dashboard-panel', 'history-panel', 'chart-fullscreen-panel', 'node-settings', 'cookie-dialog'];
 const report = {};
 
 /* One deep scenario: the REAL I18n catalog from app.js, checked at runtime.

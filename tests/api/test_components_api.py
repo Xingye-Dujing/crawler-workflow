@@ -76,6 +76,17 @@ def test_the_catalogue_lists_the_domestic_defaults(client, monkeypatch):
     assert rows['app']['downloadable'] is False, 'the running app cannot replace itself; the installer does that'
 
 
+def test_the_catalogue_tells_the_panel_whether_an_installer_tree_exists(client, monkeypatch):
+    """A source checkout must not be offered “安装器安装的”: the page hides the picker
+    and the installer-managed rows from this answer, not from a guess."""
+    _windows_assets(monkeypatch)
+    monkeypatch.setattr(components_api.component_source, 'installer_available', lambda: False)
+    monkeypatch.setattr(components_api.component_source, 'effective', lambda: 'system')
+    body = client.get('/api/components').get_json()
+    assert body['installer_available'] is False
+    assert body['component_source'] == 'system'
+
+
 def test_a_record_whose_folder_is_gone_is_not_an_installation(client, monkeypatch, tmp_path):
     import shutil
 

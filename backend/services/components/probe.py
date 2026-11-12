@@ -403,6 +403,7 @@ def environment(root: str | Path | None = None, catalog_path: str | Path | None 
         # says so instead of showing a browser this process will never launch.
         'component_source': component_source.effective(),
         'component_source_preference': component_source.preference(),
+        'installer_available': component_source.installer_available(),
         'capabilities': capabilities,
         'components': component_rows(base, catalog),
         'catalog': {

@@ -53,6 +53,7 @@ const SettingsPanel = {
             }
             this.schema = result.schema;
             this.readOnly = result.read_only === true;
+            this.installerAvailable = !(result.schema && result.schema.installer_available === false);
             this.values = Object.assign({}, (window.AppSettings && AppSettings._values) || {});
             this.draft = {};
             if (!this.activeGroup && this.schema.groups.length) this.activeGroup = this.schema.groups[0].id;
@@ -122,6 +123,7 @@ const SettingsPanel = {
         let html = '';
         groups.forEach(function (group) {
             const fields = this.schema.settings.filter(function (spec) {
+                if (this.installerAvailable === false && spec.key === 'component_source') return false;
                 return spec.group === group.id && this._matches(spec);
             }, this);
             if (!fields.length) return;

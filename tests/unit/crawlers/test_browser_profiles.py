@@ -489,6 +489,18 @@ class TestCookieFileIsNotTheProfileSession:
         # never a guess.
         assert profiles.status('weibo')['needs_refresh'] is False
 
+    def test_a_browser_generated_session_is_not_an_old_unimported_cookie(self, profiles_on, tmp_path):
+        """浏览器生成 logs in INSIDE the profile and records the saved file as that very
+        session. It was never imported, but it is not stale either — the panel must not
+        say “已存 Cookie 早于该 Profile，未导入” right after a successful save."""
+        saved = tmp_path / 'zhihu_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        profiles.mark_used('zhihu', imported=False)
+        profiles.remember_cookie('zhihu', str(saved))
+        row = profiles.status('zhihu', has_cookie=True, cookie_path=str(saved))
+        assert row['own_session'] is True
+        assert row['used_without_import'] is False
+
     def test_the_status_row_says_which_action_the_next_run_takes(self, profiles_on, tmp_path):
         """The panel names the next run's action from the SAME rule the factory reads.
 

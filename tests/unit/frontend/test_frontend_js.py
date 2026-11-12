@@ -991,6 +991,14 @@ _POPUP_CASES = [
         {'dashboard-panel', 'history-panel'},
     ),
     (
+        # The full-screen chart is stacked above the board: one click outside it must
+        # close the chart only; the board waits for the next click.
+        'fullscreen-outside-click-keeps-board',
+        ['dashboard-panel', 'chart-fullscreen-panel'],
+        ['#workspace'],
+        {'dashboard-panel'},
+    ),
+    (
         'data-preview-keeps-dashboard',
         ['dashboard-panel', 'history-panel'],
         ['#data-preview-panel'],
@@ -1033,6 +1041,13 @@ class TestPopupOutsideClick:
         report = popup_results[case]
         for panel in ('dashboard-panel', 'history-panel'):
             assert report[panel] == (panel in expect), f'{panel} wrong for {case}'
+
+    def test_the_fullscreen_chart_closes_before_the_board(self, popup_results):
+        """One outside click closes only the stacked chart; the board must still be
+        there for the next click. Closing both at once was the complaint."""
+        report = popup_results['fullscreen-outside-click-keeps-board']
+        assert report['chart-fullscreen-panel'] is False, 'the full-screen chart survived an outside click'
+        assert report['dashboard-panel'] is True, 'one click closed the board under the chart'
 
 
 class TestI18nRuntime:

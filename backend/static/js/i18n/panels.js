@@ -60,6 +60,11 @@
         'history.startedAt': 'Started At',
         'history.metricCount': 'Metrics',
         'history.empty': 'No execution history yet — run a workflow first.',
+        'history.emptyMetric':
+            'No “{metric}” points for “{workflow}” — that metric is produced by a {node} node; the canvas has none of those yet, or one has not finished a run.',
+        'history.metricNode.emotion': 'Emotion analysis',
+        'history.metricNode.tendency': 'Tendency analysis',
+        'history.metricNode.rows': 'node that produced rows',
         'history.clearAll': 'Clear History',
         'history.confirmClear': 'This will permanently delete all recorded execution history. Continue?',
         'history.cleared': 'Execution history cleared',
@@ -531,6 +536,11 @@
         'history.startedAt': '开始时间',
         'history.metricCount': '指标数',
         'history.empty': '暂无执行历史——请先运行一次工作流。',
+        'history.emptyMetric':
+            '“{workflow}”没有“{metric}”的记录——该指标由{node}节点产出；画布上还没有这类节点，或它尚未完整跑完。',
+        'history.metricNode.emotion': '情感分析',
+        'history.metricNode.tendency': '倾向分析',
+        'history.metricNode.rows': '任意产出结果的',
         'history.clearAll': '清空历史',
         'history.confirmClear': '此操作将永久删除所有已记录的执行历史，确定继续吗？',
         'history.cleared': '执行历史已清空',

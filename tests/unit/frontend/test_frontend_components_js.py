@@ -48,17 +48,32 @@ def test_a_double_click_cannot_start_two_install_loops():
     assert source.count('this._busy = false;') >= 3, 'every exit path has to release the guard'
 
 
-def test_the_panel_offers_both_component_sources_and_asks_the_server():
-    """The installer's copy and the machine's copy are both legitimate; the panel must offer the
-    choice and read the current one from the server instead of assuming the installer's."""
+def test_the_panel_offers_both_component_sources_only_where_an_installer_exists():
+    """Both copies are legitimate on an installed desktop; a source checkout has no
+    installer tree, so the server's `installer_available` hides the picker rather than
+    letting the user choose a copy that cannot exist."""
     source = JS.read_text(encoding='utf-8')
     assert "fetch('/api/settings'" in source, 'the saved preference is a setting, not local state'
     assert 'env.component_source_preference' in source, 'the buttons show what the next start uses'
+    assert 'env.installer_available !== false' in source, 'the picker reads the server verdict'
     assert "['bundled', 'env.sourceBundled']" in source
     assert "'system'" in source and "'env.sourceSystem'" in source
     assert 'this._sourceKeys[row.source]' in source, 'each row names the copy it is using'
+    assert '_showComponent(component)' in source, 'installer rows are filtered by the same verdict'
     catalogue = CATALOGUE.read_text(encoding='utf-8')
     for key in ('env.sourceTitle', 'env.sourceBundled', 'env.sourceSystem', 'env.sourceHint'):
+        assert f"'{key}'" in catalogue
+
+
+def test_manual_components_are_detected_not_called_uninstalled():
+    """Ollama/BERT/MiKTeX are machine-level tools, never installer payloads. Their row
+    now reads the same capability answer as the matrix above instead of “未安装”."""
+    source = JS.read_text(encoding='utf-8')
+    assert "component.kind === 'manual'" in source
+    assert 'this._capabilityFor(env, component.id)' in source
+    assert "'env.detectedHere'" in source and "'env.notDetected'" in source
+    catalogue = CATALOGUE.read_text(encoding='utf-8')
+    for key in ('env.detectedHere', 'env.detectedDegraded', 'env.notDetected'):
         assert f"'{key}'" in catalogue
 
 

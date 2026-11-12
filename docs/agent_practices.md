@@ -431,6 +431,26 @@ makes "slow down every platform" a real promise instead of a switch half the cra
 replaced, so one click restores exactly what the user had. A second hidden factor would make
 the panel's numbers stop describing the run, and the user could not reason about the pace.
 
+### 组件来源只在安装器真的存在时出现 / The component-source choice follows the installer
+
+`bundled` names the installer's own component tree. A source checkout, a portable zip and a
+cloud container carry no `install-manifest.json`, so `services.components.source.installer_available()`
+is false and `effective()` folds the choice to `system`. `GET /api/config`, the settings schema
+and `GET /api/components` publish that verdict; the page hides the picker and the
+installer-managed component rows without keeping a second opinion. Manual components
+(Ollama/BERT/MiKTeX) are **detected on the machine in every mode** and must read the same
+capability state as the matrix above — calling them “未安装” while the capability row says
+“可用” is the contradiction the panel used to show.
+
+### 纸面、圆角与遮罩 / Paper, radius and masks
+
+`--radius` (the 样式 slider) is the ONE corner knob for cards and controls. Two deliberate
+exceptions are written down here so nobody "fixes" them: a settings field is a full-width rule,
+not a card (`border-radius: 0`), and a full-screen mask/`env-overlay` is square — rounding a mask
+leaves four transparent wedges where the page shows through the overlay. The shortcut sheet's
+key column is left-aligned and uses the body font: a right-aligned monospace column read as a
+cramped code block rather than part of the page.
+
 ## 定时任务 (scheduler) — why the clock is narrow
 
 - **The clock is one thread, started from exactly one place.** Flask's reloader imports the module twice, so a

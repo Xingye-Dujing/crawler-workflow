@@ -119,7 +119,11 @@
   bottom: var(--barH);
   left: 0;
   width: 480px;
-  max-height: 50vh;
+  /* Height follows the content until the user drags the handle: a fixed 50vh box
+     left a large empty slab under two rows, and a short run lost its last rows.
+     The ceiling is the same before and after a manual resize. */
+  height: auto;
+  max-height: min(50vh, 500px);
   background: var(--bg);
   border-top: 1px solid var(--line);
   border-right: 1px solid var(--line);

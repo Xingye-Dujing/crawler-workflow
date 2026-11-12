@@ -493,16 +493,21 @@
   min-height: 0;
 }
 .settings-panel-nav {
-  width: 190px;
-  flex: 0 0 190px;
+  width: 164px;
+  flex: 0 0 164px;
   overflow-y: auto;
   padding: 8px 6px;
   border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .settings-panel-nav button {
   display: block;
   width: 100%;
-  text-align: left;
+  /* Centred like the bar's own groups; the old left-aligned title left a dead
+     strip on the right of a narrow pill. */
+  text-align: center;
   border: 0;
   background: transparent;
   color: var(--text-dim);
@@ -512,12 +517,16 @@
   font-size: 12px;
 }
 .settings-panel-nav button:hover {
-  background: var(--bg-alt, rgba(127, 127, 127, 0.08));
+  background: var(--hover);
   color: var(--text);
 }
+/* OMM-ZEN selection is an ink accent, never a fill: no blue wash, no black
+   block and no brown. A hairline inset bar on the leading edge reads as
+   "current" while the paper stays the same colour as every other panel. */
 .settings-panel-nav button.active {
-  background: var(--accent-soft, rgba(80, 120, 255, 0.12));
-  color: var(--accent, var(--text));
+  background: var(--hover);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 .settings-panel-main {
   flex: 1;
@@ -550,6 +559,9 @@
   align-items: start;
   padding: 8px 0;
   border-bottom: 1px dashed var(--line-soft, var(--line));
+  /* Deliberately square: a settings row is a full-width rule, not a card. The
+     global radius knob must not turn each row into a floating tile. */
+  border-radius: 0;
 }
 .settings-field-label {
   font-size: 12px;
@@ -581,29 +593,6 @@
 .settings-field-reset:hover {
   color: var(--text);
 }
-.settings-preset-card {
-  margin: 12px 0 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-alt, rgba(127, 127, 127, 0.06));
-}
-.settings-preset-card h3 {
-  margin: 0 0 6px;
-  font-size: 13px;
-}
-.settings-preset-card p {
-  margin: 0 0 8px;
-  font-size: 11.5px;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
-.settings-preset-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
 .settings-panel-warnings {
   margin-top: 12px;
   font-size: 11.5px;
@@ -614,8 +603,7 @@
   gap: 10px;
   align-items: center;
   margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  padding-top: 0;
 }
 .settings-panel-status {
   font-size: 11.5px;

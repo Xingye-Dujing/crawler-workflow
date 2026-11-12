@@ -219,6 +219,10 @@ const BrowserProfiles = {
         if (entry.will_refresh) return I18n.t('set.profileWillRefresh');
         if (entry.will_import) return I18n.t('set.profileWillImport');
         if (entry.imported) return I18n.t('set.profileReady');
+        /* 浏览器生成 logs in INSIDE the profile and records the saved file as a copy
+           of that same session. It was never imported, but “已存 Cookie 早于该 Profile，
+           未导入” read like the login had failed right after a successful save. */
+        if (entry.own_session) return I18n.t('set.profileReady');
         if (entry.used_without_import) return I18n.t('set.profileUsedNoImport');
         return I18n.t('set.profileNeedsLogin');
     },
