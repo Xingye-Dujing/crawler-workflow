@@ -2210,9 +2210,22 @@ const rows = [];
 opts.forEach((p) => {
     select.value = p;
     openCookieDialog(p);
-    rows.push({ platform: p, scroll: box.scrollHeight, client: box.clientHeight });
+    const rect = box.getBoundingClientRect();
+    rows.push({
+        platform: p,
+        scroll: box.scrollHeight,
+        client: box.clientHeight,
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+    });
     box.classList.remove('open');
 });
+// The two bars may have wrapped, and every popup is capped to the band between them: the
+// guide can then be taller than the room left, and the panel scrolls ITSELF (never the page).
+const chrome = {
+    menuH: document.getElementById('top-menu').offsetHeight,
+    barH: document.getElementById('status-bar').offsetHeight,
+};
 const content = document.getElementById('cookie-content');
 const kids = (content ? Array.prototype.map.call(content.children,
     (k) => [k.id || k.className, k.offsetHeight]) : []).sort((a, b) => b[1] - a[1]);
@@ -2238,7 +2251,8 @@ return {
     // from a window that is simply not the one this test claims to be testing.
     inner: [document.documentElement.clientWidth, window.innerHeight],
     outer: [window.outerWidth, window.outerHeight],
-    maxH: getComputedStyle(box).maxHeight
+    maxH: getComputedStyle(box).maxHeight,
+    chrome,
 };
 """
 
@@ -2256,6 +2270,12 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
     different size, so the audit compared content against a viewport it did not have). The
     viewport is therefore *emulated*, which is the one thing a page cannot disagree with, and
     the check below fails loudly if the emulated size did not take effect.
+
+    The box is capped to the band between the two bars, so "no scrollbar" is a statement about
+    the ROOM, not a promise that holds at every chrome height: a runner whose menu wraps to
+    several rows leaves ~500 px of a 768 px window, and the eight-platform guide is ~600 px.
+    There the panel scrolls its own content inside the band — asserted as such (it must take the
+    WHOLE band), because a shrunk box with clipped content is the defect #175 fixed.
     """
     _set_viewport(driver, 1366, 768)
     driver.execute_cdp_cmd(
@@ -2274,11 +2294,27 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
         'is a statement about a laptop'
     )
     assert got['count'] >= 8, f'expected the whole platform list to be measured, saw {got["count"]}'
+    menu_h, bar_h = got['chrome']['menuH'], got['chrome']['barH']
+    band = inner_h - menu_h - bar_h - 24
     for row in got['rows']:
-        assert row['scroll'] <= row['client'] + 1, (
-            f'the {row["platform"]} cookie guide still overflows: scrollHeight {row["scroll"]} '
-            f'vs clientHeight {row["client"]} (viewport {got["inner"]}, cap {got["maxH"]}, '
-            f'tallest blocks {got["kids"][:4]})'
+        # The band comes first: every independent popup keeps 12px under the menu and 12px
+        # above the status bar, both of which follow their MEASURED (possibly wrapped) height.
+        assert row['top'] >= menu_h + 11, (
+            f'the {row["platform"]} cookie panel starts under the menu: {row} (menu {menu_h}, bar {bar_h})'
+        )
+        assert row['bottom'] <= inner_h - bar_h - 11, (
+            f'the {row["platform"]} cookie panel runs under the status bar: {row} (menu {menu_h}, bar {bar_h})'
+        )
+        if row['scroll'] <= row['client'] + 1:
+            continue
+        # The guide is taller than the room left between the bars (a runner whose menu wraps
+        # to several rows leaves ~500px of a 768px window). Scrolling the panel itself is then
+        # the only correct answer — but it must scroll because the BAND is short, not because
+        # the box stopped short of the band it was given (#175's clipped guide).
+        assert row['client'] >= band - 4, (
+            f'the {row["platform"]} cookie guide overflows a box that is smaller than the band: '
+            f'scrollHeight {row["scroll"]} vs clientHeight {row["client"]} in a {band}px band '
+            f'(viewport {got["viewport"]}, cap {got["maxH"]}, tallest blocks {got["kids"][:4]})'
         )
 
 

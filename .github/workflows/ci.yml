@@ -247,7 +247,11 @@ jobs:
 
       - name: Boot it and wait for /api/config
         run: |
+          # A login is enabled by CRAWLER_ADMIN_PASSWORD, and a login on the repository's default
+          # SECRET_KEY is refused at boot by name (a published signing key can forge a session).
+          # The container log said exactly that while this job waited two minutes for a 200.
           docker run --detach --name cixi-ci \
+            -e SECRET_KEY=ci-only-session-signing-key-not-a-secret \
             -e CRAWLER_ADMIN_PASSWORD=ci-bootstrap-not-a-secret \
             -p 5000:5000 cixi-ci:latest
           for _ in $(seq 1 60); do
