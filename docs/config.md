@@ -242,6 +242,11 @@ apt-get install -y chromium chromium-driver fonts-noto-cjk
 apt-get install -y texlive-xetex texlive-lang-chinese   # 可选：论文图与论文成稿
 ```
 
+**容器第一次启动会慢**：matplotlib 的字体缓存是在**首次 import** 时建立的，而 `fonts-noto-cjk` 是几百个
+字面——实测冷启动两分多钟，其间 `/api/config` 完全不应答；Docker 交给 Python 的是管道，输出还会被块缓冲，
+于是 `docker logs` 一片空白，看起来像“镜像根本没有起来”。所以 `deploy/Dockerfile` 在构建时就以运行用户
+（`app`，同一个 `HOME`）把这份缓存建好；换了字体包之后要么重建镜像，要么接受一次这样的冷启动。
+
 **只有 Windows 桌面做得到的能力**：红果短剧评论收割（驱动本机播放器进程 + 把 mitmproxy 的 CA 装进系统证书库）。
 它在 Linux、macOS 与 cloud 模式下被按名拒绝，见 [crawler_rules.md](crawler_rules.md) 的“平台边界”。单机实例互斥、
 双击启动、系统弹窗、`%APPDATA%` 数据根都是 `desktop/` 那棵树的事。

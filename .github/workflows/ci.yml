@@ -250,24 +250,37 @@ jobs:
           # A login is enabled by CRAWLER_ADMIN_PASSWORD, and a login on the repository's default
           # SECRET_KEY is refused at boot by name (a published signing key can forge a session).
           # The container log said exactly that while this job waited two minutes for a 200.
+          #
+          # PYTHONUNBUFFERED: Docker hands the process a pipe, so Python block-buffers stdout and a
+          # boot that never reaches Flask leaves a completely empty `docker logs` — the failure
+          # then looks like "the image is deaf" instead of naming the import it is stuck in.
           docker run --detach --name cixi-ci \
+            -e PYTHONUNBUFFERED=1 \
             -e SECRET_KEY=ci-only-session-signing-key-not-a-secret \
             -e CRAWLER_ADMIN_PASSWORD=ci-bootstrap-not-a-secret \
             -p 5000:5000 cixi-ci:latest
-          for _ in $(seq 1 60); do
+          # Five minutes, not two: a cold container has to import the whole analysis stack
+          # (sklearn, matplotlib, jieba) before Flask binds, and the first one after a fresh
+          # build is the slowest.
+          for n in $(seq 1 150); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/config || true)
             if [ "$code" = "200" ]; then
-              echo "the image booted and answered /api/config with 200"
+              echo "the image booted and answered /api/config with 200 after ${n} tries"
               exit 0
+            fi
+            if [ $((n % 15)) -eq 0 ]; then
+              echo "still waiting (try ${n}, last HTTP ${code:-none})"
             fi
             sleep 2
           done
           echo "the image never answered /api/config"
           exit 1
 
-      - name: Container log on failure
+      - name: Container status and log on failure
         if: failure()
-        run: docker logs cixi-ci || true
+        run: |
+          docker inspect --format 'status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' cixi-ci || true
+          docker logs cixi-ci || true
 
       - name: Stop the container
         if: always()

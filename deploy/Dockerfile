@@ -73,6 +73,17 @@ RUN useradd --system --uid 10001 --create-home app \
  && mkdir -p /app/data /app/logs \
  && chown -R app:app /app/data /app/logs
 
+# Matplotlib builds its font cache on FIRST IMPORT, and this image installs two CJK families
+# (hundreds of faces). Measured on CI: a fresh container answered nothing for over two minutes
+# while that cache was built inside the serving process — and because Docker gives Python a pipe,
+# stdout stayed block-buffered and the job's log showed not one line. Build the cache here, as the
+# runtime user and with the same HOME the server will have, so the first request is answered as
+# soon as Flask binds.
+RUN mkdir -p /home/app/.config \
+ && chown -R app:app /home/app/.config \
+ && setpriv --reuid=app --regid=app --init-groups env HOME=/home/app \
+      python -c "import matplotlib.font_manager as fm; fm.fontManager"
+
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

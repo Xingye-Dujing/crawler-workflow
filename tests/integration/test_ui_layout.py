@@ -2257,6 +2257,30 @@ return {
 """
 
 
+CHROME_SETTLE_JS = """
+// Wait until the two bars' PUBLISHED heights (the CSS variables every popup's band is
+// computed from) match the heights they actually have. A ResizeObserver publishes them, so a
+// layout change made in this same frame — an emulated viewport, a forced language — is one
+// frame ahead of the value the page's own CSS is still using.
+const done = arguments[arguments.length - 1];
+const started = performance.now();
+const step = () => {
+    const style = getComputedStyle(document.documentElement);
+    const published = [parseFloat(style.getPropertyValue('--menuH')) || 0,
+                       parseFloat(style.getPropertyValue('--barH')) || 0];
+    const menu = document.getElementById('top-menu');
+    const bar = document.getElementById('status-bar');
+    const live = [menu ? menu.offsetHeight : 0, bar ? bar.offsetHeight : 0];
+    const settled = Math.abs(published[0] - live[0]) <= 1 && Math.abs(published[1] - live[1]) <= 1;
+    if (settled || performance.now() - started > 3000) {
+        return done({ published, live, settled });
+    }
+    requestAnimationFrame(() => setTimeout(step, 16));
+};
+step();
+"""
+
+
 def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_url, driver):
     """The eight-platform step guide wrapped into a narrow column and pushed the panel
     past the window, so every platform showed a vertical scrollbar. The panel was
@@ -2284,6 +2308,19 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
     )
     try:
         _quiet_canvas(driver, app_url)
+        # Chinese is what wraps this guide the most, and switching language re-lays out the menu:
+        # set it BEFORE the settle below, or the settle would measure the previous language.
+        driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();")
+        # The bars publish their measured height into ``--menuH``/``--barH`` from a
+        # ResizeObserver, so a layout that just changed (the emulated viewport, the forced
+        # language) leaves the published value one frame behind. Measuring in that frame reads
+        # a band the page does not have yet — measured on the runner: a 509 px cap beside a 651 px
+        # band, which looks exactly like a product defect. Wait for the publish instead.
+        settled = driver.execute_async_script(CHROME_SETTLE_JS, [])
+        assert settled['settled'], (
+            f'the bars never published their measured height: --menuH/--barH '
+            f'{settled["published"]} vs live {settled["live"]}'
+        )
         got = driver.execute_script(COOKIE_FIT_JS, [])
     finally:
         driver.execute_cdp_cmd('Emulation.clearDeviceMetricsOverride', {})
