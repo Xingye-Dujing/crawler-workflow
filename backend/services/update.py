@@ -42,7 +42,7 @@ from pathlib import Path
 from core import machine, procs
 from core.config import Config
 
-from services import update_job
+from services import update_job, update_receipt
 from services.components.archive import ArchiveError, safe_extract
 from services.version import APP_VERSION
 
@@ -342,6 +342,34 @@ def swap_supported() -> bool:
 # ─── Checking ────────────────────────────────────────────────
 
 
+def _receipt_artifact(job: dict) -> str:
+    """The package name the receipt should record; the feed URL's last segment when it has one."""
+    asset = job.get('asset') if isinstance(job.get('asset'), dict) else {}
+    url = str(asset.get('url') or '').strip()
+    name = url.rsplit('/', 1)[-1].split('?', 1)[0]
+    return name or f'CaiXiHui-{job.get("version") or ""}'
+
+
+def _record_install_receipt(version: str, job: dict) -> None:
+    """Rewrite the installer's pointer/receipt, or say why it could not.
+
+    This is the one write an in-app update owes the release chain: without it the receipt keeps
+    naming the version the installer put there, and an audit of "what is installed" is wrong.
+    A missing ``current-version`` is a portable folder and no-ops; an I/O refusal is logged once and
+    never fails the updated build's boot.
+    """
+    _mode, root, _exe = install_layout()
+    if root is None:
+        return
+    try:
+        written = update_receipt.record(version, root, artifact=_receipt_artifact(job))
+    except (OSError, ValueError) as exc:
+        update_job.log(f'安装回执没有改写：{exc}', actor='app')
+        return
+    if written:
+        update_job.log(f'安装回执已指向 {version}', actor='app')
+
+
 def _reconcile_boot(current: str) -> None:
     """Turn what the last exit left behind into a state this boot can trust."""
     job = update_job.read()
@@ -351,6 +379,7 @@ def _reconcile_boot(current: str) -> None:
         if version and version == current:
             update_job.write(state=update_job.STATE_APPLIED, error_code='', error_detail='')
             update_job.log(f'新版本 {current} 已启动', actor='app')
+            _record_install_receipt(current, job)
             return
         swapper = int(job.get('swapper_pid') or 0)
         if update_job.marker_file().exists() or procs.process_alive(swapper):
@@ -375,6 +404,21 @@ def _cleanup_updates() -> None:
         if version:
             keep.add(version)
     update_job.prune(keep)
+
+
+def reconcile_after_start() -> None:
+    """The boot half of :func:`check`, so the receipt is repaired even if nobody opens the panel.
+
+    ``check()`` owns this work too, but it only runs when the update panel asks. A user who updates
+    and restarts never has to open that panel, and leaving ``applying`` on disk (and the receipt
+    stale) until they do would make the next successful update read as "still applying".
+    """
+    if not _frozen():
+        return
+    try:
+        _reconcile_boot(current_version())
+    except Exception as exc:  # a receipt/job read must never stop the server from booting
+        update_job.log(f'启动时的更新核对失败：{exc}', actor='app')
 
 
 def check() -> dict:

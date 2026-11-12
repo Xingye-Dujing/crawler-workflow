@@ -208,6 +208,9 @@ loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、U
   非 ASCII 安装路径不会变成 GBK 字节）与 `current-version`（ASCII），两者都经 `.partial`
   + 改名原子写入；`current-version` 只接受安全的版本 token，不能当路径用。校验工具
   `install_receipt.py --root <安装目录>` 会核对编码、BOM、token、指针与回执里的版本一致性。
+  应用内自更新完成后，新版本的启动会按同一套规则改写这两份记录
+  （`backend/services/update_receipt.py`：先写回执、再写指针），否则“装的是哪个版本”会一直
+  停在安装器最后一次写下的值。
 - `ISCC` 由构建脚本传 `/DMyAppVersion=<版本>`，同一个版本号同时进 `AppVersion`、
   `current-version`、`install.json` 与发布清单。
 

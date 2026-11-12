@@ -141,9 +141,10 @@ def item_key(item) -> str:
     A **comment** is identified by its own site id, and must be: its row also carries
     楼层 (and 父楼层), which a fresh harness numbers from 1 again, so the whole-row hash
     below would read the same comment as a NEW item on every resume and re-store the
-    whole set with invented floors. When the site does not expose an id (知乎/抖音 today),
-    the article + author + body + the comment's own time are used instead; that is the
-    stable content identity, and it deliberately leaves counters and 楼层 out.
+    whole set with invented floors. When the site does not expose an id, the article + author +
+    body + the comment's own time are used instead; that is the stable content identity, and it
+    deliberately leaves counters and 楼层 out. 知乎/抖音 read the id the panel prints when it is
+    there, so this fallback only answers a panel that prints none.
 
     Otherwise a link is the best identity when the crawler captured one. Otherwise title
     + author + the head of the body: enough to recognise the same post after a

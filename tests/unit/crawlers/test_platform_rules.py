@@ -583,6 +583,10 @@ class TestNodeAndCatbusDiscoveryPerPlatform:
 class TestTheMatplotlibFontStackHoldsEachOsNames:
     @pytest.fixture(autouse=True)
     def _fresh_caches(self):
+        # Import matplotlib with the REAL font manager before any test installs a fake. ``matplotlib.text``
+        # binds ``fontManager`` at import time, so a fake present during the first ``import pyplot`` would
+        # stay bound to that fake for the whole process and every later chart would fail to find a font.
+        visualizer._pyplot()
         visualizer.cjk_font.cache_clear()
         visualizer._warn_missing_cjk_font.cache_clear()
         yield

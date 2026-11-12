@@ -7,6 +7,10 @@ name: ci
 # `browser` — the device tier's Chrome half: real Chrome driven by the real UI tests, with
 #             CRAWLER_REQUIRE_BROWSER so a driver that cannot start FAILS instead of skipping,
 #             and CRAWLER_REQUIRE_NODE so the ~43 frontend JS cases cannot hide as skips.
+# `docker`  — the deployment image actually builds and boots. A Dockerfile no runner ever built is
+#             a claim, not a deployment: the base tag, the apt suite and the dependency set drift
+#             silently until an operator hits them. It builds with upstream mirrors because the
+#             image's defaults are the China mirrors its operator uses.
 #
 # The lint targets are enumerated by `tools/ci_lint_tiers.py` rather than by a shell, because the
 # gate must ask the same question on every runner: a PowerShell-only enumeration would turn the
@@ -219,3 +223,48 @@ jobs:
           name: pytest-browser-${{ matrix.runner }}
           path: ci-browser-${{ matrix.runner }}.xml
           if-no-files-found: ignore
+
+  # The deployment shape (Linux + Docker). Build alone would pass on an image that never starts:
+  # the entrypoint drops privileges with setpriv, the app bootstraps the first administrator from
+  # CRAWLER_ADMIN_PASSWORD, and the gate must answer /api/config. So this job builds, runs, and
+  # waits for a real 200 — a boot that exits is a red job with its own log below.
+  #
+  # Upstream mirrors, not the image defaults: a runner outside China cannot reach the Aliyun apt
+  # mirror, and the base is Docker Hub's python:3.11-slim rather than the DaoCloud copy.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the deployment image
+        run: |
+          docker build -f deploy/Dockerfile \
+            --build-arg BASE_IMAGE=python:3.11-slim \
+            --build-arg APT_MIRROR=deb.debian.org \
+            --build-arg PIP_INDEX=https://pypi.org/simple \
+            --tag cixi-ci:latest .
+
+      - name: Boot it and wait for /api/config
+        run: |
+          docker run --detach --name cixi-ci \
+            -e CRAWLER_ADMIN_PASSWORD=ci-bootstrap-not-a-secret \
+            -p 5000:5000 cixi-ci:latest
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/config || true)
+            if [ "$code" = "200" ]; then
+              echo "the image booted and answered /api/config with 200"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the image never answered /api/config"
+          exit 1
+
+      - name: Container log on failure
+        if: failure()
+        run: docker logs cixi-ci || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm --force cixi-ci || true

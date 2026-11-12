@@ -57,6 +57,10 @@ def parse_zhihu_comments(url: str, items) -> list:
                 # boundary so every platform's 评论时间 is one format.
                 '评论时间': times.absolute(one.get('time')),
                 '点赞数': '',
+                # The site's own comment id, when the panel prints one (``id="comment-<digits>"`` or
+                # ``data-comment-id``). Blank means the site exposed none, and ``item_key`` then falls back
+                # to the stable content key — never an invented id.
+                '评论ID': str(one.get('id') or ''),
                 '楼层': index,
                 '父楼层': (int(parent) + 1) if isinstance(parent, int) and parent >= 0 else '',
             }
@@ -90,6 +94,24 @@ return (function () {
         }
         return best;
     }
+    // The comment's site id, when it is explicitly printed on the element (or on an ancestor that
+    // still wraps exactly this one comment): `data-comment-id` or `id="comment-<digits>"`. A bare
+    // `data-id` is NOT trusted — on a wrapper it can be the answer's or the author's id, and one
+    // shared value would collapse several comments into one ledger row. Blank = the page printed
+    // none, and the content key answers instead.
+    function ownId(scope) {
+        var node = scope;
+        while (node) {
+            var raw = String(node.getAttribute('data-comment-id') || '');
+            if (/^\d{6,}$/.test(raw)) { return raw; }
+            var hit = /^comment-(\d{6,})$/.exec(String(node.id || ''));
+            if (hit) { return hit[1]; }
+            var up = node.parentElement;
+            if (!up || up.querySelectorAll('.CommentContent').length !== 1) { break; }
+            node = up;
+        }
+        return '';
+    }
     var out = [];
     var bodies = document.querySelectorAll('.CommentContent');
     for (var i = 0; i < bodies.length; i++) {
@@ -116,7 +138,7 @@ return (function () {
                 if (bodies[q] === enclosing) { parent = q; break; }
             }
         }
-        out.push({text: text, author: author, href: href, time: when, parent: parent});
+        out.push({text: text, author: author, href: href, time: when, parent: parent, id: ownId(scope)});
     }
     return out;
 })();
@@ -242,7 +264,10 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
         batch = session.driver.execute_script(PANEL_JS) or []
         fresh = []
         for row in parse_zhihu_comments(url, batch):
-            key = (row['评论者'], row['评论内容'])
+            # The site's own id when read; otherwise the content triple. The old pair (author, body)
+            # swallowed the same person posting "谢谢" twice, and a re-read of the panel after a
+            # scroll must not turn one comment into two rows just because its like count moved.
+            key = row['评论ID'] or ('text', row['评论者'], row['评论内容'], row['评论时间'])
             if key in seen:
                 continue
             seen.add(key)

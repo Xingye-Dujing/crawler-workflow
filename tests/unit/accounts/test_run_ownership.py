@@ -107,6 +107,25 @@ def test_a_queued_request_whose_account_is_gone_is_dropped():
     assert queue.queue_snapshot() == []
 
 
+def test_a_disabled_accounts_queue_slice_is_skipped_not_written(monkeypatch):
+    """The store guard refuses a non-active owner; the mirror must skip that slice, not abort.
+
+    ``mirror_queue`` writes one slice per owner inside one ``try``, so an exception from a disabled
+    account would leave every other account's queued requests unmirrored.
+    """
+    from types import SimpleNamespace
+
+    disabled = {'user_id': ALICE.user_id, 'username': 'alice', 'role': 'user', 'status': 'disabled'}
+    monkeypatch.setattr(
+        'services.accounts.service.get_account_service',
+        lambda: SimpleNamespace(store=SimpleNamespace(get_user=lambda _uid: disabled)),
+    )
+    written = []
+    monkeypatch.setattr(queue, 'get_run_store', lambda: SimpleNamespace(save_queue=written.append))
+    queue._save_owner_mirror(ALICE.user_id, [_entry('q1', ALICE.user_id)])
+    assert written == []
+
+
 def test_the_clock_reads_each_accounts_schedule_in_its_own_context(monkeypatch):
     seen = []
     task = {'id': 't1', 'name': 'nightly', 'enabled': True, 'next_run': 'whenever', 'lang': 'en'}
@@ -203,6 +222,61 @@ def test_the_durable_console_follows_the_run_owner_not_the_printing_thread(monke
     finally:
         state.execution_state['run_id'] = previous_run_id
         account_context.clear()
+
+
+def test_a_gone_account_cannot_open_a_store_and_mint_its_tree(monkeypatch, tmp_path):
+    """The central guard: every reader (routes, worker, clock) goes through ``_user_slot``.
+
+    Without it a lingering thread bound to a deleted account ran ``paths.for_user(id).ensure()``
+    through the first store getter and recreated ``data/users/<deleted_id>/``.
+    """
+    from types import SimpleNamespace
+
+    from core.config import Config
+    from runtime import stores
+
+    from services.accounts.errors import AccountError
+
+    monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
+    monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+    monkeypatch.setattr(
+        'services.accounts.service.get_account_service',
+        lambda: SimpleNamespace(store=SimpleNamespace(get_user=lambda _uid: None)),
+    )
+    with account_context.use(ALICE), pytest.raises(AccountError) as caught:
+        stores.get_run_store()
+    assert caught.value.key == 'accounts.ownerGone'
+    assert not (tmp_path / 'users' / ALICE.user_id).exists(), 'the refusal still created a tree'
+
+
+def test_a_retired_account_stays_closed_even_while_its_row_is_still_there(monkeypatch, tmp_path):
+    """``retire_user`` is stamped BEFORE the registry row goes, closing the ``shutil.move`` window."""
+    from types import SimpleNamespace
+
+    from core.config import Config
+    from runtime import stores
+
+    from services.accounts.errors import AccountError
+
+    monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
+    monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+    monkeypatch.setattr(
+        'services.accounts.service.get_account_service',
+        lambda: SimpleNamespace(
+            store=SimpleNamespace(get_user=lambda uid: {'user_id': uid, 'status': 'active'}),
+        ),
+    )
+    try:
+        with account_context.use(ALICE):
+            stores.retire_user(ALICE.user_id)
+            with pytest.raises(AccountError):
+                stores.get_run_store()
+            assert not (tmp_path / 'users' / ALICE.user_id).exists()
+            stores.unretire_user(ALICE.user_id)
+            assert stores.get_run_store() is not None
+    finally:
+        stores.unretire_user(ALICE.user_id)
+        stores.release_user(ALICE.user_id)
 
 
 def test_owner_is_live_asks_the_account_registry(monkeypatch):

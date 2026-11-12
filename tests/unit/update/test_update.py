@@ -1,6 +1,7 @@
 """The self-updater's decisions, without downloading or replacing anything."""
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -44,6 +45,50 @@ def test_versions_compare_numerically_not_as_strings():
     assert update.is_newer('2026.11.11.1', '2026.11.10.9')
     assert not update.is_newer('2026.11.11.1', '2026.11.11.1')
     assert not update.is_newer('2026.11.10', '2026.11.11')
+
+
+def _installed(root: Path, version: str) -> Path:
+    (root / 'versions' / version).mkdir(parents=True)
+    (root / 'current-version').write_bytes(f'{version}\n'.encode('ascii'))
+    receipt = {
+        'app': 'CaiXiHui',
+        'artifact': 'CaiXiHui-Setup.exe',
+        'channel': 'stable',
+        'method': 'direct',
+        'version': version,
+        'root': str(root),
+    }
+    (root / 'versions' / version / 'install.json').write_text(json.dumps(receipt), encoding='utf-8')
+    return root
+
+
+def test_a_completed_swap_rewrites_the_installer_receipt(monkeypatch, tmp_path):
+    """The new build owns the ``applying → applied`` step, so the receipt rewrite belongs there.
+
+    Without it an in-app update leaves ``current-version`` naming the release the installer put
+    there, and the release audit reads a version this machine no longer runs.
+    """
+    _frozen(monkeypatch, current='2026.11.11.1')
+    root = _installed(tmp_path / 'CaiXiHui', '2026.11.10.1')
+    monkeypatch.setattr(
+        update,
+        'install_layout',
+        lambda: ('app', root, root / 'app' / 'CaiXiHui.exe'),
+    )
+    update_job.start(
+        version='2026.11.11.1',
+        asset={'url': 'https://example.invalid/CaiXiHui-win64.zip'},
+        from_version='2026.11.10.1',
+    )
+    update_job.write(state=update_job.STATE_APPLYING)
+    update.check()
+    assert (root / 'current-version').read_bytes() == b'2026.11.11.1\n'
+    receipt = json.loads((root / 'versions' / '2026.11.11.1' / 'install.json').read_text(encoding='utf-8'))
+    assert receipt['version'] == '2026.11.11.1'
+    assert receipt['method'] == 'self-update'
+    assert receipt['channel'] == 'stable'
+    assert receipt['artifact'] == 'CaiXiHui-win64.zip'
+    assert update_job.read()['state'] == update_job.STATE_APPLIED
 
 
 def test_a_source_run_never_offers_an_update(monkeypatch):

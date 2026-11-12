@@ -985,7 +985,7 @@ class TestXhsAdapter:
 # ─── zhihu adapter (DOM, panels behind buttons) ─────────────────────────
 
 
-def _zh_row(author, text, href='https://www.zhihu.com/people/x', when='3 天前'):
+def _zh_row(author, text, href='https://www.zhihu.com/people/x', when='3 天前', cid=''):
     """One comment as the in-page panel read reports it.
 
     The fake answers the page-side script with its own output format, so these tests cover the
@@ -993,7 +993,7 @@ def _zh_row(author, text, href='https://www.zhihu.com/people/x', when='3 天前'
     ancestor that still holds exactly one ``.CommentContent``) is a page contract, measured by
     ``backend/test_zhihu_comment_dom.py`` and re-measured by the live tier's D group.
     """
-    return {'author': author, 'href': href, 'text': text, 'time': when}
+    return {'author': author, 'href': href, 'text': text, 'time': when, 'id': cid}
 
 
 class TestZhihuAdapter:
@@ -1132,6 +1132,38 @@ class TestZhihuAdapter:
         rows, status = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert rows == [] and status == OK
 
+    def test_the_sites_comment_id_is_the_ledger_identity(self):
+        """Two identical “谢谢” from one person are two comments when the site prints two ids.
+
+        The content key (author, body, time) is the fallback for a panel that prints none; when an
+        id IS printed, using the content key is what silently merged two real comments.
+        """
+        from services.runs.store.identity import item_key
+
+        pair = [
+            _zh_row('甲', '谢谢', cid='1050000000000000001'),
+            _zh_row('甲', '谢谢', cid='1050000000000000002'),
+        ]
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('2 条评论')], 'button, a': []},
+            panel_pages=[pair],
+        )
+        session = CommentSession(driver, nap=lambda s: None)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
+        assert [row['评论ID'] for row in rows] == ['1050000000000000001', '1050000000000000002']
+        assert item_key(rows[0]) != item_key(rows[1]), 'two site ids collapsed to one ledger key'
+
+    def test_a_comment_without_a_site_id_keeps_a_blank_column_and_the_content_key(self):
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('1 条评论')], 'button, a': []},
+            panel_pages=[[_zh_row('甲', '没有 id 的一条')]],
+        )
+        session = CommentSession(driver, nap=lambda s: None)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
+        assert rows[0]['评论ID'] == '', 'an id the page never printed may not be invented'
+
     def test_limit_stops_panel_iteration(self):
         btns = [El('5 条评论'), El('6 条评论'), El('7 条评论')]
         driver = FakeDriver(
@@ -1142,6 +1174,54 @@ class TestZhihuAdapter:
         session = CommentSession(driver, nap=lambda s: None)
         rows, status = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 1)
         assert status == OK and len(rows) == 1
+
+
+# ─── douyin row identity ────────────────────────────────────────────────
+
+
+class TestDouyinCommentIds:
+    """The panel read now carries each item's own id; the row and the ledger key use it."""
+
+    def _fold(self, readings):
+        from crawlers.platforms.douyin import comments as dy
+
+        threads, reply_seen, seen = {}, set(), set()
+        dy._absorb_threads(readings, threads, reply_seen, seen)
+        return dy, threads
+
+    def test_two_identical_bodies_are_two_comments_when_the_site_prints_two_ids(self):
+        from services.runs.store.identity import item_key
+
+        body = '甲\n谢谢\n1天前·北京\n0'
+        _dy, threads = self._fold(
+            [
+                {'own': body, 'id': '7300000000000000001', 'replies': []},
+                {'own': body, 'id': '7300000000000000002', 'replies': []},
+            ]
+        )
+        assert len(threads) == 2, 'the content key merged two comments the site ids tell apart'
+        rows, _ = _dy.parse_douyin_threads(threads, 'https://www.douyin.com/video/7000000000000000001')
+        assert [row['评论ID'] for row in rows] == ['7300000000000000001', '7300000000000000002']
+        assert item_key(rows[0]) != item_key(rows[1])
+
+    def test_a_reply_takes_its_own_id_from_the_nested_item(self):
+        _dy, threads = self._fold(
+            [
+                {
+                    'own': '甲\n顶层\n1天前·北京\n3',
+                    'id': '7300000000000000001',
+                    'replies': [{'text': '乙\n子回复\n1天前·上海\n1', 'id': '7300000000000000002'}],
+                }
+            ]
+        )
+        rows, _ = _dy.parse_douyin_threads(threads, 'https://www.douyin.com/video/7000000000000000001')
+        assert [row['评论ID'] for row in rows] == ['7300000000000000001', '7300000000000000002']
+        assert rows[1]['父楼层'] == 1
+
+    def test_an_unidentified_reading_keeps_the_content_key(self):
+        _dy, threads = self._fold([{'own': '甲\n没有 id\n1天前·北京\n0', 'replies': []}])
+        rows, _ = _dy.parse_douyin_threads(threads, 'https://www.douyin.com/video/7000000000000000001')
+        assert rows[0]['评论ID'] == ''
 
 
 # ─── bilibili adapter (in-page ajax, server-owned cursor) ───────────────

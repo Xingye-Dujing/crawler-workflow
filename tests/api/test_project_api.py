@@ -2,6 +2,7 @@
 
 import io
 import json
+import time
 import zipfile
 
 import pandas as pd
@@ -44,6 +45,18 @@ def _workflow(dataset_id, template_id):
         ],
         'connections': [{'from': 'node-0', 'to': 'node-1'}],
     }
+
+
+def _wait(client, job_id: str, timeout: float = 20.0) -> dict:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        answer = client.get(f'/api/jobs/{job_id}').get_json()
+        assert answer['ok'], answer
+        job = answer['job']
+        if job['state'] != 'running':
+            return job
+        time.sleep(0.01)
+    raise AssertionError(f'job {job_id} never finished')
 
 
 def _seed(client):
@@ -106,6 +119,11 @@ class TestProjectApi:
             assert [row['name'] for row in manifest['workflows']] == ['项目A']
 
     def test_import_round_trip_renames_on_collision(self, client):
+        """The POST parks a job (202); its result is the summary the synchronous route returned.
+
+        ``tests/api/conftest`` runs ``jobs.start`` inline (``run_now``), so the job is already
+        finished here; the real 202/poll path is pinned in ``test_document_jobs_api.py``.
+        """
         _seed(client)
         exported = client.get('/api/project/export?workflow=项目A')
         response = client.post(
@@ -113,12 +131,55 @@ class TestProjectApi:
             data={'file': (io.BytesIO(exported.data), 'project.zip')},
             content_type='multipart/form-data',
         )
-        assert response.status_code == 200
-        summary = response.get_json()['summary']
+        assert response.status_code == 202
+        job = response.get_json()['job']
+        assert job['state'] == 'done'
+        summary = job['result']['summary']
         assert summary['workflows'] == [{'from': '项目A', 'to': '项目A (2)'}]
         assert summary['templates'][0]['name'] == '清洗模板 (2)'
         names = [row['name'] for row in client.get('/api/workflow/list').get_json()['workflows']]
         assert '项目A (2)' in names
+
+    @pytest.mark.async_documents
+    def test_the_import_runs_off_the_request_thread_and_is_polled(self, client):
+        """The real runner: POST answers 202 at once, the worker writes, the poll returns the summary."""
+        _seed(client)
+        exported = client.get('/api/project/export?workflow=项目A')
+        response = client.post(
+            '/api/project/import',
+            data={'file': (io.BytesIO(exported.data), 'project.zip')},
+            content_type='multipart/form-data',
+        )
+        assert response.status_code == 202, response.get_json()
+        started = response.get_json()['job']
+        assert started['state'] == 'running' and started['id']
+        job = _wait(client, started['id'])
+        assert job['result']['ok'] is True
+        imported = job['result']['summary']['workflows'][0]['to']
+        assert imported.startswith('项目A (') and imported != '项目A'
+
+    def test_a_busy_registry_refuses_the_upload_by_name(self, client, monkeypatch):
+        """A refused upload must not leave its temp file behind (the job never starts to delete it)."""
+        from services.reports import jobs
+
+        monkeypatch.setattr(jobs, 'start', lambda *_a, **_k: None)
+        response = client.post(
+            '/api/project/import',
+            data={'file': (io.BytesIO(b'PK'), 'project.zip')},
+            content_type='multipart/form-data',
+        )
+        assert response.status_code == 409
+        assert response.get_json()['ok'] is False
+
+    def test_a_broken_bundle_fails_its_job_by_name(self, client):
+        bad = client.post(
+            '/api/project/import',
+            data={'file': (io.BytesIO(b'not a zip'), 'bad.zip')},
+            content_type='multipart/form-data',
+        )
+        assert bad.status_code == 202
+        result = bad.get_json()['job']['result']
+        assert result['ok'] is False and result['error']
 
     def test_refusals_are_named(self, client):
         missing = client.get('/api/project/export?workflow=不存在')
@@ -130,13 +191,6 @@ class TestProjectApi:
         no_file = client.post('/api/project/import', data={}, content_type='multipart/form-data')
         assert no_file.status_code == 400
         assert no_file.get_json()['error']
-        bad = client.post(
-            '/api/project/import',
-            data={'file': (io.BytesIO(b'not a zip'), 'bad.zip')},
-            content_type='multipart/form-data',
-        )
-        assert bad.status_code == 400
-        assert bad.get_json()['error']
 
     def test_the_bundle_does_not_contain_runtime_state(self, client):
         _seed(client)

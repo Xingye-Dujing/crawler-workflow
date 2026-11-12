@@ -96,6 +96,7 @@ def parse_douyin_threads(threads: dict, url: str) -> tuple:
             {
                 '平台': 'douyin',
                 '文章URL': url,
+                '评论ID': str(slot.get('cid') or ''),
                 '评论者': slot['author'],
                 '评论者主页': '',
                 '评论内容': slot['content'],
@@ -117,6 +118,7 @@ def parse_douyin_threads(threads: dict, url: str) -> tuple:
                 {
                     '平台': 'douyin',
                     '文章URL': url,
+                    '评论ID': str(reply.get('cid') or ''),
                     '评论者': reply['author'],
                     '评论者主页': '',
                     '评论内容': reply['content'],
@@ -148,14 +150,32 @@ _EXPAND_RE = re.compile(r'展开\s*\d+\s*条回复')
 #: parent's LIVE ``innerText``; ``replies`` is each ``.replyContainer``'s text. Chrome's ``innerText``
 #: on a detached ``cloneNode`` is empty, so the parent is read from the rendered element directly.
 _THREADS_JS = r"""
+    // The comment's site id (`cid`) when the rendered item prints one. Only an EXPLICIT comment id is
+    // trusted: `data-comment-id` or `id="comment-<digits>"`. A bare `data-id` is deliberately not
+    // read — on a page that decorates every node it may be the video or the author, and one shared
+    // value would collapse a whole panel into a single ledger row. Blank means the site printed
+    // none, and the content key answers instead.
+    function ownId(el) {
+      if (!el) return '';
+      var raw = String(el.getAttribute('data-comment-id') || '');
+      if (/^\d{6,}$/.test(raw)) return raw;
+      var hit = /^comment-(\d{6,})$/.exec(String(el.id || ''));
+      return hit ? hit[1] : '';
+    }
     var items = document.querySelectorAll('[data-e2e="comment-item"]');
     var out = [];
     Array.prototype.forEach.call(items, function (it) {
       if (it.closest('[class*="replyContainer"]')) return;  // a reply: read under its parent, not as a thread
+      // A container holding MORE than one reply item gives no unambiguous id for its merged text:
+      // leave it blank and let the content identity decide, rather than attributing reply A to B.
       var reps = Array.prototype.map.call(it.querySelectorAll('[class*="replyContainer"]'), function (r) {
-        return (r.innerText || '').trim();
+        var nested = r.querySelectorAll('[data-e2e="comment-item"]');
+        return {
+          text: (r.innerText || '').trim(),
+          id: nested.length === 1 ? ownId(nested[0]) : ''
+        };
       });
-      out.push({ own: (it.innerText || '').trim(), replies: reps });
+      out.push({ own: (it.innerText || '').trim(), id: ownId(it), replies: reps });
     });
     return out;
     """
@@ -421,7 +441,11 @@ def _absorb_threads(readings, threads: dict, reply_seen: set, seen_identity: set
         author, content, when, region, likes, subs = douyin_comment_fields(one.get('own'))
         if not content:
             continue
-        key = (author, content, when)
+        cid = str(one.get('id') or '')
+        # The site's own comment id when the item prints one; the content triple only when it does
+        # not. Keeping the id in the key is what lets two identical "谢谢" from one person stay two
+        # rows, and what keeps a resume from re-storing a comment whose like count moved.
+        key = ('cid', cid) if cid else (author, content, when)
         if key in threads:
             threads[key]['subs'] = max(threads[key]['subs'], subs)
         elif key in reply_seen:
@@ -437,19 +461,31 @@ def _absorb_threads(readings, threads: dict, reply_seen: set, seen_identity: set
                 'region': region,
                 'likes': likes,
                 'subs': subs,
+                'cid': cid,
                 'replies': {},
             }
         slot = threads[key]
-        for rtext in one.get('replies') or []:
+        for reply in one.get('replies') or []:
+            # The newer reader answers ``{text, id}``; a plain string is still accepted so a probe
+            # or an older fixture keeps working (and simply has no id).
+            rtext = reply.get('text') if isinstance(reply, dict) else reply
+            rcid = str(reply.get('id') or '') if isinstance(reply, dict) else ''
             ra, rc, rw, rr, rl, _rs = douyin_comment_fields(rtext)
             if not rc:
                 continue
-            rkey = (ra, rc, rw)
+            rkey = ('cid', rcid) if rcid else (ra, rc, rw)
             if rkey in seen_identity or rkey in slot['replies']:
                 continue
             seen_identity.add(rkey)
             reply_seen.add(rkey)
-            slot['replies'][rkey] = {'author': ra, 'content': rc, 'when': rw, 'region': rr, 'likes': rl}
+            slot['replies'][rkey] = {
+                'author': ra,
+                'content': rc,
+                'when': rw,
+                'region': rr,
+                'likes': rl,
+                'cid': rcid,
+            }
 
 
 def _wait_for_panel(session, timeout: float = 24.0) -> bool:

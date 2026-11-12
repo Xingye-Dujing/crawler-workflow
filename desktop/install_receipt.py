@@ -9,11 +9,12 @@ Two files, both deliberately easy to get wrong:
   can decode (anomalyco/hex hit this as #1352). The installer uses
   ``SaveStringsToUTF8FileWithoutBOM``; this module refuses anything else.
 
-The exe itself does NOT live under versions/. These are the INSTALLER's records: the in-app
-self-updater replaces the program under ``app/`` and does not rewrite ``current-version`` or
-``versions/<token>/install.json``, so a receipt read after an in-app update names the version the
-installer last put there. Treat it as "what the installer did", never as "what is running now";
-``backend/services/version.py`` is the running program's own answer.
+The exe itself does NOT live under versions/. These records are written by the INSTALLER and
+rewritten through the same rules by an in-app self-update
+(``backend/services/update_receipt.py``, called from the new build's boot): a receipt read after an
+update names the version now running, which is why this reader exists. ``backend/services/version.py``
+is still the running program's own answer; this file is the install record an operator/audit reads
+from disk.
 
     .venv/Scripts/python.exe desktop/install_receipt.py --root "%LOCALAPPDATA%\\Programs\\CaiXiHui"
 """

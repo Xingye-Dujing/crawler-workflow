@@ -1,8 +1,10 @@
-"""Background jobs for the slow document routes (HTML report, paper PDF, chart PDF).
+"""Background jobs for the slow document routes (HTML report, paper PDF, chart PDF, project import).
 
 A report conclusion asks a model, and a PDF runs ``xelatex``; both can take minutes. They used
 to run on the Flask request thread, so one slow model held a worker open and 停止 could not
 interrupt it. The POST now starts a job and answers at once; the panel polls ``/api/jobs/<id>``.
+A project import is the same shape for the same reason: unpacking a bundle writes hundreds of MiB
+of datasets, and doing that on the request thread made every other panel wait for it.
 
 In-memory and bounded on purpose: a job is the answer to "this page asked for a file now", and
 it dies with the process exactly like the page that asked. Everything that must survive is on

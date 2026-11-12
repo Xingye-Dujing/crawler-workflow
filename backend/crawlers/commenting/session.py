@@ -18,10 +18,12 @@ Design notes the code cannot shout later:
   link of its own, so borrowing those names would make every comment of one
   article hash to the same key and silently drop all but the first.
   Its identity comes from ``评论ID`` when the site exposes one (``run_store._COMMENT_ID_FIELDS``,
-  plus ``平台`` so two sites' id spaces cannot meet). 知乎 and 抖音 do not emit an id today;
-  for them ``item_key`` uses article + author + body + the comment's own time instead of the
-  whole-row hash, because the row also carries ``楼层``/``点赞数``/``子回复数``, which move
-  between visits — a resume would then re-store the same comment with invented floors.
+  plus ``平台`` so two sites' id spaces cannot meet). 知乎 and 抖音 print the id on the rendered
+  comment item (``id="comment-<digits>"`` or ``data-comment-id``), and both walks read it when present; a
+  panel that prints none leaves the column blank, and ``item_key`` then uses article + author +
+  body + the comment's own time instead of the whole-row hash. The row also carries
+  ``楼层``/``点赞数``/``子回复数``, which move between visits — a resume would otherwise re-store
+  the same comment with invented floors.
 * One article can fail for different reasons and they must not blur:
   ``ok`` (rows, maybe zero — zero means 无评论), ``blocked`` (risk-control or
   login wall answered instead of content), ``dead`` (link unreadable/404).

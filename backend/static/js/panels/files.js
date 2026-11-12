@@ -105,9 +105,28 @@ var wfFiles = {
         var form = new FormData();
         form.append('file', file, file.name || 'project.zip');
         var response = await fetch('/api/project/import', { method: 'POST', body: form });
+        var started = null;
+        try { started = await response.json(); } catch (e) { started = null; }
+        if (!response.ok || !started || !started.ok) {
+            showToast((started && started.error) || I18n.t('wfProject.importFailed'));
+            return;
+        }
+        /* The bundle is unpacked off the request thread; wait for the shared job poller (the same
+           one reports and PDFs use), then read the summary the finished job carries. A start
+           answer with no job id is a server that answered something else: say it in this panel's
+           words, not the report poller's. */
+        if (!started.job || !started.job.id) {
+            showToast(I18n.t('wfProject.importFailed'));
+            return;
+        }
         var result = null;
-        try { result = await response.json(); } catch (e) { result = null; }
-        if (!response.ok || !result || !result.ok) {
+        try {
+            result = await awaitDocumentJob(started.job && started.job.id);
+        } catch (e) {
+            showToast((e && e.message) || I18n.t('wfProject.importFailed'));
+            return;
+        }
+        if (!result || !result.ok) {
             showToast((result && result.error) || I18n.t('wfProject.importFailed'));
             return;
         }

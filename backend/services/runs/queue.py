@@ -226,7 +226,9 @@ def _save_owner_mirror(user_id: str, entries: list) -> None:
         from services.accounts.service import get_account_service
 
         row = get_account_service().store.get_user(user_id)
-        if row is None:
+        if row is None or row['status'] != 'active':
+            # A deleted or disabled owner may not open a store (``runtime.stores._user_slot``
+            # refuses); skipping just this slice keeps every other account's mirror written.
             return
         account = Account(row['user_id'], row['username'], row['role'])
     with account_context.use(account):

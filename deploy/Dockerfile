@@ -1,7 +1,15 @@
 # 采析绘 crawler_workflow — Flask + Selenium 爬虫工作流
 # 镜像基于 backend/ 构建；前端为原生 JS，由 Flask 同源提供（无独立前端容器）。
 ARG BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
+# Mirrors are a DEPLOYMENT choice, not a fact about this image: the default is the China mirror the
+# operator uses, and CI overrides both with the upstream hosts it can reach. Hardcoding them made a
+# `docker build` outside China fail at the first apt line, which is why the build had no CI job.
+ARG APT_MIRROR=mirrors.cloud.aliyuncs.com
+ARG PIP_INDEX=https://mirrors.aliyun.com/pypi/simple/
 FROM $BASE_IMAGE
+
+ARG APT_MIRROR
+ARG PIP_INDEX
 
 # 系统依赖：Chromium 浏览器 + chromedriver（版本由 apt 自动匹配）+ 中文字体（爬中文站需 CJK 字体）
 # The suite is READ FROM THE IMAGE, never hardcoded. Pinning `trixie` sources onto a `bookworm`
@@ -11,9 +19,9 @@ FROM $BASE_IMAGE
 # `VERSION_CODENAME` is the fact; `debian.sources` is rewritten rather than appended so a newer base
 # image's own mirror config cannot win.
 RUN . /etc/os-release \
- && echo "deb http://mirrors.cloud.aliyuncs.com/debian ${VERSION_CODENAME} main" > /etc/apt/sources.list \
- && echo "deb http://mirrors.cloud.aliyuncs.com/debian ${VERSION_CODENAME}-updates main" >> /etc/apt/sources.list \
- && echo "deb http://mirrors.cloud.aliyuncs.com/debian-security ${VERSION_CODENAME}-security main" >> /etc/apt/sources.list \
+ && echo "deb http://${APT_MIRROR}/debian ${VERSION_CODENAME} main" > /etc/apt/sources.list \
+ && echo "deb http://${APT_MIRROR}/debian ${VERSION_CODENAME}-updates main" >> /etc/apt/sources.list \
+ && echo "deb http://${APT_MIRROR}/debian-security ${VERSION_CODENAME}-security main" >> /etc/apt/sources.list \
  && rm -f /etc/apt/sources.list.d/*.sources
 
 RUN apt-get update \
@@ -48,7 +56,7 @@ WORKDIR /app/backend
 # 项目 venv（AGENTS.md 强制要求 .venv，且不可使用系统 Python）
 RUN python -m venv .venv \
  && .venv/bin/pip install --no-cache-dir --upgrade pip \
- && .venv/bin/pip install --no-cache-dir --timeout 120 --retries 10 -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+ && .venv/bin/pip install --no-cache-dir --timeout 120 --retries 10 -i ${PIP_INDEX} -r requirements.txt
 
 ENV PATH="/app/backend/.venv/bin:$PATH"
 

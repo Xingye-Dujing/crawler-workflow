@@ -25,6 +25,7 @@ import pandas as pd
 from runtime import account_context, paths
 from runtime.settings import get_setting
 from runtime.state import _dataset_cache, dataset_cache_key, forget_ambient
+from services.accounts.errors import AccountError
 from services.analysis.lexicon_store import LexiconStore
 from services.biblio.store import BiblioStore
 from services.datasets.store import SOURCE_UPLOAD, DatasetStore
@@ -114,15 +115,33 @@ class _UserStores:
 _USER_STORES: dict[str, _UserStores] = {}
 _USER_STORES_LOCK = threading.RLock()
 
+#: Ids whose tree was moved to the trash by a DELETE that is still in progress (or has finished).
+#: Permanent for the life of the process because a deleted id is never handed out again: keeping it
+#: costs one string, and it closes the window in which a thread that was already running could open
+#: a store for the account while ``shutil.move`` is moving its tree — which would ``ensure()`` a
+#: fresh, ownerless ``data/users/<id>/`` that no later cleanup knows about.
+_RETIRED: set[str] = set()
+
 
 def _user_slot() -> _UserStores | None:
-    """The slot of the account this thread speaks for, or ``None`` for the local owner."""
+    """The slot of the account this thread speaks for, or ``None`` for the local owner.
+
+    Opening a store runs ``paths.for_user(id).ensure()``, so this is the ONE place that can refuse
+    a gone account for every reader (routes, the run worker, the queue mirror, the clock). A slot
+    that already exists was opened while its account was live, and deleting/disabling an account
+    closes and forgets it (``retire_user``/``release_user``), so only slot creation needs the
+    registry read.
+    """
     account = account_context.current()
     if account is None:
         return None
     with _USER_STORES_LOCK:
+        if account.user_id in _RETIRED:
+            raise AccountError('accounts.ownerGone')
         slot = _USER_STORES.get(account.user_id)
         if slot is None:
+            if not owner_is_live(account):
+                raise AccountError('accounts.ownerGone')
             slot = _UserStores(account.user_id)
             _USER_STORES[account.user_id] = slot
         return slot
@@ -161,6 +180,30 @@ def release_user(user_id: str) -> None:
     for key in [key for key in _dataset_cache if key[0] == str(user_id or '')]:
         _dataset_cache.pop(key, None)
     forget_ambient(user_id)
+
+
+def retire_user(user_id: str) -> None:
+    """Close one account's stores and never open them again in this process.
+
+    The delete route calls this BEFORE ``delete_user`` drops the registry row, because ``release_user``
+    alone left a window the length of ``shutil.move`` in which a lingering thread saw an active row,
+    rebuilt its stores and recreated the directory being moved. The tombstone is added under the same
+    lock ``_user_slot`` reads, so no opener can slip between the two.
+    """
+    text = str(user_id or '')
+    with _USER_STORES_LOCK:
+        _RETIRED.add(text)
+    release_user(text)
+
+
+def unretire_user(user_id: str) -> None:
+    """Undo :func:`retire_user` when the deletion was refused and the account still exists.
+
+    ``delete_user`` moves the tree first and drops the row second, so a failed move leaves a live
+    account whose data never left; without this the account would stay unusable until a restart.
+    """
+    with _USER_STORES_LOCK:
+        _RETIRED.discard(str(user_id or ''))
 
 
 def user_slots() -> dict:

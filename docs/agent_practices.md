@@ -1514,3 +1514,23 @@ A third audit (whole-project, 2026-11-11) — every item below is pinned by a te
   Serving `--proxy-server` also requires `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`, or a page can
   still learn the host's address over UDP. When every exit is benched the crawler refuses rather than connecting
   direct: a silent direct connection exposes the address the exit was bought to hide.
+- **`release_user` closes handles; it does not make the id unopenable.** Deleting an account calls `release_user`
+  before `delete_user` drops the row, and the gap is the length of `shutil.move`. A thread already running could open
+  a store in that gap and `ensure()` a fresh `data/users/<deleted_id>/` while the tree was being moved. `_user_slot`
+  is the one door every reader uses, so the refusal lives there: it reads the registry on slot CREATION and refuses a
+  tombstoned id (`retire_user`, added under the same lock BEFORE the row goes). `unretire_user` lifts it when the
+  delete itself fails and the tree moved back.
+- **A bundle import is not a request-thread job.** Unpacking hundreds of MiB of datasets held the Flask worker (and
+  every panel queued behind it) for as long as the files took, and a reverse proxy could cut the reply while the import
+  kept writing. The upload is copied to a temp file, the POST starts a `services.reports.jobs` job and answers 202,
+  and the page polls the same `/api/jobs/<id>` door reports use; the worker deletes the temp file in `finally`.
+- **A Dockerfile no runner builds is a claim, not a deployment.** The image's apt and pip lines pointed at the
+  operator's China mirrors, so a GitHub runner could never build it. Both are build args now (defaults unchanged so
+  his builds are byte-for-byte the same), and CI builds with upstream hosts, boots the image with a bootstrap admin,
+  and waits for `/api/config` — a build-only check would pass on an image that exits at `setpriv`.
+- **An in-app update owes the installer's receipt an update.** The installer stamps `current-version` and
+  `versions/<v>/install.json` once; the self-updater replaced the program and left both naming the old release, so an
+  audit read the wrong version. The new build rewrites them on its first boot (`services/update_receipt.py`), with the
+  installer's own encoding rules (ASCII pointer, UTF-8-no-BOM receipt, staged+rename), receipt before pointer so a
+  crash leaves the old pair valid. The reader in `desktop/install_receipt.py` accepts the result unchanged — proven by
+  a test that writes through one and reads through the other.

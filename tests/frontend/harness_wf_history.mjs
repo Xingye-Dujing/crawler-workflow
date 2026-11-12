@@ -203,7 +203,8 @@ let routes = {
     reusableList: TEMPLATES,
     reusableDelete: { ok: true, deleted: true },
     reusableRename: { ok: true, template: { id: 'r-000000000001', name: '清洗流水线 v2' } },
-    projectImport: {
+    projectImport: { ok: true, job: { id: 'job-import', state: 'running' } },
+    projectImportResult: {
         ok: true,
         summary: { workflows: [{ from: '项目A', to: '项目A (2)' }], datasets: [], templates: [], warnings: [] },
     },
@@ -282,7 +283,9 @@ sandbox.fetch = (url, options) => {
         });
     }
     let payload = { ok: true };
-    if (target.indexOf('/api/project/import') >= 0) payload = routes.projectImport;
+    if (target.indexOf('/api/jobs/') >= 0) {
+        payload = { ok: true, job: { state: 'done', result: routes.projectImportResult } };
+    } else if (target.indexOf('/api/project/import') >= 0) payload = routes.projectImport;
     else if (target.indexOf('/api/runs/compare') >= 0) payload = routes.runCompare;
     else if (target.indexOf('/api/workflow/history/save') >= 0) payload = routes.save;
     else if (target.indexOf('/api/workflow/history/delete') >= 0) payload = routes.delete;

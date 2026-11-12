@@ -58,6 +58,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from engine import run_schedule
 from engine.logger import setup_logger
 from i18n import audit, set_lang, t
+from services.accounts.errors import AccountError
 from services.pool.routes import bp as pool_bp
 from services.runs.queue import (
     load_pending_queue,
@@ -534,6 +535,19 @@ def _http_refusal(error: HTTPException):
     return error
 
 
+@app.errorhandler(AccountError)
+def _account_refusal(error: AccountError):
+    """A named account refusal that escaped a route (the store guard raises ``ownerGone``).
+
+    ``api.accounts`` renders its own refusals because it knows their status codes; this handler is
+    for every OTHER endpoint that reached a per-account store through ``runtime.stores`` and found
+    the account gone. Without it a deleted owner's leftover request would answer "internal error"
+    (a 500 for a fact that is not a bug).
+    """
+    status = 403 if error.key == 'accounts.ownerGone' else 400
+    return jsonify({'ok': False, 'error': t(error.key, **error.params)}), status
+
+
 @app.errorhandler(Exception)
 def _unexpected_failure(error: Exception):
     """A bug answers in the SAME envelope, and the traceback stays in the log.
@@ -716,6 +730,15 @@ def start_background_services() -> None:
 
     if accounts_mode():
         get_account_service().bootstrap()
+    # An in-app update finishes after this process exited: the new build owns the "applying → applied"
+    # transition and the installer receipt rewrite. Done at boot, not only when the update panel asks,
+    # or a user who never reopens that panel leaves the release records naming the old version.
+    try:
+        from services import update as update_service
+
+        update_service.reconcile_after_start()
+    except Exception as exc:  # update state must never keep the server from starting
+        logger.warning(t('misc.updateReconcileFailed', err=exc), exc_info=True)
     # Retention is applied on its own, not only when somebody remembers to
     # click: startup is the other moment nothing is writing. In accounts mode it runs once per
     # account, inside that account's context — a bare system-scope sweep would CREATE an empty

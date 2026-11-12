@@ -310,12 +310,18 @@ def accounts_delete(user_id: str):
             # Close this account's SQLite handles BEFORE the tree is moved. Windows refuses to
             # rename a directory that still holds an open database (and its -wal/-shm), so a
             # delete that released them afterwards could fail on exactly the platform this tool
-            # is developed on.
-            stores.release_user(user_id)
+            # is developed on. ``retire_user`` also tombstones the id in this process, closing the
+            # window between "row still active" and "tree moved" in which a lingering thread could
+            # rebuild the stores and recreate the directory being moved.
+            stores.retire_user(user_id)
             user = service.delete_user(actor, user_id, confirm)
     except AccountError as exc:
+        # A refusal before or instead of the deletion leaves a live account; lift the tombstone so
+        # its stores can be opened again (deleting the row itself already failed and moved back).
+        stores.unretire_user(user_id)
         return _fail(exc)
     except (OSError, sqlite3.Error) as exc:
+        stores.unretire_user(user_id)
         # ``shutil.move`` fails on a profile a browser still holds, a full disk, a locked file:
         # every caller here parses JSON, so an HTML 500 would read as a broken panel.
         return _fail_deletion(exc, user_id)

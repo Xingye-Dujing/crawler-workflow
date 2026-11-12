@@ -128,6 +128,10 @@ macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad �
 - **更新失败不会改动当前安装**：替换中途失败会逐项移回旧文件；新版本启动后立刻退出也会回滚。原因写在
   `update.log`，下次启动的更新卡片会把上次的失败按名字说出来（`update.err.*`），不再是“什么都没发生”。
 - 替换期间会写 `<data>/updates/applying.marker`，此时双击启动会先等替换结束，不会在半拷贝的目录上启动。
+- **安装回执跟着更新走**：新版本第一次启动把 `job.json` 从 `applying` 收成 `applied` 时，会按安装器的同一套
+  规则改写 `<安装根>/current-version` 与 `<安装根>/versions/<新版本>/install.json`（`method` 记为
+  `self-update`；先写回执、再写指针，两步都经 `.partial` 改名；便携目录没有指针文件，直接跳过）。否则
+  “安装器记录的版本”会永远停在最后一次安装，审计与回滚都会读错。
 - 完整的发版顺序、版本号同步、分片/摘要模板见 [`release.md`](release.md)。
 
 ## BERT 模型包（可选，Windows / macOS）

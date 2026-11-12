@@ -279,6 +279,11 @@ Windows 更新脚本按“逐项替换程序文件”的方式换 `CaiXiHui.exe`
 不会整目录删掉 `app/`，所以 `data-root.txt`、`portable.txt` 和用户数据都留在原处。每个被占用的文件最多重试
 20 秒（杀毒软件、正在退出的旧进程），失败就逐项移回旧文件并把旧版本启动起来。
 
+唯一的“非程序本体”写入是**安装回执**：新版本启动时把 `current-version` 与
+`versions/<新版本>/install.json` 改写成它自己的版本（`backend/services/update_receipt.py`），
+记录 `method: self-update`。这是为了让“安装器装的是哪一版”继续等于“现在跑的是哪一版”；
+`install-manifest.json` 与组件目录仍然不动。
+
 如果安装目录不可写（例如装在 `Program Files` 且当前用户无权限），应用会拒绝更新并提示用安装器，
 不会先退出再失败。
 
