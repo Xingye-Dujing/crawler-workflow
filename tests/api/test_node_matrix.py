@@ -946,6 +946,22 @@ class TestTokenizeNodeModes:
             records=records,
         )
 
+    def test_the_process_operation_reaches_the_same_tokenizer(self, client, app_module, paste):
+        """分词 merged into 处理; a new canvas must get the same word/frequency table."""
+        records = [{'正文': text} for text in self.WORDS]
+        _run, status, rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'process',
+            {'operation': 'tokenize', 'text_column': '正文', 'output_mode': 'word_freq', 'top_n': '2'},
+            operation='tokenize',
+            records=records,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert {'word', 'frequency'} <= set(rows[0])
+        assert len(rows) == 2
+
     def test_word_freq_is_a_labelled_frequency_table(self, client, app_module, paste):
         _run, status, rows = self._run(client, app_module, paste, {'output_mode': 'word_freq'})
         assert status['status'] == 'done', status.get('error')

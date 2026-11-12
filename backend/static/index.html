@@ -410,10 +410,8 @@
         <span class="palette-tag">[ACC]</span>
         <span data-i18n="palette.accumulate">Cumulative dataset</span>
       </div>
-      <div class="palette-item" data-type="tokenize" draggable="true">
-        <span class="palette-tag">[TKN]</span>
-        <span data-i18n="palette.tokenize">Tokenize</span>
-      </div>
+      <!-- 分词 is a 处理 operation now. The standalone [TKN] type stays in the engine so
+           canvases saved before the merge still load and run. -->
       <!-- 采集校验 compares a list table with a crawl result; two data wires, one report. -->
       <div class="palette-item" data-type="verify" draggable="true">
         <span class="palette-tag">[CHK]</span>

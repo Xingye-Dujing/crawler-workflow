@@ -269,12 +269,15 @@ class TestTheTablesLiveWithTheirOwners:
         assert set(OUTPUT_ADD_COLUMNS) <= served
         assert set(OUTPUT_REPLACE_COLUMNS) <= served
         assert set(READ_PARAMS) <= served
-        # The three data-dependent ops are intentionally unmodelled (unknown, never a guess).
+        # The data-dependent ops are intentionally unmodelled (unknown, never a guess).
+        # ``tokenize`` owns its shape in ``nodes/executors/tokenize.py`` (it depends on
+        # output_mode), which the next test pins; the process executor asks that table.
         assert served - set(OUTPUT_ADD_COLUMNS) - set(OUTPUT_REPLACE_COLUMNS) == {
             'keyword',
             'cluster',
             'ner',
             'bot',
+            'tokenize',
         }
 
     def test_every_analysis_contract_op_is_a_step_the_service_serves(self):
@@ -306,6 +309,21 @@ class TestTheTablesLiveWithTheirOwners:
 
         assert set(OUTPUT_COLUMNS) == {'word_freq', 'words_only', 'csv_line'}
         assert READ_PARAMS == ('text_column',)
+
+    def test_process_tokenize_asks_the_same_contract(self):
+        """The merged operation must not keep a second column table of its own."""
+        from nodes.executors.process import emit_columns, read_columns
+        from nodes.executors.tokenize import OUTPUT_COLUMNS
+
+        for mode, columns in OUTPUT_COLUMNS.items():
+            node = {
+                'id': 'p',
+                'type': 'process',
+                'operation': 'tokenize',
+                'params': {'operation': 'tokenize', 'output_mode': mode, 'text_column': '正文'},
+            }
+            assert emit_columns(node, ['正文']) == list(columns), mode
+            assert read_columns(node) == ['正文'], f'{mode} lost its input column'
 
     def test_the_old_service_module_is_gone(self):
         """A second home would silently win for whichever importer was updated first."""

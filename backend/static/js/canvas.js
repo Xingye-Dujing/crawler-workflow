@@ -64,6 +64,14 @@ const canvas = {
     panX: 0,
     panY: 0,
     zoom: 1,
+    /* 分词 became a 处理 operation; old canvases still carry the standalone type.
+       Both spellings must behave the same where a chart reads word/frequency. */
+    isTokenizeNode(node) {
+        if (!node) return false;
+        if (node.type === 'tokenize') return true;
+        var op = node.operation || (node.params && node.params.operation) || '';
+        return node.type === 'process' && op === 'tokenize';
+    },
     isDragging: false,
     isPanning: false,
     /* A drag moves the whole selected group as one, so the press snapshots every member's
@@ -2308,7 +2316,7 @@ const canvas = {
         // Tokenize ↔ Visualize: force word_freq + refresh settings
         var nA = this.nodes[fromId];
         var nB = this.nodes[toId];
-        var tkNode = (nA && nA.type === 'tokenize') ? nA : (nB && nB.type === 'tokenize') ? nB : null;
+        var tkNode = this.isTokenizeNode(nA) ? nA : (this.isTokenizeNode(nB) ? nB : null);
         var vzNode = (nA && nA.type === 'visualize') ? nA : (nB && nB.type === 'visualize') ? nB : null;
         if (tkNode && vzNode) {
             if (tkNode.params.output_mode !== 'word_freq') {

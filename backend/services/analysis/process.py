@@ -57,7 +57,7 @@ PROCESS_ENUMS = {
 #: Every operation the process executor dispatches, including the four with no select-shaped
 #: parameter (``PROCESS_ENUMS`` only lists the ones that have one). ``bot``/``anomaly``/
 #: ``correlation``/``significance`` read typed column names instead.
-PROCESS_OPS = frozenset(PROCESS_ENUMS) | {'bot', 'anomaly', 'correlation', 'significance'}
+PROCESS_OPS = frozenset(PROCESS_ENUMS) | {'bot', 'anomaly', 'correlation', 'significance', 'tokenize'}
 
 #: The operations whose whole job is to read one text column of the table.
 _TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression')

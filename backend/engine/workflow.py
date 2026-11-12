@@ -632,6 +632,10 @@ class WorkflowEngine:
                     add(nid, 'engine.fuse', message)
             if ntype == 'tokenize' and not params.get('text_column'):
                 add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
+            # 分词 is also a 处理 operation now. It keeps the same named refusal at the
+            # validation boundary, not only when the executor finally reads the column.
+            if ntype == 'process' and operation == 'tokenize' and not params.get('text_column'):
+                add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
             if ntype == 'visualize':
                 if not params.get('chart_type'):
                     add(nid, 'engine.visualize_no_chart', t('engine.visualize_no_chart', nid=label))

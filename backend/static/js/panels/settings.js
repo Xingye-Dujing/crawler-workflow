@@ -426,6 +426,36 @@ function sourceFieldHint(f) {
 
 
 /* Settings Panel */
+/* Tokenisation fields shared by the 处理 operation and a legacy 分词 node.
+   A chart reads word/frequency pairs, so wiring a visualize downstream forces the
+   word-frequency shape; that is a DISPLAY default written without saveState. */
+function renderTokenizeExtra(nodeId, node, p) {
+    var hasDownstreamVisualize = canvas.connections.some(function (c) {
+        return c.from === nodeId && canvas.nodes[c.to] && canvas.nodes[c.to].type === 'visualize';
+    });
+    if (hasDownstreamVisualize && p.output_mode !== 'word_freq') {
+        p.output_mode = 'word_freq';
+    }
+    var html = '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.outputMode') + '</label>' +
+        (hasDownstreamVisualize
+            ? '<div style="font-size:12px;color:var(--accent);padding:4px 0;">' + I18n.t('settings.tokenizeOutputLocked') + '</div>'
+            : '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'output_mode\',this.value)">' +
+              selectOptionTags(
+                  ['word_freq', 'words_only', 'csv_line'].map(function (m) {
+                      return { value: m, label: I18n.t('outputMode.' + m) };
+                  }),
+                  p.output_mode,
+                  'word_freq'
+              ) +
+              '</select>') + '</div>';
+    if ((p.output_mode || 'word_freq') === 'word_freq') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topN') + '</label>' +
+            '<input class="settings-input" type="number" value="' + escapeHtml(p.top_n || '') + '" placeholder="' +
+            I18n.t('settings.topNPlaceholder') + '" onchange="updateParam(\'' + nodeId + '\',\'top_n\',this.value)"></div>';
+    }
+    return html;
+}
+
 function openSettings(nodeId) {
     var node = canvas.nodes[nodeId];
     if (!node) {
@@ -630,7 +660,7 @@ function openSettings(nodeId) {
         html += renderFuseSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
+        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -644,6 +674,8 @@ function openSettings(nodeId) {
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.text_column || '正文') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>';
+
+        if (p.operation === 'tokenize') html += renderTokenizeExtra(nodeId, node, p);
 
         /* Clean operation. Two ways to wash a table: the model reads each row and judges
            both artifacts and relevance; the rule set strips what a repost leaves behind
@@ -838,34 +870,13 @@ function openSettings(nodeId) {
     } else if (node.type === 'visualize') {
         html += renderVisualizeSettings(nodeId, node.params);
     } else if (node.type === 'tokenize') {
+        /* A legacy 分词 node: new canvases create this as 处理 → 分词, but an old
+           canvas keeps its own type and the same fields. */
         var p = node.params;
-        // Force word_freq when a visualize node is downstream. This is a derived default filled on a
-        // MERE OPEN, not a user edit: the value is written so the preview/run reads it, but the panel
-        // may not saveState() or updateNodeDisplay() here — that pushed an undo step and lit the dirty
-        // dot for looking at a node (the same rule test_opening_a_tokenize_visualize_panel… guards on
-        // the visualize side; connectNodes already persists it as a real edit at WIRING time).
-        var hasDownstreamVisualize = canvas.connections.some(function (c) { return c.from === nodeId && canvas.nodes[c.to] && canvas.nodes[c.to].type === 'visualize'; });
-        if (hasDownstreamVisualize && p.output_mode !== 'word_freq') {
-            p.output_mode = 'word_freq';
-        }
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="' + I18n.t('settings.textColumnPlaceholder') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.outputMode') + '</label>' +
-            (hasDownstreamVisualize ? '<div style="font-size:12px;color:var(--accent);padding:4px 0;">' + I18n.t('settings.tokenizeOutputLocked') + '</div>' :
-                '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'output_mode\',this.value)">' +
-                selectOptionTags(
-                    ['word_freq', 'words_only', 'csv_line'].map(function (m) {
-                        return { value: m, label: I18n.t('outputMode.' + m) };
-                    }),
-                    p.output_mode,
-                    'word_freq'
-                ) +
-                '</select>') + '</div>' +
-            ((p.output_mode || 'word_freq') === 'word_freq' ?
-                '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topN') + '</label>' +
-                '<input class="settings-input" type="number" value="' + escapeHtml(p.top_n || '') + '" placeholder="' + I18n.t('settings.topNPlaceholder') + '" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'top_n\',this.value)"></div>' : '') +
+            renderTokenizeExtra(nodeId, node, p) +
             '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'name') {
         /* The workflow's label for the Execution History panel. It is the one

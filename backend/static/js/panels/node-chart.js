@@ -43,7 +43,13 @@ var CHARTS_WITH_ANNOTATIONS = ['bar', 'line', 'dual_line'];
 function renderVisualizeSettings(nodeId, p) {
     var upstream = canvas.getUpstreamNodeId(nodeId);
     var upstreamNode = upstream ? canvas.nodes[upstream] : null;
-    var isTokenizeUpstream = upstreamNode && upstreamNode.type === 'tokenize';
+    /* 分词 is Reachable both as a legacy node type and as a 处理 operation; this panel is
+       loaded without canvas.js in some harnesses, so the rule stays local. */
+    var isTokenizeUpstream = !!upstreamNode && (
+        upstreamNode.type === 'tokenize' ||
+        (upstreamNode.type === 'process' &&
+            (upstreamNode.operation || (upstreamNode.params && upstreamNode.params.operation)) === 'tokenize')
+    );
 
     // Simplified settings when connected to a tokenize node
     if (isTokenizeUpstream) {

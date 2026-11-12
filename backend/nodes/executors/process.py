@@ -39,6 +39,8 @@ from analyzers.bot import BotLikelihoodAnalyzer
 from analyzers.sentiment import bert_backend, resolve_bert_model
 from i18n import t
 from nodes.context import NodeCall, columns_from_params, node_operation, node_params
+from nodes.executors.tokenize import OUTPUT_COLUMNS as TOKENIZE_COLUMNS
+from nodes.executors.tokenize import execute_tokenize_node
 from services.analysis.llm import build_llm_run_ctx
 from services.analysis.pipeline import UnknownOperationError
 from services.analysis.process import (
@@ -225,6 +227,9 @@ def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
     in one spot rather than in the lineage viewer.
     """
     op = node_operation(node)
+    if op == 'tokenize':
+        mode = str(node_params(node).get('output_mode') or 'word_freq')
+        return list(TOKENIZE_COLUMNS.get(mode, ()))
     if op in OUTPUT_REPLACE_COLUMNS:
         return list(OUTPUT_REPLACE_COLUMNS[op])
     if op in OUTPUT_ADD_COLUMNS:
@@ -235,6 +240,8 @@ def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
 
 
 def read_columns(node: dict) -> list[str]:
+    if node_operation(node) == 'tokenize':
+        return columns_from_params(node_params(node), ('text_column',))
     return columns_from_params(node_params(node), READ_PARAMS.get(node_operation(node), ()))
 
 
@@ -246,6 +253,12 @@ def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
     # same blank-means-default rule `check_process_params` validates, so the column it
     # checks is the column the analyzer gets.
     text_column = str(params.get('text_column') or '正文').strip()
+    # Tokenisation is a table transform rather than an analyzer: it replaces the input
+    # with word/frequency rows, so it keeps the one implementation (and its named
+    # refusals) in the tokenize executor. New canvases reach it through this operation;
+    # old `tokenize` nodes keep their own type and executor.
+    if op == 'tokenize':
+        return execute_tokenize_node(node, current_input)
     if not current_input:
         return []
 
