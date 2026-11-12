@@ -206,6 +206,23 @@ def test_a_lock_is_never_armed_over_a_login_that_just_succeeded(service):
     assert float(service.store.get_user(user_id)['locked_until']) == 0
 
 
+def test_an_expired_lock_starts_a_fresh_failure_window(service):
+    """Without a reset, a victim could be kept locked out forever: each post-expiry guess
+    incremented the old count and pushed ``locked_until`` another hour out."""
+    admin = _bootstrap(service)
+    user_id = admin['user_id']
+    now = time.time()
+    for _ in range(5):
+        failures = service.store.bump_failure(user_id, now)
+    service.store.set_locked_until(user_id, now + 900, failures)
+    assert float(service.store.get_user(user_id)['locked_until']) > now
+
+    assert service.store.bump_failure(user_id, now + 901) == 1, 'the expired counter was not reset'
+    row = service.store.get_user(user_id)
+    assert int(row['failed_attempts']) == 1
+    assert float(row['locked_until'] or 0) == 0, 'the stale lock stayed armed after expiry'
+
+
 def test_the_failure_window_is_bounded_by_size_not_by_politeness(service, monkeypatch):
     """A stranger typing a thousand random usernames used to leave a thousand permanent entries.
 

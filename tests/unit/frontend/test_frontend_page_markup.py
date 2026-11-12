@@ -327,3 +327,15 @@ class TestTheStudioPageLoadsItsFiles:
         assert 'zenviz-page.js' in loaded, f'the studio page app is not loaded: {sorted(loaded)}'
         assert 'zenviz-page.js' not in workbench, 'the studio page app leaked onto the workbench page'
         assert (STATIC / 'css' / 'zenviz.css').is_file()
+
+
+def test_the_settings_examples_name_no_operating_system():
+    """The settings page ships to Windows, Linux and macOS. A placeholder like
+    ``C:\\...\\chromedriver.exe`` teaches a Linux reader a path that cannot exist, and the
+    Python-only cross-platform guard never looked at the markup. The server's machine
+    lookup is the one that answers per OS, so a placeholder names the program, not a
+    Windows executable."""
+    text = INDEX.read_text(encoding='utf-8')
+    assert not re.search(r'[A-Za-z]:\\', text), 'a Windows drive path is used as an example'
+    assert not re.search(r'[\w.-]+\.exe\b', text, re.IGNORECASE), 'a Windows executable is used as an example'
+    assert 'Program Files' not in text

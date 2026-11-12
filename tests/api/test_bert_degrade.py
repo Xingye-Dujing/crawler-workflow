@@ -106,4 +106,7 @@ class TestBertDegrade:
         out = process_exec.execute_process_node(node, records, run_ctx=None)
         assert len(out) == 2, 'a torch-less box must still get one row per input, not an abort'
         assert 'sentiment' in out[0], f'expected a sentiment column, got {sorted(out[0])}'
+        values = [row['sentiment'] for row in out]
+        assert all(value in ('positive', 'negative', 'neutral') for value in values), values
+        assert values[0] != values[1], f'the two opposite texts were judged alike: {values}'
         assert any('snownlp' in line for line in logs), 'the degrade must be printed, never silent'

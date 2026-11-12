@@ -110,7 +110,9 @@ def exports_list():
     limit = _safe_int(request.args.get('limit'), 200, minimum=1, maximum=500)
     rows = list_exports(paths.active().export_dir, limit=limit)
     usage = export_usage(paths.active().export_dir)
-    return jsonify({'ok': True, 'exports': rows, 'directory': paths.active().export_dir, **usage})
+    # The absolute path stays on the server: the panel never rendered it, and handing every
+    # signed-in account the account tree's location is reconnaissance for a path attack.
+    return jsonify({'ok': True, 'exports': rows, **usage})
 
 
 @bp.route('/api/exports/download', methods=['GET'])
@@ -173,6 +175,7 @@ def exports_clear():
     if any_run_live():
         return jsonify({'ok': False, 'error': t('exports.clearBusy')}), 409
     removed = 0
+    deleted: list[str] = []
     # The listing is capped, so one pass is not necessarily the whole folder: keep going
     # while it shrinks. The loop's exit is "a pass removed nothing", which is the honest
     # answer for a file Excel still holds open — 清空 reports what is left rather than
@@ -185,9 +188,12 @@ def exports_clear():
                 continue
             if delete_export_file(paths.active().export_dir, row['name']):
                 removed += 1
-                get_run_store().forget_file(row['name'])
+                deleted.append(row['name'])
         if removed == before:
             break
+    if deleted:
+        # One transaction for the whole sweep; the per-file form committed once per name.
+        get_run_store().forget_files(deleted)
     left = len(list_exports(paths.active().export_dir))
     logger.warning(t('exports.cleared', n=removed))
     return jsonify({'ok': True, 'removed': removed, 'left': left})

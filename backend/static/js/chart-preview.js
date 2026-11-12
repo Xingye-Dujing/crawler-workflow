@@ -63,9 +63,13 @@ function ensureMapRegistered(mapName) {
        byte-for-byte by tools/vendor_frontend_assets.py. The two world entries read the SAME file
        and differ only in which name column ECharts keys the data on, so a Chinese run's data names
        and its printed labels stay the same words. */
-    var WORLD = '/geo/world.json';  // static_url_path is '' — the app serves its assets at the root
+    /* static_url_path is '' — the app serves its assets at the root — but a subpath
+       deployment (/crawler) reaches them only through the prefix index.html decided.
+       A bare /geo/... asked the site root and the map fell back to “basemap unavailable”. */
+    var BASE = window.__CRAWLER_BASE__ || '';
+    var WORLD = BASE + '/geo/world.json';
     var urls = {
-        china: '/geo/china.json',
+        china: BASE + '/geo/china.json',
         world: WORLD,
         world_zh: WORLD
     };
@@ -945,7 +949,9 @@ async function saveChartPdf() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: _lastLatexFile }),
         });
-        var result = await resp.json();
+        var started = await resp.json();
+        if (!started.ok) throw new Error(started.error || 'request failed');
+        var result = await awaitDocumentJob(started.job && started.job.id);
         if (!result.ok) throw new Error(result.error || 'request failed');
         showToast(I18n.t('studio.saved').replace('{path}', result.filename));
         window.location.href = window.__cu('/api/exports/download?name=' + encodeURIComponent(result.filename));

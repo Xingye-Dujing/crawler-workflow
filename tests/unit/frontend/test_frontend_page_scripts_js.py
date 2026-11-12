@@ -200,11 +200,16 @@ class TestThePageListsItsOwnModules:
         answer = run_node(str(driver))
         assert answer.returncode == 0, answer.stderr[-600:]
         loaded = json.loads(answer.stdout)
-        for name in ('llm-settings.js', 'app-settings.js', 'floating-panels.js'):
+        for name in ('job-poll.js', 'llm-settings.js', 'app-settings.js', 'floating-panels.js'):
             assert name in loaded, f'{name} is missing from {loaded}'
         assert any(name.startswith('i18n/') for name in loaded), f'the catalogue did not come along: {loaded}'
         # page order, not closure order: the halves sit right after the file they came from
-        assert loaded.index('app.js') < loaded.index('llm-settings.js') < loaded.index('floating-panels.js'), loaded
+        assert (
+            loaded.index('app.js')
+            < loaded.index('job-poll.js')
+            < loaded.index('llm-settings.js')
+            < loaded.index('floating-panels.js')
+        ), loaded
 
     def test_the_python_driver_expands_the_same_closure_as_the_loader(self, tmp_path):
         """The two readers of ``splits.json`` must agree file-for-file, or a Python driver boots a
@@ -219,6 +224,7 @@ class TestThePageListsItsOwnModules:
         halves = [Path(str(item)).relative_to(js).as_posix() for item in with_companions([js / 'app.js'])]
         assert halves == [
             'app.js',
+            'job-poll.js',
             'llm-settings.js',
             'app-settings.js',
             'floating-panels.js',

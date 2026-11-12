@@ -20,12 +20,16 @@ BOB = Account('u_bbbbbbbbbbbb', 'bob', 'user')
 def _clean_globals():
     state.execution_state['user_id'] = ''
     state.execution_state['running'] = False
+    state.execution_state['owned_records'] = set()
+    state.execution_state['record_owners'] = {}
     with queue.queue_lock:
         queue._RUN_QUEUE.clear()
         queue._MIRRORED_OWNERS.clear()
     yield
     state.execution_state['user_id'] = ''
     state.execution_state['running'] = False
+    state.execution_state['owned_records'] = set()
+    state.execution_state['record_owners'] = {}
     with queue.queue_lock:
         queue._RUN_QUEUE.clear()
         queue._MIRRORED_OWNERS.clear()
@@ -41,6 +45,29 @@ def test_a_run_belongs_to_the_account_that_claimed_it():
         assert state.run_is_foreign() is True
     account_context.clear()
     assert state.run_is_foreign() is True
+
+
+def test_an_orphaned_record_is_settled_in_its_owners_store(monkeypatch):
+    """A record opened by A must be repaired through A's runs.db even when B's request is
+    the one that notices it; the request account's store cannot see A's row."""
+    from services.runs import settlement
+
+    seen = []
+
+    class _Store:
+        def promote_stale_runs(self, only, note):
+            seen.append((account_context.current(), set(only), note))
+            return list(only)
+
+    monkeypatch.setattr(settlement, 'get_run_store', _Store)
+    monkeypatch.setattr(settlement, 'add_log', lambda _line: None)
+    state.execution_state['running'] = False
+    state.execution_state['thread'] = None
+    state.execution_state['owned_records'] = {'r-alice'}
+    state.execution_state['record_owners'] = {'r-alice': ALICE}
+    with account_context.use(BOB):
+        assert settlement.settle_orphaned_records() == 1
+    assert seen and seen[0][0] == ALICE, f'the store was opened as {seen[0][0]}'
 
 
 def _entry(queue_id: str, user_id: str) -> dict:

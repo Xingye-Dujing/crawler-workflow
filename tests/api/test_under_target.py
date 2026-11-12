@@ -496,9 +496,9 @@ def _three_link_node():
 @pytest.mark.usefixtures('clean_globals')
 def test_one_slow_link_is_skipped_and_the_rest_are_still_walked(app_module, monkeypatch):
     """A batch where link 1 hung used to lose links 2..3 with it — the bare ``driver.get``
-    inside the walk threw its timeout through the loop and the node settled FAILED over
-    links nobody tried. A browser-level fault on ONE link is now a named, counted dead
-    link: the node returns the rows it did collect and the remaining links are walked."""
+    inside the walk threw its timeout through the loop. One link's fault must not stop the
+    batch, but it is OUR browser failing, so the node still fails (with the rows it stored)
+    and 继续 can re-walk the pinned hole. It must NOT settle DONE over the gap."""
     from nodes.executors import comment as comment_exec
     from selenium.common.exceptions import TimeoutException
 
@@ -510,11 +510,8 @@ def test_one_slow_link_is_skipped_and_the_rest_are_still_walked(app_module, monk
     monkeypatch.setattr(comment_exec, 'get_crawler', lambda *a, **k: _FakeCommentCrawler())
     monkeypatch.setattr(comment_exec, 'add_log', lambda m, **k: lines.append(str(m)))
     monkeypatch.setattr(_comments, 'CommentSession', _RecordingSession)
-    rows = comment_exec.execute_comment_node(_three_link_node(), headless=True, ctx=None)
-    assert [r['评论ID'] for r in rows] == [
-        'https://www.douyin.com/video/7000000000000000002',
-        'https://www.douyin.com/video/7000000000000000003',
-    ], 'the links after the slow one must still be walked'
+    with pytest.raises(ValueError, match='7000000000000000001'):
+        comment_exec.execute_comment_node(_three_link_node(), headless=True, ctx=None)
     assert _RecordingSession.instances[0].walked == [
         'https://www.douyin.com/video/7000000000000000001',
         'https://www.douyin.com/video/7000000000000000002',

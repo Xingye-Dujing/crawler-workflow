@@ -657,13 +657,24 @@ var runsManager = {
         try {
             /* Same contract as the banner's restart: dropping the run drops
                its "already crawled" claims, or the fresh attempt would see
-               everything as already-seen and quietly return fewer rows. */
-            await fetch('/api/runs/discard', {
+               everything as already-seen and quietly return fewer rows.
+               A server refusal (409 locked, 404 gone, 400 live run) or a
+               network failure must stop here: starting anyway would silently
+               collect less and then claim the records were dropped. */
+            var resp = await fetch('/api/runs/discard', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ run_id: runId }),
             });
-        } catch (e) { /* a failed discard still starts the run */ }
+            var result = await resp.json().catch(function () { return {}; });
+            if (!resp.ok || !result || !result.ok) {
+                showToast((result && result.error) || I18n.t('runsMgr.restartFailed'));
+                return;
+            }
+        } catch (e) {
+            showToast(I18n.t('runsMgr.restartFailed'));
+            return;
+        }
         this.close();
         workflow.execute();
     },

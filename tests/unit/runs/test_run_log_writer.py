@@ -270,6 +270,21 @@ class TestStoreFailure:
         assert filed['A'].user_id == 'user-a', "a kept batch was filed under the next run's account"
         assert filed['B'].user_id == 'user-b'
 
+    def test_a_retried_older_batch_is_written_before_the_newer_one(self, writer):
+        """Two failed drains must keep print order: the durable log is read by ``seq``, so a
+        newer batch placed ahead of the older one reads as a reordered console."""
+        _module, w, store, state = writer
+        _set_run(state, 'A')
+        store.fail = True
+        w.push(['older'], 0, 'info')
+        w.flush()
+        w.push(['newer'], 0, 'info')
+        w.flush()
+        store.fail = False
+        w.flush()
+        lines = [row[4] for _run_id, rows in store.batches for row in rows]
+        assert lines == ['older', 'newer'], lines
+
     def test_a_persistently_failing_store_is_bounded(self, writer):
         _module, w, store, state = writer
         _set_run(state, 'rX')

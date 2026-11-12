@@ -23,12 +23,13 @@ from runtime.transport import _local_transport_refusal
 
 from analyzers.llm_client import LLMClient
 from api.http import _bad_body, _bad_param, _json_body
-from i18n import normalize, t
+from i18n import get_lang, normalize, t
+from services.reports import jobs
 
 bp = Blueprint('report', __name__)
 
 
-def _report_nodes(data: dict) -> tuple:
+def _report_nodes(data: dict, identity: dict | None = None) -> tuple:
     """The tables a report may describe, as ``(nodes, meta)``.
 
     Two sources, one shape. With a ``run_id`` the tables come out of the run
@@ -75,7 +76,7 @@ def _report_nodes(data: dict) -> tuple:
         for nid, rows in sorted(_results_snapshot().items())
         if isinstance(rows, list)
     ]
-    identity = ambient()
+    identity = identity if identity is not None else ambient()
     meta = {
         'workflow_name': str(identity.get('workflow_name') or ''),
         'run_id': str(execution_state.get('run_id') or ''),
@@ -84,49 +85,32 @@ def _report_nodes(data: dict) -> tuple:
     return nodes, meta
 
 
-@bp.route('/api/report/generate', methods=['POST'])
-def report_generate():
-    """Write a self-contained HTML report of a run into the export directory.
-
-    It lands there and nowhere else, which is what makes the export panel's
-    download and delete buttons work on it without a second set of routes.
-    """
+def _generate_report(data: dict, identity: dict) -> tuple[int, dict]:
+    """The slow half: gather tables, optionally ask the model, build and save the HTML."""
     from services.reports.html import ReportService, build_conclusion_prompt, summarize
 
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    title = data.get('title')
-    if title is not None and not isinstance(title, str):
-        return _bad_param('title')
     include_conclusion = as_bool(data.get('include_conclusion'))
     options = data.get('options')
-    if options is not None and not isinstance(options, dict):
-        return _bad_param('options')
-
-    nodes, meta = _report_nodes(data)
+    title = data.get('title')
+    nodes, meta = _report_nodes(data, identity)
     if nodes is None:
-        return jsonify({'ok': False, 'error': meta}), 404
+        return 404, {'ok': False, 'error': meta}
     if not any(node['rows'] for node in nodes):
         if not str(data.get('run_id') or '').strip() and run_is_foreign():
-            # The "last run in this process" belongs to another account; saying "nothing
-            # to report" would be true for THIS caller, but naming why is more useful.
-            return jsonify({'ok': False, 'error': t('api.foreignRun')}), 409
-        return jsonify({'ok': False, 'error': t('api.reportNoData')}), 400
+            return 409, {'ok': False, 'error': t('api.foreignRun')}
+        return 400, {'ok': False, 'error': t('api.reportNoData')}
 
     conclusion = ''
+    conclusion_error = ''
     if include_conclusion:
         cfg = data.get('llm') or {}
         if not isinstance(cfg, dict):
-            return _bad_param('llm')
+            return 400, {'ok': False, 'error': t('api.paramInvalid', name='llm')}
         provider = str(cfg.get('provider') or 'ollama')
         refusal = _local_transport_refusal(provider)
         if refusal:
-            # Named rather than attempted. A connection error against a port nothing
-            # listens on would be logged as “结论生成失败” and send the user to retry a
-            # paragraph this host can never write; the report itself still ships, because
-            # the deliverable was never the paragraph.
             add_log(refusal)
+            conclusion_error = refusal
         else:
             try:
                 client = LLMClient(
@@ -134,22 +118,13 @@ def report_generate():
                     model=str(cfg.get('model') or ''),
                     api_key=str(cfg.get('api_key') or ''),
                     max_tokens=600,
-                    # A report request is its own call: it must not inherit the stop
-                    # flag of a run that ended (or is running) in this process.
                     cancel_event=None,
-                    # The host is the machine's own setting, never the request's: a caller
-                    # that could name an address made the SERVER issue the request, and the
-                    # reply (an error string, or the generated paragraph) came back into the
-                    # console and the report. That is server-side request forgery with a
-                    # partial echo — an internal port scanner aimed from inside the network.
-                    # A report is written about a run this host can already reach; it inherits
-                    # the same Ollama address a run would (``analyzers.llm_client``).
                     host=(get_setting('ollama_host') if provider == 'ollama' else ''),
                 )
                 conclusion = client.chat(build_conclusion_prompt(summarize(nodes), normalize(data.get('lang'))))
             except Exception as e:
-                # The report is the deliverable; a missing paragraph is a note in it.
                 add_log(t('run.reportConclusionFailed', err=e))
+                conclusion_error = str(e)
                 conclusion = ''
 
     workflow_name = meta.get('workflow_name') or 'workflow'
@@ -165,13 +140,46 @@ def report_generate():
     try:
         saved = report.save(markup, name)
     except OSError as e:
-        # ``run.reportFailed`` keeps the operating system's own words for the CONSOLE (where the user
-        # can read them next to the file name they chose); the HTTP answer says what to do instead of
-        # echoing a path and an errno the panel cannot use.
         add_log(t('run.reportFailed', err=e))
-        return jsonify({'ok': False, 'error': t('api.reportSaveFailed')}), 500
+        return 500, {'ok': False, 'error': t('api.reportSaveFailed')}
     add_log(t('run.reportSaved', name=saved['name'], size=saved['bytes']))
-    return jsonify({'ok': True, **saved, 'charts': markup.count('<figure>')})
+    return 200, {
+        'ok': True,
+        **saved,
+        'charts': markup.count('<figure>'),
+        'conclusion_error': conclusion_error,
+    }
+
+
+@bp.route('/api/report/generate', methods=['POST'])
+def report_generate():
+    """Start the self-contained HTML report job and answer its id at once.
+
+    The conclusion is a model call and the build reads every node's table; neither belongs on
+    the request thread, where a slow daemon used to hold a Flask worker for minutes with no way
+    to stop it. The body the job produces is exactly the body this route used to return.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    title = data.get('title')
+    if title is not None and not isinstance(title, str):
+        return _bad_param('title')
+    options = data.get('options')
+    if options is not None and not isinstance(options, dict):
+        return _bad_param('options')
+    if not str(data.get('run_id') or '').strip() and run_is_foreign():
+        # A worker would read the same foreign state, but the refusal belongs to the request:
+        # the caller learns why before anything is queued.
+        return jsonify({'ok': False, 'error': t('api.foreignRun')}), 409
+
+    identity = ambient()
+    job = jobs.start('report_html', lambda: _generate_report(data, identity), lang=get_lang())
+    if job is None:
+        return jsonify({'ok': False, 'error': t('report.jobBusy')}), 429
+    if job['state'] == 'done':
+        return jsonify(job['result']), job.get('status', 200)
+    return jsonify({'ok': True, 'job': job}), 202
 
 
 @bp.route('/api/report/view', methods=['GET'])
@@ -221,29 +229,45 @@ def report_latex():
         return _bad_body()
     run_id = str(data.get('run_id') or '').strip()
     title = str(data.get('title') or '').strip()[:120]
+    job = jobs.start('report_pdf', lambda: _latex_work(run_id, title), lang=get_lang())
+    if job is None:
+        return jsonify({'ok': False, 'error': t('report.jobBusy')}), 429
+    if job['state'] == 'done':
+        return jsonify(job['result']), job.get('status', 200)
+    return jsonify({'ok': True, 'job': job}), 202
+
+
+def _latex_work(run_id: str, title: str) -> tuple[int, dict]:
+    """The slow half: assemble the LaTeX from the run ledger and compile it."""
     from services.reports import paper
 
-    result = paper.generate(run_id, title=title, store=get_run_store(), export_dir=paths.active().export_dir)
-    # The source is registered even when the compiler refused: it is the artifact the reader can
-    # act on (paste into their own paper, or run xelatex by hand), and the refusal above would
-    # otherwise leave nothing behind but a log line.
+    export_dir = paths.active().export_dir
+    store = get_run_store()
+    result = paper.generate(run_id, title=title, store=store, export_dir=export_dir)
     produced_tex = str(result.get('tex_file') or '')
     if produced_tex:
-        get_run_store().record_file(run_id, '', os.path.join(paths.active().export_dir, produced_tex), 'latex_doc')
+        store.record_file(run_id, '', os.path.join(export_dir, produced_tex), 'latex_doc')
     if result.get('error'):
         add_log(t('run.reportLatexFailed', err=result['error']))
-        return jsonify({'ok': False, 'error': result['error'], 'tex': produced_tex or None}), 400
-    get_run_store().record_file(run_id, '', os.path.join(paths.active().export_dir, result['pdf_file']), 'report_pdf')
+        return 400, {'ok': False, 'error': result['error'], 'tex': produced_tex or None}
+    store.record_file(run_id, '', os.path.join(export_dir, result['pdf_file']), 'report_pdf')
     add_log(t('run.reportLatexSaved', name=result['pdf_file'], figures=result['figures'], tables=result['tables']))
-    return jsonify(
-        {
-            'ok': True,
-            'name': result['pdf_file'],
-            'tex': result['tex_file'],
-            'figures': result['figures'],
-            'tables': result['tables'],
-        }
-    )
+    return 200, {
+        'ok': True,
+        'name': result['pdf_file'],
+        'tex': result['tex_file'],
+        'figures': result['figures'],
+        'tables': result['tables'],
+    }
+
+
+@bp.route('/api/jobs/<job_id>', methods=['GET'])
+def document_job(job_id: str):
+    """Poll one document job. Its owner is the account that started it; everyone else is 404."""
+    job = jobs.get(job_id)
+    if job is None:
+        return jsonify({'ok': False, 'error': t('report.jobMissing')}), 404
+    return jsonify({'ok': True, 'job': job})
 
 
 @bp.route('/api/report/studio-images', methods=['GET'])

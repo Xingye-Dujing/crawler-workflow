@@ -6,6 +6,8 @@ vocabulary, and no row still knows where it came from. Every case below is one h
 promise — the fold, the naming, or the refusal.
 """
 
+from pathlib import Path
+
 import pytest
 
 from services.biblio import fuse
@@ -159,6 +161,15 @@ class TestContract:
         result = _fuse([('node-2', POSTS)])
         assert set(result['columns']) >= {'题名', '作者', '年份', '关键词', '来源'}
         assert all(set(row) == set(result['columns']) for row in result['rows'])
+
+    def test_an_exported_title_cannot_start_a_spreadsheet_formula(self, tmp_path):
+        """The fused CSV is handed to colleagues and opened in Excel. A record whose title
+        begins with ``=`` is DATA; it must not execute when the file opens."""
+        rows = [{'记录ID': '1', '题名': '=HYPERLINK("http://example.invalid")', '作者': '@SUM(1)'}]
+        path = Path(fuse.export_records(rows, str(tmp_path), 'fuse'))
+        text = path.read_text(encoding='utf-8-sig')
+        assert "'=HYPERLINK" in text
+        assert "'@SUM" in text
 
     def test_the_role_parameters_are_the_ones_the_panel_edits(self):
         """``nodes/schema.py`` reports a fusion node's column dependencies from this list, so a

@@ -24,6 +24,7 @@ manual — has to ask the same question about what the user pinned.
 import contextlib
 import logging
 
+from runtime import account_context
 from runtime.settings import get_setting
 from runtime.state import _completed_lock, add_log, execute_lock, execution_state, history_service, live_run_ids
 from runtime.stores import get_housekeeper, get_run_store
@@ -112,15 +113,26 @@ def settle_orphaned_records() -> int:
         thread = execution_state.get('thread')
         if execution_state['running'] or (thread is not None and thread.is_alive()):
             return 0
-        try:
-            promoted = get_run_store().promote_stale_runs(
-                only=owned,
-                note=t('run.interrupted_by_dead_worker'),
-            )
-        except Exception:
-            # A store we cannot open is a store we cannot settle; the panel says so
-            # through its own error, and 运行中 is not a lie worse than no answer.
-            return 0
+        owners = execution_state.get('record_owners') or {}
+        groups: dict = {}
+        for rid in owned:
+            # A record opened by another account lives in THAT account's runs.db. Opening
+            # this request's store could not see it and never repaired it.
+            groups.setdefault(owners.get(rid), set()).add(rid)
+        promoted = []
+        for owner, ids in groups.items():
+            try:
+                with account_context.use(owner):
+                    promoted.extend(
+                        get_run_store().promote_stale_runs(
+                            only=ids,
+                            note=t('run.interrupted_by_dead_worker'),
+                        )
+                    )
+            except Exception:
+                # A store we cannot open is a store we cannot settle; the panel says so
+                # through its own error, and 运行中 is not a lie worse than no answer.
+                continue
     if promoted:
         # Said out loud because it otherwise looks like the panel decided to lie: a
         # row flips to 已中断 with no run having ended in front of the user.

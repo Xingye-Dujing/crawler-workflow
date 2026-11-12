@@ -302,13 +302,21 @@ class RunsMixin:
         Backs the export panel's 智能清除 selectors; a run with no ledger rows never appears
         (there is nothing to clear), so the list is only ever actionable entries.
         """
+        # One query for every file row and one for every run header. ``files_for_run`` +
+        # ``get_run`` per run meant two round trips (plus a full node list) per history row,
+        # which grows with the archive on a request thread.
+        by_run: dict[str, list] = {}
+        for row in self._query('SELECT run_id, name, kind, node_id FROM run_files ORDER BY run_id, name'):
+            by_run.setdefault(str(row['run_id']), []).append(
+                {'name': row['name'], 'kind': row['kind'], 'node_id': row['node_id']}
+            )
+        headers = {
+            str(row['run_id']): dict(row)
+            for row in self._query('SELECT run_id, workflow_name, started_at, status FROM runs')
+        }
         out = []
-        for row in self._query('SELECT DISTINCT run_id FROM run_files'):
-            run_id = str(row['run_id'])
-            files = self.files_for_run(run_id)
-            if not files:
-                continue
-            run = self.get_run(run_id) or {}
+        for run_id, files in by_run.items():
+            run = headers.get(run_id) or {}
             out.append(
                 {
                     'run_id': run_id,
@@ -443,6 +451,22 @@ class FilesMixin:
     def forget_run_files(self, run_id: str) -> int:
         """Drop a run's file map (used once its files are cleared from disk)."""
         return self._execute('DELETE FROM run_files WHERE run_id = ?', (str(run_id),)).rowcount
+
+    def forget_files(self, names) -> int:
+        """Forget many deleted files in ONE transaction (the 清空 sweep's batch form).
+
+        ``forget_file`` commits per call, so emptying 500 files meant 500 independent
+        write transactions on the request thread.
+        """
+        cleaned = []
+        for name in names or ():
+            base = os.path.basename(str(name or '').replace('\\', '/'))
+            if base:
+                cleaned.append(base)
+        if not cleaned:
+            return 0
+        placeholders = ','.join('?' for _ in cleaned)
+        return self._execute(f'DELETE FROM run_files WHERE name IN ({placeholders})', tuple(cleaned)).rowcount
 
     def forget_file(self, name) -> int:
         """Forget every ledger row pointing at a file *name* that has since been deleted by

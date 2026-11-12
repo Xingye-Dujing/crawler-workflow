@@ -516,6 +516,9 @@ class TestTheBuildKnowsEveryPackage:
             'webview.platforms.winforms',
             'webview.platforms.edgechromium',
             'clr',
+            # Function-level import in services/update.py; PyInstaller is told explicitly.
+            'cryptography.hazmat.primitives.serialization',
+            'cryptography.hazmat.primitives.asymmetric.ed25519',
         }
         missing = set()
         for name in self._stated(spec):

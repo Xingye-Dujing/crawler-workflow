@@ -34,6 +34,7 @@ Everything is offline: the crawler is a scripted recorder, no browser and no net
 
 import capabilities.registry as capabilities
 import pytest
+from selenium.common.exceptions import WebDriverException
 
 from crawlers.core.crawler import UNDER_TARGET, as_index
 
@@ -654,6 +655,64 @@ def test_an_ok_walk_that_names_itself_unproven_still_pins_the_cursor(app_module,
     seen.clear()
     _comment_plugin().execute_comment_node(node, headless=True, ctx=dict(ctx, resume=True))
     assert seen == urls[1:], f'继续 re-walked {seen}, expected the unproven tail {urls[1:]}'
+
+
+def test_a_dead_browser_fails_the_node_and_pins_the_cursor(app_module, monkeypatch, tmp_path):
+    """A WebDriverException used to be counted as a "dead link" and the node settled DONE:
+    no 继续 entry, so the cursor hole it pinned was never re-walked. It is OUR browser
+    failing, not a site answering, so the node must be PARTIAL/resumable."""
+    import crawlers.platforms.hongguo.crawler as hongguo_module
+    from services.runs.store import RunStore
+
+    urls = [f'https://hongguoduanju.com/detail?series_id={7696063528179878930 + i}' for i in range(3)]
+    seen = []
+
+    class _DeadHarness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = None
+        target_total = 0
+        shortfall = 0
+        walk_counts = {}
+
+        def __init__(self, params=None, log=None, abort=None):
+            self.skipped_targets = []
+
+        def walk(self, platform, url, limit):
+            seen.append(url)
+            raise WebDriverException('invalid session id')
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _DeadHarness()),
+    )
+    monkeypatch.setattr(app_module, 'add_log', lambda _m: None)
+    monkeypatch.setattr(_comment_plugin(), 'add_log', lambda _m: None)
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    params['urls'] = '\n'.join(urls)
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+
+    store = RunStore(str(tmp_path / 'dead-browser.db'))
+    store.start_run('r-dead', 'deadwf', 'fp-dead', headless=True)
+    store.begin_node('r-dead', 'node-1', 'source', title='评论', fingerprint='fp-node')
+    ctx = {'store': store, 'run_id': 'r-dead', 'fingerprints': {'node-1': 'fp-node'}, 'skipped_seen': {}}
+    # The comment loop only walks while the run is live; a leaked False would return an
+    # empty table and the refusal this case is about would never be reached.
+    monkeypatch.setitem(app_module.execution_state, 'running', True)
+    monkeypatch.setitem(app_module.execution_state, 'stopping', False)
+
+    with pytest.raises(ValueError) as caught:
+        _comment_plugin().execute_comment_node(node, headless=True, ctx=ctx)
+    assert urls[0] in str(caught.value), caught.value
+    assert len(seen) == 1, f'a dead driver kept walking the rest of the batch: {seen}'
+    cursor = store.get_cursor('r-dead', 'node-1') or {}
+    assert cursor.get('url_index', 0) == 0, f'the cursor advanced over a browser fault: {cursor}'
 
 
 @pytest.mark.parametrize('platform,mode_key', _pairs())

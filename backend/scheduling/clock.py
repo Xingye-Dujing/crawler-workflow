@@ -210,27 +210,37 @@ def start() -> bool:
             for name in store.note_missed():
                 logger.info(t('sched.missedLine', name=name))
     _stop = threading.Event()
-    _thread = threading.Thread(target=_loop, name='crawler-scheduler', daemon=True)
+    _thread = threading.Thread(target=_loop, args=(_stop,), name='crawler-scheduler', daemon=True)
     _thread.start()
     return True
 
 
 def stop(timeout: float = 2.0) -> None:
-    """Stop the tick thread (tests, and a clean shutdown). Safe to call when it never started."""
+    """Stop the tick thread (tests, and a clean shutdown). Safe to call when it never started.
+
+    A join that times out does NOT clear the handles: the thread is still alive, and reporting
+    ``is_running()`` False let a second ``start()`` mint another loop on top of it. ``_loop``
+    reads its own event parameter rather than the module global, so the next wake-up can never
+    call ``None.wait`` after the handles were cleared.
+    """
     global _thread, _stop
     if _stop is not None:
         _stop.set()
     thread = _thread
     if thread is not None and thread.is_alive():
         thread.join(timeout)
+        if thread.is_alive():
+            # It will see the set event at its next boundary; until then the slot is still
+            # occupied and must keep saying so.
+            return
     _thread = None
     _stop = None
 
 
-def _loop() -> None:
+def _loop(stop_event: threading.Event) -> None:
     set_lang('zh')  # a fresh daemon starts at the default; pin it so its own lines are whole
     interval = max(5, int(Config.SCHEDULER_TICK_SECONDS or 20))
-    while not _stop.wait(interval):
+    while not stop_event.wait(interval):
         try:
             tick()
         except Exception:

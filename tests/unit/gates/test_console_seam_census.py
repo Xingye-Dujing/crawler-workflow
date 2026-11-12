@@ -13,7 +13,6 @@ So the census is asked of the source, not remembered by whoever moves a file: ev
 """
 
 import ast
-import re
 from pathlib import Path
 
 import pytest
@@ -25,25 +24,68 @@ BACKEND = REPO / 'backend'
 CONFTEST = REPO / 'tests' / 'api' / 'conftest.py'
 
 
+def _module_name(path: Path) -> str:
+    relative = path.relative_to(BACKEND).with_suffix('')
+    parts = list(relative.parts)
+    if parts and parts[-1] == '__init__':
+        parts.pop()
+    return '.'.join(parts)
+
+
 def _importers():
-    """``{module dotted name}`` for engine modules that resolve ``add_log`` as their own global."""
+    """``{module dotted name}`` for EVERY backend module that resolves ``add_log`` as its global.
+
+    The census used to scan ``engine/*.py`` only, so 20+ executors, the settlement pass, the
+    queue and the session routes were outside the gate while still printing through their own
+    ``add_log``. A test that patched ``app.add_log`` and asserted one of those lines captured
+    nothing — it was testing the patch, not the code.
+    """
     found = set()
-    for path in sorted((BACKEND / 'engine').glob('*.py')):
+    for path in sorted(BACKEND.rglob('*.py')):
+        if path.name.startswith('test_') or '__pycache__' in path.parts:
+            continue
         tree = ast.parse(path.read_text(encoding='utf-8'))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom) or node.module != 'runtime.state':
                 continue
             if any(alias.name == 'add_log' for alias in node.names):
-                found.add(f'engine.{path.stem}')
+                found.add(_module_name(path))
     return found
 
 
+def _dotted(node) -> str:
+    """``api.biblio`` from an ``ast.Attribute`` chain; '' for anything the gate cannot name."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return ''
+    parts.append(node.id)
+    return '.'.join(reversed(parts))
+
+
 def _forwarded():
-    """The modules the api fixture forwards ``app.add_log`` into, read out of its own source."""
-    text = CONFTEST.read_text(encoding='utf-8')
-    blocks = re.findall(r'def _forward_run_console\(.*?\n(?=\n@pytest|\ndef |\nclass )', text, re.S)
-    assert len(blocks) == 1, 'the console-forwarding fixture was renamed or duplicated — this gate stopped looking'
-    return {match.group(1) for match in re.finditer(r"forward\(monkeypatch, ([\w.]+), 'add_log'", blocks[0])}
+    """The modules the api fixture forwards ``app.add_log`` into, read by AST.
+
+    A regex over the source matched a loop variable (``forward(monkeypatch, owner, ...)``)
+    and could not tell a comment from a call. The calls are explicit, so the AST is exact.
+    """
+    tree = ast.parse(CONFTEST.read_text(encoding='utf-8'))
+    found = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Name) and func.id == 'forward' and len(node.args) >= 3):
+            continue
+        marker = node.args[2]
+        if not (isinstance(marker, ast.Constant) and marker.value == 'add_log'):
+            continue
+        name = _dotted(node.args[1])
+        if name:
+            found.add(name)
+    return found
 
 
 class TestTheConsoleSeamCensus:

@@ -195,7 +195,9 @@ class TestRegistry:
                 {'column': '时间', 'new_col': '阶段', 'edges': ['2024-05-01', '2024-05-08'], 'labels': ['前']},
             ),
             ('topic_model', {'column': '正文', 'n_topics': 2, 'topn': 3}),
-            ('sentiment_evolution', {'column': '作者', 'label_col': '正文'}),
+            # Three Chinese author names have no chronological order of their own; the
+            # earliest 点赞 is the numeric position this smoke test orders them by.
+            ('sentiment_evolution', {'column': '作者', 'label_col': '正文', 'order_col': '点赞'}),
         ],
     )
     def test_every_registered_operation_is_reachable_from_the_pipeline(self, op, params):
@@ -622,6 +624,29 @@ class TestReshaping:
             D.column_calc(frame, 'c', 'ghost + 1')
         message = str(err.value)
         assert 'c' in message and 'ghost + 1' in message, message
+
+    @pytest.mark.parametrize(
+        'expr',
+        [
+            'a.__class__',
+            'a.astype(str)',
+            'open("x")',
+            'a[0]',
+            'a if a else b',
+            '__import__("os")',
+        ],
+    )
+    def test_column_calc_refuses_anything_but_arithmetic(self, expr):
+        """``DataFrame.eval`` runs inside the server process; a formula needs names, numbers
+        and arithmetic, so calls, attributes, subscripts and conditionals never reach it."""
+        frame = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
+        with pytest.raises(UnknownOperationError):
+            D.column_calc(frame, 'c', expr)
+
+    def test_column_calc_still_accepts_a_backticked_column_name(self):
+        """pandas' own syntax for a column that is not a Python identifier stays usable."""
+        frame = pd.DataFrame({'点赞 数': [1, 2]})
+        assert D.column_calc(frame, '两倍', '`点赞 数` * 2')['两倍'].tolist() == [2, 4]
 
     @pytest.mark.parametrize('new_col, expr', [('', 'a + 1'), ('c', ''), ('', '')])
     def test_column_calc_needs_both_names(self, new_col, expr):
@@ -1328,11 +1353,13 @@ class TestSentimentEvolutionOrdering:
                 )
         return pd.DataFrame(list(pd.DataFrame(rows).to_dict('records')))
 
-    def test_grouping_by_a_phase_name_without_an_order_column_sorts_the_lifecycle_wrong(self):
-        # Pinned as a fact, not a wish: 二次爆发期 starts with U+4E8C, which is below 发 (U+53D1),
-        # so a name sort puts the fourth phase first and the export still looks complete.
-        out = D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment')
-        assert out['period'].tolist()[0] == '二次爆发期'
+    def test_grouping_by_a_phase_name_without_an_order_column_is_refused(self):
+        # 二次爆发期 starts with U+4E8C, below 发 (U+53D1): a name sort would put the fourth
+        # phase first while the export still looked complete. Two phase labels that parse as
+        # neither a date nor a number have no order of their own, so the step names the fix.
+        with pytest.raises(UnknownOperationError) as err:
+            D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment')
+        assert '阶段' in str(err.value)
 
     def test_naming_the_order_column_puts_the_periods_back_in_lifecycle_order(self):
         out = D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment', order_col='阶段序号')
@@ -1777,6 +1804,11 @@ class TestTopicByStage:
         for _, row in out.iterrows():
             assert row['feature_words'].split('、') == [part.split(':')[0] for part in row['weights'].split()]
         assert (out['doc_n'] == 0).any(), 'six topics over six posts per stage leaves topics unused'
+        unused = out[out['doc_n'] == 0]
+        assert (unused['sample_texts'] == '').all(), (
+            "an unused topic has no post of its own; borrowing another topic's texts would make "
+            f'主题概括 summarise the wrong posts: {unused["sample_texts"].tolist()}'
+        )
 
     def test_an_unknown_word_source_is_refused_by_the_gate(self):
         from services.analysis.pipeline import STEP_PARAMS, normalize_step_params, validate_step
@@ -3461,7 +3493,11 @@ class TestSentimentEvolution:
         # Looked up BY NAME, not by position: the row order of a phase table is the step
         # below this one's business, and asserting on the arithmetic here keeps the two
         # questions from failing each other.
-        out = D.sentiment_evolution(self._frame({'发酵期': (17, 252, 80), '二次爆发期': (1887, 112, 6030)}), 'period')
+        frame = self._frame({'发酵期': (17, 252, 80), '二次爆发期': (1887, 112, 6030)})
+        # The numbers are looked up by name; the synthetic rank only satisfies the ordering gate
+        # (two Chinese phase names alone have no lifecycle order).
+        frame['阶段序号'] = frame['period'].map({'发酵期': 1, '二次爆发期': 4})
+        out = D.sentiment_evolution(frame, 'period', order_col='阶段序号')
         index = out.set_index('period')['sentiment_index']
         assert index['发酵期'] == pytest.approx(-0.1805, abs=0.0001)
         assert index['二次爆发期'] == pytest.approx(-0.5160, abs=0.0001)
@@ -3551,7 +3587,9 @@ class TestSentimentEvolution:
         # 发酵期 349 and 爆发期 7624 rows: the shares are over the rows that reached a
         # period, so they add up to 100 and the 爆发期 bar is the tall one — which is the
         # half of “热度与情感强度成反比” that is not about sentiment at all.
-        out = D.sentiment_evolution(self._frame({'发酵期': (349, 0, 0), '爆发期': (7624, 0, 0)}), 'period')
+        frame = self._frame({'发酵期': (349, 0, 0), '爆发期': (7624, 0, 0)})
+        frame['阶段序号'] = frame['period'].map({'发酵期': 1, '爆发期': 2})
+        out = D.sentiment_evolution(frame, 'period', order_col='阶段序号')
         assert out.at[0, 'volume_pct'] == pytest.approx(4.38, abs=0.01)
         assert out['volume_pct'].sum() == pytest.approx(100.0, abs=0.02)
 
@@ -3567,7 +3605,8 @@ class TestSentimentEvolution:
                 {'period': '二次爆发期', 'sentiment': 'negative', 'score': 0.1},
             ]
         )
-        by = D.sentiment_evolution(frame, 'period', score_col='score').set_index('period')
+        frame['阶段序号'] = frame['period'].map({'波动期': 3, '二次爆发期': 4})
+        by = D.sentiment_evolution(frame, 'period', score_col='score', order_col='阶段序号').set_index('period')
         assert by.at['波动期', 'sentiment_index'] == pytest.approx(0.0)
         assert by.at['二次爆发期', 'sentiment_index'] == pytest.approx(0.0)
         assert by.at['波动期', 'intensity'] == pytest.approx(0.0)
@@ -3582,8 +3621,9 @@ class TestSentimentEvolution:
                 {'period': '爆发期', 'sentiment': 'positive', 'score': 0.8},
             ]
         )
+        frame['阶段序号'] = frame['period'].map({'发酵期': 1, '爆发期': 2})
         with caplog.at_level('WARNING'):
-            out = D.sentiment_evolution(frame, 'period', score_col='score')
+            out = D.sentiment_evolution(frame, 'period', score_col='score', order_col='阶段序号')
         by = out.set_index('period')
         assert by.at['发酵期', 'score_n'] == 0
         assert by.at['发酵期', 'intensity'] is None

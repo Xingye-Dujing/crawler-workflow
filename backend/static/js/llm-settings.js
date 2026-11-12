@@ -287,7 +287,9 @@ async function testAIConnection() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(LLMSettings.payload()),
         });
-        const result = await resp.json();
+        const started = await resp.json();
+        if (!started.ok) throw new Error(started.error || 'request failed');
+        const result = await awaitDocumentJob(started.job && started.job.id);
         if (result.ok) {
             showToast(I18n.t('toast.aiTestOk').replace('{ms}', result.latency_ms) + ' [' + result.provider + ']');
         } else {

@@ -1,4 +1,13 @@
 import os
+import sys
+
+#: ``python app.py cloud`` is a command-line shape of ``CRAWLER_CLOUD=1``. It is raised to the
+#: ENVIRONMENT here, before :class:`Config` reads it, because the attribute is read once at import
+#: time and every child process (CatBus, Chrome, the updater) inherits the environment rather than
+#: this process's Python objects. app.py used to set only the class attribute, so a cloud boot
+#: still looked like a local machine to its own subprocesses.
+if any(str(arg).strip().lower() in ('cloud', '--cloud', 'cloud-mode', '--cloud-mode') for arg in sys.argv[1:]):
+    os.environ.setdefault('CRAWLER_CLOUD', '1')
 
 #: The repository root: three levels up from ``backend/core/config.py``.
 #:

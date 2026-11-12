@@ -22,6 +22,31 @@ from i18n import t
 from services.runs.files import record_file
 
 
+def summary_scope(op: str, client) -> str:
+    """The cache scope for a one-call-per-row summary (主题概括 / 聚类摘要 / 簇综述).
+
+    The prompt is the cache KEY, and a prompt does not name the machine answering it. Two Ollama
+    daemons behind one tag produce different prose for the same prompt, so the scope must carry
+    everything that changes what the answer MEANS — provider, model, daemon host and the
+    generation limits — exactly as :func:`analyzers.llm_client.answer_scope` does for row
+    analyzers. Without it, pointing the setting at another host replayed the old answers while
+    the node's log line named the new model.
+    """
+    return '|'.join(
+        str(part)
+        for part in (
+            op,
+            getattr(client, 'label', ''),
+            getattr(client, 'provider', ''),
+            getattr(client, 'model', ''),
+            getattr(client, 'host', ''),
+            getattr(client, 'max_tokens', ''),
+            getattr(client, 'max_chars', ''),
+            getattr(client, 'temperature', ''),
+        )
+    )
+
+
 def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     """Build the per-node run context the LLM analyzers consume.
 

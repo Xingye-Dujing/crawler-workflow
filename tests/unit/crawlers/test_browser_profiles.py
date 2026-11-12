@@ -156,14 +156,32 @@ class TestMarker:
         status = profiles.status('douyin')
         assert status['used_at'] and status['imported'] is False
 
-    def test_a_corrupt_marker_reads_as_new_rather_than_raising(self, profiles_on):
+    def test_a_corrupt_marker_reads_as_used_rather_than_new(self, profiles_on):
+        """A marker that exists but cannot be parsed is not "no history": reading it as new
+        made the next crawl plant the saved (older) cookie over a profile that may hold a
+        rotated live session — the exact overwrite the import-once rule forbids."""
         path = profiles.profile_dir_for('weibo')
         with open(profiles.marker_path('weibo'), 'w', encoding='utf-8') as handle:
             handle.write('not json{')
         assert profiles.is_imported('weibo') is False
-        assert profiles.is_used('weibo') is False, 'an unreadable history must not freeze the credential'
+        assert profiles.is_used('weibo') is True, 'unreadable history must not re-plant a snapshot'
         assert json.loads(json.dumps(profiles.status('weibo')))['platform'] == 'weibo'
         assert path
+
+    def test_the_marker_is_replaced_atomically_not_truncated(self, profiles_on, monkeypatch):
+        """A crash between ``open('w')`` and ``json.dump`` used to leave a truncated marker."""
+        seen = []
+        real_replace = profiles.atomic.replace
+
+        def replace(staged, target):
+            seen.append((staged, target))
+            assert Path(staged).read_text(encoding='utf-8').startswith('{'), 'the staged file is complete'
+            real_replace(staged, target)
+
+        monkeypatch.setattr(profiles.atomic, 'replace', replace)
+        profiles.mark_used('weibo', imported=False)
+        assert seen and seen[-1][1] == profiles.marker_path('weibo')
+        assert json.loads(Path(profiles.marker_path('weibo')).read_text(encoding='utf-8'))['used_at']
 
     def test_remember_cookie_marks_the_file_without_claiming_a_plant(self, profiles_on, tmp_path):
         """A cookie captured out of the profile IS the profile's session; saying so must not

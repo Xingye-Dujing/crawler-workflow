@@ -169,9 +169,10 @@ class RunLogWriter:
         if not failed:
             return
         with self._lock:
-            # Newest failures go behind anything a concurrent drain already put back, so the log
-            # stays in print order per run.
-            kept = failed + self._pending
+            # Anything a concurrent drain already put back is OLDER than this batch, so it goes
+            # first; the previous order put the newest failures ahead of it and the durable log
+            # (which is read back by seq) came out out of print order.
+            kept = self._pending + failed
             total = sum(len(rows) for _owner, _rid, rows in kept)
             while total > self.HARD_CAP and len(kept) > 1:
                 _owner, _oldest_id, oldest_rows = kept.pop(0)

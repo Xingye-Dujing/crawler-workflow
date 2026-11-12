@@ -7,6 +7,7 @@ import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError
+from services.analysis.llm import summary_scope
 from services.analysis.topic_kernels import _cluster_facts, _review_fallback, _review_language
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ def cluster_review(
         raise UnknownOperationError(t('analysis.label_too_many', rows=len(order), limit=int(max_groups)))
 
     take = max(3, int(members))
-    scope = f'cluster_review:{getattr(llm, "label", "") or "model"}'
+    scope = summary_scope('cluster_review', llm)
 
     def row(key: int, facts: dict | None) -> dict:
         out: dict = {group_col: key}

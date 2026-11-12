@@ -17,8 +17,56 @@ pytestmark = pytest.mark.unit
 BACKEND = Path(__file__).resolve().parents[3] / 'backend'
 
 
-def _backend_text() -> str:
-    return '\n'.join(path.read_text(encoding='utf-8') for path in BACKEND.rglob('*.py'))
+#: The one family of readers a server consumer must call. The name is the contract: a
+#: setting read through some other helper is still a read, but then this gate has to learn
+#: that helper before it can see it.
+_SETTING_READERS = frozenset({'get_setting', '_int_setting', '_bool_setting', '_setting_number'})
+
+
+def _called_name(node: ast.Call) -> str:
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return ''
+
+
+def _strings_in(node) -> set:
+    """Every literal string inside an expression (an IfExp chooses one key or another)."""
+    return {child.value for child in ast.walk(node) if isinstance(child, ast.Constant) and isinstance(child.value, str)}
+
+
+def _read_setting_keys() -> set:
+    """The literal keys the backend actually hands to a settings reader.
+
+    The old version concatenated every backend file into one string and asked whether
+    ``get_setting('key')`` appeared anywhere — so a docstring, an i18n sentence or a
+    fixture could keep a key green after its real reader was deleted. Here the key must be
+    the argument of a reader call, or the value of the variable that call passes (the two
+    dynamic choices, ``_cap_key`` and ``column``, are IfExp assignments of two literals).
+    """
+    found = set()
+    for path in BACKEND.rglob('*.py'):
+        tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+        assigned: dict[str, set] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        assigned.setdefault(target.id, set()).update(_strings_in(node.value))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or _called_name(node) not in _SETTING_READERS:
+                continue
+            if not node.args:
+                continue
+            key = node.args[0]
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                found.add(key.value)
+            elif isinstance(key, ast.Name):
+                found.update(assigned.get(key.id, ()))
+    return found
 
 
 def _frontend_text() -> str:
@@ -78,26 +126,9 @@ class TestSchema:
 
 class TestCoverage:
     def test_a_server_read_setting_is_read_somewhere_outside_the_store(self):
-        backend = _backend_text()
-        for spec in SETTINGS:
-            if spec.consumer not in ('server', 'both'):
-                continue
-            if spec.key in ('max_visible_browsers', 'max_headless_browsers'):
-                # engine.run picks one of the two by run shape, then asks get_setting on
-                # the chosen name — still one read, just not a literal call per key.
-                assert f"'{spec.key}'" in backend, f'{spec.key} is never named'
-                continue
-            if spec.key == 'default_source_part_size':
-                # capabilities.registry chooses the source/comment column by mode.
-                assert "'default_source_part_size'" in backend
-                continue
-            patterns = (
-                f"get_setting('{spec.key}')",
-                f"_int_setting('{spec.key}'",
-                f"_bool_setting('{spec.key}'",
-                f"_setting_number('{spec.key}'",
-            )
-            assert any(pattern in backend for pattern in patterns), f'{spec.key} is declared but never read'
+        read = _read_setting_keys()
+        missing = [spec.key for spec in SETTINGS if spec.consumer in ('server', 'both') and spec.key not in read]
+        assert not missing, f'declared but never read through a settings reader: {missing}'
 
     def test_a_browser_read_setting_is_named_by_the_page(self):
         frontend = _frontend_text()

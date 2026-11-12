@@ -7,6 +7,7 @@ import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError
+from services.analysis.llm import summary_scope
 from services.analysis.topic_kernels import _fallback_topic_label, _label_from
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ def topic_label(
     # of the same table must not re-pay 27 questions. The key is the prompt itself, so a changed
     # model, a different language, or an edited 特征词/样本帖 column all re-ask on their own —
     # a cache that survives the question it answers would be the bug this table exists to avoid.
-    scope = f'topic_label:{getattr(llm, "label", "") or "model"}'
+    scope = summary_scope('topic_label', llm)
     asked = 0
     replayed = 0
     for offset, position in enumerate(positions):

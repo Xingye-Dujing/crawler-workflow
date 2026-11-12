@@ -145,9 +145,17 @@ class AccountsStore:
         “连续 5 次锁 15 分钟” is only true if the addition happens inside the row.
         """
         with self._lock:
+            # A lock that has EXPIRED starts a fresh window: without this, every later wrong
+            # password pushed ``locked_until`` further out from a counter that never reset, so
+            # anyone could keep a victim locked out forever with one guess per hour. The
+            # reset and the increment are one statement for the same reason the increment is.
             self._conn.execute(
-                'UPDATE users SET failed_attempts = failed_attempts + 1, updated_at = ? WHERE user_id = ?',
-                (now, user_id),
+                'UPDATE users SET '
+                'failed_attempts = CASE WHEN locked_until > 0 AND locked_until <= ? THEN 1 '
+                'ELSE failed_attempts + 1 END, '
+                'locked_until = CASE WHEN locked_until > 0 AND locked_until <= ? THEN 0 ELSE locked_until END, '
+                'updated_at = ? WHERE user_id = ?',
+                (now, now, now, user_id),
             )
             row = self._conn.execute('SELECT failed_attempts FROM users WHERE user_id = ?', (user_id,)).fetchone()
             self._conn.commit()

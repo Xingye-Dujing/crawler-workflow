@@ -380,7 +380,7 @@ const SettingsPanel = {
         if (this.readOnly) return;
         const include = document.getElementById('settings-include-machine');
         const flag = include && include.checked ? '1' : '0';
-        window.location.href = '/api/settings/export?include_machine=' + flag;
+        window.location.href = window.__cu('/api/settings/export?include_machine=' + flag);
     },
 
     pickImport() {

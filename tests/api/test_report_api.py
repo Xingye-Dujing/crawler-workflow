@@ -161,6 +161,7 @@ class TestConclusion:
         response = client.post('/api/report/generate', json={'include_conclusion': True})
         assert response.status_code == 200
         body = response.get_json()
+        assert body['conclusion_error'] == 'daemon down', 'the response must say the paragraph is missing'
         text = _report_text(client, app_module, body['name'])
         assert 'Conclusion' not in text
         assert '张先生在海边游泳' in text
@@ -172,7 +173,9 @@ class TestConclusion:
             raise AssertionError('the report asked a model it was not told to ask')
 
         monkeypatch.setattr(LLMClient, 'chat', never)
-        assert client.post('/api/report/generate', json={}).status_code == 200
+        response = client.post('/api/report/generate', json={})
+        assert response.status_code == 200
+        assert response.get_json()['conclusion_error'] == '', 'no conclusion was asked for; no error either'
 
 
 class TestView:

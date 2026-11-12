@@ -14,6 +14,7 @@ Loads the real workflow.js + app.js in node and drives their toggles. Pinned:
   behind an unremovable cap.
 """
 
+import re
 import shutil
 from pathlib import Path
 
@@ -37,6 +38,9 @@ def results():
                 JS_DIR / 'workflow.js',
                 JS_DIR / 'app.js',
                 JS_DIR / 'schedules.js',
+                # The real settings panel: its dock rule (closeDockedPanels + height reset)
+                # is exactly what this matrix exists to prove, and a stub cannot prove it.
+                JS_DIR / 'panels' / 'settings-panel.js',
             ]
         ),
     )
@@ -55,6 +59,7 @@ PANELS = [
     'schedules-panel',
     'processes-panel',
     'biblio-panel',
+    'settings-panel',
 ]
 
 
@@ -89,6 +94,14 @@ def test_a_docked_panel_without_a_handle_cannot_be_grown(results, handle):
     import json
 
     assert json.loads(results)[handle] is True
+
+
+def test_the_matrix_names_exactly_the_panels_the_dock_closes():
+    """A panel added to ``DOCKED_PANELS`` but not here is a dock nobody drives."""
+    workflow = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+    block = workflow.split('var DOCKED_PANELS', 1)[1].split('];', 1)[0]
+    docked = set(re.findall(r"'([^']+)'", block))
+    assert docked == set(PANELS), f'dock matrix drifted: {sorted(docked ^ set(PANELS))}'
 
 
 def test_the_dock_helper_is_reachable(results):

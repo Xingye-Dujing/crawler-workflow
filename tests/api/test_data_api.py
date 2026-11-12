@@ -144,6 +144,17 @@ class TestUpload:
         body = _upload(client, 'rows.tsv', b'title\tscore\nsanya\t3\n').get_json()
         assert body['columns'] == ['title', 'score'] and body['row_count'] == 1
 
+    def test_a_gb18030_csv_is_decoded_before_pandas_sees_it(self, client):
+        """Excel's “另存为 CSV” on a Chinese Windows writes GBK, not UTF-8. The upload route
+        already had a named decoder (UTF-8 then GB18030 with a mojibake check) but handed pandas
+        the raw bytes, so a legitimate file was refused as unparseable."""
+        raw = '标题,得分\n三亚,3\n'.encode('gb18030')
+        response = _upload(client, 'gbk.csv', raw)
+        body = response.get_json()
+        assert response.status_code == 200, body
+        assert body['columns'] == ['标题', '得分']
+        assert body['preview'][0]['标题'] == '三亚'
+
     def test_a_comma_file_with_a_tab_inside_a_cell_stays_comma_split(self, client):
         """The regression the ``sep=None`` sniffing version introduced: one
         quoted cell containing a tab re-shaped the whole table."""

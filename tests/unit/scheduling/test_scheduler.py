@@ -286,6 +286,37 @@ class TestTheThread:
         scheduler_module.stop()
         assert scheduler_module.is_running() is False
 
+    def test_a_join_timeout_keeps_the_slot_occupied(self, monkeypatch):
+        """A tick slower than ``join`` must not make the clock answer "stopped": the old code
+        cleared ``_stop``/``_thread``, the next ``_loop`` wake-up called ``None.wait`` and died,
+        and ``is_running()`` allowed a second clock to start on top of the first."""
+
+        class _Event:
+            def __init__(self):
+                self.was_set = False
+
+            def set(self):
+                self.was_set = True
+
+            def wait(self, _timeout):
+                return False
+
+        class _Thread:
+            def is_alive(self):
+                return True
+
+            def join(self, _timeout):
+                return None
+
+        event = _Event()
+        thread = _Thread()
+        monkeypatch.setattr(scheduler_module, '_stop', event)
+        monkeypatch.setattr(scheduler_module, '_thread', thread)
+        scheduler_module.stop(timeout=0.01)
+        assert event.was_set is True, 'stop must still ask the loop to end'
+        assert scheduler_module._thread is thread, 'a live clock was reported as stopped'
+        assert scheduler_module._stop is event
+
     def test_booting_counts_the_moments_the_server_was_down(self):
         """Startup is where a missed moment is recorded — the restart does not replay it."""
         task = _save()

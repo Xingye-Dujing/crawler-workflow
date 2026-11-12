@@ -131,6 +131,11 @@ execution_state: dict = {
     # settle a row its own worker abandoned without ever touching a row another
     # server instance might be writing right now.
     'owned_records': set(),
+    # Which account each owned record belongs to. ``owned_records`` outlives the attempt
+    # (an abandoned row must be settled from a later request), and a later request may be
+    # served for a DIFFERENT account; without this map that request opens its own
+    # ``runs.db``, cannot find the id, and the row stays 运行中 forever.
+    'record_owners': {},
     # The records THIS attempt opened (one per workflow in a split serial run),
     # cleared when a run claims the slot. The status endpoint reads their node
     # states to paint live spinners; ``owned_records`` outlives the attempt and

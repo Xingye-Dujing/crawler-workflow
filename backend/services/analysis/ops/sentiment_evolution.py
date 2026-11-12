@@ -166,7 +166,33 @@ def sentiment_evolution(
         grouped = grouped.sort_values('_rank', kind='stable')
         grouped = grouped.drop(columns=['_rank'])
     else:
-        grouped = grouped.sort_values(column, kind='stable')
+        # Sorting by the raw name is right for days and for a number, and wrong for Chinese
+        # phase labels: code points put 二次爆发期 before 发酵期, so a complete-looking curve
+        # would present the case out of order. Only a column that parses WHOLE as a date or a
+        # number may sort itself; a phase-name column falls back to the ordered categorical
+        # the same-node 分阶段 step wrote, and otherwise refuses by name.
+        periods = grouped[column]
+        stamps = _to_datetime(periods)
+        ranks = pd.to_numeric(periods, errors='coerce')
+        if len(grouped) <= 1:
+            # One period has no ordering question to answer.
+            pass
+        elif stamps.notna().all():
+            grouped = grouped.assign(_sort=stamps).sort_values('_sort', kind='stable').drop(columns=['_sort'])
+        elif ranks.notna().all():
+            grouped = grouped.assign(_sort=ranks).sort_values('_sort', kind='stable').drop(columns=['_sort'])
+        else:
+            from services.analysis.topic_kernels import _stage_order
+
+            order = _stage_order(df, column, '', op='sentiment_evolution')
+            positions = {name: index for index, name in enumerate(order)}
+            unknown = [str(name) for name in periods if str(name) not in positions]
+            if unknown:
+                raise UnknownOperationError(
+                    t('analysis.stage_order_unranked', op='sentiment_evolution', col=column, stages='、'.join(unknown))
+                )
+            grouped = grouped.assign(_sort=periods.map(positions))
+            grouped = grouped.sort_values('_sort', kind='stable').drop(columns=['_sort'])
     grouped = grouped.reset_index(drop=True)
     grouped = grouped.rename(columns={column: 'period'})
     logger.info(

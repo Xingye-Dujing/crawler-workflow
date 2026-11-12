@@ -78,10 +78,10 @@ def _cloud_requested(argv) -> bool:
     """Whether the command line asked for the cloud shape of this app.
 
     ``python app.py cloud`` (also ``--cloud``) is the line a systemd unit or a shell alias
-    writes, so it is honoured next to the ``CRAWLER_CLOUD=1`` environment variable. Setting it
-    here rather than before the imports is safe because every reader asks at CALL time — the
-    config payload, the forced headless, the hidden Ollama UI — and nothing freezes it while
-    this module is still being imported. A future import-time reader would have to move this up.
+    writes, so it is honoured next to the ``CRAWLER_CLOUD=1`` environment variable.
+    ``core.config`` raises the same argv shape to the environment before its class attribute is
+    read, which is what makes child processes see the cloud shape too; this helper still pins the
+    already-imported class attribute for a build that imported ``Config`` before argv existed.
     """
     return any(str(arg).strip().lower() in ('cloud', '--cloud', 'cloud-mode', '--cloud-mode') for arg in argv)
 

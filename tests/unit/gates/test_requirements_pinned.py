@@ -17,7 +17,9 @@ on Windows/Linux and 1.19.2 on macOS, because 1.31 publishes an arm64-only macOS
 duplicate check is therefore per ``(name, marker)`` and the version comparison is per platform.
 """
 
+import ast
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -91,6 +93,67 @@ def test_every_requirement_is_pinned():
         )
         for system in PLATFORMS:
             assert _pins_for(path, system), f'{path.name} selects nothing on {system}'
+
+
+#: Import name → distribution name, for the packages whose two spellings differ.
+_IMPORT_NAMES = {
+    'pil': 'pillow',
+    'sklearn': 'scikit-learn',
+    'sentence_transformers': 'sentence-transformers',
+    'flask_cors': 'flask-cors',
+    'webview': 'pywebview',
+    'yaml': 'pyyaml',
+}
+
+#: Top-level packages of this repository, never third-party dependencies.
+_LOCAL_PACKAGES = {
+    'analyzers',
+    'api',
+    'app',
+    'capabilities',
+    'config',
+    'core',
+    'crawlers',
+    'engine',
+    'i18n',
+    'i18n_catalog',
+    'nodes',
+    'runtime',
+    'scheduling',
+    'services',
+    'sessions',
+}
+
+
+def test_a_function_level_third_party_import_is_declared_for_the_runtime():
+    """An import inside a function is invisible to the module-level dependency check.
+
+    ``services/update.py`` imports ``cryptography`` inside ``verify_feed_signature``; the
+    packaged runtime did not declare it, so enabling the signed-update trust root was the one
+    configuration that could never update. This walks the backend AST and requires every
+    non-stdlib, non-local module imported anywhere to be in the runtime or optional set.
+    """
+    declared = set()
+    for path in (RUNTIME, OPTIONAL):
+        declared.update(name for name, _version, _marker in _entries(path))
+    imported = set()
+    for path in (REPO / 'backend').rglob('*.py'):
+        if any(part.startswith('.venv') or part == '__pycache__' for part in path.parts):
+            continue
+        tree = ast.parse(path.read_text(encoding='utf-8', errors='replace'), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.add(alias.name.split('.')[0])
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                imported.add(node.module.split('.')[0])
+    third_party = {
+        _IMPORT_NAMES.get(name.lower(), name.lower().replace('_', '-'))
+        for name in imported
+        if name and name not in sys.stdlib_module_names and name not in _LOCAL_PACKAGES and not name.startswith('_')
+    }
+    missing = sorted(third_party - declared - {''})
+    assert not missing, f'imported by backend code but not declared in the packaged runtime/optional set: {missing}'
 
 
 def test_runtime_versions_match_the_source_requirements():

@@ -354,6 +354,19 @@ out.free_restart = {
     startedWithoutResume: sentTo('/api/workflow/execute') && sentTo('/api/workflow/execute').resume_run_id,
 };
 
+/* A refused discard must not start the run: the old claims are still live, so the
+   fresh attempt would quietly collect less and then claim the record was dropped. */
+fresh();
+addFlow();
+route('/api/runs/discard', { ok: false, error: 'LOCK-REFUSED' });
+requests.length = 0;
+await pa.runsManager.restart('r9');
+await drain();
+out.restart_refused_by_server = {
+    started: requests.some((r) => r.url.indexOf('/api/workflow/execute') === 0),
+    toasts: toasts.slice(),
+};
+
 /* A declined confirmation sends nothing at all. */
 fresh();
 answers.confirm = false;

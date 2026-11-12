@@ -80,13 +80,23 @@ var resumeBar = {
         if (runId) {
             try {
                 /* Dropping the saved run includes its "already crawled" claims,
-                   otherwise the fresh run would skip everything it fetched. */
-                await fetch('/api/runs/discard', {
+                   otherwise the fresh run would skip everything it fetched.
+                   A refusal is not best-effort: starting without the discard
+                   silently collects less than the user asked for. */
+                const resp = await fetch('/api/runs/discard', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ run_id: runId }),
                 });
-            } catch (e) { /* a failed discard still starts the run */ }
+                const result = await resp.json().catch(() => ({}));
+                if (!resp.ok || !result || !result.ok) {
+                    showToast((result && result.error) || I18n.t('runsMgr.restartFailed'));
+                    return;
+                }
+            } catch (e) {
+                showToast(I18n.t('runsMgr.restartFailed'));
+                return;
+            }
             showToast(I18n.t('toast.runDiscarded'));
         }
         workflow.execute();

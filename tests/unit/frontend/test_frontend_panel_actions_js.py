@@ -98,6 +98,13 @@ class TestRunRecordActions:
         assert pa['restart_declined']['requested'] == 0
         assert pa['remove_declined']['requested'] == 0
 
+    def test_a_refused_discard_does_not_start_the_run(self, pa):
+        """The server refused to drop the run, so its claims are still live. Starting
+        anyway would silently collect less and then toast that everything was reset."""
+        refused = pa['restart_refused_by_server']
+        assert refused['started'] is False
+        assert refused['toasts'] == ['LOCK-REFUSED']
+
     def test_an_interrupted_run_is_discarded_a_finished_one_is_deleted(self, pa):
         """The two answers differ by design: an interrupted run's crawl claims
         should be released so a re-run can fetch again, while a finished run's must

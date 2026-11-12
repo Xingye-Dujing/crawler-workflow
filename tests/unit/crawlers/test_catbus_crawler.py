@@ -147,10 +147,40 @@ class TestSourceModesStreamThroughTheLedger:
         assert session.collected() == 0
         assert session.end_reason is None, 'a walk stopped at its boundary is not an under-collect'
 
+    def test_a_dead_source_table_refuses_instead_of_settling_done(self, session, monkeypatch):
+        """``dead`` is the comment engine's word for one link; for a SOURCE the list is the
+        table, so an empty answer must not let the node settle DONE."""
+        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='dead'))
+        with pytest.raises(ValueError) as raised:
+            session.search(keyword='k', target_count=0)
+        assert 'dead' in str(raised.value)
+
+    def test_a_partial_source_table_refuses_instead_of_settling_done(self, session, monkeypatch):
+        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='partial', warnings=('page 2 lost',)))
+        with pytest.raises(ValueError) as raised:
+            session.search(keyword='k', target_count=0)
+        assert 'partial' in str(raised.value)
+
+    def test_a_non_paged_source_that_returns_nothing_refuses(self, session, monkeypatch):
+        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='ok'))
+        with pytest.raises(ValueError):
+            session.search(keyword='k', target_count=0)
+
+    def test_a_non_paged_cell_with_rows_in_hand_may_add_nothing(self, session, monkeypatch):
+        """A resumed session legitimately adds no new row; the empty answer is not a hole."""
+        session.seed([row('BV1')])
+        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='ok'))
+        assert [item['BV号'] for item in session.search(keyword='k', target_count=0)] == ['BV1']
+
     def test_a_non_paged_cell_is_not_measured_against_a_target(self, session, monkeypatch):
         """A fixed board or one-item detail declares ``paged: false``: it never promised 50 rows."""
         monkeypatch.setattr(bridge, 'manifest_mode', lambda platform, mode: {'paged': False})
-        monkeypatch.setattr(bridge, 'run', lambda *a, **kw: outcome(status='ok'))
+
+        def fake_run(platform, mode, params, **kw):
+            kw['on_row'](row('BV1'))
+            return outcome(status='ok', rows=1)
+
+        monkeypatch.setattr(bridge, 'run', fake_run)
         session.search(keyword='k', target_count=5)
         assert session.end_reason is None
 

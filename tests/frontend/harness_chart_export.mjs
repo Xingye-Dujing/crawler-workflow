@@ -167,12 +167,18 @@ function world(render) {
         const u = String(url);
         const body = init && init.body ? JSON.parse(init.body) : null;
         requests.push({ url: u, body });
-        const payload =
-            u.indexOf('/api/studio/save-image') >= 0 ||
-            u.indexOf('/api/studio/save-vector') >= 0 ||
-            u.indexOf('/api/studio/save-pdf') >= 0
-                ? answers.save
-                : answers.render;
+        let payload;
+        if (u.indexOf('/api/jobs/') >= 0) {
+            // The poll: the PDF compile is a background job now, and its result is the body
+            // save-pdf used to answer directly.
+            payload = { ok: true, job: { state: 'done', result: answers.save } };
+        } else if (u.indexOf('/api/studio/save-pdf') >= 0) {
+            payload = { ok: true, job: { id: 'pdf-job-1', state: 'running' } };
+        } else if (u.indexOf('/api/studio/save-image') >= 0 || u.indexOf('/api/studio/save-vector') >= 0) {
+            payload = answers.save;
+        } else {
+            payload = answers.render;
+        }
         return Promise.resolve({ json: () => Promise.resolve(payload), status: 200 });
     };
 
@@ -581,7 +587,8 @@ async function latexBarCase(render) {
        microtask, so the ``.show`` class is still present at this point. */
     const toast = w.toast();
     await ticks();
-    const post = w.requests.slice(askedBefore).pop();
+    const calls = w.requests.slice(askedBefore);
+    const post = calls.filter((r) => r.url.indexOf('/api/studio/save-pdf') >= 0).pop();
     return {
         html,
         hasPdfButton: html.indexOf('saveChartPdf()') >= 0,
@@ -590,7 +597,8 @@ async function latexBarCase(render) {
         url: post ? post.url : null,
         sentName: post && post.body ? post.body.name : null,
         sentSource: post && post.body ? Object.keys(post.body) : null,
-        asked: w.requests.length - askedBefore,
+        asked: calls.filter((r) => r.url.indexOf('/api/studio/save-pdf') >= 0).length,
+        polled: calls.filter((r) => r.url.indexOf('/api/jobs/') >= 0).length,
         toast,
     };
 }

@@ -2080,7 +2080,7 @@
             type="text"
             id="set-driver"
             class="settings-input"
-            placeholder="C:\...\chromedriver.exe"
+            placeholder="chromedriver 路径（留空 = 自动）"
             oninput="onSettingInput('driver_path', this.value)"
           />
         </span>
@@ -2092,7 +2092,7 @@
             type="text"
             id="set-binary"
             class="settings-input"
-            placeholder="chrome.exe（留空=自动）"
+            placeholder="chrome 路径（留空=自动）"
             oninput="onSettingInput('browser_binary', this.value)"
           />
         </span>
@@ -2104,7 +2104,7 @@
             type="text"
             id="set-latex"
             class="settings-input"
-            placeholder="xelatex.exe（留空=自动）"
+            placeholder="xelatex 路径（留空=自动）"
             oninput="onSettingInput('latex_binary', this.value)"
           />
         </span>
@@ -2131,7 +2131,7 @@
             type="text"
             id="set-catbus-node"
             class="settings-input"
-            placeholder="node.exe（留空=自动）"
+            placeholder="node 路径（留空=自动）"
             oninput="onSettingInput('catbus_node', this.value)"
           />
         </span>
@@ -2232,7 +2232,7 @@
             type="text"
             id="set-hg-player"
             class="settings-input"
-            placeholder="红果短剧.exe"
+            placeholder="红果短剧启动器路径"
             oninput="onSettingInput('hongguo_player_path', this.value)"
           />
         </span>
@@ -2244,7 +2244,7 @@
             type="text"
             id="set-mitmdump"
             class="settings-input"
-            placeholder="mitmdump.exe（留空=自动）"
+            placeholder="mitmdump 路径（留空=自动）"
             oninput="onSettingInput('mitmdump_path', this.value)"
           />
         </span>
@@ -2482,6 +2482,7 @@
     <script src="js/i18n/update.js"></script>
     <script src="js/update.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/job-poll.js"></script>
     <!-- The three sections app.js no longer needs to hold: the LLM transport settings, the
          machine-local settings plus the browser-profile row, and the panels-as-windows behaviour
          (drag, resize, console pop-out, dock height, click-away). Moved out on 2026-10-29 as

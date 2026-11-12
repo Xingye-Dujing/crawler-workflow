@@ -24,9 +24,17 @@
 # builders produce the same folder and the same size.
 
 Flask==3.1.0
+# app.py imports HTTPException and ProxyFix from werkzeug directly; a direct import is a
+# declared dependency even when Flask also pulls it in.
+werkzeug==3.1.8
 flask-cors==6.0.5
 requests==2.34.2
 urllib3==2.7.0
+# The self-updater verifies a signed feed with Ed25519 (services/update.py imports it lazily).
+# Without it a packaged build that configures CIXI_UPDATE_PUBKEY answers "this install is
+# missing the signature component" and can never update. The safest configuration was the
+# only one that broke. Declared here so the build venv (and PyInstaller) actually contains it.
+cryptography==44.0.3
 selenium==4.45.0
 pandas==3.0.3
 numpy==2.4.6

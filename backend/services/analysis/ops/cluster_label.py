@@ -7,6 +7,7 @@ import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError
+from services.analysis.llm import summary_scope
 from services.analysis.topic_kernels import _label_from
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ def cluster_label(
         logger.warning(t('analysis.cluster_fallback_all', n=len(rows)))
         return pd.DataFrame(rows, columns=[group_col, 'n_docs', summary_col])
 
-    scope = f'cluster_label:{getattr(llm, "label", "") or "model"}'
+    scope = summary_scope('cluster_label', llm)
     rows = []
     summarised = 0
     asked = 0

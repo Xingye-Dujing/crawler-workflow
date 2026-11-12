@@ -24,7 +24,7 @@ from api.http import _bad_body, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.accounts.service import accounts_mode
-from services.analysis.pipeline import DataAnalysisService
+from services.analysis.pipeline import LLM_OPS, DataAnalysisService
 from services.datasets.store import SOURCE_ANALYSIS
 
 bp = Blueprint('analysis', __name__)
@@ -64,6 +64,13 @@ def run_analysis():
     # with the reason, because "steps" is the one field the caller cannot guess.
     if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
         return jsonify({'ok': False, 'error': t('api.stepsMustBeObjects')}), 400
+    # This door is the deterministic cleaning pipeline: it has no transport, no run-level
+    # cancellation and no answer cache to lend. Handing an LLM step ``None`` made it write a
+    # word-join or a table-fact sentence into a column named 主题概括/摘要/簇综述 and answer
+    # ``ok:true``, so the degradation was invisible. Refuse it by name instead.
+    model_steps = [str(step.get('op')) for step in steps if step.get('op') in LLM_OPS]
+    if model_steps:
+        return jsonify({'ok': False, 'error': t('analysis.api_needs_workflow', ops='、'.join(model_steps))}), 400
     try:
         cleaned, report = DataAnalysisService.run_pipeline(df, steps)
     except (ValueError, TypeError) as e:

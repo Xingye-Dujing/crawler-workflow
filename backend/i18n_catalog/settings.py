@@ -138,6 +138,7 @@ ZH = {
     'set.importBadPayload': '设置包格式无法识别（应为一个 JSON 对象）',
     'set.importConfirmReplace': '替换导入会重置未出现在包里的设置，请显式确认后再导入',
     'set.importFuture': '这个设置包来自更新的版本（schema {version} > {current}），请先升级程序',
+    'set.importMachineOtherPlatform': '这个设置包来自 {platform}，本机路径没有导入；请在本机重新设置',
     'set.importMachineSkipped': '有 {n} 项本机路径没有导入（未勾选“包含本机路径”），请在本机重新指定',
     'set.importMachineSkippedKey': '本机路径“{setting}”未导入：请在本机重新指定',
     'set.importUnknownKey': '未知设置项“{setting}”已跳过',
@@ -306,6 +307,10 @@ EN = {
     'set.importBadPayload': 'Unrecognised settings package (expected a JSON object)',
     'set.importConfirmReplace': 'Replace import resets settings missing from the package — confirm explicitly first',
     'set.importFuture': 'This package comes from a newer build (schema {version} > {current}) — upgrade the app first',
+    'set.importMachineOtherPlatform': (
+        'this settings package was exported on {platform}; its machine paths were not imported. '
+        'Set them on this machine'
+    ),
     'set.importMachineSkipped': (
         '{n} machine path(s) were not imported (machine paths were not included); set them again on this machine'
     ),

@@ -240,7 +240,9 @@ var exportsManager = {
                 headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
                 body: JSON.stringify(payload),
             });
-            var result = await resp.json();
+            var started = await resp.json();
+            if (!started.ok) throw new Error(started.error || 'report failed');
+            var result = await awaitDocumentJob(started.job && started.job.id);
             if (!result.ok) throw new Error(result.error || 'report failed');
             showToast(I18n.t('exportsMgr.reportDone'));
             this.view(result.name);
@@ -267,7 +269,9 @@ var exportsManager = {
                 headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
                 body: JSON.stringify({ run_id: runId, title: title || '' }),
             });
-            var result = await resp.json();
+            var started = await resp.json();
+            if (!started.ok) throw new Error(started.error || 'report failed');
+            var result = await awaitDocumentJob(started.job && started.job.id);
             if (!result.ok) throw new Error(result.error || 'report failed');
             showToast(I18n.t('exportsMgr.reportLatexDone') + ': ' + result.name, 20000);
             this.refresh();

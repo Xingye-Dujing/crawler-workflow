@@ -1,5 +1,6 @@
 {
     "app.js": [
+        "job-poll.js",
         "llm-settings.js",
         "app-settings.js",
         "floating-panels.js"
@@ -12,6 +13,7 @@
         "canvas-auto-layout.js"
     ],
     "workflow.js": [
+        "job-poll.js",
         "panels/data-views.js",
         "panels/shell.js",
         "panels/run-results.js",

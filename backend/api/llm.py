@@ -19,7 +19,8 @@ from runtime.transport import _local_transport_refusal
 
 from analyzers.llm_client import LLMClient, LLMError, list_free_models, list_ollama_models
 from api.http import _bad_body, _json_body
-from i18n import t
+from i18n import get_lang, t
+from services.reports import jobs
 
 logger = logging.getLogger('api.llm')
 
@@ -108,24 +109,32 @@ def llm_test():
         timeout=60 if provider == 'ollama' else 45,
         host=str(get_setting('ollama_host') or '') if provider == 'ollama' else '',
     )
+    job = jobs.start('llm_test', lambda: _llm_test_work(client, provider), lang=get_lang())
+    if job is None:
+        return jsonify({'ok': False, 'error': t('report.jobBusy')}), 429
+    if job['state'] == 'done':
+        return jsonify(job['result']), job.get('status', 200)
+    return jsonify({'ok': True, 'job': job}), 202
+
+
+def _llm_test_work(client: LLMClient, provider: str) -> tuple[int, dict]:
+    """The one model round-trip, off the request thread (a slow daemon used to hold it 60 s)."""
     started = time.time()
     try:
         reply = client.chat('Reply with exactly: OK', max_retries=1)
         latency = int((time.time() - started) * 1000)
-        return jsonify(
-            {
-                'ok': True,
-                'latency_ms': latency,
-                'reply': reply.strip()[:80],
-                'provider': client.label,
-                'model': client.model,
-                # Which daemon answered — with the local transport the address
-                # is half of "why did this fail", so the panel can show it.
-                'host': client.host if provider == 'ollama' else '',
-            }
-        )
+        return 200, {
+            'ok': True,
+            'latency_ms': latency,
+            'reply': reply.strip()[:80],
+            'provider': client.label,
+            'model': client.model,
+            # Which daemon answered — with the local transport the address
+            # is half of "why did this fail", so the panel can show it.
+            'host': client.host if provider == 'ollama' else '',
+        }
     except LLMError as e:
-        return jsonify({'ok': False, 'error': str(e), 'kind': e.kind})
+        return 200, {'ok': False, 'error': str(e), 'kind': e.kind}
     except Exception as e:
         # The test endpoint reports the failure; it never raises.
-        return jsonify({'ok': False, 'error': str(e), 'kind': 'error'})
+        return 200, {'ok': False, 'error': str(e), 'kind': 'error'}

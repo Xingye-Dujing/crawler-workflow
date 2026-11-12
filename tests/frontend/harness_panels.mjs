@@ -54,13 +54,10 @@ function state() {
 }
 
 const out = {};
-/* The settings page owns its own open/close state; the dock rule only needs to see it
-   take the slot. A stub keeps this harness from booting the schema/fetch machinery. */
-sandbox.SettingsPanel = {
-    toggle() {
-        sandbox.__byId('settings-panel').classList.toggle('open');
-    },
-};
+/* The REAL panels/settings-panel.js is loaded by the Python driver (see the file list):
+   its open() calls closeDockedPanels and clears height, which is the dock rule this
+   matrix measures. Only refresh() is neutralised, so no schema request is booted. */
+vm.runInContext('if (typeof SettingsPanel !== "undefined") SettingsPanel.refresh = async function () {};', sandbox);
 /* Each opening must leave exactly one panel open, with no stale inline height. */
 for (const target of ids) {
     for (const id of ids) {

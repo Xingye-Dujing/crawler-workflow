@@ -711,6 +711,7 @@ def _component_run(
     created.append(rid)
     ctx['open_records'].append(rid)
     execution_state['owned_records'].add(rid)
+    execution_state.setdefault('record_owners', {})[rid] = account_context.current()
     with _completed_lock:
         execution_state['attempt_records'].add(rid)
     # The status endpoint and the resume banner follow the record that is
@@ -735,6 +736,47 @@ def _component_run(
     )
 
 
+def _mark_dead_workflow(ctx: dict, wf_engine, wf_idx: int, exc: Exception) -> None:
+    """Persist a workflow-level failure so the run's verdict can see it.
+
+    ``_run_single_workflow`` can raise outside ``run_node_durable`` — a graph walk
+    (``group_by_level`` / ``connections`` / ``_inputs_for``) that the canvas shape broke, or a
+    stage that could not be built. No node wrote a terminal status in that case, and the run
+    verdict is read from those rows: the branch used to settle ``broken=0`` and report 已完成
+    while it had produced nothing and offered no 继续.
+
+    Every node of the dead workflow that has not already settled is written as FAILED, and
+    added to this attempt's population so the finish line counts it. Nodes that finished
+    before the fault keep their own verdict.
+    """
+    store = (ctx or {}).get('store')
+    run_id = (ctx or {}).get('run_id')
+    if store is None or not run_id:
+        return
+    settled = (NODE_DONE, NODE_PARTIAL, NODE_FAILED, NODE_SKIPPED, NODE_RESTORED)
+    statuses = store.node_statuses(run_id)
+    message = t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx))
+    detail = str(exc or '').strip()
+    if detail:
+        message = f'{message} [{type(exc).__name__}: {detail}]'
+    for nid, node in wf_engine.nodes.items():
+        nid = str(nid)
+        if (statuses.get(nid) or {}).get('status') in settled:
+            continue
+        store.begin_node(
+            run_id,
+            nid,
+            str(node.get('type') or ''),
+            title=str(node.get('title') or node.get('name') or ''),
+            fingerprint=((ctx.get('fingerprints') or {}).get(nid) or ''),
+            component=wf_idx,
+            component_name=getattr(_wf_local, 'name', '') or '',
+        )
+        store.finish_node(run_id, nid, NODE_FAILED, error=message)
+        with _completed_lock:
+            execution_state['attempted_nodes'].add(nid)
+
+
 def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock, account=None):
     # Pool threads inherit neither the starter's thread-local nor the account context. Binding
     # the run's own account here is what keeps a parallel workflow's exports, run store, cookie
@@ -746,12 +788,17 @@ def _run_workflow_wrapper(wf_engine, wf_idx, ctx, headless, all_results, wf_lock
         results = _run_single_workflow(wf_engine, wf_idx, ctx, headless)
         with wf_lock:
             all_results.update(results)
-    except Exception:
+    except Exception as exc:
         # One console line per dead workflow. The log handler
         # forwards every logger call to the console as well, so
         # logging *and* add_log printed the same sentence twice —
         # and the logger form is the one that also carries the
         # traceback to the log file.
+        #
+        # The verdict is read from the durable node rows, so a branch that died before any node
+        # settled must leave a FAILED status behind. Without it the run reported 已完成 with
+        # this workflow silently missing and no 继续 banner.
+        _mark_dead_workflow(ctx, wf_engine, wf_idx, exc)
         logger.exception(t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx)))
     finally:
         # Same release as the serial path: a pool thread that kept
@@ -930,6 +977,7 @@ def _run_worker(
             created.append(run_id)
             ctx['open_records'].append(run_id)
             execution_state['owned_records'].add(run_id)
+            execution_state.setdefault('record_owners', {})[run_id] = account_context.current()
             with _completed_lock:
                 execution_state['attempt_records'].add(run_id)
             # Read *after* start_run so nodes left 'running' by the promotion
@@ -974,6 +1022,12 @@ def _run_worker(
                 add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)), wf_idx=wf_idx)
                 try:
                     results = _run_single_workflow(se, wf_idx, sub_ctx, headless)
+                except Exception as exc:
+                    # Same durable verdict as the parallel wrapper: the outer handler marks the
+                    # run failed, but without a FAILED node row the resume banner and the
+                    # per-node panel would still describe a branch that never produced anything.
+                    _mark_dead_workflow(sub_ctx, se, wf_idx, exc)
+                    raise
                 finally:
                     # Released, not left standing. Serial mode runs in the RUN
                     # thread, so the index of the component that just finished
@@ -1188,9 +1242,41 @@ _CLAIM_STAMP_KEYS = (
 )
 
 
+#: The console, result and counter keys a claim CLEARS before it starts its thread. They are
+#: not ownership stamps: on a ``Thread.start()`` failure the previous run's finished console and
+#: preview must come back, or a start that never happened erases what the user was reading.
+_DESTRUCTIVE_CLAIM_KEYS = (
+    'results',
+    'executor',
+    'logs',
+    '_log_total',
+    '_wf_logs',
+    '_wf_log_total',
+    '_wf_names',
+    '_time_windows',
+    'total_nodes',
+    'completed_nodes',
+    'skipped_nodes',
+    'failed_nodes',
+)
+
+
 def _claim_stamp() -> dict:
     """A restoreable copy of the ownership keys a claim is about to write."""
     return {key: execution_state.get(key, _ABSENT) for key in _CLAIM_STAMP_KEYS}
+
+
+def _run_state_stamp() -> dict:
+    """A restoreable copy of the state a claim clears before its worker exists."""
+    return {key: execution_state.get(key, _ABSENT) for key in _DESTRUCTIVE_CLAIM_KEYS}
+
+
+def _restore_run_state(stamp: dict) -> None:
+    for key, value in stamp.items():
+        if value is _ABSENT:
+            execution_state.pop(key, None)
+        else:
+            execution_state[key] = value
 
 
 def _restore_claim_stamp(stamp: dict, ambient_before: dict) -> None:
@@ -1281,6 +1367,7 @@ def begin_run(data: dict, lang_header: str) -> dict:
         execution_state['running'] = True
         started = False
         _stamp_before = _claim_stamp()
+        _state_before = _run_state_stamp()
         _ambient_before = ambient()
         try:
             workflow = data.get('workflow', {})
@@ -1502,6 +1589,10 @@ def begin_run(data: dict, lang_header: str) -> dict:
         # /api/workflow/status answering a run that has no record (and every OTHER account getting
         # ``foreign_run``). AGENTS: a refused claim owns nothing.
         _restore_claim_stamp(_stamp_before, _ambient_before)
+        # The previous run's console/preview/counters were cleared before ``start()`` was called;
+        # a start that never happened must hand them back, not leave the user reading an empty
+        # console and a blank canvas for a run whose thread does not exist.
+        _restore_run_state(_state_before)
         # One console line, localized; logger.exception keeps the traceback in the file.
         logger.exception(t('run.start_failed', err=start_error))
         # Below the lock: the drain starts the next request through ``begin_run``, which needs it.

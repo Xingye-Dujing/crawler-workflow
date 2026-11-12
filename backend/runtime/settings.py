@@ -457,7 +457,14 @@ def import_payload(
         source.update(raw_values)
     raw_machine = payload.get('machine')
     if isinstance(raw_machine, dict):
-        if include_machine:
+        exported_on = str(payload.get('platform') or '')
+        if include_machine and exported_on and exported_on != sys.platform:
+            # A Windows export's C:\Program Files\... is not a path this host can use; writing
+            # it silently made every later crawl refuse by name. The package already says which
+            # platform wrote it, so honour that answer and keep this host's own paths.
+            skipped.extend(sorted(raw_machine))
+            warnings.append(t('set.importMachineOtherPlatform', platform=exported_on))
+        elif include_machine:
             source.update(raw_machine)
         else:
             skipped.extend(sorted(raw_machine))

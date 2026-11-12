@@ -10,6 +10,21 @@ from pathlib import Path
 import networkx as nx
 import pandas as pd
 
+from services.exports.writer import DataExporter
+
+
+def write_csv(path, rows, columns: list | None = None) -> None:
+    """Write one bibliometric CSV through the project's formula neutralizer.
+
+    These files are opened in Excel like every other export. A title or author that starts
+    with ``=``/``+``/``-``/``@`` is data the crawler recorded, never a formula the reader
+    asked to execute, so the same escaping ``DataExporter.save`` applies to csv/excel applies
+    here too. Without it the same table was safe from ``/api/export/save`` and unsafe from a
+    bibliometric export.
+    """
+    frame = DataExporter.neutralize_formulas(pd.DataFrame(rows, columns=columns))
+    frame.to_csv(path, index=False, encoding='utf-8-sig')
+
 
 def snapshot_capture(rows: list[dict]) -> dict:
     """Split a stored bibliometrics table into the two things a comparison reads.
@@ -140,23 +155,23 @@ def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
     files['biblio_json'] = str(json_path)
 
     nodes_path = target / f'{safe}_nodes.csv'
-    pd.DataFrame(result['rows']).to_csv(nodes_path, index=False, encoding='utf-8-sig')
+    write_csv(nodes_path, result['rows'])
     files['biblio_nodes'] = str(nodes_path)
 
     edges_path = target / f'{safe}_edges.csv'
-    pd.DataFrame(result['edges']).to_csv(edges_path, index=False, encoding='utf-8-sig')
+    write_csv(edges_path, result['edges'])
     files['biblio_edges'] = str(edges_path)
 
     if result.get('clusters'):
         clusters_path = target / f'{safe}_clusters.csv'
-        pd.DataFrame(result['clusters']).to_csv(clusters_path, index=False, encoding='utf-8-sig')
+        write_csv(clusters_path, result['clusters'])
         files['biblio_clusters'] = str(clusters_path)
     if result.get('bursts'):
         bursts_path = target / f'{safe}_bursts.csv'
-        pd.DataFrame(result['bursts']).to_csv(bursts_path, index=False, encoding='utf-8-sig')
+        write_csv(bursts_path, result['bursts'])
         files['biblio_bursts'] = str(bursts_path)
     if result.get('variation'):
         variation_path = target / f'{safe}_variation.csv'
-        pd.DataFrame(result['variation']).to_csv(variation_path, index=False, encoding='utf-8-sig')
+        write_csv(variation_path, result['variation'])
         files['biblio_variation'] = str(variation_path)
     return files

@@ -634,6 +634,11 @@ class TestAnotherAccountsRunIsNotYours:
         execution_state['username'] = 'admin'
         execution_state['run_id'] = 'admins-finished-run'
         execution_state['workflow_labels'] = ['admin’s canvas']
+        # What the previous run left on screen. A start that never happened must not erase it.
+        execution_state['results'] = {'old-node': [{'x': 1}]}
+        execution_state['completed_nodes'] = 3
+        execution_state['logs'] = ['old console line']
+        execution_state['_log_total'] = 1
 
         class _NeverStarts:
             def __init__(self, *args, **kwargs):
@@ -663,6 +668,9 @@ class TestAnotherAccountsRunIsNotYours:
         assert execution_state['run_id'] == 'admins-finished-run', 'a thread that never ran stamped a run id'
         assert execution_state['user_id'] == admin_id
         assert execution_state['workflow_labels'] == ['admin’s canvas']
+        assert execution_state['results'] == {'old-node': [{'x': 1}]}, 'a failed start erased the previous preview'
+        assert execution_state['completed_nodes'] == 3
+        assert 'old console line' in execution_state['logs'], 'a failed start erased the previous console'
         assert admin_client.get('/api/workflow/status').get_json().get('foreign_run') is not True
 
     def test_the_process_panel_sees_only_your_own_run_threads(self, admin_client):

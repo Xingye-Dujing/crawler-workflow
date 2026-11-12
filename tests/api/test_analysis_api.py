@@ -89,10 +89,10 @@ class TestAnalysisRun:
         assert body['row_count'] == 5
         assert body['report'] == []
 
-    def test_a_fallback_step_without_a_model_is_answered_not_a_500(self, client):
-        """This door hands ``run_pipeline`` no LLM client at all, and ``on_fail='fallback'`` is
-        a declared value on it. 聚类摘要 used to reach ``llm.chat`` on None — an AttributeError
-        the handler does not catch, i.e. an HTML 500 for a legal request."""
+    def test_a_model_step_without_a_model_is_refused_by_name(self, client):
+        """This door has no transport, cancellation or answer cache to lend. It used to answer
+        ``ok:true`` while writing a first-text excerpt into a column called 摘要, which reads as
+        a model summary; the refusal names the step instead."""
         response = client.post(
             '/api/analysis/run',
             json={
@@ -114,10 +114,10 @@ class TestAnalysisRun:
                 ],
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 400
         body = response.get_json()
-        assert body['ok'] is True
-        assert body['row_count'] == 2
+        assert body['ok'] is False
+        assert 'cluster_label' in body['error']
 
     def test_run_rejects_a_step_it_does_not_know(self, client, paste):
         dataset_id = paste(DIRTY_RECORDS, name='unknown-op.csv')
@@ -2062,7 +2062,7 @@ class TestTheLabellingStepNeedsTheRunModel:
             },
         )
         assert response.status_code == 400
-        assert t('analysis.label_no_llm', op='topic_label') in response.get_json()['error']
+        assert t('analysis.api_needs_workflow', ops='topic_label') == response.get_json()['error']
 
     def test_a_run_without_a_model_is_refused_before_the_first_call(self, app_module, monkeypatch):
         from services.analysis.pipeline import UnknownOperationError

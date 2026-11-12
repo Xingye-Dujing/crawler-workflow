@@ -200,6 +200,32 @@ class CatbusCrawler(Crawler):
         kept = counts['kept']
         refused = counts['refused'] + len(outcome.warnings)
         self.target_total = target_count
+        # A source cell has no comment engine's "dead link" semantics: the list IS the table.
+        # ``_refuse`` lets the comment walk classify ``dead``/``partial`` per link, but reusing
+        # that answer here let a truncated or empty source table settle DONE (the exact
+        # under-collect docs/crawler_rules.md forbids). ``partial``/``dead`` from the adapter is
+        # its own statement that the walk did not finish, so it is a named refusal.
+        if outcome.status in ('partial', 'dead'):
+            detail = str(outcome.message or outcome.hint or '').strip() or outcome.status
+            raise ValueError(
+                t('catbus.sourceIncomplete', platform=self.platform, mode=mode, status=outcome.status, detail=detail)
+            )
+        # A non-paged cell promises no target count, but an empty answer is still what a node
+        # settles DONE on. Only a resumed session that already holds rows may legitimately add
+        # nothing this pass.
+        if (
+            not kept
+            and not self.collected()
+            and not counts['halted']
+            and (not target_count or self._shortage_is_licensed(mode, counts['halted']))
+        ):
+            # A non-paged cell is the target=0 case; the licence covers a fixed board that
+            # was still asked for a count by an old canvas. A paged short crawl is convicted
+            # below (note_end(UNDER_TARGET)) and raised by the source executor.
+            detail = str(outcome.message or outcome.hint or '').strip() or t('catbus.finishedOnce', mode=mode, n=0)
+            raise ValueError(
+                t('catbus.sourceIncomplete', platform=self.platform, mode=mode, status='empty', detail=detail)
+            )
         if target_count and self.collected() < target_count and not self._shortage_is_licensed(mode, counts['halted']):
             # Convicted, not excused: an adapter list that stopped growing is not proof the site ran
             # out — a soft throttle looks exactly the same — so a short table says “采得不足” with the

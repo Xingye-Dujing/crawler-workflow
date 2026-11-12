@@ -21,6 +21,7 @@ import threading
 
 from flask import Blueprint, jsonify, request
 from nodes.labels import node_label
+from runtime import account_context
 from runtime.state import (
     LOG_KEEP,
     _completed_lock,
@@ -379,12 +380,28 @@ def stop_workflow():
         # so every line this stop path prints — including run.browserStuck below — reads
         # in the UI's own language, not Chinese in an English panel.
         lang = get_lang()
+        # And it starts with no account: the queue may hand the slot to another account while
+        # these reapers are still unwinding, and ``_push_log``/the run-log writer resolve their
+        # owner at CALL time. Without this, account A's stop lines landed in account B's console
+        # and durable run log.
+        owner = account_context.current()
 
     def _reap(c):
-        set_lang(lang)
-        _close_login_browser(c, quit_timeout=STOP_QUIT_GRACE)
+        token = account_context.bind(owner)
+        try:
+            set_lang(lang)
+            _close_login_browser(c, quit_timeout=STOP_QUIT_GRACE)
+        finally:
+            account_context.unbind(token)
 
     def _finish_stop():
+        token = account_context.bind(owner)
+        try:
+            _finish_stop_as_owner()
+        finally:
+            account_context.unbind(token)
+
+    def _finish_stop_as_owner():
         set_lang(lang)
         # One thread per browser. Reaping them in series made the LAST crawl of a
         # parallel run wait behind every earlier reap, and the run record cannot be

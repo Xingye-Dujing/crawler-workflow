@@ -111,7 +111,16 @@ def connect() -> sqlite3.Connection:
     path = db_path()
     with contextlib.suppress(OSError):
         os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.name != 'nt':
+        # This database holds paid-proxy usernames and passwords in clear (a CONNECT relay
+        # needs them). umask 022 would leave it 0644, readable by every local user of a
+        # shared host. Windows has no mode bits; its ACLs are the deployer's business.
+        with contextlib.suppress(OSError):
+            os.chmod(os.path.dirname(path), 0o700)
     conn = sqlite3.connect(path, timeout=5.0)
+    if os.name != 'nt':
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA busy_timeout = 5000')
     for statement in _SCHEMA:

@@ -283,11 +283,11 @@ class TestLimitFollowsTheFormat:
         assert request['url'] == '/api/data/preview'
         assert request['body'] == {'node_id': '3', 'workflow_name': '知乎 + 情感', 'limit': 50, 'offset': 0}
 
-    @pytest.mark.parametrize('scenario, limit', [('txt-format', 5000), ('json-format', 5000)])
-    def test_a_text_answer_is_asked_for_the_whole_thing(self, world, scenario, limit):
-        """A text view has no pager, so it must be fetched wide in one go — the 50 a
-        table wants would show a fifth of a report and offer no way to the rest."""
-        assert case(world, scenario)['requests'][0]['body']['limit'] == limit
+    @pytest.mark.parametrize('scenario', ['txt-format', 'json-format'])
+    def test_a_text_answer_asks_for_the_servers_real_maximum(self, world, scenario):
+        """The server clamps every preview to 500 rows. Asking for 5000 did not fetch the
+        whole text; it fetched 500 and then hid the pager, so truncation looked complete."""
+        assert case(world, scenario)['requests'][0]['body']['limit'] == 500
 
     @pytest.mark.parametrize('scenario', ['csv-format-is-a-table', 'no-format-is-a-table'])
     def test_every_other_format_keeps_the_paged_table(self, world, scenario):
@@ -420,10 +420,12 @@ class TestTextRender:
         report = case(world, 'json-format')
         assert json.loads(report['world']['preText']) == _rows(2)
 
-    def test_a_text_answer_hides_the_pager_it_cannot_use(self, world):
-        """There is one page by construction, so the controls would only offer a
-        cursor that has nowhere to go."""
-        assert case(world, 'txt-format')['world']['pagerDisplay'] == 'none'
+    def test_a_text_answer_keeps_the_pager_for_the_rows_past_the_cap(self, world):
+        """One answer holds at most 500 rows, so a long text output must still offer a
+        way to the rest instead of presenting the first page as the whole thing."""
+        report = case(world, 'txt-format')
+        assert report['world']['pagerDisplay'] == ''
+        assert report['world']['pageLabel'] == '1 / 1'
 
 
 # ─── empty and refused ────────────────────────────────────────────────────

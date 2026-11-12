@@ -44,7 +44,9 @@ ZH = {
         '水军可能性只是召回线索、不是判决：它只能看见表内的跨账号重复文本与发帖突发，'
         '改了措辞和时间的协同账号一律漏检，且漏检率不可测'
     ),
+    'analysis.api_needs_workflow': '步骤 {ops} 需要模型；这个接口不提供模型，请在分析节点里运行',
     'analysis.calc_failed': '计算列 {col} = {expr} 失败：{err}',
+    'analysis.calc_rejected': '表达式只能使用列名、数字和 + - * / // % ** 与括号（不允许函数调用、属性访问或 @ 变量）',
     'analysis.cluster_cancelled': '已停止：还有 {n} 个簇没问模型，它们的摘要标为未处理',
     'analysis.cluster_done': '聚类摘要：{n} 个簇已写出（模型 {model}）',
     'analysis.cluster_empty': '簇 {group} 的摘要返回为空',
@@ -415,7 +417,14 @@ EN = {
         'and posting bursts inside the table; a coordinated account that varies wording and timing is '
         'missed, and that miss rate is unmeasurable'
     ),
+    'analysis.api_needs_workflow': (
+        'step(s) {ops} need a model, and this endpoint has none; run them from an analysis node'
+    ),
     'analysis.calc_failed': 'Column calc failed for {col} = {expr}: {err}',
+    'analysis.calc_rejected': (
+        'an expression may only use column names, numbers and + - * / // % ** with parentheses '
+        '(no calls, attribute access or @ variables)'
+    ),
     'analysis.cluster_cancelled': 'stopped: {n} clusters were never asked, and their summaries are marked 未处理',
     'analysis.cluster_done': 'cluster summaries: {n} clusters written (model {model})',
     'analysis.cluster_empty': 'the summary for cluster {group} came back empty',

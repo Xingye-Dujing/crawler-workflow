@@ -36,6 +36,7 @@ import re
 import threading
 import time
 
+from core import atomic
 from core.config import Config
 from runtime import account_context, paths
 from runtime.settings import get_setting
@@ -641,18 +642,41 @@ def build_template(launch=None) -> dict:
 
 
 def _marker(platform: str, account: str = '') -> dict:
-    """The marker document, or ``{}`` when it is missing or unreadable.
+    """The marker document, or ``{}`` when it has never been written.
 
-    An unparsable marker is treated as *no history at all*, which re-imports the
-    cookie file — the safe direction: the alternative is a crawl that assumes a
-    session this profile was never given.
+    A marker that exists but cannot be parsed (a crash between ``open('w')`` and
+    ``json.dump``, two writers interleaving) is NOT "no history": treating it as new
+    made :func:`is_used` answer False, and the next crawl planted the OLD cookie
+    snapshot into a profile that may already hold a rotated live session (weibo
+    SUB/SUBP). ``unreadable`` keeps the profile on the conservative side.
     """
     try:
         with open(marker_path(platform, account), encoding='utf-8') as handle:
             data = json.load(handle)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+        return data if isinstance(data, dict) else {'unreadable': True}
+    except FileNotFoundError:
         return {}
+    except (OSError, ValueError):
+        return {'unreadable': True}
+
+
+def _write_marker(path: str, data: dict) -> None:
+    """Replace the marker atomically, under the lane that owns its path.
+
+    A bare ``open(path, 'w')`` publishes an empty/truncated file to a concurrent
+    reader and leaves one there if the process dies mid-write. The rest of the
+    project stages and renames for exactly this reason; the marker did not.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    staged = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
+    with open(staged, 'w', encoding='utf-8') as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=1)
+    try:
+        atomic.replace(staged, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(staged)
+        raise
 
 
 def is_used(platform: str, account: str = '') -> bool:
@@ -662,7 +686,10 @@ def is_used(platform: str, account: str = '') -> bool:
     :func:`is_imported`: a profile can be used without any import (the user logged
     in *inside* it), and a fresh one can be ready to import the saved file.
     """
-    return bool(_marker(platform, account).get('used_at'))
+    marker = _marker(platform, account)
+    # An unreadable marker is "this profile has a history I cannot read", never "brand
+    # new": the latter re-plants an old cookie snapshot over a live session.
+    return bool(marker.get('used_at') or marker.get('unreadable'))
 
 
 def is_imported(platform: str, account: str = '') -> bool:
@@ -688,17 +715,16 @@ def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '', a
     """
     path = marker_path(platform, account)
     stamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    with contextlib.suppress(OSError):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    with lock_for(path), contextlib.suppress(OSError):
         existing = _marker(platform, account)
+        existing.pop('unreadable', None)
         existing['used_at'] = stamp
         if imported and not existing.get('imported_at'):
             existing['imported_at'] = stamp
         existing.setdefault('imported_at', '')
         if imported:
             existing['cookie_stamp'] = cookie_stamp
-        with open(path, 'w', encoding='utf-8') as handle:
-            json.dump(existing, handle, ensure_ascii=False, indent=1)
+        _write_marker(path, existing)
 
 
 def remember_cookie(platform: str, cookie_path: str, account: str = '') -> None:
@@ -712,12 +738,11 @@ def remember_cookie(platform: str, cookie_path: str, account: str = '') -> None:
     exists to prevent. ``imported_at`` stays where it is: nothing was imported.
     """
     path = marker_path(platform, account)
-    with contextlib.suppress(OSError):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    with lock_for(path), contextlib.suppress(OSError):
         existing = _marker(platform, account)
+        existing.pop('unreadable', None)
         existing['cookie_stamp'] = file_stamp(cookie_path)
-        with open(path, 'w', encoding='utf-8') as handle:
-            json.dump(existing, handle, ensure_ascii=False, indent=1)
+        _write_marker(path, existing)
 
 
 def file_stamp(path: str) -> str:

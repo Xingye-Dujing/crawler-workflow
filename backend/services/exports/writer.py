@@ -179,7 +179,7 @@ class DataExporter:
         if fmt not in cls.SUPPORTED_FORMATS:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
         if fmt in ('csv', 'excel'):
-            df = cls._neutralize_formulas(df)
+            df = cls.neutralize_formulas(df)
 
         directory = os.path.dirname(filepath) or '.'
         os.makedirs(directory, exist_ok=True)
@@ -212,7 +212,7 @@ class DataExporter:
     FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
 
     @classmethod
-    def _neutralize_formulas(cls, df: pd.DataFrame) -> pd.DataFrame:
+    def neutralize_formulas(cls, df: pd.DataFrame) -> pd.DataFrame:
         """Prefix formula-looking text cells with ``'`` so Excel keeps them as text.
 
         Applied to csv/excel only (a json/txt export is not evaluated by a spreadsheet),

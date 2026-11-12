@@ -194,6 +194,23 @@ class TestTheDiscoveryVerdict:
         assert info.reason_params['version'] == 'v18.20.4'
         assert seen == [['/usr/bin/node', '--version']], 'the version is asked of the runtime, not the adapter'
 
+    def test_the_capability_probe_uses_its_own_short_timeout(self, monkeypatch):
+        """``probe()`` holds the module lock while it waits, so reusing the 900s run budget
+        froze the capability panel and the run gate behind one hung Node."""
+        seen = []
+
+        def fake(argv, **kw):
+            seen.append((list(argv), kw.get('timeout')))
+            if argv and argv[-1] == '--version':
+                return bridge._Call(code=0, stdout='v24.21.0', stderr='')
+            return bridge._Call(code=0, stdout=json.dumps(MANIFEST, ensure_ascii=False), stderr='')
+
+        monkeypatch.setattr(bridge, '_call', fake)
+        bridge.probe(force=True)
+        capabilities = [(argv, timeout) for argv, timeout in seen if argv and argv[-1] == 'capabilities']
+        assert capabilities == [(['/usr/bin/node', '/opt/catbus/cli.js', 'capabilities'], bridge.PROBE_TIMEOUT)], seen
+        assert bridge.PROBE_TIMEOUT < bridge.RUN_TIMEOUT
+
     def test_the_adapter_is_asked_for_its_own_manifest(self, monkeypatch):
         calls = []
         monkeypatch.setattr(bridge, '_call', answer(record=calls))

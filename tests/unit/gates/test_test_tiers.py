@@ -34,6 +34,7 @@ TESTS_DIR = REPO_ROOT / 'tests'
 #: shape, and this is a rule about the FILE (a probe must be wired, not merely named).
 REQUIRE_BROWSER_ENV = 'CRAWLER_REQUIRE_BROWSER'
 REQUIRE_OLLAMA_ENV = 'CRAWLER_REQUIRE_OLLAMA'
+REQUIRE_CATBUS_ENV = 'CIXI_REQUIRE_CATBUS'
 
 #: ``live_quick`` exists to be short. Nine today; the ceiling is where a future
 #: "just add one more" has to say why out loud instead of silently doubling the
@@ -141,6 +142,19 @@ class TestDefaultFilter:
         expression = addopts.split('-m')[1]
         for marker in ('integration', 'live_ollama', 'live_site', 'live_quick'):
             assert f'not {marker}' in expression, f'{marker} would run on a plain pytest: {addopts}'
+
+    def test_every_excluded_tier_has_a_versioned_way_to_run_it(self):
+        """The filter proves a tier will not run by accident; this proves it CAN run on purpose.
+
+        The old guard was one-directional: deleting the last ``live_quick`` case (or the
+        documented command) left a green suite with no path to the tier the docs promised.
+        """
+        docs = (REPO_ROOT / 'docs' / 'development.md').read_text(encoding='utf-8')
+        command_lines = [line for line in docs.splitlines() if 'pytest' in line and ' -m ' in line]
+        for marker in ('integration', 'live_ollama', 'live_quick', 'live_site'):
+            assert any(marker in line for line in command_lines), (
+                f'{marker} is excluded by addopts but no versioned command runs it: {command_lines}'
+            )
 
     def test_the_quick_marker_is_registered(self):
         declared = PYTEST_INI.read_text(encoding='utf-8')
@@ -900,14 +914,21 @@ class TestTheDeviceTierCanFailLoudly:
     def _policy() -> str:
         return (Path(__file__).resolve().parents[2] / 'device_policy.py').read_text(encoding='utf-8')
 
-    def test_both_devices_have_a_fail_loudly_switch(self):
+    def test_every_device_has_a_fail_loudly_switch(self):
         policy = self._policy()
         assert REQUIRE_BROWSER_ENV in policy
         assert REQUIRE_OLLAMA_ENV in policy
+        assert REQUIRE_CATBUS_ENV in policy, 'the third device had a switch nobody validated'
         # The conftest must USE that one policy, not hold a second copy of the decision.
         source = self._source()
         assert 'from device_policy import' in source
         assert 'def unavailable(' not in source, 'the policy has two homes again — the copies will drift'
+        # The CatBus contract case is the ONE real-manifest check in the suite; its skip must
+        # be answerable by the switch rather than a bare pytest.skip. CI leaves it unset on
+        # purpose (the adapter is a separate unpublished checkout), which is recorded in ci.yml.
+        catbus = (INTEGRATION_DIR / 'test_catbus_adapter.py').read_text(encoding='utf-8')
+        assert REQUIRE_CATBUS_ENV in catbus
+        assert 'from device_policy import REQUIRE_CATBUS_ENV, unavailable' in catbus
 
     def test_the_probe_asks_for_a_device_only_when_the_run_selected_one(self):
         """A flag set by someone who selected no device case must not report Chrome as broken.

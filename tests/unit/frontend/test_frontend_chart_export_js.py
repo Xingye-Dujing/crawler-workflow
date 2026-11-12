@@ -317,6 +317,7 @@ class TestLatexBarPdf:
         assert case['sentName'] == case['registered'] == 'tu30-a1b2.txt', case
         assert case['sentSource'] == ['name'], f'the request must carry the name only: {case["sentSource"]}'
         assert case['asked'] == 1
+        assert case['polled'] == 1, 'the page did not wait for the background compile'
 
     def test_an_inline_preview_offers_no_button_and_sends_nothing(self, saved):
         case = saved['latex_bar_inline_only']

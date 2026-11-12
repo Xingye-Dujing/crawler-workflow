@@ -57,6 +57,13 @@ class TestLlmPayload:
             'workers': 3,
         }
 
+    def test_the_ai_connection_button_waits_for_the_background_job(self):
+        """`/api/llm/test` answers a job id now; reading the body directly would toast a missing key."""
+        source = (JS_DIR / 'llm-settings.js').read_text(encoding='utf-8')
+        assert "'/api/llm/test'" in source
+        assert 'awaitDocumentJob(started.job && started.job.id)' in source, source
+        assert (JS_DIR / 'job-poll.js').is_file(), 'the shared poller the button calls is gone'
+
     def test_openrouter_sends_its_own_model_and_its_key(self, st):
         sent = st['payload_openrouter']
         assert sent['provider'] == 'openrouter'

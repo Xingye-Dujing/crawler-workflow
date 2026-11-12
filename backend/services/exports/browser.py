@@ -42,7 +42,10 @@ def is_staged(name: str) -> bool:
 
 #: Refused extensions. The panel can show the file but must not hand back a
 #: script or an executable with a content type that a browser might act on.
-UNSAFE_DOWNLOADS = ('.py', '.js', '.html', '.htm', '.exe', '.bat', '.cmd', '.sh', '.dll')
+#: SVG and XML join the list because both can carry script/entity payloads and a browser
+#: renders them from this app's own origin; a whitelist would be better, but every format the
+#: writers produce must stay downloadable. ``resolve_export_file`` already refuses traversal.
+UNSAFE_DOWNLOADS = ('.py', '.js', '.html', '.htm', '.exe', '.bat', '.cmd', '.sh', '.dll', '.svg', '.xml')
 
 #: A listing this long stops being useful and starts being a memory problem;
 #: the caller pages by narrowing the prefix instead.

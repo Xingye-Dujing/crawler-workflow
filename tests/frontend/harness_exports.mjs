@@ -68,6 +68,9 @@ const I18n = {
    The dialog answer is set per scenario, because the same method has to be
    proven to distinguish "create", "create with the AI paragraph" and "cancel". */
 const captured = { dialogs: [], posts: [], opens: [], toasts: [] };
+/* One map for the whole harness: the POST and the later poll are two fetch calls. */
+const completedJobs = new Map();
+let jobSeq = 0;
 const dialogAnswer = { value: null };
 /* A multi-dialog method (smart clear: pick run → confirm) needs a DIFFERENT answer for each
    call; the queue feeds them in order and falls back to the single `dialogAnswer.value` for the
@@ -88,6 +91,22 @@ Object.assign(sandbox, {
         if (body) {
             captured.posts.push({ url, method: options.method, lang: options.headers['X-Lang'], body });
         }
+        /* Report and Paper are background jobs now: the POST answers an id, the poll answers
+           the body. The harness keeps the old direct bodies as the job's result. */
+        const asJob = (result) => {
+            const id = `doc-job-${++jobSeq}`;
+            completedJobs.set(id, result);
+            return { ok: true, job: { id, state: 'running' } };
+        };
+        if (String(url).indexOf('/api/jobs/') >= 0) {
+            const raw = String(url).split('/api/jobs/')[1].split('?')[0];
+            /* The sandbox's encodeURIComponent is a marker for download assertions; a job id
+               is safe, so unwrap the marker instead of missing the map. */
+            const id = raw.replace(/^ENC\((.*)\)$/, '$1');
+            return Promise.resolve({
+                json: () => Promise.resolve({ ok: true, job: { id, state: 'done', result: completedJobs.get(id) } }),
+            });
+        }
         let answer;
         if (!body && url.indexOf('/api/exports/ledger') >= 0) {
             answer = { ok: true, ledger: payload.ledger || [] };
@@ -102,7 +121,9 @@ Object.assign(sandbox, {
             // 依据名字清除该批分片: a batch of shards gone, one 固定 kept.
             answer = { ok: true, removed: 2, skipped_locked: 1, missing: 0, requested: 3, name: body.name };
         } else if (body && url.indexOf('/report/latex') >= 0) {
-            answer = { ok: true, name: 'report-x.pdf', tex: 'report-x.tex', figures: 2, tables: 2 };
+            answer = asJob({ ok: true, name: 'report-x.pdf', tex: 'report-x.tex', figures: 2, tables: 2 });
+        } else if (body && url.indexOf('/report/generate') >= 0) {
+            answer = asJob({ ok: true, name: 'report-x.html' });
         } else if (body) {
             answer = { ok: true, name: 'report-x.html' };
         } else {

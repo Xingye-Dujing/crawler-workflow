@@ -24,8 +24,9 @@ from runtime.stores import _load_dataset, get_run_store
 
 from api.http import _bad_body, _json_body, _safe_int
 from api.resolution import _durable_node_rows, _resolve_dataframe
-from i18n import t
+from i18n import get_lang, t
 from services.charts import pdf
+from services.reports import jobs
 
 
 def _read_text(path: str) -> str:
@@ -480,27 +481,36 @@ def studio_save_pdf():
     if not os.path.isfile(figure):
         return jsonify({'ok': False, 'error': t('api.pdfMissingFile', name=name)}), 400
 
-    docs = [_read_text(figure)]
+    job = jobs.start('chart_pdf', lambda: _compile_chart_pdf(name, figure, dict(row)), lang=get_lang())
+    if job is None:
+        return jsonify({'ok': False, 'error': t('report.jobBusy')}), 429
+    if job['state'] == 'done':
+        return jsonify(job['result']), job.get('status', 200)
+    return jsonify({'ok': True, 'job': job}), 202
+
+
+def _compile_chart_pdf(name: str, figure: str, row: dict) -> tuple[int, dict]:
+    """The slow half: read the filed source(s) and run ``xelatex`` off the request thread."""
+    export_dir = paths.active().export_dir
     store = get_run_store()
+    docs = [_read_text(figure)]
     for sibling in store.files_for_run(row['run_id'], row.get('node_id') or None, 'latex_table'):
-        path = os.path.join(paths.active().export_dir, sibling['name'])
+        path = os.path.join(export_dir, sibling['name'])
         if os.path.isfile(path):
             docs.append(_read_text(path))
     out_name = re.sub(r'\.txt$', '', name, flags=re.IGNORECASE) + '.pdf'
-    out, staged = pdf.compile_pdf(pdf.compose_tex(docs), out_name, paths.active().export_dir)
+    out, staged = pdf.compile_pdf(pdf.compose_tex(docs), out_name, export_dir)
     if 'error' in out:
-        return jsonify({'ok': False, 'error': out['error']}), 500
+        return 500, {'ok': False, 'error': out['error']}
     store.record_file(row['run_id'], str(row.get('node_id') or ''), staged, 'pdf')
     logger.info(t('misc.chartPdfSaved', name=staged, bytes=out.get('pdf_bytes', 0)))
-    return jsonify(
-        {
-            'ok': True,
-            'filename': staged,
-            'bytes': out.get('pdf_bytes', 0),
-            'run_id': row['run_id'],
-            'node_id': row.get('node_id') or '',
-        }
-    )
+    return 200, {
+        'ok': True,
+        'filename': staged,
+        'bytes': out.get('pdf_bytes', 0),
+        'run_id': row['run_id'],
+        'node_id': row.get('node_id') or '',
+    }
 
 
 @bp.route('/api/studio/save-image', methods=['POST'])

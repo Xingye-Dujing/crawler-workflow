@@ -639,6 +639,16 @@ class TestTopicFigureCharts:
         with pytest.raises(ChartConfigError, match='Field not found in the data: 词'):
             V.to_echarts_option(self.TERMS, 'topic_terms', x='词', y='overall_freq', y2='within_freq')
 
+    def test_a_text_value_column_is_refused_instead_of_drawn_as_nulls(self):
+        """A column that EXISTS but holds no number used to coerce to all-NaN, and the option
+        went out as nulls: 200, ok:true, node DONE, empty figure."""
+        text_x = self.MAP.assign(pc1=['甲', '乙', '丙'])
+        with pytest.raises(ChartConfigError, match='pc1'):
+            V.to_echarts_option(text_x, 'topic_map', x='pc1', y='pc2')
+        text_y = self.TERMS.assign(overall_freq=['甲', '乙', '丙'])
+        with pytest.raises(ChartConfigError, match='overall_freq'):
+            V.to_echarts_option(text_y, 'topic_terms', x='term', y='overall_freq', y2='within_freq')
+
     def test_a_named_but_missing_topic_map_label_or_size_is_refused_not_emptied(self):
         """The map used to read a NAMED-but-absent field as "no labels": every bubble came out
         blank at the floor radius — a figure that looked valid and lied. A rename on one side is a
@@ -776,14 +786,23 @@ class TestOptionJsonSafety:
         # has none of its columns and it correctly refuses — its own happy path is TestModelAgreement.
         # ``box`` joins them: a group whose value column is entirely missing has no five-number
         # summary, and drawing one at 0 was the fabricated-zero bug (TestAggregation).
-        frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None]})
+        # ``n`` gives topic_map a NUMERIC coordinate: a text coordinate is now a named
+        # refusal (a null-only axis is the bug this case measures, not a renamed column).
+        frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None], 'n': [1.0, 2.0]})
         # 双轴折线 and 显著词图 need their second field like any other type needs x: without
         # one they are a refused spec (pinned in TestConfigErrors), not a chart with a blank
         # second series.
         extra = {'y2': 'v'} if chart_type in ('dual_line', 'topic_terms') else {}
         if chart_type == 'stack_pct':
             extra = {'stack_fields': 'v'}
-        option = V.to_echarts_option(frame, chart_type, x='g', y='v', value_field='v', **extra)
+        option = V.to_echarts_option(
+            frame,
+            chart_type,
+            x='n' if chart_type == 'topic_map' else 'g',
+            y='v',
+            value_field='v',
+            **extra,
+        )
         assert json.dumps(option, allow_nan=False)
 
     def test_numpy_scalars_are_folded_into_python_numbers(self, df):

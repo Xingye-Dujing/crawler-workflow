@@ -55,6 +55,9 @@ sandbox.showDialog = () => Promise.resolve('go');
 sandbox.escapeHtml = (value) => String(value === undefined || value === null ? '' : value);
 sandbox.closeDockedPanels = () => {};
 sandbox.I18n = { t: (key) => key };
+/* The page's own prefix builder (index.html). A navigation must go through it: a bare
+   /api/... asks the site root and 404s under a reverse-proxied subpath. */
+sandbox.__cu = (url) => '/crawler' + url;
 sandbox.AppSettings = {
     _values: {},
     preset: null,

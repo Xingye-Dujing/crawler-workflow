@@ -99,6 +99,8 @@ hiddenimports = []
 # in the collected set.
 for package in ('api', 'crawlers', 'services', 'analyzers', 'core', 'capabilities', 'engine', 'nodes', 'sessions', 'scheduling', 'i18n_catalog', 'runtime'):
     hiddenimports += package_module_names(BACKEND, package)
+# cryptography is imported inside verify_feed_signature (function-level, invisible to the
+# analysis); without it a packaged build with a configured pubkey cannot verify a feed.
 hiddenimports += [
     'core.config',
     'i18n',
@@ -107,6 +109,8 @@ hiddenimports += [
     'runtime.settings',
     'scheduling.clock',
     'sessions.profiles',
+    'cryptography.hazmat.primitives.serialization',
+    'cryptography.hazmat.primitives.asymmetric.ed25519',
     # Imported inside ``main()`` (the launcher keeps its boot path import-light), so state it
     # rather than trusting the analysis to reach a function-level import in the entry script.
     'bert_pack',

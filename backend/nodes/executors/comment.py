@@ -42,6 +42,24 @@ NODE_TYPE = 'comment'
 #: '/' reached the console verbatim because the localizer only splits on ',', '、'.
 _COMMENT_PLATFORMS = tuple(comment_platforms())
 
+#: WebDriver messages that mean the browser itself is gone, not that one page timed out.
+#: Matched case-insensitively against the exception text because Selenium has no distinct
+#: exception class for "the session died between calls".
+_GONE_MARKERS = (
+    'invalid session id',
+    'no such window',
+    'chrome not reachable',
+    'session deleted',
+    'disconnected',
+    'not reachable',
+)
+
+
+def _session_is_gone(exc: WebDriverException) -> bool:
+    """Whether this fault leaves no browser to walk the rest of the batch with."""
+    message = str(exc or '').lower()
+    return any(marker in message for marker in _GONE_MARKERS)
+
 
 def filter_comments_by_time(rows: list, params: dict, label: str) -> list:
     """Drop comments whose 评论时间 falls outside an optional [start, end] range.
@@ -209,6 +227,11 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # full pass, so resuming a node that skipped four dramas re-walked the LAST drama only,
     # a fresh harness reported no skips at all, and the node settled DONE over the hole.
     unproven: list[int] = []
+    # Links a browser-level fault kept us from proving. Kept apart from ``unproven`` (which
+    # also holds merely dead/short links the site answered) because the settlement must FAIL
+    # the node over a fault: a dead driver left to settle DONE had no 继续 entry, so its
+    # cursor hole was never re-walked.
+    browser_faults: list[str] = []
     # Which platforms actually answered with a login page, in the order they did.
     blocked_by: list[str] = []
     # Blocked platforms whose owning crawler named 风控 (back off) rather than a dead cookie
@@ -392,6 +415,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # never allowed past the hole. ``dead`` carries a browser-level fault out of the
             # retry so the rest of the batch still runs, exactly as before.
             dead = False
+            fatal_browser = False
             rotations = 0
             while True:
                 _crawler, session = sessions[kind]
@@ -415,10 +439,23 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     # and the remaining links are still walked. Semantic refusals (no adapter,
                     # a locked store) and a dead or stopped browser (``CrawlerStopped`` is a
                     # ``BaseException``) still raise.
+                    #
+                    # Unlike a site-answered dead link, this is OUR browser failing: the node
+                    # must not settle DONE, or the pinned cursor hole never gets a 继续 entry.
                     add_log(t('comment.linkFailed', url=url, err=e))
+                    browser_faults.append(url)
                     counts[DEAD] = counts.get(DEAD, 0) + 1
                     unproven.append(idx)
                     dead = True
+                    if _session_is_gone(e):
+                        # Repeating the same fault once per remaining link only buries the one
+                        # sentence that names it; a driver that reported an invalid session is
+                        # not coming back inside this node.
+                        fatal_browser = True
+                        break
+                if dead:
+                    # The exception path has no ``status``; leaving the retry loop here is what
+                    # the old unconditional ``break`` did.
                     break
                 if status == BLOCKED and pool_mode and rotations < pool.max_attempts():
                     facts = {
@@ -430,6 +467,8 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         continue
                 break
             if dead:
+                if fatal_browser:
+                    break
                 continue
             counts[status] = counts.get(status, 0) + 1
             if (
@@ -504,6 +543,17 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         # finished into its part files first; what is dropped is the ``comment.done``
         # summary, because the executor's own 被停止 line is the one true sentence here.
         raise CrawlerStopped(t('crawl.stopped'))
+    if browser_faults:
+        # The rows collected before the fault stand, but the node must fail so the run is
+        # resumable and 继续 re-walks from the pinned cursor hole. A site-answered dead link
+        # is deliberately NOT here: that can be a genuinely deleted article.
+        raise ValueError(
+            t(
+                'comment.browserFaults',
+                n=len(browser_faults),
+                names=', '.join(browser_faults[:3]) + (' …' if len(browser_faults) > 3 else ''),
+            )
+        )
     blocked_seen = bool(counts.get(BLOCKED))
     # 风控-only when EVERY blocked platform named 风控 and none named a login wall: then the
     # back-off verdict owns the node and no cookie flag is raised. Any cookie wall, or any blocked

@@ -169,7 +169,14 @@ def topic_by_stage(
             # the sort is stable either way.
             topic_mass = [float(value) for value in doc_topic[:, topic_index]]
             ranked = sorted(range(len(texts)), key=topic_mass.__getitem__, reverse=True)
-            samples = ' ／ '.join(texts[position][:80] for position in ranked[: max(0, int(sample_n))])
+            # A topic with no assigned document has no representative POST: ranking every
+            # document by this column would hand 主题概括 posts that the argmax gave to a
+            # DIFFERENT topic, so the model would summarise an empty topic from someone
+            # else's texts and look justified. The word distribution above is the model's own
+            # answer; the sample column stays empty here.
+            samples = (
+                '' if not members else ' ／ '.join(texts[position][:80] for position in ranked[: max(0, int(sample_n))])
+            )
             rows.append(
                 {
                     'stage': stage,

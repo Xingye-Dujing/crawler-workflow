@@ -9,6 +9,20 @@ from ..style import _GRID, _TEXT_STYLE, _json_safe, _localize_label
 from .base import ChartRequest, builder
 
 
+def _numbers(series: pd.Series, column: str) -> pd.Series:
+    """Coerce a plotted value column, refusing a column that holds no number at all.
+
+    ``require_columns`` only proves the NAME exists. A text column (a renamed 特征词, a
+    string 主题编号) coerced every cell to NaN, and the ECharts option went out as nulls:
+    HTTP 200, ``ok:true``, node DONE, empty figure. The aggregate path has refused this
+    input for the same reason; the two ECharts-only builders bypass it.
+    """
+    numeric = pd.to_numeric(series, errors='coerce')
+    if series.notna().any() and not numeric.notna().any():
+        raise ChartConfigError(t('chart.y_not_numeric', col=column))
+    return numeric
+
+
 @builder('topic_map')
 def _topic_map(cls, base: dict, req: ChartRequest) -> dict:
     """Intertopic distance map: bubbles at (PC1, PC2), area carrying the topic's prevalence.
@@ -29,10 +43,10 @@ def _topic_map(cls, base: dict, req: ChartRequest) -> dict:
     color = base['color']
     has_label = bool(req.label_field)
     has_size = bool(req.value_field)
-    first = pd.to_numeric(req.df[req.x], errors='coerce').tolist()
-    second = pd.to_numeric(req.df[req.y], errors='coerce').tolist()
+    first = _numbers(req.df[req.x], req.x).tolist()
+    second = _numbers(req.df[req.y], req.y).tolist()
     labels = [_localize_label(name) for name in (req.df[req.label_field].tolist() if has_label else [''] * len(req.df))]
-    sizes = pd.to_numeric(req.df[req.value_field], errors='coerce').tolist() if has_size else [None] * len(req.df)
+    sizes = _numbers(req.df[req.value_field], req.value_field).tolist() if has_size else [None] * len(req.df)
     # A coerced cell is NaN and the unsized branch fills None: pd.notna is the one test
     # that means "there is a real bubble size here".
     biggest = max((float(size) for size in sizes if pd.notna(size)), default=0.0)
@@ -104,8 +118,8 @@ def _topic_terms(cls, base: dict, req: ChartRequest) -> dict:
         )
     cls.require_columns(req.df, req.x, req.y, req.y2)
     terms = [str(name) for name in req.df[req.x].tolist()]
-    overall = pd.to_numeric(req.df[req.y], errors='coerce').tolist()
-    within = pd.to_numeric(req.df[req.y2], errors='coerce').tolist()
+    overall = _numbers(req.df[req.y], req.y).tolist()
+    within = _numbers(req.df[req.y2], req.y2).tolist()
     y_disp, y2_disp = _localize_label(req.y), _localize_label(req.y2)
     base['grid'] = {**_GRID, 'left': 90}
     base['legend'] = {'data': [y_disp, y2_disp], 'top': 28, 'textStyle': _TEXT_STYLE}

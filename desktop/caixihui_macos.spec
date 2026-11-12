@@ -76,6 +76,8 @@ hiddenimports += [
     'runtime.settings',
     'scheduling.clock',
     'sessions.profiles',
+    'cryptography.hazmat.primitives.serialization',
+    'cryptography.hazmat.primitives.asymmetric.ed25519',
     'bert_pack',
     'onnxruntime',
     'tokenizers',

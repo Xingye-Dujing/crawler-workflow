@@ -149,6 +149,9 @@ ZH = {
     'report.figure_section': '图表',
     # ── 一键报告（自包含 HTML） ───────────────────────────────
     'report.generated': '生成时间',
+    'report.jobBusy': '已有一个报告/PDF 正在后台生成，请等它完成再试',
+    'report.jobFailed': '后台文档任务失败：{err}',
+    'report.jobMissing': '找不到这个后台文档任务（可能已完成太久或不属于当前账号）',
     'report.latex_no_run': '找不到这次运行（{rid}），无法合成成稿。',
     'report.latex_no_sources': '这次运行没有登记任何 LaTeX 图源或三线表，无法合成成稿：'
     '请在可视化节点勾选“生成 LaTeX”后重跑。',
@@ -608,6 +611,11 @@ EN = {
     'report.figure_section': 'Figures and tables',
     # ── one-click HTML report ───────────────────────────────────
     'report.generated': 'Generated',
+    'report.jobBusy': 'another report/PDF is already being generated in the background; try again when it finishes',
+    'report.jobFailed': 'The background document job failed: {err}',
+    'report.jobMissing': (
+        'That background document job was not found (finished too long ago, or it belongs to another account)'
+    ),
     'report.latex_no_run': 'That run cannot be found ({rid}), so there is nothing to assemble.',
     'report.latex_no_sources': 'This run filed no LaTeX figure or table sources, so there is no document to build: '
     'tick "生成 LaTeX" on the visualize nodes and run it again.',

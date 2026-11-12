@@ -156,16 +156,21 @@ def upload_dataset():
             # table. Only .tsv asks for a tab; .csv keeps the comma contract the
             # exporter writes.
             raw = file.stream.read()
+            # Decode by name first (UTF-8, then GB18030 with a mojibake check). Reading the raw
+            # BYTES answered a legitimate Chinese CSV saved by Excel as GBK with a parse failure
+            # even though this project already knows how to decode it; the decoded text is what
+            # pandas must see for every text table, not only for the bibliographic formats.
+            text = decode_text(raw, filename)
             parsed = None
             if name_lower.endswith('.csv'):
                 try:
-                    parsed = parse_text(decode_text(raw, filename))
+                    parsed = parse_text(text)
                 except BiblioDecodeError:
                     parsed = None
             if parsed is not None:
                 df = use_biblio(parsed)
             else:
-                df = pd.read_csv(io.BytesIO(raw), sep='\t' if name_lower.endswith('.tsv') else ',')
+                df = pd.read_csv(io.StringIO(text), sep='\t' if name_lower.endswith('.tsv') else ',')
         else:
             # An extension nobody recognises is refused, not guessed at: reading
             # a Parquet or a PDF as CSV produces a table that is technically

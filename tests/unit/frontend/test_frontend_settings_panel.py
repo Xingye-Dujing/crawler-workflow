@@ -45,8 +45,8 @@ def test_the_preset_card_uses_the_preset_route_for_both_actions(panel):
     assert panel['preset'] == ['apply', 'restore']
 
 
-def test_export_carries_the_machine_path_opt_in(panel):
-    assert panel['export'].endswith('/api/settings/export?include_machine=1')
+def test_export_carries_the_machine_path_opt_in_and_the_deploy_prefix(panel):
+    assert panel['export'] == '/crawler/api/settings/export?include_machine=1'
 
 
 def test_the_canvas_never_pins_a_worker_count_over_the_server_setting():

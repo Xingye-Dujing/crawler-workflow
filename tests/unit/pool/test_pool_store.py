@@ -26,6 +26,17 @@ def clean_pool(tmp_path, monkeypatch):
             path.unlink()
 
 
+@pytest.mark.skipif(__import__('os').name == 'nt', reason='POSIX mode bits; Windows uses ACLs')
+def test_the_credential_database_is_private_to_its_owner(tmp_path):
+    """It stores paid-proxy usernames and passwords in clear; umask 022 would publish it."""
+    import os as _os
+
+    path = tmp_path / 'pool.db'
+    store.connect().close()
+    assert _os.stat(path).st_mode & 0o077 == 0, oct(_os.stat(path).st_mode)
+    assert _os.stat(tmp_path).st_mode & 0o077 == 0, oct(_os.stat(tmp_path).st_mode)
+
+
 def test_an_expired_cooldown_reads_as_usable_without_a_sweeper():
     store.mark_cooldown('account', 'weibo', 'work', 60, 'login_wall')
     row = store.get_health('account', 'weibo', 'work')

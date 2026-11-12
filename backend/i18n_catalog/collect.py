@@ -38,6 +38,9 @@ ZH = {
     'catbus.probeFailed': 'CatBus 适配器没能给出能力清单：{detail}',
     'catbus.probeUnreadable': 'CatBus 适配器返回的不是能读的答案：{detail}',
     'catbus.refused': '{platform} / {mode} 通过 CatBus 采集失败：{detail}',
+    'catbus.sourceIncomplete': (
+        '{platform} / {mode} 的 CatBus 源列表没有完整返回（{status}）：{detail}；残缺表或空表不能结算为已采完'
+    ),
     'catbus.sourceOnly': (
         'CatBus 适配器指向的是 TypeScript 源码（{path}），Node 不能直接运行它；请先在 CatBus 目录里构建，'
         '或把这里改到构建产物：{entry}'
@@ -68,6 +71,7 @@ ZH = {
         '[抖音评论] {url}：站点写着 {declared} 条，本表 {rows} 条 + 子回复 {nested} 条（还差 {gap} 条未采到）'
         ' —— 本次收尾原因是“{reason}”，所以差额不是“这条视频就这么多”'
     ),
+    'comment.browserFaults': '评论采集遇到浏览器故障：{n} 个链接未能证明，节点保留已采行并需要继续：{names}',
     'comment.linkFailed': '这条链接的页面加载失败，已跳过（其余链接继续）：{url}（{err}）',
     'comment.need_both': '节点 {nid}：按评论时间筛选必须同时给出开始和结束时间（半个区间无法界定范围）',
     'comment.noAdapter': '{platform} 还没有评论抓取实现，该链接无法处理：{url}',
@@ -253,6 +257,10 @@ EN = {
     'catbus.probeFailed': 'the CatBus adapter could not report its capability list: {detail}',
     'catbus.probeUnreadable': 'the CatBus adapter answered with something unreadable: {detail}',
     'catbus.refused': '{platform} / {mode} could not be crawled through CatBus: {detail}',
+    'catbus.sourceIncomplete': (
+        'the CatBus source list for {platform} / {mode} was not complete ({status}): {detail}; '
+        'a partial or empty table cannot settle as collected'
+    ),
     'catbus.sourceOnly': (
         'the CatBus adapter path is TypeScript source ({path}), which Node cannot run directly; build '
         'the CatBus checkout first, or point this setting at the build output: {entry}'
@@ -289,6 +297,10 @@ EN = {
         '[douyin comments] {url}: the page says {declared}, this table holds {rows} plus {nested} counted '
         'replies ({gap} still not collected) — this walk ended because: {reason}, so the gap is not a claim '
         'that the thread is that short'
+    ),
+    'comment.browserFaults': (
+        'comment crawl hit a browser fault: {n} link(s) could not be proven; the stored rows are kept and the '
+        'node needs 继续: {names}'
     ),
     'comment.linkFailed': 'this link failed to load and was skipped (the rest continue): {url} ({err})',
     'comment.need_both': (

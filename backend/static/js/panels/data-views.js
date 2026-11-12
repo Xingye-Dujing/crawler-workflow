@@ -510,11 +510,11 @@ var dataPreview = {
         this._payload = payload;
         this._offset = 0;
         var fmt = payload.preview_format || '';
-        if (fmt === 'txt' || fmt === 'json') {
-            this._limit = 5000; // fetch enough for a full text view
-        } else {
-            this._limit = 50;
-        }
+        /* The server clamps every preview request to 500 rows. Asking for 5000 did not
+           fetch the whole text; it asked for a number the backend silently reduced and
+           then hid the pager, so the user read the first 500 rows as the whole output.
+           Ask for the real maximum and keep the pager, so the rest is reachable. */
+        this._limit = fmt === 'txt' || fmt === 'json' ? 500 : 50;
         var panel = document.getElementById('data-preview-panel');
         panel.classList.add('open');
         document.getElementById('data-preview-meta').textContent = '';
@@ -645,7 +645,12 @@ function renderDataPreviewText(result, format) {
     var wrap = document.getElementById('data-preview-table-wrap');
     wrap.innerHTML = '<pre class="data-preview-text">' + escapeHtml(text) + '</pre>';
 
-    document.getElementById('data-preview-pager').style.display = 'none';
+    /* The text view is still paged: the server caps one answer at 500 rows, so hiding
+       the pager made a truncated answer look complete. */
+    var page = Math.floor(result.offset / result.limit) + 1;
+    var pages = Math.max(1, Math.ceil(result.total_rows / result.limit));
+    document.getElementById('data-preview-pager').style.display = '';
+    document.getElementById('data-preview-page-label').textContent = page + ' / ' + pages;
 }
 
 function toggleDataPreview() {

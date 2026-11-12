@@ -337,5 +337,9 @@ def export_records(rows: list[dict], out_dir: str, base_name: str) -> str:
     target.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r'[\/:*?"<>|\s]+', '_', str(base_name or 'fuse')).strip('._') or 'fuse'
     path = target / f'{safe}.csv'
-    pd.DataFrame(rows, columns=list(OUTPUT_COLUMNS)).to_csv(path, index=False, encoding='utf-8-sig')
+    # The fused table reaches a colleague as a spreadsheet, so it goes through the same
+    # formula neutralizer as every other CSV export (a title beginning with '=' is data).
+    from services.biblio.metrics.export import write_csv
+
+    write_csv(path, rows, columns=list(OUTPUT_COLUMNS))
     return str(path)

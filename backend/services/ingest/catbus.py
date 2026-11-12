@@ -47,6 +47,11 @@ RUN_TIMEOUT = 900
 #: A capability probe costs one short-lived Node process; it is re-asked at most this often.
 PROBE_TTL = 300.0
 
+#: A capability probe is a short-lived discovery call, never a crawl: it must not inherit
+#: ``RUN_TIMEOUT``. ``probe()`` holds ``_LOCK`` while it waits, so a hung Node used to freeze
+#: every capability/columns/identity query — and the run gate — for up to 15 minutes.
+PROBE_TIMEOUT = 60
+
 #: Only these two manifest states may be crawled; anything else is refused with its own reason.
 _RUNNABLE_STATES = ('available', 'partial')
 
@@ -181,7 +186,7 @@ def _probe_now() -> Probe:
 
         reason = 'catbus.installerCliMissing' if source.prefer_bundled() else 'catbus.noCli'
         return Probe(available=False, reason_key=reason, node=node, node_version=node_version)
-    call = _call(argv_for(node, entry, ['capabilities']), capture=True)
+    call = _call(argv_for(node, entry, ['capabilities']), capture=True, timeout=PROBE_TIMEOUT)
     if call.spawn_error or call.code != 0:
         return Probe(
             available=False,

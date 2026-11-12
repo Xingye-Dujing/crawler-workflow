@@ -149,6 +149,21 @@ class TestImport:
         _post(client, '/api/settings/import', {'payload': payload, 'include_machine': True})
         assert client.get('/api/settings').get_json()['settings']['driver_path'] == '/new'
 
+    def test_machine_paths_from_another_platform_are_not_written(self, client):
+        """A Windows export's drive-letter path on Linux is a refusal waiting in the crawl.
+        The package names the platform that wrote it, so an opt-in import must still skip it."""
+        client.post('/api/settings', json={'driver_path': '/opt/keep-me'})
+        payload = {
+            'kind': settings.EXPORT_KIND,
+            'schema': settings.SCHEMA_VERSION,
+            'platform': 'win32' if __import__('sys').platform != 'win32' else 'linux',
+            'machine': {'driver_path': '/new'},
+        }
+        body = _post(client, '/api/settings/import', {'payload': payload, 'include_machine': True}).get_json()
+        assert body['ok'] is True
+        assert body['skipped'] == ['driver_path']
+        assert client.get('/api/settings').get_json()['settings']['driver_path'] == '/opt/keep-me'
+
     def test_replace_resets_keys_missing_from_the_package(self, client):
         client.post('/api/settings', json={'crawl_pace_scale': 3.0})
         _post(
