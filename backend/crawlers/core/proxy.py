@@ -80,6 +80,15 @@ class _AuthRelay:
                 client, _addr = self._sock.accept()
             except OSError:
                 return
+            try:
+                # A local process that connects and says nothing must not pin a daemon thread
+                # forever; only the header read uses this timeout (``_pump`` has its own idle
+                # bound), so a real long-lived browser connection is not cut by it.
+                client.settimeout(_PUMP_TIMEOUT)
+            except OSError:
+                with contextlib.suppress(OSError):
+                    client.close()
+                continue
             threading.Thread(target=self._handle, args=(client,), daemon=True).start()
 
     def _handle(self, client) -> None:

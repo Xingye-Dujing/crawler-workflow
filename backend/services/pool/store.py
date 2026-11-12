@@ -304,31 +304,6 @@ def get_health(kind: str, platform: str, subject: str) -> dict:
     return _health_row(row) if row else {}
 
 
-def _write_health(**values) -> None:
-    keys = (
-        'kind',
-        'platform',
-        'subject',
-        'state',
-        'cool_until',
-        'reason',
-        'strikes',
-        'last_attempt_at',
-        'last_ok_at',
-        'note',
-    )
-    columns = ', '.join(keys)
-    slots = ', '.join('?' * len(keys))
-    updates = ', '.join(f'{key}=excluded.{key}' for key in keys[3:])
-    with _LOCK, contextlib.closing(connect()) as conn:
-        conn.execute(
-            f'INSERT INTO health ({columns}) VALUES ({slots}) '
-            f'ON CONFLICT(kind, platform, subject) DO UPDATE SET {updates}',
-            tuple(values.get(key) for key in keys),
-        )
-        conn.commit()
-
-
 def touch(kind: str, platform: str, subject: str) -> None:
     """Stamp "an attempt is starting" without changing the state.
 
@@ -394,19 +369,19 @@ def set_disabled(kind: str, platform: str, subject: str, disabled: bool, note: s
     if not disabled:
         mark_ok(kind, platform, subject)
         return
-    current = get_health(kind, platform, subject)
-    _write_health(
-        kind=kind,
-        platform=platform,
-        subject=subject,
-        state='disabled',
-        cool_until=0.0,
-        reason='manual',
-        strikes=0,
-        last_attempt_at=float(current.get('last_attempt_at') or 0),
-        last_ok_at=float(current.get('last_ok_at') or 0),
-        note=str(note or current.get('note') or '')[:400],
-    )
+    # One statement: the note fallback and the untouched timestamps are read by SQLite in the
+    # same transaction, so a concurrent ``touch`` cannot be overwritten by a stale snapshot.
+    with _LOCK, contextlib.closing(connect()) as conn:
+        conn.execute(
+            'INSERT INTO health '
+            '(kind, platform, subject, state, cool_until, reason, strikes, last_attempt_at, last_ok_at, note) '
+            "VALUES (?, ?, ?, 'disabled', 0, 'manual', 0, 0, 0, ?) "
+            'ON CONFLICT(kind, platform, subject) DO UPDATE SET '
+            "state='disabled', cool_until=0, reason='manual', strikes=0, "
+            "note=COALESCE(NULLIF(excluded.note, ''), health.note)",
+            (kind, platform, subject, str(note or '')[:400]),
+        )
+        conn.commit()
 
 
 def reset(kind: str, platform: str, subject: str = '', *, include_disabled: bool = False) -> int:

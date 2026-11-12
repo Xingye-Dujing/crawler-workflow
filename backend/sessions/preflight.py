@@ -392,6 +392,11 @@ def probe(
         return _verdict(platform, UNKNOWN, detail=t('cookie.pre.busy', platform=platform), account=account)
     facts = _probe_live(platform, use_profile=use_profile, account=account)
     verdict = _verdict(platform, classify_probe(facts), probed=True, account=account)
+    if facts.get('risk_blocked'):
+        # ``classify_probe`` folds a captcha into UNKNOWN (it must not call a session dead),
+        # but the pool still needs the fact: dropping it means a probe that SAW a risk page
+        # records nothing and the exit is never benched.
+        verdict['risk_blocked'] = True
     if verdict['state'] == UNKNOWN and not facts.get('error'):
         verdict['detail'] = t('cookie.pre.riskControl')
     elif verdict['state'] == UNKNOWN:
@@ -602,6 +607,11 @@ def _facts_of(verdict: dict) -> dict:
     state = str((verdict or {}).get('state') or '')
     if state == EXPIRED:
         return {'login_wall': True}
+    if (verdict or {}).get('risk_blocked'):
+        # A captcha/risk page is visible evidence even though classify_probe keeps the
+        # verdict UNKNOWN (a captcha is not proof the cookie died). The pool still benches
+        # the exit for the risk duration instead of pretending nothing was measured.
+        return {'risk_blocked': True}
     if state == UNKNOWN:
         # A timeout, a captcha page or a busy profile is "could not be checked", not a network
         # failure: recording `error` cooled the EXIT for the network duration and told the

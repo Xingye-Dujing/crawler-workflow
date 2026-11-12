@@ -99,6 +99,13 @@ def _busy_run(user_id: str) -> str:
     for entry in list(_RUN_QUEUE):
         if str(entry.get('user_id') or '') == str(user_id):
             return str(entry.get('run_id') or 'queued')
+    # A drain has popped the entry but not yet claimed the slot: it is no longer in the queue
+    # and execution_state still names the previous owner. Without this, deleting the account in
+    # that window moves the tree from under the run that is about to start.
+    from services.runs import queue as run_queue
+
+    if run_queue.draining_owner() == str(user_id):
+        return 'queued'
     return ''
 
 

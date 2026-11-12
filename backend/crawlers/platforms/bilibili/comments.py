@@ -133,6 +133,7 @@ def walk(session, url: str, limit: int) -> tuple:
     session.driver.get(url)
     session.nap(3)
     if looks_blocked(session.body_head()):
+        session.mark_blocked()
         return [], BLOCKED
     bvid = bilibili_bvid(url)
     if not bvid:
@@ -145,11 +146,13 @@ def walk(session, url: str, limit: int) -> tuple:
         # rule). A real wall was already caught above by ``looks_blocked``.
         return [], DEAD
     if verdict == 'risk':
+        session.mark_blocked()
         return [], BLOCKED
     if verdict == 'unknown':
         # A code we have not measured: do not guess it is a video answer and keep hammering,
         # and do not silently convict either — refuse it BY NAME and back off (BLOCKED).
         session.log(t('comment.biliBadAnswer', url=url, code=(view or {}).get('code')))
+        session.mark_blocked()
         return [], BLOCKED
     data = view.get('data') or {}
     aid = data.get('aid')
@@ -207,6 +210,7 @@ def walk(session, url: str, limit: int) -> tuple:
         # node latches cookieExpired, the run STOPS (no further links pressed against a flagged
         # account), and 继续 resumes from the recorded cursor. This is U54's "按 §5 具名短收": a
         # throttled 9-row thread is NAMED-BLOCKED (back-off), never a silent OK and never a full.
+        session.mark_blocked()
         return rows, BLOCKED
     if first_page_unreadable:
         return [], DEAD

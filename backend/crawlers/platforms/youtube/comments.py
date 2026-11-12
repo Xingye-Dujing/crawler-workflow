@@ -107,12 +107,14 @@ def walk(session, url: str, limit: int) -> tuple:
         # reason it was changes what the user does next, so the page itself
         # gets the last word.
         if looks_blocked(session.body_head()):
+            session.mark_blocked()
             return [], BLOCKED
         session.log(t('comment.ytNoPage', url=url))
         return [], DEAD
     key, context = found
     watch = innertube.call(session.driver, 'next', key, context, {'videoId': video})
     if innertube.refused(watch):
+        session.mark_blocked()
         return [], BLOCKED
 
     rows: list[dict] = []
@@ -152,6 +154,7 @@ def walk(session, url: str, limit: int) -> tuple:
         candidates = [token]
         attempt = fetch(token)
         if attempt is None:
+            session.mark_blocked()
             return [], BLOCKED
         if attempt:
             chosen = token
@@ -186,5 +189,6 @@ def walk(session, url: str, limit: int) -> tuple:
         alive=lambda: not session.may_stop(),
     )
     if not rows and outcome.stopped_reason == 'fetch_failed':
+        session.mark_blocked()
         return [], BLOCKED
     return rows, OK

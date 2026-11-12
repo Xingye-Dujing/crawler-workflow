@@ -59,3 +59,9 @@ def test_an_unverifiable_probe_is_not_recorded_as_a_network_failure():
     from sessions.preflight import UNKNOWN, _facts_of
 
     assert _facts_of({'state': UNKNOWN, 'detail': 'captcha'}) == {}
+
+
+def test_a_risk_page_is_still_evidence_for_the_exit():
+    from sessions.preflight import UNKNOWN, _facts_of
+
+    assert _facts_of({'state': UNKNOWN, 'risk_blocked': True}) == {'risk_blocked': True}

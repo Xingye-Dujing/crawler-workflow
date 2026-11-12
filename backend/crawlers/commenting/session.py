@@ -42,6 +42,7 @@ import contextlib
 from crawlers.commenting import walks
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.engine import pacing, pagefetch
+from crawlers.engine.wall import classify
 from i18n import t
 
 
@@ -115,6 +116,27 @@ class CommentSession:
         if owner is not None:
             with contextlib.suppress(Exception):
                 owner.unreachable = True
+
+    def mark_blocked(self) -> None:
+        """Latch WHY this page was blocked: a login wall and a risk page want different advice.
+
+        A walker that only knows "BLOCKED" (an API error code, a body phrase) still has the page
+        in front of it; the shared classifier can tell a login redirect from a risk page. The
+        fallback is 风控 (back off) — never "ok" — because a refusal with no classification is
+        still a refusal.
+        """
+        verdict = ''
+        with contextlib.suppress(Exception):
+            verdict = classify(
+                str(self.driver.current_url or ''),
+                self.body_head(),
+                self.node_text('title'),
+                document_uri=self.document_uri(),
+            )
+        if verdict == 'login':
+            self.mark_login_wall()
+        else:
+            self.mark_risk_blocked()
 
     def safe_text(self, element) -> str:
         with contextlib.suppress(Exception):

@@ -16,7 +16,7 @@ import time
 
 from runtime import account_context
 from runtime.state import _push_log, execution_state
-from runtime.stores import get_run_store
+from runtime.stores import get_run_store, owner_is_live
 
 
 class LogTee:
@@ -158,6 +158,11 @@ class RunLogWriter:
         failed: list[tuple[account_context.Account | None, str, list]] = []
         for owner, rid, rows in queue:
             if not rid or not rows:
+                continue
+            if not owner_is_live(owner):
+                # The account was deleted while this batch waited. Writing it would recreate
+                # ``data/users/<id>/`` through ``get_run_store()``; the log of a deleted
+                # account is not worth an ownerless tree, so the batch is dropped.
                 continue
             try:
                 with account_context.use(owner):

@@ -129,6 +129,7 @@ class TestWeiboWallIsNotADeadLink:
             self.driver = type('D', (), {'current_url': url, 'title': ''})()
             self.unproven = []
             self.risk = False
+            self.login = False
             self.logs = []
 
         def fetch_in_page(self, _url, timeout_ms=25000):
@@ -148,6 +149,9 @@ class TestWeiboWallIsNotADeadLink:
 
         def mark_risk_blocked(self):
             self.risk = True
+
+        def mark_login_wall(self):
+            self.login = True
 
         def mark_unproven(self, url):
             self.unproven.append(url)

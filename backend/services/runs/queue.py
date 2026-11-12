@@ -34,11 +34,16 @@ from services.runs.payload import workflow_shape_error
 
 logger = logging.getLogger(__name__)
 
-#: Queued requests live in memory only (see ``state._RUN_QUEUE``). A restart drops them, which is
-#: the honest behaviour for a list of intentions nobody is here to confirm.
+#: Per-owner slots. ``GLOBAL_QUEUE_MAX`` is a memory bound, not a permission: one account may
+#: not consume every slot another account could use.
 QUEUE_MAX = 8
+GLOBAL_QUEUE_MAX = 32
 
 queue_lock = threading.Lock()
+#: The owner of the entry popped from the queue but not yet claimed by ``start_run``. An
+#: account-delete guard reads this: the entry is no longer in ``_RUN_QUEUE``, so without it
+#: ``_busy_run`` would call the account idle for the half-second before its run starts.
+_DRAINING_OWNER = ''
 #: Serialises the read-snapshot/write-mirror pair, so two queue events cannot land their disk
 #: snapshots out of order (the older, shorter one arriving last would drop the next entry).
 _mirror_lock = threading.Lock()
@@ -94,9 +99,13 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
         return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
     workflow = data.get('workflow') or {}
     name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
+    owner = _owner_id()
     with queue_lock:
-        if len(_RUN_QUEUE) >= QUEUE_MAX:
+        own = sum(1 for item in _RUN_QUEUE if str(item.get('user_id') or '') == owner)
+        if own >= QUEUE_MAX:
             return {'status': 409, 'body': {'ok': False, 'error': t('api.queueFull', n=QUEUE_MAX)}}
+        if len(_RUN_QUEUE) >= GLOBAL_QUEUE_MAX:
+            return {'status': 409, 'body': {'ok': False, 'error': t('api.queueFull', n=GLOBAL_QUEUE_MAX)}}
         entry: QueueEntry = {
             'id': uuid.uuid4().hex[:12],
             'workflow_name': name,
@@ -106,7 +115,7 @@ def enqueue_run(data: dict, lang_header: str) -> dict:
             'queued_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
             # The queue is shared by every account; this is what lets the drain start the request
             # under its own owner and what keeps one account from cancelling another's entry.
-            'user_id': _owner_id(),
+            'user_id': owner,
             'username': getattr(account_context.current(), 'username', ''),
         }
         _RUN_QUEUE.append(entry)
@@ -148,6 +157,12 @@ def keep_waiting_as(entry: QueueEntry, parked_id: str) -> None:
         parked['put_backs'] = int(entry.get('put_backs') or 0)
         _RUN_QUEUE.insert(0, parked)
     mirror_queue()
+
+
+def draining_owner() -> str:
+    """The account whose popped queue entry is being started right now, or ``''``."""
+    with queue_lock:
+        return _DRAINING_OWNER
 
 
 def queue_snapshot() -> list:
@@ -327,6 +342,51 @@ def put_back(entry: QueueEntry) -> None:
     mirror_queue()
 
 
+def _drain_one(entry: QueueEntry, start_run: Callable[[dict, str], dict]) -> bool:
+    """Try one popped entry; ``True`` means keep draining, ``False`` means stop."""
+    name = entry['workflow_name'] or entry['id']
+    account = _account_for(entry)
+    if entry.get('user_id') and account is None:
+        # The owner was deleted or disabled while this request waited. Its data tree may have
+        # moved, so the request is dropped BY NAME instead of writing into a stranger's tree.
+        # The line names a workflow; bind the (gone) owner so the console guard keeps it out
+        # of whoever's run happens to be on screen — the file log still records it.
+        with account_context.use(Account(str(entry.get('user_id') or ''), '')):
+            logger.warning(t('run.queueOwnerGone', name=name, user=str(entry.get('user_id') or '')))
+        return True
+    try:
+        with account_context.use(account):
+            answer = start_run(entry['data'], entry['lang'])
+    except Exception as e:  # a broken request must not strand the ones behind it
+        logger.exception(t('run.queueStartFailed'))
+        if _console_is_for(entry):
+            add_log(t('run.queue_broken', name=name, err=e))
+        return True
+    body = answer.get('body') or {}
+    if answer.get('drop'):
+        # Refused at the moment of starting in a way a retry can never fix — the
+        # record a 继续 pointed at has been purged while it waited. Without this
+        # the entry would be pushed back and refused again after every run.
+        if _console_is_for(entry):
+            add_log(t('run.queue_broken', name=name, err=body.get('error', '')))
+        return True
+    if answer.get('status') == 200 and body.get('ok') and body.get('queued'):
+        # Someone else claimed the slot while this entry was being started, and the start
+        # path already parked it again (``begin_run`` → ``enqueue_run`` appends a fresh
+        # entry). Pushing this one back as well would run the same canvas TWICE — and the
+        # duplicate would survive a restart, because both entries are mirrored.
+        keep_waiting_as(entry, str(body.get('queue_id') or ''))
+        return False
+    if answer.get('status') == 200 and body.get('ok'):
+        if _console_is_for(entry):
+            add_log(t('run.queue_started', name=name, rid=body.get('run_id', '')))
+        return False
+    # Someone else took the slot in between (a manual Run press): put the
+    # request back at the front rather than drop what the user already asked for.
+    put_back(entry)
+    return False
+
+
 def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
     """Start the oldest waiting request with ``start_run``, at the end of a run.
 
@@ -338,7 +398,12 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
     Called from the finishing thread *after* it released the slot and cleared its own handle:
     the claim also checks thread liveness, so a thread still alive while it unwinds would make
     this queue the next request behind itself — and nothing would ever start it again.
+
+    While an entry is popped but not yet claimed, :func:`draining_owner` names its owner. Without
+    that marker ``_busy_run`` answers "idle" in the window, so an account could be deleted between
+    its drain and its claim.
     """
+    global _DRAINING_OWNER
     while True:
         entry: QueueEntry | None = None
         with queue_lock:
@@ -349,44 +414,11 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
         mirror_queue()
         if entry is None:
             return
-        name = entry['workflow_name'] or entry['id']
-        account = _account_for(entry)
-        if entry.get('user_id') and account is None:
-            # The owner was deleted or disabled while this request waited. Its data tree may have
-            # moved, so the request is dropped BY NAME instead of writing into a stranger's tree.
-            # The line names a workflow; bind the (gone) owner so the console guard keeps it out
-            # of whoever's run happens to be on screen — the file log still records it.
-            with account_context.use(Account(str(entry.get('user_id') or ''), '')):
-                logger.warning(t('run.queueOwnerGone', name=name, user=str(entry.get('user_id') or '')))
-            continue
+        with queue_lock:
+            _DRAINING_OWNER = str(entry.get('user_id') or '')
         try:
-            with account_context.use(account):
-                answer = start_run(entry['data'], entry['lang'])
-        except Exception as e:  # a broken request must not strand the ones behind it
-            logger.exception(t('run.queueStartFailed'))
-            if _console_is_for(entry):
-                add_log(t('run.queue_broken', name=name, err=e))
-            continue
-        body = answer.get('body') or {}
-        if answer.get('drop'):
-            # Refused at the moment of starting in a way a retry can never fix — the
-            # record a 继续 pointed at has been purged while it waited. Without this
-            # the entry would be pushed back and refused again after every run.
-            if _console_is_for(entry):
-                add_log(t('run.queue_broken', name=name, err=body.get('error', '')))
-            continue
-        if answer.get('status') == 200 and body.get('ok') and body.get('queued'):
-            # Someone else claimed the slot while this entry was being started, and the start
-            # path already parked it again (``begin_run`` → ``enqueue_run`` appends a fresh
-            # entry). Pushing this one back as well would run the same canvas TWICE — and the
-            # duplicate would survive a restart, because both entries are mirrored.
-            keep_waiting_as(entry, str(body.get('queue_id') or ''))
-            return
-        if answer.get('status') == 200 and body.get('ok'):
-            if _console_is_for(entry):
-                add_log(t('run.queue_started', name=name, rid=body.get('run_id', '')))
-            return
-        # Someone else took the slot in between (a manual Run press): put the
-        # request back at the front rather than drop what the user already asked for.
-        put_back(entry)
-        return
+            if not _drain_one(entry, start_run):
+                return
+        finally:
+            with queue_lock:
+                _DRAINING_OWNER = ''

@@ -203,3 +203,20 @@ def test_the_durable_console_follows_the_run_owner_not_the_printing_thread(monke
     finally:
         state.execution_state['run_id'] = previous_run_id
         account_context.clear()
+
+
+def test_owner_is_live_asks_the_account_registry(monkeypatch):
+    from types import SimpleNamespace
+
+    from runtime import stores
+
+    monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+    rows = {'u_one': {'user_id': 'u_one', 'status': 'active'}}
+
+    def account_service():
+        return SimpleNamespace(store=SimpleNamespace(get_user=rows.get))
+
+    monkeypatch.setattr('services.accounts.service.get_account_service', account_service)
+    assert stores.owner_is_live(Account('u_one', 'one')) is True
+    assert stores.owner_is_live(Account('u_gone', 'gone')) is False
+    assert stores.owner_is_live(None) is True

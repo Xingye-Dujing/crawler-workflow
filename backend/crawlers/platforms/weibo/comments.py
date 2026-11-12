@@ -27,6 +27,7 @@ def _walled(session, body: str) -> bool:
     except Exception:
         current, title = '', ''
     if 'passport' in current.lower() or looks_like_login_page(current, body):
+        session.mark_login_wall()
         return True
     if looks_blocked(body, url=current, title=title):
         session.mark_risk_blocked()

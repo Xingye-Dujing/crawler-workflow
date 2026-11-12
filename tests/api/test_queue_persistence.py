@@ -12,6 +12,8 @@ exercised in ``test_api_hardening``.
 """
 
 import pytest
+from runtime import account_context
+from runtime.account_context import Account
 from runtime.state import _RUN_QUEUE
 
 from services.runs import queue as run_queue
@@ -97,6 +99,35 @@ class TestQueueDurability:
         second = run_queue.enqueue_run(_data('b'), 'en')
         assert second['status'] == 409
         assert '1' in second['body']['error'], second
+
+    def test_the_cap_is_per_owner_not_shared(self, monkeypatch):
+        """One account filling its own slots must not refuse another account's request."""
+        alice = Account('u_aaaaaaaaaaaa', 'alice')
+        bob = Account('u_bbbbbbbbbbbb', 'bob')
+        monkeypatch.setattr(run_queue, 'QUEUE_MAX', 1)
+        monkeypatch.setattr(run_queue, 'mirror_queue', lambda: None)
+        with account_context.use(alice):
+            assert run_queue.enqueue_run(_data('a1'), 'en')['body']['queued'] is True
+            assert run_queue.enqueue_run(_data('a2'), 'en')['status'] == 409
+        with account_context.use(bob):
+            assert run_queue.enqueue_run(_data('b1'), 'en')['body']['queued'] is True
+        assert len(_RUN_QUEUE) == 2
+
+    def test_a_popped_entry_names_its_owner_until_the_claim(self, monkeypatch):
+        monkeypatch.setattr(run_queue, 'mirror_queue', lambda: None)
+        alice = Account('u_aaaaaaaaaaaa', 'alice')
+        monkeypatch.setattr(run_queue, '_account_for', lambda entry: alice)
+        with account_context.use(alice):
+            run_queue.enqueue_run(_data('a1'), 'en')
+        seen = []
+
+        def start_run(_data, _lang):
+            seen.append(run_queue.draining_owner())
+            return {'status': 200, 'body': {'ok': True, 'run_id': 'r1'}}
+
+        run_queue.drain_queue(start_run)
+        assert seen == ['u_aaaaaaaaaaaa']
+        assert run_queue.draining_owner() == ''
 
     def test_a_drained_request_that_was_parked_again_is_not_duplicated(self):
         """A lost race hands the entry back; a start path that ALREADY re-parked it must not

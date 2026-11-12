@@ -27,7 +27,7 @@ import logging
 from runtime import account_context
 from runtime.settings import get_setting
 from runtime.state import _completed_lock, add_log, execute_lock, execution_state, history_service, live_run_ids
-from runtime.stores import get_housekeeper, get_run_store
+from runtime.stores import get_housekeeper, get_run_store, owner_is_live
 
 from i18n import t
 from services import lock_store
@@ -88,29 +88,6 @@ def mark_records_stopping() -> None:
             add_log(t('run.recordWriteFailed', rid=rid, err=e))
 
 
-def _owner_is_live(owner) -> bool:
-    """Whether *owner* still exists and is active, so its tree may be opened.
-
-    ``record_owners`` outlives the attempt (that is the point), which means it can also outlive
-    the ACCOUNT: an administrator deleting A starts a request whose abandoned record is still in
-    this process's map. Opening A's store for the repair would run ``paths.for_user(id).ensure()``
-    and recreate ``data/users/<deleted_id>/`` as an ownerless tree nobody cleans up again.
-    """
-    if owner is None:
-        return True
-    from services.accounts.service import accounts_mode, get_account_service
-
-    if not accounts_mode():
-        return True  # the local owner tree; an Account here is a test/embedded seam
-    try:
-        row = get_account_service().store.get_user(owner.user_id)
-    except Exception:
-        # An unreadable registry is not proof the account exists; opening its tree could be the
-        # resurrection this guard prevents. Skip the repair rather than mint a directory.
-        return False
-    return bool(row) and str(row.get('status') or '') == 'active'
-
-
 def settle_orphaned_records() -> int:
     """Settle a record this process opened and then abandoned without a verdict.
 
@@ -144,7 +121,7 @@ def settle_orphaned_records() -> int:
             groups.setdefault(owners.get(rid), set()).add(rid)
         promoted = []
         for owner, ids in groups.items():
-            if not _owner_is_live(owner):
+            if not owner_is_live(owner):
                 # The account is gone (deleted/disabled). Drop its ids instead of opening a
                 # store that would mint an ownerless tree; nothing is left to settle.
                 with _completed_lock:

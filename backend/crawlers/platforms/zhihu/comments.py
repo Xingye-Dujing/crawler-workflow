@@ -177,6 +177,7 @@ def walk(session, url: str, limit: int) -> tuple:
     session.driver.get(url)
     session.nap(6)
     if looks_blocked(session.body_head()):
+        session.mark_blocked()
         return [], BLOCKED
     opened = 0
     rows = []

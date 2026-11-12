@@ -77,6 +77,7 @@ def walk(session, url: str, limit: int) -> tuple:
     # an empty page is what the walk reports as a dead link.
     feed.wait_for(lambda: len(cards_of()), 1, timeout=pacing.wait(TwitterCrawler.MOUNT_WAIT))
     if looks_blocked(session.body_head()):
+        session.mark_blocked()
         return [], BLOCKED
 
     rows: list[dict] = []
