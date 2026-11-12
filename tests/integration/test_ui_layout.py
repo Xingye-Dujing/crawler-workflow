@@ -4282,7 +4282,42 @@ def test_the_replay_bar_sits_under_the_chart_and_its_frames_are_real(app_url, dr
     # The button has to answer a real mouse, not just exist in the DOM. The handler runs inside
     # the click, so the frame it cut is measurable the moment the call returns — no sleeping on
     # the 900 ms tick, which is a race this tier must not lose on a loaded machine.
-    driver.find_element('css selector', '#chart-preview-panel .chart-replay-play').click()
+    def click_in_its_own_box(selector):
+        """Click only once the middle of the button's box actually belongs to the button.
+
+        ECharts sizes its canvas asynchronously: right after ``renderChartPreview`` the canvas still
+        covers the replay bar for a moment, and a click then lands on the ``<canvas>`` — measured on
+        the macOS runner, which is the very defect this test documents, but here it is only a layout
+        that has not finished. Poll ``elementFromPoint`` instead of trusting a fixed sleep, and name
+        the element that would take the click when it never becomes reachable.
+        """
+        deadline = time.monotonic() + 10
+        while True:
+            answer = driver.execute_script(
+                """
+                const el = document.querySelector(arguments[0]);
+                if (!el) return { missing: true };
+                const r = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                const name = hit
+                    ? hit.tagName + (hit.className ? '.' + String(hit.className).split(' ')[0] : '')
+                    : 'nothing';
+                return {
+                    ok: !!hit && (hit === el || el.contains(hit)),
+                    hit: name,
+                    rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+                };
+                """,
+                selector,
+            )
+            if answer.get('ok'):
+                driver.find_element('css selector', selector).click()
+                return
+            if time.monotonic() >= deadline:
+                pytest.fail(f'{selector} never became clickable: {answer}')
+            time.sleep(0.1)
+
+    click_in_its_own_box('#chart-preview-panel .chart-replay-play')
     playing = measure()
     assert playing['readout'] == playing['year2018'], f'播放 did not land on the first year: {playing["readout"]}'
     assert len(playing['shown']) == 2, f'the 2018 frame still shows every node: {playing["shown"]}'
