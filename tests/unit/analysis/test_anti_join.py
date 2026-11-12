@@ -92,6 +92,23 @@ class TestTheSetDifference:
         out = anti_join(left, right, left_on='评论', right_on='旧评论', mode='similar', max_distance=15)
         assert out['评论'].tolist() == ['完全无关的另一句话']
 
+    def test_a_blank_key_is_not_a_fingerprint_in_similar_mode(self):
+        """``str(nan)`` is the token 'nan': every empty cell would share one fingerprint.
+
+        The mode-agnostic rule is the same one ``trim``/``url`` already follow: two absences are
+        not the same content, so a row with an empty key is never dropped as "already present".
+        """
+        left = pd.DataFrame({'键': [None, None, 'aaaaaaaa']})
+        right = pd.DataFrame({'键': [None]})
+        out = anti_join(left, right, left_on='键', right_on='键', mode='similar')
+        assert len(out) == 3, out['键'].tolist()
+
+    def test_a_partially_blank_composite_key_never_matches(self):
+        left = pd.DataFrame({'平台': ['weibo', 'weibo'], '链接': ['u1', None]})
+        right = pd.DataFrame({'平台': ['weibo'], '链接': [None]})
+        out = anti_join(left, right, left_on='平台,链接', right_on='平台,链接', mode='similar')
+        assert len(out) == 2
+
 
 class TestTheRefusals:
     def test_no_second_table_is_named(self):

@@ -326,6 +326,7 @@ var dataNodes = {
         var p = node.params;
         _chartPreviewName = node.title || nodeId;
         _chartPreviewNodeId = nodeId;
+        var previewSeq = ++_chartPreviewSeq;
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
@@ -371,6 +372,7 @@ var dataNodes = {
                 body: JSON.stringify(payload),
             });
             var result = await resp.json();
+            if (previewSeq !== _chartPreviewSeq) return;  // a newer preview already owns the panel
             if (result.ok) {
                 renderChartPreview(result);
             } else {
@@ -381,6 +383,7 @@ var dataNodes = {
                     : '<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px;">' + escapeHtml(fv.message) + '</div>';
             }
         } catch (e) {
+            if (previewSeq !== _chartPreviewSeq) return;
             showToast(I18n.t('toast.renderFailed') + ': ' + e.message);
             echartsDiv.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px;">' + escapeHtml(e.message) + '</div>';
         }
@@ -525,8 +528,10 @@ var dataPreview = {
         await this._fetch();
     },
 
-    async _fetch() {
-        var body = Object.assign({}, this._payload, { limit: this._limit, offset: this._offset });
+    async _fetch(offset) {
+        var wanted = offset === undefined ? this._offset : offset;
+        var seq = (this._seq = (this._seq || 0) + 1);
+        var body = Object.assign({}, this._payload, { limit: this._limit, offset: wanted });
         try {
             var resp = await fetch('/api/data/preview', {
                 method: 'POST',
@@ -534,6 +539,7 @@ var dataPreview = {
                 body: JSON.stringify(body),
             });
             var result = await resp.json();
+            if (seq !== this._seq) return;  // a newer page already owns the panel
             if (!result.ok) {
                 var fv = _renderFailureView(result);
                 if (!fv.note) {
@@ -543,6 +549,7 @@ var dataPreview = {
                 document.getElementById('data-preview-table-wrap').innerHTML = '<div class="dashboard-cell-note">' + escapeHtml(fv.message) + '</div>';
                 return;
             }
+            this._offset = wanted;  // commit only after the server actually answered
             this._total = result.total_rows;
             var fmt = this._payload.preview_format || '';
             if (fmt === 'txt' || fmt === 'json') {
@@ -556,10 +563,10 @@ var dataPreview = {
     },
 
     prevPage() {
-        if (this._offset - this._limit >= 0) { this._offset -= this._limit; this._fetch(); }
+        if (this._offset - this._limit >= 0) { this._fetch(this._offset - this._limit); }
     },
     nextPage() {
-        if (this._offset + this._limit < this._total) { this._offset += this._limit; this._fetch(); }
+        if (this._offset + this._limit < this._total) { this._fetch(this._offset + this._limit); }
     },
 };
 

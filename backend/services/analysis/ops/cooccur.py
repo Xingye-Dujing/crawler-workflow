@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 def cooccur(df: pd.DataFrame, column: str, topn: int = 30, min_count: int = 2, window: int = 0) -> pd.DataFrame:
     """Which words travel together — the co-occurrence edges of 论文's knowledge graph.
 
-    One row per word pair, with the number of posts that contain both (or both within
-    ``window`` tokens of each other, when a window is asked for). The paper's other figure
-    is a 知识图谱 built from exactly this: two words are related in the graph because readers
+    One row per word pair. Without a window, ``value`` is the number of posts that contain both
+    words. With ``window > 0`` it is the number of WINDOW OCCURRENCES of the pair (a long post
+    can contribute more than one), which is a different quantity and can exceed the post count.
+    The paper's other figure is a 知识图谱 built from exactly this: two words are related in the
+    graph because readers
     put them in the same sentence, not because a topic model grouped them.
 
     The candidate words are the corpus TF-IDF list :class:`KeywordExtractor` already ranks

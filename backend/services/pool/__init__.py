@@ -48,9 +48,26 @@ def snapshot(platform: str) -> dict:
 
 
 def observe(
-    platform: str, account: str, facts: dict, *, exit_id: str = '', rows: int = 0, run_id: str = '', node_id: str = ''
+    platform: str,
+    account: str,
+    facts: dict,
+    *,
+    exit_id: str = '',
+    rows: int = 0,
+    run_id: str = '',
+    node_id: str = '',
+    assume_ok: bool = False,
 ) -> dict:
-    return health.observe(platform, account, facts, exit_id=exit_id, rows=rows, run_id=run_id, node_id=node_id)
+    return health.observe(
+        platform,
+        account,
+        facts,
+        exit_id=exit_id,
+        rows=rows,
+        run_id=run_id,
+        node_id=node_id,
+        assume_ok=assume_ok,
+    )
 
 
 def account_word(account: str) -> str:

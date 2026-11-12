@@ -43,18 +43,27 @@ const Capabilities = {
             .then(function (payload) {
                 self.data = payload && Array.isArray(payload.platforms) && payload.platforms.length ? payload : null;
                 self.error = self.data ? '' : 'malformed';
-                if (self.data) Machine.apply(self.data);
-                /* The data-source card is written from this payload, and the nodes a
-                   draft restored on a cold page were drawn before it arrived. Redraw
-                   them here rather than at each caller, so no entry point (startup,
-                   the retry button, a later refresh) can forget it. `canvas` is a
-                   top-level const in canvas.js — `window.canvas` would never exist. */
+                /* Rendering failures are not "the matrix could not be fetched". The old single
+                   ``.catch`` ran these side effects inside the fetch chain, so one exception in
+                   a half-restored node's summary discarded a matrix that had already arrived and
+                   told every source node "cannot verify the crawl matrix". Keep each render
+                   local; the data stays. */
+                function render(step) {
+                    try {
+                        step();
+                    } catch (e) {
+                        console.error('capabilities render step failed', e);
+                    }
+                }
+                if (self.data) render(function () { Machine.apply(self.data); });
                 if (self.data && typeof canvas !== 'undefined' && canvas && canvas.refreshSourceSummaries) {
-                    canvas.refreshSourceSummaries();
+                    render(function () { canvas.refreshSourceSummaries(); });
                 }
                 /* The cost estimate reads the matrix's own per-mode defaults, so it is
                    only meaningful once they have loaded. */
-                if (self.data && typeof Diagnostics !== 'undefined' && Diagnostics.schedule) Diagnostics.schedule();
+                if (self.data && typeof Diagnostics !== 'undefined' && Diagnostics.schedule) {
+                    render(function () { Diagnostics.schedule(); });
+                }
                 return self.data;
             })
             .catch(function (e) {

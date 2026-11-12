@@ -58,6 +58,15 @@ _BODY_FIELDS = ('正文', '内容', '摘要', 'body', 'content')
 # comment walk already uses as the IN-RUN identity — see the ``identity=`` in
 # ``crawlers/platforms/youtube/comments.py``).
 _COMMENT_ID_FIELDS = ('评论ID',)
+#: The fields that identify a comment when the site exposes no id of its own. 知乎 and 抖音
+#: currently emit none, and the whole-row fallback below includes 楼层 (renumbered by every
+#: walk) and like/reply counts (which move) — the same comment became a new item on a resume.
+#: The article, author, body and its own timestamp are the stable facts a comment row carries;
+#: counters and positions are explicitly NOT part of this key.
+_COMMENT_ARTICLE_FIELDS = ('文章URL', '笔记URL', '视频URL', '动态URL')
+_COMMENT_AUTHOR_FIELDS = ('评论者',)
+_COMMENT_BODY_FIELDS = ('评论内容',)
+_COMMENT_TIME_FIELDS = ('评论时间',)
 # Carried alongside it so a mixed batch cannot collapse a 知乎 numeric id onto a 微博 one:
 # the two sites draw their ids from separate spaces and neither knows the other's.
 _COMMENT_PLATFORM_FIELDS = ('平台',)
@@ -132,7 +141,9 @@ def item_key(item) -> str:
     A **comment** is identified by its own site id, and must be: its row also carries
     楼层 (and 父楼层), which a fresh harness numbers from 1 again, so the whole-row hash
     below would read the same comment as a NEW item on every resume and re-store the
-    whole set with invented floors. The site id is the only field that survives a replay.
+    whole set with invented floors. When the site does not expose an id (知乎/抖音 today),
+    the article + author + body + the comment's own time are used instead; that is the
+    stable content identity, and it deliberately leaves counters and 楼层 out.
 
     Otherwise a link is the best identity when the crawler captured one. Otherwise title
     + author + the head of the body: enough to recognise the same post after a
@@ -141,12 +152,23 @@ def item_key(item) -> str:
     """
     if not isinstance(item, dict):
         return _sha1('raw', item)
+    platform = first_text(item, _COMMENT_PLATFORM_FIELDS)
     cid = first_text(item, _COMMENT_ID_FIELDS)
     if cid:
-        return _sha1('comment', first_text(item, _COMMENT_PLATFORM_FIELDS), cid)
+        return _sha1('comment', platform, cid)
+    body = first_text(item, _COMMENT_BODY_FIELDS)
+    if body:
+        return _sha1(
+            'comment-text',
+            platform,
+            first_text(item, _COMMENT_ARTICLE_FIELDS),
+            first_text(item, _COMMENT_AUTHOR_FIELDS),
+            body[:200],
+            first_text(item, _COMMENT_TIME_FIELDS),
+        )
     sid = first_text(item, _SITE_ID_FIELDS)
     if sid:
-        return _sha1('site', first_text(item, _COMMENT_PLATFORM_FIELDS), sid)
+        return _sha1('site', platform, sid)
     link = _stable_link(first_text(item, _URL_FIELDS))
     if link:
         return _sha1('url', link)

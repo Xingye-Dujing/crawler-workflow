@@ -59,6 +59,14 @@ ENV CRAWLER_DATA_ROOT=/app
 
 EXPOSE 5000
 
+# The process does not need root: only the directory ownership is fixed once, in the
+# entrypoint (a named volume first mounted as root would otherwise refuse the app's writes).
+RUN useradd --system --uid 10001 --create-home app \
+ && mkdir -p /app/data /app/logs \
+ && chown -R app:app /app/data /app/logs
+
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/api/config | grep -qE '200|302|401' || exit 1
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

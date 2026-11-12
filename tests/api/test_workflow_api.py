@@ -1295,7 +1295,7 @@ class TestSourceCommentsMode:
             def close(self):
                 pass
 
-        def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None, abort=None, account=''):
+        def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None, abort=None, account='', **kwargs):
             # The comment engine honours the run's 无头 choice verbatim (#148): a headless request
             # builds a headless browser even for a scrolled comment panel — the old "content pages
             # reject headless, force a window" rule is gone, measured zhihu comments 5/5 headless.

@@ -215,6 +215,21 @@ def part_batch_names(export_dir: str, name: str):
 
 
 def export_usage(export_dir: str) -> dict:
-    """Totals for the panel header, from the same listing it displays."""
-    rows = list_exports(export_dir)
-    return {'files': len(rows), 'bytes': sum(int(row['size'] or 0) for row in rows)}
+    """Totals for the panel header, over EVERY file, not the paged listing.
+
+    ``list_exports`` caps itself at ``MAX_ENTRIES`` for the table; summing that answer reported
+    "500 files / X MB" forever once the archive grew past the cap. Walk the directory instead.
+    """
+    files = 0
+    size = 0
+    if export_dir and os.path.isdir(export_dir):
+        with os.scandir(export_dir) as handles:
+            for entry in handles:
+                try:
+                    if not entry.is_file() or is_staged(entry.name):
+                        continue
+                    files += 1
+                    size += int(entry.stat().st_size or 0)
+                except OSError:
+                    continue
+    return {'files': files, 'bytes': size}

@@ -441,12 +441,15 @@ def studio_save_vector():
         os.makedirs(paths.active().export_dir, exist_ok=True)
         with open(filepath, 'w', encoding='utf-8') as handle:
             handle.write(markup)
-    except OSError as e:
-        return jsonify({'ok': False, 'error': f'Could not write file: {e}'}), 500
+    except OSError:
+        # The path is host information and this sentence is shown to the user; the traceback
+        # (with the path) belongs in the log, not in the JSON response.
+        logger.exception(t('misc.studio_saveFailed'))
+        return jsonify({'ok': False, 'error': t('misc.studio_saveFailed')}), 500
 
     size = os.path.getsize(filepath)
     logger.info(t('misc.studio_saved', path=filepath, bytes=size))
-    return jsonify({'ok': True, 'filename': filename, 'path': filepath, 'bytes': size})
+    return jsonify({'ok': True, 'filename': filename, 'bytes': size})
 
 
 @bp.route('/api/studio/save-pdf', methods=['POST'])
@@ -546,8 +549,9 @@ def studio_save_image():
         os.makedirs(paths.active().export_dir, exist_ok=True)
         with open(filepath, 'wb') as fh:
             fh.write(payload)
-    except OSError as e:
-        return jsonify({'ok': False, 'error': f'Could not write file: {e}'}), 500
+    except OSError:
+        logger.exception(t('misc.studio_saveFailed'))
+        return jsonify({'ok': False, 'error': t('misc.studio_saveFailed')}), 500
 
     logger.info(t('misc.studio_saved', path=filepath, bytes=len(payload)))
-    return jsonify({'ok': True, 'filename': filename, 'path': filepath, 'bytes': len(payload)})
+    return jsonify({'ok': True, 'filename': filename, 'bytes': len(payload)})

@@ -770,12 +770,40 @@ class TestMachineSettingsAreReadWriteForAdminsOnly:
         # The values that describe how its OWN runs behave stay readable.
         assert 'page_load_timeout' in body['settings']
         assert 'element_timeout' in body['settings']
+        # The schema declared the same contract: a machine-local default is a path, and the
+        # panel renders `default` as the field's starting value.
+        schema = bob.get('/api/settings/schema').get_json()['schema']
+        for field in schema['settings']:
+            if field['key'] in HOST_PATH_KEYS:
+                assert field['default'] == '', f'{field["key"]} leaked through the schema default'
 
     def test_a_plain_account_cannot_write_them(self, admin_client):
         bob = _as_plain_user(admin_client)
         response = _post(bob, '/api/settings', {'settings': {'page_load_timeout': 5}})
         assert response.status_code == 403
         assert 'admin' in response.get_json()['error'].lower()
+
+    def test_the_environment_report_hides_host_paths_from_a_plain_account(self, admin_client, monkeypatch):
+        from api import components as components_api
+
+        monkeypatch.setattr(
+            components_api,
+            'environment',
+            lambda: {
+                'schema': 1,
+                'root': '/host/components',
+                'capabilities': [
+                    {'id': 'pdf', 'state': 'missing', 'reason_params': {'path': '/host/xelatex'}},
+                    {'id': 'crawl_selenium', 'state': 'ok', 'reason_params': {}},
+                ],
+            },
+        )
+        bob = _as_plain_user(admin_client)
+        body = bob.get('/api/environment').get_json()
+        assert body['root'] == ''
+        for capability in body['capabilities']:
+            params = capability.get('reason_params') or {}
+            assert not ({'path', 'chrome', 'driver', 'entry', 'node'} & set(params)), capability
 
     def test_an_admin_sees_everything_and_may_write(self, admin_client):
         body = admin_client.get('/api/settings').get_json()
@@ -905,6 +933,11 @@ class TestComponentAndUpdateWritesAreOperatorActions:
         refused = _post(alice, '/api/components/remove', {'id': 'chromedriver'})
         assert refused.status_code == 403, refused.get_json()
 
+    def test_a_plain_account_cannot_poll_a_component_job(self, admin_client):
+        alice = _as_plain_user(admin_client)
+        refused = alice.get('/api/components/jobs/any-id')
+        assert refused.status_code == 403, refused.get_json()
+
     def test_a_plain_account_cannot_download_or_apply_an_update(self, admin_client):
         alice = _as_plain_user(admin_client)
         for path in ('/api/update/download', '/api/update/restart', '/api/update/cancel'):
@@ -916,3 +949,17 @@ class TestComponentAndUpdateWritesAreOperatorActions:
         """An admin on a SOURCE run is refused by the updater's own rule, never with a 403."""
         refused = _post(admin_client, '/api/update/download', {})
         assert refused.status_code != 403, refused.get_json()
+
+
+@pytest.mark.async_documents
+def test_a_document_job_is_invisible_to_another_account(admin_client, monkeypatch):
+    """A job id is not a capability: the report's owner is the account that started it."""
+    bob = _as_plain_user(admin_client)
+    admin_id = _me(admin_client)['user_id']
+    monkeypatch.setitem(execution_state, 'user_id', admin_id)
+    monkeypatch.setitem(execution_state, 'results', {'node-1': [{'标题': 'private', 'n': 1}]})
+    started = _post(admin_client, '/api/report/generate', {'title': 'private job'})
+    assert started.status_code == 202, started.get_json()
+    job_id = started.get_json()['job']['id']
+    assert bob.get(f'/api/jobs/{job_id}').status_code == 404
+    assert admin_client.get(f'/api/jobs/{job_id}').status_code == 200

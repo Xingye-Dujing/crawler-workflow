@@ -443,8 +443,10 @@ class TestUserDirectoryStaysReadOnly:
             if tag[0] == 'file' and path.is_file():
                 # A Chrome profile file can be locked by a browser the user has open; skipping it
                 # costs this check nothing, since it is the *fingerprint* that must not move.
-                with contextlib.suppress(OSError):
-                    path.read_bytes()
+                with contextlib.suppress(OSError), path.open('rb') as handle:
+                    # Bounded: the fingerprint only needs a read to happen, and ``data/updates``
+                    # can hold a 4 GiB package. ``read_bytes`` turned this check into an OOM.
+                    handle.read(64 * 1024)
         assert isolation_guard.diff(first, isolation_guard.fingerprint()) == ([], [], [])
 
     def _fake_user_directory(self, monkeypatch, tmp_path):
@@ -882,7 +884,6 @@ class TestLiveTierSessionShape:
 #: sibling always runs. Anything the CRAWL answers gets asserted, not skipped.
 _LIVE_SKIP_ALLOWANCE = {
     ('conftest.py', 'no saved cookies'),
-    ('conftest.py', 'Chrome/driver unavailable'),
     ('test_live_comments.py', 'no searched weibo post had comments'),
     ('test_live_zhihu.py', 'refused the headless session'),
     ('test_live_cookie_preflight.py', 'no saved cookies'),

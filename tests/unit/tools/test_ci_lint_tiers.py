@@ -77,6 +77,17 @@ def test_the_command_carries_the_standard_the_rcfile_and_the_files(linting, tmp_
     assert command[-2:] == [str(path) for path in files]
 
 
+def test_repository_targets_are_relative_to_the_invocation_cwd(linting, tmp_path, monkeypatch):
+    """The absolute path pushed the product tier over Windows' 32,767-character limit."""
+    file = tmp_path / 'backend' / 'app.py'
+    file.parent.mkdir(parents=True)
+    file.write_text('x = 1\n', encoding='utf-8')
+    monkeypatch.setattr(linting, 'REPO', tmp_path)
+    command = linting.command('product', [file])
+    assert Path(command[-1]).as_posix() == 'backend/app.py'
+    assert len(str(file)) > len(command[-1])
+
+
 def test_an_empty_tier_is_refused_by_name(linting, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(linting, 'REPO', tmp_path)
     code = linting.main(['product'])

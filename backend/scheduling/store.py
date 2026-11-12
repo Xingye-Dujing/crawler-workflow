@@ -172,16 +172,25 @@ def _clock_parts(at) -> tuple:
         return 0, 0
 
 
-def _reanchor(task: dict, now: datetime) -> datetime | None:
+def _reanchor(
+    task: dict, now: datetime, *, moment: datetime | None = None, record_missed: bool = True
+) -> datetime | None:
     """The task's next fire, moved into the future; a moment already gone is recorded, not replayed.
 
     The same rule the restart path applies: a cloud box that was down is not owed a burst of
     catch-up runs. Returns None when the rule never fires again.
+
+    ``moment`` is the moment the CALLER already judged (``note_missed`` pushes it itself);
+    ``record_missed=False`` says "this is an edit, not a missed run". Without both, an interval
+    task's stale anchor was pushed once by ``note_missed`` and a second time here, because
+    ``next_fire`` for an interval returns the same already-past moment.
     """
-    moment = next_fire(task, now)
+    if moment is None:
+        moment = next_fire(task, now)
     if moment is None or moment > now:
         return moment
-    _push_miss(task, moment, now)
+    if record_missed and task.get('enabled'):
+        _push_miss(task, moment, now)
     trigger = task.get('trigger') or {}
     if trigger.get('kind') == 'interval':
         # An interval is a period, so its anchor is the moment that just passed: start the next
@@ -360,15 +369,25 @@ def zone_label(name) -> str:
 
 
 def describe_trigger(trigger: dict) -> str:
+    """The sentence for one stored trigger, or a named refusal for a row that cannot be read.
+
+    ``public()`` calls this for every row; a hand-edited/old ``schedules.json`` with
+    ``weekday: "Wed"`` used to make ``int()`` raise and turn the whole panel into a 500, so the
+    user could not even open the task to fix or delete it. The clock skips such a task by name;
+    the panel now does the same row by row.
+    """
     kind = (trigger or {}).get('kind')
-    if kind == 'daily':
-        return t('sched.everyDay', at=str((trigger or {}).get('at') or ''))
-    if kind == 'weekly':
-        key = _WEEKDAY_KEYS.get(int((trigger or {}).get('weekday') or 0))
-        return t('sched.everyWeek', weekday=t(key) if key else '', at=str((trigger or {}).get('at') or ''))
-    if kind == 'interval':
-        return t('sched.everyMinutes', n=int((trigger or {}).get('minutes') or 0))
-    return t('sched.cronAt', expr=str((trigger or {}).get('expr') or ''))
+    try:
+        if kind == 'daily':
+            return t('sched.everyDay', at=str((trigger or {}).get('at') or ''))
+        if kind == 'weekly':
+            key = _WEEKDAY_KEYS.get(int((trigger or {}).get('weekday') or 0))
+            return t('sched.everyWeek', weekday=t(key) if key else '', at=str((trigger or {}).get('at') or ''))
+        if kind == 'interval':
+            return t('sched.everyMinutes', n=int((trigger or {}).get('minutes') or 0))
+        return t('sched.cronAt', expr=str((trigger or {}).get('expr') or ''))
+    except (TypeError, ValueError):
+        return t('sched.unreadableTrigger')
 
 
 def describe_time(value, zone_name) -> str:
@@ -401,7 +420,7 @@ def save_task(raw, now: datetime = None) -> tuple:
         task, error = normalize(raw, existing, now)
         if error:
             return {}, error
-        moment = _reanchor(task, now)
+        moment = _reanchor(task, now, record_missed=False)
         if moment is None:
             return {}, t('sched.neverFires', expr=trigger_cron(task.get('trigger') or {}) or task.get('timezone') or '')
         task['next_run'] = _iso(moment)
@@ -485,7 +504,7 @@ def note_missed(now: datetime = None) -> list:
             if moment is None or moment > now:
                 continue
             _push_miss(task, moment, now)
-            task['next_run'] = _iso(_reanchor(task, now))
+            task['next_run'] = _iso(_reanchor(task, now, moment=moment, record_missed=False))
             task['updated_at'] = _iso(now)
             missed.append(str(task.get('name') or task.get('id') or ''))
         if missed:

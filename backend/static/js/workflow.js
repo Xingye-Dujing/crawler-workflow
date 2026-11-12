@@ -1226,6 +1226,12 @@ const workflow = {
         var SETTLE_TICKS = 90;
         var settleTicks = 0;
         var interval = setInterval(async function () {
+            // One request in flight at a time. ``/api/workflow/status`` reads SQLite and can
+            // take longer than the 1 s tick; two overlapping reads let the OLDER answer land
+            // last, and its smaller ``log_total`` is read by ``takeLines`` as "the server's
+            // buffer reset" — the whole console is replayed and the cursor moves backwards.
+            if (self._statusInFlight) return;
+            self._statusInFlight = true;
             try {
                 var resp = await fetch('/api/workflow/status');
                 var result = await resp.json();
@@ -1396,6 +1402,8 @@ const workflow = {
                 self._stopPoll();
                 RunState.setRunning(false);
                 showToast(I18n.t('toast.pollFailed'));
+            } finally {
+                self._statusInFlight = false;
             }
         }, 1000);
         this._pollTimer = interval;
@@ -1783,11 +1791,28 @@ function profileNoticeCount(nodes, settings, matrix) {    if (!settings || setti
     var live = effectiveNodeMap();
     Object.keys(live || {}).forEach(function (id) {
         var node = live[id] || {};
-        if (node.type !== 'source' && node.type !== 'comment') return;
-        var platform = (node.params || {}).platform;
-        if (!platform) return;
-        matrix.platforms.forEach(function (cap) {
-            if (cap.platform === platform && cap.profileRecommended) wanted[platform] = true;
+        var p = node.params || {};
+        var platforms = [];
+        if (node.type === 'source' && p.platform) {
+            platforms.push(p.platform);
+        } else if (node.type === 'comment') {
+            // A comment node has no ``platform`` field: its platform comes from each link,
+            // exactly as `_crawlPlatforms()` reads it. (An older canvas/API shape may still
+            // carry ``platform``; accept it as the fallback rather than dropping the node.)
+            var urls = String(p.urls || '');
+            if (urls.trim()) {
+                urls.split(/[\s,;、]+/).forEach(function (line) {
+                    var plat = urlPlatform(line);
+                    if (plat) platforms.push(plat);
+                });
+            } else if (p.platform) {
+                platforms.push(p.platform);
+            }
+        }
+        platforms.forEach(function (platform) {
+            matrix.platforms.forEach(function (cap) {
+                if (cap.platform === platform && cap.profileRecommended) wanted[platform] = true;
+            });
         });
     });
     return Object.keys(wanted).length;

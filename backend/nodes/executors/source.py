@@ -658,6 +658,12 @@ def run(node: dict, call: NodeCall):
     if not pool_selector.is_pool_value(account):
         with gate.hold(platform, log=add_log, abort=stop_requested, account=account):
             return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
+    if capabilities.is_catbus(node.get('params') or {}):
+        # ``@pool`` claims a Selenium login and its exit; a CatBus walk runs as a child process
+        # with its own account files and reads neither. Without this refusal the node claimed a
+        # login (or told the user to save a cookie the run never opens), bound an exit and
+        # wrote health rows, then ignored the name. The comment executor has the same guard.
+        raise ValueError(t('pool.catbusUnsupported', platform=platform))
     # Pool mode. The gate is taken PER ATTEMPT with the account that attempt actually uses:
     # its lane is per login, so holding the sentinel's lane would serialize every pool crawl
     # of a platform into one queue and throw away the parallelism accounts exist for.
@@ -698,7 +704,9 @@ def run(node: dict, call: NodeCall):
                 )
             # A finished attempt is a measurement too: it clears a strike counter that an old
             # wall left behind (so escalation cannot climb on stale evidence) and leaves the
-            # row count next to the pair that produced it in the audit trail.
+            # row count next to the pair that produced it in the audit trail. ``assume_ok`` is
+            # explicit: an attempt that RETURNED is a page this browser read, unlike a probe
+            # that reported no facts at all.
             with contextlib.suppress(Exception):
                 pool.observe(
                     platform,
@@ -708,6 +716,7 @@ def run(node: dict, call: NodeCall):
                     rows=len(rows) if isinstance(rows, list) else 0,
                     run_id=run_id,
                     node_id=node_id,
+                    assume_ok=True,
                 )
             return rows
         except SessionBlockedError as exc:

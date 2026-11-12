@@ -33,6 +33,7 @@ ZH = {
     'sched.everyDay': '每天 {at}',
     'sched.everyMinutes': '每 {n} 分钟',
     'sched.everyWeek': '每{weekday} {at}',
+    'sched.unreadableTrigger': '触发规则无法读取，请重新保存这条任务',
     'sched.fired': '定时任务“{name}”到点，已开始运行',
     'sched.firedManual': '定时任务“{name}”被手动触发，已开始运行',
     'sched.missedLine': '定时任务“{name}”错过了一次触发（服务没在运行），已跳过并重排',
@@ -87,6 +88,7 @@ EN = {
     'sched.everyDay': 'every day at {at}',
     'sched.everyMinutes': 'every {n} minutes',
     'sched.everyWeek': 'every {weekday} at {at}',
+    'sched.unreadableTrigger': 'this trigger cannot be read; save the task again to repair it',
     'sched.fired': 'scheduled task "{name}" came due — the run has started',
     'sched.firedManual': 'scheduled task "{name}" was triggered by hand — the run has started',
     'sched.missedLine': (

@@ -251,14 +251,22 @@ class DataAnalysisService:
         current = df
         for step in steps or []:
             op = step.get('op')
-            params = normalize_step_params(op, step.get('params', {}))
+            # Only the steps in LLM_OPS are handed the run's client, Stop flag and answer store;
+            # every other step is deterministic and gets the table alone. A step's own params
+            # may not carry these names: a workflow file from an older format (or a hand-written
+            # API step) would otherwise raise `TypeError: got multiple values for keyword
+            # argument 'llm'`, an unattributed failure. The run's objects win; the stale keys
+            # are dropped.
+            params = {
+                key: value
+                for key, value in normalize_step_params(op, step.get('params', {})).items()
+                if key not in ('llm', 'cancel', 'store')
+            }
             func = operations.get(op)
             if func is None:
                 raise UnknownOperationError(f'Unknown analysis operation: {op}')
             validate_step(current, op, params)
             before = len(current)
-            # Only the steps in LLM_OPS are handed the run's client, Stop flag and answer store;
-            # every other step is deterministic and gets the table alone.
             injected = {'llm': llm, 'cancel': cancel, 'store': store} if op in LLM_OPS else {}
             current = func(current, **injected, **params)
             report.append(

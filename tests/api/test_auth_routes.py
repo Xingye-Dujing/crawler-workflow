@@ -224,11 +224,21 @@ class TestLoggingIn:
         """``remote_addr`` behind a proxy is the PROXY for every visitor: the audit could not say
         who logged in, and one shared failure window let any attacker lock the whole server out.
         Trusting the header without that much notice would let any client invent its own address,
-        so the default reads nothing."""
+        so the default reads nothing.
+
+        A proxy APPENDS the address it saw, so the real client is ``depth`` entries from the
+        right. The leftmost entries are whatever the client typed and must never win.
+        """
         monkeypatch.setattr(Config, 'TRUST_PROXY_DEPTH', 0)
-        assert self._login_with_a_chain(client, '203.0.113.7, 10.0.0.2') == '127.0.0.1'
+        assert self._login_with_a_chain(client, '203.0.113.7, 198.51.100.9') == '127.0.0.1'
         monkeypatch.setattr(Config, 'TRUST_PROXY_DEPTH', 1)
-        assert self._login_with_a_chain(client, '203.0.113.7, 10.0.0.2') == '203.0.113.7'
+        # One proxy: the rightmost entry is the client, the left-hand one is client-supplied.
+        assert self._login_with_a_chain(client, '203.0.113.7, 198.51.100.9') == '198.51.100.9'
+        # A request that brought no header still has the one entry the proxy appended.
+        assert self._login_with_a_chain(client, '203.0.113.9') == '203.0.113.9'
+        # Two proxies: the client is the second from the right.
+        monkeypatch.setattr(Config, 'TRUST_PROXY_DEPTH', 2)
+        assert self._login_with_a_chain(client, '192.0.2.1, 203.0.113.7, 198.51.100.9') == '203.0.113.7'
         # Fewer hops than declared: the chain does not support its own claim.
         assert self._login_with_a_chain(client, '203.0.113.9') == '127.0.0.1'
 

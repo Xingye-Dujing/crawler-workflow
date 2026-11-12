@@ -17,7 +17,7 @@
 | `CRAWLER_SESSION_IDLE_MINUTES` | 会话空闲超时（分钟），超时即吊销；写坏了不会拒绝启动，按默认值继续 | `120` |
 | `CRAWLER_SESSION_MAX_HOURS` | 会话绝对有效期（小时）；同上 | `24` |
 | `CRAWLER_HTTPS` | 页面实际经 HTTPS 访问（反向代理终止 TLS）时设 `1`：会话 Cookie 标记 `Secure` | 关闭 |
-| `CRAWLER_TRUST_PROXY_DEPTH` | 这台服务前面站了几层反向代理（`1` = 一层）。设了才会读 `X-Forwarded-For` 的**右数第 depth+1 个**地址作为访客来源，用于审计日志与登录失败窗口；代理层数写在 `remote_addr` 上会让全服共用同一个失败窗口、审计也只能指到代理。**默认 0：完全不信该头**——那等于允许客户端自己编造来源地址 | `0` |
+| `CRAWLER_TRUST_PROXY_DEPTH` | 这台服务前面站了几层反向代理（`1` = 一层）。设了才会读 `X-Forwarded-For` 的**右数第 depth 个**地址作为访客来源（每层代理把自己的 `$remote_addr` 追加到右端，因此一层代理时最右项就是客户端；左侧项是客户端自己填的，不可信），用于审计日志与登录失败窗口；代理层数写在 `remote_addr` 上会让全服共用同一个失败窗口、审计也只能指到代理。**默认 0：完全不信该头**——那等于允许客户端自己编造来源地址 | `0` |
 | `PORT` | 服务端口 | `5000` |
 | `HOST` | 监听地址（默认只监听本机）。局域网内其他机器访问需设为 `0.0.0.0`，**但这要求账号已启用**：没有账号时登录门禁不会打开，绑定非本机地址会被按名拒绝启动（设置 `CRAWLER_ADMIN_PASSWORD` 即可） | `127.0.0.1` |
 | `CRAWLER_DATA_ROOT` | `data/` 与 `logs/` 的父目录（给某个进程一份**自己**的状态：验证脚本、测试里自启的那台服务，都不会碰你真正在用的那份）。**优先级最高**：设了它就只用它，不会退回其他位置 | **源码运行**（`cd backend && python app.py`）默认是仓库根目录，没有 `data-root.txt`/`portable.txt` 这一串回退。**打包启动器**（`desktop/`）另有自己的回退链：安装器选的 `data-root.txt`、便携版 `portable.txt`、Windows `%APPDATA%\CaiXiHui`、macOS `~/Library/Application Support/CaiXiHui`，最后才是程序目录。两者是不同入口，不要按本文去源码树里找安装器文件 |

@@ -182,7 +182,18 @@ def compile_pdf(tex: str, out_name: str, export_dir: str) -> tuple[dict, str]:
             stdout, stderr = proc.communicate(timeout=COMPILE_TIMEOUT)
         except subprocess.TimeoutExpired:
             _stop_process_tree(proc)
-            stdout, stderr = proc.communicate()
+            try:
+                # Bounded: a grandchild that survived the reaper can still hold the pipe
+                # open, and an unbounded ``communicate()`` then wedges the run worker forever
+                # (the Stop button cannot reach this thread). Give the pipes a short second
+                # chance, then abandon them and report the named timeout.
+                stdout, stderr = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                for stream in (proc.stdout, proc.stderr):
+                    if stream is not None:
+                        with contextlib.suppress(OSError):
+                            stream.close()
+                stdout, stderr = b'', b''
             _discard(work)
             return {'error': t('api.compilePdfTimeout', seconds=COMPILE_TIMEOUT)}, ''
         result = SimpleNamespace(returncode=proc.returncode, stdout=stdout or b'', stderr=stderr or b'')

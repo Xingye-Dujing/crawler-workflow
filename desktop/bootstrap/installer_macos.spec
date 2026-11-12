@@ -17,6 +17,7 @@ from pathlib import Path
 BOOTSTRAP = Path(SPECPATH).resolve()
 ROOT = BOOTSTRAP.parent.parent
 BACKEND = ROOT / 'backend'
+APP_VERSION = os.environ.get('CIXI_APP_VERSION') or '1.0.0'
 CATALOG = os.environ.get('CIXI_INSTALLER_CATALOG') or str(BACKEND / 'services' / 'components' / 'default_catalog.json')
 ICON = os.environ.get('CIXI_MACOS_ICON') or ''
 if str(BACKEND) not in sys.path:
@@ -157,7 +158,7 @@ app = BUNDLE(
     info_plist={
         'CFBundleDisplayName': '采析绘安装器',
         'CFBundleName': 'CaiXiHui-Online-Setup',
-        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleShortVersionString': APP_VERSION,
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '11.0',
         'LSApplicationCategoryType': 'public.app-category.utilities',

@@ -230,11 +230,20 @@ class TestStampFilename:
         assert E.stamp_filename('report.csv', str(tmp_path)) == 'report-20260924-081500-3.csv'
         assert (tmp_path / first).read_text(encoding='utf-8') == 'kept', 'an earlier result is never rewritten'
 
-    def test_the_name_it_returns_is_never_an_existing_file(self, tmp_path):
+    def test_each_call_reserves_a_fresh_name(self, tmp_path):
+        """The claim is ``O_EXCL``, so the chosen name exists as a 0-byte reservation.
+
+        A check-then-write pair handed two parallel output nodes the same name; the second
+        ``atomic_replace`` destroyed the first table. The reservation is what makes "choose"
+        and "own" one operation — ``save`` then stages beside it and replaces it.
+        """
+        names = []
         for _ in range(3):
             name = E.stamp_filename('report.csv', str(tmp_path))
-            assert not (tmp_path / name).exists()
-            (tmp_path / name).write_text('x', encoding='utf-8')
+            path = tmp_path / name
+            assert path.exists() and path.stat().st_size == 0
+            names.append(name)
+        assert len(set(names)) == 3
         assert len(list(tmp_path.iterdir())) == 3
 
 

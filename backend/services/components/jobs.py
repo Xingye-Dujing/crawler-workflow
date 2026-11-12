@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from i18n import t
 from services.components.catalog import Catalog, CatalogError
 from services.components.fetch import DownloadError
 from services.components.install import InstallError, install_component
@@ -65,6 +66,7 @@ def start(catalog: Catalog, component_id: str, root: str | Path, *, system: str 
             job['total'] = total
 
     def work() -> None:
+        error = ''
         try:
             path = install_component(
                 catalog,
@@ -75,13 +77,27 @@ def start(catalog: Catalog, component_id: str, root: str | Path, *, system: str 
                 cancel=stop.is_set,
             )
         except (InstallError, DownloadError, CatalogError, ManifestError, OSError) as exc:
+            error = str(exc)
             with _LOCK:
                 job['state'] = 'cancelled' if stop.is_set() else 'failed'
-                job['error'] = str(exc)
+                job['error'] = error
+        except Exception as exc:  # a thread must always publish a verdict
+            # ``BadZipFile``/``NotImplementedError`` and any other escape used to kill the
+            # thread with the job still ``running``: ``start`` then refused every later install
+            # of this component until the process restarted, and ``cancel`` had no listener.
+            error = str(exc) or type(exc).__name__
+            with _LOCK:
+                job['state'] = 'cancelled' if stop.is_set() else 'failed'
+                job['error'] = t('components.jobCrashed', err=error)
         else:
             with _LOCK:
                 job['state'] = 'done'
                 job['path'] = str(path)
+        finally:
+            with _LOCK:
+                if job['state'] == 'running':
+                    job['state'] = 'cancelled' if stop.is_set() else 'failed'
+                    job['error'] = t('components.jobCrashed', err=error or '?')
 
     threading.Thread(target=work, name=f'component-{component_id}', daemon=True).start()
     started = get(job_id)

@@ -68,9 +68,16 @@ def get_capabilities():
             # label (``ACCOUNT_RE`` refuses ``@``), so it is a storage value, never a login.
             options.insert(0, {'value': POOL_VALUE, 'labelKey': 'cookies.accountPool'})
         for mode in cap.get('modes', []):
+            # A CatBus-only mode never reads a Selenium login; offering @pool there made the
+            # source node claim one, bind an exit and write health rows for a walk that runs in
+            # a child process with its own account files. Keep the concrete logins (the panel
+            # still needs the field) but not the rotation sentinel.
+            mode_options = options
+            if mode.get('engines') == [capabilities.BACKEND_CATBUS]:
+                mode_options = [item for item in options if item.get('value') != POOL_VALUE]
             for field in mode.get('fields', []):
                 if field.get('key') == 'account':
-                    field['options'] = options
+                    field['options'] = mode_options
                     # A node added now logs in as the first login this machine has, rather
                     # than as "not chosen" — which used to mean the default file, existing
                     # or not, and then a crawl that silently hit a wall it could not open.

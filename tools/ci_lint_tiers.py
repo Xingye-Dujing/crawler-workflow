@@ -90,6 +90,22 @@ def targets(tier: str, root: Path = REPO) -> list[Path]:
     return sorted(files, key=lambda path: path.as_posix())
 
 
+def _argument(path: Path) -> str:
+    """One pylint target as a command-line argument.
+
+    Paths inside the repository are passed RELATIVE to ``REPO`` (the invocation's cwd) so the
+    Windows ``CreateProcess`` limit measures this repository's names, not its absolute location.
+    After the tree grew past 400 files the absolute form overflowed 32,767 characters on a
+    checkout whose root is 41 characters long (WinError 206), while the relative form left more
+    than half of the budget unused. A path outside ``REPO`` (the unit test's tmp tree) stays
+    absolute: ``relative_to`` would raise, and that caller has no repository-relative spelling.
+    """
+    try:
+        return str(path.relative_to(REPO))
+    except ValueError:
+        return str(path)
+
+
 def command(tier: str, files: list[Path]) -> list[str]:
     """The pylint invocation for one tier, with the paths as explicit arguments."""
     _, rcfile = TIERS[tier]
@@ -99,7 +115,7 @@ def command(tier: str, files: list[Path]) -> list[str]:
         'pylint',
         *PYLINT_FLAGS,
         f'--rcfile={rcfile}',
-        *(str(path) for path in files),
+        *(_argument(path) for path in files),
     ]
 
 

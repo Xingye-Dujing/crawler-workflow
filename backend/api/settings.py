@@ -71,8 +71,18 @@ def get_runtime_settings():
 
 @bp.route('/api/settings/schema', methods=['GET'])
 def get_settings_schema():
-    """The declaration the panel renders: groups, field metadata and preset ids."""
-    return jsonify({'ok': True, 'schema': schema_payload(), 'read_only': not _is_admin()})
+    """The declaration the panel renders: groups, field metadata and preset ids.
+
+    A machine-local default (the configured driver/CatBus/xelatex path) is part of the host's
+    fingerprint, and ``MACHINE_KEYS``' own contract says it is never visible to a non-admin.
+    The values endpoint already hides it; the schema leaked the same path through ``default``.
+    """
+    schema = schema_payload()
+    if not _is_admin():
+        for field in schema.get('settings', []):
+            if field.get('key') in MACHINE_KEYS:
+                field['default'] = ''
+    return jsonify({'ok': True, 'schema': schema, 'read_only': not _is_admin()})
 
 
 @bp.route('/api/settings', methods=['POST'])

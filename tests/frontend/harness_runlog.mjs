@@ -155,7 +155,10 @@ out.mergedOrder = viewer._rows.map((r) => r.line);
 viewer._dom.level.value = 'warning';
 captured.location = '';
 viewer.download();
-out.downloadUrl = captured.location;
+/* The download is a hidden iframe (a 404 must not replace the workbench), so the URL is
+   read off the frame it appended rather than off window.location. */
+const frames = sandbox.document.body.children.filter((el) => String(el.tagName || '').toUpperCase() === 'IFRAME');
+out.downloadUrl = frames.length ? String(frames[frames.length - 1].src || '') : '';
 
 // ── close hides the overlay without tearing it down ──
 viewer._dom.overlay.classList.add('open');

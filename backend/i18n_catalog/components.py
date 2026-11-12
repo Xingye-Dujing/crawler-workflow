@@ -61,6 +61,7 @@ ZH = {
     'components.installStarted': '正在安装 {component}；进度见任务状态',
     'components.installBusy': '有运行正在使用这些组件：先等它结束（或停止）再安装/卸载',
     'components.jobMissing': '找不到这个安装任务',
+    'components.jobCrashed': '安装线程意外退出（{err}），任务已中止，可以重试',
     'components.removeFailed': '无法卸载 {component}：{err}',
     'env.remove': '卸载',
     'env.removeConfirm': '卸载 {id}？只会删除组件文件，用户数据不受影响。',
@@ -142,6 +143,9 @@ EN = {
     'components.installStarted': 'Installing {component}; the job status carries the progress',
     'components.installBusy': 'A run is using these components; finish (or stop) it before installing or removing',
     'components.jobMissing': 'That installation job does not exist',
+    'components.jobCrashed': (
+        'The installation thread exited unexpectedly ({err}); the job was stopped and can be retried'
+    ),
     'components.removeFailed': 'Could not remove {component}: {err}',
     'env.remove': 'Uninstall',
     'env.removeConfirm': 'Uninstall {id}? Only the component files are deleted; user data is untouched.',

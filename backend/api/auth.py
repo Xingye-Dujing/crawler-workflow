@@ -216,19 +216,23 @@ def client_ip() -> str:
     Behind the reverse proxy ``docs/config.md`` describes, ``remote_addr`` is the PROXY for every
     visitor — so the audit log could not answer "who", and a failure window keyed on it was a
     whole-server lockout. ``CRAWLER_TRUST_PROXY_DEPTH`` (0 = never trust the header, the default)
-    says how many proxies stand in front of this process, and the client is the address that many
-    hops from the RIGHT of ``X-Forwarded-For``: the leftmost entry is whatever the first client
-    typed, and only the hops this operator declared are removed.
+    says how many proxies stand in front of this process. Each proxy appends the address it saw,
+    so the real client is the entry ``depth`` positions from the RIGHT: the leftmost entries are
+    whatever the client typed and must never be believed.
     """
     remote = str(request.remote_addr or '')
     depth = max(0, int(Config.TRUST_PROXY_DEPTH or 0))
     if not depth:
         return remote
     forwarded = [part.strip() for part in str(request.headers.get('X-Forwarded-For') or '').split(',') if part.strip()]
-    if len(forwarded) < depth + 1:
+    if len(forwarded) < depth:
         # Fewer hops than declared: the chain does not say what it claims, so say nothing.
         return remote
-    return forwarded[-(depth + 1)]
+    # Each proxy APPENDS the address it saw (`$proxy_add_x_forwarded_for` appends
+    # `$remote_addr`), so the rightmost entry is the client for one proxy and the edge proxy for
+    # several. The real client is therefore ``depth`` entries from the right, and `remote_addr`
+    # names the last proxy, not an entry in the header.
+    return forwarded[-depth]
 
 
 # ─── Credentials and the gate ──────────────────────────────────

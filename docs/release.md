@@ -96,6 +96,8 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Insta
 **`-Version` 必须显式传，而且是三段数字**（Inno 的 `VersionInfoVersion` 会自己补 `.0`）：脚本默认值是
 `1.0.0`，漏传会把安装器/收据按 1.0.0 盖章，而应用内 `APP_VERSION` 是四段（`2026.11.11.2`）。
 四段版本只存在于 `backend/services/version.py` 与 `version.json`；构建脚本只接受 `^\d+\.\d+\.\d+$`。
+GitHub 的发布 workflow 把 `version` 设为必填，并在打包前用 `tools/check_release_version.py` 拒绝任何
+不是 `APP_VERSION` 前缀的值——脚本自己的默认值只服务于本机手工构建。
 
 产出：
 

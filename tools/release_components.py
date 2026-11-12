@@ -19,11 +19,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = ROOT / 'backend' / 'services' / 'components' / 'default_catalog.json'
+_SHA = re.compile(r'^[0-9a-f]{64}$')
 
 
 def sha256(path: Path) -> str:
@@ -79,6 +81,18 @@ def main(argv: list[str] | None = None) -> int:
         if files and component_id not in {cid for cid, _ in files} and not args.check:
             continue
         for platform_key, asset in (raw.get('platforms') or {}).items():
+            if args.check and not asset.get('feed'):
+                # ``--check`` used to ``continue`` here because no ``--component``/``--url``
+                # was given, so every per-asset rule below was skipped while the tool printed
+                # "catalog ok". An asset with neither urls nor parts, or a missing/!64-hex
+                # digest, is exactly what this mode exists to catch.
+                if not (asset.get('urls') or asset.get('parts')):
+                    raise SystemExit(f'{component_id}:{platform_key} has no urls or parts')
+                if not _SHA.match(str(asset.get('sha256') or '').strip().lower()):
+                    raise SystemExit(f'{component_id}:{platform_key} has no valid sha256')
+                for part in asset.get('parts') or []:
+                    if not _SHA.match(str(part.get('sha256') or '').strip().lower()):
+                        raise SystemExit(f'{component_id}:{platform_key} has a part without sha256')
             path_text = _updates(component_files, platform_key, own)
             url_text = _updates(component_urls, platform_key, own)
             if not path_text and not url_text:

@@ -112,6 +112,7 @@ ZH = {
     'misc.server_starting': '爬虫工作流服务启动，端口 {port}',
     'misc.source_probe_failed': '数据源探测失败',
     'misc.studio_saved': '图表工坊已保存 {path}（{bytes} 字节）',
+    'misc.studio_saveFailed': '图表工坊无法写入文件：目标目录不可写或磁盘已满',
     'misc.studio_source_failed': '图表工坊合并载入：来源读取失败',
     'misc.visualize_failed': '图表渲染失败：{err}',
     'set.badFlag': '{setting} 需要 true/false 值，已恢复默认',
@@ -274,6 +275,9 @@ EN = {
     'misc.server_starting': 'Starting crawler workflow server on port {port}',
     'misc.source_probe_failed': 'Source probe failed',
     'misc.studio_saved': 'Chart studio saved {path} ({bytes} bytes)',
+    'misc.studio_saveFailed': (
+        'The chart studio could not write its file: the export directory is not writable or the disk is full'
+    ),
     'misc.studio_source_failed': 'Merged studio load: source failed',
     'misc.visualize_failed': 'Chart rendering failed: {err}',
     'set.badFlag': '{setting} needs a true/false value — restored the default',

@@ -70,6 +70,32 @@ def test_reset_clears_the_term_and_the_strikes():
     assert row['state'] == 'ok' and row['strikes'] == 0 and not row['cool_until']
 
 
+def test_reset_one_account_never_clears_its_neighbours():
+    """The default login's file spelling is blank, but its pool subject is ``default``.
+
+    Passing the raw blank used to fall into the platform-wide branch and clear every login of
+    the platform — including a manually disabled one.
+    """
+    store.mark_cooldown('account', 'weibo', 'default', 7200, 'login_wall')
+    store.mark_cooldown('account', 'weibo', 'work', 7200, 'risk')
+    store.set_disabled('account', 'weibo', 'banned', True, note='manual')
+    store.reset('account', 'weibo', 'default')
+    assert store.get_health('account', 'weibo', 'default')['state'] == 'ok'
+    assert store.get_health('account', 'weibo', 'work')['state'] == 'cooling'
+    assert store.get_health('account', 'weibo', 'banned')['state'] == 'disabled'
+
+
+def test_a_platform_wide_reset_still_does_not_revive_a_manual_stop():
+    store.mark_cooldown('account', 'weibo', 'work', 7200, 'risk')
+    store.set_disabled('account', 'weibo', 'banned', True, note='manual')
+    store.reset('account', 'weibo', '')
+    assert store.get_health('account', 'weibo', 'work')['state'] == 'ok'
+    assert store.get_health('account', 'weibo', 'banned')['state'] == 'disabled'
+    # The explicit all-clear is the operator's door, not a crawl path.
+    store.reset('account', 'weibo', '', include_disabled=True)
+    assert store.get_health('account', 'weibo', 'banned')['state'] == 'ok'
+
+
 def test_success_clears_the_cooldown():
     store.mark_cooldown('account', 'weibo', 'work', 7200, 'login_wall')
     store.mark_ok('account', 'weibo', 'work')

@@ -17,6 +17,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 SPEC_DIR = Path(SPECPATH).resolve()
 ROOT = SPEC_DIR.parent
 BACKEND = ROOT / 'backend'
+APP_VERSION = os.environ.get('CIXI_APP_VERSION') or '1.0.0'
 if str(SPEC_DIR) not in sys.path:
     sys.path.insert(0, str(SPEC_DIR))
 from frozen_modules import package_module_names
@@ -176,7 +177,7 @@ app = BUNDLE(
     info_plist={
         'CFBundleDisplayName': '采析绘',
         'CFBundleName': 'CaiXiHui',
-        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleShortVersionString': APP_VERSION,
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '11.0',
     },

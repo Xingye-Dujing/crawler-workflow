@@ -30,7 +30,11 @@ def requirement_met(token: str, system: str | None = None, cloud: bool | None = 
     feature, and the mode's own executor still refuses by name when its real dependency is missing.
     """
     if token == 'windows_desktop':
-        return machine.is_windows(system) and not (cloud_is() if cloud is None else cloud)
+        # A frozen Windows build ships without mitmproxy/uiautomation (they are optional and the
+        # PyInstaller spec excludes them), so the desktop harvest is impossible there. The
+        # capability answer must say so BEFORE the panel offers it: the executor's run-time
+        # refusal is the last line, not the permission.
+        return machine.is_windows(system) and not machine.is_frozen() and not (cloud_is() if cloud is None else cloud)
     return True
 
 

@@ -335,57 +335,57 @@ def touch(kind: str, platform: str, subject: str) -> None:
     Written at claim time, not at verdict time, so a process killed mid-crawl still leaves
     the fact that this pair was used — which is what the least-recently-used ordering and
     the "was that exit tried today?" question read.
+
+    One statement, not read-then-write: a concurrent ``mark_cooldown`` between the read and
+    the write would be overwritten by the stale snapshot, silently clearing a fresh cooldown.
     """
-    current = get_health(kind, platform, subject)
-    _write_health(
-        kind=kind,
-        platform=platform,
-        subject=subject,
-        state=current.get('state') or 'ok',
-        cool_until=float(current.get('cool_until') or 0),
-        reason=current.get('reason') or '',
-        strikes=int(current.get('strikes') or 0),
-        last_attempt_at=time.time(),
-        last_ok_at=float(current.get('last_ok_at') or 0),
-        note=current.get('note') or '',
-    )
+    now = time.time()
+    with _LOCK, contextlib.closing(connect()) as conn:
+        conn.execute(
+            'INSERT INTO health '
+            '(kind, platform, subject, state, cool_until, reason, strikes, last_attempt_at, last_ok_at, note) '
+            "VALUES (?, ?, ?, 'ok', 0, '', 0, ?, 0, '') "
+            'ON CONFLICT(kind, platform, subject) DO UPDATE SET last_attempt_at=excluded.last_attempt_at',
+            (kind, platform, subject, now),
+        )
+        conn.commit()
 
 
 def mark_ok(kind: str, platform: str, subject: str) -> None:
     """A real answer that the session/exit works: clear the cooldown and the strike count."""
-    current = get_health(kind, platform, subject)
     now = time.time()
-    _write_health(
-        kind=kind,
-        platform=platform,
-        subject=subject,
-        state='ok',
-        cool_until=0.0,
-        reason='',
-        strikes=0,
-        last_attempt_at=now,
-        last_ok_at=now,
-        note=current.get('note') or '',
-    )
+    with _LOCK, contextlib.closing(connect()) as conn:
+        conn.execute(
+            'INSERT INTO health '
+            '(kind, platform, subject, state, cool_until, reason, strikes, last_attempt_at, last_ok_at, note) '
+            "VALUES (?, ?, ?, 'ok', 0, '', 0, ?, ?, '') "
+            'ON CONFLICT(kind, platform, subject) DO UPDATE SET '
+            "state='ok', cool_until=0, reason='', strikes=0, "
+            'last_attempt_at=excluded.last_attempt_at, last_ok_at=excluded.last_ok_at',
+            (kind, platform, subject, now, now),
+        )
+        conn.commit()
 
 
 def mark_cooldown(kind: str, platform: str, subject: str, seconds: float, reason: str, detail: str = '') -> dict:
-    """Put one subject into a timed cooldown. Returns the row as written."""
-    current = get_health(kind, platform, subject)
+    """Put one subject into a timed cooldown. Returns the row as written.
+
+    The strike count is incremented IN THE ROW (``strikes = strikes + 1``): a read-then-write
+    lost one of two concurrent verdicts, so "escalate after repeated walls" undercounted.
+    """
     now = time.time()
-    strikes = int(current.get('strikes') or 0) + 1
-    _write_health(
-        kind=kind,
-        platform=platform,
-        subject=subject,
-        state='cooling',
-        cool_until=now + max(0.0, float(seconds)),
-        reason=reason,
-        strikes=strikes,
-        last_attempt_at=now,
-        last_ok_at=float(current.get('last_ok_at') or 0),
-        note=str(detail or '')[:400],
-    )
+    until = now + max(0.0, float(seconds))
+    with _LOCK, contextlib.closing(connect()) as conn:
+        conn.execute(
+            'INSERT INTO health '
+            '(kind, platform, subject, state, cool_until, reason, strikes, last_attempt_at, last_ok_at, note) '
+            "VALUES (?, ?, ?, 'cooling', ?, ?, 1, ?, 0, ?) "
+            'ON CONFLICT(kind, platform, subject) DO UPDATE SET '
+            "state='cooling', cool_until=excluded.cool_until, reason=excluded.reason, "
+            'strikes=health.strikes + 1, last_attempt_at=excluded.last_attempt_at, note=excluded.note',
+            (kind, platform, subject, until, str(reason or ''), now, str(detail or '')[:400]),
+        )
+        conn.commit()
     return get_health(kind, platform, subject)
 
 
@@ -409,24 +409,36 @@ def set_disabled(kind: str, platform: str, subject: str, disabled: bool, note: s
     )
 
 
-def reset(kind: str, platform: str, subject: str = '') -> int:
-    """Clear cooldowns now — the human override. Empty ``subject`` clears a whole kind/platform."""
+def reset(kind: str, platform: str, subject: str = '', *, include_disabled: bool = False) -> int:
+    """Clear cooldowns now — the human override. Empty ``subject`` clears a whole kind/platform.
+
+    A manually disabled subject is NOT revived: “Manual 停用 never expires, only a person can
+    restore it” is a stronger promise than “a fresh login clears the cooldown”, and saving a
+    login is not the 启用 button. ``include_disabled=True`` is the explicit all-clear an operator
+    may ask for; no crawl path uses it.
+
+    ``subject`` must be the account store's own spelling. The default login is filed as
+    ``default`` (``CookieManager.key``), while its historical *file* spelling is ``''``; passing
+    the blank here fell into the platform-wide branch and cleared every account of that platform
+    — a cooldown for one login became a cooldown for all of them.
+    """
+    guard = '' if include_disabled else " AND state != 'disabled'"
     with _LOCK, contextlib.closing(connect()) as conn:
         if subject:
             cur = conn.execute(
                 "UPDATE health SET state = 'ok', cool_until = 0, reason = '', strikes = 0 "
-                'WHERE kind = ? AND platform = ? AND subject = ?',
+                f'WHERE kind = ? AND platform = ? AND subject = ?{guard}',
                 (kind, platform, subject),
             )
         elif platform:
             cur = conn.execute(
                 "UPDATE health SET state = 'ok', cool_until = 0, reason = '', strikes = 0 "
-                'WHERE kind = ? AND platform = ?',
+                f'WHERE kind = ? AND platform = ?{guard}',
                 (kind, platform),
             )
         else:
             cur = conn.execute(
-                "UPDATE health SET state = 'ok', cool_until = 0, reason = '', strikes = 0 WHERE kind = ?",
+                f"UPDATE health SET state = 'ok', cool_until = 0, reason = '', strikes = 0 WHERE kind = ?{guard}",
                 (kind,),
             )
         conn.commit()

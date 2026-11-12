@@ -140,10 +140,29 @@ class DataExporter:
         # ``-2`` rather than a finer clock: the timestamp the user reads is
         # second-resolution, so the suffix is what says "this is the other one".
         n = 1
-        while os.path.exists(os.path.join(export_dir, candidate)):
-            n += 1
-            candidate = f'{root}-{stamp}-{n}{ext}'
-        return candidate
+        try:
+            os.makedirs(export_dir, exist_ok=True)
+        except OSError:
+            # ``save`` will report the real write failure; naming still has to answer a string.
+            return candidate
+        while True:
+            target = os.path.join(export_dir, candidate)
+            try:
+                # RESERVE, don't just look: two parallel output nodes can ask in the same
+                # second, and a check-then-write pair handed both the same name; the second
+                # ``atomic_replace`` then destroyed the first table. ``O_EXCL`` makes the
+                # choice and the claim one operation. ``save`` stages beside this empty file
+                # and replaces it, so the reservation is never the published artefact.
+                handle = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                n += 1
+                candidate = f'{root}-{stamp}-{n}{ext}'
+                continue
+            except OSError:
+                # An unwritable directory is the save's refusal to report, not a naming loop.
+                return candidate
+            os.close(handle)
+            return candidate
 
     @classmethod
     def save(

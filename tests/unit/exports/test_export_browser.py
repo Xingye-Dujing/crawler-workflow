@@ -87,6 +87,16 @@ class TestListing:
         assert usage['files'] == 4
         assert usage['bytes'] == sum(row['size'] for row in list_exports(exports))
 
+    def test_usage_is_not_truncated_by_the_listing_cap(self, tmp_path):
+        directory = tmp_path / 'many'
+        directory.mkdir()
+        for index in range(MAX_ENTRIES + 1):
+            (directory / f'f{index:04d}.csv').write_text('x', encoding='utf-8')
+        assert len(list_exports(str(directory))) == MAX_ENTRIES
+        usage = export_usage(str(directory))
+        assert usage['files'] == MAX_ENTRIES + 1
+        assert usage['bytes'] == MAX_ENTRIES + 1
+
 
 class TestResolution:
     def test_the_files_own_name_resolves(self, exports):

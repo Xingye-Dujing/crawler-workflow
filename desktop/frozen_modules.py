@@ -54,6 +54,10 @@ def package_module_names(backend: Path | str, package: str) -> list[str]:
         else:
             parts[-1] = stem  # 'executors/source.py' → 'source', not 'source.py'
         if not parts:
+            # The package's own ``__init__.py``: its module name is the package itself
+            # (``nodes.executors``), which is what a registry imports by string. Skipping it
+            # left a package with no submodules out of the frozen build entirely.
+            names.append(package)
             continue
         names.append('.'.join([package, *parts]))
     return sorted(set(names))

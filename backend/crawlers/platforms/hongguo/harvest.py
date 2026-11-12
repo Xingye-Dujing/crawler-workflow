@@ -765,18 +765,19 @@ class HongguoCommentHarness:
         """mitmdump → CA trust → player, each refused by name. Idempotent per node run."""
         if self._stack_up:
             return
+        # The desktop build does not carry this stack (mitmproxy pulls a large tree, and the
+        # harvest drives a real desktop window). "pip install mitmproxy" is not a thing anybody
+        # can do inside an exe, so name the build that can run the node instead. Checked BEFORE
+        # the generic capability refusal so a direct call still gets the specific remedy.
+        missing = [name for name in ('mitmproxy', 'uiautomation') if importlib.util.find_spec(name) is None]
+        if missing and machine.is_frozen():
+            raise ValueError(t('crawl.hg.cmt.needsExtrasFrozen', names=' / '.join(missing)))
         # The SAME predicate the panel greys this mode out with and validation refuses a canvas with
         # (:meth:`capabilities.registry.mode_blocker`): a node that reaches here has already been paid for,
         # so this line is the last of three answers and must not be a fourth opinion about the platform.
         if not requirements.requirement_met('windows_desktop'):
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing='Windows desktop (mitmdump + UIA)'))
-        missing = [name for name in ('mitmproxy', 'uiautomation') if importlib.util.find_spec(name) is None]
         if missing:
-            if machine.is_frozen():
-                # The desktop build does not carry this stack (mitmproxy pulls a large tree, and the
-                # harvest drives a real desktop window). "pip install mitmproxy" is not a thing
-                # anybody can do inside an exe, so name the build that can run the node instead.
-                raise ValueError(t('crawl.hg.cmt.needsExtrasFrozen', names=' / '.join(missing)))
             raise ValueError(t('crawl.hg.cmt.needsExtras', missing=' / '.join(missing)))
         mitmdump = find_mitmdump()
         if not mitmdump:

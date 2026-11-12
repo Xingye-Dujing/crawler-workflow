@@ -17,11 +17,11 @@ Design notes the code cannot shout later:
   The dedupe ledger picks identity from those field lists; a comment has no
   link of its own, so borrowing those names would make every comment of one
   article hash to the same key and silently drop all but the first.
-  Its identity comes from ``评论ID`` instead (``run_store._COMMENT_ID_FIELDS``, plus
-  ``平台`` so two sites' id spaces cannot meet): the ledger must NOT fall back to the
-  whole-row hash here, because a row also carries ``楼层``, which a fresh harness
-  numbers from 1 again — a resume would then re-store every comment of a re-walked
-  article with invented floors.
+  Its identity comes from ``评论ID`` when the site exposes one (``run_store._COMMENT_ID_FIELDS``,
+  plus ``平台`` so two sites' id spaces cannot meet). 知乎 and 抖音 do not emit an id today;
+  for them ``item_key`` uses article + author + body + the comment's own time instead of the
+  whole-row hash, because the row also carries ``楼层``/``点赞数``/``子回复数``, which move
+  between visits — a resume would then re-store the same comment with invented floors.
 * One article can fail for different reasons and they must not blur:
   ``ok`` (rows, maybe zero — zero means 无评论), ``blocked`` (risk-control or
   login wall answered instead of content), ``dead`` (link unreadable/404).
@@ -97,6 +97,24 @@ class CommentSession:
         with contextlib.suppress(Exception):
             return self.driver.find_element('css selector', 'body').text[:limit]
         return ''
+
+    def document_uri(self) -> str:
+        """What the document on screen calls itself (a Chrome error page says so here).
+
+        ``driver.current_url`` still reports the address that was ASKED for after Chrome
+        refuses a navigation; ``documentURI`` is the measured way to tell an error page from a
+        real empty result (see ``crawlers.core.crawler.Crawler._document_uri``).
+        """
+        with contextlib.suppress(Exception):
+            return str(self.driver.execute_script('return document.documentURI || "";') or '')
+        return ''
+
+    def mark_unreachable(self) -> None:
+        """Latch a network-level failure on the owning crawler, for the pool to name."""
+        owner = getattr(self, 'owner', None)
+        if owner is not None:
+            with contextlib.suppress(Exception):
+                owner.unreachable = True
 
     def safe_text(self, element) -> str:
         with contextlib.suppress(Exception):

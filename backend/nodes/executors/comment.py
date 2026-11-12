@@ -282,6 +282,12 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         was never allowed to advance past the hole.
         """
         candidate = claimed.get(kind)
+        if not facts.get('login_wall') and not facts.get('risk_blocked'):
+            # The walker answered BLOCKED but did not say WHY. That is still an attributable
+            # refusal — the safe word is 风控 (back off), never "ok": an empty fact set used to
+            # clear the account's cooldown and write an `ok` audit row for a walled session.
+            # The platforms that can tell a login wall apart latch it themselves.
+            facts = {**facts, 'risk_blocked': True}
         verdict = pool.observe(
             kind,
             active.get(kind, account),
@@ -461,6 +467,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     facts = {
                         'login_wall': bool(getattr(_crawler, 'login_wall', False)),
                         'risk_blocked': bool(getattr(_crawler, 'risk_blocked', False)),
+                        'unreachable': bool(getattr(_crawler, 'unreachable', False)),
                     }
                     rotations += 1
                     if _rotate(kind, facts):

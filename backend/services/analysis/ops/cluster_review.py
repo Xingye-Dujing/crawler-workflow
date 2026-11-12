@@ -56,6 +56,11 @@ def cluster_review(
 
     work = df.copy()
     work['_grp'] = pd.to_numeric(work[group_col], errors='coerce')
+    dropped = int(work['_grp'].isna().sum())
+    if dropped:
+        # Same rule as ``cluster_label``: a row the step cannot place is counted, not silently
+        # deleted, or the review table's 节点数 no longer sums to the node table.
+        logger.warning(t('analysis.cluster_groups_dropped', col=group_col, n=dropped))
     work = work[work['_grp'].notna()]
     order = sorted(int(key) for key in work['_grp'].unique())
     if not order:

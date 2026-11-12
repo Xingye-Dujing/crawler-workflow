@@ -603,5 +603,8 @@ def _facts_of(verdict: dict) -> dict:
     if state == EXPIRED:
         return {'login_wall': True}
     if state == UNKNOWN:
-        return {'error': str((verdict or {}).get('detail') or '')}
+        # A timeout, a captcha page or a busy profile is "could not be checked", not a network
+        # failure: recording `error` cooled the EXIT for the network duration and told the
+        # audit table a story the browser never saw. No measurement → no fact.
+        return {}
     return {}

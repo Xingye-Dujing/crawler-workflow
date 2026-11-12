@@ -444,11 +444,17 @@ def walk(session, url: str, limit: int) -> tuple:
     title = ''
     with contextlib.suppress(Exception):
         title = session.driver.title or ''
-    verdict = classify(current, session.body_head(), title)
+    verdict = classify(current, session.body_head(), title, document_uri=session.document_uri())
     if verdict == 'login':
         session.mark_login_wall()
         return [], BLOCKED
-    if verdict in ('blocked', 'unreachable'):
+    if verdict == 'unreachable':
+        # A browser error page is a network fact, not a risk verdict: naming it as 风控 cooled
+        # the EXIT for two hours and told the user their session was blocked. Keep the walk
+        # retryable and let the pool record the network reason.
+        session.mark_unreachable()
+        return [], BLOCKED
+    if verdict == 'blocked':
         session.mark_risk_blocked()
         return [], BLOCKED
     shown = note_id(current)

@@ -1,3 +1,5 @@
 # Build-only tools. These are installed into desktop/.venv-build, never into the app's
-# runtime environment and never shipped in dist/.
-pyinstaller>=6.10,<7
+# runtime environment and never shipped in dist/. Pinned for the same reason the runtime is:
+# BUNDLE/COLLECT/strip behaviour belongs to this version, and the macOS and Windows builders
+# must not resolve different ones.
+pyinstaller==6.22.3

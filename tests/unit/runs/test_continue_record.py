@@ -74,3 +74,29 @@ class TestContinueRecord:
         adopted = _continue_record('热榜', resumable, resuming=True, requested='comment-row')
         assert adopted['run_id'] == 'hot-row'
         assert [row['run_id'] for row in resumable] == ['comment-row']
+
+    def test_a_label_edit_still_adopts_the_same_component_by_fingerprint(self):
+        """The workflow name is a label, not an input; the fingerprint and node set survive it."""
+        resumable = [
+            {
+                'run_id': 'old-row',
+                'workflow_name': '旧名字',
+                'workflow_fingerprint': 'fp-1',
+                'nodes': [{'node_id': 'n1'}],
+            }
+        ]
+        adopted = _continue_record(
+            '新名字', resumable, resuming=True, requested='old-row', fingerprint='fp-1', node_ids={'n1'}
+        )
+        assert adopted['run_id'] == 'old-row'
+
+    def test_a_same_named_row_with_no_node_of_this_component_is_not_adopted(self):
+        resumable = [
+            {
+                'run_id': 'crawl-row',
+                'workflow_name': '工作流',
+                'workflow_fingerprint': 'fp',
+                'nodes': [{'node_id': 'crawl-1'}],
+            }
+        ]
+        assert _continue_record('工作流', resumable, resuming=True, requested='crawl-row', node_ids={'upload-1'}) == {}

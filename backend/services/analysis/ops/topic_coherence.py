@@ -47,13 +47,14 @@ def topic_coherence(
     if column not in df.columns:
         raise UnknownOperationError(t('analysis.step_col_missing', op='topic_coherence', col=column))
     texts = [str(value) for value in df[column].dropna().tolist() if str(value).strip()]
+    total_texts = len(texts)
     limit = _whole(max_documents, 'topic_coherence', 'max_documents')
     if limit > 0 and len(texts) > limit:
         # Deterministic on purpose: a sweep whose sample changes between runs changes its
         # numbers, and the user cannot tell the difference between a worse model and a
         # different dozen posts.
         texts = pd.Series(texts).sample(n=limit, random_state=_stable_seed(df)).sort_index().tolist()
-        logger.info(t('analysis.coherence_sampled', used=limit, total=len(df[column].dropna())))
+        logger.info(t('analysis.coherence_sampled', used=limit, total=total_texts))
     low = _whole(min_topics, 'topic_coherence', 'min_topics')
     high = _whole(max_topics, 'topic_coherence', 'max_topics')
     if low < 2:

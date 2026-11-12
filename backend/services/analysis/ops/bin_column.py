@@ -1,9 +1,13 @@
 """The ``bin_column`` step, one module of the analysis op registry (see ops/__init__.py)."""
 
+import logging
+
 import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError
+
+logger = logging.getLogger(__name__)
 
 
 def bin_column(
@@ -15,8 +19,14 @@ def bin_column(
     bin_col = new_col or f'{column}_bin'
     if bins is None:
         bins = 4
+    numeric = pd.to_numeric(work[column], errors='coerce')
+    dropped = int(numeric.isna().sum() - work[column].isna().sum())
+    if dropped:
+        # Same contract as ``filter_rows``: a cell the step cannot read is counted and named,
+        # never silently turned into a NaN bucket whose rows ``groupby`` then drops.
+        logger.warning(t('analysis.bin_unparsed_rows', col=column, n=dropped))
     try:
-        work[bin_col] = pd.cut(pd.to_numeric(work[column], errors='coerce'), bins=bins, labels=labels)
+        work[bin_col] = pd.cut(numeric, bins=bins, labels=labels)
     except Exception as e:
         # Same rule as ``column_calc`` above: a refusal, never a silent no-op. The
         # inputs that reach here are real — edges given in the wrong order, a label

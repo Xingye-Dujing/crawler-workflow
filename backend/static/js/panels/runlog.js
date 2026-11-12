@@ -52,32 +52,38 @@ var runLogViewer = {
     },
 
     load: async function () {
+        var seq = (this._seq = (this._seq || 0) + 1);
+        var runId = this._runId;
         var params = this._qs();
         params.push('limit=' + this.PAGE);
         this._setStatus(this._t('runLog.loading'));
         try {
-            var resp = await fetch('/api/runs/' + encodeURIComponent(this._runId) + '/log?' + params.join('&'));
+            var resp = await fetch('/api/runs/' + encodeURIComponent(runId) + '/log?' + params.join('&'));
             if (!resp.ok) throw new Error('http ' + resp.status);
             var data = await resp.json();
+            if (seq !== this._seq || runId !== this._runId) return;
             this._rows = data.rows || [];
             this._oldestSeq = data.min_seq;
             this._hasMore = !!data.has_more;
             this._noteWorkflows(this._rows);
             this.render();
         } catch (e) {
-            this._setStatus(this._t('runLog.loadFailed'));
+            if (seq === this._seq) this._setStatus(this._t('runLog.loadFailed'));
         }
     },
 
     loadOlder: async function () {
         if (!this._hasMore || this._oldestSeq === null) return;
+        var seq = this._seq;
+        var runId = this._runId;
         var params = this._qs();
         params.push('before=' + this._oldestSeq, 'limit=' + this.PAGE);
         this._setStatus(this._t('runLog.loading'));
         try {
-            var resp = await fetch('/api/runs/' + encodeURIComponent(this._runId) + '/log?' + params.join('&'));
+            var resp = await fetch('/api/runs/' + encodeURIComponent(runId) + '/log?' + params.join('&'));
             if (!resp.ok) throw new Error('http ' + resp.status);
             var data = await resp.json();
+            if (seq !== this._seq || runId !== this._runId) return;
             var older = data.rows || [];
             this._rows = older.concat(this._rows);
             if (data.min_seq !== null && data.min_seq !== undefined) this._oldestSeq = data.min_seq;
@@ -86,11 +92,12 @@ var runLogViewer = {
             var keepFromBottom = this._dom ? this._dom.body.scrollHeight - this._dom.body.scrollTop : null;
             this.render(keepFromBottom);
         } catch (e) {
-            this._setStatus(this._t('runLog.loadFailed'));
+            if (seq === this._seq) this._setStatus(this._t('runLog.loadFailed'));
         }
     },
 
     reload: function () {
+        this._seq = (this._seq || 0) + 1;  // invalidate whatever is in flight
         this._rows = [];
         this._oldestSeq = null;
         this._hasMore = false;
@@ -99,7 +106,18 @@ var runLogViewer = {
 
     download: function () {
         var params = this._qs();
-        window.location.href = window.__cu('/api/runs/' + encodeURIComponent(this._runId) + '/log.txt?' + params.join('&'));
+        var url = window.__cu('/api/runs/' + encodeURIComponent(this._runId) + '/log.txt?' + params.join('&'));
+        // A hidden iframe, not ``window.location``: a run purged by retention answers a bare
+        // text/plain 404, and navigating to it replaced the whole workbench (including a live
+        // console) with one line of text. The download still starts; a failure stays invisible
+        // in a zero-size frame instead of throwing the user out of the page.
+        var frame = document.createElement('iframe');
+        frame.style.display = 'none';
+        frame.src = url;
+        document.body.appendChild(frame);
+        setTimeout(function () {
+            if (frame.parentNode) frame.parentNode.removeChild(frame);
+        }, 60000);
     },
 
     _noteWorkflows: function (rows) {

@@ -385,6 +385,11 @@ def stop_workflow():
         # owner at CALL time. Without this, account A's stop lines landed in account B's console
         # and durable run log.
         owner = account_context.current()
+        # Clear the handle INSIDE the lock: a drain can hand the slot to a queued run the moment
+        # it is released, and writing ``executor = None`` afterwards erased the NEW run's stop
+        # handle (its 停止 then skipped TaskExecutor.stop()).
+        execution_state.pop('current_input', None)
+        execution_state['executor'] = None
 
     def _reap(c):
         token = account_context.bind(owner)
@@ -434,8 +439,6 @@ def stop_workflow():
     # "运行结束（0/0 个节点完成）" and wiped the log that explained it. The next
     # run resets both when it claims the slot (begin_run), which is where a
     # fresh slate belongs.
-    execution_state.pop('current_input', None)
-    execution_state['executor'] = None
     return jsonify({'ok': True, 'browsers': len(crawlers), 'records': list(execution_state['open_records'])})
 
 

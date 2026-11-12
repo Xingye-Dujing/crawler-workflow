@@ -39,6 +39,7 @@ from pathlib import Path
 
 import isolation_guard
 import pytest
+from device_policy import REQUIRE_BROWSER_ENV, unavailable
 from real_paths import COOKIE_DIR, has_cookie
 from runtime import settings
 
@@ -211,7 +212,10 @@ def live_crawler(cookie_dir_str):
             raise
         except Exception as e:
             stack.close()
-            pytest.skip(f'Chrome/driver unavailable: {e}')
+            # The same skip-or-fail decision the device tier makes: CRAWLER_REQUIRE_BROWSER=1
+            # turns "no browser" into a failure, so a live run cannot print green while every
+            # browser case skipped.
+            unavailable(f'Chrome/driver unavailable: {e}', REQUIRE_BROWSER_ENV)
         made.append([crawler, stack, platform])
         return crawler
 

@@ -703,3 +703,28 @@ class TestCrawlCapability:
         assert row['state'] == 'missing'
         assert row['reason_key'] == 'env.driverConfiguredMissing'
         assert row['reason_params']['path'].endswith('chromedriver.exe')
+
+
+def test_an_installation_thread_that_crashes_still_publishes_a_verdict(monkeypatch, tmp_path):
+    """A ``BadZipFile``/``NotImplementedError`` must not leave the job ``running`` forever.
+
+    The old ``work()`` caught a fixed exception tuple and wrote the terminal state only in
+    ``except``/``else``; an escape killed the thread with ``state == 'running'``, and ``start``
+    then refused every later install of that component until the process restarted.
+    """
+    import time
+
+    from services.components import jobs
+
+    jobs.reset()
+    monkeypatch.setattr(jobs, 'install_component', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('boom')))
+    started = jobs.start(catalog=None, component_id='chromedriver', root=tmp_path)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        job = jobs.get(started['id'])
+        if job and job['state'] != 'running':
+            break
+        time.sleep(0.01)
+    assert job['state'] == 'failed', job
+    assert 'boom' in job['error']
+    jobs.reset()

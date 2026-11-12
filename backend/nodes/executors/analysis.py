@@ -91,6 +91,30 @@ def _steps_of(params: dict) -> list[dict]:
     return [{'op': op, **_normalized_kwargs(str(op), params)}]
 
 
+def _step_with_params(step: dict) -> dict:
+    """Give a flat (panel-shaped) step the nested ``params`` ``run_pipeline`` reads.
+
+    ``_steps_of``/``_step_kwargs`` exists for the column model; the EXECUTION path used to
+    pass the raw list, so a step like ``{'op': 'drop_null', 'columns': '标题'}`` reached
+    ``run_pipeline`` with ``params == {}``. It then ran the operation's defaults: ``drop_null``
+    deleted rows from a column the user never named, ``fill_null`` filled nothing, and
+    ``select_columns`` raised a bare TypeError. A step that already carries ``params`` is an
+    executor-shaped step and is left untouched.
+    """
+    if isinstance(step.get('params'), dict):
+        return step
+    op = str(step.get('op') or step.get('operation') or '')
+    if not op:
+        return step
+    try:
+        normalized = normalize_analysis_params(op, step)
+    except Exception:
+        # An unknown op still has to reach run_pipeline's own named refusal; an empty params
+        # dict lets it raise `UnknownOperationError` instead of a translation error here.
+        normalized = {}
+    return {**step, 'params': normalized if isinstance(normalized, dict) else {}}
+
+
 def _output_of(params: dict, upstream: list[str] | None) -> list[str] | None:
     """Walk the node's steps and say what columns come out — or None when a step is unmodelled."""
     cols = upstream
@@ -214,6 +238,9 @@ def execute_analysis_node(
     label = node_label(node, nid)
 
     steps = list(steps)
+    # The execution path needs the canonical `params` dict, not only the lineage view. Do it
+    # once, before the two-table loop, so that loop still sees the flat fields it reads.
+    steps = [_step_with_params(step) for step in steps]
     for index, step in enumerate(steps):
         op = str(step.get('op') or '')
         if op not in STEP_TWO_TABLE:

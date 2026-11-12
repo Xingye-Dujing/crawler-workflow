@@ -30,6 +30,7 @@ REPO = Path(__file__).resolve().parents[3]
 REQUIREMENTS = REPO / 'requirements.txt'
 OPTIONAL = REPO / 'requirements-optional.txt'
 RUNTIME = REPO / 'desktop' / 'requirements-runtime.txt'
+BUILD = REPO / 'desktop' / 'requirements-build.txt'
 PLATFORMS = ('win32', 'darwin', 'linux')
 
 #: ``name==1.2.3`` with an optional ``[extra]`` and an optional ``; marker``.
@@ -82,7 +83,7 @@ def _pins_for(path: Path, system: str) -> dict[str, str]:
 
 
 def test_every_requirement_is_pinned():
-    for path in (REQUIREMENTS, OPTIONAL):
+    for path in (REQUIREMENTS, OPTIONAL, BUILD):
         rows = _entries(path)
         assert rows, f'{path.name} declares nothing'
         # A range or a bare name would have failed _entries; this second assertion names the

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,13 @@ SPEC = DESKTOP / 'caixihui_macos.spec'
 DIST = ROOT / 'dist'
 WORK = ROOT / 'build' / 'pyinstaller-macos'
 ICON_SOURCE = ROOT / 'backend' / 'static' / 'icon.png'
+
+
+def app_version() -> str:
+    """The version the bundle reports: one source, ``backend/services/version.py``."""
+    text = (ROOT / 'backend' / 'services' / 'version.py').read_text(encoding='utf-8')
+    match = re.search(r"^APP_VERSION\s*=\s*'([^']+)'", text, re.MULTILINE)
+    return match.group(1) if match else '1.0.0'
 
 
 def make_icns() -> Path | None:
@@ -95,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             old.unlink(missing_ok=True)
         shutil.rmtree(WORK, ignore_errors=True)
     WORK.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault('CIXI_APP_VERSION', app_version())
     icon = make_icns()
     if icon is not None:
         os.environ['CIXI_MACOS_ICON'] = str(icon)

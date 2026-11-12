@@ -439,6 +439,12 @@ var _chartPreviewName = '';
 /* The node id the preview was opened for, so the preview panel's 全屏 button can hand
    the very same chart to the full-screen window instead of guessing from a title. */
 var _chartPreviewNodeId = '';
+/* A generation counter for the in-flight preview request. Two previews can overlap (click A,
+   then B before A answers); the older answer must not paint over the newer chart or lend its
+   picture the other node's name. */
+var _chartPreviewSeq = 0;
+/* The full-screen window has the same stale-answer problem as the preview panel. */
+var _chartFullscreenSeq = 0;
 /* One ECharts instance for the full-screen window, disposed on close so reopening a
    different chart never paints into a stale canvas. */
 var _chartFullscreenInstance = null;
@@ -1003,6 +1009,7 @@ function toggleChartPreview() {
 async function openChartFullscreen(nodeId) {
     var node = canvas.nodes[nodeId];
     if (!node) return;
+    var fullscreenSeq = ++_chartFullscreenSeq;
     var panel = document.getElementById('chart-fullscreen-panel');
     var titleEl = document.getElementById('chart-fullscreen-title');
     if (titleEl) titleEl.textContent = node.title || nodeId;
@@ -1063,11 +1070,12 @@ async function openChartFullscreen(nodeId) {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
         var result = await resp.json();
+        if (fullscreenSeq !== _chartFullscreenSeq) return;  // a newer window owns the surface
         if (!result.ok) { var fv = _renderFailureView(result); _paintFullscreenError(fv.message, fv.note); return; }
         if (result.engine === 'matplotlib') _paintFullscreenImage(result.image);
         else _paintFullscreenOption(result.option);
     } catch (e) {
-        _paintFullscreenError(e.message);
+        if (fullscreenSeq === _chartFullscreenSeq) _paintFullscreenError(e.message);
     }
 }
 

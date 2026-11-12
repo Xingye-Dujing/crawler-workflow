@@ -22,6 +22,7 @@ from services.analysis.matching import (
     KEEP_MODES,
     MATCH_MODES,
     SIMILAR_DEFAULT_DISTANCE,
+    clean_cell,
     match_mask,
     row_key,
 )
@@ -36,6 +37,18 @@ def _distance(value) -> int:
         return int(str(value).strip())
     except (TypeError, ValueError) as exc:
         raise UnknownOperationError(t('analysis.match_distance_type', value=value)) from exc
+
+
+def _similar_key(row: dict, columns) -> str:
+    """One row's composite text for ``similar`` matching, or ``''`` when any part is blank.
+
+    The same identity rule :func:`row_key` applies to every other mode: a partially blank
+    tuple is incomplete, not a weaker key. ``clean_cell`` also folds ``None``/``NaN`` to ``''``
+    — ``str(nan)`` would otherwise become the literal token 'nan', a fingerprint every empty
+    cell would share.
+    """
+    parts = [clean_cell(row.get(name)) for name in columns]
+    return ' '.join(parts) if parts and all(parts) else ''
 
 
 def anti_join(
@@ -102,8 +115,8 @@ def anti_join(
     left_records = df.to_dict('records')
     right_records = other_df.to_dict('records')
     if mode == 'similar':
-        left_values = [' '.join(str(row.get(name, '')) for name in left_columns) for row in left_records]
-        right_values = [' '.join(str(row.get(name, '')) for name in right_columns) for row in right_records]
+        left_values = [_similar_key(row, left_columns) for row in left_records]
+        right_values = [_similar_key(row, right_columns) for row in right_records]
         mask, stats = match_mask(left_values, right_values, mode=mode, max_distance=_distance(max_distance))
     else:
         # Composite keys go through ``row_key``: two columns of one row are ONE identity,

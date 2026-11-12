@@ -82,6 +82,9 @@ def topic_salience(
             # in the same order; numpy's argsort would leave the order to floating point.
             scored.append((value, str(vocabulary[position]), position))
         scored.sort(key=lambda pair: (-pair[0], pair[1]))
+        if not scored:
+            logger.warning(t('analysis.topic_salience_unused', topic=f'Topic-{index + 1}'))
+            continue
         for rank, (value, term, position) in enumerate(scored[: max(1, int(topn))]):
             rows.append(
                 {

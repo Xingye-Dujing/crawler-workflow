@@ -3912,3 +3912,42 @@ class TestARowTheComparisonCannotReadIsCounted:
         with caplog.at_level(logging.WARNING, logger='services.analysis.ops.filter_rows'):
             D.filter_rows(frame, '赞', 'gt', '26')
         assert 'analysis.filter_unparsed_rows' not in caplog.text
+
+
+class TestFlatStepsReachTheRun:
+    """A panel-shaped step (fields beside ``op``) must not run the operation's defaults.
+
+    ``/api/analysis/run`` and a workflow file's own ``steps`` are documented flat shapes; the
+    executor used to hand them to ``run_pipeline`` with ``params == {}``, where ``drop_null``
+    deleted rows from a column the user never named and ``fill_null`` filled nothing.
+    """
+
+    ROWS = [{'a': 1, 'b': None}, {'a': 2, 'b': 'x'}]
+
+    @staticmethod
+    def _run(steps):
+        from nodes.executors import analysis
+
+        return analysis.execute_analysis_node(
+            {'id': 'flat-1', 'type': 'analysis', 'title': '平铺步骤', 'params': {'steps': steps}},
+            current_input=[dict(row) for row in TestFlatStepsReachTheRun.ROWS],
+        )
+
+    def test_drop_null_targets_the_named_column(self):
+        assert self._run([{'op': 'drop_null', 'columns': 'b'}]) == [{'a': 2, 'b': 'x'}]
+        kept = self._run([{'op': 'drop_null', 'columns': 'a'}])
+        assert [row['a'] for row in kept] == [1, 2]
+
+    def test_fill_null_actually_fills(self):
+        out = self._run([{'op': 'fill_null', 'columns': 'b', 'value': 0}])
+        assert out[0]['b'] in (0, '0'), out
+
+
+def test_a_step_cannot_inject_the_runs_llm_client():
+    """A stored ``params['llm']`` used to raise "got multiple values for keyword 'llm'"."""
+    frame = pd.DataFrame({'a': [1, 2]})
+    out, _report = D.run_pipeline(
+        frame,
+        [{'op': 'drop_null', 'params': {'columns': ['a'], 'llm': 'bogus', 'cancel': 'x', 'store': 'y'}}],
+    )
+    assert len(out) == 2

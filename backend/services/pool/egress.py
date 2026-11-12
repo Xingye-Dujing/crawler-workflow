@@ -43,22 +43,26 @@ def healthy_exit(platform: str, exclude=()) -> dict:
     return rows[0][2]
 
 
-def proxy_for(platform: str, account: str, *, auto_bind: bool = True) -> dict:
+def proxy_for(platform: str, account: str, *, auto_bind: bool = True, even_if_cooling: bool = False) -> dict:
     """The proxy spec this account's browser should use, or ``{}`` for a direct connection.
 
-    The bound exit is honoured even while it cools: a human pressing 验证 is asking "what does
-    this login see from where it lives", and quietly routing that probe through a different
-    address would answer a question nobody asked. Automatic crawls never get here with a
-    cooling binding — :mod:`services.pool.selector` moves the binding first.
+    A bound exit whose cooldown is still running is replaced for an AUTOMATIC browser: the
+    pool's whole IP side is "a benched exit is the only reason to change address", and
+    returning it anyway made a `risk` cooldown inert for every non-pool/fixed-login crawl
+    (only the selector's claim path used to re-bind). ``even_if_cooling`` is the manual door:
+    a person pressing 验证 or opening the login window is asking "what does this login see from
+    where it lives", and moving that probe would answer a question nobody asked.
     """
     account = str(account or '').strip()
     bound = store.binding_exit_id(platform, account) if account else ''
     if bound:
         spec = store.exit_secret(bound)
         if spec and spec.get('enabled') and _serves(spec, platform):
-            spec['username'] = spec.get('username') or ''
-            spec['password'] = spec.get('password') or ''
-            return spec
+            cooling = pool_health.effective_state(store.get_health('exit', platform, bound)) != 'ok'
+            if not cooling or even_if_cooling:
+                spec['username'] = spec.get('username') or ''
+                spec['password'] = spec.get('password') or ''
+                return spec
     if not exits_for(platform):
         return {}
     choice = healthy_exit(platform)

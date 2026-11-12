@@ -59,6 +59,7 @@ ZH = {
     'analysis.filter_unparsed_rows': (
         '“{op}”在列“{col}”上比较时，有 {n} 行不是数字、已按不匹配处理（它们不会出现在结果里）'
     ),
+    'analysis.bin_unparsed_rows': '分箱列“{col}”里有 {n} 行读不出数字，已归入空箱（随后按空值处理）',
     'analysis.sort_mixed_types': '排序列“{col}”里数字与文本混在一起（例如 5 与“10万”），无法排序：请先“转换类型”',
     'analysis.cluster_prompt': (
         '你是舆情分析研究员。下面是某网络暴力事件语料按语义聚类后、同一个簇里的若干条原始文本。'
@@ -258,6 +259,7 @@ ZH = {
         '（气泡大小=主题占比，坐标=两主题词分布的 JS 散度经 MDS）'
     ),
     'analysis.topic_map_unused': '主题距离图：{topics} 没有任何文档，没有词分布可比较，坐标放在原点',
+    'analysis.topic_salience_unused': '显著词图：{topic} 没有任何词分布，已跳过（不是没有显著词）',
     'analysis.topic_method_auto_embedding': '主题方法 auto：检测到编码器，使用 embedding（{model}）',
     'analysis.topic_method_auto_lda': '主题方法 auto：无编码器包，改用 LDA（结果按 LDA 计）',
     'analysis.topic_rows': 'LDA 需要至少和主题数一样多的文本：主题 {topics} 个、有效文本 {rows} 行',
@@ -441,6 +443,9 @@ EN = {
     'analysis.filter_unparsed_rows': (
         'Comparing {op} on the column "{col}" treated {n} non-numeric row(s) as no match (they do not '
         'appear in the result)'
+    ),
+    'analysis.bin_unparsed_rows': (
+        'Binning "{col}" found {n} cell(s) that are not numbers; they land in the empty bucket'
     ),
     'analysis.sort_mixed_types': (
         'The sort column "{col}" mixes numbers with text (5 beside "10万"), so it cannot be sorted: '
@@ -706,6 +711,9 @@ EN = {
     ),
     'analysis.topic_map_unused': (
         'intertopic map: {topics} has no documents (no word distribution to compare); placed at the origin'
+    ),
+    'analysis.topic_salience_unused': (
+        'salient terms: {topic} has no word distribution and was skipped (this is not "no salient terms")'
     ),
     'analysis.topic_method_auto_embedding': 'topic method auto: encoder detected, using embedding ({model})',
     'analysis.topic_method_auto_lda': (

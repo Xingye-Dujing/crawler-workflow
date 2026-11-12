@@ -41,7 +41,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from i18n import t
+from i18n import get_lang, set_lang, t
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +201,16 @@ class LLMClient:
             return
         self._cancel.wait(seconds)
 
+    def _backoff(self, seconds: float, attempt: int, max_retries: int) -> None:
+        """Sleep only when another attempt follows: a nap after the last one just delays the error."""
+        if attempt < max_retries:
+            self._sleep(seconds)
+
+    def _check_cancel(self) -> None:
+        """A Stop lands between attempts, not after the budget is spent on more calls."""
+        if self._cancel is not None and self._cancel.is_set():
+            raise LLMError(t('llm.cancelled'), 'cancelled')
+
     def chat(self, prompt: str, max_retries: int = 2) -> str:
         """One user message in, the model's plain text out. Raises LLMError."""
         if self.provider == 'openrouter':
@@ -252,6 +262,7 @@ class LLMClient:
 
         last = None
         for attempt in range(1, max_retries + 1):
+            self._check_cancel()
             try:
                 resp = client.chat(**kwargs)
                 content = self._ollama_content(resp)
@@ -302,12 +313,13 @@ class LLMClient:
         delay = 2.0
         last = None
         for attempt in range(1, max_retries + 1):
+            self._check_cancel()
             try:
                 resp = requests.post(OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=self.timeout)
             except requests.RequestException as e:
                 last = LLMError(t('llm.net_error', err=e), 'network')
                 logger.warning(t('llm.or_net_exception', i=attempt, n=max_retries, err=e))
-                self._sleep(delay)
+                self._backoff(delay, attempt, max_retries)
                 delay *= 2
                 continue
 
@@ -332,18 +344,18 @@ class LLMClient:
                     wait = 2.0
                 last = LLMError(t('llm.or_429'), 'rate_limit')
                 logger.warning(t('llm.or_429_wait', i=attempt, n=max_retries, wait=f'{wait:.1f}'))
-                self._sleep(wait)
+                self._backoff(wait, attempt, max_retries)
                 continue
             elif 500 <= resp.status_code < 600:
                 last = LLMError(t('llm.or_5xx', code=resp.status_code), 'network')
                 logger.warning(t('llm.or_5xx_attempt', code=resp.status_code, i=attempt, n=max_retries))
-                self._sleep(delay)
+                self._backoff(delay, attempt, max_retries)
                 delay *= 2
                 continue
             else:
                 raise LLMError(t('llm.or_http_fail', code=resp.status_code, body=resp.text[:200]), 'error')
 
-            self._sleep(delay)
+            self._backoff(delay, attempt, max_retries)
             delay *= 2
 
         raise last if last is not None else LLMError(t('llm.or_failed'), 'network')
@@ -544,10 +556,17 @@ class RowCheckpoint:
 # ─── Shared row runner ──────────────────────────────────────────
 
 
-def _call_row(client, parse, prompt, idx, thash):
+def _call_row(client, parse, prompt, idx, thash, lang=None):
     """Chat + parse for one row. Runs in a worker thread for API providers;
     returns (idx, text_hash, result-or-None) so the collector can checkpoint
-    the row by content no matter which order the answers land in."""
+    the row by content no matter which order the answers land in.
+
+    A pool thread starts at the default language, and ``parse`` logs warnings of its own
+    (out-of-range scores, unparseable answers); without this the English UI got a Chinese line
+    in the console. The caller captures its own language and hands it in.
+    """
+    if lang:
+        set_lang(lang)
     return idx, thash, parse(client.chat(prompt))
 
 
@@ -585,6 +604,8 @@ def run_llm_rows(
     """
     say = log if log is not None else (lambda msg: None)
     total = len(jobs)
+    # The pool thread does not inherit this thread's language; capture it once.
+    lang = get_lang()
     # A job's row id is the DataFrame's own index, which need not be 1..n (a filtered or merged
     # table), so the console line carries the ordinal of the job in this pass.
     row_numbers = {idx: position for position, (idx, _text) in enumerate(jobs, 1)}
@@ -693,7 +714,7 @@ def run_llm_rows(
                 prompt = build_prompt(truncated)
                 pending.append(
                     (
-                        pool.submit(_call_row, client, parse, prompt, idx, thash),
+                        pool.submit(_call_row, client, parse, prompt, idx, thash, lang),
                         idx,
                         thash,
                     )
@@ -705,7 +726,7 @@ def run_llm_rows(
                     _after_batch()
             else:
                 try:
-                    _idx, _hash, parsed = _call_row(client, parse, build_prompt(truncated), idx, thash)
+                    _idx, _hash, parsed = _call_row(client, parse, build_prompt(truncated), idx, thash, lang)
                 except LLMError:
                     raise
                 except Exception as e:

@@ -87,7 +87,9 @@ def job(monkeypatch, app_module):
     block.set()
     state = {'facts': None, 'hold': None}
 
-    def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None, account=''):
+    def fake_get_crawler(
+        platform, headless=True, cookie_dir=None, for_login=False, use_profile=None, account='', **kwargs
+    ):
         # Records the call shape on the fake it hands back, so a test can ask what
         # window the app asked for.
         crawler = FakeCrawler(

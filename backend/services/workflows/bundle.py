@@ -45,8 +45,11 @@ from services.workflows.manager import WorkflowManager
 BUNDLE_FORMAT = 'cixi-project'
 BUNDLE_VERSION = 1
 MAX_ENTRIES = 5000
-MAX_UNCOMPRESSED_BYTES = 2 * 1024**3
-MAX_FILE_BYTES = 512 * 1024**2
+#: The upload cap is 64 MiB COMPRESSED; these are the uncompressed ceilings. 2 GiB/512 MiB let a
+#: small deflate bomb make ``archive.read`` allocate half a gigabyte on the request thread, so the
+#: caps are one order of magnitude above a normal project bundle, not a memory policy of their own.
+MAX_UNCOMPRESSED_BYTES = 512 * 1024**2
+MAX_FILE_BYTES = 128 * 1024**2
 MAX_WORKFLOWS = 200
 MAX_DATASETS = 1000
 MAX_TEMPLATES = 500

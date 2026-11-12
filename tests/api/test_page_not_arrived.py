@@ -103,7 +103,7 @@ def dying(monkeypatch, app_module):
     def _configure(**changes):
         plan.update(changes)
 
-    def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None, abort=None, account=''):
+    def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None, abort=None, account='', **kwargs):
         crawler = _DyingCrawler(plan['rows'], plan['message'], plan['waited'], plan['verdict'], plan['gave_up'])
         made.append(crawler)
         return crawler

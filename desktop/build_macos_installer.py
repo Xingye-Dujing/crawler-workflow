@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,13 @@ SPEC = BOOTSTRAP / 'installer_macos.spec'
 DIST = ROOT / 'dist'
 WORK = ROOT / 'build' / 'pyinstaller-macos-installer'
 APP_BINARY = 'CaiXiHui.app/Contents/MacOS/CaiXiHui'
+
+
+def app_version() -> str:
+    """The version the installer bundle reports; the application's own file is the source."""
+    text = (ROOT / 'backend' / 'services' / 'version.py').read_text(encoding='utf-8')
+    match = re.search(r"^APP_VERSION\s*=\s*'([^']+)'", text, re.MULTILINE)
+    return match.group(1) if match else '1.0.0'
 
 
 def asset_key(arch: str) -> str:
@@ -63,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             old.unlink(missing_ok=True)
         shutil.rmtree(WORK, ignore_errors=True)
     WORK.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault('CIXI_APP_VERSION', app_version())
 
     # The same .icns the application uses; a missing Pillow just leaves the default icon.
     from build_macos import make_icns

@@ -147,9 +147,14 @@ def claim(platform: str, exclude_accounts=()) -> Candidate | None:
             # setup (one IP, several logins), and locking it would make a pool of five
             # accounts crawl one at a time for no reason a site cares about.
             _LEASES[account_key] = (uuid.uuid4().hex, now + LEASE_SECONDS)
-            store.touch('account', platform, candidate.account)
-            if candidate.exit_id:
-                store.touch('exit', platform, candidate.exit_id)
+            try:
+                store.touch('account', platform, candidate.account)
+                if candidate.exit_id:
+                    store.touch('exit', platform, candidate.exit_id)
+            except Exception:
+                # A failed write must not hide the account behind a two-hour lease.
+                _LEASES.pop(account_key, None)
+                raise
             return candidate
     return None
 

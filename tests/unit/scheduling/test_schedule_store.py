@@ -292,6 +292,33 @@ class TestWhatTheDownTimeMissed:
     def test_an_empty_store_reports_nothing(self):
         assert store.note_missed(NOW) == []
 
+    def test_an_interval_task_counts_one_missed_moment_not_two(self):
+        """``next_fire`` for an interval re-derives the same past moment; ``_reanchor`` must not
+        push it a second time after ``note_missed`` already did."""
+        task = _save(trigger={'kind': 'interval', 'minutes': 60})
+        assert store.note_missed(NOW + timedelta(hours=3)) == [task['name']]
+        assert store.get_task(task['id'])['missed']['count'] == 1
+
+    def test_editing_a_task_does_not_invent_a_missed_moment(self):
+        task = _save(trigger={'kind': 'interval', 'minutes': 60})
+        store.set_enabled(task['id'], False, NOW + timedelta(hours=3))
+        edited, error = store.save_task(
+            {
+                'id': task['id'],
+                'name': 'renamed',
+                'workflow': task['workflow'],
+                'trigger': {'kind': 'interval', 'minutes': 60},
+                'enabled': False,
+            },
+            NOW + timedelta(hours=4),
+        )
+        assert error == '', error
+        assert edited['missed']['count'] == 0
+
+    def test_a_corrupt_trigger_does_not_break_the_whole_panel(self):
+        row = store.public({'id': 't', 'name': 'bad', 'trigger': {'kind': 'weekly', 'weekday': 'Wed'}})
+        assert row['trigger_text'] == t('sched.unreadableTrigger')
+
 
 class TestAnUnreadableFile:
     def test_it_is_moved_aside_rather_than_deleted_or_overwritten(self, tmp_path):

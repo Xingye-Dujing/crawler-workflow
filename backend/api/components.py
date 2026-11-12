@@ -98,7 +98,21 @@ def _rows(catalog: Catalog) -> list[dict]:
 @bp.route('/api/environment', methods=['GET'])
 def get_environment():
     """One row per capability: ok / degraded / missing / unknown, with a reason key."""
-    return jsonify({'ok': True, **environment()})
+    report = environment()
+    if not _admin():
+        # ``root`` and the reason parameters carry absolute host paths (the configured
+        # chromedriver, xelatex, CatBus entry). The panel needs the STATE and the reason key,
+        # not the layout of this machine.
+        report['root'] = ''
+        for capability in report.get('capabilities', []):
+            params = capability.get('reason_params')
+            if isinstance(params, dict):
+                capability['reason_params'] = {
+                    key: value
+                    for key, value in params.items()
+                    if key not in ('path', 'chrome', 'driver', 'entry', 'node')
+                }
+    return jsonify({'ok': True, **report})
 
 
 @bp.route('/api/components', methods=['GET'])
@@ -140,6 +154,12 @@ def install_component():
 
 @bp.route('/api/components/jobs/<job_id>', methods=['GET'])
 def get_job(job_id: str):
+    # The install/remove/cancel doors are admin-only; the poll is the fourth door to the same
+    # machine-level operation and used to be the one without a check (it also carries the
+    # install path in ``error``/``path``).
+    refusal = _admin_refusal()
+    if refusal is not None:
+        return refusal
     job = jobs.get(job_id)
     if job is None:
         return jsonify({'ok': False, 'error': t('components.jobMissing')}), 404

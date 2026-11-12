@@ -144,13 +144,19 @@ def exports_delete():
     name = data.get('name')
     if not isinstance(name, str) or not name.strip():
         return _bad_param('name')
-    if lock_store.is_locked('exports', name.strip()):
+    # The lock, the delete, the ledger row and the echoed name must use the SAME spelling.
+    # ``delete_export_file`` sanitizes before touching disk; checking the raw name let
+    # ``a?b.csv`` pass a lock held on ``a_b.csv`` and delete the very file the user pinned.
+    clean = sanitize_filename(name, truncate=False)
+    if not clean:
+        return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
+    if lock_store.is_locked('exports', clean):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
-    gone = delete_export_file(paths.active().export_dir, name)
+    gone = delete_export_file(paths.active().export_dir, clean)
     if gone:
-        lock_store.drop('exports', name.strip())
-        get_run_store().forget_file(name.strip())
-    return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(name.strip())})
+        lock_store.drop('exports', clean)
+        get_run_store().forget_file(clean)
+    return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(clean)})
 
 
 @bp.route('/api/exports/clear', methods=['POST'])

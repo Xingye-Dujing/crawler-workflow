@@ -322,7 +322,10 @@ def save_cookies():
         # A login the user just pasted IS a fresh session: whatever the pool measured about
         # the old one is history, and leaving the cooldown in force would skip the account
         # the user just fixed (the same reasoning ``invalidate`` below applies to the verdict).
-        pool.store.reset('account', platform, account)
+        # The pool files its subjects as ``CookieManager.key`` labels (blank folds to
+        # ``default``), not as the raw file spelling; using ``account`` here made a blank
+        # default login clear EVERY account of the platform instead of one.
+        pool.store.reset('account', platform, cookie_manager.key(account))
         # The file this platform would be planted from just changed, so the cached
         # verdict about the previous one has to go with it.
         preflight.invalidate(platform)
@@ -618,7 +621,12 @@ def _cookie_login_worker(
         # user must scan is an ``<img>`` — with the blocker on, the panel opened a
         # window that could not be completed at all.
         crawler = get_crawler(
-            platform, headless=False, cookie_dir=paths.active().cookie_dir, for_login=True, account=account
+            platform,
+            headless=False,
+            cookie_dir=paths.active().cookie_dir,
+            for_login=True,
+            account=account,
+            keep_exit=True,
         )
         url = entry_url or crawler.login_url
         if not url:
@@ -669,7 +677,9 @@ def _cookie_login_worker(
         cookie_manager.save(platform, cookies, account)
         # A capture is a fresh login too: the account leaves the pool's cooldown now, not
         # when the old term would have expired.
-        pool.store.reset('account', platform, account)
+        # Same fold as the paste path: the pool's subject is the account LABEL, not the
+        # historical blank filename segment.
+        pool.store.reset('account', platform, cookie_manager.key(account))
         # This jar was read OUT OF the platform's own profile browser, so the profile is not behind
         # the file: without this line the panel would go on offering “把 Cookie 更新进 Profile”,
         # a button that here would overwrite a live session with a copy of itself. Only when a
@@ -873,6 +883,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
             for_login=True,
             use_profile=use_profile,
             account=account,
+            keep_exit=True,
         )
         facts = crawler.diagnose(url)
         facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
@@ -885,6 +896,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
             account,
             facts,
             exit_id=pool.store.binding_exit_id(platform, account),
+            assume_ok=True,
         )
         lines = _verify_lines(platform, facts)
         with _COOKIE_JOB_LOCK:
@@ -1068,15 +1080,18 @@ def get_browser_profiles():
         accounts = manager.accounts_in_order(platform) or [CookieManager.DEFAULT_ACCOUNT]
         account = next((name for name in accounts if manager.exists(platform, name)), accounts[0])
         saved = manager.path_for(platform, account)
-        rows['profiles'].append(
-            profiles.status(
-                platform,
-                recommended=cap.profile_recommended,
-                has_cookie=os.path.isfile(saved),
-                # The path, not the contents: this is what lets the panel say "the file you
-                # saved is not the session this profile holds" without reading a cookie.
-                cookie_path=saved,
-                account=CookieManager.key(account),
-            )
+        row = profiles.status(
+            platform,
+            recommended=cap.profile_recommended,
+            has_cookie=os.path.isfile(saved),
+            # The path, not the contents: this is what lets the panel say "the file you
+            # saved is not the session this profile holds" without reading a cookie.
+            cookie_path=saved,
+            account=CookieManager.key(account),
         )
+        if not admin:
+            # ``root`` is already blanked above for the same rule; the per-platform path is
+            # the root plus a name, so leaving it here handed the host's layout back.
+            row['path'] = ''
+        rows['profiles'].append(row)
     return jsonify(rows)

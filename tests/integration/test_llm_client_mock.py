@@ -333,11 +333,11 @@ class TestInterruptibleBackoff:
         started = time.monotonic()
         with pytest.raises(LLMError) as err:
             client.chat('p', max_retries=4)  # would sleep 2 + 4 + 8 + 16 s
-        assert err.value.kind == 'network'
+        assert err.value.kind == 'cancelled'
         assert time.monotonic() - started < 2.0
 
     def test_one_blip_still_retries_and_answers(self, monkeypatch):
-        # A raised Stop flag shortens the nap; it must not skip the retry itself.
+        # A transient blip is retried; the nap is shortened by a Stop event, not the retry.
         calls = []
 
         def flaky(*a, **k):
@@ -347,13 +347,29 @@ class TestInterruptibleBackoff:
             return FakeResponse(200, chat_payload('Emotion: pos'))
 
         monkeypatch.setattr(lc.requests, 'post', flaky)
-        ev = threading.Event()
-        ev.set()
-        client = LLMClient(provider='openrouter', model='m', api_key='k', cancel_event=ev)
+        client = LLMClient(provider='openrouter', model='m', api_key='k')
         started = time.monotonic()
         assert client.chat('p', max_retries=2) == 'Emotion: pos'
         assert len(calls) == 2
-        assert time.monotonic() - started < 2.0
+        # The retry's own backoff is 2 s; the interruptible nap is covered by its own case.
+        assert time.monotonic() - started < 5.0
+
+    def test_a_stop_before_the_retry_spends_no_second_call(self, monkeypatch):
+        """The event is a Stop, not just a shorter nap: no further paid request is made."""
+        calls = []
+
+        def flaky(*a, **k):
+            calls.append(1)
+            raise lc.requests.RequestException('transient blip')
+
+        monkeypatch.setattr(lc.requests, 'post', flaky)
+        ev = threading.Event()
+        ev.set()
+        client = LLMClient(provider='openrouter', model='m', api_key='k', cancel_event=ev)
+        with pytest.raises(LLMError) as err:
+            client.chat('p', max_retries=3)
+        assert err.value.kind == 'cancelled'
+        assert len(calls) == 0, 'a Stop set before the call must not buy a request'
 
     def test_ollama_backoff_does_not_outlive_a_stop(self, fake_ollama, monkeypatch):
         import ollama
@@ -372,8 +388,8 @@ class TestInterruptibleBackoff:
         started = time.monotonic()
         with pytest.raises(LLMError) as err:
             client.chat('p', max_retries=4)  # would sleep 0.5 + 1 + 1.5 + 2 s
-        assert err.value.kind == 'network'
-        assert len(Dead.instances[0].calls) == 4  # retries still happen
+        assert err.value.kind == 'cancelled'
+        assert len(Dead.instances[0].calls) == 0  # a pre-set Stop buys no request
         assert time.monotonic() - started < 2.0
 
 

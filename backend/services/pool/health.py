@@ -99,16 +99,24 @@ def observe(
     rows: int = 0,
     run_id: str = '',
     node_id: str = '',
+    assume_ok: bool = False,
 ) -> dict:
     """Record one browser attempt's verdict and return what it decided.
 
     Returned shape (the caller needs it to decide whether to rotate, and to word the console
     line): ``{reason, rotatable, scope, seconds, until_local}``. ``scope`` is
     ``account``/``exit``/``''``.
+
+    An empty ``facts`` is NOT a success: it means the caller reported no measurement at all
+    (a skipped probe, an exception path that never named a reason). Treating it as "the site
+    answered" cleared a wall's cooldown and wrote an ``ok`` audit row for a blocked session.
+    A caller that really finished a page must say so with ``assume_ok=True``.
     """
     reason = reason_of(facts)
     answer = {'reason': reason, 'rotatable': is_rotatable(reason), 'scope': '', 'seconds': 0.0, 'until_local': ''}
     if not reason:
+        if not assume_ok:
+            return answer
         # A real page answered. That is a measurement about both halves of the pair.
         if account:
             store.mark_ok('account', platform, account)

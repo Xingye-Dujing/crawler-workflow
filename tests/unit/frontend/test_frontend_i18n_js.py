@@ -174,7 +174,14 @@ def _raw_platform_words(catalogs, files):
 
 
 def _js_files():
-    return [(path.name, path.read_text(encoding='utf-8')) for path in sorted(JS_DIR.glob('*.js'))]
+    """Every app-owned script, including ``panels/`` and ``i18n/``.
+
+    ``glob('*.js')`` saw only the top level: the panels are where most of the new UI text is
+    written, so the call-site guard was blind to exactly the files that needed it.
+    """
+    return [
+        (path.relative_to(JS_DIR).as_posix(), path.read_text(encoding='utf-8')) for path in sorted(JS_DIR.rglob('*.js'))
+    ]
 
 
 class TestJsCallSitePlaceholders:

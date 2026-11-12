@@ -99,6 +99,24 @@ logger = logging.getLogger(__name__)
 NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment', 'compile'})
 
 
+def _settle_published_rows(store, run_id: str, nid: str, label: str):
+    """Make the durable node rows agree with the table this attempt actually produced.
+
+    LLM/process nodes publish the whole table on every batch into ``execution_state['results']``
+    but never write it to the store; crawlers stream their rows there directly. Settling a
+    stopped/failed node must persist the published table before ``finish_node`` reads
+    ``row_count`` — otherwise the console says "已保留 N 行" and the record says 0 (or the
+    previous attempt's K), so a page reload cannot see the rows the user was told were kept.
+    """
+    published = execution_state['results'].get(nid)
+    if not isinstance(published, list):
+        return store.load_rows(run_id, nid)
+    stored = store.row_count(run_id, nid)
+    if published and len(published) != stored:
+        store.replace_rows(run_id, nid, published, label=label)
+    return published if published else store.load_rows(run_id, nid)
+
+
 def settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: int, err: str = ''):
     """Close one node as "the user stopped the run", whatever raised on its way here.
 
@@ -111,9 +129,7 @@ def settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: int
     `partial` rather than `skipped`: the rows already paid for stand and travel
     downstream, and 继续 must still be able to pick this node up again.
     """
-    rows = execution_state['results'].get(nid)
-    if not isinstance(rows, list):
-        rows = store.load_rows(run_id, nid)
+    rows = _settle_published_rows(store, run_id, nid, label)
     store.finish_node(run_id, nid, NODE_PARTIAL, error=err)
     with _completed_lock:
         execution_state['stopped_node_ids'].add(nid)
@@ -254,12 +270,7 @@ def run_node_durable(
             return settle_node_as_stopped(store, run_id, nid, label, wf_idx, err=str(e))
         # What the node already produced: process nodes publish finished rows
         # after every batch, and crawlers stream every item into the store.
-        published = execution_state['results'].get(nid)
-        rows = published if isinstance(published, list) else []
-        if rows and store.row_count(run_id, nid) == 0:
-            store.append_rows(run_id, nid, rows, label=label)
-        if not rows:
-            rows = store.load_rows(run_id, nid)
+        rows = _settle_published_rows(store, run_id, nid, label)
         status = NODE_PARTIAL if rows else NODE_FAILED
         store.finish_node(run_id, nid, status, error=str(e))
         add_log(
@@ -595,7 +606,22 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
     return results
 
 
-def _continue_record(name: str, resumable: list, resuming: bool, requested: str = '') -> dict:
+def _record_has_component(candidate: dict, node_ids: set | None) -> bool:
+    """Whether a stored row carries any node of this component (or says nothing about nodes)."""
+    if not node_ids:
+        return True
+    stored = {str(node.get('node_id') or '') for node in candidate.get('nodes') or [] if isinstance(node, dict)}
+    return not stored or bool(stored & node_ids)
+
+
+def _continue_record(
+    name: str,
+    resumable: list,
+    resuming: bool,
+    requested: str = '',
+    fingerprint: str = '',
+    node_ids: set | None = None,
+) -> dict:
     """The row this workflow should keep writing, if it is a 继续.
 
     Only the resume path adopts: the attempt after a 继续 must accumulate
@@ -609,6 +635,10 @@ def _continue_record(name: str, resumable: list, resuming: bool, requested: str 
     OLD interrupted row adopt the newer (even completed) row of the same workflow,
     rewrite its history and leave the chosen row interrupted forever.
 
+    The id may be older than the 50 rows the caller could list. The caller prepends
+    the requested row's own record, so this function sees it; the fingerprint is the
+    identity that survives a 工作流命名 edit, because the label is not an input.
+
     Adopting CONSUMES the candidate (it is popped, not re-read): validate only
     asks a name node for a non-empty label, so one canvas may legitimately carry
     two same-named components, and a match that stayed in the list handed BOTH
@@ -621,9 +651,22 @@ def _continue_record(name: str, resumable: list, resuming: bool, requested: str 
     wanted = str(requested or '')
     if wanted:
         for position, candidate in enumerate(resumable):
-            if str(candidate.get('run_id') or '') == wanted and str(candidate.get('workflow_name') or '') == name:
+            same_component = str(candidate.get('workflow_name') or '') == name
+            same_canvas = bool(fingerprint) and str(candidate.get('workflow_fingerprint') or '') == fingerprint
+            if (
+                str(candidate.get('run_id') or '') == wanted
+                and (same_component or same_canvas)
+                and _record_has_component(candidate, node_ids)
+            ):
                 return dict(resumable.pop(position))
     for position, candidate in enumerate(resumable):
+        candidate_fp = str(candidate.get('workflow_fingerprint') or '')
+        if fingerprint and candidate_fp and candidate_fp != fingerprint:
+            # A same-named component of another fingerprint is a different record; adopting it
+            # put the upload's node on the crawl's row.
+            continue
+        if not _record_has_component(candidate, node_ids):
+            continue
         if str(candidate.get('workflow_name') or '') == name:
             return dict(resumable.pop(position))
     return {}
@@ -694,30 +737,51 @@ def _component_run(
     # The requested id is offered to EVERY component and adopted only by the one whose name it
     # carries: the banner can offer a row of a component that is not workflow zero, and a
     # name-only match would otherwise still pick that component's newest row.
-    earlier = _continue_record(name, resumable, resuming, requested=run_id)
+    # The requested row may be older than the 50 newest rows the list holds. Fetch it by id so
+    # "继续 the row I clicked" never degrades into "resume the newest same-named row" (or a cold
+    # start after a pure label edit).
+    component_ids = {str(key) for key in sub_engine.nodes}
+    if resuming and run_id and not any(str(item.get('run_id') or '') == str(run_id) for item in resumable):
+        requested_record = store.get_run(run_id)
+        # Only the component the record belongs to may add it. The upload workflow in a serial
+        # canvas shares the canvas name but has its own nodes; inserting the crawl's row for it
+        # made the fallback-by-name adopt a record of another component.
+        recorded_fp = str((requested_record or {}).get('workflow_fingerprint') or '')
+        if (
+            requested_record
+            and (not wf_fp or not recorded_fp or recorded_fp == wf_fp)
+            and _record_has_component(requested_record, component_ids)
+        ):
+            resumable.insert(0, requested_record)
+    earlier = _continue_record(name, resumable, resuming, requested=run_id, fingerprint=wf_fp, node_ids=component_ids)
     rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
-    store.start_run(
-        rid,
-        name,
-        wf_fp,
-        mode=mode,
-        headless=headless,
-        llm=execution_state['llm'],
-        lang=execution_state.get('lang'),
-        node_total=len(sub_engine.nodes),
-        wf_count=1,
-        skipped_workflows=skipped_str if wf_idx == 0 else '',
-    )
-    created.append(rid)
-    ctx['open_records'].append(rid)
-    execution_state['owned_records'].add(rid)
-    execution_state.setdefault('record_owners', {})[rid] = account_context.current()
-    with _completed_lock:
-        execution_state['attempt_records'].add(rid)
-    # The status endpoint and the resume banner follow the record that is
-    # being written RIGHT NOW, so a stop mid-run leaves the panel offering
-    # the workflow that was interrupted rather than the first one.
-    execution_state['run_id'] = rid
+    with execute_lock:
+        # Opening the next serial record must be atomic with the bulk-delete routes' "which
+        # records are live" read. The worker used to start_run() outside this lock, so a 清空
+        # that saw only the previous workflow's id could delete this brand-new row while rows
+        # were being written under it.
+        store.start_run(
+            rid,
+            name,
+            wf_fp,
+            mode=mode,
+            headless=headless,
+            llm=execution_state['llm'],
+            lang=execution_state.get('lang'),
+            node_total=len(sub_engine.nodes),
+            wf_count=1,
+            skipped_workflows=skipped_str if wf_idx == 0 else '',
+        )
+        created.append(rid)
+        ctx['open_records'].append(rid)
+        execution_state['owned_records'].add(rid)
+        execution_state.setdefault('record_owners', {})[rid] = account_context.current()
+        with _completed_lock:
+            execution_state['attempt_records'].add(rid)
+        # The status endpoint and the resume banner follow the record that is
+        # being written RIGHT NOW, so a stop mid-run leaves the panel offering
+        # the workflow that was interrupted rather than the first one.
+        execution_state['run_id'] = rid
     if earlier:
         saved = sum(int(n.get('row_count') or 0) for n in earlier.get('nodes') or [])
         add_log(t('run.resume_from', at=earlier.get('started_at') or '?', rows=saved), wf_idx=wf_idx)

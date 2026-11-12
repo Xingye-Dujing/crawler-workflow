@@ -9,8 +9,11 @@ Two files, both deliberately easy to get wrong:
   can decode (anomalyco/hex hit this as #1352). The installer uses
   ``SaveStringsToUTF8FileWithoutBOM``; this module refuses anything else.
 
-The exe itself does NOT live under versions/: there is no in-app self-updater here. The
-pointer names the directory holding the receipt, which a future updater can extend.
+The exe itself does NOT live under versions/. These are the INSTALLER's records: the in-app
+self-updater replaces the program under ``app/`` and does not rewrite ``current-version`` or
+``versions/<token>/install.json``, so a receipt read after an in-app update names the version the
+installer last put there. Treat it as "what the installer did", never as "what is running now";
+``backend/services/version.py`` is the running program's own answer.
 
     .venv/Scripts/python.exe desktop/install_receipt.py --root "%LOCALAPPDATA%\\Programs\\CaiXiHui"
 """

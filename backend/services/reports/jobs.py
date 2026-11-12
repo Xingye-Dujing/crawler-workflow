@@ -40,6 +40,9 @@ KEEP_FINISHED = 20
 _JOBS: dict[str, dict] = {}
 _LOCK = threading.Lock()
 _SLOTS = threading.BoundedSemaphore(MAX_RUNNING)
+#: A cheap connection test must not occupy a report/PDF slot: a second account pressing
+#: 生成报告 while another account is testing AI should not see "报告任务繁忙".
+_LLM_SLOTS = threading.BoundedSemaphore(MAX_RUNNING)
 
 
 def _snapshot(job: dict) -> dict:
@@ -94,7 +97,8 @@ def start(kind: str, work, *, lang: str | None = None) -> dict | None:
     return, so the poller and the old client read the same JSON.
     """
     owner = account_context.current()
-    if not _SLOTS.acquire(blocking=False):
+    slots = _LLM_SLOTS if kind == 'llm_test' else _SLOTS
+    if not slots.acquire(blocking=False):
         return None
     job = _finished(kind, 200, None, state='running')
     job['owner'] = account_context.scope_key()
@@ -114,14 +118,14 @@ def start(kind: str, work, *, lang: str | None = None) -> dict | None:
                 job['state'] = 'done'
         finally:
             account_context.unbind(token)
-            _SLOTS.release()
+            slots.release()
 
     try:
         threading.Thread(target=run, name=f'document-{kind}', daemon=True).start()
     except BaseException:
         with _LOCK:
             _JOBS.pop(job['id'], None)
-        _SLOTS.release()
+        slots.release()
         raise
     return _snapshot(job)
 

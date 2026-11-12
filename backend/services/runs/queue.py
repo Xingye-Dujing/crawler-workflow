@@ -145,6 +145,7 @@ def keep_waiting_as(entry: QueueEntry, parked_id: str) -> None:
         parked = _RUN_QUEUE.pop(index)
         parked['id'] = entry['id']
         parked['queued_at'] = entry['queued_at']
+        parked['put_backs'] = int(entry.get('put_backs') or 0)
         _RUN_QUEUE.insert(0, parked)
     mirror_queue()
 

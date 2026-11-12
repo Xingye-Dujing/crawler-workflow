@@ -75,6 +75,7 @@ def get_crawler(
     account: str = '',
     proxy: dict = None,
     use_proxy: bool = True,
+    keep_exit: bool = False,
 ):
     """Build the crawler for *platform*, in that platform's own browser profile.
 
@@ -132,7 +133,7 @@ def get_crawler(
     if proxy is None and use_proxy:
         from services.pool import egress
 
-        spec = egress.proxy_for(platform, account)
+        spec = egress.proxy_for(platform, account, even_if_cooling=keep_exit)
         if spec.get('unavailable'):
             raise ValueError(t('pool.exit.unavailable', platform=platform))
         proxy = spec or None
