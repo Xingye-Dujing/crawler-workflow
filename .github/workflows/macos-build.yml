@@ -47,10 +47,10 @@ jobs:
       INSTALLER_ONLY: ${{ inputs.installer_only && '1' || '' }}
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -70,14 +70,14 @@ jobs:
 
       - name: Upload application artifact
         if: env.INSTALLER_ONLY != '1'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: caixihui-macos-${{ matrix.arch }}
           path: dist/CaiXiHui-macOS-*.dmg
           if-no-files-found: error
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: caixihui-macos-installer-${{ matrix.arch }}
           path: dist/CaiXiHui-Online-Setup-macOS-*.dmg
