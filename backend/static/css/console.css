@@ -10,20 +10,29 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  height: var(--barH);
+  /* Like the top menu, the strip publishes its measured height into --barH and must
+     not use that value as its own floor: a wrapped bar would then never shrink again.
+     The floor is the one-row base; the rows themselves wrap and centre. */
+  min-height: var(--barBase);
+  height: auto;
+  box-sizing: border-box;
   background: var(--bg);
   border-top: 1px solid var(--line);
   display: flex;
+  flex-wrap: wrap;
+  align-content: center;
   align-items: center;
-  padding: 0 14px;
+  justify-content: center;
+  padding: 2px 14px;
   font-size: 10px;
   letter-spacing: 0.6px;
   color: var(--text-dim);
   z-index: 100;
-  gap: 20px;
+  gap: 2px 20px;
 }
 #status-text {
-  flex: 1;
+  flex: 1 1 180px;
+  min-width: 0;
 }
 .status-btn {
   background: none;
@@ -520,13 +529,13 @@
   background: var(--hover);
   color: var(--text);
 }
-/* OMM-ZEN selection is an ink accent, never a fill: no blue wash, no black
-   block and no brown. A hairline inset bar on the leading edge reads as
-   "current" while the paper stays the same colour as every other panel. */
+/* OMM-ZEN selection is a tone change only: no blue wash, no black block, no
+   brown, and no inset bar/shadow. The current group reads from the paper tone
+   and the ink text alone. */
 .settings-panel-nav button.active {
   background: var(--hover);
   color: var(--text);
-  box-shadow: inset 2px 0 0 var(--ink);
+  box-shadow: none;
 }
 .settings-panel-main {
   flex: 1;
@@ -554,8 +563,11 @@
 }
 .settings-field {
   display: grid;
-  grid-template-columns: minmax(180px, 0.7fr) minmax(180px, 1fr) auto;
-  gap: 10px;
+  /* One consistent three-column rhythm: label, control, reset. The reset column is
+     fixed, so the control's right edge and every 重置 sit on the same vertical line
+     instead of stepping in and out with each button's own label width. */
+  grid-template-columns: minmax(180px, 0.7fr) minmax(180px, 1fr) 44px;
+  gap: 10px 14px;
   align-items: start;
   padding: 8px 0;
   border-bottom: 1px dashed var(--line-soft, var(--line));
@@ -589,6 +601,7 @@
   cursor: pointer;
   font-size: 11px;
   padding: 4px 6px;
+  justify-self: end;
 }
 .settings-field-reset:hover {
   color: var(--text);

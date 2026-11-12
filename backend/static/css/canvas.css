@@ -673,8 +673,16 @@ body.style-menu-open #workspace #resume-banner {
 #node-palette {
   position: fixed;
   left: 12px;
-  top: 60px;
+  /* The menu wraps, so the inset is measured, never the old 48px constant. */
+  top: calc(var(--menuH) + 12px);
   width: 180px;
+  /* Same symmetric breathing room as the outline on the right: 12px under the menu
+     and 12px above the status bar. The palette is content-sized until that ceiling,
+     then its own scrollbar takes over — it may never run down behind the status bar. */
+  max-height: calc(100vh - var(--menuH) - var(--barH) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
   background: var(--bg);
   border: 1px solid var(--line);
   z-index: 100;
@@ -755,13 +763,14 @@ body.style-menu-open #workspace #resume-banner {
 #outline-panel {
   position: fixed;
   right: 12px;
-  top: 60px;
+  /* Measured insets on both sides: the menu and the status bar both wrap, so a
+     hardcoded 60/28 pair drifted apart from the bars they sit between. */
+  top: calc(var(--menuH) + 12px);
   width: 200px;
-  /* The ceiling leaves a bottom gap equal to the top one: the box sits 12px under
-     the 48px menu (60-48), so it must also stop 12px above the 28px status bar —
-     100vh-(60+28+12)=100vh-100px. The old 84px reserved only 24px, less than the
-     bar, so a full list slid behind it. */
-  max-height: calc(100vh - 100px);
+  /* The ceiling leaves a bottom gap equal to the top one: the box starts 12px under
+     the menu and stops 12px above the status bar. A full list scrolls inside it. */
+  max-height: calc(100vh - var(--menuH) - var(--barH) - 24px);
+  box-sizing: border-box;
   background: var(--bg);
   border: 1px solid var(--line);
   z-index: 100;

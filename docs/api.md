@@ -177,10 +177,10 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/stats/emotion` | GET | 情感统计 |
 | `/api/stats/tendency` | GET | 倾向性统计 |
 | `/api/stats/summary` | GET | 执行汇总统计 |
-| `/api/history/runs` | GET | 列出所有已记录的工作流执行 |
-| `/api/history/series` | GET | 按工作流/指标查询时间序列（执行历史面板趋势图） |
-| `/api/history/clear` | POST | 清空执行历史记录 |
-| `/api/history/delete` | POST | 删除**单次运行**的执行历史（`{run_id}`）；返回 `deleted` 条数，0 表示已不在历史里；不带 `run_id` 一律 400 |
+| `/api/history/series` | GET | 按工作流/指标查询时间序列（执行历史面板趋势图）；同时返回 `workflow_names` 供筛选框使用 |
+| `/api/history/clear` | POST | 清空执行历史指标记录 |
+
+> 运行列表只由运行记录（`/api/runs/*`）提供，执行历史不再复制一份。
 
 ### AI / Cookie / 系统
 

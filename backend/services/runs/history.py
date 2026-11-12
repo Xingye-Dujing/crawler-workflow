@@ -151,17 +151,6 @@ class ExecutionHistoryService:
             conn.commit()
         logger.info(t('history.recorded', n=len(rows), wf=log_label or rows[0][1] or ''))
 
-    def list_runs(self, limit: int = 50) -> pd.DataFrame:
-        with self.open() as conn:
-            df = pd.read_sql(
-                'SELECT run_id, workflow_name, MIN(timestamp) AS started_at, COUNT(*) AS metric_count '
-                'FROM execution_history GROUP BY run_id, workflow_name '
-                'ORDER BY started_at DESC LIMIT ?',
-                conn,
-                params=(limit,),
-            )
-        return df
-
     def list_workflow_names(self) -> list:
         with self.open() as conn:
             cur = conn.execute(
@@ -204,20 +193,6 @@ class ExecutionHistoryService:
             conn.execute('DELETE FROM execution_history')
             conn.commit()
 
-    def delete_run(self, run_id: str) -> int:
-        """Drop one run's recorded metrics; returns how many rows went.
-
-        The panel lists runs, so a run is the unit the user thinks they are
-        deleting. The count is the answer rather than a boolean because an id
-        that matches nothing must be reported as such — a row already aged out
-        by the retention policy is not a successful deletion.
-        """
-        with self.open() as conn:
-            cur = conn.execute('DELETE FROM execution_history WHERE run_id = ?', (str(run_id),))
-            conn.commit()
-        logger.info(t('history.run_deleted', rid=run_id, n=cur.rowcount))
-        return int(cur.rowcount or 0)
-
     def purge_older_than(self, days: int) -> int:
         """Forget metric rows older than *days*, so the table cannot grow forever.
 
@@ -250,8 +225,7 @@ def record_execution_history(
     history panel's per-workflow grouping could not distinguish anything.
     ``run_id`` is the ledger record this execution actually wrote (the run's own
     id, or the component's in a split serial run); it used to be minted here, so
-    a run the user could open in 运行记录 was a different object in 执行历史 and
-    ``POST /api/history/delete`` could never address the record it came from.
+    a run the user could open in 运行记录 was a different object in 执行历史.
     """
     from runtime.state import history_service
 

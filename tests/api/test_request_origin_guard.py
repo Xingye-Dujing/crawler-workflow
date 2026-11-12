@@ -55,8 +55,8 @@ class TestTheRequestGuard:
         assert refused.status_code == 403
 
     def test_a_loopback_origin_is_served_normally(self, client):
-        ok = client.get('/api/history/runs', headers={'Origin': 'http://127.0.0.1:5000'})
+        ok = client.get('/api/history/series', headers={'Origin': 'http://127.0.0.1:5000'})
         assert ok.status_code == 200
 
     def test_a_headerless_call_is_served_normally(self, client):
-        assert client.get('/api/history/runs').status_code == 200
+        assert client.get('/api/history/series').status_code == 200

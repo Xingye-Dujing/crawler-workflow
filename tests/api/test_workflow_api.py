@@ -395,14 +395,13 @@ class TestWorkflowExecute:
         assert not any('Data saved to' in line for line in status['logs']), 'the duplicate line is back'
 
         # ── and the history panel saw it (metrics, not rows) ──────────
-        history = client.get('/api/history/runs', query_string={'limit': 50}).get_json()
-        mine = [entry for entry in history['runs'] if entry['workflow_name'] == 'workflow-e2e']
-        assert len(mine) == 1, 'one execution must land as exactly one history run'
+        history = client.get('/api/history/series', query_string={'workflow_name': 'workflow-e2e'}).get_json()
+        series = history['rows']
         # One 'rows' metric per node that produced a table; no emotion or
         # tendency series, because nothing labelled anything.
-        assert mine[0]['metric_count'] == 3
+        assert len({row['run_id'] for row in series}) == 1, 'one execution must land as exactly one history run'
+        assert len(series) == 3
         assert 'workflow-e2e' in history['workflow_names']
-        series = client.get('/api/history/series', query_string={'workflow_name': 'workflow-e2e'}).get_json()['rows']
         assert {row['metric'] for row in series} == {'rows'}
         # All three nodes keep their own point even though analysis and output
         # reported the same row count in the same second — the read-time

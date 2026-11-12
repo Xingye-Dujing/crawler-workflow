@@ -58,6 +58,19 @@ def test_the_canvas_never_pins_a_worker_count_over_the_server_setting():
     assert 'max_workers' not in block
 
 
+def test_an_outside_click_dismisses_the_settings_page():
+    """The settings page is a form, not a read-only dock: clicking back into the
+    canvas must leave it, without a second press on 关闭."""
+    floating = (Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'floating-panels.js').read_text(
+        encoding='utf-8'
+    )
+    start = floating.index("document.getElementById('settings-panel')")
+    block = floating[start : start + 900]
+    assert "e.target.closest('#settings-panel" in block
+    assert 'SettingsPanel.close()' in block
+    assert "e.target.closest('.settings-open-full')" in block, 'the opener would close-then-reopen the panel'
+
+
 def test_the_settings_dock_is_in_the_shared_dock_list_and_has_a_resize_handler():
     js_dir = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js'
     workflow = (js_dir / 'workflow.js').read_text(encoding='utf-8')

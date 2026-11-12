@@ -304,17 +304,14 @@ pre.data-preview-text {
   color: var(--text);
   background: transparent;
 }
-table.data-preview-table,
-table.history-runs-table {
+table.data-preview-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 11px;
   font-family: var(--font);
 }
 table.data-preview-table th,
-table.data-preview-table td,
-table.history-runs-table th,
-table.history-runs-table td {
+table.data-preview-table td {
   border: 1px solid var(--line2);
   padding: 4px 8px;
   text-align: left;
@@ -324,41 +321,20 @@ table.history-runs-table td {
   text-overflow: ellipsis;
   color: var(--text-dim);
 }
-table.data-preview-table th,
-table.history-runs-table th {
+table.data-preview-table th {
   position: sticky;
   top: 0;
+  /* Sticky headers must paint ABOVE the scrolling body and carry an opaque ground.
+     Without the stacking level the body's cells (the saved-logins 重命名 button)
+     showed through the 操作 header. */
+  z-index: 2;
   background: var(--bg);
   color: var(--text);
   font-weight: 500;
   letter-spacing: 0.4px;
 }
-table.data-preview-table tr:hover td,
-table.history-runs-table tr:hover td {
+table.data-preview-table tr:hover td {
   background: var(--hover);
-}
-
-/* One delete button per recorded run. Square and narrow on purpose: the runs
-   table lives in a resizable panel, and a wide action column is a horizontal
-   scrollbar at the panel's minimum width. */
-table.history-runs-table td.history-ops {
-  text-align: right;
-  padding: 2px 4px;
-  white-space: normal;
-}
-button.history-del {
-  font-size: 11px;
-  font-family: var(--font);
-  padding: 1px 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-button.history-del:hover {
-  color: var(--err);
-  border-color: var(--err);
 }
 
 /* ── Dashboard ──────────────────────────────────────────────────────────── */
@@ -472,23 +448,17 @@ button.history-del:hover {
   flex-wrap: wrap;
 }
 #history-chart {
-  /* Centred in the panel with breathing room either side, so the plot
-     itself reads as level rather than pressed against the edges. The
-     echarts grid's left/right margins are symmetric to match. The chart
-     container inherits --font (Literata for latin/digits, 宋体 for CJK) —
-     echarts text blocks also set it explicitly, this covers the fallback. */
-  flex: 0 0 48%;
+  /* The panel now holds only the trend chart (the duplicated run list lives in
+     运行记录), so the chart owns the remaining height instead of leaving an empty
+     half-panel where the table used to be. */
+  flex: 1 1 auto;
   width: calc(100% - 24px);
   max-width: 600px;
   min-height: 260px;
-  margin: 8px auto 0;
+  margin: 8px auto;
   padding: 6px 4px 0;
   box-sizing: border-box;
   font-family: var(--font);
-}
-#history-runs-wrap {
-  flex: 1;
-  overflow: auto;
 }
 
 /* ── Run records manager (docked bottom panel content) ──────────────────── */
@@ -962,8 +932,8 @@ button.history-del:hover {
 .env-state.degraded { color: var(--warn); }
 .env-state.missing { color: var(--err); }
 .env-state.unknown { color: var(--text-dim); }
-.env-name { flex: 0 0 210px; }
-.env-reason { flex: 1; color: var(--text-dim); font-size: 12px; }
+.env-name { flex: 0 0 210px; overflow-wrap: anywhere; }
+.env-reason { flex: 1; min-width: 0; color: var(--text-dim); font-size: 12px; overflow-wrap: anywhere; }
 .env-component {
   display: flex;
   gap: 8px;

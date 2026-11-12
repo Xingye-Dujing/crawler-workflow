@@ -194,7 +194,15 @@ const SettingsPanel = {
         const importBtn = document.getElementById('settings-import-btn');
         if (importBtn) importBtn.disabled = this.readOnly;
         const include = document.getElementById('settings-include-machine');
-        if (include) include.disabled = this.readOnly;
+        if (include) {
+            include.disabled = this.readOnly;
+            /* Machine paths are an installer-build concept: the source checkout reads
+               this machine directly, so exporting them is neither needed nor offered.
+               `display` rather than the `hidden` attribute: the label is a flex box,
+               and its own display rule beats the UA's [hidden] rule. */
+            const row = include.closest && include.closest('.settings-checkbox-label');
+            if (row) row.style.display = this.installerAvailable === false ? 'none' : '';
+        }
     },
 
     fieldChanged(el) {

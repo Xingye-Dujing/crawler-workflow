@@ -1172,84 +1172,6 @@ doc.body.dataset.lang = 'zh';
 pa.setLang('zh');
 out.language_back = { tag: doc.body.dataset.lang };
 
-/* ── execution history: delete one recorded run ─────────────────────────
-   The panel used to offer only 清空历史, so removing one bad run cost the
-   whole comparison chart. A row's button now decides: which id is sent, whether
-   a decline sends nothing, and what the toast says when the server reports
-   that the run was already gone. */
-const HISTORY_RUNS = {
-    ok: true,
-    runs: [
-        { run_id: 'r-keep', workflow_name: '甲流程', started_at: '2026-09-24T01:00:00', metric_count: 3 },
-        { run_id: 'r-del', workflow_name: '乙流程', started_at: '2026-09-24T02:00:00', metric_count: 2 },
-    ],
-    workflow_names: ['甲流程', '乙流程'],
-};
-fresh();
-route('/api/history/runs', HISTORY_RUNS);
-route('/api/history/series', { ok: true, rows: [] });
-pa.historyPanel._renderChart = () => {}; // the chart is stats.js, not this decision
-await pa.historyPanel._loadRuns();
-const wrap = id('history-runs-wrap');
-out.history_rows = {
-    buttons: (wrap.innerHTML.match(/history-del/g) || []).length,
-    // The id sits in an attribute built by string concatenation, so a quote in it
-    // would end the attribute and let the rest become markup.
-    ids: (wrap.innerHTML.match(/data-run-id="([^"]*)"/g) || []),
-    label: vm.runInContext("I18n.t('history.remove')", sandbox),
-    reloads: requests.length,
-};
-
-fresh();
-route('/api/history/runs', HISTORY_RUNS);
-route('/api/history/series', { ok: true, rows: [] });
-answers.dialog = false; // “取消”
-await pa.historyPanel.deleteRun('r-del');
-out.history_declined = { requested: requests.length, toasts: toasts.slice() };
-
-fresh();
-route('/api/history/runs', HISTORY_RUNS);
-route('/api/history/series', { ok: true, rows: [] });
-route('/api/history/delete', { ok: true, deleted: 2, run_id: 'r-del' });
-answers.dialog = true;
-await pa.historyPanel.deleteRun('r-del');
-const delPost = requests.find((r) => r.url.indexOf('/api/history/delete') === 0);
-out.history_deleted = {
-    method: delPost ? delPost.method : null,
-    body: delPost ? JSON.parse(delPost.body) : null,
-    askedMessage: answers.spec ? answers.spec.message : null,
-    reloadedRuns: requests.filter((r) => r.url.indexOf('/api/history/runs') === 0).length,
-    reloadedSeries: requests.filter((r) => r.url.indexOf('/api/history/series') === 0).length,
-    toasts: toasts.slice(),
-};
-
-fresh();
-route('/api/history/runs', HISTORY_RUNS);
-route('/api/history/series', { ok: true, rows: [] });
-route('/api/history/delete', { ok: true, deleted: 0, run_id: 'r-aged' });
-answers.dialog = true;
-await pa.historyPanel.deleteRun('r-aged');
-out.history_already_gone = { toasts: toasts.slice() };
-
-fresh();
-route('/api/history/runs', HISTORY_RUNS);
-route('/api/history/series', { ok: true, rows: [] });
-route('/api/history/delete', { ok: false, error: 'no run id given' });
-answers.dialog = true;
-await pa.historyPanel.deleteRun('r-x');
-out.history_refused = {
-    toasts: toasts.slice(),
-    // A refusal must not leave the panel showing a row the server says is still there
-    // — but it also must not pretend to have refreshed anything.
-    reloaded: requests.filter((r) => r.url.indexOf('/api/history/runs') === 0).length,
-};
-
-fresh();
-answers.dialog = true;
-route('/api/history/delete', { ok: true, deleted: 1 });
-await pa.historyPanel.deleteRun('   ');
-out.history_blank_id = { requested: requests.length };
-
 /* ── one press, one toast ────────────────────────────────────────────── */
 /* Two source nodes with nothing typed in: the validator has two separate things to
    say, and the user has to hear both. Looping `showToast` over them printed only the
@@ -1287,10 +1209,8 @@ route('/api/data/datasets', {
         { id: 'd1', name: 'a.csv', source: 'upload', row_count: 3, column_count: 2, size_bytes: 1234, used_by: [] },
     ],
 });
-route('/api/history/runs', HISTORY_RUNS);
-route('/api/history/series', { ok: true, rows: [] });
+route('/api/history/series', { ok: true, rows: [], workflow_names: [] });
 id('dataset-panel').classList.add('open');
-id('history-panel').classList.add('open');
 /* The workflow-file table is the third JS-built surface, and it is fed here rather
    than by the flip below: the thing under test is that `setLang` repaints a table the
    panel already holds, not that it can re-read the disk. */
@@ -1300,14 +1220,12 @@ route('/api/workflow/list', {
 });
 sandbox.setLang('zh');
 await pa.datasetManager.refresh();
-await pa.historyPanel._loadRuns();
 id('workflows-panel').classList.add('open');
 await pa.wfFiles.refresh();
 const builtinHeaders = () => ({
     /* `innerHTML` is the string the product assigned (the stub keeps it verbatim and
        also parses it into children); `textContent` does not aggregate children. */
     dataset: id('dataset-mgr-body').innerHTML,
-    history: id('history-runs-wrap').innerHTML,
     workflows: id('workflows-mgr-body').innerHTML,
 });
 const beforeFlip = builtinHeaders();

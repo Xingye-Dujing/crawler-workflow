@@ -400,6 +400,17 @@ out.convert = {
     topPinned: anchored.style.top,
     rightReleased: anchored.style.right === 'auto',
 };
+/* A bottom-anchored dock (the processes panel) must lose BOTH anchors: with `top`
+   and `bottom` both set, an auto-height box stretches between them up to max-height. */
+sandbox.getComputedStyle = () => ({ getPropertyValue: () => '', right: 'auto', bottom: '28px', transform: 'none' });
+const bottomAnchored = doc.createElement('div');
+bottomAnchored.style.bottom = '28px';
+convertToFloating(bottomAnchored);
+out.convert_bottom = {
+    topPinned: !!bottomAnchored.style.top,
+    bottomReleased: bottomAnchored.style.bottom === 'auto',
+};
+
 sandbox.getComputedStyle = (el) => ({ getPropertyValue: (p) => (p === '--radius' ? '6px' : ''), right: 'auto', transform: 'none' });
 const staticEl = doc.createElement('div');
 convertToFloating(staticEl);

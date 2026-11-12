@@ -24,7 +24,7 @@
   left: 0;
   top: 0;
   width: 100%;
-  min-height: var(--menuH);
+  min-height: var(--menuBase);
   height: auto;
   background: var(--bg);
   border-bottom: 1px solid var(--ink);
@@ -414,11 +414,15 @@ body.style-menu-open #top-menu {
    fixed name column keeps the two-character Chinese names from breaking into one
    character per line, and the sentence starts at the same left edge on every row
    instead of being pushed to the right. */
+/* Two deliberate lines per platform: name + suggestion chip on the first, the
+   whole state sentence on the second. The old three-column grid put the sentence
+   in a narrow right-hand strip, so every row wrapped into a different ragged
+   shape. A full-width second line gives every sentence the same left edge. */
 .profile-item {
-  display: grid;
-  grid-template-columns: max-content max-content minmax(0, 1fr);
-  align-items: start;
-  gap: 3px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
   padding: 5px 0;
   border-top: 1px solid var(--line2);
   font-size: 11px;
@@ -428,20 +432,19 @@ body.style-menu-open #top-menu {
   border-top: 0;
 }
 .profile-item .profile-name {
-  grid-column: 1;
+  flex: 0 0 auto;
   min-width: 0;
   color: var(--text);
   white-space: nowrap;
 }
 .profile-item .profile-state {
-  grid-column: 3;
+  flex: 1 1 100%;
   min-width: 0;
   text-align: left;
   color: var(--text-dim);
   overflow-wrap: anywhere;
 }
 .profile-item .profile-chip {
-  grid-column: 2;
   flex: 0 0 auto;
   padding: 0 4px;
   /* Square, and the hairline divider colour: --border is the strong ink colour, and
@@ -453,7 +456,7 @@ body.style-menu-open #top-menu {
 }
 /* A note row has no name or chip; its sentence owns the whole width. */
 .profile-item > .profile-state:first-child {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
 }
 .ai-hint {
   margin-top: 4px;

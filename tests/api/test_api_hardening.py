@@ -79,7 +79,6 @@ BODY_ROUTES = [
     '/api/exports/clear-name',
     '/api/exports/delete',
     '/api/history/clear',
-    '/api/history/delete',
     '/api/lexicon',
     '/api/llm/test',
     '/api/locks',
@@ -268,7 +267,6 @@ class TestNumericLimits:
     @pytest.mark.parametrize(
         'route',
         [
-            '/api/history/runs',
             '/api/history/series',
             '/api/data/datasets',
             '/api/runs/list',

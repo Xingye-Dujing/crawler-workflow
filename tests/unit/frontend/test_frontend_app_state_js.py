@@ -287,5 +287,10 @@ class TestFloatingConversion:
         assert converted['pinnedLeft'] == '0px'
         assert converted['topPinned'] == '0px'
 
+    def test_a_bottom_anchored_dock_loses_both_anchors(self, st):
+        """With `top` and `bottom` both set, an auto-height box stretches between them
+        (capped by max-height) — the processes panel grew to its ceiling when dragged."""
+        assert st['convert_bottom'] == {'topPinned': True, 'bottomReleased': True}
+
     def test_an_unanchored_element_is_left_alone(self, st):
         assert st['convert']['untouched_when_not_anchored'] is True

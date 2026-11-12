@@ -63,17 +63,20 @@ var TopMenu = {
     init() {
         this.sync();
 
-        /* The bar now wraps on a narrow window, so its height is not the static
-           --menuH token any more. Publish the measured height; the resume banner
-           and other top-inset consumers read the same variable. */
-        var bar = document.getElementById('top-menu');
-        if (bar && window.ResizeObserver) {
-            var publishMenuHeight = function () {
-                document.documentElement.style.setProperty('--menuH', bar.offsetHeight + 'px');
+        /* Both bars wrap on a narrow window, so their heights are not the static
+           tokens any more. Publish the MEASURED height of each; every top/bottom
+           inset consumer (resume banner, palette, outline, docks, toast) reads the
+           same variables. The CSS floor stays --menuBase/--barBase, otherwise the
+           published value would itself keep the wrapped height from shrinking back. */
+        [['top-menu', '--menuH'], ['status-bar', '--barH']].forEach(function (pair) {
+            var el = document.getElementById(pair[0]);
+            if (!el) return;
+            var publish = function () {
+                document.documentElement.style.setProperty(pair[1], el.offsetHeight + 'px');
             };
-            new ResizeObserver(publishMenuHeight).observe(bar);
-            publishMenuHeight();
-        }
+            if (window.ResizeObserver) new ResizeObserver(publish).observe(el);
+            publish();
+        });
 
         /* Style / AI / 设置 submenus close on an outside click, Esc, or resize. */
         document.addEventListener('click', (e) => {

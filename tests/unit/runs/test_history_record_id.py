@@ -1,8 +1,7 @@
 """执行历史 files a run under the LEDGER's own id.
 
 The same execution was a different object in 运行记录 and 执行历史: the history row minted its own
-``uuid4`` id, so a record's metrics could never be related back to the run (and ``POST
-/api/history/delete`` could only address the synthetic one).
+``uuid4`` id, so a record's metrics could never be related back to the run it belongs to.
 """
 
 import pytest

@@ -840,10 +840,13 @@ window.addEventListener('resize', function () {
 });
 
 /* ── Execution History: time-series comparison across runs ──
-   Reads /api/history/* (populated automatically after each workflow run)
+   Reads /api/history/series (populated automatically after each workflow run)
    to chart how a metric — emotion distribution, tendency distribution, or
    row count — has changed across runs over time, e.g. "how has sentiment
-   on this topic shifted over the last two weeks of crawls". */
+   on this topic shifted over the last two weeks of crawls".
+
+   The run LIST is 运行记录's job. This panel keeps only the trend chart, so the
+   backend has one surface that lists runs and one that charts metrics. */
 var historyPanel = {
     _instance: null,
 
@@ -859,75 +862,29 @@ var historyPanel = {
                 rh.className = 'resize-handle';
                 panel.appendChild(rh);
             }
-            /* Bound once, on the container, because the rows are replaced by
-               every reload: a listener per button would pile up one per refresh
-               and a deleted row's button would still be listening. */
-            var runsWrap = document.getElementById('history-runs-wrap');
-            if (runsWrap && !runsWrap.dataset._delBound) {
-                runsWrap.dataset._delBound = '1';
-                runsWrap.addEventListener('click', function (e) {
-                    var button = e.target && e.target.closest ? e.target.closest('.history-del') : null;
-                    if (!button) return;
-                    historyPanel.deleteRun(button.getAttribute('data-run-id'));
-                });
-            }
         }
-        await this._loadRuns();
         await this.loadSeries();
     },
 
-    async _loadRuns() {
-        try {
-            var resp = await fetch('/api/history/runs');
-            var result = await resp.json();
-            if (!result.ok) return;
-            /* Kept, not only drawn: this table and the filter select are built in JS,
-               so `I18n.apply()` never reaches them — a language switch has to redraw
-               from what is already on hand instead of asking the server again. */
-            this._runs = result;
-            this._renderRuns();
-        } catch (e) { /* non-fatal */ }
-    },
-
-    _renderRuns() {
-        var result = this._runs;
-        if (!result) return;
-        var select = document.getElementById('history-workflow-select');
-        var current = select.value;
-        select.innerHTML = '<option value="">' + I18n.t('history.allWorkflows') + '</option>' +
-            result.workflow_names.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
-        if (current) select.value = current;
-
-        var wrap = document.getElementById('history-runs-wrap');
-        if (!result.runs.length) {
-            wrap.innerHTML = '<div class="dashboard-empty">' + I18n.t('history.empty') + '</div>';
-            return;
-        }
-        var html = '<table class="history-runs-table"><thead><tr>' +
-            '<th>' + I18n.t('history.runId') + '</th><th>' + I18n.t('history.workflowName') + '</th>' +
-            '<th>' + I18n.t('history.startedAt') + '</th><th>' + I18n.t('history.metricCount') + '</th>' +
-            '<th></th>' +
-            '</tr></thead><tbody>';
-        result.runs.forEach(function (r) {
-            /* The id goes into a data attribute, not into an inline handler:
-               it is database text, and one quote would end the attribute and
-               start whatever the user typed next. */
-            html += '<tr><td>' + escapeHtml(r.run_id) + '</td><td>' + escapeHtml(r.workflow_name || '') + '</td>' +
-                '<td>' + escapeHtml(r.started_at) + '</td><td>' + r.metric_count + '</td>' +
-                '<td class="history-ops"><button class="history-del" data-run-id="' + escapeHtml(r.run_id) +
-                '">' + I18n.t('history.remove') + '</button></td></tr>';
-        });
-        html += '</tbody></table>';
-        wrap.innerHTML = html;
-    },
-
     onLanguageChange() {
-        /* Same rule as the run-records and export panels: the header row is a
-           catalogue string, so switching to English with this panel open used to
-           leave the whole table Chinese until it was closed and opened again. */
+        /* The filter select is built in JS, so `I18n.apply()` never reaches it: a
+           language switch has to repaint from the server's answer. */
         var panel = document.getElementById('history-panel');
         if (!panel || !panel.classList.contains('open')) return;
-        this._renderRuns();
+        this.loadSeries();
+    },
+
+    /* The filter's options are the workflows the ledger knows about. They arrive
+       with the series (one request), so no route exists merely to list runs. */
+    _renderWorkflowOptions(names) {
+        var select = document.getElementById('history-workflow-select');
+        if (!select) return;
+        var current = select.value;
+        select.innerHTML = '<option value="">' + I18n.t('history.allWorkflows') + '</option>' +
+            (names || []).map(function (n) {
+                return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
+            }).join('');
+        if (current) select.value = current;
     },
 
     async loadSeries() {
@@ -940,6 +897,7 @@ var historyPanel = {
             var resp = await fetch('/api/history/series?' + params.toString());
             var result = await resp.json();
             if (!result.ok) return;
+            this._renderWorkflowOptions(result.workflow_names);
             this._renderChart(result.rows, metric);
         } catch (e) { /* non-fatal */ }
     },
@@ -1150,40 +1108,6 @@ var historyPanel = {
                 return;
             }
             showToast(I18n.t('history.cleared'));
-            await this._loadRuns();
-            await this.loadSeries();
-        } catch (e) {
-            showToast(I18n.t('toast.previewFailed') + ': ' + e.message);
-        }
-    },
-
-    async deleteRun(runId) {
-        var id = String(runId || '').trim();
-        if (!id) return;
-        var confirmed = await showDialog({
-            message: I18n.t('history.confirmRemove').replace('{rid}', id),
-            buttons: [
-                { label: I18n.t('dialog.cancel'), value: false },
-                { label: I18n.t('dialog.confirm'), value: true, primary: true },
-            ],
-        });
-        if (!confirmed) return;
-        try {
-            var resp = await fetch('/api/history/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ run_id: id }),
-            });
-            var result = await resp.json();
-            if (!result.ok) {
-                showToast(I18n.t('history.removeFailed') + ': ' + (result.error || ''));
-                return;
-            }
-            /* Zero deleted rows is reported, not hidden: the list on screen was
-               loaded before this click, and a run aged out by the retention
-               policy in between is a different fact than "deleted". */
-            showToast(result.deleted ? I18n.t('history.removed') : I18n.t('history.removeGone'));
-            await this._loadRuns();
             await this.loadSeries();
         } catch (e) {
             showToast(I18n.t('toast.previewFailed') + ': ' + e.message);

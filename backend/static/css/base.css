@@ -79,6 +79,12 @@
        not a corner — tokenized too so no literal radius is left loose */
   --radius-round: 50%;
 
+  /* The bars publish their MEASURED height into --menuH/--barH (menu.js), because both
+     wrap onto extra rows on a narrow window. The base tokens are the one-row floor:
+     a bar may never use its own published height as a minimum, or a narrow→wide resize
+     keeps the tall value forever (the bar can never shrink below what it published). */
+  --menuBase: 48px;
+  --barBase: 28px;
   --menuH: 48px;
   --barH: 28px;
 }

@@ -1742,101 +1742,6 @@ def test_a_fresh_page_reconnects_its_console_without_being_asked(app_url, driver
     )
 
 
-def test_deleting_one_history_row_reaches_the_server_with_that_run_only(app_url, driver):
-    """The button is delegated, so only a real click proves it works.
-
-    The row list is re-rendered on every reload, which is exactly the shape a
-    per-row listener gets wrong (it would fire once per refresh). And the id has
-    to arrive as the clicked row's — a handler reading the wrong attribute deletes
-    somebody else's history.
-
-    ``fetch`` is stubbed for the whole test: this tier must not write, and a live
-    ``/api/history/delete`` would erase a record of the user's own runs.
-    """
-    _set_viewport(driver, 1366, 768)
-    _load_app(driver, app_url)
-    _kill_animations(driver)
-    driver.execute_script(
-        """
-        window.__calls = [];
-        window.fetch = function (url, opts) {
-            window.__calls.push({ url: String(url), body: opts && opts.body ? String(opts.body) : null });
-            const path = String(url).split('?')[0];
-            let payload = { ok: true };
-            if (path === '/api/history/runs') {
-                payload = { ok: true, workflow_names: ['甲', '乙'], runs: [
-                    { run_id: 'r-keep', workflow_name: '甲', started_at: '2026-09-24T01:00:00', metric_count: 3 },
-                    { run_id: 'r-del', workflow_name: '乙', started_at: '2026-09-24T02:00:00', metric_count: 2 },
-                ] };
-            } else if (path === '/api/history/series') {
-                payload = { ok: true, rows: [] };
-            } else if (path === '/api/history/delete') {
-                payload = { ok: true, deleted: 2, run_id: JSON.parse(opts.body).run_id };
-            }
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve(payload),
-                text: () => Promise.resolve(JSON.stringify(payload)),
-            });
-        };
-        """,
-        [],
-    )
-    # The dialog is the app's own promise-based confirm; answer it without the
-    # user, and say yes.
-    driver.execute_script(
-        """
-        window.__dialogs = [];
-        window.showDialog = function (spec) {
-            window.__dialogs.push(spec && spec.message ? String(spec.message) : '');
-            return Promise.resolve(true);
-        };
-        """,
-        [],
-    )
-    # Opened through the real ``open()``: that is where the delegated listener for
-    # the row buttons is installed, so a test that only called ``_loadRuns()``
-    # would click a button nothing is listening to.
-    driver.execute_script('historyPanel._renderChart = function () {}; return historyPanel.open();', [])
-    clicked = driver.execute_script(
-        """
-        const buttons = document.querySelectorAll('#history-runs-wrap .history-del');
-        if (buttons.length !== 2) return { count: buttons.length };
-        const target = Array.from(buttons).find((b) => b.getAttribute('data-run-id') === 'r-del');
-        target.click();
-        return { count: buttons.length, found: !!target };
-        """,
-        [],
-    )
-    assert clicked['count'] == 2, f'one button per recorded run: {clicked}'
-    assert clicked['found'] is True, 'the clicked row is not addressable by its own run id'
-    deadline = time.monotonic() + 10
-    calls: list = []
-    while time.monotonic() < deadline:
-        calls = driver.execute_script('return window.__calls;', [])
-        if any(str(c['url']).split('?')[0] == '/api/history/delete' for c in calls):
-            break
-        time.sleep(0.2)
-    delete_calls = [c for c in calls if str(c['url']).split('?')[0] == '/api/history/delete']
-    assert delete_calls, f'the click never reached the server: {calls}'
-    assert json.loads(delete_calls[0]['body']) == {'run_id': 'r-del'}, delete_calls[0]['body']
-    asked = driver.execute_script('return window.__dialogs;', [])
-    assert asked and 'r-del' in asked[0], f'the confirmation must name the run about to vanish: {asked}'
-    layout = driver.execute_script(
-        """
-        const wrap = document.getElementById('history-runs-wrap');
-        const table = wrap.querySelector('table');
-        const buttons = Array.from(wrap.querySelectorAll('.history-del'));
-        return [document.documentElement.scrollWidth, document.documentElement.clientWidth,
-                table.scrollWidth - table.clientWidth,
-                buttons.filter((b) => b.scrollWidth - b.clientWidth > 1).length];
-        """,
-        [],
-    )
-    assert layout[0] <= layout[1] + 1, f'the extra column grew a page-level horizontal bar: {layout}'
-    assert layout[3] == 0, f'a delete button is cut off, so the user cannot read what it says: {layout}'
-
-
 @pytest.mark.parametrize('width', [1024, 1280])
 def test_a_narrow_window_moves_the_floating_popups_inside_it(app_url, driver, width):
     """The dashboard and the history panel are positioned from their button; on a
@@ -3241,6 +3146,109 @@ def test_the_menu_bar_wraps_whole_groups_instead_of_scrolling(app_url, driver, l
     assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts}'
     if width == 1024:
         assert facts['bar'][3] > 56, f'at 1024px the bar did not wrap to a second row: {facts}'
+
+
+def test_the_menu_shrinks_back_after_the_window_widens(app_url, driver):
+    """Narrow → wide is the direction a circular minimum-height bug survives.
+
+    The bar published its measured height and then used that same variable as
+    ``min-height``: once wrapped, the published tall value kept it tall forever,
+    even after the window was wide enough for one row.
+    """
+    _set_viewport(driver, 900, 700)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script("document.getElementById('top-menu').classList.add('pinned');", [])
+    time.sleep(0.3)
+    narrow = driver.execute_script(
+        """
+        const bar = document.getElementById('top-menu');
+        return {
+            height: bar.offsetHeight,
+            published: getComputedStyle(document.documentElement).getPropertyValue('--menuH').trim(),
+        };
+        """,
+        [],
+    )
+    _set_viewport(driver, 1800, 700)
+    time.sleep(0.5)
+    wide = driver.execute_script(
+        """
+        const bar = document.getElementById('top-menu');
+        return {
+            height: bar.offsetHeight,
+            published: getComputedStyle(document.documentElement).getPropertyValue('--menuH').trim(),
+        };
+        """,
+        [],
+    )
+    assert narrow['height'] > 56, f'the narrow bar did not wrap, so the shrink was never stressed: {narrow}'
+    assert wide['height'] < narrow['height'], f'the bar stayed at its wrapped height after widening: {narrow} → {wide}'
+    assert wide['published'] == f'{wide["height"]}px', f'--menuH disagrees with the real bar: {wide}'
+
+
+def test_the_status_bar_wraps_and_the_docks_follow_its_real_height(app_url, driver):
+    """The bottom strip had a fixed 28px height: on a narrow window its buttons ran
+    past the edge, and every dock still assumed the one-row height."""
+    _set_viewport(driver, 620, 700)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        """
+        const bar = document.getElementById('status-bar');
+        const runs = document.getElementById('runs-panel');
+        const cs = getComputedStyle(runs);
+        return {
+            height: bar.offsetHeight,
+            fullWidth: [bar.scrollWidth, bar.clientWidth],
+            wrap: getComputedStyle(bar).flexWrap,
+            published: getComputedStyle(document.documentElement).getPropertyValue('--barH').trim(),
+            dockBottom: cs.bottom,
+            inner: window.innerHeight,
+            page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+        };
+        """,
+        [],
+    )
+    assert facts['wrap'] == 'wrap', f'the status bar cannot grow a row: {facts}'
+    assert facts['height'] > 28, f'the narrow status bar stayed one row, so nothing wrapped: {facts}'
+    assert facts['fullWidth'][0] <= facts['fullWidth'][1] + 1, f'the status strip still overflows sideways: {facts}'
+    assert facts['published'] == f'{facts["height"]}px', f'--barH disagrees with the real strip: {facts}'
+    assert facts['dockBottom'] == f'{facts["height"]}px', f'a dock sits behind the wrapped strip: {facts}'
+    assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts}'
+
+
+def test_an_outside_click_dismisses_the_settings_page(app_url, driver):
+    """A form dock leaves when the user clicks back into the canvas; a click INSIDE
+    it (including its own controls) must not."""
+    _set_viewport(driver, 1366, 768)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    opened = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        SettingsPanel.open().then(() => done(document.getElementById('settings-panel').classList.contains('open')));
+        """,
+    )
+    assert opened is True, 'the settings page never opened, so the dismissal cannot be measured'
+    inside = driver.execute_script(
+        """
+        const panel = document.getElementById('settings-panel');
+        panel.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        return panel.classList.contains('open');
+        """,
+        [],
+    )
+    assert inside is True, 'a press inside the settings form closed it'
+    outside = driver.execute_script(
+        """
+        const panel = document.getElementById('settings-panel');
+        document.getElementById('workspace').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        return panel.classList.contains('open');
+        """,
+        [],
+    )
+    assert outside is False, 'clicking back into the canvas left the settings page on screen'
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])

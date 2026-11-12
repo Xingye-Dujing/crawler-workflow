@@ -2,9 +2,9 @@
 
 This table is what powers "how has the emotion mix moved over the last two
 weeks", so the pinned behaviour is about *queryability*: an 8-tuple per metric
-row, runs newest-first, series oldest-first, and read-time de-duplication that
-cleans rows written before the recorder learned to dedupe — without ever
-needing a migration.
+row, series oldest-first, and read-time de-duplication that cleans rows written
+before the recorder learned to dedupe — without ever needing a migration. The
+run list itself lives in 运行记录; this ledger only names workflows for the filter.
 
 Every test gets its own SQLite file: the default path is the real
 ``data/history.db``.
@@ -46,7 +46,7 @@ def recorded(history):
 
 class TestRecording:
     def test_the_table_is_created_on_construction(self, history):
-        assert history.list_runs().empty
+        assert history.series().empty
         assert history.series().columns.tolist() == COLUMNS
 
     def test_tuples_land_verbatim(self, history):
@@ -69,24 +69,8 @@ class TestRecording:
         assert len(History(db_path=str(tmp_path / 'history.db')).series()) == 1
 
 
-class TestListingRuns:
-    def test_runs_are_grouped_with_their_earliest_timestamp(self, recorded):
-        runs = recorded.list_runs().to_dict('records')
-        assert [r['run_id'] for r in runs] == ['r3', 'r2', 'r1']
-        assert runs[-1]['started_at'] == '2024-05-01T10:00:00'
-        assert runs[-1]['metric_count'] == 3
-
-    def test_limit_caps_the_page(self, recorded):
-        assert len(recorded.list_runs(limit=2)) == 2
-
-    def test_the_same_run_under_two_names_stays_distinct(self, history):
-        history.record_many(
-            [
-                _row('r1', 'wf-a', 'n1', 'rows', '', 1.0, '2024-01-01T00:00:00'),
-                _row('r1', 'wf-b', 'n1', 'rows', '', 2.0, '2024-01-01T00:00:00'),
-            ]
-        )
-        assert len(history.list_runs()) == 2
+class TestWorkflowNames:
+    """Runs are listed by 运行记录; this ledger only supplies the chart's filter."""
 
     def test_workflow_names_are_distinct_and_sorted(self, recorded):
         assert recorded.list_workflow_names() == sorted(['周报', '月报'])
@@ -94,7 +78,7 @@ class TestListingRuns:
     def test_runs_without_a_name_are_not_listed_as_names(self, history):
         history.record_many([_row('r1', None, 'n1', 'rows', '', 1.0, '2024-01-01T00:00:00')])
         assert history.list_workflow_names() == []
-        assert len(history.list_runs()) == 1
+        assert len(history.series()) == 1
 
 
 class TestSeries:
@@ -143,7 +127,6 @@ class TestClearing:
     def test_clear_empties_the_ledger_but_keeps_the_table(self, recorded):
         recorded.clear()
         assert recorded.series().empty
-        assert recorded.list_runs().empty
         assert recorded.list_workflow_names() == []
         recorded.record_many([_row('r9', 'wf', 'n1', 'rows', '', 1.0, '2024-04-01T00:00:00')])
         assert len(recorded.series()) == 1
@@ -186,9 +169,8 @@ class TestTheFileMayBeDeleted:
 
     def test_a_deleted_database_is_recreated_on_the_next_read(self, history, tmp_path):
         history.record_many([_row('r1', 'wf', 'n1', 'rows', '', 5.0, '2024-01-01T00:00:00')])
-        assert len(history.list_runs()) == 1
+        assert len(history.series()) == 1
         os.remove(history.db_path)
-        assert len(history.list_runs()) == 0
         assert len(history.series()) == 0
         assert history.list_workflow_names() == []
 
@@ -198,8 +180,8 @@ class TestTheFileMayBeDeleted:
         history.record_many([_row('r0', 'wf', 'n1', 'rows', '', 1.0, '2024-01-01T00:00:00')])
         os.remove(history.db_path)
         history.record_many([_row('r2', 'wf', 'n1', 'rows', '', 7.0, '2024-01-02T00:00:00')])
-        assert len(history.list_runs()) == 1
+        assert len(history.series()) == 1
 
     def test_a_never_seen_database_answers_rather_than_raising(self, tmp_path):
         fresh = History(db_path=str(tmp_path / 'brand-new' / 'history.db'))
-        assert len(fresh.list_runs()) == 0 and len(fresh.series()) == 0
+        assert len(fresh.series()) == 0

@@ -57,7 +57,7 @@ def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None)
     ``inf`` / ``nan`` are the same class of mistake and used to escape it:
     ``float('inf')`` parses fine and only ``int()`` then refuses it with an
     OverflowError, which no ``except (TypeError, ValueError)`` catches — so
-    ``/api/history/runs?limit=inf`` answered 500. Anything not finite is
+    ``/api/history/series?limit=inf`` answered 500. Anything not finite is
     rejected up front, exactly like unparseable text.
     """
     try:

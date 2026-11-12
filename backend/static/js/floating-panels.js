@@ -22,7 +22,10 @@ function makeDraggable(el, handleSelector) {
         e.preventDefault();
 
         /* Convert to floating FIRST (while transform is still readable)
-           THEN add panel-dragging to freeze inline styles */
+           THEN add panel-dragging to freeze inline styles. A dock anchored by
+           `bottom` is released here too: setting `top` while `bottom` stays set
+           makes an auto-height box stretch between the two edges, so merely
+           dragging the processes panel up grew it to max-height. */
         convertToFloating(el);
         el.classList.add('panel-dragging');
 
@@ -57,13 +60,18 @@ function convertToFloating(el) {
        (el.style only sees inline styles, not class-based rules) */
     const cs = getComputedStyle(el);
     const hasRight = cs.right && cs.right !== 'auto' && parseFloat(cs.right) !== 0;
+    const hasBottom = cs.bottom && cs.bottom !== 'auto';
     const hasTransform = cs.transform && cs.transform !== 'none';
 
-    if (hasRight || hasTransform) {
+    if (hasRight || hasBottom || hasTransform) {
         const rect = el.getBoundingClientRect();
         el.style.setProperty('left', rect.left + 'px', 'important');
         el.style.setProperty('top', rect.top + 'px', 'important');
+        /* Both anchors must go, not just the horizontal one: with `top` and `bottom`
+           both set an auto-height box stretches between them (and its max-height caps
+           that stretch, which is the "it grows to the ceiling when I lift it" bug). */
         el.style.right = 'auto';
+        if (hasBottom) el.style.bottom = 'auto';
         el.style.setProperty('transform', 'none', 'important');
     }
 }
@@ -353,6 +361,20 @@ document.addEventListener('mousedown', (e) => {
         if (window.CustomSelect && CustomSelect.ownsPopup(e.target, panel)) return;
         panel.classList.remove('open');
     });
+});
+
+/* The full settings page is a dock, but unlike the read-only docks it is a form the
+   user expects to leave by clicking the canvas (or any other surface). Clicking its
+   own opener must not close-then-reopen it, and a CustomSelect menu or an open dialog
+   belongs to the panel even though it paints into <body>. */
+document.addEventListener('mousedown', (e) => {
+    const panel = document.getElementById('settings-panel');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (!e.target || !e.target.closest) return;
+    if (e.target.closest('#settings-panel, #dialog-overlay, #cookie-dialog, .cselect-menu, .cand-menu')) return;
+    if (e.target.closest('.settings-open-full')) return;
+    if (window.CustomSelect && CustomSelect.ownsPopup(e.target, panel)) return;
+    if (typeof SettingsPanel !== 'undefined') SettingsPanel.close();
 });
 
 /* ── Init draggable panels on first open ── */

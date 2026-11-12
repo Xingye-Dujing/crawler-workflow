@@ -782,7 +782,10 @@ class TestChromeOfThePageItself:
         assert 'justify-content: safe center' in bar, f'the bar is centred again: {bar}'
         assert 'flex-wrap: wrap' in bar, 'a narrow window must wrap, not scroll sideways'
         assert 'overflow-x: auto' not in bar, 'the horizontal scroller is back'
-        assert 'min-height: var(--menuH)' in bar and 'height: auto' in bar, 'the bar cannot grow a wrapped row'
+        assert 'min-height: var(--menuBase)' in bar and 'height: auto' in bar, (
+            'the floor must be the one-row base, not the published height: a narrow→wide resize '
+            'can never shrink a bar whose minimum IS its measured (wrapped) height'
+        )
         assert 'transform: translateY(-100%)' in bar, 'the hidden bar must slide by its own height'
 
     def test_the_shortcut_sheet_and_the_env_card_follow_the_paper_rules(self):
@@ -806,6 +809,60 @@ class TestChromeOfThePageItself:
             assert 'border-bottom' not in rule(selector), f'{selector} regained its divider'
         assert 'border-radius: 0' in rule('.settings-field'), 'a settings field became a card'
         assert 'border-top' not in rule('.settings-panel-actions'), 'the actions row regained its rule'
+
+    def test_the_status_bar_wraps_and_publishes_its_measured_height(self):
+        """The bottom strip is the mirror of the top menu: it must wrap on a narrow
+        window, grow a second row, and tell every bottom-anchored dock how tall it is."""
+        css = css_text()
+        start = css.index('#status-bar {')
+        bar = css[start : css.index('}', start)]
+        assert 'flex-wrap: wrap' in bar, 'a narrow window clips the status buttons again'
+        assert 'min-height: var(--barBase)' in bar, 'the floor must be the one-row base, not the measured value'
+        assert 'height: auto' in bar
+        js = js_text('menu.js')
+        assert "['status-bar', '--barH']" in js, 'the docks still read a stale bottom inset after a wrap'
+        assert 'ResizeObserver' in js
+
+    def test_the_side_panels_follow_both_measured_bars_and_scroll(self):
+        """The palette and outline used to be pinned to 60px and a 100px ceiling, both
+        of which are only true while the menu is one row and the status bar is 28px."""
+        css = (STATIC_DIR / 'css' / 'canvas.css').read_text(encoding='utf-8')
+
+        def rule(selector):
+            start = css.index(selector + ' {')
+            return css[start : css.index('}', start)]
+
+        ceiling = 'calc(100vh - var(--menuH) - var(--barH) - 24px)'
+        for selector in ('#node-palette', '#outline-panel'):
+            block = rule(selector)
+            assert 'top: calc(var(--menuH) + 12px)' in block, f'{selector} ignores a wrapped menu: {block}'
+            assert f'max-height: {ceiling}' in block, f'{selector} can slide behind a wrapped status bar: {block}'
+        assert 'overflow-y: auto' in rule('#node-palette'), 'a long palette cannot scroll inside its new ceiling'
+
+    def test_the_settings_nav_active_state_has_no_shadow(self):
+        """OMM-ZEN selection is a tone change; the inset bar was a fifth accent."""
+        css = css_text()
+        start = css.index('.settings-panel-nav button.active {')
+        block = css[start : css.index('}', start)]
+        assert 'box-shadow: none' in block, f'the active group regained a shadow: {block}'
+        assert 'inset 2px 0 0' not in block
+
+    def test_the_saved_login_header_paints_above_its_rows(self):
+        """A sticky header with no stacking level let the row's 重命名 show through
+        the transparent 操作 cell."""
+        css = css_text()
+        start = css.index('table.data-preview-table th {')
+        block = css[start : css.index('}', start)]
+        assert 'position: sticky' in block
+        assert 'z-index: 2' in block, f'the body paints over the fixed labels: {block}'
+        assert 'background: var(--bg)' in block, 'an opaque ground is what makes the label legible'
+
+    def test_the_settings_page_hides_the_machine_path_opt_in_for_source_builds(self):
+        """Source runs read this machine directly; the installer-only opt-in must not
+        sit there asking about a deployment that is not running."""
+        js = (JS_DIR / 'panels' / 'settings-panel.js').read_text(encoding='utf-8')
+        assert "row.style.display = this.installerAvailable === false ? 'none' : ''" in js
+        assert "include.closest('.settings-checkbox-label')" in js
 
     def test_the_workbench_copy_of_the_bar_keeps_the_same_rule(self):
         """``css/zenviz.css`` carries its own copy of the top-menu block for the embedded
