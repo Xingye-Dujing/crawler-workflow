@@ -1,37 +1,37 @@
 {
   "schema": 1,
-  "version": "2026.11.13.2",
+  "version": "2026.11.13.3",
   "released": "2026-11-13",
-  "notes": "设置里新增“检查更新”按钮（不受稍后/不再提示影响）；桌面版新增 Windows 系统托盘与运行完成、运行失败、定时任务开始的系统通知，托盘菜单跟随系统亮/暗；macOS 同样发送系统通知。",
+  "notes": "设置里新增“检查更新”按钮（不受稍后/不再提示影响）；桌面版新增 Windows 系统托盘与运行完成、运行失败、定时任务开始的系统通知，托盘菜单跟随系统亮/暗；macOS 同样发送系统通知；修复图表回放条被 ECharts 画布盖住、点不动的问题。",
   "platforms": {
     "win32": {
       "archive": "zip",
-      "sha256": "ce845df20ebf6566c42d7cca619c39a175c6de82d2b00a618c7a776d379cc575",
-      "size": 134931789,
+      "sha256": "a66c3dc2b6d8463394016f10798fcc3f1b3cf56912f238600b55577d7370d889",
+      "size": 134931617,
       "parts": [
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.2/CaiXiHui-win64.zip.001",
-          "sha256": "99166e7331beeb9b5a7af25d826edf3748240b3f8329127a9376448b2e593b18",
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.3/CaiXiHui-win64.zip.001",
+          "sha256": "39bc7105a0852ea2a4291e0630459fe9aa47b3a23125b0849b6de73d220f0326",
           "size": 99614720
         },
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.2/CaiXiHui-win64.zip.002",
-          "sha256": "302f21d9bc98d5964c44697e221d7cf875ce98bc8ad8eeedfe481346da54673c",
-          "size": 35317069
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.3/CaiXiHui-win64.zip.002",
+          "sha256": "ca01918babcf2bb74938e80245033271ee35510d16dcb4587a66e5c13f03c937",
+          "size": 35316897
         }
       ]
     },
     "darwin-arm64": {
       "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.2/CaiXiHui-macOS-arm64.dmg",
-      "sha256": "f7dddcb964ced10bebb2aa286f5749bad49928d918049025be3cdf34e5290022",
-      "size": 185296614
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.3/CaiXiHui-macOS-arm64.dmg",
+      "sha256": "9cc680ff7a990bbfe7808c4041045311669d68c0004bdbe89764b0874e18353c",
+      "size": 185295470
     },
     "darwin-x64": {
       "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.2/CaiXiHui-macOS-x86_64.dmg",
-      "sha256": "a0073d03bd775f8681812aaefca546df22829fb17acbec16f66b113a5c34be51",
-      "size": 195263001
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-13.3/CaiXiHui-macOS-x86_64.dmg",
+      "sha256": "6ab2349f3379af280b5185da9fe67bc31b2b40d55db837b62b7347774fc209fe",
+      "size": 195702607
     }
   }
 }
