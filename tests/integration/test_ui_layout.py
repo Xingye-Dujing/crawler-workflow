@@ -3299,6 +3299,10 @@ def test_the_status_bar_wraps_and_the_docks_follow_its_real_height(app_url, driv
     _set_viewport(driver, 620, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
+    # --barH is published by a ResizeObserver; measuring in the frame the bar wrapped reads the
+    # previous value (measured on the Windows runner: 74px published beside a 119px strip, which
+    # looks like a product defect). Wait for the publish, then measure.
+    _settle_chrome(driver)
     facts = driver.execute_script(
         """
         const bar = document.getElementById('status-bar');
@@ -4027,10 +4031,21 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     # tried and never matched.
     # An ECharts canvas repaints on its own schedule (ink, fade, resize), so a strip over it compares
     # two animation frames rather than two states. The question here is whether the DRAWER paints, so
-    # the canvases are blanked for the comparison; a shadow that reaches them still shows.
+    # the canvases are blanked for the comparison; a shadow that reaches them still shows. The
+    # overlay scrollbar in that same right-edge lane fades on its own clock (measured on the macOS
+    # runner: closed vs display:none differed only there), so it is hidden too — this compares the
+    # drawer, not the scrollbar.
     driver.execute_script(
-        "document.querySelectorAll('canvas').forEach((c) => { c.dataset.cixiHidden = c.style.visibility; "
-        "c.style.visibility = 'hidden'; });"
+        """
+        const style = document.createElement('style');
+        style.id = 'cixi-no-scrollbar';
+        style.textContent = '::-webkit-scrollbar { display: none !important; }';
+        document.head.appendChild(style);
+        document.querySelectorAll('canvas').forEach((c) => {
+            c.dataset.cixiHidden = c.style.visibility;
+            c.style.visibility = 'hidden';
+        });
+        """
     )
     closed = control = ''
     tries = 0
@@ -4044,7 +4059,10 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
     gone = shot()
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = '';")
     driver.execute_script(
-        "document.querySelectorAll('canvas').forEach((c) => { c.style.visibility = c.dataset.cixiHidden || ''; });"
+        """
+        document.getElementById('cixi-no-scrollbar')?.remove();
+        document.querySelectorAll('canvas').forEach((c) => { c.style.visibility = c.dataset.cixiHidden || ''; });
+        """
     )
     assert closed == control, (
         'the browser did not paint two identical states identically, so a pixel comparison here '
