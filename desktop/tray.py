@@ -55,6 +55,50 @@ def applescript_string(text: str) -> str:
     return '"' + str(text).replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
+#: ``uxtheme``'s undocumented dark-mode entry points (Windows 10 1903+). A Win32 popup menu is drawn
+#: by the system and ignores the application's palette, so these are the only way to make the tray
+#: menu match a dark taskbar. Older builds do not export the ordinals; the call then raises and is
+#: skipped, and the consequence is the system's own light menu — never a broken tray.
+_UXTHEME_SET_PREFERRED_APP_MODE = 135
+_UXTHEME_FLUSH_MENU_THEMES = 136
+_FORCE_DARK = 2
+
+
+def windows_prefers_dark() -> bool:
+    """Whether Windows' app mode is dark (``AppsUseLightTheme`` = 0)."""
+    try:
+        import winreg
+    except ImportError:  # not Windows
+        return False
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize',
+        ) as key:
+            return int(winreg.QueryValueEx(key, 'AppsUseLightTheme')[0]) == 0
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def prefer_dark_menus(platform: str | None = None) -> bool:
+    """Ask uxtheme to draw this process's classic menus dark when Windows is dark.
+
+    The opt-in is process-wide, which is the point: a message box raised later in the same launch
+    should match the taskbar too. ``True`` only when the ordinals were found and called.
+    """
+    if not _is_windows(platform or sys.platform) or not windows_prefers_dark():
+        return False
+    try:
+        import ctypes
+
+        uxtheme = ctypes.WinDLL('uxtheme')
+        uxtheme[_UXTHEME_SET_PREFERRED_APP_MODE](_FORCE_DARK)
+        uxtheme[_UXTHEME_FLUSH_MENU_THEMES]()
+    except (AttributeError, OSError, ValueError):
+        return False
+    return True
+
+
 def _osascript(script: str) -> None:
     with contextlib.suppress(OSError, subprocess.SubprocessError):
         subprocess.run(['osascript', '-e', script], timeout=10, check=False, capture_output=True)
@@ -100,6 +144,9 @@ class DesktopShell:
         return self.error
 
     def _start_tray(self) -> str:
+        # Before the icon exists: the classic menu must be drawn by uxtheme in the system's mode,
+        # otherwise it stays light over a dark taskbar (pystray does not opt in).
+        prefer_dark_menus(self._platform)
         try:
             import pystray
             from PIL import Image

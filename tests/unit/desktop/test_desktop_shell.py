@@ -183,6 +183,49 @@ class TestOtherPlatforms:
         shell.notify('标题', '正文')  # no-op, never raises
 
 
+class TestTheMenuTheme:
+    """The native menu is drawn by Windows; the only say we have is uxtheme's process-wide mode."""
+
+    def test_a_light_system_is_left_alone(self, monkeypatch):
+        tray = _tray_module()
+        monkeypatch.setattr(tray, 'windows_prefers_dark', lambda: False)
+        assert tray.prefer_dark_menus('win32') is False
+
+    def test_a_non_windows_host_asks_uxtheme_nothing(self, monkeypatch):
+        tray = _tray_module()
+        asked = []
+        monkeypatch.setattr(tray, 'windows_prefers_dark', lambda: asked.append(1) or True)
+        assert tray.prefer_dark_menus('linux') is False
+        assert asked == []
+
+    def test_the_registry_answer_maps_zero_to_dark(self, monkeypatch):
+        tray = _tray_module()
+        module = ModuleType('winreg')
+        module.HKEY_CURRENT_USER = 'HKCU'
+
+        class Key:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        module.OpenKey = lambda root, path: Key()
+        module.QueryValueEx = lambda key, name: (0, 4)
+        monkeypatch.setitem(sys.modules, 'winreg', module)
+        assert tray.windows_prefers_dark() is True
+        module.QueryValueEx = lambda key, name: (1, 4)
+        assert tray.windows_prefers_dark() is False
+
+    def test_a_missing_registry_value_means_light(self, monkeypatch):
+        tray = _tray_module()
+        module = ModuleType('winreg')
+        module.HKEY_CURRENT_USER = 'HKCU'
+        module.OpenKey = lambda root, path: (_ for _ in ()).throw(OSError('no key'))
+        monkeypatch.setitem(sys.modules, 'winreg', module)
+        assert tray.windows_prefers_dark() is False
+
+
 class TestTheRunOutcomeNotification:
     """``engine.run`` decides WHEN; the shell decides HOW. The decision is what this pins."""
 
