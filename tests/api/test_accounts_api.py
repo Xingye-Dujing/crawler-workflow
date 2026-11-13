@@ -953,13 +953,35 @@ class TestComponentAndUpdateWritesAreOperatorActions:
 
 @pytest.mark.async_documents
 def test_a_document_job_is_invisible_to_another_account(admin_client, monkeypatch):
-    """A job id is not a capability: the report's owner is the account that started it."""
+    """A job id is not a capability: the report's owner is the account that started it.
+
+    The job body is GATED here on purpose: a small report finishes before ``start`` returns, and
+    the route then answers the finished body with 200 instead of a job id (measured on macOS).
+    Without the gate this test would prove nothing about whose job it is — on a slow runner it
+    would pass, on a fast one it would fail on the status code.
+    """
     bob = _as_plain_user(admin_client)
     admin_id = _me(admin_client)['user_id']
     monkeypatch.setitem(execution_state, 'user_id', admin_id)
     monkeypatch.setitem(execution_state, 'results', {'node-1': [{'标题': 'private', 'n': 1}]})
-    started = _post(admin_client, '/api/report/generate', {'title': 'private job'})
-    assert started.status_code == 202, started.get_json()
-    job_id = started.get_json()['job']['id']
-    assert bob.get(f'/api/jobs/{job_id}').status_code == 404
-    assert admin_client.get(f'/api/jobs/{job_id}').status_code == 200
+    from services.reports import jobs as report_jobs
+
+    release = threading.Event()
+    real_start = report_jobs.start
+
+    def blocked_start(kind, work, **kwargs):
+        def slow_work():
+            release.wait(10)
+            return work()
+
+        return real_start(kind, slow_work, **kwargs)
+
+    monkeypatch.setattr(report_jobs, 'start', blocked_start)
+    try:
+        started = _post(admin_client, '/api/report/generate', {'title': 'private job'})
+        assert started.status_code == 202, started.get_json()
+        job_id = started.get_json()['job']['id']
+        assert bob.get(f'/api/jobs/{job_id}').status_code == 404
+        assert admin_client.get(f'/api/jobs/{job_id}').status_code == 200
+    finally:
+        release.set()
