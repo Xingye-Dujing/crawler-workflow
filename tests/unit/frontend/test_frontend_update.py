@@ -154,6 +154,25 @@ class TestTheLanguageSwitch:
         assert results['english']['later'] == 'Later'
 
 
+class TestTheManualCheck:
+    """The settings-menu button: the same request the boot timer makes, with an answer."""
+
+    def test_a_press_is_not_silenced_by_a_snooze(self, results):
+        manual = results['manualCheck']
+        assert manual['hidden'] is False
+        assert manual['version'] == '2026.12.6.1'
+        assert manual['now'] == 'Update now'
+        assert '2026.12.6.1' in results['manualToast']
+
+    def test_nothing_to_offer_still_gets_an_answer(self, results):
+        assert results['manualLatest']['hidden'] is True
+        assert '2026.11.11.2' in results['manualLatestToast']
+
+    def test_a_host_with_no_feed_names_why(self, results):
+        assert results['manualNoChannel']['hidden'] is True
+        assert 'installer' in results['manualNoChannelToast']
+
+
 # ─── The stylesheet ───
 
 

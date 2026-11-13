@@ -100,6 +100,8 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   “立即更新”在后台进程里下载、校验、展开，“稍后”安静 24 小时、按版本记，“不再提示此版本”只压住这一版；
   **下载中关掉窗口不会中断更新**（任务写在 `data/updates/job.json`，日志在 `data/updates/update.log`），
   下载完成后关窗口或点“重启并完成更新”都会替换程序并自动拉起新版本，新版本若起不来会自己回滚到旧的；
+  设置子菜单里的“更新”一行显示当前版本，并带一个“检查更新”按钮——随时手动查一次，不受“稍后 /
+  不再提示此版本”影响，查完用一句话说明“已是最新”或“发现新版本”；
   组件目录和用户数据不会被更新碰。源码运行不执行自更新。
   同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（安装时读 `version.json`
   取最新主程序 DMG，再下载 Chrome/Node 装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像

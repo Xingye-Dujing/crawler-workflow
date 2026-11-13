@@ -381,6 +381,14 @@ body.style-menu-open #top-menu {
 #settings-menu .settings-input-sm {
   flex: 0 0 96px;
 }
+/* The running version beside the update button. It is a reading of the check's own answer, so it
+   is dim and nowrap — a label, not a control — and the button keeps its natural width. */
+#settings-menu .app-version {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 /* The profile table: one full-width block inside the settings menu. A label +
    control row would have squeezed eight platform states into the narrow right
    column, which is what produced a sideways scrollbar there. */

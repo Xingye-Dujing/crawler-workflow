@@ -191,4 +191,36 @@ report.chinese = paint();
 run("I18n.lang = 'en'; UpdatePanel.onLanguageChange();");
 report.english = paint();
 
+/* 14. The settings-menu button: a check the user ASKED for is not silenced by 稍后 / 不再提示. */
+sandbox.localStorage.setItem(
+    'update-snooze',
+    JSON.stringify({ version: '2026.12.6.1', until: Date.now() + 86400000, skip: true }),
+);
+replies.check = {
+    ok: true,
+    supported: true,
+    current: '2026.11.11.2',
+    latest: '2026.12.6.1',
+    update_available: true,
+    apply_supported: true,
+    signed: false,
+    notes: '',
+    job: { state: 'idle' },
+};
+await run('UpdatePanel.checkNow()');
+report.manualCheck = paint();
+report.manualToast = calls.toast[calls.toast.length - 1];
+
+/* 15. Nothing to offer: the press gets an answer instead of looking broken. */
+replies.check = { ...replies.check, latest: '2026.11.11.2', update_available: false };
+await run('UpdatePanel.checkNow()');
+report.manualLatest = paint();
+report.manualLatestToast = calls.toast[calls.toast.length - 1];
+
+/* 16. A host with no feed (a source checkout) names why, rather than saying nothing. */
+replies.check = { ok: true, supported: false, current: '2026.11.11.2', reason: 'source' };
+await run('UpdatePanel.checkNow()');
+report.manualNoChannel = paint();
+report.manualNoChannelToast = calls.toast[calls.toast.length - 1];
+
 process.stdout.write(JSON.stringify(report));

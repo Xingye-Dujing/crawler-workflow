@@ -2,6 +2,11 @@
     name: 'update',
     en: {
         'update.label': 'Update',
+        'update.checkButton': 'Check for updates',
+        'update.checking': 'Checking for updates…',
+        'update.checkFailed': 'The update check failed: {err}',
+        'update.upToDate': 'You are on the latest version ({version}).',
+        'update.noChannel': 'This build has no update channel (it runs from source); use the packaged installer.',
         'update.available': 'Version {version} is available',
         'update.summary': 'Current version {current}; the latest is {latest}.',
         'update.notes': 'What is new:',
@@ -37,6 +42,11 @@
     },
     zh: {
         'update.label': '更新',
+        'update.checkButton': '检查更新',
+        'update.checking': '正在检查更新…',
+        'update.checkFailed': '检查更新失败：{err}',
+        'update.upToDate': '已是最新版本（{version}）。',
+        'update.noChannel': '这个版本没有更新通道（源码运行），请使用安装包版本。',
         'update.available': '发现新版本 {version}',
         'update.summary': '当前版本 {current}，最新版本 {latest}。',
         'update.notes': '更新内容：',

@@ -18,8 +18,13 @@ const UpdatePanel = {
     _timer: null,
     _polling: false,
     _busy: false,
+    _checking: false,
     _notice: '',
     _announced: '',
+    /* A check the user ASKED for. "Later" / "do not ask again" silences the start-up timer, not a
+       press on the settings-menu button: the person has already said they want to know. Cleared
+       by _hide(). */
+    _manual: false,
     SNOOZE_MS: 24 * 60 * 60 * 1000,
     SNOOZE_KEY: 'update-snooze',
     ANNOUNCE_KEY: 'update-announced',
@@ -28,7 +33,14 @@ const UpdatePanel = {
         try {
             const response = await fetch('/api/update/check');
             const answer = await response.json();
-            if (!answer || !answer.ok || !answer.supported) {
+            if (!answer || !answer.ok) {
+                this._hide();
+                return;
+            }
+            /* The version number is worth painting even on a host that cannot check the feed:
+               it is what the user is running, and the 设置 submenu shows it beside the button. */
+            if (answer.current) this._paintVersion(answer.current);
+            if (!answer.supported) {
                 this._hide();
                 return;
             }
@@ -39,6 +51,70 @@ const UpdatePanel = {
         } catch (err) {
             /* An update check is a convenience; a failed check must not disturb the workspace. */
         }
+    },
+
+    /* The 设置 submenu's 检查更新 button: the same request the start-up timer makes, with an
+       answer for the person who asked. A silent check is right on boot — with no release there is
+       nothing to say — and wrong for a button, where "nothing happened" reads as "it is broken". */
+    async checkNow() {
+        if (this._checking) return;
+        this._checking = true;
+        this._manual = true;
+        if (typeof showToast === 'function') showToast(I18n.t('update.checking'));
+        let answer = null;
+        try {
+            const response = await fetch('/api/update/check');
+            answer = await response.json();
+        } catch (err) {
+            answer = null;
+        } finally {
+            this._checking = false;
+        }
+        if (answer && answer.current) this._paintVersion(answer.current);
+        if (!answer || !answer.ok) {
+            this._manual = false;
+            if (typeof showToast === 'function') {
+                showToast(I18n.t('update.checkFailed', { err: (answer && answer.error) || I18n.t('update.errUnknown') }));
+            }
+            return;
+        }
+        if (!answer.supported) {
+            this._manual = false;
+            if (typeof showToast === 'function') showToast(I18n.t('update.noChannel'));
+            return;
+        }
+        this._info = answer;
+        this._job = answer.job || { state: 'idle' };
+        this._announce(answer);
+        if (answer.feed_error) {
+            this._manual = false;
+            this._hide();
+            if (typeof showToast === 'function') {
+                showToast(I18n.t('update.checkFailed', { err: String(answer.feed_error) }));
+            }
+            return;
+        }
+        const state = String(this._job.state || 'idle');
+        const busy = state !== 'idle' && state !== 'cancelled' && state !== 'applied';
+        if (answer.update_available || busy) {
+            this._render();
+            if (typeof showToast === 'function') {
+                showToast(I18n.t('update.available', { version: String(answer.latest || '') }));
+            }
+            return;
+        }
+        this._manual = false;
+        this._hide();
+        if (typeof showToast === 'function') {
+            showToast(I18n.t('update.upToDate', { version: String(answer.current || '') }));
+        }
+    },
+
+    /* The 设置 submenu shows the version beside its button. Painted from the check's own answer,
+       so the number and the feed are one reading rather than two endpoints' opinions. */
+    _paintVersion(version) {
+        const node = document.getElementById('app-version');
+        if (node) node.textContent = String(version || '');
     },
 
     /* ── the card ───────────────────────────────────────────────────────── */
@@ -171,12 +247,13 @@ const UpdatePanel = {
     _shouldShow(info, job) {
         const state = String(job.state || 'idle');
         const version = String(job.version || info.latest || '');
-        if (state !== 'applying' && this._snoozed(version)) return false;
+        if (state !== 'applying' && !this._manual && this._snoozed(version)) return false;
         if (state !== 'idle' && state !== 'cancelled' && state !== 'applied') return true;
         return !!info.update_available;
     },
 
     _hide() {
+        this._manual = false;
         if (this._card) this._card.hidden = true;
     },
 

@@ -2056,6 +2056,24 @@
         </span>
       </div>
       <div class="dd-divider"></div>
+      <!-- The application's own version and the one manual check for a newer build. Desktop
+           users had no way to ask: the card only ever appeared by itself when a release existed. -->
+      <div class="dd-item-row" id="settings-menu-update">
+        <span data-i18n="update.label">更新</span>
+        <span class="dd-ctrl">
+          <span id="app-version" class="app-version"></span>
+          <button
+            class="panel-close"
+            type="button"
+            id="btn-check-update"
+            onclick="UpdatePanel.checkNow()"
+            data-i18n="update.checkButton"
+          >
+            检查更新
+          </button>
+        </span>
+      </div>
+      <div class="dd-divider"></div>
       <div class="dd-item-row" id="settings-menu-component-source">
         <span data-i18n="set.componentSource">组件来源</span>
         <span class="dd-ctrl">
