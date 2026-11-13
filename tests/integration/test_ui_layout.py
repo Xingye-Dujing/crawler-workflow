@@ -4023,20 +4023,48 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
         answer = driver.execute_cdp_cmd('Page.captureScreenshot', {'format': 'png', 'clip': strip})
         return answer['data']
 
-    # Two captures of the SAME state are the control for everything below. A browser that is still
-    # settling paints two different pictures — measured on the macOS runner: the right-edge strip
-    # (the classic overlay-scrollbar lane) differed between two captures taken a frame apart, while
-    # the same pair was byte-identical on Windows and Linux. Retry the pair instead of quoting the
-    # first one; a page that never settles still fails, and the message says how many pairs were
-    # tried and never matched.
+    def settled_shot(tries=8):
+        """Two consecutive byte-identical captures of the SAME state.
+
+        One capture can catch the compositor mid-repaint: measured on the macOS runner, two shots
+        of one state differed while the same pair was stable on Windows and Linux. Requiring
+        agreement makes "this is the picture" a fact rather than a hope; a page that never agrees is
+        still a failure, reported by the caller.
+        """
+        previous = shot()
+        for _ in range(tries):
+            time.sleep(0.12)
+            current = shot()
+            if current == previous:
+                return current
+            previous = current
+        return previous
+
+    def pixel_difference(first, second):
+        """Where two captures differ, in strip pixels — a message, never the verdict."""
+        try:
+            import base64
+            import io
+
+            from PIL import Image, ImageChops
+
+            left = Image.open(io.BytesIO(base64.b64decode(first))).convert('RGB')
+            right = Image.open(io.BytesIO(base64.b64decode(second))).convert('RGB')
+            box = ImageChops.difference(left, right).getbbox()
+            return f'differing box {box}'
+        except Exception:
+            return 'the PNG bytes differ'
+
     # An ECharts canvas repaints on its own schedule (ink, fade, resize), so a strip over it compares
     # two animation frames rather than two states. The question here is whether the DRAWER paints, so
-    # the canvases are blanked for the comparison; a shadow that reaches them still shows. The
-    # overlay scrollbar in that same right-edge lane fades on its own clock (measured on the macOS
-    # runner: closed vs display:none differed only there), so it is hidden too — this compares the
-    # drawer, not the scrollbar.
+    # the canvases are blanked for the comparison; a shadow that reaches them still shows.
+    # The right-edge lane is also where the OS draws its overlay scrollbar, which fades on its own
+    # clock: a control pair could agree MID-fade and then disagree with the next state. The scrollbar
+    # is removed from the page and the fade given time to finish, so "closed" and "gone" differ only
+    # by the drawer this test is about.
     driver.execute_script(
         """
+        document.documentElement.style.overflow = 'hidden';
         const style = document.createElement('style');
         style.id = 'cixi-no-scrollbar';
         style.textContent = '::-webkit-scrollbar { display: none !important; }';
@@ -4047,30 +4075,29 @@ def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_u
         });
         """
     )
-    closed = control = ''
-    tries = 0
-    while tries < 6:
-        tries += 1
-        closed, control = shot(), shot()
-        if closed == control:
-            break
-        time.sleep(0.2)
+    time.sleep(0.6)
+    closed = settled_shot()
+    control = settled_shot()
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = 'none';")
-    gone = shot()
+    _settle_paint(driver)
+    time.sleep(0.25)
+    gone = settled_shot()
     driver.execute_script("document.getElementById('clipboard-drawer').style.display = '';")
     driver.execute_script(
         """
         document.getElementById('cixi-no-scrollbar')?.remove();
+        document.documentElement.style.overflow = '';
         document.querySelectorAll('canvas').forEach((c) => { c.style.visibility = c.dataset.cixiHidden || ''; });
         """
     )
     assert closed == control, (
         'the browser did not paint two identical states identically, so a pixel comparison here '
-        f'proves nothing and must not be quoted ({tries} capture pairs agreed on nothing; strip {strip}, {measured})'
+        f'proves nothing and must not be quoted ({pixel_difference(closed, control)}; strip {strip}, {measured})'
     )
     assert closed == gone, (
         'the closed drawer is not identical to the same box at display:none — it still paints '
-        f'something the hit test cannot see (a shadow or an edge) (strip {strip}, {measured})'
+        f'something the hit test cannot see (a shadow or an edge) ({pixel_difference(closed, gone)}; '
+        f'strip {strip}, {measured})'
     )
 
 
