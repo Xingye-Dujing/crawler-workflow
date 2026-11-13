@@ -68,6 +68,12 @@ tzdata==2026.2
 # build pins the same versions in desktop/requirements-runtime.txt.
 pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
 pythonnet==3.0.5; sys_platform == "win32"
+# The Windows tray icon (desktop/tray.py). Imported lazily at runtime and pinned here WITHOUT a
+# platform marker: the product lint tier lints ``desktop/`` on all three CI runners, and a
+# conditional install would report import-error on the two platforms that never import it at run
+# time. pip installs pystray's own backend (python-xlib on Linux, PyObjC on macOS) by marker, and the
+# packaged Windows build pins the same version in desktop/requirements-runtime.txt.
+pystray==0.19.5
 # desktop/patch_manifest.py rewrites the Inno Setup outer manifest to requireAdministrator; the
 # product pylint tier imports every desktop tool, so this small pure-Python PE reader belongs in a
 # clean dev environment too (the build venv already carries it through PyInstaller).

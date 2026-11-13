@@ -88,6 +88,10 @@ hiddenimports += [
     'AppKit',
     'WebKit',
     'PyObjCTools.AppHelper',
+    # The notification-only desktop shell. ``macos_entry`` imports ``desktop_entry.start_desktop_shell``
+    # inside ``main`` and that helper imports ``tray`` — function-level imports, so both are stated.
+    'desktop_entry',
+    'tray',
 ]
 
 excludes = [

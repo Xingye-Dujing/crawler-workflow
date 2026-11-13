@@ -73,3 +73,8 @@ Pillow==12.3.0
 # macOS install and the Cocoa stack off Windows.
 pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
 pythonnet==3.0.5; sys_platform == "win32"
+# The tray icon (desktop/tray.py). Windows only: the macOS build posts notifications through the
+# PyObjC stack the window already pulls in and, by convention, has no status-bar item (the Dock icon
+# is the affordance). pystray talks to Shell_NotifyIcon through ctypes and needs Pillow, which the
+# build already carries for matplotlib.
+pystray==0.19.5; sys_platform == "win32"

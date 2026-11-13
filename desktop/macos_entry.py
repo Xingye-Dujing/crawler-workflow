@@ -307,6 +307,9 @@ def main(argv=None) -> int:
 
     runtime_state.register_shutdown(native_window.close)
 
+    # The same desktop shell both entry points use. On macOS it is notification-only: the Dock icon
+    # is always there, so a status-bar item would be a second affordance for the same window.
+    shell = None
     try:
         import webview
 
@@ -323,11 +326,20 @@ def main(argv=None) -> int:
         )
 
         window.events.closed += closed
+        from desktop_entry import start_desktop_shell
+
+        try:
+            shell = start_desktop_shell(root, on_quit=native_window.close)
+        except Exception:
+            # A notification channel that cannot start must not stop the window from opening.
+            print(f'托盘与系统通知没有启动（不影响使用）：{traceback.format_exc(limit=1).strip()}', file=sys.stderr)
         webview.start(private_mode=False, storage_path=str(root / 'webview'))
     except Exception:
         fail('窗口没能打开。请把日志发给维护者。', root, traceback.format_exc())
         exit_code = 1
     finally:
+        if shell is not None:
+            shell.stop()
         release_window()
         # Same rule as the Windows launcher: a closed window (or a failed one) ends the process.
         # The Cocoa host leaves threads behind, and the interpreter would otherwise wait for them

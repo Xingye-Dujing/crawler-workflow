@@ -164,6 +164,27 @@ def close() -> None:
         window.destroy()
 
 
+def show_window() -> bool:
+    """Bring the main window back (the tray's 显示主窗口 / a double-start).
+
+    ``False`` when no window exists yet. A minimised WebView2 window is restored through
+    pywebview first; on Windows the native API then raises it above other windows, because
+    ``restore()`` alone can leave it behind the one the user is looking at.
+    """
+    window = _WINDOW
+    if window is None:
+        return False
+    shown = False
+    for action in ('restore', 'show'):
+        with contextlib.suppress(Exception):
+            getattr(window, action)()
+            shown = True
+    if os.name == 'nt':
+        with contextlib.suppress(Exception):
+            shown = activate(os.getpid()) or shown
+    return shown
+
+
 def run(
     title: str,
     url: str,

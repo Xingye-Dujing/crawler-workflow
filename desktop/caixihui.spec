@@ -120,6 +120,14 @@ hiddenimports += [
     'webview.platforms.winforms',
     'webview.platforms.edgechromium',
     'clr',
+    # The tray icon, imported lazily inside ``desktop/tray.py::DesktopShell.start``. pystray has no
+    # PyInstaller hook of its own; without these two the packaged app starts with no tray and no
+    # system notifications, and nothing says why.
+    'pystray',
+    'pystray._win32',
+    # ``desktop/tray.py`` itself is imported inside ``start_desktop_shell`` (the launcher stays
+    # import-light until the data root is settled), so the analysis needs the name stated.
+    'tray',
 ]
 
 # Optional/heavy stacks that are NOT part of the packaged runtime. The app already

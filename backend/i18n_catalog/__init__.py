@@ -18,6 +18,7 @@ from i18n_catalog import (
     components,
     cookie,
     crawl,
+    desktop,
     pool,
     run,
     sched,
@@ -38,4 +39,5 @@ MODULES = (
     settings,
     accounts,
     components,
+    desktop,
 )

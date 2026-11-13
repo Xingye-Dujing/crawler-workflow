@@ -103,6 +103,9 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   设置子菜单里的“更新”一行显示当前版本，并带一个“检查更新”按钮——随时手动查一次，不受“稍后 /
   不再提示此版本”影响，查完用一句话说明“已是最新”或“发现新版本”；
   组件目录和用户数据不会被更新碰。源码运行不执行自更新。
+  主窗口跑起来后还有一个 Windows 系统托盘图标（`desktop/tray.py`）：右键“显示主窗口 / 打开数据目录 /
+  退出”，运行完成、运行失败、定时任务开始会弹系统通知，最小化后也能知道结果；托盘右键是系统原生菜单，
+  外观跟随系统亮/暗（OMM-ZEN 只用于应用窗口）。macOS 只用系统通知，不建状态栏项。
   同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（安装时读 `version.json`
   取最新主程序 DMG，再下载 Chrome/Node 装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像
   Windows 一样下载并连同 Node 一起装好。

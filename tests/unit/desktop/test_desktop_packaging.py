@@ -516,6 +516,9 @@ class TestTheBuildKnowsEveryPackage:
             'webview.platforms.winforms',
             'webview.platforms.edgechromium',
             'clr',
+            # The tray icon: imported lazily in desktop/tray.py, so the analysis cannot see it.
+            'pystray',
+            'pystray._win32',
             # Function-level import in services/update.py; PyInstaller is told explicitly.
             'cryptography.hazmat.primitives.serialization',
             'cryptography.hazmat.primitives.asymmetric.ed25519',

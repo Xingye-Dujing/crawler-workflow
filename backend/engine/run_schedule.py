@@ -123,4 +123,10 @@ def start_scheduled_run(task: dict, manual: bool) -> dict:
         # own yet (the queue narrates when it starts) and a refusal has none at all — that one is
         # recorded in the task's own history, which is where the user looks for it.
         add_log(t('sched.firedManual' if manual else 'sched.fired', name=name))
+        if not manual:
+            # A scheduled fire happens with nobody at the desk; that is the one start worth a system
+            # notification. ``_fire`` already pinned this thread's language to the task's own.
+            from services import desktop
+
+            desktop.notify(t('desktop.schedStartTitle'), t('desktop.schedStartBody', name=name))
     return {'ok': True, 'queued': queued, 'run_id': str(body.get('run_id') or ''), 'error': ''}

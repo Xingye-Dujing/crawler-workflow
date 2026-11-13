@@ -61,6 +61,14 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Installer
 主程序窗口由 `desktop_entry.py` / `macos_entry.py` 以 `maximized=True` 打开；首次主题默认浅色，设置里的
 “自动/浅色/深色”仍可改。
 
+**托盘与系统通知**（`desktop/tray.py`）：Windows 启动后会有一个系统托盘图标，右键是“显示主窗口 /
+打开数据目录 / 退出”；运行完成、运行失败、定时任务开始会弹一条系统通知，最小化后也能知道结果。
+**右键菜单是 Windows 原生菜单**（`TrackPopupMenu`），外观（含亮/暗）由系统绘制——OMM-ZEN 的纸面与
+发丝线只属于应用窗口，原生菜单不接受配色；要让菜单本身变成 OMM-ZEN 只能自绘弹窗，代价是失去系统键盘
+导航、读屏和多屏 DPI。`--no-window` 与源码运行不创建托盘、也不发通知。macOS 按平台惯例不建状态栏项，
+只用本进程的 `NSUserNotification` 发同样的通知（Dock 图标始终在，关闭窗口仍等于退出）。托盘菜单文字
+用服务端默认语言（中文）：界面语言是浏览器 `localStorage` 里的选择，托盘在窗口加载前就已就绪，无从得知。
+
 **exe 是窗口程序**（`console=False`），且**双击先请求管理员**（spec 的 `uac_admin=True`，manifest
 为 `requireAdministrator`）：UAC 在 onefile 解包之前出现，机器对未提权进程禁止 `%TEMP%` 写入时也能
 解包。主程序本身不带管理员清单。固定端口让页面来源保持稳定，语言/主题（`localStorage`）下次打开仍然

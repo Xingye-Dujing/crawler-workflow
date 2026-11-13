@@ -658,6 +658,41 @@ def seed_bert_models(
         }
 
 
+def start_desktop_shell(data_root, icon_path=None, *, on_show=None, on_quit=None):
+    """Create the tray / notification shell and install it as the server's notifier.
+
+    Imported lazily: ``tray`` asks ``i18n`` for its menu words, and ``i18n`` only exists once
+    ``_join_backend`` has put ``backend/`` on ``sys.path``. A host with no shell (a source run, a
+    Linux deploy) gets ``None`` and the app behaves exactly as before.
+    """
+    import tray
+
+    from services import desktop
+
+    if icon_path is None:
+        # Frozen builds carry ``static/`` at the bundle root; a source run keeps it under
+        # ``backend/``. Either way the tray shows the product's own art, never a guessed path.
+        for candidate in (
+            resource_dir() / 'static' / 'icon.png',
+            Path(__file__).resolve().parents[1] / 'backend' / 'static' / 'icon.png',
+        ):
+            if candidate.is_file():
+                icon_path = candidate
+                break
+    shell = tray.DesktopShell(
+        title=DISPLAY_NAME,
+        icon_path=icon_path,
+        on_show=on_show if on_show is not None else native_window.show_window,
+        on_quit=on_quit,
+        on_open_data=lambda: tray.open_folder(data_root),
+    )
+    error = shell.start()
+    if error:
+        _print_safe(error)
+    desktop.set_notifier(shell.notify)
+    return shell
+
+
 def _update_marker(data_root) -> Path:
     """Where the swapper says it is replacing files.
 
@@ -930,10 +965,18 @@ def main(argv=None) -> int:
     else:
         runtime_state.register_shutdown(native_window.close)
 
+    shell = None
     try:
         if no_window:
             server.serve_forever()
         else:
+            # After the server is listening and before the window blocks this thread: a run that
+            # finishes while the window is minimised reaches the user through the OS. A tray that
+            # cannot start is a lost convenience, never a reason to stop the window from opening.
+            try:
+                shell = start_desktop_shell(root, on_quit=native_window.close)
+            except Exception:
+                _print_safe(f'托盘与系统通知没有启动（不影响使用）：{traceback.format_exc(limit=1).strip()}')
             failure = native_window.run(
                 DISPLAY_NAME,
                 url,
@@ -954,6 +997,8 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        if shell is not None:
+            shell.stop()
         release_window()
         if not no_window:
             # Closing the window must end the program, not leave a windowless process whose mutex

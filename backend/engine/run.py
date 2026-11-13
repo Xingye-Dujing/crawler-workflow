@@ -903,6 +903,34 @@ def _invalidate_rerun_nodes(store, run_id: str, rerun) -> list:
     return list(rerun['node_ids'])
 
 
+def _notify_run_outcome(workflow_name: str, outcome: str) -> None:
+    """One system notification when a run really ends.
+
+    The window may be minimised for hours, so a finish that only exists in the console is a finish
+    nobody sees. A Stop is excluded on purpose (the user just pressed it), and so is a refusal before
+    any node ran (``total_nodes == 0``): the panel is already saying that.
+    """
+    if outcome not in (RUN_COMPLETED, RUN_FAILED):
+        return
+    from services import desktop
+
+    if not desktop.active():
+        return
+    total = int(execution_state.get('total_nodes') or 0)
+    if not total:
+        return
+    done = int(execution_state.get('completed_nodes') or 0)
+    name = str(workflow_name or '').strip() or t('desktop.untitled')
+    if outcome == RUN_COMPLETED:
+        desktop.notify(t('desktop.runDoneTitle'), t('desktop.runDoneBody', name=name, done=done, total=total))
+        return
+    failed = int(execution_state.get('failed_nodes') or 0)
+    desktop.notify(
+        t('desktop.runFailedTitle'),
+        t('desktop.runFailedBody', name=name, failed=failed, done=done, total=total),
+    )
+
+
 def _run_worker(
     workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None, rerun=None
 ):
@@ -1251,6 +1279,11 @@ def _run_worker(
             # would leave the last run's answer standing on screen.
             if not execution_state['outcome']:
                 execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
+        # The verdict is final; only now is a system notification true. It sits before the
+        # housekeeping below so a slow database sweep cannot delay the popup, and it is a no-op on
+        # a host with no desktop shell (a source run, a cloud deploy).
+        with contextlib.suppress(Exception):
+            _notify_run_outcome(workflow_name, outcome)
         # Retention is only real if something applies it. A finished run is
         # the natural moment: the databases are open, no writer is active and
         # the user just proved the machine is in use.
