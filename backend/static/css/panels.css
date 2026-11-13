@@ -143,6 +143,11 @@
   flex: 1;
   min-height: 200px;
   width: 100%;
+  /* ECharts paints into an absolutely-positioned canvas. A canvas that ends up taller than this
+     host (a stale size after the replay bar took its row) would otherwise paint OVER that bar:
+     positioned boxes paint above in-flow siblings, and the play button stopped answering the
+     mouse. Clipping to the host is what a chart surface means anyway. */
+  overflow: hidden;
 }
 #chart-preview-image {
   margin: auto;
@@ -220,6 +225,9 @@
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* Same rule as the preview host: a stale, absolutely-positioned canvas must never paint over
+     the replay bar below it. */
+  overflow: hidden;
 }
 #chart-fullscreen-image {
   margin: auto;
