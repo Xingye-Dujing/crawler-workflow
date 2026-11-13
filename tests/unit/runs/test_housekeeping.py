@@ -173,6 +173,20 @@ class TestGate:
         assert keeper.maybe_run() is not None
         assert runs.calls == ['', '']
 
+    def test_a_callable_interval_is_asked_on_every_sweep(self):
+        """The setting behind the gate is a runtime value: a saved change applies at the
+        next sweep, not only after a restart (the panel showed the new figure at once)."""
+        clock = _Clock()
+        runs = _FakeRunStore()
+        window = {'seconds': 3600}
+        keeper = Housekeeping(runs, _FakeDatasetStore(), interval_seconds=lambda: window['seconds'], clock=clock)
+        keeper.maybe_run()
+        clock.advance(61)
+        assert keeper.maybe_run() is None, 'premise: still inside the default hour'
+        window['seconds'] = 60
+        assert keeper.maybe_run() is not None, 'a shortened interval must open the gate at the next call'
+        assert runs.calls == ['', '']
+
     def test_a_failed_sweep_still_consumes_the_window(self):
         """A locked database retried after every single run would be hammered;
         the gate opens on the attempt, not on the success."""

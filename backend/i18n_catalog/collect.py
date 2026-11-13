@@ -114,6 +114,10 @@ ZH = {
         ' —— 本次收尾原因是“{reason}”'
     ),
     'comment.xhsNoPanel': '[小红书评论] 评论区没有渲染出来（可能被折叠、需要登录或页面未加载）：{url}',
+    'comment.xhsRedirected': (
+        '[小红书评论] 这条链接没有打开成笔记页：站点把浏览器留在了 {landed}（通常是 xsec_token 已过期被送回首页），'
+        '评论区不会出现，这条按失效处理：{url}'
+    ),
     'comment.xhsShort': (
         '[小红书评论] {url}：站点写着 {declared} 条评论（含楼中楼），本次取到 {rows} 条'
         ' + 未能展开的回复 {nested} 条（还差 {gap} 条）—— 本次收尾原因是“{reason}”'
@@ -352,6 +356,11 @@ EN = {
     'comment.xhsNoPanel': (
         '[xiaohongshu comments] the comment panel never rendered '
         '(collapsed, login-only, or the page did not load): {url}'
+    ),
+    'comment.xhsRedirected': (
+        '[xiaohongshu comments] this link did not open as a note page: the site left the browser on '
+        '{landed} (usually an aged-out xsec_token sending it back to the feed), so no comment panel can '
+        'mount — treated as a dead link: {url}'
     ),
     'comment.xhsShort': (
         '[xiaohongshu comments] {url}: the page says {declared} comments (nested replies included),'

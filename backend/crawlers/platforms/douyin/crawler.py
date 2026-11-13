@@ -401,7 +401,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 # from the shared walk burned five minutes on an author grid whose cards it cannot see —
                 # and threw the answer away, because this loop re-reads through ``read_ids`` anyway.
                 waited_for_swap = True
-                feed.wait_for(lambda: len(read_ids()), 1, timeout=pacing.wait(self.SCROLL_WAIT), tick=1.0)
+                feed.wait_for(lambda: len(read_ids()), 1, timeout=pacing.scroll_wait(self.SCROLL_WAIT), tick=1.0)
                 continue
             screens += 1
             on_screen = list(read_ids())
@@ -496,7 +496,7 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
                 return True
             if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
                 return False
-            pacing.nap(2.0)
+            pacing.wait_nap(2.0)
         return any(mark in self._body_text(limit=4000) for mark in marks)
 
     def _card_ids(self, anchor: str | None = None) -> list:
@@ -572,12 +572,14 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
         ``site_end`` — a stalled read stays a named shortfall, never a quiet success.
         """
         before = len(set(self._grid_ids()))
-        deadline = time.monotonic() + pacing.wait(self.SCROLL_WAIT)
+        deadline = time.monotonic() + pacing.scroll_wait(self.SCROLL_WAIT)
         grew = False
         while not self.may_stop() and time.monotonic() < deadline:
             with contextlib.suppress(Exception):
                 feed.jump_to_bottom(self.driver, self.PROFILE_GRID)
-            settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=pacing.wait(3.0), tick=0.5)
+            settled = feed.wait_for(
+                lambda: len(set(self._grid_ids())), before + 1, timeout=pacing.scroll_wait(3.0), tick=0.5
+            )
             if settled > before:
                 grew = True
                 break

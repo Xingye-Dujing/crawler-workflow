@@ -399,7 +399,7 @@ def _expand_reply_threads(session) -> int:
             ActionChains(session.driver).move_to_element(btn).pause(0.1).click().perform()
             clicked += 1
     if clicked:
-        session.nap(1.3)  # one settle for all the signed reply requests this round issued
+        session.expand_nap(1.3)  # one settle for all the signed reply requests this round issued
         # A failed thread pops “评论已删除 / 不可见” — clear it so it can't block the rest of the panel.
         _dismiss_popup(session)
     return clicked
@@ -526,4 +526,4 @@ def _scroll_panel(session) -> bool:
     before = count()
     with contextlib.suppress(Exception):
         feed.jump_to_bottom(session.driver, '[data-e2e="comment-list"]')
-    return bool(feed.wait_for(count, before + 1, timeout=pacing.wait(6.0), tick=0.5) > before)
+    return bool(feed.wait_for(count, before + 1, timeout=pacing.scroll_wait(6.0), tick=0.5) > before)

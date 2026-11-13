@@ -297,7 +297,6 @@ const Settings = {
         parallel: true,
         headless: true,
         menuPinned: true,
-        zoom: 1,
         lang: 'zh',
         radius: 2,
         reusableAutoLayout: true,
@@ -309,7 +308,6 @@ const Settings = {
             parallel: RunState.parallel,
             headless: RunState.headless,
             menuPinned: document.getElementById('top-menu').classList.contains('pinned'),
-            zoom: canvas.zoom,
             lang: document.body.dataset.lang || 'zh',
             radius: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--radius'), 10) || 2,
             reusableAutoLayout: (function () {

@@ -2486,6 +2486,26 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 的 `--login-check/--login/--walk/--complete-check/--tail-check`。**探针会写 `data/users/<id>/chrome_profile/xiaohongshu`，
 不要和 fast suite 并行**（`tests/unit/gates/test_test_tiers.py` 的只读会话断言会撞上）。
 
+#### “一直停在主页，连第一条笔记都没打开”＝链接被送回 feed（2026-11-13）
+
+用户报的是开着慢速采集后采小红书评论，浏览器停在 `xiaohongshu.com` 首页不动。走查本身只做
+`session.driver.get(笔记URL)` 一次，所以“停在首页”只有一种来源：**站点把这条笔记 URL 重定向回了 feed**
+（`/explore`，实测 `?source=web_explore_feed`）——笔记 URL 只认活的 `xsec_token`，token 过期/被剥掉就送回首页。
+旧代码在 `note_id(current)` 为空时**直接跳过**“打开的是另一篇”的判断，接着读面板、读到 0 个卡片、按
+`comment.xhsNoPanel` 记一条 `ok` 并 `mark_unproven`，浏览器就一直留在首页上——控制台既不说是链接失效，也不说
+为什么没有评论；慢速采集把每次 `nap` 拉长，主页上停留的时间成倍放大，就是用户看到的“一直停着”。
+
+现在有单独一支：链接没有打开成笔记页（`note_id` 为空）→ 控制台点名 `comment.xhsRedirected`（带实际落点 URL）→
+返回 `DEAD`（是这条链接的事实，不冤枉会话、不 latch 登录墙/风控），不再滚首页、不再读不存在的面板。判重定向之前
+仍按到达节奏等一次（`arrival_nap`，慢速预设 ×1.6 而不是原来的礼貌停顿 ×4），因为客户端的跳转要等它跳完。
+
+**同一症状的另一半：`xsec_source`。** 站点自己的“复制链接”给的是
+`…?xsec_token=…&xsec_source=pc_feed`；一条**没有** `xsec_source`（或值为空）的链接对站点不是同一个请求，可能被送回
+feed。所以两处导航（数据源节点的笔记详情 `_scrape_note`、评论走查的 `session.driver.get`）现在都经过
+`rows.with_feed_source`：缺就补 `pc_feed`，**原来非空就原样保留**（`pc_search`/`pc_user` 是站点为那个入口签发的）；
+只改请求，不改行里的 `笔记链接`/`文章URL`，身份与校验口径不动。只处理 `xiaohongshu.com` 主域，`xhslink.com` 短链
+原样交给站点跳转；签过名的 `xsec_token` 逐字符透传，不重新编码。
+
 ### 采集校验拿什么和“评论数”比（口径，2026-11-11）
 
 采集校验节点（`nodes/executors/verify.py`）的条数校验比较的是**结果表里同一链接的行数**与**清单行上站点自己印的

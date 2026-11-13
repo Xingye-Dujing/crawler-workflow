@@ -789,6 +789,20 @@ def life(tmp_path_factory, capabilities_matrix):
             'reload': True,
             'loadResponse': {'ok': False, 'missing': True, 'error': 'gone'},
         },
+        {
+            # Boot silently re-reads the file this browser already had open. That is not the
+            # user opening a canvas, so the run switches they last set must survive: reading
+            # the file's stale mode/headless back is what reset 并行/无头 on every restart.
+            'id': 'reload_keeps_run_switches',
+            'storedOpenFile': '甲流程',
+            'hasDraft': True,
+            'restore': True,
+            'reload': True,
+            'loadResponse': {
+                'ok': True,
+                'workflow': dict(opened, settings={'mode': 'serial', 'headless': False}),
+            },
+        },
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
         {
             # The camera a person panned to must ride into the saved file.
@@ -926,6 +940,14 @@ class TestFileLifecycle:
     def test_a_file_without_settings_changes_neither(self, life):
         """An absent block is "leave the user's choice alone", not "reset it"."""
         assert life['load_without_settings']['runState'] == []
+
+    def test_a_boot_reload_does_not_reset_the_run_switches(self, life):
+        """The remembered file is re-read on every start; that must not overwrite the
+        switch the user last set (their browser-level choice), or 并行/无头 reset on
+        every launch — the complaint this scenario pins."""
+        assert life['reload_keeps_run_switches']['runState'] == [], (
+            'a boot re-read of the already-open file applied its settings to the run bar'
+        )
 
     def test_opening_a_file_looks_through_the_camera_it_was_saved_with(self, life):
         """“保存时的视角跟读取得到的视角不一样” was the complaint: the file knew

@@ -618,9 +618,11 @@ class _XhsDriver:
         self._lands_on = lands_on
         self.scripts = []
         self.clicks = []
+        self.gets = []
         self.login_modal = False
 
     def get(self, url):
+        self.gets.append(url)
         self.current_url = self._lands_on or url
 
     def find_element(self, by, selector):
@@ -670,8 +672,13 @@ class _FakeActionChains:
 
 @pytest.fixture
 def xhs_chains(monkeypatch):
-    """The walk clicks natively (douyin's measurement); a unit test performs that click itself."""
+    """The walk clicks natively (douyin's measurement); a unit test performs that click itself.
+
+    Pacing sleeps are cancelled here too: the walk pays a page-arrival settle and an expand
+    settle, and a unit test must not spend them in real seconds.
+    """
     monkeypatch.setattr('crawlers.platforms.xiaohongshu.comments.ActionChains', _FakeActionChains)
+    monkeypatch.setattr('crawlers.engine.pacing.time.sleep', lambda _seconds: None)
 
 
 class _XhsOwner:
@@ -700,6 +707,28 @@ def _xhs_walk(panel, *, limit=0, log=None, abort=None, **kwargs):
 
 
 class TestXhsAdapter:
+    def test_the_walk_asks_for_the_note_with_the_sites_own_feed_source(self, xhs_chains):
+        """A note URL with no ``xsec_source`` is opened as ``?xsec_source=pc_feed``.
+
+        That is the spelling the site's own 复制链接 hands out for a web-feed note; asking
+        without it is what leaves the browser on the feed with no note and no panel.
+        """
+        panel = _XhsPanel([{'own': _xhs_comment('a1', '甲', '评论'), 'subs': [], 'hidden': []}], total='共 1 条评论')
+        (rows, status), driver = _xhs_walk(panel)
+        assert status == OK and len(rows) == 1
+        assert driver.gets == [XHS_NOTE + '?xsec_source=pc_feed'], driver.gets
+
+    def test_a_source_the_link_already_names_is_kept(self, xhs_chains):
+        panel = _XhsPanel([{'own': _xhs_comment('a1', '甲', '评论'), 'subs': [], 'hidden': []}], total='共 1 条评论')
+        link = XHS_NOTE + '?xsec_token=TOK&xsec_source=pc_search'
+        session = CommentSession(
+            _XhsDriver(panel, url=link),
+            log=lambda message: None,
+            nap=lambda seconds: None,
+        )
+        session.walk('xiaohongshu', link, 0)
+        assert session.driver.gets == [link], 'the site issued pc_search for this link; keep it'
+
     def test_a_reply_is_filed_under_its_parent_with_a_continuous_floor(self, xhs_chains):
         """The measured shape: replies are siblings of their parent's card, one per parent by default.
 
@@ -958,13 +987,54 @@ class TestXhsAdapter:
     def test_a_link_that_opens_another_note_is_dead_not_the_users_cookie(self, xhs_chains):
         said = []
         panel = _XhsPanel(
-            [{'own': _xhs_comment('a1', '甲', '别人的评论'), 'subs': [], 'hidden': []}], total='共 1 条评论'
+            [{'own': _xhs_comment('a1', '甲', '别人的评论'), 'subs': [], 'hidden': []}], total='共 3 条评论'
         )
         (rows, status), _driver = _xhs_walk(
             panel, log=said.append, lands_on='https://www.xiaohongshu.com/explore/6ad2076d000000000a01f058'
         )
         assert rows == [] and status == DEAD
         assert i18n.t('comment.xhsGone', url=XHS_NOTE, shown='6ad2076d000000000a01f058') in said, said
+
+    def test_a_link_sent_back_to_the_feed_is_named_dead_not_walked_as_an_empty_note(self, xhs_chains):
+        """The “stuck on the homepage” shape: an aged-out xsec_token lands on /explore.
+
+        The old walk read the missing note id as "no comment panel", returned ok and moved on
+        to the next link — the browser never opened a note, and nothing said why. It is a fact
+        about THIS link (the site never served the note), so it is DEAD and named.
+        """
+        said = []
+        panel = _XhsPanel([])
+        panel.mounted = False
+        (rows, status), driver = _xhs_walk(
+            panel, log=said.append, lands_on='https://www.xiaohongshu.com/explore?source=web_explore_feed'
+        )
+        assert rows == [] and status == DEAD
+        assert (
+            i18n.t(
+                'comment.xhsRedirected',
+                url=XHS_NOTE,
+                landed='https://www.xiaohongshu.com/explore?source=web_explore_feed',
+            )
+            in said
+        ), said
+        assert driver.owner.login_wall is False and driver.owner.risk_blocked is False, (
+            'a dead link must not accuse the session'
+        )
+        assert driver.clicks == [], 'nothing is scrolled or expanded on a page that is not the note'
+
+    def test_a_short_link_still_resolving_is_retryable_not_dead(self, xhs_chains):
+        """Only a landing ON xiaohongshu.com without a note id convicts the link.
+
+        A share link (``xhslink.com``) or a browser still on its own page has not landed yet;
+        the walk leaves the cursor on it so 继续 re-walks it instead of filing it dead.
+        """
+        said = []
+        panel = _XhsPanel([])
+        panel.mounted = False
+        (rows, status), driver = _xhs_walk(panel, log=said.append, lands_on='https://xhslink.com/aBcDeF')
+        assert rows == [] and status == OK
+        assert i18n.t('comment.xhsNoPanel', url=XHS_NOTE) in said, said
+        assert driver.owner.skipped_targets == [XHS_NOTE]
 
     def test_a_stop_ends_the_walk_without_claiming_the_thread_ran_out(self, xhs_chains):
         said = []

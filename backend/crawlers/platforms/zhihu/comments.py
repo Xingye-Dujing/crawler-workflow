@@ -197,7 +197,7 @@ _TRIED_SET_JS = "arguments[0].setAttribute('data-zhihu-tried', '1');"
 def walk(session, url: str, limit: int) -> tuple:
     """One question/answer page: open every comment button, drain each panel."""
     session.driver.get(url)
-    session.nap(6)
+    session.arrival_nap(6)
     if looks_blocked(session.body_head()):
         session.mark_blocked()
         return [], BLOCKED
@@ -213,10 +213,10 @@ def walk(session, url: str, limit: int) -> tuple:
         declared = int(match.group(1))
         with contextlib.suppress(Exception):
             session.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', btn)
-            session.nap(0.4)
+            session.wait_nap(0.4)
             btn.click()
             opened += 1
-            session.nap(2)
+            session.expand_nap(2)
             rows.extend(_drain_panel(session, url, limit, declared))
         if limit and len(rows) >= limit:
             break
@@ -243,10 +243,10 @@ def _click_reply_threads(session) -> int:
             continue
         with contextlib.suppress(Exception):
             session.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', el)
-            session.nap(0.2)
+            session.wait_nap(0.2)
             el.click()
             clicked += 1
-            session.nap(0.4)
+            session.expand_nap(0.4)
         with contextlib.suppress(Exception):
             session.driver.execute_script(_TRIED_SET_JS, el)
     return clicked
@@ -259,7 +259,7 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
     while True:
         rounds += 1
         session.driver.execute_script(PUMP_JS)
-        session.nap(0.6)
+        session.scroll_nap(0.6)
         threads = _click_reply_threads(session)
         batch = session.driver.execute_script(PANEL_JS) or []
         fresh = []

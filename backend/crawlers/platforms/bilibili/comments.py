@@ -131,7 +131,7 @@ def walk(session, url: str, limit: int) -> tuple:
     from crawlers.platforms.bilibili.crawler import bilibili_bvid
 
     session.driver.get(url)
-    session.nap(3)
+    session.arrival_nap(3)
     if looks_blocked(session.body_head()):
         session.mark_blocked()
         return [], BLOCKED

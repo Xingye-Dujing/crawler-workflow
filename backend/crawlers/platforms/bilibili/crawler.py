@@ -265,7 +265,7 @@ class BilibiliCrawler(VideoCrawler):
             mark=mark,
             stopped=lambda: self.login_wall or self.may_stop() or self._watermark_hit,
             stuck_rounds=pacing.rounds(2),
-            settle_wait=pacing.wait(self.CARD_WAIT),
+            settle_wait=pacing.scroll_wait(self.CARD_WAIT),
             window=self._on_screen_key,
         )
         logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))

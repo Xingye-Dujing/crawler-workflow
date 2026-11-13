@@ -565,7 +565,7 @@ class CnkiCrawler(Crawler):
                     return
             except WebDriverException:
                 pass
-            pacing.nap(0.5)
+            pacing.poll_tick(0.5)
 
     def _click_download_button(self) -> bool:
         """Wait for the export page's 导出题录文件 link and click it.
@@ -593,7 +593,7 @@ class CnkiCrawler(Crawler):
                     return True
             except WebDriverException:
                 pass
-            pacing.nap(0.5)
+            pacing.poll_tick(0.5)
         return False
 
     @staticmethod
@@ -624,10 +624,10 @@ class CnkiCrawler(Crawler):
             if files:
                 # A download is complete when the progress file is gone; one more
                 # look after a short pause is enough for the browser to rename it.
-                pacing.nap(0.5)
+                pacing.poll_tick(0.5)
                 if not any(p.suffix == '.crdownload' for p in Path(folder).iterdir()):
                     return max(files, key=lambda p: p.stat().st_mtime)
-            pacing.nap(0.5)
+            pacing.poll_tick(0.5)
         return None
 
     @staticmethod

@@ -62,6 +62,15 @@ class CommentSession:
         self._owner = owner
         self.log = log or (lambda msg: None)
         self.nap = nap or pacing.nap
+        # One pause per kind of operation, so a walk says WHICH interval it is paying for
+        # instead of lumping a scroll, an 展开 and a polite page interval onto one knob. An
+        # injected ``nap`` (a test double, or a caller that wants a fast walk) covers every
+        # dimension: a session asked not to sleep must not sleep through the new names.
+        self.scroll_nap = pacing.scroll_nap if nap is None else nap
+        self.expand_nap = pacing.expand_nap if nap is None else nap
+        self.click_nap = pacing.click_nap if nap is None else nap
+        self.arrival_nap = pacing.arrival_nap if nap is None else nap
+        self.wait_nap = pacing.wait_nap if nap is None else nap
         # "May I stop?" — the same predicate the crawlers carry, because a comment
         # node reads hundreds of pages and the node handler only asks between URLs.
         self._abort = abort
@@ -114,7 +123,7 @@ class CommentSession:
 
     def mark_unreachable(self) -> None:
         """Latch a network-level failure on the owning crawler, for the pool to name."""
-        owner = getattr(self, 'owner', None)
+        owner = self._owner
         if owner is not None:
             with contextlib.suppress(Exception):
                 owner.unreachable = True

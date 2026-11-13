@@ -62,7 +62,11 @@ sandbox.AppSettings = {
     _values: {},
     preset: null,
     readOnly: false,
+    refreshes: 0,
     applyToPanel() {},
+    refreshAfterSave() {
+        this.refreshes += 1;
+    },
     applyPresetState(preset) {
         this.preset = preset && preset.active ? preset : null;
     },
@@ -141,6 +145,9 @@ answer = { ok: true, settings: { crawl_pace_scale: 2.5, same_platform_queue: fal
 await Panel.save();
 const saveCall = posted.filter((c) => c.url === '/api/settings' && c.method === 'POST').pop();
 out.save = { body: saveCall && saveCall.body, toast: toasts[toasts.length - 1] };
+/* A save must re-ask the two boot-time catalogues the new values feed (new-node
+   defaults, the CatBus engine list), or the canvas keeps describing the old config. */
+out.save.refreshes = sandbox.AppSettings.refreshes;
 
 /* ── reset a field to the declared default ─────────────────────────────── */
 Panel.resetField('crawl_pace_scale');
@@ -150,8 +157,10 @@ out.reset = { value: sandbox.__byId('sp-crawl_pace_scale').value, draft: Panel.d
 posted.length = 0;
 answer = { ok: true, settings: { crawl_pace_scale: 4.0 }, warnings: [], preset: { active: 'slow', customized: false } };
 await Panel.applyPreset();
+out.presetRefreshes = sandbox.AppSettings.refreshes;
 await Panel.restorePreset();
 out.preset = posted.filter((c) => c.url === '/api/settings/preset').map((c) => c.body.action);
+out.presetRefreshesAfterRestore = sandbox.AppSettings.refreshes;
 
 /* ── export carries the user's machine-path choice ─────────────────────── */
 sandbox.__byId('settings-include-machine').checked = true;

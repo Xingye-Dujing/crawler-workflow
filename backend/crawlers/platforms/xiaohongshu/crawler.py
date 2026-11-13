@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.engine import feed, pacing, times
 from crawlers.engine.counters import parse_count
-from crawlers.platforms.xiaohongshu.rows import note_id
+from crawlers.platforms.xiaohongshu.rows import note_id, with_feed_source
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ class XiaohongshuCrawler(Crawler):
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
             stuck_rounds=pacing.rounds(self.STUCK_ROUNDS),
-            settle_wait=pacing.wait(self.CARD_WAIT),
+            settle_wait=pacing.scroll_wait(self.CARD_WAIT),
         )
 
         # U1 migration: xiaohongshu's grid publishes NO total and NO end-of-list marker the code
@@ -296,8 +296,13 @@ class XiaohongshuCrawler(Crawler):
         # stop the harvest and turn a run into a resume (U55's shape) — the grid re-checks
         # the session on its own, so a single walled detail is read with the *non-latching*
         # verdict and named dead, while the crawl keeps collecting the rest.
-        self.open(url, judge=False)
-        if self.verdict(url) != 'ok':
+        #
+        # The navigation asks for the site's own web-feed spelling (``xsec_source=pc_feed``)
+        # when the card's link names no source; an existing source (``pc_search`` from the
+        # grid) is kept as issued. The row keeps the card's link, so identity never moves.
+        target = with_feed_source(url)
+        self.open(target, judge=False)
+        if self.verdict(target) != 'ok':
             logger.info(t('crawl.xhs.deadNote', url=url))
             return None
         try:
@@ -307,7 +312,7 @@ class XiaohongshuCrawler(Crawler):
             logger.info(t('crawl.xhs.detail_ready'))
         except TimeoutException:
             # Re-read after the wait: a session that died mid-load shows a wall only now.
-            if self.verdict(url) != 'ok':
+            if self.verdict(target) != 'ok':
                 logger.info(t('crawl.xhs.deadNote', url=url))
                 return None
             logger.warning(t('crawl.xhs.detail_timeout'))
@@ -366,7 +371,7 @@ class XiaohongshuCrawler(Crawler):
         for _ in range(max(0, polls - 1)):
             if text:
                 break
-            pacing.nap(0.2)
+            pacing.wait_nap(0.2)
             text = self._text_of(self.driver, selector)
         return text
 

@@ -56,7 +56,6 @@ class Setting:
     restart: bool = False
     secret: bool = False
     presets: tuple = field(default_factory=tuple)
-    unit: str = ''
 
 
 # ─── Groups (panel order) ────────────────────────────────────────────────────
@@ -210,12 +209,56 @@ SETTINGS = (
         presets=('slow',),
     ),
     Setting(
+        'crawl_scroll_scale',
+        'float',
+        1.0,
+        'pace',
+        'set.crawlScrollScale',
+        hint='set.crawlScrollScaleHint',
+        minimum=0.25,
+        maximum=10.0,
+        presets=('slow',),
+    ),
+    Setting(
+        'crawl_expand_scale',
+        'float',
+        1.0,
+        'pace',
+        'set.crawlExpandScale',
+        hint='set.crawlExpandScaleHint',
+        minimum=0.25,
+        maximum=10.0,
+        presets=('slow',),
+    ),
+    Setting(
+        'crawl_click_scale',
+        'float',
+        1.0,
+        'pace',
+        'set.crawlClickScale',
+        hint='set.crawlClickScaleHint',
+        minimum=0.25,
+        maximum=10.0,
+        presets=('slow',),
+    ),
+    Setting(
         'crawl_wait_scale',
         'float',
         1.0,
         'pace',
         'set.crawlWaitScale',
         hint='set.crawlWaitScaleHint',
+        minimum=0.5,
+        maximum=5.0,
+        presets=('slow',),
+    ),
+    Setting(
+        'crawl_arrival_scale',
+        'float',
+        1.0,
+        'pace',
+        'set.crawlArrivalScale',
+        hint='set.crawlArrivalScaleHint',
         minimum=0.5,
         maximum=5.0,
         presets=('slow',),
@@ -322,7 +365,6 @@ SETTINGS = (
         hint='set.poolCooldownHint',
         minimum=60,
         maximum=604800,
-        unit='s',
     ),
     Setting(
         'pool_network_cooldown_seconds',
@@ -333,7 +375,6 @@ SETTINGS = (
         hint='set.poolNetworkCooldownHint',
         minimum=0,
         maximum=86400,
-        unit='s',
     ),
     Setting(
         'pool_max_attempts',
@@ -747,7 +788,11 @@ PRESETS = {
         'hint': 'set.presetSlowHint',
         'values': {
             'crawl_pace_scale': 4.0,
+            'crawl_scroll_scale': 3.0,
+            'crawl_expand_scale': 3.0,
+            'crawl_click_scale': 3.0,
             'crawl_wait_scale': 2.0,
+            'crawl_arrival_scale': 1.6,
             'crawl_patience_scale': 2.0,
             'same_platform_queue': True,
             'cookie_preflight_before_run': True,
@@ -778,7 +823,6 @@ def schema_payload() -> dict:
                 'restart': s.restart,
                 'secret': s.secret,
                 'presets': list(s.presets),
-                'unit': s.unit,
             }
             for s in SETTINGS
         ],

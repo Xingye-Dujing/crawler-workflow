@@ -31,7 +31,7 @@ from crawlers.commenting.walks import register
 from crawlers.engine import times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.wall import classify
-from crawlers.platforms.xiaohongshu.rows import note_id
+from crawlers.platforms.xiaohongshu.rows import note_id, with_feed_source
 from i18n import stop_reason_label, t
 
 #: One page-side round trip per screen: the whole panel as data.
@@ -280,7 +280,7 @@ def _dismiss_login(session) -> None:
     # The dialog is dismissed through the control the site renders; nothing is hidden by us.
     with contextlib.suppress(Exception):
         session.driver.execute_script(LOGIN_CLOSE_JS)
-    session.nap(0.6)
+    session.click_nap(0.6)
 
 
 def _login_modal_up(session) -> bool:
@@ -359,7 +359,7 @@ def _expand_threads(session, panel: dict, state: dict) -> tuple:
                 clicked_cards.append(card)
         if not clicked_cards:
             return 0, False
-        session.nap(EXPAND_SETTLE)
+        session.expand_nap(EXPAND_SETTLE)
         if _login_modal_up(session):
             # The site answered the whole batch with "log in to see replies" — dismissing it and
             # clicking the rest would only pay for the same dialog again.
@@ -433,8 +433,12 @@ def walk(session, url: str, limit: int) -> tuple:
     screens used to end this walk quietly, which made “怎么采不满” look like “这条笔记就这么多评论”.
     """
     expected = note_id(url)
-    session.driver.get(url)
-    session.nap(5)
+    # The site's own web-feed links carry ``xsec_source=pc_feed``; a pasted link that names no
+    # source can be served the feed instead of the note (the "stuck on the homepage" shape), so
+    # the navigation URL gets that one parameter filled in. The row identity stays the URL the
+    # user gave us — only what we ask the site for changes.
+    session.driver.get(with_feed_source(url))
+    session.arrival_nap(5)
     current = session.driver.current_url or ''
     # One shared classifier decides arrival, not a 600-character body sniff: the URL carries XHS's
     # login redirect, the browser's own error page is `unreachable`, and `login` vs `blocked` are
@@ -458,6 +462,18 @@ def walk(session, url: str, limit: int) -> tuple:
         session.mark_risk_blocked()
         return [], BLOCKED
     shown = note_id(current)
+    if expected and not shown and 'xiaohongshu.com' in str(current or '').lower():
+        # The link did not open a note AT ALL. Measured shape (docs/crawler_notes.md): a note URL
+        # whose ``xsec_token`` has aged out is redirected to the feed (``/explore``), so the browser
+        # sits on the site's homepage, no comment panel ever mounts, and the old code walked every
+        # remaining link the same way while reporting nothing. That is the "为什么一直停在主页"
+        # symptom, and it is a DEAD link rather than an empty note: the site never served the note.
+        #
+        # Gated on the host: a short link (``xhslink.com``) or a browser still on its own start page
+        # has not landed anywhere yet, and that stays on the retryable "no panel" path below rather
+        # than convicting a link that may merely still be resolving.
+        session.log(t('comment.xhsRedirected', url=url, landed=current or '?'))
+        return [], DEAD
     if expected and shown and shown != expected:
         # The link opened ANOTHER note (a dead/aged token lands on the feed or on a substitute).
         # A row nobody asked for is worse than a missing one, so it is DEAD, not BLOCKED: the session
@@ -521,7 +537,7 @@ def walk(session, url: str, limit: int) -> tuple:
             quiet = 0
         key = current
         _scroll_panel(session)
-        session.nap(1.2)
+        session.scroll_nap(1.2)
 
     rows = parse_xhs_threads(threads, url)
     if expand['gated']:

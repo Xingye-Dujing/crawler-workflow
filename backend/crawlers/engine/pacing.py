@@ -5,14 +5,23 @@ per-platform numbers (how long douyin needs for its skeleton rows, how many stuc
 rounds zhihu tolerates before giving up) stay next to the code that was measured
 against the site — they are **facts about the site**, not configuration. What the
 user controls, globally, is how much extra time and patience to spend on top of those
-baselines:
+baselines, **one dimension at a time** so a slow scroll can be separated from a slow
+expand:
 
-* ``crawl_pace_scale``    — polite pauses and in-walk naps;
-* ``crawl_wait_scale``    — card / modal / detail / arrival waits;
-* ``crawl_patience_scale``— stuck rounds, retry counts.
+* ``crawl_pace_scale``     — polite pauses between network rounds, and in-walk naps;
+* ``crawl_scroll_scale``   — the pause after a scroll, and the wait for it to land;
+* ``crawl_expand_scale``   — the pause after 展开/更多 and the wait for it to mount;
+* ``crawl_click_scale``    — the pause after any other UI click (tab, dismiss, dialog);
+* ``crawl_wait_scale``     — card / panel / detail element waits;
+* ``crawl_arrival_scale``  — the first-navigation settle (page arrival);
+* ``crawl_patience_scale`` — stuck rounds, retry counts.
 
-The 慢速采集 preset writes these three plus a few safety switches as concrete values,
-which is why nothing here multiplies a second "gentle" factor: one scale, one result.
+They used to be three (pause / wait / patience) and the 慢速采集 preset wrote them as
+concrete values. Painting every pause with one brush meant a user who needed a longer
+scroll interval paid the same multiplier on every reply expansion and every polite
+round; the split is what lets “scroll slowly, expand normally” be one settings page
+instead of one compromise. Each dimension is still applied exactly once, and the
+preset writes concrete values for every dimension, so no multiplier stacks.
 """
 
 import random
@@ -20,29 +29,77 @@ import time
 
 from runtime.settings import get_setting
 
+#: Dimensions that are multipliers on a measured baseline. Patience is a count scale and
+#: is floored at 1 (never fewer rounds than the site measurement needed).
+_PAUSE_DIMENSIONS = ('pause', 'scroll', 'expand', 'click', 'wait', 'arrival')
 
-def pace_scale() -> float:
-    """How much to stretch every politeness pause and in-walk nap."""
+
+def _raw(dimension: str) -> object:
+    """The stored value for one dimension.
+
+    Written as literal ``get_setting`` calls rather than a table lookup so the settings
+    coverage gate can see every key this module really reads (it follows a literal
+    argument, never a dict subscript).
+    """
+    if dimension == 'scroll':
+        return get_setting('crawl_scroll_scale')
+    if dimension == 'expand':
+        return get_setting('crawl_expand_scale')
+    if dimension == 'click':
+        return get_setting('crawl_click_scale')
+    if dimension == 'wait':
+        return get_setting('crawl_wait_scale')
+    if dimension == 'arrival':
+        return get_setting('crawl_arrival_scale')
+    if dimension == 'patience':
+        return get_setting('crawl_patience_scale')
+    return get_setting('crawl_pace_scale')
+
+
+def _scale(dimension: str) -> float:
+    """The user's multiplier for one dimension, falling back to the baseline 1.0."""
     try:
-        return max(0.0, float(get_setting('crawl_pace_scale')))
+        value = float(_raw(dimension))
     except (TypeError, ValueError):
         return 1.0
+    if dimension == 'patience':
+        return max(1.0, value)
+    return max(0.0, value)
+
+
+def pace_scale() -> float:
+    """How much to stretch a politeness pause (kept as the pause dimension's own name)."""
+    return _scale('pause')
+
+
+def scroll_scale() -> float:
+    """How much to stretch the pause/wait that belongs to scrolling."""
+    return _scale('scroll')
+
+
+def expand_scale() -> float:
+    """How much to stretch the pause/wait that belongs to 展开/展开更多."""
+    return _scale('expand')
+
+
+def click_scale() -> float:
+    """How much to stretch the settle that follows a plain UI click."""
+    return _scale('click')
 
 
 def wait_scale() -> float:
     """How much to stretch UI/content waits (not the page-arrival failure budget)."""
-    try:
-        return max(0.0, float(get_setting('crawl_wait_scale')))
-    except (TypeError, ValueError):
-        return 1.0
+    return _scale('wait')
+
+
+def arrival_scale() -> float:
+    """How much to stretch a page-arrival settle (never the arrival failure budget)."""
+    return _scale('arrival')
 
 
 def patience_scale() -> float:
     """How many more rounds/retries to allow on top of the measured baseline."""
-    try:
-        return max(1.0, float(get_setting('crawl_patience_scale')))
-    except (TypeError, ValueError):
-        return 1.0
+    return _scale('patience')
 
 
 def page_wait_timeout() -> float:
@@ -61,35 +118,51 @@ def max_pending_waits() -> int:
         return 2
 
 
-def wait(base: float) -> float:
-    """A UI/content wait (card, modal, detail) scaled by the user's choice."""
-    return max(0.0, float(base)) * wait_scale()
+# ─── sleeps ─────────────────────────────────────────────────────────────────
+# Every pause below is ``measured baseline × that dimension's multiplier``. A negative
+# request is a no-op wait, never a raised floor: this scales a pause, it does not impose
+# a minimum.
 
 
-def arrival(base: float) -> float:
-    """A page-arrival style wait scaled by the user's choice."""
-    return max(0.0, float(base)) * wait_scale()
-
-
-def rounds(base: int | float) -> int:
-    """A loop/retry count scaled by the user's patience setting, never below one."""
-    return max(1, int(round(float(base) * patience_scale())))
-
-
-def throttled_sleep(seconds: float) -> None:
-    """Sleep *seconds*, stretched by the global pace scale.
-
-    A negative or zero request is a no-op wait, never a raised floor: this scales a
-    pause, it does not impose a minimum.
-    """
-    delay = max(0.0, float(seconds)) * pace_scale()
+def _sleep_scaled(seconds: float, dimension: str) -> None:
+    delay = max(0.0, float(seconds)) * _scale(dimension)
     if delay > 0:
         time.sleep(delay)
 
 
+def throttled_sleep(seconds: float) -> None:
+    """Sleep *seconds*, stretched by the politeness (pause) multiplier."""
+    _sleep_scaled(seconds, 'pause')
+
+
 def nap(seconds: float) -> None:
-    """A pause inside a walk (comment engines, platform screens) — same rule as sleep."""
+    """A pause inside a walk (a polite page interval) — same rule as sleep."""
     throttled_sleep(seconds)
+
+
+def scroll_nap(seconds: float) -> None:
+    """The pause that lets one scroll's content mount before the next read."""
+    _sleep_scaled(seconds, 'scroll')
+
+
+def expand_nap(seconds: float) -> None:
+    """The pause that lets a clicked 展开/更多 batch mount before the next read."""
+    _sleep_scaled(seconds, 'expand')
+
+
+def click_nap(seconds: float) -> None:
+    """The settle after a plain UI click (a tab, a dialog's close control, a menu)."""
+    _sleep_scaled(seconds, 'click')
+
+
+def arrival_nap(seconds: float) -> None:
+    """The settle after a navigation, before the page is read for the first time."""
+    _sleep_scaled(seconds, 'arrival')
+
+
+def wait_nap(seconds: float) -> None:
+    """A poll pause while waiting for content to hydrate inside an already-open page."""
+    _sleep_scaled(seconds, 'wait')
 
 
 def poll_tick(seconds: float) -> None:
@@ -113,6 +186,39 @@ def polite(base: float = 1.0, spread: float = 0.4) -> None:
     throttled_sleep(max(0.2, float(base) + random.uniform(-float(spread), float(spread))))
 
 
+# ─── waits and round counts ─────────────────────────────────────────────────
+
+
+def wait(base: float) -> float:
+    """A UI/content wait (card, panel, detail element) scaled by the wait multiplier."""
+    return max(0.0, float(base)) * wait_scale()
+
+
+def scroll_wait(base: float) -> float:
+    """How long one scroll's content may take to arrive, scaled by the scroll multiplier."""
+    return max(0.0, float(base)) * scroll_scale()
+
+
+def expand_wait(base: float) -> float:
+    """How long one expand batch may take to mount, scaled by the expand multiplier."""
+    return max(0.0, float(base)) * expand_scale()
+
+
+def click_wait(base: float) -> float:
+    """How long a click-triggered surface (a modal, a menu) may take, scaled by the click multiplier."""
+    return max(0.0, float(base)) * click_scale()
+
+
+def arrival(base: float) -> float:
+    """A page-arrival wait scaled by the arrival multiplier."""
+    return max(0.0, float(base)) * arrival_scale()
+
+
+def rounds(base: int | float) -> int:
+    """A loop/retry count scaled by the user's patience setting, never below one."""
+    return max(1, int(round(float(base) * patience_scale())))
+
+
 def gentle_crawl_on() -> bool:
-    """Compatibility read: whether the user has stretched pacing beyond the baseline."""
-    return pace_scale() > 1.0
+    """Compatibility read: whether the user has stretched any pacing dimension beyond the baseline."""
+    return any(_scale(dimension) > 1.0 for dimension in _PAUSE_DIMENSIONS)

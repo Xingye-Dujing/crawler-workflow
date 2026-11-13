@@ -202,7 +202,7 @@ class TestLayoutStrategy:
     def test_a_load_with_history_single_goes_through_the_batch(self, wfh):
         assert wfh['load_wrapper'] == {'batch_calls': 1, 'direct_calls': 2}
         source = WORKFLOW_JS.read_text(encoding='utf-8')
-        assert "options.history === 'single'" in source
+        assert "opts.history === 'single'" in source
         assert 'canvas.batchHistory' in source
 
     def test_the_history_table_repaints_in_chinese_without_a_request(self, wfh):

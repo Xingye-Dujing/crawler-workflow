@@ -94,7 +94,7 @@ class _UserStores:
                 self._housekeeper = Housekeeping(
                     self.run_store(),
                     self.dataset_store(),
-                    interval_seconds=max(0, int(get_setting('housekeeping_interval_minutes'))) * 60,
+                    interval_seconds=lambda: max(0, int(get_setting('housekeeping_interval_minutes'))) * 60,
                 )
         return self._housekeeper
 
@@ -258,7 +258,7 @@ def get_housekeeper() -> Housekeeping:
                 _HOUSEKEEPER = Housekeeping(
                     get_run_store(),
                     get_dataset_store(),
-                    interval_seconds=max(0, int(get_setting('housekeeping_interval_minutes'))) * 60,
+                    interval_seconds=lambda: max(0, int(get_setting('housekeeping_interval_minutes'))) * 60,
                 )
     return _HOUSEKEEPER
 

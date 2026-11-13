@@ -22,13 +22,20 @@ class Housekeeping:
     def __init__(self, run_store, dataset_store, interval_seconds: float = 3600, clock=time.time):
         self._run_store = run_store
         self._dataset_store = dataset_store
-        self._interval = max(0.0, float(interval_seconds))
+        # A number, or a callable asked once per sweep. The setting behind it is a
+        # runtime value: resolving it at construction made a saved change wait for the
+        # next process start, while the panel showed the new figure at once.
+        self._interval = interval_seconds if callable(interval_seconds) else max(0.0, float(interval_seconds))
         self._clock = clock
         self._lock = threading.Lock()
         # None means "never swept", which is different from "swept at the epoch":
         # a gate that compared against 0 would not open until a full interval had
         # already elapsed since the process started.
         self._last = None
+
+    def _interval_seconds(self) -> float:
+        raw = self._interval() if callable(self._interval) else self._interval
+        return max(0.0, float(raw))
 
     def run_now(self, exclude_run_id='') -> dict:
         """Sweep unconditionally. Returns what went; never raises on a store
@@ -89,7 +96,7 @@ class Housekeeping:
         """Sweep only once the gate has elapsed. Returns None when skipped."""
         with self._lock:
             now = self._clock()
-            if self._last is not None and now - self._last < self._interval:
+            if self._last is not None and now - self._last < self._interval_seconds():
                 return None
             self._last = now
         return self.run_now(exclude_run_id=exclude_run_id)

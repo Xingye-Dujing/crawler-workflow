@@ -115,6 +115,16 @@ const AppSettings = {
         if (window.LLMSettings) LLMSettings.renderOllamaHost();
     },
 
+    /* A save can change what the CANVAS offers, not just how a crawl behaves: the new-node
+       defaults are seeded from /api/node-types, and the CatBus component paths decide which
+       engine a platform offers in /api/capabilities. Both are fetched at boot, so after a save
+       (or a preset apply/restore) they must be asked again — otherwise the panel shows the new
+       number while the next node/engine list keeps the old one until the page is reloaded. */
+    refreshAfterSave() {
+        if (typeof NodeTypes !== 'undefined' && NodeTypes && NodeTypes.load) NodeTypes.load();
+        if (typeof Capabilities !== 'undefined' && Capabilities && Capabilities.load) Capabilities.load();
+    },
+
     async save() {
         // The server refuses this anyway; refusing here is what keeps the user from typing a
         // whole field and meeting a 403 with no explanation of which door was locked.
@@ -139,6 +149,7 @@ const AppSettings = {
                 this._values = result.settings || {};
                 this._draft = {};
                 this.applyToPanel();
+                this.refreshAfterSave();
                 const warns = result.warnings || [];
                 if (warns.length) {
                     showToast(I18n.t('toast.setSavedWarn') + ' ' + warns.join('；'));

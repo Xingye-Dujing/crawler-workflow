@@ -121,7 +121,7 @@ def walk(session, url: str, limit: int) -> tuple:
         # walk waits for the ids on screen to change, not for more nodes.
         window=lambda: str(session.driver.execute_script(WINDOW_LINKS_JS) or ''),
         stuck_rounds=pacing.rounds(3),
-        settle_wait=pacing.wait(4.0),
+        settle_wait=pacing.scroll_wait(4.0),
         stopped=session.may_stop,
     )
     if not rows and walk_result.stopped_reason == 'no_cards':
@@ -138,4 +138,4 @@ def walk(session, url: str, limit: int) -> tuple:
 def _scroll_replies(session):
     """Scroll the reply page the way a person does, then let it settle."""
     session.driver.execute_script('window.scrollBy(0, window.innerHeight * 1.4);')
-    session.nap(1.2)
+    session.scroll_nap(1.2)

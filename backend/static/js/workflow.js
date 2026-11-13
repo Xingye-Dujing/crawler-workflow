@@ -115,7 +115,10 @@ const workflow = {
                 var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
                 var result = await resp.json();
                 if (result && result.ok && result.workflow) {
-                    loaded = this.loadFromJSON(result.workflow);
+                    /* A boot re-read of the file this browser already had open: the run
+                       switches are the user's browser-level choice, so this refresh must
+                       not reset them (see `keepRunSwitches` in `_loadFromJSON`). */
+                    loaded = this.loadFromJSON(result.workflow, { keepRunSwitches: true });
                     if (loaded) canvas.markSaved();
                 } else if ((resp && resp.status === 404) || (result && result.missing)) {
                     /* The remembered name outlived the file: a fresh data root, a delete, a
@@ -297,13 +300,15 @@ const workflow = {
     /* Restoring a snapshot is ONE undo step. The file-open path is unchanged: it
        deliberately records its own entries (a file load is not a canvas edit). */
     loadFromJSON(workflowData, options) {
-        if (options && options.history === 'single') {
-            return canvas.batchHistory(() => this._loadFromJSON(workflowData));
+        var opts = options || {};
+        if (opts.history === 'single') {
+            return canvas.batchHistory(() => this._loadFromJSON(workflowData, opts));
         }
-        return this._loadFromJSON(workflowData);
+        return this._loadFromJSON(workflowData, opts);
     },
 
-    _loadFromJSON(workflowData) {
+    _loadFromJSON(workflowData, options) {
+        var opts = options || {};
         /* Checked BEFORE anything is torn down: the old order cleared the canvas,
            then died on `workflowData.nodes.forEach` for a file without a node
            list, so opening a foreign or half-written JSON cost the user the
@@ -362,12 +367,18 @@ const workflow = {
            opening a file saved as parallel/headless left the bar where it was — and
            the next 保存 then wrote the WRONG settings back over the file, quietly
            converting the workflow the user had configured. An absent key still means
-           "leave the panel alone", which is what older files expect. */
-        if (settings.mode === 'serial' || settings.mode === 'parallel') {
-            RunState.set('parallel', settings.mode === 'parallel');
-        }
-        if (typeof settings.headless === 'boolean') {
-            RunState.set('headless', settings.headless);
+           "leave the panel alone", which is what older files expect.
+           `keepRunSwitches` is the boot re-read of the file this browser already had
+           open: that is not the user opening a canvas, and the switch they last set
+           must win — otherwise every restart silently reset 并行/无头 to whatever the
+           file happened to be saved with (never updated by a mere toolbar click). */
+        if (!opts.keepRunSwitches) {
+            if (settings.mode === 'serial' || settings.mode === 'parallel') {
+                RunState.set('parallel', settings.mode === 'parallel');
+            }
+            if (typeof settings.headless === 'boolean') {
+                RunState.set('headless', settings.headless);
+            }
         }
         canvas.disabledTypes = Array.isArray(settings.disabledTypes) ? settings.disabledTypes.slice() : [];
         /* …and the fifth read-back is the CAMERA. A file saved after 适应/自动排布

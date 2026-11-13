@@ -48,9 +48,11 @@
 
 定义在 `runtime/settings_schema.py` 的 `SETTINGS`（一个键一条 `Setting`，含类型、范围、分组、中英文标签、读取方与是否可导出）；`runtime/settings.py` 只负责加载、校验、持久化、预设与导入导出。设置面板由 `GET /api/settings/schema` 动态渲染，新增键不需要再手写输入框。
 
-**慢速采集**是一套预设（`PRESETS['slow']`），不是单独的开关：它把节奏/等待/耐心三个倍数、同平台排队、跑前 Cookie 验证与并发上限写成具体值，并保存启用前的快照；设置页或顶栏按钮可一键启用、一键恢复。相关的三个全局倍数是 `crawl_pace_scale`、`crawl_wait_scale`、`crawl_patience_scale`，平台自身只保留实测基线，不再有自己的开关。
+**慢速采集**是一套预设（`PRESETS['slow']`），不是单独的开关：它把七个速度倍数（礼貌停顿 / 滚动 / 展开 / 点击 / 元素等待 / 页面到达 / 耐心）、同平台排队、跑前 Cookie 验证与并发上限写成具体值，并保存启用前的快照；设置页或顶栏按钮可一键启用、一键恢复。七个倍数各自只作用于自己那一类操作，平台自身只保留实测基线，不再有自己的开关——需要“滚动慢一点、展开照旧”时改对应的那一个，而不是把整轮采集一起拖慢。
 
 **设置导出/导入**：`GET /api/settings/export`、`POST /api/settings/import`。默认只导出可移植值，机器路径要显式包含；导入先 `dry_run` 预览，再按 `merge`（默认）或 `replace` 应用，未知键与本机路径会逐项报告。
+
+**保存即生效**：`get_setting` 读的是进程内的最新值，所以保存后下一次采集/下一次开浏览器就用新值；只有三条标了 `restart` 的键（组件来源、日志大小、日志备份数）要重启，设置页会给它们挂“重启生效”徽标。前端在保存（以及应用/恢复预设）后会重新拉 `/api/node-types` 与 `/api/capabilities`，因此“新节点默认值”和 CatBus 引擎列表当场刷新，不会出现“数值改了、拖出来的节点还是旧默认值”。顶栏的并行/无头是浏览器级偏好（`localStorage`），启动时不会被自动重开的那个文件里的旧值覆盖。
 
 | 键 | 说明 |
 |------|------|
@@ -70,7 +72,7 @@
 | `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
 | `max_visible_browsers` / `max_headless_browsers` | 一次并行运行最多同时开几台浏览器，按本次是窗口 / 无头分别取（默认都取 `DEFAULT_MAX_WORKERS=4`；窗口比无头更费机器）。串行轮流，不受此限 |
 | `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；**默认开**，开后上一轮的行不会留到下一轮） |
-| `crawl_pace_scale` / `crawl_wait_scale` / `crawl_patience_scale` | 全局节奏 / 等待 / 耐心倍数（默认都是 1，即各平台实测基线）。慢速预设写入 4 / 2 / 2；一键恢复回到启用前的值。`gentle_crawl` 旧键在首次读取时迁移成 `crawl_pace_scale=4` |
+| `crawl_pace_scale` / `crawl_scroll_scale` / `crawl_expand_scale` / `crawl_click_scale` / `crawl_wait_scale` / `crawl_arrival_scale` / `crawl_patience_scale` | 七个互相独立的速度倍数：礼貌停顿 / 滚动间隔（含滚动后等新内容）/ 展开间隔（含展开后等回复挂上）/ 点击后稳定（含弹层出现）/ 元素等待 / 页面到达稳定 / 耐心重试。默认都是 1，即各平台实测基线。慢速预设写入 4 / 3 / 3 / 3 / 2 / 1.6 / 2；一键恢复回到启用前的值。`gentle_crawl` 旧键在首次读取时迁移成 `crawl_pace_scale=4` |
 | `page_wait_timeout` | 一页首次内容的总预算（秒，默认 300；原 `Config.PAGE_WAIT_TIMEOUT`） |
 | `wall_retry_backoff` / `wall_proofs` / `wall_poll` | 首行前撞墙的退避、连续读墙次数与复读间隔 |
 | `nav_retry` / `nav_settle` / `max_pending_waits` | 导航重试、重试前等待、连续未到达页面的熔断次数 |

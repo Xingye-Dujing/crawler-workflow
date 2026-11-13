@@ -143,7 +143,7 @@ class PlayerUI:
             win = self.window()
             if win is not None:
                 return win
-            pacing.nap(0.5)
+            pacing.poll_tick(0.5)
         return None
 
     def wait_content(self, seconds: float = 60.0):
@@ -164,7 +164,7 @@ class PlayerUI:
                 hit = self._find(win, '推荐', 'ButtonControl')
                 if hit is not None:
                     return win
-            pacing.nap(1.5)
+            pacing.poll_tick(1.5)
         return None
 
     def _find_until(self, needle, ctype=None, seconds: float = 10.0):
@@ -175,7 +175,7 @@ class PlayerUI:
             hit = self._find(self.window(), needle, ctype)
             if hit is not None:
                 return hit
-            pacing.nap(0.5)
+            pacing.poll_tick(0.5)
         return None
 
     def collect(self, max_depth: int = 20):
@@ -290,7 +290,7 @@ class PlayerUI:
             rank = self._find_until('排行榜', 'ButtonControl', seconds=20)
             if rank is None or not self._click(rank):
                 return False
-            pacing.nap(4)
+            pacing.click_nap(4)
             for label in self._board_labels():
                 self._check_stopped()
                 # Progress the user can see: without it a drama absent from every board grinds
@@ -312,14 +312,14 @@ class PlayerUI:
                     hit = self._play_for_title(title, items)
                     if hit is not None:
                         self._click(hit)
-                        pacing.nap(3.0)
+                        pacing.click_nap(3.0)
                         return True
                     # Re-activate before scrolling: the board's own re-render can drop the window
                     # from the foreground, and a wheel on a non-foreground window scrolls nothing
                     # (the “滚动几次又不动” the user saw — until a manual click foregrounded it).
                     self._activate()
                     self._ensure_library().WheelDown(wheelTimes=3, interval=0.12)
-                    pacing.nap(2.0)
+                    pacing.scroll_nap(2.0)
             return False
         except CrawlerStopped:
             # 停止 is not a search that failed. Swallowed here it would file the drama the
@@ -350,7 +350,7 @@ class PlayerUI:
         labels = []
         toggle = self._board_toggle()
         if toggle is not None and self._click(toggle):
-            pacing.nap(1.5)
+            pacing.click_nap(1.5)
             labels = self._visible_boards()
         return labels or self._visible_boards() or list(_FALLBACK_BOARDS)
 
@@ -384,12 +384,12 @@ class PlayerUI:
             toggle = self._board_toggle()
             if toggle is None or not self._click(toggle):
                 return False
-            pacing.nap(1.5)
+            pacing.click_nap(1.5)
             option = self._board_option(label)
         if option is None:
             return False
         clicked = self._click(option)
-        pacing.nap(3.5)
+        pacing.click_nap(3.5)
         return clicked
 
     def _board_option(self, label: str):
@@ -493,7 +493,7 @@ class PlayerUI:
             with contextlib.suppress(Exception):
                 win.SetFocus()
             auto.SendKeys('{Down}')
-            pacing.nap(1.5)
+            pacing.click_nap(1.5)
             return True
         except Exception as exc:
             logger.debug('hongguo harvest: next_episode failed: %s', exc)
@@ -518,7 +518,7 @@ class PlayerUI:
                 auto.SendKeys('{PageDown}{PageDown}')
             else:
                 auto.WheelDown(wheelTimes=5 if attempt else 2, interval=0.15)
-            pacing.nap(1.2)
+            pacing.scroll_nap(1.2)
             return True
         except Exception as exc:
             logger.debug('hongguo harvest: scroll_drawer failed: %s', exc)
@@ -528,7 +528,7 @@ class PlayerUI:
         """Press ESC so a reply box that grabbed the keyboard gives it back to the drawer."""
         try:
             self._ensure_library().SendKeys('{Esc}')
-            pacing.nap(0.4)
+            pacing.click_nap(0.4)
         except Exception as exc:
             logger.debug('hongguo harvest: composer dismiss failed: %s', exc)
 
@@ -623,7 +623,7 @@ class PlayerUI:
             if not self._click(target):
                 break
             clicked += 1
-            pacing.nap(1.0)
+            pacing.expand_nap(1.0)
         self.dismiss_composer()
         if clicked:
             self._log(t('crawl.hg.cmt.repliesExpanded', n=clicked))

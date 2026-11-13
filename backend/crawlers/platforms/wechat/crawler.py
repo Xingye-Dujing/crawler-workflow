@@ -341,7 +341,7 @@ class WechatCrawler(Crawler):
 
         # Retry once after a short wait
         logger.debug(t('crawl.debug.content_retry'))
-        pacing.nap(0.1)
+        pacing.wait_nap(0.1)
         text = re.sub(r'\n\s*\n', '\n', self._node_text(self._content_node()))
         if not text:
             logger.warning(t('crawl.wechat.no_content'))

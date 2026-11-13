@@ -202,7 +202,7 @@ def walk(session, url: str, limit: int) -> tuple:
         current = session.driver.current_url or ''
         if not current.startswith('https://weibo.com'):
             session.driver.get('https://weibo.com/')
-            session.nap(2)
+            session.arrival_nap(2)
     except Exception:
         pass
     raw = ''

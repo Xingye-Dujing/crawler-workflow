@@ -22,6 +22,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 import crawlers.core.crawler as base_module
 from crawlers.core.crawler import UNDER_TARGET, Crawler
 from crawlers.platforms.xiaohongshu.crawler import XiaohongshuCrawler as Xhs
+from crawlers.platforms.xiaohongshu.rows import with_feed_source
 from i18n import t
 
 pytestmark = pytest.mark.unit
@@ -29,6 +30,54 @@ pytestmark = pytest.mark.unit
 SEARCH = 'https://www.xiaohongshu.com/search_result?keyword=%E4%B8%89%E4%BA%9A&type=51'
 NOTE = 'https://www.xiaohongshu.com/explore/abcdef?xsec_token=xyz'
 RENDERER_TIMEOUT = 'timeout: Timed out receiving message from renderer: -0.001'
+
+
+class TestFeedSource:
+    """``xsec_source`` is filled with the value the site's own web-feed links carry.
+
+    Measured shape from the user's 复制链接: ``…?xsec_token=…&xsec_source=pc_feed``. A link
+    without a source is not the same request to this site — it can be served the feed
+    instead of the note — while a source the site issued for another entry point
+    (``pc_search``, ``pc_user``) is part of the link and must come back untouched.
+    """
+
+    def test_a_link_with_no_source_gains_the_feed_source(self):
+        assert (
+            with_feed_source('https://www.xiaohongshu.com/explore/6ad81a29000000002c011778?xsec_token=ABEN')
+            == 'https://www.xiaohongshu.com/explore/6ad81a29000000002c011778?xsec_token=ABEN&xsec_source=pc_feed'
+        )
+
+    def test_a_link_with_no_query_gains_a_query(self):
+        assert (
+            with_feed_source('https://www.xiaohongshu.com/explore/6ad81a29000000002c011778')
+            == 'https://www.xiaohongshu.com/explore/6ad81a29000000002c011778?xsec_source=pc_feed'
+        )
+
+    def test_an_existing_source_is_kept_verbatim(self):
+        link = 'https://www.xiaohongshu.com/search_result/6ad81a29?xsec_token=A&xsec_source=pc_search'
+        assert with_feed_source(link) == link
+
+    def test_an_empty_source_is_filled(self):
+        assert (
+            with_feed_source('https://www.xiaohongshu.com/explore/6ad81a29?xsec_token=A&xsec_source=')
+            == 'https://www.xiaohongshu.com/explore/6ad81a29?xsec_token=A&xsec_source=pc_feed'
+        )
+
+    def test_a_fragment_survives(self):
+        assert (
+            with_feed_source('https://www.xiaohongshu.com/explore/6ad81a29#comments')
+            == 'https://www.xiaohongshu.com/explore/6ad81a29?xsec_source=pc_feed#comments'
+        )
+
+    def test_a_signed_token_is_not_re_encoded(self):
+        link = 'https://www.xiaohongshu.com/explore/6ad81a29?xsec_token=a%2Bb%3D%3D'
+        assert with_feed_source(link).endswith('&xsec_source=pc_feed'), 'the token itself must be byte-identical'
+        assert 'xsec_token=a%2Bb%3D%3D' in with_feed_source(link)
+
+    def test_another_site_is_left_alone(self):
+        link = 'https://xhslink.com/aBcDeF?xsec_source='
+        assert with_feed_source(link) == link
+        assert with_feed_source('') == ''
 
 
 class _TextElement:
@@ -547,7 +596,15 @@ class TestNoteNavigation:
 
         monkeypatch.setattr('crawlers.platforms.xiaohongshu.crawler.WebDriverWait', _Expired)
         assert crawler._scrape_note(NOTE) is None
-        assert crawler.requests == [NOTE], 'the detail visit is one of the crawl requests'
+        assert crawler.requests == [NOTE + '&xsec_source=pc_feed'], (
+            'the detail visit is one request, asked for with the web-feed source the site itself uses'
+        )
+
+    def test_an_existing_xsec_source_is_kept_verbatim(self, make_crawler):
+        crawler, _driver = make_crawler(get_error=False)
+        link = NOTE + '&xsec_source=pc_search'
+        crawler._scrape_note(link)
+        assert crawler.requests == [link], 'a source the site issued is not ours to rewrite'
 
 
 class TestResumeIdentityAndCursor:

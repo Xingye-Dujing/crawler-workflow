@@ -174,7 +174,9 @@ class TestSettingsDraft:
         assert saved['parallel'] is False
         assert saved['headless'] is False
         assert saved['menuPinned'] is True
-        assert saved['zoom'] == 2.5
+        assert 'zoom' not in saved, (
+            'the camera belongs to the canvas draft (settings.view); a copy here was written and never read'
+        )
         # The background is read off the body, not written by the caller.
         assert saved['bg'] == 'bg-dots'
 

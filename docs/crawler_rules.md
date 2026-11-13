@@ -26,8 +26,9 @@
   `test_frontend_contract.py::TestCrawlMatrixParity`. A field name reaches an inline handler, so one not matching
   `/^[\w.-]{1,64}$/` is dropped whole, and the JS panel is tested against the matrix dumped from Python, never a
   copy checked in.
-- **No platform owns a user-facing crawl knob.** Measured per-site baselines (a card wait, a scroll budget, a stuck round count) may live beside the platform because they are site facts, but every one is consumed through `crawlers/engine/pacing.py` (`pace_scale` / `wait_scale` / `patience_scale`). Platform modules must not call `get_setting` for crawl behaviour and must not call `time.sleep` by hand; `tests/unit/gates/test_settings_schema.py` refuses both. User choices live once in `runtime/settings_schema.py` and are rendered by the settings page.
-- **慢速采集 is a preset, not a second multiplier.** `PRESETS['slow']` writes concrete values (`crawl_pace_scale=4`, `crawl_wait_scale=2`, `crawl_patience_scale=2`, queue/preflight/caps) and snapshots what it replaced; restore is exact. Never layer a new global factor on top of it — one scale, one result, or the settings page stops predicting what a run does.
+- **No platform owns a user-facing crawl knob.** Measured per-site baselines (a card wait, a scroll budget, a stuck round count) may live beside the platform because they are site facts, but every one is consumed through `crawlers/engine/pacing.py` (`pace_scale` / `scroll_scale` / `expand_scale` / `click_scale` / `wait_scale` / `arrival_scale` / `patience_scale` plus the `*_nap` / `*_wait` that apply them). Platform modules must not call `get_setting` for crawl behaviour and must not call `time.sleep` by hand; `tests/unit/gates/test_settings_schema.py` refuses both. User choices live once in `runtime/settings_schema.py` and are rendered by the settings page.
+- **One interval, one knob.** Each pause names the operation it belongs to: `scroll_nap`/`scroll_wait` for a scroll, `expand_nap`/`expand_wait` for 展开/更多, `click_nap`/`click_wait` for any other UI click, `arrival_nap`/`arrival` for a page arrival, `wait`/`wait_nap` for element hydration, `nap` for politeness, `rounds` for retries. `poll_tick` is deliberately unscaled — it paces a loop whose iteration count comes from a fixed budget.
+- **慢速采集 is a preset, not a second multiplier.** `PRESETS['slow']` writes concrete values for all seven pacing dimensions (4 / 3 / 3 / 3 / 2 / 1.6 / 2), plus queue/preflight/caps, and snapshots what it replaced; restore is exact. Never layer a new global factor on top of it — one dimension, one result, or the settings page stops predicting what a run does.
 - **A record whose worker is gone is settled by the panel, not by a restart:** `/api/runs/list` settles a row this
   process opened and never closed, once no worker is alive. Adding a run status means updating
   `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list and both app.js catalogs.
@@ -352,6 +353,17 @@
   `login_wall`、`blocked`/`unreachable` 锁 `risk_blocked`，两者的建议是相反的。
   Pinned: `tests/unit/crawlers/test_comments.py::TestXhsAdapter`、
   `tests/api/test_source_dispatch_matrix.py::test_an_ok_walk_that_names_itself_unproven_still_pins_the_cursor`.
+
+- **A 小红书 note URL is opened the way the site's own 复制链接 writes it.** The link carries
+  `xsec_source=pc_feed`; one without that parameter (or with an empty value) can be redirected to the
+  feed, which reads as “stuck on the homepage with no note”. `xiaohongshu.rows.with_feed_source` fills
+  `pc_feed` when the parameter is absent **and keeps any non-empty source verbatim** (`pc_search` was
+  issued for that entry point). Only the navigation URL changes; the row's `笔记链接`/`文章URL` stays
+  what the user gave, because it is the identity the ledger and verify read. A landing on
+  xiaohongshu.com with no note id is `DEAD` + `comment.xhsRedirected`, never "no panel, ok"; a link
+  still on another host (a short link) stays retryable. Pinned:
+  `test_comments.py::TestXhsAdapter::test_a_link_sent_back_to_the_feed_is_named_dead_not_walked_as_an_empty_note`,
+  `test_xhs_crawler.py::TestFeedSource`.
 
 - **cnki (中国知网)**: **全选 selects only the current page**; the site accumulates the selection across pages in
   localStorage, so click 全选 on every page and export once at the end (per batch when the site's own 500-selection

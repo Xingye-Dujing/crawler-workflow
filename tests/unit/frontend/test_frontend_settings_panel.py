@@ -45,6 +45,14 @@ def test_the_preset_card_uses_the_preset_route_for_both_actions(panel):
     assert panel['preset'] == ['apply', 'restore']
 
 
+def test_a_save_refreshes_the_catalogues_the_values_feed(panel):
+    """New-node defaults and the CatBus engine list are fetched at boot; a save that
+    changed them must ask again, or the canvas keeps offering the previous config."""
+    assert panel['save']['refreshes'] == 1, 'a save did not refresh the node-type catalogue'
+    assert panel['presetRefreshes'] == 2, 'applying the preset did not refresh the catalogues'
+    assert panel['presetRefreshesAfterRestore'] == 3, 'restoring the preset did not refresh the catalogues'
+
+
 def test_export_carries_the_machine_path_opt_in_and_the_deploy_prefix(panel):
     assert panel['export'] == '/crawler/api/settings/export?include_machine=1'
 

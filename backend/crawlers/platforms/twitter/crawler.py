@@ -382,7 +382,7 @@ class TwitterCrawler(Crawler):
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
             stuck_rounds=pacing.rounds(self.STUCK_ROUNDS),
-            settle_wait=pacing.wait(self.SETTLE_WAIT),
+            settle_wait=pacing.scroll_wait(self.SETTLE_WAIT),
         )
         if result.stopped_reason == 'no_cards' and not self.collected():
             logger.info(t('crawl.x.no_cards', url=self._current_url()))

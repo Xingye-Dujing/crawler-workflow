@@ -569,7 +569,7 @@ class Crawler(ABC):
             if settled or not self._parked_on_internal_page():
                 break
             logger.info(t('crawl.redrive', platform=self.domain, where=self._current_url()))
-            pacing.nap(float(get_setting('nav_settle')))
+            pacing.arrival_nap(float(get_setting('nav_settle')))
             settled = self._navigate(url)
         return settled
 
@@ -621,7 +621,7 @@ class Crawler(ABC):
             # about a refused address is a flash.
             if verdict in ('ok', 'unreachable'):
                 break
-            pacing.nap(float(get_setting('wall_poll')))
+            pacing.poll_tick(float(get_setting('wall_poll')))
             verdict = self.verdict(request_url=request_url)
         # Latched from *this* reading rather than by calling check_intercept again,
         # because re-judging here would hand a flash one free escape and make the window
@@ -933,7 +933,7 @@ class Crawler(ABC):
         function of the page (and stays instant under a fake driver).
 
         The timeout is the platform's measured baseline, stretched by the user's
-        global ``crawl_wait_scale`` — one place, so every platform obeys the same
+        ``crawl_wait_scale`` — one place, so every platform obeys the same
         setting without carrying its own copy of the choice.
         """
         return feed.wait_for(count_fn, target, timeout=pacing.wait(timeout), tick=tick)
@@ -1063,9 +1063,9 @@ class Crawler(ABC):
         """Jittered pause between rounds that hit the network.
 
         Anti-bot caution is a requirement, not a leftover: the jitter is what
-        keeps a run of crawls from looking like a metronome. The global
-        ``crawl_pace_scale`` stretches every platform's baseline through
-        :func:`pacing.polite` — pacing only, never the browser's identity.
+        keeps a run of crawls from looking like a metronome. The user's
+        ``crawl_pace_scale`` (the politeness dimension) stretches every platform's
+        baseline through :func:`pacing.polite` — pacing only, never the browser's identity.
         """
         pacing.polite(base, spread)
 
@@ -1100,7 +1100,7 @@ class Crawler(ABC):
     def scroll_to_bottom(self, times: int = 1, wait: float = 0.1):
         for _ in range(times):
             self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-            pacing.nap(wait)
+            pacing.scroll_nap(wait)
 
     def scroll_down(self, steps: int = 3, wait: float = 0.12):
         """Walk the page down in viewport-sized steps, then land at the bottom.
@@ -1111,9 +1111,9 @@ class Crawler(ABC):
         """
         for _ in range(max(1, steps)):
             self.driver.execute_script('window.scrollBy(0, Math.max(400, window.innerHeight * 0.9));')
-            pacing.nap(wait)
+            pacing.scroll_nap(wait)
         self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-        pacing.nap(wait)
+        pacing.scroll_nap(wait)
 
     def page_height(self) -> int:
         """How tall the document is right now, as one number to compare against the last round's.

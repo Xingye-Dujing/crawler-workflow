@@ -302,7 +302,7 @@ class WeiboCrawler(Crawler):
                 return url
             if self.may_stop():
                 return url
-            pacing.nap(poll)
+            pacing.wait_nap(poll)
         return url
 
     # ─── one author's posts ─────────────────────────────────────────────

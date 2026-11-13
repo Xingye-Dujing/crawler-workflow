@@ -345,7 +345,7 @@ class HongguoCommentHarness:
                 # and a 30-thread drawer answered six), then drain everything the player
                 # fetched — from these clicks, its own prefetch, or a human scrolling.
                 self.ui.expand_replies()
-                pacing.nap(1.5)
+                pacing.expand_nap(1.5)
                 reply_rows, reply_refused = self._harvest_replies(article_url, title, ep)
                 scanned += len(reply_rows) + reply_refused
                 refused += reply_refused
@@ -381,7 +381,7 @@ class HongguoCommentHarness:
             # per-episode grace is short, so a child page can still be in flight after the last
             # episode: drained NOW it belongs to this drama, left in the inbox it would be read
             # at the NEXT drama's episode end and stamped with a 剧名 that never carried it.
-            pacing.nap(_REPLY_SETTLE_SECONDS)
+            pacing.expand_nap(_REPLY_SETTLE_SECONDS)
             late, late_refused = self._harvest_replies(article_url, title, episodes)
             scanned += len(late) + late_refused
             refused += late_refused
@@ -450,7 +450,7 @@ class HongguoCommentHarness:
             return 'ok'
         for _ in range(_SCREEN_SETTLE_READS):
             self._check_abort()
-            pacing.nap(_SCREEN_SETTLE_SECONDS)
+            pacing.click_nap(_SCREEN_SETTLE_SECONDS)
             again = self.ui.screen_drama_title()
             if not again or screen_names(want_norm, norm_title(again)):
                 return 'ok'  # went cold, or settled onto the requested drama
@@ -692,7 +692,7 @@ class HongguoCommentHarness:
                 # would wait 90 s on pages the identity gate discards — the walk wants to stop the
                 # drama now, not at the deadline.
                 return None
-            pacing.nap(0.5)
+            pacing.poll_tick(0.5)
         return None
 
     @staticmethod
@@ -846,7 +846,7 @@ class HongguoCommentHarness:
                 break
             if os.path.exists(self._cert_path()) and self._port_open(port):
                 return
-            pacing.nap(0.3)
+            pacing.poll_tick(0.3)
         self.close()
         raise ValueError(t('crawl.hg.cmt.noMitmdump', detail=f'proxy did not come up on 127.0.0.1:{port}'))
 

@@ -1,10 +1,12 @@
-"""The 慢速采集 preset's pacing contract — one scale, never the browser's identity.
+"""The 慢速采集 preset's pacing contract — one knob per interval, never the browser's identity.
 
-The preset writes ``crawl_pace_scale`` / ``crawl_wait_scale`` / ``crawl_patience_scale``
-as concrete values (see ``runtime.settings_schema.PRESETS``); these tests prove the one
-consumer, :mod:`crawlers.engine.pacing`, applies them exactly once and leaves a
-default install at the measured baseline. The douyin risk latch lives here for the same
-historical reason: the two checks share "what a platform refusing looks like".
+The preset writes ``crawl_pace_scale`` / ``crawl_scroll_scale`` / ``crawl_expand_scale`` /
+``crawl_click_scale`` / ``crawl_wait_scale`` / ``crawl_arrival_scale`` /
+``crawl_patience_scale`` as concrete values (see ``runtime.settings_schema.PRESETS``);
+these tests prove the one consumer, :mod:`crawlers.engine.pacing`, applies each of them
+exactly once, to its own dimension, and leaves a default install at the measured
+baseline. The douyin risk latch lives here for the same historical reason: the two
+checks share "what a platform refusing looks like".
 
 Pacing is pure enough to test without a browser: sleep is patched on the module that
 owns it.
@@ -34,10 +36,14 @@ def no_jitter(monkeypatch):
     monkeypatch.setattr(pacing_module.random, 'uniform', lambda _a, _b: 0.0)
 
 
-def _configure(monkeypatch, *, pace=1.0, wait_scale=1.0, patience=1.0):
+def _configure(monkeypatch, *, pace=1.0, scroll=1.0, expand=1.0, click=1.0, wait_scale=1.0, arrival=1.0, patience=1.0):
     values = {
         'crawl_pace_scale': pace,
+        'crawl_scroll_scale': scroll,
+        'crawl_expand_scale': expand,
+        'crawl_click_scale': click,
         'crawl_wait_scale': wait_scale,
+        'crawl_arrival_scale': arrival,
         'crawl_patience_scale': patience,
     }
 
@@ -88,6 +94,52 @@ def test_wait_and_rounds_scale_once(monkeypatch):
     _configure(monkeypatch, wait_scale=2.0, patience=2.0)
     assert wait(1.5) == 3.0
     assert rounds(3) == 6
+
+
+class TestEachDimensionIsItsOwnKnob:
+    """Splitting the three scales into seven: a scroll no longer moves an expand, etc.
+
+    Each pause sleeps through the module's own clock so the assertion is the number of
+    seconds a platform would really pay, not a reader's arithmetic.
+    """
+
+    def test_each_nap_reads_its_own_dimension(self, monkeypatch, slept):
+        _configure(monkeypatch, pace=2.0, scroll=3.0, expand=4.0, click=5.0, arrival=6.0)
+        pacing_module.nap(1.0)
+        pacing_module.scroll_nap(1.0)
+        pacing_module.expand_nap(1.0)
+        pacing_module.click_nap(1.0)
+        pacing_module.arrival_nap(1.0)
+        assert slept == [2.0, 3.0, 4.0, 5.0, 6.0], 'one dimension may not borrow another multiplier'
+
+    def test_a_dimension_left_at_baseline_is_untouched(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll=3.0)
+        pacing_module.expand_nap(2.0)
+        pacing_module.scroll_nap(2.0)
+        assert slept == [2.0, 6.0]
+
+    def test_waits_follow_the_dimension_they_belong_to(self, monkeypatch):
+        _configure(monkeypatch, scroll=2.0, expand=3.0, click=4.0, wait_scale=5.0, arrival=6.0)
+        assert pacing_module.wait(1.0) == 5.0
+        assert pacing_module.scroll_wait(1.0) == 2.0
+        assert pacing_module.expand_wait(1.0) == 3.0
+        assert pacing_module.click_wait(1.0) == 4.0
+        assert pacing_module.arrival(1.0) == 6.0
+
+    def test_wait_nap_rides_the_element_wait_dimension(self, monkeypatch, slept):
+        _configure(monkeypatch, wait_scale=2.0, scroll=9.0)
+        pacing_module.wait_nap(1.0)
+        assert slept == [2.0]
+
+    def test_a_poll_tick_is_never_stretched(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll=3.0)
+        pacing_module.poll_tick(1.0)
+        assert slept == [1.0], 'a poll tick inside a fixed budget is never stretched'
+
+    def test_a_negative_dimension_is_clamped(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll=-4.0)
+        pacing_module.scroll_nap(3.0)
+        assert slept == []
 
 
 def test_rounds_never_reaches_zero(monkeypatch):

@@ -281,7 +281,10 @@ const SettingsPanel = {
                 const warns = result.warnings || [];
                 showToast(warns.length ? I18n.t('toast.setSavedWarn') + ' ' + warns.join('；') : I18n.t('toast.setSaved'));
                 this.setStatus(I18n.t('settingsPanel.saved'));
-                if (window.AppSettings) AppSettings.applyToPanel();
+                if (window.AppSettings) {
+                    AppSettings.applyToPanel();
+                    AppSettings.refreshAfterSave();
+                }
             } else {
                 showToast(I18n.t('toast.setSaveFail') + ': ' + (result.error || ''));
             }
@@ -335,6 +338,7 @@ const SettingsPanel = {
                 AppSettings._values = result.settings || {};
                 AppSettings.applyPresetState(result.preset);
                 AppSettings.applyToPanel();
+                AppSettings.refreshAfterSave();
             }
             this.render();
             this.renderPresetState();
@@ -376,6 +380,7 @@ const SettingsPanel = {
                 AppSettings._values = result.settings || {};
                 AppSettings.applyPresetState(result.preset);
                 AppSettings.applyToPanel();
+                AppSettings.refreshAfterSave();
             }
             this.render();
             this.renderPresetState();

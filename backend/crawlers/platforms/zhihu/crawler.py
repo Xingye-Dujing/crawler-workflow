@@ -499,7 +499,7 @@ class ZhihuCrawler(Crawler):
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
             stuck_rounds=pacing.rounds(self.STUCK_ROUNDS),
-            settle_wait=pacing.wait(self.CARD_WAIT),
+            settle_wait=pacing.scroll_wait(self.CARD_WAIT),
         )
         logger.info(
             t('crawl.zhihu.authorTabDone', tab=tab, n=self.collected(), reason=stop_reason_label(result.stopped_reason))
@@ -547,7 +547,7 @@ class ZhihuCrawler(Crawler):
                 # The button's click swaps the clamped node for the full one; the
                 # text is re-read by the caller right away, and a row that is still
                 # short is simply a short answer.
-                pacing.nap(0.3)
+                pacing.expand_nap(0.3)
                 return True
         return False
 
@@ -673,7 +673,7 @@ class ZhihuCrawler(Crawler):
                     with contextlib.suppress(Exception):
                         self.driver.execute_script('arguments[0].scrollIntoView({block: "center"});', card)
                         for _ in range(4):
-                            pacing.nap(0.3)
+                            pacing.wait_nap(0.3)
                             if card.find_elements(By.CSS_SELECTOR, 'a[href]'):
                                 break
                         item = self._scrape_card(card)
@@ -729,7 +729,7 @@ class ZhihuCrawler(Crawler):
         feed.wait_for(
             lambda: len(self._get_content(card)),
             len(preview) + 1,
-            timeout=pacing.wait(self.EXPAND_WAIT),
+            timeout=pacing.expand_wait(self.EXPAND_WAIT),
             tick=0.25,
         )
         body = str(self._get_content(card) or '')

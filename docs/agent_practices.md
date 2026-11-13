@@ -424,12 +424,35 @@ from either language, and a platform module that calls `get_setting` or `time.sl
 
 Platforms keep **measured baselines** because a card wait or a stuck-round count is a fact
 about that site, like a selector. They are not configuration: every value goes through
-`crawlers/engine/pacing.py`, where the user's three global scales apply once. That is what
-makes "slow down every platform" a real promise instead of a switch half the crawlers ignore.
+`crawlers/engine/pacing.py`, where the user's scales apply once. That is what makes "slow
+down every platform" a real promise instead of a switch half the crawlers ignore.
 
-慢速采集 is a **preset**, not a multiplier: it writes concrete values and stores the values it
-replaced, so one click restores exactly what the user had. A second hidden factor would make
-the panel's numbers stop describing the run, and the user could not reason about the pace.
+The scales are **one per operation**, not three for the whole crawl (2026-11-13, user
+request: “滚动间隔、展开间隔等等全部分开设置”). Three scales forced one compromise on
+every pause: an account that needed slower scrolling also paid it on every reply expansion
+and every polite round, and no setting could express “scroll slowly, expand normally”.
+The dimension is named at the call site (`scroll_nap`, `expand_nap`, `click_nap`,
+`arrival_nap`, `wait`, `rounds`, `nap`, and the `*_wait` twins for the timeout that belongs
+to the same operation), so a pause cannot silently borrow the wrong knob — and a session
+handed a no-op `nap` (tests, fast walks) is silent in every dimension. `poll_tick` stays
+unscaled on purpose: a loop whose iteration count comes from a fixed budget must keep the
+same wall clock.
+
+慢速采集 is a **preset**, not a multiplier: it writes concrete values for all seven
+dimensions and stores the values it replaced, so one click restores exactly what the user
+had. A second hidden factor would make the panel's numbers stop describing the run, and
+the user could not reason about the pace.
+
+**A saved value must be one something reads, and a live value must not be re-frozen.**
+Three audits on 2026-11-13, each a value the panel showed and the program did not honour:
+the toolbar's 并行/无头 were reset on every start because the boot re-read of the last file
+applied its stale settings over the browser's own choice (`loadFromJSON(..., {keepRunSwitches})`);
+`default_comment_*`/`default_keep_parts` were fetched once at boot, so a new node kept the
+previous defaults until a page reload (`AppSettings.refreshAfterSave()` re-asks
+`/api/node-types` and `/api/capabilities`); and `housekeeping_interval_minutes` was resolved
+when the housekeeper was built, so a saved change waited for a restart (the interval is a
+callable now). Dead metadata was removed rather than rendered: the stored `zoom` (the camera
+lives in the canvas draft) and `Setting.unit` (the label already carries “(s)”).
 
 ### 组件来源只在安装器真的存在时出现 / The component-source choice follows the installer
 
