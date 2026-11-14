@@ -9,6 +9,7 @@ repo keeps paying for is a run that quietly does the other thing and reports suc
 
 import os
 import re
+import time
 
 import pytest
 from core.config import Config
@@ -222,7 +223,15 @@ class TestNoWindowToLogInto:
         # 202 = the job was accepted and the worker found no browser; a 400 here would
         # mean the refusal leaked into the machine that still has a display.
         assert response.status_code in (202, 500), response.get_json()
-        assert started.get('platform') == 'zhihu'
+        # The login is opened by a BACKGROUND thread: `started` is filled when that thread
+        # reaches the crawler factory, which on a loaded runner is a moment after the 202 —
+        # reading it straight away made a Windows runner fail with `None == 'zhihu'` while
+        # the same bytes passed twice on every other job. Poll for the call the request
+        # promised instead of racing it.
+        deadline = time.monotonic() + 10
+        while not started and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert started.get('platform') == 'zhihu', f'the worker never asked for a browser: {response.get_json()}'
 
 
 class TestEverythingRunsHeadless:

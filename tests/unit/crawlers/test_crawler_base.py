@@ -532,14 +532,21 @@ BARE_NAVIGATIONS = {
     # ``commenting/session.py`` on 2026-10-27 when each platform's walk went to its own
     # package — the count is the same seven, now spelled out per site instead of hidden in
     # one engine file.
+    'backend/crawlers/commenting/session.py': 1,
     'backend/crawlers/platforms/bilibili/comments.py': 1,
     'backend/crawlers/platforms/douyin/comments.py': 1,
     'backend/crawlers/platforms/twitter/comments.py': 1,
     'backend/crawlers/platforms/weibo/comments.py': 1,
-    'backend/crawlers/platforms/xiaohongshu/comments.py': 1,
     'backend/crawlers/platforms/youtube/comments.py': 1,
     'backend/crawlers/platforms/zhihu/comments.py': 1,
 }
+# ``commenting/session.py`` came back on 2026-11-14 as the walk's ONE bounded navigation: the
+# driver call runs on a worker thread that is joined against ``pacing.navigation_budget()``, so
+# a renderer that never answers costs one link instead of the whole batch (xiaohongshu — the
+# first platform moved onto it — leaves this table because it no longer drives its own).
+# ``driver.get`` is deliberate there: it is the only call that can hang without returning, so it
+# cannot sit inside ``open``'s own arrival accounting. The caller still records the outcome, and
+# a timeout is re-raised as the named refusal.
 # wechat and zhihu's article/search entries left this table on 2026-11-01: both drove a bare
 # ``driver.get``, so one page-load timeout escaped the caller's loop and ended the whole batch
 # (wechat stopped cold at the first slow link; zhihu's node failed with a traceback instead of
