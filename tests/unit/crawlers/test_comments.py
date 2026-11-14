@@ -706,6 +706,60 @@ def _xhs_walk(panel, *, limit=0, log=None, abort=None, **kwargs):
     return session.walk('xiaohongshu', XHS_NOTE, limit), driver
 
 
+class TestNavigationWatchdog:
+    """A page load that never returns is silence; the session must name it and let go.
+
+    Measured shape: chromedriver waits in ``WaitForPendingNavigations`` forever, so the
+    executor never reaches its next line and the user sees a browser window with nothing
+    happening. ``CommentSession.get`` bounds the navigation and closes a wedged session.
+    """
+
+    def test_a_navigation_that_never_returns_is_named_and_the_browser_closed(self, monkeypatch):
+        import threading
+        import time
+
+        from crawlers.commenting.session import NavigationTimeout
+        from crawlers.engine import pacing
+
+        closed = []
+
+        class _Blocking:
+            def get(self, url):
+                threading.Event().wait(3)
+
+        blocking = _Blocking()
+
+        class _Owner:
+            domain = 'www.xiaohongshu.com'
+            driver = blocking
+
+            def close(self):
+                closed.append(True)
+
+        monkeypatch.setattr(pacing, 'navigation_budget', lambda: 0.2)
+        session = CommentSession(blocking, nap=lambda seconds: None, owner=_Owner())
+        started = time.monotonic()
+        with pytest.raises(NavigationTimeout, match='navigation did not return'):
+            session.get('https://www.xiaohongshu.com/explore/x')
+        assert closed == [True], 'a wedged browser was left open for the next link'
+        assert time.monotonic() - started < 1.5
+
+    def test_a_normal_navigation_returns_and_records_ok(self):
+        from runtime import phases
+
+        seen = []
+
+        class _Driver:
+            def get(self, url):
+                seen.append(url)
+
+        session = CommentSession(_Driver(), nap=lambda seconds: None)
+        session.get('https://example.com/note')
+        assert seen == ['https://example.com/note']
+        assert phases.snapshot()[-1]['phase'] == 'navigate'
+        assert phases.snapshot()[-1]['status'] == 'ok'
+
+
 class TestXhsAdapter:
     def test_the_walk_asks_for_the_note_with_the_sites_own_feed_source(self, xhs_chains):
         """A note URL with no ``xsec_source`` is opened as ``?xsec_source=pc_feed``.

@@ -36,7 +36,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import capabilities.registry as capabilities
-from runtime import account_context, paths
+from runtime import account_context, paths, phases
 from runtime.settings import get_setting
 
 from crawlers import crawler_class, is_crawlable
@@ -275,6 +275,16 @@ def knows(platform: str) -> bool:
     return bool(platform) and (CookieManager.is_supported(platform) or crawler_class(platform) is not None)
 
 
+def _probe_budget() -> float:
+    """How long the probe's own page load may stay outstanding before it is closed.
+
+    Five seconds under the endpoint's timeout, so the browser is gone before the caller's
+    deadline answers “无法核对” — otherwise the run starts while a visible window still
+    holds the profile and sits on the platform's home page.
+    """
+    return max(5.0, float(get_setting('cookie_preflight_timeout')) - 5.0)
+
+
 def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -> dict:
     """One bounded navigation in the browser the run would have used.
 
@@ -282,6 +292,11 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
     is re-driven a bounded few times by :meth:`Crawler.open` before it judges, so a
     parked ``chrome://`` tab is not cached as a false wall. Whatever does not fit the
     deadline answers “无法核对”, which never blocks a run.
+
+    The probe is the ONE browser a run opens before it starts (慢速采集 switches it on),
+    so a renderer that stops answering must not leave a visible window parked on the
+    platform's home page for the rest of the run: ``diagnose`` runs on a worker and this
+    function closes the browser when it outlives the probe budget.
 
     Isolated as a function so the whole of ``check`` below — the cache, the deadline,
     the parallelism — is testable without a browser, while the crawler facts still
@@ -309,8 +324,41 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
         # A browser that would not start (no chromedriver, a profile Chrome refuses to
         # share) is not a probe that found a dead cookie.
         return {'error': str(e)[:200]}
+    started = time.monotonic()
     try:
-        facts = crawler.diagnose('')
+        budget = _probe_budget()
+        box: dict = {}
+
+        def _diagnose() -> None:
+            try:
+                box['facts'] = crawler.diagnose('')
+            except BaseException as exc:  # re-raised as this probe's error below
+                box['error'] = str(exc)[:200]
+
+        worker = threading.Thread(target=_diagnose, name='cookie-probe', daemon=True)
+        worker.start()
+        worker.join(budget)
+        if worker.is_alive():
+            phases.record(
+                'probe',
+                time.monotonic() - started,
+                label=platform,
+                platform=platform,
+                status='timeout',
+                for_login=True,
+            )
+            return {'error': t('cookie.pre.timeout', n=int(budget))}
+        phases.record(
+            'probe',
+            time.monotonic() - started,
+            label=platform,
+            platform=platform,
+            status='ok' if 'facts' in box else 'error',
+            for_login=True,
+        )
+        if 'error' in box:
+            return {'error': box['error']}
+        facts = box.get('facts') or {}
         return {
             'login_wall': bool(facts.get('login_wall')),
             'risk_blocked': bool(getattr(crawler, 'risk_blocked', False)),

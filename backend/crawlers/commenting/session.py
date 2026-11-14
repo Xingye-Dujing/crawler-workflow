@@ -40,12 +40,24 @@ Design notes the code cannot shout later:
 """
 
 import contextlib
+import threading
+
+from selenium.common.exceptions import WebDriverException
 
 from crawlers.commenting import walks
 from crawlers.commenting.protocol import DEAD, OK
 from crawlers.engine import pacing, pagefetch
 from crawlers.engine.wall import classify
 from i18n import t
+
+
+class NavigationTimeout(WebDriverException):
+    """A page load that never came back — the renderer is wedged, not the network slow.
+
+    ``driver.get`` is an in-band command: when the renderer stops answering, chromedriver
+    waits in ``WaitForPendingNavigations`` and the call never returns. The run then shows a
+    browser window and no console line at all, which is the “打开窗口没有反应” report.
+    """
 
 
 class CommentSession:
@@ -82,6 +94,44 @@ class CommentSession:
 
     def may_stop(self) -> bool:
         return bool(self._abort is not None and self._abort())
+
+    def get(self, url: str, timeout: float = None) -> None:
+        """Navigate to *url* with a hard bound, and report a wedged renderer by name.
+
+        ``driver.get`` has no timeout of its own for a renderer that stops answering: the
+        command simply never returns, and a batch of links then shows a browser window and
+        nothing else. The navigation runs on a worker; when it outlives
+        ``pacing.navigation_budget()`` the session is closed (the process is wedged and the
+        next link cannot be trusted to it) and a :class:`NavigationTimeout` is raised, whose
+        message the executors treat as “this browser is gone” (pinned by ``_GONE_MARKERS``).
+        """
+        from runtime import phases
+
+        limit = float(timeout if timeout is not None else pacing.navigation_budget())
+        label = str(getattr(self._owner, 'domain', '') or '')
+        entry = phases.begin('navigate', label, url=url)
+        box: dict = {}
+
+        def _load() -> None:
+            try:
+                self.driver.get(url)
+                box['ok'] = True
+            except BaseException as exc:  # re-raised on the caller's thread
+                box['error'] = exc
+
+        worker = threading.Thread(target=_load, name='comment-navigate', daemon=True)
+        worker.start()
+        worker.join(limit)
+        if worker.is_alive():
+            phases.end(entry, seconds=limit, status='blocked')
+            with contextlib.suppress(Exception):
+                if self._owner is not None:
+                    self._owner.close()
+            raise NavigationTimeout(f'navigation did not return within {int(limit)}s: {url}')
+        if 'error' in box:
+            phases.end(entry, status='error')
+            raise box['error']
+        phases.end(entry, status='ok')
 
     def walk(self, platform: str, url: str, limit: int) -> tuple:
         """Read one article's comments on *platform*, using the walk that platform registered.

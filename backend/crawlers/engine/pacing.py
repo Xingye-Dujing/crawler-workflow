@@ -204,6 +204,22 @@ def page_nap(seconds: float) -> None:
     _sleep_scaled(seconds, 'page')
 
 
+def navigation_budget() -> float:
+    """How long one page load may stay outstanding before the renderer is called wedged.
+
+    Measured failure (chromedriver sitting in ``WaitForPendingNavigations``) is silence, not
+    a timeout: the browser command never returns, so no later line is ever printed. This is
+    the budget a caller uses to turn that silence into a named failure; it scales with the
+    user's page-load timeout but is capped, because a page that has not answered in three
+    minutes is not "slow", it is stuck.
+    """
+    try:
+        base = float(get_setting('page_load_timeout'))
+    except (TypeError, ValueError):
+        base = 40.0
+    return min(180.0, max(60.0, base * 2.0))
+
+
 def poll_tick(seconds: float) -> None:
     """A fixed poll cadence, deliberately NOT scaled.
 

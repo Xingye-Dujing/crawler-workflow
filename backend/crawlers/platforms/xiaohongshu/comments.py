@@ -437,7 +437,7 @@ def walk(session, url: str, limit: int) -> tuple:
     # source can be served the feed instead of the note (the "stuck on the homepage" shape), so
     # the navigation URL gets that one parameter filled in. The row identity stays the URL the
     # user gave us — only what we ask the site for changes.
-    session.driver.get(with_feed_source(url))
+    session.get(with_feed_source(url))
     session.arrival_nap(5)
     current = session.driver.current_url or ''
     # One shared classifier decides arrival, not a 600-character body sniff: the URL carries XHS's

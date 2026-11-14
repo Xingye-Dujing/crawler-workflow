@@ -54,6 +54,9 @@ _GONE_MARKERS = (
     'session deleted',
     'disconnected',
     'not reachable',
+    # A navigation that never returned: the renderer is wedged, so the session cannot carry
+    # the rest of the batch (see ``CommentSession.get``).
+    'navigation did not return',
 )
 
 
