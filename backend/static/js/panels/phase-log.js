@@ -46,6 +46,7 @@ const PhaseLog = {
 
     _detail(entry) {
         const bits = [];
+        if (entry.running) bits.push(I18n.t('phaseLog.running'));
         if (entry.rows !== undefined && entry.rows !== null) {
             bits.push(I18n.t('phaseLog.rows').replace('{n}', String(entry.rows)));
         }
@@ -55,6 +56,13 @@ const PhaseLog = {
         if (entry.risk) bits.push(I18n.t('phaseLog.risk'));
         if (entry.for_login) bits.push(I18n.t('phaseLog.loginWindow'));
         return bits.join(' · ');
+    },
+
+    /* A running phase's number is NOW minus its start: the strip must move during the
+       minutes a slow note takes, or the panel repeats the silence it exists to explain. */
+    _seconds(entry) {
+        if (!entry.running) return Number(entry.seconds || 0);
+        return Math.max(0, Date.now() / 1000 - Number(entry.at || 0));
     },
 
     _label(entry) {
@@ -74,23 +82,30 @@ const PhaseLog = {
     render(phases) {
         const box = document.getElementById('console-phases-body');
         if (!box) return;
-        const signature = JSON.stringify(phases);
+        const shown = phases.map(function (entry) {
+            return {
+                entry: entry,
+                seconds: PhaseLog._seconds(entry),
+                text: PhaseLog._detail(entry),
+            };
+        });
+        const signature = JSON.stringify(shown);
         if (signature === this._signature) return;
         this._signature = signature;
-        if (!phases.length) {
+        if (!shown.length) {
             box.innerHTML = '<div class="phase-empty">' + escapeHtml(I18n.t('phaseLog.empty')) + '</div>';
             return;
         }
-        const rows = phases
-            .map(function (entry) {
+        const rows = shown
+            .map(function (item) {
+                const entry = item.entry;
                 const name = PhaseLog._word('phase', entry.phase);
-                const detail = PhaseLog._detail(entry);
                 return (
-                    '<tr>' +
+                    '<tr' + (entry.running ? ' class="phase-running"' : '') + '>' +
                     '<td class="phase-name">' + escapeHtml(name) + '</td>' +
                     '<td class="phase-label">' + escapeHtml(PhaseLog._label(entry)) + '</td>' +
-                    '<td class="phase-seconds">' + escapeHtml(Number(entry.seconds || 0).toFixed(1)) + 's</td>' +
-                    '<td class="phase-detail">' + escapeHtml(detail) + '</td>' +
+                    '<td class="phase-seconds">' + escapeHtml(item.seconds.toFixed(1)) + 's</td>' +
+                    '<td class="phase-detail">' + escapeHtml(item.text) + '</td>' +
                     '</tr>'
                 );
             })

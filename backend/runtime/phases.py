@@ -37,26 +37,52 @@ def reset() -> None:
 
 
 def record(phase: str, seconds: float, label: str = '', **facts) -> dict:
-    """Append one phase. *seconds* is measured by the caller with a monotonic clock.
+    """Append one completed phase. *seconds* is measured by the caller."""
+    entry = begin(phase, label, **facts)
+    return end(entry, seconds=seconds, status=facts.get('status', ''))
 
-    The run id and the account are stamped here rather than passed by each caller: a
-    thread that records a phase is not necessarily the one that owns the run slot, and a
-    diagnostic that lands under the wrong account is worse than no diagnostic.
-    """
+
+def _new_entry(phase: str, label: str, **facts) -> dict:
     from runtime.state import execution_state
 
     owner = account_context.current()
     entry = {
         'phase': str(phase or ''),
         'label': str(label or ''),
-        'seconds': round(max(0.0, float(seconds or 0.0)), 3),
+        'seconds': 0.0,
+        'running': True,
         'run_id': str(execution_state.get('run_id') or ''),
         'user_id': owner.user_id if owner is not None else '',
         'at': time.time(),
     }
     entry.update({str(k): v for k, v in facts.items()})
+    return entry
+
+
+def begin(phase: str, label: str = '', **facts) -> dict:
+    """Start a phase and return its entry, so the panel can say “进行中 2:14”.
+
+    A phase that only appears once it finishes is exactly the “window opened and nothing
+    happened” report: the first 小红书 note under the slow preset can take minutes, and a
+    completed-only log shows silence for all of it. Callers finish the entry with
+    :func:`end` in a ``finally``, so a raised phase still stops saying “running”.
+    """
+    entry = _new_entry(phase, label, **facts)
     with _lock:
         _entries.append(entry)
+    return entry
+
+
+def end(entry: dict, seconds: float = None, status: str = '', **facts) -> dict:
+    """Finish a :func:`begin` entry in place (the ring holds the same dict)."""
+    entry['running'] = False
+    entry['seconds'] = round(
+        max(0.0, time.time() - float(entry.get('at') or time.time()) if seconds is None else float(seconds or 0.0)),
+        3,
+    )
+    if status:
+        entry['status'] = str(status)
+    entry.update({str(k): v for k, v in facts.items()})
     return dict(entry)
 
 

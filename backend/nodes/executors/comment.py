@@ -363,6 +363,9 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # inside a page. The first link of the batch (and a resumed prefix) pays nothing.
             if idx > 1:
                 pacing.between_pages()
+            # A line BEFORE the walk, not only after it: the slow preset can spend minutes
+            # on one note, and a console that only says “done” reads as a frozen run.
+            add_log(t('comment.start', i=idx, n=len(urls), url=url))
             # The adapter's platform, chosen the same way the input list was: by DOMAIN, or —
             # for a mode whose matrix declares it takes NAMES (红果) — by the platform this
             # node already names. Never a guess: an unknown kind still lands on the named
@@ -445,18 +448,16 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         _walk_started = time.monotonic()
                         walk_rows = []
                         walk_status = ''
+                        _walk_entry = phases.begin('walk', kind, platform=kind, url=url, index=idx, total=len(urls))
                         try:
                             walk_rows, walk_status = session.walk(kind, url, limit)
                         finally:
-                            # One line per LINK in the Console's phase log: the user's
-                            # “window opened and nothing happened” is answered by “this link
-                            # took N seconds and settled on X”.
-                            phases.record(
-                                'walk',
-                                time.monotonic() - _walk_started,
-                                label=kind,
-                                platform=kind,
-                                url=url,
+                            # One line per LINK in the Console's phase log, and it exists from
+                            # the START: the user's “window opened and nothing happened” is
+                            # answered by “this link has been running for 3:12”.
+                            phases.end(
+                                _walk_entry,
+                                seconds=time.monotonic() - _walk_started,
                                 status=walk_status,
                                 rows=len(walk_rows),
                             )

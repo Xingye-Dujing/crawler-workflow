@@ -517,8 +517,8 @@ def test_one_slow_link_is_skipped_and_the_rest_are_still_walked(app_module, monk
         'https://www.douyin.com/video/7000000000000000002',
         'https://www.douyin.com/video/7000000000000000003',
     ]
-    failed = [line for line in lines if '7000000000000000001' in line]
-    assert failed and 'timed out' in failed[0], f'the failure must be named with its reason, got: {failed}'
+    failed = [line for line in lines if '7000000000000000001' in line and 'timed out' in line]
+    assert failed, f'the failure must be named with its reason, got: {lines}'
 
 
 @pytest.mark.usefixtures('clean_globals')

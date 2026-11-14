@@ -257,6 +257,9 @@
   padding: 4px 0;
   color: var(--text-dim);
 }
+.phase-running .phase-seconds {
+  color: var(--warn);
+}
 #runs-tabs:empty,
 #workflows-tabs:empty {
   display: none;

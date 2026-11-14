@@ -7,6 +7,7 @@ a note URL reach the DOM as markup.
 """
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -58,6 +59,12 @@ def test_a_note_url_and_label_are_escaped(phase_log):
     assert '<b>x</b>' not in html, 'the note URL reached the DOM as markup'
     assert '&lt;img' in html
     assert '3 rows' not in html, 'premise: this payload carries zero rows'
+
+
+def test_a_running_phase_shows_its_elapsed_instead_of_silence(phase_log):
+    html = phase_log['running']
+    assert 'running' in html
+    assert re.search(r'7[0-9]\.\ds', html), html
 
 
 def test_a_closed_console_is_not_polled(phase_log):

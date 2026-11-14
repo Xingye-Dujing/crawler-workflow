@@ -66,3 +66,17 @@ def test_reset_forgets_everything():
     phases.record('browser', 1.0)
     phases.reset()
     assert phases.snapshot() == []
+
+
+def test_a_phase_is_visible_while_it_runs_and_closes_in_place(monkeypatch):
+    """A completed-only log shows silence for the minutes the first note takes."""
+    entry = phases.begin('walk', 'xiaohongshu', url='https://www.xiaohongshu.com/explore/x')
+    running = phases.snapshot()
+    assert running[-1]['running'] is True and running[-1]['url'].endswith('/x')
+
+    monkeypatch.setattr(phases.time, 'time', lambda: entry['at'] + 74.2)
+    done = phases.end(entry, status='ok', rows=3)
+    assert done['running'] is False
+    assert done['seconds'] == 74.2, 'a phase that finishes without an explicit clock reads its own start'
+    assert done['status'] == 'ok' and done['rows'] == 3
+    assert phases.snapshot()[-1]['running'] is False

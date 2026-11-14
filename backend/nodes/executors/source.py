@@ -484,19 +484,17 @@ def execute_source_node(
         allow_retry = not (pool_mode and bool(get_setting('pool_skip_wall_backoff')))
         _crawl_started = time.monotonic()
         rows = []
+        _crawl_entry = phases.begin('crawl', platform, platform=platform, mode=str(getattr(mode, 'handler', '')))
         try:
             rows = crawl_with_collision_retry(
                 crawler, getattr(crawler, mode.handler), crawl_args, resume, platform, allow_retry=allow_retry
             )
         finally:
-            # The search/list phase in the Console's phase log: a slow account spends most
-            # of its time here, and “the window sat on the feed” needs this number beside it.
-            phases.record(
-                'crawl',
-                time.monotonic() - _crawl_started,
-                label=platform,
-                platform=platform,
-                mode=str(getattr(mode, 'handler', '')),
+            # The search/list phase exists from its start, so a slow account shows “采集
+            # 进行中 2:40” instead of an empty strip.
+            phases.end(
+                _crawl_entry,
+                seconds=time.monotonic() - _crawl_started,
                 rows=len(rows),
                 wall=bool(getattr(crawler, 'login_wall', False)),
                 risk=bool(getattr(crawler, 'risk_blocked', False)),

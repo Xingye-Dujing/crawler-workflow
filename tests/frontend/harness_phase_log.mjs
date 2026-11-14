@@ -136,6 +136,25 @@ answer = {
 await PhaseLog.refresh();
 out.escaped = body.innerHTML;
 
+/* ── a running phase shows its live elapsed, not a silence ─────────────── */
+answer = {
+    ok: true,
+    running: true,
+    phases: [
+        {
+            phase: 'walk',
+            label: 'xiaohongshu',
+            platform: 'xiaohongshu',
+            running: true,
+            seconds: 0,
+            at: Date.now() / 1000 - 74,
+            url: 'https://www.xiaohongshu.com/explore/6ad81a29000000002c011778',
+        },
+    ],
+};
+await PhaseLog.refresh();
+out.running = body.innerHTML;
+
 /* ── a closed console is not polled ─────────────────────────────────────── */
 consolePanel.classList.remove('open');
 const before = fetches.length;
