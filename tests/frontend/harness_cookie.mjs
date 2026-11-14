@@ -908,4 +908,111 @@ out.loginSaved = {
 delete sandbox.canvas;
 delete sandbox.openSettings;
 
+/* ── switching platform is a change of every answer on the panel ─────────
+   The select's handler used to repaint the guide alone. The line under the account box
+   names the platform, so it kept saying “知乎 · work” while the box said 微博; the summary
+   and the saved-logins dock are built from /api/cookies/status, which nothing asked again.
+   A cookie written while the dialog was open (this harness makes the disk change behind it)
+   is exactly what the user sees as “没有及时刷新”. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieJob.active = false;
+sandbox.cookieJob.known = false;
+sandbox.cookieFlows = {
+    zhihu: FLOW_BODY.flows[1],
+    weibo: {
+        platform: 'weibo',
+        purpose: 'PURPOSE-WEIBO',
+        steps: ['W-STEP'],
+        login_url: 'https://weibo.com/',
+        accepts_custom_url: false,
+        allowed_hosts: [],
+    },
+};
+sandbox.cookieProfiles = {};
+sandbox.cookieProfilesLoaded = true;
+const ZHIHU_ONLY = {
+    ok: true,
+    cookies: { zhihu: true, weibo: false },
+    accounts: { zhihu: ['default', 'work'], weibo: [] },
+    rows: [{ platform: 'zhihu', account: 'work', entries: 2, saved_at: '2026-10-01 09:00', label_key: '', label_args: {} }],
+};
+const BOTH_PLATFORMS = {
+    ok: true,
+    cookies: { zhihu: true, weibo: true },
+    accounts: { zhihu: ['default', 'work'], weibo: ['work'] },
+    rows: [
+        { platform: 'zhihu', account: 'work', entries: 2, saved_at: '2026-10-01 09:00', label_key: '', label_args: {} },
+        { platform: 'weibo', account: 'work', entries: 3, saved_at: '2026-10-02 11:00', label_key: '', label_args: {} },
+    ],
+};
+sandbox.__responses['/api/cookies/status'] = ZHIHU_ONLY;
+setPlatform('zhihu');
+doc.getElementById('cookie-account').value = 'work';
+sandbox.refreshCookieStatus();
+await flush();
+out.beforePlatformSwitch = {
+    platform: doc.getElementById('cookie-platform').value,
+    line: accountLine(),
+    summary: doc.getElementById('cookie-status').textContent,
+};
+/* The disk answers differently now (a login was saved for weibo in between): the panel may
+   only show that if the switch ASKS, instead of reusing what the dialog opened with. */
+sandbox.__responses['/api/cookies/status'] = BOTH_PLATFORMS;
+setPlatform('weibo');
+const beforeSwitchCalls = sandbox.__calls.length;
+sandbox.onCookiePlatformChange();
+await flush();
+out.platformSwitch = {
+    platform: doc.getElementById('cookie-platform').value,
+    statusAsked: sandbox.__calls.slice(beforeSwitchCalls).filter((c) => c.url === '/api/cookies/status').length,
+    line: accountLine(),
+    summary: doc.getElementById('cookie-status').textContent,
+    guide: (doc.getElementById('cookie-guide-body').children || []).map((child) => child.textContent),
+    managerPlatforms: managerRows().map((row) => row.platform),
+};
+
+/* The dock's own read is the same rows the dialog prints: opening it while the dialog is up
+   must not leave the line under the box describing a row the fresh table no longer holds. */
+doc.getElementById('cookie-dialog').classList.add('open');
+sandbox.__responses['/api/cookies/status'] = {
+    ok: true,
+    cookies: { weibo: false },
+    accounts: { weibo: [] },
+    rows: [],
+};
+sandbox.refreshCookieStatus();
+await flush();
+const lineWhileEmpty = accountLine();
+sandbox.__responses['/api/cookies/status'] = BOTH_PLATFORMS;
+sandbox.__responses['/api/pool/state'] = { ok: true, enabled: false, summary: {}, accounts: [], exits: [], events: [] };
+await sandbox.cookiesManager.refresh();
+await flush();
+out.dockRefreshRepaintsDialog = { before: lineWhileEmpty, after: accountLine() };
+
+/* ── a cookie write re-reads the profile state the guide's hint is drawn from ──
+   “该 profile 里还是旧的 Cookie，下一次抓取会自动带上新的” is only ever true because the
+   SERVER measured it; that table was cached for the life of the page, so a save that just
+   planted the new file (or was deferred because the profile was held) left the sentence
+   saying the opposite of the disk until a full reload. */
+sandbox.__responses['/api/browser/profiles'] = { ok: true, profiles: [{ platform: 'weibo', needs_refresh: true }] };
+sandbox.cookieProfiles = { weibo: { platform: 'weibo', needs_refresh: true } };
+sandbox.cookieProfilesLoaded = true;
+setPlatform('weibo');
+sandbox.renderCookieGuide();
+await flush();
+out.hintBeforeSave = (doc.getElementById('cookie-guide-body').children || []).map((child) => child.textContent);
+sandbox.__responses['/api/browser/profiles'] = { ok: true, profiles: [{ platform: 'weibo', needs_refresh: false }] };
+sandbox.__responses['/api/cookies/save'] = { ok: true, message: 'SAVED', count: 1 };
+sandbox.__responses['/api/cookies/status'] = BOTH_PLATFORMS;
+doc.getElementById('cookie-account').value = 'work';
+doc.getElementById('cookie-json').value = JSON.stringify([{ name: 'SUB', value: 'v', domain: '.weibo.com' }]);
+const beforeProfilesReads = sandbox.__calls.filter((c) => c.url === '/api/browser/profiles').length;
+sandbox.saveCookieConfig();
+await flush();
+await flush();
+out.saveReloadsProfiles = {
+    profilesAsked: sandbox.__calls.filter((c) => c.url === '/api/browser/profiles').length - beforeProfilesReads,
+    hintAfter: (doc.getElementById('cookie-guide-body').children || []).map((child) => child.textContent),
+};
+
 process.stdout.write(JSON.stringify(out));

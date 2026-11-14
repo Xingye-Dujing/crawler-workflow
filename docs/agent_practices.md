@@ -422,6 +422,15 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
     page load — the paste box did it, the **login window's `saved` phase did not** (2026-11-14). `Capabilities.reload()`
     then waits out a request that predates the write, because `load()` hands an in-flight promise to the next caller and
     that answer is exactly "refreshed with the old list".
+  - **A cookie write also invalidates the PROFILE table, and a platform switch invalidates the platform summary.** The
+    guide's `cookie.refreshHint` says “that profile still holds an older cookie”, which only the server's
+    `/api/browser/profiles` can answer — cached for the page, it kept the pre-save sentence (and the save that was
+    *deferred* because the profile was busy never showed the hint at all). `reloadCookieProfiles()` waits out an
+    in-flight read exactly like `Capabilities.reload()`, and every mutation path (save, login-window `saved`, delete,
+    profile delete, rename) calls it. Separately, the dialog's `#cookie-platform` handler is
+    `onCookiePlatformChange()`, not `renderCookieGuide()`: a new platform changes the line under the account box and the
+    per-platform summary + saved-logins dock (built from `/api/cookies/status`), so the switch also re-reads the disk —
+    the reported shape (2026-11-14) was the guide moving while the line still named the platform just left.
   - **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both browser catalogues, and
     the `AppSettings` wiring.
 

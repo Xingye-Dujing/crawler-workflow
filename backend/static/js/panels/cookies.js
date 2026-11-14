@@ -21,17 +21,20 @@ var cookieFlowsLoading = false;
    outside is that the cookie file in data/cookies is NOT the session this profile holds. */
 var cookieProfiles = {};
 var cookieProfilesLoaded = false;
-var cookieProfilesLoading = false;
+/* The in-flight READ is kept as a promise, not as a boolean, for the same reason
+   ``Capabilities.reload`` keeps one: a caller that must see the state AFTER a write has to
+   wait that request out, because it may have started before the write. */
+var cookieProfilesPending = null;
 
 function loadCookieProfiles() {
     /* In-flight as well as loaded: the guide repaints when its own fetch lands, and a
        second call during that window would buy the same table twice — the reason the
        panel is allowed to cache it at all is that it is fetched once. A failed read
        leaves ``loaded`` false, so the next render asks again. */
-    if (cookieProfilesLoaded || cookieProfilesLoading) return;
-    cookieProfilesLoading = true;
-    fetchJSON('/api/browser/profiles').then(function (result) {
-        cookieProfilesLoading = false;
+    if (cookieProfilesLoaded) return Promise.resolve();
+    if (cookieProfilesPending) return cookieProfilesPending;
+    cookieProfilesPending = fetchJSON('/api/browser/profiles').then(function (result) {
+        cookieProfilesPending = null;
         if (!result || !result.ok) return;
         var byName = {};
         (result.profiles || []).forEach(function (row) {
@@ -40,6 +43,21 @@ function loadCookieProfiles() {
         cookieProfiles = byName;
         cookieProfilesLoaded = true;
         renderCookieGuide();
+    });
+    return cookieProfilesPending;
+}
+
+function reloadCookieProfiles() {
+    /* A cookie was written or removed, so the question this table answers — “does that
+       account's browser still hold an OLDER cookie than the file on disk?” — just changed
+       its answer, and the guide's ``cookie.refreshHint`` line is drawn from the cached one.
+       Waiting out an in-flight read first is the half that made the earlier account bug look
+       “refreshed but unchanged”: a request sent before the save answers about the state
+       before it. */
+    var pending = cookieProfilesPending;
+    return Promise.resolve(pending).then(function () {
+        cookieProfilesLoaded = false;
+        return loadCookieProfiles();
     });
 }
 
@@ -50,6 +68,10 @@ function renderCookieGuide() {
     loadCookieProfiles();
     // The account offers follow the platform the guide is being drawn for.
     renderCookieAccounts();
+    /* So does the line under the account box. It names the platform, so a repaint that left
+       it behind kept saying “知乎 · work — 还没有保存过” while the select said 微博 — the one
+       line on this panel a platform switch is guaranteed to make wrong. */
+    renderCookieAccountStatus();
     if (!cookieFlows) {
         body.textContent = I18n.t('cookie.guideLoading');
         /* The same in-flight guard the profile table needs: this function is called again
@@ -104,6 +126,18 @@ function renderCookieGuide() {
         entry.disabled = !flow.accepts_custom_url;
         entry.placeholder = flow.login_url || 'https://…';
     }
+}
+
+function onCookiePlatformChange() {
+    /* The select's own handler, and the reason it is not just ``renderCookieGuide``: picking
+       another platform changes every answer this panel prints — the steps, the account
+       candidates, the line under the account box, and the per-platform summary + saved-logins
+       list — while the guide was the ONLY thing the old handler repainted. The summary and the
+       dock are built from /api/cookies/status (a different read than the guide's), so their
+       freshness is asked for rather than assumed: the user came here to look, and a list that
+       answers from the moment the dialog was opened is exactly what “没有及时刷新” describes. */
+    renderCookieGuide();
+    refreshCookieStatus();
 }
 
 function refreshCookieStatus(updateSummary) {
@@ -281,6 +315,10 @@ function pollCookieJob() {
             statusEl.textContent = I18n.t('cookie.savedN', { platform: platformLabels([s.platform]), n: s.count });
             showToast(I18n.t('toast.cookiesSaved') + ' - ' + platformLabels([s.platform]));
             refreshCookieStatus();
+            /* The file on disk just became the profile's source (or was deferred because the
+               profile was held), so the guide's “still holds an older cookie” line is drawn
+               from a table whose answer is now stale. */
+            reloadCookieProfiles();
             /* The login window is how a NEW login is born: the name typed in the account box
                is a cookie file on disk as of this answer, and a data-source node already on
                screen kept offering only the logins it knew at page load. The JSON save path
@@ -403,6 +441,10 @@ function saveCookieConfig() {
                     // The login is on disk now even when its profile plant was deferred, so
                     // the data-source account box must offer it without a page reload.
                     refreshAccountCandidates();
+                    /* And the profile table the guide reads now answers a different question:
+                       the file this save wrote is the one its browser holds (or, when the plant
+                       was deferred, the one it does NOT hold yet). */
+                    reloadCookieProfiles();
                 } else {
                     showToast(I18n.t('cookie.failed', { err: result.error || '' }));
                 }
@@ -452,6 +494,9 @@ async function deleteCookie(platform, account) {
         if (statusEl) statusEl.textContent = result.message || '';
         refreshCookieStatus();
         refreshAccountCandidates();
+        // The profile table answers “is the browser's cookie older than the file?” — the
+        // file just left, so that answer is no longer the one the guide shows.
+        reloadCookieProfiles();
     } else if (statusEl) {
         statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
     }
@@ -504,6 +549,8 @@ async function deleteCookieProfile(platform, account) {
         // The device is gone, so the profile chip and the whole row state must be re-read.
         refreshCookieStatus();
         refreshAccountCandidates();
+        // A deleted device cannot hold a stale cookie any more, so the guide's hint must go.
+        reloadCookieProfiles();
     } else if (statusEl) {
         statusEl.textContent = result.error || '';
     }
@@ -553,6 +600,9 @@ async function renameCookieAccount(platform, account) {
         setCookieAccountBox(result.account);
         refreshCookieStatus();
         refreshAccountCandidates();
+        // The account (and its browser directory) now have another name, and the profile table
+        // is keyed by platform — a cached answer might still describe the login that moved.
+        reloadCookieProfiles();
     } else if (statusEl) {
         statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
         showToast(result.error || I18n.t('cookie.failed').replace('{err}', ''));
@@ -1216,6 +1266,12 @@ var cookiesManager = {
                 var result = answers[0];
                 if (!result || !result.ok) throw new Error('status failed');
                 cookieRows = result.rows || [];
+                /* These are the rows the DIALOG's lines are drawn from as well: opening the dock
+                   over an open cookie dialog used to leave “微博 · work — 已保存 12 条” standing
+                   over a table that no longer held that row. Repaint both from the one read — the
+                   same rule the language switch follows, and no second request. */
+                renderCookieAccountStatus();
+                if (document.getElementById('cookie-dialog').classList.contains('open')) renderCookieAccounts();
                 renderCookieManager();
             })
             .catch(function () {

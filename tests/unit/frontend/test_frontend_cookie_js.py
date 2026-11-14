@@ -629,3 +629,61 @@ class TestAccountCandidatesAndManager:
         for gone in ('id="cookie-account-candidates"', 'id="cookie-manager"', 'cookies.refreshExplain'):
             assert gone not in html, f'{gone} came back'
         assert 'cookie-account-options' not in html, 'the datalist came back beside the dropdown'
+
+
+class TestAPlatformSwitchRefreshesTheWholePanel:
+    """A different platform is a different answer to every line this panel prints.
+
+    Reported 2026-11-14: “COOKIE 页面，平台切换时，底下面的各平台 COOKIE 有没有及时刷新”.
+    The select's handler repainted the guide alone — the line under the account box kept
+    naming the platform the user had just left, and the platform summary + saved-logins
+    dock answered from whenever the dialog was opened. The disk in this harness changes
+    behind the panel between the two reads, which is the state a stale list misreports.
+    """
+
+    def test_the_switch_asks_the_disk_again(self, panel):
+        case = panel['platformSwitch']
+        assert case['statusAsked'] == 1, 'the summary + dock were left on the pre-switch read'
+        assert case['summary'] != panel['beforePlatformSwitch']['summary'], case
+
+    def test_the_summary_names_the_new_platforms_cookie(self, panel):
+        before, after = panel['beforePlatformSwitch']['summary'], panel['platformSwitch']['summary']
+        assert 'cookie.savedNo' in before, before
+        assert 'cookie.savedNo' not in after, after
+        assert 'platform.weibo (work)' in after, after
+
+    def test_the_line_under_the_box_follows_the_platform(self, panel):
+        before, after = panel['beforePlatformSwitch']['line'], panel['platformSwitch']['line']
+        assert 'platform.zhihu' in before, before
+        assert 'platform.weibo' in after, after
+        assert 'platform.zhihu' not in after, after
+        # …and from the freshly read rows, not just from the new platform's name.
+        assert 'cookies.accountStatusSaved - 3' in after, after
+
+    def test_the_guide_and_the_dock_move_with_it(self, panel):
+        case = panel['platformSwitch']
+        assert case['guide'] == ['PURPOSE-WEIBO', 'W-STEP'], case['guide']
+        assert case['managerPlatforms'] == ['platform.zhihu', 'platform.weibo'], case
+
+    def test_the_markup_wires_the_whole_panel_not_only_the_guide(self):
+        """The bug was in the markup's handler name: one function that repainted one box."""
+        html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
+        select = html[html.index('id="cookie-platform"') : html.index('>', html.index('id="cookie-platform"'))]
+        assert 'onchange="onCookiePlatformChange()"' in select, select
+        assert 'onchange="renderCookieGuide()"' not in select, select
+
+    def test_the_docks_own_read_repaints_the_dialog_line(self, panel):
+        """Both surfaces print the same rows; a refresh must not leave one describing a row
+        the other has just been told no longer exists."""
+        case = panel['dockRefreshRepaintsDialog']
+        assert 'cookies.accountStatusNone' in case['before'], case
+        assert 'cookies.accountStatusSaved - 3' in case['after'], case
+
+    def test_a_save_re_reads_the_profile_state_the_hint_is_drawn_from(self, panel):
+        """“该 profile 里还是旧的 Cookie” is measured by the server, so the table it comes
+        from is only cached, never assumed: a save changes the answer, and the panel used to
+        keep the pre-save sentence until a full reload."""
+        assert 'cookie.refreshHint' in panel['hintBeforeSave'], panel['hintBeforeSave']
+        case = panel['saveReloadsProfiles']
+        assert case['profilesAsked'] == 1, case
+        assert 'cookie.refreshHint' not in case['hintAfter'], case['hintAfter']
