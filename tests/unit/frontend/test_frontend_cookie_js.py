@@ -341,6 +341,25 @@ class TestSavePlantsItsOwnProfile:
             assert dead not in declared, f'the button is gone but its catalogue entry ({dead}) stayed'
 
 
+class TestALoginWindowThatSavedIsANewAccount:
+    """A login window is how a NEW login is born, so its save must re-read the candidates.
+
+    The paste box re-read them from the start; the login-window half did not, so the
+    data-source node's account box kept offering only the logins it knew at page load until a
+    full reload (user, 2026-11-14). The refresh rides the ``saved`` phase, not the poll loop:
+    an answer that only reports "still waiting" changes nothing on disk.
+    """
+
+    def test_the_saved_phase_re_reads_the_data_source_account_list(self, panel):
+        assert panel['loginSaved']['capabilitiesRefetched'] is True
+
+    def test_the_node_panel_on_screen_is_repainted_with_the_new_login(self, panel):
+        assert panel['loginSaved']['repaintedNode'] == ['n1']
+
+    def test_the_job_still_settles_after_the_refresh(self, panel):
+        assert panel['loginSaved']['jobActive'] is False
+
+
 class TestAccountCandidatesAndManager:
     """The account box, its candidate dropdown, and the docked table of saved logins.
 

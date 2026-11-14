@@ -79,6 +79,22 @@ const Capabilities = {
         return this._pending;
     },
 
+    reload() {
+        /* A cookie was written a moment ago, so a request already in flight cannot be the
+           answer: it may have started before the file existed, and `load()` hands that very
+           promise to the next caller. Wait it out, then ask again — the data-source node's
+           account box is only honest if it lists what is on disk NOW, and awaiting the
+           in-flight fetch is exactly the "refreshed, but with the old list" the user saw. */
+        var self = this;
+        return Promise.resolve(this._pending)
+            .catch(function () {
+                return null;
+            })
+            .then(function () {
+                return self.load();
+            });
+    },
+
     ready() {
         return !!this.data;
     },

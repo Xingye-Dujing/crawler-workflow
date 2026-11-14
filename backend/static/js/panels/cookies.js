@@ -281,6 +281,11 @@ function pollCookieJob() {
             statusEl.textContent = I18n.t('cookie.savedN', { platform: platformLabels([s.platform]), n: s.count });
             showToast(I18n.t('toast.cookiesSaved') + ' - ' + platformLabels([s.platform]));
             refreshCookieStatus();
+            /* The login window is how a NEW login is born: the name typed in the account box
+               is a cookie file on disk as of this answer, and a data-source node already on
+               screen kept offering only the logins it knew at page load. The JSON save path
+               below has always re-read the candidates; this half did not. */
+            refreshAccountCandidates();
         } else if (s.phase === 'verified') {
             statusEl.textContent = (s.lines || []).join('\n');
         } else if (s.phase === 'cancelled') {

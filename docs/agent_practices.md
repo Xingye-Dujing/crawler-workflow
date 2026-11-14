@@ -416,6 +416,12 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
     point `CookieManager.key`/`path_segment` (`''`⇄`default`, lowercase always — `Work` and `work` are the same session on
     a case-insensitive FS) so `sessions.profiles`, the preflight cache and the JS box route through it. The candidate list
     and a new node's preselection are both `CookieManager.accounts_in_order`.
+  - **Every cookie mutation path re-reads `/api/capabilities`, and only through `refreshAccountCandidates()`:** the node's
+    账号 box reads its options from that payload (rebuilt at send time from the files on disk), never from a JS list. A
+    path that wrote a cookie and skipped the re-read left the open data-source panel offering only the logins it knew at
+    page load — the paste box did it, the **login window's `saved` phase did not** (2026-11-14). `Capabilities.reload()`
+    then waits out a request that predates the write, because `load()` hands an in-flight promise to the next caller and
+    that answer is exactly "refreshed with the old list".
   - **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both browser catalogues, and
     the `AppSettings` wiring.
 

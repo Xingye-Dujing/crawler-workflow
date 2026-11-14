@@ -1686,8 +1686,9 @@ function refreshAccountCandidates() {
        panel from /api/cookies/status, but the node's account box reads the CAPABILITIES cache,
        which was filled once at startup — so without this, a login created, deleted, renamed or
        had its device retired stayed invisible to the data-source node until a full page reload.
-       Re-read that one endpoint and repaint a node panel the user may already have open. */
-    Capabilities.load().then(function () {
+       Re-read that endpoint (`reload` waits out a request that predates the write) and repaint a
+       node panel the user may already have open. */
+    Capabilities.reload().then(function () {
         if (typeof canvas !== 'undefined' && canvas && canvas._settingsNodeId) openSettings(canvas._settingsNodeId);
     });
 }

@@ -865,4 +865,47 @@ sandbox.pollCookieJob();
 await flush();
 out.pollLost = report();
 
+/* ── a login window that SAVED a cookie must re-read the account candidates ──
+   The login window is how a new account is born: the name typed in the account box becomes a
+   cookie file on disk, and the data-source node's account box reads its options from
+   /api/capabilities. The paste path (section 9) always re-read it; this half did not, so a
+   node panel already on screen kept offering only the logins it knew at page load. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+/* The pool row reader is shared state: earlier sections left it holding a bare `{ok:true}`
+   answer, and the status refresh below repaints the docked table from it. Give it the shape
+   the server sends so this scenario measures the account refresh, not a crash. */
+sandbox.poolState = { enabled: false, summary: {}, accounts: [], exits: [], events: [] };
+sandbox.cookieJob.active = true;
+sandbox.cookieJob.known = true;
+sandbox.cookieJob.platform = 'weibo';
+sandbox.cookieJob.kind = 'login';
+sandbox.cookieJob.timer = 4343;
+sandbox.__responses['/api/cookies/status'] = {
+    ok: true,
+    cookies: { weibo: true },
+    accounts: { weibo: ['work'] },
+    rows: [],
+};
+sandbox.__responses['/api/cookies/generate/status'] = {
+    ok: true,
+    active: false,
+    kind: 'login',
+    platform: 'weibo',
+    phase: 'saved',
+    count: 21,
+};
+sandbox.__opened = [];
+sandbox.canvas = { _settingsNodeId: 'n1' };
+sandbox.openSettings = (id) => sandbox.__opened.push(id);
+const beforeFetchLoginSaved = sandbox.__fetches.length;
+sandbox.pollCookieJob();
+await flush();
+out.loginSaved = {
+    capabilitiesRefetched: sandbox.__fetches.slice(beforeFetchLoginSaved).includes('/api/capabilities'),
+    repaintedNode: sandbox.__opened.slice(),
+    jobActive: sandbox.cookieJob.active,
+};
+delete sandbox.canvas;
+delete sandbox.openSettings;
+
 process.stdout.write(JSON.stringify(out));
