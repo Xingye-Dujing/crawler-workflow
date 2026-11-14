@@ -143,6 +143,70 @@ def driver():
         crawler.close()
 
 
+# Collected from the FIRST byte of every document, because a script that never ran prints nothing.
+# ``driver.get_log('browser')`` is not an option: the crawl driver never asks for
+# ``goog:loggingPrefs``, so Selenium's browser log is empty whatever the page did.
+_BOOT_ERRORS_JS = """
+window.__bootErrors = [];
+window.addEventListener('error', function (event) {
+    window.__bootErrors.push(
+        String(event.message) + ' @ ' + String(event.filename || '?') + ':' + String(event.lineno || 0)
+    );
+});
+window.addEventListener('unhandledrejection', function (event) {
+    window.__bootErrors.push('unhandled rejection: ' + String(event.reason));
+});
+"""
+
+_BOOT_WAIT_SECONDS = 15
+_BOOT_COLLECTOR_INSTALLED: set[int] = set()
+
+
+def _install_boot_error_collector(driver):
+    """Install the listener once per driver; it applies to every later navigation."""
+    if id(driver) in _BOOT_COLLECTOR_INSTALLED:
+        return
+    driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': _BOOT_ERRORS_JS})
+    _BOOT_COLLECTOR_INSTALLED.add(id(driver))
+
+
+def _boot_state(driver):
+    return driver.execute_script(
+        'return { ready: document.readyState, canvas: typeof canvas, i18n: typeof I18n,'
+        ' errors: (window.__bootErrors || []).slice() };'
+    )
+
+
+def _booted(state):
+    return state['ready'] == 'complete' and state['canvas'] == 'object' and state['i18n'] == 'object'
+
+
+def _wait_for_boot(driver, seconds=None):
+    limit = _BOOT_WAIT_SECONDS if seconds is None else seconds
+    deadline = time.monotonic() + limit
+    while True:
+        state = _boot_state(driver)
+        if _booted(state):
+            return state
+        if time.monotonic() >= deadline:
+            return state
+        time.sleep(0.05)
+
+
+def _boot_evidence(driver):
+    """The document's own account of itself: which scripts it lists, which ones transferred bytes."""
+    return driver.execute_script(
+        """
+        return {
+            scripts: Array.from(document.scripts).map((s) => s.src || 'inline'),
+            fetched: performance.getEntriesByType('resource')
+                .filter((e) => e.initiatorType === 'script')
+                .map((e) => `${e.name} transfer=${e.transferSize} duration=${Math.round(e.duration)}`),
+        };
+        """
+    )
+
+
 def _load_app(driver, app_url):
     """Open the page and refuse to drive bindings it never installed.
 
@@ -154,32 +218,63 @@ def _load_app(driver, app_url):
     bindings every test drives, and on timeout fail with the page's own evidence
     (which scripts the document lists, which ones transferred bytes) rather than a
     bare JavaScript exception.
+
+    A document that lists ``app.js`` and still has no ``I18n`` (the mirror image of that
+    incident: canvas present, the LATER script missing) is a request the browser never
+    finished — same bytes pass on the other two runners. That costs ONE reload, reported
+    with both attempts, exactly like the browser-launch retry in ``test_profile_template``;
+    a real boot regression fails the second navigation the same way and still goes red.
     """
-    driver.get(app_url + '/')
-    deadline = time.monotonic() + 15
-    while True:
-        state = driver.execute_script(
-            'return { ready: document.readyState, canvas: typeof canvas, i18n: typeof I18n };'
-        )
-        if state['ready'] == 'complete' and state['canvas'] == 'object' and state['i18n'] == 'object':
+    _install_boot_error_collector(driver)
+    attempts = []
+    for attempt in (1, 2):
+        driver.get(app_url + '/')
+        state = _wait_for_boot(driver)
+        if _booted(state):
+            if attempt > 1:
+                print(f'[boot] the page needed a reload; first attempt: {attempts[0]}')
             # A navigation resets Chrome's device-metrics override; re-apply after the document is
             # really ready, not right after `get` (the reset can arrive later).
             _apply_viewport(driver)
             return
-        if time.monotonic() >= deadline:
-            break
-        time.sleep(0.05)
-    evidence = driver.execute_script(
-        """
-        return {
-            scripts: Array.from(document.scripts).map((s) => s.src || 'inline'),
-            fetched: performance.getEntriesByType('resource')
-                .filter((e) => e.initiatorType === 'script')
-                .map((e) => `${e.name} transfer=${e.transferSize} duration=${Math.round(e.duration)}`),
-        };
-        """
+        attempts.append((state, _boot_evidence(driver)))
+    pytest.fail(
+        'the page never finished booting after two navigations: '
+        + '; '.join(f'attempt {index + 1}: {state}; {evidence}' for index, (state, evidence) in enumerate(attempts))
     )
-    pytest.fail(f'the page never finished booting: {state}; {evidence}')
+
+
+def test_the_boot_retry_still_refuses_a_page_that_never_defines_a_later_script(driver, monkeypatch, tmp_path):
+    """One reload may absorb a dropped request; it may never absorb a broken boot.
+
+    The page served here defines ``canvas`` and never defines ``I18n`` — the exact shape the
+    2026-11-14 Windows runner reported — so the second navigation has to fail the same way and
+    the refusal has to carry both attempts, the state that was missing and the document's own
+    script list. Without this pin the retry could turn into "the flake is green now".
+    """
+    import functools
+    import http.server
+    import threading
+
+    (tmp_path / 'index.html').write_text(
+        '<!doctype html><title>broken boot</title><script>window.canvas = {};</script>',
+        encoding='utf-8',
+    )
+    server = http.server.ThreadingHTTPServer(
+        ('127.0.0.1', 0), functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp_path))
+    )
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setattr(sys.modules[__name__], '_BOOT_WAIT_SECONDS', 1)
+        with pytest.raises(pytest.fail.Exception) as caught:
+            _load_app(driver, f'http://127.0.0.1:{server.server_port}')
+    finally:
+        server.shutdown()
+        server.server_close()
+    message = str(caught.value)
+    assert 'never finished booting after two navigations' in message
+    assert "'canvas': 'object'" in message and "'i18n': 'undefined'" in message
+    assert 'attempt 2' in message and "'scripts': ['inline']" in message
 
 
 # ─── the overflow rule, stated once as JavaScript ───────────────────────

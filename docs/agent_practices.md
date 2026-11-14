@@ -170,6 +170,14 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   before. A test driving page bindings must wait by name (`readyState === 'complete'` plus `typeof canvas === 'object'`)
   and on timeout fail with the document's script list and each script's transfer size. All 54 navigations in
   `test_ui_layout.py` now go through `_load_app`.
+- **The mirror case is the same flake, and it costs one reload:** on 2026-11-14 the Windows runner hit `canvas` present,
+  `I18n` undefined (`readyState` complete) with `app.js` downloaded — the one script that defines both `I18n` and the boot
+  body had not executed. A rerun of the same commit was green, so it is the browser dropping a static request, not a
+  product regression. `_load_app` now installs an `error`/`unhandledrejection` collector with
+  `Page.addScriptToEvaluateOnNewDocument` (not `driver.get_log('browser')`: the crawl driver never asks for
+  `goog:loggingPrefs`, so that log is always empty), retries the navigation ONCE, and prints the first attempt's state
+  when the reload was needed; two failed navigations still fail, now with the page's own JS errors beside the script
+  list. A deterministic boot regression cannot be rescued by a reload, so the retry only absorbs a transport abort.
 - **A harness that reads module files by hand is a second opinion about the split map — and the map must read each file
   once.** Three harnesses (`harness_menu`/`harness_app_state`/`harness_schedules`) did their own `argv.map(readFileSync)`
   instead of `companions.mjs`, so when `LLMSettings`/`AppSettings` moved out of `app.js` their boots died with
