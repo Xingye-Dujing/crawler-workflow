@@ -72,6 +72,25 @@ class TestPreset:
         for key in settings.PRESETS['slow']['values']:
             assert restored['settings'][key] == before[key], key
 
+    @pytest.mark.parametrize('preset', ['standard', 'slow', 'night'])
+    def test_every_preset_applies_and_restores_exactly(self, client, preset):
+        """Three bundles are only honest if each one is one click and one click back.
+
+        The snapshot rule is the same for all of them (see ``apply_preset``): the first
+        bundle applied keeps the ORIGINAL values, so switching between presets still
+        restores what the user had before any of them.
+        """
+        before = client.get('/api/settings').get_json()['settings']
+        applied = _post(client, '/api/settings/preset', {'action': 'apply', 'preset': preset}).get_json()
+        assert applied['ok'] is True, applied
+        assert applied['preset']['active'] == preset
+        for key, value in settings.PRESETS[preset]['values'].items():
+            assert applied['settings'][key] == value, f'{preset} did not write {key}'
+
+        restored = _post(client, '/api/settings/preset', {'action': 'restore'}).get_json()
+        for key in settings.PRESETS[preset]['values']:
+            assert restored['settings'][key] == before[key], f'{preset} left {key} changed'
+
     def test_unknown_preset_and_bad_action_are_named_refusals(self, client):
         assert _post(client, '/api/settings/preset', {'action': 'apply', 'preset': 'turbo'}).status_code == 400
         assert _post(client, '/api/settings/preset', {'action': 'dance'}).status_code == 400

@@ -59,6 +59,13 @@ class XiaohongshuCrawler(Crawler):
     #: instead of an AttributeError — the value is never invented per row.
     comment_preview = DEFAULT_COMMENT_PREVIEW
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        #: Notes this session has opened. The page-to-page interval is paid before the
+        #: SECOND and later ones only — a batch's first page has nothing to follow, and a
+        #: resumed cursor landing on one note pays nothing either.
+        self._notes_opened = 0
+
     def search(self, keyword: str, target_count: int = 50, **_kwargs):
         self.comment_preview = self._comment_preview_of(_kwargs)
         resume = self.resume_of(_kwargs)
@@ -269,6 +276,14 @@ class XiaohongshuCrawler(Crawler):
         grid is still scrolling: the search page never reloads, so its virtualised
         card list and scroll offset are intact when the tab is closed again.
         """
+        # A human does not open forty notes back to back. The pause sits here, on the one
+        # path that opens a note (a resumed cursor landing on a note is a single open and
+        # pays nothing), and it is the page-interval knob — 小红书 watches the rate at
+        # which pages are opened, not only how their panels are scrolled.
+        opened = self._notes_opened
+        if opened:
+            pacing.between_pages()
+        self._notes_opened = opened + 1
         logger.info(t('crawl.xhs.detail_visit', url=url))
         search_handle = self.driver.current_window_handle if keep_page else None
         opened_tab = False

@@ -12,12 +12,13 @@ rows headless, so no comment panel forces a window.
 """
 
 import contextlib
+import time
 
 import capabilities.registry as capabilities
 import pandas as pd
 from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
-from runtime import gate, paths
+from runtime import gate, paths, phases
 from runtime.state import add_log, ambient, execution_state, stop_requested
 from selenium.common.exceptions import WebDriverException
 
@@ -25,6 +26,7 @@ from crawlers import crawler_class, get_crawler
 from crawlers.backends.catbus import CatbusCrawler
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped
+from crawlers.engine import pacing
 from i18n import t
 from nodes.context import NodeCall
 from nodes.labels import node_label
@@ -356,6 +358,11 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 break
             if idx <= resumed_index:
                 continue
+            # One page has already been opened, so pause before opening the next the way a
+            # person reads a feed: 小红书 watches the page-opening rate, not only the scrolls
+            # inside a page. The first link of the batch (and a resumed prefix) pays nothing.
+            if idx > 1:
+                pacing.between_pages()
             # The adapter's platform, chosen the same way the input list was: by DOMAIN, or —
             # for a mode whose matrix declares it takes NAMES (红果) — by the platform this
             # node already names. Never a guess: an unknown kind still lands on the named
@@ -435,7 +442,25 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     # platforms never holds two lanes at once. A pool rotation re-enters with
                     # the NEW login's lane, which is the lane the next attempt belongs to.
                     with gate.hold(kind, log=add_log, abort=stop_requested, account=active.get(kind, account)):
-                        rows, status = session.walk(kind, url, limit)
+                        _walk_started = time.monotonic()
+                        walk_rows = []
+                        walk_status = ''
+                        try:
+                            walk_rows, walk_status = session.walk(kind, url, limit)
+                        finally:
+                            # One line per LINK in the Console's phase log: the user's
+                            # “window opened and nothing happened” is answered by “this link
+                            # took N seconds and settled on X”.
+                            phases.record(
+                                'walk',
+                                time.monotonic() - _walk_started,
+                                label=kind,
+                                platform=kind,
+                                url=url,
+                                status=walk_status,
+                                rows=len(walk_rows),
+                            )
+                        rows, status = walk_rows, walk_status
                 except WebDriverException as e:
                     # One slow navigation used to take the whole node with it: the walk's bare
                     # ``driver.get`` throws its timeout straight through, and a batch where link

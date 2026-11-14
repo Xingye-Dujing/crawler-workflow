@@ -14,6 +14,8 @@ expand:
 * ``crawl_click_scale``    — the pause after any other UI click (tab, dismiss, dialog);
 * ``crawl_wait_scale``     — card / panel / detail element waits;
 * ``crawl_arrival_scale``  — the first-navigation settle (page arrival);
+* ``crawl_page_scale``     — the pause between opening one page (note/article) and the next;
+* ``crawl_jitter``         — how much each of those pauses may vary (± %), the human part;
 * ``crawl_patience_scale`` — stuck rounds, retry counts.
 
 They used to be three (pause / wait / patience) and the 慢速采集 preset wrote them as
@@ -31,7 +33,12 @@ from runtime.settings import get_setting
 
 #: Dimensions that are multipliers on a measured baseline. Patience is a count scale and
 #: is floored at 1 (never fewer rounds than the site measurement needed).
-_PAUSE_DIMENSIONS = ('pause', 'scroll', 'expand', 'click', 'wait', 'arrival')
+_PAUSE_DIMENSIONS = ('pause', 'scroll', 'expand', 'click', 'wait', 'arrival', 'page')
+
+#: The dimensions the humanising jitter applies to. A page-arrival wait and the element
+#: wait are budgets, not beats: stretching them by chance buys no human rhythm, and it
+#: would make "how long may this page take" a lottery.
+_JITTERED_DIMENSIONS = ('scroll', 'expand', 'click')
 
 
 def _raw(dimension: str) -> object:
@@ -51,6 +58,8 @@ def _raw(dimension: str) -> object:
         return get_setting('crawl_wait_scale')
     if dimension == 'arrival':
         return get_setting('crawl_arrival_scale')
+    if dimension == 'page':
+        return get_setting('crawl_page_scale')
     if dimension == 'patience':
         return get_setting('crawl_patience_scale')
     return get_setting('crawl_pace_scale')
@@ -97,6 +106,25 @@ def arrival_scale() -> float:
     return _scale('arrival')
 
 
+def page_scale() -> float:
+    """How much to stretch the pause between opening one page and the next."""
+    return _scale('page')
+
+
+def jitter() -> float:
+    """How far a beat may stray from its baseline, as a fraction (0.25 = ±25%).
+
+    ``crawl_jitter`` is a percentage the user sets (0-90). Read on every pause, so a saved
+    change applies to the next beat; a value that cannot be parsed is no jitter, never a
+    reason to raise.
+    """
+    try:
+        percent = float(get_setting('crawl_jitter'))
+    except (TypeError, ValueError):
+        return 0.0
+    return min(90.0, max(0.0, percent)) / 100.0
+
+
 def patience_scale() -> float:
     """How many more rounds/retries to allow on top of the measured baseline."""
     return _scale('patience')
@@ -126,6 +154,12 @@ def max_pending_waits() -> int:
 
 def _sleep_scaled(seconds: float, dimension: str) -> None:
     delay = max(0.0, float(seconds)) * _scale(dimension)
+    if dimension in _JITTERED_DIMENSIONS:
+        # The human part: the same beat is never the same length twice. A zero jitter is
+        # exactly the measured baseline, which is what every existing test pins.
+        amount = jitter()
+        if amount:
+            delay *= random.uniform(1.0 - amount, 1.0 + amount)
     if delay > 0:
         time.sleep(delay)
 
@@ -165,6 +199,11 @@ def wait_nap(seconds: float) -> None:
     _sleep_scaled(seconds, 'wait')
 
 
+def page_nap(seconds: float) -> None:
+    """A pause in the interval between two pages (a note, an article) being opened."""
+    _sleep_scaled(seconds, 'page')
+
+
 def poll_tick(seconds: float) -> None:
     """A fixed poll cadence, deliberately NOT scaled.
 
@@ -184,6 +223,22 @@ def polite(base: float = 1.0, spread: float = 0.4) -> None:
     is what turns the same rhythm into the 慢速采集 template.
     """
     throttled_sleep(max(0.2, float(base) + random.uniform(-float(spread), float(spread))))
+
+
+def between_pages(base: float = 1.6, spread: float = 0.6) -> None:
+    """A human-like pause between opening one page and the next.
+
+    Measured complaint (2026-11-14): 小红书 watches how fast pages are opened, not only how
+    the panel is scrolled, so a comment batch that opens note after note with no interval
+    between them reads as a machine. The jitter is the human part — a constant 5 s is still
+    a metronome — and the page-interval multiplier is what makes the interval a choice.
+    Called by the executors between links, never for the first page of a batch.
+    """
+    drawn = max(0.4, float(base) + random.uniform(-float(spread), float(spread)))
+    amount = jitter()
+    if amount:
+        drawn *= random.uniform(1.0 - amount, 1.0 + amount)
+    page_nap(drawn)
 
 
 # ─── waits and round counts ─────────────────────────────────────────────────

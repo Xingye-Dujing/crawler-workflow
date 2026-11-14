@@ -171,6 +171,10 @@ class Crawler(ABC):
     ):
         self.headless = headless
         self.cookie_path = cookie_path
+        #: Whether this browser exists only for the user to log in (a window, no crawl).
+        #: Kept as state because the phase log distinguishes a login window from a crawl
+        #: launch, and `needs_images` (the other consequence) is not the same fact.
+        self.for_login = bool(for_login)
         #: The exit (IP) this browser leaves through, as a plain description. ``None`` is a
         #: direct connection, which is also what every platform had before exits existed.
         #: Never a credential in a log: :mod:`crawlers.core.proxy` owns the wording.
@@ -272,6 +276,7 @@ class Crawler(ABC):
         self.pending_waits = 0
         self.cookies_loaded = 0
         self._profile_lock = browser.claim_profile(self.profile_dir, self._abort)
+        _launched_at = time.monotonic()
         try:
             self._create_driver()
         except BaseException:
@@ -295,6 +300,27 @@ class Crawler(ABC):
                 browser.close_driver(driver)
             self._release_profile()
             raise
+        self._record_launch(_launched_at)
+
+    def _record_launch(self, started: float) -> None:
+        """Report this browser's launch time to the panel's phase log.
+
+        A window the user can see with nothing on it for a minute is the symptom this
+        answers: the Console says how long the Chrome took, separately from what the
+        crawl then spent. A probe or preflight browser is recorded too — ``label`` names
+        the platform and ``for_login`` the window it was.
+        """
+        from runtime import phases
+
+        phases.record(
+            'browser',
+            time.monotonic() - started,
+            # The site's domain, not a platform key: the panel translates ``platform`` when
+            # it has one, and a domain is already the word a person recognises here.
+            label=self.domain,
+            profile=bool(self.profile_dir),
+            for_login=self.for_login,
+        )
 
     def _release_profile(self):
         """Give this session's profile back exactly once, even if a teardown is called twice.

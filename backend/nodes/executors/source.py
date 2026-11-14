@@ -18,7 +18,7 @@ import time
 import capabilities.registry as capabilities
 from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, split_urls
-from runtime import gate, paths
+from runtime import gate, paths, phases
 from runtime.settings import get_setting
 from runtime.state import _wf_local, add_log, ambient, execution_state, stop_requested
 
@@ -482,9 +482,25 @@ def execute_source_node(
         # argument that is not the user's — it is where this run stopped, handed
         # over from the store.
         allow_retry = not (pool_mode and bool(get_setting('pool_skip_wall_backoff')))
-        rows = crawl_with_collision_retry(
-            crawler, getattr(crawler, mode.handler), crawl_args, resume, platform, allow_retry=allow_retry
-        )
+        _crawl_started = time.monotonic()
+        rows = []
+        try:
+            rows = crawl_with_collision_retry(
+                crawler, getattr(crawler, mode.handler), crawl_args, resume, platform, allow_retry=allow_retry
+            )
+        finally:
+            # The search/list phase in the Console's phase log: a slow account spends most
+            # of its time here, and “the window sat on the feed” needs this number beside it.
+            phases.record(
+                'crawl',
+                time.monotonic() - _crawl_started,
+                label=platform,
+                platform=platform,
+                mode=str(getattr(mode, 'handler', '')),
+                rows=len(rows),
+                wall=bool(getattr(crawler, 'login_wall', False)),
+                risk=bool(getattr(crawler, 'risk_blocked', False)),
+            )
         if stop_requested():
             # A walk that honours 停止 does not raise: it breaks at its next row and hands
             # back what it collected. So a crawl that finished by *returning* after the

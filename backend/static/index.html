@@ -798,6 +798,10 @@
         </div>
       </div>
       <div id="console-tabs" style="display: none"></div>
+      <details id="console-phases" class="console-phases" open>
+        <summary data-i18n="phaseLog.title">Startup / phase log</summary>
+        <div id="console-phases-body" class="console-phases-body"></div>
+      </details>
       <div id="console-output"></div>
     </div>
 
@@ -1103,8 +1107,13 @@
               class="settings-input"
               type="text"
               placeholder=""
+              data-i18n-placeholder="settingsPanel.search"
               oninput="SettingsPanel.setFilter(this.value)"
             />
+            <label class="settings-checkbox-label" title="">
+              <input type="checkbox" id="settings-show-advanced" onchange="SettingsPanel.setAdvanced(this.checked)" />
+              <span data-i18n="settingsPanel.advanced">Advanced</span>
+            </label>
             <button class="menu-btn" type="button" id="settings-export-btn" onclick="SettingsPanel.exportSettings()" data-i18n="settingsPanel.export">
               Export
             </button>
@@ -1120,6 +1129,9 @@
           <div id="settings-panel-form"></div>
           <div id="settings-panel-warnings" class="settings-panel-warnings"></div>
           <div class="settings-panel-actions">
+            <button class="menu-btn" type="button" id="settings-reset-all" onclick="SettingsPanel.resetAll()" data-i18n="settingsPanel.resetAll">
+              Restore all defaults
+            </button>
             <button class="menu-btn" type="button" id="settings-panel-save" onclick="SettingsPanel.save()" data-i18n="set.save">
               Save
             </button>
@@ -2458,6 +2470,8 @@
     <script src="js/workflow-layout.js"></script>
     <script src="js/panels/settings.js"></script>
     <script src="js/panels/settings-panel.js"></script>
+    <!-- The Console's startup/phase timing strip (runtime/phases.py via /api/run/phases). -->
+    <script src="js/panels/phase-log.js"></script>
     <!-- The three per-node-type settings renderers split out of panels/settings.js: the panel shell
          stays one file, each node's own option lists and form live beside it. -->
     <script src="js/panels/node-analysis.js"></script>

@@ -36,7 +36,19 @@ def no_jitter(monkeypatch):
     monkeypatch.setattr(pacing_module.random, 'uniform', lambda _a, _b: 0.0)
 
 
-def _configure(monkeypatch, *, pace=1.0, scroll=1.0, expand=1.0, click=1.0, wait_scale=1.0, arrival=1.0, patience=1.0):
+def _configure(
+    monkeypatch,
+    *,
+    pace=1.0,
+    scroll=1.0,
+    expand=1.0,
+    click=1.0,
+    wait_scale=1.0,
+    arrival=1.0,
+    page=1.0,
+    jitter=0.0,
+    patience=1.0,
+):
     values = {
         'crawl_pace_scale': pace,
         'crawl_scroll_scale': scroll,
@@ -44,6 +56,8 @@ def _configure(monkeypatch, *, pace=1.0, scroll=1.0, expand=1.0, click=1.0, wait
         'crawl_click_scale': click,
         'crawl_wait_scale': wait_scale,
         'crawl_arrival_scale': arrival,
+        'crawl_page_scale': page,
+        'crawl_jitter': jitter,
         'crawl_patience_scale': patience,
     }
 
@@ -131,6 +145,21 @@ class TestEachDimensionIsItsOwnKnob:
         pacing_module.wait_nap(1.0)
         assert slept == [2.0]
 
+    def test_the_page_interval_is_its_own_knob_and_keeps_the_jitter(self, monkeypatch, slept):
+        """Between two pages a human is not a metronome: base ± spread, then the multiplier."""
+        _configure(monkeypatch, page=3.0)
+        pacing_module.page_nap(1.0)
+        assert slept == [3.0], 'the page interval must ride its own multiplier, not the polite one'
+
+        slept.clear()
+        pacing_module.between_pages()  # the real draw: 1.0..2.2 s × 3
+        assert len(slept) == 1 and 3.0 <= slept[0] <= 6.6, slept
+
+        slept.clear()
+        monkeypatch.setattr(pacing_module.random, 'uniform', lambda _a, _b: 0.0)
+        pacing_module.between_pages()
+        assert slept == [1.6 * 3.0]
+
     def test_a_poll_tick_is_never_stretched(self, monkeypatch, slept):
         _configure(monkeypatch, scroll=3.0)
         pacing_module.poll_tick(1.0)
@@ -139,6 +168,19 @@ class TestEachDimensionIsItsOwnKnob:
     def test_a_negative_dimension_is_clamped(self, monkeypatch, slept):
         _configure(monkeypatch, scroll=-4.0)
         pacing_module.scroll_nap(3.0)
+        assert slept == []
+
+    def test_jitter_spreads_the_beat_and_never_a_budget(self, monkeypatch, slept):
+        """30% means 0.7–1.3×, on the beats only: a wait budget is a promise, not a rhythm."""
+        _configure(monkeypatch, scroll=1.0, wait_scale=1.0, jitter=30.0)
+        draws = iter([0.0, 0.999])
+        # ``uniform(a, b)`` is called with (0.7, 1.3) for a 30% jitter; answer the ends.
+        monkeypatch.setattr(pacing_module.random, 'uniform', lambda a, b: a if next(draws) < 0.5 else b)
+        pacing_module.scroll_nap(2.0)
+        pacing_module.expand_nap(2.0)
+        assert [round(value, 2) for value in slept] == [1.4, 2.6], slept
+        slept.clear()
+        pacing_module.wait(2.0)  # returns, never sleeps: a budget is not a beat
         assert slept == []
 
 

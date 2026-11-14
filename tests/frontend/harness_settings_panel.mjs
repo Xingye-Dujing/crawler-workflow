@@ -54,8 +54,29 @@ sandbox.showToast = (text) => toasts.push(String(text));
 sandbox.showDialog = () => Promise.resolve('go');
 sandbox.escapeHtml = (value) => String(value === undefined || value === null ? '' : value);
 sandbox.closeDockedPanels = () => {};
-sandbox.I18n = { t: (key) => key };
-/* The page's own prefix builder (index.html). A navigation must go through it: a bare
+const LABELS = {
+    'settingsPanel.effective': '≈ {seconds} s (baseline {base} s × {scale})',
+    'settingsPanel.search': 'Search settings…',
+    'settingsPanel.presetsTitle': 'Speed presets',
+    'settingsPanel.presetWillChange': 'Will change {n} values: {list}',
+    'settingsPanel.presetMore': ' …and {n} more',
+    'settingsPanel.presetNoChange': 'Already matches the page',
+    'settingsPanel.importDiff': 'Changes (now → after import):',
+    'settingsPanel.importSummary': 'Import preview: {changed} change(s), {skipped} skipped.',
+    'settingsPanel.presetRestoreHint': 'Restore puts back exactly the values the preset replaced.',
+    'settingsPanel.resetGroup': 'Defaults',
+    'settingsPanel.resetGroupHint': 'stage',
+    'settingsPanel.resetAll': 'Restore all defaults',
+    'settingsPanel.advanced': 'Advanced settings',
+    'settingsPanel.outOfRange': 'allowed range: {min} – {max}',
+    'settingsPanel.hasInvalid': '{n} fields need a valid value',
+    'toast.setInvalid': 'These values need fixing before saving:',
+    'set.crawlPaceScale': 'Pacing multiplier',
+    'set.sameQueue': 'Same-platform queue',
+    'set.presetSlow': 'Slow crawl preset',
+    'set.presetSlowHint': 'slow',
+};
+sandbox.I18n = { t: (key) => (Object.prototype.hasOwnProperty.call(LABELS, key) ? LABELS[key] : key) };/* The page's own prefix builder (index.html). A navigation must go through it: a bare
    /api/... asks the site root and 404s under a reverse-proxied subpath. */
 sandbox.__cu = (url) => '/crawler' + url;
 sandbox.AppSettings = {
@@ -91,6 +112,7 @@ const schema = {
             choices: [],
             restart: false,
             portable: true,
+            baseline: 1.2,
         },
         {
             key: 'same_platform_queue',
@@ -105,8 +127,29 @@ const schema = {
             restart: false,
             portable: true,
         },
+        {
+            key: 'wall_proofs',
+            kind: 'int',
+            default: 5,
+            group: 'safety',
+            label: 'set.wallProofs',
+            hint: '',
+            minimum: 1,
+            maximum: 20,
+            choices: [],
+            restart: false,
+            portable: true,
+            advanced: true,
+        },
     ],
-    presets: { slow: { label: 'set.presetSlow', hint: 'set.presetSlowHint', keys: ['crawl_pace_scale'] } },
+    presets: {
+        slow: {
+            label: 'set.presetSlow',
+            hint: 'set.presetSlowHint',
+            keys: ['crawl_pace_scale', 'same_platform_queue'],
+            values: { crawl_pace_scale: 4.0, same_platform_queue: true },
+        },
+    },
 };
 
 function settingsAnswer(overrides) {
@@ -135,12 +178,28 @@ out.rendered = {
     paceField: !!sandbox.__byId('sp-crawl_pace_scale'),
     queueField: !!(sandbox.__byId('settings-panel-form').innerHTML.indexOf('sp-same_platform_queue') >= 0),
     formHasDefault: form.innerHTML.indexOf('value="1"') >= 0,
+    /* First confirmation the page turns a multiplier into seconds: ×1 at 1.2 s. */
+    effective: (form.innerHTML.match(/settings-field-effective">([^<]*)</) || [])[1] || '',
+    advancedHidden: form.innerHTML.indexOf('sp-wall_proofs') < 0,
 };
+
+/* ── advanced knobs stay out of the first look ─────────────────────────── */
+Panel.showGroup('safety');
+out.advancedHiddenInSafety = sandbox.__byId('settings-panel-form').innerHTML.indexOf('sp-wall_proofs') < 0;
+Panel.setAdvanced(true);
+out.advancedShown = sandbox.__byId('settings-panel-form').innerHTML.indexOf('sp-wall_proofs') >= 0;
+Panel.setAdvanced(false);
+Panel.showGroup('pace');
 
 /* ── a field edit is posted under its own key ──────────────────────────── */
 const pace = sandbox.__byId('sp-crawl_pace_scale');
 pace.value = '2.5';
 Panel.fieldChanged(pace);
+/* The effective line follows the number, not only the first render. */
+const effectiveNode = sandbox.document.querySelector
+    ? sandbox.document.querySelector('.settings-field-effective')
+    : null;
+out.effectiveAfterEdit = effectiveNode ? effectiveNode.textContent : '';
 answer = { ok: true, settings: { crawl_pace_scale: 2.5, same_platform_queue: false }, warnings: [], preset: null };
 await Panel.save();
 const saveCall = posted.filter((c) => c.url === '/api/settings' && c.method === 'POST').pop();
@@ -153,6 +212,35 @@ out.save.refreshes = sandbox.AppSettings.refreshes;
 Panel.resetField('crawl_pace_scale');
 out.reset = { value: sandbox.__byId('sp-crawl_pace_scale').value, draft: Panel.draft.crawl_pace_scale };
 
+/* ── an out-of-range number is refused by name, before the POST ─────────── */
+const invalid = sandbox.__byId('sp-crawl_pace_scale');
+invalid.value = '99';
+Panel.fieldChanged(invalid);
+posted.length = 0;
+const toastsBefore = toasts.length;
+await Panel.save();
+out.invalid = {
+    posted: posted.length,
+    toast: toasts[toasts.length - 1],
+    marked: !!invalid.closest('.settings-field').classList.contains('settings-field-invalid'),
+    raised: toasts.length > toastsBefore,
+};
+Panel.resetField('crawl_pace_scale');
+
+/* ── reset a whole group stages defaults; Save applies them ─────────────── */
+Panel.resetGroup('safety');
+out.groupReset = {
+    queue: Panel.draft.same_platform_queue,
+    proofs: Panel.draft.wall_proofs,
+    dirty: Object.keys(Panel.draft).length,
+};
+Panel.draft = {};
+
+/* ── the preset card shows what applying it would change ───────────────── */
+Panel.values = { crawl_pace_scale: 1.0, same_platform_queue: false };
+await Panel.renderPresetState();
+out.presetCard = sandbox.__byId('settings-preset-card').innerHTML;
+
 /* ── preset apply / restore hit the preset route ───────────────────────── */
 posted.length = 0;
 answer = { ok: true, settings: { crawl_pace_scale: 4.0 }, warnings: [], preset: { active: 'slow', customized: false } };
@@ -161,6 +249,34 @@ out.presetRefreshes = sandbox.AppSettings.refreshes;
 await Panel.restorePreset();
 out.preset = posted.filter((c) => c.url === '/api/settings/preset').map((c) => c.body.action);
 out.presetRefreshesAfterRestore = sandbox.AppSettings.refreshes;
+
+/* ── the import preview is old → new, not a list of keys ───────────────── */
+Panel.values = { crawl_pace_scale: 1.0, same_platform_queue: false };
+out.importDiff = Panel._importPreviewText({
+    ok: true,
+    changed: ['crawl_pace_scale'],
+    values: { crawl_pace_scale: 4.0 },
+    skipped: [],
+    warnings: [],
+});
+
+/* ── closing with staged edits asks first, and a discard clears them ─────── */
+const panelEl = sandbox.__byId('settings-panel');
+panelEl.classList.add('open');
+const dialogs = [];
+sandbox.showDialog = (opts) => {
+    dialogs.push(opts && opts.message);
+    return Promise.resolve('discard');
+};
+Panel.draft = { crawl_pace_scale: 2.5 };
+Panel.close();
+await new Promise((r) => setImmediate(r));
+out.guard = {
+    asked: dialogs.length,
+    open: panelEl.classList.contains('open'),
+    draft: Object.keys(Panel.draft).length,
+};
+sandbox.showDialog = () => Promise.resolve('go');
 
 /* ── export carries the user's machine-path choice ─────────────────────── */
 sandbox.__byId('settings-include-machine').checked = true;

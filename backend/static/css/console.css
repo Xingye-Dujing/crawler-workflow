@@ -209,6 +209,54 @@
   flex-shrink: 0;
   overflow-x: auto;
 }
+
+/* The phase-timing strip above the log: a quiet sheet like the tabs, never a second
+   console. Monospaced numbers so two runs can be compared by eye. */
+.console-phases {
+  border-bottom: 1px solid var(--line2);
+  flex-shrink: 0;
+  max-height: 30%;
+  overflow-y: auto;
+  padding: 5px 14px 7px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.console-phases summary {
+  cursor: pointer;
+  user-select: none;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+.console-phases summary:hover {
+  color: var(--text);
+}
+.phase-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+}
+.phase-table td {
+  padding: 1px 8px 1px 0;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.phase-table td.phase-detail {
+  color: var(--text-dim);
+  white-space: normal;
+}
+.phase-table td.phase-seconds {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-right: 12px;
+}
+.phase-table td.phase-name {
+  color: var(--text);
+}
+.phase-empty {
+  padding: 4px 0;
+  color: var(--text-dim);
+}
 #runs-tabs:empty,
 #workflows-tabs:empty {
   display: none;
@@ -563,6 +611,46 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-group-reset {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-weight: 400;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.settings-group-reset:hover {
+  color: var(--text);
+}
+.settings-field-invalid input,
+.settings-field-invalid select {
+  border-color: var(--err);
+}
+.settings-field-error {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--err);
+}
+.settings-preset-row {
+  border-top: 1px solid var(--line2);
+  padding-top: 8px;
+  margin-top: 10px;
+}
+.settings-preset-row:first-of-type {
+  border-top: 0;
+  margin-top: 4px;
+}
+.settings-preset-diff {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin: 4px 0 6px;
 }
 .settings-field {
   display: grid;
@@ -588,6 +676,15 @@
   font-size: 10.5px;
   color: var(--text-dim);
   line-height: 1.45;
+}
+/* The seconds a multiplier buys, beside it: “×3” alone is a number, not a promise. */
+.settings-field-effective {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 .settings-field input[type='text'],
 .settings-field input[type='number'],

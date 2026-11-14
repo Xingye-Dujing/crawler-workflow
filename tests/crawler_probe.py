@@ -35,6 +35,8 @@ def bare(driver, **attrs):
     crawler.driver = driver
     crawler.headless = True
     crawler.cookie_path = None
+    #: A probe is not a login window; the phase log reads this to say which Chrome it was.
+    crawler.for_login = False
     crawler.domain = 'www.douyin.com'
     crawler.cookie_domains = ('douyin.com', 'www.iesdouyin.com')
     crawler.login_url = 'https://www.douyin.com/'

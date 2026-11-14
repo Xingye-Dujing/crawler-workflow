@@ -45,6 +45,19 @@
         'console.popout': 'Pop',
         'console.dock': 'Dock',
         'console.all': 'All',
+        'phaseLog.title': 'Startup / phase log',
+        'phaseLog.empty': 'No timings yet — they appear here once a run opens a browser or reads a page.',
+        'phaseLog.phase.browser': 'Browser start',
+        'phaseLog.phase.crawl': 'Crawl',
+        'phaseLog.phase.walk': 'Comment walk',
+        'phaseLog.status.ok': 'ok',
+        'phaseLog.status.blocked': 'blocked',
+        'phaseLog.status.dead': 'dead',
+        'phaseLog.rows': '{n} rows',
+        'phaseLog.unproven': '{n} unproven',
+        'phaseLog.wall': 'login wall',
+        'phaseLog.risk': 'risk control',
+        'phaseLog.loginWindow': 'login window',
         /* The first-entry notice on a cloud host. The headline is the first line of the
         body because this page's dialog has no title slot — inventing one for one
         dialog would be a second way to render a dialog. */
@@ -173,6 +186,19 @@
         'console.popout': '弹出',
         'console.dock': '收回',
         'console.all': '全部',
+        'phaseLog.title': '启动 / 阶段耗时',
+        'phaseLog.empty': '还没有记录——运行一次（打开浏览器或读取页面）后就会出现在这里。',
+        'phaseLog.phase.browser': '浏览器启动',
+        'phaseLog.phase.crawl': '采集',
+        'phaseLog.phase.walk': '评论走查',
+        'phaseLog.status.ok': '正常',
+        'phaseLog.status.blocked': '被拦',
+        'phaseLog.status.dead': '失效',
+        'phaseLog.rows': '{n} 行',
+        'phaseLog.unproven': '未证明 {n}',
+        'phaseLog.wall': '登录墙',
+        'phaseLog.risk': '风控',
+        'phaseLog.loginWindow': '登录窗口',
         'privacy.body':
          '这个应用跑在服务器上，不在你这台电脑里。\n'
          + '存在服务器上的：你粘贴进来的 Cookie、你上传或采集到的每一张表、你的工作流文件与运行记录。'

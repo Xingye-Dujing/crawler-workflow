@@ -48,7 +48,9 @@
 
 定义在 `runtime/settings_schema.py` 的 `SETTINGS`（一个键一条 `Setting`，含类型、范围、分组、中英文标签、读取方与是否可导出）；`runtime/settings.py` 只负责加载、校验、持久化、预设与导入导出。设置面板由 `GET /api/settings/schema` 动态渲染，新增键不需要再手写输入框。
 
-**慢速采集**是一套预设（`PRESETS['slow']`），不是单独的开关：它把七个速度倍数（礼貌停顿 / 滚动 / 展开 / 点击 / 元素等待 / 页面到达 / 耐心）、同平台排队、跑前 Cookie 验证与并发上限写成具体值，并保存启用前的快照；设置页或顶栏按钮可一键启用、一键恢复。七个倍数各自只作用于自己那一类操作，平台自身只保留实测基线，不再有自己的开关——需要“滚动慢一点、展开照旧”时改对应的那一个，而不是把整轮采集一起拖慢。
+**慢速采集**是一套预设（`PRESETS['slow']`），不是单独的开关：它把九个速度倍数（礼貌停顿 / 滚动 / 展开 / 点击 / 元素等待 / 页面到达 / 页面间隔 / 像人抖动 / 耐心）、同平台排队、跑前 Cookie 验证与并发上限写成具体值，并保存启用前的快照；设置页或顶栏按钮可一键启用、一键恢复。九个倍数各自只作用于自己那一类操作，平台自身只保留实测基线，不再有自己的开关——需要“滚动慢一点、展开照旧”时改对应的那一个，而不是把整轮采集一起拖慢。**页面间隔**是“打开完一页到打开下一页”之间的停顿（评论逐条打开、笔记详情逐篇打开）；**像人抖动**（`crawl_jitter`，0~90%）只作用于滚动/展开/点击/页面间隔这几拍，元素等待与页面到达是预算，不参与抖动。
+
+预设共三档，都是写具体值：`standard`（全部回实测基线）、`slow`（当前慢速模板）、`night`（更慢 + 抖动 50% + 单浏览器）。任一档应用时都会保存“启用前的值”，所以换档后恢复仍是回到用户最初的状态。设置页把机器内部时序项（门禁超时、渲染探测、预检预算、池内开关、日志大小等）标成 `advanced`，默认收在“显示高级项”之后。
 
 **设置导出/导入**：`GET /api/settings/export`、`POST /api/settings/import`。默认只导出可移植值，机器路径要显式包含；导入先 `dry_run` 预览，再按 `merge`（默认）或 `replace` 应用，未知键与本机路径会逐项报告。
 
@@ -72,7 +74,7 @@
 | `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
 | `max_visible_browsers` / `max_headless_browsers` | 一次并行运行最多同时开几台浏览器，按本次是窗口 / 无头分别取（默认都取 `DEFAULT_MAX_WORKERS=4`；窗口比无头更费机器）。串行轮流，不受此限 |
 | `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；**默认开**，开后上一轮的行不会留到下一轮） |
-| `crawl_pace_scale` / `crawl_scroll_scale` / `crawl_expand_scale` / `crawl_click_scale` / `crawl_wait_scale` / `crawl_arrival_scale` / `crawl_patience_scale` | 七个互相独立的速度倍数：礼貌停顿 / 滚动间隔（含滚动后等新内容）/ 展开间隔（含展开后等回复挂上）/ 点击后稳定（含弹层出现）/ 元素等待 / 页面到达稳定 / 耐心重试。默认都是 1，即各平台实测基线。慢速预设写入 4 / 3 / 3 / 3 / 2 / 1.6 / 2；一键恢复回到启用前的值。`gentle_crawl` 旧键在首次读取时迁移成 `crawl_pace_scale=4` |
+| `crawl_pace_scale` / `crawl_scroll_scale` / `crawl_expand_scale` / `crawl_click_scale` / `crawl_wait_scale` / `crawl_arrival_scale` / `crawl_page_scale` / `crawl_jitter` / `crawl_patience_scale` | 九个互相独立的速度旋钮：礼貌停顿 / 滚动间隔（含滚动后等新内容）/ 展开间隔（含展开后等回复挂上）/ 点击后稳定（含弹层出现）/ 元素等待 / 页面到达稳定 / 页面间隔（打开完一页到打开下一页）/ 像人抖动（%、只作用于滚动/展开/点击/页面间隔）/ 耐心重试。前八个默认都是 1（抖动默认 0），即各平台实测基线。慢速预设写入 4 / 3 / 3 / 3 / 2 / 1.6 / 3 / 30 / 2；夜间预设 6 / 5 / 5 / 5 / 3 / 2 / 6 / 50 / 3；标准预设全部回 1（抖动 0）。一键恢复回到启用前的值。`gentle_crawl` 旧键在首次读取时迁移成 `crawl_pace_scale=4` |
 | `page_wait_timeout` | 一页首次内容的总预算（秒，默认 300；原 `Config.PAGE_WAIT_TIMEOUT`） |
 | `wall_retry_backoff` / `wall_proofs` / `wall_poll` | 首行前撞墙的退避、连续读墙次数与复读间隔 |
 | `nav_retry` / `nav_settle` / `max_pending_waits` | 导航重试、重试前等待、连续未到达页面的熔断次数 |

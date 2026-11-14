@@ -306,12 +306,32 @@ def quiet_jar(data_root):
     file makes one test pass for the wrong reason and the next fail for nobody's — which
     is how a whole class of engine cases looked green between two cookie tests. Whatever
     a test added is deleted afterwards and whatever it removed is written back.
+
+    The directory is bound ONCE, at setup. It used to be re-read from ``Config`` at
+    teardown, and a test that repoints ``Config.COOKIE_DIR`` at the user's real jar (the
+    live tier's ``real_jar``) then had the restore run against THAT directory with the
+    throwaway root's snapshot — measured 2026-11-14: the live slow-crawl case deleted
+    every saved login in ``data/cookies`` on teardown. A fixture that owns a directory's
+    bytes must own the PATH too, or its teardown answers a different question than its
+    setup.
     """
     from core.config import Config
 
-    snapshot = _cookie_snapshot(Config.COOKIE_DIR)
+    directory = Config.COOKIE_DIR
+    snapshot = _cookie_snapshot(directory)
     yield
-    _cookie_restore(Config.COOKIE_DIR, snapshot)
+    _cookie_restore(directory, snapshot)
+
+
+@pytest.fixture(autouse=True)
+def quiet_phases():
+    """The phase-timing ring is process state: one test's browser timings must not answer
+    the next test's ``/api/run/phases`` (and a stale entry would look like a live crawl)."""
+    from runtime import phases
+
+    phases.reset()
+    yield
+    phases.reset()
 
 
 @pytest.fixture(autouse=True)

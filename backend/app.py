@@ -25,6 +25,7 @@ from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
 from api.node_types import bp as node_types_bp
+from api.phases import bp as phases_bp
 from api.project import bp as project_bp
 from api.report import bp as report_bp
 from api.reusable import bp as reusable_bp
@@ -604,6 +605,9 @@ node_registry.load_builtin_executors()
 app.register_blueprint(stats_bp)
 app.register_blueprint(locks_bp)
 app.register_blueprint(node_types_bp)
+# The Console's phase-timing strip (``runtime/phases.py``): launch/crawl/walk durations of
+# the caller's own runs, never another account's.
+app.register_blueprint(phases_bp)
 # The login page and 退出登录 (api/auth.py). The gate that refuses every other route lives in
 # ``_require_login`` above, so a route added later cannot forget it.
 app.register_blueprint(web_auth.bp)

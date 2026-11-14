@@ -1375,6 +1375,53 @@ class TestSourceCommentsMode:
         )
         assert built['n'] == 0
 
+    def test_a_second_link_is_opened_after_a_human_page_interval(self, app_module, monkeypatch):
+        """Between two pages, one pause; before the first, none.
+
+        小红书 watches the page-opening rate, so the interval belongs between links, not
+        once per batch (a single pause at the start would still open N pages back to back).
+        """
+        from nodes.executors import comment as comment_exec
+
+        import crawlers.commenting.session as comments_module
+
+        waits = []
+
+        class _FakeCrawler:
+            driver = None
+
+            def close(self):
+                pass
+
+        class _RecordingSession:
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+                pass
+
+            def walk(self, platform, url, limit):
+                return [], 'ok'
+
+        monkeypatch.setattr(comment_exec, 'get_crawler', lambda *a, **k: _FakeCrawler())
+        monkeypatch.setattr(comments_module, 'CommentSession', _RecordingSession)
+        monkeypatch.setattr(comment_exec.pacing, 'between_pages', lambda *a, **k: waits.append(1))
+        monkeypatch.setitem(app_module.execution_state, 'running', True)
+
+        node = {
+            'id': 'node-1',
+            'type': 'comment',
+            'params': {'urls': 'https://www.zhihu.com/question/1\nhttps://www.zhihu.com/question/2'},
+        }
+        comment_exec.execute_comment_node(node)
+        assert waits == [1], f'expected exactly one page interval between the two links, got {waits}'
+
+        waits.clear()
+        single = {
+            'id': 'node-2',
+            'type': 'comment',
+            'params': {'urls': 'https://www.zhihu.com/question/1'},
+        }
+        comment_exec.execute_comment_node(single)
+        assert waits == [], 'the first (and only) page of a batch pays no interval'
+
     def test_runtime_skips_foreign_links_and_refuses_when_none_match(self, app_module, monkeypatch):
         """The crawl-time second line of defence (a hand-made JSON that never
         passed validate() still must not crawl a platform nobody selected)."""

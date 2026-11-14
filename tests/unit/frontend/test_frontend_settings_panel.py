@@ -36,6 +36,49 @@ def test_a_changed_field_is_posted_under_its_own_key(panel):
     assert panel['save']['body'] == {'settings': {'crawl_pace_scale': 2.5}}
 
 
+def test_a_multiplier_shows_the_seconds_it_buys(panel):
+    """“×3” alone makes the user guess; the pane shows the effective seconds beside it."""
+    assert panel['rendered']['effective'] == '≈ 1.2 s (baseline 1.2 s × 1)', panel['rendered']
+    assert panel['effectiveAfterEdit'] == '≈ 3 s (baseline 1.2 s × 2.5)', panel['effectiveAfterEdit']
+
+
+def test_advanced_knobs_are_hidden_until_asked_for(panel):
+    assert panel['rendered']['advancedHidden'] is True
+    assert panel['advancedHiddenInSafety'] is True
+    assert panel['advancedShown'] is True
+
+
+def test_an_out_of_range_number_is_refused_before_the_post(panel):
+    assert panel['invalid']['posted'] == 0, 'an invalid value reached the server to be clamped'
+    assert panel['invalid']['marked'] is True
+    assert panel['invalid']['raised'] is True
+    assert panel['invalid']['toast'].startswith('These values need fixing'), panel['invalid']['toast']
+
+
+def test_resetting_a_group_stages_its_declared_defaults(panel):
+    assert panel['groupReset'] == {'queue': False, 'proofs': 5, 'dirty': 3}, panel['groupReset']
+
+
+def test_the_preset_card_shows_what_applying_it_would_change(panel):
+    html = panel['presetCard']
+    assert 'Speed presets' in html
+    assert 'Will change 2 values' in html, html
+    assert 'Pacing multiplier 1 → 4' in html, 'the diff must name the field and both values'
+
+
+def test_the_import_preview_is_old_to_new_not_a_list_of_keys(panel):
+    text = panel['importDiff']
+    assert 'Import preview: 1 change(s), 0 skipped.' in text, text
+    assert 'Changes (now → after import):' in text
+    assert '· Pacing multiplier: 1 → 4' in text, text
+
+
+def test_closing_with_staged_edits_asks_before_discarding(panel):
+    assert panel['guard']['asked'] == 1, 'closing with unsaved edits discarded them silently'
+    assert panel['guard']['open'] is False
+    assert panel['guard']['draft'] == 0
+
+
 def test_reset_restores_the_declared_default(panel):
     assert panel['reset']['value'] == 1
     assert panel['reset']['draft'] == 1.0

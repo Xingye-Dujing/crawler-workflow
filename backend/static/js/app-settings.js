@@ -301,10 +301,10 @@ async function saveAppSettings() {
    so this page is not the owner of "what the settings used to be". */
 async function toggleSlowPreset() {
     if (typeof SettingsPanel === 'undefined') return;
-    if (window.AppSettings && AppSettings.preset && AppSettings.preset.active) {
+    if (window.AppSettings && AppSettings.preset && AppSettings.preset.active === 'slow') {
         await SettingsPanel.restorePreset();
     } else {
-        await SettingsPanel.applyPreset();
+        await SettingsPanel.applyPreset('slow');
     }
 }
 

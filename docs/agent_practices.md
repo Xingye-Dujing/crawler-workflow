@@ -432,11 +432,17 @@ request: “滚动间隔、展开间隔等等全部分开设置”). Three scale
 every pause: an account that needed slower scrolling also paid it on every reply expansion
 and every polite round, and no setting could express “scroll slowly, expand normally”.
 The dimension is named at the call site (`scroll_nap`, `expand_nap`, `click_nap`,
-`arrival_nap`, `wait`, `rounds`, `nap`, and the `*_wait` twins for the timeout that belongs
-to the same operation), so a pause cannot silently borrow the wrong knob — and a session
-handed a no-op `nap` (tests, fast walks) is silent in every dimension. `poll_tick` stays
-unscaled on purpose: a loop whose iteration count comes from a fixed budget must keep the
-same wall clock.
+`arrival_nap`, `between_pages`, `wait`, `rounds`, `nap`, and the `*_wait` twins for the
+timeout that belongs to the same operation), so a pause cannot silently borrow the wrong
+knob — and a session handed a no-op `nap` (tests, fast walks) is silent in every dimension.
+`poll_tick` stays unscaled on purpose: a loop whose iteration count comes from a fixed
+budget must keep the same wall clock.
+
+**Page-to-page is its own interval** (2026-11-14): 小红书 watches how fast pages are opened,
+not only how a panel is scrolled, so the comment executor and the note-detail crawl pause
+between links — jittered, because a constant interval is still a metronome — through
+`pacing.between_pages()` and the `crawl_page_scale` knob. It fires between two pages, never
+before the first one.
 
 慢速采集 is a **preset**, not a multiplier: it writes concrete values for all seven
 dimensions and stores the values it replaced, so one click restores exactly what the user

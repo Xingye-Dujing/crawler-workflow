@@ -17,7 +17,7 @@ schema endpoint, the export/import validator, the panel renderer and the coverag
 gate all read the same table.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from core.config import Config
 
@@ -56,6 +56,13 @@ class Setting:
     restart: bool = False
     secret: bool = False
     presets: tuple = field(default_factory=tuple)
+    #: The measured base this multiplier scales, for the panel to show in seconds
+    #: (``0.25 × 1.2 s``). Display only: pacing reads the multiplier, never this. A
+    #: per-site wait has one typical figure here, so the panel calls it an estimate.
+    baseline: float | None = None
+    #: A low-level knob a normal user should not have to see. The panel keeps it behind
+    #: “显示高级项”; the value keeps working exactly the same either way.
+    advanced: bool = False
 
 
 # ─── Groups (panel order) ────────────────────────────────────────────────────
@@ -183,7 +190,7 @@ SETTINGS = (
         hint='set.maxVisibleHint',
         minimum=1,
         maximum=16,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
     ),
     Setting(
         'max_headless_browsers',
@@ -194,7 +201,7 @@ SETTINGS = (
         hint='set.maxHeadlessHint',
         minimum=1,
         maximum=16,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
     ),
     # ── Pace / waits ────────────────────────────────────────────────────────
     Setting(
@@ -206,7 +213,8 @@ SETTINGS = (
         hint='set.crawlPaceScaleHint',
         minimum=0.25,
         maximum=10.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
+        baseline=1.0,
     ),
     Setting(
         'crawl_scroll_scale',
@@ -217,7 +225,8 @@ SETTINGS = (
         hint='set.crawlScrollScaleHint',
         minimum=0.25,
         maximum=10.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
+        baseline=1.2,
     ),
     Setting(
         'crawl_expand_scale',
@@ -228,7 +237,8 @@ SETTINGS = (
         hint='set.crawlExpandScaleHint',
         minimum=0.25,
         maximum=10.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
+        baseline=1.8,
     ),
     Setting(
         'crawl_click_scale',
@@ -239,7 +249,8 @@ SETTINGS = (
         hint='set.crawlClickScaleHint',
         minimum=0.25,
         maximum=10.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
+        baseline=0.6,
     ),
     Setting(
         'crawl_wait_scale',
@@ -250,7 +261,8 @@ SETTINGS = (
         hint='set.crawlWaitScaleHint',
         minimum=0.5,
         maximum=5.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
+        baseline=1.5,
     ),
     Setting(
         'crawl_arrival_scale',
@@ -261,7 +273,31 @@ SETTINGS = (
         hint='set.crawlArrivalScaleHint',
         minimum=0.5,
         maximum=5.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
+        baseline=5.0,
+    ),
+    Setting(
+        'crawl_page_scale',
+        'float',
+        1.0,
+        'pace',
+        'set.crawlPageScale',
+        hint='set.crawlPageScaleHint',
+        minimum=0.25,
+        maximum=10.0,
+        presets=('standard', 'slow', 'night'),
+        baseline=1.6,
+    ),
+    Setting(
+        'crawl_jitter',
+        'float',
+        0.0,
+        'pace',
+        'set.crawlJitter',
+        hint='set.crawlJitterHint',
+        minimum=0.0,
+        maximum=90.0,
+        presets=('standard', 'slow', 'night'),
     ),
     Setting(
         'crawl_patience_scale',
@@ -272,7 +308,7 @@ SETTINGS = (
         hint='set.crawlPatienceScaleHint',
         minimum=1.0,
         maximum=5.0,
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
     ),
     Setting(
         'page_wait_timeout',
@@ -303,7 +339,7 @@ SETTINGS = (
         'set.cookiePreflight',
         hint='set.cookiePreflightInline',
         consumer='both',
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
     ),
     Setting(
         'ask_overseas_network',
@@ -322,7 +358,7 @@ SETTINGS = (
         'set.sameQueue',
         hint='set.sameQueueInline',
         consumer='both',
-        presets=('slow',),
+        presets=('standard', 'slow', 'night'),
     ),
     Setting(
         'clear_console_before_run',
@@ -758,6 +794,38 @@ SETTINGS = (
     ),
 )
 
+#: Knobs that are timing/transport internals rather than a user's choice: they keep
+#: working, but the panel holds them behind “显示高级项” so the 20 decisions that matter
+#: are not buried under 20 that only a diagnosis changes. One list, so “is it advanced?”
+#: cannot drift from the declaration.
+ADVANCED_KEYS = frozenset(
+    {
+        'wall_retry_backoff',
+        'wall_proofs',
+        'wall_poll',
+        'nav_retry',
+        'nav_settle',
+        'max_pending_waits',
+        'platform_gate_timeout',
+        'profile_lock_timeout',
+        'renderer_probe_timeout',
+        'renderer_close_timeout',
+        'cookie_preflight_timeout',
+        'cookie_preflight_ttl',
+        'cookie_preflight_max_parallel',
+        'pool_escalate',
+        'pool_allow_direct_fallback',
+        'pool_skip_wall_backoff',
+        'pool_preflight_live',
+        'run_max_rows_per_node',
+        'dataset_max_rows',
+        'housekeeping_interval_minutes',
+        'log_max_mb',
+        'log_backup_count',
+    }
+)
+SETTINGS = tuple(replace(spec, advanced=True) if spec.key in ADVANCED_KEYS else spec for spec in SETTINGS)
+
 #: ``key -> Setting``, built once. A duplicate key is a bug caught at import.
 BY_KEY = {spec.key: spec for spec in SETTINGS}
 if len(BY_KEY) != len(SETTINGS):  # pragma: no cover - a declaration mistake
@@ -777,12 +845,38 @@ CRAWL_KEYS = tuple(spec.key for spec in SETTINGS if spec.group in ('pace', 'safe
 
 
 # ─── Presets ────────────────────────────────────────────────────────────────
-#: Named bundles applied as concrete values. ``slow`` is the one-click
-#: 慢速采集 template: it raises patience and spacing together, serially queues a
-#: platform and verifies the session first. Applying it snapshots the previous values
-#: (see ``runtime.settings.apply_preset``) so restoring is exact, and the values are
-#: written rather than layered, so no multiplier can stack twice.
+#: Named bundles applied as concrete values. Three steps of the same idea:
+#:
+#: * ``standard`` — the measured baselines (the defaults), so a user who tuned things can
+#:   come back without remembering every number;
+#: * ``slow`` — the one-click 慢速采集 template: more spacing and patience, serial queue,
+#:   session verified first, fewer concurrent browsers;
+#: * ``night`` — for an account already answering risk control: much slower, more jitter,
+#:   one browser at a time. It is still only concrete values, never a hidden multiplier.
+#:
+#: Applying any of them snapshots the previous values (see
+#: ``runtime.settings.apply_preset``) so restoring is exact, and the values are written
+#: rather than layered, so no multiplier can stack twice.
 PRESETS = {
+    'standard': {
+        'label': 'set.presetStandard',
+        'hint': 'set.presetStandardHint',
+        'values': {
+            'crawl_pace_scale': 1.0,
+            'crawl_scroll_scale': 1.0,
+            'crawl_expand_scale': 1.0,
+            'crawl_click_scale': 1.0,
+            'crawl_wait_scale': 1.0,
+            'crawl_arrival_scale': 1.0,
+            'crawl_page_scale': 1.0,
+            'crawl_jitter': 0.0,
+            'crawl_patience_scale': 1.0,
+            'same_platform_queue': False,
+            'cookie_preflight_before_run': False,
+            'max_headless_browsers': int(Config.DEFAULT_MAX_WORKERS),
+            'max_visible_browsers': int(Config.DEFAULT_MAX_WORKERS),
+        },
+    },
     'slow': {
         'label': 'set.presetSlow',
         'hint': 'set.presetSlowHint',
@@ -793,10 +887,31 @@ PRESETS = {
             'crawl_click_scale': 3.0,
             'crawl_wait_scale': 2.0,
             'crawl_arrival_scale': 1.6,
+            'crawl_page_scale': 3.0,
+            'crawl_jitter': 30.0,
             'crawl_patience_scale': 2.0,
             'same_platform_queue': True,
             'cookie_preflight_before_run': True,
             'max_headless_browsers': 2,
+            'max_visible_browsers': 1,
+        },
+    },
+    'night': {
+        'label': 'set.presetNight',
+        'hint': 'set.presetNightHint',
+        'values': {
+            'crawl_pace_scale': 6.0,
+            'crawl_scroll_scale': 5.0,
+            'crawl_expand_scale': 5.0,
+            'crawl_click_scale': 5.0,
+            'crawl_wait_scale': 3.0,
+            'crawl_arrival_scale': 2.0,
+            'crawl_page_scale': 6.0,
+            'crawl_jitter': 50.0,
+            'crawl_patience_scale': 3.0,
+            'same_platform_queue': True,
+            'cookie_preflight_before_run': True,
+            'max_headless_browsers': 1,
             'max_visible_browsers': 1,
         },
     },
@@ -823,6 +938,8 @@ def schema_payload() -> dict:
                 'restart': s.restart,
                 'secret': s.secret,
                 'presets': list(s.presets),
+                'baseline': s.baseline,
+                'advanced': s.advanced,
             }
             for s in SETTINGS
         ],
@@ -831,6 +948,9 @@ def schema_payload() -> dict:
                 'label': p['label'],
                 'hint': p['hint'],
                 'keys': sorted(p['values']),
+                # The values travel so the panel can show “this is what applying it changes”
+                # without a second request or a client-side copy of the bundle.
+                'values': dict(p['values']),
             }
             for pid, p in PRESETS.items()
         },

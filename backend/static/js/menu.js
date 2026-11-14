@@ -18,7 +18,7 @@ var TopMenu = {
         // applying it and restoring the values it replaced. Server is the authority.
         var s = document.getElementById('btn-slow-crawl');
         if (s) {
-            var presetOn = !!(window.AppSettings && AppSettings.preset && AppSettings.preset.active);
+            var presetOn = !!(window.AppSettings && AppSettings.preset && AppSettings.preset.active === 'slow');
             s.className = 'menu-btn ' + (presetOn ? 'toggle-on' : 'toggle-off');
             s.textContent = I18n.t(presetOn ? 'settingsPanel.presetRestore' : 'settingsPanel.slowButton');
             s.disabled = !!(window.AppSettings && AppSettings.readOnly);
