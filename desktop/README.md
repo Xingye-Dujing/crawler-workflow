@@ -243,6 +243,18 @@ loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、U
 
 ## 体积边界
 
+**2026-11-14 设置页人话化 + 阶段耗时那一轮**：`CaiXiHui-win64.zip` **134,954,665 B（128.7 MB）**、
+`CaiXiHui-Setup.exe` **126,002,845 B（120.2 MB）**；`CaiXiHui-Online-Setup.exe` 沿用 2026-11-11 那份
+**13,887,671 B（13.2 MB）**——安装器代码没改，它读 `version.json` 装当次最新版，主程序出新版不重建它。
+构建用 `-Clean -Installer -Version 2026.11.14`（构建环境重装、UPX 默认开），产出的 zip 顶层仍只有
+`CaiXiHui/`，没有 `data/` 与 `portable.txt`；Gitee 上的 `.001`/`.002` 按 **99,614,720 B** 切，拼接后的
+SHA-256 与整包一致（`.001` 99,614,720 B + `.002` 35,339,945 B）。
+
+**本轮没有量启动毫秒数**：exe 的 manifest 是 `requireAdministrator`，这次发布用的 shell 没有提权，
+`Start-Process` 只会停在 UAC 上等一个没人点的确认，所以“双击到 `/api/config` 200”的读数仍是上一轮
+2026-11-09 的 **1612 ms**（同机、同数据根、`CIXI_NO_WINDOW=1`）。下一轮在提权终端里按“验证构建”第 5 步补测，
+不要拿这一条当新数据。
+
 **2026-11-09 圆形图标 + BERT 安装那一轮**：`CaiXiHui-win64.zip` **130,133,526 B（124.1 MB）**、
 `CaiXiHui-Setup.exe` **121,684,967 B（116.0 MB）**、`CaiXiHui-Online-Setup.exe` **13,867,776 B（13.2 MB）**。
 三个 exe 都嵌入了同一份圆形 ICO（实测 32×32，角 alpha=0、中心 alpha=255）；macOS 应用 DMG
