@@ -669,7 +669,16 @@ def run(node: dict, call: NodeCall):
     # reaches this function without a claim in place has no run to be "not running", and inferring
     # “the user pressed 停止” from that abandoned the queue for every such call instead of holding
     # the lane.
-    if not pool_selector.is_pool_value(account):
+    #
+    # A comments-mode source runs the COMMENT engine, which takes this platform's lane around
+    # EACH LINK (so a blocked link can rotate logins). Taking a node-level turn here as well
+    # deadlocks the non-reentrant lock against itself whenever 真排队 is on — measured
+    # 2026-11-14: with 慢速采集 applied, the browser opened and the first link then waited
+    # forever for a lane its own node was holding. That is the same rule the pool branch below
+    # states for its per-attempt turn.
+    mode = capabilities.mode_of_node(node)
+    comments_mode = mode is not None and mode.handler == 'comments'
+    if not pool_selector.is_pool_value(account) and not comments_mode:
         with gate.hold(platform, log=add_log, abort=stop_requested, account=account):
             return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
     if capabilities.is_catbus(node.get('params') or {}):
@@ -681,8 +690,7 @@ def run(node: dict, call: NodeCall):
     # Pool mode. The gate is taken PER ATTEMPT with the account that attempt actually uses:
     # its lane is per login, so holding the sentinel's lane would serialize every pool crawl
     # of a platform into one queue and throw away the parallelism accounts exist for.
-    mode = capabilities.mode_of_node(node)
-    if mode is not None and mode.handler == 'comments':
+    if comments_mode:
         # The comment engine rotates per LINK and holds its own lane around each walk; a
         # node-level turn here would hold a second, fake lane for the whole batch.
         return execute_source_node(node, call.headless, ctx=call.ctx, upstream=call.upstream)
