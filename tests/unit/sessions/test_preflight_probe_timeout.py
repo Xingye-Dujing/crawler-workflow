@@ -23,7 +23,7 @@ class _Scope:
 
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch, tmp_path):
-    monkeypatch.setattr(paths, 'active', lambda: _Scope())
+    monkeypatch.setattr(paths, 'active', _Scope)
     preflight.reset()
     yield
     preflight.reset()
