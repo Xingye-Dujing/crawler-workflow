@@ -320,6 +320,18 @@ class TestUploadDatasetPicker:
             'row_count': '',
         }
 
+    def test_attaching_a_file_repaints_the_open_panels_lineage_line(self, pa):
+        """The “Output columns” line is the server's answer, not the node's params.
+
+        An Upload node's columns are its dataset's, so the panel that rendered before the
+        file was attached says “unknown until this node runs” until a diagnostics answer
+        lands — and that answer has to reach the still-open panel, not just the page's next
+        load. Measured symptom: the new file appeared, its columns did not, until a reload.
+        """
+        lineage = pa['upload_lineage_after_pick']
+        assert lineage['asked'] is True, 'the panel never asked the server for the new shape'
+        assert '姓名' in lineage['html'] and '分数' in lineage['html'], lineage['html']
+
     def test_rows_carry_source_and_shape_and_order_most_recent_first(self, pa):
         """A bare name list is unusable once files pile up — many share a filename, so
         the row says what the file is and the freshest sits on top."""

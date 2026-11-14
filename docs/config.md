@@ -64,7 +64,7 @@
 | `window_size` | 采集浏览器窗口尺寸（`--window-size=WxH`，默认 `960x920`） |
 | `page_load_timeout` / `element_timeout` | 页面/元素超时（秒；默认 40 / 15） |
 | `ollama_host` | Ollama 地址（覆盖环境变量） |
-| `cookie_preflight_before_run` | 运行前是否自动验证各平台 Cookie，过期就禁止执行（**默认关**；关掉则什么都不问） |
+| `cookie_preflight_before_run` | 运行前是否自动验证各平台**浏览器** Cookie，过期就禁止执行（**默认关**；关掉则浏览器什么都不问）。CatBus 的登录态不在这份 Cookie 里：清单声明 `auth: required` 的 cell 每次执行前都会问一次适配器（一个短命 Node 进程），与这个开关无关 |
 | `same_platform_queue` | 真排队：同一平台一次只跑一条采集，前一条整个跑完才轮到下一条（**默认关**）。关掉时按 `same_platform_stagger` 错峰；打开时严格串行。微博不受此开关影响，永远真排队（矩阵 `serial_only`） |
 | `same_platform_stagger` | 同平台错峰间隔（秒，默认 1，可填 0~600；0=不额外隔）。只对同时在跑的同平台采集生效，串行永远无缝 |
 | `ask_overseas_network` | 画布里有海外平台时，运行前先问一句“外网开了吗”（默认开） |

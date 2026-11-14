@@ -108,6 +108,14 @@ var Diagnostics = {
         this._problems = merged;
         if (typeof canvas._applyValidationVisuals === 'function') canvas._applyValidationVisuals(merged);
         renderCostSummary();
+        /* The open node panel shows this same lineage, and a refresh can land AFTER it
+           was rendered — an Upload node's columns are exactly that case: uploading/picking
+           a file makes them knowable on the server, and until this line is repainted the
+           panel keeps saying “unknown until this node runs” until the page is reloaded.
+           Only the line: rebuilding the form would drop an in-progress edit. */
+        if (canvas._settingsNodeId && typeof paintOutputColumns === 'function') {
+            paintOutputColumns(canvas._settingsNodeId);
+        }
     },
 
     problems(id) { return this._problems[id] || []; },

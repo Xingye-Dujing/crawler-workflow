@@ -269,6 +269,10 @@ class CatbusCrawler(Crawler):
             on_row=rows.append,
             platform=platform,
         )
+        # The adapter's own line about this link (``AUTH_REQUIRED comment list 需要登录``) is the
+        # detail the user needs, and the refusal now carries it (code, message and hint) instead
+        # of a bare ``exit=3``. The warning is not printed a second time on that path: one
+        # failure, one line — the reason is not repeated by a helper.
         self._refuse(outcome, 'comments', url=url, platform=platform)
         if outcome.status == 'dead':
             # The page answered and there was nothing behind it: DEAD is the engine's own word for
@@ -399,8 +403,23 @@ class CatbusCrawler(Crawler):
             return
         # 'blocked' (the whole list walled), 'error' and 'unavailable' all refuse. The advice is the
         # adapter's own hint — “catbus bilibili auth login” — never “重新保存 Cookie”.
-        message = str(outcome.message or '') or f'exit={outcome.exit_code}'
-        hint = f' — {outcome.hint}' if outcome.hint else ''
+        message = str(outcome.message or '').strip()
+        hint = str(outcome.hint or '').strip()
+        if not message:
+            # An Outcome built elsewhere still owes the reader the adapter's per-link refusal: the
+            # articles carry it even when a caller forgot to copy it into ``message``.
+            for article in outcome.articles:
+                error = article.error or {}
+                code = str(error.get('code') or '').strip()
+                text = str(error.get('message') or '').strip()
+                message = f'{code}: {text}' if code and text and code not in text else (text or code)
+                if message:
+                    hint = hint or str(error.get('hint') or '').strip()
+                    break
+        if not message and outcome.warnings:
+            message = str(outcome.warnings[0])
+        message = message or f'exit={outcome.exit_code}'
+        hint = f' — {hint}' if hint else ''
         where = f' [{url}]' if url else ''
         raise ValueError(t('catbus.refused', platform=site, mode=mode, detail=f'{message}{hint}{where}'))
 

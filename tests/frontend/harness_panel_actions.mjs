@@ -685,6 +685,23 @@ pa.canvas._settingsNodeId = clrNode;
 pa.dataNodes.pickFromDataset(clrNode, '');
 out.dataset_picker_cleared = { params: pa.canvas.nodes[clrNode].params };
 
+/* The panel's lineage line ("Output columns: …") is the SERVER's answer, and the answer
+   to an Upload node is its dataset's columns. Picking a stored file is the measured case:
+   the panel rendered before the server knew the file, so without an immediate diagnostics
+   refresh the line stayed "unknown until this node runs" until the page was reloaded. */
+fresh();
+const lineNode = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.canvas._settingsNodeId = null;
+pa.canvas.editNode(lineNode);
+pa.dataNodes._datasets = { dsL: { dataset_id: 'dsL', name: 'L.csv', row_count: 2, columns: ['a'] } };
+route('/api/workflow/diagnostics', { ok: true, columns: { [lineNode]: ['姓名', '分数'] }, reads: {} });
+pa.dataNodes.pickFromDataset(lineNode, 'dsL');
+await drain();
+out.upload_lineage_after_pick = {
+    html: id('settings-output-cols').innerHTML,
+    asked: requests.some((r) => r.url === '/api/workflow/diagnostics'),
+};
+
 /* The dropdown is more than a name list once files pile up: it filters, carries each
    file's shape and source, orders most-recently-used first, guides an empty library,
    reveals who reads a file, and copies one pick across the canvas. */

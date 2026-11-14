@@ -456,6 +456,42 @@ function renderTokenizeExtra(nodeId, node, p) {
     return html;
 }
 
+/* ── The lineage line: what this node will emit ─────────────────────────────
+   The answer is the server's (`/api/workflow/diagnostics`), which is why the panel
+   cannot render it from node params alone: an Upload node's columns are the stored
+   dataset's, and they become knowable only after the server has the file. Both the
+   panel build and a later `Diagnostics` refresh must word it through ONE function,
+   or a repaint would say it differently from the first render. */
+var OUTPUT_COLUMN_NODE_TYPES = ['source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'tokenize', 'resume', 'comment'];
+
+function outputColumnsHtml(nodeId) {
+    var text = outputColumnsText(nodeId);
+    return text === null
+        ? ''
+        : '<div id="settings-output-cols" class="settings-group node-output-cols" style="font-size:11px;color:var(--text-dim);">' +
+          text + '</div>';
+}
+
+function outputColumnsText(nodeId) {
+    var node = canvas.nodes[nodeId];
+    if (!node || OUTPUT_COLUMN_NODE_TYPES.indexOf(node.type) < 0 || typeof Diagnostics === 'undefined') return null;
+    var cols = Diagnostics.outputColumns(nodeId);
+    if (cols === null) return I18n.t('diagnostics.unknownCols');
+    return cols.length
+        ? I18n.t('diagnostics.outputCols') + ': ' + escapeHtml(cols.join(', '))
+        : I18n.t('diagnostics.outputColsNone');
+}
+
+/* Repaint ONLY that line when diagnostics answer after the panel was rendered.
+   Rebuilding the whole form here would discard whatever the user is typing in —
+   `openSettings` is a deliberate rebuild after an edit, a background refresh is not. */
+function paintOutputColumns(nodeId) {
+    var el = document.getElementById('settings-output-cols');
+    if (!el) return;
+    var text = outputColumnsText(nodeId);
+    if (text !== null) el.innerHTML = text;
+}
+
 function openSettings(nodeId) {
     var node = canvas.nodes[nodeId];
     if (!node) {
@@ -486,15 +522,8 @@ function openSettings(nodeId) {
         '</div>';
     /* The columns this node will emit — the edit-time lineage. A producer whose shape
        the server can see lists them; a crawl/comment/resume says so plainly rather than
-       guessing. */
-    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'tokenize', 'resume', 'comment'];
-    if (OUTPUT_PRODUCERS.indexOf(node.type) >= 0 && typeof Diagnostics !== 'undefined') {
-        var _oc = Diagnostics.outputColumns(nodeId);
-        var _ocText = _oc === null
-            ? I18n.t('diagnostics.unknownCols')
-            : (_oc.length ? I18n.t('diagnostics.outputCols') + ': ' + escapeHtml(_oc.join(', ')) : I18n.t('diagnostics.outputColsNone'));
-        html += '<div class="settings-group node-output-cols" style="font-size:11px;color:var(--text-dim);">' + _ocText + '</div>';
-    }
+       guessing. `outputColumnsHtml` is shared with the in-place repaint below. */
+    html += outputColumnsHtml(nodeId);
     if (node.type === 'source') {
         /* The form is the matrix: which platforms exist, which of them want
            links instead of a keyword, and every field in between come from

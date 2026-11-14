@@ -850,6 +850,15 @@ backend (CatBus)”; read that before touching CatBus. What is kept here is the 
   not cached. `login_wall` stays False (the executor's reading would print cookie/风控 advice about a session this crawl
   doesn't have). **Not yet verified on a real site** — no CatBus account on this box, so the row mapping/`--raw` shapes/
   partial accounting are tested against the adapter's documented contract and a stand-in process.
+- **A Cookie switch must not decide a login that is not a Cookie.** `cookie_preflight_before_run` is labelled and
+  documented as the *browser* check. Folding CatBus into it meant that after the setting defaulted to off, a CatBus canvas
+  showed “CatBus 未登录” once and then started runs that died at the adapter — measured live 2026-11-14 as
+  `exit=3`, because the adapter's refusal lives on `articles[].error` and the bridge only read the summary's top-level
+  `error`. So: `auth: required` cells are asked every run regardless of that switch (one short-lived Node process, no
+  Chrome), and `run()` reads `error`, `articles[].error`, then `warnings` — code, message and hint all travel into the
+  refusal line, and the warning is not printed a second time beside it (one failure, one line). Pinned:
+  `test_frontend_cookie_gate_js.py` (`catbus-asks-even-with-the-cookie-check-off`), `test_catbus_bridge.py`,
+  `test_catbus_crawler.py`.
 
 ## 按主题的测量记录 / Topic measurements (appendix)
 

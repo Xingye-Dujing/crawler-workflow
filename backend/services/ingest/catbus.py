@@ -564,13 +564,56 @@ def _drive(
 
 
 def _reason_of(call: _Call) -> str:
-    """One line saying what the process actually did, for a refusal that has no envelope to read."""
+    """One line saying what the process actually did, for a refusal that has no envelope to read.
+
+    The child's LAST lines are the report. Keeping only the last one lost a multi-line Node error
+    (the message on one line, “at …” on the next), and folding the exit code in when nothing was
+    printed keeps a silent death from reading as a site with no rows.
+    """
     if call.spawn_error:
         return call.spawn_error
     if call.timed_out:
         return t('catbus.timeout', seconds=int(call.budget or RUN_TIMEOUT))
-    text = (call.stderr or call.stdout or '').strip().splitlines()
-    return text[-1][:200] if text else f'exit={call.code}'
+    lines = [line.strip() for line in (call.stderr or call.stdout or '').strip().splitlines() if line.strip()]
+    if lines:
+        detail = ' / '.join(lines[-3:])
+        return f'{detail} (exit={call.code})' if len(detail) < 300 else detail[:300]
+    return f'exit={call.code}'
+
+
+def _summary_error(summary: dict | None) -> dict:
+    """The adapter's own refusal object, wherever its summary puts it.
+
+    A list crawl reports a top-level ``error``; a comments crawl reports one object per LINK
+    (``articles[].error``), because one article can be walled while the next is fine. Reading only
+    the top-level slot is how an ``AUTH_REQUIRED … 需要登录`` arrived as a bare ``exit=3`` — the
+    adapter had already said what was wrong, in the one place this side never looked.
+    """
+    if not isinstance(summary, dict):
+        return {}
+    error = summary.get('error')
+    if isinstance(error, dict) and any(error.get(key) for key in ('code', 'message', 'hint')):
+        return error
+    for article in summary.get('articles') or []:
+        if not isinstance(article, dict):
+            continue
+        entry = article.get('error')
+        if isinstance(entry, dict) and any(entry.get(key) for key in ('code', 'message', 'hint')):
+            return entry
+    return {}
+
+
+def _error_line(error: dict, warnings: tuple[str, ...]) -> str:
+    """One sentence from a refusal object: ``CODE: message``, with a warning as the last resort.
+
+    The code is part of the detail because it is the token a CatBus user can search for, and the
+    warning already carries the URL/command the adapter attached to it.
+    """
+    code = str((error or {}).get('code') or '').strip()
+    message = str((error or {}).get('message') or '').strip()
+    if code and code not in message:
+        return f'{code}: {message}' if message else code
+    return message or (warnings[0] if warnings else '')
 
 
 def _summary_of(call: _Call) -> dict | None:
@@ -750,10 +793,12 @@ def run(
     summary = _summary_of(call)
     articles = tuple(_as_article(item) for item in (summary or {}).get('articles') or [] if isinstance(item, dict))
     warnings = tuple(str(item) for item in (summary or {}).get('warnings') or [])
-    error = summary.get('error') if isinstance((summary or {}).get('error'), dict) else None
-    message = str((error or {}).get('message') or '')
-    hint = str((error or {}).get('hint') or '')
+    error = _summary_error(summary) or None
     state = str((summary or {}).get('status') or '')
+    # A warning on an ``ok`` summary is advisory and is printed as one; only a run that did not
+    # finish gets its warning promoted to the message that explains why.
+    message = _error_line(error or {}, () if state in ('', 'ok') else warnings)
+    hint = str((error or {}).get('hint') or '')
     if call.stopped:
         return Outcome(
             status='stopped',

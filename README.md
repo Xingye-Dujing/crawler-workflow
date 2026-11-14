@@ -128,7 +128,8 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
   那一条，节点按失败或部分收尾，`继续` 从洞口重采；只有站点自己印了结束标记（如小红书 `- THE END -`）或命中
   用户设的评论上限才算采完。→ [`docs/collection.md`](docs/collection.md)
 - **第二采集引擎 CatBus**：按“平台 × 引擎 × 功能”列出能采什么、出哪些列；能力全部读适配器自己的清单，
-  不可运行的组合直接写清原因，绝不静默换后端或降级成空表。→ [`docs/collection.md`](docs/collection.md)
+  不可运行的组合直接写清原因，绝不静默换后端或降级成空表。它的登录是适配器自己的账号，运行前总会问一次
+  （与浏览器 Cookie 预检开关无关），失败时把适配器的 `code/message/hint` 原样带进报错。→ [`docs/collection.md`](docs/collection.md)
 - **分析**：情感、倾向、情绪（LLM / sklearn / 微调 BERT，默认 BERT，跑不动会降级并打印实际用的方法）、
   NER、关键词、聚类、异常、相关性、显著性检验、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、
   [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)

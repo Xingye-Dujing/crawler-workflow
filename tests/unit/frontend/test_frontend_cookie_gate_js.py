@@ -561,6 +561,65 @@ SCENARIOS = [
             'probed': True,
         },
     },
+    {
+        # The Cookie switch is a BROWSER switch (its label and its docs say so). An adapter has no
+        # cookie of ours, so a CatBus node whose cell wants a login is asked every time — otherwise
+        # turning the browser check off silently disabled the only 未登录 warning a CatBus canvas
+        # has, and the run died at the adapter with a bare exit code.
+        'id': 'catbus-asks-even-with-the-cookie-check-off',
+        'settings': {'cookie_preflight_before_run': False, 'ask_overseas_network': False},
+        **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb')),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell()}),
+        'preflight': {
+            'ok': True,
+            'results': {
+                'bilibili@cb#catbus': _verdict(
+                    'bilibili',
+                    'expired',
+                    blocking=True,
+                    text='CatBus 没有 B站的登录态 — catbus bilibili auth login',
+                )
+            },
+            'blocked': ['bilibili@cb#catbus'],
+            'unclear': [],
+            'probed': True,
+        },
+    },
+    {
+        # ...and the browser half keeps obeying that switch. Same press, same code path: only the
+        # platform of the second backend is asked, or the fix above would have re-enabled the
+        # browser probe the user turned off.
+        'id': 'browser-still-off-while-catbus-asks',
+        'settings': {'cookie_preflight_before_run': False, 'ask_overseas_network': False},
+        **_canvas(
+            _chain(1, 'zhihu'),
+            _chain(2, 'bilibili', backend='catbus', catbus_account='cb'),
+        ),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell()}),
+        'preflight': {
+            'ok': True,
+            'results': {
+                'bilibili@cb#catbus': _verdict(
+                    'bilibili',
+                    'valid',
+                    blocking=False,
+                    text='CatBus is logged in',
+                )
+            },
+            'blocked': [],
+            'unclear': [],
+            'probed': True,
+        },
+    },
+    {
+        # An adapter cell that declares no login is not a login question even when the switch is
+        # off — the always-ask rule is about cells whose own manifest wants an account.
+        'id': 'catbus-optional-cell-still-asks-nothing',
+        'settings': {'cookie_preflight_before_run': False, 'ask_overseas_network': False},
+        **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb')),
+        'matrix': _matrix_with_catbus({'bilibili.posts': _cell(runnable=True, auth='optional')}),
+        'preflight': CLEAN,
+    },
 ]
 
 #: Every scenario needs the crawl matrix: the canvas validates required fields
@@ -903,3 +962,28 @@ class TestTheSecondBackendAtTheGate:
         assert 'update' not in dialog['values'], dialog['values']
         assert case['cookiePanelOpen'] is False
         assert 'catbus bilibili auth login' in dialog['message'], 'the remedy that IS offered is the adapter command'
+
+    def test_a_dead_catbus_login_is_asked_about_even_with_the_cookie_check_off(self, gate):
+        """CatBus keeps its own login in the adapter's account files, not in a cookie of ours.
+
+        The setting is the BROWSER Cookie check. Leaving the adapter behind it is how a canvas
+        “showed 未登录 once” and then started a run that died at the adapter with only ``exit=3``.
+        """
+        case = gate['catbus-asks-even-with-the-cookie-check-off']
+        assert case['asked'] is True, 'the only CatBus login warning disappeared with a browser switch'
+        assert case['ran'] is False
+        assert 'catbus bilibili auth login' in case['dialogs'][-1]['message']
+
+    def test_the_browser_half_still_obeys_the_switch(self, gate):
+        """The always-ask rule belongs to the adapter's cells alone: a browser platform on the same
+        canvas must stay unprobed when the user turned that check off."""
+        case = gate['browser-still-off-while-catbus-asks']
+        assert case['asked'] is True
+        assert [e['platform'] for e in case['askedBody']['platforms']] == ['bilibili']
+        assert case['ran'] is True
+        assert case['askedBody'].get('use_profile') is None
+
+    def test_a_catbus_cell_that_wants_no_login_is_still_not_asked(self, gate):
+        case = gate['catbus-optional-cell-still-asks-nothing']
+        assert case['asked'] is False
+        assert case['ran'] is True

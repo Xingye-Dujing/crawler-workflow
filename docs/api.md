@@ -200,7 +200,7 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 | `/api/cookies/delete` | POST | 删除该平台 Cookie 快照文件；回话说清 profile 是否仍持有登录态 |
 | `/api/profiles/delete` | POST | 删除某**命名账号**自己的浏览器 Profile 目录（不动 Cookie 文件）；默认账号结构性拒绝、被占用 409、没有可删 404、非法名 400 |
 | `/api/cookies/rename` | POST | 给一个已存登录改名字——Cookie 文件与它自己的浏览器目录一起搬或一样都不动；默认那份结构性拒绝 |
-| `/api/cookies/preflight` | POST | 运行前一次性验证画布要用到的多个平台：逐平台 `valid/expired/unknown/nocookie/nologin/notcrawlable` + 已渲染文案 + `blocked`/`unclear`（按 `COOKIE_PREFLIGHT_TTL` 缓存） |
+| `/api/cookies/preflight` | POST | 运行前一次性验证画布要用到的多个平台：逐平台 `valid/expired/unknown/nocookie/nologin/notcrawlable` + 已渲染文案 + `blocked`/`unclear`（浏览器结论按 `COOKIE_PREFLIGHT_TTL` 缓存；`backend=catbus` 的条目问适配器自己的登录态，不缓存） |
 | `/api/settings` | GET / POST | 读取 / 修改运行时设置（`data/settings.json`） |
 | `/api/browser/profiles` | GET | 每个平台的持久浏览器 Profile 状态，外加 `template` 一行（`{exists, pristine}`，pristine 由读表里的行数判定） |
 | `/api/browser/profiles/template` | POST | 用一台空白 Chrome 生成/重建初始模板（`{force?}`）；建不出来时是 502 带原因，不是 200 加一句谎 |

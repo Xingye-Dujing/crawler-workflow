@@ -419,8 +419,17 @@
   `cookie_preflight.entry_of` 读出三元组 `(platform, account, backend)`，`entry_key` 只给非浏览器后端加
   `#catbus` 后缀（浏览器侧拼写逐字节不变），所以同名 `work` 的两套登录各得各的判定——
   一边失效不会拦下另一边的运行，也不会把自己的 verdict 缓存成对方的答案。
+  **浏览器的 `cookie_preflight_before_run` 开关只管浏览器那一半**：CatBus 的登录不存在 Cookie 里，
+  一次探测只花一个短命 Node 进程，所以清单声明 `auth: required` 的 cell **每次执行前都问**，
+  开关关掉也问；否则“这次没登录”的弹窗只在某次出现过、之后运行直接死在适配器的 `exit=3` 上。
+  清单声明 `auth: optional` 的 cell 不问，机器采不了的 cell 也不问（校验会按名拒绝）。
   数据源节点的 `account`（Selenium）在 catbus 后端下**不参与任何判定**：`engine/workflow.py::_account_session_errors`
   对它直接不作要求，否则用户会被送去重存一个本次根本不会读的 Cookie。
+- **失败必须带上适配器自己说的话。** 列表采集的拒绝在 summary 顶层 `error`，评论采集的在
+  `articles[].error`（一条链接一个结果）——两边都要读，还要拼上 `code` 与 `hint`；只看顶层槽位时，
+  `AUTH_REQUIRED comment list 需要登录` / `catbus xhs auth login` 会退化成一句 `exit=3`。
+  评论路径的 `_refuse` 先拼好这句再抛：同一个原因不再由 warnings 再说一遍（一条失败一行），
+  子进程没有 summary 时 `_reason_of` 保留最后几行 stderr 与退出码，绝不把一次沉默的死亡说成“站点没有内容”。
 - **不假装做不到的事。** CatBus 没有偏移量／游标：源节点续跑是重放同一张清单、由账本挡掉重复行，
   跨运行水位只能界定"哪些行入库"、省不下请求，这一条**必须打印**（`catbus.watermarkNote`）而不是留给读者猜；
   评论按链接逐条起进程，`url_index` 仍只记"已证明的连续前缀"，partial 的链接进 `skipped_targets`。

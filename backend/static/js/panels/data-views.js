@@ -10,6 +10,21 @@ var dataNodes = {
     _datasets: null,
     _filter: {},
 
+    /* The node panel's lineage line (and every node badge) is the SERVER's answer,
+       fetched by Diagnostics. A dataset change is exactly the moment that answer
+       changes — an Upload node's columns are its file's — so ask now instead of
+       waiting for the debounced tick: the panel is already open and this is the
+       difference between "updated" and "reload the page to see it". */
+    _refreshDerived() {
+        if (typeof Diagnostics !== 'undefined' && Diagnostics.refresh) {
+            try {
+                Diagnostics.refresh();
+            } catch (e) {
+                /* diagnostics are decoration: never break an upload over them */
+            }
+        }
+    },
+
     pickFile(nodeId) {
         this._pendingNodeId = nodeId;
         document.getElementById('dataset-file-input').click();
@@ -47,6 +62,7 @@ var dataNodes = {
                     showToast(uploadMsg);
                     canvas.updateNodeDisplay(nodeId);
                     canvas.saveState();
+                    dataNodes._refreshDerived();
                 }
                 if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
             } else {
@@ -208,6 +224,7 @@ var dataNodes = {
         });
         canvas.saveState();
         showToast(I18n.t('dataSource.appliedToOthers').replace('{n}', others.length));
+        dataNodes._refreshDerived();
     },
 
     /* Attach a stored dataset to the Upload node without re-uploading it: set the
@@ -222,6 +239,7 @@ var dataNodes = {
             node.params.row_count = '';
             canvas.updateNodeDisplay(nodeId);
             canvas.saveState();
+            dataNodes._refreshDerived();
             if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
             return;
         }
@@ -237,6 +255,7 @@ var dataNodes = {
             canvas.updateNodeDisplay(nodeId);
             canvas.saveState();
             showToast(I18n.t('dataSource.datasetSelected').replace('{name}', meta.name || meta.dataset_id));
+            dataNodes._refreshDerived();
             if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
         };
         var cached = dataNodes._datasets && dataNodes._datasets[datasetId];

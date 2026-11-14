@@ -407,6 +407,39 @@ class TestRunTranslatesTheAdapter:
         assert outcome.rows == 1, 'the row that landed is not un-counted because another article was walled'
         assert [a.status for a in outcome.articles] == ['ok', 'blocked']
         assert outcome.warnings == ('u2: AUTH_REQUIRED 未登录',)
+        # A summary that carries no top-level ``error`` still said WHY, per article: reading only
+        # the top-level slot is how the failure line arrived as a bare ``exit=3``.
+        assert outcome.message == 'AUTH_REQUIRED'
+
+    def test_a_per_link_refusal_keeps_its_code_message_and_remedy(self, monkeypatch):
+        """The comments crawl's error lives on ``articles[]``, not on the summary.
+
+        A walled link printed ``AUTH_REQUIRED comment list 需要登录`` and
+        ``catbus bilibili auth login``; both are the detail a user needs, and both used to be
+        thrown away with the summary envelope.
+        """
+        summary = summary_payload(
+            ok=False,
+            status='blocked',
+            rows=0,
+            warnings=['u1: AUTH_REQUIRED comment list 需要登录'],
+            articles=[
+                {
+                    'url': 'u1',
+                    'status': 'blocked',
+                    'rows': 0,
+                    'error': {
+                        'code': 'AUTH_REQUIRED',
+                        'message': 'comment list 需要登录',
+                        'hint': 'catbus bilibili auth login',
+                    },
+                }
+            ],
+        )
+        monkeypatch.setattr(bridge, '_call', self._stream([], summary, code=3))
+        outcome = bridge.run('bilibili', 'comments', {'urls': ['u1']})
+        assert outcome.message == 'AUTH_REQUIRED: comment list 需要登录'
+        assert outcome.hint == 'catbus bilibili auth login'
 
     def test_a_partial_run_reports_which_links_it_lost(self, monkeypatch):
         summary = summary_payload(

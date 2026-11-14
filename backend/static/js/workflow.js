@@ -761,21 +761,32 @@ const workflow = {
 
            · nothing to crawl, or a 继续 → no question at all. A resumed run is already
              inside "refresh the cookie and carry on", and asking again is cruelty;
-           · 自动验证 on → ask the *sites* (``_preflightCookies``), which is a fact, and
-             a platform that answers with a login page refuses the run;
-           · off → proceed unanswered. The old “执行前确认 Cookie” prompt that stood here
-             was a guess about a session, and the user asked for it gone: with the real
-             check switched off, nothing is asked and nothing blocks.
+           · a browser session → ask the *sites* (``_preflightCookies``) only when 自动验证
+             is on, which is a fact, and a platform that answers with a login page refuses
+             the run; off → proceed unanswered, because the old “执行前确认 Cookie” prompt
+             was a guess about a session and the user asked for it gone;
+           · a CatBus session → ALWAYS ask, switch or no switch. That setting is the
+             browser Cookie check (its label and its documentation say so): CatBus has no
+             Cookie of ours, its login lives in the adapter's own account files, and the
+             question costs one short-lived Node process, not a Chrome. Leaving it behind
+             the Cookie switch is how a CatBus canvas “had a 未登录 popup once” and later
+             started a run that died at the adapter with a bare exit code. A cell whose
+             manifest says ``auth`` is not required never reaches this list
+             (``sessionAsked``), and a cell the machine cannot crawl asks nothing.
 
            ``profileChoice`` is the per-run answer from the profile dialog, forwarded to
-           the check so it probes the browser the run will actually use. */
+           the check so it probes the browser the run will actually use. It is only sent
+           when a browser session is among the questions — a CatBus probe ignores it. */
         if (opts && opts.resumeRunId) return true;
-        var platforms = this._sessionPlatforms();
-        if (!platforms.length) return true;
+        var sessions = this._sessionPlatforms();
+        if (!sessions.length) return true;
+        var catbus = sessions.filter(function (entry) { return entry.backend === 'catbus'; });
+        var browser = sessions.filter(function (entry) { return entry.backend !== 'catbus'; });
         if (window.AppSettings) await AppSettings.pull();
         var values = (window.AppSettings && AppSettings._values) || {};
-        if (values.cookie_preflight_before_run) return await this._preflightCookies(platforms, profileChoice);
-        return true;
+        var asked = catbus.concat(values.cookie_preflight_before_run ? browser : []);
+        if (!asked.length) return true;
+        return await this._preflightCookies(asked, browser.length ? profileChoice : undefined);
     },
 
     async _preflightCookies(entries, profileChoice) {

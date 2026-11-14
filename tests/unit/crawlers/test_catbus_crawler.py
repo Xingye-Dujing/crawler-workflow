@@ -379,6 +379,44 @@ class TestCommentsWalkOneLinkAtATime:
         assert 'catbus bilibili auth login' in str(raised.value)
         assert session.skipped_targets == [], 'a refusal is not a walked link, proven or otherwise'
 
+    def test_a_walled_link_reports_the_adapters_reason_not_just_an_exit_code(self, session, monkeypatch):
+        """Measured failure: the run console said only ``exit=3``.
+
+        The adapter had printed ``AUTH_REQUIRED comment list 需要登录`` and
+        ``catbus xhs auth login``, on the per-link error and in the warnings. Both must reach the
+        sentence the console shows — and the warning is not printed again beside it: the reason
+        belongs to the one failure line, not to a helper.
+        """
+        lines = []
+        session._log = lines.append
+        monkeypatch.setattr(
+            bridge,
+            'run',
+            lambda *a, **kw: outcome(
+                status='blocked',
+                rows=0,
+                warnings=('u1: AUTH_REQUIRED comment list 需要登录',),
+                articles=(
+                    bridge.Article(
+                        url='u1',
+                        status='blocked',
+                        rows=0,
+                        error={
+                            'code': 'AUTH_REQUIRED',
+                            'message': 'comment list 需要登录',
+                            'hint': 'catbus xhs auth login',
+                        },
+                    ),
+                ),
+            ),
+        )
+        with pytest.raises(ValueError) as raised:
+            session.walk('bilibili', 'https://www.bilibili.com/video/BV1/', 0)
+        text = str(raised.value)
+        assert 'AUTH_REQUIRED' in text and '需要登录' in text, text
+        assert 'catbus xhs auth login' in text, 'the remedy the adapter printed is missing'
+        assert lines == [], 'the reason is repeated by a warning line after the failure line'
+
 
 class TestTheWatermarkUnderThisBackend:
     def test_the_boundary_stops_the_walk_and_is_said_out_loud(self, session, monkeypatch):
