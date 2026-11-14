@@ -8,7 +8,7 @@
       "params": {
         "account": "default",
         "author": "",
-        "backend": "catbus",
+        "backend": "selenium",
         "catbus_account": "",
         "collect": "comments",
         "comment_end": "",
