@@ -173,7 +173,7 @@ def _install_boot_error_collector(driver):
 def _boot_state(driver):
     return driver.execute_script(
         'return { ready: document.readyState, canvas: typeof canvas, i18n: typeof I18n,'
-        ' errors: (window.__bootErrors || []).slice() };'
+        ' auth: typeof Auth, errors: (window.__bootErrors || []).slice() };'
     )
 
 
@@ -205,6 +205,23 @@ def _boot_evidence(driver):
         };
         """
     )
+
+
+def _reload_app(driver):
+    """Refresh like a user would, then wait for the SAME bindings ``_load_app`` waits for.
+
+    ``page_load_strategy='eager'`` makes ``driver.refresh()`` return at DOM parse time, so a
+    test that measured straight after it read a half-booted page — and one that ENDED there
+    left a reload in flight for the next test, whose late scripts (``app.js``: ``Auth``,
+    ``I18n``) then never executed while ``canvas.js`` already had. Measured 2026-11-14: a
+    module run failed the reload test and the next three, each reporting
+    ``canvas: object / i18n: undefined`` on a document that lists ``app.js``.
+    """
+    driver.refresh()
+    state = _wait_for_boot(driver)
+    if not _booted(state):
+        pytest.fail(f'the reloaded page never finished booting: {state}; {_boot_evidence(driver)}')
+    _apply_viewport(driver)
 
 
 def _load_app(driver, app_url):
@@ -2923,7 +2940,7 @@ def test_a_wire_ends_on_its_port_after_a_bare_refresh(app_url, driver):
     _load_app(driver, app_url)
     _wait_for_id(driver, 'workspace')
     driver.execute_script(REFRESH_ALIGN_DRAFT, [])
-    driver.refresh()
+    _reload_app(driver)
     _wait_for_id(driver, 'node-1')
     # Settle: the webfont's repaint and CustomSelect's collapse both land well
     # inside this window; the assertion is about the END state, not the race.
@@ -3803,7 +3820,7 @@ def test_the_camera_and_a_zero_coordinate_survive_a_real_reload(app_url, driver)
         [],
     )
     assert drafted == {'panX': -320, 'panY': -60, 'zoom': 0.8}, f'the draft never captured the camera: {drafted}'
-    driver.refresh()
+    _reload_app(driver)
     _kill_animations(driver)
     facts = driver.execute_script(
         """
