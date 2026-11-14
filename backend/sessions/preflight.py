@@ -285,6 +285,34 @@ def _probe_budget() -> float:
     return max(5.0, float(get_setting('cookie_preflight_timeout')) - 5.0)
 
 
+def diagnose_bounded(crawler, url: str = '', seconds: float = None):
+    """Ask a visible browser what it sees, on a worker with a hard bound.
+
+    ``None`` means the page load never returned (a wedged renderer), an ``{'error': …}``
+    dict means the driver raised, anything else is the crawler's own facts. Both doors that
+    open a visible Chrome for a session question go through here — the pre-run gate and the
+    panel's 验证 button — because ``driver.get`` has no timeout for a renderer that stops
+    answering, and a check nobody asked for then parks a window on the desktop forever.
+    """
+    budget = max(1.0, float(seconds if seconds is not None else _probe_budget()))
+    box: dict = {}
+
+    def _run() -> None:
+        try:
+            box['facts'] = crawler.diagnose(url)
+        except BaseException as exc:  # re-raised as this probe's error below
+            box['error'] = str(exc)[:200]
+
+    worker = threading.Thread(target=_run, name='cookie-diagnose', daemon=True)
+    worker.start()
+    worker.join(budget)
+    if worker.is_alive():
+        return None
+    if 'error' in box:
+        return {'error': box['error']}
+    return box.get('facts') or {}
+
+
 def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -> dict:
     """One bounded navigation in the browser the run would have used.
 
@@ -327,18 +355,8 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
     started = time.monotonic()
     try:
         budget = _probe_budget()
-        box: dict = {}
-
-        def _diagnose() -> None:
-            try:
-                box['facts'] = crawler.diagnose('')
-            except BaseException as exc:  # re-raised as this probe's error below
-                box['error'] = str(exc)[:200]
-
-        worker = threading.Thread(target=_diagnose, name='cookie-probe', daemon=True)
-        worker.start()
-        worker.join(budget)
-        if worker.is_alive():
+        outcome = diagnose_bounded(crawler, '', budget)
+        if outcome is None:
             phases.record(
                 'probe',
                 time.monotonic() - started,
@@ -353,12 +371,12 @@ def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -
             time.monotonic() - started,
             label=platform,
             platform=platform,
-            status='ok' if 'facts' in box else 'error',
+            status='ok' if 'error' not in outcome else 'error',
             for_login=True,
         )
-        if 'error' in box:
-            return {'error': box['error']}
-        facts = box.get('facts') or {}
+        if 'error' in outcome:
+            return {'error': outcome['error']}
+        facts = outcome
         return {
             'login_wall': bool(facts.get('login_wall')),
             'risk_blocked': bool(getattr(crawler, 'risk_blocked', False)),

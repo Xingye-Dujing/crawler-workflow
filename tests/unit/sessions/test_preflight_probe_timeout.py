@@ -51,6 +51,30 @@ def test_a_probe_that_never_answers_is_closed_at_its_budget(monkeypatch):
     assert elapsed < 2.0, f'the probe outlived its own budget: {elapsed:.1f}s'
 
 
+def test_diagnose_bounded_returns_none_when_the_renderer_never_answers():
+    class _Crawler:
+        def diagnose(self, url=''):
+            threading.Event().wait(5)
+
+    assert preflight.diagnose_bounded(_Crawler(), '', 0.2) is None
+
+
+def test_diagnose_bounded_carries_a_driver_error_as_data():
+    class _Crawler:
+        def diagnose(self, url=''):
+            raise RuntimeError('boom')
+
+    assert preflight.diagnose_bounded(_Crawler(), '', 1.0) == {'error': 'boom'}
+
+
+def test_diagnose_bounded_returns_the_crawler_facts():
+    class _Crawler:
+        def diagnose(self, url=''):
+            return {'login_wall': False, 'unreachable': False}
+
+    assert preflight.diagnose_bounded(_Crawler(), '', 1.0) == {'login_wall': False, 'unreachable': False}
+
+
 def test_a_probe_that_answers_reports_its_facts(monkeypatch):
     closed = []
 

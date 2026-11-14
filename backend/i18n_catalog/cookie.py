@@ -112,6 +112,7 @@ ZH = {
     # and “可用” here would be cached and reused by every later run.
     'cookie.verify.unreachable': '{platform} 无法验证：浏览器自己没能打开这个地址（本机网络或 DNS），未检验到 Cookie',
     'cookie.verifyFailed': '验证失败：{err}',
+    'cookie.verifyTimeout': '页面在 {n} 秒内没有返回（渲染器无响应），这次验证已放弃；窗口已关闭',
     'cookie.verifying': '正在用已保存的 Cookie 试探该平台…',
     'cookie.weibo.purpose': '解锁微博搜索（s.weibo.com）与评论 JSON 接口；未登录会被跳回 passport 二维码页。'
     '微博只认一份一直在用的会话：同账号并行翻页、或另开一个浏览器重放同一份 Cookie，都会被弹回登录页。'
@@ -271,6 +272,9 @@ EN = {
     'cookie.verify.unreachable': '{platform} could not be verified: the browser never opened this address '
     '(this machine\u2019s network or DNS), so the cookie was not tested',
     'cookie.verifyFailed': 'Verification failed: {err}',
+    'cookie.verifyTimeout': (
+        'the page did not answer within {n} seconds (wedged renderer); this check was abandoned and its window closed'
+    ),
     'cookie.verifying': 'Probing this platform with the stored cookie\u2026',
     'cookie.weibo.purpose': 'Unlocks Weibo search (s.weibo.com) and the comment JSON API; logged out you are '
     'bounced back to the passport QR page. Weibo accepts one live session per account: paging in parallel, '

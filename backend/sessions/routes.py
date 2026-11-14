@@ -25,10 +25,11 @@ from api.http import _bad_body, _json_body, _safe_int
 from core.config import Config
 from core.refs import as_bool, flag_or_none
 from flask import Blueprint, jsonify
-from runtime import account_context, paths
+from runtime import account_context, paths, phases
 from runtime.state import add_log, cookie_manager, execution_state
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
+from crawlers.engine import pacing
 from i18n import get_lang, set_lang, t
 from services import pool
 from services.accounts.service import accounts_mode
@@ -885,7 +886,18 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
             account=account,
             keep_exit=True,
         )
-        facts = crawler.diagnose(url)
+        facts = preflight.diagnose_bounded(crawler, url, pacing.navigation_budget())
+        if facts is None:
+            phases.record(
+                'probe',
+                pacing.navigation_budget(),
+                label=platform,
+                platform=platform,
+                status='timeout',
+            )
+            raise ValueError(t('cookie.verifyTimeout', n=int(pacing.navigation_budget())))
+        if 'error' in facts:
+            raise ValueError(facts['error'])
         facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
         # A verification is a real browser reading the real site through the account's own
         # exit: the most trustworthy evidence the pool can get, and the one a user pressing
