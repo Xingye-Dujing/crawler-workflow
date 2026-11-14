@@ -48,10 +48,13 @@
   `WaitForPendingNavigations`, so even the UA read never reaches Chrome (measured 2026-11-03). The component
   updater is off (`--disable-component-update`) because its CRX downloads (TTS engine, safety lists, on-device
   models) land in the user-data-dir, are useless to a crawler, and had grown hongguo's profile until its
-  renderer stopped answering. A headless launch then health-checks the renderer with **one** bounded UA read
-  (`Config.RENDERER_PROBE_TIMEOUT`): a browser that does not answer is **refused by name**
-  (`crawl.rendererUnresponsive`) rather than carried on un-masked — every later command would wait on the same
+  renderer stopped answering. **Every** launch — headless or a visible window — now health-checks the renderer with
+  **one** bounded UA read (`Config.RENDERER_PROBE_TIMEOUT`): a browser that does not answer is **refused by name**
+  (`crawl.rendererUnresponsive`) rather than carried on — every later command would wait on the same
   socket — and it is closed through `browser.close_driver` (bounded `quit`, then a PID reap of that session).
+  A visible window is not exempt: measured 2026-11-15, 慢速采集's automatic Cookie check showed a browser on an
+  empty tab that never navigated because the renderer never answered the first command. Only the *disguise* is
+  headless-only.
   A platform whose every page is anonymous declares `needs_profile = False`; `get_crawler` then forces
   `use_profile=False`, so no persistent directory and no profile lock exist for it. That attribute and the
   matrix's `needs_session` describe one fact: `test_platform_rules.py` refuses a platform where they disagree.

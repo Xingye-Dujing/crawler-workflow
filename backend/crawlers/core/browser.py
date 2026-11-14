@@ -472,26 +472,27 @@ def launch(
         # A public name, deliberately: this is state WE hang on the driver, and a private
         # name reads to every reviewer (and to pylint) as poking at the client's internals.
         driver.proxy_relay = relay
+    # The browser process is up, but a wedged renderer answers no CDP script at all — the
+    # “读不到自己的 User-Agent” stall, which used to hang the disguise for the driver's whole
+    # timeout. Probe with one bounded UA read first: a live renderer answers in milliseconds,
+    # and a dead one is refused here rather than carried on (every later command would hang
+    # on the same socket). This applies to EVERY browser, not only headless: a visible Chrome
+    # whose renderer wedges shows exactly the same blank tab with no command returning, and
+    # that window is the one a user reports (“验证 Cookie 停在不跳转的空白标签页”).
+    probe_seconds = int(_int_setting('renderer_probe_timeout', 15))
+    try:
+        real_ua = _bounded_call(
+            lambda: str(driver.execute_script('return navigator.userAgent;') or ''),
+            probe_seconds,
+            'the renderer',
+        )
+    except TimeoutError as exc:
+        close_driver(driver)
+        raise ValueError(t('crawl.rendererUnresponsive', seconds=probe_seconds, domain=domain)) from exc
+    except Exception as exc:
+        close_driver(driver)
+        raise ValueError(t('crawl.rendererProbeFailed', err=exc, domain=domain)) from exc
     if headless:
-        # The browser process is up, but a wedged renderer answers no CDP script at all — the
-        # “读不到自己的 User-Agent” stall, which used to hang the disguise for the driver's whole
-        # timeout. Probe with one bounded UA read FIRST: a live renderer answers in milliseconds, and
-        # a dead one is refused here rather than carried on un-masked (every later command would hang
-        # on the same socket). Reading it here also means the disguise needs no second read.
-        try:
-            real_ua = _bounded_call(
-                lambda: str(driver.execute_script('return navigator.userAgent;') or ''),
-                int(_int_setting('renderer_probe_timeout', 15)),
-                'the renderer',
-            )
-        except TimeoutError as exc:
-            close_driver(driver)
-            raise ValueError(
-                t('crawl.rendererUnresponsive', seconds=int(_int_setting('renderer_probe_timeout', 15)), domain=domain)
-            ) from exc
-        except Exception as exc:
-            close_driver(driver)
-            raise ValueError(t('crawl.rendererProbeFailed', err=exc, domain=domain)) from exc
         disguise_headless(driver, real_ua)
     # Hide the page-visible automation tells on EVERY browser (the visible login window
     # included), before any navigation.

@@ -185,12 +185,31 @@ def test_a_probe_error_is_refused_and_carries_the_drivers_words(fake_chrome, mon
     assert driver.cdp == []
 
 
-def test_a_visible_window_is_not_health_checked(fake_chrome):
-    """The visible login window is the user's own: it gets no probe delay and no disguise, and a
-    slow window is the user's to judge (the cookie job has its own grace)."""
+def test_a_visible_window_is_health_checked_too(fake_chrome):
+    """A visible Chrome with a wedged renderer is the same blank tab as a headless one.
+
+    Measured (2026-11-15, user's packaged build): 慢速采集's automatic Cookie check showed a
+    browser on an empty tab that never navigated. The window exists as soon as the process
+    is up, so “the user can see it” is not evidence the renderer answers; the one bounded UA
+    read runs here as well, and the disguise stays headless-only.
+    """
     browser.launch(headless=False, profile_dir=None, needs_images=True, domain='weibo')
-    assert 'read_ua' not in fake_chrome['driver'].journal
+    assert 'read_ua' in fake_chrome['driver'].journal
     assert [name for name, _params in fake_chrome['driver'].cdp] == ['Page.addScriptToEvaluateOnNewDocument']
+
+
+def test_a_visible_window_with_a_wedged_renderer_is_refused_by_name(fake_chrome, reaper, monkeypatch):
+    monkeypatch.setattr(Config, 'RENDERER_PROBE_TIMEOUT', 0.2)
+    monkeypatch.setattr(Config, 'RENDERER_CLOSE_TIMEOUT', 0.1)
+    driver = _FakeDriver()
+    driver.script_wait = 0.4
+    driver.quit_wait = 0.4
+    monkeypatch.setattr(browser, 'ChromeWebDriver', lambda options=None, service=None: driver)
+    started = time.monotonic()
+    with pytest.raises(ValueError, match='weibo'):
+        browser.launch(headless=False, profile_dir=None, needs_images=True, domain='weibo')
+    assert time.monotonic() - started < 2.0
+    assert 'quit' in driver.journal, 'the blank window must be closed, not left on the desktop'
 
 
 def test_a_wedged_quit_does_not_hold_the_teardown(reaper, monkeypatch):
