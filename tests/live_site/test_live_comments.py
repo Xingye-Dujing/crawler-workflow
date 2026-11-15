@@ -18,15 +18,23 @@ pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_soc
 
 
 def _fresh_post_with_comments(weibo_windowed) -> str:
-    """A weibo post from the session's one windowed search that reports 评论数 > 0.
+    """A weibo post from the session's one windowed search that reports 评论数 >= 2.
 
     Read off the shared crawl rather than searched again: the search endpoint is the
     request this account gets refused by, and the two cases want the same rows.
+
+    The count is the site's own and it counts REPLIES too, so a post printing exactly 1
+    can legitimately answer an empty ROOT list (measured 2026-11-15: the first such post
+    made this case red while the adapter's own ``comment.weiboShort`` named the gap). At
+    two or more, a root comment exists in practice; the busiest candidate is taken so a
+    lonely, deleted or reply-only thread cannot stand in for the endpoint.
     """
-    for row in weibo_windowed['rows']:
-        if int(row.get('评论数') or 0) > 0 and 'weibo.com/' in (row.get('链接') or ''):
-            return str(row['链接'])
-    return ''
+    candidates = [
+        (int(row.get('评论数') or 0), str(row['链接']))
+        for row in weibo_windowed['rows']
+        if 'weibo.com/' in (row.get('链接') or '') and int(row.get('评论数') or 0) >= 2
+    ]
+    return max(candidates, default=(0, ''))[1]
 
 
 @pytest.mark.parametrize(

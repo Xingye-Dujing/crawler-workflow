@@ -19,7 +19,12 @@ KEYWORD = '大学生恋爱观'
 
 @pytest.mark.live_quick
 def test_two_pages_are_selected_and_exported_once(live_crawler):
-    crawler = live_crawler('cnki', headless=True)
+    # HEADED on purpose. kns.cnki.net refuses the export window from a headless session
+    # ("您的请求被拒绝 / 您无权查看该页面 / HTTP ERROR 403：无头模式被拒绝"), and the export page then
+    # has no 下载题录文件 link — the same measurement as docs/crawler_notes.md → 中国知网. A
+    # headless run is therefore not a statement about this crawler, and asking for one turned a
+    # documented site rule into a red live case.
+    crawler = live_crawler('cnki', headless=False)
     rows = crawler.search(KEYWORD, target_count=25)
 
     assert len(rows) == 25, f'expected the target, got {len(rows)}'

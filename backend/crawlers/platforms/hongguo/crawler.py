@@ -72,7 +72,11 @@ try {
         if (pages.length) {
             out.page_key = pages[0];
             var content = loaders[pages[0]] && loaders[pages[0]].content;
-            var board = content && content._data;
+            // Two shipped shapes: the board used to arrive under ``content._data`` (a Nuxt
+            // deferral), and since 2026-11-15 the loader hands the payload over directly
+            // (``content.rankList``). Accept the wrapper when it is there and the content
+            // itself when it is not; a thenable in either place is still "not yet".
+            var board = content && (content._data !== undefined ? content._data : content);
             if (board && typeof board.then !== 'function') {
                 var rows = board.rankList || [];
                 var pg = board.pagination || {};
@@ -103,7 +107,9 @@ if (!loaders) { return null; }
 var pages = Object.keys(loaders).filter(function (k) { return k.indexOf('/page') > 0; });
 if (!pages.length) { return null; }
 var content = loaders[pages[0]] && loaders[pages[0]].content;
-var board = content && content._data;
+// Either shipped shape (see ``_STATE_JS``): the wrapper when the site puts it there, the
+// content itself when the loader hands the payload over directly.
+var board = content && (content._data !== undefined ? content._data : content);
 if (!board || typeof board.then === 'function') { return null; }
 return board;
 """

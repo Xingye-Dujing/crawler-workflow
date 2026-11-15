@@ -857,6 +857,14 @@ loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以�
 `hot-ai-drama`、`hot-comic-drama`）第 1/2/5 页实测都是 20 条、`totalPages=5`、排名跨页连续（第 5 页从 81 起），
 第 5 页 `nextUrl=None`；`?page=1` 与裸 URL 是同一页（所以第 1 页不带参数）。
 
+**2026-11-15 站点把载荷从 `content._data` 挪到了 `content` 本身**（measured 真站层
+`test_the_hot_board_answers_one_page_load_with_its_own_numbers`）：`loaderData['rank_hot-drama/page']`
+仍有 `req/rankKey/canonicalUrl/updatedText/pageNum/isCrawler/content`，但 `content` 直接就是
+`{isSuccess, rankList, pagination}`，`content._data` 已不存在。旧的读法把 `state` 永远停在
+`missing`（`page_key` 却在），于是整轮等满 5 分钟再以 `crawl.hg.noBoard` 拒绝——而页面上明明有 40 张卡。
+两个 JS 探针现在都接受两种形状：`content._data !== undefined ? content._data : content`，
+thenable 仍然按“还没到货”处理。
+
 **一条探针返回字符串而不是对象，是这里第一次就踩到的坑**：`execute_script` 里
 `return JSON.stringify(...)` 回来后是 `str`，`content.get` 直接 `'str' object has no attribute 'get'`；
 改成 `return board`（对象）即可，别在爬虫里 `json.loads`（probe #11）。
@@ -2514,6 +2522,10 @@ feed。所以两处导航（数据源节点的笔记详情 `_scrape_note`、评�
 - **站点的数字不等于顶层评论数**：微博评论页的 `total_number` 统计整条 thread，实测 30 条的帖子只返回 22 条顶层行，
   差的 8 条正是它的楼中楼，而本项目的评论走查会把可拿到的子回复也写成行。所以两边的分母都可能包含回复，
   比较的是“站点说这条有多少条评论 / 我们存了多少行”，不是“顶层评论”。
+  - **live 案例挑帖要避开“只有 1 条”的帖**（measured 2026-11-15）：搜索行印着 `评论数=1` 的帖子，那唯一一条
+    往往是楼中楼（或已删除、仍被计数），顶层列表合法地为空；`test_live_comments.py` 却断言“印了评论就必须有行”，
+    于是把站点的正常答案记成红。`_fresh_post_with_comments` 现在只取 `评论数 >= 2` 且**最大**的那条——
+    输入要让断言有意义，而不是把阈值调低。
 - **万/千/亿与 K/M/B 是取整过的标签**：爬虫落库时已经用 `crawlers.engine.counters.parse_count` 折成整数，但标签本身
   可能四舍五入（“1.2万”可能是 11,800 也可能是 12,300）。因此节点给了“每篇允许少的条数”和“每篇上限”两个旋钮，
   默认都是 0/不设；站点取整明显时把容差调大，而**不要**把它当成漏采。

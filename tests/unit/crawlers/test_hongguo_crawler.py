@@ -16,8 +16,11 @@ of which a reading of the site suggests:
   left ``UNDER_TARGET`` — our loop stopping is not the site running out.
 """
 
+import json
+
 import capabilities.registry as capabilities
 import pytest
+from node_runner import run_node
 
 import crawlers.core.crawler as base_module
 import i18n
@@ -387,6 +390,44 @@ def test_the_panel_offers_exactly_the_boards_this_crawler_knows():
     # The option *labels* are browser words, owned by ``app.js`` and checked there
     # (``test_frontend_contract.py`` walks every option of every declared select).
     assert len({label for _value, label in field.options}) == len(field.options), 'two boards share one label'
+
+
+def test_the_state_probe_reads_both_loader_shapes(tmp_path):
+    """The site moved the payload out of ``content._data`` on 2026-11-15 (see crawler_notes).
+
+    The Python fake never executes this JS, so it cannot notice that the wrapper disappeared:
+    the page kept rendering 40 cards while the probe answered ``missing`` for five minutes.
+    Both shapes must be readable, and a missing/deferred one must NOT be mistaken for a board.
+    """
+    import shutil
+
+    if shutil.which('node') is None:
+        pytest.skip('node not installed')
+    script = (
+        f'const STATE = {json.dumps(hongguo._STATE_JS)};\n'
+        'function probe(loaderData) {\n'
+        "  return new Function('window', STATE)({ _ROUTER_DATA: { loaderData } });\n"
+        '}\n'
+        'const wrapped = { content: { _data: { isSuccess: true, rankList: [1, 2],\n'
+        "  pagination: { pageNum: 1, totalPages: 5, nextUrl: '/x' } } } };\n"
+        'const direct = { content: { isSuccess: true, rankList: [1, 2, 3],\n'
+        "  pagination: { pageNum: 1, totalPages: 5, nextUrl: '' } } };\n"
+        'const empty = { content: { _data: null } };\n'
+        'console.log(JSON.stringify({\n'
+        "  wrapped: probe({ 'rank_hot-drama/page': wrapped }),\n"
+        "  direct: probe({ 'rank_hot-drama/page': direct }),\n"
+        "  empty: probe({ 'rank_hot-drama/page': empty }),\n"
+        '}));\n'
+    )
+    path = tmp_path / 'probe.mjs'
+    path.write_text(script, encoding='utf-8')
+    proc = run_node(str(path))
+    assert proc.returncode == 0, proc.stderr[-1500:]
+    seen = json.loads(proc.stdout)
+    assert seen['wrapped']['state'] == 'ready' and seen['wrapped']['rows'] == 2
+    assert seen['direct']['state'] == 'ready' and seen['direct']['rows'] == 3, seen['direct']
+    assert seen['direct']['next_url'] == '' and seen['direct']['is_success'] is True
+    assert seen['empty']['state'] != 'ready', 'an absent board is not an empty board'
 
 
 def test_every_board_label_the_crawler_logs_exists_in_both_languages():
