@@ -153,6 +153,15 @@ window.addEventListener('error', function (event) {
         String(event.message) + ' @ ' + String(event.filename || '?') + ':' + String(event.lineno || 0)
     );
 });
+/* Resource errors do NOT bubble, so the listener above cannot see a <script> that never
+   loaded — which is the exact shape of a boot that leaves one late file's symbols undefined.
+   Capture phase catches them and names the URL. */
+window.addEventListener('error', function (event) {
+    var target = event && event.target;
+    if (target && target !== window && (target.src || target.href)) {
+        window.__bootErrors.push('resource failed: ' + String(target.src || target.href));
+    }
+}, true);
 window.addEventListener('unhandledrejection', function (event) {
     window.__bootErrors.push('unhandled rejection: ' + String(event.reason));
 });
@@ -201,7 +210,15 @@ def _boot_evidence(driver):
             scripts: Array.from(document.scripts).map((s) => s.src || 'inline'),
             fetched: performance.getEntriesByType('resource')
                 .filter((e) => e.initiatorType === 'script')
-                .map((e) => `${e.name} transfer=${e.transferSize} duration=${Math.round(e.duration)}`),
+                .map((e) => `${e.name} transfer=${e.transferSize} decoded=${e.decodedBodySize}`
+                    + ` status=${e.responseStatus === undefined ? '?' : e.responseStatus}`
+                    + ` duration=${Math.round(e.duration)}`),
+            materialised: {
+                app: Array.from(document.scripts).filter((s) => /\\/app\\.js(\\?|$)/.test(s.src)).length,
+                canvas: typeof window.canvas,
+                i18n: typeof window.I18n,
+            },
+            html: document.documentElement.outerHTML.length,
         };
         """
     )
@@ -241,6 +258,17 @@ def _load_app(driver, app_url):
     finished — same bytes pass on the other two runners. That costs ONE reload, reported
     with both attempts, exactly like the browser-launch retry in ``test_profile_template``;
     a real boot regression fails the second navigation the same way and still goes red.
+
+    The repeated shape, after the first clean run with the capture-phase listener below,
+    points at a **cache entry**, not a slow server: ``Connection: close`` on every Werkzeug
+    response plus ~63 separate scripts per page lets a long device run interrupt one large
+    response while Chrome writes it to its cache. The server sends ``Cache-Control:
+    no-cache``, so every later navigation revalidates and receives ``304`` — a retry would
+    then re-use the same entry and fail identically, and the files reported missing are the
+    big ones (``app.js``, ``workflow.js``). The second attempt therefore clears the browser
+    cache first, which forces real ``200`` bodies; the failure message names the resource
+    the browser could not load, so a genuine truncation or a boot regression still shows
+    itself instead of being retried away.
     """
     _install_boot_error_collector(driver)
     attempts = []
@@ -255,6 +283,13 @@ def _load_app(driver, app_url):
             _apply_viewport(driver)
             return
         attempts.append((state, _boot_evidence(driver)))
+        # A resource that never arrived is not fixed by asking for the same cached entry
+        # again: give the second attempt a clean cache and a fresh set of connections.
+        if attempt == 1:
+            with contextlib.suppress(Exception):
+                driver.execute_cdp_cmd('Network.enable', {})
+                driver.execute_cdp_cmd('Network.setCacheDisabled', {'cacheDisabled': True})
+                driver.execute_cdp_cmd('Network.clearBrowserCache', {})
     pytest.fail(
         'the page never finished booting after two navigations: '
         + '; '.join(f'attempt {index + 1}: {state}; {evidence}' for index, (state, evidence) in enumerate(attempts))
@@ -292,6 +327,42 @@ def test_the_boot_retry_still_refuses_a_page_that_never_defines_a_later_script(d
     assert 'never finished booting after two navigations' in message
     assert "'canvas': 'object'" in message and "'i18n': 'undefined'" in message
     assert 'attempt 2' in message and "'scripts': ['inline']" in message
+
+
+def test_the_boot_retry_clears_the_cache_between_the_two_navigations(monkeypatch):
+    """The retry must not re-validate the same cached entry that just failed.
+
+    The dev server answers ``Cache-Control: no-cache``, so a second ``driver.get`` is usually a
+    ``304``: a body Chrome cached badly (a truncated large script under load) would fail the
+    reload in exactly the same way. Clearing the cache is what makes attempt 2 a fresh ``200``.
+    """
+    calls = []
+
+    class _Driver:
+        def get(self, url):
+            calls.append(('get', url))
+
+        def execute_cdp_cmd(self, name, params):
+            calls.append(('cdp', name))
+
+        def execute_script(self, script, *args):
+            return {}
+
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        '_wait_for_boot',
+        lambda _driver: {'ready': 'complete', 'canvas': 'undefined', 'i18n': 'undefined', 'auth': 'undefined'},
+    )
+    monkeypatch.setattr(sys.modules[__name__], '_boot_evidence', lambda _driver: {})
+    with pytest.raises(pytest.fail.Exception):
+        _load_app(_Driver(), 'http://127.0.0.1:9')
+    order = [entry for entry in calls if entry[0] == 'get' or str(entry[1]).startswith('Network.')]
+    assert [kind for kind, _ in order] == ['get', 'cdp', 'cdp', 'cdp', 'get'], order
+    assert order[1:4] == [
+        ('cdp', 'Network.enable'),
+        ('cdp', 'Network.setCacheDisabled'),
+        ('cdp', 'Network.clearBrowserCache'),
+    ], order
 
 
 # ─── the overflow rule, stated once as JavaScript ───────────────────────

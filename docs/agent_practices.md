@@ -178,6 +178,17 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `goog:loggingPrefs`, so that log is always empty), retries the navigation ONCE, and prints the first attempt's state
   when the reload was needed; two failed navigations still fail, now with the page's own JS errors beside the script
   list. A deterministic boot regression cannot be rescued by a reload, so the retry only absorbs a transport abort.
+  - **2026-11-15: the retry must not re-validate what just failed.** Three consecutive full device runs each failed
+    exactly one `test_ui_layout` boot case, at a different test each time, while the same case passed 3/3 alone — and
+    each failure reported the two LARGEST scripts' symbols missing (`app.js` → `I18n`/`Auth`, or `workflow.js` →
+    `workflow`). Werkzeug answers `Connection: close` on every response and the page loads ~63 separate scripts, so a
+    long run can interrupt one large response while Chrome writes its cache entry; because the server sends
+    `Cache-Control: no-cache`, the retry's `304` hands the same entry back and the second attempt fails identically.
+    `_load_app` therefore calls `Network.setCacheDisabled` + `Network.clearBrowserCache` between the attempts (forced
+    `200` bodies), and the collector now listens in the CAPTURE phase — a `<script>` that never loads fires an error on
+    the element, which does not bubble and was invisible to the window listener. Three full device runs after the change
+    were green (201 passed / 5 CatBus skips). The mechanism is inferred from those four failure dumps, not proven with a
+    corrupted entry: the capture listener names the resource on the next failure.
 - **A harness that reads module files by hand is a second opinion about the split map — and the map must read each file
   once.** Three harnesses (`harness_menu`/`harness_app_state`/`harness_schedules`) did their own `argv.map(readFileSync)`
   instead of `companions.mjs`, so when `LLMSettings`/`AppSettings` moved out of `app.js` their boots died with
