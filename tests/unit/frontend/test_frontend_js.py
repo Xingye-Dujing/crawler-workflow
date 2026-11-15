@@ -303,6 +303,44 @@ def results(tmp_path_factory, capabilities_matrix):
             'nodes': [_node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'})],
             'connections': [],
         },
+        # ── a disabled node is as if it were not on the canvas (engine.effective_workflow) ──
+        # A workflow whose boxes are all switched off must not refuse the press: the live chain
+        # beside it is what runs. Validating the FULL canvas instead put a red badge on every
+        # greyed-out box and blocked the run over wires it never had.
+        {
+            'id': 'disabled_workflow_skipped',
+            'nodes': [
+                _node('nm', 'name', {'workflow_name': '旧稿', 'enabled': False}),
+                _node('src', 'source', {'platform': 'zhihu', 'keyword': '', 'enabled': False}),
+                _node('old-out', 'output', {'operation': 'save', 'filename': '', 'enabled': False}),
+                _node('live', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
+                _save(),
+            ],
+            'connections': [
+                {'from': 'nm', 'to': 'src'},
+                {'from': 'src', 'to': 'old-out'},
+                {'from': 'live', 'to': 'out-1'},
+            ],
+        },
+        {
+            'id': 'disabled_type_skipped',
+            'nodes': [
+                _node('v', 'visualize', {}),
+                _node('live', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
+                _save(),
+            ],
+            'connections': [{'from': 'live', 'to': 'out-1'}],
+            'disabledTypes': ['visualize'],
+        },
+        {
+            'id': 'starved_chain_skipped',
+            'nodes': [
+                _node('src', 'source', {'platform': 'zhihu', 'keyword': '', 'enabled': False}),
+                _node('p', 'process', {'operation': 'clean'}),
+                _save(),
+            ],
+            'connections': [{'from': 'src', 'to': 'p'}, {'from': 'p', 'to': 'out-1'}],
+        },
         # ── the feed gate: a wired table must feed, a named column needs a table ──
         # Same distinction the backend engine builds: parent type 'name' is a label,
         # not data; and what can be fed at all is the payload's (field.fedBy), which
@@ -612,6 +650,25 @@ class TestValidateGate:
     def test_an_unwired_source_is_reported_twice_reasonably(self, results):
         keys = [_parse(m)[0] for m in results['validate']['no_terminal']]
         assert keys == ['validate.sourceDownstream', 'validate.noTerminal']
+
+    def test_a_disabled_workflow_never_blocks_the_live_one(self, results):
+        """被禁用的节点直接跳过: a switched-off box is not on the run's canvas — the engine drops it
+        and its wires before validating (``effective_workflow``) — so its missing keyword, its
+        missing file name and its dangling downstream must not be reported, and must not refuse
+        the press while a live chain sits beside it."""
+        assert results['validate']['disabled_workflow_skipped'] == []
+
+    def test_a_switched_off_node_type_is_not_validated(self, results):
+        # The type switch removes every box of that kind, so the chart's missing type must not
+        # surface — the same graph the backend runs has no visualize node in it.
+        keys = [_parse(m)[0] for m in results['validate']['disabled_type_skipped']]
+        assert keys == [], keys
+
+    def test_a_chain_starved_by_its_disabled_head_validates_as_an_empty_canvas(self, results):
+        # Same answer the backend's validate gives when every node is off: a run of nothing is
+        # not a success. The cascade is the canvas's own (``disableStates``), not a second copy.
+        keys = [_parse(m)[0] for m in results['validate']['starved_chain_skipped']]
+        assert keys == ['validate.empty'], keys
 
     def test_a_fed_source_validates_without_pasted_links(self, results):
         # Wired table + named column: the pasted box is neither required nor

@@ -22,9 +22,17 @@
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 
 import { baseSandbox, fixWindow, readJson } from './harness_dom.mjs';
 import { sourceOf } from './companions.mjs';
+
+/* The page's canvas section (``canvas-visuals.js``) rides along: ``validateDetailed`` asks the
+   canvas which nodes are switched on (``effectiveIds``), so a harness holding a bare stub would
+   measure the "no canvas layer, full map" fallback for every scenario and the disabled-node cases
+   would prove nothing. Loaded through ``sourceOf`` like every other module — one read per file,
+   companions included — and it only ASSIGNS members onto the stub's ``canvas``. */
+const CANVAS_SECTION = fileURLToPath(new URL('../../backend/static/js/canvas-visuals.js', import.meta.url));
 
 const wfPath = process.argv[2];
 const scenarioPath = process.argv[3];
@@ -33,7 +41,7 @@ const scenarioPath = process.argv[3];
    from it, so rendering one without this answers "the list did not load" — which
    is itself a scenario, and the reason the argument stays optional. */
 const matrixPath = process.argv[4];
-const src = sourceOf(wfPath);
+const src = sourceOf(wfPath, CANVAS_SECTION);
 const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
 
 /* A parseable stand-in for the catalog: validate messages come back as
@@ -76,6 +84,10 @@ const sandbox = {
     canvas: {
         nodes: {},
         connections: [],
+        /* Which node TYPES the canvas has switched off; a scenario may override it. The
+           enable/disable mirror itself (``effectiveIds``) is the real one, assigned by
+           ``canvas-visuals.js`` above. */
+        disabledTypes: [],
         _settingsNodeId: null,
         // updateParam's display/state hooks are canvas territory — stubbed so
         // selectSourcePlatform can run to its END (the collect reset) here.
@@ -120,6 +132,9 @@ const out = { validate: {}, url: [], placeholder: {}, settings: {}, needsLlm: {}
 for (const sc of scenarios) {
     I18n.lang = sc.lang || 'en';
     sandbox.canvas.nodes = {};
+    /* A scenario declares the canvas's own type switches; reset it per scenario or the
+       previous case's disabled type would silently carry over. */
+    sandbox.canvas.disabledTypes = (sc.disabledTypes || []).slice();
     sandbox.canvas._settingsNodeId = null;
     if (sc.needsLlm !== undefined) {
         // One params dict (+ the node-level operation the wire also carries) in,

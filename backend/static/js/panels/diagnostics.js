@@ -81,7 +81,13 @@ var Diagnostics = {
         var out = {};
         var self = this;
         var nodes = canvas.nodes;
+        /* A disabled node is as if it were not on the canvas, so a reading the server left behind
+           (it answered for the snapshot it was sent, which may predate the switch) must not
+           repaint that box's badge. ``effectiveNodeMap`` is workflow.js's one mirror of the run's
+           graph; a harness without it keeps the full map, exactly as before. */
+        var live = typeof effectiveNodeMap === 'function' ? effectiveNodeMap() : nodes;
         Object.keys(this._reads).forEach(function (id) {
+            if (!live[id]) return;
             var reads = self._reads[id] || [];
             if (!reads.length) return;
             var input = self.inputColumns(id);

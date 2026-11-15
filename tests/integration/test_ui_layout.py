@@ -1372,7 +1372,10 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
     the starved box really wears a dashed frame and a named badge, the wire
     between them really dims, and the power button on a live node carries a
     resolved tooltip in this language. Toggling back must clear all of it. Two
-    connected nodes are drawn (floor: 2 boxes, 1 wire measured).
+    connected nodes are drawn (floor: 2 boxes, 1 wire measured). The validity
+    frame is measured the same way: the head box is refused by validation while it
+    is on, and the switched-off head must lose the red frame and its count badge —
+    被禁用的节点直接跳过, so the browser's gate never refuses the run over it.
     """
     _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
@@ -1395,12 +1398,20 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
         const ids = [idA, idB];
         canvas.connections.push({ from: ids[0], to: ids[1] });
         canvas.updateConnections();
+        // A source with no platform is refused by every validate() branch, matrix or not — so the
+        // head box is invalid for a reason this test does not have to guess at.
+        canvas.nodes[ids[0]].params = {};
+        canvas.updateNodeDisplay(ids[0]);
 
         const probe = () => {
+            // The real badge painter: the edit-time diagnostics merge the offline validation and
+            // write it onto the boxes. Asking it directly keeps this measurement off the debounce.
+            Diagnostics.recompute();
             const box = (id) => {
                 const el = canvas._nodeEl(id);
                 const cs = getComputedStyle(el);
                 const badge = el.querySelector('.node-state-badge');
+                const vBadge = el.querySelector('.node-validate-badge');
                 return {
                     opacity: parseFloat(cs.opacity),
                     filter: cs.filter,
@@ -1409,6 +1420,10 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
                     badge: badge ? badge.textContent : null,
                     badgeShown: badge ? getComputedStyle(badge).display !== 'none' : null,
                     powerTitle: el.querySelector('.node-power-btn').title,
+                    // “被禁用的节点直接跳过” drawn on screen: a switched-off box must not wear the
+                    // invalid frame or its count badge.
+                    invalid: el.classList.contains('node-invalid'),
+                    validateBadgeShown: vBadge ? getComputedStyle(vBadge).display !== 'none' : null,
                 };
             };
             const wires = Array.from(document.querySelectorAll('#svg-layer path.conn-line'));
@@ -1458,6 +1473,12 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
     assert again['head']['opacity'] > 0.99 and again['child']['opacity'] > 0.99, again
     assert again['wireDimmed'] == 0, f'a re-enabled wire stayed dim: {again}'
     assert again['head']['badge'] == '' and again['child']['badge'] == '', again
+    # 被禁用的节点直接跳过: the greyed box carries no validity frame and no count badge — the run
+    # gate skips it — and switching it back on brings both back (the same box, same reason).
+    assert before['head']['invalid'] is True and before['head']['validateBadgeShown'] is True, before
+    assert disabled['head']['invalid'] is False, f'a disabled node is still drawn as invalid: {disabled["head"]}'
+    assert disabled['head']['validateBadgeShown'] is False, disabled['head']
+    assert again['head']['invalid'] is True and again['head']['validateBadgeShown'] is True, again['head']
     assert again['head']['powerTitle'] and 'ctx.' not in again['head']['powerTitle'], (
         f'the power tooltip is untranslated in {lang}: {again["head"]["powerTitle"]!r}'
     )

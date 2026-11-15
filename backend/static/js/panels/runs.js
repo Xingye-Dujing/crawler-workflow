@@ -1070,10 +1070,21 @@ workflow.validateDetailed = function () {
             (perNode[id] = perNode[id] || []).push(msg);
         }
     }
-    var nodes = canvas.nodes;
-    var conns = canvas.connections;
+    /* 被禁用的节点直接跳过：a node the run will not execute — its own switch off, its type off, or
+       starved because every upstream is gone — is as if it were not on the canvas, and so is every
+       wire that touched it. That is the graph the engine actually runs
+       (engine.workflow.effective_workflow), so validating the FULL canvas instead put a red badge
+       on the greyed-out box the user had just switched off and refused the whole run over a wire
+       the run never had. ``effectiveNodeMap`` is the canvas mirror of that same filter; a harness
+       without the canvas layer gets the full map back, which is the old behaviour there. */
+    var nodes = effectiveNodeMap();
+    var conns = (canvas.connections || []).filter(function (c) {
+        return nodes[c.from] && nodes[c.to];
+    });
 
     if (Object.keys(nodes).length === 0) {
+        /* Same answer as the backend's own validate for a canvas whose every box is switched off
+           (``engine.empty_canvas``): a run of nothing is not a success. */
         add(null, I18n.t('validate.empty'));
         return { messages: errors, perNode: perNode };
     }
