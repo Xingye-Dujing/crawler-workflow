@@ -100,8 +100,14 @@
 - **A Stop is a request, not a verdict.** 停止 writes `stopping` into the record **on the request thread** (the
   worker's verdict replaces it) and `stop_requested()` reads that — never `not running`, which an idle server also
   answers. Each crawl asks it at its next row via `Crawler.emit` (a `BaseException`: `except Exception` would
-  swallow it into "the site sent nothing more"). **A walk may honour 停止 by *returning* its rows, so the executor
-  asks again after it comes back: a returned table is not a completed node.** `driver.quit()` cannot interrupt the
+  swallow it into "the site sent nothing more"), and **a hand-rolled per-card loop asks `may_stop()` itself** — a
+  `WebElement` found before the kill keeps talking to the session it came from, so replacing `Crawler.driver` with
+  `DeadDriver` never reaches it (measured 2026-11-15: a 停止 at 卡片 24/43 made cards 25–43 answer `invalid session id`
+  and a 16 s connect refusal, each logged as `处理第 N 条结果时出错`; zhihu's `_harvest` now asks per card, as
+  `feed.walk_feed` already did). **A walk may honour 停止 by *returning* its rows, so the executor
+  asks again after it comes back: a returned table is not a completed node.** Its caller must not spend that stop on
+  the next step either (zhihu's two-tab author walk never opens tab 2 on a reaped session) — and never relabels it
+  采得不足. `driver.quit()` cannot interrupt the
   command the worker is inside, so 停止 kills that driver process. **A timeout not handed to the connection is a
   comment, not a ceiling:** `ollama.Client` defaults to `None` (never), so pass the run's timeout there; and the
   panel's post-stop watch must outlast the measured tail (`docs/crawler_notes.md`).

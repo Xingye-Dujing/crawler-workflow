@@ -8,6 +8,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
+from crawlers.core.faults import CrawlerStopped
 from crawlers.engine import feed, pacing, pagefetch, times
 from crawlers.engine.counters import parse_count
 from i18n import stop_reason_label, t
@@ -236,6 +237,11 @@ class ZhihuCrawler(Crawler):
         last_height = self.page_height()
         ended = 'target'
         while self.collected() < target_count:
+            # Between rounds too: a stop that landed after the last harvest has nothing left to
+            # interrupt, and the next thing this loop does is drive a browser the reaper may have
+            # closed already — "被停止" is the honest answer, an AttributeError/connect error is not.
+            if self.may_stop():
+                raise CrawlerStopped(t('crawl.stopped'))
             rounds += 1
             self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS))
             # Adaptive wait: a screen that already grew costs one poll, a slow
@@ -420,7 +426,11 @@ class ZhihuCrawler(Crawler):
             raise ValueError(t('crawl.zhihu.authorEmpty', author=author))
         logger.info(t('crawl.zhihu.authorStart', author=token, n=target_count))
         for tab in self.PROFILE_TABS:
-            if self.collected() >= target_count:
+            # A 停止 the walk honoured by *returning* (``feed.walk_feed``'s own boundary) must not
+            # be spent on the next tab. That tab's first act is a navigation, and the stop thread
+            # may already have reaped this session — the answer would be a connect error instead of
+            # 被停止. The walk is left unjudged below, so nothing here relabels it.
+            if self.collected() >= target_count or self.may_stop():
                 break
             self._walk_profile_tab(token, tab, target_count)
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
@@ -432,9 +442,13 @@ class ZhihuCrawler(Crawler):
         # if the walk stopped with collected < total, we KNOW it under-collected (convict, resumable);
         # if collected reached or passed total, the site itself sized the feed → 'site_end' (settles
         # clean). total == -1 means the metas did not render (a page we cannot read); leave None. A
-        # wall / 风控 / 停止 is settled upstream and must not be relabeled here.
-        total = self._author_total()
-        if total >= 0 and not (self.login_wall or self.risk_blocked or self.may_stop()):
+        # wall / 风控 / 停止 is settled upstream and must not be relabeled here — and after one there
+        # is no denominator worth reading either: ``_author_total`` issues two element lookups, and
+        # the session they would reach may be the one 停止 just reaped (a 16 s connect refusal bought
+        # for a number nothing will use).
+        stopped = self.login_wall or self.risk_blocked or self.may_stop()
+        total = -1 if stopped else self._author_total()
+        if total >= 0:
             if self.collected() < target_count and self.collected() < total:
                 self.note_end(UNDER_TARGET, kept=self.collected())
             elif self.collected() >= total:
@@ -650,6 +664,15 @@ class ZhihuCrawler(Crawler):
         # the next round starts at ``cards[start:]`` and never looks at that index again.
         hole = False
         for idx, card in enumerate(cards[start:], start + 1):
+            # Re-asked per card, not only per round (the shared ``feed.walk_feed`` asks it in the
+            # same place). 停止 reaps this session's driver process, but the cards this round
+            # already HOLDS keep talking to the session they were found through — so every read
+            # after the kill is a fresh connect to a port nobody holds (~16 s) that comes back
+            # "invalid session id", and the tolerance below would log one of those per remaining
+            # card before the round ended. Measured: a stop at card 24 of 43 printed 19 stack
+            # traces and the node looked broken rather than stopped.
+            if self.may_stop():
+                raise CrawlerStopped(t('crawl.stopped'))
             if self.collected() >= target_count:
                 logger.info(t('crawl.zhihu.target_reached', n=target_count))
                 break
@@ -695,6 +718,13 @@ class ZhihuCrawler(Crawler):
                 else:
                     logger.debug(t('crawl.zhihu.skipped', i=idx))
             except Exception as e:
+                # A stop landing inside this card is what the dead session looks like from here
+                # (the reaper killed the driver under an in-flight command), so it must leave as
+                # 被停止 instead of being logged as a card that could not be read. Same rule as
+                # ``Crawler.wait_for_first_content``: consult ``may_stop`` rather than try to
+                # classify the exception's text.
+                if self.may_stop():
+                    raise CrawlerStopped(t('crawl.stopped')) from e
                 logger.error(t('crawl.zhihu.process_error', i=idx, err=e))
                 hole = True
             # Recorded per card, AFTER it was processed: a kill between two cards costs at
