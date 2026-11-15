@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, three numeric groups (for example 1.0.0)'
+        description: 'Release version, three or four numeric groups (for example 1.0.0 or 2026.11.14.2)'
         required: true
       channel:
         description: 'stable or dev'
@@ -39,7 +39,7 @@ jobs:
       # -NoZip: the zip is made AFTER signing, from the signed folder. No CIXI_SIGN_*
       # value is set anywhere in this job.
       - name: Build the folder without credentials
-        run: powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -NoZip
+        run: powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -NoZip -Version ${{ inputs.version }}
       - uses: actions/upload-artifact@v7
         with:
           name: unsigned-dist

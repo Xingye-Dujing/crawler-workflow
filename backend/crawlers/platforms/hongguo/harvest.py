@@ -307,6 +307,13 @@ class HongguoCommentHarness:
             # than this group has; a lost scroll leaves UNDER_TARGET, never a
             # claimed 'site_end'.
             stalled = 0
+            # A page that ARRIVES but carries only ids this group already has adds nothing.
+            # ``allow_repeat`` lets the drawer's own cursor pages through, so a site that
+            # replays the same window keeps ``prog`` unchanged and ``has_more`` true; the
+            # old loop reset ``stalled`` on every arrival and paid another scroll plus the
+            # full page wait forever. One blank page is tolerated (a resume can land on the
+            # page boundary), the second is named as the shortfall it is.
+            blank_rounds = 0
             while (has_more or prog['kept'] < prog['total']) and not (limit and len(rows) >= limit):
                 self._check_abort()
                 if not self.ui.scroll_drawer(stalled):
@@ -336,6 +343,25 @@ class HongguoCommentHarness:
                     continue
                 stalled = 0
                 extra, extra_refused, prog, has_more = self._harvest(more, article_url, title, ep)
+                if not extra:
+                    blank_rounds += 1
+                    if blank_rounds >= 2:
+                        # A repeating cursor window: the closed set is finite, so the walk
+                        # must convict the shortfall instead of sleeping on it until 停止.
+                        licensed = False
+                        self._named_groups.add(group_of_prog)
+                        self._log(
+                            t(
+                                'crawl.hg.cmt.episodeShort',
+                                title=title,
+                                ep=ep,
+                                have=prog['kept'],
+                                site_total=prog['total'],
+                            )
+                        )
+                        break
+                else:
+                    blank_rounds = 0
                 group_of_prog = str(more.get('group_id') or '')
                 scanned += _entry_count(more)
                 refused += extra_refused

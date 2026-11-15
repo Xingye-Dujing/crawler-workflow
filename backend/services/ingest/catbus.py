@@ -161,11 +161,22 @@ def _probe_now() -> Probe:
     # asking the adapter would confuse "no CatBus" with "the Node under it is too old".
     check = _call([node, '--version'], capture=True, timeout=30)
     node_version = check.stdout.strip()
-    if check.spawn_error or not machine.node_version_supported(node_version):
+    if check.spawn_error:
+        # The child never started (permissions, a broken image, an OSError). "Upgrade Node" is
+        # the wrong remedy for a runtime that is new enough but cannot be executed, and the two
+        # refusals need different names.
+        return Probe(
+            available=False,
+            reason_key='catbus.nodeUnrunnable',
+            reason_params={'node': node, 'err': check.spawn_error[:200]},
+            node=node,
+            node_version=node_version,
+        )
+    if not machine.node_version_supported(node_version):
         return Probe(
             available=False,
             reason_key='catbus.oldNode',
-            reason_params={'version': node_version or check.spawn_error or '?', 'node': node},
+            reason_params={'version': node_version or '?', 'node': node},
             node=node,
             node_version=node_version,
         )
@@ -285,6 +296,7 @@ _PANEL_KEYS = {
     'catbus.installerNodeMissing': 'settings.backendInstallerNodeMissing',
     'catbus.installerCliMissing': 'settings.backendInstallerCliMissing',
     'catbus.oldNode': 'settings.backendOldNode',
+    'catbus.nodeUnrunnable': 'settings.backendNodeUnrunnable',
     'catbus.probeFailed': 'settings.backendProbeFailed',
     'catbus.probeUnreadable': 'settings.backendProbeFailed',
 }
@@ -788,8 +800,6 @@ def run(
             on_row(row)
 
     call = _call(argv, stdin_text=payload, on_line=_consume, abort=abort, timeout=timeout, token=token)
-    if drift:
-        return Outcome(status='error', rows=rows, exit_code=call.code, message=drift[0])
     summary = _summary_of(call)
     articles = tuple(_as_article(item) for item in (summary or {}).get('articles') or [] if isinstance(item, dict))
     warnings = tuple(str(item) for item in (summary or {}).get('warnings') or [])
@@ -809,6 +819,11 @@ def run(
             exit_code=call.code,
             message=t('catbus.stopped', platform=platform, mode=mode),
         )
+    # The stop check comes FIRST: ``_drive`` delivers a row and only then asks ``abort()``, so a
+    # 停止 that lands on a drifted line used to be re-filed as a column-drift error — the one
+    # refusal the user caused themselves reported as a broken backend.
+    if drift:
+        return Outcome(status='error', rows=rows, exit_code=call.code, message=drift[0])
     if state in _SUMMARY_STATES:
         return Outcome(
             status=state,

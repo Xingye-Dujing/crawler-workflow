@@ -93,6 +93,12 @@ def cell_text(value) -> str:
     """
     if value is None:
         return ''
+    # ``pd.NA``/``pd.NaT`` are not ``None``, not ``float`` and not ``bool``: they used to fall
+    # through to ``str(value)`` as ``'<NA>'``/``'NaT'``, giving every missing cell ONE shared
+    # non-blank key — the exact thing this module's contract forbids (“two empty cells are not
+    # the same content”). A clustering column written as ``pd.NA`` is enough to reach it.
+    if value is pd.NA or value is pd.NaT:
+        return ''
     if isinstance(value, bool):
         return 'true' if value else 'false'
     if isinstance(value, float):

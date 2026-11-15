@@ -12,6 +12,7 @@ transformers / pyarrow / mitmproxy) and by excluding optional stacks here. See
 
 import glob
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -195,6 +196,34 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+
+def _version_resource() -> str:
+    """Write a PE version resource naming THIS build, and return its path.
+
+    ``version_info.txt`` used to be handed over verbatim, so every release of ``CaiXiHui.exe``
+    reported file/product version 1.0.0.0 while ``version.json`` moved: Explorer's Details tab,
+    crash dumps and endpoint inventories could not tell two builds apart. The number comes from
+    the build script (``CIXI_APP_VERSION``) and falls back to the application's own
+    ``APP_VERSION``; PyInstaller needs four numeric fields either way.
+    """
+    raw = (os.environ.get('CIXI_APP_VERSION') or '').strip()
+    if not raw:
+        source = (BACKEND / 'services' / 'version.py').read_text(encoding='utf-8')
+        found = re.search(r"APP_VERSION\s*=\s*'([^']+)'", source)
+        raw = found.group(1) if found else '0.0.0'
+    fields = [int(part) for part in re.findall(r'\d+', raw)][:4]
+    fields += [0] * (4 - len(fields))
+    text = (SPEC_DIR / 'version_info.txt').read_text(encoding='utf-8')
+    text = re.sub(r'filevers=\([^)]*\)', f'filevers={tuple(fields)}', text)
+    text = re.sub(r'prodvers=\([^)]*\)', f'prodvers={tuple(fields)}', text)
+    text = text.replace("'1.0.0.0'", f"'{'.'.join(str(field) for field in fields)}'")
+    staged = ROOT / 'build' / 'pyinstaller'
+    staged.mkdir(parents=True, exist_ok=True)
+    target = staged / 'version_info.build.txt'
+    target.write_text(text, encoding='utf-8')
+    return str(target)
+
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -213,7 +242,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(BACKEND / 'static' / 'icon.ico'),
-    version=str(SPEC_DIR / 'version_info.txt'),
+    version=_version_resource(),
 )
 
 coll = COLLECT(

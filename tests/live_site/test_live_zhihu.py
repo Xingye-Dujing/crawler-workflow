@@ -11,6 +11,8 @@ flags included.
 
 import pytest
 
+from i18n import t as i18n_t
+
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 
@@ -31,7 +33,11 @@ def test_headless_search_returns_full_rows(live_search):
         # Zhihu's day-by-day headless risk control is a DESIGNED refusal: the
         # crawler raises the catalog's actionable message instead of pretending
         # success. That is an environment state (retry later, or run the
-        # visible-window variant), not a code failure.
+        # visible-window variant), not a code failure. Only THAT refusal is
+        # skipped: any other RuntimeError (a parser bug, a wrapped driver error)
+        # must stay red, not turn the case green by skipping.
+        if str(e) != i18n_t('crawl.zhihu.emptyOrBlocked'):
+            raise
         pytest.skip(f'zhihu refused the headless session this run: {e}')
     _assert_rows(rows)
     # Time column regression: the 2026 layout moved it to .SearchItem-time.

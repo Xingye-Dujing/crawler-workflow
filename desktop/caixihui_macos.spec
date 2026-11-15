@@ -182,6 +182,9 @@ app = BUNDLE(
         'CFBundleDisplayName': '采析绘',
         'CFBundleName': 'CaiXiHui',
         'CFBundleShortVersionString': APP_VERSION,
+        # The moving build number. Without it PyInstaller writes its own constant and Finder,
+        # LaunchServices and any update tooling cannot tell two releases apart.
+        'CFBundleVersion': APP_VERSION,
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '11.0',
     },

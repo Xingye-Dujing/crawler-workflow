@@ -220,8 +220,11 @@ def _stack_pct(cls, base: dict, req: ChartRequest) -> dict:
             'name': _localize_label(f),
             'type': 'bar',
             'stack': 'total',
+            # ``None`` (not 0.0) for a category whose total is zero or whose own cell is blank:
+            # the chart draws a gap and the reader sees “not measured”, where a 0.0 bar is a
+            # measurement the table never made.
             'data': [
-                round(cols[f][i] / totals[i] * 100, 2) if totals[i] and pd.notna(cols[f][i]) else 0.0
+                round(cols[f][i] / totals[i] * 100, 2) if totals[i] and pd.notna(cols[f][i]) else None
                 for i in range(len(labels))
             ],
             'barMaxWidth': 60,

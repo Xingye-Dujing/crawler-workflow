@@ -20,6 +20,28 @@ def _reset_jobs():
     jobs.reset()
 
 
+def test_a_non_admin_gets_no_host_paths_from_the_environment(client, monkeypatch):
+    """One module, one privacy rule: ``/api/components`` blanks ``path`` for an ordinary account,
+    and ``/api/environment`` carries the same host paths under ``components[]``."""
+    report = {
+        'schema': 1,
+        'os': 'win32',
+        'root': 'C:/Users/someone/AppData/Local/CaiXiHui/components',
+        'capabilities': [
+            {'id': 'chrome', 'state': 'ok', 'reason_key': 'env.chromeOk', 'reason_params': {'path': 'C:/x/chrome.exe'}}
+        ],
+        'components': [{'id': 'node', 'state': 'ok', 'version': '24.0.0', 'path': 'C:/Users/someone/node'}],
+        'catalog': {'generated_at': '', 'components': 1},
+    }
+    monkeypatch.setattr(components_api, 'environment', lambda: report)
+    monkeypatch.setattr(components_api, '_admin', lambda: False)
+    body = client.get('/api/environment').get_json()
+    assert body['root'] == ''
+    assert body['components'][0]['path'] == ''
+    assert body['components'][0]['state'] == 'ok'
+    assert 'path' not in body['capabilities'][0]['reason_params']
+
+
 def test_environment_answers_the_matrix_without_probing_devices(client, monkeypatch):
     report = {
         'schema': 1,

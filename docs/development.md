@@ -179,11 +179,13 @@ CIXI_LIVE_USE_USER_PROFILE=1 .venv/Scripts/python.exe -m pytest -q -m "live_quic
 空列表会按名失败，不会在“没有文件”时报绿）。CI 与本机跑的是同一个脚本：
 
 ```bash
-.venv/Scripts/python.exe -m ruff check backend/ tests/
-.venv/Scripts/python.exe -m ruff format --check backend/ tests/
+.venv/Scripts/python.exe -m ruff check backend/ tests/ desktop/ tools/
+.venv/Scripts/python.exe -m ruff format --check backend/ tests/ desktop/ tools/
 .venv/Scripts/python.exe tools/ci_lint_tiers.py product   # backend 去掉其 test_*.py + desktop/tools/ml_train/scripts
 .venv/Scripts/python.exe tools/ci_lint_tiers.py tests     # tests/
-.venv/Scripts/pylint.exe --rcfile=.pylintrc.probes backend/test_*.py   # 一次性探针脚本的本地档（CI 不跑）
+# 一次性探针脚本（backend/test_*.py，当前没有）的本地档，CI 不跑。pylint 不做通配，
+# PowerShell 会把 pattern 原样传过去，所以要先展开文件列表：
+.venv/Scripts/pylint.exe --rcfile=.pylintrc.probes (Get-ChildItem backend -Filter test_*.py)
 ```
 
 **绝不写 `# pylint: disable` 或 `# noqa`，也绝不为消掉一条告警而放宽 `.pylintrc*`**：修根因；真正无意义的消息，

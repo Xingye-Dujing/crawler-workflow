@@ -100,7 +100,7 @@ def walk(session, url: str, limit: int) -> tuple:
     video = video_id_of(url)
     if not video:
         return [], DEAD
-    session.driver.get(f'https://www.youtube.com/watch?v={video}')
+    session.get(f'https://www.youtube.com/watch?v={video}')
     found = innertube.ready(session.driver)
     if not found:
         # No API config means the page never booted as a watch page. Which

@@ -1376,11 +1376,12 @@ const workflow = {
                            'unfinished, worth a continue' from completed<total
                            announced a resume for a run that had merely starved
                            one node, and inferred '0/0' for a definition that was
-                           refused before anything ran. */
+                           refused before anything ran. A blank verdict is not an
+                           invitation to guess either: the ``foreign_run`` answer
+                           has no outcome and no counts of ours. */
                         var doneNodes = Number(result.completed_nodes) || 0;
                         var plannedNodes = Number(result.total_nodes) || 0;
-                        var outcome = result.outcome
-                            || (plannedNodes > 0 && doneNodes >= plannedNodes ? 'completed' : 'failed');
+                        var outcome = result.outcome || '';
                         /* The progress ratio stays on screen. Overwriting it with
                            the canvas node count was a different statistic wearing
                            the same label, printed at the exact moment the reader
@@ -1394,8 +1395,10 @@ const workflow = {
                             showToast(I18n.t('toast.workflowRejected'));
                         } else if (outcome === 'interrupted') {
                             showToast(I18n.t('toast.workflowStopped'));
-                        } else {
+                        } else if (outcome === 'failed') {
                             showToast(I18n.t('toast.workflowEnded').replace('{done}', doneNodes).replace('{total}', plannedNodes));
+                        } else {
+                            showToast(I18n.t('toast.runStateUnknown'));
                         }
                         I18n.apply();
                         stats.refresh();

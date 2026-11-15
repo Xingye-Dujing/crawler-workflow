@@ -515,3 +515,30 @@ def _await_phase(client, phase, timeout=6.0):
             return body
         time.sleep(0.05)
     raise AssertionError(f'cookie job never reached phase {phase!r}')
+
+
+def test_a_wedged_navigation_ends_the_login_job(monkeypatch):
+    """A renderer that never answers must not leave the single-flight job active forever.
+
+    ``_COOKIE_JOB['active']`` is cleared by the worker's ``finally``; a ``driver.get`` that
+    never returns never reaches it, so every later login answered “另一个登录窗口还开着”.
+    """
+    import i18n
+
+    job = {'phase': '', 'error': ''}
+    release = threading.Event()
+
+    class _Driver:
+        def get(self, url):
+            release.wait(3)
+
+    class _Crawler:
+        driver = _Driver()
+
+    monkeypatch.setattr(routes.pacing, 'navigation_budget', lambda: 0.2)
+    try:
+        assert routes._bounded_goto(job, _Crawler(), 'https://example.com/', 'test') is False
+    finally:
+        release.set()
+    assert job['phase'] == 'error'
+    assert job['error'] == i18n.t('cookie.verifyTimeout', n=1)

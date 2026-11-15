@@ -29,6 +29,7 @@ from runtime import account_context, paths, phases
 from runtime.state import add_log, cookie_manager, execution_state
 
 from crawlers import cookie_hosts, crawler_class, get_crawler
+from crawlers.core.browser import bounded_get
 from crawlers.engine import pacing
 from i18n import get_lang, set_lang, t
 from services import pool
@@ -359,7 +360,7 @@ def save_cookies():
         # logger call here speaks: no interpolation in the code (pylint W1201/W1203) and no
         # bare ``'%s'`` template for the untranslated-text guard to read as English prose.
         logger.exception(t('misc.cookie_save_failed', err=str(e)[:120]))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': t('misc.cookie_save_failed', err=_os_error_detail(e))}), 500
 
 
 @bp.route('/api/cookies/rename', methods=['POST'])
@@ -478,7 +479,7 @@ def delete_cookies():
         cookie_manager.delete(platform, account)
     except OSError as e:
         logger.exception(t('cookie.delete.failed', err=str(e)[:120]))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': t('cookie.delete.failed', err=_os_error_detail(e))}), 500
     preflight.invalidate(platform)
     holds = bool(profiles.is_enabled() and profiles.is_used(platform, account))
     message = t('cookie.deleted', platform=platform)
@@ -529,7 +530,7 @@ def delete_profile():
         return jsonify({'ok': False, 'error': t('api.profileDeleteDefault', platform=platform)}), 400
     except OSError as e:
         logger.exception(t('cookie.delete.failed', err=str(e)[:120]))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': t('cookie.delete.failed', err=_os_error_detail(e))}), 500
     if result == 'absent':
         # Not a silent success: the panel asked to remove a device that is not there, and
         # “已删除” would report a reset that did not happen.
@@ -586,6 +587,39 @@ def _job_is_mine() -> bool:
     return str(_COOKIE_JOB.get('owner') or '') == _owner_id()
 
 
+def _os_error_detail(exc: OSError) -> str:
+    """An ``OSError``'s own words without the paths ``str(exc)`` quotes.
+
+    On Windows a ``PermissionError`` from ``os.replace`` names both absolute paths; the export
+    routes already refuse to hand a signed-in account the layout of the machine, and a storage
+    refusal in this panel must not either. ``strerror`` is the sentence the OS wrote; when the
+    exception carries no ``filename`` (a raise made by our own code) its text is the whole reason.
+    """
+    detail = str(getattr(exc, 'strerror', '') or '')
+    if not detail and not getattr(exc, 'filename', None):
+        detail = str(exc)
+    return detail or type(exc).__name__
+
+
+def _bounded_goto(job: dict, crawler, url: str, what: str) -> bool:
+    """Navigate the login window with a hard bound; False when the renderer never answered.
+
+    ``driver.get`` never returns on a wedged renderer, and this worker's ``finally`` is the
+    only thing that clears ``_COOKIE_JOB['active']`` — a navigation that hangs therefore kept
+    every later login request answering “another login is open” until the process restarted.
+    The bound is the same navigation budget the crawler paths pay.
+    """
+    budget = max(1.0, float(pacing.navigation_budget()))
+    try:
+        bounded_get(crawler.driver, url, budget, what)
+    except TimeoutError:
+        job['phase'] = 'error'
+        job['error'] = t('cookie.verifyTimeout', n=int(budget))
+        add_log(job['error'])
+        return False
+    return True
+
+
 def _cookie_login_worker(
     platform: str, wait_seconds: int, entry_url: str = '', lang: str = '', account: str = '', owner=None
 ):
@@ -632,7 +666,8 @@ def _cookie_login_worker(
         url = entry_url or crawler.login_url
         if not url:
             raise ValueError(t('api.unsupportedPlatform', platform=platform))
-        crawler.driver.get(url)
+        if not _bounded_goto(job, crawler, url, 'login-window'):
+            return
         job['entry'] = url
         # One line for one event, carrying both facts it was split across: which
         # platform's window opened, how long it will wait, and the page it landed on
@@ -665,8 +700,10 @@ def _cookie_login_worker(
         # ended on the identity provider (accounts.google.com, facebook.com)
         # would otherwise be read *there*, which both misses the session the crawl
         # needs and stores someone else's cookies under this platform's name. A
-        # dead window raises, which the outer handler reports as it always has.
-        crawler.driver.get(crawler.login_url or url)
+        # dead window raises, which the outer handler reports as it always has;
+        # a wedged renderer is bounded here so this single-flight job can end.
+        if not _bounded_goto(job, crawler, crawler.login_url or url, 'login-capture'):
+            return
         cookies, dropped = retain_for_platform(crawler.driver.get_cookies(), crawler_hosts(crawler))
         if dropped:
             add_log(t('cookie.droppedForeign', platform=platform, n=dropped))

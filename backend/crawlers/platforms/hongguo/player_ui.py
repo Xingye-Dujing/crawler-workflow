@@ -601,18 +601,27 @@ class PlayerUI:
         **No click budget**: the old ``max_clicks=40`` was a number WE chose ending a drawer the
         player was still offering (an episode with more than 40 threads lost the rest silently).
         What ends this loop is the page: nothing left to click, or a click the player refuses.
-        A control is remembered by its own words rather than its rectangle, so one that moves after
-        being clicked cannot be clicked twice — while ``展开 3 条回复`` turning into
-        ``展开更多回复`` is a new label and is followed, which is how the player pages a thread out.
+        A control is remembered by its own words AND its place rather than its rectangle
+        alone, so one that moves after being clicked cannot be clicked twice — while
+        ``展开 3 条回复`` turning into ``展开更多回复`` is a new label and is followed, which
+        is how the player pages a thread out.
         """
         clicked = 0
+        # A control is identified by its OWN words AND where it sits. Keying on the label
+        # alone collapsed every thread that reads the same ``展开 3 条回复`` into one key:
+        # a 30-thread drawer expanded once and the rest were skipped, while the missing
+        # child pages never reached the inbox, so ``_outstanding`` could not even name the
+        # gap. The rectangle alone was the older bug (a control that moves after being
+        # clicked was clicked twice), so both go into the key: a label that flips to
+        # ``展开更多回复`` is a new control at the same place (followed, as before), and one
+        # that merely moved is still the same control only when its label did not change.
         seen: set[tuple] = set()
         while True:
             target = None
             for ctrl, kind, name, rect in self.collect():
                 if rect.width() <= 0 or not is_expand_control(name):
                     continue
-                key = (kind, str(name).strip())
+                key = (kind, str(name).strip(), rect.left, rect.top)
                 if key in seen:
                     continue
                 target = ctrl

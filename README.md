@@ -17,8 +17,9 @@ scikit-learn，拖节点、连线条、点执行；中断了能从断点接着�
 
 ## 快速开始
 
-源码版 Windows / Linux / macOS 都能跑（云端部署目标是 Linux）。只有两处是 Windows 专属：`desktop/`
-打包，以及红果短剧的评论收割（要驱动本机播放器并装系统证书）——后者在其他系统上按名拒绝，面板也不给这个选项。
+源码版 Windows / Linux / macOS 都能跑（云端部署目标是 Linux）。`desktop/` 是唯一的系统打包目录，同一份代码出
+Windows 安装包与 macOS `.app`/DMG（macOS 构建在 GitHub 的 macOS runner 上跑）。唯一只能 Windows 做的是红果短剧的
+评论收割（要驱动本机播放器并装系统证书）——它在其他系统上按名拒绝，面板也不给这个选项。
 
 **你需要什么**
 
@@ -190,7 +191,7 @@ crawler_workflow/
 ├── docs/             # 文档与实测记录
 ├── tests/            # unit / api / integration / frontend / 真站
 ├── ml_train/         # 训练脚本与模型（gitignore）
-├── desktop/          # Windows 打包（唯一故意只服务 Windows 的目录）
+├── desktop/          # 系统打包：Windows 安装包 + macOS .app/DMG（唯一 OS 打包目录）
 └── requirements.txt  # 可选依赖在 requirements-optional.txt
 ```
 

@@ -63,12 +63,20 @@ $OnlineSetupExe = Join-Path $DistRoot 'CaiXiHui-Online-Setup.exe'
 $SignScript = Join-Path $PSScriptRoot 'sign_windows.ps1'
 $IssScript = Join-Path $PSScriptRoot 'installer.iss'
 
-# The installer stamps this same version into current-version and install.json. A version
-# with a slash, a space or a prerelease suffix would make the pointer a path or break
-# VersionInfoVersion, so it is refused before a ten-minute build starts.
-if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw "-Version must be three numeric groups (for example 1.0.0), not '$Version'."
+# The installer stamps this same version into current-version and install.json, and the PE
+# resource is built from it. Three or four numeric groups are accepted because the product's own
+# ``APP_VERSION`` may carry a fourth (``2026.11.14.2``); anything with a slash, a space or a
+# prerelease suffix would make the pointer a path or break VersionInfoVersion, so it is refused
+# before a ten-minute build starts.
+if ($Version -notmatch '^\d+(\.\d+){2,3}$') {
+    throw "-Version must be three or four numeric groups (for example 1.0.0 or 2026.11.14.2), not '$Version'."
 }
+# Inno's VersionInfoVersion holds exactly four numeric fields; a 3-group input is padded, a
+# 4-group one kept. Appending '.0' to a 4-group version (the old installer.iss) produced five.
+$VersionFields = @($Version.Split('.'))
+while ($VersionFields.Count -lt 4) { $VersionFields += '0' }
+$Version4 = ($VersionFields[0..3] -join '.')
+$env:CIXI_APP_VERSION = $Version
 if ($PackageOnly -and $Clean) {
     throw '-PackageOnly wraps an existing folder; -Clean would delete it. Drop one of the two flags.'
 }
@@ -212,7 +220,7 @@ if ($Installer -or $PackageOnly) {
     } else {
         Write-Host ("Using ISCC: {0}" -f $iscc)
         # The same version lands in AppVersion, current-version and install.json.
-        Invoke-Exe $iscc @("/DMyAppVersion=$Version", $IssScript)
+        Invoke-Exe $iscc @("/DMyAppVersion=$Version", "/DMyAppVersion4=$Version4", $IssScript)
         if (Test-Path $SetupExe) {
             # Inno's loader is always asInvoker and extracts into %TEMP% before the inner setup can
             # ask for UAC. On a machine that denies that write, the wizard never appears. Patching

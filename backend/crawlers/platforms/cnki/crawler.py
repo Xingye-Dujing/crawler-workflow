@@ -620,13 +620,31 @@ class CnkiCrawler(Crawler):
         while time.monotonic() < deadline:
             if self.may_stop():
                 raise CrawlerStopped(t('crawl.stopped'))
-            files = [p for p in Path(folder).iterdir() if p.suffix != '.crdownload' and p.stat().st_size > 0]
+            files = []
+            for candidate in Path(folder).iterdir():
+                if candidate.suffix == '.crdownload':
+                    continue
+                try:
+                    if candidate.stat().st_size > 0:
+                        files.append(candidate)
+                except OSError:
+                    # Chrome renames ``*.crdownload`` while this loop runs, so a path listed a
+                    # moment ago can be gone. That is the download finishing, not a failure;
+                    # the named refusal below still covers "nothing arrived".
+                    continue
             if files:
                 # A download is complete when the progress file is gone; one more
                 # look after a short pause is enough for the browser to rename it.
                 pacing.poll_tick(0.5)
                 if not any(p.suffix == '.crdownload' for p in Path(folder).iterdir()):
-                    return max(files, key=lambda p: p.stat().st_mtime)
+
+                    def _mtime(item):
+                        try:
+                            return item.stat().st_mtime
+                        except OSError:
+                            return 0.0
+
+                    return max(files, key=_mtime)
             pacing.poll_tick(0.5)
         return None
 

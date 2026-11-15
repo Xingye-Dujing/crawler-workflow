@@ -340,6 +340,17 @@ def _bounded_call(fn, timeout: float, what: str):
     return box.get('value')
 
 
+def bounded_get(driver, url: str, timeout: float, what: str = 'navigation') -> None:
+    """``driver.get`` on a worker with a hard bound; :class:`TimeoutError` when it never returns.
+
+    ``driver.get`` is in-band: a renderer that stops answering leaves the call parked inside
+    chromedriver with no timeout of its own. Every caller that opens a *visible* browser for a
+    person — the login window, the run's pre-flight probe — must therefore bound the navigation
+    itself, or one wedged renderer keeps its single-flight job active forever.
+    """
+    _bounded_call(lambda: driver.get(url), timeout, what)
+
+
 def disguise_headless(driver, real_ua: str) -> None:
     """Remove the two headless tells (UA, virtual-display metrics) on the live session.
 

@@ -103,8 +103,9 @@ class TestDataframeMode:
         result = extractor.analyze_dataframe(frame, merge=False, topk=4)
         assert set(result['row']) == {0, 3}
 
-    def test_a_missing_column_returns_the_frame_untouched(self, extractor, df):
-        assert extractor.analyze_dataframe(df, text_column='不存在') is df
+    def test_a_missing_column_is_refused_by_name(self, extractor, df):
+        with pytest.raises(ValueError, match='不存在'):
+            extractor.analyze_dataframe(df, text_column='不存在')
 
     def test_an_unknown_method_is_refused_by_name(self, extractor, df):
         """Not TextRank with the requested name stamped into the output.
@@ -272,8 +273,9 @@ class TestTfidfCorpus:
         per_row = extractor.tfidf_corpus(frame, topk=5, merge=False)
         assert per_row.empty and list(per_row.columns) == ['keyword', 'weight', 'row', 'method']
 
-    def test_a_missing_column_returns_the_frame_untouched(self, extractor, df):
-        assert extractor.tfidf_corpus(df, text_column='不存在') is df
+    def test_a_missing_column_is_refused_by_name(self, extractor, df):
+        with pytest.raises(ValueError, match='不存在'):
+            extractor.tfidf_corpus(df, text_column='不存在')
 
     def test_two_runs_on_one_table_agree(self, extractor, df):
         assert extractor.tfidf_corpus(df, topk=4).equals(extractor.tfidf_corpus(df, topk=4))

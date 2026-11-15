@@ -254,7 +254,7 @@ def walk(session, url: str, limit: int) -> tuple:
     if not video_id(url):
         session.log(t('comment.dyNoId', url=url))
         return [], DEAD
-    session.driver.get(target)
+    session.get(target)
     mounted = _wait_for_panel(session)
     if looks_blocked(session.body_head()):
         # A security-check body is 风控, not a dead session: latch it on the owning

@@ -201,10 +201,16 @@ def walk(session, url: str, limit: int) -> tuple:
         # rejection that reads as a dead link. Park on the right host first.
         current = session.driver.current_url or ''
         if not current.startswith('https://weibo.com'):
-            session.driver.get('https://weibo.com/')
+            session.get('https://weibo.com/')
             session.arrival_nap(2)
-    except Exception:
-        pass
+    except Exception as exc:
+        # A wedged renderer is not "never mind, fetch from wherever we are": the session
+        # has already been closed and every later command on it fails. Let the executor
+        # see that refusal by name.
+        from crawlers.commenting.session import NavigationTimeout
+
+        if isinstance(exc, NavigationTimeout):
+            raise
     raw = ''
     try:
         raw = session.fetch_in_page(weibo_show_js(bid))

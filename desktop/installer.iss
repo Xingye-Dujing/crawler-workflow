@@ -19,6 +19,11 @@
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.0"
 #endif
+; Exactly four numeric fields, computed by build_windows.ps1 (a 4-group version padded/appended
+; with '.0' here produced five, which Inno refuses to compile).
+#ifndef MyAppVersion4
+  #define MyAppVersion4 "1.0.0.0"
+#endif
 #define MyAppName "采析绘"
 #define MyAppExeName "CaiXiHui.exe"
 
@@ -27,7 +32,7 @@ AppId={{8E1C6A2D-5E46-4C71-9A0B-6D0F7A2E9C11}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=采析绘
-VersionInfoVersion={#MyAppVersion}.0
+VersionInfoVersion={#MyAppVersion4}
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=采析绘 工作流采集与分析
 DefaultDirName={localappdata}\Programs\CaiXiHui

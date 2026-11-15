@@ -64,7 +64,10 @@ def _tokenize_dataframe(df: pd.DataFrame, params: dict) -> pd.DataFrame | None:
         kwargs['top_n'] = _safe_int(top_n, 120, minimum=1)
     labels, values = VisualizationService.tokenize_frequency(df, column, **kwargs)
     if not labels:
-        return pd.DataFrame()
+        # A DONE node owes its readers the columns it declares. An empty zero-column frame
+        # made a downstream 词云/柱状图 refuse with “column word missing”, sending the user to
+        # the field picker instead of saying the corpus produced no words.
+        return pd.DataFrame(columns=list(OUTPUT_COLUMNS[output_mode]))
     if output_mode == 'words_only':
         return pd.DataFrame([{'word': w} for w in labels])
     if output_mode == 'csv_line':

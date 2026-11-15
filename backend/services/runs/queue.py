@@ -371,6 +371,10 @@ def _drain_one(entry: QueueEntry, start_run: Callable[[dict, str], dict]) -> boo
         # the entry would be pushed back and refused again after every run.
         if _console_is_for(entry):
             add_log(t('run.queue_broken', name=name, err=body.get('error', '')))
+        # The owner-scoped console line above is not enough: a parked request whose
+        # owner does not hold the slot (or a boot drain with no owner yet) would vanish
+        # with no trace at all, and this is exactly the refusal a retry cannot fix.
+        logger.warning(t('run.queue_broken', name=name, err=body.get('error', '')))
         return True
     if answer.get('status') == 200 and body.get('ok') and body.get('queued'):
         # Someone else claimed the slot while this entry was being started, and the start

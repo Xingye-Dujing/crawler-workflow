@@ -335,7 +335,10 @@ class TestSearchWalk:
         crawler = make_crawler(driver)
         with pytest.raises(RuntimeError):
             crawler.search('kw', target_count=5)
-        assert crawler.login_wall is True
+        # A captcha/interstitial is 风控, not an expired login: YouTube is crawled anonymously,
+        # so "re-save the cookie" would be advice about a session this crawl never used.
+        assert crawler.risk_blocked is True
+        assert crawler.login_wall is False
 
     def test_a_page_that_never_offered_its_config_is_an_error_not_an_empty_crawl(self, make_crawler):
         driver = FakeDriver({}, config={'key': '', 'context': None})

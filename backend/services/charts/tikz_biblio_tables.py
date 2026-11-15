@@ -199,7 +199,13 @@ class BiblioTableMixin:
                 group['frequency'] += frequency
                 if first:
                     group['years'].extend([first, last])
-            head = [_esc('聚类'), _esc('节点数'), _esc('首年'), _esc('末年'), _esc('总频次')]
+            head = [
+                _esc(t('biblio.col.聚类')),
+                _esc(t('biblio.col.节点数')),
+                _esc(t('biblio.col.首年')),
+                _esc(t('biblio.col.末年')),
+                _esc(t('biblio.col.总频次')),
+            ]
             table = [
                 [
                     _esc(key),
@@ -227,7 +233,12 @@ class BiblioTableMixin:
                     )
                 )
             items.sort(key=lambda item: (-item[3], item[0]))
-            head = [_esc('节点'), _esc('起始'), _esc('结束'), _esc('强度 B')]
+            head = [
+                _esc(t('biblio.col.节点')),
+                _esc(t('biblio.col.起始年')),
+                _esc(t('biblio.col.结束年')),
+                _esc(t('biblio.col.强度')),
+            ]
             return head, [[_esc(name), _num(start), _num(end), _num(strength)] for name, start, end, strength in items]
         if chart_type in ('timezone', 'biblio_heatmap'):
             rows, names = cls._biblio_node_rows(df, ('节点', '年份序列', '频次'))
@@ -255,9 +266,9 @@ class BiblioTableMixin:
                     for year, count in counts.items():
                         group[year] += count
                 ordered = sorted(groups.items(), key=lambda item: (-sum(item[1].values()), item[0]))[:40]
-                head = [_esc('聚类')] + [_esc(str(year)) for year in year_list]
+                head = [_esc(t('biblio.col.聚类'))] + [_esc(str(year)) for year in year_list]
                 return head, [[_esc(key)] + [_num(group[year]) for year in year_list] for key, group in ordered]
-            head = [_esc('节点'), _esc('年份区间'), _esc('总频次')]
+            head = [_esc(t('biblio.col.节点')), _esc(t('biblio.col.年份区间')), _esc(t('biblio.col.总频次'))]
             rows_out = []
             for name, counts, frequency in sorted(table, key=lambda item: (-item[2], item[0]))[:80]:
                 span = f'{min(counts)}--{max(counts)}' if counts else ''
@@ -273,7 +284,12 @@ class BiblioTableMixin:
                 group = groups.setdefault(key, {'nodes': [], 'frequency': 0.0})
                 group['nodes'].append(name)
                 group['frequency'] += cls._biblio_float(rows[name].get('频次'), 0.0)
-            head = [_esc('聚类'), _esc('节点数'), _esc('总频次'), _esc('代表节点')]
+            head = [
+                _esc(t('biblio.col.聚类')),
+                _esc(t('biblio.col.节点数')),
+                _esc(t('biblio.col.总频次')),
+                _esc(t('biblio.col.代表节点')),
+            ]
             table = []
             for key, group in sorted(groups.items(), key=lambda item: (-item[1]['frequency'], item[0])):
                 representatives = '、'.join(
@@ -287,7 +303,12 @@ class BiblioTableMixin:
             cls._require_biblio(df, '节点', '频次')
             result = geo_aggregate(df.to_dict('records'))
             total = sum(value for _iso, value, _names in result['regions']) or 1.0
-            head = [_esc(t('chart.biblio_geo')), _esc('频次'), _esc('占比'), _esc('并入的写法')]
+            head = [
+                _esc(t('chart.biblio_geo')),
+                _esc(t('biblio.col.频次')),
+                _esc(t('biblio.col.占比')),
+                _esc(t('biblio.col.并入写法')),
+            ]
             rows = [
                 [
                     _esc(display(iso, 'zh') or iso),

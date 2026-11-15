@@ -399,6 +399,11 @@ CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   `[]`. **Read a switch, never compare it** (`core/refs.as_bool`; blank = default).
 - **`_push_log` stores one entry per physical line** — the total advances by lines, not `add_log` calls (a multi-line
   driver `Message:` rendered as several rows and the browser cursor skipped/repeated).
+- **A line a stranger can write is not a run line: a pre-auth refusal is file-log only.** The origin and
+  forwarded-prefix guards run BEFORE the login gate, and `_push_log` accepts a record whose caller has no identity
+  (internal writers do). Their text is request-supplied, so `logger.warning(..., extra={'console': False})` and
+  `LogBufferHandler` skips it — otherwise an anonymous client could author a line in the signed-in owner's console,
+  write it into a live run's durable `run_log`, and evict the run's own history by repeating the request.
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook:** no "Executing node…"/
   "Node…completed" line, but progress counters still count them and every fact still prints (with `node_label`, or a
   silenced node that fails is undiagnosable).

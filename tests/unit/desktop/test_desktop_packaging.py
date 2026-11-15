@@ -864,6 +864,29 @@ class TestTheUpxPassReportsWhatItActuallyDid:
         assert '& $iscc' not in script, 'the direct call can block forever on a non-interactive host'
         assert 'Invoke-Exe $iscc' in script
 
+    def test_the_release_version_contract_accepts_the_products_own_version(self):
+        """Three gates used to disagree about how many numeric groups a version has.
+
+        ``APP_VERSION`` may carry four (``2026.11.14.2``) and passed ``check_release_version``,
+        while the packaging script refused it and Inno's ``VersionInfoVersion`` appended ``.0``
+        to make five fields. The product's own number must satisfy every gate.
+        """
+        from services.version import APP_VERSION
+
+        spec = importlib.util.spec_from_file_location(
+            'check_release_version', REPO / 'tools' / 'check_release_version.py'
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.check(APP_VERSION) == APP_VERSION
+
+        script = (PACKAGING / 'build_windows.ps1').read_text(encoding='utf-8')
+        assert r'^\d+(\.\d+){2,3}$' in script, 'the packaging gate refuses the product version'
+        assert '"/DMyAppVersion4=$Version4"' in script
+        iss = (PACKAGING / 'installer.iss').read_text(encoding='utf-8-sig')
+        assert 'VersionInfoVersion={#MyAppVersion4}' in iss, 'a 4-group version plus ".0" is five fields'
+        assert 'VersionInfoVersion={#MyAppVersion}.0' not in iss
+
     def test_the_contradictory_flag_pair_is_refused_before_the_venv_is_deleted(self):
         """Measured: `-Clean -SkipInstall` wiped the build env and then skipped refilling it, so the
         run died at `No module named PyInstaller` minutes later, pointing at nothing useful."""

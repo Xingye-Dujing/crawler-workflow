@@ -103,8 +103,10 @@ class TestDegenerateInput:
         assert result['cluster'].nunique() == 3
         assert (result['silhouette'] == 0.0).all()
 
-    def test_a_missing_text_column_returns_the_frame(self, cluster, df):
-        assert cluster.analyze_dataframe(df, text_column='不存在') is df
+    def test_a_missing_text_column_is_refused_by_name(self, cluster, df):
+        """A DONE node with no cluster column reads as success; the refusal must raise."""
+        with pytest.raises(ValueError, match='不存在'):
+            cluster.analyze_dataframe(df, text_column='不存在')
 
 
 class TestDbscan:

@@ -327,8 +327,10 @@ class YouTubeCrawler(Crawler):
         if innertube.refused(payload):
             # Risk control answers with HTML where JSON was promised, so the shape
             # of the refusal separates a blocked session from a list that really
-            # is empty.
-            self.login_wall = True
+            # is empty. YouTube is crawled anonymously: telling the user to re-save a
+            # cookie is advice about a session this crawl never used, so this is 风控
+            # (back off) and not a login wall.
+            self.risk_blocked = True
             logger.warning(t('crawl.yt.wall', url=self._current_url()))
             return {}
         if payload.get('_status') != 200:
@@ -524,7 +526,7 @@ class YouTubeCrawler(Crawler):
 
     def _explain_zero(self, keyword: str):
         """Say why nothing came back, when the reason is not 'no results'."""
-        if self.login_wall:
+        if self.login_wall or self.risk_blocked:
             raise RuntimeError(t('crawl.yt.wall', url=self._current_url()))
         logger.info(t('crawl.yt.noResults', kw=keyword))
 

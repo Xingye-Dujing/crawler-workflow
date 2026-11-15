@@ -96,6 +96,11 @@ class TestRunEndReporting:
         assert console['endedInterrupted']['toasts'] == ['WORKFLOW-STOPPED']
         assert console['endedInterrupted']['resumeRefreshed'] is True, 'a stopped run is exactly what to continue'
 
+    def test_a_blank_verdict_is_not_inferred_from_the_counts(self, console):
+        """``foreign_run`` answers with ``outcome:''`` and 0/0 — not a failed run of ours."""
+        assert console['endedUnknown']['toasts'] == ['RUN-STATE-UNKNOWN']
+        assert console['endedUnknown']['resumeRefreshed'] is False
+
     def test_the_status_bar_keeps_the_progress_ratio_and_drops_the_clock(self, console):
         """The bar used to show the canvas node count at the exact moment the
         reader wanted the finished/planned ratio, and copied the last console line

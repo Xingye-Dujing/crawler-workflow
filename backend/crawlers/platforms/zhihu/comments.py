@@ -196,7 +196,7 @@ _TRIED_SET_JS = "arguments[0].setAttribute('data-zhihu-tried', '1');"
 @register('zhihu')
 def walk(session, url: str, limit: int) -> tuple:
     """One question/answer page: open every comment button, drain each panel."""
-    session.driver.get(url)
+    session.get(url)
     session.arrival_nap(6)
     if looks_blocked(session.body_head()):
         session.mark_blocked()

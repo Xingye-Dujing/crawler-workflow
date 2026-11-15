@@ -21,6 +21,15 @@ from i18n import t
 logger = logging.getLogger(__name__)
 
 
+def _counter(value):
+    """A counter the payload carried, or BLANK when the key was absent.
+
+    ``parse_count(None)`` answers 0, so an unrendered/unpublished counter used to be stored
+    as a measured zero — the same defect 粉丝数/获赞数 already avoid by writing ``''``.
+    """
+    return parse_count(value) if has_count(value) else ''
+
+
 class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
     """Douyin (抖音 web): one video page per row, visible window only."""
 
@@ -716,10 +725,11 @@ class DouyinCrawler(DouyinOverlayMixin, VideoCrawler):
             '获赞数': liked or '',
             '发布时间': publish,
             '视频ID': str(aweme_id),
-            '点赞数': parse_count(facts.get('digg')),
-            '评论数': parse_count(facts.get('comment')),
-            '收藏数': parse_count(facts.get('collect')),
-            '转发数': parse_count(facts.get('share')),
+            # Same rule as 粉丝数 above: a key the payload did not carry is blank, never 0.
+            '点赞数': _counter(facts.get('digg')),
+            '评论数': _counter(facts.get('comment')),
+            '收藏数': _counter(facts.get('collect')),
+            '转发数': _counter(facts.get('share')),
             '链接': f'https://www.douyin.com/video/{aweme_id}',
         }
 

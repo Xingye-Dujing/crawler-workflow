@@ -39,6 +39,7 @@ const KEYS = {
     'toast.cookieExpired': 'COOKIE-EXPIRED',
     'toast.workflowCompleted': 'WORKFLOW-COMPLETED',
     'toast.workflowEnded': 'WORKFLOW-ENDED {done}/{total}',
+    'toast.runStateUnknown': 'RUN-STATE-UNKNOWN',
     'toast.workflowRejected': 'WORKFLOW-REJECTED',
     'toast.workflowStopped': 'WORKFLOW-STOPPED',
     'toast.consoleReconnected': 'RECONNECTED',
@@ -241,6 +242,13 @@ await finishCase(
 await finishCase(
     'endedInterrupted',
     status(['done'], 4, { running: false, completed_nodes: 1, total_nodes: 3, outcome: 'interrupted' })
+);
+/* A ``foreign_run`` answer — another account's run — carries no outcome and no counts of
+   ours. Inferring "failed" from 0/0 printed 工作流结束 0/0 and offered a continue for a run
+   this page never started. */
+await finishCase(
+    'endedUnknown',
+    status([], 4, { running: false, completed_nodes: 0, total_nodes: 0, outcome: '', foreign_run: true })
 );
 
 /* A Stop flips running off before the worker writes the verdict. The poller must

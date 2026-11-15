@@ -1,6 +1,8 @@
-# Test-tree standard. Same rule set as `.pylintrc`, plus three messages that pytest's own
-# design makes meaningless here. Nothing else is exempt: naming, unused variables, exception
-# handling, abstract-class instantiation and the rest are still checked and still fixed.
+# Test-tree standard. The product rule set with one relaxation and three additions: `W0603`
+# (global-statement) is off because a test that rebinds module state is a smell, not a seam, and
+# pytest's own idioms add the three messages below. Nothing else is exempt: naming, unused
+# variables, exception handling, abstract-class instantiation and the rest are still checked and
+# still fixed.
 #
 # An inline `# pylint: disable` remains unacceptable (AGENTS.md); this file is the one place
 # the exception is written down, with the reason.

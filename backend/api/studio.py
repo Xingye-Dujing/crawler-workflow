@@ -9,12 +9,14 @@ Paths and behaviour are unchanged; no monkeypatch seam on these handlers.
 """
 
 import base64
+import contextlib
 import logging
 import os
 import re
 import uuid
 
 import pandas as pd
+from core.atomic import replace as atomic_replace
 from core.refs import json_safe_records as _json_safe_records
 from core.refs import sanitize_filename
 from flask import Blueprint, jsonify
@@ -27,6 +29,23 @@ from api.resolution import _durable_node_rows, _resolve_dataframe
 from i18n import get_lang, t
 from services.charts import pdf
 from services.reports import jobs
+
+
+def _write_chart_artifact(filepath: str, write) -> None:
+    """Stage a chart file beside its target and publish it with one replace.
+
+    The export panel lists whatever sits in this directory and 报告 reads it straight back, so
+    a crash, a full disk or a kill mid-write must not leave a half-written chart under a real
+    name. The staged name keeps ``.part`` in it, which the export browser hides.
+    """
+    staged = f'{filepath}.{uuid.uuid4().hex[:8]}.part'
+    try:
+        write(staged)
+        atomic_replace(staged, filepath)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.remove(staged)
+        raise
 
 
 def _read_text(path: str) -> str:
@@ -439,8 +458,12 @@ def studio_save_vector():
     filepath = os.path.join(paths.active().export_dir, filename)
     try:
         os.makedirs(paths.active().export_dir, exist_ok=True)
-        with open(filepath, 'w', encoding='utf-8') as handle:
-            handle.write(markup)
+
+        def _write_text(staged: str) -> None:
+            with open(staged, 'w', encoding='utf-8') as handle:
+                handle.write(markup)
+
+        _write_chart_artifact(filepath, _write_text)
     except OSError:
         # The path is host information and this sentence is shown to the user; the traceback
         # (with the path) belongs in the log, not in the JSON response.
@@ -547,8 +570,12 @@ def studio_save_image():
     filepath = os.path.join(paths.active().export_dir, filename)
     try:
         os.makedirs(paths.active().export_dir, exist_ok=True)
-        with open(filepath, 'wb') as fh:
-            fh.write(payload)
+
+        def _write_bytes(staged: str) -> None:
+            with open(staged, 'wb') as fh:
+                fh.write(payload)
+
+        _write_chart_artifact(filepath, _write_bytes)
     except OSError:
         logger.exception(t('misc.studio_saveFailed'))
         return jsonify({'ok': False, 'error': t('misc.studio_saveFailed')}), 500

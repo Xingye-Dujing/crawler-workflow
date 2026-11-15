@@ -61,6 +61,24 @@ def _author_cell(value) -> str:
     return str(value).strip()
 
 
+def _text_cell(value) -> str:
+    """One 正文 cell as text; a missing cell is EMPTY, never the string ``'nan'``.
+
+    The author fold above fixed the pseudo-author called nan; the text column had the same
+    shape and was missed: ``str(float('nan'))`` is ``'nan'`` (non-empty), so every row whose
+    body was never collected hashed to ONE SimHash and the duplicate signal accused unrelated
+    authors of posting the same content — the evidence column literally read “文本高度相同”.
+    """
+    if value is None:
+        return ''
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip()
+
+
 class BotLikelihoodAnalyzer:
     """Per-author coordinated-posting signal written onto every row."""
 
@@ -82,7 +100,7 @@ class BotLikelihoodAnalyzer:
         work = df.copy()
         # Row order is preserved so the score lands back on the row it came from; the frame is
         # never reordered (a shuffled output would break the merge-order/SimHash invariants).
-        texts = [normalize_text(str(v)) for v in work[text_column].tolist()]
+        texts = [normalize_text(_text_cell(v)) for v in work[text_column].tolist()]
         authors = [_author_cell(a) for a in work[author_column].tolist()]
         # The project's own parser, not ``pd.to_datetime``: our crawlers write
         # ``2022年01月27日 00:59``, which pandas answers with NaT for the WHOLE column — every

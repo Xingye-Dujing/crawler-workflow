@@ -105,6 +105,13 @@ def get_environment():
         # chromedriver, xelatex, CatBus entry). The panel needs the STATE and the reason key,
         # not the layout of this machine.
         report['root'] = ''
+        # ``components[]`` carries the same host path ``/api/components`` blanks for an
+        # ordinary account (``row['path']``). One module answering two doors with two
+        # privacy rules was the bug: this one handed the server's OS account name and
+        # component layout to every signed-in user.
+        for row in report.get('components', []):
+            if isinstance(row, dict):
+                row['path'] = ''
         for capability in report.get('capabilities', []):
             params = capability.get('reason_params')
             if isinstance(params, dict):

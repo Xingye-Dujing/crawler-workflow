@@ -54,8 +54,7 @@ class TextCluster:
         from sklearn.feature_extraction.text import TfidfVectorizer
 
         if text_column not in df.columns:
-            logger.error(t('analysis.col_missing', col=text_column))
-            return df
+            raise ValueError(t('analysis.col_missing', col=text_column))
 
         # Every input row keeps its place: rows without usable text get an empty
         # cluster rather than disappearing, so the row count never shrinks

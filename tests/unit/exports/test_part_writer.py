@@ -223,3 +223,17 @@ class TestSnapshotWriter:
         w = SnapshotWriter(str(tmp_path / 'deep' / 'dir'), 'snap')
         w.write(_rows(1))
         assert w.path.endswith(os.path.join('deep', 'dir', 'snap.live.csv'))
+
+
+class TestMergeOrder:
+    def test_shards_merge_in_numeric_order_past_three_digits(self, tmp_path):
+        """``part1000`` sorts before ``part101`` as a name; the merge must follow the numbers.
+
+        A quoted row count is only true of the merge order that produced it, and SimHash keeps
+        the first-arriving row — so a lexicographic merge silently decides which duplicate wins.
+        """
+        for name, value in (('wf.part101.csv', 'a'), ('wf.part1000.csv', 'b')):
+            pd.DataFrame([{'k': value}]).to_csv(tmp_path / name, index=False)
+        info = PartWriter(str(tmp_path), 'wf', 'csv').finish()
+        assert list(pd.read_csv(info['path'])['k']) == ['a', 'b']
+        assert info['rows'] == 2

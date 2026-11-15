@@ -10,7 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from crawlers.core.crawler import UNDER_TARGET, Crawler, as_index
 from crawlers.engine import feed, pacing, times
-from crawlers.engine.counters import parse_count
+from crawlers.engine.counters import has_count, parse_count
 from crawlers.platforms.xiaohongshu.rows import note_id, with_feed_source
 from i18n import t
 
@@ -230,16 +230,20 @@ class XiaohongshuCrawler(Crawler):
         return ''
 
     def _scrape_card(self, card, link: str) -> dict:
+        likes = self._text_of(card, '.like-wrapper .count')
         return {
             '笔记链接': link,
             '笔记ID': note_id(link),
             '标题': self._text_of(card, '.footer .title') or self._text_of(card, '.title'),
             '作者': self._text_of(card, '.author .name') or self._text_of(card, '.name'),
-            '点赞数': parse_count(self._text_of(card, '.like-wrapper .count')),
+            # An unrendered counter is blank, never 0: the page printed no number.
+            '点赞数': parse_count(likes) if has_count(likes) else '',
             '正文': '',
             '发布时间': '',
-            '收藏数': 0,
-            '评论数': 0,
+            # A search card does not print these two at all: 0 would be a measurement the page
+            # never made. The detail crawl fills them when the row is opened.
+            '收藏数': '',
+            '评论数': '',
             '评论列表': [],
         }
 

@@ -516,29 +516,15 @@ class TestAWallMustSurviveBeingJudged:
 #: page is measured doing exactly that. Pinned both ways: a new one is red, and so is a
 #: stale entry once a site has been moved onto ``open``.
 BARE_NAVIGATIONS = {
-    # The login window's two navigations moved here from ``app.py`` on 2026-10-28 with the
-    # cookie routes: the entry page it was asked to open, and the pull back to the platform's
-    # own login URL before the jar is captured (a login that ended on the identity provider
-    # would otherwise be read *there*).
-    'backend/sessions/routes.py': 2,
     # ``_navigate`` (the one driver call ``open`` and the cookie planter share) and the
     # template warmer — the last one enters ``about:blank`` ON PURPOSE: that internal page
     # is the goal, not a failed navigation, so it must never be re-driven off itself, and
     # there is no slow renderer to outwait, no first-run dialog to dismiss, no arrival to
     # account for. Cookie planting moved onto the shared re-drive, so it left this table.
     'backend/crawlers/core/crawler.py': 2,
-    # One per platform, and it is the walk's own first page: the comment walks enter a link
-    # (or weibo.com, to be same-origin for its JSON) before reading. They moved here from
-    # ``commenting/session.py`` on 2026-10-27 when each platform's walk went to its own
-    # package — the count is the same seven, now spelled out per site instead of hidden in
-    # one engine file.
+    # ``CommentSession.get`` IS the bound (a worker joined against the navigation budget), so it
+    # is the one sanctioned driver call the comment walks and the login window share.
     'backend/crawlers/commenting/session.py': 1,
-    'backend/crawlers/platforms/bilibili/comments.py': 1,
-    'backend/crawlers/platforms/douyin/comments.py': 1,
-    'backend/crawlers/platforms/twitter/comments.py': 1,
-    'backend/crawlers/platforms/weibo/comments.py': 1,
-    'backend/crawlers/platforms/youtube/comments.py': 1,
-    'backend/crawlers/platforms/zhihu/comments.py': 1,
 }
 # ``commenting/session.py`` came back on 2026-11-14 as the walk's ONE bounded navigation: the
 # driver call runs on a worker thread that is joined against ``pacing.navigation_budget()``, so

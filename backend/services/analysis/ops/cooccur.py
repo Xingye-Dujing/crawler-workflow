@@ -34,6 +34,10 @@ def cooccur(df: pd.DataFrame, column: str, topn: int = 30, min_count: int = 2, w
 
     from analyzers.keyword import KeywordExtractor
 
+    if column not in df.columns:
+        # The keyword corpus refuses a missing column by raising; this op owns its own refusal
+        # so the step reports UnknownOperationError like every other analysis step.
+        raise UnknownOperationError(t('analysis.step_col_missing', op='cooccur', col=column))
     wanted = _whole(topn, 'cooccur', 'topn')
     if wanted < 2:
         raise UnknownOperationError(t('analysis.cooccur_topn', value=topn, cap=COOCCUR_WORD_CAP))

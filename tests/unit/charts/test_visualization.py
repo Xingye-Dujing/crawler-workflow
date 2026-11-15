@@ -953,11 +953,12 @@ class TestStackPct:
         assert option['yAxis']['max'] == 100
         assert option['yAxis']['name']
 
-    def test_a_period_with_nothing_to_show_is_zero_not_a_crash(self):
+    def test_a_period_with_nothing_to_show_is_a_gap_not_a_crash(self):
         frame = pd.DataFrame({'g': ['a', 'b'], 'pos': [0, 2], 'neg': [0, 2]})
         option = V.to_echarts_option(frame, 'stack_pct', x='g', stack_fields='pos,neg')
-        # Period 'a' sums to zero: shares become 0.0 rather than a division by zero / NaN token.
-        assert option['series'][0]['data'][0] == 0.0
+        # Period 'a' sums to zero: the share is UNMEASURED (null, drawn as a gap), never a
+        # measured 0 %, and never a division by zero / NaN token.
+        assert option['series'][0]['data'][0] is None
         assert json.dumps(option, allow_nan=False)
 
     def test_a_fullwidth_comma_in_the_field_box_is_understood(self):
@@ -1247,10 +1248,10 @@ class TestAFigureRefusesWhatItCannotDivide:
         assert t('chart.y_not_numeric', col='正面') in str(excinfo.value)
 
     def test_a_stack_field_that_is_missing_everywhere_still_serialises(self):
-        """An all-blank column is "no measurement", not a misconfiguration: the share is 0 %."""
+        """An all-blank column is "no measurement", not a misconfiguration: the share is a gap."""
         frame = pd.DataFrame({'阶段': ['a', 'b'], '正面': [None, None], '中性': [2, 1]})
         option = V.to_echarts_option(frame, 'stack_pct', x='阶段', stack_fields='正面,中性')
-        assert [segment['data'] for segment in option['series']] == [[0.0, 0.0], [100.0, 100.0]]
+        assert [segment['data'] for segment in option['series']] == [[None, None], [100.0, 100.0]]
 
     def test_a_negative_pie_slice_is_refused_like_the_printed_figure(self):
         """``tikz_console._pie`` already refused this; ECharts drew it and matplotlib raised a bare

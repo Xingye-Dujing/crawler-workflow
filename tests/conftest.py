@@ -353,7 +353,9 @@ def machine_has_a_browser(monkeypatch):
     monkeypatch.setattr(
         machine,
         'find_chrome',
-        lambda explicit='', env=None, system=None: explicit or 'C:/fake/chrome.exe',
+        # A neutral sentinel: a `C:/fake/chrome.exe` answer is a Windows fact supplied on every
+        # runner, and the platform-rules gate only scans ``backend/``, so nothing could notice.
+        lambda explicit='', env=None, system=None: explicit or 'fake-chrome',
     )
 
 

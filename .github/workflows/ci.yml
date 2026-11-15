@@ -63,7 +63,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     # Triage escape hatch only (see the workflow_dispatch input above); normal runs are blocking.
     continue-on-error: ${{ github.event.inputs.probe == 'true' && matrix.runner != 'windows-latest' }}
-    # 45, not 30: a green fast job was measured at 29m40s (26m49s of it the pytest tier), so 30
+    # 50, not 30: a green fast job was measured at 29m40s (26m49s of it the pytest tier), so 30
     # left one slow case between green and a timeout — and a timeout reports as a cancelled run,
     # never as the test that hung.
     timeout-minutes: 50

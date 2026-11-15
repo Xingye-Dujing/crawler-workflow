@@ -37,6 +37,12 @@ _TRAILING_EXT = re.compile(r'\.(csv|json|tsv|xlsx|xls|txt|md|html|parquet)$', re
 _PART_NUMBER = re.compile(r'\.part(\d{3,})\.[A-Za-z0-9]+$')
 
 
+def _part_number(path: str) -> int:
+    """The shard number in *path* (0 when it carries none), for a numeric merge order."""
+    match = _PART_NUMBER.search(os.path.basename(path))
+    return int(match.group(1)) if match else 0
+
+
 def dump_rows(rows, path: str, columns: list, fmt: str) -> None:
     """Write one table to one path in either supported format."""
     if fmt == 'csv':
@@ -82,7 +88,11 @@ class PartWriter:
                 # is not exactly ``a``.
                 continue
             self._parts.append(os.path.join(self.dir, name))
-        self._parts.sort()
+        # Numeric order, not the file name's: shard names are zero-padded to three digits,
+        # so lexicographic order puts ``part1000`` before ``part101`` and the merged file's
+        # rows end up out of the order they were written (SimHash keeps the first-arriving
+        # row, so the merge order silently decides which duplicate survives).
+        self._parts.sort(key=_part_number)
         # The next slot is the HIGHEST adopted part number + 1, never ``len(parts)``: a hole
         # (a middle shard deleted from the export panel while a different run is live) made
         # ``len`` reuse an existing number, so ``_write_part`` overwrote an adopted shard AND

@@ -6,6 +6,7 @@ fold two different pages into one key: both failures are silent, and both cost t
 row that vanished or a hole the audit never reported.
 """
 
+import pandas as pd
 import pytest
 
 from services.analysis.kernels import UnknownOperationError
@@ -30,6 +31,10 @@ class TestTheKeySpelling:
         assert cell_text(12345) == cell_text('12345') == cell_text(12345.0) == '12345'
         assert cell_text(float('nan')) == ''
         assert cell_text(None) == ''
+        # pandas' missing SCALARS are not None and not float: they fell through to str() as
+        # '<NA>'/'NaT', giving every missing cell one shared non-blank key.
+        assert cell_text(pd.NA) == ''
+        assert cell_text(pd.NaT) == ''
 
     def test_trim_folds_padding_and_full_width_spaces(self):
         assert value_key('  张三 ', 'trim') == '张三'

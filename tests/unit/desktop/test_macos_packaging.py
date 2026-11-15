@@ -37,6 +37,9 @@ def test_the_macos_bundle_is_windowed_and_collects_cocoa_not_webview2():
         assert repr(module) in spec
     assert "'pythonnet'" not in spec and "'clr'" not in spec, 'the Windows CLR stack must not ship'
     assert 'webview.platforms.winforms' not in spec
+    # The moving build number: without CFBundleVersion PyInstaller writes its own constant and
+    # two releases are indistinguishable to Finder/LaunchServices and to update tooling.
+    assert "'CFBundleVersion'" in spec and "'CFBundleShortVersionString'" in spec
 
 
 def test_the_dmg_builder_names_the_architecture_and_uses_hdiutil():

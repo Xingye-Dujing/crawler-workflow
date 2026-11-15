@@ -573,6 +573,38 @@ class TestWorkflowExecute:
         assert app_module._RUN_STORE.get_run(started.get_json()['run_id']) is None
 
     @pytest.mark.serial
+    def test_a_refused_resume_leaves_its_record_alone(self, client, app_module):
+        """A 继续 the canvas refuses ran nothing, so the ADOPTED record keeps its own history.
+
+        The refusal returns before any record is opened; ``close_run`` used to infer "nothing was
+        opened" from a missing key and then re-finished ``ctx['run_id']`` — for a resume that is
+        the interrupted record, so a refusal with no attempt behind it stamped 失败/0-of-N over
+        the run's own status, note and end time.
+        """
+        store = app_module._RUN_STORE
+        store.start_run('r-refused-resume', 'interrupted-wf', 'fp', headless=True, node_total=2)
+        store.finish_run('r-refused-resume', 'interrupted', note='stopped by user')
+        before = store.get_run('r-refused-resume')
+
+        workflow = _workflow(
+            [_node('node-1', 'upload', params={}), _node('node-2', 'analysis', params={'steps': E2E_STEPS})],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': workflow, 'workflow_name': 'invalid-wf', 'resume_run_id': 'r-refused-resume'},
+        )
+        assert started.status_code == 200
+        assert started.get_json()['run_id'] == 'r-refused-resume'
+        assert _wait_for_worker(app_module)
+
+        after = store.get_run('r-refused-resume')
+        assert after['status'] == 'interrupted', 'a refusal rewrote the record it never touched'
+        assert after['note'] == 'stopped by user'
+        assert after['node_done'] == before['node_done']
+        assert after['finished_at'] == before['finished_at']
+
+    @pytest.mark.serial
     def test_a_stale_upload_fails_its_node_and_skips_downstream(self, client, app_module):
         ghost = {'dataset_id': 'gone', 'dataset_name': 'ghost.csv', 'row_count': 6}
         workflow = _workflow(

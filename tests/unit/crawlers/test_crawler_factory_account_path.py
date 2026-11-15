@@ -109,3 +109,26 @@ def test_a_cookie_that_is_there_is_still_imported(monkeypatch, tmp_path):
     crawlers.get_crawler('weibo', cookie_dir=str(jar), account='default')
 
     assert recorded.get('imported') is True
+
+
+def test_a_jar_that_planted_nothing_is_not_recorded_as_imported(monkeypatch, tmp_path):
+    """The file existing is not the same fact as its cookies reaching the browser."""
+    recorded = {}
+    jar = tmp_path / 'jar'
+    jar.mkdir()
+    (jar / 'weibo_cookies.json').write_text('[{"name": "SUB", "expiry": 1}]', encoding='utf-8')
+
+    class _AppliedNothing(_StubCrawler):
+        cookies_loaded = 0
+
+    monkeypatch.setattr(crawlers, 'crawler_class', lambda platform: _AppliedNothing)
+    monkeypatch.setattr(profiles, 'profile_dir_for', lambda platform, enabled=None, account='': str(tmp_path / 'p'))
+    monkeypatch.setattr(profiles, 'needs_refresh', lambda platform, path, account='': False)
+    monkeypatch.setattr(profiles, 'is_used', lambda platform, account='': False)
+    monkeypatch.setattr(profiles, 'file_stamp', lambda path: 'stamp' if path else '')
+    monkeypatch.setattr(profiles, 'mark_used', lambda *a, **k: recorded.update(k))
+
+    crawlers.get_crawler('weibo', cookie_dir=str(jar), account='default')
+
+    assert recorded.get('imported') is False, 'an expired jar was recorded as a planted session'
+    assert recorded.get('cookie_stamp') == '', 'a stamp recorded for a jar that went in nowhere'

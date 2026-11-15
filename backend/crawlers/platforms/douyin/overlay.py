@@ -22,7 +22,7 @@ import logging
 from collections.abc import Callable
 
 from crawlers.engine import feed, pacing
-from crawlers.engine.counters import parse_count
+from crawlers.engine.counters import has_count, parse_count
 from crawlers.platforms.douyin import rows
 from i18n import t
 
@@ -190,10 +190,11 @@ class DouyinOverlayMixin:
                 '获赞数': liked,
                 '发布时间': publish,
                 '视频ID': str(aweme_id),
-                '点赞数': parse_count(facts.get('digg')),
-                '评论数': parse_count(facts.get('comment')),
-                '收藏数': parse_count(facts.get('collect')),
-                '转发数': parse_count(facts.get('share')),
+                # A key the overlay payload did not carry is blank, never a measured 0.
+                '点赞数': parse_count(facts.get('digg')) if has_count(facts.get('digg')) else '',
+                '评论数': parse_count(facts.get('comment')) if has_count(facts.get('comment')) else '',
+                '收藏数': parse_count(facts.get('collect')) if has_count(facts.get('collect')) else '',
+                '转发数': parse_count(facts.get('share')) if has_count(facts.get('share')) else '',
                 '链接': f'https://www.douyin.com/video/{aweme_id}',
             }
         finally:

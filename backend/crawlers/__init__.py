@@ -170,7 +170,11 @@ def get_crawler(
     # for a profile that received nothing — and ``needs_refresh``, which needs a non-empty recorded
     # stamp, answered "no" from then on, so the user who saved a Cookie later was never offered the
     # re-plant that would put it into that profile.
-    imported = planting and bool(saved) and os.path.isfile(saved)
+    #
+    # The file EXISTING is not the same fact either: a jar whose cookies are all expired or bound to
+    # another host applies zero of them, and ``Crawler.cookies_loaded`` is the only measurement of
+    # what actually reached the browser. The marker is therefore written AFTER the browser ran.
+    offered = planting and bool(saved) and os.path.isfile(saved)
     build = {
         'headless': headless,
         'cookie_path': saved if planting else None,
@@ -186,7 +190,18 @@ def get_crawler(
         build['proxy'] = proxy
     crawler = cls(**build)
     if profile:
-        # The stamp is *which* file went in, so the panel can tell a saved-over cookie
-        # from a profile that already holds the current one.
-        profiles.mark_used(platform, imported=imported, cookie_stamp=profiles.file_stamp(saved), account=account)
+        # What the browser APPLIED, not what the file contained. A stamp recorded for a jar that
+        # planted nothing made the panel say 已导入 and suppressed the “saved Cookie is newer”
+        # hint; this is the only measurement of what reached the browser. A crawler class that
+        # does not report the count (a test double, a platform with no cookie planting) keeps the
+        # old evidence — the file existing — rather than being accused of planting nothing.
+        applied_known = getattr(crawler, 'cookies_loaded', None)
+        if not offered:
+            imported, stamp = False, profiles.file_stamp(saved)
+        elif applied_known is None:
+            imported, stamp = True, profiles.file_stamp(saved)
+        else:
+            imported = int(applied_known or 0) > 0
+            stamp = profiles.file_stamp(saved) if imported else ''
+        profiles.mark_used(platform, imported=imported, cookie_stamp=stamp, account=account)
     return crawler

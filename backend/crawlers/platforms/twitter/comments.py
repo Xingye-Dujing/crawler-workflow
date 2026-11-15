@@ -70,7 +70,7 @@ def walk(session, url: str, limit: int) -> tuple:
     def cards_of():
         return session.driver.find_elements('css selector', TwitterCrawler.CARD_SELECTOR)
 
-    session.driver.get(url if 'x.com/' in url or 'twitter.com/' in url else f'https://x.com/i/status/{root}')
+    session.get(url if 'x.com/' in url or 'twitter.com/' in url else f'https://x.com/i/status/{root}')
     # Waited for, not slept: the permalink is an app route that fetches its own
     # thread and measured ~12 s to its first rendered card on a connection that
     # was fine. A fixed nap ended the walk on a page that had not painted, and

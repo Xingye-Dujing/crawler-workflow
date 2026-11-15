@@ -979,6 +979,13 @@ def _run_worker(
             # The resume-node's "newest unfinished run" fallback must pick from
             # THIS workflow's shape only — node ids repeat across workflows.
             'wf_fp': wf_fp,
+            # No record is open yet. ``close_run`` reads this instead of inferring
+            # "nothing was opened" from a missing key: an early exit (a canvas
+            # ``validate()`` refused) then closes nothing, where the fallback would
+            # have re-finished ``ctx['run_id']`` — for a 继续 that id is the adopted
+            # record, so a refusal that ran nothing stamped 失败/0-of-N over the
+            # interrupted run's own history.
+            'open_records': [],
             # {node_id: count} of items the incremental ledger refused; the
             # status endpoint mirrors it (shared dict, written by row sinks).
             'skipped_seen': {},

@@ -194,6 +194,14 @@ class TestTheDiscoveryVerdict:
         assert info.reason_params['version'] == 'v18.20.4'
         assert seen == [['/usr/bin/node', '--version']], 'the version is asked of the runtime, not the adapter'
 
+    def test_a_runtime_that_cannot_start_is_not_called_too_old(self, monkeypatch):
+        """A child that never started (permissions, a broken image) needs a different remedy."""
+        monkeypatch.setattr(bridge, '_call', lambda argv, **kw: bridge._Call(code=-1, spawn_error='Permission denied'))
+        info = bridge.probe(force=True)
+        assert info.reason_key == 'catbus.nodeUnrunnable'
+        assert info.reason_params['err'] == 'Permission denied'
+        assert info.reason_params['node'] == '/usr/bin/node'
+
     def test_the_capability_probe_uses_its_own_short_timeout(self, monkeypatch):
         """``probe()`` holds the module lock while it waits, so reusing the 900s run budget
         froze the capability panel and the run gate behind one hung Node."""
@@ -490,6 +498,22 @@ class TestRunTranslatesTheAdapter:
         outcome = bridge.run('bilibili', 'posts', {'keyword': '甲'})
         assert outcome.status == 'stopped'
         assert outcome.rows == 1
+
+    def test_a_stop_wins_over_a_column_drift_on_the_same_line(self, monkeypatch):
+        """The driver delivers a row and only then asks abort(): a 停止 landing on a drifted line
+        is the user's own exit, never a backend error."""
+        monkeypatch.setattr(
+            bridge,
+            '_call',
+            self._stream(
+                [{'标题': '甲', 'url': 'u1'}],
+                summary_payload(status='partial', rows=1),
+                code=130,
+                stopped=True,
+            ),
+        )
+        outcome = bridge.run('bilibili', 'posts', {'keyword': '甲'})
+        assert outcome.status == 'stopped'
 
     def test_no_summary_is_the_childs_own_report(self, monkeypatch):
         monkeypatch.setattr(bridge, '_call', lambda argv, **kw: bridge._Call(code=7, stderr='boom\nupstream 404'))

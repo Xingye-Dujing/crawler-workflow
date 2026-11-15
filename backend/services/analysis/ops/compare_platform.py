@@ -26,7 +26,9 @@ def compare_platform(
     must not produce a complete-looking table missing the one number that mattered.
     """
     if df.empty:
-        return pd.DataFrame()
+        # The declared shape, so a downstream step refuses for the real reason (“no rows”)
+        # instead of “column platform missing” from a zero-column frame.
+        return pd.DataFrame(columns=[platform_col, 'n'] + ([f'{value_col}_{agg}'] if value_col else []))
     if platform_col not in df.columns:
         raise UnknownOperationError(t('analysis.step_col_missing', op='compare_platform', col=platform_col))
     groups = df.groupby(platform_col, dropna=False)

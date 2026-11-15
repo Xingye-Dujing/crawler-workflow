@@ -54,6 +54,23 @@ class TestTheRequestGuard:
         refused = client.post('/api/history/clear', json={'confirm': True}, headers={'Origin': 'http://evil.example'})
         assert refused.status_code == 403
 
+    def test_a_refusal_is_not_written_into_the_run_console(self, client, app_module):
+        """A pre-auth refusal carries request-supplied text, so it must not reach the console.
+
+        The origin guard runs BEFORE the login gate, and ``_push_log`` accepts a line whose
+        caller has no identity — so an anonymous request could author text in the signed-in
+        owner's console (and, during a run, in that run's durable log) and, repeated, evict the
+        run's own history.
+        """
+        before = len(app_module.execution_state['logs'])
+        refused = client.get(
+            '/api/cookies/status',
+            headers={'Origin': 'http://evil.example', 'Referer': 'http://evil.example/console-injection'},
+        )
+        assert refused.status_code == 403
+        written = app_module.execution_state['logs'][before:]
+        assert not any('console-injection' in line or 'evil.example' in line for line in written), written
+
     def test_a_loopback_origin_is_served_normally(self, client):
         ok = client.get('/api/history/series', headers={'Origin': 'http://127.0.0.1:5000'})
         assert ok.status_code == 200

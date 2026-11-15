@@ -21,11 +21,13 @@ Three rules shape it:
 """
 
 import base64
+import contextlib
 import html
 import logging
 import os
 import re
 import time
+import uuid
 from dataclasses import dataclass
 
 import pandas as pd
@@ -491,6 +493,8 @@ class ReportService:
         survives cleaning as nothing falls back rather than landing as
         ``report-.html``.
         """
+        from core.atomic import replace as atomic_replace
+
         from services.exports.browser import REPORT_PREFIX
 
         os.makedirs(self.export_dir, exist_ok=True)
@@ -501,8 +505,17 @@ class ReportService:
         if os.path.exists(path):
             filename = f'{REPORT_PREFIX}{stem}-{time.strftime("%Y%m%d-%H%M%S")}.html'
             path = os.path.join(self.export_dir, filename)
-        with open(path, 'w', encoding='utf-8') as fh:
-            fh.write(markup)
+        # Staged beside the target and renamed in: the panel lists whatever is in this directory
+        # and opens it, so a crash mid-write must not publish a truncated report under a real name.
+        staged = f'{path}.{uuid.uuid4().hex[:8]}.part'
+        try:
+            with open(staged, 'w', encoding='utf-8') as fh:
+                fh.write(markup)
+            atomic_replace(staged, path)
+        except OSError:
+            with contextlib.suppress(OSError):
+                os.remove(staged)
+            raise
         return {'name': filename, 'path': path, 'bytes': os.path.getsize(path)}
 
 

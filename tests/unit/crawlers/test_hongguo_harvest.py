@@ -331,6 +331,24 @@ class TestWalk:
         named = i18n.t('crawl.hg.cmt.episodeShort', title='测试剧', ep=1, have=20, site_total=698)
         assert any(named in line for line in said), 'the shortfall names its episode'
 
+    def test_a_repeating_page_window_is_convicted_not_slept_through(self, tmp_path):
+        """A page that arrives but adds nothing must end the walk, not reset its patience.
+
+        ``allow_repeat`` admits the drawer's own cursor pages, so a site that replays the same
+        window kept ``prog`` unchanged and ``has_more`` true while every arrival reset ``stalled``
+        — an endless scroll (a full page wait each round) that only 停止 could end.
+        """
+        page1 = _record(entries=[_entry(f'7{i:03d}', f'评{i}', 1792313924) for i in range(20)], total=698, as_dict=True)
+        harness, said = _harness(tmp_path, capture_lines=[])
+        harness._await_page = lambda *args, **kwargs: page1
+        rows, status = harness.walk('hongguo', ARTICLE, 0)
+        assert status == OK and len(rows) == 20, 'the rows already read are kept'
+        assert harness.end_reason == UNDER_TARGET and harness.target_total == 698
+        assert harness.shortfall == 678
+        named = i18n.t('crawl.hg.cmt.episodeShort', title='测试剧', ep=1, have=20, site_total=698)
+        assert any(named in line for line in said), 'a repeating window names the shortfall'
+        assert harness.ui.scroll_attempts == [0, 0], 'the walk stopped after the second blank page'
+
     def test_stop_is_honoured_between_episodes(self, tmp_path):
         page2 = [_record(group='9999', entries=[_entry('8001', '第二集', 1792313924)])]
         ui = _FakeUI(second_page_lines=page2)
@@ -1566,3 +1584,37 @@ class TestInputFocus:
         ui._ensure_library = self._fake_auto
         ui.open_drama('不存在这部剧')
         assert called, 'open_drama clicked a board without ever foregrounding the player'
+
+
+class TestExpandReplies:
+    """A drawer's threads share one wording, so the label alone cannot identify a control."""
+
+    @staticmethod
+    def _ui(monkeypatch, tree):
+        from crawlers.platforms.hongguo import player_ui as pu
+
+        monkeypatch.setattr(pu.pacing, 'expand_nap', lambda *_a, **_k: None)
+        ui = PlayerUI(log=lambda _m: None, abort=lambda: False)
+        ui.collect = lambda max_depth=20: list(tree)
+        ui.dismiss_composer = lambda: None
+        return ui
+
+    def test_two_threads_with_the_same_label_are_both_expanded(self, monkeypatch):
+        clicked = []
+        ui = self._ui(
+            monkeypatch,
+            [
+                ('a', 'ButtonControl', '展开 3 条回复', _RowRect(100)),
+                ('b', 'ButtonControl', '展开 3 条回复', _RowRect(300)),
+            ],
+        )
+        ui._click = lambda ctrl: clicked.append(ctrl) or True
+        assert ui.expand_replies() == 2, 'a shared 展开N条回复 wording collapsed the second thread'
+        assert clicked == ['a', 'b']
+
+    def test_a_clicked_control_is_not_clicked_again(self, monkeypatch):
+        clicked = []
+        ui = self._ui(monkeypatch, [('a', 'ButtonControl', '展开 3 条回复', _RowRect(100))])
+        ui._click = lambda ctrl: clicked.append(ctrl) or True
+        assert ui.expand_replies() == 1
+        assert clicked == ['a'], 'the same control was clicked twice and collapsed its thread'

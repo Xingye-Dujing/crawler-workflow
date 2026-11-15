@@ -188,8 +188,9 @@ class KeywordExtractor:
         the same columns as the other methods, so a downstream node cannot tell them apart.
         """
         if text_column not in df.columns:
-            logger.error(t('analysis.col_missing', col=text_column))
-            return df
+            # Raises, like the rest of the analysis family: returning the input unchanged
+            # settled the node DONE on a table with no keyword column, which reads as success.
+            raise ValueError(t('analysis.col_missing', col=text_column))
 
         _ensure_userdict()
         pos_tags = _pos_tags(allow_pos)
@@ -273,8 +274,7 @@ class KeywordExtractor:
         allow_pos: str | list | None = '',
     ) -> pd.DataFrame:
         if text_column not in df.columns:
-            logger.error(t('analysis.col_missing', col=text_column))
-            return df
+            raise ValueError(t('analysis.col_missing', col=text_column))
 
         # ``tfidf_corpus`` needs the whole column (it fits an IDF over it), so it is named here
         # to keep the refusal contract in one place: every method this node knows is listed, and

@@ -170,7 +170,7 @@ def _refuse_unsafe_url_prefix():
         return None
     if _URL_PREFIX.match(prefix) and '..' not in prefix.split('/'):
         return None
-    logger.warning(t('api.prefixRefusedLog', prefix=prefix[:120]))
+    logger.warning(t('api.prefixRefusedLog', prefix=prefix[:120]), extra={'console': False})
     request.environ['SCRIPT_NAME'] = ''
     return None
 
@@ -200,7 +200,10 @@ def _reject_foreign_origin():
                 host=request.host,
                 origin=request.headers.get('Origin'),
                 referer=request.headers.get('Referer'),
-            )
+            ),
+            # File log only: this request has no identity yet (it is refused before the gate),
+            # and its text is the caller's, so it must not reach the run console.
+            extra={'console': False},
         )
         return jsonify({'ok': False, 'error': t('api.foreignOriginRefused', origin=origin)}), 403
 
@@ -321,6 +324,14 @@ class LogBufferHandler(logging.Handler):
         if record.name == 'werkzeug' or record.name.startswith('werkzeug.'):
             return
         if record.name == 'urllib3' or record.name.startswith('urllib3.'):
+            return
+        # A record can opt out of the run console while still reaching the file log
+        # (``extra={'console': False}``). A refusal that happens BEFORE the login gate
+        # carries request-supplied text (Origin/Referer/X-Forwarded-Prefix): an
+        # anonymous client must not be able to author a line in the signed-in owner's
+        # console — or, while a run is live, in that run's durable ``run_log`` — and
+        # repeating the request must not be able to evict the run's own history.
+        if getattr(record, 'console', True) is False:
             return
         msg = self.format(record)
         stripped = msg.strip()
